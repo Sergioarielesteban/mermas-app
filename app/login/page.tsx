@@ -3,34 +3,34 @@
 import Image from 'next/image';
 import React, { useState } from 'react';
 import { useAuth } from '@/components/AuthProvider';
-import { getAllowedPhones, isAllowedPhone, isValidPhoneInput, normalizePhoneForAuth } from '@/lib/auth-access';
+import { getAllowedEmails, isAllowedEmail } from '@/lib/auth-access';
 
-const REMEMBERED_PHONE_KEY = 'mermas_remembered_phone';
+const REMEMBERED_EMAIL_KEY = 'mermas_remembered_email';
 
 export default function LoginPage() {
   const { login } = useAuth();
-  const [phone, setPhone] = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [rememberPhone, setRememberPhone] = useState(true);
+  const [rememberEmail, setRememberEmail] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const allowedPhones = getAllowedPhones();
+  const allowedEmails = getAllowedEmails();
 
   React.useEffect(() => {
     if (typeof window === 'undefined') return;
-    const remembered = window.localStorage.getItem(REMEMBERED_PHONE_KEY);
-    if (remembered) setPhone(remembered);
+    const remembered = window.localStorage.getItem(REMEMBERED_EMAIL_KEY);
+    if (remembered) setEmail(remembered);
   }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const clean = normalizePhoneForAuth(phone);
-    if (!isValidPhoneInput(clean)) {
-      setError('Introduce un teléfono válido en formato +34XXXXXXXXX.');
+    const clean = email.trim().toLowerCase();
+    if (!clean || !clean.includes('@')) {
+      setError('Introduce un email válido.');
       return;
     }
-    if (!isAllowedPhone(clean)) {
-      setError('Este teléfono no está autorizado para acceder.');
+    if (!isAllowedEmail(clean)) {
+      setError('Este email no está autorizado para acceder.');
       return;
     }
     if (!password) {
@@ -45,8 +45,8 @@ export default function LoginPage() {
       return;
     }
     if (typeof window !== 'undefined') {
-      if (rememberPhone) window.localStorage.setItem(REMEMBERED_PHONE_KEY, clean);
-      else window.localStorage.removeItem(REMEMBERED_PHONE_KEY);
+      if (rememberEmail) window.localStorage.setItem(REMEMBERED_EMAIL_KEY, clean);
+      else window.localStorage.removeItem(REMEMBERED_EMAIL_KEY);
     }
     window.location.assign('/');
   };
@@ -68,8 +68,8 @@ export default function LoginPage() {
         <form onSubmit={handleSubmit} className="space-y-4 p-5">
           <div>
             <h1 className="text-lg font-black text-zinc-900">Acceso de Usuario</h1>
-            <p className="pt-1 text-sm text-zinc-600">Entra con tu teléfono y contraseña.</p>
-            {allowedPhones.length > 0 ? (
+            <p className="pt-1 text-sm text-zinc-600">Entra con tu email y contraseña.</p>
+            {allowedEmails.length > 0 ? (
               <p className="pt-1 text-xs text-zinc-500">
                 Acceso restringido a usuarios autorizados.
               </p>
@@ -77,15 +77,15 @@ export default function LoginPage() {
           </div>
 
           <label className="block text-xs font-semibold uppercase tracking-wide text-zinc-600">
-            Teléfono
+            Email
             <input
-              type="tel"
-              value={phone}
+              type="email"
+              value={email}
               onChange={(e) => {
-                setPhone(e.target.value);
+                setEmail(e.target.value);
                 setError(null);
               }}
-              placeholder="602083078"
+              placeholder="usuario@empresa.com"
               className="mt-2 h-12 w-full rounded-xl border border-zinc-300 bg-zinc-50 px-3 text-sm text-zinc-900 outline-none focus:border-[#D32F2F] focus:ring-2 focus:ring-[#D32F2F]/20"
               autoFocus
             />
@@ -108,11 +108,11 @@ export default function LoginPage() {
           <label className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-zinc-600">
             <input
               type="checkbox"
-              checked={rememberPhone}
-              onChange={(e) => setRememberPhone(e.target.checked)}
+              checked={rememberEmail}
+              onChange={(e) => setRememberEmail(e.target.checked)}
               className="h-4 w-4 rounded border-zinc-300 text-[#D32F2F] focus:ring-[#D32F2F]/30"
             />
-            Recordar teléfono en este dispositivo
+            Recordar email en este dispositivo
           </label>
 
           {error ? <p className="text-sm text-[#B91C1C]">{error}</p> : null}

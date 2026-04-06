@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { isAllowedPhone } from '@/lib/auth-access';
+import { isAllowedEmail } from '@/lib/auth-access';
 import { isSupabaseAdminConfigured, upsertSnapshot } from '@/lib/server/supabase-admin';
 import type { MermaRecord, Product } from '@/lib/types';
 
@@ -19,9 +19,9 @@ export async function POST(request: Request) {
     const payload = (await request.json()) as SyncPayload;
     const email = String(payload.email ?? '')
       .trim()
-      .toLowerCase(); // Campo legado; ahora lleva teléfono como string.
-    if (!email || !isAllowedPhone(email)) {
-      return NextResponse.json({ ok: false, reason: 'Unauthorized phone' }, { status: 401 });
+      .toLowerCase();
+    if (!email || !isAllowedEmail(email)) {
+      return NextResponse.json({ ok: false, reason: 'Unauthorized email' }, { status: 401 });
     }
     if (!Array.isArray(payload.products) || !Array.isArray(payload.mermas)) {
       return NextResponse.json({ ok: false, reason: 'Invalid payload' }, { status: 400 });
