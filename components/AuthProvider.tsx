@@ -2,11 +2,11 @@
 
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
-import { isAllowedEmail } from '@/lib/auth-access';
+import { isAllowedPhone, normalizePhoneForAuth } from '@/lib/auth-access';
 
 type AuthContextValue = {
-  email: string | null;
-  login: (email: string, password: string) => Promise<{ ok: boolean; reason?: string }>;
+  email: string | null; // Se mantiene por compatibilidad; ahora guarda teléfono o email legado.
+  login: (phone: string, password: string) => Promise<{ ok: boolean; reason?: string }>;
   logout: () => Promise<void>;
   loading: boolean;
 };
@@ -29,8 +29,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!supabase || !isSupabaseEnabled()) {
       queueMicrotask(() => {
         if (typeof window !== 'undefined') {
-          const remembered = window.localStorage.getItem(AUTH_KEY)?.trim().toLowerCase() ?? null;
-          if (remembered && isAllowedEmail(remembered)) setEmail(remembered);
+          const remembered = window.localStorage.getItem(AUTH_KEY)?.trim() ?? null;
+          if (remembered && isAllowedPhone(remembered)) setEmail(remembered);
           else persistEmail(null);
         }
         setLoading(false);
@@ -41,16 +41,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     let isMounted = true;
     void supabase.auth.getSession().then(({ data }) => {
       if (!isMounted) return;
-      const sessionEmail = data.session?.user?.email?.toLowerCase() ?? null;
-      setEmail(sessionEmail);
-      persistEmail(sessionEmail);
+      const user = data.session?.user;
+      const sessionIdentity = user?.phone ?? user?.email?.toLowerCase() ?? null;
+      setEmail(sessionIdentity);
+      persistEmail(sessionIdentity);
       setLoading(false);
     });
 
     const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
-      const nextEmail = session?.user?.email?.toLowerCase() ?? null;
-      setEmail(nextEmail);
-      persistEmail(nextEmail);
+      const user = session?.user;
+      const nextIdentity = user?.phone ?? user?.email?.toLowerCase() ?? null;
+      setEmail(nextIdentity);
+      persistEmail(nextIdentity);
       setLoading(false);
     });
 
@@ -63,9 +65,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const value = useMemo<AuthContextValue>(
     () => ({
       email,
-      login: async (nextEmail: string, password: string) => {
-        const clean = nextEmail.trim().toLowerCase();
-        if (!clean || !password) return { ok: false, reason: 'Completa email y contraseña.' };
+      login: async (nextPhone: string, password: string) => {
+        const clean = normalizePhoneForAuth(nextPhone);
+        if (!clean || !password) return { ok: false, reason: 'Completa teléfono y contraseña.' };
+        if (!isAllowedPhone(clean)) return { ok: false, reason: 'Este teléfono no está autorizado.' };
 
         const supabase = getSupabaseClient();
         if (!supabase || !isSupabaseEnabled()) {
@@ -73,7 +76,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
 
         const { error } = await supabase.auth.signInWithPassword({
-          email: clean,
+          phone: clean,
           password,
         });
         if (error) return { ok: false, reason: error.message };
