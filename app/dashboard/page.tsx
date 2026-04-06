@@ -407,7 +407,7 @@ export default function DashboardPage() {
               contentStyle={{ borderRadius: 12, border: '1px solid #e4e4e7', boxShadow: '0 6px 20px rgba(0,0,0,0.08)' }}
             />
             <Bar dataKey="cost" fill="url(#barWeek)" radius={[10, 10, 0, 0]} barSize={30}>
-              <LabelList dataKey="cost" position="top" formatter={(v: number) => `${Number(v ?? 0).toFixed(0)}€`} className="fill-zinc-600 text-[11px] font-semibold" />
+              <LabelList dataKey="cost" position="top" formatter={(v) => `${Number(v ?? 0).toFixed(0)}€`} className="fill-zinc-600 text-[11px] font-semibold" />
             </Bar>
           </BarChart>
         </ResponsiveContainer>
@@ -453,7 +453,7 @@ export default function DashboardPage() {
                 contentStyle={{ borderRadius: 12, border: '1px solid #e4e4e7', boxShadow: '0 6px 20px rgba(0,0,0,0.08)' }}
               />
               <Bar dataKey="value" fill="url(#barMonthComp)" radius={[10, 10, 0, 0]} barSize={36}>
-                <LabelList dataKey="value" position="top" formatter={(v: number) => `${Number(v ?? 0).toFixed(0)}€`} className="fill-zinc-600 text-[11px] font-semibold" />
+                <LabelList dataKey="value" position="top" formatter={(v) => `${Number(v ?? 0).toFixed(0)}€`} className="fill-zinc-600 text-[11px] font-semibold" />
               </Bar>
             </BarChart>
           </ResponsiveContainer>
@@ -496,7 +496,7 @@ export default function DashboardPage() {
               contentStyle={{ borderRadius: 12, border: '1px solid #e4e4e7', boxShadow: '0 6px 20px rgba(0,0,0,0.08)' }}
             />
             <Bar dataKey="value" fill="url(#barTopQty)" radius={[0, 10, 10, 0]} barSize={18}>
-              <LabelList dataKey="value" position="right" formatter={(v: number) => qty(Number(v ?? 0))} className="fill-zinc-600 text-[11px] font-semibold" />
+              <LabelList dataKey="value" position="right" formatter={(v) => qty(Number(v ?? 0))} className="fill-zinc-600 text-[11px] font-semibold" />
             </Bar>
           </BarChart>
         </ResponsiveContainer>
@@ -519,7 +519,7 @@ export default function DashboardPage() {
               contentStyle={{ borderRadius: 12, border: '1px solid #e4e4e7', boxShadow: '0 6px 20px rgba(0,0,0,0.08)' }}
             />
             <Bar dataKey="value" fill="url(#barTopValue)" radius={[0, 10, 10, 0]} barSize={18}>
-              <LabelList dataKey="value" position="right" formatter={(v: number) => `${Number(v ?? 0).toFixed(0)}€`} className="fill-zinc-600 text-[11px] font-semibold" />
+              <LabelList dataKey="value" position="right" formatter={(v) => `${Number(v ?? 0).toFixed(0)}€`} className="fill-zinc-600 text-[11px] font-semibold" />
             </Bar>
           </BarChart>
         </ResponsiveContainer>
