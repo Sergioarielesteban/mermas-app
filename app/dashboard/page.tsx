@@ -262,6 +262,9 @@ export default function DashboardPage() {
   const weeklyDelta = Math.round((t.week - previousWeekTotal) * 100) / 100;
   const weeklyTrendUp = weeklyDelta > 0;
   const weeklyTrendFlat = weeklyDelta === 0;
+  const monthlyDelta = Math.round((t.month - monthly.previous) * 100) / 100;
+  const monthlyTrendUp = monthlyDelta > 0;
+  const monthlyTrendFlat = monthlyDelta === 0;
 
   const exportMonthlyExecutivePdf = () => {
     const doc = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'a4' });
@@ -474,6 +477,21 @@ export default function DashboardPage() {
           title="Merma del Mes"
           value={t.month}
           tone={monthCardTone}
+          extra={
+            <span
+              className={[
+                'inline-flex items-center gap-1 rounded-full px-2 py-1 text-[11px] font-bold',
+                monthlyTrendFlat
+                  ? 'bg-zinc-100 text-zinc-600'
+                  : monthlyTrendUp
+                    ? 'bg-red-100 text-red-700'
+                    : 'bg-emerald-100 text-emerald-700',
+              ].join(' ')}
+            >
+              {monthlyTrendFlat ? null : monthlyTrendUp ? <TrendingUp className="h-3.5 w-3.5" /> : <TrendingDown className="h-3.5 w-3.5" />}
+              {monthlyTrendFlat ? 'Sin cambio vs mes anterior' : `${monthlyTrendUp ? '↑' : '↓'} ${eur(Math.abs(monthlyDelta))} vs mes anterior`}
+            </span>
+          }
           onClick={() =>
             openDetail(
               'Detalle Merma del Mes',
