@@ -8,7 +8,15 @@ type SnapshotRow = {
 };
 const SHARED_SNAPSHOT_KEY = 'local-shared@mermas.app';
 
-const SUPABASE_URL = process.env.SUPABASE_URL;
+function resolveSupabaseUrl() {
+  const serverUrl = process.env.SUPABASE_URL?.trim() ?? '';
+  const publicUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim() ?? '';
+  if (serverUrl.startsWith('http://') || serverUrl.startsWith('https://')) return serverUrl;
+  if (publicUrl.startsWith('http://') || publicUrl.startsWith('https://')) return publicUrl;
+  return '';
+}
+
+const SUPABASE_URL = resolveSupabaseUrl();
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 export function isSupabaseAdminConfigured() {
