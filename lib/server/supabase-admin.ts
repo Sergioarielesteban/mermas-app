@@ -6,6 +6,7 @@ type SnapshotRow = {
   mermas: MermaRecord[];
   updated_at?: string;
 };
+const SHARED_SNAPSHOT_KEY = 'local-shared@mermas.app';
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -66,4 +67,16 @@ export async function getSnapshotByEmail(email: string): Promise<SnapshotRow | n
 
   const rows = (await response.json()) as SnapshotRow[];
   return rows[0] ?? null;
+}
+
+export async function upsertSharedSnapshot(input: { products: Product[]; mermas: MermaRecord[] }) {
+  await upsertSnapshot({
+    email: SHARED_SNAPSHOT_KEY,
+    products: input.products,
+    mermas: input.mermas,
+  });
+}
+
+export async function getSharedSnapshot(): Promise<SnapshotRow | null> {
+  return getSnapshotByEmail(SHARED_SNAPSHOT_KEY);
 }

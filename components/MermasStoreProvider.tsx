@@ -412,6 +412,53 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
   useEffect(() => {
     if (!isBrowser()) return;
     if (!hydrated) return;
+    const email = localStorage.getItem(AUTH_KEY)?.trim().toLowerCase();
+    if (!email) return;
+
+    let cancelled = false;
+    const applyRemote = (remote: PersistedState) => {
+      if (cancelled) return;
+      if (!Array.isArray(remote.products) || !Array.isArray(remote.mermas)) return;
+      const mergedProducts = mergeProducts(DEFAULT_PRODUCTS, remote.products);
+      const cleanedMermas = pruneBaconHalfRecords(mergedProducts, remote.mermas);
+      setProducts(mergedProducts);
+      setMermas(cleanedMermas);
+    };
+
+    const pull = async () => {
+      try {
+        const resp = await fetch(`/api/sync?email=${encodeURIComponent(email)}`, {
+          method: 'GET',
+          cache: 'no-store',
+        });
+        if (!resp.ok) return;
+        const data = (await resp.json()) as {
+          ok?: boolean;
+          snapshot?: { products?: Product[]; mermas?: MermaRecord[] } | null;
+        };
+        if (!data?.ok || !data.snapshot) return;
+        applyRemote({
+          products: Array.isArray(data.snapshot.products) ? data.snapshot.products : [],
+          mermas: Array.isArray(data.snapshot.mermas) ? data.snapshot.mermas : [],
+        });
+      } catch {
+        // Ignore transient network issues; next poll retries.
+      }
+    };
+
+    void pull();
+    const intervalId = window.setInterval(() => {
+      void pull();
+    }, 12000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, [hydrated]);
+
+  useEffect(() => {
+    if (!isBrowser()) return;
+    if (!hydrated) return;
     const email = localStorage.getItem(AUTH_KEY);
     if (!email) return;
 
