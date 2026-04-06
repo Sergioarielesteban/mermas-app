@@ -1,4 +1,4 @@
-const CACHE_NAME = 'can-xampa-mermas-v1';
+const CACHE_NAME = 'can-xampa-mermas-v2';
 const CORE_ASSETS = ['/', '/login', '/dashboard', '/productos', '/resumen', '/manifest.webmanifest'];
 
 self.addEventListener('message', (event) => {
@@ -25,7 +25,14 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   const { request } = event;
   if (request.method !== 'GET') return;
+  const url = new URL(request.url);
   const acceptsHtml = request.headers.get('accept')?.includes('text/html');
+
+  // Never cache API calls. They must always hit network for fresh shared data.
+  if (url.pathname.startsWith('/api/')) {
+    event.respondWith(fetch(request));
+    return;
+  }
 
   // For pages, prefer network to avoid serving stale app shells.
   if (request.mode === 'navigate' || acceptsHtml) {
