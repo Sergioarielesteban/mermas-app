@@ -43,9 +43,11 @@ export default function MermasRegistrationForm() {
   const [photoDataUrl, setPhotoDataUrl] = useState<string | null>(null);
   const [notes, setNotes] = useState<string>('');
   const [message, setMessage] = useState<string | null>(null);
+  const [showSavedBanner, setShowSavedBanner] = useState(false);
   const [openProductPicker, setOpenProductPicker] = useState(false);
   const [productSearch, setProductSearch] = useState('');
   const [lastQtyAction, setLastQtyAction] = useState<'inc' | 'dec' | null>(null);
+  const savedBannerTimeoutRef = React.useRef<number | null>(null);
 
   const selectedMotive = motives.find((m) => m.key === motiveKey) ?? null;
 
@@ -54,6 +56,20 @@ export default function MermasRegistrationForm() {
       setProductId(products[0].id);
     }
   }, [productId, products]);
+
+  React.useEffect(() => {
+    if (motiveKey !== 'mal-estado') {
+      setPhotoDataUrl(null);
+    }
+  }, [motiveKey]);
+
+  React.useEffect(() => {
+    return () => {
+      if (savedBannerTimeoutRef.current) {
+        window.clearTimeout(savedBannerTimeoutRef.current);
+      }
+    };
+  }, []);
 
   const selectedProduct = products.find((p) => p.id === productId) ?? null;
   const filteredProducts = products.filter((p) =>
@@ -93,10 +109,18 @@ export default function MermasRegistrationForm() {
       motiveKey,
       notes,
       occurredAt: occurredAt.toISOString(),
-      photoDataUrl: photoDataUrl ?? undefined,
+      photoDataUrl: motiveKey === 'mal-estado' ? (photoDataUrl ?? undefined) : undefined,
     });
 
     setMessage(`Mermas guardadas. Coste calculado: ${record.costEur.toFixed(2)} EUR`);
+    setShowSavedBanner(true);
+    if (savedBannerTimeoutRef.current) {
+      window.clearTimeout(savedBannerTimeoutRef.current);
+    }
+    savedBannerTimeoutRef.current = window.setTimeout(() => {
+      setShowSavedBanner(false);
+      savedBannerTimeoutRef.current = null;
+    }, 1500);
   };
 
   const handleCancel = () => {
@@ -126,9 +150,13 @@ export default function MermasRegistrationForm() {
 
   return (
     <div className="min-h-full">
-      <div className="mb-4 rounded-2xl bg-white px-4 py-4 shadow-sm ring-1 ring-zinc-200">
-        <h1 className="text-base font-extrabold uppercase tracking-wide text-zinc-900">Nuevo Registro</h1>
-      </div>
+      {showSavedBanner ? (
+        <div className="pointer-events-none fixed inset-0 z-[90] grid place-items-center px-6">
+          <div className="saved-banner-pop rounded-2xl bg-[#D32F2F] px-6 py-4 text-center shadow-2xl ring-2 ring-white/70">
+            <p className="text-lg font-black uppercase tracking-wide text-white">MERMA GUARDADA</p>
+          </div>
+        </div>
+      ) : null}
 
       <form onSubmit={handleSave} className="pb-2">
         {message ? (
@@ -144,30 +172,18 @@ export default function MermasRegistrationForm() {
 
         <div className="space-y-5">
           <div className="rounded-2xl bg-white p-3 shadow-sm ring-1 ring-zinc-200">
-            <div className="grid grid-cols-2 gap-3">
-              <label className="mb-2 block text-xs font-semibold text-zinc-700">
-                Fecha
-                <input
-                  type="date"
-                  value={dateValue}
-                  onChange={(e) => setDateValue(e.target.value)}
-                  className="mt-2 h-12 w-full rounded-xl border border-zinc-200 bg-zinc-50 px-3 text-sm text-zinc-900 outline-none focus:border-[#D32F2F] focus:ring-2 focus:ring-[#D32F2F]/20"
-                />
-              </label>
-              <label className="mb-2 block text-xs font-semibold text-zinc-700">
-                Hora
-                <input
-                  type="time"
-                  value={timeValue}
-                  onChange={(e) => setTimeValue(e.target.value)}
-                  className="mt-2 h-12 w-full rounded-xl border border-zinc-200 bg-zinc-50 px-3 text-sm text-zinc-900 outline-none focus:border-[#D32F2F] focus:ring-2 focus:ring-[#D32F2F]/20"
-                />
-              </label>
-            </div>
-          </div>
-
-          <div className="rounded-2xl bg-white p-3 shadow-sm ring-1 ring-zinc-200">
-            <label className="mb-2 block text-xs font-semibold text-zinc-700">Producto</label>
+            <label className="mb-2 block text-xs font-semibold text-zinc-700">
+              Producto <span className="text-[#B91C1C]">*</span>
+            </label>
+            <input
+              type="text"
+              value={productId}
+              onChange={() => undefined}
+              required
+              tabIndex={-1}
+              aria-hidden
+              className="hidden"
+            />
             <button
               type="button"
               onClick={() => setOpenProductPicker(true)}
@@ -186,7 +202,9 @@ export default function MermasRegistrationForm() {
           </div>
 
           <div className="rounded-2xl bg-white p-3 shadow-sm ring-1 ring-zinc-200">
-            <label className="mb-2 block text-xs font-semibold text-zinc-700">Cantidad</label>
+            <label className="mb-2 block text-xs font-semibold text-zinc-700">
+              Cantidad <span className="text-[#B91C1C]">*</span>
+            </label>
             <div className="grid grid-cols-3 items-center gap-2">
               <button
                 type="button"
@@ -213,6 +231,7 @@ export default function MermasRegistrationForm() {
                 inputMode="numeric"
                 min={1}
                 max={999}
+                required
                 value={quantity}
                 onChange={(e) => {
                   setQuantity(toIntClamped(e.target.value, 1, 999));
@@ -243,9 +262,20 @@ export default function MermasRegistrationForm() {
 
           <div className="rounded-2xl bg-white p-3 shadow-sm ring-1 ring-zinc-200">
             <div className="mb-2 flex items-center justify-between">
-              <label className="text-xs font-semibold text-zinc-700">Motivo</label>
+              <label className="text-xs font-semibold text-zinc-700">
+                Motivo <span className="text-[#B91C1C]">*</span>
+              </label>
               <span className="text-[11px] text-zinc-500">Selecciona uno</span>
             </div>
+            <input
+              type="text"
+              value={motiveKey ?? ''}
+              onChange={() => undefined}
+              required
+              tabIndex={-1}
+              aria-hidden
+              className="hidden"
+            />
 
             <div className="grid grid-cols-2 gap-2">
               {motives.map((m) => {
@@ -271,31 +301,33 @@ export default function MermasRegistrationForm() {
             </div>
           </div>
 
-          <div className="rounded-2xl bg-white p-3 shadow-sm ring-1 ring-zinc-200">
-            <label className="mb-2 block text-xs font-semibold text-zinc-700">Añadir Foto de Merma</label>
-            <label className="flex h-12 cursor-pointer items-center justify-center gap-2 rounded-xl border border-zinc-300 bg-zinc-50 text-sm font-semibold text-zinc-700 hover:bg-zinc-100">
-              <Camera className="h-4 w-4" />
-              <Upload className="h-4 w-4" />
-              <span>Tomar o subir foto</span>
-              <input
-                type="file"
-                accept="image/*"
-                capture="environment"
-                className="hidden"
-                onChange={handlePhoto}
-              />
-            </label>
-            {photoDataUrl ? (
-              <Image
-                src={photoDataUrl}
-                alt="Foto de merma"
-                width={720}
-                height={360}
-                unoptimized
-                className="mt-2 h-36 w-full rounded-xl object-cover ring-1 ring-zinc-200"
-              />
-            ) : null}
-          </div>
+          {motiveKey === 'mal-estado' ? (
+            <div className="rounded-2xl bg-white p-3 shadow-sm ring-1 ring-zinc-200">
+              <label className="mb-2 block text-xs font-semibold text-zinc-700">Añadir Foto de Merma</label>
+              <label className="flex h-12 cursor-pointer items-center justify-center gap-2 rounded-xl border border-zinc-300 bg-zinc-50 text-sm font-semibold text-zinc-700 hover:bg-zinc-100">
+                <Camera className="h-4 w-4" />
+                <Upload className="h-4 w-4" />
+                <span>Tomar o subir foto</span>
+                <input
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  className="hidden"
+                  onChange={handlePhoto}
+                />
+              </label>
+              {photoDataUrl ? (
+                <Image
+                  src={photoDataUrl}
+                  alt="Foto de merma"
+                  width={720}
+                  height={360}
+                  unoptimized
+                  className="mt-2 h-36 w-full rounded-xl object-cover ring-1 ring-zinc-200"
+                />
+              ) : null}
+            </div>
+          ) : null}
 
           <div className="rounded-2xl bg-white p-3 shadow-sm ring-1 ring-zinc-200">
             <label className="mb-2 block text-xs font-semibold text-zinc-700">Campo de Notas</label>
@@ -307,6 +339,29 @@ export default function MermasRegistrationForm() {
               className="w-full resize-none rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm text-zinc-900 shadow-sm outline-none focus:border-[#D32F2F] focus:ring-2 focus:ring-[#D32F2F]/20"
               aria-label="Notas"
             />
+          </div>
+
+          <div className="rounded-2xl bg-white p-3 shadow-sm ring-1 ring-zinc-200">
+            <div className="grid grid-cols-2 gap-3">
+              <label className="mb-2 block text-xs font-semibold text-zinc-700">
+                Fecha
+                <input
+                  type="date"
+                  value={dateValue}
+                  onChange={(e) => setDateValue(e.target.value)}
+                  className="mt-2 h-12 w-full rounded-xl border border-zinc-200 bg-zinc-50 px-3 text-sm text-zinc-900 outline-none focus:border-[#D32F2F] focus:ring-2 focus:ring-[#D32F2F]/20"
+                />
+              </label>
+              <label className="mb-2 block text-xs font-semibold text-zinc-700">
+                Hora
+                <input
+                  type="time"
+                  value={timeValue}
+                  onChange={(e) => setTimeValue(e.target.value)}
+                  className="mt-2 h-12 w-full rounded-xl border border-zinc-200 bg-zinc-50 px-3 text-sm text-zinc-900 outline-none focus:border-[#D32F2F] focus:ring-2 focus:ring-[#D32F2F]/20"
+                />
+              </label>
+            </div>
           </div>
         </div>
 

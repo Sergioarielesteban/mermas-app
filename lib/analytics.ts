@@ -21,6 +21,20 @@ function startOfBusinessWeek(date: Date) {
   return out;
 }
 
+function normalizedCostForRecord(record: MermaRecord, pricePerUnit: number | undefined) {
+  const recorded = Number(record.costEur ?? 0);
+  if (!Number.isFinite(recorded) || recorded < 0) return 0;
+  if (!pricePerUnit || !Number.isFinite(pricePerUnit) || pricePerUnit <= 0) return recorded;
+
+  const expected = Math.round(record.quantity * pricePerUnit * 100) / 100;
+  if (!Number.isFinite(expected) || expected <= 0) return recorded;
+
+  const ratio = recorded / expected;
+  // Fix legacy decimal-shift mistakes (x10 / x100) while keeping normal deviations untouched.
+  const looksShifted = (Math.abs(ratio - 10) < 0.25 || Math.abs(ratio - 100) < 2.5) && recorded > expected * 4;
+  return looksShifted ? expected : recorded;
+}
+
 export function totals(mermas: MermaRecord[]) {
   const now = toBusinessDate(new Date());
   const weekStart = startOfBusinessWeek(now);
@@ -83,14 +97,15 @@ export function topByQuantity(mermas: MermaRecord[], products: Product[], top = 
       value: Math.round(quantity * 100) / 100,
     }))
     .sort((a, b) => b.value - a.value)
-    .slice(0, top)
-    .reverse();
+    .slice(0, top);
 }
 
 export function topByValue(mermas: MermaRecord[], products: Product[], top = 5) {
+  const priceByProductId = new Map(products.map((p) => [p.id, p.pricePerUnit]));
   const map = new Map<string, number>();
   for (const m of mermas) {
-    map.set(m.productId, (map.get(m.productId) ?? 0) + m.costEur);
+    const fixedCost = normalizedCostForRecord(m, priceByProductId.get(m.productId));
+    map.set(m.productId, (map.get(m.productId) ?? 0) + fixedCost);
   }
 
   return Array.from(map.entries())
@@ -100,8 +115,7 @@ export function topByValue(mermas: MermaRecord[], products: Product[], top = 5) 
       value: Math.round(amount * 100) / 100,
     }))
     .sort((a, b) => b.value - a.value)
-    .slice(0, top)
-    .reverse();
+    .slice(0, top);
 }
 
 export function monthComparison(mermas: MermaRecord[]) {
@@ -141,16 +155,16 @@ export function monthComparison(mermas: MermaRecord[]) {
 
 export function highWasteAlerts(mermas: MermaRecord[], products: Product[], top = 3) {
   const now = toBusinessDate(new Date());
-  const days = 7;
-  const start = new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
-  const map = new Map<string, { total: number; events: number }>();
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const priceByProductId = new Map(products.map((p) => [p.id, p.pricePerUnit]));
+  const map = new Map<string, { total: number; quantity: number }>();
 
   for (const m of mermas) {
     const d = toBusinessDate(m.occurredAt);
-    if (d < start) continue;
-    const prev = map.get(m.productId) ?? { total: 0, events: 0 };
-    prev.total += m.costEur;
-    prev.events += 1;
+    if (d < monthStart) continue;
+    const prev = map.get(m.productId) ?? { total: 0, quantity: 0 };
+    prev.total += normalizedCostForRecord(m, priceByProductId.get(m.productId));
+    prev.quantity += m.quantity;
     map.set(m.productId, prev);
   }
 
@@ -159,8 +173,8 @@ export function highWasteAlerts(mermas: MermaRecord[], products: Product[], top 
       productId,
       productName: products.find((p) => p.id === productId)?.name ?? 'Producto',
       totalCost: Math.round(data.total * 100) / 100,
-      events: data.events,
-      severity: data.total >= 12 || data.events >= 8 ? 'alta' : data.total >= 6 ? 'media' : 'baja',
+      quantity: Math.round(data.quantity * 100) / 100,
+      severity: data.total >= 12 || data.quantity >= 12 ? 'alta' : data.total >= 6 ? 'media' : 'baja',
     }))
     .sort((a, b) => b.totalCost - a.totalCost)
     .slice(0, top);
@@ -178,10 +192,10 @@ export function topMotives(mermas: MermaRecord[], top = 5) {
     cancelado: 'CANCELADO',
   };
 
-  const map = new Map<MermaRecord['motiveKey'], { events: number; total: number }>();
+  const map = new Map<MermaRecord['motiveKey'], { quantity: number; total: number }>();
   for (const m of mermas) {
-    const prev = map.get(m.motiveKey) ?? { events: 0, total: 0 };
-    prev.events += 1;
+    const prev = map.get(m.motiveKey) ?? { quantity: 0, total: 0 };
+    prev.quantity += m.quantity;
     prev.total += m.costEur;
     map.set(m.motiveKey, prev);
   }
@@ -190,7 +204,7 @@ export function topMotives(mermas: MermaRecord[], top = 5) {
     .map(([key, data]) => ({
       key,
       label: labels[key],
-      events: data.events,
+      quantity: Math.round(data.quantity * 100) / 100,
       totalCost: Math.round(data.total * 100) / 100,
     }))
     .sort((a, b) => b.totalCost - a.totalCost)

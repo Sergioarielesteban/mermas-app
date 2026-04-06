@@ -266,6 +266,22 @@ const PRODUCT_ALIASES: Record<string, string> = {
   'pan rústico': 'pan rustico',
 };
 
+const PRODUCT_PRICE_FIXES: Record<string, number> = {
+  'loncha bacon bocata': 0.25,
+  'loncha bacon burguer 1/2': 0.11,
+};
+
+function applyKnownPriceFix(product: Product): Product {
+  const key = normalizeName(product.name);
+  const fixed = PRODUCT_PRICE_FIXES[key];
+  if (!fixed) return product;
+  // Defensive migration for legacy decimal-shift mistakes (e.g. 2.5 instead of 0.25).
+  if (product.pricePerUnit > 1) {
+    return { ...product, pricePerUnit: fixed };
+  }
+  return product;
+}
+
 function findProductIdByName(name: string, products: Product[]) {
   const norm = normalizeName(name);
   const aliasNorm = normalizeName(PRODUCT_ALIASES[norm] ?? norm);
@@ -279,6 +295,44 @@ function findProductIdByName(name: string, products: Product[]) {
   return null;
 }
 
+function isBaconHalfSliceName(name: string) {
+  const n = normalizeName(name);
+  return n.includes('loncha bacon burguer 1/2') || n.includes('loncha bacon burger 1/2');
+}
+
+function applyBaconHalfMonthlyBackfill(mermas: MermaRecord[], products: Product[]) {
+  const target = products.find((p) => isBaconHalfSliceName(p.name));
+  if (!target) return mermas;
+
+  const now = new Date();
+  const monthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  const daysToSpread = 7;
+  const totalQty = 84;
+  const qtyPerDay = Math.floor(totalQty / daysToSpread);
+  const remainder = totalQty % daysToSpread;
+
+  const kept = mermas.filter((m) => !m.id.startsWith(`fix-bacon-half-${monthKey}-`));
+  const additions: MermaRecord[] = [];
+
+  for (let i = 1; i <= daysToSpread; i += 1) {
+    const qty = qtyPerDay + (i <= remainder ? 1 : 0);
+    const occurredAt = new Date(now.getFullYear(), now.getMonth(), i, 12, 0, 0);
+    const costEur = Math.round(qty * target.pricePerUnit * 100) / 100;
+    additions.push({
+      id: `fix-bacon-half-${monthKey}-${String(i).padStart(2, '0')}`,
+      productId: target.id,
+      quantity: qty,
+      motiveKey: 'sobras-marcaje',
+      notes: 'Ajuste mensual bacon 1/2',
+      occurredAt: occurredAt.toISOString(),
+      costEur,
+      createdAt: new Date().toISOString(),
+    });
+  }
+
+  return [...additions, ...kept].sort((a, b) => (a.occurredAt < b.occurredAt ? 1 : -1));
+}
+
 function buildSeedMermas(products: Product[]): MermaRecord[] {
   const rows = (seedMermasRaw as SeedMermaRow[]) ?? [];
   const out: MermaRecord[] = [];
@@ -287,6 +341,8 @@ function buildSeedMermas(products: Product[]): MermaRecord[] {
     const productId = findProductIdByName(row.productName, products);
     const motiveKey = mapMotive(row.motiveLabel);
     if (!productId || !motiveKey) return;
+    const product = products.find((p) => p.id === productId);
+    if (product && isBaconHalfSliceName(product.name)) return;
 
     out.push({
       id: `seed-m-${index + 1}`,
@@ -312,19 +368,28 @@ function mergeProducts(seed: Product[], persisted: Product[]): Product[] {
   }
   for (const item of persisted) {
     // User-defined values overwrite seed if same name exists.
-    map.set(normalizeName(item.name), item);
+    map.set(normalizeName(item.name), applyKnownPriceFix(item));
   }
   return sortProductsByName(Array.from(map.values()));
 }
 
 function loadInitialState(): PersistedState {
-  if (!isBrowser()) return { products: sortProductsByName(DEFAULT_PRODUCTS), mermas: DEFAULT_MERMAS };
+  if (!isBrowser()) {
+    const products = sortProductsByName(DEFAULT_PRODUCTS);
+    return { products, mermas: applyBaconHalfMonthlyBackfill(DEFAULT_MERMAS, products) };
+  }
   const parsed = safeJsonParse<PersistedState>(localStorage.getItem(STORAGE_KEY));
-  if (!parsed?.products?.length)
-    return { products: sortProductsByName(DEFAULT_PRODUCTS), mermas: DEFAULT_MERMAS };
+  if (!parsed?.products?.length) {
+    const products = sortProductsByName(DEFAULT_PRODUCTS);
+    return { products, mermas: applyBaconHalfMonthlyBackfill(DEFAULT_MERMAS, products) };
+  }
+  const mergedProducts = mergeProducts(DEFAULT_PRODUCTS, parsed.products);
   return {
-    products: mergeProducts(DEFAULT_PRODUCTS, parsed.products),
-    mermas: Array.isArray(parsed.mermas) ? parsed.mermas : DEFAULT_MERMAS,
+    products: mergedProducts,
+    mermas: applyBaconHalfMonthlyBackfill(
+      Array.isArray(parsed.mermas) ? parsed.mermas : DEFAULT_MERMAS,
+      mergedProducts,
+    ),
   };
 }
 

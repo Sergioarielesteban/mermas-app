@@ -3,10 +3,12 @@
 import React from 'react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { CalendarDays } from 'lucide-react';
 import {
   Bar,
   BarChart,
   CartesianGrid,
+  LabelList,
   Line,
   LineChart,
   ResponsiveContainer,
@@ -30,17 +32,60 @@ import {
 
 const eur = (value: number) => `${Number(value).toFixed(2)} €`;
 const MONTHLY_TARGET_KEY = 'mermas_monthly_target_eur';
+const WEEKLY_TARGET_KEY = 'mermas_weekly_target_eur';
 const qty = (value: number) =>
   Number(value).toLocaleString('es-ES', {
     minimumFractionDigits: 0,
     maximumFractionDigits: 2,
   });
 
-function Card({ title, value }: { title: string; value: number }) {
+function Card({
+  title,
+  value,
+  Icon,
+  tone = 'default',
+}: {
+  title: string;
+  value: number;
+  Icon?: React.ComponentType<{ className?: string }>;
+  tone?: 'default' | 'success' | 'warning' | 'danger';
+}) {
+  const toneStyles =
+    tone === 'success'
+      ? {
+          border: 'from-emerald-500/20 via-white to-white',
+          badge: 'bg-emerald-500/12 text-emerald-700 ring-emerald-500/25',
+          icon: 'text-emerald-600',
+        }
+      : tone === 'warning'
+        ? {
+            border: 'from-amber-500/20 via-white to-white',
+            badge: 'bg-amber-500/12 text-amber-700 ring-amber-500/25',
+            icon: 'text-amber-600',
+          }
+        : tone === 'danger'
+          ? {
+              border: 'from-red-600/22 via-white to-white',
+              badge: 'bg-red-600/12 text-red-700 ring-red-600/25',
+              icon: 'text-red-600',
+            }
+          : {
+              border: 'from-[#B91C1C]/15 via-white to-white',
+              badge: 'bg-[#D32F2F]/10 text-[#B91C1C] ring-[#D32F2F]/20',
+              icon: 'text-[#D32F2F]',
+            };
+
   return (
-    <div className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-zinc-200">
-      <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">{title}</p>
-      <p className="pt-1 text-2xl font-black text-zinc-900">{eur(value)}</p>
+    <div className={`rounded-2xl bg-gradient-to-br p-[1px] shadow-sm ${toneStyles.border}`}>
+      <div className="rounded-2xl bg-white px-4 py-5 text-center ring-1 ring-zinc-200/80">
+        <div className="flex items-center justify-center gap-1.5 text-[11px] font-extrabold uppercase tracking-[0.14em] text-zinc-500">
+          {Icon ? <Icon className={`h-3.5 w-3.5 ${toneStyles.icon}`} /> : null}
+          <span>{title}</span>
+        </div>
+        <p className={`mt-3 inline-flex items-center justify-center rounded-xl px-3 py-1.5 text-2xl font-black ring-1 ${toneStyles.badge}`}>
+          {eur(value)}
+        </p>
+      </div>
     </div>
   );
 }
@@ -54,6 +99,17 @@ function Block({ title, children }: { title: string; children: React.ReactNode }
   );
 }
 
+function readStoredTarget(key: string, fallback: number) {
+  try {
+    if (typeof window === 'undefined') return fallback;
+    const raw = window.localStorage.getItem(key);
+    const parsed = Number(raw ?? fallback);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
 export default function DashboardPage() {
   const { products, mermas } = useMermasStore();
   const t = totals(mermas);
@@ -65,17 +121,8 @@ export default function DashboardPage() {
   const alerts = highWasteAlerts(mermas, products);
   const motives = topMotives(mermas);
   const anomalies = anomalyAlerts(mermas, products);
-  const [monthlyTarget, setMonthlyTarget] = React.useState<number>(500);
-
-  React.useEffect(() => {
-    try {
-      const raw = localStorage.getItem(MONTHLY_TARGET_KEY);
-      const parsed = Number(raw ?? 500);
-      if (Number.isFinite(parsed) && parsed > 0) setMonthlyTarget(parsed);
-    } catch {
-      // ignore
-    }
-  }, []);
+  const [monthlyTarget, setMonthlyTarget] = React.useState<number>(() => readStoredTarget(MONTHLY_TARGET_KEY, 500));
+  const [weeklyTarget, setWeeklyTarget] = React.useState<number>(() => readStoredTarget(WEEKLY_TARGET_KEY, 125));
 
   React.useEffect(() => {
     try {
@@ -85,6 +132,14 @@ export default function DashboardPage() {
     }
   }, [monthlyTarget]);
 
+  React.useEffect(() => {
+    try {
+      localStorage.setItem(WEEKLY_TARGET_KEY, String(weeklyTarget));
+    } catch {
+      // ignore
+    }
+  }, [weeklyTarget]);
+
   const monthNow = toBusinessDate(new Date());
   const monthlyMermas = mermas.filter((m) => {
     const d = toBusinessDate(m.occurredAt);
@@ -93,8 +148,20 @@ export default function DashboardPage() {
   const monthlyTopValue = topByValue(monthlyMermas, products, 5);
   const monthlyMotives = topMotives(monthlyMermas, 5);
   const monthlyAnomalies = anomalyAlerts(monthlyMermas, products, 5);
+  const daysInMonth = new Date(monthNow.getFullYear(), monthNow.getMonth() + 1, 0).getDate();
+  const currentDayOfMonth = monthNow.getDate();
+  const projectedMonth =
+    currentDayOfMonth > 0 ? Math.round(((t.month / currentDayOfMonth) * daysInMonth) * 100) / 100 : t.month;
+  const projectedRatio = monthlyTarget > 0 ? projectedMonth / monthlyTarget : 0;
+  const projectedTone = projectedRatio <= 0.85 ? 'success' : projectedRatio <= 1 ? 'warning' : 'danger';
+  const weeklyRatio = weeklyTarget > 0 ? t.week / weeklyTarget : 0;
+  const weeklySeverity = weeklyRatio <= 0.85 ? 'verde' : weeklyRatio <= 1 ? 'amarillo' : 'rojo';
   const targetRatio = monthlyTarget > 0 ? t.month / monthlyTarget : 0;
   const targetSeverity = targetRatio <= 0.85 ? 'verde' : targetRatio <= 1 ? 'amarillo' : 'rojo';
+  const weekCardTone = weeklyRatio <= 0.85 ? 'success' : weeklyRatio <= 1 ? 'warning' : 'danger';
+  const monthCardTone = targetRatio <= 0.85 ? 'success' : targetRatio <= 1 ? 'warning' : 'danger';
+  const weeklyColor =
+    weeklySeverity === 'verde' ? 'bg-emerald-500' : weeklySeverity === 'amarillo' ? 'bg-amber-500' : 'bg-red-500';
   const targetColor =
     targetSeverity === 'verde' ? 'bg-emerald-500' : targetSeverity === 'amarillo' ? 'bg-amber-500' : 'bg-red-500';
 
@@ -123,10 +190,10 @@ export default function DashboardPage() {
       startY: (doc as jsPDF & { lastAutoTable?: { finalY?: number } }).lastAutoTable?.finalY
         ? ((doc as jsPDF & { lastAutoTable?: { finalY?: number } }).lastAutoTable?.finalY ?? 130) + 18
         : 240,
-      head: [['Top motivos', 'Eventos', 'Impacto']],
+      head: [['Top motivos', 'Artículos', 'Impacto']],
       body:
         monthlyMotives.length > 0
-          ? monthlyMotives.map((item) => [item.label, String(item.events), eur(item.totalCost)])
+          ? monthlyMotives.map((item) => [item.label, String(item.quantity), eur(item.totalCost)])
           : [['Sin datos', '-', '-']],
       styles: { fontSize: 9 },
       headStyles: { fillColor: [211, 47, 47] },
@@ -151,8 +218,8 @@ export default function DashboardPage() {
   return (
     <div className="space-y-4">
       <div className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-zinc-200">
-        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-zinc-500">Business Intelligence</p>
-        <p className="pt-1 text-sm font-semibold text-zinc-700">
+        <p className="text-center text-xs font-semibold uppercase tracking-[0.16em] text-zinc-500">Business Intelligence</p>
+        <p className="pt-1 text-center text-sm font-semibold text-zinc-700">
           Seguimiento en tiempo real del coste de merma.
         </p>
       </div>
@@ -160,11 +227,11 @@ export default function DashboardPage() {
       <section className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-zinc-200">
         <div className="mb-2 flex items-center justify-between">
           <h2 className="text-sm font-extrabold uppercase tracking-wide text-zinc-700">
-            Alertas de Merma Alta (7 días)
+            Alertas de Merma Alta (Mes actual)
           </h2>
         </div>
         {alerts.length === 0 ? (
-          <p className="text-sm text-zinc-500">Sin alertas relevantes esta semana.</p>
+          <p className="text-sm text-zinc-500">Sin alertas relevantes este mes.</p>
         ) : (
           <div className="space-y-2">
             {alerts.map((item) => (
@@ -185,7 +252,7 @@ export default function DashboardPage() {
                   </span>
                 </div>
                 <p className="pt-1 text-xs text-zinc-700">
-                  Coste acumulado: <strong>{eur(item.totalCost)}</strong> | eventos: {item.events}
+                  Coste acumulado: <strong>{eur(item.totalCost)}</strong> | artículos: {item.quantity}
                 </p>
               </div>
             ))}
@@ -235,9 +302,47 @@ export default function DashboardPage() {
 
       <div className="grid grid-cols-1 gap-3">
         <Card title="Merma de Hoy" value={t.today} />
-        <Card title="Merma de la Semana" value={t.week} />
-        <Card title="Merma del Mes" value={t.month} />
+        <Card title="Merma de la Semana" value={t.week} Icon={CalendarDays} tone={weekCardTone} />
+        <Card title="Merma del Mes" value={t.month} tone={monthCardTone} />
+        <Card title="Proyección Fin de Mes" value={projectedMonth} tone={projectedTone} />
       </div>
+
+      <section className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-zinc-200">
+        <h2 className="text-sm font-extrabold uppercase tracking-wide text-zinc-700">Objetivo Semanal</h2>
+        <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-[1fr_auto]">
+          <input
+            type="number"
+            min={1}
+            value={weeklyTarget}
+            onChange={(e) => setWeeklyTarget(Math.max(1, Number(e.target.value || 1)))}
+            className="h-10 rounded-lg border border-zinc-200 bg-zinc-50 px-3 text-sm outline-none"
+          />
+          <p className="self-center text-sm font-semibold text-zinc-700">
+            Actual: {eur(t.week)} / Objetivo: {eur(weeklyTarget)}
+          </p>
+        </div>
+        <div className="mt-2 grid grid-cols-4 gap-2">
+          {[75, 100, 125, 150].map((value) => (
+            <button
+              key={value}
+              type="button"
+              onClick={() => setWeeklyTarget(value)}
+              className={[
+                'h-9 rounded-lg border text-xs font-bold',
+                weeklyTarget === value
+                  ? 'border-[#D32F2F] bg-[#D32F2F] text-white'
+                  : 'border-zinc-300 bg-white text-zinc-700',
+              ].join(' ')}
+            >
+              {value}€
+            </button>
+          ))}
+        </div>
+        <div className="mt-3 h-3 w-full overflow-hidden rounded-full bg-zinc-200">
+          <div className={['h-full transition-all', weeklyColor].join(' ')} style={{ width: `${Math.min(weeklyRatio * 100, 100)}%` }} />
+        </div>
+        <p className="mt-2 text-xs font-semibold uppercase text-zinc-600">Semáforo: {weeklySeverity}</p>
+      </section>
 
       <section className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-zinc-200">
         <div className="flex items-center justify-between gap-3">
@@ -287,12 +392,23 @@ export default function DashboardPage() {
 
       <Block title="Merma de la Semana (€)">
         <ResponsiveContainer width="100%" height="100%" minWidth={0}>
-          <BarChart data={dataWeek}>
-            <CartesianGrid strokeDasharray="3 3" />
-            <XAxis dataKey="day" />
-            <YAxis />
-            <Tooltip formatter={(value) => [eur(Number(value ?? 0)), 'VALOR']} />
-            <Bar dataKey="cost" fill="#D32F2F" radius={[8, 8, 0, 0]} />
+          <BarChart data={dataWeek} margin={{ top: 18, right: 10, left: -8, bottom: 2 }}>
+            <defs>
+              <linearGradient id="barWeek" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="#EF4444" />
+                <stop offset="100%" stopColor="#B91C1C" />
+              </linearGradient>
+            </defs>
+            <CartesianGrid strokeDasharray="3 3" stroke="#e4e4e7" vertical={false} />
+            <XAxis dataKey="day" tick={{ fill: '#52525b', fontSize: 12, fontWeight: 600 }} axisLine={false} tickLine={false} />
+            <YAxis tick={{ fill: '#71717a', fontSize: 11 }} axisLine={false} tickLine={false} />
+            <Tooltip
+              formatter={(value) => [eur(Number(value ?? 0)), 'Valor']}
+              contentStyle={{ borderRadius: 12, border: '1px solid #e4e4e7', boxShadow: '0 6px 20px rgba(0,0,0,0.08)' }}
+            />
+            <Bar dataKey="cost" fill="url(#barWeek)" radius={[10, 10, 0, 0]} barSize={30}>
+              <LabelList dataKey="cost" position="top" formatter={(v: number) => `${Number(v ?? 0).toFixed(0)}€`} className="fill-zinc-600 text-[11px] font-semibold" />
+            </Bar>
           </BarChart>
         </ResponsiveContainer>
       </Block>
@@ -322,12 +438,23 @@ export default function DashboardPage() {
         </p>
         <div className="mt-3 h-56 min-w-0">
           <ResponsiveContainer width="100%" height="100%" minWidth={0}>
-            <BarChart data={monthly.chart}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="month" />
-              <YAxis />
-              <Tooltip formatter={(value) => [eur(Number(value ?? 0)), 'VALOR']} />
-              <Bar dataKey="value" fill="#D32F2F" radius={[8, 8, 0, 0]} />
+            <BarChart data={monthly.chart} margin={{ top: 18, right: 10, left: -8, bottom: 2 }}>
+              <defs>
+                <linearGradient id="barMonthComp" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#F87171" />
+                  <stop offset="100%" stopColor="#DC2626" />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" stroke="#e4e4e7" vertical={false} />
+              <XAxis dataKey="month" tick={{ fill: '#52525b', fontSize: 11, fontWeight: 600 }} axisLine={false} tickLine={false} />
+              <YAxis tick={{ fill: '#71717a', fontSize: 11 }} axisLine={false} tickLine={false} />
+              <Tooltip
+                formatter={(value) => [eur(Number(value ?? 0)), 'Valor']}
+                contentStyle={{ borderRadius: 12, border: '1px solid #e4e4e7', boxShadow: '0 6px 20px rgba(0,0,0,0.08)' }}
+              />
+              <Bar dataKey="value" fill="url(#barMonthComp)" radius={[10, 10, 0, 0]} barSize={36}>
+                <LabelList dataKey="value" position="top" formatter={(v: number) => `${Number(v ?? 0).toFixed(0)}€`} className="fill-zinc-600 text-[11px] font-semibold" />
+              </Bar>
             </BarChart>
           </ResponsiveContainer>
         </div>
@@ -343,7 +470,7 @@ export default function DashboardPage() {
               <div key={item.key} className="rounded-xl border border-zinc-200 bg-zinc-50 p-3">
                 <div className="flex items-center justify-between">
                   <p className="text-sm font-bold text-zinc-900">{item.label}</p>
-                  <p className="text-xs font-semibold text-zinc-700">{item.events} eventos</p>
+                  <p className="text-xs font-semibold text-zinc-700">{item.quantity} artículos</p>
                 </div>
                 <p className="pt-1 text-xs text-zinc-700">Impacto: {eur(item.totalCost)}</p>
               </div>
@@ -354,24 +481,46 @@ export default function DashboardPage() {
 
       <Block title="Top 5 Productos por Cantidad Tirada">
         <ResponsiveContainer width="100%" height="100%" minWidth={0}>
-          <BarChart data={dataTopQty} layout="vertical">
-            <CartesianGrid strokeDasharray="3 3" />
-            <XAxis type="number" tickFormatter={(value) => qty(Number(value ?? 0))} />
-            <YAxis type="category" dataKey="name" width={120} />
-            <Tooltip formatter={(value) => [qty(Number(value ?? 0)), 'CANTIDAD']} />
-            <Bar dataKey="value" fill="#2563eb" radius={[0, 8, 8, 0]} />
+          <BarChart data={dataTopQty} layout="vertical" margin={{ top: 8, right: 52, left: 10, bottom: 2 }}>
+            <defs>
+              <linearGradient id="barTopQty" x1="0" y1="0" x2="1" y2="0">
+                <stop offset="0%" stopColor="#60A5FA" />
+                <stop offset="100%" stopColor="#2563EB" />
+              </linearGradient>
+            </defs>
+            <CartesianGrid strokeDasharray="3 3" stroke="#e4e4e7" horizontal={false} />
+            <XAxis type="number" tickFormatter={(value) => qty(Number(value ?? 0))} tick={{ fill: '#71717a', fontSize: 11 }} axisLine={false} tickLine={false} />
+            <YAxis type="category" dataKey="name" width={132} tick={{ fill: '#52525b', fontSize: 11, fontWeight: 600 }} axisLine={false} tickLine={false} />
+            <Tooltip
+              formatter={(value) => [qty(Number(value ?? 0)), 'Cantidad']}
+              contentStyle={{ borderRadius: 12, border: '1px solid #e4e4e7', boxShadow: '0 6px 20px rgba(0,0,0,0.08)' }}
+            />
+            <Bar dataKey="value" fill="url(#barTopQty)" radius={[0, 10, 10, 0]} barSize={18}>
+              <LabelList dataKey="value" position="right" formatter={(v: number) => qty(Number(v ?? 0))} className="fill-zinc-600 text-[11px] font-semibold" />
+            </Bar>
           </BarChart>
         </ResponsiveContainer>
       </Block>
 
       <Block title="Top 5 Productos por Valor Economico">
         <ResponsiveContainer width="100%" height="100%" minWidth={0}>
-          <BarChart data={dataTopValue} layout="vertical">
-            <CartesianGrid strokeDasharray="3 3" />
-            <XAxis type="number" />
-            <YAxis type="category" dataKey="name" width={120} />
-            <Tooltip formatter={(value) => [eur(Number(value ?? 0)), 'VALOR']} />
-            <Bar dataKey="value" fill="#D32F2F" radius={[0, 8, 8, 0]} />
+          <BarChart data={dataTopValue} layout="vertical" margin={{ top: 8, right: 58, left: 10, bottom: 2 }}>
+            <defs>
+              <linearGradient id="barTopValue" x1="0" y1="0" x2="1" y2="0">
+                <stop offset="0%" stopColor="#FB7185" />
+                <stop offset="100%" stopColor="#D32F2F" />
+              </linearGradient>
+            </defs>
+            <CartesianGrid strokeDasharray="3 3" stroke="#e4e4e7" horizontal={false} />
+            <XAxis type="number" tick={{ fill: '#71717a', fontSize: 11 }} axisLine={false} tickLine={false} />
+            <YAxis type="category" dataKey="name" width={145} tick={{ fill: '#52525b', fontSize: 11, fontWeight: 600 }} axisLine={false} tickLine={false} />
+            <Tooltip
+              formatter={(value) => [eur(Number(value ?? 0)), 'Valor']}
+              contentStyle={{ borderRadius: 12, border: '1px solid #e4e4e7', boxShadow: '0 6px 20px rgba(0,0,0,0.08)' }}
+            />
+            <Bar dataKey="value" fill="url(#barTopValue)" radius={[0, 10, 10, 0]} barSize={18}>
+              <LabelList dataKey="value" position="right" formatter={(v: number) => `${Number(v ?? 0).toFixed(0)}€`} className="fill-zinc-600 text-[11px] font-semibold" />
+            </Bar>
           </BarChart>
         </ResponsiveContainer>
       </Block>
