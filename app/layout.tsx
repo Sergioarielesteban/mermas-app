@@ -1,8 +1,9 @@
 import type { Metadata } from "next";
+import { AuthProvider } from "@/components/AuthProvider";
+import AppFrame from "@/components/AppFrame";
 import { Geist, Geist_Mono } from "next/font/google";
-import AppShell from "@/components/AppShell";
-import BottomNav from "@/components/BottomNav";
 import { MermasStoreProvider } from "@/components/MermasStoreProvider";
+import PwaRegister from "@/components/PwaRegister";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -16,8 +17,27 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Mermas App",
+  metadataBase: new URL("http://localhost:3000"),
+  title: "Can Xampa Mermas",
   description: "Gestión de mermas para hostelería",
+  manifest: "/manifest.webmanifest",
+  icons: {
+    icon: "/logo-can-xampa.png",
+    apple: "/logo-can-xampa.png",
+  },
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "Can Xampa Mermas",
+  },
+  formatDetection: {
+    telephone: false,
+  },
+  openGraph: {
+    title: "Can Xampa Mermas",
+    description: "Gestión de mermas para hostelería",
+    images: ["/logo-can-xampa.png"],
+  },
 };
 
 export default function RootLayout({
@@ -31,12 +51,12 @@ export default function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
-        <MermasStoreProvider>
-          <div className="flex-1 pb-24">
-            <AppShell>{children}</AppShell>
-          </div>
-          <BottomNav />
-        </MermasStoreProvider>
+        <PwaRegister />
+        <AuthProvider>
+          <MermasStoreProvider>
+            <AppFrame>{children}</AppFrame>
+          </MermasStoreProvider>
+        </AuthProvider>
       </body>
     </html>
   );

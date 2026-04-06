@@ -1,4 +1,4 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+## App de Mermas (Next.js)
 
 ## Getting Started
 
@@ -16,21 +16,49 @@ bun dev
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## WhatsApp semanal automatico (Opcion A)
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Se implemento:
+- Sincronizacion automatica del estado local a Supabase (`/api/sync`) cuando cambian productos/mermas.
+- Cron en Vercel (`/api/cron/weekly-whatsapp`) para enviar resumen semanal por WhatsApp.
+- Envio con Twilio WhatsApp.
 
-## Learn More
+### 1) Crear tabla en Supabase
 
-To learn more about Next.js, take a look at the following resources:
+Ejecuta el SQL de `supabase-schema.sql` en tu proyecto Supabase.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+### 2) Variables de entorno (Vercel/Local)
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Configura:
+- `SUPABASE_URL`
+- `SUPABASE_SERVICE_ROLE_KEY`
+- `TWILIO_ACCOUNT_SID`
+- `TWILIO_AUTH_TOKEN`
+- `TWILIO_WHATSAPP_FROM` (ej: `whatsapp:+14155238886`)
+- `WHATSAPP_TO` (tu numero: `whatsapp:+34622915421`)
+- `WEEKLY_REPORT_EMAIL` (email permitido que usa la app)
+- `CRON_SECRET` (token secreto para proteger el endpoint cron)
 
-## Deploy on Vercel
+### 3) Cron semanal lunes 08:00 Madrid
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+`vercel.json` incluye dos disparos (06:00 y 07:00 UTC) y el endpoint valida hora local Madrid para cubrir horario de invierno/verano.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Para invocar manualmente:
+
+```bash
+curl -H "Authorization: Bearer TU_CRON_SECRET" https://TU_DOMINIO/api/cron/weekly-whatsapp
+```
+
+## Multi-local aislado (Mataro, Premia, etc.)
+
+Si quieres que cada local tenga sus datos independientes:
+
+1. Ejecuta `supabase-multilocal-schema.sql` en Supabase.
+2. Crea un perfil por usuario en `public.profiles` asignando su `local_id`.
+3. Usa solo consultas autenticadas (no service role en cliente), para que aplique RLS.
+
+### Como funciona el aislamiento
+
+- Cada tabla operativa (`products`, `mermas`) tiene `local_id`.
+- RLS fuerza que un usuario solo vea/escriba su propio `local_id`.
+- Puedes desplegar nuevas versiones de la app sin mezclar datos entre locales.

@@ -1,0 +1,2501 @@
+[
+  {
+    "occurredAt": "2026-03-15T09:30:00",
+    "productName": "LONCHA JAMON DULCE",
+    "quantity": 6.0,
+    "motiveLabel": "❌ ERROR EN COCINA",
+    "costEur": 0.6
+  },
+  {
+    "occurredAt": "2026-03-15T09:58:12",
+    "productName": "BIKINI",
+    "quantity": 2.0,
+    "motiveLabel": "🔥 SE QUEMO",
+    "costEur": 1.3
+  },
+  {
+    "occurredAt": "2026-03-15T10:37:20",
+    "productName": "MORROS",
+    "quantity": 0.2,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 0.27
+  },
+  {
+    "occurredAt": "2026-03-15T13:14:06",
+    "productName": "LONCHA CHEDAR",
+    "quantity": 1.0,
+    "motiveLabel": "❌ ERROR EN COCINA",
+    "costEur": 0.08
+  },
+  {
+    "occurredAt": "2026-03-15T13:14:56",
+    "productName": "LONCHA BACON BURGUÉR 1/",
+    "quantity": 23.0,
+    "motiveLabel": "🔥 SE QUEMO",
+    "costEur": 0.33
+  },
+  {
+    "occurredAt": "2026-03-15T13:30:31",
+    "productName": "PAN RUSTICO",
+    "quantity": 1.0,
+    "motiveLabel": "❌ ERROR EN COCINA",
+    "costEur": 0.38
+  },
+  {
+    "occurredAt": "2026-03-15T14:17:00",
+    "productName": "PAN BRIOCHE",
+    "quantity": 1.0,
+    "motiveLabel": "♻ EL CLIENTE CAMBIO",
+    "costEur": 0.56
+  },
+  {
+    "occurredAt": "2026-03-15T14:17:16",
+    "productName": "LONCHA CHEDAR",
+    "quantity": 2.0,
+    "motiveLabel": "☠ MAL ESTADO",
+    "costEur": 0.16
+  },
+  {
+    "occurredAt": "2026-03-15T14:18:28",
+    "productName": "LONCHA CHEDAR",
+    "quantity": 3.0,
+    "motiveLabel": "❌ ERROR EN COCINA",
+    "costEur": 0.24
+  },
+  {
+    "occurredAt": "2026-03-15T15:14:56",
+    "productName": "PAN BRIOCHE",
+    "quantity": 1.0,
+    "motiveLabel": "❌ ERROR EN COCINA",
+    "costEur": 0.56
+  },
+  {
+    "occurredAt": "2026-03-15T15:15:50",
+    "productName": "LONCHA BACON BURGUÉR 1/",
+    "quantity": 22.0,
+    "motiveLabel": "❌ ERROR EN COCINA",
+    "costEur": 0.22
+  },
+  {
+    "occurredAt": "2026-03-15T15:17:33",
+    "productName": "ROYAL CHICKEN",
+    "quantity": 1.0,
+    "motiveLabel": "❌ ERROR EN COCINA",
+    "costEur": 2.8
+  },
+  {
+    "occurredAt": "2026-03-15T15:25:45",
+    "productName": "CARNE PULLED",
+    "quantity": 1.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 1.3
+  },
+  {
+    "occurredAt": "2026-03-15T15:37:21",
+    "productName": "CARNE SMASH",
+    "quantity": 2.0,
+    "motiveLabel": "🔥 SE QUEMO",
+    "costEur": 1.56
+  },
+  {
+    "occurredAt": "2026-03-15T15:37:47",
+    "productName": "LONCHA CHEDAR",
+    "quantity": 2.0,
+    "motiveLabel": "🔥 SE QUEMO",
+    "costEur": 0.16
+  },
+  {
+    "occurredAt": "2026-03-15T15:51:37",
+    "productName": "MAXI CHICKEN",
+    "quantity": 1.0,
+    "motiveLabel": "❌ ERROR EN COCINA",
+    "costEur": 2.46
+  },
+  {
+    "occurredAt": "2026-03-15T16:02:07",
+    "productName": "NACHOS RESTOS 450 gr",
+    "quantity": 1.5,
+    "motiveLabel": "☠ MAL ESTADO",
+    "costEur": 3.14
+  },
+  {
+    "occurredAt": "2026-03-15T17:51:44",
+    "productName": "CARNE LOMO UNIDAD",
+    "quantity": 3.0,
+    "motiveLabel": "🔥 SE QUEMO",
+    "costEur": 0.42
+  },
+  {
+    "occurredAt": "2026-03-15T17:54:49",
+    "productName": "PATATAS",
+    "quantity": 1.0,
+    "motiveLabel": "☠ MAL ESTADO",
+    "costEur": 0.75
+  },
+  {
+    "occurredAt": "2026-03-15T18:17:18",
+    "productName": "CARNE LOMO UNIDAD",
+    "quantity": 3.0,
+    "motiveLabel": "❌ ERROR EN COCINA",
+    "costEur": 0.42
+  },
+  {
+    "occurredAt": "2026-03-15T21:09:25",
+    "productName": "MINI CROQUETAS UNIDAD",
+    "quantity": 2.0,
+    "motiveLabel": "☠ MAL ESTADO",
+    "costEur": 0.1
+  },
+  {
+    "occurredAt": "2026-03-15T21:09:59",
+    "productName": "TIRAS DE CHOCOS UNIDAD",
+    "quantity": 3.0,
+    "motiveLabel": "☠ MAL ESTADO",
+    "costEur": 0.3
+  },
+  {
+    "occurredAt": "2026-03-15T23:44:55",
+    "productName": "PAN BRIOCHE",
+    "quantity": 2.0,
+    "motiveLabel": "❌ ERROR EN COCINA",
+    "costEur": 1.12
+  },
+  {
+    "occurredAt": "2026-03-15T23:45:22",
+    "productName": "MORROS",
+    "quantity": 1.0,
+    "motiveLabel": "❌ ERROR EN COCINA",
+    "costEur": 1.34
+  },
+  {
+    "occurredAt": "2026-03-15T23:46:38",
+    "productName": "PAN RUSTICO",
+    "quantity": 2.0,
+    "motiveLabel": "❌ ERROR EN COCINA",
+    "costEur": 0.76
+  },
+  {
+    "occurredAt": "2026-03-15T23:47:17",
+    "productName": "PAN LARGO",
+    "quantity": 2.0,
+    "motiveLabel": "❌ ERROR EN COCINA",
+    "costEur": 0.56
+  },
+  {
+    "occurredAt": "2026-03-15T23:47:46",
+    "productName": "PATATAS",
+    "quantity": 1.0,
+    "motiveLabel": "❌ ERROR EN COCINA",
+    "costEur": 0.75
+  },
+  {
+    "occurredAt": "2026-03-15T23:55:44",
+    "productName": "SMASH BURGUER",
+    "quantity": 4.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 12.0
+  },
+  {
+    "occurredAt": "2026-03-16T00:06:12",
+    "productName": "PAN RÚSTICO",
+    "quantity": 1.0,
+    "motiveLabel": "🔥 SE QUEMO",
+    "costEur": 0.38
+  },
+  {
+    "occurredAt": "2026-03-16T11:41:36",
+    "productName": "POLLO GOURMET",
+    "quantity": 1.0,
+    "motiveLabel": "❌ ERROR EN COCINA",
+    "costEur": 2.11
+  },
+  {
+    "occurredAt": "2026-03-16T11:42:02",
+    "productName": "PAN BRIOCHE",
+    "quantity": 1.0,
+    "motiveLabel": "🔥 SE QUEMO",
+    "costEur": 0.56
+  },
+  {
+    "occurredAt": "2026-03-16T14:07:35",
+    "productName": "POLLO GOURMET",
+    "quantity": 1.0,
+    "motiveLabel": "❌ ERROR EN COCINA",
+    "costEur": 2.11
+  },
+  {
+    "occurredAt": "2026-03-16T19:30:11",
+    "productName": "SALSA TRUFADA RACION",
+    "quantity": 20.0,
+    "motiveLabel": "☠ MAL ESTADO",
+    "costEur": 2.8
+  },
+  {
+    "occurredAt": "2026-03-16T19:52:33",
+    "productName": "HUEVOS",
+    "quantity": 5.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 1.05
+  },
+  {
+    "occurredAt": "2026-03-16T21:11:02",
+    "productName": "RODAJA DE TOMATE",
+    "quantity": 1.0,
+    "motiveLabel": "♻ EL CLIENTE CAMBIO",
+    "costEur": 0.05
+  },
+  {
+    "occurredAt": "2026-03-16T21:50:58",
+    "productName": "LECHUGA RACION",
+    "quantity": 1.0,
+    "motiveLabel": "♻ EL CLIENTE CAMBIO",
+    "costEur": 0.12
+  },
+  {
+    "occurredAt": "2026-03-16T21:51:08",
+    "productName": "SMASH BURGUER",
+    "quantity": 1.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 3.0
+  },
+  {
+    "occurredAt": "2026-03-16T23:30:06",
+    "productName": "CARNE CHICKEN",
+    "quantity": 1.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 0.7
+  },
+  {
+    "occurredAt": "2026-03-16T23:30:18",
+    "productName": "PATATAS CHEDAR BACON",
+    "quantity": 1.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 1.53
+  },
+  {
+    "occurredAt": "2026-03-16T23:31:03",
+    "productName": "PATATAS",
+    "quantity": 1.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 0.75
+  },
+  {
+    "occurredAt": "2026-03-17T09:26:13",
+    "productName": "PAN EXTREME",
+    "quantity": 0.5,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 0.8
+  },
+  {
+    "occurredAt": "2026-03-16T23:31:30",
+    "productName": "MINI DE JAMON DUROC",
+    "quantity": 1.0,
+    "motiveLabel": "🔥 SE QUEMO",
+    "costEur": 1.54
+  },
+  {
+    "occurredAt": "2026-03-17T12:20:04",
+    "productName": "MINI DE JAMON DUROC",
+    "quantity": 1.0,
+    "motiveLabel": "🔥 SE QUEMO",
+    "costEur": 1.54
+  },
+  {
+    "occurredAt": "2026-03-17T15:41:58",
+    "productName": "PAN EXTREME",
+    "quantity": 0.5,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 0.8
+  },
+  {
+    "occurredAt": "2026-03-17T15:42:38",
+    "productName": "CEBOLLA MORADA RACION",
+    "quantity": 3.0,
+    "motiveLabel": "☠ MAL ESTADO",
+    "costEur": 0.09
+  },
+  {
+    "occurredAt": "2026-03-17T16:04:02",
+    "productName": "MORROS",
+    "quantity": 3.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 4.02
+  },
+  {
+    "occurredAt": "2026-03-17T16:04:14",
+    "productName": "PAN LARGO",
+    "quantity": 1.0,
+    "motiveLabel": "♻ EL CLIENTE CAMBIO",
+    "costEur": 0.28
+  },
+  {
+    "occurredAt": "2026-03-17T18:41:17",
+    "productName": "CARNE FRANKFURT",
+    "quantity": 1.0,
+    "motiveLabel": "🔥 SE QUEMO",
+    "costEur": 0.81
+  },
+  {
+    "occurredAt": "2026-03-17T21:31:23",
+    "productName": "LONCHA CHEDAR",
+    "quantity": 1.0,
+    "motiveLabel": "☠ MAL ESTADO",
+    "costEur": 0.08
+  },
+  {
+    "occurredAt": "2026-03-17T21:56:20",
+    "productName": "CARNE CHICKEN",
+    "quantity": 4.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 2.8
+  },
+  {
+    "occurredAt": "2026-03-17T23:45:38",
+    "productName": "LONCHA BACON BURGUÉR 1/",
+    "quantity": 24.0,
+    "motiveLabel": "☠ MAL ESTADO",
+    "costEur": 0.44
+  },
+  {
+    "occurredAt": "2026-03-17T23:46:46",
+    "productName": "HUEVOS",
+    "quantity": 2.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 0.42
+  },
+  {
+    "occurredAt": "2026-03-18T07:34:13",
+    "productName": "PAN EXTREME",
+    "quantity": 3.0,
+    "motiveLabel": "☠ MAL ESTADO",
+    "costEur": 4.8
+  },
+  {
+    "occurredAt": "2026-03-18T08:29:29",
+    "productName": "MINI DE QUESO MANCHEGO",
+    "quantity": 1.0,
+    "motiveLabel": "🔥 SE QUEMO",
+    "costEur": 1.49
+  },
+  {
+    "occurredAt": "2026-03-18T10:46:25",
+    "productName": "MINI DE JAMON DUROC",
+    "quantity": 1.0,
+    "motiveLabel": "♻ EL CLIENTE CAMBIO",
+    "costEur": 1.54
+  },
+  {
+    "occurredAt": "2026-03-18T10:47:03",
+    "productName": "RODAJA DE TOMATE",
+    "quantity": 5.0,
+    "motiveLabel": "☠ MAL ESTADO",
+    "costEur": 0.25
+  },
+  {
+    "occurredAt": "2026-03-18T11:28:00",
+    "productName": "LONCHA CABRA BOCATA",
+    "quantity": 1.0,
+    "motiveLabel": "☠ MAL ESTADO",
+    "costEur": 0.52
+  },
+  {
+    "occurredAt": "2026-03-18T11:36:58",
+    "productName": "QUESO STRACCIATELLA",
+    "quantity": 2.0,
+    "motiveLabel": "☠ MAL ESTADO",
+    "costEur": 3.6
+  },
+  {
+    "occurredAt": "2026-03-17T23:50:00",
+    "productName": "DONUT BLANCO",
+    "quantity": 1.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 1.07
+  },
+  {
+    "occurredAt": "2026-03-17T23:50:00",
+    "productName": "CROISANT CHOCOLATE",
+    "quantity": 2.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 2.08
+  },
+  {
+    "occurredAt": "2026-03-18T15:14:48",
+    "productName": "CEBOLLA MORADA RACION",
+    "quantity": 10.0,
+    "motiveLabel": "❌ ERROR EN COCINA",
+    "costEur": 0.3
+  },
+  {
+    "occurredAt": "2026-03-18T16:22:51",
+    "productName": "PAN BRIOCHE",
+    "quantity": 1.0,
+    "motiveLabel": "🔥 SE QUEMO",
+    "costEur": 0.56
+  },
+  {
+    "occurredAt": "2026-03-18T16:27:52",
+    "productName": "TEQUEÑOS DE QUESO",
+    "quantity": 1.0,
+    "motiveLabel": "☠ MAL ESTADO",
+    "costEur": 1.77
+  },
+  {
+    "occurredAt": "2026-03-18T18:12:00",
+    "productName": "MORROS",
+    "quantity": 1.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 1.34
+  },
+  {
+    "occurredAt": "2026-03-18T18:13:11",
+    "productName": "HUEVOS",
+    "quantity": 5.0,
+    "motiveLabel": "☠ MAL ESTADO",
+    "costEur": 1.05
+  },
+  {
+    "occurredAt": "2026-03-18T19:42:32",
+    "productName": "CROISANT",
+    "quantity": 4.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 2.96
+  },
+  {
+    "occurredAt": "2026-03-18T23:42:59",
+    "productName": "PAN BRIOCHE SALSA AHUMADA",
+    "quantity": 2.0,
+    "motiveLabel": "❌ ERROR EN COCINA",
+    "costEur": 1.4
+  },
+  {
+    "occurredAt": "2026-03-18T23:45:37",
+    "productName": "PAN BRIOCHE",
+    "quantity": 3.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 1.68
+  },
+  {
+    "occurredAt": "2026-03-18T23:46:02",
+    "productName": "PAN BRIOCHE",
+    "quantity": 2.0,
+    "motiveLabel": "🔥 SE QUEMO",
+    "costEur": 1.12
+  },
+  {
+    "occurredAt": "2026-03-18T23:46:22",
+    "productName": "PAN RUSTICO",
+    "quantity": 2.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 0.76
+  },
+  {
+    "occurredAt": "2026-03-18T23:46:44",
+    "productName": "PAN LARGO",
+    "quantity": 1.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 0.28
+  },
+  {
+    "occurredAt": "2026-03-18T23:47:00",
+    "productName": "PATATAS CHEDAR BACON",
+    "quantity": 1.0,
+    "motiveLabel": "❌ ERROR EN COCINA",
+    "costEur": 1.53
+  },
+  {
+    "occurredAt": "2026-03-18T23:47:30",
+    "productName": "CHISTORRA",
+    "quantity": 1.0,
+    "motiveLabel": "❌ ERROR EN COCINA",
+    "costEur": 1.22
+  },
+  {
+    "occurredAt": "2026-03-18T23:49:34",
+    "productName": "PAN BRIOCHE",
+    "quantity": 9.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 5.04
+  },
+  {
+    "occurredAt": "2026-03-18T23:49:57",
+    "productName": "PAN RUSTICO",
+    "quantity": 13.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 4.94
+  },
+  {
+    "occurredAt": "2026-03-18T23:50:17",
+    "productName": "PATATAS",
+    "quantity": 1.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 0.75
+  },
+  {
+    "occurredAt": "2026-03-18T23:52:10",
+    "productName": "FRANFURT",
+    "quantity": 1.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 1.16
+  },
+  {
+    "occurredAt": "2026-03-18T23:55:19",
+    "productName": "CARNE POLLO RACION",
+    "quantity": 3.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 2.4
+  },
+  {
+    "occurredAt": "2026-03-19T13:30:41",
+    "productName": "PAN RUSTICO",
+    "quantity": 4.0,
+    "motiveLabel": "🔥 SE QUEMO",
+    "costEur": 1.52
+  },
+  {
+    "occurredAt": "2026-03-19T13:30:55",
+    "productName": "PAN EXTREME",
+    "quantity": 0.5,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 0.8
+  },
+  {
+    "occurredAt": "2026-03-19T13:31:43",
+    "productName": "PAN RUSTICO",
+    "quantity": 1.0,
+    "motiveLabel": "🔥 SE QUEMO",
+    "costEur": 0.38
+  },
+  {
+    "occurredAt": "2026-03-19T14:07:16",
+    "productName": "PAN LARGO",
+    "quantity": 1.0,
+    "motiveLabel": "❌ ERROR EN COCINA",
+    "costEur": 0.28
+  },
+  {
+    "occurredAt": "2026-03-19T15:19:58",
+    "productName": "MAXI CHICKEN",
+    "quantity": 1.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 2.46
+  },
+  {
+    "occurredAt": "2026-03-19T15:37:27",
+    "productName": "HUEVOS",
+    "quantity": 1.0,
+    "motiveLabel": "☠ MAL ESTADO",
+    "costEur": 0.21
+  },
+  {
+    "occurredAt": "2026-03-19T22:02:54",
+    "productName": "NACHOS RESTOS 450 gr",
+    "quantity": 1.5,
+    "motiveLabel": "☠ MAL ESTADO",
+    "costEur": 3.14
+  },
+  {
+    "occurredAt": "2026-03-19T22:25:36",
+    "productName": "CROISANT",
+    "quantity": 4.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 2.96
+  },
+  {
+    "occurredAt": "2026-03-19T22:25:48",
+    "productName": "SMASH BURGUER",
+    "quantity": 3.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 9.0
+  },
+  {
+    "occurredAt": "2026-03-19T23:42:53",
+    "productName": "CARNE CHICKEN",
+    "quantity": 18.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 12.6
+  },
+  {
+    "occurredAt": "2026-03-19T23:44:13",
+    "productName": "CARNE POLLO RACION",
+    "quantity": 3.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 2.4
+  },
+  {
+    "occurredAt": "2026-03-19T23:44:52",
+    "productName": "PAN RUSTICO",
+    "quantity": 8.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 3.04
+  },
+  {
+    "occurredAt": "2026-03-19T23:45:17",
+    "productName": "PAN BRIOCHE",
+    "quantity": 1.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 0.56
+  },
+  {
+    "occurredAt": "2026-03-20T08:15:11",
+    "productName": "PAN EXTREME",
+    "quantity": 1.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 1.6
+  },
+  {
+    "occurredAt": "2026-03-20T09:36:34",
+    "productName": "BOLSA DE ALBAHACA",
+    "quantity": 1.0,
+    "motiveLabel": "☠ MAL ESTADO",
+    "costEur": 1.5
+  },
+  {
+    "occurredAt": "2026-03-20T11:50:55",
+    "productName": "HUEVOS",
+    "quantity": 1.0,
+    "motiveLabel": "❌ ERROR EN COCINA",
+    "costEur": 0.21
+  },
+  {
+    "occurredAt": "2026-03-20T13:37:20",
+    "productName": "PAN BRIOCHE SALSA TRUFADA",
+    "quantity": 1.0,
+    "motiveLabel": "❌ ERROR EN COCINA",
+    "costEur": 0.7
+  },
+  {
+    "occurredAt": "2026-03-20T15:56:47",
+    "productName": "LONCHA PROVOLONE",
+    "quantity": 3.0,
+    "motiveLabel": "❌ ERROR EN COCINA",
+    "costEur": 0.63
+  },
+  {
+    "occurredAt": "2026-03-20T15:57:33",
+    "productName": "CEBOLLA CARAMELIZADA RACION",
+    "quantity": 1.0,
+    "motiveLabel": "❌ ERROR EN COCINA",
+    "costEur": 0.19
+  },
+  {
+    "occurredAt": "2026-03-20T15:58:14",
+    "productName": "LONCHA BACON BURGUÉR 1/",
+    "quantity": 24.0,
+    "motiveLabel": "❌ ERROR EN COCINA",
+    "costEur": 0.44
+  },
+  {
+    "occurredAt": "2026-03-20T15:58:47",
+    "productName": "MORROS",
+    "quantity": 1.0,
+    "motiveLabel": "♻ EL CLIENTE CAMBIO",
+    "costEur": 1.34
+  },
+  {
+    "occurredAt": "2026-03-20T16:50:59",
+    "productName": "HUEVOS",
+    "quantity": 12.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 2.52
+  },
+  {
+    "occurredAt": "2026-03-20T19:44:04",
+    "productName": "MORROS",
+    "quantity": 1.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 1.34
+  },
+  {
+    "occurredAt": "2026-03-20T19:46:00",
+    "productName": "PAN RUSTICO",
+    "quantity": 10.0,
+    "motiveLabel": "☠ MAL ESTADO",
+    "costEur": 3.8
+  },
+  {
+    "occurredAt": "2026-03-20T19:50:21",
+    "productName": "PAN LARGO",
+    "quantity": 1.0,
+    "motiveLabel": "🔥 SE QUEMO",
+    "costEur": 0.28
+  },
+  {
+    "occurredAt": "2026-03-20T19:58:49",
+    "productName": "CROISANT CHOCOLATE BLANCO",
+    "quantity": 1.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 1.07
+  },
+  {
+    "occurredAt": "2026-03-20T23:28:34",
+    "productName": "PAN RUSTICO",
+    "quantity": 10.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 3.8
+  },
+  {
+    "occurredAt": "2026-03-20T23:58:23",
+    "productName": "PAN BRIOCHE",
+    "quantity": 7.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 3.92
+  },
+  {
+    "occurredAt": "2026-03-20T23:58:44",
+    "productName": "FRANFURT",
+    "quantity": 2.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 2.32
+  },
+  {
+    "occurredAt": "2026-03-20T23:58:00",
+    "productName": "LONCHA BACON BURGUÉR 1/",
+    "quantity": 24.0,
+    "motiveLabel": "❌ ERROR EN COCINA",
+    "costEur": 0.44
+  },
+  {
+    "occurredAt": "2026-03-20T23:54:00",
+    "productName": "LONCHA EDAM",
+    "quantity": 2.0,
+    "motiveLabel": "❌ ERROR EN COCINA",
+    "costEur": 0.24
+  },
+  {
+    "occurredAt": "2026-03-20T23:00:00",
+    "productName": "CEBOLLA CARAMELIZADA RACION",
+    "quantity": 1.0,
+    "motiveLabel": "❌ ERROR EN COCINA",
+    "costEur": 0.19
+  },
+  {
+    "occurredAt": "2026-03-20T23:58:00",
+    "productName": "LONCHA PROVOLONE",
+    "quantity": 2.0,
+    "motiveLabel": "❌ ERROR EN COCINA",
+    "costEur": 0.42
+  },
+  {
+    "occurredAt": "2026-03-20T23:12:00",
+    "productName": "HUEVOS",
+    "quantity": 11.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 2.31
+  },
+  {
+    "occurredAt": "2026-03-20T23:57:00",
+    "productName": "CARNE CHICKEN",
+    "quantity": 5.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 3.5
+  },
+  {
+    "occurredAt": "2026-03-21T08:59:42",
+    "productName": "TOMATE ROJO",
+    "quantity": 0.7,
+    "motiveLabel": "☠ MAL ESTADO",
+    "costEur": 1.19
+  },
+  {
+    "occurredAt": "2026-03-21T10:48:13",
+    "productName": "RODAJA DE TOMATE",
+    "quantity": 10.0,
+    "motiveLabel": "☠ MAL ESTADO",
+    "costEur": 0.5
+  },
+  {
+    "occurredAt": "2026-03-21T10:59:51",
+    "productName": "PAN BRIOCHE",
+    "quantity": 1.0,
+    "motiveLabel": "☠ MAL ESTADO",
+    "costEur": 0.56
+  },
+  {
+    "occurredAt": "2026-03-21T15:23:49",
+    "productName": "LOMO GOURMET",
+    "quantity": 1.0,
+    "motiveLabel": "❌ ERROR EN COCINA",
+    "costEur": 1.81
+  },
+  {
+    "occurredAt": "2026-03-21T15:24:06",
+    "productName": "MINI CROQUETAS",
+    "quantity": 1.0,
+    "motiveLabel": "❌ ERROR EN COCINA",
+    "costEur": 0.44
+  },
+  {
+    "occurredAt": "2026-03-21T15:51:35",
+    "productName": "CARNE VACUNA",
+    "quantity": 1.0,
+    "motiveLabel": "☠ MAL ESTADO",
+    "costEur": 2.09
+  },
+  {
+    "occurredAt": "2026-03-21T15:52:00",
+    "productName": "PAN BRIOCHE",
+    "quantity": 1.0,
+    "motiveLabel": "🔥 SE QUEMO",
+    "costEur": 0.56
+  },
+  {
+    "occurredAt": "2026-03-21T15:52:37",
+    "productName": "LONCHA EDAM",
+    "quantity": 1.0,
+    "motiveLabel": "🔥 SE QUEMO",
+    "costEur": 0.12
+  },
+  {
+    "occurredAt": "2026-03-21T16:40:23",
+    "productName": "COCIDOS",
+    "quantity": 2.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 1.92
+  },
+  {
+    "occurredAt": "2026-03-21T16:40:35",
+    "productName": "MORROS",
+    "quantity": 2.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 2.68
+  },
+  {
+    "occurredAt": "2026-03-21T16:40:47",
+    "productName": "PATATAS BONIATO",
+    "quantity": 0.5,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 0.65
+  },
+  {
+    "occurredAt": "2026-03-21T15:53:22",
+    "productName": "PATATAS BONIATO",
+    "quantity": 0.5,
+    "motiveLabel": "☠ MAL ESTADO",
+    "costEur": 0.65
+  },
+  {
+    "occurredAt": "2026-03-21T20:53:39",
+    "productName": "AMERICAN BURGUER",
+    "quantity": 1.0,
+    "motiveLabel": "♻ EL CLIENTE CAMBIO",
+    "costEur": 2.54
+  },
+  {
+    "occurredAt": "2026-03-21T20:53:56",
+    "productName": "DONUT BLANCO",
+    "quantity": 2.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 2.14
+  },
+  {
+    "occurredAt": "2026-03-21T23:27:37",
+    "productName": "CROISANT CHOCOLATE BLANCO",
+    "quantity": 1.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 1.07
+  },
+  {
+    "occurredAt": "2026-03-21T23:27:50",
+    "productName": "CROISANT",
+    "quantity": 1.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 0.74
+  },
+  {
+    "occurredAt": "2026-03-21T23:28:03",
+    "productName": "PAN EXTREME",
+    "quantity": 6.0,
+    "motiveLabel": "☠ MAL ESTADO",
+    "costEur": 9.6
+  },
+  {
+    "occurredAt": "2026-03-21T23:41:18",
+    "productName": "SMASH BURGUER",
+    "quantity": 1.0,
+    "motiveLabel": "♻ EL CLIENTE CAMBIO",
+    "costEur": 3.0
+  },
+  {
+    "occurredAt": "2026-03-21T23:42:43",
+    "productName": "MAXI CHICKEN",
+    "quantity": 1.0,
+    "motiveLabel": "♻ EL CLIENTE CAMBIO",
+    "costEur": 2.46
+  },
+  {
+    "occurredAt": "2026-03-21T23:42:55",
+    "productName": "PAN BRIOCHE",
+    "quantity": 6.0,
+    "motiveLabel": "☠ MAL ESTADO",
+    "costEur": 3.36
+  },
+  {
+    "occurredAt": "2026-03-21T23:43:46",
+    "productName": "CERVELA",
+    "quantity": 1.0,
+    "motiveLabel": "❌ ERROR EN COCINA",
+    "costEur": 1.74
+  },
+  {
+    "occurredAt": "2026-03-21T23:44:33",
+    "productName": "FRANFURT",
+    "quantity": 1.0,
+    "motiveLabel": "❌ ERROR EN COCINA",
+    "costEur": 1.16
+  },
+  {
+    "occurredAt": "2026-03-21T23:44:59",
+    "productName": "CHISTORRA",
+    "quantity": 1.0,
+    "motiveLabel": "🔥 SE QUEMO",
+    "costEur": 1.22
+  },
+  {
+    "occurredAt": "2026-03-21T23:45:18",
+    "productName": "CARNE SMASH",
+    "quantity": 10.0,
+    "motiveLabel": "☠ MAL ESTADO",
+    "costEur": 7.8
+  },
+  {
+    "occurredAt": "2026-03-21T23:48:58",
+    "productName": "NACHOS RESTOS 450 gr",
+    "quantity": 1.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 2.09
+  },
+  {
+    "occurredAt": "2026-03-21T23:49:57",
+    "productName": "FRANFURT",
+    "quantity": 1.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 1.16
+  },
+  {
+    "occurredAt": "2026-03-21T23:11:00",
+    "productName": "CARNE CHICKEN",
+    "quantity": 3.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 2.1
+  },
+  {
+    "occurredAt": "2026-03-21T23:49:00",
+    "productName": "PAN RUSTICO",
+    "quantity": 3.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 1.14
+  },
+  {
+    "occurredAt": "2026-03-21T23:58:00",
+    "productName": "PAN BRIOCHE",
+    "quantity": 1.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 0.56
+  },
+  {
+    "occurredAt": "2026-03-21T23:17:00",
+    "productName": "SMASH BURGUER",
+    "quantity": 2.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 6.0
+  },
+  {
+    "occurredAt": "2026-03-21T23:23:00",
+    "productName": "MORROS",
+    "quantity": 1.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 1.34
+  },
+  {
+    "occurredAt": "2026-03-21T23:25:00",
+    "productName": "SMASH BURGUER",
+    "quantity": 2.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 6.0
+  },
+  {
+    "occurredAt": "2026-03-22T09:31:33",
+    "productName": "BOCADILLO TORTILLA FRANCESA",
+    "quantity": 1.0,
+    "motiveLabel": "❌ ERROR EN COCINA",
+    "costEur": 0.83
+  },
+  {
+    "occurredAt": "2026-03-22T09:31:56",
+    "productName": "PAN RUSTICO",
+    "quantity": 1.0,
+    "motiveLabel": "☠ MAL ESTADO",
+    "costEur": 0.38
+  },
+  {
+    "occurredAt": "2026-03-22T12:09:58",
+    "productName": "HUEVOS",
+    "quantity": 2.0,
+    "motiveLabel": "❌ ERROR EN COCINA",
+    "costEur": 0.42
+  },
+  {
+    "occurredAt": "2026-03-22T12:14:16",
+    "productName": "CAJA BURGUÉR LLEVAR",
+    "quantity": 1.0,
+    "motiveLabel": "☠ MAL ESTADO",
+    "costEur": 0.19
+  },
+  {
+    "occurredAt": "2026-03-22T12:24:47",
+    "productName": "PATATAS BONIATO",
+    "quantity": 1.0,
+    "motiveLabel": "🔥 SE QUEMO",
+    "costEur": 1.3
+  },
+  {
+    "occurredAt": "2026-03-22T14:59:40",
+    "productName": "ENSALADA DE PASTA",
+    "quantity": 1.0,
+    "motiveLabel": "♻ EL CLIENTE CAMBIO",
+    "costEur": 1.77
+  },
+  {
+    "occurredAt": "2026-03-22T15:00:28",
+    "productName": "CARNE PULLED",
+    "quantity": 0.1,
+    "motiveLabel": "❌ ERROR EN COCINA",
+    "costEur": 0.13
+  },
+  {
+    "occurredAt": "2026-03-22T15:04:39",
+    "productName": "LONCHA BACON BURGUÉR 1/",
+    "quantity": 24.0,
+    "motiveLabel": "❌ ERROR EN COCINA",
+    "costEur": 0.44
+  },
+  {
+    "occurredAt": "2026-03-22T15:05:04",
+    "productName": "LONCHA CHEDAR",
+    "quantity": 1.0,
+    "motiveLabel": "❌ ERROR EN COCINA",
+    "costEur": 0.08
+  },
+  {
+    "occurredAt": "2026-03-22T15:58:19",
+    "productName": "MORROS",
+    "quantity": 2.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 2.68
+  },
+  {
+    "occurredAt": "2026-03-22T15:59:06",
+    "productName": "PATATAS BONIATO",
+    "quantity": 0.5,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 0.65
+  },
+  {
+    "occurredAt": "2026-03-22T16:02:22",
+    "productName": "TOMATE CHERRY KG",
+    "quantity": 0.5,
+    "motiveLabel": "☠ MAL ESTADO",
+    "costEur": 1.5
+  },
+  {
+    "occurredAt": "2026-03-22T15:05:33",
+    "productName": "PATATAS CHEDAR BACON",
+    "quantity": 1.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 1.53
+  },
+  {
+    "occurredAt": "2026-03-22T22:46:17",
+    "productName": "MORROS",
+    "quantity": 1.0,
+    "motiveLabel": "🔥 SE QUEMO",
+    "costEur": 1.34
+  },
+  {
+    "occurredAt": "2026-03-22T23:36:10",
+    "productName": "PATATAS BONIATO",
+    "quantity": 1.0,
+    "motiveLabel": "🔥 SE QUEMO",
+    "costEur": 1.3
+  },
+  {
+    "occurredAt": "2026-03-22T23:38:30",
+    "productName": "PATATAS",
+    "quantity": 1.0,
+    "motiveLabel": "🔥 SE QUEMO",
+    "costEur": 0.75
+  },
+  {
+    "occurredAt": "2026-03-22T23:38:57",
+    "productName": "PAN RUSTICO",
+    "quantity": 4.0,
+    "motiveLabel": "🔥 SE QUEMO",
+    "costEur": 1.52
+  },
+  {
+    "occurredAt": "2026-03-22T23:39:25",
+    "productName": "NACHOS",
+    "quantity": 1.0,
+    "motiveLabel": "🔥 SE QUEMO",
+    "costEur": 1.18
+  },
+  {
+    "occurredAt": "2026-03-22T23:41:01",
+    "productName": "FRANFURT",
+    "quantity": 1.0,
+    "motiveLabel": "🔥 SE QUEMO",
+    "costEur": 1.16
+  },
+  {
+    "occurredAt": "2026-03-22T23:41:29",
+    "productName": "CARNE CHICKEN",
+    "quantity": 7.0,
+    "motiveLabel": "🔥 SE QUEMO",
+    "costEur": 4.9
+  },
+  {
+    "occurredAt": "2026-03-22T23:41:59",
+    "productName": "PAN RUSTICO",
+    "quantity": 10.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 3.8
+  },
+  {
+    "occurredAt": "2026-03-22T23:44:51",
+    "productName": "LONCHA BACON BURGUÉR 1/",
+    "quantity": 23.0,
+    "motiveLabel": "🔥 SE QUEMO",
+    "costEur": 0.33
+  },
+  {
+    "occurredAt": "2026-03-23T13:30:43",
+    "productName": "PAN EXTREME",
+    "quantity": 0.4,
+    "motiveLabel": "🔥 SE QUEMO",
+    "costEur": 0.64
+  },
+  {
+    "occurredAt": "2026-03-23T13:31:06",
+    "productName": "CARNE SMASH",
+    "quantity": 1.0,
+    "motiveLabel": "❌ ERROR EN COCINA",
+    "costEur": 0.78
+  },
+  {
+    "occurredAt": "2026-03-23T13:31:23",
+    "productName": "CARNE CERVELA",
+    "quantity": 1.0,
+    "motiveLabel": "🔥 SE QUEMO",
+    "costEur": 1.39
+  },
+  {
+    "occurredAt": "2026-03-23T13:36:57",
+    "productName": "PAN BRIOCHE",
+    "quantity": 1.0,
+    "motiveLabel": "❌ ERROR EN COCINA",
+    "costEur": 0.56
+  },
+  {
+    "occurredAt": "2026-03-23T15:31:16",
+    "productName": "LONCHA PROVOLONE",
+    "quantity": 1.0,
+    "motiveLabel": "❌ ERROR EN COCINA",
+    "costEur": 0.21
+  },
+  {
+    "occurredAt": "2026-03-23T15:31:29",
+    "productName": "PAN RUSTICO",
+    "quantity": 1.0,
+    "motiveLabel": "⚠ CANCELADO",
+    "costEur": 0.38
+  },
+  {
+    "occurredAt": "2026-03-23T15:33:25",
+    "productName": "HUEVOS",
+    "quantity": 3.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 0.63
+  },
+  {
+    "occurredAt": "2026-03-23T18:03:50",
+    "productName": "DONUT BLANCO",
+    "quantity": 1.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 1.07
+  },
+  {
+    "occurredAt": "2026-03-23T22:27:01",
+    "productName": "PAN LARGO",
+    "quantity": 2.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 0.56
+  },
+  {
+    "occurredAt": "2026-03-23T23:16:03",
+    "productName": "CARNE CHICKEN",
+    "quantity": 2.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 1.4
+  },
+  {
+    "occurredAt": "2026-03-23T23:34:12",
+    "productName": "PAN BRIOCHE",
+    "quantity": 3.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 1.68
+  },
+  {
+    "occurredAt": "2026-03-23T23:34:49",
+    "productName": "PAN RUSTICO",
+    "quantity": 3.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 1.14
+  },
+  {
+    "occurredAt": "2026-03-23T23:35:11",
+    "productName": "HUEVOS",
+    "quantity": 1.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 0.21
+  },
+  {
+    "occurredAt": "2026-03-23T23:35:35",
+    "productName": "NACHOS RESTOS 450 gr",
+    "quantity": 0.5,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 1.05
+  },
+  {
+    "occurredAt": "2026-03-23T23:36:12",
+    "productName": "PAN EXTREME",
+    "quantity": 1.0,
+    "motiveLabel": "☠ MAL ESTADO",
+    "costEur": 1.6
+  },
+  {
+    "occurredAt": "2026-03-24T11:28:23",
+    "productName": "PAN LARGO",
+    "quantity": 1.0,
+    "motiveLabel": "🔥 SE QUEMO",
+    "costEur": 0.28
+  },
+  {
+    "occurredAt": "2026-03-24T11:39:29",
+    "productName": "PAN RUSTICO",
+    "quantity": 1.0,
+    "motiveLabel": "🔥 SE QUEMO",
+    "costEur": 0.38
+  },
+  {
+    "occurredAt": "2026-03-24T11:39:40",
+    "productName": "CHISTORRA",
+    "quantity": 1.0,
+    "motiveLabel": "🔥 SE QUEMO",
+    "costEur": 1.22
+  },
+  {
+    "occurredAt": "2026-03-24T14:02:36",
+    "productName": "HUEVOS",
+    "quantity": 1.0,
+    "motiveLabel": "❌ ERROR EN COCINA",
+    "costEur": 0.21
+  },
+  {
+    "occurredAt": "2026-03-24T16:44:46",
+    "productName": "PATATAS",
+    "quantity": 0.5,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 0.38
+  },
+  {
+    "occurredAt": "2026-03-24T17:22:04",
+    "productName": "SMASH BURGUER",
+    "quantity": 3.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 9.0
+  },
+  {
+    "occurredAt": "2026-03-24T23:30:06",
+    "productName": "PAN RUSTICO",
+    "quantity": 5.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 1.9
+  },
+  {
+    "occurredAt": "2026-03-24T23:30:32",
+    "productName": "PAN BRIOCHE",
+    "quantity": 1.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 0.56
+  },
+  {
+    "occurredAt": "2026-03-24T23:30:59",
+    "productName": "HUEVOS",
+    "quantity": 7.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 1.47
+  },
+  {
+    "occurredAt": "2026-03-24T23:31:29",
+    "productName": "PATATAS",
+    "quantity": 5.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 3.75
+  },
+  {
+    "occurredAt": "2026-03-24T23:32:00",
+    "productName": "MORROS",
+    "quantity": 0.5,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 0.67
+  },
+  {
+    "occurredAt": "2026-03-24T23:34:42",
+    "productName": "NACHOS RESTOS 450 gr",
+    "quantity": 1.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 2.09
+  },
+  {
+    "occurredAt": "2026-03-25T23:11:35",
+    "productName": "PAN EXTREME",
+    "quantity": 1.0,
+    "motiveLabel": "🔥 SE QUEMO",
+    "costEur": 1.6
+  },
+  {
+    "occurredAt": "2026-03-25T23:11:46",
+    "productName": "PAN BRIOCHE",
+    "quantity": 1.0,
+    "motiveLabel": "🔥 SE QUEMO",
+    "costEur": 0.56
+  },
+  {
+    "occurredAt": "2026-03-25T23:34:00",
+    "productName": "HUEVOS",
+    "quantity": 2.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 0.42
+  },
+  {
+    "occurredAt": "2026-03-25T23:35:00",
+    "productName": "CERVELA",
+    "quantity": 1.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 1.74
+  },
+  {
+    "occurredAt": "2026-03-25T23:36:00",
+    "productName": "CARNE POLLO RACION",
+    "quantity": 3.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 2.4
+  },
+  {
+    "occurredAt": "2026-03-25T23:36:00",
+    "productName": "PAN LARGO",
+    "quantity": 2.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 0.56
+  },
+  {
+    "occurredAt": "2026-03-25T23:36:00",
+    "productName": "PAN RUSTICO",
+    "quantity": 5.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 1.9
+  },
+  {
+    "occurredAt": "2026-03-25T23:37:00",
+    "productName": "PAN BRIOCHE",
+    "quantity": 6.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 3.36
+  },
+  {
+    "occurredAt": "2026-03-25T23:38:00",
+    "productName": "TRUFADA",
+    "quantity": 1.0,
+    "motiveLabel": "❌ ERROR EN COCINA",
+    "costEur": 2.55
+  },
+  {
+    "occurredAt": "2026-03-25T23:38:00",
+    "productName": "SMASH BURGUER",
+    "quantity": 1.0,
+    "motiveLabel": "❌ ERROR EN COCINA",
+    "costEur": 3.0
+  },
+  {
+    "occurredAt": "2026-03-25T23:38:00",
+    "productName": "CARNE SMASH",
+    "quantity": 5.0,
+    "motiveLabel": "🔥 SE QUEMO",
+    "costEur": 3.9
+  },
+  {
+    "occurredAt": "2026-03-25T23:39:00",
+    "productName": "LECHUGA RACION",
+    "quantity": 1.0,
+    "motiveLabel": "❌ ERROR EN COCINA",
+    "costEur": 0.12
+  },
+  {
+    "occurredAt": "2026-03-25T23:39:00",
+    "productName": "RODAJA DE TOMATE",
+    "quantity": 1.0,
+    "motiveLabel": "❌ ERROR EN COCINA",
+    "costEur": 0.05
+  },
+  {
+    "occurredAt": "2026-03-25T23:39:00",
+    "productName": "CEBOLLA MORADA RACION",
+    "quantity": 1.0,
+    "motiveLabel": "❌ ERROR EN COCINA",
+    "costEur": 0.03
+  },
+  {
+    "occurredAt": "2026-03-25T23:40:00",
+    "productName": "AMERICAN CHIKEN",
+    "quantity": 2.0,
+    "motiveLabel": "❌ ERROR EN COCINA",
+    "costEur": 4.94
+  },
+  {
+    "occurredAt": "2026-03-25T23:43:00",
+    "productName": "PAN BRIOCHE",
+    "quantity": 2.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 1.12
+  },
+  {
+    "occurredAt": "2026-03-26T11:50:40",
+    "productName": "MINI DE QUESO MANCHEGO",
+    "quantity": 1.0,
+    "motiveLabel": "🔥 SE QUEMO",
+    "costEur": 1.49
+  },
+  {
+    "occurredAt": "2026-03-26T11:51:02",
+    "productName": "PAN RUSTICO",
+    "quantity": 1.0,
+    "motiveLabel": "🔥 SE QUEMO",
+    "costEur": 0.38
+  },
+  {
+    "occurredAt": "2026-03-26T11:51:14",
+    "productName": "PAN EXTREME",
+    "quantity": 0.5,
+    "motiveLabel": "🔥 SE QUEMO",
+    "costEur": 0.8
+  },
+  {
+    "occurredAt": "2026-03-26T11:52:00",
+    "productName": "DONUT BLANCO",
+    "quantity": 2.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 2.14
+  },
+  {
+    "occurredAt": "2026-03-26T22:49:28",
+    "productName": "DONUT",
+    "quantity": 1.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 0.77
+  },
+  {
+    "occurredAt": "2026-03-26T22:49:55",
+    "productName": "CROISANT",
+    "quantity": 5.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 3.7
+  },
+  {
+    "occurredAt": "2026-03-26T22:50:29",
+    "productName": "PAN RUSTICO",
+    "quantity": 2.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 0.76
+  },
+  {
+    "occurredAt": "2026-03-26T23:36:08",
+    "productName": "MORROS",
+    "quantity": 1.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 1.34
+  },
+  {
+    "occurredAt": "2026-03-26T23:36:19",
+    "productName": "CARNE CHICKEN",
+    "quantity": 1.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 0.7
+  },
+  {
+    "occurredAt": "2026-03-26T23:36:36",
+    "productName": "HUEVOS",
+    "quantity": 5.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 1.05
+  },
+  {
+    "occurredAt": "2026-03-26T23:36:50",
+    "productName": "CARNE POLLO RACION",
+    "quantity": 2.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 1.6
+  },
+  {
+    "occurredAt": "2026-03-26T23:37:06",
+    "productName": "PAN BRIOCHE",
+    "quantity": 5.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 2.8
+  },
+  {
+    "occurredAt": "2026-03-26T23:37:26",
+    "productName": "SMASH BURGUER",
+    "quantity": 2.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 6.0
+  },
+  {
+    "occurredAt": "2026-03-26T23:38:36",
+    "productName": "PAN RUSTICO",
+    "quantity": 1.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 0.38
+  },
+  {
+    "occurredAt": "2026-03-26T23:38:52",
+    "productName": "BACON TIRAS RACION",
+    "quantity": 2.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 0.84
+  },
+  {
+    "occurredAt": "2026-03-27T14:37:59",
+    "productName": "PAN BRIOCHE",
+    "quantity": 8.0,
+    "motiveLabel": "🔥 SE QUEMO",
+    "costEur": 4.48
+  },
+  {
+    "occurredAt": "2026-03-27T14:38:14",
+    "productName": "LONCHA EDAM",
+    "quantity": 1.0,
+    "motiveLabel": "🔥 SE QUEMO",
+    "costEur": 0.12
+  },
+  {
+    "occurredAt": "2026-03-27T14:38:31",
+    "productName": "HUEVOS",
+    "quantity": 1.0,
+    "motiveLabel": "🔥 SE QUEMO",
+    "costEur": 0.21
+  },
+  {
+    "occurredAt": "2026-03-27T14:38:40",
+    "productName": "SALSA TRUFADA RACION",
+    "quantity": 1.0,
+    "motiveLabel": "☠ MAL ESTADO",
+    "costEur": 0.14
+  },
+  {
+    "occurredAt": "2026-03-27T14:39:01",
+    "productName": "LECHUGA RACION",
+    "quantity": 2.0,
+    "motiveLabel": "☠ MAL ESTADO",
+    "costEur": 0.24
+  },
+  {
+    "occurredAt": "2026-03-27T09:33:11",
+    "productName": "PAN BRIOCHE",
+    "quantity": 1.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 0.56
+  },
+  {
+    "occurredAt": "2026-03-27T16:32:22",
+    "productName": "HUEVOS",
+    "quantity": 14.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 2.94
+  },
+  {
+    "occurredAt": "2026-03-27T19:24:48",
+    "productName": "COCIDOS",
+    "quantity": 1.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 0.96
+  },
+  {
+    "occurredAt": "2026-03-27T19:45:58",
+    "productName": "ALITAS DE POLLO",
+    "quantity": 1.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 1.3
+  },
+  {
+    "occurredAt": "2026-03-27T19:46:08",
+    "productName": "DONUT BLANCO",
+    "quantity": 1.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 1.07
+  },
+  {
+    "occurredAt": "2026-03-27T23:32:08",
+    "productName": "HUEVOS",
+    "quantity": 5.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 1.05
+  },
+  {
+    "occurredAt": "2026-03-27T23:13:00",
+    "productName": "PAN RUSTICO",
+    "quantity": 11.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 4.18
+  },
+  {
+    "occurredAt": "2026-03-27T23:20:00",
+    "productName": "PAN BRIOCHE",
+    "quantity": 5.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 2.8
+  },
+  {
+    "occurredAt": "2026-03-27T23:20:00",
+    "productName": "CARNE CHICKEN",
+    "quantity": 7.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 4.9
+  },
+  {
+    "occurredAt": "2026-03-27T23:21:00",
+    "productName": "CARNE ROYAL",
+    "quantity": 0.5,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 0.75
+  },
+  {
+    "occurredAt": "2026-03-27T23:21:00",
+    "productName": "SMASH BURGUER",
+    "quantity": 6.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 18.0
+  },
+  {
+    "occurredAt": "2026-03-27T23:23:00",
+    "productName": "PAN BRIOCHE",
+    "quantity": 5.0,
+    "motiveLabel": "🔥 SE QUEMO",
+    "costEur": 2.8
+  },
+  {
+    "occurredAt": "2026-03-27T23:42:00",
+    "productName": "FRANFURT",
+    "quantity": 1.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 1.16
+  },
+  {
+    "occurredAt": "2026-03-27T23:42:00",
+    "productName": "CHISTORRA",
+    "quantity": 1.0,
+    "motiveLabel": "🔥 SE QUEMO",
+    "costEur": 1.22
+  },
+  {
+    "occurredAt": "2026-03-28T11:19:03",
+    "productName": "QUESO STRACCIATELLA",
+    "quantity": 2.0,
+    "motiveLabel": "☠ MAL ESTADO",
+    "costEur": 3.6
+  },
+  {
+    "occurredAt": "2026-03-28T15:15:14",
+    "productName": "7b83f72f",
+    "quantity": 1.0,
+    "motiveLabel": "❌ ERROR EN COCINA",
+    "costEur": 0.0
+  },
+  {
+    "occurredAt": "2026-03-28T15:15:37",
+    "productName": "52828fb4",
+    "quantity": 1.0,
+    "motiveLabel": "🔥 SE QUEMO",
+    "costEur": 0.0
+  },
+  {
+    "occurredAt": "2026-03-28T15:16:07",
+    "productName": "MINI CROQUETAS",
+    "quantity": 1.0,
+    "motiveLabel": "🔥 SE QUEMO",
+    "costEur": 0.44
+  },
+  {
+    "occurredAt": "2026-03-28T22:20:37",
+    "productName": "PAN LARGO",
+    "quantity": 2.0,
+    "motiveLabel": "🔥 SE QUEMO",
+    "costEur": 0.56
+  },
+  {
+    "occurredAt": "2026-03-28T22:21:09",
+    "productName": "FINGERS",
+    "quantity": 2.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 3.3
+  },
+  {
+    "occurredAt": "2026-03-28T23:25:28",
+    "productName": "MORROS",
+    "quantity": 4.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 5.36
+  },
+  {
+    "occurredAt": "2026-03-28T23:25:40",
+    "productName": "PATATAS BONIATO",
+    "quantity": 2.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 2.6
+  },
+  {
+    "occurredAt": "2026-03-28T23:25:52",
+    "productName": "BIKINI",
+    "quantity": 1.0,
+    "motiveLabel": "❌ ERROR EN COCINA",
+    "costEur": 0.65
+  },
+  {
+    "occurredAt": "2026-03-28T23:26:12",
+    "productName": "MAXI CHICKEN",
+    "quantity": 1.0,
+    "motiveLabel": "♻ EL CLIENTE CAMBIO",
+    "costEur": 2.46
+  },
+  {
+    "occurredAt": "2026-03-28T23:26:54",
+    "productName": "CARROT BURGUER",
+    "quantity": 1.0,
+    "motiveLabel": "❌ ERROR EN COCINA",
+    "costEur": 1.5
+  },
+  {
+    "occurredAt": "2026-03-28T23:27:14",
+    "productName": "PAN BRIOCHE",
+    "quantity": 4.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 2.24
+  },
+  {
+    "occurredAt": "2026-03-28T23:27:28",
+    "productName": "PAN LARGO",
+    "quantity": 1.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 0.28
+  },
+  {
+    "occurredAt": "2026-03-28T23:27:49",
+    "productName": "PAN RUSTICO",
+    "quantity": 8.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 3.04
+  },
+  {
+    "occurredAt": "2026-03-28T23:28:08",
+    "productName": "PAN LARGO",
+    "quantity": 4.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 1.12
+  },
+  {
+    "occurredAt": "2026-03-28T23:28:21",
+    "productName": "HUEVOS",
+    "quantity": 3.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 0.63
+  },
+  {
+    "occurredAt": "2026-03-28T23:28:39",
+    "productName": "SMASH BURGUER",
+    "quantity": 8.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 24.0
+  },
+  {
+    "occurredAt": "2026-03-28T23:28:58",
+    "productName": "CARNE CHICKEN",
+    "quantity": 5.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 3.5
+  },
+  {
+    "occurredAt": "2026-03-28T23:34:34",
+    "productName": "CARNE POLLO RACION",
+    "quantity": 2.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 1.6
+  },
+  {
+    "occurredAt": "2026-03-29T12:57:32",
+    "productName": "BOCADILLO TORTILLA FRANCESA",
+    "quantity": 1.0,
+    "motiveLabel": "♻ EL CLIENTE CAMBIO",
+    "costEur": 0.83
+  },
+  {
+    "occurredAt": "2026-03-29T12:57:52",
+    "productName": "CHICKEN BURGUER",
+    "quantity": 1.0,
+    "motiveLabel": "❌ ERROR EN COCINA",
+    "costEur": 1.27
+  },
+  {
+    "occurredAt": "2026-03-29T16:22:57",
+    "productName": "PAN BRIOCHE",
+    "quantity": 2.0,
+    "motiveLabel": "🔥 SE QUEMO",
+    "costEur": 1.12
+  },
+  {
+    "occurredAt": "2026-03-30T00:26:51",
+    "productName": "PAN RUSTICO",
+    "quantity": 4.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 1.52
+  },
+  {
+    "occurredAt": "2026-03-30T00:27:25",
+    "productName": "PAN BRIOCHE",
+    "quantity": 1.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 0.56
+  },
+  {
+    "occurredAt": "2026-03-30T00:27:44",
+    "productName": "PAN EXTREME",
+    "quantity": 0.5,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 0.8
+  },
+  {
+    "occurredAt": "2026-03-30T19:25:22",
+    "productName": "CEBOLLA CARAMELIZADA RACION",
+    "quantity": 1.0,
+    "motiveLabel": "❌ ERROR EN COCINA",
+    "costEur": 0.19
+  },
+  {
+    "occurredAt": "2026-03-30T19:25:36",
+    "productName": "MORROS",
+    "quantity": 1.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 1.34
+  },
+  {
+    "occurredAt": "2026-03-30T19:25:45",
+    "productName": "PAN BRIOCHE SALSA AHUMADA",
+    "quantity": 1.0,
+    "motiveLabel": "❌ ERROR EN COCINA",
+    "costEur": 0.7
+  },
+  {
+    "occurredAt": "2026-03-30T22:50:47",
+    "productName": "PAN LARGO",
+    "quantity": 1.0,
+    "motiveLabel": "🔥 SE QUEMO",
+    "costEur": 0.28
+  },
+  {
+    "occurredAt": "2026-03-30T22:51:02",
+    "productName": "PAN RUSTICO",
+    "quantity": 2.0,
+    "motiveLabel": "☠ MAL ESTADO",
+    "costEur": 0.76
+  },
+  {
+    "occurredAt": "2026-03-30T22:51:20",
+    "productName": "CARNE POLLO RACION",
+    "quantity": 3.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 2.4
+  },
+  {
+    "occurredAt": "2026-03-30T23:36:22",
+    "productName": "CARNE CHICKEN",
+    "quantity": 6.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 4.2
+  },
+  {
+    "occurredAt": "2026-03-30T23:36:37",
+    "productName": "PAN RUSTICO",
+    "quantity": 7.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 2.66
+  },
+  {
+    "occurredAt": "2026-03-30T23:36:58",
+    "productName": "PAN BRIOCHE",
+    "quantity": 2.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 1.12
+  },
+  {
+    "occurredAt": "2026-03-30T23:37:16",
+    "productName": "SMASH BURGUER",
+    "quantity": 5.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 15.0
+  },
+  {
+    "occurredAt": "2026-03-30T23:37:30",
+    "productName": "BIKINI",
+    "quantity": 1.0,
+    "motiveLabel": "❌ ERROR EN COCINA",
+    "costEur": 0.65
+  },
+  {
+    "occurredAt": "2026-03-30T23:39:03",
+    "productName": "PATATAS BONIATO",
+    "quantity": 3.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 3.9
+  },
+  {
+    "occurredAt": "2026-03-30T23:39:33",
+    "productName": "NUGGETS",
+    "quantity": 1.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 0.88
+  },
+  {
+    "occurredAt": "2026-03-30T23:39:42",
+    "productName": "MORROS",
+    "quantity": 0.5,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 0.67
+  },
+  {
+    "occurredAt": "2026-03-30T23:39:56",
+    "productName": "HUEVOS",
+    "quantity": 5.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 1.05
+  },
+  {
+    "occurredAt": "2026-03-30T23:42:09",
+    "productName": "7b83f72f",
+    "quantity": 1.0,
+    "motiveLabel": "❌ ERROR EN COCINA",
+    "costEur": 0.0
+  },
+  {
+    "occurredAt": "2026-03-31T15:59:38",
+    "productName": "PAN RUSTICO",
+    "quantity": 1.0,
+    "motiveLabel": "❌ ERROR EN COCINA",
+    "costEur": 0.38
+  },
+  {
+    "occurredAt": "2026-03-31T23:12:00",
+    "productName": "MORROS",
+    "quantity": 2.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 2.68
+  },
+  {
+    "occurredAt": "2026-03-31T23:13:00",
+    "productName": "CARNE CHISTORRA UNIDAD",
+    "quantity": 1.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 0.29
+  },
+  {
+    "occurredAt": "2026-03-31T23:13:00",
+    "productName": "CARNE CHICKEN",
+    "quantity": 2.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 1.4
+  },
+  {
+    "occurredAt": "2026-03-31T23:13:00",
+    "productName": "MINI CROQUETAS UNIDAD",
+    "quantity": 6.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 0.3
+  },
+  {
+    "occurredAt": "2026-03-31T23:13:00",
+    "productName": "SMASH BURGUER",
+    "quantity": 5.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 15.0
+  },
+  {
+    "occurredAt": "2026-03-31T23:14:00",
+    "productName": "NUGGETS",
+    "quantity": 1.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 0.88
+  },
+  {
+    "occurredAt": "2026-04-01T11:22:23",
+    "productName": "CEBOLLA MORADA RACION",
+    "quantity": 5.0,
+    "motiveLabel": "☠ MAL ESTADO",
+    "costEur": 0.15
+  },
+  {
+    "occurredAt": "2026-04-01T15:39:26",
+    "productName": "ALITAS DE POLLO",
+    "quantity": 1.0,
+    "motiveLabel": "🔥 SE QUEMO",
+    "costEur": 1.3
+  },
+  {
+    "occurredAt": "2026-04-01T15:39:40",
+    "productName": "PATATAS CHEDAR BACON",
+    "quantity": 1.0,
+    "motiveLabel": "♻ EL CLIENTE CAMBIO",
+    "costEur": 1.53
+  },
+  {
+    "occurredAt": "2026-04-01T15:40:15",
+    "productName": "PAN BRIOCHE",
+    "quantity": 6.0,
+    "motiveLabel": "🔥 SE QUEMO",
+    "costEur": 3.36
+  },
+  {
+    "occurredAt": "2026-04-01T15:40:30",
+    "productName": "CARNE VACUNA",
+    "quantity": 1.0,
+    "motiveLabel": "🔥 SE QUEMO",
+    "costEur": 2.09
+  },
+  {
+    "occurredAt": "2026-04-01T15:41:10",
+    "productName": "PAN RUSTICO",
+    "quantity": 2.0,
+    "motiveLabel": "☠ MAL ESTADO",
+    "costEur": 0.76
+  },
+  {
+    "occurredAt": "2026-04-01T15:41:31",
+    "productName": "LONCHA BACON BURGUÉR 1/",
+    "quantity": 210.0,
+    "motiveLabel": "🔥 SE QUEMO",
+    "costEur": 1.1
+  },
+  {
+    "occurredAt": "2026-04-01T15:39:57",
+    "productName": "PATATAS",
+    "quantity": 4.0,
+    "motiveLabel": "🔥 SE QUEMO",
+    "costEur": 3.0
+  },
+  {
+    "occurredAt": "2026-04-01T19:14:25",
+    "productName": "PAN RUSTICO",
+    "quantity": 1.0,
+    "motiveLabel": "🔥 SE QUEMO",
+    "costEur": 0.38
+  },
+  {
+    "occurredAt": "2026-04-01T22:26:40",
+    "productName": "MINI CROQUETAS",
+    "quantity": 3.0,
+    "motiveLabel": "🔥 SE QUEMO",
+    "costEur": 1.32
+  },
+  {
+    "occurredAt": "2026-04-01T22:26:51",
+    "productName": "PATATAS",
+    "quantity": 2.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 1.5
+  },
+  {
+    "occurredAt": "2026-04-01T23:54:17",
+    "productName": "HUEVOS",
+    "quantity": 5.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 1.05
+  },
+  {
+    "occurredAt": "2026-04-01T23:54:30",
+    "productName": "LECHUGA RACION",
+    "quantity": 2.0,
+    "motiveLabel": "❌ ERROR EN COCINA",
+    "costEur": 0.24
+  },
+  {
+    "occurredAt": "2026-04-01T23:54:52",
+    "productName": "RODAJA DE TOMATE",
+    "quantity": 2.0,
+    "motiveLabel": "❌ ERROR EN COCINA",
+    "costEur": 0.1
+  },
+  {
+    "occurredAt": "2026-04-01T23:55:07",
+    "productName": "MORROS",
+    "quantity": 2.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 2.68
+  },
+  {
+    "occurredAt": "2026-04-01T23:55:56",
+    "productName": "SMASH BURGUER",
+    "quantity": 8.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 24.0
+  },
+  {
+    "occurredAt": "2026-04-01T23:57:00",
+    "productName": "NACHOS RESTOS",
+    "quantity": 2.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 0.01
+  },
+  {
+    "occurredAt": "2026-04-02T00:30:52",
+    "productName": "PAN EXTREME",
+    "quantity": 1.0,
+    "motiveLabel": "🔥 SE QUEMO",
+    "costEur": 1.6
+  },
+  {
+    "occurredAt": "2026-04-02T15:41:14",
+    "productName": "LONCHA BACON BURGUÉR 1/",
+    "quantity": 220.0,
+    "motiveLabel": "🔥 SE QUEMO",
+    "costEur": 2.2
+  },
+  {
+    "occurredAt": "2026-04-02T15:41:24",
+    "productName": "PAN RUSTICO",
+    "quantity": 1.0,
+    "motiveLabel": "❌ ERROR EN COCINA",
+    "costEur": 0.38
+  },
+  {
+    "occurredAt": "2026-04-02T15:41:38",
+    "productName": "LONCHA EDAM",
+    "quantity": 7.0,
+    "motiveLabel": "❌ ERROR EN COCINA",
+    "costEur": 0.84
+  },
+  {
+    "occurredAt": "2026-04-02T23:27:00",
+    "productName": "CARNE CHICKEN",
+    "quantity": 2.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 1.4
+  },
+  {
+    "occurredAt": "2026-04-02T23:27:00",
+    "productName": "CARNE POLLO RACION",
+    "quantity": 1.5,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 1.2
+  },
+  {
+    "occurredAt": "2026-04-02T23:28:00",
+    "productName": "PAN RUSTICO",
+    "quantity": 10.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 3.8
+  },
+  {
+    "occurredAt": "2026-04-02T23:28:00",
+    "productName": "PAN BRIOCHE",
+    "quantity": 2.0,
+    "motiveLabel": "❌ ERROR EN COCINA",
+    "costEur": 1.12
+  },
+  {
+    "occurredAt": "2026-04-02T23:28:00",
+    "productName": "PATATAS",
+    "quantity": 1.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 0.75
+  },
+  {
+    "occurredAt": "2026-04-02T23:28:00",
+    "productName": "MORROS",
+    "quantity": 1.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 1.34
+  },
+  {
+    "occurredAt": "2026-04-02T23:29:00",
+    "productName": "NACHOS RESTOS",
+    "quantity": 1.0,
+    "motiveLabel": "☠ MAL ESTADO",
+    "costEur": 2.2
+  },
+  {
+    "occurredAt": "2026-04-03T15:55:02",
+    "productName": "CHOCOS",
+    "quantity": 1.0,
+    "motiveLabel": "🔥 SE QUEMO",
+    "costEur": 1.15
+  },
+  {
+    "occurredAt": "2026-04-03T23:17:16",
+    "productName": "LONCHA BACON BURGUÉR 1/",
+    "quantity": 210.0,
+    "motiveLabel": "🔥 SE QUEMO",
+    "costEur": 1.1
+  },
+  {
+    "occurredAt": "2026-04-03T15:55:21",
+    "productName": "CROISANT",
+    "quantity": 5.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 3.7
+  },
+  {
+    "occurredAt": "2026-04-03T23:50:21",
+    "productName": "CROISANT CHOCOLATE BLANCO",
+    "quantity": 2.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 2.14
+  },
+  {
+    "occurredAt": "2026-04-03T23:21:00",
+    "productName": "MORROS",
+    "quantity": 2.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 2.68
+  },
+  {
+    "occurredAt": "2026-04-03T23:21:00",
+    "productName": "PATATAS BONIATO",
+    "quantity": 2.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 2.6
+  },
+  {
+    "occurredAt": "2026-04-03T23:21:00",
+    "productName": "ENSALADA CESAR",
+    "quantity": 1.0,
+    "motiveLabel": "♻ EL CLIENTE CAMBIO",
+    "costEur": 2.12
+  },
+  {
+    "occurredAt": "2026-04-03T23:39:00",
+    "productName": "CARNE VACUNA",
+    "quantity": 2.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 4.18
+  },
+  {
+    "occurredAt": "2026-04-03T23:39:00",
+    "productName": "PAN LARGO",
+    "quantity": 1.0,
+    "motiveLabel": "❌ ERROR EN COCINA",
+    "costEur": 0.28
+  },
+  {
+    "occurredAt": "2026-04-03T23:40:00",
+    "productName": "PAN BRIOCHE",
+    "quantity": 4.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 2.24
+  },
+  {
+    "occurredAt": "2026-04-04T15:35:16",
+    "productName": "PAN BRIOCHE SALSA AHUMADA",
+    "quantity": 1.0,
+    "motiveLabel": "❌ ERROR EN COCINA",
+    "costEur": 0.7
+  },
+  {
+    "occurredAt": "2026-04-04T15:35:33",
+    "productName": "CHORIZO PICANTE",
+    "quantity": 1.0,
+    "motiveLabel": "❌ ERROR EN COCINA",
+    "costEur": 1.21
+  },
+  {
+    "occurredAt": "2026-04-04T00:40:35",
+    "productName": "DONUT",
+    "quantity": 1.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 0.77
+  },
+  {
+    "occurredAt": "2026-04-04T18:26:53",
+    "productName": "CROISANT",
+    "quantity": 2.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 1.48
+  },
+  {
+    "occurredAt": "2026-04-04T20:27:58",
+    "productName": "HUEVOS",
+    "quantity": 9.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 1.89
+  },
+  {
+    "occurredAt": "2026-04-04T20:28:20",
+    "productName": "MORROS",
+    "quantity": 0.5,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 0.67
+  },
+  {
+    "occurredAt": "2026-04-04T20:28:33",
+    "productName": "PAN BRIOCHE",
+    "quantity": 1.0,
+    "motiveLabel": "❌ ERROR EN COCINA",
+    "costEur": 0.56
+  },
+  {
+    "occurredAt": "2026-04-04T20:28:55",
+    "productName": "CARNE CHICKEN",
+    "quantity": 1.0,
+    "motiveLabel": "❌ ERROR EN COCINA",
+    "costEur": 0.7
+  },
+  {
+    "occurredAt": "2026-04-04T21:31:09",
+    "productName": "LONCHA EDAM",
+    "quantity": 1.0,
+    "motiveLabel": "❌ ERROR EN COCINA",
+    "costEur": 0.12
+  },
+  {
+    "occurredAt": "2026-04-04T21:31:36",
+    "productName": "HUEVOS",
+    "quantity": 10.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 2.1
+  },
+  {
+    "occurredAt": "2026-04-05T00:12:38",
+    "productName": "CARNE CHICKEN",
+    "quantity": 4.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 2.8
+  },
+  {
+    "occurredAt": "2026-04-05T00:13:01",
+    "productName": "PAN BRIOCHE SALSA AHUMADA",
+    "quantity": 1.0,
+    "motiveLabel": "❌ ERROR EN COCINA",
+    "costEur": 0.7
+  },
+  {
+    "occurredAt": "2026-04-05T00:13:26",
+    "productName": "PAN RÚSTICO SALSA CHEDAR",
+    "quantity": 2.0,
+    "motiveLabel": "❌ ERROR EN COCINA",
+    "costEur": 1.0
+  },
+  {
+    "occurredAt": "2026-04-05T00:13:40",
+    "productName": "PATATAS BONIATO",
+    "quantity": 2.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 2.6
+  },
+  {
+    "occurredAt": "2026-04-05T00:14:28",
+    "productName": "SMASH BURGUER",
+    "quantity": 2.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 6.0
+  },
+  {
+    "occurredAt": "2026-04-05T00:15:20",
+    "productName": "NACHOS",
+    "quantity": 1.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 1.18
+  },
+  {
+    "occurredAt": "2026-04-05T00:34:34",
+    "productName": "NACHOS RESTOS",
+    "quantity": 0.7,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 1.54
+  },
+  {
+    "occurredAt": "2026-04-05T17:33:17",
+    "productName": "HUEVOS",
+    "quantity": 11.0,
+    "motiveLabel": "🔥 SE QUEMO",
+    "costEur": 2.31
+  },
+  {
+    "occurredAt": "2026-04-05T15:36:09",
+    "productName": "DONUT",
+    "quantity": 1.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 0.77
+  },
+  {
+    "occurredAt": "2026-04-05T18:33:55",
+    "productName": "CROISANT",
+    "quantity": 1.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 0.74
+  },
+  {
+    "occurredAt": "2026-04-05T18:34:25",
+    "productName": "CROISANT",
+    "quantity": 1.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 0.74
+  },
+  {
+    "occurredAt": "2026-04-05T19:52:30",
+    "productName": "XUXO",
+    "quantity": 1.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 1.04
+  },
+  {
+    "occurredAt": "2026-04-05T23:24:01",
+    "productName": "PAN BRIOCHE",
+    "quantity": 10.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 5.6
+  },
+  {
+    "occurredAt": "2026-04-06T00:02:48",
+    "productName": "HUEVOS",
+    "quantity": 2.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 0.42
+  },
+  {
+    "occurredAt": "2026-04-06T00:03:13",
+    "productName": "VIKINGO",
+    "quantity": 1.0,
+    "motiveLabel": "❌ ERROR EN COCINA",
+    "costEur": 1.24
+  },
+  {
+    "occurredAt": "2026-04-06T00:03:31",
+    "productName": "CARNE SMASH",
+    "quantity": 2.0,
+    "motiveLabel": "❌ ERROR EN COCINA",
+    "costEur": 1.56
+  },
+  {
+    "occurredAt": "2026-04-06T00:23:03",
+    "productName": "NACHOS RESTOS",
+    "quantity": 2.0,
+    "motiveLabel": "🚮 SOBRAS DE MARCAJE",
+    "costEur": 4.4
+  }
+]

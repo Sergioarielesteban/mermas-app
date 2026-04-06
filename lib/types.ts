@@ -1,4 +1,4 @@
-export type Unit = 'kg' | 'ud' | 'bolsa';
+export type Unit = 'kg' | 'ud' | 'bolsa' | 'racion';
 
 export type Product = {
   id: string;

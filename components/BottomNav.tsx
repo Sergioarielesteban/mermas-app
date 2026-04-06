@@ -14,10 +14,10 @@ export default function BottomNav() {
 
   return (
     <nav
-      className="fixed bottom-0 left-0 right-0 z-50 h-16 border-t border-zinc-200 bg-white/90 backdrop-blur"
+      className="fixed inset-x-0 bottom-0 z-[70] border-t border-zinc-200/80 bg-white/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-md"
       aria-label="Navegación inferior"
     >
-      <div className="mx-auto flex h-full w-full max-w-md">
+      <div className="mx-auto flex h-16 w-full max-w-md px-1">
         {NAV_ITEMS.map((item) => {
           const Icon = item.Icon;
           const isActive =
@@ -31,9 +31,10 @@ export default function BottomNav() {
               href={item.href}
               aria-current={isActive ? 'page' : undefined}
               className={[
-                'flex flex-1 flex-col items-center justify-center gap-1 px-2',
-                'transition-colors',
-                isActive ? 'text-[#D32F2F]' : 'text-zinc-500',
+                'flex flex-1 flex-col items-center justify-center gap-1 rounded-xl px-2 transition-all',
+                isActive
+                  ? 'bg-[#D32F2F]/10 text-[#D32F2F] shadow-sm ring-1 ring-[#D32F2F]/20'
+                  : 'text-zinc-500 hover:bg-zinc-100',
               ].join(' ')}
             >
               <Icon className="h-6 w-6" strokeWidth={2.25} />

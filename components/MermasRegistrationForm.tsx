@@ -1,23 +1,18 @@
 'use client';
 
 import React, { useMemo, useState } from 'react';
+import Image from 'next/image';
+import { Camera, Check, ChevronDown, Search, Upload, X } from 'lucide-react';
+import { useMermasStore } from '@/components/MermasStoreProvider';
+import type { MermaMotiveKey } from '@/lib/types';
 
-type Product = { id: string; name: string };
-type Motive = { key: string; emoji: string; label: string };
-
-const PRODUCTS: Product[] = [
-  { id: 'carne-smash', name: 'Carne Smash' },
-  { id: 'huevos', name: 'Huevos' },
-  { id: 'vikingo', name: 'Vikingo' },
-  { id: 'pan-brioche', name: 'Pan Brioche' },
-  { id: 'patatas', name: 'Patatas' },
-] as const;
+type Motive = { key: MermaMotiveKey; emoji: string; label: string };
 
 const MOTIVES: Motive[] = [
   { key: 'se-quemo', emoji: '🔥', label: 'SE QUEMÓ' },
   { key: 'mal-estado', emoji: '💀', label: 'MAL ESTADO' },
   { key: 'cliente-cambio', emoji: '♻️', label: 'EL CLIENTE CAMBIÓ' },
-  { key: 'error-cocina', emoji: '❌', label: 'ERROR EN COCINA' },
+  { key: 'error-cocina', emoji: '❌', label: 'ERROR DEL EQUIPO' },
   { key: 'sobras-marcaje', emoji: '🗑️', label: 'SOBRAS DE MARCAJE' },
   { key: 'cancelado', emoji: '⚠️', label: 'CANCELADO' },
 ] as const;
@@ -28,16 +23,42 @@ function toIntClamped(value: string, min: number, max: number) {
   return Math.min(max, Math.max(min, Math.floor(parsed)));
 }
 
-export default function MermasRegistrationForm() {
-  const motives = useMemo(() => MOTIVES, []);
+function nowParts() {
+  const d = new Date();
+  const date = d.toISOString().slice(0, 10);
+  const time = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+  return { date, time };
+}
 
-  const [productId, setProductId] = useState<string>(PRODUCTS[0].id);
+export default function MermasRegistrationForm() {
+  const { products, addMerma } = useMermasStore();
+  const motives = useMemo(() => MOTIVES, []);
+  const current = nowParts();
+
+  const [productId, setProductId] = useState<string>(products[0]?.id ?? '');
   const [quantity, setQuantity] = useState<number>(1);
-  const [motiveKey, setMotiveKey] = useState<string | null>(null);
+  const [motiveKey, setMotiveKey] = useState<MermaMotiveKey | null>(null);
+  const [dateValue, setDateValue] = useState(current.date);
+  const [timeValue, setTimeValue] = useState(current.time);
+  const [photoDataUrl, setPhotoDataUrl] = useState<string | null>(null);
   const [notes, setNotes] = useState<string>('');
   const [message, setMessage] = useState<string | null>(null);
+  const [openProductPicker, setOpenProductPicker] = useState(false);
+  const [productSearch, setProductSearch] = useState('');
+  const [lastQtyAction, setLastQtyAction] = useState<'inc' | 'dec' | null>(null);
 
   const selectedMotive = motives.find((m) => m.key === motiveKey) ?? null;
+
+  React.useEffect(() => {
+    if (!productId && products[0]?.id) {
+      setProductId(products[0].id);
+    }
+  }, [productId, products]);
+
+  const selectedProduct = products.find((p) => p.id === productId) ?? null;
+  const filteredProducts = products.filter((p) =>
+    p.name.toLowerCase().includes(productSearch.trim().toLowerCase()),
+  );
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
@@ -55,38 +76,63 @@ export default function MermasRegistrationForm() {
       return;
     }
 
-    // Sin backend por ahora: simulamos guardado.
-    const payload = {
+    if (!dateValue || !timeValue) {
+      setMessage('Completa fecha y hora.');
+      return;
+    }
+
+    const occurredAt = new Date(`${dateValue}T${timeValue}:00`);
+    if (Number.isNaN(occurredAt.getTime())) {
+      setMessage('Fecha u hora inválida.');
+      return;
+    }
+
+    const record = addMerma({
       productId,
       quantity,
       motiveKey,
-      notes: notes.trim(),
-    };
+      notes,
+      occurredAt: occurredAt.toISOString(),
+      photoDataUrl: photoDataUrl ?? undefined,
+    });
 
-    console.log('Guardar mermas:', payload);
-    setMessage('Mermas guardadas correctamente.');
+    setMessage(`Mermas guardadas. Coste calculado: ${record.costEur.toFixed(2)} EUR`);
   };
 
   const handleCancel = () => {
-    setProductId(PRODUCTS[0].id);
+    const now = nowParts();
+    setProductId(products[0]?.id ?? '');
     setQuantity(1);
     setMotiveKey(null);
+    setDateValue(now.date);
+    setTimeValue(now.time);
+    setPhotoDataUrl(null);
     setNotes('');
     setMessage(null);
+    setProductSearch('');
+    setOpenProductPicker(false);
+    setLastQtyAction(null);
+  };
+
+  const handlePhoto = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === 'string') setPhotoDataUrl(reader.result);
+    };
+    reader.readAsDataURL(file);
   };
 
   return (
-    <div className="min-h-full bg-zinc-50">
-      <div className="bg-[#D32F2F]">
-        <div className="mx-auto w-full max-w-md px-4 py-4">
-          <h1 className="text-lg font-semibold text-white">Registro de Mermas</h1>
-          <p className="mt-1 text-xs text-white/90">Carga rápida para hostelería</p>
-        </div>
+    <div className="min-h-full">
+      <div className="mb-4 rounded-2xl bg-white px-4 py-4 shadow-sm ring-1 ring-zinc-200">
+        <h1 className="text-base font-extrabold uppercase tracking-wide text-zinc-900">Nuevo Registro</h1>
       </div>
 
-      <form onSubmit={handleSave} className="mx-auto w-full max-w-md px-4 py-4">
+      <form onSubmit={handleSave} className="pb-2">
         {message ? (
-          <div className="mb-3 rounded-xl bg-zinc-100 p-3 text-sm text-zinc-800">
+          <div className="mb-3 rounded-xl bg-white p-3 text-sm text-zinc-800 shadow-sm ring-1 ring-zinc-200">
             {message}
             {message.includes('guardadas') && selectedMotive ? (
               <span className="block pt-1 text-xs text-zinc-600">
@@ -97,40 +143,65 @@ export default function MermasRegistrationForm() {
         ) : null}
 
         <div className="space-y-5">
-          <div>
-            <label className="mb-2 block text-xs font-semibold text-zinc-700">
-              Selector de Producto
-            </label>
-            <div className="relative">
-              <select
-                value={productId}
-                onChange={(e) => setProductId(e.target.value)}
-                className="w-full appearance-none rounded-xl border border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-900 shadow-sm outline-none focus:border-[#D32F2F] focus:ring-2 focus:ring-[#D32F2F]/20"
-              >
-                {PRODUCTS.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name}
-                  </option>
-                ))}
-              </select>
+          <div className="rounded-2xl bg-white p-3 shadow-sm ring-1 ring-zinc-200">
+            <div className="grid grid-cols-2 gap-3">
+              <label className="mb-2 block text-xs font-semibold text-zinc-700">
+                Fecha
+                <input
+                  type="date"
+                  value={dateValue}
+                  onChange={(e) => setDateValue(e.target.value)}
+                  className="mt-2 h-12 w-full rounded-xl border border-zinc-200 bg-zinc-50 px-3 text-sm text-zinc-900 outline-none focus:border-[#D32F2F] focus:ring-2 focus:ring-[#D32F2F]/20"
+                />
+              </label>
+              <label className="mb-2 block text-xs font-semibold text-zinc-700">
+                Hora
+                <input
+                  type="time"
+                  value={timeValue}
+                  onChange={(e) => setTimeValue(e.target.value)}
+                  className="mt-2 h-12 w-full rounded-xl border border-zinc-200 bg-zinc-50 px-3 text-sm text-zinc-900 outline-none focus:border-[#D32F2F] focus:ring-2 focus:ring-[#D32F2F]/20"
+                />
+              </label>
             </div>
           </div>
 
-          <div>
-            <label className="mb-2 block text-xs font-semibold text-zinc-700">
-              Selector de Cantidad
-            </label>
+          <div className="rounded-2xl bg-white p-3 shadow-sm ring-1 ring-zinc-200">
+            <label className="mb-2 block text-xs font-semibold text-zinc-700">Producto</label>
+            <button
+              type="button"
+              onClick={() => setOpenProductPicker(true)}
+              className="flex h-12 w-full items-center justify-between rounded-xl border border-zinc-200 bg-zinc-50 px-4 text-left text-sm text-zinc-900 shadow-sm outline-none focus:border-[#D32F2F] focus:ring-2 focus:ring-[#D32F2F]/20"
+            >
+              <span className={selectedProduct ? 'text-zinc-900' : 'text-zinc-400'}>
+                {selectedProduct?.name ?? 'Selecciona producto'}
+              </span>
+              <ChevronDown className="h-4 w-4 text-zinc-500" />
+            </button>
+            {selectedProduct ? (
+              <p className="pt-1 text-xs text-zinc-500">
+                Precio: {selectedProduct.pricePerUnit.toFixed(2)} EUR/{selectedProduct.unit}
+              </p>
+            ) : null}
+          </div>
 
-            <div className="grid grid-cols-3 items-center gap-3">
+          <div className="rounded-2xl bg-white p-3 shadow-sm ring-1 ring-zinc-200">
+            <label className="mb-2 block text-xs font-semibold text-zinc-700">Cantidad</label>
+            <div className="grid grid-cols-3 items-center gap-2">
               <button
                 type="button"
-                onClick={() => setQuantity((q) => Math.max(1, q - 1))}
+                onClick={() => {
+                  setQuantity((q) => Math.max(1, q - 1));
+                  setLastQtyAction('dec');
+                }}
                 disabled={quantity <= 1}
                 className={[
-                  'h-12 rounded-xl text-2xl font-bold',
+                  'h-14 rounded-xl border border-zinc-300 text-2xl font-bold',
                   quantity <= 1
-                    ? 'cursor-not-allowed bg-zinc-200 text-zinc-400'
-                    : 'bg-[#D32F2F] text-white hover:bg-[#c62828]',
+                    ? 'cursor-not-allowed bg-zinc-100 text-zinc-400'
+                    : lastQtyAction === 'dec'
+                      ? 'bg-[#D32F2F] text-white hover:bg-[#c62828]'
+                      : 'bg-zinc-100 text-zinc-900 hover:bg-zinc-200',
                 ].join(' ')}
                 aria-label="Restar cantidad"
               >
@@ -143,15 +214,26 @@ export default function MermasRegistrationForm() {
                 min={1}
                 max={999}
                 value={quantity}
-                onChange={(e) => setQuantity(toIntClamped(e.target.value, 1, 999))}
-                className="h-12 rounded-xl border border-zinc-200 bg-white text-center text-sm font-semibold text-zinc-900 shadow-sm outline-none focus:border-[#D32F2F] focus:ring-2 focus:ring-[#D32F2F]/20"
+                onChange={(e) => {
+                  setQuantity(toIntClamped(e.target.value, 1, 999));
+                  setLastQtyAction(null);
+                }}
+                className="h-14 rounded-xl border border-zinc-300 bg-white text-center text-xl font-bold text-zinc-900 shadow-sm outline-none focus:border-[#D32F2F] focus:ring-2 focus:ring-[#D32F2F]/20"
                 aria-label="Cantidad"
               />
 
               <button
                 type="button"
-                onClick={() => setQuantity((q) => Math.min(999, q + 1))}
-                className="h-12 rounded-xl bg-[#D32F2F] text-2xl font-bold text-white hover:bg-[#c62828]"
+                onClick={() => {
+                  setQuantity((q) => Math.min(999, q + 1));
+                  setLastQtyAction('inc');
+                }}
+                className={[
+                  'h-14 rounded-xl border border-zinc-300 text-2xl font-bold',
+                  lastQtyAction === 'inc'
+                    ? 'bg-[#D32F2F] text-white hover:bg-[#c62828]'
+                    : 'bg-zinc-100 text-zinc-900 hover:bg-zinc-200',
+                ].join(' ')}
                 aria-label="Aumentar cantidad"
               >
                 +
@@ -159,9 +241,9 @@ export default function MermasRegistrationForm() {
             </div>
           </div>
 
-          <div>
+          <div className="rounded-2xl bg-white p-3 shadow-sm ring-1 ring-zinc-200">
             <div className="mb-2 flex items-center justify-between">
-              <label className="text-xs font-semibold text-zinc-700">Motivos</label>
+              <label className="text-xs font-semibold text-zinc-700">Motivo</label>
               <span className="text-[11px] text-zinc-500">Selecciona uno</span>
             </div>
 
@@ -174,29 +256,55 @@ export default function MermasRegistrationForm() {
                     type="button"
                     onClick={() => setMotiveKey((prev) => (prev === m.key ? null : m.key))}
                     className={[
-                      'flex flex-col items-center justify-center rounded-xl border px-2 py-2 text-center transition-colors',
+                      'flex h-16 items-center justify-center gap-2 rounded-md border px-2 text-center transition-all',
                       isSelected
-                        ? 'border-transparent bg-[#D32F2F] text-white'
-                        : 'border-zinc-200 bg-white text-zinc-800 hover:border-zinc-300',
+                        ? 'border-[#D32F2F] bg-[#D32F2F]/10 text-zinc-900 shadow-sm'
+                        : 'border-zinc-300 bg-zinc-50 text-zinc-800 hover:border-zinc-400',
                     ].join(' ')}
                     aria-pressed={isSelected}
                   >
                     <span className="text-lg leading-none">{m.emoji}</span>
-                    <span className="mt-1 text-[11px] font-semibold leading-tight">{m.label}</span>
+                    <span className="text-[11px] font-semibold leading-tight">{m.label}</span>
                   </button>
                 );
               })}
             </div>
           </div>
 
-          <div>
+          <div className="rounded-2xl bg-white p-3 shadow-sm ring-1 ring-zinc-200">
+            <label className="mb-2 block text-xs font-semibold text-zinc-700">Añadir Foto de Merma</label>
+            <label className="flex h-12 cursor-pointer items-center justify-center gap-2 rounded-xl border border-zinc-300 bg-zinc-50 text-sm font-semibold text-zinc-700 hover:bg-zinc-100">
+              <Camera className="h-4 w-4" />
+              <Upload className="h-4 w-4" />
+              <span>Tomar o subir foto</span>
+              <input
+                type="file"
+                accept="image/*"
+                capture="environment"
+                className="hidden"
+                onChange={handlePhoto}
+              />
+            </label>
+            {photoDataUrl ? (
+              <Image
+                src={photoDataUrl}
+                alt="Foto de merma"
+                width={720}
+                height={360}
+                unoptimized
+                className="mt-2 h-36 w-full rounded-xl object-cover ring-1 ring-zinc-200"
+              />
+            ) : null}
+          </div>
+
+          <div className="rounded-2xl bg-white p-3 shadow-sm ring-1 ring-zinc-200">
             <label className="mb-2 block text-xs font-semibold text-zinc-700">Campo de Notas</label>
             <textarea
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               rows={4}
               placeholder="Escribe aquí cualquier observación..."
-              className="w-full resize-none rounded-xl border border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-900 shadow-sm outline-none focus:border-[#D32F2F] focus:ring-2 focus:ring-[#D32F2F]/20"
+              className="w-full resize-none rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm text-zinc-900 shadow-sm outline-none focus:border-[#D32F2F] focus:ring-2 focus:ring-[#D32F2F]/20"
               aria-label="Notas"
             />
           </div>
@@ -220,6 +328,77 @@ export default function MermasRegistrationForm() {
           </div>
         </div>
       </form>
+
+      {openProductPicker ? (
+        <div className="fixed inset-0 z-50 bg-black/40 px-4 py-10">
+          <div className="mx-auto flex h-full w-full max-w-md flex-col rounded-2xl bg-white shadow-xl">
+            <div className="flex items-center justify-between border-b border-zinc-200 p-4">
+              <h3 className="text-lg font-black uppercase text-zinc-800">Producto</h3>
+              <button
+                type="button"
+                onClick={() => setOpenProductPicker(false)}
+                className="grid h-9 w-9 place-items-center rounded-lg text-zinc-700 hover:bg-zinc-100"
+                aria-label="Cerrar selector de producto"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="p-4">
+              <label className="flex h-11 items-center gap-2 rounded-xl border border-zinc-300 bg-white px-3">
+                <Search className="h-4 w-4 text-zinc-500" />
+                <input
+                  value={productSearch}
+                  onChange={(e) => setProductSearch(e.target.value)}
+                  placeholder="Buscar producto..."
+                  className="w-full bg-transparent text-sm text-zinc-900 outline-none placeholder:text-zinc-400"
+                  autoFocus
+                />
+              </label>
+            </div>
+
+            <div className="flex-1 overflow-y-auto px-4 pb-4">
+              <div className="space-y-1">
+                {filteredProducts.length === 0 ? (
+                  <div className="rounded-xl bg-zinc-50 px-3 py-4 text-sm text-zinc-500 ring-1 ring-zinc-200">
+                    No hay coincidencias.
+                  </div>
+                ) : null}
+
+                {filteredProducts.map((p) => {
+                  const active = p.id === productId;
+                  return (
+                    <button
+                      key={p.id}
+                      type="button"
+                      onClick={() => {
+                        setProductId(p.id);
+                        setOpenProductPicker(false);
+                      }}
+                      className={[
+                        'flex w-full items-center gap-3 rounded-xl border px-3 py-3 text-left',
+                        active
+                          ? 'border-[#D32F2F] bg-[#D32F2F]/5 text-zinc-900'
+                          : 'border-zinc-200 bg-white text-zinc-800 hover:bg-zinc-50',
+                      ].join(' ')}
+                    >
+                      <span
+                        className={[
+                          'grid h-5 w-5 place-items-center rounded-full border',
+                          active ? 'border-[#D32F2F] text-[#D32F2F]' : 'border-zinc-400 text-transparent',
+                        ].join(' ')}
+                      >
+                        <Check className="h-3.5 w-3.5" />
+                      </span>
+                      <span className="flex-1 text-base">{p.name}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

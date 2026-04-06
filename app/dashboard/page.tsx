@@ -1,21 +1,380 @@
-export default function DashboardPage() {
+'use client';
+
+import React from 'react';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Line,
+  LineChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from 'recharts';
+import { useMermasStore } from '@/components/MermasStoreProvider';
+import { toBusinessDate } from '@/lib/business-day';
+import {
+  anomalyAlerts,
+  highWasteAlerts,
+  monthComparison,
+  monthTrend,
+  topMotives,
+  topByQuantity,
+  topByValue,
+  totals,
+  weekBars,
+} from '@/lib/analytics';
+
+const eur = (value: number) => `${Number(value).toFixed(2)} €`;
+const MONTHLY_TARGET_KEY = 'mermas_monthly_target_eur';
+const qty = (value: number) =>
+  Number(value).toLocaleString('es-ES', {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  });
+
+function Card({ title, value }: { title: string; value: number }) {
   return (
-    <div className="min-h-full bg-zinc-50">
-      <div className="bg-[#D32F2F]">
-        <div className="mx-auto w-full max-w-md px-4 py-4">
-          <h1 className="text-lg font-semibold text-white">Dashboard</h1>
-          <p className="mt-1 text-xs text-white/90">Vista general (pendiente)</p>
-        </div>
+    <div className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-zinc-200">
+      <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">{title}</p>
+      <p className="pt-1 text-2xl font-black text-zinc-900">{eur(value)}</p>
+    </div>
+  );
+}
+
+function Block({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <section className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-zinc-200">
+      <h2 className="text-sm font-extrabold uppercase tracking-wide text-zinc-700">{title}</h2>
+      <div className="mt-3 h-64 min-w-0">{children}</div>
+    </section>
+  );
+}
+
+export default function DashboardPage() {
+  const { products, mermas } = useMermasStore();
+  const t = totals(mermas);
+  const dataWeek = weekBars(mermas);
+  const dataTrend = monthTrend(mermas);
+  const dataTopQty = topByQuantity(mermas, products);
+  const dataTopValue = topByValue(mermas, products);
+  const monthly = monthComparison(mermas);
+  const alerts = highWasteAlerts(mermas, products);
+  const motives = topMotives(mermas);
+  const anomalies = anomalyAlerts(mermas, products);
+  const [monthlyTarget, setMonthlyTarget] = React.useState<number>(500);
+
+  React.useEffect(() => {
+    try {
+      const raw = localStorage.getItem(MONTHLY_TARGET_KEY);
+      const parsed = Number(raw ?? 500);
+      if (Number.isFinite(parsed) && parsed > 0) setMonthlyTarget(parsed);
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  React.useEffect(() => {
+    try {
+      localStorage.setItem(MONTHLY_TARGET_KEY, String(monthlyTarget));
+    } catch {
+      // ignore
+    }
+  }, [monthlyTarget]);
+
+  const monthNow = toBusinessDate(new Date());
+  const monthlyMermas = mermas.filter((m) => {
+    const d = toBusinessDate(m.occurredAt);
+    return d.getFullYear() === monthNow.getFullYear() && d.getMonth() === monthNow.getMonth();
+  });
+  const monthlyTopValue = topByValue(monthlyMermas, products, 5);
+  const monthlyMotives = topMotives(monthlyMermas, 5);
+  const monthlyAnomalies = anomalyAlerts(monthlyMermas, products, 5);
+  const targetRatio = monthlyTarget > 0 ? t.month / monthlyTarget : 0;
+  const targetSeverity = targetRatio <= 0.85 ? 'verde' : targetRatio <= 1 ? 'amarillo' : 'rojo';
+  const targetColor =
+    targetSeverity === 'verde' ? 'bg-emerald-500' : targetSeverity === 'amarillo' ? 'bg-amber-500' : 'bg-red-500';
+
+  const exportMonthlyExecutivePdf = () => {
+    const doc = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'a4' });
+    const monthLabel = monthNow.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' });
+    doc.setFontSize(16);
+    doc.text('Informe Ejecutivo de Mermas', 40, 40);
+    doc.setFontSize(11);
+    doc.text(`Mes: ${monthLabel}`, 40, 62);
+    doc.text(`Merma mensual: ${eur(t.month)}`, 40, 80);
+    doc.text(`Objetivo mensual: ${eur(monthlyTarget)} | Estado: ${targetSeverity.toUpperCase()}`, 40, 96);
+
+    autoTable(doc, {
+      startY: 116,
+      head: [['Top productos (valor)', 'Valor']],
+      body:
+        monthlyTopValue.length > 0
+          ? monthlyTopValue.map((item) => [item.name, eur(item.value)])
+          : [['Sin datos', '-']],
+      styles: { fontSize: 9 },
+      headStyles: { fillColor: [211, 47, 47] },
+    });
+
+    autoTable(doc, {
+      startY: (doc as jsPDF & { lastAutoTable?: { finalY?: number } }).lastAutoTable?.finalY
+        ? ((doc as jsPDF & { lastAutoTable?: { finalY?: number } }).lastAutoTable?.finalY ?? 130) + 18
+        : 240,
+      head: [['Top motivos', 'Eventos', 'Impacto']],
+      body:
+        monthlyMotives.length > 0
+          ? monthlyMotives.map((item) => [item.label, String(item.events), eur(item.totalCost)])
+          : [['Sin datos', '-', '-']],
+      styles: { fontSize: 9 },
+      headStyles: { fillColor: [211, 47, 47] },
+    });
+
+    autoTable(doc, {
+      startY: (doc as jsPDF & { lastAutoTable?: { finalY?: number } }).lastAutoTable?.finalY
+        ? ((doc as jsPDF & { lastAutoTable?: { finalY?: number } }).lastAutoTable?.finalY ?? 360) + 18
+        : 420,
+      head: [['Anomalias', 'Semana actual', 'Semana previa', 'Incremento']],
+      body:
+        monthlyAnomalies.length > 0
+          ? monthlyAnomalies.map((item) => [item.productName, eur(item.current), eur(item.previous), `+${eur(item.delta)}`])
+          : [['Sin anomalías', '-', '-', '-']],
+      styles: { fontSize: 9 },
+      headStyles: { fillColor: [211, 47, 47] },
+    });
+
+    doc.save(`informe-ejecutivo-${monthNow.toISOString().slice(0, 7)}.pdf`);
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-zinc-200">
+        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-zinc-500">Business Intelligence</p>
+        <p className="pt-1 text-sm font-semibold text-zinc-700">
+          Seguimiento en tiempo real del coste de merma.
+        </p>
       </div>
 
-      <div className="mx-auto w-full max-w-md px-4 py-6">
-        <div className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-zinc-200">
-          <p className="text-sm font-semibold text-zinc-900">Próximamente</p>
-          <p className="mt-1 text-sm text-zinc-600">
-            Aquí verás estadísticas y el historial de registros de mermas.
+      <section className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-zinc-200">
+        <div className="mb-2 flex items-center justify-between">
+          <h2 className="text-sm font-extrabold uppercase tracking-wide text-zinc-700">
+            Alertas de Merma Alta (7 días)
+          </h2>
+        </div>
+        {alerts.length === 0 ? (
+          <p className="text-sm text-zinc-500">Sin alertas relevantes esta semana.</p>
+        ) : (
+          <div className="space-y-2">
+            {alerts.map((item) => (
+              <div key={item.productId} className="rounded-xl border border-zinc-200 bg-zinc-50 p-3">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="truncate text-sm font-bold text-zinc-900">{item.productName}</p>
+                  <span
+                    className={[
+                      'rounded-full px-2 py-1 text-[11px] font-bold uppercase',
+                      item.severity === 'alta'
+                        ? 'bg-red-100 text-red-700'
+                        : item.severity === 'media'
+                          ? 'bg-amber-100 text-amber-700'
+                          : 'bg-emerald-100 text-emerald-700',
+                    ].join(' ')}
+                  >
+                    {item.severity}
+                  </span>
+                </div>
+                <p className="pt-1 text-xs text-zinc-700">
+                  Coste acumulado: <strong>{eur(item.totalCost)}</strong> | eventos: {item.events}
+                </p>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
+      <section className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-zinc-200">
+        <h2 className="text-sm font-extrabold uppercase tracking-wide text-zinc-700">Aviso de Anomalias (7d vs 7d)</h2>
+        {anomalies.length === 0 ? (
+          <p className="pt-2 text-sm text-zinc-500">Sin anomalías relevantes detectadas.</p>
+        ) : (
+          <div className="mt-3 space-y-2">
+            {anomalies.map((item) => (
+              <div
+                key={item.productId}
+                className={[
+                  'rounded-xl border p-3',
+                  item.severity === 'alta' ? 'border-red-200 bg-red-50' : 'border-amber-200 bg-amber-50',
+                ].join(' ')}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-sm font-bold text-zinc-900">
+                    {item.severity === 'alta' ? '🚨 ' : '⚠️ '}
+                    {item.productName}
+                  </p>
+                  <span
+                    className={[
+                      'rounded-full px-2 py-1 text-[11px] font-bold uppercase',
+                      item.severity === 'alta' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700',
+                    ].join(' ')}
+                  >
+                    {item.severity}
+                  </span>
+                </div>
+                <p className="pt-1 text-xs text-zinc-700">
+                  Semana actual: <strong>{eur(item.current)}</strong> | semana previa: <strong>{eur(item.previous)}</strong>
+                </p>
+                <p className={['pt-1 text-xs font-semibold', item.severity === 'alta' ? 'text-red-800' : 'text-amber-800'].join(' ')}>
+                  Incremento: +{eur(item.delta)}
+                </p>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
+      <div className="grid grid-cols-1 gap-3">
+        <Card title="Merma de Hoy" value={t.today} />
+        <Card title="Merma de la Semana" value={t.week} />
+        <Card title="Merma del Mes" value={t.month} />
+      </div>
+
+      <section className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-zinc-200">
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="text-sm font-extrabold uppercase tracking-wide text-zinc-700">Objetivo Mensual</h2>
+          <button
+            type="button"
+            onClick={exportMonthlyExecutivePdf}
+            className="h-9 rounded-lg bg-[#D32F2F] px-3 text-xs font-bold text-white"
+          >
+            PDF Ejecutivo Mensual
+          </button>
+        </div>
+        <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-[1fr_auto]">
+          <input
+            type="number"
+            min={1}
+            value={monthlyTarget}
+            onChange={(e) => setMonthlyTarget(Math.max(1, Number(e.target.value || 1)))}
+            className="h-10 rounded-lg border border-zinc-200 bg-zinc-50 px-3 text-sm outline-none"
+          />
+          <p className="self-center text-sm font-semibold text-zinc-700">
+            Actual: {eur(t.month)} / Objetivo: {eur(monthlyTarget)}
           </p>
         </div>
-      </div>
+        <div className="mt-2 grid grid-cols-4 gap-2">
+          {[500, 750, 1000, 1500].map((value) => (
+            <button
+              key={value}
+              type="button"
+              onClick={() => setMonthlyTarget(value)}
+              className={[
+                'h-9 rounded-lg border text-xs font-bold',
+                monthlyTarget === value
+                  ? 'border-[#D32F2F] bg-[#D32F2F] text-white'
+                  : 'border-zinc-300 bg-white text-zinc-700',
+              ].join(' ')}
+            >
+              {value}€
+            </button>
+          ))}
+        </div>
+        <div className="mt-3 h-3 w-full overflow-hidden rounded-full bg-zinc-200">
+          <div className={['h-full transition-all', targetColor].join(' ')} style={{ width: `${Math.min(targetRatio * 100, 100)}%` }} />
+        </div>
+        <p className="mt-2 text-xs font-semibold uppercase text-zinc-600">Semáforo: {targetSeverity}</p>
+      </section>
+
+      <Block title="Merma de la Semana (€)">
+        <ResponsiveContainer width="100%" height="100%" minWidth={0}>
+          <BarChart data={dataWeek}>
+            <CartesianGrid strokeDasharray="3 3" />
+            <XAxis dataKey="day" />
+            <YAxis />
+            <Tooltip formatter={(value) => [eur(Number(value ?? 0)), 'VALOR']} />
+            <Bar dataKey="cost" fill="#D32F2F" radius={[8, 8, 0, 0]} />
+          </BarChart>
+        </ResponsiveContainer>
+      </Block>
+
+      <Block title="Tendencia de Merma Mensual">
+        <ResponsiveContainer width="100%" height="100%" minWidth={0}>
+          <LineChart data={dataTrend}>
+            <CartesianGrid strokeDasharray="3 3" />
+            <XAxis dataKey="day" />
+            <YAxis />
+            <Tooltip formatter={(value) => [eur(Number(value ?? 0)), 'VALOR']} />
+            <Line type="monotone" dataKey="cost" stroke="#D32F2F" strokeWidth={3} dot={false} />
+          </LineChart>
+        </ResponsiveContainer>
+      </Block>
+
+      <section className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-zinc-200">
+        <h2 className="text-sm font-extrabold uppercase tracking-wide text-zinc-700">
+          Comparación Mensual
+        </h2>
+        <p className="pt-1 text-xs text-zinc-600">
+          Diferencia vs mes anterior:{' '}
+          <span className={monthly.diff <= 0 ? 'font-bold text-emerald-700' : 'font-bold text-red-700'}>
+            {monthly.diff >= 0 ? '+' : ''}
+            {eur(monthly.diff)} ({monthly.pct.toFixed(1)}%)
+          </span>
+        </p>
+        <div className="mt-3 h-56 min-w-0">
+          <ResponsiveContainer width="100%" height="100%" minWidth={0}>
+            <BarChart data={monthly.chart}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="month" />
+              <YAxis />
+              <Tooltip formatter={(value) => [eur(Number(value ?? 0)), 'VALOR']} />
+              <Bar dataKey="value" fill="#D32F2F" radius={[8, 8, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      </section>
+
+      <section className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-zinc-200">
+        <h2 className="text-sm font-extrabold uppercase tracking-wide text-zinc-700">Top Motivos de Merma</h2>
+        {motives.length === 0 ? (
+          <p className="pt-2 text-sm text-zinc-500">Sin datos de motivos.</p>
+        ) : (
+          <div className="mt-3 space-y-2">
+            {motives.map((item) => (
+              <div key={item.key} className="rounded-xl border border-zinc-200 bg-zinc-50 p-3">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm font-bold text-zinc-900">{item.label}</p>
+                  <p className="text-xs font-semibold text-zinc-700">{item.events} eventos</p>
+                </div>
+                <p className="pt-1 text-xs text-zinc-700">Impacto: {eur(item.totalCost)}</p>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
+      <Block title="Top 5 Productos por Cantidad Tirada">
+        <ResponsiveContainer width="100%" height="100%" minWidth={0}>
+          <BarChart data={dataTopQty} layout="vertical">
+            <CartesianGrid strokeDasharray="3 3" />
+            <XAxis type="number" tickFormatter={(value) => qty(Number(value ?? 0))} />
+            <YAxis type="category" dataKey="name" width={120} />
+            <Tooltip formatter={(value) => [qty(Number(value ?? 0)), 'CANTIDAD']} />
+            <Bar dataKey="value" fill="#2563eb" radius={[0, 8, 8, 0]} />
+          </BarChart>
+        </ResponsiveContainer>
+      </Block>
+
+      <Block title="Top 5 Productos por Valor Economico">
+        <ResponsiveContainer width="100%" height="100%" minWidth={0}>
+          <BarChart data={dataTopValue} layout="vertical">
+            <CartesianGrid strokeDasharray="3 3" />
+            <XAxis type="number" />
+            <YAxis type="category" dataKey="name" width={120} />
+            <Tooltip formatter={(value) => [eur(Number(value ?? 0)), 'VALOR']} />
+            <Bar dataKey="value" fill="#D32F2F" radius={[0, 8, 8, 0]} />
+          </BarChart>
+        </ResponsiveContainer>
+      </Block>
     </div>
   );
 }

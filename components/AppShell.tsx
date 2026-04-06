@@ -1,18 +1,11 @@
 'use client';
 
+import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import React, { useMemo, useState } from 'react';
-import {
-  BookOpen,
-  Drumstick,
-  LayoutDashboard,
-  Menu,
-  X,
-  FileText,
-} from 'lucide-react';
-
-const BRAND_RED = '#D32F2F';
+import { BookOpen, Drumstick, LayoutDashboard, LogOut, Menu, X, FileText } from 'lucide-react';
+import { useAuth } from '@/components/AuthProvider';
 
 type NavItem = {
   href: string;
@@ -39,13 +32,54 @@ function titleForPath(pathname: string | null) {
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
+  const [confirmLogoutOpen, setConfirmLogoutOpen] = useState(false);
+  const { email, logout } = useAuth();
 
   const title = useMemo(() => titleForPath(pathname), [pathname]);
 
+  const confirmAndLogout = () => setConfirmLogoutOpen(true);
+
   return (
     <div className="min-h-full bg-zinc-50">
-      <header className="sticky top-0 z-40 bg-[#D32F2F]">
-        <div className="mx-auto flex h-14 w-full max-w-md items-center gap-3 px-3">
+      {confirmLogoutOpen ? (
+        <>
+          <button
+            type="button"
+            aria-hidden
+            onClick={() => setConfirmLogoutOpen(false)}
+            className="fixed inset-0 z-[70] bg-black/45"
+            tabIndex={-1}
+          />
+          <div className="fixed inset-0 z-[80] grid place-items-center px-4">
+            <div className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-xl ring-1 ring-zinc-200">
+              <p className="text-sm font-extrabold text-zinc-900">Confirmar cierre de sesión</p>
+              <p className="mt-1 text-sm text-zinc-600">¿Seguro que quieres cerrar sesión?</p>
+              <div className="mt-4 flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setConfirmLogoutOpen(false)}
+                  className="h-10 flex-1 rounded-xl border border-zinc-300 bg-white px-3 text-sm font-bold text-zinc-700"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setConfirmLogoutOpen(false);
+                    void logout();
+                  }}
+                  className="h-10 flex-1 rounded-xl bg-[#D32F2F] px-3 text-sm font-bold text-white"
+                >
+                  Cerrar sesión
+                </button>
+              </div>
+            </div>
+          </div>
+        </>
+      ) : null}
+
+      <header className="sticky top-0 z-40 border-b border-[#b32020] bg-gradient-to-r from-[#B91C1C] to-[#D32F2F] shadow-lg">
+        <div className="mx-auto flex h-16 w-full max-w-md items-center gap-3 px-3">
           <button
             type="button"
             onClick={() => setOpen(true)}
@@ -54,10 +88,27 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           >
             <Menu className="h-6 w-6" />
           </button>
-          <h1 className="text-sm font-extrabold uppercase tracking-wide text-white">
+          <Image
+            src="/logo-can-xampa.png"
+            alt="Can Xampa"
+            width={120}
+            height={40}
+            className="h-8 w-auto rounded-md border border-white/25 bg-white/95 p-1"
+            priority
+          />
+          <h1 className="line-clamp-1 text-sm font-extrabold uppercase tracking-wide text-white">
             {title}
           </h1>
           <div className="flex-1" />
+          <button
+            type="button"
+            onClick={confirmAndLogout}
+            className="grid h-10 w-10 place-items-center rounded-xl text-white/95 hover:bg-white/10 active:scale-[0.99]"
+            aria-label="Cerrar sesión"
+            title="Cerrar sesión"
+          >
+            <LogOut className="h-5 w-5" />
+          </button>
         </div>
       </header>
 
@@ -76,36 +127,39 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       {/* Drawer */}
       <aside
         className={[
-          'fixed left-0 top-0 z-[60] h-full w-[84%] max-w-[320px] bg-white shadow-xl transition-transform',
+          'fixed left-0 top-0 z-[60] h-full w-[84%] max-w-[320px] bg-white shadow-2xl transition-transform',
           open ? 'translate-x-0' : '-translate-x-full',
         ].join(' ')}
         aria-label="Menú lateral"
       >
-        <div className="flex h-14 items-center gap-3 bg-white px-3">
-          <div
-            className="grid h-10 w-10 place-items-center rounded-xl"
-            style={{ backgroundColor: `${BRAND_RED}15` }}
-          >
-            <span className="text-sm font-black" style={{ color: BRAND_RED }}>
-              XA
-            </span>
+        <div className="bg-gradient-to-r from-[#B91C1C] to-[#D32F2F] px-3 pb-4 pt-3 text-white">
+          <div className="flex items-center gap-3">
+            <Image
+              src="/logo-can-xampa.png"
+              alt="Logo Can Xampa"
+              width={108}
+              height={108}
+              className="h-14 w-14 rounded-xl border border-white/25 bg-white object-contain p-1 shadow-sm"
+            />
+            <div className="min-w-0">
+              <div className="truncate text-sm font-black tracking-wide">CAN XAMPA</div>
+              <div className="truncate text-xs text-white/85">Gestión de mermas</div>
+            </div>
           </div>
-          <div className="min-w-0">
-            <div className="truncate text-sm font-extrabold text-zinc-900">XAMPA MERMAS</div>
-            <div className="truncate text-xs text-zinc-500">Gestión de mermas</div>
+          <div className="mt-3 rounded-xl bg-white/12 px-3 py-2 text-xs text-white/90 backdrop-blur">
+            Plataforma interna de control de costes y desperdicio.
           </div>
-          <div className="flex-1" />
           <button
             type="button"
             onClick={() => setOpen(false)}
-            className="grid h-10 w-10 place-items-center rounded-xl text-zinc-700 hover:bg-zinc-100"
+            className="absolute right-3 top-3 grid h-9 w-9 place-items-center rounded-xl text-white hover:bg-white/15"
             aria-label="Cerrar menú"
           >
             <X className="h-5 w-5" />
           </button>
         </div>
 
-        <nav className="px-2 py-2">
+        <nav className="px-2 py-3">
           {NAV_ITEMS.map((item) => {
             const isActive =
               item.href === '/'
@@ -119,8 +173,10 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                 href={item.href}
                 onClick={() => setOpen(false)}
                 className={[
-                  'flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-semibold transition-colors',
-                  isActive ? 'bg-[#D32F2F]/10 text-[#D32F2F]' : 'text-zinc-800 hover:bg-zinc-100',
+                  'flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-semibold transition-all',
+                  isActive
+                    ? 'bg-[#D32F2F]/10 text-[#D32F2F] shadow-sm ring-1 ring-[#D32F2F]/25'
+                    : 'text-zinc-800 hover:bg-zinc-100',
                 ].join(' ')}
               >
                 <Icon className="h-5 w-5" />
@@ -132,15 +188,27 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
         <div className="px-3 py-4">
           <div className="rounded-2xl bg-zinc-50 p-3 ring-1 ring-zinc-200">
-            <div className="text-xs font-semibold text-zinc-700">Modo demo</div>
-            <div className="mt-1 text-xs text-zinc-500">
+            <div className="text-xs font-semibold text-zinc-700">Sesión</div>
+            <div className="mt-1 truncate text-xs text-zinc-500">{email ?? 'Sin usuario'}</div>
+            <button
+              type="button"
+              onClick={() => {
+                confirmAndLogout();
+                setOpen(false);
+              }}
+              className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs font-bold uppercase tracking-wide text-zinc-700 hover:bg-zinc-100"
+            >
+              <LogOut className="h-3.5 w-3.5" />
+              Cerrar Sesión
+            </button>
+            <div className="mt-2 text-[11px] text-zinc-500">
               Datos guardados en este dispositivo (localStorage).
             </div>
           </div>
         </div>
       </aside>
 
-      <main className="mx-auto w-full max-w-md px-4 py-4">{children}</main>
+      <main className="mx-auto w-full max-w-md px-4 py-5">{children}</main>
     </div>
   );
 }

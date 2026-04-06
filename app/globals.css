@@ -1,8 +1,9 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #f4f5f7;
+  --foreground: #14161a;
+  --brand-red: #d32f2f;
 }
 
 @theme inline {
@@ -22,5 +23,16 @@
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
+  background-image: radial-gradient(circle at 8% -10%, #ffe8e8 0, transparent 40%),
+    radial-gradient(circle at 100% -5%, #ffecec 0, transparent 36%);
+}
+
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+::selection {
+  background: #ffd0d0;
+  color: #6d1616;
 }
