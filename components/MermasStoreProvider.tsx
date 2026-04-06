@@ -394,6 +394,9 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
   const lastLocalEditAtRef = React.useRef(0);
   const lastRemoteAppliedAtRef = React.useRef(0);
   const applyingRemoteRef = React.useRef(false);
+  const markLocalEdit = React.useCallback(() => {
+    lastLocalEditAtRef.current = Date.now();
+  }, []);
 
   useEffect(() => {
     if (!isBrowser()) return;
@@ -408,9 +411,6 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
   useEffect(() => {
     if (!isBrowser()) return;
     if (!hydrated) return;
-    if (!applyingRemoteRef.current) {
-      lastLocalEditAtRef.current = Date.now();
-    }
     const next: PersistedState = { products, mermas };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
   }, [hydrated, products, mermas]);
@@ -426,8 +426,8 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
       if (cancelled) return;
       if (!Array.isArray(remote.products) || !Array.isArray(remote.mermas)) return;
       const remoteTs = updatedAt ? Date.parse(updatedAt) : 0;
-      // Evita pisar ediciones locales recientes con un snapshot remoto más antiguo o retrasado.
-      if (Date.now() - lastLocalEditAtRef.current < 18000) return;
+      // Evita pisar ediciones locales más nuevas que el snapshot remoto.
+      if (remoteTs && lastLocalEditAtRef.current && remoteTs + 2000 < lastLocalEditAtRef.current) return;
       if (remoteTs && remoteTs <= lastRemoteAppliedAtRef.current) return;
       const mergedProducts = mergeProducts(DEFAULT_PRODUCTS, remote.products);
       const cleanedMermas = pruneBaconHalfRecords(mergedProducts, remote.mermas);
@@ -464,7 +464,7 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
     void pull();
     const intervalId = window.setInterval(() => {
       void pull();
-    }, 12000);
+    }, 5000);
     return () => {
       cancelled = true;
       window.clearInterval(intervalId);
@@ -507,6 +507,7 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
         pricePerUnit: Math.round(input.pricePerUnit * 100) / 100,
         createdAt: new Date().toISOString(),
       };
+      markLocalEdit();
       setProducts((prev) => sortProductsByName([product, ...prev]));
     };
 
@@ -532,6 +533,7 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
           ),
         ),
       );
+      markLocalEdit();
     };
 
     const removeProduct = (id: string) => {
@@ -539,6 +541,7 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
       if (hasRelatedMermas) {
         return { ok: false, reason: 'No se puede eliminar: tiene mermas registradas.' };
       }
+      markLocalEdit();
       setProducts((prev) => prev.filter((p) => p.id !== id));
       return { ok: true };
     };
@@ -561,6 +564,7 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
         createdAt: new Date().toISOString(),
       };
 
+      markLocalEdit();
       setMermas((prev) => [record, ...prev]);
       return record;
     };
@@ -588,12 +592,14 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
             : m,
         ),
       );
+      markLocalEdit();
       return { ok: true };
     };
 
     const removeMerma = (id: string) => {
       const exists = mermas.some((m) => m.id === id);
       if (!exists) return { ok: false, reason: 'Registro no encontrado.' };
+      markLocalEdit();
       setMermas((prev) => prev.filter((m) => m.id !== id));
       return { ok: true };
     };
@@ -604,6 +610,7 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
       if (!Array.isArray(payload.products) || !Array.isArray(payload.mermas)) {
         return { ok: false, reason: 'Formato de backup inválido.' };
       }
+      markLocalEdit();
       setProducts(sortProductsByName(payload.products));
       setMermas(payload.mermas);
       return { ok: true };
@@ -621,7 +628,7 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
       exportData,
       importData,
     };
-  }, [products, mermas]);
+  }, [markLocalEdit, products, mermas]);
 
   return <StoreContext.Provider value={store}>{children}</StoreContext.Provider>;
 }
