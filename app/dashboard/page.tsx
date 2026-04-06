@@ -11,7 +11,6 @@ import {
   LabelList,
   Line,
   LineChart,
-  ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
@@ -108,37 +107,57 @@ function Card({
   );
 }
 
-function Block({ title, children }: { title: string; children: React.ReactNode }) {
+function Block({
+  title,
+  children,
+  footer,
+}: {
+  title: string;
+  children: React.ReactNode;
+  footer?: React.ReactNode;
+}) {
   return (
     <section className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-zinc-200">
       <h2 className="text-sm font-extrabold uppercase tracking-wide text-zinc-700">{title}</h2>
       <div className="mt-3 h-64 min-w-0">{children}</div>
+      {footer ? <div className="mt-2 min-w-0">{footer}</div> : null}
     </section>
   );
 }
 
-function SafeChart({ children }: { children: React.ReactNode }) {
+/** Medidas reales en px — evita ResponsiveContainer y los avisos width/height -1 de Recharts. */
+function ChartBox({
+  className = 'h-full w-full min-w-0',
+  children,
+}: {
+  className?: string;
+  children: (dims: { width: number; height: number }) => React.ReactNode;
+}) {
   const hostRef = React.useRef<HTMLDivElement | null>(null);
-  const [ready, setReady] = React.useState(false);
+  const [dims, setDims] = React.useState({ width: 0, height: 0 });
 
-  React.useEffect(() => {
+  React.useLayoutEffect(() => {
     const host = hostRef.current;
     if (!host) return;
 
-    const update = () => {
-      const rect = host.getBoundingClientRect();
-      setReady(rect.width > 8 && rect.height > 8);
+    const read = () => {
+      const r = host.getBoundingClientRect();
+      const width = Math.max(0, Math.floor(r.width));
+      const height = Math.max(0, Math.floor(r.height));
+      setDims((prev) => (prev.width === width && prev.height === height ? prev : { width, height }));
     };
 
-    update();
-    const observer = new ResizeObserver(update);
-    observer.observe(host);
-    return () => observer.disconnect();
+    read();
+    const ro = new ResizeObserver(read);
+    ro.observe(host);
+    return () => ro.disconnect();
   }, []);
 
   return (
-    <div ref={hostRef} className="h-full w-full min-w-0">
-      {ready ? children : <div className="h-full w-full rounded-xl bg-zinc-50 ring-1 ring-zinc-200" />}
+    <div ref={hostRef} className={className}>
+      {dims.width > 16 && dims.height > 16 ? children({ width: dims.width, height: dims.height }) : (
+        <div className="h-full min-h-[12rem] w-full rounded-xl bg-zinc-50 ring-1 ring-zinc-200" />
+      )}
     </div>
   );
 }
@@ -269,15 +288,25 @@ export default function DashboardPage() {
   const exportMonthlyExecutivePdf = () => {
     const doc = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'a4' });
     const monthLabel = monthNow.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' });
+    const weeklyDeltaToTarget = Math.round((t.week - weeklyTarget) * 100) / 100;
+    const weeklyDeltaLabel =
+      weeklyDeltaToTarget === 0
+        ? 'EN OBJETIVO'
+        : weeklyDeltaToTarget > 0
+          ? `+${eur(weeklyDeltaToTarget)} sobre objetivo`
+          : `${eur(Math.abs(weeklyDeltaToTarget))} por debajo del objetivo`;
+    const projectedStatus = projectedRatio <= 0.85 ? 'VERDE' : projectedRatio <= 1 ? 'AMARILLO' : 'ROJO';
     doc.setFontSize(16);
     doc.text('Informe Ejecutivo de Mermas', 40, 40);
     doc.setFontSize(11);
     doc.text(`Mes: ${monthLabel}`, 40, 62);
-    doc.text(`Merma mensual: ${eur(t.month)}`, 40, 80);
-    doc.text(`Objetivo mensual: ${eur(monthlyTarget)} | Estado: ${targetSeverity.toUpperCase()}`, 40, 96);
+    doc.text(`Merma mensual: ${eur(t.month)} | Objetivo mensual: ${eur(monthlyTarget)} (${targetSeverity.toUpperCase()})`, 40, 80);
+    doc.text(`Proyección fin de mes: ${eur(projectedMonth)} | Estado proyectado: ${projectedStatus}`, 40, 96);
+    doc.text(`Merma semanal: ${eur(t.week)} | Objetivo semanal: ${eur(weeklyTarget)} (${weeklySeverity.toUpperCase()})`, 40, 112);
+    doc.text(`Desviación semanal: ${weeklyDeltaLabel}`, 40, 128);
 
     autoTable(doc, {
-      startY: 116,
+      startY: 146,
       head: [['Top productos (valor)', 'Valor']],
       body:
         monthlyTopValue.length > 0
@@ -296,6 +325,19 @@ export default function DashboardPage() {
         monthlyMotives.length > 0
           ? monthlyMotives.map((item) => [item.label, String(item.quantity), eur(item.totalCost)])
           : [['Sin datos', '-', '-']],
+      styles: { fontSize: 9 },
+      headStyles: { fillColor: [211, 47, 47] },
+    });
+
+    autoTable(doc, {
+      startY: (doc as jsPDF & { lastAutoTable?: { finalY?: number } }).lastAutoTable?.finalY
+        ? ((doc as jsPDF & { lastAutoTable?: { finalY?: number } }).lastAutoTable?.finalY ?? 260) + 18
+        : 360,
+      head: [['Alertas merma alta (mes actual)', 'Severidad', 'Coste acumulado', 'Artículos']],
+      body:
+        alerts.length > 0
+          ? alerts.map((item) => [item.productName, item.severity.toUpperCase(), eur(item.totalCost), String(item.quantity)])
+          : [['Sin alertas', '-', '-', '-']],
       styles: { fontSize: 9 },
       headStyles: { fillColor: [211, 47, 47] },
     });
@@ -602,38 +644,42 @@ export default function DashboardPage() {
       </section>
 
       <Block title="Merma de la Semana (€)">
-        <SafeChart><ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={220}>
-          <BarChart data={dataWeek} margin={{ top: 18, right: 10, left: -8, bottom: 2 }}>
-            <defs>
-              <linearGradient id="barWeek" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="#EF4444" />
-                <stop offset="100%" stopColor="#B91C1C" />
-              </linearGradient>
-            </defs>
-            <CartesianGrid strokeDasharray="3 3" stroke="#e4e4e7" vertical={false} />
-            <XAxis dataKey="day" tick={{ fill: '#52525b', fontSize: 12, fontWeight: 600 }} axisLine={false} tickLine={false} />
-            <YAxis tick={{ fill: '#71717a', fontSize: 11 }} axisLine={false} tickLine={false} />
-            <Tooltip
-              formatter={(value) => [eur(Number(value ?? 0)), 'Valor']}
-              contentStyle={{ borderRadius: 12, border: '1px solid #e4e4e7', boxShadow: '0 6px 20px rgba(0,0,0,0.08)' }}
-            />
-            <Bar dataKey="cost" fill="url(#barWeek)" radius={[10, 10, 0, 0]} barSize={30}>
-              <LabelList dataKey="cost" position="top" formatter={(v) => `${Number(v ?? 0).toFixed(0)}€`} className="fill-zinc-600 text-[11px] font-semibold" />
-            </Bar>
-          </BarChart>
-        </ResponsiveContainer></SafeChart>
+        <ChartBox>
+          {({ width, height }) => (
+            <BarChart width={width} height={height} data={dataWeek} margin={{ top: 18, right: 10, left: -8, bottom: 2 }}>
+              <defs>
+                <linearGradient id="barWeek" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#EF4444" />
+                  <stop offset="100%" stopColor="#B91C1C" />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" stroke="#e4e4e7" vertical={false} />
+              <XAxis dataKey="day" tick={{ fill: '#52525b', fontSize: 12, fontWeight: 600 }} axisLine={false} tickLine={false} />
+              <YAxis tick={{ fill: '#71717a', fontSize: 11 }} axisLine={false} tickLine={false} />
+              <Tooltip
+                formatter={(value) => [eur(Number(value ?? 0)), 'Valor']}
+                contentStyle={{ borderRadius: 12, border: '1px solid #e4e4e7', boxShadow: '0 6px 20px rgba(0,0,0,0.08)' }}
+              />
+              <Bar dataKey="cost" fill="url(#barWeek)" radius={[10, 10, 0, 0]} barSize={30}>
+                <LabelList dataKey="cost" position="top" formatter={(v) => `${Number(v ?? 0).toFixed(0)}€`} className="fill-zinc-600 text-[11px] font-semibold" />
+              </Bar>
+            </BarChart>
+          )}
+        </ChartBox>
       </Block>
 
       <Block title="Tendencia de Merma Mensual">
-        <SafeChart><ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={220}>
-          <LineChart data={dataTrend}>
-            <CartesianGrid strokeDasharray="3 3" />
-            <XAxis dataKey="day" />
-            <YAxis />
-            <Tooltip formatter={(value) => [eur(Number(value ?? 0)), 'VALOR']} />
-            <Line type="monotone" dataKey="cost" stroke="#D32F2F" strokeWidth={3} dot={false} />
-          </LineChart>
-        </ResponsiveContainer></SafeChart>
+        <ChartBox>
+          {({ width, height }) => (
+            <LineChart width={width} height={height} data={dataTrend}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="day" />
+              <YAxis />
+              <Tooltip formatter={(value) => [eur(Number(value ?? 0)), 'VALOR']} />
+              <Line type="monotone" dataKey="cost" stroke="#D32F2F" strokeWidth={3} dot={false} />
+            </LineChart>
+          )}
+        </ChartBox>
       </Block>
 
       <section className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-zinc-200">
@@ -648,26 +694,28 @@ export default function DashboardPage() {
           </span>
         </p>
         <div className="mt-3 h-56 min-w-0">
-          <SafeChart><ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={220}>
-            <BarChart data={monthly.chart} margin={{ top: 18, right: 10, left: -8, bottom: 2 }}>
-              <defs>
-                <linearGradient id="barMonthComp" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#F87171" />
-                  <stop offset="100%" stopColor="#DC2626" />
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="#e4e4e7" vertical={false} />
-              <XAxis dataKey="month" tick={{ fill: '#52525b', fontSize: 11, fontWeight: 600 }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fill: '#71717a', fontSize: 11 }} axisLine={false} tickLine={false} />
-              <Tooltip
-                formatter={(value) => [eur(Number(value ?? 0)), 'Valor']}
-                contentStyle={{ borderRadius: 12, border: '1px solid #e4e4e7', boxShadow: '0 6px 20px rgba(0,0,0,0.08)' }}
-              />
-              <Bar dataKey="value" fill="url(#barMonthComp)" radius={[10, 10, 0, 0]} barSize={36}>
-                <LabelList dataKey="value" position="top" formatter={(v) => `${Number(v ?? 0).toFixed(0)}€`} className="fill-zinc-600 text-[11px] font-semibold" />
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer></SafeChart>
+          <ChartBox className="h-full w-full min-w-0">
+            {({ width, height }) => (
+              <BarChart width={width} height={height} data={monthly.chart} margin={{ top: 18, right: 10, left: -8, bottom: 2 }}>
+                <defs>
+                  <linearGradient id="barMonthComp" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#F87171" />
+                    <stop offset="100%" stopColor="#DC2626" />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="#e4e4e7" vertical={false} />
+                <XAxis dataKey="month" tick={{ fill: '#52525b', fontSize: 11, fontWeight: 600 }} axisLine={false} tickLine={false} />
+                <YAxis tick={{ fill: '#71717a', fontSize: 11 }} axisLine={false} tickLine={false} />
+                <Tooltip
+                  formatter={(value) => [eur(Number(value ?? 0)), 'Valor']}
+                  contentStyle={{ borderRadius: 12, border: '1px solid #e4e4e7', boxShadow: '0 6px 20px rgba(0,0,0,0.08)' }}
+                />
+                <Bar dataKey="value" fill="url(#barMonthComp)" radius={[10, 10, 0, 0]} barSize={36}>
+                  <LabelList dataKey="value" position="top" formatter={(v) => `${Number(v ?? 0).toFixed(0)}€`} className="fill-zinc-600 text-[11px] font-semibold" />
+                </Bar>
+              </BarChart>
+            )}
+          </ChartBox>
         </div>
       </section>
 
@@ -700,96 +748,108 @@ export default function DashboardPage() {
         )}
       </section>
 
-      <Block title="Top 5 Productos por Cantidad Tirada">
-        <SafeChart><ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={220}>
-          <BarChart data={dataTopQty} layout="vertical" margin={{ top: 8, right: 52, left: 10, bottom: 2 }}>
-            <defs>
-              <linearGradient id="barTopQty" x1="0" y1="0" x2="1" y2="0">
-                <stop offset="0%" stopColor="#60A5FA" />
-                <stop offset="100%" stopColor="#2563EB" />
-              </linearGradient>
-            </defs>
-            <CartesianGrid strokeDasharray="3 3" stroke="#e4e4e7" horizontal={false} />
-            <XAxis type="number" tickFormatter={(value) => qty(Number(value ?? 0))} tick={{ fill: '#71717a', fontSize: 11 }} axisLine={false} tickLine={false} />
-            <YAxis type="category" dataKey="name" width={132} tick={{ fill: '#52525b', fontSize: 11, fontWeight: 600 }} axisLine={false} tickLine={false} />
-            <Tooltip
-              formatter={(value) => [qty(Number(value ?? 0)), 'Cantidad']}
-              contentStyle={{ borderRadius: 12, border: '1px solid #e4e4e7', boxShadow: '0 6px 20px rgba(0,0,0,0.08)' }}
-            />
-            <Bar
-              dataKey="value"
-              fill="url(#barTopQty)"
-              radius={[0, 10, 10, 0]}
-              barSize={18}
-              onClick={(entry) => {
-                if (!entry || typeof entry !== 'object') return;
-                const row = entry as { productId?: string; name?: string };
-                if (!row.productId || !row.name) return;
-                openProductDetail(row.productId, row.name);
-              }}
-            >
-              <LabelList dataKey="value" position="right" formatter={(v) => qty(Number(v ?? 0))} className="fill-zinc-600 text-[11px] font-semibold" />
-            </Bar>
-          </BarChart>
-        </ResponsiveContainer></SafeChart>
-        <div className="mt-2 space-y-1">
-          {dataTopQty.map((item) => (
-            <button
-              key={item.productId}
-              type="button"
-              onClick={() => openProductDetail(item.productId, item.name)}
-              className="w-full rounded-lg border border-zinc-200 bg-zinc-50 px-2 py-1 text-left text-xs font-semibold text-zinc-700 hover:bg-zinc-100"
-            >
-              Ver detalle: {item.name}
-            </button>
-          ))}
-        </div>
+      <Block
+        title="Top 5 Productos por Cantidad Tirada"
+        footer={
+          <div className="space-y-1">
+            {dataTopQty.map((item) => (
+              <button
+                key={item.productId}
+                type="button"
+                onClick={() => openProductDetail(item.productId, item.name)}
+                className="w-full rounded-lg border border-zinc-200 bg-zinc-50 px-2 py-1 text-left text-xs font-semibold text-zinc-700 hover:bg-zinc-100"
+              >
+                Ver detalle: {item.name}
+              </button>
+            ))}
+          </div>
+        }
+      >
+        <ChartBox>
+          {({ width, height }) => (
+            <BarChart data={dataTopQty} width={width} height={height} layout="vertical" margin={{ top: 8, right: 52, left: 10, bottom: 2 }}>
+              <defs>
+                <linearGradient id="barTopQty" x1="0" y1="0" x2="1" y2="0">
+                  <stop offset="0%" stopColor="#60A5FA" />
+                  <stop offset="100%" stopColor="#2563EB" />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" stroke="#e4e4e7" horizontal={false} />
+              <XAxis type="number" tickFormatter={(value) => qty(Number(value ?? 0))} tick={{ fill: '#71717a', fontSize: 11 }} axisLine={false} tickLine={false} />
+              <YAxis type="category" dataKey="name" width={132} tick={{ fill: '#52525b', fontSize: 11, fontWeight: 600 }} axisLine={false} tickLine={false} />
+              <Tooltip
+                formatter={(value) => [qty(Number(value ?? 0)), 'Cantidad']}
+                contentStyle={{ borderRadius: 12, border: '1px solid #e4e4e7', boxShadow: '0 6px 20px rgba(0,0,0,0.08)' }}
+              />
+              <Bar
+                dataKey="value"
+                fill="url(#barTopQty)"
+                radius={[0, 10, 10, 0]}
+                barSize={18}
+                onClick={(entry) => {
+                  if (!entry || typeof entry !== 'object') return;
+                  const row = entry as { productId?: string; name?: string };
+                  if (!row.productId || !row.name) return;
+                  openProductDetail(row.productId, row.name);
+                }}
+              >
+                <LabelList dataKey="value" position="right" formatter={(v) => qty(Number(v ?? 0))} className="fill-zinc-600 text-[11px] font-semibold" />
+              </Bar>
+            </BarChart>
+          )}
+        </ChartBox>
       </Block>
 
-      <Block title="Top 5 Productos por Valor Economico">
-        <SafeChart><ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={220}>
-          <BarChart data={dataTopValue} layout="vertical" margin={{ top: 8, right: 58, left: 10, bottom: 2 }}>
-            <defs>
-              <linearGradient id="barTopValue" x1="0" y1="0" x2="1" y2="0">
-                <stop offset="0%" stopColor="#FB7185" />
-                <stop offset="100%" stopColor="#D32F2F" />
-              </linearGradient>
-            </defs>
-            <CartesianGrid strokeDasharray="3 3" stroke="#e4e4e7" horizontal={false} />
-            <XAxis type="number" tick={{ fill: '#71717a', fontSize: 11 }} axisLine={false} tickLine={false} />
-            <YAxis type="category" dataKey="name" width={145} tick={{ fill: '#52525b', fontSize: 11, fontWeight: 600 }} axisLine={false} tickLine={false} />
-            <Tooltip
-              formatter={(value) => [eur(Number(value ?? 0)), 'Valor']}
-              contentStyle={{ borderRadius: 12, border: '1px solid #e4e4e7', boxShadow: '0 6px 20px rgba(0,0,0,0.08)' }}
-            />
-            <Bar
-              dataKey="value"
-              fill="url(#barTopValue)"
-              radius={[0, 10, 10, 0]}
-              barSize={18}
-              onClick={(entry) => {
-                if (!entry || typeof entry !== 'object') return;
-                const row = entry as { productId?: string; name?: string };
-                if (!row.productId || !row.name) return;
-                openProductDetail(row.productId, row.name);
-              }}
-            >
-              <LabelList dataKey="value" position="right" formatter={(v) => `${Number(v ?? 0).toFixed(0)}€`} className="fill-zinc-600 text-[11px] font-semibold" />
-            </Bar>
-          </BarChart>
-        </ResponsiveContainer></SafeChart>
-        <div className="mt-2 space-y-1">
-          {dataTopValue.map((item) => (
-            <button
-              key={item.productId}
-              type="button"
-              onClick={() => openProductDetail(item.productId, item.name)}
-              className="w-full rounded-lg border border-zinc-200 bg-zinc-50 px-2 py-1 text-left text-xs font-semibold text-zinc-700 hover:bg-zinc-100"
-            >
-              Ver detalle: {item.name}
-            </button>
-          ))}
-        </div>
+      <Block
+        title="Top 5 Productos por Valor Economico"
+        footer={
+          <div className="space-y-1">
+            {dataTopValue.map((item) => (
+              <button
+                key={item.productId}
+                type="button"
+                onClick={() => openProductDetail(item.productId, item.name)}
+                className="w-full rounded-lg border border-zinc-200 bg-zinc-50 px-2 py-1 text-left text-xs font-semibold text-zinc-700 hover:bg-zinc-100"
+              >
+                Ver detalle: {item.name}
+              </button>
+            ))}
+          </div>
+        }
+      >
+        <ChartBox>
+          {({ width, height }) => (
+            <BarChart data={dataTopValue} width={width} height={height} layout="vertical" margin={{ top: 8, right: 58, left: 10, bottom: 2 }}>
+              <defs>
+                <linearGradient id="barTopValue" x1="0" y1="0" x2="1" y2="0">
+                  <stop offset="0%" stopColor="#FB7185" />
+                  <stop offset="100%" stopColor="#D32F2F" />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" stroke="#e4e4e7" horizontal={false} />
+              <XAxis type="number" tick={{ fill: '#71717a', fontSize: 11 }} axisLine={false} tickLine={false} />
+              <YAxis type="category" dataKey="name" width={145} tick={{ fill: '#52525b', fontSize: 11, fontWeight: 600 }} axisLine={false} tickLine={false} />
+              <Tooltip
+                formatter={(value) => [eur(Number(value ?? 0)), 'Valor']}
+                contentStyle={{ borderRadius: 12, border: '1px solid #e4e4e7', boxShadow: '0 6px 20px rgba(0,0,0,0.08)' }}
+              />
+              <Bar
+                dataKey="value"
+                fill="url(#barTopValue)"
+                radius={[0, 10, 10, 0]}
+                barSize={18}
+                onClick={(entry) => {
+                  if (!entry || typeof entry !== 'object') return;
+                  const row = entry as { productId?: string; name?: string };
+                  if (!row.productId || !row.name) return;
+                  openProductDetail(row.productId, row.name);
+                }}
+              >
+                <LabelList dataKey="value" position="right" formatter={(v) => `${Number(v ?? 0).toFixed(0)}€`} className="fill-zinc-600 text-[11px] font-semibold" />
+              </Bar>
+            </BarChart>
+          )}
+        </ChartBox>
       </Block>
     </div>
   );
