@@ -4,7 +4,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import React, { useMemo, useState } from 'react';
-import { BookOpen, Drumstick, LayoutDashboard, LogOut, Menu, X, FileText } from 'lucide-react';
+import { BookOpen, Drumstick, LayoutDashboard, LogOut, Menu, X, FileText, RefreshCcw } from 'lucide-react';
 import { useAuth } from '@/components/AuthProvider';
 
 type NavItem = {
@@ -38,6 +38,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const title = useMemo(() => titleForPath(pathname), [pathname]);
 
   const confirmAndLogout = () => setConfirmLogoutOpen(true);
+  const refreshApp = () => window.location.reload();
 
   return (
     <div className="min-h-full bg-zinc-50">
@@ -100,6 +101,15 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             {title}
           </h1>
           <div className="flex-1" />
+          <button
+            type="button"
+            onClick={refreshApp}
+            className="grid h-10 w-10 place-items-center rounded-xl text-white/95 hover:bg-white/10 active:scale-[0.99]"
+            aria-label="Actualizar app"
+            title="Actualizar app"
+          >
+            <RefreshCcw className="h-5 w-5" />
+          </button>
           <button
             type="button"
             onClick={confirmAndLogout}
@@ -192,11 +202,19 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             <div className="mt-1 truncate text-xs text-zinc-500">{email ?? 'Sin usuario'}</div>
             <button
               type="button"
+              onClick={refreshApp}
+              className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs font-bold uppercase tracking-wide text-zinc-700 hover:bg-zinc-100"
+            >
+              <RefreshCcw className="h-3.5 w-3.5" />
+              Actualizar App
+            </button>
+            <button
+              type="button"
               onClick={() => {
                 confirmAndLogout();
                 setOpen(false);
               }}
-              className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs font-bold uppercase tracking-wide text-zinc-700 hover:bg-zinc-100"
+              className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs font-bold uppercase tracking-wide text-zinc-700 hover:bg-zinc-100"
             >
               <LogOut className="h-3.5 w-3.5" />
               Cerrar Sesión
