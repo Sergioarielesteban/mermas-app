@@ -300,37 +300,29 @@ function isBaconHalfSliceName(name: string) {
   return n.includes('loncha bacon burguer 1/2') || n.includes('loncha bacon burger 1/2');
 }
 
-function applyBaconHalfMonthlyBackfill(mermas: MermaRecord[], products: Product[]) {
-  const target = products.find((p) => isBaconHalfSliceName(p.name));
-  if (!target) return mermas;
+function isBaconHalfSliceText(text: string) {
+  const n = normalizeName(text);
+  return (
+    n.includes('loncha bacon burguer 1/2') ||
+    n.includes('loncha bacon burger 1/2') ||
+    n.includes('bacon 1/2')
+  );
+}
 
-  const now = new Date();
-  const monthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-  const daysToSpread = 7;
-  const totalQty = 84;
-  const qtyPerDay = Math.floor(totalQty / daysToSpread);
-  const remainder = totalQty % daysToSpread;
+function pruneBaconHalfRecords(products: Product[], records: MermaRecord[]) {
+  const removedProductIds = new Set(products.filter((p) => isBaconHalfSliceName(p.name)).map((p) => p.id));
+  const productNameById = new Map(products.map((p) => [p.id, p.name]));
 
-  const kept = mermas.filter((m) => !m.id.startsWith(`fix-bacon-half-${monthKey}-`));
-  const additions: MermaRecord[] = [];
-
-  for (let i = 1; i <= daysToSpread; i += 1) {
-    const qty = qtyPerDay + (i <= remainder ? 1 : 0);
-    const occurredAt = new Date(now.getFullYear(), now.getMonth(), i, 12, 0, 0);
-    const costEur = Math.round(qty * target.pricePerUnit * 100) / 100;
-    additions.push({
-      id: `fix-bacon-half-${monthKey}-${String(i).padStart(2, '0')}`,
-      productId: target.id,
-      quantity: qty,
-      motiveKey: 'sobras-marcaje',
-      notes: 'Ajuste mensual bacon 1/2',
-      occurredAt: occurredAt.toISOString(),
-      costEur,
-      createdAt: new Date().toISOString(),
-    });
-  }
-
-  return [...additions, ...kept].sort((a, b) => (a.occurredAt < b.occurredAt ? 1 : -1));
+  return records.filter((m) => {
+    const productName = productNameById.get(m.productId) ?? '';
+    const looksBaconHalf =
+      removedProductIds.has(m.productId) ||
+      isBaconHalfSliceText(productName) ||
+      isBaconHalfSliceText(m.notes ?? '') ||
+      m.id.startsWith('fix-bacon-half-') ||
+      normalizeName(m.id).includes('loncha-bacon-burguer-1-2');
+    return !looksBaconHalf;
+  });
 }
 
 function buildSeedMermas(products: Product[]): MermaRecord[] {
@@ -376,26 +368,28 @@ function mergeProducts(seed: Product[], persisted: Product[]): Product[] {
 function loadInitialState(): PersistedState {
   if (!isBrowser()) {
     const products = sortProductsByName(DEFAULT_PRODUCTS);
-    return { products, mermas: applyBaconHalfMonthlyBackfill(DEFAULT_MERMAS, products) };
+    return { products, mermas: pruneBaconHalfRecords(products, DEFAULT_MERMAS) };
   }
   const parsed = safeJsonParse<PersistedState>(localStorage.getItem(STORAGE_KEY));
   if (!parsed?.products?.length) {
     const products = sortProductsByName(DEFAULT_PRODUCTS);
-    return { products, mermas: applyBaconHalfMonthlyBackfill(DEFAULT_MERMAS, products) };
+    return { products, mermas: pruneBaconHalfRecords(products, DEFAULT_MERMAS) };
   }
   const mergedProducts = mergeProducts(DEFAULT_PRODUCTS, parsed.products);
   return {
     products: mergedProducts,
-    mermas: applyBaconHalfMonthlyBackfill(
-      Array.isArray(parsed.mermas) ? parsed.mermas : DEFAULT_MERMAS,
+    mermas: pruneBaconHalfRecords(
       mergedProducts,
+      Array.isArray(parsed.mermas) ? parsed.mermas : DEFAULT_MERMAS,
     ),
   };
 }
 
 export function MermasStoreProvider({ children }: { children: React.ReactNode }) {
   const [products, setProducts] = useState<Product[]>(() => sortProductsByName(DEFAULT_PRODUCTS));
-  const [mermas, setMermas] = useState<MermaRecord[]>(() => DEFAULT_MERMAS);
+  const [mermas, setMermas] = useState<MermaRecord[]>(() =>
+    pruneBaconHalfRecords(sortProductsByName(DEFAULT_PRODUCTS), DEFAULT_MERMAS),
+  );
   const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {

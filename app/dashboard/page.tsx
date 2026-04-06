@@ -3,7 +3,7 @@
 import React from 'react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { CalendarDays } from 'lucide-react';
+import { CalendarDays, TrendingDown, TrendingUp } from 'lucide-react';
 import {
   Bar,
   BarChart,
@@ -39,16 +39,29 @@ const qty = (value: number) =>
     maximumFractionDigits: 2,
   });
 
+const motiveLabelMap: Record<string, string> = {
+  'se-quemo': 'SE QUEMÓ',
+  'mal-estado': 'MAL ESTADO',
+  'cliente-cambio': 'EL CLIENTE CAMBIÓ',
+  'error-cocina': 'ERROR DEL EQUIPO',
+  'sobras-marcaje': 'SOBRAS DE MARCAJE',
+  cancelado: 'CANCELADO',
+};
+
 function Card({
   title,
   value,
   Icon,
   tone = 'default',
+  onClick,
+  extra,
 }: {
   title: string;
   value: number;
   Icon?: React.ComponentType<{ className?: string }>;
   tone?: 'default' | 'success' | 'warning' | 'danger';
+  onClick?: () => void;
+  extra?: React.ReactNode;
 }) {
   const toneStyles =
     tone === 'success'
@@ -76,7 +89,11 @@ function Card({
             };
 
   return (
-    <div className={`rounded-2xl bg-gradient-to-br p-[1px] shadow-sm ${toneStyles.border}`}>
+    <button
+      type="button"
+      onClick={onClick}
+      className={`w-full rounded-2xl bg-gradient-to-br p-[1px] text-left shadow-sm transition-transform hover:scale-[1.01] ${toneStyles.border}`}
+    >
       <div className="rounded-2xl bg-white px-4 py-5 text-center ring-1 ring-zinc-200/80">
         <div className="flex items-center justify-center gap-1.5 text-[11px] font-extrabold uppercase tracking-[0.14em] text-zinc-500">
           {Icon ? <Icon className={`h-3.5 w-3.5 ${toneStyles.icon}`} /> : null}
@@ -85,8 +102,9 @@ function Card({
         <p className={`mt-3 inline-flex items-center justify-center rounded-xl px-3 py-1.5 text-2xl font-black ring-1 ${toneStyles.badge}`}>
           {eur(value)}
         </p>
+        {extra ? <div className="mt-2 flex items-center justify-center">{extra}</div> : null}
       </div>
-    </div>
+    </button>
   );
 }
 
@@ -96,6 +114,32 @@ function Block({ title, children }: { title: string; children: React.ReactNode }
       <h2 className="text-sm font-extrabold uppercase tracking-wide text-zinc-700">{title}</h2>
       <div className="mt-3 h-64 min-w-0">{children}</div>
     </section>
+  );
+}
+
+function SafeChart({ children }: { children: React.ReactNode }) {
+  const hostRef = React.useRef<HTMLDivElement | null>(null);
+  const [ready, setReady] = React.useState(false);
+
+  React.useEffect(() => {
+    const host = hostRef.current;
+    if (!host) return;
+
+    const update = () => {
+      const rect = host.getBoundingClientRect();
+      setReady(rect.width > 8 && rect.height > 8);
+    };
+
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(host);
+    return () => observer.disconnect();
+  }, []);
+
+  return (
+    <div ref={hostRef} className="h-full w-full min-w-0">
+      {ready ? children : <div className="h-full w-full rounded-xl bg-zinc-50 ring-1 ring-zinc-200" />}
+    </div>
   );
 }
 
@@ -123,6 +167,9 @@ export default function DashboardPage() {
   const anomalies = anomalyAlerts(mermas, products);
   const [monthlyTarget, setMonthlyTarget] = React.useState<number>(() => readStoredTarget(MONTHLY_TARGET_KEY, 500));
   const [weeklyTarget, setWeeklyTarget] = React.useState<number>(() => readStoredTarget(WEEKLY_TARGET_KEY, 125));
+  const [detailOpen, setDetailOpen] = React.useState(false);
+  const [detailTitle, setDetailTitle] = React.useState('');
+  const [detailRows, setDetailRows] = React.useState<Array<{ id: string; occurredAt: string; productName: string; quantity: number; costEur: number; motiveKey: string }>>([]);
 
   React.useEffect(() => {
     try {
@@ -164,6 +211,57 @@ export default function DashboardPage() {
     weeklySeverity === 'verde' ? 'bg-emerald-500' : weeklySeverity === 'amarillo' ? 'bg-amber-500' : 'bg-red-500';
   const targetColor =
     targetSeverity === 'verde' ? 'bg-emerald-500' : targetSeverity === 'amarillo' ? 'bg-amber-500' : 'bg-red-500';
+
+  const openDetail = React.useCallback(
+    (title: string, rows: typeof detailRows) => {
+      const ordered = [...rows].sort((a, b) => (a.occurredAt < b.occurredAt ? 1 : -1));
+      setDetailTitle(title);
+      setDetailRows(ordered);
+      setDetailOpen(true);
+    },
+    [],
+  );
+
+  const mermasWithProduct = React.useMemo(
+    () =>
+      mermas.map((m) => ({
+        id: m.id,
+        occurredAt: m.occurredAt,
+        productName: products.find((p) => p.id === m.productId)?.name ?? 'Producto',
+        productId: m.productId,
+        quantity: m.quantity,
+        costEur: m.costEur,
+        motiveKey: m.motiveKey,
+      })),
+    [mermas, products],
+  );
+
+  const openProductDetail = React.useCallback(
+    (productId: string, productName: string) => {
+      openDetail(
+        `Detalle por producto: ${productName}`,
+        mermasWithProduct.filter((m) => m.productId === productId),
+      );
+    },
+    [mermasWithProduct, openDetail],
+  );
+
+  const now = toBusinessDate(new Date());
+  const weekStart = new Date(now);
+  weekStart.setDate(now.getDate() - ((now.getDay() + 6) % 7));
+  weekStart.setHours(0, 0, 0, 0);
+  const previousWeekStart = new Date(weekStart);
+  previousWeekStart.setDate(weekStart.getDate() - 7);
+  const previousWeekEnd = new Date(weekStart);
+  previousWeekEnd.setMilliseconds(-1);
+  const previousWeekTotal = mermas.reduce((acc, m) => {
+    const d = toBusinessDate(m.occurredAt);
+    if (d >= previousWeekStart && d <= previousWeekEnd) return acc + m.costEur;
+    return acc;
+  }, 0);
+  const weeklyDelta = Math.round((t.week - previousWeekTotal) * 100) / 100;
+  const weeklyTrendUp = weeklyDelta > 0;
+  const weeklyTrendFlat = weeklyDelta === 0;
 
   const exportMonthlyExecutivePdf = () => {
     const doc = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'a4' });
@@ -217,6 +315,42 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-4">
+      {detailOpen ? (
+        <div className="fixed inset-0 z-[95] bg-black/35 p-4" onClick={() => setDetailOpen(false)}>
+          <div
+            className="mx-auto mt-8 max-h-[82vh] w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-2xl ring-1 ring-zinc-200"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-zinc-200 px-4 py-3">
+              <h3 className="text-sm font-extrabold uppercase tracking-wide text-zinc-800">{detailTitle}</h3>
+              <button type="button" onClick={() => setDetailOpen(false)} className="rounded-lg px-2 py-1 text-xs font-bold text-zinc-600 hover:bg-zinc-100">
+                Cerrar
+              </button>
+            </div>
+            <div className="max-h-[68vh] space-y-2 overflow-y-auto p-3">
+              {detailRows.length === 0 ? (
+                <p className="rounded-xl bg-zinc-50 p-3 text-sm text-zinc-500 ring-1 ring-zinc-200">Sin registros para este filtro.</p>
+              ) : (
+                detailRows.map((row) => (
+                  <div key={row.id} className="rounded-xl border border-zinc-200 bg-zinc-50 p-3">
+                    <p className="text-sm font-bold text-zinc-900">{row.productName}</p>
+                    <p className="pt-1 text-xs text-zinc-700">
+                      Fecha: {new Date(row.occurredAt).toLocaleString('es-ES')}
+                    </p>
+                    <p className="pt-1 text-xs text-zinc-700">
+                      Cantidad: {qty(row.quantity)} | Coste: {eur(row.costEur)}
+                    </p>
+                    <p className="pt-1 text-[11px] font-semibold text-zinc-600">
+                      Motivo: {motiveLabelMap[row.motiveKey] ?? row.motiveKey}
+                    </p>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       <div className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-zinc-200">
         <p className="text-center text-xs font-semibold uppercase tracking-[0.16em] text-zinc-500">Business Intelligence</p>
         <p className="pt-1 text-center text-sm font-semibold text-zinc-700">
@@ -301,10 +435,69 @@ export default function DashboardPage() {
       </section>
 
       <div className="grid grid-cols-1 gap-3">
-        <Card title="Merma de Hoy" value={t.today} />
-        <Card title="Merma de la Semana" value={t.week} Icon={CalendarDays} tone={weekCardTone} />
-        <Card title="Merma del Mes" value={t.month} tone={monthCardTone} />
-        <Card title="Proyección Fin de Mes" value={projectedMonth} tone={projectedTone} />
+        <Card
+          title="Merma de Hoy"
+          value={t.today}
+          onClick={() =>
+            openDetail(
+              'Detalle Merma de Hoy',
+              mermasWithProduct.filter((m) => {
+                const d = toBusinessDate(m.occurredAt);
+                return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate();
+              }),
+            )
+          }
+        />
+        <Card
+          title="Merma de la Semana"
+          value={t.week}
+          Icon={CalendarDays}
+          tone={weekCardTone}
+          extra={
+            <span
+              className={[
+                'inline-flex items-center gap-1 rounded-full px-2 py-1 text-[11px] font-bold',
+                weeklyTrendFlat
+                  ? 'bg-zinc-100 text-zinc-600'
+                  : weeklyTrendUp
+                    ? 'bg-red-100 text-red-700'
+                    : 'bg-emerald-100 text-emerald-700',
+              ].join(' ')}
+            >
+              {weeklyTrendFlat ? null : weeklyTrendUp ? <TrendingUp className="h-3.5 w-3.5" /> : <TrendingDown className="h-3.5 w-3.5" />}
+              {weeklyTrendFlat ? 'Sin cambio vs semana anterior' : `${weeklyTrendUp ? '↑' : '↓'} ${eur(Math.abs(weeklyDelta))} vs semana anterior`}
+            </span>
+          }
+          onClick={() => openDetail('Detalle Merma de la Semana', mermasWithProduct.filter((m) => toBusinessDate(m.occurredAt) >= weekStart))}
+        />
+        <Card
+          title="Merma del Mes"
+          value={t.month}
+          tone={monthCardTone}
+          onClick={() =>
+            openDetail(
+              'Detalle Merma del Mes',
+              mermasWithProduct.filter((m) => {
+                const d = toBusinessDate(m.occurredAt);
+                return d.getFullYear() === monthNow.getFullYear() && d.getMonth() === monthNow.getMonth();
+              }),
+            )
+          }
+        />
+        <Card
+          title="Proyección Fin de Mes"
+          value={projectedMonth}
+          tone={projectedTone}
+          onClick={() =>
+            openDetail(
+              'Base de Proyección Mensual',
+              mermasWithProduct.filter((m) => {
+                const d = toBusinessDate(m.occurredAt);
+                return d.getFullYear() === monthNow.getFullYear() && d.getMonth() === monthNow.getMonth();
+              }),
+            )
+          }
+        />
       </div>
 
       <section className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-zinc-200">
@@ -391,7 +584,7 @@ export default function DashboardPage() {
       </section>
 
       <Block title="Merma de la Semana (€)">
-        <ResponsiveContainer width="100%" height="100%" minWidth={0}>
+        <SafeChart><ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={220}>
           <BarChart data={dataWeek} margin={{ top: 18, right: 10, left: -8, bottom: 2 }}>
             <defs>
               <linearGradient id="barWeek" x1="0" y1="0" x2="0" y2="1">
@@ -410,11 +603,11 @@ export default function DashboardPage() {
               <LabelList dataKey="cost" position="top" formatter={(v) => `${Number(v ?? 0).toFixed(0)}€`} className="fill-zinc-600 text-[11px] font-semibold" />
             </Bar>
           </BarChart>
-        </ResponsiveContainer>
+        </ResponsiveContainer></SafeChart>
       </Block>
 
       <Block title="Tendencia de Merma Mensual">
-        <ResponsiveContainer width="100%" height="100%" minWidth={0}>
+        <SafeChart><ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={220}>
           <LineChart data={dataTrend}>
             <CartesianGrid strokeDasharray="3 3" />
             <XAxis dataKey="day" />
@@ -422,7 +615,7 @@ export default function DashboardPage() {
             <Tooltip formatter={(value) => [eur(Number(value ?? 0)), 'VALOR']} />
             <Line type="monotone" dataKey="cost" stroke="#D32F2F" strokeWidth={3} dot={false} />
           </LineChart>
-        </ResponsiveContainer>
+        </ResponsiveContainer></SafeChart>
       </Block>
 
       <section className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-zinc-200">
@@ -437,7 +630,7 @@ export default function DashboardPage() {
           </span>
         </p>
         <div className="mt-3 h-56 min-w-0">
-          <ResponsiveContainer width="100%" height="100%" minWidth={0}>
+          <SafeChart><ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={220}>
             <BarChart data={monthly.chart} margin={{ top: 18, right: 10, left: -8, bottom: 2 }}>
               <defs>
                 <linearGradient id="barMonthComp" x1="0" y1="0" x2="0" y2="1">
@@ -456,7 +649,7 @@ export default function DashboardPage() {
                 <LabelList dataKey="value" position="top" formatter={(v) => `${Number(v ?? 0).toFixed(0)}€`} className="fill-zinc-600 text-[11px] font-semibold" />
               </Bar>
             </BarChart>
-          </ResponsiveContainer>
+          </ResponsiveContainer></SafeChart>
         </div>
       </section>
 
@@ -467,20 +660,30 @@ export default function DashboardPage() {
         ) : (
           <div className="mt-3 space-y-2">
             {motives.map((item) => (
-              <div key={item.key} className="rounded-xl border border-zinc-200 bg-zinc-50 p-3">
+              <button
+                key={item.key}
+                type="button"
+                onClick={() =>
+                  openDetail(
+                    `Detalle motivo: ${item.label}`,
+                    mermasWithProduct.filter((m) => m.motiveKey === item.key),
+                  )
+                }
+                className="w-full rounded-xl border border-zinc-200 bg-zinc-50 p-3 text-left"
+              >
                 <div className="flex items-center justify-between">
                   <p className="text-sm font-bold text-zinc-900">{item.label}</p>
                   <p className="text-xs font-semibold text-zinc-700">{item.quantity} artículos</p>
                 </div>
                 <p className="pt-1 text-xs text-zinc-700">Impacto: {eur(item.totalCost)}</p>
-              </div>
+              </button>
             ))}
           </div>
         )}
       </section>
 
       <Block title="Top 5 Productos por Cantidad Tirada">
-        <ResponsiveContainer width="100%" height="100%" minWidth={0}>
+        <SafeChart><ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={220}>
           <BarChart data={dataTopQty} layout="vertical" margin={{ top: 8, right: 52, left: 10, bottom: 2 }}>
             <defs>
               <linearGradient id="barTopQty" x1="0" y1="0" x2="1" y2="0">
@@ -495,15 +698,38 @@ export default function DashboardPage() {
               formatter={(value) => [qty(Number(value ?? 0)), 'Cantidad']}
               contentStyle={{ borderRadius: 12, border: '1px solid #e4e4e7', boxShadow: '0 6px 20px rgba(0,0,0,0.08)' }}
             />
-            <Bar dataKey="value" fill="url(#barTopQty)" radius={[0, 10, 10, 0]} barSize={18}>
+            <Bar
+              dataKey="value"
+              fill="url(#barTopQty)"
+              radius={[0, 10, 10, 0]}
+              barSize={18}
+              onClick={(entry) => {
+                if (!entry || typeof entry !== 'object') return;
+                const row = entry as { productId?: string; name?: string };
+                if (!row.productId || !row.name) return;
+                openProductDetail(row.productId, row.name);
+              }}
+            >
               <LabelList dataKey="value" position="right" formatter={(v) => qty(Number(v ?? 0))} className="fill-zinc-600 text-[11px] font-semibold" />
             </Bar>
           </BarChart>
-        </ResponsiveContainer>
+        </ResponsiveContainer></SafeChart>
+        <div className="mt-2 space-y-1">
+          {dataTopQty.map((item) => (
+            <button
+              key={item.productId}
+              type="button"
+              onClick={() => openProductDetail(item.productId, item.name)}
+              className="w-full rounded-lg border border-zinc-200 bg-zinc-50 px-2 py-1 text-left text-xs font-semibold text-zinc-700 hover:bg-zinc-100"
+            >
+              Ver detalle: {item.name}
+            </button>
+          ))}
+        </div>
       </Block>
 
       <Block title="Top 5 Productos por Valor Economico">
-        <ResponsiveContainer width="100%" height="100%" minWidth={0}>
+        <SafeChart><ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={220}>
           <BarChart data={dataTopValue} layout="vertical" margin={{ top: 8, right: 58, left: 10, bottom: 2 }}>
             <defs>
               <linearGradient id="barTopValue" x1="0" y1="0" x2="1" y2="0">
@@ -518,11 +744,34 @@ export default function DashboardPage() {
               formatter={(value) => [eur(Number(value ?? 0)), 'Valor']}
               contentStyle={{ borderRadius: 12, border: '1px solid #e4e4e7', boxShadow: '0 6px 20px rgba(0,0,0,0.08)' }}
             />
-            <Bar dataKey="value" fill="url(#barTopValue)" radius={[0, 10, 10, 0]} barSize={18}>
+            <Bar
+              dataKey="value"
+              fill="url(#barTopValue)"
+              radius={[0, 10, 10, 0]}
+              barSize={18}
+              onClick={(entry) => {
+                if (!entry || typeof entry !== 'object') return;
+                const row = entry as { productId?: string; name?: string };
+                if (!row.productId || !row.name) return;
+                openProductDetail(row.productId, row.name);
+              }}
+            >
               <LabelList dataKey="value" position="right" formatter={(v) => `${Number(v ?? 0).toFixed(0)}€`} className="fill-zinc-600 text-[11px] font-semibold" />
             </Bar>
           </BarChart>
-        </ResponsiveContainer>
+        </ResponsiveContainer></SafeChart>
+        <div className="mt-2 space-y-1">
+          {dataTopValue.map((item) => (
+            <button
+              key={item.productId}
+              type="button"
+              onClick={() => openProductDetail(item.productId, item.name)}
+              className="w-full rounded-lg border border-zinc-200 bg-zinc-50 px-2 py-1 text-left text-xs font-semibold text-zinc-700 hover:bg-zinc-100"
+            >
+              Ver detalle: {item.name}
+            </button>
+          ))}
+        </div>
       </Block>
     </div>
   );

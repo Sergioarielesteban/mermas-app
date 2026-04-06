@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { AuthProvider } from "@/components/AuthProvider";
 import AppFrame from "@/components/AppFrame";
 import { Geist, Geist_Mono } from "next/font/google";
@@ -38,6 +38,13 @@ export const metadata: Metadata = {
     description: "Gestión de mermas para hostelería",
     images: ["/logo-can-xampa.png"],
   },
+};
+
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
 };
 
 export default function RootLayout({
