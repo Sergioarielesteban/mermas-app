@@ -1,5 +1,6 @@
 const ALLOWED_EMAILS = [
   'sergioarielesteban@hotmail.com',
+  'xampacocina2026@gmail.com',
 ] as const;
 
 function normalizeEmail(email: string) {
