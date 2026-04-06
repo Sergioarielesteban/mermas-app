@@ -1,7 +1,10 @@
 'use client';
 
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import { useAuth } from '@/components/AuthProvider';
+import { fetchProductsAndMermas } from '@/lib/mermas-supabase';
 import { uid } from '@/lib/id';
+import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
 import { isBrowser, safeJsonParse } from '@/lib/storage';
 import type { MermaMotiveKey, MermaRecord, Product, Unit } from '@/lib/types';
 import seedMermasRaw from '@/lib/seed-mermas.json';
@@ -386,6 +389,10 @@ function loadInitialState(): PersistedState {
 }
 
 export function MermasStoreProvider({ children }: { children: React.ReactNode }) {
+  const { localId, profileReady } = useAuth();
+  const cloudMode = Boolean(profileReady && localId && isSupabaseEnabled());
+  const [cloudDataLoaded, setCloudDataLoaded] = useState(false);
+
   const [products, setProducts] = useState<Product[]>(() => sortProductsByName(DEFAULT_PRODUCTS));
   const [mermas, setMermas] = useState<MermaRecord[]>(() =>
     pruneBaconHalfRecords(sortProductsByName(DEFAULT_PRODUCTS), DEFAULT_MERMAS),
@@ -398,26 +405,94 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
     lastLocalEditAtRef.current = Date.now();
   }, []);
 
+  const refetchCloud = React.useCallback(async () => {
+    const supabase = getSupabaseClient();
+    if (!supabase || !localId) return;
+    const { products: p, mermas: m } = await fetchProductsAndMermas(supabase);
+    const cleaned = pruneBaconHalfRecords(p, m);
+    setProducts(sortProductsByName(p));
+    setMermas(cleaned);
+  }, [localId]);
+
+  useEffect(() => {
+    if (!profileReady) return;
+    if (!localId) setCloudDataLoaded(true);
+    else setCloudDataLoaded(false);
+  }, [profileReady, localId]);
+
   useEffect(() => {
     if (!isBrowser()) return;
+    if (isSupabaseEnabled() && !profileReady) return;
+    if (profileReady && localId) {
+      queueMicrotask(() => {
+        setProducts([]);
+        setMermas([]);
+        setHydrated(true);
+      });
+      return;
+    }
     const initial = loadInitialState();
     queueMicrotask(() => {
       setProducts(initial.products);
       setMermas(initial.mermas);
       setHydrated(true);
     });
-  }, []);
+  }, [localId, profileReady]);
+
+  useEffect(() => {
+    if (!isBrowser() || !hydrated || !cloudMode || !localId) return;
+    const supabase = getSupabaseClient();
+    if (!supabase) {
+      setCloudDataLoaded(true);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      try {
+        const { products: p, mermas: m } = await fetchProductsAndMermas(supabase);
+        if (cancelled) return;
+        const cleaned = pruneBaconHalfRecords(p, m);
+        setProducts(sortProductsByName(p));
+        setMermas(cleaned);
+      } finally {
+        if (!cancelled) setCloudDataLoaded(true);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [cloudMode, hydrated, localId]);
+
+  useEffect(() => {
+    if (!isBrowser() || !hydrated || !cloudMode || !cloudDataLoaded) return;
+    const supabase = getSupabaseClient();
+    if (!supabase) return;
+    const channel = supabase
+      .channel('mermas-local-realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'products' }, () => {
+        void refetchCloud();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'mermas' }, () => {
+        void refetchCloud();
+      })
+      .subscribe();
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [cloudDataLoaded, cloudMode, hydrated, refetchCloud]);
 
   useEffect(() => {
     if (!isBrowser()) return;
     if (!hydrated) return;
+    if (cloudMode && cloudDataLoaded) return;
     const next: PersistedState = { products, mermas };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
-  }, [hydrated, products, mermas]);
+  }, [cloudDataLoaded, cloudMode, hydrated, products, mermas]);
 
   useEffect(() => {
     if (!isBrowser()) return;
     if (!hydrated) return;
+    if (cloudMode && cloudDataLoaded) return;
     const email = localStorage.getItem(AUTH_KEY)?.trim().toLowerCase();
     if (!email) return;
 
@@ -469,11 +544,12 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
       cancelled = true;
       window.clearInterval(intervalId);
     };
-  }, [hydrated]);
+  }, [cloudDataLoaded, cloudMode, hydrated]);
 
   useEffect(() => {
     if (!isBrowser()) return;
     if (!hydrated) return;
+    if (cloudMode && cloudDataLoaded) return;
     const email = localStorage.getItem(AUTH_KEY);
     if (!email) return;
 
@@ -488,9 +564,11 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
     }, 1400);
 
     return () => window.clearTimeout(timeout);
-  }, [hydrated, products, mermas]);
+  }, [cloudDataLoaded, cloudMode, hydrated, products, mermas]);
 
   const store = useMemo<MermasStore>(() => {
+    const useCloud = cloudMode && cloudDataLoaded && localId;
+
     const addProduct = (input: CreateProductInput) => {
       const trimmed = input.name.trim();
       if (!trimmed) return;
@@ -498,6 +576,24 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
       const normalized = normalizeName(trimmed);
       const exists = products.some((p) => normalizeName(p.name) === normalized);
       if (exists) return;
+
+      if (useCloud) {
+        const supabase = getSupabaseClient();
+        if (!supabase) return;
+        void (async () => {
+          const { error } = await supabase.from('products').insert({
+            local_id: localId,
+            name: trimmed,
+            unit: input.unit,
+            price_per_unit: Math.round(input.pricePerUnit * 100) / 100,
+            is_active: true,
+          });
+          if (error) return;
+          markLocalEdit();
+          await refetchCloud();
+        })();
+        return;
+      }
 
       const id = uid('p');
       const product: Product = {
@@ -518,6 +614,25 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
       const normalized = normalizeName(trimmed);
       const exists = products.some((p) => p.id !== id && normalizeName(p.name) === normalized);
       if (exists) return;
+
+      if (useCloud) {
+        const supabase = getSupabaseClient();
+        if (!supabase) return;
+        void (async () => {
+          const { error } = await supabase
+            .from('products')
+            .update({
+              name: trimmed,
+              unit: input.unit,
+              price_per_unit: Math.round(input.pricePerUnit * 100) / 100,
+            })
+            .eq('id', id);
+          if (error) return;
+          markLocalEdit();
+          await refetchCloud();
+        })();
+        return;
+      }
 
       setProducts((prev) =>
         sortProductsByName(
@@ -541,6 +656,17 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
       if (hasRelatedMermas) {
         return { ok: false, reason: 'No se puede eliminar: tiene mermas registradas.' };
       }
+      if (useCloud) {
+        const supabase = getSupabaseClient();
+        if (!supabase) return { ok: false, reason: 'Sin conexión.' };
+        void (async () => {
+          const { error } = await supabase.from('products').update({ is_active: false }).eq('id', id);
+          if (error) return;
+          markLocalEdit();
+          await refetchCloud();
+        })();
+        return { ok: true };
+      }
       markLocalEdit();
       setProducts((prev) => prev.filter((p) => p.id !== id));
       return { ok: true };
@@ -551,6 +677,50 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
       const price = product?.pricePerUnit ?? 0;
       const qty = Number.isFinite(input.quantity) ? input.quantity : 0;
       const costEur = Math.round(qty * price * 100) / 100;
+
+      if (useCloud) {
+        const supabase = getSupabaseClient();
+        if (!supabase) {
+          const record: MermaRecord = {
+            id: uid('m'),
+            productId: input.productId,
+            quantity: qty,
+            motiveKey: input.motiveKey,
+            notes: input.notes.trim(),
+            occurredAt: input.occurredAt,
+            photoDataUrl: input.photoDataUrl,
+            costEur,
+            createdAt: new Date().toISOString(),
+          };
+          return record;
+        }
+        void (async () => {
+          const { error } = await supabase.from('mermas').insert({
+            local_id: localId,
+            product_id: input.productId,
+            quantity: qty,
+            motive_key: input.motiveKey,
+            notes: input.notes.trim(),
+            occurred_at: input.occurredAt,
+            photo_data_url: input.photoDataUrl ?? null,
+            cost_eur: costEur,
+          });
+          if (error) return;
+          markLocalEdit();
+          await refetchCloud();
+        })();
+        return {
+          id: uid('m'),
+          productId: input.productId,
+          quantity: qty,
+          motiveKey: input.motiveKey,
+          notes: input.notes.trim(),
+          occurredAt: input.occurredAt,
+          photoDataUrl: input.photoDataUrl,
+          costEur,
+          createdAt: new Date().toISOString(),
+        };
+      }
 
       const record: MermaRecord = {
         id: uid('m'),
@@ -576,6 +746,29 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
       if (qty <= 0) return { ok: false, reason: 'Cantidad inválida.' };
       const costEur = Math.round(qty * product.pricePerUnit * 100) / 100;
 
+      if (useCloud) {
+        const supabase = getSupabaseClient();
+        if (!supabase) return { ok: false, reason: 'Sin conexión.' };
+        void (async () => {
+          const { error } = await supabase
+            .from('mermas')
+            .update({
+              product_id: input.productId,
+              quantity: qty,
+              motive_key: input.motiveKey,
+              notes: input.notes.trim(),
+              occurred_at: input.occurredAt,
+              photo_data_url: input.photoDataUrl ?? null,
+              cost_eur: costEur,
+            })
+            .eq('id', id);
+          if (error) return;
+          markLocalEdit();
+          await refetchCloud();
+        })();
+        return { ok: true };
+      }
+
       setMermas((prev) =>
         prev.map((m) =>
           m.id === id
@@ -599,6 +792,17 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
     const removeMerma = (id: string) => {
       const exists = mermas.some((m) => m.id === id);
       if (!exists) return { ok: false, reason: 'Registro no encontrado.' };
+      if (useCloud) {
+        const supabase = getSupabaseClient();
+        if (!supabase) return { ok: false, reason: 'Sin conexión.' };
+        void (async () => {
+          const { error } = await supabase.from('mermas').delete().eq('id', id);
+          if (error) return;
+          markLocalEdit();
+          await refetchCloud();
+        })();
+        return { ok: true };
+      }
       markLocalEdit();
       setMermas((prev) => prev.filter((m) => m.id !== id));
       return { ok: true };
@@ -607,6 +811,9 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
     const exportData = () => ({ products, mermas });
 
     const importData = (payload: PersistedState) => {
+      if (useCloud) {
+        return { ok: false, reason: 'Importación no disponible en modo multi-local (Supabase).' };
+      }
       if (!Array.isArray(payload.products) || !Array.isArray(payload.mermas)) {
         return { ok: false, reason: 'Formato de backup inválido.' };
       }
@@ -628,7 +835,7 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
       exportData,
       importData,
     };
-  }, [markLocalEdit, products, mermas]);
+  }, [cloudDataLoaded, cloudMode, localId, markLocalEdit, products, mermas, refetchCloud]);
 
   return <StoreContext.Provider value={store}>{children}</StoreContext.Provider>;
 }

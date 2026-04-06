@@ -4,6 +4,7 @@ import Image from 'next/image';
 import React, { useState } from 'react';
 import { useAuth } from '@/components/AuthProvider';
 import { getAllowedEmails, isAllowedEmail } from '@/lib/auth-access';
+import { isSupabaseEnabled } from '@/lib/supabase-client';
 
 const REMEMBERED_EMAIL_KEY = 'mermas_remembered_email';
 
@@ -29,7 +30,8 @@ export default function LoginPage() {
       setError('Introduce un email válido.');
       return;
     }
-    if (!isAllowedEmail(clean)) {
+    // Con Supabase, quien autoriza es Auth (usuarios creados en el panel). Sin Supabase, lista en código.
+    if (!isSupabaseEnabled() && !isAllowedEmail(clean)) {
       setError('Este email no está autorizado para acceder.');
       return;
     }
@@ -69,7 +71,7 @@ export default function LoginPage() {
           <div>
             <h1 className="text-lg font-black text-zinc-900">Acceso de Usuario</h1>
             <p className="pt-1 text-sm text-zinc-600">Entra con tu email y contraseña.</p>
-            {allowedEmails.length > 0 ? (
+            {!isSupabaseEnabled() && allowedEmails.length > 0 ? (
               <p className="pt-1 text-xs text-zinc-500">
                 Acceso restringido a usuarios autorizados.
               </p>

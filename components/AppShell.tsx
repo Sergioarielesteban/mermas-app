@@ -33,7 +33,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const [confirmLogoutOpen, setConfirmLogoutOpen] = useState(false);
-  const { email, logout } = useAuth();
+  const { email, logout, localId, localCode, localName } = useAuth();
+  const localLabel = localName ?? localCode;
 
   const title = useMemo(() => titleForPath(pathname), [pathname]);
 
@@ -80,11 +81,11 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       ) : null}
 
       <header className="sticky top-0 z-40 border-b border-[#b32020] bg-gradient-to-r from-[#B91C1C] to-[#D32F2F] shadow-lg">
-        <div className="mx-auto flex h-16 w-full max-w-md items-center gap-3 px-3">
+        <div className="mx-auto flex min-h-14 w-full max-w-md items-center gap-3 px-3 py-2">
           <button
             type="button"
             onClick={() => setOpen(true)}
-            className="grid h-10 w-10 place-items-center rounded-xl text-white/95 hover:bg-white/10 active:scale-[0.99]"
+            className="grid h-10 w-10 shrink-0 place-items-center rounded-xl text-white/95 hover:bg-white/10 active:scale-[0.99]"
             aria-label="Abrir menú"
           >
             <Menu className="h-6 w-6" />
@@ -94,13 +95,19 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             alt="Can Xampa"
             width={120}
             height={40}
-            className="h-8 w-auto rounded-md border border-white/25 bg-white/95 p-1"
+            className="h-8 w-auto shrink-0 rounded-md border border-white/25 bg-white/95 p-1"
             priority
           />
-          <h1 className="line-clamp-1 text-sm font-extrabold uppercase tracking-wide text-white">
-            {title}
-          </h1>
-          <div className="flex-1" />
+          <div className="min-w-0 flex-1">
+            <h1 className="line-clamp-1 text-sm font-extrabold uppercase tracking-wide text-white">
+              {title}
+            </h1>
+            {localId && localLabel ? (
+              <p className="line-clamp-1 text-[10px] font-semibold uppercase tracking-wider text-white/85">
+                {localLabel}
+              </p>
+            ) : null}
+          </div>
           <button
             type="button"
             onClick={refreshApp}
@@ -200,6 +207,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           <div className="rounded-2xl bg-zinc-50 p-3 ring-1 ring-zinc-200">
             <div className="text-xs font-semibold text-zinc-700">Sesión</div>
             <div className="mt-1 truncate text-xs text-zinc-500">{email ?? 'Sin usuario'}</div>
+            {localId && localLabel ? (
+              <div className="mt-1 truncate text-xs font-medium text-zinc-700">{localLabel}</div>
+            ) : null}
             <button
               type="button"
               onClick={refreshApp}
@@ -220,7 +230,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               Cerrar Sesión
             </button>
             <div className="mt-2 text-[11px] text-zinc-500">
-              Datos guardados en este dispositivo (localStorage).
+              {localId
+                ? 'Datos del local sincronizados con Supabase.'
+                : 'Datos guardados en este dispositivo (localStorage).'}
             </div>
           </div>
         </div>
