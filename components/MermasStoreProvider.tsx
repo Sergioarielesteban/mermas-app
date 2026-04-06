@@ -391,6 +391,9 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
     pruneBaconHalfRecords(sortProductsByName(DEFAULT_PRODUCTS), DEFAULT_MERMAS),
   );
   const [hydrated, setHydrated] = useState(false);
+  const lastLocalEditAtRef = React.useRef(0);
+  const lastRemoteAppliedAtRef = React.useRef(0);
+  const applyingRemoteRef = React.useRef(false);
 
   useEffect(() => {
     if (!isBrowser()) return;
@@ -405,6 +408,9 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
   useEffect(() => {
     if (!isBrowser()) return;
     if (!hydrated) return;
+    if (!applyingRemoteRef.current) {
+      lastLocalEditAtRef.current = Date.now();
+    }
     const next: PersistedState = { products, mermas };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
   }, [hydrated, products, mermas]);
@@ -416,13 +422,22 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
     if (!email) return;
 
     let cancelled = false;
-    const applyRemote = (remote: PersistedState) => {
+    const applyRemote = (remote: PersistedState, updatedAt: string | null | undefined) => {
       if (cancelled) return;
       if (!Array.isArray(remote.products) || !Array.isArray(remote.mermas)) return;
+      const remoteTs = updatedAt ? Date.parse(updatedAt) : 0;
+      // Evita pisar ediciones locales recientes con un snapshot remoto más antiguo o retrasado.
+      if (Date.now() - lastLocalEditAtRef.current < 18000) return;
+      if (remoteTs && remoteTs <= lastRemoteAppliedAtRef.current) return;
       const mergedProducts = mergeProducts(DEFAULT_PRODUCTS, remote.products);
       const cleanedMermas = pruneBaconHalfRecords(mergedProducts, remote.mermas);
+      applyingRemoteRef.current = true;
       setProducts(mergedProducts);
       setMermas(cleanedMermas);
+      queueMicrotask(() => {
+        applyingRemoteRef.current = false;
+      });
+      if (remoteTs) lastRemoteAppliedAtRef.current = remoteTs;
     };
 
     const pull = async () => {
@@ -434,13 +449,13 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
         if (!resp.ok) return;
         const data = (await resp.json()) as {
           ok?: boolean;
-          snapshot?: { products?: Product[]; mermas?: MermaRecord[] } | null;
+          snapshot?: { products?: Product[]; mermas?: MermaRecord[]; updatedAt?: string | null } | null;
         };
         if (!data?.ok || !data.snapshot) return;
         applyRemote({
           products: Array.isArray(data.snapshot.products) ? data.snapshot.products : [],
           mermas: Array.isArray(data.snapshot.mermas) ? data.snapshot.mermas : [],
-        });
+        }, data.snapshot.updatedAt);
       } catch {
         // Ignore transient network issues; next poll retries.
       }
