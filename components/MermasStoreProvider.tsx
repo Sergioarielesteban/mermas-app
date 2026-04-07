@@ -408,10 +408,15 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
   const refetchCloud = React.useCallback(async () => {
     const supabase = getSupabaseClient();
     if (!supabase || !localId) return;
-    const { products: p, mermas: m } = await fetchProductsAndMermas(supabase);
-    const cleaned = pruneBaconHalfRecords(p, m);
-    setProducts(sortProductsByName(p));
-    setMermas(cleaned);
+    try {
+      const { products: p, mermas: m } = await fetchProductsAndMermas(supabase);
+      const cleaned = pruneBaconHalfRecords(p, m);
+      setProducts(sortProductsByName(p));
+      setMermas(cleaned);
+      setCloudDataLoaded(true);
+    } catch {
+      // Keep last known state; do not wipe UI on transient cloud errors.
+    }
   }, [localId]);
 
   useEffect(() => {
@@ -425,8 +430,6 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
     if (isSupabaseEnabled() && !profileReady) return;
     if (profileReady && localId) {
       queueMicrotask(() => {
-        setProducts([]);
-        setMermas([]);
         setHydrated(true);
       });
       return;
@@ -442,10 +445,7 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
   useEffect(() => {
     if (!isBrowser() || !hydrated || !cloudMode || !localId) return;
     const supabase = getSupabaseClient();
-    if (!supabase) {
-      setCloudDataLoaded(true);
-      return;
-    }
+    if (!supabase) return;
     let cancelled = false;
     void (async () => {
       try {
@@ -454,8 +454,9 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
         const cleaned = pruneBaconHalfRecords(p, m);
         setProducts(sortProductsByName(p));
         setMermas(cleaned);
-      } finally {
-        if (!cancelled) setCloudDataLoaded(true);
+        setCloudDataLoaded(true);
+      } catch {
+        // Keep last known state if first cloud load fails.
       }
     })();
     return () => {
@@ -484,15 +485,15 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
   useEffect(() => {
     if (!isBrowser()) return;
     if (!hydrated) return;
-    if (cloudMode && cloudDataLoaded) return;
+    if (cloudMode) return;
     const next: PersistedState = { products, mermas };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
-  }, [cloudDataLoaded, cloudMode, hydrated, products, mermas]);
+  }, [cloudMode, hydrated, products, mermas]);
 
   useEffect(() => {
     if (!isBrowser()) return;
     if (!hydrated) return;
-    if (cloudMode && cloudDataLoaded) return;
+    if (cloudMode) return;
     const email = localStorage.getItem(AUTH_KEY)?.trim().toLowerCase();
     if (!email) return;
 
@@ -544,12 +545,12 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
       cancelled = true;
       window.clearInterval(intervalId);
     };
-  }, [cloudDataLoaded, cloudMode, hydrated]);
+  }, [cloudMode, hydrated]);
 
   useEffect(() => {
     if (!isBrowser()) return;
     if (!hydrated) return;
-    if (cloudMode && cloudDataLoaded) return;
+    if (cloudMode) return;
     const email = localStorage.getItem(AUTH_KEY);
     if (!email) return;
 
@@ -564,10 +565,10 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
     }, 1400);
 
     return () => window.clearTimeout(timeout);
-  }, [cloudDataLoaded, cloudMode, hydrated, products, mermas]);
+  }, [cloudMode, hydrated, products, mermas]);
 
   const store = useMemo<MermasStore>(() => {
-    const useCloud = cloudMode && cloudDataLoaded && localId;
+    const useCloud = Boolean(cloudMode && localId);
 
     const addProduct = (input: CreateProductInput) => {
       const trimmed = input.name.trim();
