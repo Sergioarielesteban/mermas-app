@@ -4,7 +4,7 @@ import React from 'react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { useMermasStore } from '@/components/MermasStoreProvider';
-import { toBusinessDate, toBusinessDateKey } from '@/lib/business-day';
+import { toBusinessDateKey } from '@/lib/business-day';
 import type { MermaMotiveKey } from '@/lib/types';
 
 const MOTIVES: Array<{ key: MermaMotiveKey; label: string }> = [
@@ -37,7 +37,6 @@ function motiveLabel(key: string) {
 
 export default function ResumenPage() {
   const { mermas, products, exportData, importData, updateMerma, removeMerma } = useMermasStore();
-  const [whatsNumber, setWhatsNumber] = React.useState('+34622915421');
   const [productFilter, setProductFilter] = React.useState<string>('all');
   const [fromDate, setFromDate] = React.useState('');
   const [toDate, setToDate] = React.useState('');
@@ -112,61 +111,6 @@ export default function ResumenPage() {
     if (!ok) return;
     const result = removeMerma(id);
     setMessage(result.ok ? 'Merma eliminada.' : result.reason ?? 'No se pudo eliminar.');
-  };
-
-  const sendWeeklyWhatsapp = () => {
-    const cleanNumber = whatsNumber.replace(/[^\d+]/g, '');
-    if (!cleanNumber) {
-      setMessage('Escribe un numero de WhatsApp valido.');
-      return;
-    }
-
-    const now = toBusinessDate(new Date());
-    const day = now.getDay(); // 0 domingo, 1 lunes, ... 6 sabado
-    const mondayOffset = (day + 6) % 7;
-    const currentWeekMonday = new Date(now);
-    currentWeekMonday.setHours(0, 0, 0, 0);
-    currentWeekMonday.setDate(now.getDate() - mondayOffset);
-
-    const mondayPrevWeek = new Date(currentWeekMonday);
-    mondayPrevWeek.setDate(currentWeekMonday.getDate() - 7);
-    const sundayPrevWeek = new Date(currentWeekMonday);
-    sundayPrevWeek.setDate(currentWeekMonday.getDate() - 1);
-    sundayPrevWeek.setHours(23, 59, 59, 999);
-
-    const weekly = mermas.filter((m) => {
-      const occurred = toBusinessDate(m.occurredAt);
-      return occurred >= mondayPrevWeek && occurred <= sundayPrevWeek;
-    });
-    const total = weekly.reduce((acc, row) => acc + row.costEur, 0);
-
-    const byProduct = new Map<string, number>();
-    for (const item of weekly) {
-      byProduct.set(item.productId, (byProduct.get(item.productId) ?? 0) + item.costEur);
-    }
-
-    const topLines = Array.from(byProduct.entries())
-      .map(([productId, value]) => ({
-        name: products.find((p) => p.id === productId)?.name ?? 'Producto',
-        value,
-      }))
-      .sort((a, b) => b.value - a.value)
-      .slice(0, 3)
-      .map((item, index) => `${index + 1}. ${item.name}: ${item.value.toFixed(2)} €`);
-
-    const periodFrom = mondayPrevWeek.toLocaleDateString('es-ES');
-    const periodTo = sundayPrevWeek.toLocaleDateString('es-ES');
-
-    const text =
-      `*Resumen semanal de mermas*\n` +
-      `Periodo: ${periodFrom} a ${periodTo}\n` +
-      `Registros: ${weekly.length}\n` +
-      `Valor total: ${total.toFixed(2)} €\n\n` +
-      `Top impacto:\n` +
-      `${topLines.length > 0 ? topLines.join('\n') : 'Sin datos esta semana.'}`;
-
-    const url = `https://wa.me/${cleanNumber.replace('+', '')}?text=${encodeURIComponent(text)}`;
-    window.open(url, '_blank', 'noopener,noreferrer');
   };
 
   const exportPdf = () => {
@@ -283,21 +227,6 @@ export default function ResumenPage() {
             Restaurar JSON
             <input type="file" accept="application/json" className="hidden" onChange={restoreJson} />
           </label>
-        </div>
-        <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-[1fr_auto]">
-          <input
-            value={whatsNumber}
-            onChange={(e) => setWhatsNumber(e.target.value)}
-            placeholder="+34622915421"
-            className="h-10 rounded-lg border border-zinc-200 bg-zinc-50 px-3 text-sm outline-none"
-          />
-          <button
-            type="button"
-            onClick={sendWeeklyWhatsapp}
-            className="h-10 rounded-lg bg-[#D32F2F] px-4 text-sm font-bold text-white"
-          >
-            Enviar informe semanal WhatsApp
-          </button>
         </div>
         <p className="mt-2 text-xs text-zinc-500">
           Registros filtrados: {filtered.length} | Valor total: {totalFiltered.toFixed(2)} €

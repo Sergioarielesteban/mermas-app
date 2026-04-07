@@ -42,12 +42,13 @@ export default function MermasRegistrationForm() {
   const [timeValue, setTimeValue] = useState(current.time);
   const [photoDataUrl, setPhotoDataUrl] = useState<string | null>(null);
   const [notes, setNotes] = useState<string>('');
-  const [message, setMessage] = useState<string | null>(null);
   const [showSavedBanner, setShowSavedBanner] = useState(false);
+  const [validationBanner, setValidationBanner] = useState<string | null>(null);
   const [openProductPicker, setOpenProductPicker] = useState(false);
   const [productSearch, setProductSearch] = useState('');
   const [lastQtyAction, setLastQtyAction] = useState<'inc' | 'dec' | null>(null);
   const savedBannerTimeoutRef = React.useRef<number | null>(null);
+  const validationBannerTimeoutRef = React.useRef<number | null>(null);
 
   const selectedMotive = motives.find((m) => m.key === motiveKey) ?? null;
 
@@ -68,6 +69,9 @@ export default function MermasRegistrationForm() {
       if (savedBannerTimeoutRef.current) {
         window.clearTimeout(savedBannerTimeoutRef.current);
       }
+      if (validationBannerTimeoutRef.current) {
+        window.clearTimeout(validationBannerTimeoutRef.current);
+      }
     };
   }, []);
 
@@ -76,30 +80,41 @@ export default function MermasRegistrationForm() {
     p.name.toLowerCase().includes(productSearch.trim().toLowerCase()),
   );
 
+  const showValidationBanner = (text: string) => {
+    setValidationBanner(text);
+    if (validationBannerTimeoutRef.current) {
+      window.clearTimeout(validationBannerTimeoutRef.current);
+    }
+    validationBannerTimeoutRef.current = window.setTimeout(() => {
+      setValidationBanner(null);
+      validationBannerTimeoutRef.current = null;
+    }, 1300);
+  };
+
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!productId) {
-      setMessage('Selecciona un producto.');
+      showValidationBanner('Te faltó elegir un producto');
       return;
     }
     if (!motiveKey) {
-      setMessage('Selecciona un motivo.');
+      showValidationBanner('Te faltó elegir un motivo');
       return;
     }
     if (quantity < 1) {
-      setMessage('La cantidad debe ser mayor que 0.');
+      showValidationBanner('La cantidad debe ser mayor que 0');
       return;
     }
 
     if (!dateValue || !timeValue) {
-      setMessage('Completa fecha y hora.');
+      showValidationBanner('Completa fecha y hora');
       return;
     }
 
     const occurredAt = new Date(`${dateValue}T${timeValue}:00`);
     if (Number.isNaN(occurredAt.getTime())) {
-      setMessage('Fecha u hora inválida.');
+      showValidationBanner('Fecha u hora inválida');
       return;
     }
 
@@ -112,7 +127,7 @@ export default function MermasRegistrationForm() {
       photoDataUrl: motiveKey === 'mal-estado' ? (photoDataUrl ?? undefined) : undefined,
     });
 
-    setMessage(null);
+    setValidationBanner(null);
     setShowSavedBanner(true);
     if (savedBannerTimeoutRef.current) {
       window.clearTimeout(savedBannerTimeoutRef.current);
@@ -132,7 +147,7 @@ export default function MermasRegistrationForm() {
     setTimeValue(now.time);
     setPhotoDataUrl(null);
     setNotes('');
-    setMessage(null);
+    setValidationBanner(null);
     setProductSearch('');
     setOpenProductPicker(false);
     setLastQtyAction(null);
@@ -157,19 +172,15 @@ export default function MermasRegistrationForm() {
           </div>
         </div>
       ) : null}
+      {validationBanner ? (
+        <div className="pointer-events-none fixed inset-0 z-[91] grid place-items-center bg-black/20 px-6">
+          <div className="rounded-2xl bg-zinc-900 px-7 py-5 text-center shadow-2xl ring-2 ring-white/70">
+            <p className="text-lg font-black uppercase tracking-wide text-white">{validationBanner}</p>
+          </div>
+        </div>
+      ) : null}
 
       <form onSubmit={handleSave} className="pb-2">
-        {message ? (
-          <div className="mb-3 rounded-xl bg-white p-3 text-sm text-zinc-800 shadow-sm ring-1 ring-zinc-200">
-            {message}
-            {message.includes('guardadas') && selectedMotive ? (
-              <span className="block pt-1 text-xs text-zinc-600">
-                Motivo: {selectedMotive.emoji} {selectedMotive.label}
-              </span>
-            ) : null}
-          </div>
-        ) : null}
-
         <div className="space-y-5">
           <div className="rounded-2xl bg-white p-3 shadow-sm ring-1 ring-zinc-200">
             <label className="mb-2 block text-xs font-semibold text-zinc-700">
