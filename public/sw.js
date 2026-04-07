@@ -1,4 +1,4 @@
-const CACHE_NAME = 'can-xampa-mermas-v2';
+const CACHE_NAME = 'can-xampa-mermas-v3';
 const CORE_ASSETS = ['/', '/login', '/dashboard', '/productos', '/resumen', '/manifest.webmanifest'];
 
 self.addEventListener('message', (event) => {
