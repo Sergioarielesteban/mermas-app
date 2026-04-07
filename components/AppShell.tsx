@@ -4,7 +4,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import React, { useMemo, useState } from 'react';
-import { BookOpen, Drumstick, LayoutDashboard, LogOut, Menu, X, FileText, RefreshCcw } from 'lucide-react';
+import { BookOpen, Drumstick, LayoutDashboard, LogOut, Menu, X, FileText, RefreshCcw, ShoppingCart } from 'lucide-react';
 import { useAuth } from '@/components/AuthProvider';
 
 type NavItem = {
@@ -20,12 +20,15 @@ const NAV_ITEMS: NavItem[] = [
   { href: '/resumen', label: 'Resumen', Icon: FileText },
 ];
 
+const BETA_PURCHASES_EMAILS = ['sergioarielesteban@hotmail.com'];
+
 function titleForPath(pathname: string | null) {
   if (!pathname) return 'Mermas';
   if (pathname === '/') return 'Registro de Mermas';
   if (pathname.startsWith('/dashboard')) return 'Dashboard';
   if (pathname.startsWith('/productos')) return 'Añadir Productos';
   if (pathname.startsWith('/resumen')) return 'Resumen';
+  if (pathname.startsWith('/pedidos')) return 'Pedidos';
   return 'Mermas';
 }
 
@@ -35,8 +38,16 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const [confirmLogoutOpen, setConfirmLogoutOpen] = useState(false);
   const { email, logout, localId, localCode, localName } = useAuth();
   const localLabel = localName ?? localCode;
+  const canSeePurchases = Boolean(email && BETA_PURCHASES_EMAILS.includes(email.toLowerCase()));
 
   const title = useMemo(() => titleForPath(pathname), [pathname]);
+  const navItems = useMemo<NavItem[]>(
+    () =>
+      canSeePurchases
+        ? [...NAV_ITEMS, { href: '/pedidos', label: 'Pedidos', Icon: ShoppingCart }]
+        : NAV_ITEMS,
+    [canSeePurchases],
+  );
 
   const confirmAndLogout = () => setConfirmLogoutOpen(true);
   const refreshApp = () => window.location.reload();
@@ -177,7 +188,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         </div>
 
         <nav className="px-2 py-3">
-          {NAV_ITEMS.map((item) => {
+          {navItems.map((item) => {
             const isActive =
               item.href === '/'
                 ? pathname === '/'

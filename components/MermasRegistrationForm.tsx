@@ -23,6 +23,15 @@ function toIntClamped(value: string, min: number, max: number) {
   return Math.min(max, Math.max(min, Math.floor(parsed)));
 }
 
+function toNumberClamped(value: string, min: number, max: number, decimals = 2) {
+  const normalized = value.replace(',', '.');
+  const parsed = Number(normalized);
+  if (!Number.isFinite(parsed)) return min;
+  const clamped = Math.min(max, Math.max(min, parsed));
+  const factor = 10 ** decimals;
+  return Math.round(clamped * factor) / factor;
+}
+
 function nowParts() {
   const d = new Date();
   const date = d.toISOString().slice(0, 10);
@@ -36,7 +45,8 @@ export default function MermasRegistrationForm() {
   const current = nowParts();
 
   const [productId, setProductId] = useState<string>(products[0]?.id ?? '');
-  const [quantity, setQuantity] = useState<number>(1);
+  const [quantity, setQuantity] = useState<number>(0);
+  const [quantityInput, setQuantityInput] = useState<string>('0');
   const [motiveKey, setMotiveKey] = useState<MermaMotiveKey | null>(null);
   const [dateValue, setDateValue] = useState(current.date);
   const [timeValue, setTimeValue] = useState(current.time);
@@ -51,12 +61,23 @@ export default function MermasRegistrationForm() {
   const validationBannerTimeoutRef = React.useRef<number | null>(null);
 
   const selectedMotive = motives.find((m) => m.key === motiveKey) ?? null;
+  const selectedProduct = products.find((p) => p.id === productId) ?? null;
+  const quantityLabel = selectedProduct?.unit === 'kg' ? 'Cantidad (kg)' : 'Cantidad';
+  const quantityHint = selectedProduct?.unit === 'kg' ? 'Admite decimales (ej: 0,30 kg).' : null;
 
   React.useEffect(() => {
     if (!productId && products[0]?.id) {
       setProductId(products[0].id);
     }
   }, [productId, products]);
+
+  React.useEffect(() => {
+    if (selectedProduct?.unit === 'kg') {
+      setQuantityInput(quantity.toFixed(2).replace('.', ','));
+    } else {
+      setQuantityInput(String(Math.max(1, Math.floor(quantity))));
+    }
+  }, [quantity, selectedProduct?.unit]);
 
   React.useEffect(() => {
     if (motiveKey !== 'mal-estado') {
@@ -75,12 +96,6 @@ export default function MermasRegistrationForm() {
     };
   }, []);
 
-  const selectedProduct = products.find((p) => p.id === productId) ?? null;
-  const quantityLabel = selectedProduct?.unit === 'kg' ? 'Cantidad (gramos)' : 'Cantidad';
-  const quantityHint =
-    selectedProduct?.unit === 'kg'
-      ? 'Para productos por kg, introduce gramos (ej: 300 = 0,30 kg).'
-      : null;
   const filteredProducts = products.filter((p) =>
     p.name.toLowerCase().includes(productSearch.trim().toLowerCase()),
   );
@@ -107,7 +122,7 @@ export default function MermasRegistrationForm() {
       showValidationBanner('Te faltó elegir un motivo');
       return;
     }
-    if (quantity < 1) {
+    if (quantity <= 0) {
       showValidationBanner('La cantidad debe ser mayor que 0');
       return;
     }
@@ -123,10 +138,9 @@ export default function MermasRegistrationForm() {
       return;
     }
 
-    const normalizedQty = selectedProduct?.unit === 'kg' ? quantity / 1000 : quantity;
     const record = addMerma({
       productId,
-      quantity: normalizedQty,
+      quantity,
       motiveKey,
       notes,
       occurredAt: occurredAt.toISOString(),
@@ -147,7 +161,8 @@ export default function MermasRegistrationForm() {
   const handleCancel = () => {
     const now = nowParts();
     setProductId(products[0]?.id ?? '');
-    setQuantity(1);
+    setQuantity(0);
+    setQuantityInput('0');
     setMotiveKey(null);
     setDateValue(now.date);
     setTimeValue(now.time);
@@ -225,13 +240,21 @@ export default function MermasRegistrationForm() {
               <button
                 type="button"
                 onClick={() => {
-                  setQuantity((q) => Math.max(1, q - 1));
+                  if (selectedProduct?.unit === 'kg') {
+                    setQuantity((q) => {
+                      const next = toNumberClamped(String(q - 0.01), 0, 999, 2);
+                      setQuantityInput(next.toFixed(2).replace('.', ','));
+                      return next;
+                    });
+                  } else {
+                    setQuantity((q) => Math.max(0, q - 1));
+                  }
                   setLastQtyAction('dec');
                 }}
-                disabled={quantity <= 1}
+                disabled={quantity <= 0}
                 className={[
                   'h-14 rounded-xl border border-zinc-300 text-2xl font-bold',
-                  quantity <= 1
+                  quantity <= 0
                     ? 'cursor-not-allowed bg-zinc-100 text-zinc-400'
                     : lastQtyAction === 'dec'
                       ? 'bg-[#D32F2F] text-white hover:bg-[#c62828]'
@@ -243,15 +266,35 @@ export default function MermasRegistrationForm() {
               </button>
 
               <input
-                type="number"
-                inputMode="numeric"
-                min={1}
+                type={selectedProduct?.unit === 'kg' ? 'text' : 'number'}
+                inputMode={selectedProduct?.unit === 'kg' ? 'decimal' : 'numeric'}
+                min={0}
                 max={999}
+                step={selectedProduct?.unit === 'kg' ? 0.01 : 1}
                 required
-                value={quantity}
+                value={selectedProduct?.unit === 'kg' ? quantityInput : String(quantity)}
                 onChange={(e) => {
-                  setQuantity(toIntClamped(e.target.value, 1, 999));
+                  if (selectedProduct?.unit === 'kg') {
+                    const raw = e.target.value;
+                    if (!/^\d*(?:[.,]\d{0,2})?$/.test(raw)) return;
+                    setQuantityInput(raw);
+                    const normalized = raw.replace(',', '.');
+                    const parsed = Number(normalized);
+                    if (Number.isFinite(parsed)) {
+                      setQuantity(toNumberClamped(normalized, 0, 999, 2));
+                    }
+                  } else {
+                    setQuantity(toIntClamped(e.target.value, 0, 999));
+                  }
                   setLastQtyAction(null);
+                }}
+                onBlur={() => {
+                  if (selectedProduct?.unit !== 'kg') return;
+                  const normalized = quantityInput.replace(',', '.');
+                  const parsed = Number(normalized);
+                  const safe = Number.isFinite(parsed) ? toNumberClamped(normalized, 0, 999, 2) : quantity;
+                  setQuantity(safe);
+                  setQuantityInput(safe.toFixed(2).replace('.', ','));
                 }}
                 className="h-14 rounded-xl border border-zinc-300 bg-white text-center text-xl font-bold text-zinc-900 shadow-sm outline-none focus:border-[#D32F2F] focus:ring-2 focus:ring-[#D32F2F]/20"
                 aria-label="Cantidad"
@@ -260,7 +303,15 @@ export default function MermasRegistrationForm() {
               <button
                 type="button"
                 onClick={() => {
-                  setQuantity((q) => Math.min(999, q + 1));
+                  if (selectedProduct?.unit === 'kg') {
+                    setQuantity((q) => {
+                      const next = toNumberClamped(String(q + 0.01), 0.01, 999, 2);
+                      setQuantityInput(next.toFixed(2).replace('.', ','));
+                      return next;
+                    });
+                  } else {
+                    setQuantity((q) => Math.min(999, q + 1));
+                  }
                   setLastQtyAction('inc');
                 }}
                 className={[
