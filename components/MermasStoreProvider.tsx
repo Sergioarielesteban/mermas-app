@@ -794,9 +794,18 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
         if (!localId) return { ok: false, reason: 'Perfil del local aún cargando. Reintenta en 2 segundos.' };
         const supabase = getSupabaseClient();
         if (!supabase) return { ok: false, reason: 'Sin conexión.' };
-        const { error } = await supabase.from('mermas').delete().eq('id', id);
+        const { data, error } = await supabase
+          .from('mermas')
+          .delete()
+          .eq('id', id)
+          .eq('local_id', localId)
+          .select('id')
+          .maybeSingle();
         if (error) {
           return { ok: false, reason: `No se pudo eliminar en nube: ${error.message}` };
+        }
+        if (!data?.id) {
+          return { ok: false, reason: 'No se pudo eliminar: sin permisos o registro no encontrado en este local.' };
         }
         markLocalEdit();
         await refetchCloud();
