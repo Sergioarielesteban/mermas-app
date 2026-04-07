@@ -45,10 +45,11 @@ export function mapMermaRow(row: MermaRow): MermaRecord {
   };
 }
 
-export async function fetchProductsAndMermas(supabase: SupabaseClient) {
+export async function fetchProductsAndMermas(supabase: SupabaseClient, localId: string) {
   const { data: productRows, error: pErr } = await supabase
     .from('products')
     .select('id,name,unit,price_per_unit,created_at')
+    .eq('local_id', localId)
     .eq('is_active', true)
     .order('name');
 
@@ -57,6 +58,7 @@ export async function fetchProductsAndMermas(supabase: SupabaseClient) {
   const { data: mermaRows, error: mErr } = await supabase
     .from('mermas')
     .select('id,product_id,quantity,motive_key,notes,occurred_at,photo_data_url,cost_eur,created_at')
+    .eq('local_id', localId)
     .order('occurred_at', { ascending: false });
 
   if (mErr) throw new Error(mErr.message);

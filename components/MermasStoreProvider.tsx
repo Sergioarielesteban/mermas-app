@@ -411,7 +411,7 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
     const supabase = getSupabaseClient();
     if (!supabase || !localId) return;
     try {
-      const { products: p, mermas: m } = await fetchProductsAndMermas(supabase);
+      const { products: p, mermas: m } = await fetchProductsAndMermas(supabase, localId);
       const cleaned = pruneBaconHalfRecords(p, m);
       setProducts(sortProductsByName(p));
       setMermas(cleaned);
@@ -453,7 +453,7 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
     let cancelled = false;
     void (async () => {
       try {
-        const { products: p, mermas: m } = await fetchProductsAndMermas(supabase);
+        const { products: p, mermas: m } = await fetchProductsAndMermas(supabase, localId);
         if (cancelled) return;
         const cleaned = pruneBaconHalfRecords(p, m);
         setProducts(sortProductsByName(p));
