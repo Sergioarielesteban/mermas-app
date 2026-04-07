@@ -798,14 +798,16 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
           .from('mermas')
           .delete()
           .eq('id', id)
-          .eq('local_id', localId)
           .select('id')
           .maybeSingle();
         if (error) {
           return { ok: false, reason: `No se pudo eliminar en nube: ${error.message}` };
         }
+        // If row was already deleted in another refresh tab, keep UI consistent and continue.
         if (!data?.id) {
-          return { ok: false, reason: 'No se pudo eliminar: sin permisos o registro no encontrado en este local.' };
+          setMermas((prev) => prev.filter((m) => m.id !== id));
+          await refetchCloud();
+          return { ok: true };
         }
         markLocalEdit();
         // Keep UI consistent even if cloud refetch has a transient failure.
