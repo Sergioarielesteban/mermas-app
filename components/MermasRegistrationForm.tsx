@@ -112,7 +112,7 @@ export default function MermasRegistrationForm() {
       photoDataUrl: motiveKey === 'mal-estado' ? (photoDataUrl ?? undefined) : undefined,
     });
 
-    setMessage(`Mermas guardadas. Coste calculado: ${record.costEur.toFixed(2)} EUR`);
+    setMessage(null);
     setShowSavedBanner(true);
     if (savedBannerTimeoutRef.current) {
       window.clearTimeout(savedBannerTimeoutRef.current);
@@ -120,7 +120,7 @@ export default function MermasRegistrationForm() {
     savedBannerTimeoutRef.current = window.setTimeout(() => {
       setShowSavedBanner(false);
       savedBannerTimeoutRef.current = null;
-    }, 1500);
+    }, 1000);
   };
 
   const handleCancel = () => {
@@ -151,9 +151,9 @@ export default function MermasRegistrationForm() {
   return (
     <div className="min-h-full">
       {showSavedBanner ? (
-        <div className="pointer-events-none fixed inset-0 z-[90] grid place-items-center px-6">
-          <div className="saved-banner-pop rounded-2xl bg-[#D32F2F] px-6 py-4 text-center shadow-2xl ring-2 ring-white/70">
-            <p className="text-lg font-black uppercase tracking-wide text-white">MERMA GUARDADA</p>
+        <div className="pointer-events-none fixed inset-0 z-[90] grid place-items-center bg-black/25 px-6">
+          <div className="rounded-2xl bg-[#D32F2F] px-7 py-5 text-center shadow-2xl ring-2 ring-white/75">
+            <p className="text-xl font-black uppercase tracking-wide text-white">MERMA REGISTRADA</p>
           </div>
         </div>
       ) : null}
