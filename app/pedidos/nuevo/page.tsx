@@ -2,6 +2,8 @@
 
 import { useRouter } from 'next/navigation';
 import React from 'react';
+import { useAuth } from '@/components/AuthProvider';
+import { canAccessPedidos } from '@/lib/pedidos-access';
 import { MOCK_SUPPLIERS } from '@/lib/pedidos-mock-catalog';
 import { savePedidoDraft, type PedidoDraftItem } from '@/lib/pedidos-storage';
 
@@ -9,6 +11,8 @@ type QtyMap = Record<string, number>;
 
 export default function NuevoPedidoPage() {
   const router = useRouter();
+  const { localCode, email } = useAuth();
+  const canUse = canAccessPedidos(localCode, email);
   const [supplierId, setSupplierId] = React.useState(MOCK_SUPPLIERS[0]?.id ?? '');
   const [notes, setNotes] = React.useState('');
   const [search, setSearch] = React.useState('');
@@ -72,6 +76,15 @@ export default function NuevoPedidoPage() {
     });
     router.push('/pedidos');
   };
+
+  if (!canUse) {
+    return (
+      <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-zinc-200">
+        <p className="text-sm font-black text-zinc-900">Modulo no habilitado</p>
+        <p className="pt-1 text-sm text-zinc-600">Pedidos esta disponible solo para el local de Mataro.</p>
+      </section>
+    );
+  }
 
   return (
     <div className="space-y-4">

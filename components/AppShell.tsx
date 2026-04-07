@@ -6,6 +6,7 @@ import { usePathname } from 'next/navigation';
 import React, { useMemo, useState } from 'react';
 import { BookOpen, Drumstick, LayoutDashboard, LogOut, Menu, X, FileText, RefreshCcw, ShoppingCart } from 'lucide-react';
 import { useAuth } from '@/components/AuthProvider';
+import { canAccessPedidos } from '@/lib/pedidos-access';
 
 type NavItem = {
   href: string;
@@ -35,11 +36,12 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const [confirmLogoutOpen, setConfirmLogoutOpen] = useState(false);
   const { email, logout, localId, localCode, localName } = useAuth();
   const localLabel = localName ?? localCode;
+  const showPedidos = canAccessPedidos(localCode, email);
 
   const title = useMemo(() => titleForPath(pathname), [pathname]);
   const navItems = useMemo<NavItem[]>(
-    () => [...NAV_ITEMS, { href: '/pedidos', label: 'Pedidos', Icon: ShoppingCart }],
-    [],
+    () => (showPedidos ? [...NAV_ITEMS, { href: '/pedidos', label: 'Pedidos', Icon: ShoppingCart }] : NAV_ITEMS),
+    [showPedidos],
   );
 
   const confirmAndLogout = () => setConfirmLogoutOpen(true);

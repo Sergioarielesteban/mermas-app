@@ -2,17 +2,31 @@
 
 import Link from 'next/link';
 import React from 'react';
+import { useAuth } from '@/components/AuthProvider';
+import { canAccessPedidos } from '@/lib/pedidos-access';
 import { getPedidoDrafts } from '@/lib/pedidos-storage';
 
 export default function PedidosPage() {
+  const { localCode, email } = useAuth();
+  const canUse = canAccessPedidos(localCode, email);
   const [draftsCount, setDraftsCount] = React.useState(0);
   const [draftsTotal, setDraftsTotal] = React.useState(0);
 
   React.useEffect(() => {
+    if (!canUse) return;
     const drafts = getPedidoDrafts();
     setDraftsCount(drafts.length);
     setDraftsTotal(drafts.reduce((acc, d) => acc + d.total, 0));
-  }, []);
+  }, [canUse]);
+
+  if (!canUse) {
+    return (
+      <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-zinc-200">
+        <p className="text-sm font-black text-zinc-900">Modulo no habilitado</p>
+        <p className="pt-1 text-sm text-zinc-600">Pedidos esta disponible solo para el local de Mataro.</p>
+      </section>
+    );
+  }
 
   return (
     <div className="space-y-4">
