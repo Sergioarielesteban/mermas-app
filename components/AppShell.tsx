@@ -20,8 +20,6 @@ const NAV_ITEMS: NavItem[] = [
   { href: '/resumen', label: 'Resumen', Icon: FileText },
 ];
 
-const BETA_PURCHASES_EMAILS = ['sergioarielesteban@hotmail.com'];
-
 function titleForPath(pathname: string | null) {
   if (!pathname) return 'Mermas';
   if (pathname === '/') return 'Registro de Mermas';
@@ -38,7 +36,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const [confirmLogoutOpen, setConfirmLogoutOpen] = useState(false);
   const { email, logout, localId, localCode, localName } = useAuth();
   const localLabel = localName ?? localCode;
-  const canSeePurchases = Boolean(email && BETA_PURCHASES_EMAILS.includes(email.toLowerCase()));
+  const canSeePurchases = localCode === 'MATARO';
 
   const title = useMemo(() => titleForPath(pathname), [pathname]);
   const navItems = useMemo<NavItem[]>(

@@ -3,11 +3,9 @@
 import React from 'react';
 import { useAuth } from '@/components/AuthProvider';
 
-const BETA_PURCHASES_EMAILS = ['sergioarielesteban@hotmail.com'];
-
 export default function PedidosPage() {
-  const { email } = useAuth();
-  const canSeePurchases = Boolean(email && BETA_PURCHASES_EMAILS.includes(email.toLowerCase()));
+  const { localCode } = useAuth();
+  const canSeePurchases = localCode === 'MATARO';
 
   if (!canSeePurchases) {
     return (
