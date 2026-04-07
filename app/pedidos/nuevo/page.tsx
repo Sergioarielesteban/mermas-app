@@ -2,70 +2,60 @@
 
 import { useRouter } from 'next/navigation';
 import React from 'react';
-import { useMermasStore } from '@/components/MermasStoreProvider';
+import { MOCK_SUPPLIERS } from '@/lib/pedidos-mock-catalog';
 import { savePedidoDraft, type PedidoDraftItem } from '@/lib/pedidos-storage';
+
+type QtyMap = Record<string, number>;
 
 export default function NuevoPedidoPage() {
   const router = useRouter();
-  const { products } = useMermasStore();
-  const [supplierName, setSupplierName] = React.useState('');
+  const [supplierId, setSupplierId] = React.useState(MOCK_SUPPLIERS[0]?.id ?? '');
   const [notes, setNotes] = React.useState('');
   const [search, setSearch] = React.useState('');
-  const [selectedProductId, setSelectedProductId] = React.useState(products[0]?.id ?? '');
-  const [quantityInput, setQuantityInput] = React.useState('1');
-  const [items, setItems] = React.useState<PedidoDraftItem[]>([]);
+  const [qtyByProductId, setQtyByProductId] = React.useState<QtyMap>({});
   const [message, setMessage] = React.useState<string | null>(null);
 
-  const selectedProduct = products.find((p) => p.id === selectedProductId) ?? null;
-  const filteredProducts = products.filter((p) =>
+  const selectedSupplier = MOCK_SUPPLIERS.find((s) => s.id === supplierId) ?? null;
+  const supplierProducts = selectedSupplier?.products ?? [];
+  const filteredProducts = supplierProducts.filter((p) =>
     p.name.toLowerCase().includes(search.trim().toLowerCase()),
   );
 
-  const addLine = () => {
-    if (!selectedProduct) return;
-    const qty = Number(quantityInput.replace(',', '.'));
-    if (!Number.isFinite(qty) || qty <= 0) {
-      setMessage('Cantidad invalida.');
-      return;
-    }
-    const normalizedQty = selectedProduct.unit === 'kg' ? Math.round(qty * 100) / 100 : Math.floor(qty);
-    const lineTotal = Math.round(normalizedQty * selectedProduct.pricePerUnit * 100) / 100;
+  React.useEffect(() => {
+    setSearch('');
+    setQtyByProductId({});
+  }, [supplierId, supplierProducts]);
 
-    setItems((prev) => {
-      const idx = prev.findIndex((i) => i.productId === selectedProduct.id);
-      if (idx >= 0) {
-        const current = prev[idx];
-        const mergedQty = Math.round((current.quantity + normalizedQty) * 100) / 100;
-        const mergedTotal = Math.round(mergedQty * current.pricePerUnit * 100) / 100;
-        const copy = [...prev];
-        copy[idx] = { ...current, quantity: mergedQty, lineTotal: mergedTotal };
-        return copy;
-      }
-      return [
-        ...prev,
-        {
-          productId: selectedProduct.id,
-          productName: selectedProduct.name,
-          unit: selectedProduct.unit,
-          quantity: normalizedQty,
-          pricePerUnit: selectedProduct.pricePerUnit,
-          lineTotal,
-        },
-      ];
+  const changeQty = (productId: string, unit: 'kg' | 'ud' | 'bolsa' | 'racion', direction: 'inc' | 'dec') => {
+    const step = unit === 'kg' ? 0.1 : 1;
+    setQtyByProductId((prev) => {
+      const current = prev[productId] ?? 0;
+      const nextRaw = direction === 'inc' ? current + step : current - step;
+      const next = Math.max(0, Math.round(nextRaw * 100) / 100);
+      return { ...prev, [productId]: next };
     });
-    setMessage(null);
-    setQuantityInput(selectedProduct.unit === 'kg' ? '0,10' : '1');
   };
 
-  const removeLine = (productId: string) => {
-    setItems((prev) => prev.filter((i) => i.productId !== productId));
-  };
+  const items: PedidoDraftItem[] = supplierProducts
+    .map((p) => {
+      const quantity = qtyByProductId[p.id] ?? 0;
+      const lineTotal = Math.round(quantity * p.pricePerUnit * 100) / 100;
+      return {
+        productId: p.id,
+        productName: p.name,
+        unit: p.unit,
+        quantity,
+        pricePerUnit: p.pricePerUnit,
+        lineTotal,
+      };
+    })
+    .filter((row) => row.quantity > 0);
 
   const total = items.reduce((acc, row) => acc + row.lineTotal, 0);
 
   const saveDraft = () => {
-    if (!supplierName.trim()) {
-      setMessage('Indica proveedor.');
+    if (!selectedSupplier) {
+      setMessage('Selecciona proveedor.');
       return;
     }
     if (items.length === 0) {
@@ -74,7 +64,7 @@ export default function NuevoPedidoPage() {
     }
     savePedidoDraft({
       id: `ped-${Date.now()}`,
-      supplierName: supplierName.trim(),
+      supplierName: selectedSupplier.name,
       notes: notes.trim(),
       createdAt: new Date().toISOString(),
       items,
@@ -92,12 +82,20 @@ export default function NuevoPedidoPage() {
 
       <section className="rounded-2xl bg-white p-4 ring-1 ring-zinc-200">
         <label className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Proveedor</label>
-        <input
-          value={supplierName}
-          onChange={(e) => setSupplierName(e.target.value)}
-          placeholder="Ej: Makro, Transgourmet..."
+        <select
+          value={supplierId}
+          onChange={(e) => setSupplierId(e.target.value)}
           className="mt-2 h-11 w-full rounded-xl border border-zinc-200 bg-zinc-50 px-3 text-sm outline-none"
-        />
+        >
+          {MOCK_SUPPLIERS.map((s) => (
+            <option key={s.id} value={s.id}>
+              {s.name}
+            </option>
+          ))}
+        </select>
+        {selectedSupplier ? (
+          <p className="mt-1 text-xs text-zinc-500">Contacto demo: {selectedSupplier.contact}</p>
+        ) : null}
         <label className="mt-3 block text-xs font-semibold uppercase tracking-wide text-zinc-500">
           Buscar producto
         </label>
@@ -107,37 +105,49 @@ export default function NuevoPedidoPage() {
           placeholder="Buscar..."
           className="mt-2 h-11 w-full rounded-xl border border-zinc-200 bg-zinc-50 px-3 text-sm outline-none"
         />
-        <select
-          value={selectedProductId}
-          onChange={(e) => setSelectedProductId(e.target.value)}
-          className="mt-2 h-11 w-full rounded-xl border border-zinc-200 bg-zinc-50 px-3 text-sm outline-none"
-        >
-          {filteredProducts.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.name}
-            </option>
-          ))}
-        </select>
-        <div className="mt-2 grid grid-cols-[1fr_auto] gap-2">
-          <input
-            value={quantityInput}
-            onChange={(e) => setQuantityInput(e.target.value)}
-            placeholder={selectedProduct?.unit === 'kg' ? '0,50' : '1'}
-            className="h-11 rounded-xl border border-zinc-200 bg-zinc-50 px-3 text-sm outline-none"
-          />
-          <button
-            type="button"
-            onClick={addLine}
-            className="h-11 rounded-xl bg-[#D32F2F] px-4 text-sm font-bold text-white"
-          >
-            Añadir
-          </button>
+      </section>
+
+      <section className="rounded-2xl bg-white p-4 ring-1 ring-zinc-200">
+        <p className="text-sm font-bold text-zinc-800">Catalogo del proveedor</p>
+        <div className="mt-2 space-y-2">
+          {filteredProducts.length === 0 ? <p className="text-sm text-zinc-500">Sin productos para este filtro.</p> : null}
+          {filteredProducts.map((p) => {
+            const qty = qtyByProductId[p.id] ?? 0;
+            const lineTotal = Math.round(qty * p.pricePerUnit * 100) / 100;
+            return (
+              <div key={p.id} className="rounded-xl bg-zinc-50 p-3 ring-1 ring-zinc-200">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-semibold text-zinc-800">{p.name}</p>
+                    <p className="text-xs text-zinc-500">
+                      {p.pricePerUnit.toFixed(2)} EUR/{p.unit}
+                    </p>
+                  </div>
+                  <p className="text-sm font-bold text-zinc-900">{lineTotal.toFixed(2)} EUR</p>
+                </div>
+                <div className="mt-3 flex items-center justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => changeQty(p.id, p.unit, 'dec')}
+                    className="h-10 w-10 rounded-full border border-zinc-300 bg-white text-xl font-bold text-zinc-700"
+                  >
+                    -
+                  </button>
+                  <div className="min-w-20 rounded-lg bg-white px-3 py-2 text-center text-sm font-bold text-zinc-900 ring-1 ring-zinc-200">
+                    {p.unit === 'kg' ? qty.toFixed(2) : Math.round(qty)} {p.unit}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => changeQty(p.id, p.unit, 'inc')}
+                    className="h-10 w-10 rounded-full bg-[#2563EB] text-xl font-bold text-white"
+                  >
+                    +
+                  </button>
+                </div>
+              </div>
+            );
+          })}
         </div>
-        {selectedProduct ? (
-          <p className="mt-1 text-xs text-zinc-500">
-            Precio: {selectedProduct.pricePerUnit.toFixed(2)} EUR/{selectedProduct.unit}
-          </p>
-        ) : null}
       </section>
 
       <section className="rounded-2xl bg-white p-4 ring-1 ring-zinc-200">
@@ -152,13 +162,6 @@ export default function NuevoPedidoPage() {
                   {row.quantity} {row.unit} · {row.lineTotal.toFixed(2)} EUR
                 </p>
               </div>
-              <button
-                type="button"
-                onClick={() => removeLine(row.productId)}
-                className="rounded-lg border border-zinc-300 px-2 py-1 text-xs font-semibold text-zinc-700"
-              >
-                Quitar
-              </button>
             </div>
           ))}
         </div>
