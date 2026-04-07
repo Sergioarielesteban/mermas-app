@@ -179,7 +179,6 @@ export default function MermasRegistrationForm() {
               type="text"
               value={productId}
               onChange={() => undefined}
-              required
               tabIndex={-1}
               aria-hidden
               className="hidden"
@@ -271,7 +270,6 @@ export default function MermasRegistrationForm() {
               type="text"
               value={motiveKey ?? ''}
               onChange={() => undefined}
-              required
               tabIndex={-1}
               aria-hidden
               className="hidden"

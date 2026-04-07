@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import { useAuth } from '@/components/AuthProvider';
-import { fetchProductsAndMermas } from '@/lib/mermas-supabase';
+import { fetchProductsAndMermas, mapMermaRow } from '@/lib/mermas-supabase';
 import { uid } from '@/lib/id';
 import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
 import { isBrowser, safeJsonParse } from '@/lib/storage';
@@ -677,51 +677,6 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
       const price = product?.pricePerUnit ?? 0;
       const qty = Number.isFinite(input.quantity) ? input.quantity : 0;
       const costEur = Math.round(qty * price * 100) / 100;
-
-      if (useCloud) {
-        const supabase = getSupabaseClient();
-        if (!supabase) {
-          const record: MermaRecord = {
-            id: uid('m'),
-            productId: input.productId,
-            quantity: qty,
-            motiveKey: input.motiveKey,
-            notes: input.notes.trim(),
-            occurredAt: input.occurredAt,
-            photoDataUrl: input.photoDataUrl,
-            costEur,
-            createdAt: new Date().toISOString(),
-          };
-          return record;
-        }
-        void (async () => {
-          const { error } = await supabase.from('mermas').insert({
-            local_id: localId,
-            product_id: input.productId,
-            quantity: qty,
-            motive_key: input.motiveKey,
-            notes: input.notes.trim(),
-            occurred_at: input.occurredAt,
-            photo_data_url: input.photoDataUrl ?? null,
-            cost_eur: costEur,
-          });
-          if (error) return;
-          markLocalEdit();
-          await refetchCloud();
-        })();
-        return {
-          id: uid('m'),
-          productId: input.productId,
-          quantity: qty,
-          motiveKey: input.motiveKey,
-          notes: input.notes.trim(),
-          occurredAt: input.occurredAt,
-          photoDataUrl: input.photoDataUrl,
-          costEur,
-          createdAt: new Date().toISOString(),
-        };
-      }
-
       const record: MermaRecord = {
         id: uid('m'),
         productId: input.productId,
@@ -733,6 +688,38 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
         costEur,
         createdAt: new Date().toISOString(),
       };
+
+      if (useCloud) {
+        const supabase = getSupabaseClient();
+        if (!supabase) return record;
+        markLocalEdit();
+        setMermas((prev) => [record, ...prev]);
+        void (async () => {
+          const { data, error } = await supabase
+            .from('mermas')
+            .insert({
+              local_id: localId,
+              product_id: input.productId,
+              quantity: qty,
+              motive_key: input.motiveKey,
+              notes: input.notes.trim(),
+              occurred_at: input.occurredAt,
+              photo_data_url: input.photoDataUrl ?? null,
+              cost_eur: costEur,
+            })
+            .select('id,product_id,quantity,motive_key,notes,occurred_at,photo_data_url,cost_eur,created_at')
+            .single();
+          if (error || !data) {
+            // Revert optimistic row so the UI does not suggest it was saved.
+            setMermas((prev) => prev.filter((m) => m.id !== record.id));
+            return;
+          }
+          const saved = mapMermaRow(data);
+          setMermas((prev) => prev.map((m) => (m.id === record.id ? saved : m)));
+          markLocalEdit();
+        })();
+        return record;
+      }
 
       markLocalEdit();
       setMermas((prev) => [record, ...prev]);
