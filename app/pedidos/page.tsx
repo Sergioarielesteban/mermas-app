@@ -4,20 +4,26 @@ import Link from 'next/link';
 import React from 'react';
 import { useAuth } from '@/components/AuthProvider';
 import { canAccessPedidos } from '@/lib/pedidos-access';
-import { getPedidoDrafts } from '@/lib/pedidos-storage';
+import { deletePedidoDraft, getPedidoDrafts, setPedidoStatus, type PedidoDraft } from '@/lib/pedidos-storage';
 
 export default function PedidosPage() {
   const { localCode, email } = useAuth();
   const canUse = canAccessPedidos(localCode, email);
-  const [draftsCount, setDraftsCount] = React.useState(0);
-  const [draftsTotal, setDraftsTotal] = React.useState(0);
+  const [orders, setOrders] = React.useState<PedidoDraft[]>([]);
+
+  const reloadOrders = React.useCallback(() => {
+    if (!canUse) return;
+    setOrders(getPedidoDrafts());
+  }, [canUse]);
 
   React.useEffect(() => {
-    if (!canUse) return;
-    const drafts = getPedidoDrafts();
-    setDraftsCount(drafts.length);
-    setDraftsTotal(drafts.reduce((acc, d) => acc + d.total, 0));
-  }, [canUse]);
+    reloadOrders();
+  }, [reloadOrders]);
+
+  const draftOrders = orders.filter((row) => row.status === 'draft');
+  const sentOrders = orders.filter((row) => row.status === 'sent');
+  const receivedOrders = orders.filter((row) => row.status === 'received');
+  const draftsTotal = draftOrders.reduce((acc, d) => acc + d.total, 0);
 
   if (!canUse) {
     return (
@@ -40,12 +46,12 @@ export default function PedidosPage() {
       <section className="grid grid-cols-2 gap-3">
         <div className="rounded-2xl bg-white p-4 ring-1 ring-zinc-200">
           <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Borradores</p>
-          <p className="pt-2 text-2xl font-black text-zinc-900">{draftsCount}</p>
+          <p className="pt-2 text-2xl font-black text-zinc-900">{draftOrders.length}</p>
           <p className="pt-1 text-xs text-zinc-500">Total: {draftsTotal.toFixed(2)} EUR</p>
         </div>
         <div className="rounded-2xl bg-white p-4 ring-1 ring-zinc-200">
           <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Pendientes recepcion</p>
-          <p className="pt-2 text-2xl font-black text-zinc-900">0</p>
+          <p className="pt-2 text-2xl font-black text-zinc-900">{sentOrders.length}</p>
         </div>
       </section>
 
@@ -74,10 +80,81 @@ export default function PedidosPage() {
       </section>
 
       <section className="rounded-2xl bg-white p-4 ring-1 ring-zinc-200">
-        <p className="text-sm font-bold text-zinc-800">Proximo paso</p>
-        <p className="pt-1 text-sm text-zinc-600">
-          En el siguiente sprint conectamos estas pantallas con Supabase para crear pedidos reales.
-        </p>
+        <p className="text-sm font-bold text-zinc-800">Borradores</p>
+        <div className="mt-2 space-y-2">
+          {draftOrders.length === 0 ? <p className="text-sm text-zinc-500">No hay borradores.</p> : null}
+          {draftOrders.map((order) => (
+            <div key={order.id} className="rounded-xl bg-zinc-50 p-3 ring-1 ring-zinc-200">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm font-semibold text-zinc-900">{order.supplierName}</p>
+                  <p className="text-xs text-zinc-500">{order.items.length} lineas · {order.total.toFixed(2)} EUR</p>
+                </div>
+                <p className="text-xs text-zinc-500">{new Date(order.createdAt).toLocaleDateString('es-ES')}</p>
+              </div>
+              <div className="mt-3 flex gap-2">
+                <Link
+                  href={`/pedidos/nuevo?id=${order.id}`}
+                  className="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-xs font-semibold text-zinc-700"
+                >
+                  Editar
+                </Link>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPedidoStatus(order.id, 'sent');
+                    reloadOrders();
+                  }}
+                  className="rounded-lg bg-[#2563EB] px-3 py-2 text-xs font-semibold text-white"
+                >
+                  Enviar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    deletePedidoDraft(order.id);
+                    reloadOrders();
+                  }}
+                  className="rounded-lg border border-[#B91C1C] bg-white px-3 py-2 text-xs font-semibold text-[#B91C1C]"
+                >
+                  Eliminar
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="rounded-2xl bg-white p-4 ring-1 ring-zinc-200">
+        <p className="text-sm font-bold text-zinc-800">Pedidos enviados</p>
+        <div className="mt-2 space-y-2">
+          {sentOrders.length === 0 ? <p className="text-sm text-zinc-500">No hay pedidos enviados.</p> : null}
+          {sentOrders.map((order) => (
+            <div key={order.id} className="rounded-xl bg-zinc-50 p-3 ring-1 ring-zinc-200">
+              <p className="text-sm font-semibold text-zinc-900">{order.supplierName}</p>
+              <p className="text-xs text-zinc-500">
+                {order.items.length} lineas · {order.total.toFixed(2)} EUR · enviado{' '}
+                {order.sentAt ? new Date(order.sentAt).toLocaleDateString('es-ES') : '-'}
+              </p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="rounded-2xl bg-white p-4 ring-1 ring-zinc-200">
+        <p className="text-sm font-bold text-zinc-800">Historico recibido</p>
+        <div className="mt-2 space-y-2">
+          {receivedOrders.length === 0 ? <p className="text-sm text-zinc-500">No hay pedidos recibidos.</p> : null}
+          {receivedOrders.map((order) => (
+            <div key={order.id} className="rounded-xl bg-zinc-50 p-3 ring-1 ring-zinc-200">
+              <p className="text-sm font-semibold text-zinc-900">{order.supplierName}</p>
+              <p className="text-xs text-zinc-500">
+                {order.items.length} lineas · {order.total.toFixed(2)} EUR · recibido{' '}
+                {order.receivedAt ? new Date(order.receivedAt).toLocaleDateString('es-ES') : '-'}
+              </p>
+            </div>
+          ))}
+        </div>
       </section>
     </div>
   );

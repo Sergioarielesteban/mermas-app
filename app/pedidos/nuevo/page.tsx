@@ -1,23 +1,29 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import React from 'react';
 import { useAuth } from '@/components/AuthProvider';
+import { uid } from '@/lib/id';
 import { canAccessPedidos } from '@/lib/pedidos-access';
 import { MOCK_SUPPLIERS } from '@/lib/pedidos-mock-catalog';
-import { savePedidoDraft, type PedidoDraftItem } from '@/lib/pedidos-storage';
+import { getPedidoDraftById, savePedidoDraft, type PedidoDraftItem } from '@/lib/pedidos-storage';
 
 type QtyMap = Record<string, number>;
 
 export default function NuevoPedidoPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { localCode, email } = useAuth();
   const canUse = canAccessPedidos(localCode, email);
+  const editingId = searchParams.get('id');
   const [supplierId, setSupplierId] = React.useState(MOCK_SUPPLIERS[0]?.id ?? '');
   const [notes, setNotes] = React.useState('');
   const [search, setSearch] = React.useState('');
   const [qtyByProductId, setQtyByProductId] = React.useState<QtyMap>({});
   const [message, setMessage] = React.useState<string | null>(null);
+  const [isLoadedEdit, setIsLoadedEdit] = React.useState(false);
+  const [existingCreatedAt, setExistingCreatedAt] = React.useState<string | null>(null);
+  const [existingSentAt, setExistingSentAt] = React.useState<string | null>(null);
 
   const selectedSupplier = MOCK_SUPPLIERS.find((s) => s.id === supplierId) ?? null;
   const supplierProducts = selectedSupplier?.products ?? [];
@@ -26,9 +32,37 @@ export default function NuevoPedidoPage() {
   );
 
   React.useEffect(() => {
+    if (!editingId) return;
+    const draft = getPedidoDraftById(editingId);
+    if (!draft) {
+      setMessage('No se encontro el borrador para editar.');
+      setIsLoadedEdit(true);
+      return;
+    }
+    setSupplierId(draft.supplierId || MOCK_SUPPLIERS[0]?.id || '');
+    setNotes(draft.notes);
+    setExistingCreatedAt(draft.createdAt);
+    setExistingSentAt(draft.sentAt ?? null);
+    setQtyByProductId(
+      draft.items.reduce<QtyMap>((acc, item) => {
+        acc[item.productId] = item.quantity;
+        return acc;
+      }, {}),
+    );
+    setIsLoadedEdit(true);
+  }, [editingId]);
+
+  React.useEffect(() => {
     setSearch('');
-    setQtyByProductId({});
-  }, [supplierId, supplierProducts]);
+    if (editingId && !isLoadedEdit) return;
+    setQtyByProductId((prev) => {
+      const next: QtyMap = {};
+      for (const product of supplierProducts) {
+        next[product.id] = prev[product.id] ?? 0;
+      }
+      return next;
+    });
+  }, [supplierId, supplierProducts, editingId, isLoadedEdit]);
 
   const changeQty = (productId: string, unit: 'kg' | 'ud' | 'bolsa' | 'racion', direction: 'inc' | 'dec') => {
     const step = unit === 'kg' ? 0.1 : 1;
@@ -49,6 +83,7 @@ export default function NuevoPedidoPage() {
         productName: p.name,
         unit: p.unit,
         quantity,
+        receivedQuantity: 0,
         pricePerUnit: p.pricePerUnit,
         lineTotal,
       };
@@ -57,7 +92,7 @@ export default function NuevoPedidoPage() {
 
   const total = items.reduce((acc, row) => acc + row.lineTotal, 0);
 
-  const saveDraft = () => {
+  const saveDraft = (nextStatus: 'draft' | 'sent' = 'draft') => {
     if (!selectedSupplier) {
       setMessage('Selecciona proveedor.');
       return;
@@ -66,11 +101,15 @@ export default function NuevoPedidoPage() {
       setMessage('Añade al menos un producto.');
       return;
     }
+    const id = editingId ?? uid('ped');
     savePedidoDraft({
-      id: `ped-${Date.now()}`,
+      id,
+      supplierId: selectedSupplier.id,
       supplierName: selectedSupplier.name,
+      status: nextStatus,
       notes: notes.trim(),
-      createdAt: new Date().toISOString(),
+      createdAt: existingCreatedAt ?? new Date().toISOString(),
+      sentAt: nextStatus === 'sent' ? existingSentAt ?? new Date().toISOString() : undefined,
       items,
       total: Math.round(total * 100) / 100,
     });
@@ -90,7 +129,9 @@ export default function NuevoPedidoPage() {
     <div className="space-y-4">
       <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-zinc-200">
         <h1 className="text-lg font-black text-zinc-900">Nuevo pedido</h1>
-        <p className="pt-1 text-sm text-zinc-600">Crea un borrador de pedido con productos del catalogo.</p>
+        <p className="pt-1 text-sm text-zinc-600">
+          {editingId ? 'Edita el borrador y guarda cambios.' : 'Crea un borrador de pedido con productos del catalogo.'}
+        </p>
       </section>
 
       <section className="rounded-2xl bg-white p-4 ring-1 ring-zinc-200">
@@ -193,10 +234,17 @@ export default function NuevoPedidoPage() {
         {message ? <p className="mt-2 text-sm text-[#B91C1C]">{message}</p> : null}
         <button
           type="button"
-          onClick={saveDraft}
+          onClick={() => saveDraft('draft')}
           className="mt-3 h-11 w-full rounded-xl bg-[#D32F2F] text-sm font-bold text-white"
         >
-          Guardar borrador
+          {editingId ? 'Guardar cambios' : 'Guardar borrador'}
+        </button>
+        <button
+          type="button"
+          onClick={() => saveDraft('sent')}
+          className="mt-2 h-11 w-full rounded-xl border border-[#2563EB] bg-white text-sm font-bold text-[#2563EB]"
+        >
+          Enviar pedido
         </button>
       </section>
     </div>
