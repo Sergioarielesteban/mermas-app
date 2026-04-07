@@ -2,10 +2,11 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { BookOpen, Info } from 'lucide-react';
+import { BookOpen, Info, ShoppingCart } from 'lucide-react';
 
 const NAV_ITEMS = [
   { href: '/', label: 'Registro de Mermas', Icon: BookOpen },
+  { href: '/pedidos', label: 'Pedidos', Icon: ShoppingCart },
   { href: '/dashboard', label: 'Dashboard', Icon: Info },
 ] as const;
 

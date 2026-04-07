@@ -19,7 +19,6 @@ const NAV_ITEMS: NavItem[] = [
   { href: '/productos', label: 'Añadir Productos', Icon: Drumstick },
   { href: '/resumen', label: 'Resumen', Icon: FileText },
 ];
-
 function titleForPath(pathname: string | null) {
   if (!pathname) return 'Mermas';
   if (pathname === '/') return 'Registro de Mermas';
@@ -36,15 +35,11 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const [confirmLogoutOpen, setConfirmLogoutOpen] = useState(false);
   const { email, logout, localId, localCode, localName } = useAuth();
   const localLabel = localName ?? localCode;
-  const canSeePurchases = localCode === 'MATARO';
 
   const title = useMemo(() => titleForPath(pathname), [pathname]);
   const navItems = useMemo<NavItem[]>(
-    () =>
-      canSeePurchases
-        ? [...NAV_ITEMS, { href: '/pedidos', label: 'Pedidos', Icon: ShoppingCart }]
-        : NAV_ITEMS,
-    [canSeePurchases],
+    () => [...NAV_ITEMS, { href: '/pedidos', label: 'Pedidos', Icon: ShoppingCart }],
+    [],
   );
 
   const confirmAndLogout = () => setConfirmLogoutOpen(true);
