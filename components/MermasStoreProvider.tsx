@@ -808,6 +808,8 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
           return { ok: false, reason: 'No se pudo eliminar: sin permisos o registro no encontrado en este local.' };
         }
         markLocalEdit();
+        // Keep UI consistent even if cloud refetch has a transient failure.
+        setMermas((prev) => prev.filter((m) => m.id !== id));
         await refetchCloud();
         return { ok: true };
       }
