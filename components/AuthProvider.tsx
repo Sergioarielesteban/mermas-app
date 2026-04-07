@@ -64,8 +64,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       .eq('user_id', userId)
       .maybeSingle();
 
+    // Some projects have stricter RLS on `locals`; keep local_id even if nested read fails.
     if (error || !data) {
-      clearProfile();
+      const { data: profileOnly, error: profileErr } = await supabase
+        .from('profiles')
+        .select('local_id')
+        .eq('user_id', userId)
+        .maybeSingle();
+      if (profileErr || !profileOnly?.local_id) {
+        clearProfile();
+        setProfileReady(true);
+        return;
+      }
+      setLocalId(profileOnly.local_id);
+      setLocalCode(null);
+      setLocalName(null);
       setProfileReady(true);
       return;
     }
