@@ -32,7 +32,7 @@ type MermasStore = {
   removeProduct: (id: string) => { ok: boolean; reason?: string };
   addMerma: (input: AddMermaInput) => MermaRecord;
   updateMerma: (id: string, input: AddMermaInput) => { ok: boolean; reason?: string };
-  removeMerma: (id: string) => { ok: boolean; reason?: string };
+  removeMerma: (id: string) => Promise<{ ok: boolean; reason?: string }>;
   exportData: () => PersistedState;
   importData: (payload: PersistedState) => { ok: boolean; reason?: string };
 };
@@ -787,19 +787,19 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
       return { ok: true };
     };
 
-    const removeMerma = (id: string) => {
+    const removeMerma = async (id: string) => {
       const exists = mermas.some((m) => m.id === id);
       if (!exists) return { ok: false, reason: 'Registro no encontrado.' };
       if (useCloud) {
         if (!localId) return { ok: false, reason: 'Perfil del local aún cargando. Reintenta en 2 segundos.' };
         const supabase = getSupabaseClient();
         if (!supabase) return { ok: false, reason: 'Sin conexión.' };
-        void (async () => {
-          const { error } = await supabase.from('mermas').delete().eq('id', id);
-          if (error) return;
-          markLocalEdit();
-          await refetchCloud();
-        })();
+        const { error } = await supabase.from('mermas').delete().eq('id', id);
+        if (error) {
+          return { ok: false, reason: `No se pudo eliminar en nube: ${error.message}` };
+        }
+        markLocalEdit();
+        await refetchCloud();
         return { ok: true };
       }
       markLocalEdit();

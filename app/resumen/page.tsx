@@ -106,10 +106,10 @@ export default function ResumenPage() {
     cancelEdit();
   };
 
-  const deleteMerma = (id: string) => {
+  const deleteMerma = async (id: string) => {
     const ok = window.confirm('¿Seguro que quieres eliminar esta merma?');
     if (!ok) return;
-    const result = removeMerma(id);
+    const result = await removeMerma(id);
     setMessage(result.ok ? 'Merma eliminada.' : result.reason ?? 'No se pudo eliminar.');
   };
 
@@ -270,7 +270,9 @@ export default function ResumenPage() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => deleteMerma(m.id)}
+                    onClick={() => {
+                      void deleteMerma(m.id);
+                    }}
                     className="h-9 rounded-lg bg-red-600 px-3 text-xs font-bold text-white"
                   >
                     Eliminar
