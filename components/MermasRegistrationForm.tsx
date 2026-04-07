@@ -76,6 +76,11 @@ export default function MermasRegistrationForm() {
   }, []);
 
   const selectedProduct = products.find((p) => p.id === productId) ?? null;
+  const quantityLabel = selectedProduct?.unit === 'kg' ? 'Cantidad (gramos)' : 'Cantidad';
+  const quantityHint =
+    selectedProduct?.unit === 'kg'
+      ? 'Para productos por kg, introduce gramos (ej: 300 = 0,30 kg).'
+      : null;
   const filteredProducts = products.filter((p) =>
     p.name.toLowerCase().includes(productSearch.trim().toLowerCase()),
   );
@@ -118,9 +123,10 @@ export default function MermasRegistrationForm() {
       return;
     }
 
+    const normalizedQty = selectedProduct?.unit === 'kg' ? quantity / 1000 : quantity;
     const record = addMerma({
       productId,
-      quantity,
+      quantity: normalizedQty,
       motiveKey,
       notes,
       occurredAt: occurredAt.toISOString(),
@@ -213,7 +219,7 @@ export default function MermasRegistrationForm() {
 
           <div className="rounded-2xl bg-white p-3 shadow-sm ring-1 ring-zinc-200">
             <label className="mb-2 block text-xs font-semibold text-zinc-700">
-              Cantidad <span className="text-[#B91C1C]">*</span>
+              {quantityLabel} <span className="text-[#B91C1C]">*</span>
             </label>
             <div className="grid grid-cols-3 items-center gap-2">
               <button
@@ -268,6 +274,7 @@ export default function MermasRegistrationForm() {
                 +
               </button>
             </div>
+            {quantityHint ? <p className="pt-1 text-xs text-zinc-500">{quantityHint}</p> : null}
           </div>
 
           <div className="rounded-2xl bg-white p-3 shadow-sm ring-1 ring-zinc-200">
