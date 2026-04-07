@@ -572,7 +572,8 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
   }, [hydrated, legacyMode, products, mermas]);
 
   const store = useMemo<MermasStore>(() => {
-    const useCloud = Boolean(cloudMode && localId);
+    // If Supabase auth is active, avoid falling back to local writes while profile/local is loading.
+    const useCloud = Boolean(supabaseEnabled && email);
 
     const addProduct = (input: CreateProductInput) => {
       const trimmed = input.name.trim();
@@ -583,6 +584,7 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
       if (exists) return;
 
       if (useCloud) {
+        if (!localId) return;
         const supabase = getSupabaseClient();
         if (!supabase) return;
         void (async () => {
@@ -621,6 +623,7 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
       if (exists) return;
 
       if (useCloud) {
+        if (!localId) return;
         const supabase = getSupabaseClient();
         if (!supabase) return;
         void (async () => {
@@ -662,6 +665,7 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
         return { ok: false, reason: 'No se puede eliminar: tiene mermas registradas.' };
       }
       if (useCloud) {
+        if (!localId) return { ok: false, reason: 'Perfil del local aún cargando. Reintenta en 2 segundos.' };
         const supabase = getSupabaseClient();
         if (!supabase) return { ok: false, reason: 'Sin conexión.' };
         void (async () => {
@@ -695,6 +699,7 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
       };
 
       if (useCloud) {
+        if (!localId) return record;
         const supabase = getSupabaseClient();
         if (!supabase) return record;
         markLocalEdit();
@@ -739,6 +744,7 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
       const costEur = Math.round(qty * product.pricePerUnit * 100) / 100;
 
       if (useCloud) {
+        if (!localId) return { ok: false, reason: 'Perfil del local aún cargando. Reintenta en 2 segundos.' };
         const supabase = getSupabaseClient();
         if (!supabase) return { ok: false, reason: 'Sin conexión.' };
         void (async () => {
@@ -785,6 +791,7 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
       const exists = mermas.some((m) => m.id === id);
       if (!exists) return { ok: false, reason: 'Registro no encontrado.' };
       if (useCloud) {
+        if (!localId) return { ok: false, reason: 'Perfil del local aún cargando. Reintenta en 2 segundos.' };
         const supabase = getSupabaseClient();
         if (!supabase) return { ok: false, reason: 'Sin conexión.' };
         void (async () => {
@@ -827,7 +834,7 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
       exportData,
       importData,
     };
-  }, [cloudMode, localId, markLocalEdit, products, mermas, refetchCloud]);
+  }, [email, localId, markLocalEdit, mermas, products, refetchCloud, supabaseEnabled]);
 
   return <StoreContext.Provider value={store}>{children}</StoreContext.Provider>;
 }
