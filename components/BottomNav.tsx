@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { BookOpen, Info, ShoppingCart } from 'lucide-react';
 import { useAuth } from '@/components/AuthProvider';
+import { canAccessPedidos } from '@/lib/pedidos-access';
 
 const NAV_ITEMS = [
   { href: '/', label: 'Registro de Mermas', Icon: BookOpen },
@@ -13,8 +14,8 @@ const NAV_ITEMS = [
 
 export default function BottomNav() {
   const pathname = usePathname();
-  const { localCode } = useAuth();
-  const items = (localCode ?? '').toUpperCase() === 'MATARO'
+  const { localCode, localName, localId, email } = useAuth();
+  const items = canAccessPedidos(localCode, email, localName, localId)
     ? NAV_ITEMS
     : NAV_ITEMS.filter((item) => item.href !== '/pedidos');
 

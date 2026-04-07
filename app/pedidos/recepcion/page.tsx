@@ -6,8 +6,8 @@ import { canAccessPedidos } from '@/lib/pedidos-access';
 import { getPedidoDrafts, updatePedidoLineReceived, type PedidoDraft } from '@/lib/pedidos-storage';
 
 export default function RecepcionPedidosPage() {
-  const { localCode, email } = useAuth();
-  const canUse = canAccessPedidos(localCode, email);
+  const { localCode, localName, localId, email } = useAuth();
+  const canUse = canAccessPedidos(localCode, email, localName, localId);
   const [orders, setOrders] = React.useState<PedidoDraft[]>([]);
   const [supplierFilter, setSupplierFilter] = React.useState('all');
   const [dateFilter, setDateFilter] = React.useState('');

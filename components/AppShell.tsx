@@ -36,7 +36,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const [confirmLogoutOpen, setConfirmLogoutOpen] = useState(false);
   const { email, logout, localId, localCode, localName } = useAuth();
   const localLabel = localName ?? localCode;
-  const showPedidos = canAccessPedidos(localCode, email);
+  const showPedidos = canAccessPedidos(localCode, email, localName, localId);
 
   const title = useMemo(() => titleForPath(pathname), [pathname]);
   const navItems = useMemo<NavItem[]>(

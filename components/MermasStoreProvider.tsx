@@ -389,8 +389,10 @@ function loadInitialState(): PersistedState {
 }
 
 export function MermasStoreProvider({ children }: { children: React.ReactNode }) {
-  const { localId, profileReady } = useAuth();
+  const { localId, profileReady, email } = useAuth();
+  const supabaseEnabled = isSupabaseEnabled();
   const cloudMode = Boolean(profileReady && localId && isSupabaseEnabled());
+  const legacyMode = !supabaseEnabled || !email;
   const [cloudDataLoaded, setCloudDataLoaded] = useState(false);
 
   const [products, setProducts] = useState<Product[]>(() => sortProductsByName(DEFAULT_PRODUCTS));
@@ -427,8 +429,9 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
 
   useEffect(() => {
     if (!isBrowser()) return;
-    if (isSupabaseEnabled() && !profileReady) return;
-    if (profileReady && localId) {
+    // With Supabase enabled, never fall back to legacy local state while auth/profile is still resolving.
+    if (supabaseEnabled && !profileReady) return;
+    if (!legacyMode) {
       queueMicrotask(() => {
         setHydrated(true);
       });
@@ -440,7 +443,7 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
       setMermas(initial.mermas);
       setHydrated(true);
     });
-  }, [localId, profileReady]);
+  }, [legacyMode, localId, profileReady, supabaseEnabled]);
 
   useEffect(() => {
     if (!isBrowser() || !hydrated || !cloudMode || !localId) return;
@@ -485,15 +488,15 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
   useEffect(() => {
     if (!isBrowser()) return;
     if (!hydrated) return;
-    if (cloudMode) return;
+    if (!legacyMode) return;
     const next: PersistedState = { products, mermas };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
-  }, [cloudMode, hydrated, products, mermas]);
+  }, [hydrated, legacyMode, products, mermas]);
 
   useEffect(() => {
     if (!isBrowser()) return;
     if (!hydrated) return;
-    if (cloudMode) return;
+    if (!legacyMode) return;
     const email = localStorage.getItem(AUTH_KEY)?.trim().toLowerCase();
     if (!email) return;
 
@@ -545,12 +548,12 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
       cancelled = true;
       window.clearInterval(intervalId);
     };
-  }, [cloudMode, hydrated]);
+  }, [hydrated, legacyMode]);
 
   useEffect(() => {
     if (!isBrowser()) return;
     if (!hydrated) return;
-    if (cloudMode) return;
+    if (!legacyMode) return;
     const email = localStorage.getItem(AUTH_KEY);
     if (!email) return;
 
@@ -565,7 +568,7 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
     }, 1400);
 
     return () => window.clearTimeout(timeout);
-  }, [cloudMode, hydrated, products, mermas]);
+  }, [hydrated, legacyMode, products, mermas]);
 
   const store = useMemo<MermasStore>(() => {
     const useCloud = Boolean(cloudMode && localId);

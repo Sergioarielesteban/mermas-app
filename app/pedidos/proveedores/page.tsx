@@ -6,8 +6,8 @@ import { canAccessPedidos } from '@/lib/pedidos-access';
 import { MOCK_SUPPLIERS } from '@/lib/pedidos-mock-catalog';
 
 export default function ProveedoresPage() {
-  const { localCode, email } = useAuth();
-  const canUse = canAccessPedidos(localCode, email);
+  const { localCode, localName, localId, email } = useAuth();
+  const canUse = canAccessPedidos(localCode, email, localName, localId);
   if (!canUse) {
     return (
       <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-zinc-200">

@@ -13,8 +13,8 @@ type QtyMap = Record<string, number>;
 export default function NuevoPedidoPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { localCode, email } = useAuth();
-  const canUse = canAccessPedidos(localCode, email);
+  const { localCode, localName, localId, email } = useAuth();
+  const canUse = canAccessPedidos(localCode, email, localName, localId);
   const editingId = searchParams.get('id');
   const [supplierId, setSupplierId] = React.useState(MOCK_SUPPLIERS[0]?.id ?? '');
   const [notes, setNotes] = React.useState('');
