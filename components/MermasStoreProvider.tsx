@@ -423,8 +423,9 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
 
   useEffect(() => {
     if (!profileReady) return;
-    if (!localId) setCloudDataLoaded(true);
-    else setCloudDataLoaded(false);
+    queueMicrotask(() => {
+      setCloudDataLoaded(!localId);
+    });
   }, [profileReady, localId]);
 
   useEffect(() => {
@@ -826,7 +827,7 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
       exportData,
       importData,
     };
-  }, [cloudDataLoaded, cloudMode, localId, markLocalEdit, products, mermas, refetchCloud]);
+  }, [cloudMode, localId, markLocalEdit, products, mermas, refetchCloud]);
 
   return <StoreContext.Provider value={store}>{children}</StoreContext.Provider>;
 }

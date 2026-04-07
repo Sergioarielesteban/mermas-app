@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import AppShell from '@/components/AppShell';
 import BottomNav from '@/components/BottomNav';
@@ -10,12 +10,7 @@ export default function AppFrame({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const { email, loading } = useAuth();
-  const [mounted, setMounted] = useState(false);
   const isLogin = pathname === '/login';
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
 
   useEffect(() => {
     if (loading) return;
@@ -24,7 +19,7 @@ export default function AppFrame({ children }: { children: React.ReactNode }) {
   }, [email, isLogin, loading, router]);
 
   // Keep server and first client paint aligned to avoid hydration mismatch.
-  if (!mounted || loading || (!isLogin && !email)) {
+  if (loading || (!isLogin && !email)) {
     return (
       <main className="grid min-h-screen place-items-center bg-zinc-50 px-4">
         <p className="text-sm font-semibold text-zinc-600">Cargando sesión...</p>

@@ -26,7 +26,7 @@ export default function NuevoPedidoPage() {
   const [existingSentAt, setExistingSentAt] = React.useState<string | null>(null);
 
   const selectedSupplier = MOCK_SUPPLIERS.find((s) => s.id === supplierId) ?? null;
-  const supplierProducts = selectedSupplier?.products ?? [];
+  const supplierProducts = React.useMemo(() => selectedSupplier?.products ?? [], [selectedSupplier]);
   const filteredProducts = supplierProducts.filter((p) =>
     p.name.toLowerCase().includes(search.trim().toLowerCase()),
   );

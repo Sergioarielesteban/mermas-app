@@ -60,7 +60,6 @@ export default function MermasRegistrationForm() {
   const savedBannerTimeoutRef = React.useRef<number | null>(null);
   const validationBannerTimeoutRef = React.useRef<number | null>(null);
 
-  const selectedMotive = motives.find((m) => m.key === motiveKey) ?? null;
   const selectedProduct = products.find((p) => p.id === productId) ?? null;
   const quantityLabel = selectedProduct?.unit === 'kg' ? 'Cantidad (kg)' : 'Cantidad';
   const quantityHint = selectedProduct?.unit === 'kg' ? 'Admite decimales (ej: 0,30 kg).' : null;
@@ -138,7 +137,7 @@ export default function MermasRegistrationForm() {
       return;
     }
 
-    const record = addMerma({
+    addMerma({
       productId,
       quantity,
       motiveKey,
