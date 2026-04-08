@@ -116,14 +116,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     let isMounted = true;
-    void supabase.auth.getSession().then(({ data }) => {
+    const safetyTimeout = window.setTimeout(() => {
       if (!isMounted) return;
-      const sessionEmail = data.session?.user?.email?.toLowerCase() ?? null;
-      setEmail(sessionEmail);
-      persistEmail(sessionEmail);
+      // Prevent indefinite "Cargando sesión..." when auth request hangs.
       setLoading(false);
-      void loadProfileForUser(data.session?.user?.id);
-    });
+      setProfileReady(true);
+    }, 8000);
+    void supabase.auth
+      .getSession()
+      .then(({ data }) => {
+        if (!isMounted) return;
+        const sessionEmail = data.session?.user?.email?.toLowerCase() ?? null;
+        setEmail(sessionEmail);
+        persistEmail(sessionEmail);
+        setLoading(false);
+        void loadProfileForUser(data.session?.user?.id);
+      })
+      .catch(() => {
+        if (!isMounted) return;
+        setLoading(false);
+        setProfileReady(true);
+      })
+      .finally(() => {
+        window.clearTimeout(safetyTimeout);
+      });
 
     const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
       const nextEmail = session?.user?.email?.toLowerCase() ?? null;
@@ -135,6 +151,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     return () => {
       isMounted = false;
+      window.clearTimeout(safetyTimeout);
       sub.subscription.unsubscribe();
     };
   }, [loadProfileForUser]);
