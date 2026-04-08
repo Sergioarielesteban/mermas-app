@@ -14,17 +14,29 @@ export default function AppFrame({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (loading) return;
-    if (!email && !isLogin) router.replace('/login');
+    if (!email && !isLogin) {
+      router.replace('/login');
+      // Fallback in case client router transition gets stuck.
+      window.setTimeout(() => {
+        if (window.location.pathname !== '/login') {
+          window.location.replace('/login');
+        }
+      }, 400);
+    }
     if (email && isLogin) router.replace('/');
   }, [email, isLogin, loading, router]);
 
   // Keep server and first client paint aligned to avoid hydration mismatch.
-  if (loading || (!isLogin && !email)) {
+  if (loading) {
     return (
       <main className="grid min-h-screen place-items-center bg-zinc-50 px-4">
         <p className="text-sm font-semibold text-zinc-600">Cargando sesión...</p>
       </main>
     );
+  }
+
+  if (!email && !isLogin) {
+    return null;
   }
 
   if (isLogin) {
