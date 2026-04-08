@@ -98,7 +98,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           </button>
           <Image
             src="/logo-can-xampa.png"
-            alt="Can Xampa"
+            alt="Xampa One"
             width={120}
             height={40}
             className="h-8 w-auto shrink-0 rounded-md border border-white/25 bg-white/95 p-1"
@@ -159,14 +159,14 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           <div className="flex items-center gap-3">
             <Image
               src="/logo-can-xampa.png"
-              alt="Logo Can Xampa"
+              alt="Logo Xampa One"
               width={108}
               height={108}
               className="h-14 w-14 rounded-xl border border-white/25 bg-white object-contain p-1 shadow-sm"
             />
             <div className="min-w-0">
-              <div className="truncate text-sm font-black tracking-wide">CAN XAMPA</div>
-              <div className="truncate text-xs text-white/85">Gestión de mermas</div>
+              <div className="truncate text-sm font-black tracking-wide">XAMPA ONE</div>
+              <div className="truncate text-xs text-white/85">Gestión operativa</div>
             </div>
           </div>
           <div className="mt-3 rounded-xl bg-white/12 px-3 py-2 text-xs text-white/90 backdrop-blur">

@@ -7,9 +7,7 @@ import { useAuth } from '@/components/AuthProvider';
 import { getSupabaseClient } from '@/lib/supabase-client';
 import { canAccessPedidos } from '@/lib/pedidos-access';
 import {
-  deleteOrder,
   fetchOrders,
-  setOrderStatus,
   type PedidoOrder,
 } from '@/lib/pedidos-supabase';
 
@@ -26,7 +24,7 @@ function normalizeWhatsappNumber(raw: string | undefined) {
 function buildWhatsappOrderMessage(order: PedidoOrder, deliveryDate: string) {
   const fechaPedido = new Date(order.createdAt).toLocaleDateString('es-ES');
   const lines = order.items.map(
-    (item) => `- ${item.productName}: ${item.quantity} ${item.unit} (${item.lineTotal.toFixed(2)} EUR)`,
+    (item) => `- ${item.productName}: ${item.quantity} ${item.unit}`,
   );
   return [
     `Proveedor: ${order.supplierName}`,
@@ -39,7 +37,6 @@ function buildWhatsappOrderMessage(order: PedidoOrder, deliveryDate: string) {
     '',
     ...lines,
     '',
-    `Total: ${order.total.toFixed(2)} EUR`,
     order.notes ? `Notas: ${order.notes}` : '',
     '',
     'Por favor, confirmar pedido. Gracias.',
@@ -140,30 +137,6 @@ export default function PedidosPage() {
           <p className="pt-2 text-2xl font-black text-zinc-900">{sentOrders.length}</p>
           <p className="pt-1 text-xs text-zinc-500">Toca para ver el listado de pedidos de hoy.</p>
         </button>
-      </section>
-
-      <section className="rounded-2xl bg-white p-4 ring-1 ring-zinc-200">
-        <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Accesos</p>
-        <div className="mt-3 grid grid-cols-1 gap-2">
-          <Link
-            href="/pedidos/nuevo"
-            className="rounded-xl border border-zinc-300 bg-zinc-50 px-3 py-3 text-sm font-semibold text-zinc-800"
-          >
-            Nuevo pedido
-          </Link>
-          <Link
-            href="/pedidos/proveedores"
-            className="rounded-xl border border-zinc-300 bg-zinc-50 px-3 py-3 text-sm font-semibold text-zinc-800"
-          >
-            Proveedores y catalogo
-          </Link>
-          <Link
-            href="/pedidos/recepcion"
-            className="rounded-xl border border-zinc-300 bg-zinc-50 px-3 py-3 text-sm font-semibold text-zinc-800"
-          >
-            Recepcion de albaranes
-          </Link>
-        </div>
       </section>
 
       <section className="rounded-2xl bg-white p-4 ring-1 ring-zinc-200">

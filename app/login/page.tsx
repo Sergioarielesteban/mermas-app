@@ -59,7 +59,7 @@ export default function LoginPage() {
         <div className="bg-gradient-to-r from-[#B91C1C] to-[#D32F2F] p-5">
           <Image
             src="/logo-can-xampa.png"
-            alt="Can Xampa"
+            alt="Xampa One"
             width={280}
             height={100}
             className="h-14 w-auto rounded-xl bg-white px-2 py-1 object-contain"

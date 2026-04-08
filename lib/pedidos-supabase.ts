@@ -139,6 +139,15 @@ export async function updateSupplier(
   return data as SupplierRow;
 }
 
+export async function deleteSupplier(supabase: SupabaseClient, localId: string, supplierId: string) {
+  const { error } = await supabase
+    .from('pedido_suppliers')
+    .delete()
+    .eq('id', supplierId)
+    .eq('local_id', localId);
+  if (error) throw new Error(error.message);
+}
+
 export async function createSupplierProduct(
   supabase: SupabaseClient,
   localId: string,

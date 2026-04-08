@@ -16,6 +16,38 @@ import {
 
 type QtyMap = Record<string, number>;
 
+function normalizeWhatsappNumber(raw: string | undefined) {
+  if (!raw) return null;
+  const digits = raw.replace(/[^\d]/g, '');
+  return digits || null;
+}
+
+function buildWhatsappDraftMessage(input: {
+  supplierName: string;
+  createdAtIso: string;
+  deliveryDate: string;
+  notes: string;
+  items: PedidoOrderItem[];
+}) {
+  const fechaPedido = new Date(input.createdAtIso).toLocaleDateString('es-ES');
+  return [
+    `Proveedor: ${input.supplierName}`,
+    `Fecha pedido: ${fechaPedido}`,
+    `Fecha entrega: ${input.deliveryDate}`,
+    'Local: ____________________',
+    'Pedido por: _______________',
+    '',
+    'PEDIDO:',
+    '',
+    ...input.items.map((item) => `- ${item.productName}: ${item.quantity} ${item.unit}`),
+    '',
+    input.notes ? `Notas: ${input.notes}` : '',
+    'Por favor, confirmar pedido. Gracias.',
+  ]
+    .filter(Boolean)
+    .join('\n');
+}
+
 export default function NuevoPedidoPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -165,6 +197,54 @@ export default function NuevoPedidoPage() {
       })),
     })
       .then(() => router.push('/pedidos'))
+      .catch((err: Error) => setMessage(err.message));
+  };
+
+  const sendToWhatsappInOneStep = () => {
+    if (!selectedSupplier) return setMessage('Selecciona proveedor.');
+    if (items.length === 0) return setMessage('Añade al menos un producto.');
+    if (!localId) return setMessage('Perfil del local aún cargando.');
+    const phone = normalizeWhatsappNumber(selectedSupplier.contact);
+    if (!phone) return setMessage('El proveedor no tiene teléfono válido en contacto.');
+    const suggested = new Date();
+    suggested.setDate(suggested.getDate() + 1);
+    const picked = window.prompt('Fecha de entrega (AAAA-MM-DD):', suggested.toISOString().slice(0, 10))?.trim();
+    if (!picked) return;
+    const parsed = new Date(`${picked}T00:00:00`);
+    if (Number.isNaN(parsed.getTime())) return setMessage('Fecha de entrega inválida. Usa AAAA-MM-DD.');
+    const supabase = getSupabaseClient();
+    if (!supabase) return setMessage('Sin conexión con Supabase.');
+
+    void saveOrder(supabase, localId, {
+      orderId: existingOrderId ?? undefined,
+      supplierId: selectedSupplier.id,
+      status: 'sent',
+      notes: notes.trim(),
+      createdAt: existingCreatedAt ?? new Date().toISOString(),
+      sentAt: existingSentAt ?? new Date().toISOString(),
+      items: items.map((item) => ({
+        supplierProductId: item.supplierProductId,
+        productName: item.productName,
+        unit: item.unit,
+        quantity: item.quantity,
+        receivedQuantity: item.receivedQuantity,
+        pricePerUnit: item.pricePerUnit,
+        lineTotal: item.lineTotal,
+      })),
+    })
+      .then(() => {
+        const text = encodeURIComponent(
+          buildWhatsappDraftMessage({
+            supplierName: selectedSupplier.name,
+            createdAtIso: existingCreatedAt ?? new Date().toISOString(),
+            deliveryDate: parsed.toLocaleDateString('es-ES'),
+            notes: notes.trim(),
+            items,
+          }),
+        );
+        window.open(`https://wa.me/${phone}?text=${text}`, '_blank', 'noopener,noreferrer');
+        router.push('/pedidos');
+      })
       .catch((err: Error) => setMessage(err.message));
   };
 
@@ -318,10 +398,10 @@ export default function NuevoPedidoPage() {
           </button>
           <button
             type="button"
-            onClick={() => saveDraft('sent')}
+            onClick={sendToWhatsappInOneStep}
             className="h-11 rounded-xl border border-[#2563EB] bg-white text-sm font-bold text-[#2563EB]"
           >
-            Enviar pedido
+            Enviar pedido por WhatsApp
           </button>
         </div>
       </section>

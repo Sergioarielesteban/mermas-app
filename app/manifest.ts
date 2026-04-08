@@ -2,9 +2,9 @@ import type { MetadataRoute } from 'next';
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: 'Can Xampa Mermas',
-    short_name: 'Mermas',
-    description: 'Gestión de mermas para hostelería',
+    name: 'Xampa One',
+    short_name: 'XampaOne',
+    description: 'Gestión operativa para restaurantes',
     start_url: '/',
     display: 'standalone',
     background_color: '#f4f5f7',

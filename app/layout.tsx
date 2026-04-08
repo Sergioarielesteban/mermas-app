@@ -18,8 +18,8 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   metadataBase: new URL("http://localhost:3000"),
-  title: "Can Xampa Mermas",
-  description: "Gestión de mermas para hostelería",
+  title: "Xampa One",
+  description: "Gestión operativa para restaurantes",
   manifest: "/manifest.webmanifest",
   icons: {
     icon: "/logo-can-xampa.png",
@@ -28,14 +28,14 @@ export const metadata: Metadata = {
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
-    title: "Can Xampa Mermas",
+    title: "Xampa One",
   },
   formatDetection: {
     telephone: false,
   },
   openGraph: {
-    title: "Can Xampa Mermas",
-    description: "Gestión de mermas para hostelería",
+    title: "Xampa One",
+    description: "Gestión operativa para restaurantes",
     images: ["/logo-can-xampa.png"],
   },
 };

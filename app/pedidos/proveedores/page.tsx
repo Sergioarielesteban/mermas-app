@@ -8,6 +8,7 @@ import { canAccessPedidos } from '@/lib/pedidos-access';
 import {
   createSupplier,
   createSupplierProduct,
+  deleteSupplier,
   fetchSuppliersWithProducts,
   setSupplierProductActive,
   updateSupplier,
@@ -160,6 +161,20 @@ export default function ProveedoresPage() {
       .catch((err: Error) => setMessage(err.message));
   };
 
+  const removeSupplier = (supplierId: string, supplierName: string) => {
+    if (!localId) return setMessage('Perfil del local no cargado. Cierra sesión y vuelve a entrar.');
+    const ok = window.confirm(`¿Eliminar proveedor "${supplierName}"?`);
+    if (!ok) return;
+    const supabase = getSupabaseClient();
+    if (!supabase) return setMessage('Supabase no disponible en esta sesión.');
+    void deleteSupplier(supabase, localId, supplierId)
+      .then(() => {
+        setMessage('Proveedor eliminado.');
+        reload();
+      })
+      .catch((err: Error) => setMessage(`No se pudo eliminar proveedor: ${err.message}`));
+  };
+
   if (!canUse) {
     return (
       <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-zinc-200">
@@ -268,22 +283,31 @@ export default function ProveedoresPage() {
         <section key={supplier.id} className="rounded-2xl bg-white p-4 ring-1 ring-zinc-200">
           <div className="flex items-center justify-between gap-2">
             <p className="text-sm font-black text-zinc-900">{supplier.name}</p>
-            <button
-              type="button"
-              onClick={() => {
-                setEditingSupplierId((prev) => (prev === supplier.id ? null : supplier.id));
-                setSupplierDrafts((prev) => ({
-                  ...prev,
-                  [supplier.id]: {
-                    name: prev[supplier.id]?.name ?? supplier.name,
-                    contact: prev[supplier.id]?.contact ?? supplier.contact ?? '',
-                  },
-                }));
-              }}
-              className="rounded-lg border border-zinc-300 bg-white px-2 py-1 text-xs font-semibold text-zinc-700"
-            >
-              {editingSupplierId === supplier.id ? 'Cerrar' : 'Editar proveedor'}
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setEditingSupplierId((prev) => (prev === supplier.id ? null : supplier.id));
+                  setSupplierDrafts((prev) => ({
+                    ...prev,
+                    [supplier.id]: {
+                      name: prev[supplier.id]?.name ?? supplier.name,
+                      contact: prev[supplier.id]?.contact ?? supplier.contact ?? '',
+                    },
+                  }));
+                }}
+                className="rounded-lg border border-zinc-300 bg-white px-2 py-1 text-xs font-semibold text-zinc-700"
+              >
+                {editingSupplierId === supplier.id ? 'Cerrar' : 'Editar proveedor'}
+              </button>
+              <button
+                type="button"
+                onClick={() => removeSupplier(supplier.id, supplier.name)}
+                className="rounded-lg border border-[#B91C1C] bg-white px-2 py-1 text-xs font-semibold text-[#B91C1C]"
+              >
+                Eliminar proveedor
+              </button>
+            </div>
           </div>
           <p className="pt-1 text-xs text-zinc-500">Contacto: {supplier.contact || '-'}</p>
           {editingSupplierId === supplier.id ? (
