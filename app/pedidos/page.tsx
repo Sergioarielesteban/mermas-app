@@ -7,6 +7,7 @@ import { useAuth } from '@/components/AuthProvider';
 import { getSupabaseClient } from '@/lib/supabase-client';
 import { canAccessPedidos } from '@/lib/pedidos-access';
 import {
+  deleteOrder,
   fetchOrders,
   type PedidoOrder,
 } from '@/lib/pedidos-supabase';
@@ -164,6 +165,23 @@ export default function PedidosPage() {
               >
                 Enviar WhatsApp
               </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (!localId) return;
+                  const supabase = getSupabaseClient();
+                  if (!supabase) return;
+                  void deleteOrder(supabase, localId, order.id)
+                    .then(() => {
+                      setMessage('Pedido enviado eliminado.');
+                      reloadOrders();
+                    })
+                    .catch((err: Error) => setMessage(err.message));
+                }}
+                className="mt-2 ml-3 text-xs font-semibold text-[#B91C1C]"
+              >
+                Eliminar
+              </button>
               {expandedId === order.id ? (
                 <div className="mt-2 space-y-1">
                   {order.items.map((item) => (
@@ -195,6 +213,23 @@ export default function PedidosPage() {
                 className="mt-2 text-xs font-semibold text-[#2563EB]"
               >
                 {expandedId === order.id ? 'Ocultar detalle' : 'Ver detalle'}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (!localId) return;
+                  const supabase = getSupabaseClient();
+                  if (!supabase) return;
+                  void deleteOrder(supabase, localId, order.id)
+                    .then(() => {
+                      setMessage('Pedido histórico eliminado.');
+                      reloadOrders();
+                    })
+                    .catch((err: Error) => setMessage(err.message));
+                }}
+                className="mt-2 ml-3 text-xs font-semibold text-[#B91C1C]"
+              >
+                Eliminar
               </button>
               {expandedId === order.id ? (
                 <div className="mt-2 space-y-1">

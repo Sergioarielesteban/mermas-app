@@ -50,11 +50,17 @@ export default function RecepcionPedidosPage() {
     if (!supabase) return;
     void (async () => {
       try {
-        for (const item of order.items) {
-          await updateOrderItemReceived(supabase, localId, item.id, item.quantity);
+        const updates = await Promise.allSettled(
+          order.items.map((item) => updateOrderItemReceived(supabase, localId, item.id, item.quantity)),
+        );
+        const failed = updates.filter((r) => r.status === 'rejected');
+        if (failed.length > 0) {
+          setMessage(`No se pudieron actualizar ${failed.length} líneas del pedido.`);
+          return;
         }
         await setOrderStatus(supabase, localId, order.id, 'received');
-        reloadOrders();
+        setMessage('Pedido marcado como recibido.');
+        await reloadOrders();
       } catch (err) {
         setMessage(err instanceof Error ? err.message : 'No se pudo marcar recibido.');
       }
@@ -66,10 +72,33 @@ export default function RecepcionPedidosPage() {
     const supabase = getSupabaseClient();
     if (!supabase) return;
     const next = Math.max(0, Math.min(max, Math.round((current + step) * 100) / 100));
+    if (next === current) return;
+
+    let shouldCloseOrder = false;
+    // Optimistic UI: reflect line changes instantly.
+    setOrders((prev) =>
+      prev.map((order) => {
+        if (order.id !== orderId) return order;
+        const nextItems = order.items.map((item) =>
+          item.id === itemId ? { ...item, receivedQuantity: next } : item,
+        );
+        shouldCloseOrder = nextItems.every((item) => item.receivedQuantity >= item.quantity);
+        return { ...order, items: nextItems };
+      }),
+    );
+
     void updateOrderItemReceived(supabase, localId, itemId, next)
-      .then(() => reloadOrders())
-      .catch((err: Error) => setMessage(err.message));
-    void orderId;
+      .then(async () => {
+        if (!shouldCloseOrder) return;
+        await setOrderStatus(supabase, localId, orderId, 'received');
+        setMessage('Pedido completado y movido a histórico recibido.');
+        await reloadOrders();
+      })
+      .catch((err: Error) => {
+        // Re-sync from backend if optimistic update failed.
+        void reloadOrders();
+        setMessage(err.message);
+      });
   };
 
   if (!canUse) {
