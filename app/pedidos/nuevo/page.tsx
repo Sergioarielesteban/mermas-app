@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import React from 'react';
 import { useAuth } from '@/components/AuthProvider';
@@ -173,6 +174,15 @@ export default function NuevoPedidoPage() {
 
   return (
     <div className="space-y-4">
+      <section>
+        <Link
+          href="/pedidos"
+          className="inline-flex h-9 items-center rounded-lg border border-zinc-300 bg-white px-3 text-sm font-semibold text-zinc-700"
+        >
+          ← Atras
+        </Link>
+      </section>
+
       <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-zinc-200">
         <h1 className="text-lg font-black text-zinc-900">Nuevo pedido</h1>
         <p className="pt-1 text-sm text-zinc-600">

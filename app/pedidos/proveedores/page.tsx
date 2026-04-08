@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import React from 'react';
 import { useAuth } from '@/components/AuthProvider';
 import { getSupabaseClient } from '@/lib/supabase-client';
@@ -83,6 +84,15 @@ export default function ProveedoresPage() {
   }
   return (
     <div className="space-y-4">
+      <section>
+        <Link
+          href="/pedidos"
+          className="inline-flex h-9 items-center rounded-lg border border-zinc-300 bg-white px-3 text-sm font-semibold text-zinc-700"
+        >
+          ← Atras
+        </Link>
+      </section>
+
       <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-zinc-200">
         <h1 className="text-lg font-black text-zinc-900">Proveedores y catalogo</h1>
         <p className="pt-1 text-sm text-zinc-600">Gestiona proveedores reales y su catalogo en Supabase.</p>
@@ -99,13 +109,13 @@ export default function ProveedoresPage() {
             value={supplierName}
             onChange={(e) => setSupplierName(e.target.value)}
             placeholder="Nombre proveedor"
-            className="h-10 rounded-xl border border-zinc-200 bg-zinc-50 px-3 text-sm outline-none"
+            className="h-10 rounded-xl border border-zinc-300 bg-white px-3 text-sm text-zinc-900 placeholder:text-zinc-500 outline-none"
           />
           <input
             value={supplierContact}
             onChange={(e) => setSupplierContact(e.target.value)}
             placeholder="Contacto (email/teléfono)"
-            className="h-10 rounded-xl border border-zinc-200 bg-zinc-50 px-3 text-sm outline-none"
+            className="h-10 rounded-xl border border-zinc-300 bg-white px-3 text-sm text-zinc-900 placeholder:text-zinc-500 outline-none"
           />
           <button
             type="button"
@@ -123,7 +133,7 @@ export default function ProveedoresPage() {
           <select
             value={productSupplierId}
             onChange={(e) => setProductSupplierId(e.target.value)}
-            className="h-10 rounded-xl border border-zinc-200 bg-zinc-50 px-3 text-sm outline-none"
+            className="h-10 rounded-xl border border-zinc-300 bg-white px-3 text-sm text-zinc-900 outline-none"
           >
             {suppliers.map((s) => (
               <option key={s.id} value={s.id}>
@@ -135,13 +145,13 @@ export default function ProveedoresPage() {
             value={productName}
             onChange={(e) => setProductName(e.target.value)}
             placeholder="Nombre producto"
-            className="h-10 rounded-xl border border-zinc-200 bg-zinc-50 px-3 text-sm outline-none"
+            className="h-10 rounded-xl border border-zinc-300 bg-white px-3 text-sm text-zinc-900 placeholder:text-zinc-500 outline-none"
           />
           <div className="grid grid-cols-2 gap-2">
             <select
               value={productUnit}
               onChange={(e) => setProductUnit(e.target.value as Unit)}
-              className="h-10 rounded-xl border border-zinc-200 bg-zinc-50 px-3 text-sm outline-none"
+              className="h-10 rounded-xl border border-zinc-300 bg-white px-3 text-sm text-zinc-900 outline-none"
             >
               <option value="ud">ud</option>
               <option value="kg">kg</option>
@@ -152,7 +162,7 @@ export default function ProveedoresPage() {
               value={productPrice}
               onChange={(e) => setProductPrice(e.target.value)}
               placeholder="Precio unidad"
-              className="h-10 rounded-xl border border-zinc-200 bg-zinc-50 px-3 text-sm outline-none"
+              className="h-10 rounded-xl border border-zinc-300 bg-white px-3 text-sm text-zinc-900 placeholder:text-zinc-500 outline-none"
             />
           </div>
           <button
