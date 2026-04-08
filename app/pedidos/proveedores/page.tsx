@@ -69,7 +69,6 @@ export default function ProveedoresPage() {
   const [editingProductId, setEditingProductId] = React.useState<string | null>(null);
   const [supplierDrafts, setSupplierDrafts] = React.useState<Record<string, { name: string; contact: string }>>({});
   const [productDrafts, setProductDrafts] = React.useState<Record<string, { name: string; unit: Unit; price: string; vatRate: string; parStock: string }>>({});
-  const [bulkRowsText, setBulkRowsText] = React.useState('');
 
   const reload = React.useCallback(() => {
     if (!canUse || !localId) return;
@@ -162,88 +161,6 @@ export default function ProveedoresPage() {
       .catch((err: Error) => setMessage(err.message));
   };
 
-  const importBulkCatalog = async () => {
-    if (!localId) return setMessage('Perfil del local no cargado. Cierra sesión y vuelve a entrar.');
-    const supabase = getSupabaseClient();
-    if (!supabase) return setMessage('Supabase no disponible en esta sesión.');
-
-    const packed = bulkRowsText.replace(/\r/g, '').replace(/\n\t+/g, '\t');
-    const lines = packed
-      .split('\n')
-      .map((line) => line.trim())
-      .filter(Boolean);
-
-    const parsedRows: Array<{ supplier: string; product: string; unit: Unit; price: number; vatRate: number; parStock: number }> = [];
-    for (const line of lines) {
-      const cols = line.split('\t').map((c) => c.trim()).filter(Boolean);
-      if (cols.length < 4) continue;
-      const [productRaw, unitRaw, priceRaw, supplierRaw, vatRaw = '0', parRaw = '0'] = cols;
-      const price = parseDecimal(priceRaw);
-      const vatRate = parseDecimal(vatRaw);
-      const parStock = parseDecimal(parRaw);
-      if (!price || price <= 0) continue;
-      if (vatRate == null || vatRate < 0 || vatRate > 1) continue;
-      if (parStock == null || parStock < 0) continue;
-      parsedRows.push({
-        supplier: normalizeUpper(supplierRaw),
-        product: normalizeUpper(productRaw),
-        unit: normalizeUnit(unitRaw),
-        price,
-        vatRate,
-        parStock,
-      });
-    }
-
-    if (parsedRows.length === 0) {
-      setMessage('No encontré filas válidas para importar.');
-      return;
-    }
-
-    const bySupplier = new Map<string, Array<{ product: string; unit: Unit; price: number; vatRate: number; parStock: number }>>();
-    for (const row of parsedRows) {
-      const current = bySupplier.get(row.supplier) ?? [];
-      current.push({ product: row.product, unit: row.unit, price: row.price, vatRate: row.vatRate, parStock: row.parStock });
-      bySupplier.set(row.supplier, current);
-    }
-
-    const supplierByName = new Map(suppliers.map((s) => [normalizeUpper(s.name), s]));
-    let createdSuppliers = 0;
-    let createdProducts = 0;
-
-    for (const [supplierNameUpper, productsToCreate] of bySupplier.entries()) {
-      let supplier = supplierByName.get(supplierNameUpper);
-      if (!supplier) {
-        const preferredContact = PREFERRED_CONTACT_BY_SUPPLIER[supplierNameUpper] ?? DEFAULT_SUPPLIER_CONTACT;
-        const created = await createSupplier(supabase, localId, supplierNameUpper, preferredContact);
-        supplier = { id: created.id, name: created.name, contact: created.contact ?? '', products: [] };
-        supplierByName.set(supplierNameUpper, supplier);
-        createdSuppliers += 1;
-      }
-
-      const existingByProductName = new Set((supplier.products ?? []).map((p) => normalizeUpper(p.name)));
-      const dedupInput = new Map<string, { product: string; unit: Unit; price: number; vatRate: number; parStock: number }>();
-      for (const item of productsToCreate) {
-        dedupInput.set(item.product, item);
-      }
-      const sortedInput = Array.from(dedupInput.values()).sort((a, b) => a.product.localeCompare(b.product, 'es'));
-      for (const item of sortedInput) {
-        if (existingByProductName.has(item.product)) continue;
-        await createSupplierProduct(supabase, localId, supplier.id, {
-          name: item.product,
-          unit: item.unit,
-          pricePerUnit: item.price,
-          vatRate: item.vatRate,
-          parStock: item.parStock,
-        });
-        existingByProductName.add(item.product);
-        createdProducts += 1;
-      }
-    }
-
-    setMessage(`Importación lista. Proveedores creados: ${createdSuppliers}. Productos creados: ${createdProducts}.`);
-    setBulkRowsText('');
-    reload();
-  };
 
   const saveSupplierChanges = (supplierId: string) => {
     if (!localId) return setMessage('Perfil del local no cargado. Cierra sesión y vuelve a entrar.');
@@ -450,29 +367,6 @@ export default function ProveedoresPage() {
             Guardar producto
           </button>
         </div>
-      </section>
-
-      <section className="rounded-2xl bg-white p-4 ring-1 ring-zinc-200">
-        <p className="text-sm font-bold text-zinc-800">Importación masiva (pegado)</p>
-        <p className="mt-1 text-xs text-zinc-500">
-          Pega filas formato: PRODUCTO[TAB]UNIDAD[TAB]PRECIO[TAB]PROVEEDOR[TAB]IVA[TAB]PAR_STOCK. Se guarda en mayúsculas y se ordena alfabéticamente.
-        </p>
-        <textarea
-          value={bulkRowsText}
-          onChange={(e) => setBulkRowsText(e.target.value)}
-          rows={6}
-          className="mt-2 w-full rounded-xl border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 outline-none"
-          placeholder="PEGA AQUÍ EL LISTADO..."
-        />
-        <button
-          type="button"
-          onClick={() => {
-            void importBulkCatalog();
-          }}
-          className="mt-2 h-10 rounded-xl bg-[#2563EB] px-3 text-sm font-bold text-white"
-        >
-          Importar listado
-        </button>
       </section>
 
       {[...suppliers]
