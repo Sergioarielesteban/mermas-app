@@ -67,11 +67,11 @@ export default function RecepcionPedidosPage() {
     })();
   };
 
-  const changeReceived = (orderId: string, itemId: string, current: number, step: number, max: number) => {
+  const changeReceived = (orderId: string, itemId: string, current: number, step: number) => {
     if (!localId) return;
     const supabase = getSupabaseClient();
     if (!supabase) return;
-    const next = Math.max(0, Math.min(max, Math.round((current + step) * 100) / 100));
+    const next = Math.max(0, Math.round((current + step) * 100) / 100);
     if (next === current) return;
 
     let shouldCloseOrder = false;
@@ -178,12 +178,15 @@ export default function RecepcionPedidosPage() {
                       <p className="text-sm font-semibold text-zinc-800">{item.productName}</p>
                       <p className="text-xs text-zinc-500">
                         Pedido: {item.quantity} {item.unit} · Recibido: {item.receivedQuantity} {item.unit}
+                        {item.receivedQuantity > item.quantity
+                          ? ` · Extra: +${(item.receivedQuantity - item.quantity).toFixed(item.unit === 'kg' ? 2 : 0)} ${item.unit}`
+                          : ''}
                       </p>
                       <div className="mt-2 flex items-center gap-2">
                         <button
                           type="button"
                           onClick={() =>
-                            changeReceived(order.id, item.id, item.receivedQuantity, -step, item.quantity)
+                            changeReceived(order.id, item.id, item.receivedQuantity, -step)
                           }
                           className="h-8 w-8 rounded-full border border-zinc-300 bg-white font-bold text-zinc-700"
                         >
@@ -192,7 +195,7 @@ export default function RecepcionPedidosPage() {
                         <button
                           type="button"
                           onClick={() =>
-                            changeReceived(order.id, item.id, item.receivedQuantity, step, item.quantity)
+                            changeReceived(order.id, item.id, item.receivedQuantity, step)
                           }
                           className="h-8 w-8 rounded-full bg-[#2563EB] font-bold text-white"
                         >

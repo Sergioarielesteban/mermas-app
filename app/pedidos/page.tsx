@@ -173,8 +173,9 @@ export default function PedidosPage() {
                   if (!supabase) return;
                   void deleteOrder(supabase, localId, order.id)
                     .then(() => {
+                      setOrders((prev) => prev.filter((o) => o.id !== order.id));
                       setMessage('Pedido enviado eliminado.');
-                      reloadOrders();
+                      void reloadOrders();
                     })
                     .catch((err: Error) => setMessage(err.message));
                 }}
@@ -222,8 +223,9 @@ export default function PedidosPage() {
                   if (!supabase) return;
                   void deleteOrder(supabase, localId, order.id)
                     .then(() => {
+                      setOrders((prev) => prev.filter((o) => o.id !== order.id));
                       setMessage('Pedido histórico eliminado.');
-                      reloadOrders();
+                      void reloadOrders();
                     })
                     .catch((err: Error) => setMessage(err.message));
                 }}

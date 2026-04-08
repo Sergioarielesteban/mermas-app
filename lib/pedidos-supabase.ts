@@ -336,8 +336,17 @@ export async function saveOrder(
 }
 
 export async function deleteOrder(supabase: SupabaseClient, localId: string, orderId: string) {
-  const { error } = await supabase.from('purchase_orders').delete().eq('id', orderId).eq('local_id', localId);
+  const { data, error } = await supabase
+    .from('purchase_orders')
+    .delete()
+    .eq('id', orderId)
+    .eq('local_id', localId)
+    .select('id')
+    .maybeSingle();
   if (error) throw new Error(error.message);
+  if (!data?.id) {
+    throw new Error('No se pudo eliminar el pedido: sin permisos o pedido no encontrado para este local.');
+  }
 }
 
 export async function setOrderStatus(

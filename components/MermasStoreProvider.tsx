@@ -796,6 +796,9 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
         if (!localId) return { ok: false, reason: 'Perfil del local aún cargando. Reintenta en 2 segundos.' };
         const supabase = getSupabaseClient();
         if (!supabase) return { ok: false, reason: 'Sin conexión.' };
+        const snapshot = mermas;
+        // Optimistic UI: remove immediately, rollback if backend delete fails.
+        setMermas((prev) => prev.filter((m) => m.id !== id));
         const { data, error } = await supabase
           .from('mermas')
           .delete()
@@ -803,17 +806,17 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
           .select('id')
           .maybeSingle();
         if (error) {
+          setMermas(snapshot);
           return { ok: false, reason: `No se pudo eliminar en nube: ${error.message}` };
         }
-        // If row was already deleted in another refresh tab, keep UI consistent and continue.
         if (!data?.id) {
-          setMermas((prev) => prev.filter((m) => m.id !== id));
-          await refetchCloud();
-          return { ok: true };
+          setMermas(snapshot);
+          return {
+            ok: false,
+            reason: 'No se pudo eliminar: sin permisos o registro no encontrado para este local.',
+          };
         }
         markLocalEdit();
-        // Keep UI consistent even if cloud refetch has a transient failure.
-        setMermas((prev) => prev.filter((m) => m.id !== id));
         await refetchCloud();
         return { ok: true };
       }
