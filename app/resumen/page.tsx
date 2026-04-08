@@ -41,6 +41,8 @@ export default function ResumenPage() {
   const [fromDate, setFromDate] = React.useState('');
   const [toDate, setToDate] = React.useState('');
   const [message, setMessage] = React.useState<string | null>(null);
+  const [showDeletedBanner, setShowDeletedBanner] = React.useState(false);
+  const deletedBannerTimeoutRef = React.useRef<number | null>(null);
   const [editingId, setEditingId] = React.useState<string | null>(null);
   const [editProductId, setEditProductId] = React.useState('');
   const [editQuantity, setEditQuantity] = React.useState(1);
@@ -111,7 +113,22 @@ export default function ResumenPage() {
     if (!ok) return;
     const result = await removeMerma(id);
     setMessage(result.ok ? 'Merma eliminada.' : result.reason ?? 'No se pudo eliminar.');
+    if (result.ok) {
+      setShowDeletedBanner(true);
+      if (deletedBannerTimeoutRef.current) window.clearTimeout(deletedBannerTimeoutRef.current);
+      deletedBannerTimeoutRef.current = window.setTimeout(() => {
+        setShowDeletedBanner(false);
+        deletedBannerTimeoutRef.current = null;
+      }, 1000);
+    }
   };
+
+  React.useEffect(
+    () => () => {
+      if (deletedBannerTimeoutRef.current) window.clearTimeout(deletedBannerTimeoutRef.current);
+    },
+    [],
+  );
 
   const exportPdf = () => {
     const doc = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'a4' });
@@ -177,6 +194,13 @@ export default function ResumenPage() {
 
   return (
     <div className="space-y-3">
+      {showDeletedBanner ? (
+        <div className="pointer-events-none fixed inset-0 z-[90] grid place-items-center bg-black/25 px-6">
+          <div className="rounded-2xl bg-[#D32F2F] px-7 py-5 text-center shadow-2xl ring-2 ring-white/75">
+            <p className="text-xl font-black uppercase tracking-wide text-white">ELIMINADO</p>
+          </div>
+        </div>
+      ) : null}
       <div className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-zinc-200">
         <p className="text-xs font-semibold uppercase tracking-[0.16em] text-zinc-500">Resumen de Operaciones</p>
         <p className="pt-1 text-sm text-zinc-700">Historial de mermas registradas y su impacto economico.</p>

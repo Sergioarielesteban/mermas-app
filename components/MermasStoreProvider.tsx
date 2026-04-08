@@ -799,17 +799,27 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
         const snapshot = mermas;
         // Optimistic UI: remove immediately, rollback if backend delete fails.
         setMermas((prev) => prev.filter((m) => m.id !== id));
-        const { data, error } = await supabase
+        const { error } = await supabase
           .from('mermas')
           .delete()
-          .eq('id', id)
-          .select('id')
-          .maybeSingle();
+          .eq('id', id);
         if (error) {
           setMermas(snapshot);
           return { ok: false, reason: `No se pudo eliminar en nube: ${error.message}` };
         }
-        if (!data?.id) {
+
+        // Defensive verification: some environments return no deleted row payload.
+        const { data: stillExists, error: checkError } = await supabase
+          .from('mermas')
+          .select('id')
+          .eq('id', id)
+          .eq('local_id', localId)
+          .maybeSingle();
+        if (checkError) {
+          setMermas(snapshot);
+          return { ok: false, reason: `No se pudo verificar borrado: ${checkError.message}` };
+        }
+        if (stillExists?.id) {
           setMermas(snapshot);
           return {
             ok: false,

@@ -20,6 +20,7 @@ create table if not exists public.pedido_supplier_products (
   name text not null,
   unit text not null check (unit in ('kg', 'ud', 'bolsa', 'racion')),
   price_per_unit numeric(10,2) not null check (price_per_unit >= 0),
+  vat_rate numeric(6,4) not null default 0 check (vat_rate >= 0 and vat_rate <= 1),
   is_active boolean not null default true,
   created_by uuid references auth.users(id),
   created_at timestamptz not null default now()
@@ -53,12 +54,20 @@ create table if not exists public.purchase_order_items (
   quantity numeric(10,2) not null check (quantity >= 0),
   received_quantity numeric(10,2) not null default 0 check (received_quantity >= 0),
   price_per_unit numeric(10,2) not null check (price_per_unit >= 0),
+  vat_rate numeric(6,4) not null default 0 check (vat_rate >= 0 and vat_rate <= 1),
   line_total numeric(12,2) not null check (line_total >= 0),
   created_at timestamptz not null default now()
 );
 
 create index if not exists idx_purchase_order_items_local_id on public.purchase_order_items(local_id);
 create index if not exists idx_purchase_order_items_order_id on public.purchase_order_items(order_id);
+
+-- Safe migrations for existing databases
+alter table public.pedido_supplier_products
+  add column if not exists vat_rate numeric(6,4) not null default 0;
+
+alter table public.purchase_order_items
+  add column if not exists vat_rate numeric(6,4) not null default 0;
 
 alter table public.pedido_suppliers enable row level security;
 alter table public.pedido_supplier_products enable row level security;

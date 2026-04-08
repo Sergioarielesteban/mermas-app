@@ -182,6 +182,10 @@ export default function RecepcionPedidosPage() {
                           ? ` · Extra: +${(item.receivedQuantity - item.quantity).toFixed(item.unit === 'kg' ? 2 : 0)} ${item.unit}`
                           : ''}
                       </p>
+                      <p className="text-xs text-zinc-500">
+                        Base: {item.lineTotal.toFixed(2)} EUR · IVA {(item.lineTotal * item.vatRate).toFixed(2)} EUR · Total{' '}
+                        {(item.lineTotal * (1 + item.vatRate)).toFixed(2)} EUR
+                      </p>
                       <div className="mt-2 flex items-center gap-2">
                         <button
                           type="button"

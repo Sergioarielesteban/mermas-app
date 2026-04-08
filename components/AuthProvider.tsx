@@ -19,6 +19,7 @@ type AuthContextValue = {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 const AUTH_KEY = 'mermas_user_email';
+const PROFILE_TIMEOUT_MS = 6000;
 
 function isInvalidRefreshTokenError(message: string | undefined) {
   const m = (message ?? '').toLowerCase();
@@ -34,6 +35,15 @@ function mapSupabaseAuthError(message: string): string {
     return 'Tienes que confirmar el correo (enlace de Supabase) o desactivar “Confirm email” en Authentication → Providers → Email.';
   }
   return message;
+}
+
+async function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  return await Promise.race([
+    promise,
+    new Promise<T>((_, reject) => {
+      window.setTimeout(() => reject(new Error('Perfil tardó demasiado en cargar.')), ms);
+    }),
+  ]);
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -75,19 +85,50 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return;
     }
     setProfileReady(false);
-    const { data, error } = await supabase
-      .from('profiles')
-      .select('local_id, locals(code, name)')
-      .eq('user_id', userId)
-      .maybeSingle();
+    let data:
+      | {
+          local_id: string;
+          locals: { code: string; name: string } | { code: string; name: string }[] | null;
+        }
+      | null = null;
+    let error: Error | null = null;
+    try {
+      const res = await withTimeout(
+        Promise.resolve(
+          supabase
+            .from('profiles')
+            .select('local_id, locals(code, name)')
+            .eq('user_id', userId)
+            .maybeSingle(),
+        ),
+        PROFILE_TIMEOUT_MS,
+      );
+      data = (res.data as typeof data) ?? null;
+      error = res.error ? new Error(res.error.message) : null;
+    } catch {
+      error = new Error('timeout');
+    }
 
     // Some projects have stricter RLS on `locals`; keep local_id even if nested read fails.
     if (error || !data) {
-      const { data: profileOnly, error: profileErr } = await supabase
-        .from('profiles')
-        .select('local_id')
-        .eq('user_id', userId)
-        .maybeSingle();
+      let profileOnly: { local_id: string } | null = null;
+      let profileErr: Error | null = null;
+      try {
+        const res = await withTimeout(
+          Promise.resolve(
+            supabase
+              .from('profiles')
+              .select('local_id')
+              .eq('user_id', userId)
+              .maybeSingle(),
+          ),
+          PROFILE_TIMEOUT_MS,
+        );
+        profileOnly = (res.data as { local_id: string } | null) ?? null;
+        profileErr = res.error ? new Error(res.error.message) : null;
+      } catch {
+        profileErr = new Error('timeout');
+      }
       if (profileErr || !profileOnly?.local_id) {
         clearProfile();
         setProfileReady(true);
@@ -103,7 +144,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const row = data as {
       local_id: string;
       locals: { code: string; name: string } | { code: string; name: string }[] | null;
-    };
+    } | null;
+    if (!row) {
+      clearProfile();
+      setProfileReady(true);
+      return;
+    }
     const loc = Array.isArray(row.locals) ? row.locals[0] : row.locals;
     setLocalId(row.local_id);
     setLocalCode(loc?.code ?? null);

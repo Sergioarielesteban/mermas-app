@@ -13,6 +13,8 @@ export default function ProductosPage() {
   const [price, setPrice] = useState('0');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [showDeletedBanner, setShowDeletedBanner] = useState(false);
+  const deletedBannerTimeoutRef = React.useRef<number | null>(null);
   const [search, setSearch] = useState('');
 
   const filteredProducts = products.filter((p) =>
@@ -48,8 +50,22 @@ export default function ProductosPage() {
     setOpen(false);
   };
 
+  React.useEffect(
+    () => () => {
+      if (deletedBannerTimeoutRef.current) window.clearTimeout(deletedBannerTimeoutRef.current);
+    },
+    [],
+  );
+
   return (
     <div className="relative">
+      {showDeletedBanner ? (
+        <div className="pointer-events-none fixed inset-0 z-[90] grid place-items-center bg-black/25 px-6">
+          <div className="rounded-2xl bg-[#D32F2F] px-7 py-5 text-center shadow-2xl ring-2 ring-white/75">
+            <p className="text-xl font-black uppercase tracking-wide text-white">ELIMINADO</p>
+          </div>
+        </div>
+      ) : null}
       <div className="mb-3 rounded-2xl bg-white p-4 shadow-sm ring-1 ring-zinc-200">
         <p className="text-xs font-semibold uppercase tracking-[0.16em] text-zinc-500">Catalogo de Productos</p>
         <p className="pt-1 text-sm text-zinc-700">Gestiona nombre, unidad y precio por producto.</p>
@@ -105,6 +121,14 @@ export default function ProductosPage() {
                     if (!confirmed) return;
                     const result = removeProduct(p.id);
                     setMessage(result.ok ? 'Producto eliminado.' : result.reason ?? 'No se pudo eliminar.');
+                    if (result.ok) {
+                      setShowDeletedBanner(true);
+                      if (deletedBannerTimeoutRef.current) window.clearTimeout(deletedBannerTimeoutRef.current);
+                      deletedBannerTimeoutRef.current = window.setTimeout(() => {
+                        setShowDeletedBanner(false);
+                        deletedBannerTimeoutRef.current = null;
+                      }, 1000);
+                    }
                   }}
                   className="grid h-9 w-9 place-items-center rounded-lg border border-red-200 text-red-600 hover:bg-red-50"
                   aria-label={`Eliminar ${p.name}`}

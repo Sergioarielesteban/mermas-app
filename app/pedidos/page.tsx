@@ -22,7 +22,7 @@ function normalizeWhatsappNumber(raw: string | undefined) {
   return hasPlus ? digits : digits;
 }
 
-function buildWhatsappOrderMessage(order: PedidoOrder, deliveryDate: string) {
+function buildWhatsappOrderMessage(order: PedidoOrder, deliveryDate: string, localName: string, requestedBy: string) {
   const fechaPedido = new Date(order.createdAt).toLocaleDateString('es-ES');
   const lines = order.items.map(
     (item) => `- ${item.productName}: ${item.quantity} ${item.unit}`,
@@ -31,8 +31,8 @@ function buildWhatsappOrderMessage(order: PedidoOrder, deliveryDate: string) {
     `Proveedor: ${order.supplierName}`,
     `Fecha pedido: ${fechaPedido}`,
     `Fecha entrega: ${deliveryDate}`,
-    'Local: ____________________',
-    'Pedido por: _______________',
+    `Local: ${localName || 'MATARO'}`,
+    `Pedido por: ${requestedBy}`,
     '',
     'PEDIDO:',
     '',
@@ -46,12 +46,20 @@ function buildWhatsappOrderMessage(order: PedidoOrder, deliveryDate: string) {
     .join('\n');
 }
 
+function totalsWithVat(order: PedidoOrder) {
+  const base = order.items.reduce((acc, item) => acc + item.lineTotal, 0);
+  const vat = order.items.reduce((acc, item) => acc + item.lineTotal * (item.vatRate ?? 0), 0);
+  return { base, vat, total: base + vat };
+}
+
 export default function PedidosPage() {
   const router = useRouter();
   const { localCode, localName, localId, email } = useAuth();
   const canUse = canAccessPedidos(localCode, email, localName, localId);
   const [orders, setOrders] = React.useState<PedidoOrder[]>([]);
   const [message, setMessage] = React.useState<string | null>(null);
+  const [showDeletedBanner, setShowDeletedBanner] = React.useState(false);
+  const deletedBannerTimeoutRef = React.useRef<number | null>(null);
   const sendWhatsappOrder = React.useCallback((order: PedidoOrder) => {
     const phone = normalizeWhatsappNumber(order.supplierContact);
     if (!phone) {
@@ -68,11 +76,16 @@ export default function PedidosPage() {
       setMessage('Fecha de entrega inválida. Usa formato AAAA-MM-DD.');
       return;
     }
+    const requestedBy = window.prompt('Nombre de quien pide:')?.trim();
+    if (!requestedBy) {
+      setMessage('Debes indicar quién está pidiendo.');
+      return;
+    }
     const deliveryDate = parsed.toLocaleDateString('es-ES');
-    const text = encodeURIComponent(buildWhatsappOrderMessage(order, deliveryDate));
+    const text = encodeURIComponent(buildWhatsappOrderMessage(order, deliveryDate, localName ?? 'MATARO', requestedBy));
     const url = `https://wa.me/${phone}?text=${text}`;
     window.open(url, '_blank', 'noopener,noreferrer');
-  }, []);
+  }, [localName]);
 
   const [expandedId, setExpandedId] = React.useState<string | null>(null);
 
@@ -89,6 +102,13 @@ export default function PedidosPage() {
     reloadOrders();
   }, [reloadOrders]);
 
+  React.useEffect(
+    () => () => {
+      if (deletedBannerTimeoutRef.current) window.clearTimeout(deletedBannerTimeoutRef.current);
+    },
+    [],
+  );
+
   const sentOrders = orders.filter((row) => row.status === 'sent');
   const receivedOrders = orders.filter((row) => row.status === 'received');
 
@@ -103,6 +123,13 @@ export default function PedidosPage() {
 
   return (
     <div className="space-y-4">
+      {showDeletedBanner ? (
+        <div className="pointer-events-none fixed inset-0 z-[90] grid place-items-center bg-black/25 px-6">
+          <div className="rounded-2xl bg-[#D32F2F] px-7 py-5 text-center shadow-2xl ring-2 ring-white/75">
+            <p className="text-xl font-black uppercase tracking-wide text-white">ELIMINADO</p>
+          </div>
+        </div>
+      ) : null}
       <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-zinc-200">
         <h1 className="text-lg font-black text-zinc-900">Pedidos</h1>
         <p className="pt-1 text-sm text-zinc-600">
@@ -146,11 +173,18 @@ export default function PedidosPage() {
           {sentOrders.length === 0 ? <p className="text-sm text-zinc-500">No hay pedidos enviados.</p> : null}
           {sentOrders.map((order) => (
             <div key={order.id} className="rounded-xl bg-zinc-50 p-3 ring-1 ring-zinc-200">
+              {(() => {
+                const totals = totalsWithVat(order);
+                return (
+                  <>
               <p className="text-sm font-semibold text-zinc-900">{order.supplierName}</p>
               <p className="text-xs text-zinc-500">
-                {order.items.length} lineas · {order.total.toFixed(2)} EUR · enviado{' '}
+                {order.items.length} lineas · Base {totals.base.toFixed(2)} EUR · IVA {totals.vat.toFixed(2)} EUR · Total {totals.total.toFixed(2)} EUR · enviado{' '}
                 {order.sentAt ? new Date(order.sentAt).toLocaleDateString('es-ES') : '-'}
               </p>
+                  </>
+                );
+              })()}
               <button
                 type="button"
                 onClick={() => setExpandedId((prev) => (prev === order.id ? null : order.id))}
@@ -175,6 +209,12 @@ export default function PedidosPage() {
                     .then(() => {
                       setOrders((prev) => prev.filter((o) => o.id !== order.id));
                       setMessage('Pedido enviado eliminado.');
+                      setShowDeletedBanner(true);
+                      if (deletedBannerTimeoutRef.current) window.clearTimeout(deletedBannerTimeoutRef.current);
+                      deletedBannerTimeoutRef.current = window.setTimeout(() => {
+                        setShowDeletedBanner(false);
+                        deletedBannerTimeoutRef.current = null;
+                      }, 1000);
                       void reloadOrders();
                     })
                     .catch((err: Error) => setMessage(err.message));
@@ -187,7 +227,7 @@ export default function PedidosPage() {
                 <div className="mt-2 space-y-1">
                   {order.items.map((item) => (
                     <p key={item.id} className="text-xs text-zinc-600">
-                      {item.productName}: {item.quantity} {item.unit} ({item.lineTotal.toFixed(2)} EUR)
+                      {item.productName}: {item.quantity} {item.unit} · Base {item.lineTotal.toFixed(2)} EUR · IVA {(item.lineTotal * item.vatRate).toFixed(2)} EUR
                     </p>
                   ))}
                 </div>
@@ -203,11 +243,18 @@ export default function PedidosPage() {
           {receivedOrders.length === 0 ? <p className="text-sm text-zinc-500">No hay pedidos recibidos.</p> : null}
           {receivedOrders.map((order) => (
             <div key={order.id} className="rounded-xl bg-zinc-50 p-3 ring-1 ring-zinc-200">
+              {(() => {
+                const totals = totalsWithVat(order);
+                return (
+                  <>
               <p className="text-sm font-semibold text-zinc-900">{order.supplierName}</p>
               <p className="text-xs text-zinc-500">
-                {order.items.length} lineas · {order.total.toFixed(2)} EUR · recibido{' '}
+                {order.items.length} lineas · Base {totals.base.toFixed(2)} EUR · IVA {totals.vat.toFixed(2)} EUR · Total {totals.total.toFixed(2)} EUR · recibido{' '}
                 {order.receivedAt ? new Date(order.receivedAt).toLocaleDateString('es-ES') : '-'}
               </p>
+                  </>
+                );
+              })()}
               <button
                 type="button"
                 onClick={() => setExpandedId((prev) => (prev === order.id ? null : order.id))}
@@ -225,6 +272,12 @@ export default function PedidosPage() {
                     .then(() => {
                       setOrders((prev) => prev.filter((o) => o.id !== order.id));
                       setMessage('Pedido histórico eliminado.');
+                      setShowDeletedBanner(true);
+                      if (deletedBannerTimeoutRef.current) window.clearTimeout(deletedBannerTimeoutRef.current);
+                      deletedBannerTimeoutRef.current = window.setTimeout(() => {
+                        setShowDeletedBanner(false);
+                        deletedBannerTimeoutRef.current = null;
+                      }, 1000);
                       void reloadOrders();
                     })
                     .catch((err: Error) => setMessage(err.message));

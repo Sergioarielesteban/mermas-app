@@ -8,6 +8,7 @@ export type PedidoSupplierProduct = {
   name: string;
   unit: Unit;
   pricePerUnit: number;
+  vatRate: number;
   isActive: boolean;
 };
 
@@ -26,6 +27,7 @@ export type PedidoOrderItem = {
   quantity: number;
   receivedQuantity: number;
   pricePerUnit: number;
+  vatRate: number;
   lineTotal: number;
 };
 
@@ -50,6 +52,7 @@ type SupplierProductRow = {
   name: string;
   unit: string;
   price_per_unit: number;
+  vat_rate: number;
   is_active: boolean;
 };
 type OrderRow = {
@@ -71,8 +74,13 @@ type OrderItemRow = {
   quantity: number;
   received_quantity: number;
   price_per_unit: number;
+  vat_rate: number;
   line_total: number;
 };
+
+function normalizeLabelUpper(value: string) {
+  return value.trim().toUpperCase();
+}
 
 export async function fetchSuppliersWithProducts(supabase: SupabaseClient, localId: string) {
   const { data: supplierRows, error: sErr } = await supabase
@@ -84,7 +92,7 @@ export async function fetchSuppliersWithProducts(supabase: SupabaseClient, local
 
   const { data: productRows, error: pErr } = await supabase
     .from('pedido_supplier_products')
-    .select('id,supplier_id,name,unit,price_per_unit,is_active')
+    .select('id,supplier_id,name,unit,price_per_unit,vat_rate,is_active')
     .eq('local_id', localId)
     .eq('is_active', true)
     .order('name');
@@ -98,6 +106,7 @@ export async function fetchSuppliersWithProducts(supabase: SupabaseClient, local
       name: row.name,
       unit: row.unit as Unit,
       pricePerUnit: Number(row.price_per_unit),
+      vatRate: Number(row.vat_rate ?? 0),
       isActive: Boolean(row.is_active),
     });
     bySupplier.set(row.supplier_id, list);
@@ -115,7 +124,7 @@ export async function fetchSuppliersWithProducts(supabase: SupabaseClient, local
 export async function createSupplier(supabase: SupabaseClient, localId: string, name: string, contact: string) {
   const { data, error } = await supabase
     .from('pedido_suppliers')
-    .insert({ local_id: localId, name: name.trim(), contact: contact.trim() })
+    .insert({ local_id: localId, name: normalizeLabelUpper(name), contact: contact.trim() })
     .select('id,name,contact')
     .single();
   if (error) throw new Error(error.message);
@@ -130,7 +139,7 @@ export async function updateSupplier(
 ) {
   const { data, error } = await supabase
     .from('pedido_suppliers')
-    .update({ name: input.name.trim(), contact: input.contact.trim() })
+    .update({ name: normalizeLabelUpper(input.name), contact: input.contact.trim() })
     .eq('id', supplierId)
     .eq('local_id', localId)
     .select('id,name,contact')
@@ -152,19 +161,20 @@ export async function createSupplierProduct(
   supabase: SupabaseClient,
   localId: string,
   supplierId: string,
-  input: { name: string; unit: Unit; pricePerUnit: number },
+  input: { name: string; unit: Unit; pricePerUnit: number; vatRate?: number },
 ) {
   const { data, error } = await supabase
     .from('pedido_supplier_products')
     .insert({
       local_id: localId,
       supplier_id: supplierId,
-      name: input.name.trim(),
+      name: normalizeLabelUpper(input.name),
       unit: input.unit,
       price_per_unit: Math.round(input.pricePerUnit * 100) / 100,
+      vat_rate: Math.max(0, Math.round((input.vatRate ?? 0) * 10000) / 10000),
       is_active: true,
     })
-    .select('id,supplier_id,name,unit,price_per_unit,is_active')
+    .select('id,supplier_id,name,unit,price_per_unit,vat_rate,is_active')
     .single();
   if (error) throw new Error(error.message);
   return data as SupplierProductRow;
@@ -174,18 +184,19 @@ export async function updateSupplierProduct(
   supabase: SupabaseClient,
   localId: string,
   supplierProductId: string,
-  input: { name: string; unit: Unit; pricePerUnit: number },
+  input: { name: string; unit: Unit; pricePerUnit: number; vatRate?: number },
 ) {
   const { data, error } = await supabase
     .from('pedido_supplier_products')
     .update({
-      name: input.name.trim(),
+      name: normalizeLabelUpper(input.name),
       unit: input.unit,
       price_per_unit: Math.round(input.pricePerUnit * 100) / 100,
+      vat_rate: Math.max(0, Math.round((input.vatRate ?? 0) * 10000) / 10000),
     })
     .eq('id', supplierProductId)
     .eq('local_id', localId)
-    .select('id,supplier_id,name,unit,price_per_unit,is_active')
+    .select('id,supplier_id,name,unit,price_per_unit,vat_rate,is_active')
     .single();
   if (error) throw new Error(error.message);
   return data as SupplierProductRow;
@@ -216,7 +227,7 @@ export async function fetchOrders(supabase: SupabaseClient, localId: string) {
   const ids = ((orderRows ?? []) as OrderRow[]).map((row) => row.id);
   const { data: itemRows, error: iErr } = await supabase
     .from('purchase_order_items')
-    .select('id,order_id,supplier_product_id,product_name,unit,quantity,received_quantity,price_per_unit,line_total')
+    .select('id,order_id,supplier_product_id,product_name,unit,quantity,received_quantity,price_per_unit,vat_rate,line_total')
     .in('order_id', ids.length ? ids : ['00000000-0000-0000-0000-000000000000']);
   if (iErr) throw new Error(iErr.message);
 
@@ -231,6 +242,7 @@ export async function fetchOrders(supabase: SupabaseClient, localId: string) {
       quantity: Number(row.quantity),
       receivedQuantity: Number(row.received_quantity),
       pricePerUnit: Number(row.price_per_unit),
+      vatRate: Number(row.vat_rate ?? 0),
       lineTotal: Number(row.line_total),
     });
     byOrder.set(row.order_id, list);
@@ -273,6 +285,7 @@ export async function saveOrder(
       quantity: number;
       receivedQuantity: number;
       pricePerUnit: number;
+      vatRate: number;
       lineTotal: number;
     }>;
   },
@@ -326,6 +339,7 @@ export async function saveOrder(
         quantity: item.quantity,
         received_quantity: item.receivedQuantity,
         price_per_unit: Math.round(item.pricePerUnit * 100) / 100,
+        vat_rate: Math.max(0, Math.round((item.vatRate ?? 0) * 10000) / 10000),
         line_total: Math.round(item.lineTotal * 100) / 100,
       })),
     );
@@ -336,15 +350,23 @@ export async function saveOrder(
 }
 
 export async function deleteOrder(supabase: SupabaseClient, localId: string, orderId: string) {
-  const { data, error } = await supabase
+  const { error } = await supabase
     .from('purchase_orders')
     .delete()
     .eq('id', orderId)
-    .eq('local_id', localId)
-    .select('id')
-    .maybeSingle();
+    .eq('local_id', localId);
   if (error) throw new Error(error.message);
-  if (!data?.id) {
+
+  // Some deployments can return empty delete payloads even when row-level delete succeeded.
+  // Confirm by checking current state after delete.
+  const { data: stillExists, error: checkError } = await supabase
+    .from('purchase_orders')
+    .select('id')
+    .eq('id', orderId)
+    .eq('local_id', localId)
+    .maybeSingle();
+  if (checkError) throw new Error(checkError.message);
+  if (stillExists?.id) {
     throw new Error('No se pudo eliminar el pedido: sin permisos o pedido no encontrado para este local.');
   }
 }

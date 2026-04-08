@@ -26,6 +26,8 @@ function buildWhatsappDraftMessage(input: {
   supplierName: string;
   createdAtIso: string;
   deliveryDate: string;
+  localName: string;
+  requestedBy: string;
   notes: string;
   items: PedidoOrderItem[];
 }) {
@@ -34,8 +36,8 @@ function buildWhatsappDraftMessage(input: {
     `Proveedor: ${input.supplierName}`,
     `Fecha pedido: ${fechaPedido}`,
     `Fecha entrega: ${input.deliveryDate}`,
-    'Local: ____________________',
-    'Pedido por: _______________',
+    `Local: ${input.localName || 'MATARO'}`,
+    `Pedido por: ${input.requestedBy}`,
     '',
     'PEDIDO:',
     '',
@@ -154,12 +156,15 @@ export default function NuevoPedidoPage() {
         quantity,
         receivedQuantity: 0,
         pricePerUnit: p.pricePerUnit,
+        vatRate: p.vatRate ?? 0,
         lineTotal,
       };
     })
     .filter((row) => row.quantity > 0);
 
-  const total = items.reduce((acc, row) => acc + row.lineTotal, 0);
+  const totalBase = items.reduce((acc, row) => acc + row.lineTotal, 0);
+  const totalVat = items.reduce((acc, row) => acc + row.lineTotal * row.vatRate, 0);
+  const total = totalBase + totalVat;
 
   const saveDraft = (nextStatus: 'draft' | 'sent' = 'draft') => {
     if (!selectedSupplier) {
@@ -193,6 +198,7 @@ export default function NuevoPedidoPage() {
         quantity: item.quantity,
         receivedQuantity: item.receivedQuantity,
         pricePerUnit: item.pricePerUnit,
+        vatRate: item.vatRate,
         lineTotal: item.lineTotal,
       })),
     })
@@ -212,6 +218,8 @@ export default function NuevoPedidoPage() {
     if (!picked) return;
     const parsed = new Date(`${picked}T00:00:00`);
     if (Number.isNaN(parsed.getTime())) return setMessage('Fecha de entrega inválida. Usa AAAA-MM-DD.');
+    const requestedBy = window.prompt('Nombre de quien pide:')?.trim();
+    if (!requestedBy) return setMessage('Debes indicar quién está pidiendo.');
     const supabase = getSupabaseClient();
     if (!supabase) return setMessage('Sin conexión con Supabase.');
 
@@ -229,6 +237,7 @@ export default function NuevoPedidoPage() {
         quantity: item.quantity,
         receivedQuantity: item.receivedQuantity,
         pricePerUnit: item.pricePerUnit,
+        vatRate: item.vatRate,
         lineTotal: item.lineTotal,
       })),
     })
@@ -238,6 +247,8 @@ export default function NuevoPedidoPage() {
             supplierName: selectedSupplier.name,
             createdAtIso: existingCreatedAt ?? new Date().toISOString(),
             deliveryDate: parsed.toLocaleDateString('es-ES'),
+            localName: localName ?? 'MATARO',
+            requestedBy,
             notes: notes.trim(),
             items,
           }),
@@ -324,7 +335,7 @@ export default function NuevoPedidoPage() {
                   <div>
                     <p className="text-sm font-semibold text-zinc-800">{p.name}</p>
                     <p className="text-xs text-zinc-500">
-                      {p.pricePerUnit.toFixed(2)} EUR/{p.unit}
+                      {p.pricePerUnit.toFixed(2)} EUR/{p.unit} · IVA {(p.vatRate * 100).toFixed(0)}%
                     </p>
                   </div>
                   <p className="text-sm font-bold text-zinc-900">{lineTotal.toFixed(2)} EUR</p>
@@ -363,13 +374,15 @@ export default function NuevoPedidoPage() {
               <div>
                 <p className="text-sm font-semibold text-zinc-800">{row.productName}</p>
                 <p className="text-xs text-zinc-500">
-                  {row.quantity} {row.unit} · {row.lineTotal.toFixed(2)} EUR
+                  {row.quantity} {row.unit} · Base {row.lineTotal.toFixed(2)} EUR · IVA {(row.lineTotal * row.vatRate).toFixed(2)} EUR
                 </p>
               </div>
             </div>
           ))}
         </div>
-        <p className="mt-3 text-sm font-black text-zinc-900">Total estimado: {total.toFixed(2)} EUR</p>
+        <p className="mt-3 text-sm font-black text-zinc-900">
+          Total estimado: Base {totalBase.toFixed(2)} EUR · IVA {totalVat.toFixed(2)} EUR · Total {total.toFixed(2)} EUR
+        </p>
       </section>
 
       <section className="rounded-2xl bg-white p-4 pb-28 ring-1 ring-zinc-200">
@@ -386,7 +399,7 @@ export default function NuevoPedidoPage() {
 
       <section className="sticky bottom-2 z-20 rounded-2xl border border-zinc-200 bg-white/95 p-3 shadow-lg backdrop-blur">
         <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
-          {items.length} lineas · Total {total.toFixed(2)} EUR
+          {items.length} lineas · Base {totalBase.toFixed(2)} EUR · IVA {totalVat.toFixed(2)} EUR · Total {total.toFixed(2)} EUR
         </p>
         <div className="mt-2 grid grid-cols-2 gap-2">
           <button

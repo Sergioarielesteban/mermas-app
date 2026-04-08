@@ -17,21 +17,58 @@ import {
 } from '@/lib/pedidos-supabase';
 import type { Unit } from '@/lib/types';
 
+const PREFERRED_CONTACT_BY_SUPPLIER: Record<string, string> = {
+  ROMEU: '699446517',
+  'CARNES ROMEU': '699446517',
+  ASSOLIM: '622915421',
+  TGT: '695292301',
+  'CASA VALLES': '629111218',
+  FERRER: '696248973',
+};
+
+const DEFAULT_SUPPLIER_CONTACT = '622915421';
+
+function normalizeUpper(value: string) {
+  return value.trim().toUpperCase();
+}
+
+function normalizeUnit(raw: string): Unit {
+  const value = raw.trim().toLowerCase();
+  if (value.includes('kg') || value === 'kilo' || value === 'kilos') return 'kg';
+  if (value.includes('caja')) return 'caja';
+  if (value.includes('paquete')) return 'paquete';
+  if (value.includes('bandeja')) return 'bandeja';
+  if (value.includes('bolsa')) return 'bolsa';
+  if (value.includes('racion')) return 'racion';
+  return 'ud';
+}
+
+function parseDecimal(raw: string) {
+  const normalized = raw.trim().replace(/\./g, '').replace(',', '.');
+  const value = Number(normalized);
+  if (!Number.isFinite(value)) return null;
+  return Math.round(value * 100) / 100;
+}
+
 export default function ProveedoresPage() {
   const { localCode, localName, localId, email } = useAuth();
   const canUse = canAccessPedidos(localCode, email, localName, localId);
   const [suppliers, setSuppliers] = React.useState<PedidoSupplier[]>([]);
   const [message, setMessage] = React.useState<string | null>(null);
+  const [showDeletedBanner, setShowDeletedBanner] = React.useState(false);
+  const deletedBannerTimeoutRef = React.useRef<number | null>(null);
   const [supplierName, setSupplierName] = React.useState('');
   const [supplierContact, setSupplierContact] = React.useState('');
   const [productSupplierId, setProductSupplierId] = React.useState('');
   const [productName, setProductName] = React.useState('');
   const [productUnit, setProductUnit] = React.useState<Unit>('ud');
   const [productPrice, setProductPrice] = React.useState('');
+  const [productVat, setProductVat] = React.useState('0,21');
   const [editingSupplierId, setEditingSupplierId] = React.useState<string | null>(null);
   const [editingProductId, setEditingProductId] = React.useState<string | null>(null);
   const [supplierDrafts, setSupplierDrafts] = React.useState<Record<string, { name: string; contact: string }>>({});
-  const [productDrafts, setProductDrafts] = React.useState<Record<string, { name: string; unit: Unit; price: string }>>({});
+  const [productDrafts, setProductDrafts] = React.useState<Record<string, { name: string; unit: Unit; price: string; vatRate: string }>>({});
+  const [bulkRowsText, setBulkRowsText] = React.useState('');
 
   const reload = React.useCallback(() => {
     if (!canUse || !localId) return;
@@ -56,6 +93,7 @@ export default function ProveedoresPage() {
                 name: p.name,
                 unit: p.unit,
                 price: String(p.pricePerUnit),
+                vatRate: String(p.vatRate ?? 0),
               };
             }
           }
@@ -69,13 +107,20 @@ export default function ProveedoresPage() {
     reload();
   }, [reload]);
 
+  React.useEffect(
+    () => () => {
+      if (deletedBannerTimeoutRef.current) window.clearTimeout(deletedBannerTimeoutRef.current);
+    },
+    [],
+  );
+
   const saveSupplier = () => {
     if (!localId) return setMessage('Perfil del local no cargado. Cierra sesión y vuelve a entrar.');
-    const name = supplierName.trim();
+    const name = normalizeUpper(supplierName);
     if (!name) return setMessage('Nombre de proveedor obligatorio.');
     const supabase = getSupabaseClient();
     if (!supabase) return setMessage('Supabase no disponible en esta sesión.');
-    void createSupplier(supabase, localId, name, supplierContact)
+    void createSupplier(supabase, localId, name, supplierContact.trim() || DEFAULT_SUPPLIER_CONTACT)
       .then(() => {
         setSupplierName('');
         setSupplierContact('');
@@ -88,23 +133,106 @@ export default function ProveedoresPage() {
   const saveSupplierProduct = () => {
     if (!localId) return setMessage('Perfil del local no cargado. Cierra sesión y vuelve a entrar.');
     if (!productSupplierId) return setMessage('Selecciona proveedor.');
-    const name = productName.trim();
+    const name = normalizeUpper(productName);
     const price = Number(productPrice.replace(',', '.'));
+    const vatRate = Number(productVat.replace(',', '.'));
     if (!name || !Number.isFinite(price) || price <= 0) return setMessage('Producto y precio válidos son obligatorios.');
+    if (!Number.isFinite(vatRate) || vatRate < 0 || vatRate > 1) return setMessage('IVA inválido. Usa 0,21 o 0,10.');
     const supabase = getSupabaseClient();
     if (!supabase) return setMessage('Supabase no disponible en esta sesión.');
     void createSupplierProduct(supabase, localId, productSupplierId, {
       name,
       unit: productUnit,
       pricePerUnit: price,
+      vatRate,
     })
       .then(() => {
         setProductName('');
         setProductPrice('');
+        setProductVat('0,21');
         setMessage('Producto de proveedor guardado.');
         reload();
       })
       .catch((err: Error) => setMessage(err.message));
+  };
+
+  const importBulkCatalog = async () => {
+    if (!localId) return setMessage('Perfil del local no cargado. Cierra sesión y vuelve a entrar.');
+    const supabase = getSupabaseClient();
+    if (!supabase) return setMessage('Supabase no disponible en esta sesión.');
+
+    const packed = bulkRowsText.replace(/\r/g, '').replace(/\n\t+/g, '\t');
+    const lines = packed
+      .split('\n')
+      .map((line) => line.trim())
+      .filter(Boolean);
+
+    const parsedRows: Array<{ supplier: string; product: string; unit: Unit; price: number; vatRate: number }> = [];
+    for (const line of lines) {
+      const cols = line.split('\t').map((c) => c.trim()).filter(Boolean);
+      if (cols.length < 4) continue;
+      const [productRaw, unitRaw, priceRaw, supplierRaw, vatRaw = '0'] = cols;
+      const price = parseDecimal(priceRaw);
+      const vatRate = parseDecimal(vatRaw);
+      if (!price || price <= 0) continue;
+      if (vatRate == null || vatRate < 0 || vatRate > 1) continue;
+      parsedRows.push({
+        supplier: normalizeUpper(supplierRaw),
+        product: normalizeUpper(productRaw),
+        unit: normalizeUnit(unitRaw),
+        price,
+        vatRate,
+      });
+    }
+
+    if (parsedRows.length === 0) {
+      setMessage('No encontré filas válidas para importar.');
+      return;
+    }
+
+    const bySupplier = new Map<string, Array<{ product: string; unit: Unit; price: number; vatRate: number }>>();
+    for (const row of parsedRows) {
+      const current = bySupplier.get(row.supplier) ?? [];
+      current.push({ product: row.product, unit: row.unit, price: row.price, vatRate: row.vatRate });
+      bySupplier.set(row.supplier, current);
+    }
+
+    const supplierByName = new Map(suppliers.map((s) => [normalizeUpper(s.name), s]));
+    let createdSuppliers = 0;
+    let createdProducts = 0;
+
+    for (const [supplierNameUpper, productsToCreate] of bySupplier.entries()) {
+      let supplier = supplierByName.get(supplierNameUpper);
+      if (!supplier) {
+        const preferredContact = PREFERRED_CONTACT_BY_SUPPLIER[supplierNameUpper] ?? DEFAULT_SUPPLIER_CONTACT;
+        const created = await createSupplier(supabase, localId, supplierNameUpper, preferredContact);
+        supplier = { id: created.id, name: created.name, contact: created.contact ?? '', products: [] };
+        supplierByName.set(supplierNameUpper, supplier);
+        createdSuppliers += 1;
+      }
+
+      const existingByProductName = new Set((supplier.products ?? []).map((p) => normalizeUpper(p.name)));
+      const dedupInput = new Map<string, { product: string; unit: Unit; price: number; vatRate: number }>();
+      for (const item of productsToCreate) {
+        dedupInput.set(item.product, item);
+      }
+      const sortedInput = Array.from(dedupInput.values()).sort((a, b) => a.product.localeCompare(b.product, 'es'));
+      for (const item of sortedInput) {
+        if (existingByProductName.has(item.product)) continue;
+        await createSupplierProduct(supabase, localId, supplier.id, {
+          name: item.product,
+          unit: item.unit,
+          pricePerUnit: item.price,
+          vatRate: item.vatRate,
+        });
+        existingByProductName.add(item.product);
+        createdProducts += 1;
+      }
+    }
+
+    setMessage(`Importación lista. Proveedores creados: ${createdSuppliers}. Productos creados: ${createdProducts}.`);
+    setBulkRowsText('');
+    reload();
   };
 
   const saveSupplierChanges = (supplierId: string) => {
@@ -115,7 +243,7 @@ export default function ProveedoresPage() {
     const supabase = getSupabaseClient();
     if (!supabase) return setMessage('Supabase no disponible en esta sesión.');
     void updateSupplier(supabase, localId, supplierId, {
-      name,
+      name: normalizeUpper(name),
       contact: draft?.contact ?? '',
     })
       .then(() => {
@@ -131,15 +259,20 @@ export default function ProveedoresPage() {
     const draft = productDrafts[productId];
     const name = draft?.name?.trim() ?? '';
     const price = Number((draft?.price ?? '').replace(',', '.'));
+    const vatRate = Number((draft?.vatRate ?? '').replace(',', '.'));
     if (!name || !Number.isFinite(price) || price <= 0) {
       return setMessage('Producto, unidad y precio válido son obligatorios.');
+    }
+    if (!Number.isFinite(vatRate) || vatRate < 0 || vatRate > 1) {
+      return setMessage('IVA inválido. Usa 0,21 o 0,10.');
     }
     const supabase = getSupabaseClient();
     if (!supabase) return setMessage('Supabase no disponible en esta sesión.');
     void updateSupplierProduct(supabase, localId, productId, {
-      name,
+      name: normalizeUpper(name),
       unit: draft.unit,
       pricePerUnit: price,
+      vatRate,
     })
       .then(() => {
         setEditingProductId(null);
@@ -170,6 +303,12 @@ export default function ProveedoresPage() {
     void deleteSupplier(supabase, localId, supplierId)
       .then(() => {
         setMessage('Proveedor eliminado.');
+        setShowDeletedBanner(true);
+        if (deletedBannerTimeoutRef.current) window.clearTimeout(deletedBannerTimeoutRef.current);
+        deletedBannerTimeoutRef.current = window.setTimeout(() => {
+          setShowDeletedBanner(false);
+          deletedBannerTimeoutRef.current = null;
+        }, 1000);
         reload();
       })
       .catch((err: Error) => setMessage(`No se pudo eliminar proveedor: ${err.message}`));
@@ -185,6 +324,13 @@ export default function ProveedoresPage() {
   }
   return (
     <div className="space-y-4">
+      {showDeletedBanner ? (
+        <div className="pointer-events-none fixed inset-0 z-[90] grid place-items-center bg-black/25 px-6">
+          <div className="rounded-2xl bg-[#D32F2F] px-7 py-5 text-center shadow-2xl ring-2 ring-white/75">
+            <p className="text-xl font-black uppercase tracking-wide text-white">ELIMINADO</p>
+          </div>
+        </div>
+      ) : null}
       <section>
         <Link
           href="/pedidos"
@@ -248,7 +394,7 @@ export default function ProveedoresPage() {
             placeholder="Nombre producto"
             className="h-10 rounded-xl border border-zinc-300 bg-white px-3 text-sm text-zinc-900 placeholder:text-zinc-500 outline-none"
           />
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
             <select
               value={productUnit}
               onChange={(e) => setProductUnit(e.target.value as Unit)}
@@ -268,6 +414,12 @@ export default function ProveedoresPage() {
               placeholder="Precio unidad"
               className="h-10 rounded-xl border border-zinc-300 bg-white px-3 text-sm text-zinc-900 placeholder:text-zinc-500 outline-none"
             />
+            <input
+              value={productVat}
+              onChange={(e) => setProductVat(e.target.value)}
+              placeholder="IVA (0,21)"
+              className="h-10 rounded-xl border border-zinc-300 bg-white px-3 text-sm text-zinc-900 placeholder:text-zinc-500 outline-none"
+            />
           </div>
           <button
             type="button"
@@ -279,7 +431,32 @@ export default function ProveedoresPage() {
         </div>
       </section>
 
-      {suppliers.map((supplier) => (
+      <section className="rounded-2xl bg-white p-4 ring-1 ring-zinc-200">
+        <p className="text-sm font-bold text-zinc-800">Importación masiva (pegado)</p>
+        <p className="mt-1 text-xs text-zinc-500">
+          Pega filas formato: PRODUCTO[TAB]UNIDAD[TAB]PRECIO[TAB]PROVEEDOR[TAB]IVA. Se guarda en mayúsculas y se ordena alfabéticamente.
+        </p>
+        <textarea
+          value={bulkRowsText}
+          onChange={(e) => setBulkRowsText(e.target.value)}
+          rows={6}
+          className="mt-2 w-full rounded-xl border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 outline-none"
+          placeholder="PEGA AQUÍ EL LISTADO..."
+        />
+        <button
+          type="button"
+          onClick={() => {
+            void importBulkCatalog();
+          }}
+          className="mt-2 h-10 rounded-xl bg-[#2563EB] px-3 text-sm font-bold text-white"
+        >
+          Importar listado
+        </button>
+      </section>
+
+      {[...suppliers]
+        .sort((a, b) => a.name.localeCompare(b.name, 'es'))
+        .map((supplier) => (
         <section key={supplier.id} className="rounded-2xl bg-white p-4 ring-1 ring-zinc-200">
           <div className="flex items-center justify-between gap-2">
             <p className="text-sm font-black text-zinc-900">{supplier.name}</p>
@@ -344,7 +521,9 @@ export default function ProveedoresPage() {
             </div>
           ) : null}
           <div className="mt-3 space-y-2">
-            {supplier.products.map((p) => (
+            {[...supplier.products]
+              .sort((a, b) => a.name.localeCompare(b.name, 'es'))
+              .map((p) => (
               <div key={p.id} className="rounded-lg bg-zinc-50 px-3 py-2">
                 <div className="flex items-center justify-between gap-2">
                   <p className="text-sm text-zinc-800">{p.name}</p>
@@ -359,6 +538,7 @@ export default function ProveedoresPage() {
                             name: prev[p.id]?.name ?? p.name,
                             unit: prev[p.id]?.unit ?? p.unit,
                             price: prev[p.id]?.price ?? String(p.pricePerUnit),
+                            vatRate: prev[p.id]?.vatRate ?? String(p.vatRate ?? 0),
                           },
                         }));
                       }}
@@ -376,7 +556,7 @@ export default function ProveedoresPage() {
                   </div>
                 </div>
                 <p className="pt-1 text-xs font-semibold text-zinc-600">
-                  {p.pricePerUnit.toFixed(2)} EUR/{p.unit}
+                  {p.pricePerUnit.toFixed(2)} EUR/{p.unit} · IVA {(p.vatRate * 100).toFixed(0)}%
                 </p>
                 {editingProductId === p.id ? (
                   <div className="mt-2 grid grid-cols-1 gap-2 rounded-lg border border-zinc-200 bg-white p-2">
@@ -385,20 +565,23 @@ export default function ProveedoresPage() {
                       onChange={(e) =>
                         setProductDrafts((prev) => ({
                           ...prev,
-                          [p.id]: { ...(prev[p.id] ?? { name: '', unit: 'ud', price: '' }), name: e.target.value },
+                          [p.id]: {
+                            ...(prev[p.id] ?? { name: '', unit: 'ud', price: '', vatRate: '0' }),
+                            name: e.target.value,
+                          },
                         }))
                       }
                       placeholder="Nombre producto"
                       className="h-9 rounded-lg border border-zinc-300 bg-white px-3 text-sm text-zinc-900 placeholder:text-zinc-500 outline-none"
                     />
-                    <div className="grid grid-cols-2 gap-2">
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
                       <select
                         value={productDrafts[p.id]?.unit ?? 'ud'}
                         onChange={(e) =>
                           setProductDrafts((prev) => ({
                             ...prev,
                             [p.id]: {
-                              ...(prev[p.id] ?? { name: '', unit: 'ud', price: '' }),
+                              ...(prev[p.id] ?? { name: '', unit: 'ud', price: '', vatRate: '0' }),
                               unit: e.target.value as Unit,
                             },
                           }))
@@ -418,10 +601,27 @@ export default function ProveedoresPage() {
                         onChange={(e) =>
                           setProductDrafts((prev) => ({
                             ...prev,
-                            [p.id]: { ...(prev[p.id] ?? { name: '', unit: 'ud', price: '' }), price: e.target.value },
+                            [p.id]: {
+                              ...(prev[p.id] ?? { name: '', unit: 'ud', price: '', vatRate: '0' }),
+                              price: e.target.value,
+                            },
                           }))
                         }
                         placeholder="Precio unidad"
+                        className="h-9 rounded-lg border border-zinc-300 bg-white px-3 text-sm text-zinc-900 placeholder:text-zinc-500 outline-none"
+                      />
+                      <input
+                        value={productDrafts[p.id]?.vatRate ?? ''}
+                        onChange={(e) =>
+                          setProductDrafts((prev) => ({
+                            ...prev,
+                            [p.id]: {
+                              ...(prev[p.id] ?? { name: '', unit: 'ud', price: '', vatRate: '0' }),
+                              vatRate: e.target.value,
+                            },
+                          }))
+                        }
+                        placeholder="IVA (0,21)"
                         className="h-9 rounded-lg border border-zinc-300 bg-white px-3 text-sm text-zinc-900 placeholder:text-zinc-500 outline-none"
                       />
                     </div>
