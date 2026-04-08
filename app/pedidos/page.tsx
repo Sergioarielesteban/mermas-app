@@ -36,6 +36,7 @@ export default function PedidosPage() {
   const sentOrders = orders.filter((row) => row.status === 'sent');
   const receivedOrders = orders.filter((row) => row.status === 'received');
   const draftsTotal = draftOrders.reduce((acc, d) => acc + d.total, 0);
+  const totalOrders = orders.length;
 
   if (!canUse) {
     return (
@@ -53,6 +54,17 @@ export default function PedidosPage() {
         <p className="pt-1 text-sm text-zinc-600">
           Gestion de pedidos de compra, recepcion de mercancia y control de incidencias.
         </p>
+        <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-3">
+          <Link href="/pedidos/nuevo" className="rounded-xl bg-[#D32F2F] px-3 py-2 text-center text-sm font-bold text-white">
+            + Nuevo pedido
+          </Link>
+          <Link href="/pedidos/proveedores" className="rounded-xl border border-zinc-300 bg-white px-3 py-2 text-center text-sm font-semibold text-zinc-700">
+            Proveedores
+          </Link>
+          <Link href="/pedidos/recepcion" className="rounded-xl border border-zinc-300 bg-white px-3 py-2 text-center text-sm font-semibold text-zinc-700">
+            Recepcion
+          </Link>
+        </div>
       </section>
 
       {message ? (
@@ -63,7 +75,7 @@ export default function PedidosPage() {
         <div className="rounded-2xl bg-white p-4 ring-1 ring-zinc-200">
           <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Borradores</p>
           <p className="pt-2 text-2xl font-black text-zinc-900">{draftOrders.length}</p>
-          <p className="pt-1 text-xs text-zinc-500">Total: {draftsTotal.toFixed(2)} EUR</p>
+          <p className="pt-1 text-xs text-zinc-500">Total: {draftsTotal.toFixed(2)} EUR · {totalOrders} pedidos</p>
         </div>
         <div className="rounded-2xl bg-white p-4 ring-1 ring-zinc-200">
           <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Pendientes recepcion</p>

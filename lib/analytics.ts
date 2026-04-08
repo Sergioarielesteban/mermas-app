@@ -217,39 +217,59 @@ export function anomalyAlerts(mermas: MermaRecord[], products: Product[], top = 
   currentStart.setDate(now.getDate() - 7);
   const previousStart = new Date(now);
   previousStart.setDate(now.getDate() - 14);
+  const priceByProductId = new Map(products.map((p) => [p.id, p.pricePerUnit]));
 
-  const current = new Map<string, number>();
-  const previous = new Map<string, number>();
+  const current = new Map<string, { cost: number; qty: number }>();
+  const previous = new Map<string, { cost: number; qty: number }>();
 
   for (const m of mermas) {
     const d = toBusinessDate(m.occurredAt);
+    const fixedCost = normalizedCostForRecord(m, priceByProductId.get(m.productId));
     if (d >= currentStart) {
-      current.set(m.productId, (current.get(m.productId) ?? 0) + m.costEur);
+      const prev = current.get(m.productId) ?? { cost: 0, qty: 0 };
+      prev.cost += fixedCost;
+      prev.qty += m.quantity;
+      current.set(m.productId, prev);
       continue;
     }
     if (d >= previousStart && d < currentStart) {
-      previous.set(m.productId, (previous.get(m.productId) ?? 0) + m.costEur);
+      const prev = previous.get(m.productId) ?? { cost: 0, qty: 0 };
+      prev.cost += fixedCost;
+      prev.qty += m.quantity;
+      previous.set(m.productId, prev);
     }
   }
 
   return Array.from(current.entries())
-    .map(([productId, currentValue]) => {
-      const previousValue = previous.get(productId) ?? 0;
+    .map(([productId, currentData]) => {
+      const previousData = previous.get(productId) ?? { cost: 0, qty: 0 };
+      const currentValue = currentData.cost;
+      const previousValue = previousData.cost;
+      const currentQty = currentData.qty;
+      const previousQty = previousData.qty;
       const delta = currentValue - previousValue;
+      const qtyDelta = currentQty - previousQty;
       const ratio = previousValue > 0 ? currentValue / previousValue : currentValue > 0 ? 2 : 1;
-      const severity = ratio >= 2.2 || delta >= 8 ? 'alta' : 'media';
+      const unitPrice = priceByProductId.get(productId) ?? 0;
+      const qtyImpactEur = Math.max(0, qtyDelta) * Math.max(0.75, unitPrice);
+      const riskScore = delta + qtyImpactEur;
+      const severity = ratio >= 2.2 || delta >= 8 || qtyDelta >= 8 ? 'alta' : 'media';
       return {
         productId,
         productName: products.find((p) => p.id === productId)?.name ?? 'Producto',
         current: Math.round(currentValue * 100) / 100,
         previous: Math.round(previousValue * 100) / 100,
+        currentQty: Math.round(currentQty * 100) / 100,
+        previousQty: Math.round(previousQty * 100) / 100,
+        qtyDelta: Math.round(qtyDelta * 100) / 100,
         delta: Math.round(delta * 100) / 100,
         ratio,
+        riskScore: Math.round(riskScore * 100) / 100,
         severity,
       };
     })
-    .filter((item) => item.current >= 3 && item.ratio >= 1.5 && item.delta > 0)
-    .sort((a, b) => b.delta - a.delta)
+    .filter((item) => item.current >= 2 && item.ratio >= 1.35 && (item.delta > 0 || item.qtyDelta >= 3))
+    .sort((a, b) => (b.riskScore - a.riskScore) || (b.delta - a.delta))
     .slice(0, top);
 }
 

@@ -104,6 +104,11 @@ export default function NuevoPedidoPage() {
       return { ...prev, [productId]: next };
     });
   };
+  const setDirectQty = (productId: string, rawValue: string) => {
+    const parsed = Number(rawValue.replace(',', '.'));
+    const safe = Number.isFinite(parsed) ? Math.max(0, Math.round(parsed * 100) / 100) : 0;
+    setQtyByProductId((prev) => ({ ...prev, [productId]: safe }));
+  };
 
   const items: PedidoOrderItem[] = supplierProducts
     .map((p) => {
@@ -195,7 +200,7 @@ export default function NuevoPedidoPage() {
         <select
           value={supplierId}
           onChange={(e) => setSupplierId(e.target.value)}
-          className="mt-2 h-11 w-full rounded-xl border border-zinc-200 bg-zinc-50 px-3 text-sm outline-none"
+          className="mt-2 h-11 w-full rounded-xl border border-zinc-300 bg-white px-3 text-sm font-medium text-zinc-900 outline-none"
         >
           {suppliers.map((s) => (
             <option key={s.id} value={s.id}>
@@ -213,12 +218,13 @@ export default function NuevoPedidoPage() {
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Buscar..."
-          className="mt-2 h-11 w-full rounded-xl border border-zinc-200 bg-zinc-50 px-3 text-sm outline-none"
+          className="mt-2 h-11 w-full rounded-xl border border-zinc-300 bg-white px-3 text-sm text-zinc-900 placeholder:text-zinc-500 outline-none"
         />
       </section>
 
       <section className="rounded-2xl bg-white p-4 ring-1 ring-zinc-200">
         <p className="text-sm font-bold text-zinc-800">Catalogo del proveedor</p>
+        <p className="mt-1 text-xs text-zinc-500">Toca +1/+5 para cargar rapido o escribe la cantidad exacta.</p>
         <div className="mt-2 space-y-2">
           {filteredProducts.length === 0 ? <p className="text-sm text-zinc-500">Sin productos para este filtro.</p> : null}
           {filteredProducts.map((p) => {
@@ -235,7 +241,23 @@ export default function NuevoPedidoPage() {
                   </div>
                   <p className="text-sm font-bold text-zinc-900">{lineTotal.toFixed(2)} EUR</p>
                 </div>
-                <div className="mt-3 flex items-center justify-end gap-2">
+                <div className="mt-3 flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setQtyByProductId((prev) => ({ ...prev, [p.id]: Math.max(0, (prev[p.id] ?? 0) + (p.unit === 'kg' ? 0.5 : 1)) }))}
+                      className="h-8 rounded-lg border border-zinc-300 bg-white px-2 text-xs font-semibold text-zinc-700"
+                    >
+                      {p.unit === 'kg' ? '+0.5' : '+1'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setQtyByProductId((prev) => ({ ...prev, [p.id]: Math.max(0, (prev[p.id] ?? 0) + (p.unit === 'kg' ? 1 : 5)) }))}
+                      className="h-8 rounded-lg border border-zinc-300 bg-white px-2 text-xs font-semibold text-zinc-700"
+                    >
+                      {p.unit === 'kg' ? '+1' : '+5'}
+                    </button>
+                  </div>
                   <button
                     type="button"
                     onClick={() => changeQty(p.id, p.unit, 'dec')}
@@ -246,6 +268,12 @@ export default function NuevoPedidoPage() {
                   <div className="min-w-20 rounded-lg bg-white px-3 py-2 text-center text-sm font-bold text-zinc-900 ring-1 ring-zinc-200">
                     {p.unit === 'kg' ? qty.toFixed(2) : Math.round(qty)} {p.unit}
                   </div>
+                  <input
+                    value={qty}
+                    onChange={(e) => setDirectQty(p.id, e.target.value)}
+                    inputMode="decimal"
+                    className="h-10 w-20 rounded-lg border border-zinc-300 bg-white px-2 text-center text-sm font-semibold text-zinc-900 outline-none"
+                  />
                   <button
                     type="button"
                     onClick={() => changeQty(p.id, p.unit, 'inc')}
@@ -278,30 +306,38 @@ export default function NuevoPedidoPage() {
         <p className="mt-3 text-sm font-black text-zinc-900">Total estimado: {total.toFixed(2)} EUR</p>
       </section>
 
-      <section className="rounded-2xl bg-white p-4 ring-1 ring-zinc-200">
+      <section className="rounded-2xl bg-white p-4 pb-28 ring-1 ring-zinc-200">
         <label className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Notas</label>
         <textarea
           value={notes}
           onChange={(e) => setNotes(e.target.value)}
           rows={3}
-          className="mt-2 w-full rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm outline-none"
+          className="mt-2 w-full rounded-xl border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 placeholder:text-zinc-500 outline-none"
           placeholder="Observaciones del pedido..."
         />
         {message ? <p className="mt-2 text-sm text-[#B91C1C]">{message}</p> : null}
-        <button
-          type="button"
-          onClick={() => saveDraft('draft')}
-          className="mt-3 h-11 w-full rounded-xl bg-[#D32F2F] text-sm font-bold text-white"
-        >
-          {editingId ? 'Guardar cambios' : 'Guardar borrador'}
-        </button>
-        <button
-          type="button"
-          onClick={() => saveDraft('sent')}
-          className="mt-2 h-11 w-full rounded-xl border border-[#2563EB] bg-white text-sm font-bold text-[#2563EB]"
-        >
-          Enviar pedido
-        </button>
+      </section>
+
+      <section className="sticky bottom-2 z-20 rounded-2xl border border-zinc-200 bg-white/95 p-3 shadow-lg backdrop-blur">
+        <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
+          {items.length} lineas · Total {total.toFixed(2)} EUR
+        </p>
+        <div className="mt-2 grid grid-cols-2 gap-2">
+          <button
+            type="button"
+            onClick={() => saveDraft('draft')}
+            className="h-11 rounded-xl bg-[#D32F2F] text-sm font-bold text-white"
+          >
+            {editingId ? 'Guardar cambios' : 'Guardar borrador'}
+          </button>
+          <button
+            type="button"
+            onClick={() => saveDraft('sent')}
+            className="h-11 rounded-xl border border-[#2563EB] bg-white text-sm font-bold text-[#2563EB]"
+          >
+            Enviar pedido
+          </button>
+        </div>
       </section>
     </div>
   );

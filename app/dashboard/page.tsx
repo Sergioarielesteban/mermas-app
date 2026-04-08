@@ -470,8 +470,11 @@ export default function DashboardPage() {
                 <p className="pt-1 text-xs text-zinc-700">
                   Semana actual: <strong>{eur(item.current)}</strong> | semana previa: <strong>{eur(item.previous)}</strong>
                 </p>
+                <p className="pt-1 text-xs text-zinc-700">
+                  Cantidad: <strong>{qty(item.currentQty)}</strong> | previa: <strong>{qty(item.previousQty)}</strong>
+                </p>
                 <p className={['pt-1 text-xs font-semibold', item.severity === 'alta' ? 'text-red-800' : 'text-amber-800'].join(' ')}>
-                  Incremento: +{eur(item.delta)}
+                  Incremento: +{eur(item.delta)} · +{qty(item.qtyDelta)} uds aprox
                 </p>
               </div>
             ))}

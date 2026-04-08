@@ -121,6 +121,23 @@ export async function createSupplier(supabase: SupabaseClient, localId: string, 
   return data as SupplierRow;
 }
 
+export async function updateSupplier(
+  supabase: SupabaseClient,
+  localId: string,
+  supplierId: string,
+  input: { name: string; contact: string },
+) {
+  const { data, error } = await supabase
+    .from('pedido_suppliers')
+    .update({ name: input.name.trim(), contact: input.contact.trim() })
+    .eq('id', supplierId)
+    .eq('local_id', localId)
+    .select('id,name,contact')
+    .single();
+  if (error) throw new Error(error.message);
+  return data as SupplierRow;
+}
+
 export async function createSupplierProduct(
   supabase: SupabaseClient,
   localId: string,
@@ -141,6 +158,41 @@ export async function createSupplierProduct(
     .single();
   if (error) throw new Error(error.message);
   return data as SupplierProductRow;
+}
+
+export async function updateSupplierProduct(
+  supabase: SupabaseClient,
+  localId: string,
+  supplierProductId: string,
+  input: { name: string; unit: Unit; pricePerUnit: number },
+) {
+  const { data, error } = await supabase
+    .from('pedido_supplier_products')
+    .update({
+      name: input.name.trim(),
+      unit: input.unit,
+      price_per_unit: Math.round(input.pricePerUnit * 100) / 100,
+    })
+    .eq('id', supplierProductId)
+    .eq('local_id', localId)
+    .select('id,supplier_id,name,unit,price_per_unit,is_active')
+    .single();
+  if (error) throw new Error(error.message);
+  return data as SupplierProductRow;
+}
+
+export async function setSupplierProductActive(
+  supabase: SupabaseClient,
+  localId: string,
+  supplierProductId: string,
+  isActive: boolean,
+) {
+  const { error } = await supabase
+    .from('pedido_supplier_products')
+    .update({ is_active: isActive })
+    .eq('id', supplierProductId)
+    .eq('local_id', localId);
+  if (error) throw new Error(error.message);
 }
 
 export async function fetchOrders(supabase: SupabaseClient, localId: string) {
