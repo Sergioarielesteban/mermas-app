@@ -28,6 +28,7 @@ export default function NuevoPedidoPage() {
   const [search, setSearch] = React.useState('');
   const [qtyByProductId, setQtyByProductId] = React.useState<QtyMap>({});
   const [message, setMessage] = React.useState<string | null>(null);
+  const [loadingSuppliers, setLoadingSuppliers] = React.useState(false);
   const [isLoadedEdit, setIsLoadedEdit] = React.useState(false);
   const [existingCreatedAt, setExistingCreatedAt] = React.useState<string | null>(null);
   const [existingSentAt, setExistingSentAt] = React.useState<string | null>(null);
@@ -37,19 +38,23 @@ export default function NuevoPedidoPage() {
     if (!canUse || !localId) return;
     const supabase = getSupabaseClient();
     if (!supabase) return;
+    setLoadingSuppliers(true);
     void fetchSuppliersWithProducts(supabase, localId)
       .then((rows) => {
         setSuppliers(rows);
-        if (!supplierId && rows[0]?.id) setSupplierId(rows[0].id);
+        if (rows[0]?.id) {
+          setSupplierId((prev) => prev || rows[0].id);
+        }
       })
-      .catch((err: Error) => setMessage(err.message));
-  }, [canUse, localId, supplierId]);
+      .catch((err: Error) => setMessage(err.message))
+      .finally(() => setLoadingSuppliers(false));
+  }, [canUse, localId]);
 
   const selectedSupplier = suppliers.find((s) => s.id === supplierId) ?? null;
   const supplierProducts = React.useMemo(() => selectedSupplier?.products ?? [], [selectedSupplier]);
-  const filteredProducts = supplierProducts.filter((p) =>
-    p.name.toLowerCase().includes(search.trim().toLowerCase()),
-  );
+  const filteredProducts = supplierProducts
+    .filter((p) => p.name.toLowerCase().includes(search.trim().toLowerCase()))
+    .sort((a, b) => a.name.localeCompare(b.name, 'es'));
 
   React.useEffect(() => {
     if (!editingId) return;
@@ -95,7 +100,7 @@ export default function NuevoPedidoPage() {
     });
   }, [supplierId, supplierProducts, editingId, isLoadedEdit]);
 
-  const changeQty = (productId: string, unit: 'kg' | 'ud' | 'bolsa' | 'racion', direction: 'inc' | 'dec') => {
+  const changeQty = (productId: string, unit: PedidoOrderItem['unit'], direction: 'inc' | 'dec') => {
     const step = unit === 'kg' ? 0.1 : 1;
     setQtyByProductId((prev) => {
       const current = prev[productId] ?? 0;
@@ -103,11 +108,6 @@ export default function NuevoPedidoPage() {
       const next = Math.max(0, Math.round(nextRaw * 100) / 100);
       return { ...prev, [productId]: next };
     });
-  };
-  const setDirectQty = (productId: string, rawValue: string) => {
-    const parsed = Number(rawValue.replace(',', '.'));
-    const safe = Number.isFinite(parsed) ? Math.max(0, Math.round(parsed * 100) / 100) : 0;
-    setQtyByProductId((prev) => ({ ...prev, [productId]: safe }));
   };
 
   const items: PedidoOrderItem[] = supplierProducts
@@ -197,6 +197,7 @@ export default function NuevoPedidoPage() {
 
       <section className="rounded-2xl bg-white p-4 ring-1 ring-zinc-200">
         <label className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Proveedor</label>
+        {loadingSuppliers ? <p className="mt-2 text-xs font-semibold text-zinc-500">Cargando catálogo de proveedores...</p> : null}
         <select
           value={supplierId}
           onChange={(e) => setSupplierId(e.target.value)}
@@ -224,9 +225,16 @@ export default function NuevoPedidoPage() {
 
       <section className="rounded-2xl bg-white p-4 ring-1 ring-zinc-200">
         <p className="text-sm font-bold text-zinc-800">Catalogo del proveedor</p>
-        <p className="mt-1 text-xs text-zinc-500">Toca +1/+5 para cargar rapido o escribe la cantidad exacta.</p>
+        <p className="mt-1 text-xs text-zinc-500">Al seleccionar proveedor se carga todo su catálogo. Usa solo + y -.</p>
         <div className="mt-2 space-y-2">
-          {filteredProducts.length === 0 ? <p className="text-sm text-zinc-500">Sin productos para este filtro.</p> : null}
+          {selectedSupplier && filteredProducts.length > 0 ? (
+            <p className="text-xs font-semibold text-zinc-500">
+              {selectedSupplier.name}: {filteredProducts.length} productos
+            </p>
+          ) : null}
+          {selectedSupplier && filteredProducts.length === 0 ? (
+            <p className="text-sm text-zinc-500">Este proveedor no tiene productos activos. Revísalo en Proveedores.</p>
+          ) : null}
           {filteredProducts.map((p) => {
             const qty = qtyByProductId[p.id] ?? 0;
             const lineTotal = Math.round(qty * p.pricePerUnit * 100) / 100;
@@ -242,42 +250,20 @@ export default function NuevoPedidoPage() {
                   <p className="text-sm font-bold text-zinc-900">{lineTotal.toFixed(2)} EUR</p>
                 </div>
                 <div className="mt-3 flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setQtyByProductId((prev) => ({ ...prev, [p.id]: Math.max(0, (prev[p.id] ?? 0) + (p.unit === 'kg' ? 0.5 : 1)) }))}
-                      className="h-8 rounded-lg border border-zinc-300 bg-white px-2 text-xs font-semibold text-zinc-700"
-                    >
-                      {p.unit === 'kg' ? '+0.5' : '+1'}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setQtyByProductId((prev) => ({ ...prev, [p.id]: Math.max(0, (prev[p.id] ?? 0) + (p.unit === 'kg' ? 1 : 5)) }))}
-                      className="h-8 rounded-lg border border-zinc-300 bg-white px-2 text-xs font-semibold text-zinc-700"
-                    >
-                      {p.unit === 'kg' ? '+1' : '+5'}
-                    </button>
-                  </div>
                   <button
                     type="button"
                     onClick={() => changeQty(p.id, p.unit, 'dec')}
-                    className="h-10 w-10 rounded-full border border-zinc-300 bg-white text-xl font-bold text-zinc-700"
+                    className="h-14 w-14 rounded-full border border-zinc-300 bg-white text-3xl font-black text-zinc-700"
                   >
                     -
                   </button>
-                  <div className="min-w-20 rounded-lg bg-white px-3 py-2 text-center text-sm font-bold text-zinc-900 ring-1 ring-zinc-200">
+                  <div className="min-w-28 rounded-lg bg-white px-3 py-3 text-center text-base font-black text-zinc-900 ring-1 ring-zinc-200">
                     {p.unit === 'kg' ? qty.toFixed(2) : Math.round(qty)} {p.unit}
                   </div>
-                  <input
-                    value={qty}
-                    onChange={(e) => setDirectQty(p.id, e.target.value)}
-                    inputMode="decimal"
-                    className="h-10 w-20 rounded-lg border border-zinc-300 bg-white px-2 text-center text-sm font-semibold text-zinc-900 outline-none"
-                  />
                   <button
                     type="button"
                     onClick={() => changeQty(p.id, p.unit, 'inc')}
-                    className="h-10 w-10 rounded-full bg-[#2563EB] text-xl font-bold text-white"
+                    className="h-14 w-14 rounded-full bg-[#2563EB] text-3xl font-black text-white"
                   >
                     +
                   </button>

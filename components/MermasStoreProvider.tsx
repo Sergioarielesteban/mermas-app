@@ -30,7 +30,7 @@ type MermasStore = {
   addProduct: (input: CreateProductInput) => void;
   updateProduct: (id: string, input: CreateProductInput) => void;
   removeProduct: (id: string) => { ok: boolean; reason?: string };
-  addMerma: (input: AddMermaInput) => MermaRecord;
+  addMerma: (input: AddMermaInput) => Promise<{ ok: boolean; record?: MermaRecord; reason?: string }>;
   updateMerma: (id: string, input: AddMermaInput) => { ok: boolean; reason?: string };
   removeMerma: (id: string) => Promise<{ ok: boolean; reason?: string }>;
   exportData: () => PersistedState;
@@ -681,7 +681,7 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
       return { ok: true };
     };
 
-    const addMerma = (input: AddMermaInput) => {
+    const addMerma = async (input: AddMermaInput) => {
       const product = products.find((p) => p.id === input.productId);
       const price = product?.pricePerUnit ?? 0;
       const qty = Number.isFinite(input.quantity) ? input.quantity : 0;
@@ -699,41 +699,43 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
       };
 
       if (useCloud) {
-        if (!localId) return record;
+        if (!localId) {
+          return { ok: false, reason: 'Perfil del local aún cargando. Espera 2 segundos y vuelve a guardar.' };
+        }
         const supabase = getSupabaseClient();
-        if (!supabase) return record;
+        if (!supabase) {
+          return { ok: false, reason: 'Sin conexión con Supabase.' };
+        }
         markLocalEdit();
         setMermas((prev) => [record, ...prev]);
-        void (async () => {
-          const { data, error } = await supabase
-            .from('mermas')
-            .insert({
-              local_id: localId,
-              product_id: input.productId,
-              quantity: qty,
-              motive_key: input.motiveKey,
-              notes: input.notes.trim(),
-              occurred_at: input.occurredAt,
-              photo_data_url: input.photoDataUrl ?? null,
-              cost_eur: costEur,
-            })
-            .select('id,product_id,quantity,motive_key,notes,occurred_at,photo_data_url,cost_eur,created_at')
-            .single();
-          if (error || !data) {
-            // Revert optimistic row so the UI does not suggest it was saved.
-            setMermas((prev) => prev.filter((m) => m.id !== record.id));
-            return;
-          }
-          const saved = mapMermaRow(data);
-          setMermas((prev) => prev.map((m) => (m.id === record.id ? saved : m)));
-          markLocalEdit();
-        })();
-        return record;
+        const { data, error } = await supabase
+          .from('mermas')
+          .insert({
+            local_id: localId,
+            product_id: input.productId,
+            quantity: qty,
+            motive_key: input.motiveKey,
+            notes: input.notes.trim(),
+            occurred_at: input.occurredAt,
+            photo_data_url: input.photoDataUrl ?? null,
+            cost_eur: costEur,
+          })
+          .select('id,product_id,quantity,motive_key,notes,occurred_at,photo_data_url,cost_eur,created_at')
+          .single();
+        if (error || !data) {
+          // Revert optimistic row so the UI does not suggest it was saved.
+          setMermas((prev) => prev.filter((m) => m.id !== record.id));
+          return { ok: false, reason: error?.message ?? 'No se pudo guardar en nube.' };
+        }
+        const saved = mapMermaRow(data);
+        setMermas((prev) => prev.map((m) => (m.id === record.id ? saved : m)));
+        markLocalEdit();
+        return { ok: true, record: saved };
       }
 
       markLocalEdit();
       setMermas((prev) => [record, ...prev]);
-      return record;
+      return { ok: true, record };
     };
 
     const updateMerma = (id: string, input: AddMermaInput) => {

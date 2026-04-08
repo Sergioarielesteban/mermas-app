@@ -33,6 +33,7 @@ export type PedidoOrder = {
   id: string;
   supplierId: string;
   supplierName: string;
+  supplierContact?: string;
   status: PedidoStatus;
   notes: string;
   createdAt: string;
@@ -59,7 +60,7 @@ type OrderRow = {
   created_at: string;
   sent_at: string | null;
   received_at: string | null;
-  pedido_suppliers: { name: string } | { name: string }[] | null;
+  pedido_suppliers: { name: string; contact: string | null } | { name: string; contact: string | null }[] | null;
 };
 type OrderItemRow = {
   id: string;
@@ -198,7 +199,7 @@ export async function setSupplierProductActive(
 export async function fetchOrders(supabase: SupabaseClient, localId: string) {
   const { data: orderRows, error: oErr } = await supabase
     .from('purchase_orders')
-    .select('id,supplier_id,status,notes,created_at,sent_at,received_at,pedido_suppliers(name)')
+    .select('id,supplier_id,status,notes,created_at,sent_at,received_at,pedido_suppliers(name,contact)')
     .eq('local_id', localId)
     .order('created_at', { ascending: false });
   if (oErr) throw new Error(oErr.message);
@@ -233,6 +234,7 @@ export async function fetchOrders(supabase: SupabaseClient, localId: string) {
       id: row.id,
       supplierId: row.supplier_id,
       supplierName: supplier?.name ?? 'Proveedor',
+      supplierContact: supplier?.contact ?? undefined,
       status: row.status,
       notes: row.notes ?? '',
       createdAt: row.created_at,

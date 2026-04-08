@@ -20,6 +20,11 @@ type AuthContextValue = {
 const AuthContext = createContext<AuthContextValue | null>(null);
 const AUTH_KEY = 'mermas_user_email';
 
+function isInvalidRefreshTokenError(message: string | undefined) {
+  const m = (message ?? '').toLowerCase();
+  return m.includes('invalid refresh token') || m.includes('refresh token not found');
+}
+
 function mapSupabaseAuthError(message: string): string {
   const m = message.toLowerCase();
   if (m.includes('invalid login credentials') || m.includes('invalid_credentials')) {
@@ -43,6 +48,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setLocalId(null);
     setLocalCode(null);
     setLocalName(null);
+  }, []);
+
+  const clearLocalAuthCache = React.useCallback(() => {
+    if (typeof window === 'undefined') return;
+    window.localStorage.removeItem(AUTH_KEY);
+    // Remove stale Supabase session tokens that can cause refresh-loop errors.
+    const keys = Object.keys(window.localStorage);
+    for (const key of keys) {
+      if (key.startsWith('sb-') && key.includes('-auth-token')) {
+        window.localStorage.removeItem(key);
+      }
+    }
   }, []);
 
   const loadProfileForUser = React.useCallback(async (userId: string | undefined) => {
@@ -124,8 +141,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }, 8000);
     void supabase.auth
       .getSession()
-      .then(({ data }) => {
+      .then(({ data, error }) => {
         if (!isMounted) return;
+        if (error && isInvalidRefreshTokenError(error.message)) {
+          setEmail(null);
+          clearProfile();
+          clearLocalAuthCache();
+          setLoading(false);
+          setProfileReady(true);
+          return;
+        }
         const sessionEmail = data.session?.user?.email?.toLowerCase() ?? null;
         setEmail(sessionEmail);
         persistEmail(sessionEmail);
@@ -141,7 +166,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         window.clearTimeout(safetyTimeout);
       });
 
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: sub } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_OUT') {
+        clearLocalAuthCache();
+      }
       const nextEmail = session?.user?.email?.toLowerCase() ?? null;
       setEmail(nextEmail);
       persistEmail(nextEmail);
@@ -154,7 +182,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       window.clearTimeout(safetyTimeout);
       sub.subscription.unsubscribe();
     };
-  }, [loadProfileForUser]);
+  }, [clearLocalAuthCache, clearProfile, loadProfileForUser]);
 
   const value = useMemo<AuthContextValue>(
     () => ({

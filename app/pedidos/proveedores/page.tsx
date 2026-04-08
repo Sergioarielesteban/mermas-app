@@ -241,6 +241,9 @@ export default function ProveedoresPage() {
             >
               <option value="ud">ud</option>
               <option value="kg">kg</option>
+              <option value="caja">caja</option>
+              <option value="paquete">paquete</option>
+              <option value="bandeja">bandeja</option>
               <option value="bolsa">bolsa</option>
               <option value="racion">racion</option>
             </select>
@@ -380,6 +383,9 @@ export default function ProveedoresPage() {
                       >
                         <option value="ud">ud</option>
                         <option value="kg">kg</option>
+                        <option value="caja">caja</option>
+                        <option value="paquete">paquete</option>
+                        <option value="bandeja">bandeja</option>
                         <option value="bolsa">bolsa</option>
                         <option value="racion">racion</option>
                       </select>

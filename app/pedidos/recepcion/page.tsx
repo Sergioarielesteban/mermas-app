@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import React from 'react';
 import { useAuth } from '@/components/AuthProvider';
 import { getSupabaseClient } from '@/lib/supabase-client';
@@ -8,11 +9,13 @@ import { canAccessPedidos } from '@/lib/pedidos-access';
 import { fetchOrders, setOrderStatus, updateOrderItemReceived, type PedidoOrder } from '@/lib/pedidos-supabase';
 
 export default function RecepcionPedidosPage() {
+  const searchParams = useSearchParams();
   const { localCode, localName, localId, email } = useAuth();
   const canUse = canAccessPedidos(localCode, email, localName, localId);
   const [orders, setOrders] = React.useState<PedidoOrder[]>([]);
   const [supplierFilter, setSupplierFilter] = React.useState('all');
-  const [dateFilter, setDateFilter] = React.useState('');
+  const initialDateFilter = searchParams.get('date') ?? '';
+  const [dateFilter, setDateFilter] = React.useState(initialDateFilter);
   const [message, setMessage] = React.useState<string | null>(null);
 
   const reloadOrders = React.useCallback(() => {
@@ -91,6 +94,11 @@ export default function RecepcionPedidosPage() {
       <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-zinc-200">
         <h1 className="text-lg font-black text-zinc-900">Recepcion de albaranes</h1>
         <p className="pt-1 text-sm text-zinc-600">Marca por linea lo recibido frente a lo pedido.</p>
+        {dateFilter ? (
+          <p className="pt-1 text-xs font-semibold text-zinc-500">
+            Mostrando pedidos del día: {new Date(`${dateFilter}T00:00:00`).toLocaleDateString('es-ES')}
+          </p>
+        ) : null}
       </section>
 
       <section className="rounded-2xl bg-white p-4 ring-1 ring-zinc-200">

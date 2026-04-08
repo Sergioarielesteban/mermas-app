@@ -110,7 +110,7 @@ export default function MermasRegistrationForm() {
     }, 1300);
   };
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!productId) {
@@ -137,7 +137,7 @@ export default function MermasRegistrationForm() {
       return;
     }
 
-    addMerma({
+    const result = await addMerma({
       productId,
       quantity,
       motiveKey,
@@ -145,6 +145,10 @@ export default function MermasRegistrationForm() {
       occurredAt: occurredAt.toISOString(),
       photoDataUrl: motiveKey === 'mal-estado' ? (photoDataUrl ?? undefined) : undefined,
     });
+    if (!result.ok) {
+      showValidationBanner(result.reason ?? 'No se pudo guardar la merma');
+      return;
+    }
 
     setValidationBanner(null);
     setShowSavedBanner(true);
