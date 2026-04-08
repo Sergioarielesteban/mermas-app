@@ -3,18 +3,30 @@
 import Link from 'next/link';
 import React from 'react';
 import { useAuth } from '@/components/AuthProvider';
+import { getSupabaseClient } from '@/lib/supabase-client';
 import { canAccessPedidos } from '@/lib/pedidos-access';
-import { deletePedidoDraft, getPedidoDrafts, setPedidoStatus, type PedidoDraft } from '@/lib/pedidos-storage';
+import {
+  deleteOrder,
+  fetchOrders,
+  setOrderStatus,
+  type PedidoOrder,
+} from '@/lib/pedidos-supabase';
 
 export default function PedidosPage() {
   const { localCode, localName, localId, email } = useAuth();
   const canUse = canAccessPedidos(localCode, email, localName, localId);
-  const [orders, setOrders] = React.useState<PedidoDraft[]>([]);
+  const [orders, setOrders] = React.useState<PedidoOrder[]>([]);
+  const [message, setMessage] = React.useState<string | null>(null);
+  const [expandedId, setExpandedId] = React.useState<string | null>(null);
 
   const reloadOrders = React.useCallback(() => {
-    if (!canUse) return;
-    setOrders(getPedidoDrafts());
-  }, [canUse]);
+    if (!canUse || !localId) return;
+    const supabase = getSupabaseClient();
+    if (!supabase) return;
+    void fetchOrders(supabase, localId)
+      .then((rows) => setOrders(rows))
+      .catch((err: Error) => setMessage(err.message));
+  }, [canUse, localId]);
 
   React.useEffect(() => {
     reloadOrders();
@@ -42,6 +54,10 @@ export default function PedidosPage() {
           Gestion de pedidos de compra, recepcion de mercancia y control de incidencias.
         </p>
       </section>
+
+      {message ? (
+        <section className="rounded-2xl bg-white p-4 text-sm text-zinc-700 ring-1 ring-zinc-200">{message}</section>
+      ) : null}
 
       <section className="grid grid-cols-2 gap-3">
         <div className="rounded-2xl bg-white p-4 ring-1 ring-zinc-200">
@@ -102,8 +118,12 @@ export default function PedidosPage() {
                 <button
                   type="button"
                   onClick={() => {
-                    setPedidoStatus(order.id, 'sent');
-                    reloadOrders();
+                    if (!localId) return;
+                    const supabase = getSupabaseClient();
+                    if (!supabase) return;
+                    void setOrderStatus(supabase, localId, order.id, 'sent')
+                      .then(() => reloadOrders())
+                      .catch((err: Error) => setMessage(err.message));
                   }}
                   className="rounded-lg bg-[#2563EB] px-3 py-2 text-xs font-semibold text-white"
                 >
@@ -112,8 +132,12 @@ export default function PedidosPage() {
                 <button
                   type="button"
                   onClick={() => {
-                    deletePedidoDraft(order.id);
-                    reloadOrders();
+                    if (!localId) return;
+                    const supabase = getSupabaseClient();
+                    if (!supabase) return;
+                    void deleteOrder(supabase, localId, order.id)
+                      .then(() => reloadOrders())
+                      .catch((err: Error) => setMessage(err.message));
                   }}
                   className="rounded-lg border border-[#B91C1C] bg-white px-3 py-2 text-xs font-semibold text-[#B91C1C]"
                 >
@@ -136,6 +160,22 @@ export default function PedidosPage() {
                 {order.items.length} lineas · {order.total.toFixed(2)} EUR · enviado{' '}
                 {order.sentAt ? new Date(order.sentAt).toLocaleDateString('es-ES') : '-'}
               </p>
+              <button
+                type="button"
+                onClick={() => setExpandedId((prev) => (prev === order.id ? null : order.id))}
+                className="mt-2 text-xs font-semibold text-[#2563EB]"
+              >
+                {expandedId === order.id ? 'Ocultar detalle' : 'Ver detalle'}
+              </button>
+              {expandedId === order.id ? (
+                <div className="mt-2 space-y-1">
+                  {order.items.map((item) => (
+                    <p key={item.id} className="text-xs text-zinc-600">
+                      {item.productName}: {item.quantity} {item.unit} ({item.lineTotal.toFixed(2)} EUR)
+                    </p>
+                  ))}
+                </div>
+              ) : null}
             </div>
           ))}
         </div>
@@ -152,6 +192,22 @@ export default function PedidosPage() {
                 {order.items.length} lineas · {order.total.toFixed(2)} EUR · recibido{' '}
                 {order.receivedAt ? new Date(order.receivedAt).toLocaleDateString('es-ES') : '-'}
               </p>
+              <button
+                type="button"
+                onClick={() => setExpandedId((prev) => (prev === order.id ? null : order.id))}
+                className="mt-2 text-xs font-semibold text-[#2563EB]"
+              >
+                {expandedId === order.id ? 'Ocultar detalle' : 'Ver detalle'}
+              </button>
+              {expandedId === order.id ? (
+                <div className="mt-2 space-y-1">
+                  {order.items.map((item) => (
+                    <p key={item.id} className="text-xs text-zinc-600">
+                      {item.productName}: pedido {item.quantity} / recibido {item.receivedQuantity} {item.unit}
+                    </p>
+                  ))}
+                </div>
+              ) : null}
             </div>
           ))}
         </div>

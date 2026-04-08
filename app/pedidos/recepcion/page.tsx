@@ -2,21 +2,26 @@
 
 import React from 'react';
 import { useAuth } from '@/components/AuthProvider';
+import { getSupabaseClient } from '@/lib/supabase-client';
 import { canAccessPedidos } from '@/lib/pedidos-access';
-import { getPedidoDrafts, updatePedidoLineReceived, type PedidoDraft } from '@/lib/pedidos-storage';
+import { fetchOrders, setOrderStatus, updateOrderItemReceived, type PedidoOrder } from '@/lib/pedidos-supabase';
 
 export default function RecepcionPedidosPage() {
   const { localCode, localName, localId, email } = useAuth();
   const canUse = canAccessPedidos(localCode, email, localName, localId);
-  const [orders, setOrders] = React.useState<PedidoDraft[]>([]);
+  const [orders, setOrders] = React.useState<PedidoOrder[]>([]);
   const [supplierFilter, setSupplierFilter] = React.useState('all');
   const [dateFilter, setDateFilter] = React.useState('');
+  const [message, setMessage] = React.useState<string | null>(null);
 
   const reloadOrders = React.useCallback(() => {
-    if (!canUse) return;
-    const sent = getPedidoDrafts().filter((row) => row.status === 'sent');
-    setOrders(sent);
-  }, [canUse]);
+    if (!canUse || !localId) return;
+    const supabase = getSupabaseClient();
+    if (!supabase) return;
+    void fetchOrders(supabase, localId)
+      .then((rows) => setOrders(rows.filter((row) => row.status === 'sent')))
+      .catch((err: Error) => setMessage(err.message));
+  }, [canUse, localId]);
 
   React.useEffect(() => {
     reloadOrders();
@@ -35,17 +40,32 @@ export default function RecepcionPedidosPage() {
     });
   }, [orders, supplierFilter, dateFilter]);
 
-  const markAllReceived = (order: PedidoDraft) => {
-    for (const item of order.items) {
-      updatePedidoLineReceived(order.id, item.productId, item.quantity);
-    }
-    reloadOrders();
+  const markAllReceived = (order: PedidoOrder) => {
+    if (!localId) return;
+    const supabase = getSupabaseClient();
+    if (!supabase) return;
+    void (async () => {
+      try {
+        for (const item of order.items) {
+          await updateOrderItemReceived(supabase, localId, item.id, item.quantity);
+        }
+        await setOrderStatus(supabase, localId, order.id, 'received');
+        reloadOrders();
+      } catch (err) {
+        setMessage(err instanceof Error ? err.message : 'No se pudo marcar recibido.');
+      }
+    })();
   };
 
-  const changeReceived = (orderId: string, productId: string, current: number, step: number, max: number) => {
+  const changeReceived = (orderId: string, itemId: string, current: number, step: number, max: number) => {
+    if (!localId) return;
+    const supabase = getSupabaseClient();
+    if (!supabase) return;
     const next = Math.max(0, Math.min(max, Math.round((current + step) * 100) / 100));
-    updatePedidoLineReceived(orderId, productId, next);
-    reloadOrders();
+    void updateOrderItemReceived(supabase, localId, itemId, next)
+      .then(() => reloadOrders())
+      .catch((err: Error) => setMessage(err.message));
+    void orderId;
   };
 
   if (!canUse) {
@@ -65,6 +85,7 @@ export default function RecepcionPedidosPage() {
 
       <section className="rounded-2xl bg-white p-4 ring-1 ring-zinc-200">
         <p className="text-sm font-semibold text-zinc-800">Pendientes de recepcion</p>
+        {message ? <p className="mt-2 text-sm text-[#B91C1C]">{message}</p> : null}
         <div className="mt-3 grid grid-cols-1 gap-2 md:grid-cols-2">
           <select
             value={supplierFilter}
@@ -106,7 +127,7 @@ export default function RecepcionPedidosPage() {
                 {order.items.map((item) => {
                   const step = item.unit === 'kg' ? 0.1 : 1;
                   return (
-                    <div key={item.productId} className="rounded-lg bg-white p-2 ring-1 ring-zinc-200">
+                    <div key={item.id} className="rounded-lg bg-white p-2 ring-1 ring-zinc-200">
                       <p className="text-sm font-semibold text-zinc-800">{item.productName}</p>
                       <p className="text-xs text-zinc-500">
                         Pedido: {item.quantity} {item.unit} · Recibido: {item.receivedQuantity} {item.unit}
@@ -115,7 +136,7 @@ export default function RecepcionPedidosPage() {
                         <button
                           type="button"
                           onClick={() =>
-                            changeReceived(order.id, item.productId, item.receivedQuantity, -step, item.quantity)
+                            changeReceived(order.id, item.id, item.receivedQuantity, -step, item.quantity)
                           }
                           className="h-8 w-8 rounded-full border border-zinc-300 bg-white font-bold text-zinc-700"
                         >
@@ -124,7 +145,7 @@ export default function RecepcionPedidosPage() {
                         <button
                           type="button"
                           onClick={() =>
-                            changeReceived(order.id, item.productId, item.receivedQuantity, step, item.quantity)
+                            changeReceived(order.id, item.id, item.receivedQuantity, step, item.quantity)
                           }
                           className="h-8 w-8 rounded-full bg-[#2563EB] font-bold text-white"
                         >

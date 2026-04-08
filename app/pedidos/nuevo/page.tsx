@@ -3,10 +3,15 @@
 import { useRouter, useSearchParams } from 'next/navigation';
 import React from 'react';
 import { useAuth } from '@/components/AuthProvider';
-import { uid } from '@/lib/id';
+import { getSupabaseClient } from '@/lib/supabase-client';
 import { canAccessPedidos } from '@/lib/pedidos-access';
-import { MOCK_SUPPLIERS } from '@/lib/pedidos-mock-catalog';
-import { getPedidoDraftById, savePedidoDraft, type PedidoDraftItem } from '@/lib/pedidos-storage';
+import {
+  fetchOrders,
+  fetchSuppliersWithProducts,
+  saveOrder,
+  type PedidoOrderItem,
+  type PedidoSupplier,
+} from '@/lib/pedidos-supabase';
 
 type QtyMap = Record<string, number>;
 
@@ -16,7 +21,8 @@ export default function NuevoPedidoPage() {
   const { localCode, localName, localId, email } = useAuth();
   const canUse = canAccessPedidos(localCode, email, localName, localId);
   const editingId = searchParams.get('id');
-  const [supplierId, setSupplierId] = React.useState(MOCK_SUPPLIERS[0]?.id ?? '');
+  const [suppliers, setSuppliers] = React.useState<PedidoSupplier[]>([]);
+  const [supplierId, setSupplierId] = React.useState('');
   const [notes, setNotes] = React.useState('');
   const [search, setSearch] = React.useState('');
   const [qtyByProductId, setQtyByProductId] = React.useState<QtyMap>({});
@@ -24,8 +30,21 @@ export default function NuevoPedidoPage() {
   const [isLoadedEdit, setIsLoadedEdit] = React.useState(false);
   const [existingCreatedAt, setExistingCreatedAt] = React.useState<string | null>(null);
   const [existingSentAt, setExistingSentAt] = React.useState<string | null>(null);
+  const [existingOrderId, setExistingOrderId] = React.useState<string | null>(null);
 
-  const selectedSupplier = MOCK_SUPPLIERS.find((s) => s.id === supplierId) ?? null;
+  React.useEffect(() => {
+    if (!canUse || !localId) return;
+    const supabase = getSupabaseClient();
+    if (!supabase) return;
+    void fetchSuppliersWithProducts(supabase, localId)
+      .then((rows) => {
+        setSuppliers(rows);
+        if (!supplierId && rows[0]?.id) setSupplierId(rows[0].id);
+      })
+      .catch((err: Error) => setMessage(err.message));
+  }, [canUse, localId, supplierId]);
+
+  const selectedSupplier = suppliers.find((s) => s.id === supplierId) ?? null;
   const supplierProducts = React.useMemo(() => selectedSupplier?.products ?? [], [selectedSupplier]);
   const filteredProducts = supplierProducts.filter((p) =>
     p.name.toLowerCase().includes(search.trim().toLowerCase()),
@@ -33,24 +52,35 @@ export default function NuevoPedidoPage() {
 
   React.useEffect(() => {
     if (!editingId) return;
-    const draft = getPedidoDraftById(editingId);
-    if (!draft) {
-      setMessage('No se encontro el borrador para editar.');
-      setIsLoadedEdit(true);
-      return;
-    }
-    setSupplierId(draft.supplierId || MOCK_SUPPLIERS[0]?.id || '');
-    setNotes(draft.notes);
-    setExistingCreatedAt(draft.createdAt);
-    setExistingSentAt(draft.sentAt ?? null);
-    setQtyByProductId(
-      draft.items.reduce<QtyMap>((acc, item) => {
-        acc[item.productId] = item.quantity;
-        return acc;
-      }, {}),
-    );
-    setIsLoadedEdit(true);
-  }, [editingId]);
+    if (!localId) return;
+    const supabase = getSupabaseClient();
+    if (!supabase) return;
+    void fetchOrders(supabase, localId)
+      .then((rows) => {
+        const draft = rows.find((row) => row.id === editingId);
+        if (!draft) {
+          setMessage('No se encontro el borrador para editar.');
+          setIsLoadedEdit(true);
+          return;
+        }
+        setExistingOrderId(draft.id);
+        setSupplierId(draft.supplierId);
+        setNotes(draft.notes);
+        setExistingCreatedAt(draft.createdAt);
+        setExistingSentAt(draft.sentAt ?? null);
+        setQtyByProductId(
+          draft.items.reduce<QtyMap>((acc, item) => {
+            if (item.supplierProductId) acc[item.supplierProductId] = item.quantity;
+            return acc;
+          }, {}),
+        );
+        setIsLoadedEdit(true);
+      })
+      .catch((err: Error) => {
+        setMessage(err.message);
+        setIsLoadedEdit(true);
+      });
+  }, [editingId, localId]);
 
   React.useEffect(() => {
     setSearch('');
@@ -74,12 +104,13 @@ export default function NuevoPedidoPage() {
     });
   };
 
-  const items: PedidoDraftItem[] = supplierProducts
+  const items: PedidoOrderItem[] = supplierProducts
     .map((p) => {
       const quantity = qtyByProductId[p.id] ?? 0;
       const lineTotal = Math.round(quantity * p.pricePerUnit * 100) / 100;
       return {
-        productId: p.id,
+        id: p.id,
+        supplierProductId: p.id,
         productName: p.name,
         unit: p.unit,
         quantity,
@@ -101,19 +132,34 @@ export default function NuevoPedidoPage() {
       setMessage('Añade al menos un producto.');
       return;
     }
-    const id = editingId ?? uid('ped');
-    savePedidoDraft({
-      id,
+    if (!localId) {
+      setMessage('Perfil del local aún cargando.');
+      return;
+    }
+    const supabase = getSupabaseClient();
+    if (!supabase) {
+      setMessage('Sin conexión con Supabase.');
+      return;
+    }
+    void saveOrder(supabase, localId, {
+      orderId: existingOrderId ?? undefined,
       supplierId: selectedSupplier.id,
-      supplierName: selectedSupplier.name,
       status: nextStatus,
       notes: notes.trim(),
       createdAt: existingCreatedAt ?? new Date().toISOString(),
       sentAt: nextStatus === 'sent' ? existingSentAt ?? new Date().toISOString() : undefined,
-      items,
-      total: Math.round(total * 100) / 100,
-    });
-    router.push('/pedidos');
+      items: items.map((item) => ({
+        supplierProductId: item.supplierProductId,
+        productName: item.productName,
+        unit: item.unit,
+        quantity: item.quantity,
+        receivedQuantity: item.receivedQuantity,
+        pricePerUnit: item.pricePerUnit,
+        lineTotal: item.lineTotal,
+      })),
+    })
+      .then(() => router.push('/pedidos'))
+      .catch((err: Error) => setMessage(err.message));
   };
 
   if (!canUse) {
@@ -141,7 +187,7 @@ export default function NuevoPedidoPage() {
           onChange={(e) => setSupplierId(e.target.value)}
           className="mt-2 h-11 w-full rounded-xl border border-zinc-200 bg-zinc-50 px-3 text-sm outline-none"
         >
-          {MOCK_SUPPLIERS.map((s) => (
+          {suppliers.map((s) => (
             <option key={s.id} value={s.id}>
               {s.name}
             </option>
@@ -209,7 +255,7 @@ export default function NuevoPedidoPage() {
         <div className="mt-2 space-y-2">
           {items.length === 0 ? <p className="text-sm text-zinc-500">Sin productos añadidos.</p> : null}
           {items.map((row) => (
-            <div key={row.productId} className="flex items-center justify-between rounded-xl bg-zinc-50 p-3">
+            <div key={row.id} className="flex items-center justify-between rounded-xl bg-zinc-50 p-3">
               <div>
                 <p className="text-sm font-semibold text-zinc-800">{row.productName}</p>
                 <p className="text-xs text-zinc-500">
