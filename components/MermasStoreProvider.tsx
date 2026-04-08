@@ -730,6 +730,8 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
         const saved = mapMermaRow(data);
         setMermas((prev) => prev.map((m) => (m.id === record.id ? saved : m)));
         markLocalEdit();
+        // Immediate cloud reconciliation to avoid any stale local mismatch.
+        await refetchCloud();
         return { ok: true, record: saved };
       }
 
@@ -796,9 +798,12 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
         if (!localId) return { ok: false, reason: 'Perfil del local aún cargando. Reintenta en 2 segundos.' };
         const supabase = getSupabaseClient();
         if (!supabase) return { ok: false, reason: 'Sin conexión.' };
-        const snapshot = mermas;
+        let snapshot: MermaRecord[] = [];
         // Optimistic UI: remove immediately, rollback if backend delete fails.
-        setMermas((prev) => prev.filter((m) => m.id !== id));
+        setMermas((prev) => {
+          snapshot = prev;
+          return prev.filter((m) => m.id !== id);
+        });
         const { error } = await supabase
           .from('mermas')
           .delete()

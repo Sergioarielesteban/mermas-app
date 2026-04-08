@@ -6,7 +6,7 @@ import React from 'react';
 import { useAuth } from '@/components/AuthProvider';
 import { getSupabaseClient } from '@/lib/supabase-client';
 import { canAccessPedidos } from '@/lib/pedidos-access';
-import { fetchOrders, setOrderStatus, updateOrderItemReceived, type PedidoOrder } from '@/lib/pedidos-supabase';
+import { fetchOrders, setOrderStatus, updateOrderItemIncident, updateOrderItemReceived, type PedidoOrder } from '@/lib/pedidos-supabase';
 
 export default function RecepcionPedidosPage() {
   const searchParams = useSearchParams();
@@ -101,6 +101,19 @@ export default function RecepcionPedidosPage() {
       });
   };
 
+  const registerIncident = (itemId: string, type: 'missing' | 'damaged' | 'wrong-item') => {
+    if (!localId) return;
+    const supabase = getSupabaseClient();
+    if (!supabase) return;
+    const notes = window.prompt('Detalle de incidencia (opcional):')?.trim() ?? '';
+    void updateOrderItemIncident(supabase, localId, itemId, { type, notes })
+      .then(() => {
+        setMessage('Incidencia guardada.');
+        reloadOrders();
+      })
+      .catch((err: Error) => setMessage(err.message));
+  };
+
   if (!canUse) {
     return (
       <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-zinc-200">
@@ -186,6 +199,12 @@ export default function RecepcionPedidosPage() {
                         Base: {item.lineTotal.toFixed(2)} EUR · IVA {(item.lineTotal * item.vatRate).toFixed(2)} EUR · Total{' '}
                         {(item.lineTotal * (1 + item.vatRate)).toFixed(2)} EUR
                       </p>
+                      {item.incidentType ? (
+                        <p className="text-xs font-semibold text-amber-700">
+                          Incidencia: {item.incidentType}
+                          {item.incidentNotes ? ` · ${item.incidentNotes}` : ''}
+                        </p>
+                      ) : null}
                       <div className="mt-2 flex items-center gap-2">
                         <button
                           type="button"
@@ -204,6 +223,27 @@ export default function RecepcionPedidosPage() {
                           className="h-8 w-8 rounded-full bg-[#2563EB] font-bold text-white"
                         >
                           +
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => registerIncident(item.id, 'missing')}
+                          className="rounded border border-amber-300 bg-white px-2 py-1 text-xs font-semibold text-amber-700"
+                        >
+                          Faltante
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => registerIncident(item.id, 'damaged')}
+                          className="rounded border border-amber-300 bg-white px-2 py-1 text-xs font-semibold text-amber-700"
+                        >
+                          Dañado
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => registerIncident(item.id, 'wrong-item')}
+                          className="rounded border border-amber-300 bg-white px-2 py-1 text-xs font-semibold text-amber-700"
+                        >
+                          Producto incorrecto
                         </button>
                       </div>
                     </div>

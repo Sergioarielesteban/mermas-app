@@ -22,9 +22,9 @@ export default function manifest(): MetadataRoute.Manifest {
         type: 'image/jpeg',
       },
       {
-        src: '/logo-can-xampa.png',
-        sizes: '1024x1024',
-        type: 'image/png',
+        src: '/logo-xampa-one.svg',
+        sizes: '512x160',
+        type: 'image/svg+xml',
       },
     ],
   };

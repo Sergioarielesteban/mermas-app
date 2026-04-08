@@ -21,6 +21,7 @@ create table if not exists public.pedido_supplier_products (
   unit text not null check (unit in ('kg', 'ud', 'bolsa', 'racion')),
   price_per_unit numeric(10,2) not null check (price_per_unit >= 0),
   vat_rate numeric(6,4) not null default 0 check (vat_rate >= 0 and vat_rate <= 1),
+  par_stock numeric(10,2) not null default 0 check (par_stock >= 0),
   is_active boolean not null default true,
   created_by uuid references auth.users(id),
   created_at timestamptz not null default now()
@@ -35,6 +36,7 @@ create table if not exists public.purchase_orders (
   supplier_id uuid not null references public.pedido_suppliers(id) on delete restrict,
   status text not null default 'draft' check (status in ('draft', 'sent', 'received')),
   notes text not null default '',
+  delivery_date date,
   sent_at timestamptz,
   received_at timestamptz,
   created_by uuid references auth.users(id),
@@ -56,6 +58,8 @@ create table if not exists public.purchase_order_items (
   price_per_unit numeric(10,2) not null check (price_per_unit >= 0),
   vat_rate numeric(6,4) not null default 0 check (vat_rate >= 0 and vat_rate <= 1),
   line_total numeric(12,2) not null check (line_total >= 0),
+  incident_type text check (incident_type in ('missing', 'damaged', 'wrong-item')),
+  incident_notes text,
   created_at timestamptz not null default now()
 );
 
@@ -65,9 +69,17 @@ create index if not exists idx_purchase_order_items_order_id on public.purchase_
 -- Safe migrations for existing databases
 alter table public.pedido_supplier_products
   add column if not exists vat_rate numeric(6,4) not null default 0;
+alter table public.pedido_supplier_products
+  add column if not exists par_stock numeric(10,2) not null default 0;
 
 alter table public.purchase_order_items
   add column if not exists vat_rate numeric(6,4) not null default 0;
+alter table public.purchase_orders
+  add column if not exists delivery_date date;
+alter table public.purchase_order_items
+  add column if not exists incident_type text;
+alter table public.purchase_order_items
+  add column if not exists incident_notes text;
 
 alter table public.pedido_suppliers enable row level security;
 alter table public.pedido_supplier_products enable row level security;

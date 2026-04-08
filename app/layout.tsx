@@ -22,8 +22,8 @@ export const metadata: Metadata = {
   description: "Gestión operativa para restaurantes",
   manifest: "/manifest.webmanifest",
   icons: {
-    icon: "/logo-can-xampa.png",
-    apple: "/logo-can-xampa.png",
+    icon: "/logo-xampa-one.svg",
+    apple: "/logo-xampa-one.svg",
   },
   appleWebApp: {
     capable: true,
@@ -36,7 +36,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: "Xampa One",
     description: "Gestión operativa para restaurantes",
-    images: ["/logo-can-xampa.png"],
+    images: ["/logo-xampa-one.svg"],
   },
 };
 

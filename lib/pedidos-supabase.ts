@@ -9,6 +9,7 @@ export type PedidoSupplierProduct = {
   unit: Unit;
   pricePerUnit: number;
   vatRate: number;
+  parStock: number;
   isActive: boolean;
 };
 
@@ -29,6 +30,8 @@ export type PedidoOrderItem = {
   pricePerUnit: number;
   vatRate: number;
   lineTotal: number;
+  incidentType?: 'missing' | 'damaged' | 'wrong-item' | null;
+  incidentNotes?: string;
 };
 
 export type PedidoOrder = {
@@ -41,8 +44,18 @@ export type PedidoOrder = {
   createdAt: string;
   sentAt?: string;
   receivedAt?: string;
+  deliveryDate?: string;
   items: PedidoOrderItem[];
   total: number;
+};
+
+export type SupplierProductPriceHistory = {
+  supplierProductId: string;
+  lastPrice: number;
+  avgPrice: number;
+  minPrice: number;
+  maxPrice: number;
+  samples: number;
 };
 
 type SupplierRow = { id: string; name: string; contact: string };
@@ -53,6 +66,7 @@ type SupplierProductRow = {
   unit: string;
   price_per_unit: number;
   vat_rate: number;
+  par_stock: number;
   is_active: boolean;
 };
 type OrderRow = {
@@ -63,6 +77,7 @@ type OrderRow = {
   created_at: string;
   sent_at: string | null;
   received_at: string | null;
+  delivery_date: string | null;
   pedido_suppliers: { name: string; contact: string | null } | { name: string; contact: string | null }[] | null;
 };
 type OrderItemRow = {
@@ -76,6 +91,8 @@ type OrderItemRow = {
   price_per_unit: number;
   vat_rate: number;
   line_total: number;
+  incident_type: 'missing' | 'damaged' | 'wrong-item' | null;
+  incident_notes: string | null;
 };
 
 function normalizeLabelUpper(value: string) {
@@ -92,7 +109,7 @@ export async function fetchSuppliersWithProducts(supabase: SupabaseClient, local
 
   const { data: productRows, error: pErr } = await supabase
     .from('pedido_supplier_products')
-    .select('id,supplier_id,name,unit,price_per_unit,vat_rate,is_active')
+    .select('id,supplier_id,name,unit,price_per_unit,vat_rate,par_stock,is_active')
     .eq('local_id', localId)
     .eq('is_active', true)
     .order('name');
@@ -107,6 +124,7 @@ export async function fetchSuppliersWithProducts(supabase: SupabaseClient, local
       unit: row.unit as Unit,
       pricePerUnit: Number(row.price_per_unit),
       vatRate: Number(row.vat_rate ?? 0),
+      parStock: Number(row.par_stock ?? 0),
       isActive: Boolean(row.is_active),
     });
     bySupplier.set(row.supplier_id, list);
@@ -161,7 +179,7 @@ export async function createSupplierProduct(
   supabase: SupabaseClient,
   localId: string,
   supplierId: string,
-  input: { name: string; unit: Unit; pricePerUnit: number; vatRate?: number },
+  input: { name: string; unit: Unit; pricePerUnit: number; vatRate?: number; parStock?: number },
 ) {
   const { data, error } = await supabase
     .from('pedido_supplier_products')
@@ -172,9 +190,10 @@ export async function createSupplierProduct(
       unit: input.unit,
       price_per_unit: Math.round(input.pricePerUnit * 100) / 100,
       vat_rate: Math.max(0, Math.round((input.vatRate ?? 0) * 10000) / 10000),
+      par_stock: Math.max(0, Math.round((input.parStock ?? 0) * 100) / 100),
       is_active: true,
     })
-    .select('id,supplier_id,name,unit,price_per_unit,vat_rate,is_active')
+    .select('id,supplier_id,name,unit,price_per_unit,vat_rate,par_stock,is_active')
     .single();
   if (error) throw new Error(error.message);
   return data as SupplierProductRow;
@@ -184,7 +203,7 @@ export async function updateSupplierProduct(
   supabase: SupabaseClient,
   localId: string,
   supplierProductId: string,
-  input: { name: string; unit: Unit; pricePerUnit: number; vatRate?: number },
+  input: { name: string; unit: Unit; pricePerUnit: number; vatRate?: number; parStock?: number },
 ) {
   const { data, error } = await supabase
     .from('pedido_supplier_products')
@@ -193,10 +212,11 @@ export async function updateSupplierProduct(
       unit: input.unit,
       price_per_unit: Math.round(input.pricePerUnit * 100) / 100,
       vat_rate: Math.max(0, Math.round((input.vatRate ?? 0) * 10000) / 10000),
+      par_stock: Math.max(0, Math.round((input.parStock ?? 0) * 100) / 100),
     })
     .eq('id', supplierProductId)
     .eq('local_id', localId)
-    .select('id,supplier_id,name,unit,price_per_unit,vat_rate,is_active')
+    .select('id,supplier_id,name,unit,price_per_unit,vat_rate,par_stock,is_active')
     .single();
   if (error) throw new Error(error.message);
   return data as SupplierProductRow;
@@ -219,7 +239,7 @@ export async function setSupplierProductActive(
 export async function fetchOrders(supabase: SupabaseClient, localId: string) {
   const { data: orderRows, error: oErr } = await supabase
     .from('purchase_orders')
-    .select('id,supplier_id,status,notes,created_at,sent_at,received_at,pedido_suppliers(name,contact)')
+    .select('id,supplier_id,status,notes,created_at,sent_at,received_at,delivery_date,pedido_suppliers(name,contact)')
     .eq('local_id', localId)
     .order('created_at', { ascending: false });
   if (oErr) throw new Error(oErr.message);
@@ -227,7 +247,7 @@ export async function fetchOrders(supabase: SupabaseClient, localId: string) {
   const ids = ((orderRows ?? []) as OrderRow[]).map((row) => row.id);
   const { data: itemRows, error: iErr } = await supabase
     .from('purchase_order_items')
-    .select('id,order_id,supplier_product_id,product_name,unit,quantity,received_quantity,price_per_unit,vat_rate,line_total')
+    .select('id,order_id,supplier_product_id,product_name,unit,quantity,received_quantity,price_per_unit,vat_rate,line_total,incident_type,incident_notes')
     .in('order_id', ids.length ? ids : ['00000000-0000-0000-0000-000000000000']);
   if (iErr) throw new Error(iErr.message);
 
@@ -244,6 +264,8 @@ export async function fetchOrders(supabase: SupabaseClient, localId: string) {
       pricePerUnit: Number(row.price_per_unit),
       vatRate: Number(row.vat_rate ?? 0),
       lineTotal: Number(row.line_total),
+      incidentType: row.incident_type,
+      incidentNotes: row.incident_notes ?? undefined,
     });
     byOrder.set(row.order_id, list);
   }
@@ -261,6 +283,7 @@ export async function fetchOrders(supabase: SupabaseClient, localId: string) {
       createdAt: row.created_at,
       sentAt: row.sent_at ?? undefined,
       receivedAt: row.received_at ?? undefined,
+      deliveryDate: row.delivery_date ?? undefined,
       items,
       total: items.reduce((acc, item) => acc + item.lineTotal, 0),
     };
@@ -278,6 +301,7 @@ export async function saveOrder(
     notes: string;
     sentAt?: string;
     createdAt?: string;
+    deliveryDate?: string;
     items: Array<{
       supplierProductId: string | null;
       productName: string;
@@ -300,6 +324,7 @@ export async function saveOrder(
         status: payload.status,
         notes: payload.notes.trim(),
         sent_at: payload.status === 'sent' ? payload.sentAt ?? new Date().toISOString() : null,
+        delivery_date: payload.deliveryDate ?? null,
       })
       .select('id')
       .single();
@@ -313,6 +338,7 @@ export async function saveOrder(
         status: payload.status,
         notes: payload.notes.trim(),
         sent_at: payload.status === 'sent' ? payload.sentAt ?? new Date().toISOString() : null,
+        delivery_date: payload.deliveryDate ?? null,
       })
       .eq('id', orderId)
       .eq('local_id', localId);
@@ -341,12 +367,68 @@ export async function saveOrder(
         price_per_unit: Math.round(item.pricePerUnit * 100) / 100,
         vat_rate: Math.max(0, Math.round((item.vatRate ?? 0) * 10000) / 10000),
         line_total: Math.round(item.lineTotal * 100) / 100,
+        incident_type: null,
+        incident_notes: null,
       })),
     );
     if (insErr) throw new Error(insErr.message);
   }
 
   return orderId;
+}
+
+export async function updateOrderItemIncident(
+  supabase: SupabaseClient,
+  localId: string,
+  itemId: string,
+  incident: { type: 'missing' | 'damaged' | 'wrong-item' | null; notes?: string },
+) {
+  const { error } = await supabase
+    .from('purchase_order_items')
+    .update({
+      incident_type: incident.type,
+      incident_notes: incident.notes?.trim() ? incident.notes.trim() : null,
+    })
+    .eq('id', itemId)
+    .eq('local_id', localId);
+  if (error) throw new Error(error.message);
+}
+
+export async function fetchSupplierProductPriceHistory(
+  supabase: SupabaseClient,
+  localId: string,
+  supplierProductIds: string[],
+) {
+  if (!supplierProductIds.length) return new Map<string, SupplierProductPriceHistory>();
+  const { data, error } = await supabase
+    .from('purchase_order_items')
+    .select('supplier_product_id,price_per_unit,created_at')
+    .eq('local_id', localId)
+    .in('supplier_product_id', supplierProductIds)
+    .order('created_at', { ascending: false });
+  if (error) throw new Error(error.message);
+
+  const out = new Map<string, SupplierProductPriceHistory>();
+  const grouped = new Map<string, number[]>();
+  for (const row of (data ?? []) as Array<{ supplier_product_id: string | null; price_per_unit: number }>) {
+    if (!row.supplier_product_id) continue;
+    const list = grouped.get(row.supplier_product_id) ?? [];
+    list.push(Number(row.price_per_unit));
+    grouped.set(row.supplier_product_id, list);
+  }
+  for (const [id, prices] of grouped.entries()) {
+    if (!prices.length) continue;
+    const sum = prices.reduce((acc, n) => acc + n, 0);
+    out.set(id, {
+      supplierProductId: id,
+      lastPrice: prices[0],
+      avgPrice: Math.round((sum / prices.length) * 100) / 100,
+      minPrice: Math.min(...prices),
+      maxPrice: Math.max(...prices),
+      samples: prices.length,
+    });
+  }
+  return out;
 }
 
 export async function deleteOrder(supabase: SupabaseClient, localId: string, orderId: string) {

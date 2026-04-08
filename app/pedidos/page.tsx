@@ -68,7 +68,7 @@ export default function PedidosPage() {
     }
     const suggested = new Date();
     suggested.setDate(suggested.getDate() + 1);
-    const suggestedText = suggested.toISOString().slice(0, 10);
+    const suggestedText = order.deliveryDate ?? suggested.toISOString().slice(0, 10);
     const picked = window.prompt('Fecha de entrega (AAAA-MM-DD):', suggestedText)?.trim();
     if (!picked) return;
     const parsed = new Date(`${picked}T00:00:00`);
@@ -146,6 +146,11 @@ export default function PedidosPage() {
             Recepcion
           </Link>
         </div>
+        <div className="mt-2">
+          <Link href="/pedidos/calendario" className="rounded-xl border border-zinc-300 bg-white px-3 py-2 text-center text-sm font-semibold text-zinc-700 inline-block">
+            Calendario entregas
+          </Link>
+        </div>
       </section>
 
       {message ? (
@@ -182,6 +187,7 @@ export default function PedidosPage() {
                 {order.items.length} lineas · Base {totals.base.toFixed(2)} EUR · IVA {totals.vat.toFixed(2)} EUR · Total {totals.total.toFixed(2)} EUR · enviado{' '}
                 {order.sentAt ? new Date(order.sentAt).toLocaleDateString('es-ES') : '-'}
               </p>
+              {order.deliveryDate ? <p className="text-xs text-zinc-500">Entrega: {new Date(`${order.deliveryDate}T00:00:00`).toLocaleDateString('es-ES')}</p> : null}
                   </>
                 );
               })()}

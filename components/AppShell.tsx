@@ -97,7 +97,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             <Menu className="h-6 w-6" />
           </button>
           <Image
-            src="/logo-can-xampa.png"
+            src="/logo-xampa-one.svg"
             alt="Xampa One"
             width={120}
             height={40}
@@ -158,7 +158,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         <div className="bg-gradient-to-r from-[#B91C1C] to-[#D32F2F] px-3 pb-4 pt-3 text-white">
           <div className="flex items-center gap-3">
             <Image
-              src="/logo-can-xampa.png"
+              src="/logo-xampa-one.svg"
               alt="Logo Xampa One"
               width={108}
               height={108}

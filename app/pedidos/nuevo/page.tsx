@@ -7,11 +7,13 @@ import { useAuth } from '@/components/AuthProvider';
 import { getSupabaseClient } from '@/lib/supabase-client';
 import { canAccessPedidos } from '@/lib/pedidos-access';
 import {
+  fetchSupplierProductPriceHistory,
   fetchOrders,
   fetchSuppliersWithProducts,
   saveOrder,
   type PedidoOrderItem,
   type PedidoSupplier,
+  type SupplierProductPriceHistory,
 } from '@/lib/pedidos-supabase';
 
 type QtyMap = Record<string, number>;
@@ -62,6 +64,8 @@ export default function NuevoPedidoPage() {
   const [search, setSearch] = React.useState('');
   const [qtyByProductId, setQtyByProductId] = React.useState<QtyMap>({});
   const [message, setMessage] = React.useState<string | null>(null);
+  const [deliveryDate, setDeliveryDate] = React.useState('');
+  const [priceHistoryByProductId, setPriceHistoryByProductId] = React.useState<Map<string, SupplierProductPriceHistory>>(new Map());
   const [loadingSuppliers, setLoadingSuppliers] = React.useState(false);
   const [isLoadedEdit, setIsLoadedEdit] = React.useState(false);
   const [existingCreatedAt, setExistingCreatedAt] = React.useState<string | null>(null);
@@ -83,6 +87,12 @@ export default function NuevoPedidoPage() {
       .catch((err: Error) => setMessage(err.message))
       .finally(() => setLoadingSuppliers(false));
   }, [canUse, localId]);
+
+  React.useEffect(() => {
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    setDeliveryDate(tomorrow.toISOString().slice(0, 10));
+  }, []);
 
   const selectedSupplier = suppliers.find((s) => s.id === supplierId) ?? null;
   const supplierProducts = React.useMemo(() => selectedSupplier?.products ?? [], [selectedSupplier]);
@@ -134,6 +144,18 @@ export default function NuevoPedidoPage() {
     });
   }, [supplierId, supplierProducts, editingId, isLoadedEdit]);
 
+  React.useEffect(() => {
+    if (!localId || supplierProducts.length === 0) {
+      setPriceHistoryByProductId(new Map());
+      return;
+    }
+    const supabase = getSupabaseClient();
+    if (!supabase) return;
+    void fetchSupplierProductPriceHistory(supabase, localId, supplierProducts.map((p) => p.id))
+      .then((rows) => setPriceHistoryByProductId(rows))
+      .catch(() => setPriceHistoryByProductId(new Map()));
+  }, [localId, supplierProducts]);
+
   const changeQty = (productId: string, unit: PedidoOrderItem['unit'], direction: 'inc' | 'dec') => {
     const step = unit === 'kg' ? 0.1 : 1;
     setQtyByProductId((prev) => {
@@ -142,6 +164,10 @@ export default function NuevoPedidoPage() {
       const next = Math.max(0, Math.round(nextRaw * 100) / 100);
       return { ...prev, [productId]: next };
     });
+  };
+
+  const setQtyToPar = (productId: string, parStock: number) => {
+    setQtyByProductId((prev) => ({ ...prev, [productId]: Math.max(0, Math.round(parStock * 100) / 100) }));
   };
 
   const items: PedidoOrderItem[] = supplierProducts
@@ -191,6 +217,7 @@ export default function NuevoPedidoPage() {
       notes: notes.trim(),
       createdAt: existingCreatedAt ?? new Date().toISOString(),
       sentAt: nextStatus === 'sent' ? existingSentAt ?? new Date().toISOString() : undefined,
+      deliveryDate: deliveryDate || undefined,
       items: items.map((item) => ({
         supplierProductId: item.supplierProductId,
         productName: item.productName,
@@ -218,6 +245,7 @@ export default function NuevoPedidoPage() {
     if (!picked) return;
     const parsed = new Date(`${picked}T00:00:00`);
     if (Number.isNaN(parsed.getTime())) return setMessage('Fecha de entrega inválida. Usa AAAA-MM-DD.');
+    setDeliveryDate(picked);
     const requestedBy = window.prompt('Nombre de quien pide:')?.trim();
     if (!requestedBy) return setMessage('Debes indicar quién está pidiendo.');
     const supabase = getSupabaseClient();
@@ -230,6 +258,7 @@ export default function NuevoPedidoPage() {
       notes: notes.trim(),
       createdAt: existingCreatedAt ?? new Date().toISOString(),
       sentAt: existingSentAt ?? new Date().toISOString(),
+      deliveryDate: deliveryDate || undefined,
       items: items.map((item) => ({
         supplierProductId: item.supplierProductId,
         productName: item.productName,
@@ -312,11 +341,35 @@ export default function NuevoPedidoPage() {
           placeholder="Buscar..."
           className="mt-2 h-11 w-full rounded-xl border border-zinc-300 bg-white px-3 text-sm text-zinc-900 placeholder:text-zinc-500 outline-none"
         />
+        <label className="mt-3 block text-xs font-semibold uppercase tracking-wide text-zinc-500">Fecha entrega</label>
+        <input
+          type="date"
+          value={deliveryDate}
+          onChange={(e) => setDeliveryDate(e.target.value)}
+          className="mt-2 h-11 w-full rounded-xl border border-zinc-300 bg-white px-3 text-sm text-zinc-900 outline-none"
+        />
       </section>
 
       <section className="rounded-2xl bg-white p-4 ring-1 ring-zinc-200">
         <p className="text-sm font-bold text-zinc-800">Catalogo del proveedor</p>
         <p className="mt-1 text-xs text-zinc-500">Al seleccionar proveedor se carga todo su catálogo. Usa solo + y -.</p>
+        <div className="mt-2">
+          <button
+            type="button"
+            onClick={() => {
+              setQtyByProductId((prev) => {
+                const next = { ...prev };
+                for (const p of filteredProducts) {
+                  if ((p.parStock ?? 0) > 0) next[p.id] = p.parStock;
+                }
+                return next;
+              });
+            }}
+            className="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-xs font-semibold text-zinc-700"
+          >
+            Aplicar par stock a todos
+          </button>
+        </div>
         <div className="mt-2 space-y-2">
           {selectedSupplier && filteredProducts.length > 0 ? (
             <p className="text-xs font-semibold text-zinc-500">
@@ -329,6 +382,8 @@ export default function NuevoPedidoPage() {
           {filteredProducts.map((p) => {
             const qty = qtyByProductId[p.id] ?? 0;
             const lineTotal = Math.round(qty * p.pricePerUnit * 100) / 100;
+            const priceHistory = priceHistoryByProductId.get(p.id);
+            const priceDelta = priceHistory ? p.pricePerUnit - priceHistory.lastPrice : 0;
             return (
               <div key={p.id} className="rounded-xl bg-zinc-50 p-3 ring-1 ring-zinc-200">
                 <div className="flex items-start justify-between gap-3">
@@ -336,6 +391,10 @@ export default function NuevoPedidoPage() {
                     <p className="text-sm font-semibold text-zinc-800">{p.name}</p>
                     <p className="text-xs text-zinc-500">
                       {p.pricePerUnit.toFixed(2)} EUR/{p.unit} · IVA {(p.vatRate * 100).toFixed(0)}%
+                    </p>
+                    <p className="text-xs text-zinc-500">
+                      Par stock: {p.parStock}
+                      {priceHistory ? ` · Último ${priceHistory.lastPrice.toFixed(2)} EUR · Δ ${priceDelta >= 0 ? '+' : ''}${priceDelta.toFixed(2)} EUR` : ' · Sin histórico'}
                     </p>
                   </div>
                   <p className="text-sm font-bold text-zinc-900">{lineTotal.toFixed(2)} EUR</p>
@@ -359,6 +418,18 @@ export default function NuevoPedidoPage() {
                     +
                   </button>
                 </div>
+                {(p.parStock ?? 0) > 0 && qty < p.parStock ? (
+                  <div className="mt-2 flex items-center justify-between rounded-lg bg-amber-50 px-2 py-1 text-xs text-amber-700">
+                    <span>Bajo par stock</span>
+                    <button
+                      type="button"
+                      onClick={() => setQtyToPar(p.id, p.parStock)}
+                      className="rounded border border-amber-300 bg-white px-2 py-0.5 font-semibold"
+                    >
+                      Llevar a PAR
+                    </button>
+                  </div>
+                ) : null}
               </div>
             );
           })}

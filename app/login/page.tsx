@@ -58,7 +58,7 @@ export default function LoginPage() {
       <div className="overflow-hidden rounded-3xl bg-white shadow-xl ring-1 ring-zinc-200">
         <div className="bg-gradient-to-r from-[#B91C1C] to-[#D32F2F] p-5">
           <Image
-            src="/logo-can-xampa.png"
+            src="/logo-xampa-one.svg"
             alt="Xampa One"
             width={280}
             height={100}
