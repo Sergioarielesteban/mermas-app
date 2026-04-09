@@ -1,4 +1,4 @@
-const CACHE_NAME = 'xampa-one-app-v1';
+const CACHE_NAME = 'xampa-one-app-v2';
 const CORE_ASSETS = ['/', '/login', '/dashboard', '/productos', '/resumen', '/manifest.webmanifest'];
 
 self.addEventListener('message', (event) => {

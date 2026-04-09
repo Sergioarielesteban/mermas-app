@@ -805,13 +805,23 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
           snapshot = prev;
           return prev.filter((m) => m.id !== id);
         });
-        const { error } = await supabase
+        const { data: deletedRow, error } = await supabase
           .from('mermas')
           .delete()
-          .eq('id', id);
+          .eq('id', id)
+          .eq('local_id', localId)
+          .select('id')
+          .maybeSingle();
         if (error) {
           setMermas(snapshot);
           return { ok: false, reason: `No se pudo eliminar en nube: ${error.message}` };
+        }
+        if (!deletedRow?.id) {
+          setMermas(snapshot);
+          return {
+            ok: false,
+            reason: 'No se pudo eliminar: sin permisos o registro no encontrado para este local.',
+          };
         }
 
         // Defensive verification: some environments return no deleted row payload.

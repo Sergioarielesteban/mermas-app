@@ -44,7 +44,20 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   );
 
   const confirmAndLogout = () => setConfirmLogoutOpen(true);
-  const refreshApp = () => window.location.reload();
+  const refreshApp = async () => {
+    try {
+      if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
+        const regs = await navigator.serviceWorker.getRegistrations();
+        await Promise.all(regs.map((r) => r.unregister()));
+      }
+      if (typeof window !== 'undefined' && 'caches' in window) {
+        const keys = await caches.keys();
+        await Promise.all(keys.map((k) => caches.delete(k)));
+      }
+    } finally {
+      window.location.reload();
+    }
+  };
 
   return (
     <div className="min-h-full bg-zinc-50">
