@@ -50,11 +50,6 @@ function buildWhatsappOrderMessage(order: PedidoOrder, deliveryDate: string, loc
     .join('\n');
 }
 
-function orderedProductsLabel(order: PedidoOrder) {
-  if (order.items.length === 0) return 'Sin productos';
-  return order.items.map((item) => `${item.productName} (${item.quantity} ${item.unit})`).join(' · ');
-}
-
 function totalsWithVat(order: PedidoOrder) {
   const base = order.items.reduce((acc, item) => acc + item.lineTotal, 0);
   const vat = order.items.reduce((acc, item) => acc + item.lineTotal * (item.vatRate ?? 0), 0);
@@ -132,6 +127,22 @@ export default function PedidosPage() {
       ) : null}
       <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-zinc-200">
         <h1 className="text-center text-lg font-black text-zinc-900">PEDIDOS</h1>
+        <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-3">
+          <Link href="/pedidos/nuevo" className="rounded-xl bg-[#D32F2F] px-3 py-2 text-center text-sm font-bold text-white">
+            + Nuevo pedido
+          </Link>
+          <Link href="/pedidos/proveedores" className="rounded-xl border border-zinc-300 bg-white px-3 py-2 text-center text-sm font-semibold text-zinc-700">
+            Proveedores
+          </Link>
+        </div>
+        <div className="mt-2 flex flex-wrap gap-2">
+          <Link href="/pedidos/calendario" className="rounded-xl border border-zinc-300 bg-white px-3 py-2 text-center text-sm font-semibold text-zinc-700 inline-block">
+            Calendario entregas
+          </Link>
+          <Link href="/pedidos/precios" className="rounded-xl border border-zinc-300 bg-white px-3 py-2 text-center text-sm font-semibold text-zinc-700 inline-block">
+            Evolucion precios
+          </Link>
+        </div>
       </section>
 
       {message ? (
@@ -168,48 +179,52 @@ export default function PedidosPage() {
                 enviado {order.sentAt ? new Date(order.sentAt).toLocaleDateString('es-ES') : '-'}
               </p>
               {order.deliveryDate ? <p className="text-xs text-zinc-500">Entrega: {new Date(`${order.deliveryDate}T00:00:00`).toLocaleDateString('es-ES')}</p> : null}
-              <p className="pt-1 text-xs text-zinc-500">Total (IVA incluido): {totals.total.toFixed(2)} €</p>
+              <p className="pt-1 text-sm font-bold text-zinc-700">
+                Total (IVA incluido): <span className="text-base font-black text-zinc-900">{totals.total.toFixed(2)} €</span>
+              </p>
                   </>
                 );
               })()}
-              <button
-                type="button"
-                onClick={() => setExpandedId((prev) => (prev === order.id ? null : order.id))}
-                className="mt-2 text-xs font-semibold text-[#2563EB]"
-              >
-                {expandedId === order.id ? 'Ocultar detalle' : 'Ver detalle'}
-              </button>
-              <button
-                type="button"
-                onClick={() => sendWhatsappOrder(order)}
-                className="mt-2 ml-3 text-xs font-semibold text-[#166534]"
-              >
-                Enviar WhatsApp
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  if (!localId) return;
-                  const supabase = getSupabaseClient();
-                  if (!supabase) return;
-                  void deleteOrder(supabase, localId, order.id)
-                    .then(() => {
-                      setOrders((prev) => prev.filter((o) => o.id !== order.id));
-                      setMessage('Pedido enviado eliminado.');
-                      setShowDeletedBanner(true);
-                      if (deletedBannerTimeoutRef.current) window.clearTimeout(deletedBannerTimeoutRef.current);
-                      deletedBannerTimeoutRef.current = window.setTimeout(() => {
-                        setShowDeletedBanner(false);
-                        deletedBannerTimeoutRef.current = null;
-                      }, 1000);
-                      void reloadOrders();
-                    })
-                    .catch((err: Error) => setMessage(err.message));
-                }}
-                className="mt-2 ml-3 text-xs font-semibold text-[#B91C1C]"
-              >
-                Eliminar
-              </button>
+              <div className="mt-3 grid grid-cols-3 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setExpandedId((prev) => (prev === order.id ? null : order.id))}
+                  className="rounded-lg border border-zinc-300 bg-white px-2 py-1.5 text-xs font-semibold text-[#2563EB]"
+                >
+                  {expandedId === order.id ? 'Ocultar detalle' : 'Ver detalle'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => sendWhatsappOrder(order)}
+                  className="rounded-lg border border-zinc-300 bg-white px-2 py-1.5 text-xs font-semibold text-[#166534]"
+                >
+                  Enviar WhatsApp
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!localId) return;
+                    const supabase = getSupabaseClient();
+                    if (!supabase) return;
+                    void deleteOrder(supabase, localId, order.id)
+                      .then(() => {
+                        setOrders((prev) => prev.filter((o) => o.id !== order.id));
+                        setMessage('Pedido enviado eliminado.');
+                        setShowDeletedBanner(true);
+                        if (deletedBannerTimeoutRef.current) window.clearTimeout(deletedBannerTimeoutRef.current);
+                        deletedBannerTimeoutRef.current = window.setTimeout(() => {
+                          setShowDeletedBanner(false);
+                          deletedBannerTimeoutRef.current = null;
+                        }, 1000);
+                        void reloadOrders();
+                      })
+                      .catch((err: Error) => setMessage(err.message));
+                  }}
+                  className="rounded-lg border border-zinc-300 bg-white px-2 py-1.5 text-xs font-semibold text-[#B91C1C]"
+                >
+                  Eliminar
+                </button>
+              </div>
               {expandedId === order.id ? (
                 <div className="mt-2 space-y-1">
                   {order.items.map((item) => (
@@ -238,41 +253,45 @@ export default function PedidosPage() {
               <p className="text-xs text-zinc-500">
                 recibido {order.receivedAt ? new Date(order.receivedAt).toLocaleDateString('es-ES') : '-'}
               </p>
-              <p className="pt-1 text-xs text-zinc-500">Total (IVA incluido): {totals.total.toFixed(2)} €</p>
+              <p className="pt-1 text-sm font-bold text-zinc-700">
+                Total (IVA incluido): <span className="text-base font-black text-zinc-900">{totals.total.toFixed(2)} €</span>
+              </p>
                   </>
                 );
               })()}
-              <button
-                type="button"
-                onClick={() => setExpandedId((prev) => (prev === order.id ? null : order.id))}
-                className="mt-2 text-xs font-semibold text-[#2563EB]"
-              >
-                {expandedId === order.id ? 'Ocultar detalle' : 'Ver detalle'}
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  if (!localId) return;
-                  const supabase = getSupabaseClient();
-                  if (!supabase) return;
-                  void deleteOrder(supabase, localId, order.id)
-                    .then(() => {
-                      setOrders((prev) => prev.filter((o) => o.id !== order.id));
-                      setMessage('Pedido histórico eliminado.');
-                      setShowDeletedBanner(true);
-                      if (deletedBannerTimeoutRef.current) window.clearTimeout(deletedBannerTimeoutRef.current);
-                      deletedBannerTimeoutRef.current = window.setTimeout(() => {
-                        setShowDeletedBanner(false);
-                        deletedBannerTimeoutRef.current = null;
-                      }, 1000);
-                      void reloadOrders();
-                    })
-                    .catch((err: Error) => setMessage(err.message));
-                }}
-                className="mt-2 ml-3 text-xs font-semibold text-[#B91C1C]"
-              >
-                Eliminar
-              </button>
+              <div className="mt-3 grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setExpandedId((prev) => (prev === order.id ? null : order.id))}
+                  className="rounded-lg border border-zinc-300 bg-white px-2 py-1.5 text-xs font-semibold text-[#2563EB]"
+                >
+                  {expandedId === order.id ? 'Ocultar detalle' : 'Ver detalle'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!localId) return;
+                    const supabase = getSupabaseClient();
+                    if (!supabase) return;
+                    void deleteOrder(supabase, localId, order.id)
+                      .then(() => {
+                        setOrders((prev) => prev.filter((o) => o.id !== order.id));
+                        setMessage('Pedido histórico eliminado.');
+                        setShowDeletedBanner(true);
+                        if (deletedBannerTimeoutRef.current) window.clearTimeout(deletedBannerTimeoutRef.current);
+                        deletedBannerTimeoutRef.current = window.setTimeout(() => {
+                          setShowDeletedBanner(false);
+                          deletedBannerTimeoutRef.current = null;
+                        }, 1000);
+                        void reloadOrders();
+                      })
+                      .catch((err: Error) => setMessage(err.message));
+                  }}
+                  className="rounded-lg border border-zinc-300 bg-white px-2 py-1.5 text-xs font-semibold text-[#B91C1C]"
+                >
+                  Eliminar
+                </button>
+              </div>
               {expandedId === order.id ? (
                 <div className="mt-2 space-y-1">
                   {order.items.map((item) => (
