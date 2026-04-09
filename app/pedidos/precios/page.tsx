@@ -29,6 +29,43 @@ export default function PedidosPreciosPage() {
   const [message, setMessage] = React.useState<string | null>(null);
   const [search, setSearch] = React.useState('');
 
+  React.useEffect(() => {
+    if (!canUse || !localId) return;
+    const supabase = getSupabaseClient();
+    if (!supabase) return;
+    void fetchOrders(supabase, localId)
+      .then((rows) => setOrders(rows.filter((o) => o.status !== 'draft')))
+      .catch((err: Error) => setMessage(err.message));
+  }, [canUse, localId]);
+
+  const series = React.useMemo<ProductPriceSeries[]>(() => {
+    const map = new Map<string, ProductPriceSeries>();
+    for (const order of orders) {
+      for (const item of order.items) {
+        const key = item.supplierProductId ?? `name:${item.productName}`;
+        const row = map.get(key) ?? { key, productName: item.productName, points: [] };
+        row.points.push({
+          date: order.createdAt,
+          supplier: order.supplierName,
+          unit: item.unit,
+          price: item.pricePerUnit,
+        });
+        map.set(key, row);
+      }
+    }
+    return Array.from(map.values())
+      .map((row) => ({
+        ...row,
+        points: row.points.sort((a, b) => Date.parse(b.date) - Date.parse(a.date)),
+      }))
+      .filter((row) => {
+        const uniquePrices = new Set(row.points.map((p) => p.price.toFixed(2)));
+        return uniquePrices.size > 1;
+      })
+      .filter((row) => row.productName.toLowerCase().includes(search.trim().toLowerCase()))
+      .sort((a, b) => a.productName.localeCompare(b.productName, 'es'));
+  }, [orders, search]);
+
   const downloadReportPdf = React.useCallback(() => {
     if (series.length === 0) {
       setMessage('No hay datos con cambios de precio para descargar.');
@@ -68,43 +105,6 @@ export default function PedidosPreciosPage() {
     const stamp = new Date().toISOString().slice(0, 10);
     doc.save(`evolucion-precios-${stamp}.pdf`);
   }, [series]);
-
-  React.useEffect(() => {
-    if (!canUse || !localId) return;
-    const supabase = getSupabaseClient();
-    if (!supabase) return;
-    void fetchOrders(supabase, localId)
-      .then((rows) => setOrders(rows.filter((o) => o.status !== 'draft')))
-      .catch((err: Error) => setMessage(err.message));
-  }, [canUse, localId]);
-
-  const series = React.useMemo<ProductPriceSeries[]>(() => {
-    const map = new Map<string, ProductPriceSeries>();
-    for (const order of orders) {
-      for (const item of order.items) {
-        const key = item.supplierProductId ?? `name:${item.productName}`;
-        const row = map.get(key) ?? { key, productName: item.productName, points: [] };
-        row.points.push({
-          date: order.createdAt,
-          supplier: order.supplierName,
-          unit: item.unit,
-          price: item.pricePerUnit,
-        });
-        map.set(key, row);
-      }
-    }
-    return Array.from(map.values())
-      .map((row) => ({
-        ...row,
-        points: row.points.sort((a, b) => Date.parse(b.date) - Date.parse(a.date)),
-      }))
-      .filter((row) => {
-        const uniquePrices = new Set(row.points.map((p) => p.price.toFixed(2)));
-        return uniquePrices.size > 1;
-      })
-      .filter((row) => row.productName.toLowerCase().includes(search.trim().toLowerCase()))
-      .sort((a, b) => a.productName.localeCompare(b.productName, 'es'));
-  }, [orders, search]);
 
   if (!canUse) {
     return (
