@@ -56,6 +56,10 @@ export default function PedidosPreciosPage() {
         ...row,
         points: row.points.sort((a, b) => Date.parse(b.date) - Date.parse(a.date)),
       }))
+      .filter((row) => {
+        const uniquePrices = new Set(row.points.map((p) => p.price.toFixed(2)));
+        return uniquePrices.size > 1;
+      })
       .filter((row) => row.productName.toLowerCase().includes(search.trim().toLowerCase()))
       .sort((a, b) => a.productName.localeCompare(b.productName, 'es'));
   }, [orders, search]);

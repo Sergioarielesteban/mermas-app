@@ -66,26 +66,17 @@ export default function PedidosPage() {
       setMessage(`El proveedor "${order.supplierName}" no tiene teléfono válido en contacto.`);
       return;
     }
-    const suggested = new Date();
-    suggested.setDate(suggested.getDate() + 1);
-    const suggestedText = order.deliveryDate ?? suggested.toISOString().slice(0, 10);
-    const picked = window.prompt('Fecha de entrega (AAAA-MM-DD):', suggestedText)?.trim();
-    if (!picked) return;
-    const parsed = new Date(`${picked}T00:00:00`);
-    if (Number.isNaN(parsed.getTime())) {
-      setMessage('Fecha de entrega inválida. Usa formato AAAA-MM-DD.');
-      return;
-    }
-    const requestedBy = window.prompt('Nombre de quien pide:')?.trim();
-    if (!requestedBy) {
-      setMessage('Debes indicar quién está pidiendo.');
-      return;
-    }
-    const deliveryDate = parsed.toLocaleDateString('es-ES');
+    const fallbackDelivery = order.createdAt.slice(0, 10);
+    const rawDelivery = order.deliveryDate ?? fallbackDelivery;
+    const parsed = new Date(`${rawDelivery}T00:00:00`);
+    const deliveryDate = Number.isNaN(parsed.getTime())
+      ? new Date(order.createdAt).toLocaleDateString('es-ES')
+      : parsed.toLocaleDateString('es-ES');
+    const requestedBy = (email ?? 'EQUIPO').split('@')[0] || 'EQUIPO';
     const text = encodeURIComponent(buildWhatsappOrderMessage(order, deliveryDate, localName ?? 'MATARO', requestedBy));
     const url = `https://wa.me/${phone}?text=${text}`;
     window.open(url, '_blank', 'noopener,noreferrer');
-  }, [localName]);
+  }, [email, localName]);
 
   const [expandedId, setExpandedId] = React.useState<string | null>(null);
 

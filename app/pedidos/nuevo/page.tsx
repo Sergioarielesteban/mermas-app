@@ -250,6 +250,11 @@ export default function NuevoPedidoPage() {
     if (!requestedBy) return setMessage('Debes indicar quién está pidiendo.');
     const supabase = getSupabaseClient();
     if (!supabase) return setMessage('Sin conexión con Supabase.');
+    const popup = window.open('about:blank', '_blank');
+    if (!popup) {
+      setMessage('Tu navegador bloqueó WhatsApp. Permite ventanas emergentes e inténtalo de nuevo.');
+      return;
+    }
 
     void saveOrder(supabase, localId, {
       orderId: existingOrderId ?? undefined,
@@ -258,7 +263,7 @@ export default function NuevoPedidoPage() {
       notes: notes.trim(),
       createdAt: existingCreatedAt ?? new Date().toISOString(),
       sentAt: existingSentAt ?? new Date().toISOString(),
-      deliveryDate: deliveryDate || undefined,
+      deliveryDate: picked,
       items: items.map((item) => ({
         supplierProductId: item.supplierProductId,
         productName: item.productName,
@@ -282,10 +287,13 @@ export default function NuevoPedidoPage() {
             items,
           }),
         );
-        window.open(`https://wa.me/${phone}?text=${text}`, '_blank', 'noopener,noreferrer');
+        popup.location.href = `https://wa.me/${phone}?text=${text}`;
         router.push('/pedidos');
       })
-      .catch((err: Error) => setMessage(err.message));
+      .catch((err: Error) => {
+        popup.close();
+        setMessage(err.message);
+      });
   };
 
   if (!canUse) {
