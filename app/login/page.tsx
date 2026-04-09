@@ -1,6 +1,5 @@
 'use client';
 
-import Image from 'next/image';
 import React, { useState } from 'react';
 import { useAuth } from '@/components/AuthProvider';
 import { getAllowedEmails, isAllowedEmail } from '@/lib/auth-access';
@@ -57,14 +56,9 @@ export default function LoginPage() {
     <div className="mx-auto mt-14 w-full max-w-md">
       <div className="overflow-hidden rounded-3xl bg-white shadow-xl ring-1 ring-zinc-200">
         <div className="bg-gradient-to-r from-[#B91C1C] to-[#D32F2F] p-5">
-          <Image
-            src="/logo-xampa-one.svg"
-            alt="Xampa One"
-            width={280}
-            height={100}
-            className="h-14 w-auto rounded-xl bg-white px-2 py-1 object-contain"
-            priority
-          />
+          <div className="mx-auto flex h-16 w-full max-w-[280px] items-center justify-center rounded-xl bg-white px-3">
+            <span className="text-center text-2xl font-black italic tracking-wide text-[#D32F2F]">XAMPA ONE</span>
+          </div>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4 p-5">

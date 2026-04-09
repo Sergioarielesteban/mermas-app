@@ -6,15 +6,7 @@ import React from 'react';
 import { useAuth } from '@/components/AuthProvider';
 import { getSupabaseClient } from '@/lib/supabase-client';
 import { canAccessPedidos } from '@/lib/pedidos-access';
-import {
-  fetchSupplierProductPriceHistory,
-  fetchOrders,
-  fetchSuppliersWithProducts,
-  saveOrder,
-  type PedidoOrderItem,
-  type PedidoSupplier,
-  type SupplierProductPriceHistory,
-} from '@/lib/pedidos-supabase';
+import { fetchOrders, fetchSuppliersWithProducts, saveOrder, type PedidoOrderItem, type PedidoSupplier } from '@/lib/pedidos-supabase';
 
 type QtyMap = Record<string, number>;
 
@@ -66,7 +58,6 @@ export default function NuevoPedidoPage() {
   const [message, setMessage] = React.useState<string | null>(null);
   const [deliveryDate, setDeliveryDate] = React.useState('');
   const [requestedBy, setRequestedBy] = React.useState('');
-  const [priceHistoryByProductId, setPriceHistoryByProductId] = React.useState<Map<string, SupplierProductPriceHistory>>(new Map());
   const [loadingSuppliers, setLoadingSuppliers] = React.useState(false);
   const [isLoadedEdit, setIsLoadedEdit] = React.useState(false);
   const [existingCreatedAt, setExistingCreatedAt] = React.useState<string | null>(null);
@@ -145,18 +136,6 @@ export default function NuevoPedidoPage() {
     });
   }, [supplierId, supplierProducts, editingId, isLoadedEdit]);
 
-  React.useEffect(() => {
-    if (!localId || supplierProducts.length === 0) {
-      setPriceHistoryByProductId(new Map());
-      return;
-    }
-    const supabase = getSupabaseClient();
-    if (!supabase) return;
-    void fetchSupplierProductPriceHistory(supabase, localId, supplierProducts.map((p) => p.id))
-      .then((rows) => setPriceHistoryByProductId(rows))
-      .catch(() => setPriceHistoryByProductId(new Map()));
-  }, [localId, supplierProducts]);
-
   const changeQty = (productId: string, unit: PedidoOrderItem['unit'], direction: 'inc' | 'dec') => {
     const step = unit === 'kg' ? 0.1 : 1;
     setQtyByProductId((prev) => {
@@ -165,10 +144,6 @@ export default function NuevoPedidoPage() {
       const next = Math.max(0, Math.round(nextRaw * 100) / 100);
       return { ...prev, [productId]: next };
     });
-  };
-
-  const setQtyToPar = (productId: string, parStock: number) => {
-    setQtyByProductId((prev) => ({ ...prev, [productId]: Math.max(0, Math.round(parStock * 100) / 100) }));
   };
 
   const items: PedidoOrderItem[] = supplierProducts
@@ -313,10 +288,7 @@ export default function NuevoPedidoPage() {
       </section>
 
       <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-zinc-200">
-        <h1 className="text-lg font-black text-zinc-900">Nuevo pedido</h1>
-        <p className="pt-1 text-sm text-zinc-600">
-          {editingId ? 'Edita el borrador y guarda cambios.' : 'Crea un borrador de pedido con productos del catalogo.'}
-        </p>
+        <h1 className="text-center text-lg font-black text-zinc-900">NUEVO PEDIDO</h1>
       </section>
 
       <section className="rounded-2xl bg-white p-4 ring-1 ring-zinc-200">
@@ -359,51 +331,20 @@ export default function NuevoPedidoPage() {
       </section>
 
       <section className="rounded-2xl bg-white p-4 ring-1 ring-zinc-200">
-        <p className="text-sm font-bold text-zinc-800">Catalogo del proveedor</p>
-        <p className="mt-1 text-xs text-zinc-500">Al seleccionar proveedor se carga todo su catálogo. Usa solo + y -.</p>
-        <div className="mt-2">
-          <button
-            type="button"
-            onClick={() => {
-              setQtyByProductId((prev) => {
-                const next = { ...prev };
-                for (const p of filteredProducts) {
-                  if ((p.parStock ?? 0) > 0) next[p.id] = p.parStock;
-                }
-                return next;
-              });
-            }}
-            className="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-xs font-semibold text-zinc-700"
-          >
-            Aplicar par stock a todos
-          </button>
-        </div>
+        <p className="text-center text-sm font-bold text-zinc-800">CATALOGO</p>
         <div className="mt-2 space-y-2">
-          {selectedSupplier && filteredProducts.length > 0 ? (
-            <p className="text-xs font-semibold text-zinc-500">
-              {selectedSupplier.name}: {filteredProducts.length} productos
-            </p>
-          ) : null}
           {selectedSupplier && filteredProducts.length === 0 ? (
             <p className="text-sm text-zinc-500">Este proveedor no tiene productos activos. Revísalo en Proveedores.</p>
           ) : null}
           {filteredProducts.map((p) => {
             const qty = qtyByProductId[p.id] ?? 0;
             const lineTotal = Math.round(qty * p.pricePerUnit * 100) / 100;
-            const priceHistory = priceHistoryByProductId.get(p.id);
-            const priceDelta = priceHistory ? p.pricePerUnit - priceHistory.lastPrice : 0;
             return (
               <div key={p.id} className="rounded-xl bg-zinc-50 p-3 ring-1 ring-zinc-200">
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <p className="text-sm font-semibold text-zinc-800">{p.name}</p>
-                    <p className="text-xs text-zinc-500">
-                      {p.pricePerUnit.toFixed(2)} €/{p.unit} · IVA {(p.vatRate * 100).toFixed(0)}%
-                    </p>
-                    <p className="text-xs text-zinc-500">
-                      Par stock: {p.parStock}
-                      {priceHistory ? ` · Último ${priceHistory.lastPrice.toFixed(2)} € · Δ ${priceDelta >= 0 ? '+' : ''}${priceDelta.toFixed(2)} €` : ' · Sin histórico'}
-                    </p>
+                    <p className="text-xs text-zinc-500">{p.pricePerUnit.toFixed(2)} €/{p.unit}</p>
                   </div>
                   <p className="text-sm font-bold text-zinc-900">{lineTotal.toFixed(2)} €</p>
                 </div>
@@ -427,18 +368,6 @@ export default function NuevoPedidoPage() {
                     +
                   </button>
                 </div>
-                {(p.parStock ?? 0) > 0 && qty < p.parStock ? (
-                  <div className="mt-2 flex items-center justify-between rounded-lg bg-amber-50 px-2 py-1 text-xs text-amber-700">
-                    <span>Bajo par stock</span>
-                    <button
-                      type="button"
-                      onClick={() => setQtyToPar(p.id, p.parStock)}
-                      className="rounded border border-amber-300 bg-white px-2 py-0.5 font-semibold"
-                    >
-                      Llevar a PAR
-                    </button>
-                  </div>
-                ) : null}
               </div>
             );
           })}

@@ -17,6 +17,8 @@ export default function RecepcionPedidosPage() {
   const initialDateFilter = searchParams.get('date') ?? '';
   const [dateFilter, setDateFilter] = React.useState(initialDateFilter);
   const [message, setMessage] = React.useState<string | null>(null);
+  const [showReceivedBanner, setShowReceivedBanner] = React.useState(false);
+  const receivedBannerTimeoutRef = React.useRef<number | null>(null);
 
   const reloadOrders = React.useCallback(() => {
     if (!canUse || !localId) return;
@@ -60,12 +62,25 @@ export default function RecepcionPedidosPage() {
         }
         await setOrderStatus(supabase, localId, order.id, 'received');
         setMessage('Pedido marcado como recibido.');
+        setShowReceivedBanner(true);
+        if (receivedBannerTimeoutRef.current) window.clearTimeout(receivedBannerTimeoutRef.current);
+        receivedBannerTimeoutRef.current = window.setTimeout(() => {
+          setShowReceivedBanner(false);
+          receivedBannerTimeoutRef.current = null;
+        }, 1000);
         await reloadOrders();
       } catch (err) {
         setMessage(err instanceof Error ? err.message : 'No se pudo marcar recibido.');
       }
     })();
   };
+
+  React.useEffect(
+    () => () => {
+      if (receivedBannerTimeoutRef.current) window.clearTimeout(receivedBannerTimeoutRef.current);
+    },
+    [],
+  );
 
   const changeReceived = (orderId: string, itemId: string, current: number, step: number) => {
     if (!localId) return;
@@ -141,6 +156,13 @@ export default function RecepcionPedidosPage() {
   }
   return (
     <div className="space-y-4">
+      {showReceivedBanner ? (
+        <div className="pointer-events-none fixed inset-0 z-[90] grid place-items-center bg-black/25 px-6">
+          <div className="rounded-2xl bg-[#16A34A] px-7 py-5 text-center shadow-2xl ring-2 ring-white/75">
+            <p className="text-xl font-black uppercase tracking-wide text-white">RECIBIDO</p>
+          </div>
+        </div>
+      ) : null}
       <section>
         <Link
           href="/pedidos"
@@ -151,13 +173,7 @@ export default function RecepcionPedidosPage() {
       </section>
 
       <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-zinc-200">
-        <h1 className="text-lg font-black text-zinc-900">Recepcion de albaranes</h1>
-        <p className="pt-1 text-sm text-zinc-600">Marca por linea lo recibido frente a lo pedido.</p>
-        {dateFilter ? (
-          <p className="pt-1 text-xs font-semibold text-zinc-500">
-            Mostrando pedidos del día: {new Date(`${dateFilter}T00:00:00`).toLocaleDateString('es-ES')}
-          </p>
-        ) : null}
+        <h1 className="text-center text-lg font-black text-zinc-900">RECEPCION</h1>
       </section>
 
       <section className="rounded-2xl bg-white p-4 ring-1 ring-zinc-200">

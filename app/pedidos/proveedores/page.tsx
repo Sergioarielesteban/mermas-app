@@ -64,11 +64,10 @@ export default function ProveedoresPage() {
   const [productUnit, setProductUnit] = React.useState<Unit>('ud');
   const [productPrice, setProductPrice] = React.useState('');
   const [productVat, setProductVat] = React.useState('0,21');
-  const [productParStock, setProductParStock] = React.useState('0');
   const [editingSupplierId, setEditingSupplierId] = React.useState<string | null>(null);
   const [editingProductId, setEditingProductId] = React.useState<string | null>(null);
   const [supplierDrafts, setSupplierDrafts] = React.useState<Record<string, { name: string; contact: string }>>({});
-  const [productDrafts, setProductDrafts] = React.useState<Record<string, { name: string; unit: Unit; price: string; vatRate: string; parStock: string }>>({});
+  const [productDrafts, setProductDrafts] = React.useState<Record<string, { name: string; unit: Unit; price: string; vatRate: string }>>({});
 
   const reload = React.useCallback(() => {
     if (!canUse) return;
@@ -98,7 +97,6 @@ export default function ProveedoresPage() {
                 unit: p.unit,
                 price: String(p.pricePerUnit),
                 vatRate: String(p.vatRate ?? 0),
-                parStock: String(p.parStock ?? 0),
               };
             }
           }
@@ -141,10 +139,8 @@ export default function ProveedoresPage() {
     const name = normalizeUpper(productName);
     const price = Number(productPrice.replace(',', '.'));
     const vatRate = Number(productVat.replace(',', '.'));
-    const parStock = Number(productParStock.replace(',', '.'));
     if (!name || !Number.isFinite(price) || price <= 0) return setMessage('Producto y precio válidos son obligatorios.');
     if (!Number.isFinite(vatRate) || vatRate < 0 || vatRate > 1) return setMessage('IVA inválido. Usa 0,21 o 0,10.');
-    if (!Number.isFinite(parStock) || parStock < 0) return setMessage('Par stock inválido.');
     const supabase = getSupabaseClient();
     if (!supabase) return setMessage('Supabase no disponible en esta sesión.');
     void createSupplierProduct(supabase, localId, productSupplierId, {
@@ -152,13 +148,12 @@ export default function ProveedoresPage() {
       unit: productUnit,
       pricePerUnit: price,
       vatRate,
-      parStock,
+      parStock: 0,
     })
       .then(() => {
         setProductName('');
         setProductPrice('');
         setProductVat('0,21');
-        setProductParStock('0');
         setMessage('Producto de proveedor guardado.');
         reload();
       })
@@ -191,15 +186,11 @@ export default function ProveedoresPage() {
     const name = draft?.name?.trim() ?? '';
     const price = Number((draft?.price ?? '').replace(',', '.'));
     const vatRate = Number((draft?.vatRate ?? '').replace(',', '.'));
-    const parStock = Number((draft?.parStock ?? '').replace(',', '.'));
     if (!name || !Number.isFinite(price) || price <= 0) {
       return setMessage('Producto, unidad y precio válido son obligatorios.');
     }
     if (!Number.isFinite(vatRate) || vatRate < 0 || vatRate > 1) {
       return setMessage('IVA inválido. Usa 0,21 o 0,10.');
-    }
-    if (!Number.isFinite(parStock) || parStock < 0) {
-      return setMessage('Par stock inválido.');
     }
     const supabase = getSupabaseClient();
     if (!supabase) return setMessage('Supabase no disponible en esta sesión.');
@@ -208,7 +199,7 @@ export default function ProveedoresPage() {
       unit: draft.unit,
       pricePerUnit: price,
       vatRate,
-      parStock,
+      parStock: 0,
     })
       .then(() => {
         setEditingProductId(null);
@@ -277,8 +268,7 @@ export default function ProveedoresPage() {
       </section>
 
       <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-zinc-200">
-        <h1 className="text-lg font-black text-zinc-900">Proveedores y catalogo</h1>
-        <p className="pt-1 text-sm text-zinc-600">Gestiona proveedores reales y su catalogo en Supabase.</p>
+        <h1 className="text-center text-lg font-black text-zinc-900">PROVEEDORES Y PRODUCTOS</h1>
       </section>
 
       {message ? (
@@ -354,12 +344,6 @@ export default function ProveedoresPage() {
               value={productVat}
               onChange={(e) => setProductVat(e.target.value)}
               placeholder="IVA (0,21)"
-              className="h-10 rounded-xl border border-zinc-300 bg-white px-3 text-sm text-zinc-900 placeholder:text-zinc-500 outline-none"
-            />
-            <input
-              value={productParStock}
-              onChange={(e) => setProductParStock(e.target.value)}
-              placeholder="Par stock"
               className="h-10 rounded-xl border border-zinc-300 bg-white px-3 text-sm text-zinc-900 placeholder:text-zinc-500 outline-none"
             />
           </div>
@@ -458,7 +442,6 @@ export default function ProveedoresPage() {
                             unit: prev[p.id]?.unit ?? p.unit,
                             price: prev[p.id]?.price ?? String(p.pricePerUnit),
                             vatRate: prev[p.id]?.vatRate ?? String(p.vatRate ?? 0),
-                            parStock: prev[p.id]?.parStock ?? String(p.parStock ?? 0),
                           },
                         }));
                       }}
@@ -476,7 +459,7 @@ export default function ProveedoresPage() {
                   </div>
                 </div>
                 <p className="pt-1 text-xs font-semibold text-zinc-600">
-                  {p.pricePerUnit.toFixed(2)} €/{p.unit} · IVA {(p.vatRate * 100).toFixed(0)}% · PAR {p.parStock}
+                  {p.pricePerUnit.toFixed(2)} €/{p.unit} · IVA {(p.vatRate * 100).toFixed(0)}%
                 </p>
                 {editingProductId === p.id ? (
                   <div className="mt-2 grid grid-cols-1 gap-2 rounded-lg border border-zinc-200 bg-white p-2">
@@ -486,7 +469,7 @@ export default function ProveedoresPage() {
                         setProductDrafts((prev) => ({
                           ...prev,
                           [p.id]: {
-                            ...(prev[p.id] ?? { name: '', unit: 'ud', price: '', vatRate: '0', parStock: '0' }),
+                            ...(prev[p.id] ?? { name: '', unit: 'ud', price: '', vatRate: '0' }),
                             name: e.target.value,
                           },
                         }))
@@ -494,14 +477,14 @@ export default function ProveedoresPage() {
                       placeholder="Nombre producto"
                       className="h-9 rounded-lg border border-zinc-300 bg-white px-3 text-sm text-zinc-900 placeholder:text-zinc-500 outline-none"
                     />
-                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-4">
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
                       <select
                         value={productDrafts[p.id]?.unit ?? 'ud'}
                         onChange={(e) =>
                           setProductDrafts((prev) => ({
                             ...prev,
                             [p.id]: {
-                              ...(prev[p.id] ?? { name: '', unit: 'ud', price: '', vatRate: '0', parStock: '0' }),
+                              ...(prev[p.id] ?? { name: '', unit: 'ud', price: '', vatRate: '0' }),
                               unit: e.target.value as Unit,
                             },
                           }))
@@ -522,7 +505,7 @@ export default function ProveedoresPage() {
                           setProductDrafts((prev) => ({
                             ...prev,
                             [p.id]: {
-                              ...(prev[p.id] ?? { name: '', unit: 'ud', price: '', vatRate: '0', parStock: '0' }),
+                              ...(prev[p.id] ?? { name: '', unit: 'ud', price: '', vatRate: '0' }),
                               price: e.target.value,
                             },
                           }))
@@ -536,26 +519,12 @@ export default function ProveedoresPage() {
                           setProductDrafts((prev) => ({
                             ...prev,
                             [p.id]: {
-                              ...(prev[p.id] ?? { name: '', unit: 'ud', price: '', vatRate: '0', parStock: '0' }),
+                              ...(prev[p.id] ?? { name: '', unit: 'ud', price: '', vatRate: '0' }),
                               vatRate: e.target.value,
                             },
                           }))
                         }
                         placeholder="IVA (0,21)"
-                        className="h-9 rounded-lg border border-zinc-300 bg-white px-3 text-sm text-zinc-900 placeholder:text-zinc-500 outline-none"
-                      />
-                      <input
-                        value={productDrafts[p.id]?.parStock ?? ''}
-                        onChange={(e) =>
-                          setProductDrafts((prev) => ({
-                            ...prev,
-                            [p.id]: {
-                              ...(prev[p.id] ?? { name: '', unit: 'ud', price: '', vatRate: '0', parStock: '0' }),
-                              parStock: e.target.value,
-                            },
-                          }))
-                        }
-                        placeholder="Par stock"
                         className="h-9 rounded-lg border border-zinc-300 bg-white px-3 text-sm text-zinc-900 placeholder:text-zinc-500 outline-none"
                       />
                     </div>

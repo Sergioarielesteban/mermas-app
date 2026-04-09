@@ -87,7 +87,7 @@ export default function AppFrame({ children }: { children: React.ReactNode }) {
   if (showSplash) {
     return (
       <main className="grid min-h-screen place-items-center bg-white px-4">
-        <img src="/can-xampa-logo.svg" alt="Can Xampa" className="h-auto w-full max-w-sm" />
+        <img src="/can-xampa-logo-original.png" alt="Can Xampa" className="h-auto w-full max-w-[17rem]" />
       </main>
     );
   }
