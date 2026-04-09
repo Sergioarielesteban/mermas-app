@@ -2,6 +2,8 @@
 
 import Link from 'next/link';
 import React from 'react';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import { useAuth } from '@/components/AuthProvider';
 import { canAccessPedidos } from '@/lib/pedidos-access';
 import { fetchOrders, type PedidoOrder } from '@/lib/pedidos-supabase';
@@ -27,43 +29,44 @@ export default function PedidosPreciosPage() {
   const [message, setMessage] = React.useState<string | null>(null);
   const [search, setSearch] = React.useState('');
 
-  const downloadReport = React.useCallback(() => {
+  const downloadReportPdf = React.useCallback(() => {
     if (series.length === 0) {
       setMessage('No hay datos con cambios de precio para descargar.');
       return;
     }
-    const lines: string[] = [];
-    lines.push('PRODUCTO,FECHA,PROVEEDOR,UNIDAD,PRECIO_€,DELTA_€');
+    const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' });
+    doc.setFontSize(14);
+    doc.text('Informe de evolución de precios', 40, 34);
+    doc.setFontSize(9);
+    doc.text(`Generado: ${new Date().toLocaleString('es-ES')}`, 40, 50);
+
+    const body: string[][] = [];
     for (const row of series) {
       const ordered = [...row.points].sort((a, b) => Date.parse(a.date) - Date.parse(b.date));
       for (let i = 0; i < ordered.length; i += 1) {
         const point = ordered[i];
         const prev = i > 0 ? ordered[i - 1] : null;
         const delta = prev ? point.price - prev.price : 0;
-        const escape = (value: string) => `"${value.replaceAll('"', '""')}"`;
-        lines.push(
-          [
-            escape(row.productName),
-            escape(new Date(point.date).toLocaleDateString('es-ES')),
-            escape(point.supplier),
-            escape(point.unit),
-            point.price.toFixed(2),
-            delta.toFixed(2),
-          ].join(','),
-        );
+        body.push([
+          row.productName,
+          new Date(point.date).toLocaleDateString('es-ES'),
+          point.supplier,
+          point.unit,
+          `${point.price.toFixed(2)} €`,
+          `${delta >= 0 ? '+' : ''}${delta.toFixed(2)} €`,
+        ]);
       }
     }
-    const content = `\uFEFF${lines.join('\n')}`;
-    const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
+    autoTable(doc, {
+      startY: 62,
+      head: [['Producto', 'Fecha', 'Proveedor', 'Unidad', 'Precio', 'Delta']],
+      body,
+      styles: { fontSize: 8, cellPadding: 4 },
+      headStyles: { fillColor: [211, 47, 47] },
+      alternateRowStyles: { fillColor: [248, 250, 252] },
+    });
     const stamp = new Date().toISOString().slice(0, 10);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `evolucion-precios-${stamp}.csv`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
+    doc.save(`evolucion-precios-${stamp}.pdf`);
   }, [series]);
 
   React.useEffect(() => {
@@ -127,10 +130,10 @@ export default function PedidosPreciosPage() {
         <div className="mt-3">
           <button
             type="button"
-            onClick={downloadReport}
-            className="h-10 rounded-xl border border-zinc-300 bg-white px-3 text-sm font-semibold text-zinc-700"
+            onClick={downloadReportPdf}
+            className="h-10 rounded-xl bg-[#D32F2F] px-3 text-sm font-semibold text-white"
           >
-            Descargar informe
+            Descargar informe PDF
           </button>
         </div>
         <input
