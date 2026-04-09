@@ -55,6 +55,12 @@ function orderedProductsLabel(order: PedidoOrder) {
   return order.items.map((item) => `${item.productName} (${item.quantity} ${item.unit})`).join(' · ');
 }
 
+function totalsWithVat(order: PedidoOrder) {
+  const base = order.items.reduce((acc, item) => acc + item.lineTotal, 0);
+  const vat = order.items.reduce((acc, item) => acc + item.lineTotal * (item.vatRate ?? 0), 0);
+  return { base, vat, total: base + vat };
+}
+
 export default function PedidosPage() {
   const router = useRouter();
   const { localCode, localName, localId, email } = useAuth();
@@ -125,24 +131,7 @@ export default function PedidosPage() {
         </div>
       ) : null}
       <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-zinc-200">
-        <h1 className="text-lg font-black text-zinc-900">Pedidos</h1>
-        <p className="pt-1 text-sm text-zinc-600">Gestion de pedidos de compra, recepcion de mercancia y seguimiento de precios.</p>
-        <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-3">
-          <Link href="/pedidos/nuevo" className="rounded-xl bg-[#D32F2F] px-3 py-2 text-center text-sm font-bold text-white">
-            + Nuevo pedido
-          </Link>
-          <Link href="/pedidos/proveedores" className="rounded-xl border border-zinc-300 bg-white px-3 py-2 text-center text-sm font-semibold text-zinc-700">
-            Proveedores
-          </Link>
-        </div>
-        <div className="mt-2 flex flex-wrap gap-2">
-          <Link href="/pedidos/calendario" className="rounded-xl border border-zinc-300 bg-white px-3 py-2 text-center text-sm font-semibold text-zinc-700 inline-block">
-            Calendario entregas
-          </Link>
-          <Link href="/pedidos/precios" className="rounded-xl border border-zinc-300 bg-white px-3 py-2 text-center text-sm font-semibold text-zinc-700 inline-block">
-            Evolucion precios
-          </Link>
-        </div>
+        <h1 className="text-center text-lg font-black text-zinc-900">PEDIDOS</h1>
       </section>
 
       {message ? (
@@ -170,12 +159,19 @@ export default function PedidosPage() {
           {sentOrders.length === 0 ? <p className="text-sm text-zinc-500">No hay pedidos enviados.</p> : null}
           {sentOrders.map((order) => (
             <div key={order.id} className="rounded-xl bg-zinc-50 p-3 ring-1 ring-zinc-200">
+              {(() => {
+                const totals = totalsWithVat(order);
+                return (
+                  <>
               <p className="text-sm font-semibold text-zinc-900">{order.supplierName}</p>
               <p className="text-xs text-zinc-500">
                 enviado {order.sentAt ? new Date(order.sentAt).toLocaleDateString('es-ES') : '-'}
               </p>
               {order.deliveryDate ? <p className="text-xs text-zinc-500">Entrega: {new Date(`${order.deliveryDate}T00:00:00`).toLocaleDateString('es-ES')}</p> : null}
-              <p className="pt-1 text-xs text-zinc-600">{orderedProductsLabel(order)}</p>
+              <p className="pt-1 text-xs text-zinc-500">Total (IVA incluido): {totals.total.toFixed(2)} €</p>
+                  </>
+                );
+              })()}
               <button
                 type="button"
                 onClick={() => setExpandedId((prev) => (prev === order.id ? null : order.id))}
@@ -234,10 +230,18 @@ export default function PedidosPage() {
           {receivedOrders.length === 0 ? <p className="text-sm text-zinc-500">No hay pedidos recibidos.</p> : null}
           {receivedOrders.map((order) => (
             <div key={order.id} className="rounded-xl bg-zinc-50 p-3 ring-1 ring-zinc-200">
+              {(() => {
+                const totals = totalsWithVat(order);
+                return (
+                  <>
               <p className="text-sm font-semibold text-zinc-900">{order.supplierName}</p>
               <p className="text-xs text-zinc-500">
                 recibido {order.receivedAt ? new Date(order.receivedAt).toLocaleDateString('es-ES') : '-'}
               </p>
+              <p className="pt-1 text-xs text-zinc-500">Total (IVA incluido): {totals.total.toFixed(2)} €</p>
+                  </>
+                );
+              })()}
               <button
                 type="button"
                 onClick={() => setExpandedId((prev) => (prev === order.id ? null : order.id))}

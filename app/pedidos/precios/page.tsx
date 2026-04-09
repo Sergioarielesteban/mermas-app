@@ -22,12 +22,18 @@ type ProductPriceSeries = {
   points: PricePoint[];
 };
 
+type PriceSummary = ProductPriceSeries & {
+  base: PricePoint;
+  current: PricePoint;
+  delta: number;
+  deltaPct: number;
+};
+
 export default function PedidosPreciosPage() {
   const { localCode, localName, localId, email } = useAuth();
   const canUse = canAccessPedidos(localCode, email, localName, localId);
   const [orders, setOrders] = React.useState<PedidoOrder[]>([]);
   const [message, setMessage] = React.useState<string | null>(null);
-  const [search, setSearch] = React.useState('');
 
   React.useEffect(() => {
     if (!canUse || !localId) return;
@@ -38,7 +44,7 @@ export default function PedidosPreciosPage() {
       .catch((err: Error) => setMessage(err.message));
   }, [canUse, localId]);
 
-  const series = React.useMemo<ProductPriceSeries[]>(() => {
+  const series = React.useMemo<PriceSummary[]>(() => {
     const map = new Map<string, ProductPriceSeries>();
     for (const order of orders) {
       for (const item of order.items) {
@@ -53,18 +59,40 @@ export default function PedidosPreciosPage() {
         map.set(key, row);
       }
     }
-    return Array.from(map.values())
-      .map((row) => ({
+    return Array.from(map.values()).map((row) => {
+      const ordered = [...row.points].sort((a, b) => Date.parse(a.date) - Date.parse(b.date));
+      const base = ordered[0];
+      const current = ordered[ordered.length - 1];
+      const delta = Math.round((current.price - base.price) * 100) / 100;
+      const deltaPct = base.price > 0 ? Math.round((delta / base.price) * 10000) / 100 : 0;
+      return {
         ...row,
-        points: row.points.sort((a, b) => Date.parse(b.date) - Date.parse(a.date)),
-      }))
-      .filter((row) => {
-        const uniquePrices = new Set(row.points.map((p) => p.price.toFixed(2)));
-        return uniquePrices.size > 1;
-      })
-      .filter((row) => row.productName.toLowerCase().includes(search.trim().toLowerCase()))
+        points: ordered.reverse(),
+        base,
+        current,
+        delta,
+        deltaPct,
+      };
+    })
+      .filter((row) => Math.abs(row.delta) > 0.001)
       .sort((a, b) => a.productName.localeCompare(b.productName, 'es'));
-  }, [orders, search]);
+  }, [orders]);
+
+  const trendLabel = (row: PriceSummary) => {
+    if (row.delta > 0) {
+      return `Sube +${row.delta.toFixed(2)} € (+${row.deltaPct.toFixed(2)}%)`;
+    }
+    if (row.delta < 0) {
+      return `Baja ${row.delta.toFixed(2)} € (${row.deltaPct.toFixed(2)}%)`;
+    }
+    return 'Sin cambio';
+  };
+
+  const trendClass = (row: PriceSummary) => {
+    if (row.delta > 0) return 'text-red-700';
+    if (row.delta < 0) return 'text-emerald-700';
+    return 'text-zinc-600';
+  };
 
   const downloadReportPdf = React.useCallback(() => {
     if (series.length === 0) {
@@ -79,24 +107,17 @@ export default function PedidosPreciosPage() {
 
     const body: string[][] = [];
     for (const row of series) {
-      const ordered = [...row.points].sort((a, b) => Date.parse(a.date) - Date.parse(b.date));
-      for (let i = 0; i < ordered.length; i += 1) {
-        const point = ordered[i];
-        const prev = i > 0 ? ordered[i - 1] : null;
-        const delta = prev ? point.price - prev.price : 0;
-        body.push([
-          row.productName,
-          new Date(point.date).toLocaleDateString('es-ES'),
-          point.supplier,
-          point.unit,
-          `${point.price.toFixed(2)} €`,
-          `${delta >= 0 ? '+' : ''}${delta.toFixed(2)} €`,
-        ]);
-      }
+      body.push([
+        row.productName,
+        `${row.base.price.toFixed(2)} €/${row.base.unit}`,
+        `${row.current.price.toFixed(2)} €/${row.current.unit}`,
+        `${row.delta >= 0 ? '+' : ''}${row.delta.toFixed(2)} €`,
+        `${row.deltaPct >= 0 ? '+' : ''}${row.deltaPct.toFixed(2)}%`,
+      ]);
     }
     autoTable(doc, {
       startY: 62,
-      head: [['Producto', 'Fecha', 'Proveedor', 'Unidad', 'Precio', 'Delta']],
+      head: [['Producto', 'Precio base', 'Precio actual', 'Delta €', 'Delta %']],
       body,
       styles: { fontSize: 8, cellPadding: 4 },
       headStyles: { fillColor: [211, 47, 47] },
@@ -124,8 +145,7 @@ export default function PedidosPreciosPage() {
       </section>
 
       <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-zinc-200">
-        <h1 className="text-lg font-black text-zinc-900">Evolucion de precios</h1>
-        <p className="pt-1 text-sm text-zinc-600">Comparativa histórica por artículo para detectar subidas y bajadas.</p>
+        <h1 className="text-center text-lg font-black text-zinc-900">EVOLUCION DE PRECIOS</h1>
         {message ? <p className="pt-2 text-sm text-[#B91C1C]">{message}</p> : null}
         <div className="mt-3">
           <button
@@ -136,29 +156,20 @@ export default function PedidosPreciosPage() {
             Descargar informe PDF
           </button>
         </div>
-        <input
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Buscar artículo..."
-          className="mt-3 h-10 w-full rounded-xl border border-zinc-300 bg-white px-3 text-sm text-zinc-900 outline-none"
-        />
       </section>
 
       <section className="space-y-2">
-        {series.length === 0 ? <div className="rounded-2xl bg-white p-4 text-sm text-zinc-500 ring-1 ring-zinc-200">No hay histórico de precios para mostrar.</div> : null}
+        {series.length === 0 ? <div className="rounded-2xl bg-white p-4 text-sm text-zinc-500 ring-1 ring-zinc-200">No hay evolución de precios para mostrar.</div> : null}
         {series.map((row) => {
-          const last = row.points[0];
-          const prev = row.points[1];
-          const delta = prev ? last.price - prev.price : 0;
           return (
             <div key={row.key} className="rounded-2xl bg-white p-4 ring-1 ring-zinc-200">
               <p className="text-sm font-black text-zinc-900">{row.productName}</p>
               <p className="pt-1 text-xs text-zinc-600">
-                Ultimo: {last.price.toFixed(2)} €/{last.unit}
-                {prev ? ` · Anterior: ${prev.price.toFixed(2)} € · Δ ${delta >= 0 ? '+' : ''}${delta.toFixed(2)} €` : ' · Sin comparación previa'}
+                Base: {row.base.price.toFixed(2)} €/{row.base.unit} · Actual: {row.current.price.toFixed(2)} €/{row.current.unit}
               </p>
-              <div className="mt-2 max-h-40 space-y-1 overflow-auto rounded-lg bg-zinc-50 p-2 ring-1 ring-zinc-200">
-                {row.points.slice(0, 10).map((point, idx) => (
+              <p className={`pt-1 text-xs font-semibold ${trendClass(row)}`}>{trendLabel(row)}</p>
+              <div className="mt-2 max-h-36 space-y-1 overflow-auto rounded-lg bg-zinc-50 p-2 ring-1 ring-zinc-200">
+                {row.points.slice(0, 8).map((point, idx) => (
                   <p key={`${row.key}-${idx}`} className="text-xs text-zinc-600">
                     {new Date(point.date).toLocaleDateString('es-ES')} · {point.supplier} · {point.price.toFixed(2)} €/{point.unit}
                   </p>
