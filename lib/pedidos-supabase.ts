@@ -484,3 +484,23 @@ export async function updateOrderItemReceived(
     .eq('local_id', localId);
   if (error) throw new Error(error.message);
 }
+
+export async function updateOrderItemPrice(
+  supabase: SupabaseClient,
+  localId: string,
+  itemId: string,
+  pricePerUnit: number,
+  quantity: number,
+) {
+  const safePrice = Math.max(0, Math.round(pricePerUnit * 100) / 100);
+  const lineTotal = Math.round(safePrice * Math.max(0, quantity) * 100) / 100;
+  const { error } = await supabase
+    .from('purchase_order_items')
+    .update({
+      price_per_unit: safePrice,
+      line_total: lineTotal,
+    })
+    .eq('id', itemId)
+    .eq('local_id', localId);
+  if (error) throw new Error(error.message);
+}

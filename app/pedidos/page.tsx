@@ -132,9 +132,7 @@ export default function PedidosPage() {
       ) : null}
       <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-zinc-200">
         <h1 className="text-lg font-black text-zinc-900">Pedidos</h1>
-        <p className="pt-1 text-sm text-zinc-600">
-          Gestion de pedidos de compra, recepcion de mercancia y control de incidencias.
-        </p>
+        <p className="pt-1 text-sm text-zinc-600">Gestion de pedidos de compra, recepcion de mercancia y seguimiento de precios.</p>
         <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-3">
           <Link href="/pedidos/nuevo" className="rounded-xl bg-[#D32F2F] px-3 py-2 text-center text-sm font-bold text-white">
             + Nuevo pedido
@@ -146,9 +144,12 @@ export default function PedidosPage() {
             Recepcion
           </Link>
         </div>
-        <div className="mt-2">
+        <div className="mt-2 flex flex-wrap gap-2">
           <Link href="/pedidos/calendario" className="rounded-xl border border-zinc-300 bg-white px-3 py-2 text-center text-sm font-semibold text-zinc-700 inline-block">
             Calendario entregas
+          </Link>
+          <Link href="/pedidos/precios" className="rounded-xl border border-zinc-300 bg-white px-3 py-2 text-center text-sm font-semibold text-zinc-700 inline-block">
+            Evolucion precios
           </Link>
         </div>
       </section>

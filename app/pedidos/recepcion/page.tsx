@@ -6,7 +6,7 @@ import React from 'react';
 import { useAuth } from '@/components/AuthProvider';
 import { getSupabaseClient } from '@/lib/supabase-client';
 import { canAccessPedidos } from '@/lib/pedidos-access';
-import { fetchOrders, setOrderStatus, updateOrderItemIncident, updateOrderItemReceived, type PedidoOrder } from '@/lib/pedidos-supabase';
+import { fetchOrders, setOrderStatus, updateOrderItemPrice, updateOrderItemReceived, type PedidoOrder } from '@/lib/pedidos-supabase';
 
 export default function RecepcionPedidosPage() {
   const searchParams = useSearchParams();
@@ -101,17 +101,34 @@ export default function RecepcionPedidosPage() {
       });
   };
 
-  const registerIncident = (itemId: string, type: 'missing' | 'damaged' | 'wrong-item') => {
+  const changeUnitPrice = (orderId: string, itemId: string, rawValue: string) => {
     if (!localId) return;
     const supabase = getSupabaseClient();
     if (!supabase) return;
-    const notes = window.prompt('Detalle de incidencia (opcional):')?.trim() ?? '';
-    void updateOrderItemIncident(supabase, localId, itemId, { type, notes })
-      .then(() => {
-        setMessage('Incidencia guardada.');
-        reloadOrders();
-      })
-      .catch((err: Error) => setMessage(err.message));
+    const parsed = Number(rawValue.replace(',', '.'));
+    if (Number.isNaN(parsed) || parsed < 0) {
+      setMessage('Precio inválido.');
+      return;
+    }
+    const nextPrice = Math.round(parsed * 100) / 100;
+
+    let itemQuantity = 0;
+    setOrders((prev) =>
+      prev.map((order) => {
+        if (order.id !== orderId) return order;
+        const nextItems = order.items.map((item) => {
+          if (item.id !== itemId) return item;
+          itemQuantity = item.quantity;
+          return { ...item, pricePerUnit: nextPrice, lineTotal: Math.round(nextPrice * item.quantity * 100) / 100 };
+        });
+        return { ...order, items: nextItems };
+      }),
+    );
+
+    void updateOrderItemPrice(supabase, localId, itemId, nextPrice, itemQuantity).catch((err: Error) => {
+      void reloadOrders();
+      setMessage(err.message);
+    });
   };
 
   if (!canUse) {
@@ -196,22 +213,15 @@ export default function RecepcionPedidosPage() {
                           : ''}
                       </p>
                       <p className="text-xs text-zinc-500">
-                        Subtotal: {item.lineTotal.toFixed(2)} € · IVA {(item.lineTotal * item.vatRate).toFixed(2)} € · Total{' '}
-                        {(item.lineTotal * (1 + item.vatRate)).toFixed(2)} €
+                        Precio unitario: {item.pricePerUnit.toFixed(2)} €/{item.unit} · Subtotal línea: {item.lineTotal.toFixed(2)} €
                       </p>
-                      {item.incidentType ? (
-                        <p className="text-xs font-semibold text-amber-700">
-                          Incidencia: {item.incidentType}
-                          {item.incidentNotes ? ` · ${item.incidentNotes}` : ''}
-                        </p>
-                      ) : null}
-                      <div className="mt-2 flex items-center gap-2">
+                      <div className="mt-2 flex items-center gap-3">
                         <button
                           type="button"
                           onClick={() =>
                             changeReceived(order.id, item.id, item.receivedQuantity, -step)
                           }
-                          className="h-8 w-8 rounded-full border border-zinc-300 bg-white font-bold text-zinc-700"
+                          className="grid h-11 w-11 place-items-center rounded-full border border-zinc-300 bg-white text-2xl font-black leading-none text-zinc-700"
                         >
                           -
                         </button>
@@ -220,31 +230,21 @@ export default function RecepcionPedidosPage() {
                           onClick={() =>
                             changeReceived(order.id, item.id, item.receivedQuantity, step)
                           }
-                          className="h-8 w-8 rounded-full bg-[#2563EB] font-bold text-white"
+                          className="grid h-11 w-11 place-items-center rounded-full bg-[#D32F2F] text-2xl font-black leading-none text-white"
                         >
                           +
                         </button>
-                        <button
-                          type="button"
-                          onClick={() => registerIncident(item.id, 'missing')}
-                          className="rounded border border-amber-300 bg-white px-2 py-1 text-xs font-semibold text-amber-700"
-                        >
-                          Faltante
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => registerIncident(item.id, 'damaged')}
-                          className="rounded border border-amber-300 bg-white px-2 py-1 text-xs font-semibold text-amber-700"
-                        >
-                          Dañado
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => registerIncident(item.id, 'wrong-item')}
-                          className="rounded border border-amber-300 bg-white px-2 py-1 text-xs font-semibold text-amber-700"
-                        >
-                          Producto incorrecto
-                        </button>
+                        <div className="ml-auto flex items-center gap-2">
+                          <label className="text-xs font-semibold text-zinc-600">Precio recibido</label>
+                          <input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            defaultValue={item.pricePerUnit.toFixed(2)}
+                            onBlur={(e) => changeUnitPrice(order.id, item.id, e.target.value)}
+                            className="h-10 w-28 rounded-lg border border-zinc-300 bg-white px-2 text-sm font-semibold text-zinc-900 outline-none"
+                          />
+                        </div>
                       </div>
                     </div>
                   );

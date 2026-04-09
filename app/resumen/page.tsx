@@ -284,6 +284,9 @@ export default function ResumenPage() {
                 <p className="pt-1 text-xs text-zinc-500">
                   {new Date(m.occurredAt).toLocaleString('es-ES')}
                 </p>
+                {m.notes?.trim() ? (
+                  <p className="pt-1 text-xs text-zinc-600">Nota: {m.notes.trim()}</p>
+                ) : null}
                 <div className="mt-3 flex gap-2">
                   <button
                     type="button"
