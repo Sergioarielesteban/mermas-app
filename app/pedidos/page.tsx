@@ -22,6 +22,11 @@ function normalizeWhatsappNumber(raw: string | undefined) {
   return hasPlus ? digits : digits;
 }
 
+function normalizeLocalForWhatsapp(raw: string) {
+  const cleaned = raw.replace(/\bCAN\b/gi, '').replace(/\s+/g, ' ').trim();
+  return cleaned || 'XAMPA MATARO';
+}
+
 function buildWhatsappOrderMessage(order: PedidoOrder, deliveryDate: string, localName: string, requestedBy: string) {
   const fechaPedido = new Date(order.createdAt).toLocaleDateString('es-ES');
   const lines = order.items.map(
@@ -31,15 +36,14 @@ function buildWhatsappOrderMessage(order: PedidoOrder, deliveryDate: string, loc
     `Proveedor: ${order.supplierName}`,
     `Fecha pedido: ${fechaPedido}`,
     `Fecha entrega: ${deliveryDate}`,
-    `Local: ${localName || 'MATARO'}`,
+    `Local: ${normalizeLocalForWhatsapp(localName || 'XAMPA MATARO')}`,
     `Pedido por: ${requestedBy}`,
-    '',
+    '------------------------------',
     'PEDIDO:',
-    '',
+    '------------------------------',
     ...lines,
-    '',
+    '------------------------------',
     order.notes ? `Notas: ${order.notes}` : '',
-    '',
     'Por favor, confirmar pedido. Gracias.',
   ]
     .filter(Boolean)

@@ -16,6 +16,11 @@ function normalizeWhatsappNumber(raw: string | undefined) {
   return digits || null;
 }
 
+function normalizeLocalForWhatsapp(raw: string) {
+  const cleaned = raw.replace(/\bCAN\b/gi, '').replace(/\s+/g, ' ').trim();
+  return cleaned || 'XAMPA MATARO';
+}
+
 function buildWhatsappDraftMessage(input: {
   supplierName: string;
   createdAtIso: string;
@@ -30,13 +35,13 @@ function buildWhatsappDraftMessage(input: {
     `Proveedor: ${input.supplierName}`,
     `Fecha pedido: ${fechaPedido}`,
     `Fecha entrega: ${input.deliveryDate}`,
-    `Local: ${input.localName || 'MATARO'}`,
+    `Local: ${normalizeLocalForWhatsapp(input.localName || 'XAMPA MATARO')}`,
     `Pedido por: ${input.requestedBy}`,
-    '',
+    '------------------------------',
     'PEDIDO:',
-    '',
+    '------------------------------',
     ...input.items.map((item) => `- ${item.productName}: ${item.quantity} ${item.unit}`),
-    '',
+    '------------------------------',
     input.notes ? `Notas: ${input.notes}` : '',
     'Por favor, confirmar pedido. Gracias.',
   ]
