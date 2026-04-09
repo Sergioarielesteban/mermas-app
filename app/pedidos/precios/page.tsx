@@ -27,6 +27,45 @@ export default function PedidosPreciosPage() {
   const [message, setMessage] = React.useState<string | null>(null);
   const [search, setSearch] = React.useState('');
 
+  const downloadReport = React.useCallback(() => {
+    if (series.length === 0) {
+      setMessage('No hay datos con cambios de precio para descargar.');
+      return;
+    }
+    const lines: string[] = [];
+    lines.push('PRODUCTO,FECHA,PROVEEDOR,UNIDAD,PRECIO_€,DELTA_€');
+    for (const row of series) {
+      const ordered = [...row.points].sort((a, b) => Date.parse(a.date) - Date.parse(b.date));
+      for (let i = 0; i < ordered.length; i += 1) {
+        const point = ordered[i];
+        const prev = i > 0 ? ordered[i - 1] : null;
+        const delta = prev ? point.price - prev.price : 0;
+        const escape = (value: string) => `"${value.replaceAll('"', '""')}"`;
+        lines.push(
+          [
+            escape(row.productName),
+            escape(new Date(point.date).toLocaleDateString('es-ES')),
+            escape(point.supplier),
+            escape(point.unit),
+            point.price.toFixed(2),
+            delta.toFixed(2),
+          ].join(','),
+        );
+      }
+    }
+    const content = `\uFEFF${lines.join('\n')}`;
+    const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const stamp = new Date().toISOString().slice(0, 10);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `evolucion-precios-${stamp}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  }, [series]);
+
   React.useEffect(() => {
     if (!canUse || !localId) return;
     const supabase = getSupabaseClient();
@@ -85,6 +124,15 @@ export default function PedidosPreciosPage() {
         <h1 className="text-lg font-black text-zinc-900">Evolucion de precios</h1>
         <p className="pt-1 text-sm text-zinc-600">Comparativa histórica por artículo para detectar subidas y bajadas.</p>
         {message ? <p className="pt-2 text-sm text-[#B91C1C]">{message}</p> : null}
+        <div className="mt-3">
+          <button
+            type="button"
+            onClick={downloadReport}
+            className="h-10 rounded-xl border border-zinc-300 bg-white px-3 text-sm font-semibold text-zinc-700"
+          >
+            Descargar informe
+          </button>
+        </div>
         <input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
