@@ -1,6 +1,5 @@
 'use client';
 
-import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import React, { useMemo, useState } from 'react';
@@ -96,14 +95,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           >
             <Menu className="h-6 w-6" />
           </button>
-          <Image
-            src="/logo-xampa-one.svg"
-            alt="Xampa One"
-            width={120}
-            height={40}
-            className="h-8 w-auto shrink-0 rounded-md border border-white/25 bg-white/95 p-1"
-            priority
-          />
+          <div className="flex h-8 min-w-[108px] shrink-0 items-center justify-center rounded-md border border-white/25 bg-white px-2">
+            <span className="text-[11px] font-extrabold tracking-wide text-[#D32F2F]">XAMPA ONE</span>
+          </div>
           <div className="min-w-0 flex-1">
             <h1 className="line-clamp-1 text-sm font-extrabold uppercase tracking-wide text-white">
               {title}
@@ -157,13 +151,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       >
         <div className="bg-gradient-to-r from-[#B91C1C] to-[#D32F2F] px-3 pb-4 pt-3 text-white">
           <div className="flex items-center gap-3">
-            <Image
-              src="/logo-xampa-one.svg"
-              alt="Logo Xampa One"
-              width={108}
-              height={108}
-              className="h-14 w-14 rounded-xl border border-white/25 bg-white object-contain p-1 shadow-sm"
-            />
+            <div className="grid h-14 w-14 place-items-center rounded-xl border border-white/25 bg-white shadow-sm">
+              <span className="text-center text-[10px] font-black leading-tight tracking-wide text-[#D32F2F]">XAMPA{'\n'}ONE</span>
+            </div>
             <div className="min-w-0">
               <div className="truncate text-sm font-black tracking-wide">XAMPA ONE</div>
               <div className="truncate text-xs text-white/85">Gestión operativa</div>
@@ -222,7 +212,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs font-bold uppercase tracking-wide text-zinc-700 hover:bg-zinc-100"
             >
               <RefreshCcw className="h-3.5 w-3.5" />
-              Actualizar App
+              Actualizar version app
             </button>
             <button
               type="button"

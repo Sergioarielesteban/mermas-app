@@ -292,7 +292,7 @@ export default function NuevoPedidoPage() {
     return (
       <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-zinc-200">
         <p className="text-sm font-black text-zinc-900">Modulo no habilitado</p>
-        <p className="pt-1 text-sm text-zinc-600">Pedidos esta disponible solo para el local de Mataro.</p>
+        <p className="pt-1 text-sm text-zinc-600">Pedidos esta disponible para los locales de Mataro y Premia.</p>
       </section>
     );
   }
@@ -390,14 +390,14 @@ export default function NuevoPedidoPage() {
                   <div>
                     <p className="text-sm font-semibold text-zinc-800">{p.name}</p>
                     <p className="text-xs text-zinc-500">
-                      {p.pricePerUnit.toFixed(2)} EUR/{p.unit} · IVA {(p.vatRate * 100).toFixed(0)}%
+                      {p.pricePerUnit.toFixed(2)} €/{p.unit} · IVA {(p.vatRate * 100).toFixed(0)}%
                     </p>
                     <p className="text-xs text-zinc-500">
                       Par stock: {p.parStock}
-                      {priceHistory ? ` · Último ${priceHistory.lastPrice.toFixed(2)} EUR · Δ ${priceDelta >= 0 ? '+' : ''}${priceDelta.toFixed(2)} EUR` : ' · Sin histórico'}
+                      {priceHistory ? ` · Último ${priceHistory.lastPrice.toFixed(2)} € · Δ ${priceDelta >= 0 ? '+' : ''}${priceDelta.toFixed(2)} €` : ' · Sin histórico'}
                     </p>
                   </div>
-                  <p className="text-sm font-bold text-zinc-900">{lineTotal.toFixed(2)} EUR</p>
+                  <p className="text-sm font-bold text-zinc-900">{lineTotal.toFixed(2)} €</p>
                 </div>
                 <div className="mt-3 flex items-center justify-between gap-2">
                   <button
@@ -445,15 +445,26 @@ export default function NuevoPedidoPage() {
               <div>
                 <p className="text-sm font-semibold text-zinc-800">{row.productName}</p>
                 <p className="text-xs text-zinc-500">
-                  {row.quantity} {row.unit} · Base {row.lineTotal.toFixed(2)} EUR · IVA {(row.lineTotal * row.vatRate).toFixed(2)} EUR
+                  {row.quantity} {row.unit} · Subtotal {row.lineTotal.toFixed(2)} € · IVA {(row.lineTotal * row.vatRate).toFixed(2)} €
                 </p>
               </div>
             </div>
           ))}
         </div>
-        <p className="mt-3 text-sm font-black text-zinc-900">
-          Total estimado: Base {totalBase.toFixed(2)} EUR · IVA {totalVat.toFixed(2)} EUR · Total {total.toFixed(2)} EUR
-        </p>
+        <div className="mt-3 rounded-xl bg-zinc-50 p-3 ring-1 ring-zinc-200">
+          <div className="flex items-center justify-between text-sm text-zinc-700">
+            <span>Subtotal</span>
+            <span className="font-semibold">{totalBase.toFixed(2)} €</span>
+          </div>
+          <div className="mt-1 flex items-center justify-between text-sm text-zinc-700">
+            <span>IVA</span>
+            <span className="font-semibold">{totalVat.toFixed(2)} €</span>
+          </div>
+          <div className="mt-1 flex items-center justify-between text-base font-black text-zinc-900">
+            <span>Total</span>
+            <span>{total.toFixed(2)} €</span>
+          </div>
+        </div>
       </section>
 
       <section className="rounded-2xl bg-white p-4 pb-28 ring-1 ring-zinc-200">
@@ -469,9 +480,21 @@ export default function NuevoPedidoPage() {
       </section>
 
       <section className="sticky bottom-2 z-20 rounded-2xl border border-zinc-200 bg-white/95 p-3 shadow-lg backdrop-blur">
-        <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
-          {items.length} lineas · Base {totalBase.toFixed(2)} EUR · IVA {totalVat.toFixed(2)} EUR · Total {total.toFixed(2)} EUR
-        </p>
+        <div className="rounded-xl bg-zinc-50 p-2 ring-1 ring-zinc-200">
+          <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">{items.length} lineas</p>
+          <div className="mt-1 flex items-center justify-between text-sm text-zinc-700">
+            <span>Subtotal</span>
+            <span>{totalBase.toFixed(2)} €</span>
+          </div>
+          <div className="mt-1 flex items-center justify-between text-sm text-zinc-700">
+            <span>IVA</span>
+            <span>{totalVat.toFixed(2)} €</span>
+          </div>
+          <div className="mt-1 flex items-center justify-between text-base font-black text-zinc-900">
+            <span>Total</span>
+            <span>{total.toFixed(2)} €</span>
+          </div>
+        </div>
         <div className="mt-2 grid grid-cols-2 gap-2">
           <button
             type="button"

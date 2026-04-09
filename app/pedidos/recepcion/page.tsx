@@ -118,7 +118,7 @@ export default function RecepcionPedidosPage() {
     return (
       <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-zinc-200">
         <p className="text-sm font-black text-zinc-900">Modulo no habilitado</p>
-        <p className="pt-1 text-sm text-zinc-600">Pedidos esta disponible solo para el local de Mataro.</p>
+        <p className="pt-1 text-sm text-zinc-600">Pedidos esta disponible para los locales de Mataro y Premia.</p>
       </section>
     );
   }
@@ -196,8 +196,8 @@ export default function RecepcionPedidosPage() {
                           : ''}
                       </p>
                       <p className="text-xs text-zinc-500">
-                        Base: {item.lineTotal.toFixed(2)} EUR · IVA {(item.lineTotal * item.vatRate).toFixed(2)} EUR · Total{' '}
-                        {(item.lineTotal * (1 + item.vatRate)).toFixed(2)} EUR
+                        Subtotal: {item.lineTotal.toFixed(2)} € · IVA {(item.lineTotal * item.vatRate).toFixed(2)} € · Total{' '}
+                        {(item.lineTotal * (1 + item.vatRate)).toFixed(2)} €
                       </p>
                       {item.incidentType ? (
                         <p className="text-xs font-semibold text-amber-700">

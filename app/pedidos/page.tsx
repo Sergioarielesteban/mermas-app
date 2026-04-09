@@ -116,7 +116,7 @@ export default function PedidosPage() {
     return (
       <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-zinc-200">
         <p className="text-sm font-black text-zinc-900">Modulo no habilitado</p>
-        <p className="pt-1 text-sm text-zinc-600">Pedidos esta disponible solo para el local de Mataro.</p>
+        <p className="pt-1 text-sm text-zinc-600">Pedidos esta disponible para los locales de Mataro y Premia.</p>
       </section>
     );
   }
@@ -184,7 +184,7 @@ export default function PedidosPage() {
                   <>
               <p className="text-sm font-semibold text-zinc-900">{order.supplierName}</p>
               <p className="text-xs text-zinc-500">
-                {order.items.length} lineas · Base {totals.base.toFixed(2)} EUR · IVA {totals.vat.toFixed(2)} EUR · Total {totals.total.toFixed(2)} EUR · enviado{' '}
+                {order.items.length} lineas · Subtotal {totals.base.toFixed(2)} € · IVA {totals.vat.toFixed(2)} € · Total {totals.total.toFixed(2)} € · enviado{' '}
                 {order.sentAt ? new Date(order.sentAt).toLocaleDateString('es-ES') : '-'}
               </p>
               {order.deliveryDate ? <p className="text-xs text-zinc-500">Entrega: {new Date(`${order.deliveryDate}T00:00:00`).toLocaleDateString('es-ES')}</p> : null}
@@ -233,7 +233,7 @@ export default function PedidosPage() {
                 <div className="mt-2 space-y-1">
                   {order.items.map((item) => (
                     <p key={item.id} className="text-xs text-zinc-600">
-                      {item.productName}: {item.quantity} {item.unit} · Base {item.lineTotal.toFixed(2)} EUR · IVA {(item.lineTotal * item.vatRate).toFixed(2)} EUR
+                      {item.productName}: {item.quantity} {item.unit} · Subtotal {item.lineTotal.toFixed(2)} € · IVA {(item.lineTotal * item.vatRate).toFixed(2)} €
                     </p>
                   ))}
                 </div>
@@ -255,7 +255,7 @@ export default function PedidosPage() {
                   <>
               <p className="text-sm font-semibold text-zinc-900">{order.supplierName}</p>
               <p className="text-xs text-zinc-500">
-                {order.items.length} lineas · Base {totals.base.toFixed(2)} EUR · IVA {totals.vat.toFixed(2)} EUR · Total {totals.total.toFixed(2)} EUR · recibido{' '}
+                {order.items.length} lineas · Subtotal {totals.base.toFixed(2)} € · IVA {totals.vat.toFixed(2)} € · Total {totals.total.toFixed(2)} € · recibido{' '}
                 {order.receivedAt ? new Date(order.receivedAt).toLocaleDateString('es-ES') : '-'}
               </p>
                   </>

@@ -392,7 +392,8 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
   const { localId, profileReady, email } = useAuth();
   const supabaseEnabled = isSupabaseEnabled();
   const cloudMode = Boolean(profileReady && localId && isSupabaseEnabled());
-  const legacyMode = !supabaseEnabled || !email;
+  // If Supabase is enabled, never fall back to legacy sync/storage.
+  const legacyMode = !supabaseEnabled;
   const [cloudDataLoaded, setCloudDataLoaded] = useState(false);
 
   const [products, setProducts] = useState<Product[]>(() => sortProductsByName(DEFAULT_PRODUCTS));
@@ -572,8 +573,8 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
   }, [hydrated, legacyMode, products, mermas]);
 
   const store = useMemo<MermasStore>(() => {
-    // If Supabase auth is active, avoid falling back to local writes while profile/local is loading.
-    const useCloud = Boolean(supabaseEnabled && email);
+    // If Supabase is configured, writes must go through cloud path only.
+    const useCloud = supabaseEnabled;
 
     const addProduct = (input: CreateProductInput) => {
       const trimmed = input.name.trim();
@@ -867,7 +868,7 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
       exportData,
       importData,
     };
-  }, [email, localId, markLocalEdit, mermas, products, refetchCloud, supabaseEnabled]);
+  }, [localId, markLocalEdit, mermas, products, refetchCloud, supabaseEnabled]);
 
   return <StoreContext.Provider value={store}>{children}</StoreContext.Provider>;
 }

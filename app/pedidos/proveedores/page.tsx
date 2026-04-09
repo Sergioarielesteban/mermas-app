@@ -71,7 +71,11 @@ export default function ProveedoresPage() {
   const [productDrafts, setProductDrafts] = React.useState<Record<string, { name: string; unit: Unit; price: string; vatRate: string; parStock: string }>>({});
 
   const reload = React.useCallback(() => {
-    if (!canUse || !localId) return;
+    if (!canUse) return;
+    if (!localId) {
+      setMessage('No se pudo cargar proveedores: tu usuario no tiene local_id activo en perfil.');
+      return;
+    }
     const supabase = getSupabaseClient();
     if (!supabase) return;
     void fetchSuppliersWithProducts(supabase, localId)
@@ -250,7 +254,7 @@ export default function ProveedoresPage() {
     return (
       <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-zinc-200">
         <p className="text-sm font-black text-zinc-900">Modulo no habilitado</p>
-        <p className="pt-1 text-sm text-zinc-600">Pedidos esta disponible solo para el local de Mataro.</p>
+        <p className="pt-1 text-sm text-zinc-600">Pedidos esta disponible para los locales de Mataro y Premia.</p>
       </section>
     );
   }
@@ -472,7 +476,7 @@ export default function ProveedoresPage() {
                   </div>
                 </div>
                 <p className="pt-1 text-xs font-semibold text-zinc-600">
-                  {p.pricePerUnit.toFixed(2)} EUR/{p.unit} · IVA {(p.vatRate * 100).toFixed(0)}% · PAR {p.parStock}
+                  {p.pricePerUnit.toFixed(2)} €/{p.unit} · IVA {(p.vatRate * 100).toFixed(0)}% · PAR {p.parStock}
                 </p>
                 {editingProductId === p.id ? (
                   <div className="mt-2 grid grid-cols-1 gap-2 rounded-lg border border-zinc-200 bg-white p-2">

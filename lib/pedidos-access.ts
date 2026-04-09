@@ -7,7 +7,8 @@ function normalize(value: string | null | undefined) {
 }
 
 const MATARO_LOCAL_ID = '74cdaba5-b714-47e9-811d-8de14d531a20';
-const MATARO_ALLOWED_EMAILS = new Set(['xampacocina2026@gmail.com']);
+const PREMIA_LOCAL_ID = '8e4f5bc5-2f22-4ce4-bf6f-8a66f2f7f66f';
+const PEDIDOS_ALLOWED_EMAILS = new Set(['xampacocina2026@gmail.com', 'xampapremia@gmail.com']);
 
 export function canAccessPedidos(
   localCode: string | null | undefined,
@@ -20,11 +21,15 @@ export function canAccessPedidos(
   const name = normalize(localName);
   const id = (localId ?? '').trim();
   return (
-    MATARO_ALLOWED_EMAILS.has(mail) ||
+    PEDIDOS_ALLOWED_EMAILS.has(mail) ||
     id === MATARO_LOCAL_ID ||
+    id === PREMIA_LOCAL_ID ||
     code === 'MATARO' ||
+    code === 'PREMIA' ||
     name === 'MATARO' ||
+    name === 'PREMIA' ||
     name.endsWith(' MATARO')
+    || name.endsWith(' PREMIA')
   );
 }
 

@@ -19,6 +19,7 @@ type AuthContextValue = {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 const AUTH_KEY = 'mermas_user_email';
+const PROFILE_CACHE_KEY = 'xampa_profile_cache_v1';
 const PROFILE_TIMEOUT_MS = 6000;
 
 function isInvalidRefreshTokenError(message: string | undefined) {
@@ -60,6 +61,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setLocalName(null);
   }, []);
 
+  const persistProfileCache = React.useCallback(
+    (profile: { localId: string; localCode: string | null; localName: string | null }) => {
+      if (typeof window === 'undefined') return;
+      window.localStorage.setItem(PROFILE_CACHE_KEY, JSON.stringify(profile));
+    },
+    [],
+  );
+
+  const restoreProfileFromCache = React.useCallback(() => {
+    if (typeof window === 'undefined') return false;
+    try {
+      const raw = window.localStorage.getItem(PROFILE_CACHE_KEY);
+      if (!raw) return false;
+      const parsed = JSON.parse(raw) as { localId?: string; localCode?: string | null; localName?: string | null };
+      if (!parsed?.localId) return false;
+      setLocalId(parsed.localId);
+      setLocalCode(parsed.localCode ?? null);
+      setLocalName(parsed.localName ?? null);
+      return true;
+    } catch {
+      return false;
+    }
+  }, []);
+
   const clearLocalAuthCache = React.useCallback(() => {
     if (typeof window === 'undefined') return;
     window.localStorage.removeItem(AUTH_KEY);
@@ -70,6 +95,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         window.localStorage.removeItem(key);
       }
     }
+    window.localStorage.removeItem(PROFILE_CACHE_KEY);
   }, []);
 
   const loadProfileForUser = React.useCallback(async (userId: string | undefined) => {
@@ -130,13 +156,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         profileErr = new Error('timeout');
       }
       if (profileErr || !profileOnly?.local_id) {
-        clearProfile();
+        if (!restoreProfileFromCache()) clearProfile();
         setProfileReady(true);
         return;
       }
       setLocalId(profileOnly.local_id);
       setLocalCode(null);
       setLocalName(null);
+      persistProfileCache({ localId: profileOnly.local_id, localCode: null, localName: null });
       setProfileReady(true);
       return;
     }
@@ -154,8 +181,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setLocalId(row.local_id);
     setLocalCode(loc?.code ?? null);
     setLocalName(loc?.name ?? null);
+    persistProfileCache({ localId: row.local_id, localCode: loc?.code ?? null, localName: loc?.name ?? null });
     setProfileReady(true);
-  }, [clearProfile]);
+  }, [clearProfile, persistProfileCache, restoreProfileFromCache]);
 
   useEffect(() => {
     const persistEmail = (nextEmail: string | null) => {
@@ -183,7 +211,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (!isMounted) return;
       // Prevent indefinite "Cargando sesión..." when auth request hangs.
       setLoading(false);
-      setProfileReady(true);
+      if (restoreProfileFromCache()) {
+        setProfileReady(true);
+      }
     }, 8000);
     void supabase.auth
       .getSession()
@@ -261,7 +291,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setEmail(null);
         clearProfile();
         setProfileReady(true);
-        if (typeof window !== 'undefined') window.localStorage.removeItem(AUTH_KEY);
+        if (typeof window !== 'undefined') {
+          window.localStorage.removeItem(AUTH_KEY);
+          window.localStorage.removeItem(PROFILE_CACHE_KEY);
+        }
       },
       loading,
     }),

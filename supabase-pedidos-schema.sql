@@ -18,7 +18,7 @@ create table if not exists public.pedido_supplier_products (
   local_id uuid not null references public.locals(id) on delete restrict,
   supplier_id uuid not null references public.pedido_suppliers(id) on delete cascade,
   name text not null,
-  unit text not null check (unit in ('kg', 'ud', 'bolsa', 'racion')),
+  unit text not null check (unit in ('kg', 'ud', 'bolsa', 'racion', 'caja', 'paquete', 'bandeja')),
   price_per_unit numeric(10,2) not null check (price_per_unit >= 0),
   vat_rate numeric(6,4) not null default 0 check (vat_rate >= 0 and vat_rate <= 1),
   par_stock numeric(10,2) not null default 0 check (par_stock >= 0),
@@ -52,7 +52,7 @@ create table if not exists public.purchase_order_items (
   order_id uuid not null references public.purchase_orders(id) on delete cascade,
   supplier_product_id uuid references public.pedido_supplier_products(id) on delete set null,
   product_name text not null,
-  unit text not null check (unit in ('kg', 'ud', 'bolsa', 'racion')),
+  unit text not null check (unit in ('kg', 'ud', 'bolsa', 'racion', 'caja', 'paquete', 'bandeja')),
   quantity numeric(10,2) not null check (quantity >= 0),
   received_quantity numeric(10,2) not null default 0 check (received_quantity >= 0),
   price_per_unit numeric(10,2) not null check (price_per_unit >= 0),
@@ -80,6 +80,19 @@ alter table public.purchase_order_items
   add column if not exists incident_type text;
 alter table public.purchase_order_items
   add column if not exists incident_notes text;
+
+-- Align unit constraints with app units
+alter table public.pedido_supplier_products
+  drop constraint if exists pedido_supplier_products_unit_check;
+alter table public.pedido_supplier_products
+  add constraint pedido_supplier_products_unit_check
+  check (unit in ('kg', 'ud', 'bolsa', 'racion', 'caja', 'paquete', 'bandeja'));
+
+alter table public.purchase_order_items
+  drop constraint if exists purchase_order_items_unit_check;
+alter table public.purchase_order_items
+  add constraint purchase_order_items_unit_check
+  check (unit in ('kg', 'ud', 'bolsa', 'racion', 'caja', 'paquete', 'bandeja'));
 
 alter table public.pedido_suppliers enable row level security;
 alter table public.pedido_supplier_products enable row level security;
