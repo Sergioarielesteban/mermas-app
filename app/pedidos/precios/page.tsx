@@ -117,7 +117,7 @@ export default function PedidosPreciosPage() {
     }
     autoTable(doc, {
       startY: 62,
-      head: [['Producto', 'Precio base', 'Precio actual', 'Delta €', 'Delta %']],
+      head: [['Producto', 'Precio base', 'Precio actual', 'Variación €', 'Variación %']],
       body,
       styles: { fontSize: 8, cellPadding: 4 },
       headStyles: { fillColor: [211, 47, 47] },

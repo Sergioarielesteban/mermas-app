@@ -164,12 +164,12 @@ export default function PedidosPage() {
         </button>
       </section>
 
-      <section className="rounded-2xl bg-white p-4 ring-1 ring-zinc-200">
+      <section className="rounded-2xl bg-white p-4 text-center ring-1 ring-zinc-200">
         <p className="text-sm font-bold text-zinc-800">Pedidos enviados</p>
         <div className="mt-2 space-y-2">
           {sentOrders.length === 0 ? <p className="text-sm text-zinc-500">No hay pedidos enviados.</p> : null}
           {sentOrders.map((order) => (
-            <div key={order.id} className="rounded-xl bg-zinc-50 p-3 ring-1 ring-zinc-200">
+            <div key={order.id} className="rounded-xl bg-zinc-50 p-3 text-center ring-1 ring-zinc-200">
               {(() => {
                 const totals = totalsWithVat(order);
                 return (
@@ -189,14 +189,14 @@ export default function PedidosPage() {
                 <button
                   type="button"
                   onClick={() => setExpandedId((prev) => (prev === order.id ? null : order.id))}
-                  className="rounded-lg border border-zinc-300 bg-white px-2 py-1.5 text-xs font-semibold text-[#2563EB]"
+                  className="rounded-lg border border-zinc-300 bg-white px-2 py-1.5 text-center text-xs font-semibold text-[#2563EB]"
                 >
                   {expandedId === order.id ? 'Ocultar detalle' : 'Ver detalle'}
                 </button>
                 <button
                   type="button"
                   onClick={() => sendWhatsappOrder(order)}
-                  className="rounded-lg border border-zinc-300 bg-white px-2 py-1.5 text-xs font-semibold text-[#166534]"
+                  className="rounded-lg border border-zinc-300 bg-white px-2 py-1.5 text-center text-xs font-semibold text-[#166534]"
                 >
                   Enviar WhatsApp
                 </button>
@@ -220,13 +220,13 @@ export default function PedidosPage() {
                       })
                       .catch((err: Error) => setMessage(err.message));
                   }}
-                  className="rounded-lg border border-zinc-300 bg-white px-2 py-1.5 text-xs font-semibold text-[#B91C1C]"
+                  className="rounded-lg border border-zinc-300 bg-white px-2 py-1.5 text-center text-xs font-semibold text-[#B91C1C]"
                 >
                   Eliminar
                 </button>
               </div>
               {expandedId === order.id ? (
-                <div className="mt-2 space-y-1">
+                <div className="mt-2 space-y-1 text-center">
                   {order.items.map((item) => (
                     <p key={item.id} className="text-xs text-zinc-600">
                       {item.productName}: {item.quantity} {item.unit}
@@ -239,12 +239,12 @@ export default function PedidosPage() {
         </div>
       </section>
 
-      <section className="rounded-2xl bg-white p-4 ring-1 ring-zinc-200">
+      <section className="rounded-2xl bg-white p-4 text-center ring-1 ring-zinc-200">
         <p className="text-sm font-bold text-zinc-800">Historico recibido</p>
         <div className="mt-2 space-y-2">
           {receivedOrders.length === 0 ? <p className="text-sm text-zinc-500">No hay pedidos recibidos.</p> : null}
           {receivedOrders.map((order) => (
-            <div key={order.id} className="rounded-xl bg-zinc-50 p-3 ring-1 ring-zinc-200">
+            <div key={order.id} className="rounded-xl bg-zinc-50 p-3 text-center ring-1 ring-zinc-200">
               {(() => {
                 const totals = totalsWithVat(order);
                 return (
@@ -263,7 +263,7 @@ export default function PedidosPage() {
                 <button
                   type="button"
                   onClick={() => setExpandedId((prev) => (prev === order.id ? null : order.id))}
-                  className="rounded-lg border border-zinc-300 bg-white px-2 py-1.5 text-xs font-semibold text-[#2563EB]"
+                  className="rounded-lg border border-zinc-300 bg-white px-2 py-1.5 text-center text-xs font-semibold text-[#2563EB]"
                 >
                   {expandedId === order.id ? 'Ocultar detalle' : 'Ver detalle'}
                 </button>
@@ -287,13 +287,13 @@ export default function PedidosPage() {
                       })
                       .catch((err: Error) => setMessage(err.message));
                   }}
-                  className="rounded-lg border border-zinc-300 bg-white px-2 py-1.5 text-xs font-semibold text-[#B91C1C]"
+                  className="rounded-lg border border-zinc-300 bg-white px-2 py-1.5 text-center text-xs font-semibold text-[#B91C1C]"
                 >
                   Eliminar
                 </button>
               </div>
               {expandedId === order.id ? (
-                <div className="mt-2 space-y-1">
+                <div className="mt-2 space-y-1 text-center">
                   {order.items.map((item) => (
                     <p key={item.id} className="text-xs text-zinc-600">
                       {item.productName}: pedido {item.quantity} / recibido {item.receivedQuantity} {item.unit}
