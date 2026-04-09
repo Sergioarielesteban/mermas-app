@@ -213,7 +213,7 @@ export default function RecepcionPedidosPage() {
                           : ''}
                       </p>
                       <p className="text-xs text-zinc-500">
-                        Precio unitario: {item.pricePerUnit.toFixed(2)} €/{item.unit} · Subtotal línea: {item.lineTotal.toFixed(2)} €
+                        p/unit: {item.pricePerUnit.toFixed(2)} €/{item.unit} · subt.: {item.lineTotal.toFixed(2)} €
                       </p>
                       <div className="mt-2 flex items-center gap-3">
                         <button

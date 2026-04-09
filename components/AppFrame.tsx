@@ -12,6 +12,7 @@ export default function AppFrame({ children }: { children: React.ReactNode }) {
   const { email, loading } = useAuth();
   const isLogin = pathname === '/login';
   const [forceUnlock, setForceUnlock] = React.useState(false);
+  const [showSplash, setShowSplash] = React.useState(true);
 
   useEffect(() => {
     if (!loading) {
@@ -39,6 +40,12 @@ export default function AppFrame({ children }: { children: React.ReactNode }) {
     }
     if (email && isLogin) router.replace('/');
   }, [effectiveLoading, email, isLogin, router]);
+
+  useEffect(() => {
+    if (effectiveLoading || isLogin || !email) return;
+    const timer = window.setTimeout(() => setShowSplash(false), 1800);
+    return () => window.clearTimeout(timer);
+  }, [effectiveLoading, isLogin, email]);
 
   // Keep server and first client paint aligned to avoid hydration mismatch.
   if (effectiveLoading) {
@@ -75,6 +82,14 @@ export default function AppFrame({ children }: { children: React.ReactNode }) {
 
   if (isLogin) {
     return <main className="min-h-screen px-4 py-8">{children}</main>;
+  }
+
+  if (showSplash) {
+    return (
+      <main className="grid min-h-screen place-items-center bg-white px-4">
+        <img src="/can-xampa-logo.svg" alt="Can Xampa" className="h-auto w-full max-w-sm" />
+      </main>
+    );
   }
 
   return (

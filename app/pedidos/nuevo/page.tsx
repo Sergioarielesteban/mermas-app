@@ -65,6 +65,7 @@ export default function NuevoPedidoPage() {
   const [qtyByProductId, setQtyByProductId] = React.useState<QtyMap>({});
   const [message, setMessage] = React.useState<string | null>(null);
   const [deliveryDate, setDeliveryDate] = React.useState('');
+  const [requestedBy, setRequestedBy] = React.useState('');
   const [priceHistoryByProductId, setPriceHistoryByProductId] = React.useState<Map<string, SupplierProductPriceHistory>>(new Map());
   const [loadingSuppliers, setLoadingSuppliers] = React.useState(false);
   const [isLoadedEdit, setIsLoadedEdit] = React.useState(false);
@@ -237,17 +238,12 @@ export default function NuevoPedidoPage() {
     if (!selectedSupplier) return setMessage('Selecciona proveedor.');
     if (items.length === 0) return setMessage('Añade al menos un producto.');
     if (!localId) return setMessage('Perfil del local aún cargando.');
+    if (!deliveryDate.trim()) return setMessage('Fecha de entrega obligatoria.');
+    if (!requestedBy.trim()) return setMessage('Indica quién pide.');
     const phone = normalizeWhatsappNumber(selectedSupplier.contact);
     if (!phone) return setMessage('El proveedor no tiene teléfono válido en contacto.');
-    const suggested = new Date();
-    suggested.setDate(suggested.getDate() + 1);
-    const picked = window.prompt('Fecha de entrega (AAAA-MM-DD):', suggested.toISOString().slice(0, 10))?.trim();
-    if (!picked) return;
-    const parsed = new Date(`${picked}T00:00:00`);
+    const parsed = new Date(`${deliveryDate}T00:00:00`);
     if (Number.isNaN(parsed.getTime())) return setMessage('Fecha de entrega inválida. Usa AAAA-MM-DD.');
-    setDeliveryDate(picked);
-    const requestedBy = window.prompt('Nombre de quien pide:')?.trim();
-    if (!requestedBy) return setMessage('Debes indicar quién está pidiendo.');
     const supabase = getSupabaseClient();
     if (!supabase) return setMessage('Sin conexión con Supabase.');
     const popup = window.open('about:blank', '_blank');
@@ -263,7 +259,7 @@ export default function NuevoPedidoPage() {
       notes: notes.trim(),
       createdAt: existingCreatedAt ?? new Date().toISOString(),
       sentAt: existingSentAt ?? new Date().toISOString(),
-      deliveryDate: picked,
+      deliveryDate,
       items: items.map((item) => ({
         supplierProductId: item.supplierProductId,
         productName: item.productName,
@@ -282,7 +278,7 @@ export default function NuevoPedidoPage() {
             createdAtIso: existingCreatedAt ?? new Date().toISOString(),
             deliveryDate: parsed.toLocaleDateString('es-ES'),
             localName: localName ?? 'MATARO',
-            requestedBy,
+            requestedBy: requestedBy.trim(),
             notes: notes.trim(),
             items,
           }),
@@ -337,9 +333,6 @@ export default function NuevoPedidoPage() {
             </option>
           ))}
         </select>
-        {selectedSupplier ? (
-          <p className="mt-1 text-xs text-zinc-500">Contacto demo: {selectedSupplier.contact}</p>
-        ) : null}
         <label className="mt-3 block text-xs font-semibold uppercase tracking-wide text-zinc-500">
           Buscar producto
         </label>
@@ -355,6 +348,13 @@ export default function NuevoPedidoPage() {
           value={deliveryDate}
           onChange={(e) => setDeliveryDate(e.target.value)}
           className="mt-2 h-11 w-full rounded-xl border border-zinc-300 bg-white px-3 text-sm text-zinc-900 outline-none"
+        />
+        <label className="mt-3 block text-xs font-semibold uppercase tracking-wide text-zinc-500">Pedido por</label>
+        <input
+          value={requestedBy}
+          onChange={(e) => setRequestedBy(e.target.value)}
+          placeholder="Nombre de quien pide"
+          className="mt-2 h-11 w-full rounded-xl border border-zinc-300 bg-white px-3 text-sm text-zinc-900 placeholder:text-zinc-500 outline-none"
         />
       </section>
 
@@ -490,7 +490,6 @@ export default function NuevoPedidoPage() {
 
       <section className="sticky bottom-2 z-20 rounded-2xl border border-zinc-200 bg-white/95 p-3 shadow-lg backdrop-blur">
         <div className="rounded-xl bg-zinc-50 p-2 ring-1 ring-zinc-200">
-          <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">{items.length} lineas</p>
           <div className="mt-1 flex items-center justify-between text-sm text-zinc-700">
             <span>Subtotal</span>
             <span>{totalBase.toFixed(2)} €</span>

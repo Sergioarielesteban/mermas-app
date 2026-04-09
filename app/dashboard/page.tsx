@@ -188,7 +188,7 @@ export default function DashboardPage() {
   const [weeklyTarget, setWeeklyTarget] = React.useState<number>(() => readStoredTarget(WEEKLY_TARGET_KEY, 125));
   const [detailOpen, setDetailOpen] = React.useState(false);
   const [detailTitle, setDetailTitle] = React.useState('');
-  const [detailRows, setDetailRows] = React.useState<Array<{ id: string; occurredAt: string; productName: string; quantity: number; costEur: number; motiveKey: string }>>([]);
+  const [detailRows, setDetailRows] = React.useState<Array<{ id: string; occurredAt: string; productName: string; quantity: number; costEur: number; motiveKey: string; notes?: string }>>([]);
 
   React.useEffect(() => {
     try {
@@ -251,6 +251,7 @@ export default function DashboardPage() {
         quantity: m.quantity,
         costEur: m.costEur,
         motiveKey: m.motiveKey,
+        notes: m.notes?.trim() ? m.notes.trim() : undefined,
       })),
     [mermas, products],
   );
@@ -388,6 +389,7 @@ export default function DashboardPage() {
                     <p className="pt-1 text-[11px] font-semibold text-zinc-600">
                       Motivo: {motiveLabelMap[row.motiveKey] ?? row.motiveKey}
                     </p>
+                    {row.notes ? <p className="pt-1 text-[11px] text-zinc-700">Notas: {row.notes}</p> : null}
                   </div>
                 ))
               )}
@@ -414,7 +416,20 @@ export default function DashboardPage() {
         ) : (
           <div className="space-y-2">
             {alerts.map((item) => (
-              <div key={item.productId} className="rounded-xl border border-zinc-200 bg-zinc-50 p-3">
+              <button
+                key={item.productId}
+                type="button"
+                onClick={() =>
+                  openDetail(
+                    `Detalle alerta: ${item.productName}`,
+                    mermasWithProduct.filter((m) => {
+                      const d = toBusinessDate(m.occurredAt);
+                      return m.productId === item.productId && d.getMonth() === monthNow.getMonth() && d.getFullYear() === monthNow.getFullYear();
+                    }),
+                  )
+                }
+                className="w-full rounded-xl border border-zinc-200 bg-zinc-50 p-3 text-left"
+              >
                 <div className="flex items-center justify-between gap-2">
                   <p className="truncate text-sm font-bold text-zinc-900">{item.productName}</p>
                   <span
@@ -433,7 +448,7 @@ export default function DashboardPage() {
                 <p className="pt-1 text-xs text-zinc-700">
                   Coste acumulado: <strong>{eur(item.totalCost)}</strong> | artículos: {item.quantity}
                 </p>
-              </div>
+              </button>
             ))}
           </div>
         )}
@@ -446,10 +461,20 @@ export default function DashboardPage() {
         ) : (
           <div className="mt-3 space-y-2">
             {anomalies.map((item) => (
-              <div
+              <button
                 key={item.productId}
+                type="button"
+                onClick={() =>
+                  openDetail(
+                    `Detalle anomalía: ${item.productName}`,
+                    mermasWithProduct.filter((m) => {
+                      const d = toBusinessDate(m.occurredAt);
+                      return m.productId === item.productId && d >= previousWeekStart;
+                    }),
+                  )
+                }
                 className={[
-                  'rounded-xl border p-3',
+                  'w-full rounded-xl border p-3 text-left',
                   item.severity === 'alta' ? 'border-red-200 bg-red-50' : 'border-amber-200 bg-amber-50',
                 ].join(' ')}
               >
@@ -476,7 +501,7 @@ export default function DashboardPage() {
                 <p className={['pt-1 text-xs font-semibold', item.severity === 'alta' ? 'text-red-800' : 'text-amber-800'].join(' ')}>
                   Incremento: +{eur(item.delta)} · +{qty(item.qtyDelta)} uds aprox
                 </p>
-              </div>
+              </button>
             ))}
           </div>
         )}

@@ -46,10 +46,9 @@ function buildWhatsappOrderMessage(order: PedidoOrder, deliveryDate: string, loc
     .join('\n');
 }
 
-function totalsWithVat(order: PedidoOrder) {
-  const base = order.items.reduce((acc, item) => acc + item.lineTotal, 0);
-  const vat = order.items.reduce((acc, item) => acc + item.lineTotal * (item.vatRate ?? 0), 0);
-  return { base, vat, total: base + vat };
+function orderedProductsLabel(order: PedidoOrder) {
+  if (order.items.length === 0) return 'Sin productos';
+  return order.items.map((item) => `${item.productName} (${item.quantity} ${item.unit})`).join(' · ');
 }
 
 export default function PedidosPage() {
@@ -131,9 +130,6 @@ export default function PedidosPage() {
           <Link href="/pedidos/proveedores" className="rounded-xl border border-zinc-300 bg-white px-3 py-2 text-center text-sm font-semibold text-zinc-700">
             Proveedores
           </Link>
-          <Link href="/pedidos/recepcion" className="rounded-xl border border-zinc-300 bg-white px-3 py-2 text-center text-sm font-semibold text-zinc-700">
-            Recepcion
-          </Link>
         </div>
         <div className="mt-2 flex flex-wrap gap-2">
           <Link href="/pedidos/calendario" className="rounded-xl border border-zinc-300 bg-white px-3 py-2 text-center text-sm font-semibold text-zinc-700 inline-block">
@@ -149,14 +145,14 @@ export default function PedidosPage() {
         <section className="rounded-2xl bg-white p-4 text-sm text-zinc-700 ring-1 ring-zinc-200">{message}</section>
       ) : null}
 
-      <section className="grid grid-cols-1 gap-3">
+      <section className="flex justify-center">
         <button
           type="button"
           onClick={() => {
             const today = new Date().toISOString().slice(0, 10);
             router.push(`/pedidos/recepcion?date=${today}`);
           }}
-          className="rounded-2xl bg-white p-4 text-left ring-1 ring-zinc-200"
+          className="w-full max-w-sm rounded-2xl bg-white p-4 text-center ring-1 ring-zinc-200"
         >
           <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Pendientes recepcion</p>
           <p className="pt-2 text-2xl font-black text-zinc-900">{sentOrders.length}</p>
@@ -170,19 +166,12 @@ export default function PedidosPage() {
           {sentOrders.length === 0 ? <p className="text-sm text-zinc-500">No hay pedidos enviados.</p> : null}
           {sentOrders.map((order) => (
             <div key={order.id} className="rounded-xl bg-zinc-50 p-3 ring-1 ring-zinc-200">
-              {(() => {
-                const totals = totalsWithVat(order);
-                return (
-                  <>
               <p className="text-sm font-semibold text-zinc-900">{order.supplierName}</p>
               <p className="text-xs text-zinc-500">
-                {order.items.length} lineas · Subtotal {totals.base.toFixed(2)} € · IVA {totals.vat.toFixed(2)} € · Total {totals.total.toFixed(2)} € · enviado{' '}
-                {order.sentAt ? new Date(order.sentAt).toLocaleDateString('es-ES') : '-'}
+                enviado {order.sentAt ? new Date(order.sentAt).toLocaleDateString('es-ES') : '-'}
               </p>
               {order.deliveryDate ? <p className="text-xs text-zinc-500">Entrega: {new Date(`${order.deliveryDate}T00:00:00`).toLocaleDateString('es-ES')}</p> : null}
-                  </>
-                );
-              })()}
+              <p className="pt-1 text-xs text-zinc-600">{orderedProductsLabel(order)}</p>
               <button
                 type="button"
                 onClick={() => setExpandedId((prev) => (prev === order.id ? null : order.id))}
@@ -225,7 +214,7 @@ export default function PedidosPage() {
                 <div className="mt-2 space-y-1">
                   {order.items.map((item) => (
                     <p key={item.id} className="text-xs text-zinc-600">
-                      {item.productName}: {item.quantity} {item.unit} · Subtotal {item.lineTotal.toFixed(2)} € · IVA {(item.lineTotal * item.vatRate).toFixed(2)} €
+                      {item.productName}: {item.quantity} {item.unit}
                     </p>
                   ))}
                 </div>
@@ -241,18 +230,10 @@ export default function PedidosPage() {
           {receivedOrders.length === 0 ? <p className="text-sm text-zinc-500">No hay pedidos recibidos.</p> : null}
           {receivedOrders.map((order) => (
             <div key={order.id} className="rounded-xl bg-zinc-50 p-3 ring-1 ring-zinc-200">
-              {(() => {
-                const totals = totalsWithVat(order);
-                return (
-                  <>
               <p className="text-sm font-semibold text-zinc-900">{order.supplierName}</p>
               <p className="text-xs text-zinc-500">
-                {order.items.length} lineas · Subtotal {totals.base.toFixed(2)} € · IVA {totals.vat.toFixed(2)} € · Total {totals.total.toFixed(2)} € · recibido{' '}
-                {order.receivedAt ? new Date(order.receivedAt).toLocaleDateString('es-ES') : '-'}
+                recibido {order.receivedAt ? new Date(order.receivedAt).toLocaleDateString('es-ES') : '-'}
               </p>
-                  </>
-                );
-              })()}
               <button
                 type="button"
                 onClick={() => setExpandedId((prev) => (prev === order.id ? null : order.id))}
