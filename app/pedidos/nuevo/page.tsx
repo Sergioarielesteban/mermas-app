@@ -399,21 +399,22 @@ export default function NuevoPedidoPage() {
                   </div>
                   <p className="text-sm font-bold text-zinc-900">{lineTotal.toFixed(2)} €</p>
                 </div>
-                <div className="mt-3 flex items-center justify-between gap-2">
+                <div className="mt-3 flex items-center justify-end gap-2">
+                  <div className="min-w-[88px] rounded-md bg-[#D32F2F] px-3 py-1.5 text-center text-sm font-black text-white">
+                    {p.unit === 'kg' ? qty.toFixed(2) : Math.round(qty)}
+                  </div>
+                  <span className="text-xs font-semibold uppercase text-zinc-500">{p.unit}</span>
                   <button
                     type="button"
                     onClick={() => changeQty(p.id, p.unit, 'dec')}
-                    className="h-14 w-14 rounded-full border border-zinc-300 bg-white text-3xl font-black text-zinc-700"
+                    className="grid h-10 w-10 place-items-center rounded-full border border-zinc-300 bg-white text-2xl font-black leading-none text-zinc-500"
                   >
                     -
                   </button>
-                  <div className="min-w-28 rounded-lg bg-white px-3 py-3 text-center text-base font-black text-zinc-900 ring-1 ring-zinc-200">
-                    {p.unit === 'kg' ? qty.toFixed(2) : Math.round(qty)} {p.unit}
-                  </div>
                   <button
                     type="button"
                     onClick={() => changeQty(p.id, p.unit, 'inc')}
-                    className="h-14 w-14 rounded-full bg-[#2563EB] text-3xl font-black text-white"
+                    className="grid h-10 w-10 place-items-center rounded-full bg-[#D32F2F] text-2xl font-black leading-none text-white"
                   >
                     +
                   </button>
