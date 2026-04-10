@@ -389,11 +389,11 @@ export default function NuevoPedidoPage() {
                   </div>
                   <p className="text-sm font-bold text-zinc-900">{lineTotal.toFixed(2)} €</p>
                 </div>
-                <div className="mt-3 flex items-center justify-end gap-1">
+                <div className="mt-3 flex items-center justify-end gap-2">
                   <button
                     type="button"
                     onClick={() => adjustQty(p.id, p.unit, -1)}
-                    className="grid h-9 w-9 shrink-0 place-items-center rounded-lg border border-zinc-300 bg-white text-base font-black leading-none text-zinc-800 active:bg-zinc-100"
+                    className="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-zinc-300 bg-white text-lg font-semibold leading-none text-zinc-400 shadow-sm active:bg-zinc-50"
                     aria-label={`Quitar una unidad de ${p.name}`}
                   >
                     {'\u2212'}
@@ -404,19 +404,19 @@ export default function NuevoPedidoPage() {
                     step={p.unit === 'kg' ? 0.01 : 1}
                     inputMode="decimal"
                     aria-label={`Cantidad ${p.name}`}
-                    className="min-w-[3.5rem] max-w-[4.5rem] rounded-md border border-zinc-300 bg-white px-1.5 py-1.5 text-center text-xs font-bold text-zinc-700 outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                    className="h-8 w-[2.35rem] shrink-0 rounded-lg border border-zinc-300 bg-white px-1 text-center text-sm font-semibold text-zinc-400 outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                     value={qty === 0 ? '' : p.unit === 'kg' ? qty : Math.round(qty)}
                     onChange={(e) => setQtyFromInput(p.id, p.unit, e.target.value)}
                   />
                   <button
                     type="button"
                     onClick={() => adjustQty(p.id, p.unit, 1)}
-                    className="grid h-9 w-9 shrink-0 place-items-center rounded-lg border border-zinc-300 bg-white text-base font-black leading-none text-zinc-800 active:bg-zinc-100"
+                    className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-[#D32F2F] text-lg font-semibold leading-none text-white shadow-sm active:bg-[#B71C1C]"
                     aria-label={`Añadir una unidad de ${p.name}`}
                   >
                     +
                   </button>
-                  <span className="ml-1 text-xs font-semibold uppercase text-zinc-500">{p.unit}</span>
+                  <span className="text-xs font-semibold uppercase text-zinc-500">{p.unit}</span>
                 </div>
               </div>
             );
