@@ -50,6 +50,17 @@ function parseDecimal(raw: string) {
   return Math.round(value * 100) / 100;
 }
 
+/** Kg estimado por bandeja (3 decimales). Vacío = sin estimación. */
+function parseKgEstimate(raw: string) {
+  const normalized = raw.trim().replace(/\s/g, '').replace(',', '.');
+  if (normalized === '') return null;
+  const value = Number(normalized);
+  if (!Number.isFinite(value) || value <= 0) return undefined;
+  return Math.round(value * 1000) / 1000;
+}
+
+type ProductDraft = { name: string; unit: Unit; price: string; vatRate: string; estimatedKg: string };
+
 export default function ProveedoresPage() {
   const { localCode, localName, localId, email } = useAuth();
   const canUse = canAccessPedidos(localCode, email, localName, localId);
@@ -63,11 +74,12 @@ export default function ProveedoresPage() {
   const [productName, setProductName] = React.useState('');
   const [productUnit, setProductUnit] = React.useState<Unit>('ud');
   const [productPrice, setProductPrice] = React.useState('');
+  const [productEstimatedKg, setProductEstimatedKg] = React.useState('');
   const [productVat, setProductVat] = React.useState('0,21');
   const [editingSupplierId, setEditingSupplierId] = React.useState<string | null>(null);
   const [editingProductId, setEditingProductId] = React.useState<string | null>(null);
   const [supplierDrafts, setSupplierDrafts] = React.useState<Record<string, { name: string; contact: string }>>({});
-  const [productDrafts, setProductDrafts] = React.useState<Record<string, { name: string; unit: Unit; price: string; vatRate: string }>>({});
+  const [productDrafts, setProductDrafts] = React.useState<Record<string, ProductDraft>>({});
 
   const reload = React.useCallback(() => {
     if (!canUse) return;
@@ -97,6 +109,10 @@ export default function ProveedoresPage() {
                 unit: p.unit,
                 price: String(p.pricePerUnit),
                 vatRate: String(p.vatRate ?? 0),
+                estimatedKg:
+                  p.unit === 'bandeja' && p.estimatedKgPerUnit != null && p.estimatedKgPerUnit > 0
+                    ? String(p.estimatedKgPerUnit)
+                    : '',
               };
             }
           }
@@ -143,16 +159,24 @@ export default function ProveedoresPage() {
     if (!Number.isFinite(vatRate) || vatRate < 0 || vatRate > 1) return setMessage('IVA inválido. Usa 0,21 o 0,10.');
     const supabase = getSupabaseClient();
     if (!supabase) return setMessage('Supabase no disponible en esta sesión.');
+    let estimatedKgPerUnit: number | null = null;
+    if (productUnit === 'bandeja') {
+      const parsedKg = parseKgEstimate(productEstimatedKg);
+      if (parsedKg === undefined) return setMessage('Kg estimado por bandeja inválido (usa un número > 0 o déjalo vacío).');
+      estimatedKgPerUnit = parsedKg;
+    }
     void createSupplierProduct(supabase, localId, productSupplierId, {
       name,
       unit: productUnit,
       pricePerUnit: price,
       vatRate,
       parStock: 0,
+      estimatedKgPerUnit,
     })
       .then(() => {
         setProductName('');
         setProductPrice('');
+        setProductEstimatedKg('');
         setProductVat('0,21');
         setMessage('Producto de proveedor guardado.');
         reload();
@@ -192,6 +216,12 @@ export default function ProveedoresPage() {
     if (!Number.isFinite(vatRate) || vatRate < 0 || vatRate > 1) {
       return setMessage('IVA inválido. Usa 0,21 o 0,10.');
     }
+    let estimatedKgPerUnit: number | null = null;
+    if (draft.unit === 'bandeja') {
+      const parsedKg = parseKgEstimate(draft.estimatedKg ?? '');
+      if (parsedKg === undefined) return setMessage('Kg estimado por bandeja inválido (usa un número > 0 o déjalo vacío).');
+      estimatedKgPerUnit = parsedKg;
+    }
     const supabase = getSupabaseClient();
     if (!supabase) return setMessage('Supabase no disponible en esta sesión.');
     void updateSupplierProduct(supabase, localId, productId, {
@@ -200,6 +230,7 @@ export default function ProveedoresPage() {
       pricePerUnit: price,
       vatRate,
       parStock: 0,
+      estimatedKgPerUnit,
     })
       .then(() => {
         setEditingProductId(null);
@@ -347,6 +378,14 @@ export default function ProveedoresPage() {
               className="h-10 rounded-xl border border-zinc-300 bg-white px-3 text-sm text-zinc-900 placeholder:text-zinc-500 outline-none"
             />
           </div>
+          {productUnit === 'bandeja' ? (
+            <input
+              value={productEstimatedKg}
+              onChange={(e) => setProductEstimatedKg(e.target.value)}
+              placeholder="Kg estimados por bandeja (opcional)"
+              className="h-10 rounded-xl border border-zinc-300 bg-white px-3 text-sm text-zinc-900 placeholder:text-zinc-500 outline-none"
+            />
+          ) : null}
           <button
             type="button"
             onClick={saveSupplierProduct}
@@ -442,6 +481,11 @@ export default function ProveedoresPage() {
                             unit: prev[p.id]?.unit ?? p.unit,
                             price: prev[p.id]?.price ?? String(p.pricePerUnit),
                             vatRate: prev[p.id]?.vatRate ?? String(p.vatRate ?? 0),
+                            estimatedKg:
+                              prev[p.id]?.estimatedKg ??
+                              (p.unit === 'bandeja' && p.estimatedKgPerUnit != null && p.estimatedKgPerUnit > 0
+                                ? String(p.estimatedKgPerUnit)
+                                : ''),
                           },
                         }));
                       }}
@@ -460,6 +504,9 @@ export default function ProveedoresPage() {
                 </div>
                 <p className="pt-1 text-xs font-semibold text-zinc-600">
                   {p.pricePerUnit.toFixed(2)} €/{p.unit} · IVA {(p.vatRate * 100).toFixed(0)}%
+                  {p.unit === 'bandeja' && p.estimatedKgPerUnit != null && p.estimatedKgPerUnit > 0
+                    ? ` · ~${p.estimatedKgPerUnit} kg/bandeja`
+                    : ''}
                 </p>
                 {editingProductId === p.id ? (
                   <div className="mt-2 grid grid-cols-1 gap-2 rounded-lg border border-zinc-200 bg-white p-2">
@@ -469,7 +516,7 @@ export default function ProveedoresPage() {
                         setProductDrafts((prev) => ({
                           ...prev,
                           [p.id]: {
-                            ...(prev[p.id] ?? { name: '', unit: 'ud', price: '', vatRate: '0' }),
+                            ...(prev[p.id] ?? { name: '', unit: 'ud', price: '', vatRate: '0', estimatedKg: '' }),
                             name: e.target.value,
                           },
                         }))
@@ -484,7 +531,7 @@ export default function ProveedoresPage() {
                           setProductDrafts((prev) => ({
                             ...prev,
                             [p.id]: {
-                              ...(prev[p.id] ?? { name: '', unit: 'ud', price: '', vatRate: '0' }),
+                              ...(prev[p.id] ?? { name: '', unit: 'ud', price: '', vatRate: '0', estimatedKg: '' }),
                               unit: e.target.value as Unit,
                             },
                           }))
@@ -505,7 +552,7 @@ export default function ProveedoresPage() {
                           setProductDrafts((prev) => ({
                             ...prev,
                             [p.id]: {
-                              ...(prev[p.id] ?? { name: '', unit: 'ud', price: '', vatRate: '0' }),
+                              ...(prev[p.id] ?? { name: '', unit: 'ud', price: '', vatRate: '0', estimatedKg: '' }),
                               price: e.target.value,
                             },
                           }))
@@ -519,7 +566,7 @@ export default function ProveedoresPage() {
                           setProductDrafts((prev) => ({
                             ...prev,
                             [p.id]: {
-                              ...(prev[p.id] ?? { name: '', unit: 'ud', price: '', vatRate: '0' }),
+                              ...(prev[p.id] ?? { name: '', unit: 'ud', price: '', vatRate: '0', estimatedKg: '' }),
                               vatRate: e.target.value,
                             },
                           }))
@@ -528,6 +575,22 @@ export default function ProveedoresPage() {
                         className="h-9 rounded-lg border border-zinc-300 bg-white px-3 text-sm text-zinc-900 placeholder:text-zinc-500 outline-none"
                       />
                     </div>
+                    {productDrafts[p.id]?.unit === 'bandeja' ? (
+                      <input
+                        value={productDrafts[p.id]?.estimatedKg ?? ''}
+                        onChange={(e) =>
+                          setProductDrafts((prev) => ({
+                            ...prev,
+                            [p.id]: {
+                              ...(prev[p.id] ?? { name: '', unit: 'ud', price: '', vatRate: '0', estimatedKg: '' }),
+                              estimatedKg: e.target.value,
+                            },
+                          }))
+                        }
+                        placeholder="Kg estimados por bandeja (opcional)"
+                        className="h-9 rounded-lg border border-zinc-300 bg-white px-3 text-sm text-zinc-900 placeholder:text-zinc-500 outline-none"
+                      />
+                    ) : null}
                     <button
                       type="button"
                       onClick={() => saveProductChanges(p.id)}

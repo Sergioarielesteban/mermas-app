@@ -55,13 +55,14 @@ export default function MermasRegistrationForm() {
   const validationBannerTimeoutRef = React.useRef<number | null>(null);
 
   const selectedProduct = products.find((p) => p.id === productId) ?? null;
-  const quantityStep = selectedProduct?.unit === 'kg' ? 0.01 : selectedProduct?.unit === 'racion' ? 0.5 : 1;
+  /** Botones +/− siempre de 1 en 1; decimales solo escribiendo en el recuadro. */
+  const quantityButtonStep = 1;
   const quantityLabel = selectedProduct?.unit === 'kg' ? 'Cantidad (kg)' : 'Cantidad';
   const quantityHint = selectedProduct?.unit === 'kg'
-    ? 'Admite decimales (ej: 0,30 kg).'
+    ? 'Botones ±1 kg. Toca la cantidad para decimales (ej: 0,30).'
     : selectedProduct?.unit === 'racion'
-      ? 'Puedes usar decimales (ej: 0,5 ración).'
-      : 'Puedes escribir decimales si lo necesitas.';
+      ? 'Botones ±1. Toca la cantidad para medias raciones (ej: 0,5).'
+      : 'Botones ±1 unidad. Toca la cantidad para decimales (ej: 0,5).';
 
   React.useEffect(() => {
     if (!productId && products[0]?.id) {
@@ -249,7 +250,7 @@ export default function MermasRegistrationForm() {
                 type="button"
                 onClick={() => {
                   setQuantity((q) => {
-                    const next = toNumberClamped(String(q - quantityStep), 0, 999, 2);
+                    const next = toNumberClamped(String(q - quantityButtonStep), 0, 999, 2);
                     setQuantityInput(next.toFixed(2).replace('.', ','));
                     return next;
                   });
@@ -272,9 +273,6 @@ export default function MermasRegistrationForm() {
               <input
                 type="text"
                 inputMode="decimal"
-                min={0}
-                max={999}
-                step={quantityStep}
                 required
                 value={quantityInput}
                 onChange={(e) => {
@@ -303,7 +301,7 @@ export default function MermasRegistrationForm() {
                 type="button"
                 onClick={() => {
                   setQuantity((q) => {
-                    const next = toNumberClamped(String(q + quantityStep), quantityStep, 999, 2);
+                    const next = toNumberClamped(String(q + quantityButtonStep), 0, 999, 2);
                     setQuantityInput(next.toFixed(2).replace('.', ','));
                     return next;
                   });

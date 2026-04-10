@@ -9,10 +9,12 @@ import { canAccessPedidos } from '@/lib/pedidos-access';
 import {
   deleteOrder,
   fetchOrders,
-  setOrderStatus,
+  fetchSuppliersWithProducts,
+  reopenReceivedOrderToSent,
   updateOrderItemIncident,
   updateOrderItemReceived,
   type PedidoOrder,
+  type PedidoSupplier,
 } from '@/lib/pedidos-supabase';
 
 function normalizeWhatsappNumber(raw: string | undefined) {
@@ -59,11 +61,44 @@ function totalsWithVat(order: PedidoOrder) {
   return { base, vat, total: base + vat };
 }
 
+function catalogPriceMapFromSuppliers(suppliers: PedidoSupplier[]) {
+  const m = new Map<string, number>();
+  for (const s of suppliers) {
+    for (const p of s.products) {
+      m.set(p.id, p.pricePerUnit);
+    }
+  }
+  return m;
+}
+
+function itemPriceDiffersFromCatalog(
+  item: PedidoOrder['items'][number],
+  catalogPriceByProductId: Map<string, number>,
+) {
+  if (!item.supplierProductId) return false;
+  const cat = catalogPriceByProductId.get(item.supplierProductId);
+  if (cat == null) return false;
+  return Math.round((item.pricePerUnit - cat) * 100) / 100 !== 0;
+}
+
+function receivedOrderHasAttention(
+  order: PedidoOrder,
+  catalogPriceByProductId: Map<string, number>,
+) {
+  return order.items.some(
+    (item) =>
+      Boolean(item.incidentType) ||
+      Boolean(item.incidentNotes?.trim()) ||
+      itemPriceDiffersFromCatalog(item, catalogPriceByProductId),
+  );
+}
+
 export default function PedidosPage() {
   const router = useRouter();
   const { localCode, localName, localId, email } = useAuth();
   const canUse = canAccessPedidos(localCode, email, localName, localId);
   const [orders, setOrders] = React.useState<PedidoOrder[]>([]);
+  const [catalogPriceByProductId, setCatalogPriceByProductId] = React.useState<Map<string, number>>(() => new Map());
   const [message, setMessage] = React.useState<string | null>(null);
   const [showDeletedBanner, setShowDeletedBanner] = React.useState(false);
   const deletedBannerTimeoutRef = React.useRef<number | null>(null);
@@ -100,7 +135,6 @@ export default function PedidosPage() {
 
     setQuickLineMarks((prev) => ({ ...prev, [itemId]: markOk ? 'ok' : 'bad' }));
 
-    let nextItemsSnapshot: PedidoOrder['items'] = [];
     setOrders((prev) =>
       prev.map((order) => {
         if (order.id !== orderId) return order;
@@ -113,21 +147,15 @@ export default function PedidosPage() {
             incidentNotes: nextIncidentNotes,
           };
         });
-        nextItemsSnapshot = nextItems;
         return { ...order, items: nextItems };
       }),
     );
 
-    const allReviewed = nextItemsSnapshot.every((item) => item.receivedQuantity >= item.quantity || Boolean(item.incidentType));
     void Promise.all([
       updateOrderItemReceived(supabase, localId, itemId, nextReceived),
       updateOrderItemIncident(supabase, localId, itemId, markOk ? { type: null, notes: '' } : { type: 'missing', notes: 'No recibido' }),
     ])
-      .then(async () => {
-        if (!allReviewed) return;
-        await setOrderStatus(supabase, localId, orderId, 'received');
-        await reloadOrders();
-      })
+      .then(() => reloadOrders())
       .catch((err: Error) => {
         void reloadOrders();
         setMessage(err.message);
@@ -165,6 +193,21 @@ export default function PedidosPage() {
   React.useEffect(() => {
     reloadOrders();
   }, [reloadOrders]);
+
+  const reloadCatalog = React.useCallback(() => {
+    if (!canUse || !localId) return;
+    const supabase = getSupabaseClient();
+    if (!supabase) return;
+    void fetchSuppliersWithProducts(supabase, localId)
+      .then((rows) => setCatalogPriceByProductId(catalogPriceMapFromSuppliers(rows)))
+      .catch(() => {
+        /* catálogo opcional para colorear precio */
+      });
+  }, [canUse, localId]);
+
+  React.useEffect(() => {
+    reloadCatalog();
+  }, [reloadCatalog]);
 
   React.useEffect(
     () => () => {
@@ -241,7 +284,10 @@ export default function PedidosPage() {
         <div className="mt-2 space-y-2">
           {sentOrders.length === 0 ? <p className="text-sm text-zinc-500">No hay pedidos enviados.</p> : null}
           {sentOrders.map((order) => (
-            <div key={order.id} className="rounded-xl bg-zinc-50 p-3 text-center ring-1 ring-zinc-200">
+            <div
+              key={order.id}
+              className="rounded-xl bg-amber-100 p-3 text-center ring-2 ring-amber-300/90 shadow-sm"
+            >
               {(() => {
                 const totals = totalsWithVat(order);
                 return (
@@ -357,8 +403,13 @@ export default function PedidosPage() {
         <p className="text-sm font-bold text-zinc-800">Historico recibido</p>
         <div className="mt-2 space-y-2">
           {receivedOrders.length === 0 ? <p className="text-sm text-zinc-500">No hay pedidos recibidos.</p> : null}
-          {receivedOrders.map((order) => (
-            <div key={order.id} className="rounded-xl bg-zinc-50 p-3 text-center ring-1 ring-zinc-200">
+          {receivedOrders.map((order) => {
+            const needsAttention = receivedOrderHasAttention(order, catalogPriceByProductId);
+            const cardTone = needsAttention
+              ? 'bg-red-100 ring-2 ring-red-400/90'
+              : 'bg-green-100 ring-2 ring-green-500/80';
+            return (
+            <div key={order.id} className={`rounded-xl p-3 text-center shadow-sm ${cardTone}`}>
               {(() => {
                 const totals = totalsWithVat(order);
                 return (
@@ -373,13 +424,39 @@ export default function PedidosPage() {
                   </>
                 );
               })()}
-              <div className="mt-3 grid grid-cols-2 gap-2">
+              {needsAttention ? (
+                <p className="mt-2 text-xs font-semibold text-red-800">
+                  Incidencia o precio distinto al catálogo en alguna línea
+                </p>
+              ) : null}
+              <div className="mt-3 flex flex-wrap justify-center gap-2">
                 <button
                   type="button"
                   onClick={() => setExpandedHistoricoId((prev) => (prev === order.id ? null : order.id))}
                   className="rounded-lg border border-zinc-300 bg-white px-2 py-1.5 text-center text-xs font-semibold text-[#2563EB]"
                 >
                   {expandedHistoricoId === order.id ? 'Ocultar detalle' : 'Ver detalle'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!localId) return;
+                    const ok = window.confirm(
+                      '¿Devolver este pedido a «Pedidos enviados»? El pedido volverá a pendientes de recepción (las líneas no se borran).',
+                    );
+                    if (!ok) return;
+                    const supabase = getSupabaseClient();
+                    if (!supabase) return;
+                    void reopenReceivedOrderToSent(supabase, localId, order.id)
+                      .then(() => {
+                        setMessage('Pedido devuelto a enviados.');
+                        void reloadOrders();
+                      })
+                      .catch((err: Error) => setMessage(err.message));
+                  }}
+                  className="rounded-lg border border-amber-600/70 bg-amber-50 px-2 py-1.5 text-center text-xs font-semibold text-amber-900"
+                >
+                  Volver a enviados
                 </button>
                 <button
                   type="button"
@@ -408,15 +485,29 @@ export default function PedidosPage() {
               </div>
               {expandedHistoricoId === order.id ? (
                 <div className="mt-2 space-y-1 text-center">
-                  {order.items.map((item) => (
-                    <p key={item.id} className="text-xs text-zinc-600">
-                      {item.productName}: pedido {item.quantity} / recibido {item.receivedQuantity} {item.unit}
-                    </p>
-                  ))}
+                  {order.items.map((item) => {
+                    const priceDiff = itemPriceDiffersFromCatalog(item, catalogPriceByProductId);
+                    const inc = Boolean(item.incidentType) || Boolean(item.incidentNotes?.trim());
+                    const flag =
+                      inc || priceDiff
+                        ? ` · ${[inc ? 'incidencia' : null, priceDiff ? 'precio recepción ≠ catálogo' : null].filter(Boolean).join(', ')}`
+                        : '';
+                    return (
+                      <p
+                        key={item.id}
+                        className={inc || priceDiff ? 'text-xs font-semibold text-red-900' : 'text-xs text-zinc-600'}
+                      >
+                        {item.productName}: pedido {item.quantity} / recibido {item.receivedQuantity} {item.unit} ·{' '}
+                        {item.pricePerUnit.toFixed(2)} €/{item.unit}
+                        {flag}
+                      </p>
+                    );
+                  })}
                 </div>
               ) : null}
             </div>
-          ))}
+            );
+          })}
         </div>
       </section>
     </div>

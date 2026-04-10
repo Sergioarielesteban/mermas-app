@@ -176,6 +176,9 @@ export default function NuevoPedidoPage() {
         pricePerUnit: p.pricePerUnit,
         vatRate: p.vatRate ?? 0,
         lineTotal,
+        ...(p.unit === 'bandeja' && p.estimatedKgPerUnit != null && p.estimatedKgPerUnit > 0
+          ? { estimatedKgPerUnit: p.estimatedKgPerUnit }
+          : {}),
       };
     })
     .filter((row) => row.quantity > 0);
@@ -219,6 +222,8 @@ export default function NuevoPedidoPage() {
         pricePerUnit: item.pricePerUnit,
         vatRate: item.vatRate,
         lineTotal: item.lineTotal,
+        estimatedKgPerUnit: item.estimatedKgPerUnit ?? null,
+        receivedWeightKg: item.receivedWeightKg ?? null,
       })),
     })
       .then(() => router.push('/pedidos'))
@@ -260,6 +265,8 @@ export default function NuevoPedidoPage() {
         pricePerUnit: item.pricePerUnit,
         vatRate: item.vatRate,
         lineTotal: item.lineTotal,
+        estimatedKgPerUnit: item.estimatedKgPerUnit ?? null,
+        receivedWeightKg: item.receivedWeightKg ?? null,
       })),
     })
       .then(() => {

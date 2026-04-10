@@ -11,6 +11,8 @@ export type PedidoSupplierProduct = {
   vatRate: number;
   parStock: number;
   isActive: boolean;
+  /** Solo bandeja: kg estimados por bandeja (referencia para pedido/recepción). */
+  estimatedKgPerUnit?: number;
 };
 
 export type PedidoSupplier = {
@@ -30,6 +32,10 @@ export type PedidoOrderItem = {
   pricePerUnit: number;
   vatRate: number;
   lineTotal: number;
+  /** Copia del catálogo al guardar el pedido (bandeja). */
+  estimatedKgPerUnit?: number;
+  /** Peso real en recepción (kg), solo bandeja. */
+  receivedWeightKg?: number | null;
   incidentType?: 'missing' | 'damaged' | 'wrong-item' | null;
   incidentNotes?: string;
 };
@@ -68,6 +74,7 @@ type SupplierProductRow = {
   vat_rate: number;
   par_stock: number;
   is_active: boolean;
+  estimated_kg_per_unit: number | null;
 };
 type OrderRow = {
   id: string;
@@ -91,6 +98,8 @@ type OrderItemRow = {
   price_per_unit: number;
   vat_rate: number;
   line_total: number;
+  estimated_kg_per_unit: number | null;
+  received_weight_kg: number | null;
   incident_type: 'missing' | 'damaged' | 'wrong-item' | null;
   incident_notes: string | null;
 };
@@ -109,7 +118,7 @@ export async function fetchSuppliersWithProducts(supabase: SupabaseClient, local
 
   const { data: productRows, error: pErr } = await supabase
     .from('pedido_supplier_products')
-    .select('id,supplier_id,name,unit,price_per_unit,vat_rate,par_stock,is_active')
+    .select('id,supplier_id,name,unit,price_per_unit,vat_rate,par_stock,is_active,estimated_kg_per_unit')
     .eq('local_id', localId)
     .eq('is_active', true)
     .order('name');
@@ -126,6 +135,9 @@ export async function fetchSuppliersWithProducts(supabase: SupabaseClient, local
       vatRate: Number(row.vat_rate ?? 0),
       parStock: Number(row.par_stock ?? 0),
       isActive: Boolean(row.is_active),
+      ...(row.estimated_kg_per_unit != null
+        ? { estimatedKgPerUnit: Number(row.estimated_kg_per_unit) }
+        : {}),
     });
     bySupplier.set(row.supplier_id, list);
   }
@@ -179,8 +191,22 @@ export async function createSupplierProduct(
   supabase: SupabaseClient,
   localId: string,
   supplierId: string,
-  input: { name: string; unit: Unit; pricePerUnit: number; vatRate?: number; parStock?: number },
+  input: {
+    name: string;
+    unit: Unit;
+    pricePerUnit: number;
+    vatRate?: number;
+    parStock?: number;
+    estimatedKgPerUnit?: number | null;
+  },
 ) {
+  const est =
+    input.unit === 'bandeja' &&
+    input.estimatedKgPerUnit != null &&
+    Number.isFinite(input.estimatedKgPerUnit) &&
+    input.estimatedKgPerUnit > 0
+      ? Math.round(input.estimatedKgPerUnit * 1000) / 1000
+      : null;
   const { data, error } = await supabase
     .from('pedido_supplier_products')
     .insert({
@@ -192,8 +218,9 @@ export async function createSupplierProduct(
       vat_rate: Math.max(0, Math.round((input.vatRate ?? 0) * 10000) / 10000),
       par_stock: Math.max(0, Math.round((input.parStock ?? 0) * 100) / 100),
       is_active: true,
+      estimated_kg_per_unit: est,
     })
-    .select('id,supplier_id,name,unit,price_per_unit,vat_rate,par_stock,is_active')
+    .select('id,supplier_id,name,unit,price_per_unit,vat_rate,par_stock,is_active,estimated_kg_per_unit')
     .single();
   if (error) throw new Error(error.message);
   return data as SupplierProductRow;
@@ -203,8 +230,22 @@ export async function updateSupplierProduct(
   supabase: SupabaseClient,
   localId: string,
   supplierProductId: string,
-  input: { name: string; unit: Unit; pricePerUnit: number; vatRate?: number; parStock?: number },
+  input: {
+    name: string;
+    unit: Unit;
+    pricePerUnit: number;
+    vatRate?: number;
+    parStock?: number;
+    estimatedKgPerUnit?: number | null;
+  },
 ) {
+  const est =
+    input.unit === 'bandeja' &&
+    input.estimatedKgPerUnit != null &&
+    Number.isFinite(input.estimatedKgPerUnit) &&
+    input.estimatedKgPerUnit > 0
+      ? Math.round(input.estimatedKgPerUnit * 1000) / 1000
+      : null;
   const { data, error } = await supabase
     .from('pedido_supplier_products')
     .update({
@@ -213,10 +254,11 @@ export async function updateSupplierProduct(
       price_per_unit: Math.round(input.pricePerUnit * 100) / 100,
       vat_rate: Math.max(0, Math.round((input.vatRate ?? 0) * 10000) / 10000),
       par_stock: Math.max(0, Math.round((input.parStock ?? 0) * 100) / 100),
+      estimated_kg_per_unit: input.unit === 'bandeja' ? est : null,
     })
     .eq('id', supplierProductId)
     .eq('local_id', localId)
-    .select('id,supplier_id,name,unit,price_per_unit,vat_rate,par_stock,is_active')
+    .select('id,supplier_id,name,unit,price_per_unit,vat_rate,par_stock,is_active,estimated_kg_per_unit')
     .single();
   if (error) throw new Error(error.message);
   return data as SupplierProductRow;
@@ -247,7 +289,9 @@ export async function fetchOrders(supabase: SupabaseClient, localId: string) {
   const ids = ((orderRows ?? []) as OrderRow[]).map((row) => row.id);
   const { data: itemRows, error: iErr } = await supabase
     .from('purchase_order_items')
-    .select('id,order_id,supplier_product_id,product_name,unit,quantity,received_quantity,price_per_unit,vat_rate,line_total,incident_type,incident_notes')
+    .select(
+      'id,order_id,supplier_product_id,product_name,unit,quantity,received_quantity,price_per_unit,vat_rate,line_total,estimated_kg_per_unit,received_weight_kg,incident_type,incident_notes',
+    )
     .in('order_id', ids.length ? ids : ['00000000-0000-0000-0000-000000000000']);
   if (iErr) throw new Error(iErr.message);
 
@@ -264,6 +308,10 @@ export async function fetchOrders(supabase: SupabaseClient, localId: string) {
       pricePerUnit: Number(row.price_per_unit),
       vatRate: Number(row.vat_rate ?? 0),
       lineTotal: Number(row.line_total),
+      ...(row.estimated_kg_per_unit != null
+        ? { estimatedKgPerUnit: Number(row.estimated_kg_per_unit) }
+        : {}),
+      receivedWeightKg: row.received_weight_kg != null ? Number(row.received_weight_kg) : null,
       incidentType: row.incident_type,
       incidentNotes: row.incident_notes ?? undefined,
     });
@@ -311,6 +359,8 @@ export async function saveOrder(
       pricePerUnit: number;
       vatRate: number;
       lineTotal: number;
+      estimatedKgPerUnit?: number | null;
+      receivedWeightKg?: number | null;
     }>;
   },
 ) {
@@ -355,7 +405,7 @@ export async function saveOrder(
   if (!orderId) throw new Error('No se pudo guardar el pedido.');
 
   if (payload.items.length > 0) {
-    const { error: insErr } = await supabase.from('purchase_order_items').insert(
+       const { error: insErr } = await supabase.from('purchase_order_items').insert(
       payload.items.map((item) => ({
         local_id: localId,
         order_id: orderId,
@@ -367,6 +417,20 @@ export async function saveOrder(
         price_per_unit: Math.round(item.pricePerUnit * 100) / 100,
         vat_rate: Math.max(0, Math.round((item.vatRate ?? 0) * 10000) / 10000),
         line_total: Math.round(item.lineTotal * 100) / 100,
+        estimated_kg_per_unit:
+          item.unit === 'bandeja' &&
+          item.estimatedKgPerUnit != null &&
+          Number.isFinite(item.estimatedKgPerUnit) &&
+          item.estimatedKgPerUnit > 0
+            ? Math.round(item.estimatedKgPerUnit * 1000) / 1000
+            : null,
+        received_weight_kg:
+          item.unit === 'bandeja' &&
+          item.receivedWeightKg != null &&
+          Number.isFinite(item.receivedWeightKg) &&
+          item.receivedWeightKg > 0
+            ? Math.round(item.receivedWeightKg * 1000) / 1000
+            : null,
         incident_type: null,
         incident_notes: null,
       })),
@@ -471,6 +535,22 @@ export async function setOrderStatus(
   if (error) throw new Error(error.message);
 }
 
+/** Pedido marcado recibido por error: vuelve a enviados sin tocar sent_at ni las líneas. */
+export async function reopenReceivedOrderToSent(supabase: SupabaseClient, localId: string, orderId: string) {
+  const { data, error } = await supabase
+    .from('purchase_orders')
+    .update({ status: 'sent', received_at: null })
+    .eq('id', orderId)
+    .eq('local_id', localId)
+    .eq('status', 'received')
+    .select('id')
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  if (!data?.id) {
+    throw new Error('No se pudo reabrir: el pedido no está en estado recibido o no existe.');
+  }
+}
+
 export async function updateOrderItemReceived(
   supabase: SupabaseClient,
   localId: string,
@@ -480,6 +560,24 @@ export async function updateOrderItemReceived(
   const { error } = await supabase
     .from('purchase_order_items')
     .update({ received_quantity: Math.max(0, Math.round(receivedQuantity * 100) / 100) })
+    .eq('id', itemId)
+    .eq('local_id', localId);
+  if (error) throw new Error(error.message);
+}
+
+export async function updateOrderItemReceivedWeightKg(
+  supabase: SupabaseClient,
+  localId: string,
+  itemId: string,
+  receivedWeightKg: number | null,
+) {
+  const safe =
+    receivedWeightKg == null || !Number.isFinite(receivedWeightKg) || receivedWeightKg <= 0
+      ? null
+      : Math.round(receivedWeightKg * 1000) / 1000;
+  const { error } = await supabase
+    .from('purchase_order_items')
+    .update({ received_weight_kg: safe })
     .eq('id', itemId)
     .eq('local_id', localId);
   if (error) throw new Error(error.message);

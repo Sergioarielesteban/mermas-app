@@ -1,5 +1,6 @@
 'use client';
 
+import type { SupabaseClient } from '@supabase/supabase-js';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import React from 'react';
@@ -12,8 +13,17 @@ import {
   updateOrderItemIncident,
   updateOrderItemPrice,
   updateOrderItemReceived,
+  updateOrderItemReceivedWeightKg,
   type PedidoOrder,
 } from '@/lib/pedidos-supabase';
+
+function parseReceivedKg(raw: string): number | null | 'invalid' {
+  const t = raw.trim();
+  if (t === '') return null;
+  const n = Number(t.replace(',', '.'));
+  if (!Number.isFinite(n) || n <= 0) return 'invalid';
+  return Math.round(n * 1000) / 1000;
+}
 
 export default function RecepcionPedidosPage() {
   const searchParams = useSearchParams();
@@ -25,6 +35,9 @@ export default function RecepcionPedidosPage() {
   const [dateFilter, setDateFilter] = React.useState(initialDateFilter);
   const [message, setMessage] = React.useState<string | null>(null);
   const [priceInputByItemId, setPriceInputByItemId] = React.useState<Record<string, string>>({});
+  const [weightInputByItemId, setWeightInputByItemId] = React.useState<Record<string, string>>({});
+  const weightInputRef = React.useRef<Record<string, string>>({});
+  weightInputRef.current = weightInputByItemId;
   const [incidentOpenByItemId, setIncidentOpenByItemId] = React.useState<Record<string, boolean>>({});
   const [incidentNoteByItemId, setIncidentNoteByItemId] = React.useState<Record<string, string>>({});
   const [showReceivedBanner, setShowReceivedBanner] = React.useState(false);
@@ -56,6 +69,21 @@ export default function RecepcionPedidosPage() {
     });
   }, [orders, supplierFilter, dateFilter]);
 
+  const persistBandejaWeights = React.useCallback(
+    async (supabase: SupabaseClient, items: PedidoOrder['items']) => {
+      const weights = weightInputRef.current;
+      for (const item of items) {
+        if (item.unit !== 'bandeja') continue;
+        const wRaw = weights[item.id];
+        if (wRaw === undefined) continue;
+        const wp = parseReceivedKg(wRaw);
+        if (wp === 'invalid') throw new Error('Peso recibido inválido en una línea de bandeja.');
+        await updateOrderItemReceivedWeightKg(supabase, localId!, item.id, wp);
+      }
+    },
+    [localId],
+  );
+
   const markAllReceived = (order: PedidoOrder) => {
     if (!localId) return;
     const supabase = getSupabaseClient();
@@ -71,6 +99,13 @@ export default function RecepcionPedidosPage() {
         const failedPrice = priceUpdates.filter((r) => r.status === 'rejected');
         if (failedPrice.length > 0) {
           setMessage(`No se pudieron guardar ${failedPrice.length} precios del pedido.`);
+          return;
+        }
+
+        try {
+          await persistBandejaWeights(supabase, order.items);
+        } catch (err) {
+          setMessage(err instanceof Error ? err.message : 'No se pudo guardar el peso recibido.');
           return;
         }
 
@@ -112,6 +147,7 @@ export default function RecepcionPedidosPage() {
     if (next === current) return;
 
     let shouldCloseOrder = false;
+    let closingItems: PedidoOrder['items'] = [];
     // Optimistic UI: reflect line changes instantly.
     setOrders((prev) =>
       prev.map((order) => {
@@ -120,6 +156,7 @@ export default function RecepcionPedidosPage() {
           item.id === itemId ? { ...item, receivedQuantity: next } : item,
         );
         shouldCloseOrder = nextItems.every((item) => item.receivedQuantity >= item.quantity);
+        if (shouldCloseOrder) closingItems = nextItems;
         return { ...order, items: nextItems };
       }),
     );
@@ -127,6 +164,13 @@ export default function RecepcionPedidosPage() {
     void updateOrderItemReceived(supabase, localId, itemId, next)
       .then(async () => {
         if (!shouldCloseOrder) return;
+        try {
+          await persistBandejaWeights(supabase, closingItems);
+        } catch (err) {
+          setMessage(err instanceof Error ? err.message : 'No se pudo guardar el peso recibido.');
+          await reloadOrders();
+          return;
+        }
         await setOrderStatus(supabase, localId, orderId, 'received');
         setMessage('Pedido completado y movido a histórico recibido.');
         await reloadOrders();
@@ -192,6 +236,43 @@ export default function RecepcionPedidosPage() {
     const parsed = Number(raw.replace(',', '.'));
     const normalized = Number.isNaN(parsed) || parsed < 0 ? '0.00' : (Math.round(parsed * 100) / 100).toFixed(2);
     setPriceInputByItemId((prev) => ({ ...prev, [itemId]: normalized }));
+  };
+
+  const commitWeightInput = (orderId: string, itemId: string) => {
+    if (!localId) return;
+    const supabase = getSupabaseClient();
+    if (!supabase) return;
+    const raw = weightInputByItemId[itemId];
+    if (raw === undefined) return;
+    const parsed = parseReceivedKg(raw);
+    if (parsed === 'invalid') {
+      setMessage('Peso recibido inválido.');
+      return;
+    }
+    void updateOrderItemReceivedWeightKg(supabase, localId, itemId, parsed)
+      .then(() => {
+        setOrders((prev) =>
+          prev.map((order) => {
+            if (order.id !== orderId) return order;
+            return {
+              ...order,
+              items: order.items.map((item) =>
+                item.id === itemId ? { ...item, receivedWeightKg: parsed } : item,
+              ),
+            };
+          }),
+        );
+        setWeightInputByItemId((prev) => {
+          const next = { ...prev };
+          if (parsed == null) delete next[itemId];
+          else next[itemId] = String(parsed);
+          return next;
+        });
+      })
+      .catch((err: Error) => {
+        void reloadOrders();
+        setMessage(err.message);
+      });
   };
 
   const saveIncident = (orderId: string, itemId: string) => {
@@ -302,9 +383,44 @@ export default function RecepcionPedidosPage() {
                           ? ` · Extra: +${(item.receivedQuantity - item.quantity).toFixed(item.unit === 'kg' ? 2 : 0)} ${item.unit}`
                           : ''}
                       </p>
+                      {item.unit === 'bandeja' &&
+                      item.estimatedKgPerUnit != null &&
+                      item.estimatedKgPerUnit > 0 ? (
+                        <p className="text-xs text-zinc-600">
+                          Estimado pedido: {(item.quantity * item.estimatedKgPerUnit).toFixed(2)} kg (
+                          {item.estimatedKgPerUnit.toFixed(2)} kg/bandeja)
+                          {item.receivedQuantity > 0
+                            ? ` · referencia con bandejas recibidas: ${(item.receivedQuantity * item.estimatedKgPerUnit).toFixed(2)} kg`
+                            : ''}
+                        </p>
+                      ) : null}
                       <p className="text-xs text-zinc-500">
                         p/unit: {item.pricePerUnit.toFixed(2)} €/{item.unit} · subt.: {item.lineTotal.toFixed(2)} €
                       </p>
+                      {item.unit === 'bandeja' ? (
+                        <div className="mt-1 flex flex-wrap items-center gap-2">
+                          <label className="text-xs font-semibold text-zinc-600">Peso recibido (kg)</label>
+                          <input
+                            type="text"
+                            inputMode="decimal"
+                            placeholder="Balanza"
+                            value={
+                              weightInputByItemId[item.id] ??
+                              (item.receivedWeightKg != null ? String(item.receivedWeightKg) : '')
+                            }
+                            onChange={(e) =>
+                              setWeightInputByItemId((prev) => ({ ...prev, [item.id]: e.target.value }))
+                            }
+                            onBlur={() => commitWeightInput(order.id, item.id)}
+                            className="h-9 w-28 rounded-lg border border-zinc-300 bg-white px-2 text-sm font-semibold text-zinc-900 outline-none"
+                          />
+                          {item.receivedWeightKg != null && item.receivedWeightKg > 0 ? (
+                            <span className="text-xs text-zinc-500">
+                              Guardado: {item.receivedWeightKg.toFixed(3)} kg
+                            </span>
+                          ) : null}
+                        </div>
+                      ) : null}
                       <div className="mt-2 flex items-center gap-3">
                         <button
                           type="button"

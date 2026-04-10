@@ -158,3 +158,11 @@ for all
 to authenticated
 using (local_id = public.current_local_id())
 with check (local_id = public.current_local_id());
+
+-- Bandeja: kg estimado en catálogo y kg reales en recepción (precio en €/bandeja)
+alter table public.pedido_supplier_products
+  add column if not exists estimated_kg_per_unit numeric(10,3);
+alter table public.purchase_order_items
+  add column if not exists estimated_kg_per_unit numeric(10,3);
+alter table public.purchase_order_items
+  add column if not exists received_weight_kg numeric(10,3);
