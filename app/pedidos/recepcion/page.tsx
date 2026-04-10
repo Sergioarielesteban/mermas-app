@@ -426,18 +426,9 @@ export default function RecepcionPedidosPage() {
                       <p className="text-sm font-semibold text-zinc-800">{item.productName}</p>
                       <p className="text-xs text-zinc-700">
                         Pedido:{' '}
-                        <span className="font-semibold text-zinc-900">
+                        <span className="font-bold text-zinc-900">
                           {formatQuantityWithUnit(item.quantity, item.unit)}
                         </span>
-                      </p>
-                      <p className="text-xs text-zinc-700">
-                        Recibido:{' '}
-                        <span className="font-semibold text-zinc-900">
-                          {formatQuantityWithUnit(item.receivedQuantity, item.unit)}
-                        </span>
-                        {item.receivedQuantity > item.quantity
-                          ? ` · Extra: +${formatQuantityWithUnit(item.receivedQuantity - item.quantity, item.unit)}`
-                          : ''}
                       </p>
                       {unitSupportsReceivedWeightKg(item.unit) &&
                       item.estimatedKgPerUnit != null &&
@@ -451,10 +442,14 @@ export default function RecepcionPedidosPage() {
                         </p>
                       ) : null}
                       <p className="text-xs text-zinc-700">
-                        P/unit: {item.pricePerUnit.toFixed(2)} €/{unitPriceCatalogSuffix[item.unit]}
+                        P/unit:{' '}
+                        <span className="font-bold text-zinc-900">
+                          {item.pricePerUnit.toFixed(2)} €/{unitPriceCatalogSuffix[item.unit]}
+                        </span>
                       </p>
                       <p className="text-xs text-zinc-700">
-                        Subt: {item.lineTotal.toFixed(2)} €
+                        Subt:{' '}
+                        <span className="font-bold text-zinc-900">{item.lineTotal.toFixed(2)} €</span>
                       </p>
                       {unitCanDeclareScaleKgOnReception(item.unit) ? (
                         <div className="mt-2 flex flex-wrap items-center gap-2">
@@ -473,7 +468,7 @@ export default function RecepcionPedidosPage() {
                               setWeightInputByItemId((prev) => ({ ...prev, [item.id]: e.target.value }))
                             }
                             onBlur={() => commitWeightInput(order.id, item.id)}
-                            className="min-h-9 min-w-[6.5rem] flex-1 rounded-lg border border-zinc-300 bg-white px-2 py-2 text-sm font-semibold text-zinc-900 outline-none sm:max-w-[8rem]"
+                            className="h-8 w-[3.25rem] max-w-[3.25rem] shrink-0 rounded-lg border border-zinc-300 bg-white px-1.5 py-1 text-xs font-semibold text-zinc-900 outline-none sm:w-[4rem] sm:max-w-[4rem]"
                           />
                           {item.receivedWeightKg != null && item.receivedWeightKg > 0 ? (
                             <span className="text-xs text-zinc-500">
