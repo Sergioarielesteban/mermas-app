@@ -1,0 +1,64 @@
+import type { Unit } from '@/lib/types';
+
+const UNIT_WORD: Record<Unit, { one: string; many: string }> = {
+  kg: { one: 'kg', many: 'kg' },
+  ud: { one: 'unidad', many: 'unidades' },
+  caja: { one: 'caja', many: 'cajas' },
+  bandeja: { one: 'bandeja', many: 'bandejas' },
+  bolsa: { one: 'bolsa', many: 'bolsas' },
+  paquete: { one: 'paquete', many: 'paquetes' },
+  racion: { one: 'ración', many: 'raciones' },
+};
+
+/** True si la cantidad se muestra como singular (1, 1,0…). */
+export function isQuantitySingular(quantity: number): boolean {
+  return Math.abs(quantity - 1) < 1e-6;
+}
+
+/** Palabra de unidad en singular o plural según la cantidad. */
+export function pluralUnitWord(unit: Unit, quantity: number): string {
+  return isQuantitySingular(quantity) ? UNIT_WORD[unit].one : UNIT_WORD[unit].many;
+}
+
+/** "3 cajas", "1 caja", "2,5 kg" para textos de pedido/recepción. */
+export function formatQuantityWithUnit(quantity: number, unit: Unit): string {
+  const word = pluralUnitWord(unit, quantity);
+  const rounded = Math.round(quantity * 100) / 100;
+  const formatted =
+    unit === 'kg'
+      ? rounded.toLocaleString('es-ES', { minimumFractionDigits: 0, maximumFractionDigits: 2 })
+      : Number.isInteger(rounded) || Math.abs(rounded - Math.round(rounded)) < 1e-6
+        ? String(Math.round(rounded))
+        : rounded.toLocaleString('es-ES', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+  return `${formatted} ${word}`;
+}
+
+/** Sufijo "precio por" en catálogo (siempre forma corta singular: €/caja). */
+export const unitPriceCatalogSuffix: Record<Unit, string> = {
+  kg: 'kg',
+  ud: 'ud',
+  caja: 'caja',
+  bandeja: 'bandeja',
+  bolsa: 'bolsa',
+  paquete: 'paquete',
+  racion: 'ración',
+};
+
+export function formatIncidentLine(input: {
+  incidentType?: 'missing' | 'damaged' | 'wrong-item' | null;
+  incidentNotes?: string;
+}): string | null {
+  const notes = input.incidentNotes?.trim();
+  if (!input.incidentType && !notes) return null;
+  const typeLabel =
+    input.incidentType === 'missing'
+      ? 'No recibido / falta'
+      : input.incidentType === 'damaged'
+        ? 'Incidencia'
+        : input.incidentType === 'wrong-item'
+          ? 'Artículo incorrecto'
+          : null;
+  if (typeLabel && notes) return `${typeLabel}: ${notes}`;
+  if (notes) return notes;
+  return typeLabel;
+}

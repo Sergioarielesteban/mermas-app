@@ -6,7 +6,9 @@ import { ChevronDown } from 'lucide-react';
 import { useAuth } from '@/components/AuthProvider';
 import { getSupabaseClient } from '@/lib/supabase-client';
 import { canAccessPedidos } from '@/lib/pedidos-access';
+import { formatQuantityWithUnit } from '@/lib/pedidos-format';
 import { fetchOrders, type PedidoOrder } from '@/lib/pedidos-supabase';
+import type { Unit } from '@/lib/types';
 
 function totalsWithVat(order: PedidoOrder) {
   const base = order.items.reduce((acc, item) => acc + item.lineTotal, 0);
@@ -204,9 +206,8 @@ export default function PedidosHistorialMesPage() {
                           <span className="min-w-0 flex-1 text-left text-[15px] font-medium leading-snug text-zinc-800">
                             {product.name}
                           </span>
-                          <span className="shrink-0 text-right text-[15px] tabular-nums font-semibold text-zinc-900">
-                            {product.quantity.toFixed(product.unit === 'kg' ? 2 : 0)}
-                            <span className="ml-1 text-xs font-normal text-zinc-500">{product.unit}</span>
+                          <span className="shrink-0 text-right text-[15px] font-semibold text-zinc-900">
+                            {formatQuantityWithUnit(product.quantity, product.unit as Unit)}
                           </span>
                         </li>
                       ))}

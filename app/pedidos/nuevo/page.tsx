@@ -6,6 +6,7 @@ import React from 'react';
 import { useAuth } from '@/components/AuthProvider';
 import { getSupabaseClient } from '@/lib/supabase-client';
 import { canAccessPedidos } from '@/lib/pedidos-access';
+import { formatQuantityWithUnit, unitPriceCatalogSuffix } from '@/lib/pedidos-format';
 import {
   fetchOrders,
   fetchSuppliersWithProducts,
@@ -47,7 +48,7 @@ function buildWhatsappDraftMessage(input: {
     '------------------------------',
     'PEDIDO:',
     '------------------------------',
-    ...input.items.map((item) => `- ${item.productName}: ${item.quantity} ${item.unit}`),
+    ...input.items.map((item) => `- ${item.productName}: ${formatQuantityWithUnit(item.quantity, item.unit)}`),
     '------------------------------',
     input.notes ? `Notas: ${input.notes}` : '',
     'Por favor, confirmar pedido. Gracias.',
@@ -367,7 +368,9 @@ export default function NuevoPedidoPage() {
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <p className="text-sm font-semibold text-zinc-800">{p.name}</p>
-                    <p className="text-xs text-zinc-500">{p.pricePerUnit.toFixed(2)} €/{p.unit}</p>
+                    <p className="text-xs text-zinc-500">
+                      {p.pricePerUnit.toFixed(2)} €/{unitPriceCatalogSuffix[p.unit]}
+                    </p>
                   </div>
                   <p className="text-sm font-bold text-zinc-900">{lineTotal.toFixed(2)} €</p>
                 </div>
@@ -420,7 +423,8 @@ export default function NuevoPedidoPage() {
               <div>
                 <p className="text-sm font-semibold text-zinc-800">{row.productName}</p>
                 <p className="text-xs text-zinc-500">
-                  {row.quantity} {row.unit} · Subtotal {row.lineTotal.toFixed(2)} € · IVA {(row.lineTotal * row.vatRate).toFixed(2)} €
+                  {formatQuantityWithUnit(row.quantity, row.unit)} · Subtotal {row.lineTotal.toFixed(2)} € · IVA{' '}
+                  {(row.lineTotal * row.vatRate).toFixed(2)} €
                 </p>
               </div>
             </div>

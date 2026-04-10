@@ -7,6 +7,7 @@ import React from 'react';
 import { useAuth } from '@/components/AuthProvider';
 import { getSupabaseClient } from '@/lib/supabase-client';
 import { canAccessPedidos } from '@/lib/pedidos-access';
+import { formatQuantityWithUnit, unitPriceCatalogSuffix } from '@/lib/pedidos-format';
 import {
   fetchOrders,
   setOrderStatus,
@@ -381,9 +382,10 @@ export default function RecepcionPedidosPage() {
                     <div key={item.id} className="rounded-lg bg-white p-2 ring-1 ring-zinc-200">
                       <p className="text-sm font-semibold text-zinc-800">{item.productName}</p>
                       <p className="text-xs text-zinc-500">
-                        Pedido: {item.quantity} {item.unit} · Recibido: {item.receivedQuantity} {item.unit}
+                        Pedido: {formatQuantityWithUnit(item.quantity, item.unit)} · Recibido:{' '}
+                        {formatQuantityWithUnit(item.receivedQuantity, item.unit)}
                         {item.receivedQuantity > item.quantity
-                          ? ` · Extra: +${(item.receivedQuantity - item.quantity).toFixed(item.unit === 'kg' ? 2 : 0)} ${item.unit}`
+                          ? ` · Extra: +${formatQuantityWithUnit(item.receivedQuantity - item.quantity, item.unit)}`
                           : ''}
                       </p>
                       {unitSupportsReceivedWeightKg(item.unit) &&
@@ -398,7 +400,8 @@ export default function RecepcionPedidosPage() {
                         </p>
                       ) : null}
                       <p className="text-xs text-zinc-500">
-                        p/unit: {item.pricePerUnit.toFixed(2)} €/{item.unit} · subt.: {item.lineTotal.toFixed(2)} €
+                        p/unit: {item.pricePerUnit.toFixed(2)} €/{unitPriceCatalogSuffix[item.unit]} · subt.:{' '}
+                        {item.lineTotal.toFixed(2)} €
                       </p>
                       {unitSupportsReceivedWeightKg(item.unit) ? (
                         <div className="mt-1 flex flex-wrap items-center gap-2">

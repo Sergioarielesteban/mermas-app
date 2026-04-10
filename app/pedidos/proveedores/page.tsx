@@ -5,6 +5,7 @@ import React from 'react';
 import { useAuth } from '@/components/AuthProvider';
 import { getSupabaseClient } from '@/lib/supabase-client';
 import { canAccessPedidos } from '@/lib/pedidos-access';
+import { unitPriceCatalogSuffix } from '@/lib/pedidos-format';
 import {
   createSupplier,
   createSupplierProduct,
@@ -504,7 +505,7 @@ export default function ProveedoresPage() {
                   </div>
                 </div>
                 <p className="pt-1 text-xs font-semibold text-zinc-600">
-                  {p.pricePerUnit.toFixed(2)} €/{p.unit} · IVA {(p.vatRate * 100).toFixed(0)}%
+                  {p.pricePerUnit.toFixed(2)} €/{unitPriceCatalogSuffix[p.unit]} · IVA {(p.vatRate * 100).toFixed(0)}%
                   {unitSupportsReceivedWeightKg(p.unit) && p.estimatedKgPerUnit != null && p.estimatedKgPerUnit > 0
                     ? ` · ~${p.estimatedKgPerUnit} kg/${p.unit}`
                     : ''}

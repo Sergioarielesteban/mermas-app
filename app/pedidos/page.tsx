@@ -6,11 +6,13 @@ import React from 'react';
 import { useAuth } from '@/components/AuthProvider';
 import { getSupabaseClient } from '@/lib/supabase-client';
 import { canAccessPedidos } from '@/lib/pedidos-access';
+import { formatIncidentLine, formatQuantityWithUnit, unitPriceCatalogSuffix } from '@/lib/pedidos-format';
 import {
   deleteOrder,
   fetchOrders,
   fetchSuppliersWithProducts,
   reopenReceivedOrderToSent,
+  unitSupportsReceivedWeightKg,
   updateOrderItemIncident,
   updateOrderItemReceived,
   type PedidoOrder,
@@ -35,7 +37,7 @@ function normalizeLocalForWhatsapp(raw: string) {
 function buildWhatsappOrderMessage(order: PedidoOrder, deliveryDate: string, localName: string, requestedBy: string) {
   const fechaPedido = new Date(order.createdAt).toLocaleDateString('es-ES');
   const lines = order.items.map(
-    (item) => `- ${item.productName}: ${item.quantity} ${item.unit}`,
+    (item) => `- ${item.productName}: ${formatQuantityWithUnit(item.quantity, item.unit)}`,
   );
   return [
     `Proveedor: ${order.supplierName}`,
@@ -288,21 +290,36 @@ export default function PedidosPage() {
               key={order.id}
               className="rounded-xl bg-amber-100 p-3 text-center ring-2 ring-amber-300/90 shadow-sm"
             >
-              {(() => {
-                const totals = totalsWithVat(order);
-                return (
-                  <>
-              <p className="text-sm font-semibold text-zinc-900">{order.supplierName}</p>
-              <p className="text-xs text-zinc-500">
-                enviado {order.sentAt ? new Date(order.sentAt).toLocaleDateString('es-ES') : '-'}
-              </p>
-              {order.deliveryDate ? <p className="text-xs text-zinc-500">Entrega: {new Date(`${order.deliveryDate}T00:00:00`).toLocaleDateString('es-ES')}</p> : null}
-              <p className="pt-1 text-sm font-bold text-zinc-700">
-                Total (IVA incluido): <span className="text-base font-black text-zinc-900">{totals.total.toFixed(2)} €</span>
-              </p>
-                  </>
-                );
-              })()}
+              <button
+                type="button"
+                onClick={() => setExpandedSentId((prev) => (prev === order.id ? null : order.id))}
+                className="w-full rounded-xl py-1 text-center outline-none focus-visible:ring-2 focus-visible:ring-amber-600/40 active:bg-amber-200/60"
+                aria-expanded={expandedSentId === order.id}
+              >
+                {(() => {
+                  const totals = totalsWithVat(order);
+                  return (
+                    <>
+                      <p className="text-sm font-semibold text-zinc-900">{order.supplierName}</p>
+                      <p className="text-xs text-zinc-500">
+                        enviado {order.sentAt ? new Date(order.sentAt).toLocaleDateString('es-ES') : '-'}
+                      </p>
+                      {order.deliveryDate ? (
+                        <p className="text-xs text-zinc-500">
+                          Entrega: {new Date(`${order.deliveryDate}T00:00:00`).toLocaleDateString('es-ES')}
+                        </p>
+                      ) : null}
+                      <p className="pt-1 text-sm font-bold text-zinc-700">
+                        Total (IVA incluido):{' '}
+                        <span className="text-base font-black text-zinc-900">{totals.total.toFixed(2)} €</span>
+                      </p>
+                      <p className="pt-2 text-[10px] font-semibold uppercase tracking-wide text-amber-900/70">
+                        Toca para {expandedSentId === order.id ? 'ocultar' : 'ver'} detalle
+                      </p>
+                    </>
+                  );
+                })()}
+              </button>
               <div className="mt-3 grid grid-cols-3 gap-2">
                 <button
                   type="button"
@@ -344,56 +361,93 @@ export default function PedidosPage() {
                 </button>
               </div>
               {expandedSentId === order.id ? (
-                <div className="mt-2 space-y-2 text-left">
-                  {order.items.map((item) => (
-                    <div key={item.id} className="flex items-center justify-between gap-2 rounded-lg bg-white p-2 ring-1 ring-zinc-200">
-                      <p className="text-xs text-zinc-700">
-                        {item.productName}: {item.quantity} {item.unit}
-                      </p>
-                      <div className="flex items-center gap-2">
-                        {(() => {
-                          const mark = quickLineMarks[item.id];
-                          const isOk =
-                            mark === 'ok' ||
-                            (mark === undefined &&
-                              item.receivedQuantity >= item.quantity &&
-                              item.quantity > 0 &&
-                              !item.incidentType);
-                          const isBad = mark === 'bad' || (mark === undefined && Boolean(item.incidentType));
-                          return (
-                            <>
-                        <button
-                          type="button"
-                          onClick={() => quickReceiveItem(order.id, item.id, item.quantity, true)}
-                          className={[
-                            'grid h-7 w-7 place-items-center rounded-full border text-sm font-black',
-                            isOk ? 'border-[#16A34A] bg-[#16A34A] text-white' : 'border-zinc-300 bg-white text-zinc-400',
-                          ].join(' ')}
-                          title="Recibido OK"
-                          aria-label="Recibido OK"
-                        >
-                          ✓
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => quickReceiveItem(order.id, item.id, item.quantity, false)}
-                          className={[
-                            'grid h-7 w-7 place-items-center rounded-full border text-sm font-black',
-                            isBad ? 'border-[#B91C1C] bg-[#B91C1C] text-white' : 'border-zinc-300 bg-white text-zinc-400',
-                          ].join(' ')}
-                          title="Marcar incidencia"
-                          aria-label="Marcar incidencia"
-                        >
-                          ✕
-                        </button>
-                            </>
-                          );
-                        })()}
-                      </div>
+                <div className="mt-3 space-y-3 text-left">
+                  {order.notes?.trim() ? (
+                    <div className="rounded-xl border border-amber-200 bg-amber-50/90 px-3 py-2.5">
+                      <p className="text-[10px] font-bold uppercase tracking-wide text-amber-900/80">Notas del pedido</p>
+                      <p className="mt-1 text-sm leading-relaxed text-amber-950">{order.notes.trim()}</p>
                     </div>
-                  ))}
+                  ) : null}
+                  {order.deliveryDate ? (
+                    <p className="text-xs text-zinc-600">
+                      Entrega prevista:{' '}
+                      {new Date(`${order.deliveryDate}T00:00:00`).toLocaleDateString('es-ES')}
+                    </p>
+                  ) : null}
+                  {order.items.map((item) => {
+                    const incidentText = formatIncidentLine(item);
+                    const mark = quickLineMarks[item.id];
+                    const isOk =
+                      mark === 'ok' ||
+                      (mark === undefined &&
+                        item.receivedQuantity >= item.quantity &&
+                        item.quantity > 0 &&
+                        !item.incidentType);
+                    const isBad = mark === 'bad' || (mark === undefined && Boolean(item.incidentType));
+                    return (
+                      <div key={item.id} className="space-y-2 rounded-xl bg-white p-3 ring-1 ring-zinc-200">
+                        <div className="flex items-start justify-between gap-2">
+                          <p className="text-sm font-semibold text-zinc-900">{item.productName}</p>
+                          <div className="flex shrink-0 items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => quickReceiveItem(order.id, item.id, item.quantity, true)}
+                              className={[
+                                'grid h-7 w-7 place-items-center rounded-full border text-sm font-black',
+                                isOk ? 'border-[#16A34A] bg-[#16A34A] text-white' : 'border-zinc-300 bg-white text-zinc-400',
+                              ].join(' ')}
+                              title="Recibido OK"
+                              aria-label="Recibido OK"
+                            >
+                              {'\u2713'}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => quickReceiveItem(order.id, item.id, item.quantity, false)}
+                              className={[
+                                'grid h-7 w-7 place-items-center rounded-full border text-sm font-black',
+                                isBad ? 'border-[#B91C1C] bg-[#B91C1C] text-white' : 'border-zinc-300 bg-white text-zinc-400',
+                              ].join(' ')}
+                              title="Marcar incidencia"
+                              aria-label="Marcar incidencia"
+                            >
+                              {'\u2715'}
+                            </button>
+                          </div>
+                        </div>
+                        <p className="text-xs text-zinc-700">
+                          Pedido:{' '}
+                          <span className="font-semibold text-zinc-900">
+                            {formatQuantityWithUnit(item.quantity, item.unit)}
+                          </span>
+                        </p>
+                        <p className="text-xs text-zinc-700">
+                          Recibido:{' '}
+                          <span className="font-semibold text-zinc-900">
+                            {formatQuantityWithUnit(item.receivedQuantity, item.unit)}
+                          </span>
+                        </p>
+                        <p className="text-xs text-zinc-600">
+                          Precio: {item.pricePerUnit.toFixed(2)} €/{unitPriceCatalogSuffix[item.unit]} · Subt.{' '}
+                          {item.lineTotal.toFixed(2)} €
+                        </p>
+                        {incidentText ? (
+                          <p className="text-xs font-semibold text-[#B91C1C]">Incidencia: {incidentText}</p>
+                        ) : null}
+                        {unitSupportsReceivedWeightKg(item.unit) &&
+                        item.receivedWeightKg != null &&
+                        item.receivedWeightKg > 0 ? (
+                          <p className="text-xs text-zinc-700">
+                            Peso báscula:{' '}
+                            <span className="font-semibold">{item.receivedWeightKg.toFixed(3)} kg</span>
+                          </p>
+                        ) : null}
+                      </div>
+                    );
+                  })}
                 </div>
               ) : null}
+
             </div>
           ))}
         </div>
@@ -410,20 +464,31 @@ export default function PedidosPage() {
               : 'bg-green-100 ring-2 ring-green-500/80';
             return (
             <div key={order.id} className={`rounded-xl p-3 text-center shadow-sm ${cardTone}`}>
-              {(() => {
-                const totals = totalsWithVat(order);
-                return (
-                  <>
-              <p className="text-sm font-semibold text-zinc-900">{order.supplierName}</p>
-              <p className="text-xs text-zinc-500">
-                recibido {order.receivedAt ? new Date(order.receivedAt).toLocaleDateString('es-ES') : '-'}
-              </p>
-              <p className="pt-1 text-sm font-bold text-zinc-700">
-                Total (IVA incluido): <span className="text-base font-black text-zinc-900">{totals.total.toFixed(2)} €</span>
-              </p>
-                  </>
-                );
-              })()}
+              <button
+                type="button"
+                onClick={() => setExpandedHistoricoId((prev) => (prev === order.id ? null : order.id))}
+                className="w-full rounded-xl py-1 text-center outline-none focus-visible:ring-2 focus-visible:ring-green-700/30 active:opacity-90"
+                aria-expanded={expandedHistoricoId === order.id}
+              >
+                {(() => {
+                  const totals = totalsWithVat(order);
+                  return (
+                    <>
+                      <p className="text-sm font-semibold text-zinc-900">{order.supplierName}</p>
+                      <p className="text-xs text-zinc-500">
+                        recibido {order.receivedAt ? new Date(order.receivedAt).toLocaleDateString('es-ES') : '-'}
+                      </p>
+                      <p className="pt-1 text-sm font-bold text-zinc-700">
+                        Total (IVA incluido):{' '}
+                        <span className="text-base font-black text-zinc-900">{totals.total.toFixed(2)} €</span>
+                      </p>
+                      <p className="pt-2 text-[10px] font-semibold uppercase tracking-wide text-zinc-600">
+                        Toca para {expandedHistoricoId === order.id ? 'ocultar' : 'ver'} detalle
+                      </p>
+                    </>
+                  );
+                })()}
+              </button>
               {needsAttention ? (
                 <p className="mt-2 text-xs font-semibold text-red-800">
                   Incidencia o precio distinto al catálogo en alguna línea
@@ -484,38 +549,69 @@ export default function PedidosPage() {
                 </button>
               </div>
               {expandedHistoricoId === order.id ? (
-                <div className="mt-2 space-y-2 text-left">
+                <div className="mt-3 space-y-3 text-left">
+                  {order.notes?.trim() ? (
+                    <div className="rounded-xl border border-green-200 bg-white px-3 py-2.5 ring-1 ring-green-100">
+                      <p className="text-[10px] font-bold uppercase tracking-wide text-green-900/80">Notas del pedido</p>
+                      <p className="mt-1 text-sm leading-relaxed text-zinc-900">{order.notes.trim()}</p>
+                    </div>
+                  ) : null}
                   {order.items.map((item) => {
                     const inc = Boolean(item.incidentType) || Boolean(item.incidentNotes?.trim());
                     const isBad = inc || item.receivedQuantity < item.quantity;
                     const isOk = !isBad && item.receivedQuantity >= item.quantity && item.quantity > 0;
+                    const incidentText = formatIncidentLine(item);
                     return (
-                      <div
-                        key={item.id}
-                        className="flex items-center justify-between gap-2 rounded-lg bg-white p-2 ring-1 ring-zinc-200"
-                      >
-                        <p className="min-w-0 flex-1 text-xs text-zinc-700">
-                          {item.productName}: {item.receivedQuantity} {item.unit}
-                        </p>
-                        <div className="flex shrink-0 items-center gap-2">
-                          <span
-                            className={[
-                              'grid h-7 w-7 place-items-center rounded-full border text-sm font-black',
-                              isOk
-                                ? 'border-[#16A34A] bg-[#16A34A] text-white'
-                                : isBad
-                                  ? 'border-[#B91C1C] bg-[#B91C1C] text-white'
-                                  : 'border-zinc-300 bg-white text-zinc-400',
-                            ].join(' ')}
-                            title={isOk ? 'Recibido OK' : isBad ? 'Incidencia o cantidad pendiente' : 'Parcial'}
-                            aria-hidden
-                          >
-                            {isOk ? '\u2713' : isBad ? '\u2715' : '\u00B7'}
-                          </span>
-                          <span className="w-14 text-right text-xs font-semibold tabular-nums text-zinc-900">
-                            {item.pricePerUnit.toFixed(2)} €
-                          </span>
+                      <div key={item.id} className="rounded-xl bg-white p-3 ring-1 ring-zinc-200">
+                        <div className="flex items-start justify-between gap-2">
+                          <p className="text-sm font-semibold text-zinc-900">{item.productName}</p>
+                          <div className="flex shrink-0 items-center gap-2">
+                            <span
+                              className={[
+                                'grid h-7 w-7 place-items-center rounded-full border text-sm font-black',
+                                isOk
+                                  ? 'border-[#16A34A] bg-[#16A34A] text-white'
+                                  : isBad
+                                    ? 'border-[#B91C1C] bg-[#B91C1C] text-white'
+                                    : 'border-zinc-300 bg-white text-zinc-400',
+                              ].join(' ')}
+                              title={isOk ? 'Recibido OK' : isBad ? 'Incidencia o cantidad pendiente' : 'Parcial'}
+                              aria-hidden
+                            >
+                              {isOk ? '\u2713' : isBad ? '\u2715' : '\u00B7'}
+                            </span>
+                            <span className="w-16 text-right text-xs font-semibold tabular-nums text-zinc-900">
+                              {item.pricePerUnit.toFixed(2)} €
+                            </span>
+                          </div>
                         </div>
+                        <p className="mt-2 text-xs text-zinc-700">
+                          Pedido:{' '}
+                          <span className="font-semibold text-zinc-900">
+                            {formatQuantityWithUnit(item.quantity, item.unit)}
+                          </span>
+                        </p>
+                        <p className="text-xs text-zinc-700">
+                          Recibido:{' '}
+                          <span className="font-semibold text-zinc-900">
+                            {formatQuantityWithUnit(item.receivedQuantity, item.unit)}
+                          </span>
+                        </p>
+                        <p className="text-xs text-zinc-600">
+                          Precio recepción: {item.pricePerUnit.toFixed(2)} €/{unitPriceCatalogSuffix[item.unit]} · Subt.{' '}
+                          {item.lineTotal.toFixed(2)} €
+                        </p>
+                        {incidentText ? (
+                          <p className="mt-1 text-xs font-semibold text-[#B91C1C]">Incidencia: {incidentText}</p>
+                        ) : null}
+                        {unitSupportsReceivedWeightKg(item.unit) &&
+                        item.receivedWeightKg != null &&
+                        item.receivedWeightKg > 0 ? (
+                          <p className="mt-1 text-xs text-zinc-800">
+                            Peso báscula:{' '}
+                            <span className="font-semibold">{item.receivedWeightKg.toFixed(3)} kg</span>
+                          </p>
+                        ) : null}
                       </div>
                     );
                   })}
