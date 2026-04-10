@@ -31,6 +31,18 @@ function parseReceivedKg(raw: string): number | null | 'invalid' {
   return Math.round(n * 1000) / 1000;
 }
 
+function orderHasAnyIncident(order: PedidoOrder): boolean {
+  return order.items.some((i) => Boolean(i.incidentType) || Boolean(i.incidentNotes?.trim()));
+}
+
+/** Texto único para el pedido si varias líneas tenían la misma incidencia (o la primera nota). */
+function draftIncidentNoteForOrder(order: PedidoOrder): string {
+  const notes = order.items.map((i) => i.incidentNotes?.trim()).filter(Boolean) as string[];
+  if (notes.length === 0) return '';
+  const uniq = [...new Set(notes)];
+  return uniq.join(' · ');
+}
+
 export default function RecepcionPedidosPage() {
   const searchParams = useSearchParams();
   const { localCode, localName, localId, email } = useAuth();
@@ -53,8 +65,8 @@ export default function RecepcionPedidosPage() {
     const parsed = raw == null ? item.pricePerUnit : Number(raw.replace(',', '.'));
     return Number.isNaN(parsed) || parsed < 0 ? item.pricePerUnit : Math.round(parsed * 100) / 100;
   }, []);
-  const [incidentOpenByItemId, setIncidentOpenByItemId] = React.useState<Record<string, boolean>>({});
-  const [incidentNoteByItemId, setIncidentNoteByItemId] = React.useState<Record<string, string>>({});
+  const [incidentOpenByOrderId, setIncidentOpenByOrderId] = React.useState<Record<string, boolean>>({});
+  const [incidentNoteByOrderId, setIncidentNoteByOrderId] = React.useState<Record<string, string>>({});
   const [showReceivedBanner, setShowReceivedBanner] = React.useState(false);
   const receivedBannerTimeoutRef = React.useRef<number | null>(null);
 
@@ -319,27 +331,47 @@ export default function RecepcionPedidosPage() {
       });
   };
 
-  const saveIncident = (orderId: string, itemId: string) => {
+  const toggleOrderIncidentPanel = (order: PedidoOrder) => {
+    setIncidentOpenByOrderId((prev) => {
+      const willOpen = !prev[order.id];
+      if (willOpen) {
+        setIncidentNoteByOrderId((n) => {
+          if (n[order.id] !== undefined) return n;
+          return { ...n, [order.id]: draftIncidentNoteForOrder(order) };
+        });
+      }
+      return { ...prev, [order.id]: willOpen };
+    });
+  };
+
+  const saveOrderIncident = (order: PedidoOrder) => {
     if (!localId) return;
     const supabase = getSupabaseClient();
     if (!supabase) return;
-    const note = (incidentNoteByItemId[itemId] ?? '').trim();
+    const raw =
+      incidentNoteByOrderId[order.id] ??
+      (incidentOpenByOrderId[order.id] ? draftIncidentNoteForOrder(order) : '');
+    const note = raw.trim();
     const nextIncidentType: PedidoOrder['items'][number]['incidentType'] = note ? 'damaged' : null;
     const nextIncidentNotes = note || undefined;
 
     setOrders((prev) =>
-      prev.map((order) => {
-        if (order.id !== orderId) return order;
-        const nextItems = order.items.map((item) =>
-          item.id === itemId
-            ? { ...item, incidentType: nextIncidentType, incidentNotes: nextIncidentNotes }
-            : item,
-        );
-        return { ...order, items: nextItems };
+      prev.map((o) => {
+        if (o.id !== order.id) return o;
+        const nextItems = o.items.map((item) => ({
+          ...item,
+          incidentType: nextIncidentType,
+          incidentNotes: nextIncidentNotes,
+        }));
+        return { ...o, items: nextItems };
       }),
     );
 
-    void updateOrderItemIncident(supabase, localId, itemId, { type: note ? 'damaged' : null, notes: note })
+    void Promise.all(
+      order.items.map((item) =>
+        updateOrderItemIncident(supabase, localId, item.id, { type: note ? 'damaged' : null, notes: note }),
+      ),
+    )
       .then(() => dispatchPedidosDataChanged())
       .catch((err: Error) => {
         void reloadOrders();
@@ -405,20 +437,28 @@ export default function RecepcionPedidosPage() {
         </div>
         <div className="mt-2 space-y-3">
           {filteredOrders.length === 0 ? <p className="text-sm text-zinc-500">No hay pedidos con ese filtro.</p> : null}
-          {filteredOrders.map((order) => (
-            <div key={order.id} className="rounded-xl bg-zinc-50 p-3 ring-1 ring-zinc-200">
-              <div className="flex items-center justify-between gap-2">
-                <div>
-                  <p className="text-sm font-bold text-zinc-900">{order.supplierName}</p>
-                  <p className="text-xs text-zinc-500">Pedido {new Date(order.createdAt).toLocaleDateString('es-ES')}</p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => markAllReceived(order)}
-                  className="rounded-lg bg-[#16A34A] px-3 py-2 text-xs font-semibold text-white"
-                >
-                  Marcar todo recibido
-                </button>
+          {filteredOrders.map((order) => {
+            const orderIncidentMode =
+              Boolean(incidentOpenByOrderId[order.id]) || orderHasAnyIncident(order);
+            return (
+            <div
+              key={order.id}
+              className={[
+                'rounded-xl p-3 ring-1 transition-colors',
+                orderIncidentMode ? 'bg-red-50 ring-2 ring-red-500 shadow-sm' : 'bg-zinc-50 ring-zinc-200',
+              ].join(' ')}
+            >
+              <div className="flex flex-col items-center px-2 pb-1 text-center">
+                <p className="max-w-[96%] text-sm font-semibold leading-snug tracking-tight text-zinc-900">
+                  {order.supplierName}
+                </p>
+                <span
+                  className="mt-2 block h-px w-10 bg-gradient-to-r from-transparent via-[#D32F2F] to-transparent opacity-90"
+                  aria-hidden
+                />
+                <p className="mt-2 text-[10px] font-medium uppercase tracking-[0.14em] text-zinc-400">
+                  Pedido {new Date(order.createdAt).toLocaleDateString('es-ES')}
+                </p>
               </div>
               <div className="mt-3 space-y-2">
                 {order.items.map((item) => (
@@ -493,63 +533,77 @@ export default function RecepcionPedidosPage() {
                           className="h-10 w-20 rounded-lg border border-zinc-300 bg-white px-2 text-sm font-semibold text-zinc-900 outline-none"
                         />
                       </div>
-                      <div className="mt-2">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setIncidentOpenByItemId((prev) => ({ ...prev, [item.id]: !prev[item.id] }));
-                            setIncidentNoteByItemId((prev) => ({
-                              ...prev,
-                              [item.id]: prev[item.id] ?? item.incidentNotes ?? '',
-                            }));
-                          }}
-                          className="rounded-lg bg-[#B91C1C] px-3 py-2 text-xs font-semibold text-white"
-                        >
-                          Incidencia
-                        </button>
-                        {incidentOpenByItemId[item.id] ? (
-                          <div className="mt-2 space-y-2 rounded-lg bg-red-50 p-2 ring-1 ring-red-200">
-                            <textarea
-                              value={incidentNoteByItemId[item.id] ?? ''}
-                              onChange={(e) =>
-                                setIncidentNoteByItemId((prev) => ({
-                                  ...prev,
-                                  [item.id]: e.target.value,
-                                }))
-                              }
-                              rows={2}
-                              placeholder="Describe la incidencia..."
-                              className="w-full rounded-lg border border-red-300 bg-white px-2 py-1.5 text-xs text-zinc-900 outline-none"
-                            />
-                            <div className="flex gap-2">
-                              <button
-                                type="button"
-                                onClick={() => saveIncident(order.id, item.id)}
-                                className="rounded-md bg-[#B91C1C] px-2 py-1 text-xs font-semibold text-white"
-                              >
-                                Guardar incidencia
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => setIncidentOpenByItemId((prev) => ({ ...prev, [item.id]: false }))}
-                                className="rounded-md border border-zinc-300 bg-white px-2 py-1 text-xs font-semibold text-zinc-700"
-                              >
-                                Cerrar
-                              </button>
-                            </div>
-                          </div>
-                        ) : null}
-                        {item.incidentNotes?.trim() ? (
-                          <p className="mt-1 text-xs font-semibold text-[#B91C1C]">
-                            <span aria-hidden>{'\u{1F6A8}'}</span> Incidencia: {item.incidentNotes.trim()}
-                          </p>
-                        ) : null}
-                      </div>
                     </div>
                   ))}
               </div>
+              <div className="mt-3 border-t border-red-200/70 pt-3">
+                <button
+                  type="button"
+                  onClick={() => toggleOrderIncidentPanel(order)}
+                  className={[
+                    'w-full rounded-lg px-3 py-2.5 text-center text-xs font-bold text-white sm:w-auto',
+                    incidentOpenByOrderId[order.id] || orderHasAnyIncident(order)
+                      ? 'bg-[#991B1B] ring-2 ring-red-600'
+                      : 'bg-[#B91C1C]',
+                  ].join(' ')}
+                >
+                  {incidentOpenByOrderId[order.id] ? 'Ocultar nota de incidencia' : 'Incidencia'}
+                </button>
+                {incidentOpenByOrderId[order.id] ? (
+                  <div className="mt-3 space-y-2 rounded-xl bg-red-100 p-3 ring-2 ring-red-400">
+                    <p className="text-[10px] font-bold uppercase tracking-wide text-red-900">
+                      Nota para todo el pedido (se guarda en todas las lineas)
+                    </p>
+                    <textarea
+                      value={
+                        incidentNoteByOrderId[order.id] ??
+                        (incidentOpenByOrderId[order.id] ? draftIncidentNoteForOrder(order) : '')
+                      }
+                      onChange={(e) =>
+                        setIncidentNoteByOrderId((prev) => ({ ...prev, [order.id]: e.target.value }))
+                      }
+                      rows={3}
+                      placeholder="Describe la incidencia del pedido..."
+                      className="w-full rounded-lg border-2 border-red-400 bg-white px-2 py-2 text-sm text-zinc-900 outline-none placeholder:text-zinc-400"
+                    />
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={() => saveOrderIncident(order)}
+                        className="rounded-lg bg-[#B91C1C] px-3 py-2 text-xs font-semibold text-white"
+                      >
+                        Guardar incidencia
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setIncidentOpenByOrderId((prev) => ({ ...prev, [order.id]: false }))}
+                        className="rounded-lg border border-zinc-400 bg-white px-3 py-2 text-xs font-semibold text-zinc-800"
+                      >
+                        Cerrar sin guardar
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
+                {orderHasAnyIncident(order) &&
+                draftIncidentNoteForOrder(order) &&
+                !incidentOpenByOrderId[order.id] ? (
+                  <p className="mt-2 text-xs font-semibold text-[#B91C1C]">
+                    <span aria-hidden>{'\u{1F6A8}'}</span> Incidencia: {draftIncidentNoteForOrder(order)}
+                  </p>
+                ) : null}
+              </div>
+              <div className="mt-4 border-t border-zinc-200/90 pt-4">
+                <button
+                  type="button"
+                  onClick={() => markAllReceived(order)}
+                  className="flex w-full items-center justify-center rounded-2xl bg-gradient-to-b from-[#4ADE80] to-[#16A34A] py-3.5 text-center text-xs font-black uppercase tracking-[0.12em] text-white shadow-lg shadow-emerald-900/25 ring-1 ring-white/25 transition active:scale-[0.98] active:shadow-md"
+                >
+                  Marcar todo recibido
+                </button>
+              </div>
             </div>
-          ))}
+            );
+          })}
         </div>
       </section>
     </div>
