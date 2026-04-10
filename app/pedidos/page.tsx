@@ -85,8 +85,11 @@ export default function PedidosPage() {
     window.open(url, '_blank', 'noopener,noreferrer');
   }, [email, localName]);
 
-  const [expandedId, setExpandedId] = React.useState<string | null>(null);
+  const [expandedSentId, setExpandedSentId] = React.useState<string | null>(null);
+  const [expandedHistoricoId, setExpandedHistoricoId] = React.useState<string | null>(null);
   const [monthlySummaryMonth, setMonthlySummaryMonth] = React.useState(() => new Date().toISOString().slice(0, 7));
+  /** Marca visual por línea (varias a la vez); evita que un refetch parcial “borre” el estado al ir recibiendo. */
+  const [quickLineMarks, setQuickLineMarks] = React.useState<Record<string, 'ok' | 'bad'>>({});
 
   const quickReceiveItem = (orderId: string, itemId: string, expectedQty: number, markOk: boolean) => {
     if (!localId) return;
@@ -95,6 +98,8 @@ export default function PedidosPage() {
     const nextReceived = markOk ? expectedQty : 0;
     const nextIncidentType: PedidoOrder['items'][number]['incidentType'] = markOk ? null : 'missing';
     const nextIncidentNotes = markOk ? undefined : 'No recibido';
+
+    setQuickLineMarks((prev) => ({ ...prev, [itemId]: markOk ? 'ok' : 'bad' }));
 
     let nextItemsSnapshot: PedidoOrder['items'] = [];
     setOrders((prev) =>
@@ -135,7 +140,18 @@ export default function PedidosPage() {
     const supabase = getSupabaseClient();
     if (!supabase) return;
     void fetchOrders(supabase, localId)
-      .then((rows) => setOrders(rows))
+      .then((rows) => {
+        setOrders(rows);
+        const nextMarks: Record<string, 'ok' | 'bad'> = {};
+        for (const o of rows) {
+          if (o.status !== 'sent') continue;
+          for (const i of o.items) {
+            if (i.receivedQuantity >= i.quantity && i.quantity > 0 && !i.incidentType) nextMarks[i.id] = 'ok';
+            else if (i.incidentType) nextMarks[i.id] = 'bad';
+          }
+        }
+        setQuickLineMarks(nextMarks);
+      })
       .catch((err: Error) => setMessage(err.message));
   }, [canUse, localId]);
 
@@ -280,10 +296,10 @@ export default function PedidosPage() {
               <div className="mt-3 grid grid-cols-3 gap-2">
                 <button
                   type="button"
-                  onClick={() => setExpandedId((prev) => (prev === order.id ? null : order.id))}
+                  onClick={() => setExpandedSentId((prev) => (prev === order.id ? null : order.id))}
                   className="rounded-lg border border-zinc-300 bg-white px-2 py-1.5 text-center text-xs font-semibold text-[#2563EB]"
                 >
-                  {expandedId === order.id ? 'Ocultar detalle' : 'Ver detalle'}
+                  {expandedSentId === order.id ? 'Ocultar detalle' : 'Ver detalle'}
                 </button>
                 <button
                   type="button"
@@ -317,7 +333,7 @@ export default function PedidosPage() {
                   Eliminar
                 </button>
               </div>
-              {expandedId === order.id ? (
+              {expandedSentId === order.id ? (
                 <div className="mt-2 space-y-2 text-left">
                   {order.items.map((item) => (
                     <div key={item.id} className="flex items-center justify-between gap-2 rounded-lg bg-white p-2 ring-1 ring-zinc-200">
@@ -326,8 +342,14 @@ export default function PedidosPage() {
                       </p>
                       <div className="flex items-center gap-2">
                         {(() => {
-                          const isOk = item.receivedQuantity >= item.quantity && item.quantity > 0 && !item.incidentType;
-                          const isIncident = Boolean(item.incidentType);
+                          const mark = quickLineMarks[item.id];
+                          const isOk =
+                            mark === 'ok' ||
+                            (mark === undefined &&
+                              item.receivedQuantity >= item.quantity &&
+                              item.quantity > 0 &&
+                              !item.incidentType);
+                          const isBad = mark === 'bad' || (mark === undefined && Boolean(item.incidentType));
                           return (
                             <>
                         <button
@@ -347,7 +369,7 @@ export default function PedidosPage() {
                           onClick={() => quickReceiveItem(order.id, item.id, item.quantity, false)}
                           className={[
                             'grid h-7 w-7 place-items-center rounded-full border text-sm font-black',
-                            isIncident ? 'border-[#B91C1C] bg-[#B91C1C] text-white' : 'border-zinc-300 bg-white text-zinc-400',
+                            isBad ? 'border-[#B91C1C] bg-[#B91C1C] text-white' : 'border-zinc-300 bg-white text-zinc-400',
                           ].join(' ')}
                           title="Marcar incidencia"
                           aria-label="Marcar incidencia"
@@ -390,10 +412,10 @@ export default function PedidosPage() {
               <div className="mt-3 grid grid-cols-2 gap-2">
                 <button
                   type="button"
-                  onClick={() => setExpandedId((prev) => (prev === order.id ? null : order.id))}
+                  onClick={() => setExpandedHistoricoId((prev) => (prev === order.id ? null : order.id))}
                   className="rounded-lg border border-zinc-300 bg-white px-2 py-1.5 text-center text-xs font-semibold text-[#2563EB]"
                 >
-                  {expandedId === order.id ? 'Ocultar detalle' : 'Ver detalle'}
+                  {expandedHistoricoId === order.id ? 'Ocultar detalle' : 'Ver detalle'}
                 </button>
                 <button
                   type="button"
@@ -420,7 +442,7 @@ export default function PedidosPage() {
                   Eliminar
                 </button>
               </div>
-              {expandedId === order.id ? (
+              {expandedHistoricoId === order.id ? (
                 <div className="mt-2 space-y-1 text-center">
                   {order.items.map((item) => (
                     <p key={item.id} className="text-xs text-zinc-600">
