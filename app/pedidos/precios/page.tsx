@@ -48,6 +48,16 @@ function orderPriceDate(order: PedidoOrder): string {
   return order.receivedAt ?? order.sentAt ?? order.createdAt;
 }
 
+/**
+ * Clave estable por proveedor + producto + unidad. No usar solo `supplier_product_id`:
+ * si en un pedido falta el UUID y en otro no, antes se creaban dos series y no había “evolución”.
+ * Las incidencias no cambian esta clave: el precio facturado en línea sigue contando.
+ */
+function evolutionProductKey(order: PedidoOrder, item: PedidoOrder['items'][number]): string {
+  const name = item.productName.trim().replace(/\s+/g, ' ').toLowerCase();
+  return `${order.supplierId}|${name}|${item.unit}`;
+}
+
 /** Precio unitario para historial: incluye líneas con incidencia si `price_per_unit` quedó en 0 pero hay subtotal. */
 function unitPriceForPriceHistory(item: PedidoOrder['items'][number]): number | null {
   const p = item.pricePerUnit;
@@ -107,12 +117,12 @@ export default function PedidosPreciosPage() {
       for (const item of order.items) {
         const unitPrice = unitPriceForPriceHistory(item);
         if (unitPrice == null) continue;
-        const key = item.supplierProductId ?? `name:${item.productName}`;
+        const key = evolutionProductKey(order, item);
         const wq = weightQtyForHistory(item);
         const acc =
           map.get(key) ?? {
             key,
-            productName: item.productName,
+            productName: item.productName.trim(),
             points: [],
             purchases: [],
             wSum: 0,
