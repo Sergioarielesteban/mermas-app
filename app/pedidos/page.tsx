@@ -93,6 +93,8 @@ export default function PedidosPage() {
     const supabase = getSupabaseClient();
     if (!supabase) return;
     const nextReceived = markOk ? expectedQty : 0;
+    const nextIncidentType: PedidoOrder['items'][number]['incidentType'] = markOk ? null : 'missing';
+    const nextIncidentNotes = markOk ? undefined : 'No recibido';
 
     let nextItemsSnapshot: PedidoOrder['items'] = [];
     setOrders((prev) =>
@@ -103,8 +105,8 @@ export default function PedidosPage() {
           return {
             ...item,
             receivedQuantity: nextReceived,
-            incidentType: markOk ? null : 'missing',
-            incidentNotes: markOk ? undefined : 'No recibido',
+            incidentType: nextIncidentType,
+            incidentNotes: nextIncidentNotes,
           };
         });
         nextItemsSnapshot = nextItems;

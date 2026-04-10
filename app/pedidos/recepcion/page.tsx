@@ -199,13 +199,15 @@ export default function RecepcionPedidosPage() {
     const supabase = getSupabaseClient();
     if (!supabase) return;
     const note = (incidentNoteByItemId[itemId] ?? '').trim();
+    const nextIncidentType: PedidoOrder['items'][number]['incidentType'] = note ? 'damaged' : null;
+    const nextIncidentNotes = note || undefined;
 
     setOrders((prev) =>
       prev.map((order) => {
         if (order.id !== orderId) return order;
         const nextItems = order.items.map((item) =>
           item.id === itemId
-            ? { ...item, incidentType: note ? 'damaged' : null, incidentNotes: note || undefined }
+            ? { ...item, incidentType: nextIncidentType, incidentNotes: nextIncidentNotes }
             : item,
         );
         return { ...order, items: nextItems };
