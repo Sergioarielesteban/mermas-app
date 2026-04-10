@@ -150,6 +150,16 @@ export default function MermasRegistrationForm() {
       return;
     }
 
+    const now = nowParts();
+    setQuantity(0);
+    setQuantityInput('0');
+    setMotiveKey(null);
+    setNotes('');
+    setPhotoDataUrl(null);
+    setDateValue(now.date);
+    setTimeValue(now.time);
+    setLastQtyAction(null);
+
     setValidationBanner(null);
     setShowSavedBanner(true);
     if (savedBannerTimeoutRef.current) {

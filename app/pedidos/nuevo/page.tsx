@@ -151,6 +151,17 @@ export default function NuevoPedidoPage() {
     });
   };
 
+  const setQtyFromInput = (productId: string, unit: PedidoOrderItem['unit'], raw: string) => {
+    if (raw.trim() === '') {
+      setQtyByProductId((prev) => ({ ...prev, [productId]: 0 }));
+      return;
+    }
+    const num = Number(raw.replace(',', '.'));
+    if (Number.isNaN(num) || num < 0) return;
+    const next = unit === 'kg' ? Math.round(num * 100) / 100 : Math.floor(num);
+    setQtyByProductId((prev) => ({ ...prev, [productId]: next }));
+  };
+
   const items: PedidoOrderItem[] = supplierProducts
     .map((p) => {
       const quantity = qtyByProductId[p.id] ?? 0;
@@ -354,9 +365,16 @@ export default function NuevoPedidoPage() {
                   <p className="text-sm font-bold text-zinc-900">{lineTotal.toFixed(2)} €</p>
                 </div>
                 <div className="mt-3 flex items-center justify-end gap-2">
-                  <div className="min-w-[88px] rounded-md bg-[#D32F2F] px-3 py-1.5 text-center text-sm font-black text-white">
-                    {p.unit === 'kg' ? qty.toFixed(2) : Math.round(qty)}
-                  </div>
+                  <input
+                    type="number"
+                    min={0}
+                    step={p.unit === 'kg' ? 0.01 : 1}
+                    inputMode="decimal"
+                    aria-label={`Cantidad ${p.name}`}
+                    className="min-w-[5.5rem] max-w-[6.5rem] rounded-md border-2 border-white/40 bg-[#D32F2F] px-2 py-1.5 text-center text-sm font-black text-white outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                    value={qty === 0 ? '' : p.unit === 'kg' ? qty : Math.round(qty)}
+                    onChange={(e) => setQtyFromInput(p.id, p.unit, e.target.value)}
+                  />
                   <span className="text-xs font-semibold uppercase text-zinc-500">{p.unit}</span>
                   <button
                     type="button"
