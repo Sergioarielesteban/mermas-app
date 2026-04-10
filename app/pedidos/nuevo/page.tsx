@@ -7,6 +7,7 @@ import { useAuth } from '@/components/AuthProvider';
 import { getSupabaseClient } from '@/lib/supabase-client';
 import PedidosPremiaLockedScreen from '@/components/PedidosPremiaLockedScreen';
 import { canAccessPedidos, canUsePedidosModule } from '@/lib/pedidos-access';
+import { dispatchPedidosDataChanged, usePedidosDataChangedListener } from '@/hooks/usePedidosDataChangedListener';
 import { formatQuantityWithUnit, unitPriceCatalogSuffix } from '@/lib/pedidos-format';
 import {
   fetchOrders,
@@ -79,7 +80,7 @@ export default function NuevoPedidoPage() {
   const [existingSentAt, setExistingSentAt] = React.useState<string | null>(null);
   const [existingOrderId, setExistingOrderId] = React.useState<string | null>(null);
 
-  React.useEffect(() => {
+  const reloadSuppliers = React.useCallback(() => {
     if (!canUse || !localId) return;
     const supabase = getSupabaseClient();
     if (!supabase) return;
@@ -96,10 +97,10 @@ export default function NuevoPedidoPage() {
   }, [canUse, localId]);
 
   React.useEffect(() => {
-    const tomorrow = new Date();
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    setDeliveryDate(tomorrow.toISOString().slice(0, 10));
-  }, []);
+    reloadSuppliers();
+  }, [reloadSuppliers]);
+
+  usePedidosDataChangedListener(reloadSuppliers, Boolean(hasPedidosEntry && canUse));
 
   const selectedSupplier = suppliers.find((s) => s.id === supplierId) ?? null;
   const supplierProducts = React.useMemo(() => selectedSupplier?.products ?? [], [selectedSupplier]);
@@ -123,6 +124,7 @@ export default function NuevoPedidoPage() {
         setExistingOrderId(draft.id);
         setSupplierId(draft.supplierId);
         setNotes(draft.notes);
+        setDeliveryDate(draft.deliveryDate ?? '');
         setExistingCreatedAt(draft.createdAt);
         setExistingSentAt(draft.sentAt ?? null);
         setQtyByProductId(
@@ -150,16 +152,6 @@ export default function NuevoPedidoPage() {
       return next;
     });
   }, [supplierId, supplierProducts, editingId, isLoadedEdit]);
-
-  const changeQty = (productId: string, unit: PedidoOrderItem['unit'], direction: 'inc' | 'dec') => {
-    const step = unit === 'kg' ? 0.1 : 1;
-    setQtyByProductId((prev) => {
-      const current = prev[productId] ?? 0;
-      const nextRaw = direction === 'inc' ? current + step : current - step;
-      const next = Math.max(0, Math.round(nextRaw * 100) / 100);
-      return { ...prev, [productId]: next };
-    });
-  };
 
   const setQtyFromInput = (productId: string, unit: PedidoOrderItem['unit'], raw: string) => {
     if (raw.trim() === '') {
@@ -242,6 +234,7 @@ export default function NuevoPedidoPage() {
         } catch {
           /* modo privado */
         }
+        dispatchPedidosDataChanged();
         router.push('/pedidos');
       })
       .catch((err: Error) => setMessage(err.message));
@@ -304,6 +297,7 @@ export default function NuevoPedidoPage() {
         } catch {
           /* modo privado */
         }
+        dispatchPedidosDataChanged();
         router.push('/pedidos');
       })
       .catch((err: Error) => {
@@ -362,13 +356,6 @@ export default function NuevoPedidoPage() {
           placeholder="Buscar..."
           className="mt-2 h-11 w-full rounded-xl border border-zinc-300 bg-white px-3 text-sm text-zinc-900 placeholder:text-zinc-500 outline-none"
         />
-        <label className="mt-3 block text-xs font-semibold uppercase tracking-wide text-zinc-500">Fecha entrega</label>
-        <input
-          type="date"
-          value={deliveryDate}
-          onChange={(e) => setDeliveryDate(e.target.value)}
-          className="mt-2 h-11 w-full rounded-xl border border-zinc-300 bg-white px-3 text-sm text-zinc-900 outline-none"
-        />
       </section>
 
       <section className="rounded-2xl bg-white p-4 ring-1 ring-zinc-200">
@@ -398,37 +385,16 @@ export default function NuevoPedidoPage() {
                     step={p.unit === 'kg' ? 0.01 : 1}
                     inputMode="decimal"
                     aria-label={`Cantidad ${p.name}`}
-                    className="min-w-[2.75rem] max-w-[3.25rem] rounded-md border border-zinc-300 bg-white px-1.5 py-1.5 text-center text-xs font-bold text-zinc-500 outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                    className="min-w-[3.5rem] max-w-[4.5rem] rounded-md border border-zinc-300 bg-white px-1.5 py-1.5 text-center text-xs font-bold text-zinc-700 outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                     value={qty === 0 ? '' : p.unit === 'kg' ? qty : Math.round(qty)}
                     onChange={(e) => setQtyFromInput(p.id, p.unit, e.target.value)}
                   />
                   <span className="text-xs font-semibold uppercase text-zinc-500">{p.unit}</span>
-                  <button
-                    type="button"
-                    onClick={() => changeQty(p.id, p.unit, 'dec')}
-                    className="grid h-10 w-10 place-items-center rounded-full border border-zinc-300 bg-white text-2xl font-black leading-none text-zinc-500"
-                  >
-                    -
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => changeQty(p.id, p.unit, 'inc')}
-                    className="grid h-10 w-10 place-items-center rounded-full bg-[#D32F2F] text-2xl font-black leading-none text-white"
-                  >
-                    +
-                  </button>
                 </div>
               </div>
             );
           })}
         </div>
-        <label className="mt-4 block text-xs font-semibold uppercase tracking-wide text-zinc-500">Pedido por</label>
-        <input
-          value={requestedBy}
-          onChange={(e) => setRequestedBy(e.target.value)}
-          placeholder="Nombre de quien pide"
-          className="mt-2 h-11 w-full rounded-xl border border-zinc-300 bg-white px-3 text-sm text-zinc-900 placeholder:text-zinc-500 outline-none"
-        />
       </section>
 
       <section className="rounded-2xl bg-white p-4 ring-1 ring-zinc-200">
@@ -447,7 +413,29 @@ export default function NuevoPedidoPage() {
             </div>
           ))}
         </div>
-        <div className="mt-3 rounded-xl bg-zinc-50 p-3 ring-1 ring-zinc-200">
+        <label className="mt-4 block text-xs font-semibold uppercase tracking-wide text-zinc-500">Notas</label>
+        <textarea
+          value={notes}
+          onChange={(e) => setNotes(e.target.value)}
+          rows={3}
+          className="mt-2 w-full rounded-xl border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 placeholder:text-zinc-500 outline-none"
+          placeholder="Observaciones del pedido..."
+        />
+        <label className="mt-3 block text-xs font-semibold uppercase tracking-wide text-zinc-500">Fecha entrega</label>
+        <input
+          type="date"
+          value={deliveryDate}
+          onChange={(e) => setDeliveryDate(e.target.value)}
+          className="mt-2 h-11 w-full rounded-xl border border-zinc-300 bg-white px-3 text-sm text-zinc-900 outline-none"
+        />
+        <label className="mt-3 block text-xs font-semibold uppercase tracking-wide text-zinc-500">Quien pide</label>
+        <input
+          value={requestedBy}
+          onChange={(e) => setRequestedBy(e.target.value)}
+          placeholder="Nombre de quien pide"
+          className="mt-2 h-11 w-full rounded-xl border border-zinc-300 bg-white px-3 text-sm text-zinc-900 placeholder:text-zinc-500 outline-none"
+        />
+        <div className="mt-4 rounded-xl bg-zinc-50 p-3 ring-1 ring-zinc-200">
           <div className="flex items-center justify-between text-sm text-zinc-700">
             <span>Subtotal</span>
             <span className="font-semibold">{totalBase.toFixed(2)} €</span>
@@ -461,18 +449,7 @@ export default function NuevoPedidoPage() {
             <span>{total.toFixed(2)} €</span>
           </div>
         </div>
-      </section>
-
-      <section className="rounded-2xl bg-white p-4 pb-28 ring-1 ring-zinc-200">
-        <label className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Notas</label>
-        <textarea
-          value={notes}
-          onChange={(e) => setNotes(e.target.value)}
-          rows={3}
-          className="mt-2 w-full rounded-xl border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 placeholder:text-zinc-500 outline-none"
-          placeholder="Observaciones del pedido..."
-        />
-        {message ? <p className="mt-2 text-sm text-[#B91C1C]">{message}</p> : null}
+        {message ? <p className="mt-3 text-sm text-[#B91C1C]">{message}</p> : null}
       </section>
 
       <section className="sticky bottom-2 z-20 rounded-2xl border border-zinc-200 bg-white/95 p-3 shadow-lg backdrop-blur">

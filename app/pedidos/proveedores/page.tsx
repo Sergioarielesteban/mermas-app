@@ -6,6 +6,7 @@ import { useAuth } from '@/components/AuthProvider';
 import { getSupabaseClient } from '@/lib/supabase-client';
 import PedidosPremiaLockedScreen from '@/components/PedidosPremiaLockedScreen';
 import { canAccessPedidos, canUsePedidosModule } from '@/lib/pedidos-access';
+import { dispatchPedidosDataChanged, usePedidosDataChangedListener } from '@/hooks/usePedidosDataChangedListener';
 import { unitPriceCatalogSuffix } from '@/lib/pedidos-format';
 import {
   createSupplier,
@@ -130,6 +131,8 @@ export default function ProveedoresPage() {
     reload();
   }, [reload]);
 
+  usePedidosDataChangedListener(reload, Boolean(hasPedidosEntry && canUse));
+
   React.useEffect(
     () => () => {
       if (deletedBannerTimeoutRef.current) window.clearTimeout(deletedBannerTimeoutRef.current);
@@ -149,6 +152,7 @@ export default function ProveedoresPage() {
         setSupplierContact('');
         setMessage('Proveedor guardado.');
         reload();
+        dispatchPedidosDataChanged();
       })
       .catch((err: Error) => setMessage(err.message));
   };
@@ -184,6 +188,7 @@ export default function ProveedoresPage() {
         setProductVat('0,21');
         setMessage('Producto de proveedor guardado.');
         reload();
+        dispatchPedidosDataChanged();
       })
       .catch((err: Error) => setMessage(err.message));
   };
@@ -204,6 +209,7 @@ export default function ProveedoresPage() {
         setEditingSupplierId(null);
         setMessage('Proveedor actualizado.');
         reload();
+        dispatchPedidosDataChanged();
       })
       .catch((err: Error) => setMessage(err.message));
   };
@@ -240,6 +246,7 @@ export default function ProveedoresPage() {
         setEditingProductId(null);
         setMessage('Producto actualizado.');
         reload();
+        dispatchPedidosDataChanged();
       })
       .catch((err: Error) => setMessage(err.message));
   };
@@ -252,6 +259,7 @@ export default function ProveedoresPage() {
       .then(() => {
         setMessage('Producto desactivado.');
         reload();
+        dispatchPedidosDataChanged();
       })
       .catch((err: Error) => setMessage(err.message));
   };
@@ -272,6 +280,7 @@ export default function ProveedoresPage() {
           deletedBannerTimeoutRef.current = null;
         }, 1000);
         reload();
+        dispatchPedidosDataChanged();
       })
       .catch((err: Error) => setMessage(`No se pudo eliminar proveedor: ${err.message}`));
   };

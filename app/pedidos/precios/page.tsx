@@ -7,8 +7,11 @@ import autoTable from 'jspdf-autotable';
 import { useAuth } from '@/components/AuthProvider';
 import PedidosPremiaLockedScreen from '@/components/PedidosPremiaLockedScreen';
 import { canAccessPedidos, canUsePedidosModule } from '@/lib/pedidos-access';
-import { fetchOrders, type PedidoOrder } from '@/lib/pedidos-supabase';
+import { formatQuantityWithUnit } from '@/lib/pedidos-format';
+import { usePedidosDataChangedListener } from '@/hooks/usePedidosDataChangedListener';
+import { billingQuantityForLine, fetchOrders, type PedidoOrder } from '@/lib/pedidos-supabase';
 import { getSupabaseClient } from '@/lib/supabase-client';
+import type { Unit } from '@/lib/types';
 
 type PricePoint = {
   date: string;
@@ -17,18 +20,38 @@ type PricePoint = {
   price: number;
 };
 
-type ProductPriceSeries = {
+type PurchaseRow = {
+  date: string;
+  supplier: string;
+  qty: number;
+  unit: Unit;
+  price: number;
+};
+
+type PriceSummary = {
   key: string;
   productName: string;
   points: PricePoint[];
-};
-
-type PriceSummary = ProductPriceSeries & {
+  purchases: PurchaseRow[];
+  weightedAvg: number;
+  totalWeightedQty: number;
   base: PricePoint;
   current: PricePoint;
   delta: number;
   deltaPct: number;
 };
+
+function orderPriceDate(order: PedidoOrder): string {
+  return order.receivedAt ?? order.sentAt ?? order.createdAt;
+}
+
+function weightQtyForHistory(item: PedidoOrder['items'][number]): number {
+  const billed = billingQuantityForLine(item);
+  if (billed > 0) return billed;
+  if (item.quantity > 0) return item.quantity;
+  /* Incluir la línea en evolución/media aunque cantidad sea 0 (p. ej. incidencia), para no perder el precio facturado. */
+  return 1;
+}
 
 export default function PedidosPreciosPage() {
   const { localCode, localName, localId, email } = useAuth();
@@ -37,7 +60,7 @@ export default function PedidosPreciosPage() {
   const [orders, setOrders] = React.useState<PedidoOrder[]>([]);
   const [message, setMessage] = React.useState<string | null>(null);
 
-  React.useEffect(() => {
+  const reload = React.useCallback(() => {
     if (!canUse || !localId) return;
     const supabase = getSupabaseClient();
     if (!supabase) return;
@@ -46,37 +69,77 @@ export default function PedidosPreciosPage() {
       .catch((err: Error) => setMessage(err.message));
   }, [canUse, localId]);
 
+  React.useEffect(() => {
+    reload();
+  }, [reload]);
+
+  usePedidosDataChangedListener(reload, Boolean(hasPedidosEntry && canUse));
+
   const series = React.useMemo<PriceSummary[]>(() => {
-    const map = new Map<string, ProductPriceSeries>();
+    type Acc = {
+      key: string;
+      productName: string;
+      points: PricePoint[];
+      purchases: PurchaseRow[];
+      wSum: number;
+      wQty: number;
+    };
+    const map = new Map<string, Acc>();
     for (const order of orders) {
+      const d = orderPriceDate(order);
       for (const item of order.items) {
         const key = item.supplierProductId ?? `name:${item.productName}`;
-        const row = map.get(key) ?? { key, productName: item.productName, points: [] };
-        row.points.push({
-          date: order.createdAt,
+        const wq = weightQtyForHistory(item);
+        const acc =
+          map.get(key) ?? {
+            key,
+            productName: item.productName,
+            points: [],
+            purchases: [],
+            wSum: 0,
+            wQty: 0,
+          };
+        acc.points.push({
+          date: d,
           supplier: order.supplierName,
           unit: item.unit,
           price: item.pricePerUnit,
         });
-        map.set(key, row);
+        acc.purchases.push({
+          date: d,
+          supplier: order.supplierName,
+          qty: wq,
+          unit: item.unit,
+          price: item.pricePerUnit,
+        });
+        acc.wSum += item.pricePerUnit * wq;
+        acc.wQty += wq;
+        map.set(key, acc);
       }
     }
-    return Array.from(map.values()).map((row) => {
-      const ordered = [...row.points].sort((a, b) => Date.parse(a.date) - Date.parse(b.date));
-      const base = ordered[0];
-      const current = ordered[ordered.length - 1];
-      const delta = Math.round((current.price - base.price) * 100) / 100;
-      const deltaPct = base.price > 0 ? Math.round((delta / base.price) * 10000) / 100 : 0;
-      return {
-        ...row,
-        points: ordered.reverse(),
-        base,
-        current,
-        delta,
-        deltaPct,
-      };
-    })
-      .filter((row) => Math.abs(row.delta) > 0.001)
+    return Array.from(map.values())
+      .map((acc) => {
+        const ordered = [...acc.points].sort((a, b) => Date.parse(a.date) - Date.parse(b.date));
+        const base = ordered[0];
+        const current = ordered[ordered.length - 1];
+        const delta = Math.round((current.price - base.price) * 100) / 100;
+        const deltaPct = base.price > 0 ? Math.round((delta / base.price) * 10000) / 100 : 0;
+        const weightedAvg = acc.wQty > 0 ? Math.round((acc.wSum / acc.wQty) * 100) / 100 : current.price;
+        const purchasesSorted = [...acc.purchases].sort((a, b) => Date.parse(b.date) - Date.parse(a.date));
+        return {
+          key: acc.key,
+          productName: acc.productName,
+          points: [...ordered].reverse(),
+          purchases: purchasesSorted,
+          weightedAvg,
+          totalWeightedQty: acc.wQty,
+          base,
+          current,
+          delta,
+          deltaPct,
+        };
+      })
+      .filter((row) => row.points.length >= 2 && Math.abs(row.delta) > 0.001)
       .sort((a, b) => a.productName.localeCompare(b.productName, 'es'));
   }, [orders]);
 
@@ -112,6 +175,7 @@ export default function PedidosPreciosPage() {
       body.push([
         row.productName,
         `${row.base.price.toFixed(2)} €/${row.base.unit}`,
+        `${row.weightedAvg.toFixed(2)} €/${row.current.unit}`,
         `${row.current.price.toFixed(2)} €/${row.current.unit}`,
         `${row.delta >= 0 ? '+' : ''}${row.delta.toFixed(2)} €`,
         `${row.deltaPct >= 0 ? '+' : ''}${row.deltaPct.toFixed(2)}%`,
@@ -119,7 +183,7 @@ export default function PedidosPreciosPage() {
     }
     autoTable(doc, {
       startY: 62,
-      head: [['Producto', 'Precio base', 'Precio actual', 'Variación €', 'Variación %']],
+      head: [['Producto', 'Precio base', 'Precio medio ponderado', 'Precio actual', 'Variación €', 'Variación %']],
       body,
       styles: { fontSize: 8, cellPadding: 4 },
       headStyles: { fillColor: [211, 47, 47] },
@@ -170,13 +234,33 @@ export default function PedidosPreciosPage() {
             <div key={row.key} className="rounded-2xl bg-white p-4 ring-1 ring-zinc-200">
               <p className="text-sm font-black text-zinc-900">{row.productName}</p>
               <p className="pt-1 text-xs text-zinc-600">
-                Base: {row.base.price.toFixed(2)} €/{row.base.unit} · Actual: {row.current.price.toFixed(2)} €/{row.current.unit}
+                Base: {row.base.price.toFixed(2)} €/{row.base.unit} · Actual: {row.current.price.toFixed(2)} €/
+                {row.current.unit}
+              </p>
+              <p className="pt-1 text-xs font-semibold text-zinc-800">
+                Precio medio ponderado:{' '}
+                <span className="tabular-nums">
+                  {row.weightedAvg.toFixed(2)} €/{row.current.unit}
+                </span>{' '}
+                · Cantidad total acumulada:{' '}
+                <span className="tabular-nums">{row.totalWeightedQty.toLocaleString('es-ES')}</span>
               </p>
               <p className={`pt-1 text-xs font-semibold ${trendClass(row)}`}>{trendLabel(row)}</p>
-              <div className="mt-2 max-h-36 space-y-1 overflow-auto rounded-lg bg-zinc-50 p-2 ring-1 ring-zinc-200">
-                {row.points.slice(0, 8).map((point, idx) => (
+              <p className="pt-2 text-[10px] font-bold uppercase tracking-wide text-zinc-500">Compras (más reciente primero)</p>
+              <div className="mt-1 max-h-40 space-y-1 overflow-auto rounded-lg bg-zinc-50 p-2 ring-1 ring-zinc-200">
+                {row.purchases.map((pur, idx) => (
+                  <p key={`${row.key}-p-${idx}`} className="text-xs text-zinc-600">
+                    {new Date(pur.date).toLocaleDateString('es-ES')} · {pur.supplier} ·{' '}
+                    {formatQuantityWithUnit(pur.qty, pur.unit)} · {pur.price.toFixed(2)} €/{pur.unit}
+                  </p>
+                ))}
+              </div>
+              <p className="pt-2 text-[10px] font-bold uppercase tracking-wide text-zinc-500">Evolución precio unitario</p>
+              <div className="mt-1 max-h-28 space-y-1 overflow-auto rounded-lg bg-zinc-50 p-2 ring-1 ring-zinc-200">
+                {row.points.slice(0, 12).map((point, idx) => (
                   <p key={`${row.key}-${idx}`} className="text-xs text-zinc-600">
-                    {new Date(point.date).toLocaleDateString('es-ES')} · {point.supplier} · {point.price.toFixed(2)} €/{point.unit}
+                    {new Date(point.date).toLocaleDateString('es-ES')} · {point.supplier} · {point.price.toFixed(2)} €/
+                    {point.unit}
                   </p>
                 ))}
               </div>

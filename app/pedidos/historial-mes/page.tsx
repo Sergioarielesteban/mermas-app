@@ -7,6 +7,7 @@ import { useAuth } from '@/components/AuthProvider';
 import { getSupabaseClient } from '@/lib/supabase-client';
 import PedidosPremiaLockedScreen from '@/components/PedidosPremiaLockedScreen';
 import { canAccessPedidos, canUsePedidosModule } from '@/lib/pedidos-access';
+import { usePedidosDataChangedListener } from '@/hooks/usePedidosDataChangedListener';
 import { formatQuantityWithUnit } from '@/lib/pedidos-format';
 import { fetchOrders, type PedidoOrder } from '@/lib/pedidos-supabase';
 import type { Unit } from '@/lib/types';
@@ -25,7 +26,7 @@ export default function PedidosHistorialMesPage() {
   const [message, setMessage] = React.useState<string | null>(null);
   const [month, setMonth] = React.useState(() => new Date().toISOString().slice(0, 7));
 
-  React.useEffect(() => {
+  const reload = React.useCallback(() => {
     if (!canUse || !localId) return;
     const supabase = getSupabaseClient();
     if (!supabase) return;
@@ -33,6 +34,12 @@ export default function PedidosHistorialMesPage() {
       .then((rows) => setOrders(rows))
       .catch((err: Error) => setMessage(err.message));
   }, [canUse, localId]);
+
+  React.useEffect(() => {
+    reload();
+  }, [reload]);
+
+  usePedidosDataChangedListener(reload, Boolean(hasPedidosEntry && canUse));
 
   const accountingOrders = React.useMemo(
     () => orders.filter((row) => row.status === 'sent' || row.status === 'received'),

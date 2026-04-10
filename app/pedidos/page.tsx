@@ -6,6 +6,7 @@ import React from 'react';
 import { useAuth } from '@/components/AuthProvider';
 import { getSupabaseClient } from '@/lib/supabase-client';
 import PedidosPremiaLockedScreen from '@/components/PedidosPremiaLockedScreen';
+import { dispatchPedidosDataChanged, usePedidosDataChangedListener } from '@/hooks/usePedidosDataChangedListener';
 import { canAccessPedidos, canUsePedidosModule } from '@/lib/pedidos-access';
 import { formatIncidentLine, formatQuantityWithUnit, unitPriceCatalogSuffix } from '@/lib/pedidos-format';
 import {
@@ -77,26 +78,8 @@ function catalogPriceMapFromSuppliers(suppliers: PedidoSupplier[]) {
   return m;
 }
 
-function itemPriceDiffersFromCatalog(
-  item: PedidoOrder['items'][number],
-  catalogPriceByProductId: Map<string, number>,
-) {
-  if (!item.supplierProductId) return false;
-  const cat = catalogPriceByProductId.get(item.supplierProductId);
-  if (cat == null) return false;
-  return Math.round((item.pricePerUnit - cat) * 100) / 100 !== 0;
-}
-
-function receivedOrderHasAttention(
-  order: PedidoOrder,
-  catalogPriceByProductId: Map<string, number>,
-) {
-  return order.items.some(
-    (item) =>
-      Boolean(item.incidentType) ||
-      Boolean(item.incidentNotes?.trim()) ||
-      itemPriceDiffersFromCatalog(item, catalogPriceByProductId),
-  );
+function receivedOrderHasAttention(order: PedidoOrder) {
+  return order.items.some((item) => Boolean(item.incidentType) || Boolean(item.incidentNotes?.trim()));
 }
 
 export default function PedidosPage() {
@@ -131,6 +114,54 @@ export default function PedidosPage() {
   const [expandedHistoricoId, setExpandedHistoricoId] = React.useState<string | null>(null);
   /** Marca visual por línea (varias a la vez); evita que un refetch parcial “borre” el estado al ir recibiendo. */
   const [quickLineMarks, setQuickLineMarks] = React.useState<Record<string, 'ok' | 'bad'>>({});
+
+  const clearQuickReceive = (orderId: string, line: PedidoOrder['items'][number]) => {
+    if (!localId) return;
+    const supabase = getSupabaseClient();
+    if (!supabase) return;
+    const itemId = line.id;
+    setQuickLineMarks((prev) => {
+      const next = { ...prev };
+      delete next[itemId];
+      return next;
+    });
+    setOrders((prev) =>
+      prev.map((order) => {
+        if (order.id !== orderId) return order;
+        return {
+          ...order,
+          items: order.items.map((item) =>
+            item.id === itemId
+              ? {
+                  ...item,
+                  receivedQuantity: 0,
+                  receivedWeightKg: item.unit === 'kg' ? null : item.receivedWeightKg,
+                  incidentType: null,
+                  incidentNotes: undefined,
+                  lineTotal: 0,
+                }
+              : item,
+          ),
+        };
+      }),
+    );
+    void Promise.all([
+      updateOrderItemReceived(supabase, localId, itemId, 0),
+      updateOrderItemIncident(supabase, localId, itemId, { type: null, notes: '' }),
+    ])
+      .then(async () => {
+        if (line.unit === 'kg') {
+          await updateOrderItemReceivedWeightKg(supabase, localId, itemId, null);
+        }
+        await updateOrderItemPrice(supabase, localId, itemId, line.pricePerUnit, 0);
+      })
+      .then(() => reloadOrders())
+      .then(() => dispatchPedidosDataChanged())
+      .catch((err: Error) => {
+        void reloadOrders();
+        setMessage(err.message);
+      });
+  };
 
   const quickReceiveItem = (orderId: string, line: PedidoOrder['items'][number], markOk: boolean) => {
     if (!localId) return;
@@ -186,6 +217,7 @@ export default function PedidosPage() {
     ])
       .then(() => afterReceive())
       .then(() => reloadOrders())
+      .then(() => dispatchPedidosDataChanged())
       .catch((err: Error) => {
         void reloadOrders();
         setMessage(err.message);
@@ -279,6 +311,14 @@ export default function PedidosPage() {
       document.removeEventListener('visibilitychange', pull);
     };
   }, [pathname, reloadOrders, reloadCatalog]);
+
+  usePedidosDataChangedListener(
+    React.useCallback(() => {
+      reloadOrders();
+      reloadCatalog();
+    }, [reloadOrders, reloadCatalog]),
+    Boolean(hasPedidosEntry && canUse),
+  );
 
   React.useEffect(
     () => () => {
@@ -385,21 +425,11 @@ export default function PedidosPage() {
                         Total (IVA incluido):{' '}
                         <span className="text-base font-black text-zinc-900">{totals.total.toFixed(2)} €</span>
                       </p>
-                      <p className="pt-2 text-[10px] font-semibold uppercase tracking-wide text-amber-900/70">
-                        Toca para {expandedSentId === order.id ? 'ocultar' : 'ver'} detalle
-                      </p>
                     </>
                   );
                 })()}
               </button>
-              <div className="mt-3 grid grid-cols-3 gap-2">
-                <button
-                  type="button"
-                  onClick={() => setExpandedSentId((prev) => (prev === order.id ? null : order.id))}
-                  className="rounded-lg border border-zinc-300 bg-white px-2 py-1.5 text-center text-xs font-semibold text-[#2563EB]"
-                >
-                  {expandedSentId === order.id ? 'Ocultar detalle' : 'Ver detalle'}
-                </button>
+              <div className="mt-3 grid grid-cols-2 gap-2">
                 <button
                   type="button"
                   onClick={() => sendWhatsappOrder(order)}
@@ -424,6 +454,7 @@ export default function PedidosPage() {
                           deletedBannerTimeoutRef.current = null;
                         }, 1000);
                         void reloadOrders();
+                        dispatchPedidosDataChanged();
                       })
                       .catch((err: Error) => setMessage(err.message));
                   }}
@@ -463,25 +494,42 @@ export default function PedidosPage() {
                           <div className="flex shrink-0 items-center gap-2">
                             <button
                               type="button"
-                              onClick={() => quickReceiveItem(order.id, item, true)}
+                              onClick={() => {
+                                const serverOk =
+                                  item.receivedQuantity >= item.quantity &&
+                                  item.quantity > 0 &&
+                                  !item.incidentType;
+                                if (mark === 'ok' || (mark === undefined && serverOk)) {
+                                  clearQuickReceive(order.id, item);
+                                  return;
+                                }
+                                quickReceiveItem(order.id, item, true);
+                              }}
                               className={[
                                 'grid h-7 w-7 place-items-center rounded-full border text-sm font-black',
                                 isOk ? 'border-[#16A34A] bg-[#16A34A] text-white' : 'border-zinc-300 bg-white text-zinc-400',
                               ].join(' ')}
-                              title="Recibido OK"
+                              title="Recibido OK (toca otra vez para quitar)"
                               aria-label="Recibido OK"
                             >
                               {'\u2713'}
                             </button>
                             <button
                               type="button"
-                              onClick={() => quickReceiveItem(order.id, item, false)}
+                              onClick={() => {
+                                const serverBad = Boolean(item.incidentType);
+                                if (mark === 'bad' || (mark === undefined && serverBad)) {
+                                  clearQuickReceive(order.id, item);
+                                  return;
+                                }
+                                quickReceiveItem(order.id, item, false);
+                              }}
                               className={[
                                 'grid h-7 w-7 place-items-center rounded-full border text-sm font-black',
                                 isBad ? 'border-[#B91C1C] bg-[#B91C1C] text-white' : 'border-zinc-300 bg-white text-zinc-400',
                               ].join(' ')}
-                              title="Marcar incidencia"
-                              aria-label="Marcar incidencia"
+                              title="No recibido (toca otra vez para quitar)"
+                              aria-label="No recibido"
                             >
                               {'\u2715'}
                             </button>
@@ -504,7 +552,9 @@ export default function PedidosPage() {
                           {item.lineTotal.toFixed(2)} €
                         </p>
                         {incidentText ? (
-                          <p className="text-xs font-semibold text-[#B91C1C]">Incidencia: {incidentText}</p>
+                          <p className="text-xs font-semibold text-[#B91C1C]">
+                            <span aria-hidden>{'\u{1F6A8}'}</span> Incidencia: {incidentText}
+                          </p>
                         ) : null}
                         {unitCanDeclareScaleKgOnReception(item.unit) &&
                         item.receivedWeightKg != null &&
@@ -530,7 +580,7 @@ export default function PedidosPage() {
         <div className="mt-2 space-y-2">
           {receivedOrders.length === 0 ? <p className="text-sm text-zinc-500">No hay pedidos recibidos.</p> : null}
           {receivedOrders.map((order) => {
-            const needsAttention = receivedOrderHasAttention(order, catalogPriceByProductId);
+            const needsAttention = receivedOrderHasAttention(order);
             const cardTone = needsAttention
               ? 'bg-red-100 ring-2 ring-red-400/90'
               : 'bg-green-100 ring-2 ring-green-500/80';
@@ -554,26 +604,16 @@ export default function PedidosPage() {
                         Total (IVA incluido):{' '}
                         <span className="text-base font-black text-zinc-900">{totals.total.toFixed(2)} €</span>
                       </p>
-                      <p className="pt-2 text-[10px] font-semibold uppercase tracking-wide text-zinc-600">
-                        Toca para {expandedHistoricoId === order.id ? 'ocultar' : 'ver'} detalle
-                      </p>
                     </>
                   );
                 })()}
               </button>
               {needsAttention ? (
                 <p className="mt-2 text-xs font-semibold text-red-800">
-                  Incidencia o precio distinto al catálogo en alguna línea
+                  <span aria-hidden>{'\u{1F6A8}'}</span> Hay incidencia registrada en alguna línea
                 </p>
               ) : null}
               <div className="mt-3 flex flex-wrap justify-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setExpandedHistoricoId((prev) => (prev === order.id ? null : order.id))}
-                  className="rounded-lg border border-zinc-300 bg-white px-2 py-1.5 text-center text-xs font-semibold text-[#2563EB]"
-                >
-                  {expandedHistoricoId === order.id ? 'Ocultar detalle' : 'Ver detalle'}
-                </button>
                 <button
                   type="button"
                   onClick={() => {
@@ -588,6 +628,7 @@ export default function PedidosPage() {
                       .then(() => {
                         setMessage('Pedido devuelto a enviados.');
                         void reloadOrders();
+                        dispatchPedidosDataChanged();
                       })
                       .catch((err: Error) => setMessage(err.message));
                   }}
@@ -612,6 +653,7 @@ export default function PedidosPage() {
                           deletedBannerTimeoutRef.current = null;
                         }, 1000);
                         void reloadOrders();
+                        dispatchPedidosDataChanged();
                       })
                       .catch((err: Error) => setMessage(err.message));
                   }}
@@ -630,8 +672,8 @@ export default function PedidosPage() {
                   ) : null}
                   {order.items.map((item) => {
                     const inc = Boolean(item.incidentType) || Boolean(item.incidentNotes?.trim());
-                    const isBad = inc || item.receivedQuantity < item.quantity;
-                    const isOk = !isBad && item.receivedQuantity >= item.quantity && item.quantity > 0;
+                    const isBad = inc;
+                    const isOk = !inc && item.receivedQuantity >= item.quantity && item.quantity > 0;
                     const incidentText = formatIncidentLine(item);
                     return (
                       <div key={item.id} className="rounded-xl bg-white p-3 ring-1 ring-zinc-200">
@@ -647,7 +689,7 @@ export default function PedidosPage() {
                                     ? 'border-[#B91C1C] bg-[#B91C1C] text-white'
                                     : 'border-zinc-300 bg-white text-zinc-400',
                               ].join(' ')}
-                              title={isOk ? 'Recibido OK' : isBad ? 'Incidencia o cantidad pendiente' : 'Parcial'}
+                              title={isOk ? 'Recibido OK' : isBad ? 'Incidencia registrada' : 'Parcial'}
                               aria-hidden
                             >
                               {isOk ? '\u2713' : isBad ? '\u2715' : '\u00B7'}
@@ -674,7 +716,9 @@ export default function PedidosPage() {
                           {item.lineTotal.toFixed(2)} €
                         </p>
                         {incidentText ? (
-                          <p className="mt-1 text-xs font-semibold text-[#B91C1C]">Incidencia: {incidentText}</p>
+                          <p className="mt-1 text-xs font-semibold text-[#B91C1C]">
+                            <span aria-hidden>{'\u{1F6A8}'}</span> Incidencia: {incidentText}
+                          </p>
                         ) : null}
                         {unitCanDeclareScaleKgOnReception(item.unit) &&
                         item.receivedWeightKg != null &&

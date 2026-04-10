@@ -5,6 +5,7 @@ import React from 'react';
 import { useAuth } from '@/components/AuthProvider';
 import PedidosPremiaLockedScreen from '@/components/PedidosPremiaLockedScreen';
 import { canAccessPedidos, canUsePedidosModule } from '@/lib/pedidos-access';
+import { usePedidosDataChangedListener } from '@/hooks/usePedidosDataChangedListener';
 import { fetchOrders, type PedidoOrder } from '@/lib/pedidos-supabase';
 import { getSupabaseClient } from '@/lib/supabase-client';
 
@@ -17,7 +18,7 @@ export default function PedidosCalendarioPage() {
   const [orders, setOrders] = React.useState<PedidoOrder[]>([]);
   const [message, setMessage] = React.useState<string | null>(null);
 
-  React.useEffect(() => {
+  const reload = React.useCallback(() => {
     if (!canUse || !localId) return;
     const supabase = getSupabaseClient();
     if (!supabase) return;
@@ -25,6 +26,12 @@ export default function PedidosCalendarioPage() {
       .then((rows) => setOrders(rows.filter((o) => o.status === 'sent')))
       .catch((err: Error) => setMessage(err.message));
   }, [canUse, localId]);
+
+  React.useEffect(() => {
+    reload();
+  }, [reload]);
+
+  usePedidosDataChangedListener(reload, Boolean(hasPedidosEntry && canUse));
 
   const groups = React.useMemo<CalendarGroup[]>(() => {
     const map = new Map<string, PedidoOrder[]>();
