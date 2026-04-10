@@ -152,6 +152,7 @@ export default function PedidosPage() {
 
   const sentOrders = orders.filter((row) => row.status === 'sent');
   const receivedOrders = orders.filter((row) => row.status === 'received');
+  const accountingOrders = orders.filter((row) => row.status === 'sent' || row.status === 'received');
   const monthlyBySupplier = React.useMemo(() => {
     const bySupplier = new Map<
       string,
@@ -162,8 +163,8 @@ export default function PedidosPage() {
       }
     >();
 
-    for (const order of receivedOrders) {
-      const pivotDate = (order.receivedAt ?? order.createdAt).slice(0, 7);
+    for (const order of accountingOrders) {
+      const pivotDate = (order.receivedAt ?? order.sentAt ?? order.createdAt).slice(0, 7);
       if (pivotDate !== monthlySummaryMonth) continue;
 
       const existing = bySupplier.get(order.supplierId) ?? {
@@ -177,7 +178,7 @@ export default function PedidosPage() {
 
       for (const item of order.items) {
         const prod = existing.byProduct.get(item.productName) ?? { unit: item.unit, quantity: 0 };
-        prod.quantity += item.receivedQuantity;
+        prod.quantity += order.status === 'received' ? item.receivedQuantity : item.quantity;
         existing.byProduct.set(item.productName, prod);
       }
       bySupplier.set(order.supplierId, existing);
@@ -196,7 +197,7 @@ export default function PedidosPage() {
           .sort((a, b) => a.name.localeCompare(b.name, 'es')),
       }))
       .sort((a, b) => b.totalWithVat - a.totalWithVat);
-  }, [receivedOrders, monthlySummaryMonth]);
+  }, [accountingOrders, monthlySummaryMonth]);
 
   if (!canUse) {
     return (
@@ -324,10 +325,18 @@ export default function PedidosPage() {
                         {item.productName}: {item.quantity} {item.unit}
                       </p>
                       <div className="flex items-center gap-2">
+                        {(() => {
+                          const isOk = item.receivedQuantity >= item.quantity && item.quantity > 0 && !item.incidentType;
+                          const isIncident = Boolean(item.incidentType);
+                          return (
+                            <>
                         <button
                           type="button"
                           onClick={() => quickReceiveItem(order.id, item.id, item.quantity, true)}
-                          className="grid h-7 w-7 place-items-center rounded-full bg-[#16A34A] text-sm font-black text-white"
+                          className={[
+                            'grid h-7 w-7 place-items-center rounded-full border text-sm font-black',
+                            isOk ? 'border-[#16A34A] bg-[#16A34A] text-white' : 'border-zinc-300 bg-white text-zinc-400',
+                          ].join(' ')}
                           title="Recibido OK"
                           aria-label="Recibido OK"
                         >
@@ -336,12 +345,18 @@ export default function PedidosPage() {
                         <button
                           type="button"
                           onClick={() => quickReceiveItem(order.id, item.id, item.quantity, false)}
-                          className="grid h-7 w-7 place-items-center rounded-full bg-[#B91C1C] text-sm font-black text-white"
+                          className={[
+                            'grid h-7 w-7 place-items-center rounded-full border text-sm font-black',
+                            isIncident ? 'border-[#B91C1C] bg-[#B91C1C] text-white' : 'border-zinc-300 bg-white text-zinc-400',
+                          ].join(' ')}
                           title="Marcar incidencia"
                           aria-label="Marcar incidencia"
                         >
                           ✕
                         </button>
+                            </>
+                          );
+                        })()}
                       </div>
                     </div>
                   ))}
@@ -421,7 +436,7 @@ export default function PedidosPage() {
 
       <section className="rounded-2xl bg-white p-4 ring-1 ring-zinc-200">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <p className="text-sm font-bold text-zinc-800">Total comprado por proveedor (mes)</p>
+          <p className="text-sm font-bold text-zinc-800">Historial económico y cantidad de productos (mes)</p>
           <input
             type="month"
             value={monthlySummaryMonth}
@@ -431,7 +446,7 @@ export default function PedidosPage() {
         </div>
         <div className="mt-3 space-y-2">
           {monthlyBySupplier.length === 0 ? (
-            <p className="text-sm text-zinc-500">No hay compras recibidas para ese mes.</p>
+            <p className="text-sm text-zinc-500">No hay compras de pedidos para ese mes.</p>
           ) : null}
           {monthlyBySupplier.map((supplier) => (
             <div key={supplier.supplierName} className="rounded-xl bg-zinc-50 p-3 ring-1 ring-zinc-200">

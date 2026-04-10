@@ -337,7 +337,7 @@ export default function RecepcionPedidosPage() {
                               setLocalUnitPrice(order.id, item.id, raw);
                             }}
                             onBlur={() => commitPriceInput(order.id, item.id)}
-                            className="h-10 w-28 rounded-lg border border-zinc-300 bg-white px-2 text-sm font-semibold text-zinc-900 outline-none"
+                            className="h-10 w-14 rounded-lg border border-zinc-300 bg-white px-2 text-sm font-semibold text-zinc-900 outline-none"
                           />
                         </div>
                       </div>
