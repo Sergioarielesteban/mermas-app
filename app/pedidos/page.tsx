@@ -535,21 +535,21 @@ export default function PedidosPage() {
                             </button>
                           </div>
                         </div>
-                        <p className="text-xs text-zinc-700">
+                        <p className="text-xs italic text-zinc-700">
                           Pedido:{' '}
-                          <span className="font-semibold text-zinc-900">
+                          <span className="font-semibold not-italic text-zinc-900">
                             {formatQuantityWithUnit(item.quantity, item.unit)}
                           </span>
                         </p>
-                        <p className="text-xs text-zinc-700">
-                          Recibido:{' '}
-                          <span className="font-semibold text-zinc-900">
-                            {formatQuantityWithUnit(item.receivedQuantity, item.unit)}
+                        <p className="text-xs italic text-zinc-700">
+                          Precio:{' '}
+                          <span className="font-semibold not-italic text-zinc-900">
+                            {item.pricePerUnit.toFixed(2)} €/{unitPriceCatalogSuffix[item.unit]}
                           </span>
                         </p>
-                        <p className="text-xs text-zinc-600">
-                          Precio: {item.pricePerUnit.toFixed(2)} €/{unitPriceCatalogSuffix[item.unit]} · Subt.{' '}
-                          {item.lineTotal.toFixed(2)} €
+                        <p className="text-xs italic text-zinc-700">
+                          Subt:{' '}
+                          <span className="font-semibold not-italic text-zinc-900">{item.lineTotal.toFixed(2)} €</span>
                         </p>
                         {incidentText ? (
                           <p className="text-xs font-semibold text-[#B91C1C]">
@@ -699,21 +699,21 @@ export default function PedidosPage() {
                             </span>
                           </div>
                         </div>
-                        <p className="mt-2 text-xs text-zinc-700">
+                        <p className="mt-2 text-xs italic text-zinc-700">
                           Pedido:{' '}
-                          <span className="font-semibold text-zinc-900">
+                          <span className="font-semibold not-italic text-zinc-900">
                             {formatQuantityWithUnit(item.quantity, item.unit)}
                           </span>
                         </p>
-                        <p className="text-xs text-zinc-700">
-                          Recibido:{' '}
-                          <span className="font-semibold text-zinc-900">
-                            {formatQuantityWithUnit(item.receivedQuantity, item.unit)}
+                        <p className="text-xs italic text-zinc-700">
+                          Precio recepción:{' '}
+                          <span className="font-semibold not-italic text-zinc-900">
+                            {item.pricePerUnit.toFixed(2)} €/{unitPriceCatalogSuffix[item.unit]}
                           </span>
                         </p>
-                        <p className="text-xs text-zinc-600">
-                          Precio recepción: {item.pricePerUnit.toFixed(2)} €/{unitPriceCatalogSuffix[item.unit]} · Subt.{' '}
-                          {item.lineTotal.toFixed(2)} €
+                        <p className="text-xs italic text-zinc-700">
+                          Subt:{' '}
+                          <span className="font-semibold not-italic text-zinc-900">{item.lineTotal.toFixed(2)} €</span>
                         </p>
                         {incidentText ? (
                           <p className="mt-1 text-xs font-semibold text-[#B91C1C]">
