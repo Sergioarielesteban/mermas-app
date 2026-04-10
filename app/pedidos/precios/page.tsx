@@ -18,6 +18,9 @@ type PricePoint = {
   supplier: string;
   unit: string;
   price: number;
+  /** Desempate si varios pedidos comparten la misma fecha de precio */
+  orderCreatedAt: string;
+  itemId: string;
 };
 
 type PurchaseRow = {
@@ -43,6 +46,20 @@ type PriceSummary = {
 
 function orderPriceDate(order: PedidoOrder): string {
   return order.receivedAt ?? order.sentAt ?? order.createdAt;
+}
+
+/** Precio unitario para historial: incluye líneas con incidencia si `price_per_unit` quedó en 0 pero hay subtotal. */
+function unitPriceForPriceHistory(item: PedidoOrder['items'][number]): number | null {
+  const p = item.pricePerUnit;
+  if (Number.isFinite(p) && p > 0) return Math.round(p * 100) / 100;
+  const billed = billingQuantityForLine(item);
+  if (billed > 0 && item.lineTotal > 0) {
+    return Math.round((item.lineTotal / billed) * 100) / 100;
+  }
+  if (item.quantity > 0 && item.lineTotal > 0) {
+    return Math.round((item.lineTotal / item.quantity) * 100) / 100;
+  }
+  return null;
 }
 
 function weightQtyForHistory(item: PedidoOrder['items'][number]): number {
@@ -88,6 +105,8 @@ export default function PedidosPreciosPage() {
     for (const order of orders) {
       const d = orderPriceDate(order);
       for (const item of order.items) {
+        const unitPrice = unitPriceForPriceHistory(item);
+        if (unitPrice == null) continue;
         const key = item.supplierProductId ?? `name:${item.productName}`;
         const wq = weightQtyForHistory(item);
         const acc =
@@ -103,23 +122,31 @@ export default function PedidosPreciosPage() {
           date: d,
           supplier: order.supplierName,
           unit: item.unit,
-          price: item.pricePerUnit,
+          price: unitPrice,
+          orderCreatedAt: order.createdAt,
+          itemId: item.id,
         });
         acc.purchases.push({
           date: d,
           supplier: order.supplierName,
           qty: wq,
           unit: item.unit,
-          price: item.pricePerUnit,
+          price: unitPrice,
         });
-        acc.wSum += item.pricePerUnit * wq;
+        acc.wSum += unitPrice * wq;
         acc.wQty += wq;
         map.set(key, acc);
       }
     }
     return Array.from(map.values())
       .map((acc) => {
-        const ordered = [...acc.points].sort((a, b) => Date.parse(a.date) - Date.parse(b.date));
+        const ordered = [...acc.points].sort((a, b) => {
+          const t = Date.parse(a.date) - Date.parse(b.date);
+          if (t !== 0) return t;
+          const oc = Date.parse(a.orderCreatedAt) - Date.parse(b.orderCreatedAt);
+          if (oc !== 0) return oc;
+          return a.itemId.localeCompare(b.itemId);
+        });
         const base = ordered[0];
         const current = ordered[ordered.length - 1];
         const delta = Math.round((current.price - base.price) * 100) / 100;
