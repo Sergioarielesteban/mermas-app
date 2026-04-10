@@ -142,15 +142,23 @@ export default function PedidosPage() {
     void fetchOrders(supabase, localId)
       .then((rows) => {
         setOrders(rows);
-        const nextMarks: Record<string, 'ok' | 'bad'> = {};
-        for (const o of rows) {
-          if (o.status !== 'sent') continue;
-          for (const i of o.items) {
-            if (i.receivedQuantity >= i.quantity && i.quantity > 0 && !i.incidentType) nextMarks[i.id] = 'ok';
-            else if (i.incidentType) nextMarks[i.id] = 'bad';
+        // No machacar marcas con datos aún viejos del servidor (race: el fetch puede llegar antes que el update).
+        setQuickLineMarks((prev) => {
+          const next: Record<string, 'ok' | 'bad'> = {};
+          for (const o of rows) {
+            if (o.status !== 'sent') continue;
+            for (const i of o.items) {
+              const rq = Number(i.receivedQuantity);
+              const qq = Number(i.quantity);
+              const serverOk = qq > 0 && rq >= qq && !i.incidentType;
+              const serverBad = Boolean(i.incidentType);
+              if (serverOk) next[i.id] = 'ok';
+              else if (serverBad) next[i.id] = 'bad';
+              else if (prev[i.id]) next[i.id] = prev[i.id];
+            }
           }
-        }
-        setQuickLineMarks(nextMarks);
+          return next;
+        });
       })
       .catch((err: Error) => setMessage(err.message));
   }, [canUse, localId]);
