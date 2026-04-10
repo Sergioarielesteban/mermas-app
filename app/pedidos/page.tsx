@@ -82,6 +82,19 @@ function receivedOrderHasAttention(order: PedidoOrder) {
   return order.items.some((item) => Boolean(item.incidentType) || Boolean(item.incidentNotes?.trim()));
 }
 
+/** Pie del histórico: un solo texto si todas las líneas con incidencia coinciden; si no, una línea por producto. */
+function historicoIncidentFooterText(order: PedidoOrder): string | null {
+  const rows: { name: string; text: string }[] = [];
+  for (const item of order.items) {
+    const t = formatIncidentLine(item);
+    if (t) rows.push({ name: item.productName, text: t });
+  }
+  if (rows.length === 0) return null;
+  const unique = [...new Set(rows.map((r) => r.text))];
+  if (unique.length === 1) return unique[0];
+  return rows.map((r) => `${r.name}: ${r.text}`).join('\n');
+}
+
 export default function PedidosPage() {
   const router = useRouter();
   const { localCode, localName, localId, email } = useAuth();
@@ -581,6 +594,7 @@ export default function PedidosPage() {
           {receivedOrders.length === 0 ? <p className="text-sm text-zinc-500">No hay pedidos recibidos.</p> : null}
           {receivedOrders.map((order) => {
             const needsAttention = receivedOrderHasAttention(order);
+            const incidentFooterText = historicoIncidentFooterText(order);
             const cardTone = needsAttention
               ? 'bg-red-100 ring-2 ring-red-400/90'
               : 'bg-green-100 ring-2 ring-green-500/80';
@@ -608,11 +622,6 @@ export default function PedidosPage() {
                   );
                 })()}
               </button>
-              {needsAttention ? (
-                <p className="mt-2 text-xs font-semibold text-red-800">
-                  <span aria-hidden>{'\u{1F6A8}'}</span> Hay incidencia registrada en alguna línea
-                </p>
-              ) : null}
               <div className="mt-3 flex flex-wrap justify-center gap-2">
                 <button
                   type="button"
@@ -674,7 +683,6 @@ export default function PedidosPage() {
                     const inc = Boolean(item.incidentType) || Boolean(item.incidentNotes?.trim());
                     const isBad = inc;
                     const isOk = !inc && item.receivedQuantity >= item.quantity && item.quantity > 0;
-                    const incidentText = formatIncidentLine(item);
                     return (
                       <div key={item.id} className="rounded-xl bg-white p-3 ring-1 ring-zinc-200">
                         <div className="flex items-start justify-between gap-2">
@@ -686,7 +694,7 @@ export default function PedidosPage() {
                                 isOk
                                   ? 'border-[#16A34A] bg-[#16A34A] text-white'
                                   : isBad
-                                    ? 'border-[#B91C1C] bg-[#B91C1C] text-white'
+                                    ? 'border-amber-600 bg-amber-500 text-white'
                                     : 'border-zinc-300 bg-white text-zinc-400',
                               ].join(' ')}
                               title={isOk ? 'Recibido OK' : isBad ? 'Incidencia registrada' : 'Parcial'}
@@ -715,11 +723,6 @@ export default function PedidosPage() {
                           Subt:{' '}
                           <span className="font-semibold not-italic text-zinc-900">{item.lineTotal.toFixed(2)} €</span>
                         </p>
-                        {incidentText ? (
-                          <p className="mt-1 text-xs font-semibold text-[#B91C1C]">
-                            <span aria-hidden>{'\u{1F6A8}'}</span> Incidencia: {incidentText}
-                          </p>
-                        ) : null}
                         {unitCanDeclareScaleKgOnReception(item.unit) &&
                         item.receivedWeightKg != null &&
                         item.receivedWeightKg > 0 ? (
@@ -731,6 +734,16 @@ export default function PedidosPage() {
                       </div>
                     );
                   })}
+                  {needsAttention && incidentFooterText ? (
+                    <div className="rounded-xl border border-red-200 bg-red-50/50 px-3 py-2.5 text-left shadow-sm ring-1 ring-red-100">
+                      <p className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wide text-red-800">
+                        <span aria-hidden>{'\u{1F6A8}'}</span> Incidencia
+                      </p>
+                      <p className="mt-1.5 text-xs leading-relaxed text-zinc-800 whitespace-pre-wrap">
+                        {incidentFooterText}
+                      </p>
+                    </div>
+                  ) : null}
                 </div>
               ) : null}
             </div>
