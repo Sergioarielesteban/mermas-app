@@ -10,6 +10,7 @@ import { canAccessPedidos } from '@/lib/pedidos-access';
 import {
   fetchOrders,
   setOrderStatus,
+  unitSupportsReceivedWeightKg,
   updateOrderItemIncident,
   updateOrderItemPrice,
   updateOrderItemReceived,
@@ -69,15 +70,17 @@ export default function RecepcionPedidosPage() {
     });
   }, [orders, supplierFilter, dateFilter]);
 
-  const persistBandejaWeights = React.useCallback(
+  const persistPackagingReceivedKg = React.useCallback(
     async (supabase: SupabaseClient, items: PedidoOrder['items']) => {
       const weights = weightInputRef.current;
       for (const item of items) {
-        if (item.unit !== 'bandeja') continue;
+        if (!unitSupportsReceivedWeightKg(item.unit)) continue;
         const wRaw = weights[item.id];
         if (wRaw === undefined) continue;
         const wp = parseReceivedKg(wRaw);
-        if (wp === 'invalid') throw new Error('Peso recibido inválido en una línea de bandeja.');
+        if (wp === 'invalid') {
+          throw new Error('Peso recibido (kg) inválido en una línea de bandeja o caja.');
+        }
         await updateOrderItemReceivedWeightKg(supabase, localId!, item.id, wp);
       }
     },
@@ -103,7 +106,7 @@ export default function RecepcionPedidosPage() {
         }
 
         try {
-          await persistBandejaWeights(supabase, order.items);
+          await persistPackagingReceivedKg(supabase, order.items);
         } catch (err) {
           setMessage(err instanceof Error ? err.message : 'No se pudo guardar el peso recibido.');
           return;
@@ -165,7 +168,7 @@ export default function RecepcionPedidosPage() {
       .then(async () => {
         if (!shouldCloseOrder) return;
         try {
-          await persistBandejaWeights(supabase, closingItems);
+          await persistPackagingReceivedKg(supabase, closingItems);
         } catch (err) {
           setMessage(err instanceof Error ? err.message : 'No se pudo guardar el peso recibido.');
           await reloadOrders();
@@ -383,27 +386,32 @@ export default function RecepcionPedidosPage() {
                           ? ` · Extra: +${(item.receivedQuantity - item.quantity).toFixed(item.unit === 'kg' ? 2 : 0)} ${item.unit}`
                           : ''}
                       </p>
-                      {item.unit === 'bandeja' &&
+                      {unitSupportsReceivedWeightKg(item.unit) &&
                       item.estimatedKgPerUnit != null &&
                       item.estimatedKgPerUnit > 0 ? (
                         <p className="text-xs text-zinc-600">
                           Estimado pedido: {(item.quantity * item.estimatedKgPerUnit).toFixed(2)} kg (
-                          {item.estimatedKgPerUnit.toFixed(2)} kg/bandeja)
+                          {item.estimatedKgPerUnit.toFixed(2)} kg/{item.unit})
                           {item.receivedQuantity > 0
-                            ? ` · referencia con bandejas recibidas: ${(item.receivedQuantity * item.estimatedKgPerUnit).toFixed(2)} kg`
+                            ? ` · referencia con ${item.unit === 'caja' ? 'cajas' : 'bandejas'} recibidas: ${(item.receivedQuantity * item.estimatedKgPerUnit).toFixed(2)} kg`
                             : ''}
                         </p>
                       ) : null}
                       <p className="text-xs text-zinc-500">
                         p/unit: {item.pricePerUnit.toFixed(2)} €/{item.unit} · subt.: {item.lineTotal.toFixed(2)} €
                       </p>
-                      {item.unit === 'bandeja' ? (
+                      {unitSupportsReceivedWeightKg(item.unit) ? (
                         <div className="mt-1 flex flex-wrap items-center gap-2">
-                          <label className="text-xs font-semibold text-zinc-600">Peso recibido (kg)</label>
+                          <label className="text-xs font-semibold text-zinc-600">
+                            Kg reales (báscula){' '}
+                            <span className="font-normal text-zinc-400">· opcional</span>
+                          </label>
                           <input
                             type="text"
                             inputMode="decimal"
-                            placeholder="Balanza"
+                            autoComplete="off"
+                            autoCorrect="off"
+                            placeholder="Ej: 12,5"
                             value={
                               weightInputByItemId[item.id] ??
                               (item.receivedWeightKg != null ? String(item.receivedWeightKg) : '')
@@ -412,7 +420,7 @@ export default function RecepcionPedidosPage() {
                               setWeightInputByItemId((prev) => ({ ...prev, [item.id]: e.target.value }))
                             }
                             onBlur={() => commitWeightInput(order.id, item.id)}
-                            className="h-9 w-28 rounded-lg border border-zinc-300 bg-white px-2 text-sm font-semibold text-zinc-900 outline-none"
+                            className="min-h-9 min-w-[6.5rem] flex-1 rounded-lg border border-zinc-300 bg-white px-2 py-2 text-sm font-semibold text-zinc-900 outline-none sm:max-w-[8rem]"
                           />
                           {item.receivedWeightKg != null && item.receivedWeightKg > 0 ? (
                             <span className="text-xs text-zinc-500">

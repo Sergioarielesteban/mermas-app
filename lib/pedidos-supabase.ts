@@ -1,6 +1,11 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Unit } from '@/lib/types';
 
+/** Bandeja o caja: se pide por envase; en recepción se puede anotar kg reales (báscula). */
+export function unitSupportsReceivedWeightKg(unit: Unit): boolean {
+  return unit === 'bandeja' || unit === 'caja';
+}
+
 export type PedidoStatus = 'draft' | 'sent' | 'received';
 
 export type PedidoSupplierProduct = {
@@ -11,7 +16,7 @@ export type PedidoSupplierProduct = {
   vatRate: number;
   parStock: number;
   isActive: boolean;
-  /** Solo bandeja: kg estimados por bandeja (referencia para pedido/recepción). */
+  /** Bandeja/caja: kg estimados por envase (referencia). */
   estimatedKgPerUnit?: number;
 };
 
@@ -32,9 +37,9 @@ export type PedidoOrderItem = {
   pricePerUnit: number;
   vatRate: number;
   lineTotal: number;
-  /** Copia del catálogo al guardar el pedido (bandeja). */
+  /** Copia del catálogo al guardar (bandeja/caja). */
   estimatedKgPerUnit?: number;
-  /** Peso real en recepción (kg), solo bandeja. */
+  /** Peso real en recepción (kg), bandeja/caja. */
   receivedWeightKg?: number | null;
   incidentType?: 'missing' | 'damaged' | 'wrong-item' | null;
   incidentNotes?: string;
@@ -201,7 +206,7 @@ export async function createSupplierProduct(
   },
 ) {
   const est =
-    input.unit === 'bandeja' &&
+    unitSupportsReceivedWeightKg(input.unit) &&
     input.estimatedKgPerUnit != null &&
     Number.isFinite(input.estimatedKgPerUnit) &&
     input.estimatedKgPerUnit > 0
@@ -240,7 +245,7 @@ export async function updateSupplierProduct(
   },
 ) {
   const est =
-    input.unit === 'bandeja' &&
+    unitSupportsReceivedWeightKg(input.unit) &&
     input.estimatedKgPerUnit != null &&
     Number.isFinite(input.estimatedKgPerUnit) &&
     input.estimatedKgPerUnit > 0
@@ -254,7 +259,7 @@ export async function updateSupplierProduct(
       price_per_unit: Math.round(input.pricePerUnit * 100) / 100,
       vat_rate: Math.max(0, Math.round((input.vatRate ?? 0) * 10000) / 10000),
       par_stock: Math.max(0, Math.round((input.parStock ?? 0) * 100) / 100),
-      estimated_kg_per_unit: input.unit === 'bandeja' ? est : null,
+      estimated_kg_per_unit: unitSupportsReceivedWeightKg(input.unit) ? est : null,
     })
     .eq('id', supplierProductId)
     .eq('local_id', localId)
@@ -418,14 +423,14 @@ export async function saveOrder(
         vat_rate: Math.max(0, Math.round((item.vatRate ?? 0) * 10000) / 10000),
         line_total: Math.round(item.lineTotal * 100) / 100,
         estimated_kg_per_unit:
-          item.unit === 'bandeja' &&
+          unitSupportsReceivedWeightKg(item.unit) &&
           item.estimatedKgPerUnit != null &&
           Number.isFinite(item.estimatedKgPerUnit) &&
           item.estimatedKgPerUnit > 0
             ? Math.round(item.estimatedKgPerUnit * 1000) / 1000
             : null,
         received_weight_kg:
-          item.unit === 'bandeja' &&
+          unitSupportsReceivedWeightKg(item.unit) &&
           item.receivedWeightKg != null &&
           Number.isFinite(item.receivedWeightKg) &&
           item.receivedWeightKg > 0

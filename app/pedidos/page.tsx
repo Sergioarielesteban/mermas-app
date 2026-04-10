@@ -484,23 +484,39 @@ export default function PedidosPage() {
                 </button>
               </div>
               {expandedHistoricoId === order.id ? (
-                <div className="mt-2 space-y-1 text-center">
+                <div className="mt-2 space-y-2 text-left">
                   {order.items.map((item) => {
-                    const priceDiff = itemPriceDiffersFromCatalog(item, catalogPriceByProductId);
                     const inc = Boolean(item.incidentType) || Boolean(item.incidentNotes?.trim());
-                    const flag =
-                      inc || priceDiff
-                        ? ` · ${[inc ? 'incidencia' : null, priceDiff ? 'precio recepción ≠ catálogo' : null].filter(Boolean).join(', ')}`
-                        : '';
+                    const isBad = inc || item.receivedQuantity < item.quantity;
+                    const isOk = !isBad && item.receivedQuantity >= item.quantity && item.quantity > 0;
                     return (
-                      <p
+                      <div
                         key={item.id}
-                        className={inc || priceDiff ? 'text-xs font-semibold text-red-900' : 'text-xs text-zinc-600'}
+                        className="flex items-center justify-between gap-2 rounded-lg bg-white p-2 ring-1 ring-zinc-200"
                       >
-                        {item.productName}: pedido {item.quantity} / recibido {item.receivedQuantity} {item.unit} ·{' '}
-                        {item.pricePerUnit.toFixed(2)} €/{item.unit}
-                        {flag}
-                      </p>
+                        <p className="min-w-0 flex-1 text-xs text-zinc-700">
+                          {item.productName}: {item.receivedQuantity} {item.unit}
+                        </p>
+                        <div className="flex shrink-0 items-center gap-2">
+                          <span
+                            className={[
+                              'grid h-7 w-7 place-items-center rounded-full border text-sm font-black',
+                              isOk
+                                ? 'border-[#16A34A] bg-[#16A34A] text-white'
+                                : isBad
+                                  ? 'border-[#B91C1C] bg-[#B91C1C] text-white'
+                                  : 'border-zinc-300 bg-white text-zinc-400',
+                            ].join(' ')}
+                            title={isOk ? 'Recibido OK' : isBad ? 'Incidencia o cantidad pendiente' : 'Parcial'}
+                            aria-hidden
+                          >
+                            {isOk ? '\u2713' : isBad ? '\u2715' : '\u00B7'}
+                          </span>
+                          <span className="w-14 text-right text-xs font-semibold tabular-nums text-zinc-900">
+                            {item.pricePerUnit.toFixed(2)} €
+                          </span>
+                        </div>
+                      </div>
                     );
                   })}
                 </div>

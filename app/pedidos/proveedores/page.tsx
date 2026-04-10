@@ -13,6 +13,7 @@ import {
   setSupplierProductActive,
   updateSupplier,
   updateSupplierProduct,
+  unitSupportsReceivedWeightKg,
   type PedidoSupplier,
 } from '@/lib/pedidos-supabase';
 import type { Unit } from '@/lib/types';
@@ -50,7 +51,7 @@ function parseDecimal(raw: string) {
   return Math.round(value * 100) / 100;
 }
 
-/** Kg estimado por bandeja (3 decimales). Vacío = sin estimación. */
+/** Kg estimado por bandeja/caja (3 decimales). Vacío = sin estimación. */
 function parseKgEstimate(raw: string) {
   const normalized = raw.trim().replace(/\s/g, '').replace(',', '.');
   if (normalized === '') return null;
@@ -110,7 +111,7 @@ export default function ProveedoresPage() {
                 price: String(p.pricePerUnit),
                 vatRate: String(p.vatRate ?? 0),
                 estimatedKg:
-                  p.unit === 'bandeja' && p.estimatedKgPerUnit != null && p.estimatedKgPerUnit > 0
+                  unitSupportsReceivedWeightKg(p.unit) && p.estimatedKgPerUnit != null && p.estimatedKgPerUnit > 0
                     ? String(p.estimatedKgPerUnit)
                     : '',
               };
@@ -160,9 +161,9 @@ export default function ProveedoresPage() {
     const supabase = getSupabaseClient();
     if (!supabase) return setMessage('Supabase no disponible en esta sesión.');
     let estimatedKgPerUnit: number | null = null;
-    if (productUnit === 'bandeja') {
+    if (unitSupportsReceivedWeightKg(productUnit)) {
       const parsedKg = parseKgEstimate(productEstimatedKg);
-      if (parsedKg === undefined) return setMessage('Kg estimado por bandeja inválido (usa un número > 0 o déjalo vacío).');
+      if (parsedKg === undefined) return setMessage('Kg estimado por envase inválido (usa un número > 0 o déjalo vacío).');
       estimatedKgPerUnit = parsedKg;
     }
     void createSupplierProduct(supabase, localId, productSupplierId, {
@@ -217,9 +218,9 @@ export default function ProveedoresPage() {
       return setMessage('IVA inválido. Usa 0,21 o 0,10.');
     }
     let estimatedKgPerUnit: number | null = null;
-    if (draft.unit === 'bandeja') {
+    if (unitSupportsReceivedWeightKg(draft.unit)) {
       const parsedKg = parseKgEstimate(draft.estimatedKg ?? '');
-      if (parsedKg === undefined) return setMessage('Kg estimado por bandeja inválido (usa un número > 0 o déjalo vacío).');
+      if (parsedKg === undefined) return setMessage('Kg estimado por envase inválido (usa un número > 0 o déjalo vacío).');
       estimatedKgPerUnit = parsedKg;
     }
     const supabase = getSupabaseClient();
@@ -378,11 +379,11 @@ export default function ProveedoresPage() {
               className="h-10 rounded-xl border border-zinc-300 bg-white px-3 text-sm text-zinc-900 placeholder:text-zinc-500 outline-none"
             />
           </div>
-          {productUnit === 'bandeja' ? (
+          {unitSupportsReceivedWeightKg(productUnit) ? (
             <input
               value={productEstimatedKg}
               onChange={(e) => setProductEstimatedKg(e.target.value)}
-              placeholder="Kg estimados por bandeja (opcional)"
+              placeholder="Kg estimados por envase — bandeja/caja (opcional)"
               className="h-10 rounded-xl border border-zinc-300 bg-white px-3 text-sm text-zinc-900 placeholder:text-zinc-500 outline-none"
             />
           ) : null}
@@ -483,7 +484,7 @@ export default function ProveedoresPage() {
                             vatRate: prev[p.id]?.vatRate ?? String(p.vatRate ?? 0),
                             estimatedKg:
                               prev[p.id]?.estimatedKg ??
-                              (p.unit === 'bandeja' && p.estimatedKgPerUnit != null && p.estimatedKgPerUnit > 0
+                              (unitSupportsReceivedWeightKg(p.unit) && p.estimatedKgPerUnit != null && p.estimatedKgPerUnit > 0
                                 ? String(p.estimatedKgPerUnit)
                                 : ''),
                           },
@@ -504,8 +505,8 @@ export default function ProveedoresPage() {
                 </div>
                 <p className="pt-1 text-xs font-semibold text-zinc-600">
                   {p.pricePerUnit.toFixed(2)} €/{p.unit} · IVA {(p.vatRate * 100).toFixed(0)}%
-                  {p.unit === 'bandeja' && p.estimatedKgPerUnit != null && p.estimatedKgPerUnit > 0
-                    ? ` · ~${p.estimatedKgPerUnit} kg/bandeja`
+                  {unitSupportsReceivedWeightKg(p.unit) && p.estimatedKgPerUnit != null && p.estimatedKgPerUnit > 0
+                    ? ` · ~${p.estimatedKgPerUnit} kg/${p.unit}`
                     : ''}
                 </p>
                 {editingProductId === p.id ? (
@@ -575,7 +576,7 @@ export default function ProveedoresPage() {
                         className="h-9 rounded-lg border border-zinc-300 bg-white px-3 text-sm text-zinc-900 placeholder:text-zinc-500 outline-none"
                       />
                     </div>
-                    {productDrafts[p.id]?.unit === 'bandeja' ? (
+                    {unitSupportsReceivedWeightKg(productDrafts[p.id]?.unit ?? p.unit) ? (
                       <input
                         value={productDrafts[p.id]?.estimatedKg ?? ''}
                         onChange={(e) =>
@@ -587,7 +588,7 @@ export default function ProveedoresPage() {
                             },
                           }))
                         }
-                        placeholder="Kg estimados por bandeja (opcional)"
+                        placeholder="Kg estimados por envase (opcional)"
                         className="h-9 rounded-lg border border-zinc-300 bg-white px-3 text-sm text-zinc-900 placeholder:text-zinc-500 outline-none"
                       />
                     ) : null}

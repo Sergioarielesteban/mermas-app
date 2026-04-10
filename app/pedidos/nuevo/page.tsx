@@ -6,7 +6,14 @@ import React from 'react';
 import { useAuth } from '@/components/AuthProvider';
 import { getSupabaseClient } from '@/lib/supabase-client';
 import { canAccessPedidos } from '@/lib/pedidos-access';
-import { fetchOrders, fetchSuppliersWithProducts, saveOrder, type PedidoOrderItem, type PedidoSupplier } from '@/lib/pedidos-supabase';
+import {
+  fetchOrders,
+  fetchSuppliersWithProducts,
+  saveOrder,
+  unitSupportsReceivedWeightKg,
+  type PedidoOrderItem,
+  type PedidoSupplier,
+} from '@/lib/pedidos-supabase';
 
 type QtyMap = Record<string, number>;
 
@@ -176,7 +183,7 @@ export default function NuevoPedidoPage() {
         pricePerUnit: p.pricePerUnit,
         vatRate: p.vatRate ?? 0,
         lineTotal,
-        ...(p.unit === 'bandeja' && p.estimatedKgPerUnit != null && p.estimatedKgPerUnit > 0
+        ...(unitSupportsReceivedWeightKg(p.unit) && p.estimatedKgPerUnit != null && p.estimatedKgPerUnit > 0
           ? { estimatedKgPerUnit: p.estimatedKgPerUnit }
           : {}),
       };
