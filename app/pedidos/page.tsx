@@ -9,13 +9,16 @@ import PedidosPremiaLockedScreen from '@/components/PedidosPremiaLockedScreen';
 import { canAccessPedidos, canUsePedidosModule } from '@/lib/pedidos-access';
 import { formatIncidentLine, formatQuantityWithUnit, unitPriceCatalogSuffix } from '@/lib/pedidos-format';
 import {
+  billingQuantityForLine,
   deleteOrder,
   fetchOrders,
   fetchSuppliersWithProducts,
   reopenReceivedOrderToSent,
-  unitSupportsReceivedWeightKg,
+  unitCanDeclareScaleKgOnReception,
   updateOrderItemIncident,
   updateOrderItemReceived,
+  updateOrderItemReceivedWeightKg,
+  updateOrderItemPrice,
   type PedidoOrder,
   type PedidoSupplier,
 } from '@/lib/pedidos-supabase';
@@ -129,13 +132,26 @@ export default function PedidosPage() {
   /** Marca visual por línea (varias a la vez); evita que un refetch parcial “borre” el estado al ir recibiendo. */
   const [quickLineMarks, setQuickLineMarks] = React.useState<Record<string, 'ok' | 'bad'>>({});
 
-  const quickReceiveItem = (orderId: string, itemId: string, expectedQty: number, markOk: boolean) => {
+  const quickReceiveItem = (orderId: string, line: PedidoOrder['items'][number], markOk: boolean) => {
     if (!localId) return;
     const supabase = getSupabaseClient();
     if (!supabase) return;
-    const nextReceived = markOk ? expectedQty : 0;
+    const itemId = line.id;
+    const nextReceived = markOk ? line.quantity : 0;
     const nextIncidentType: PedidoOrder['items'][number]['incidentType'] = markOk ? null : 'missing';
     const nextIncidentNotes = markOk ? undefined : 'No recibido';
+
+    const merged = markOk
+      ? line.unit === 'kg'
+        ? { ...line, receivedQuantity: nextReceived, receivedWeightKg: null as number | null }
+        : { ...line, receivedQuantity: nextReceived }
+      : {
+          ...line,
+          receivedQuantity: 0,
+          receivedWeightKg: line.unit === 'kg' ? null : line.receivedWeightKg,
+        };
+    const billingQty = markOk ? billingQuantityForLine(merged) : 0;
+    const lineTotal = Math.round(line.pricePerUnit * billingQty * 100) / 100;
 
     setQuickLineMarks((prev) => ({ ...prev, [itemId]: markOk ? 'ok' : 'bad' }));
 
@@ -147,18 +163,28 @@ export default function PedidosPage() {
           return {
             ...item,
             receivedQuantity: nextReceived,
+            receivedWeightKg: merged.receivedWeightKg,
             incidentType: nextIncidentType,
             incidentNotes: nextIncidentNotes,
+            lineTotal,
           };
         });
         return { ...order, items: nextItems };
       }),
     );
 
+    const afterReceive = async () => {
+      if (line.unit === 'kg') {
+        await updateOrderItemReceivedWeightKg(supabase, localId, itemId, null);
+      }
+      await updateOrderItemPrice(supabase, localId, itemId, line.pricePerUnit, billingQty);
+    };
+
     void Promise.all([
       updateOrderItemReceived(supabase, localId, itemId, nextReceived),
       updateOrderItemIncident(supabase, localId, itemId, markOk ? { type: null, notes: '' } : { type: 'missing', notes: 'No recibido' }),
     ])
+      .then(() => afterReceive())
       .then(() => reloadOrders())
       .catch((err: Error) => {
         void reloadOrders();
@@ -396,7 +422,7 @@ export default function PedidosPage() {
                           <div className="flex shrink-0 items-center gap-2">
                             <button
                               type="button"
-                              onClick={() => quickReceiveItem(order.id, item.id, item.quantity, true)}
+                              onClick={() => quickReceiveItem(order.id, item, true)}
                               className={[
                                 'grid h-7 w-7 place-items-center rounded-full border text-sm font-black',
                                 isOk ? 'border-[#16A34A] bg-[#16A34A] text-white' : 'border-zinc-300 bg-white text-zinc-400',
@@ -408,7 +434,7 @@ export default function PedidosPage() {
                             </button>
                             <button
                               type="button"
-                              onClick={() => quickReceiveItem(order.id, item.id, item.quantity, false)}
+                              onClick={() => quickReceiveItem(order.id, item, false)}
                               className={[
                                 'grid h-7 w-7 place-items-center rounded-full border text-sm font-black',
                                 isBad ? 'border-[#B91C1C] bg-[#B91C1C] text-white' : 'border-zinc-300 bg-white text-zinc-400',
@@ -439,7 +465,7 @@ export default function PedidosPage() {
                         {incidentText ? (
                           <p className="text-xs font-semibold text-[#B91C1C]">Incidencia: {incidentText}</p>
                         ) : null}
-                        {unitSupportsReceivedWeightKg(item.unit) &&
+                        {unitCanDeclareScaleKgOnReception(item.unit) &&
                         item.receivedWeightKg != null &&
                         item.receivedWeightKg > 0 ? (
                           <p className="text-xs text-zinc-700">
@@ -609,7 +635,7 @@ export default function PedidosPage() {
                         {incidentText ? (
                           <p className="mt-1 text-xs font-semibold text-[#B91C1C]">Incidencia: {incidentText}</p>
                         ) : null}
-                        {unitSupportsReceivedWeightKg(item.unit) &&
+                        {unitCanDeclareScaleKgOnReception(item.unit) &&
                         item.receivedWeightKg != null &&
                         item.receivedWeightKg > 0 ? (
                           <p className="mt-1 text-xs text-zinc-800">

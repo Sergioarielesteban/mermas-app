@@ -10,8 +10,10 @@ import PedidosPremiaLockedScreen from '@/components/PedidosPremiaLockedScreen';
 import { canAccessPedidos, canUsePedidosModule } from '@/lib/pedidos-access';
 import { formatQuantityWithUnit, unitPriceCatalogSuffix } from '@/lib/pedidos-format';
 import {
+  billingQuantityForLine,
   fetchOrders,
   setOrderStatus,
+  unitCanDeclareScaleKgOnReception,
   unitSupportsReceivedWeightKg,
   updateOrderItemIncident,
   updateOrderItemPrice,
@@ -28,6 +30,20 @@ function parseReceivedKg(raw: string): number | null | 'invalid' {
   return Math.round(n * 1000) / 1000;
 }
 
+/** Aplica el valor del campo peso (si el usuario lo tocó) sobre la línea para facturación. */
+function itemWithAppliedKgInputField(
+  item: PedidoOrder['items'][number],
+  weightRef: Record<string, string>,
+): PedidoOrder['items'][number] {
+  if (item.unit !== 'kg') return item;
+  const wRaw = weightRef[item.id];
+  if (wRaw === undefined) return item;
+  const wp = parseReceivedKg(wRaw);
+  if (wp === 'invalid') throw new Error('Peso recibido (kg) inválido en una línea de producto al peso.');
+  if (wp == null) return { ...item, receivedWeightKg: null };
+  return { ...item, receivedWeightKg: wp, receivedQuantity: wp };
+}
+
 export default function RecepcionPedidosPage() {
   const searchParams = useSearchParams();
   const { localCode, localName, localId, email } = useAuth();
@@ -42,6 +58,14 @@ export default function RecepcionPedidosPage() {
   const [weightInputByItemId, setWeightInputByItemId] = React.useState<Record<string, string>>({});
   const weightInputRef = React.useRef<Record<string, string>>({});
   weightInputRef.current = weightInputByItemId;
+  const priceInputRef = React.useRef<Record<string, string>>({});
+  priceInputRef.current = priceInputByItemId;
+
+  const getLinePrice = React.useCallback((item: PedidoOrder['items'][number]) => {
+    const raw = priceInputRef.current[item.id];
+    const parsed = raw == null ? item.pricePerUnit : Number(raw.replace(',', '.'));
+    return Number.isNaN(parsed) || parsed < 0 ? item.pricePerUnit : Math.round(parsed * 100) / 100;
+  }, []);
   const [incidentOpenByItemId, setIncidentOpenByItemId] = React.useState<Record<string, boolean>>({});
   const [incidentNoteByItemId, setIncidentNoteByItemId] = React.useState<Record<string, string>>({});
   const [showReceivedBanner, setShowReceivedBanner] = React.useState(false);
@@ -96,33 +120,43 @@ export default function RecepcionPedidosPage() {
     if (!supabase) return;
     void (async () => {
       try {
-        const priceUpdates = await Promise.allSettled(order.items.map(async (item) => {
-          const raw = priceInputByItemId[item.id];
+        for (const item of order.items) {
+          const raw = priceInputRef.current[item.id];
           const parsed = raw == null ? item.pricePerUnit : Number(raw.replace(',', '.'));
           const nextPrice = Number.isNaN(parsed) || parsed < 0 ? item.pricePerUnit : Math.round(parsed * 100) / 100;
-          await updateOrderItemPrice(supabase, localId, item.id, nextPrice, item.quantity);
-        }));
-        const failedPrice = priceUpdates.filter((r) => r.status === 'rejected');
-        if (failedPrice.length > 0) {
-          setMessage(`No se pudieron guardar ${failedPrice.length} precios del pedido.`);
-          return;
+
+          let recvQty = item.quantity;
+
+          if (item.unit === 'kg') {
+            const wRaw = weightInputRef.current[item.id];
+            if (wRaw !== undefined) {
+              const wp = parseReceivedKg(wRaw);
+              if (wp === 'invalid') {
+                setMessage('Peso recibido (kg) inválido en una línea de producto al peso.');
+                return;
+              }
+              await updateOrderItemReceivedWeightKg(supabase, localId, item.id, wp);
+              recvQty = wp == null ? item.quantity : wp;
+            } else {
+              await updateOrderItemReceivedWeightKg(supabase, localId, item.id, null);
+              recvQty = item.quantity;
+            }
+          } else if (unitSupportsReceivedWeightKg(item.unit)) {
+            const wRaw = weightInputRef.current[item.id];
+            if (wRaw !== undefined) {
+              const wp = parseReceivedKg(wRaw);
+              if (wp === 'invalid') {
+                setMessage('Peso recibido (kg) inválido en una línea de bandeja o caja.');
+                return;
+              }
+              await updateOrderItemReceivedWeightKg(supabase, localId, item.id, wp);
+            }
+          }
+
+          await updateOrderItemReceived(supabase, localId, item.id, recvQty);
+          await updateOrderItemPrice(supabase, localId, item.id, nextPrice, recvQty);
         }
 
-        try {
-          await persistPackagingReceivedKg(supabase, order.items);
-        } catch (err) {
-          setMessage(err instanceof Error ? err.message : 'No se pudo guardar el peso recibido.');
-          return;
-        }
-
-        const updates = await Promise.allSettled(
-          order.items.map((item) => updateOrderItemReceived(supabase, localId, item.id, item.quantity)),
-        );
-        const failed = updates.filter((r) => r.status === 'rejected');
-        if (failed.length > 0) {
-          setMessage(`No se pudieron actualizar ${failed.length} líneas del pedido.`);
-          return;
-        }
         await setOrderStatus(supabase, localId, order.id, 'received');
         setMessage('Pedido marcado como recibido.');
         setShowReceivedBanner(true);
@@ -145,33 +179,74 @@ export default function RecepcionPedidosPage() {
     [],
   );
 
-  const changeReceived = (orderId: string, itemId: string, current: number, step: number) => {
+  const changeReceived = (orderId: string, line: PedidoOrder['items'][number], step: number) => {
     if (!localId) return;
     const supabase = getSupabaseClient();
     if (!supabase) return;
+    const itemId = line.id;
+    const current = line.receivedQuantity;
     const next = Math.max(0, Math.round((current + step) * 100) / 100);
     if (next === current) return;
 
+    const price = getLinePrice(line);
     let shouldCloseOrder = false;
     let closingItems: PedidoOrder['items'] = [];
-    // Optimistic UI: reflect line changes instantly.
+
     setOrders((prev) =>
       prev.map((order) => {
         if (order.id !== orderId) return order;
-        const nextItems = order.items.map((item) =>
-          item.id === itemId ? { ...item, receivedQuantity: next } : item,
-        );
+        const nextItems = order.items.map((item) => {
+          if (item.id !== itemId) return item;
+          const merged =
+            item.unit === 'kg'
+              ? { ...item, receivedQuantity: next, receivedWeightKg: null as number | null }
+              : { ...item, receivedQuantity: next };
+          const lt = Math.round(price * billingQuantityForLine(merged) * 100) / 100;
+          return { ...merged, lineTotal: lt };
+        });
         shouldCloseOrder = nextItems.every((item) => item.receivedQuantity >= item.quantity);
         if (shouldCloseOrder) closingItems = nextItems;
         return { ...order, items: nextItems };
       }),
     );
 
+    const mergedForDb =
+      line.unit === 'kg'
+        ? { ...line, receivedQuantity: next, receivedWeightKg: null as number | null }
+        : { ...line, receivedQuantity: next };
+
     void updateOrderItemReceived(supabase, localId, itemId, next)
       .then(async () => {
+        if (line.unit === 'kg') {
+          await updateOrderItemReceivedWeightKg(supabase, localId, itemId, null);
+        }
+        await updateOrderItemPrice(supabase, localId, itemId, price, billingQuantityForLine(mergedForDb));
         if (!shouldCloseOrder) return;
         try {
           await persistPackagingReceivedKg(supabase, closingItems);
+          for (const row of closingItems) {
+            if (row.unit !== 'kg') continue;
+            const wRaw = weightInputRef.current[row.id];
+            if (wRaw === undefined) continue;
+            const wp = parseReceivedKg(wRaw);
+            if (wp === 'invalid') {
+              throw new Error('Peso recibido (kg) inválido en una línea de producto al peso.');
+            }
+            await updateOrderItemReceivedWeightKg(supabase, localId, row.id, wp);
+            const rq = wp == null ? row.receivedQuantity : wp;
+            await updateOrderItemReceived(supabase, localId, row.id, rq);
+          }
+          for (const row of closingItems) {
+            let merged = row;
+            try {
+              merged = itemWithAppliedKgInputField(row, weightInputRef.current);
+            } catch (err) {
+              setMessage(err instanceof Error ? err.message : 'No se pudo guardar el peso recibido.');
+              await reloadOrders();
+              return;
+            }
+            await updateOrderItemPrice(supabase, localId, row.id, getLinePrice(row), billingQuantityForLine(merged));
+          }
         } catch (err) {
           setMessage(err instanceof Error ? err.message : 'No se pudo guardar el peso recibido.');
           await reloadOrders();
@@ -182,7 +257,6 @@ export default function RecepcionPedidosPage() {
         await reloadOrders();
       })
       .catch((err: Error) => {
-        // Re-sync from backend if optimistic update failed.
         void reloadOrders();
         setMessage(err.message);
       });
@@ -199,20 +273,24 @@ export default function RecepcionPedidosPage() {
     }
     const nextPrice = Math.round(parsed * 100) / 100;
 
-    let itemQuantity = 0;
+    let billingQty = 0;
     setOrders((prev) =>
       prev.map((order) => {
         if (order.id !== orderId) return order;
         const nextItems = order.items.map((item) => {
           if (item.id !== itemId) return item;
-          itemQuantity = item.quantity;
-          return { ...item, pricePerUnit: nextPrice, lineTotal: Math.round(nextPrice * item.quantity * 100) / 100 };
+          billingQty = billingQuantityForLine(item);
+          return {
+            ...item,
+            pricePerUnit: nextPrice,
+            lineTotal: Math.round(nextPrice * billingQty * 100) / 100,
+          };
         });
         return { ...order, items: nextItems };
       }),
     );
 
-    void updateOrderItemPrice(supabase, localId, itemId, nextPrice, itemQuantity).catch((err: Error) => {
+    void updateOrderItemPrice(supabase, localId, itemId, nextPrice, billingQty).catch((err: Error) => {
       void reloadOrders();
       setMessage(err.message);
     });
@@ -225,11 +303,11 @@ export default function RecepcionPedidosPage() {
     setOrders((prev) =>
       prev.map((order) => {
         if (order.id !== orderId) return order;
-        const nextItems = order.items.map((item) =>
-          item.id === itemId
-            ? { ...item, pricePerUnit: nextPrice, lineTotal: Math.round(nextPrice * item.quantity * 100) / 100 }
-            : item,
-        );
+        const nextItems = order.items.map((item) => {
+          if (item.id !== itemId) return item;
+          const bq = billingQuantityForLine(item);
+          return { ...item, pricePerUnit: nextPrice, lineTotal: Math.round(nextPrice * bq * 100) / 100 };
+        });
         return { ...order, items: nextItems };
       }),
     );
@@ -255,6 +333,55 @@ export default function RecepcionPedidosPage() {
       setMessage('Peso recibido inválido.');
       return;
     }
+
+    const orderSnap = orders.find((o) => o.id === orderId);
+    const itemSnap = orderSnap?.items.find((i) => i.id === itemId);
+    if (!itemSnap) return;
+
+    if (itemSnap.unit === 'kg') {
+      const price = getLinePrice(itemSnap);
+      void (async () => {
+        try {
+          if (parsed == null) {
+            await updateOrderItemReceivedWeightKg(supabase, localId, itemId, null);
+            await updateOrderItemReceived(supabase, localId, itemId, itemSnap.receivedQuantity);
+            await updateOrderItemPrice(supabase, localId, itemId, price, itemSnap.receivedQuantity);
+          } else {
+            await updateOrderItemReceivedWeightKg(supabase, localId, itemId, parsed);
+            await updateOrderItemReceived(supabase, localId, itemId, parsed);
+            await updateOrderItemPrice(supabase, localId, itemId, price, parsed);
+          }
+          setOrders((prev) =>
+            prev.map((order) => {
+              if (order.id !== orderId) return order;
+              return {
+                ...order,
+                items: order.items.map((item) => {
+                  if (item.id !== itemId) return item;
+                  if (parsed == null) {
+                    const lt = Math.round(price * item.receivedQuantity * 100) / 100;
+                    return { ...item, receivedWeightKg: null, lineTotal: lt };
+                  }
+                  const lt = Math.round(price * parsed * 100) / 100;
+                  return { ...item, receivedWeightKg: parsed, receivedQuantity: parsed, lineTotal: lt };
+                }),
+              };
+            }),
+          );
+          setWeightInputByItemId((prev) => {
+            const next = { ...prev };
+            if (parsed == null) delete next[itemId];
+            else next[itemId] = String(parsed);
+            return next;
+          });
+        } catch (err: unknown) {
+          void reloadOrders();
+          setMessage(err instanceof Error ? err.message : 'No se pudo guardar el peso.');
+        }
+      })();
+      return;
+    }
+
     void updateOrderItemReceivedWeightKg(supabase, localId, itemId, parsed)
       .then(() => {
         setOrders((prev) =>
@@ -408,11 +535,20 @@ export default function RecepcionPedidosPage() {
                         p/unit: {item.pricePerUnit.toFixed(2)} €/{unitPriceCatalogSuffix[item.unit]} · subt.:{' '}
                         {item.lineTotal.toFixed(2)} €
                       </p>
-                      {unitSupportsReceivedWeightKg(item.unit) ? (
+                      {unitCanDeclareScaleKgOnReception(item.unit) ? (
                         <div className="mt-1 flex flex-wrap items-center gap-2">
                           <label className="text-xs font-semibold text-zinc-600">
-                            Kg reales (báscula){' '}
-                            <span className="font-normal text-zinc-400">· opcional</span>
+                            {item.unit === 'kg' ? (
+                              <>
+                                Peso recibido (kg){' '}
+                                <span className="font-normal text-zinc-400">· actualiza albarán</span>
+                              </>
+                            ) : (
+                              <>
+                                Kg reales (báscula){' '}
+                                <span className="font-normal text-zinc-400">· opcional</span>
+                              </>
+                            )}
                           </label>
                           <input
                             type="text"
@@ -441,7 +577,7 @@ export default function RecepcionPedidosPage() {
                         <button
                           type="button"
                           onClick={() =>
-                            changeReceived(order.id, item.id, item.receivedQuantity, -step)
+                            changeReceived(order.id, item, -step)
                           }
                           className="grid h-11 w-11 place-items-center rounded-full border border-zinc-300 bg-white text-2xl font-black leading-none text-zinc-700"
                         >
@@ -450,7 +586,7 @@ export default function RecepcionPedidosPage() {
                         <button
                           type="button"
                           onClick={() =>
-                            changeReceived(order.id, item.id, item.receivedQuantity, step)
+                            changeReceived(order.id, item, step)
                           }
                           className="grid h-11 w-11 place-items-center rounded-full bg-[#D32F2F] text-2xl font-black leading-none text-white"
                         >

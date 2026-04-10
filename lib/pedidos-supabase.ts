@@ -1,9 +1,22 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Unit } from '@/lib/types';
 
-/** Bandeja o caja: se pide por envase; en recepción se puede anotar kg reales (báscula). */
+/** Bandeja o caja: referencia kg por envase en catálogo; en recepción peso báscula opcional (no cambia el subtotal). */
 export function unitSupportsReceivedWeightKg(unit: Unit): boolean {
   return unit === 'bandeja' || unit === 'caja';
+}
+
+/** Líneas donde se puede anotar peso en báscula al recibir (kg: el peso actualiza subtotal e IVA del albarán). */
+export function unitCanDeclareScaleKgOnReception(unit: Unit): boolean {
+  return unit === 'kg' || unitSupportsReceivedWeightKg(unit);
+}
+
+/** Cantidad que multiplica el precio unitario en albarán (kg reales si están declarados; si no, unidades recibidas). */
+export function billingQuantityForLine(item: Pick<PedidoOrderItem, 'unit' | 'receivedQuantity' | 'receivedWeightKg'>): number {
+  if (item.unit === 'kg' && item.receivedWeightKg != null && item.receivedWeightKg > 0) {
+    return item.receivedWeightKg;
+  }
+  return item.receivedQuantity;
 }
 
 export type PedidoStatus = 'draft' | 'sent' | 'received';
@@ -430,12 +443,18 @@ export async function saveOrder(
             ? Math.round(item.estimatedKgPerUnit * 1000) / 1000
             : null,
         received_weight_kg:
-          unitSupportsReceivedWeightKg(item.unit) &&
-          item.receivedWeightKg != null &&
-          Number.isFinite(item.receivedWeightKg) &&
-          item.receivedWeightKg > 0
-            ? Math.round(item.receivedWeightKg * 1000) / 1000
-            : null,
+          item.unit === 'kg'
+            ? item.receivedWeightKg != null &&
+              Number.isFinite(item.receivedWeightKg) &&
+              item.receivedWeightKg > 0
+              ? Math.round(item.receivedWeightKg * 1000) / 1000
+              : null
+            : unitSupportsReceivedWeightKg(item.unit) &&
+                item.receivedWeightKg != null &&
+                Number.isFinite(item.receivedWeightKg) &&
+                item.receivedWeightKg > 0
+              ? Math.round(item.receivedWeightKg * 1000) / 1000
+              : null,
         incident_type: null,
         incident_notes: null,
       })),
