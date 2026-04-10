@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation';
 import React, { useMemo, useState } from 'react';
 import { BookOpen, Drumstick, LayoutDashboard, LogOut, Menu, X, FileText, RefreshCcw, ShoppingCart } from 'lucide-react';
 import { useAuth } from '@/components/AuthProvider';
+import PullToRefreshPedidos from '@/components/PullToRefreshPedidos';
 import { canAccessPedidos } from '@/lib/pedidos-access';
 
 type NavItem = {
@@ -247,7 +248,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         </div>
       </aside>
 
-      <main className="mx-auto w-full max-w-md px-4 py-5">{children}</main>
+      <main className="mx-auto w-full max-w-md px-4 py-5">
+        <PullToRefreshPedidos>{children}</PullToRefreshPedidos>
+      </main>
     </div>
   );
 }

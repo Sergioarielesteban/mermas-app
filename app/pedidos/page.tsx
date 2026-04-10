@@ -454,6 +454,7 @@ export default function PedidosPage() {
                   type="button"
                   onClick={() => {
                     if (!localId) return;
+                    if (!window.confirm('¿Seguro que quieres eliminar este pedido?')) return;
                     const supabase = getSupabaseClient();
                     if (!supabase) return;
                     void deleteOrder(supabase, localId, order.id)
@@ -649,6 +650,7 @@ export default function PedidosPage() {
                   type="button"
                   onClick={() => {
                     if (!localId) return;
+                    if (!window.confirm('¿Seguro que quieres eliminar este pedido?')) return;
                     const supabase = getSupabaseClient();
                     if (!supabase) return;
                     void deleteOrder(supabase, localId, order.id)
