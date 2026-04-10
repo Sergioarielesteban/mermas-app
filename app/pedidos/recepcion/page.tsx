@@ -6,7 +6,14 @@ import React from 'react';
 import { useAuth } from '@/components/AuthProvider';
 import { getSupabaseClient } from '@/lib/supabase-client';
 import { canAccessPedidos } from '@/lib/pedidos-access';
-import { fetchOrders, setOrderStatus, updateOrderItemPrice, updateOrderItemReceived, type PedidoOrder } from '@/lib/pedidos-supabase';
+import {
+  fetchOrders,
+  setOrderStatus,
+  updateOrderItemIncident,
+  updateOrderItemPrice,
+  updateOrderItemReceived,
+  type PedidoOrder,
+} from '@/lib/pedidos-supabase';
 
 export default function RecepcionPedidosPage() {
   const searchParams = useSearchParams();
@@ -17,6 +24,9 @@ export default function RecepcionPedidosPage() {
   const initialDateFilter = searchParams.get('date') ?? '';
   const [dateFilter, setDateFilter] = React.useState(initialDateFilter);
   const [message, setMessage] = React.useState<string | null>(null);
+  const [priceInputByItemId, setPriceInputByItemId] = React.useState<Record<string, string>>({});
+  const [incidentOpenByItemId, setIncidentOpenByItemId] = React.useState<Record<string, boolean>>({});
+  const [incidentNoteByItemId, setIncidentNoteByItemId] = React.useState<Record<string, string>>({});
   const [showReceivedBanner, setShowReceivedBanner] = React.useState(false);
   const receivedBannerTimeoutRef = React.useRef<number | null>(null);
 
@@ -52,6 +62,18 @@ export default function RecepcionPedidosPage() {
     if (!supabase) return;
     void (async () => {
       try {
+        const priceUpdates = await Promise.allSettled(order.items.map(async (item) => {
+          const raw = priceInputByItemId[item.id];
+          const parsed = raw == null ? item.pricePerUnit : Number(raw.replace(',', '.'));
+          const nextPrice = Number.isNaN(parsed) || parsed < 0 ? item.pricePerUnit : Math.round(parsed * 100) / 100;
+          await updateOrderItemPrice(supabase, localId, item.id, nextPrice, item.quantity);
+        }));
+        const failedPrice = priceUpdates.filter((r) => r.status === 'rejected');
+        if (failedPrice.length > 0) {
+          setMessage(`No se pudieron guardar ${failedPrice.length} precios del pedido.`);
+          return;
+        }
+
         const updates = await Promise.allSettled(
           order.items.map((item) => updateOrderItemReceived(supabase, localId, item.id, item.quantity)),
         );
@@ -141,6 +163,56 @@ export default function RecepcionPedidosPage() {
     );
 
     void updateOrderItemPrice(supabase, localId, itemId, nextPrice, itemQuantity).catch((err: Error) => {
+      void reloadOrders();
+      setMessage(err.message);
+    });
+  };
+
+  const setLocalUnitPrice = (orderId: string, itemId: string, rawValue: string) => {
+    const parsed = Number(rawValue.replace(',', '.'));
+    if (Number.isNaN(parsed) || parsed < 0) return;
+    const nextPrice = Math.round(parsed * 100) / 100;
+    setOrders((prev) =>
+      prev.map((order) => {
+        if (order.id !== orderId) return order;
+        const nextItems = order.items.map((item) =>
+          item.id === itemId
+            ? { ...item, pricePerUnit: nextPrice, lineTotal: Math.round(nextPrice * item.quantity * 100) / 100 }
+            : item,
+        );
+        return { ...order, items: nextItems };
+      }),
+    );
+  };
+
+  const commitPriceInput = (orderId: string, itemId: string) => {
+    const raw = priceInputByItemId[itemId];
+    if (raw == null) return;
+    changeUnitPrice(orderId, itemId, raw);
+    const parsed = Number(raw.replace(',', '.'));
+    const normalized = Number.isNaN(parsed) || parsed < 0 ? '0.00' : (Math.round(parsed * 100) / 100).toFixed(2);
+    setPriceInputByItemId((prev) => ({ ...prev, [itemId]: normalized }));
+  };
+
+  const saveIncident = (orderId: string, itemId: string) => {
+    if (!localId) return;
+    const supabase = getSupabaseClient();
+    if (!supabase) return;
+    const note = (incidentNoteByItemId[itemId] ?? '').trim();
+
+    setOrders((prev) =>
+      prev.map((order) => {
+        if (order.id !== orderId) return order;
+        const nextItems = order.items.map((item) =>
+          item.id === itemId
+            ? { ...item, incidentType: note ? 'damaged' : null, incidentNotes: note || undefined }
+            : item,
+        );
+        return { ...order, items: nextItems };
+      }),
+    );
+
+    void updateOrderItemIncident(supabase, localId, itemId, { type: note ? 'damaged' : null, notes: note }).catch((err: Error) => {
       void reloadOrders();
       setMessage(err.message);
     });
@@ -256,11 +328,66 @@ export default function RecepcionPedidosPage() {
                             type="number"
                             step="0.01"
                             min="0"
-                            defaultValue={item.pricePerUnit.toFixed(2)}
-                            onBlur={(e) => changeUnitPrice(order.id, item.id, e.target.value)}
+                            value={priceInputByItemId[item.id] ?? item.pricePerUnit.toFixed(2)}
+                            onChange={(e) => {
+                              const raw = e.target.value;
+                              setPriceInputByItemId((prev) => ({ ...prev, [item.id]: raw }));
+                              setLocalUnitPrice(order.id, item.id, raw);
+                            }}
+                            onBlur={() => commitPriceInput(order.id, item.id)}
                             className="h-10 w-28 rounded-lg border border-zinc-300 bg-white px-2 text-sm font-semibold text-zinc-900 outline-none"
                           />
                         </div>
+                      </div>
+                      <div className="mt-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIncidentOpenByItemId((prev) => ({ ...prev, [item.id]: !prev[item.id] }));
+                            setIncidentNoteByItemId((prev) => ({
+                              ...prev,
+                              [item.id]: prev[item.id] ?? item.incidentNotes ?? '',
+                            }));
+                          }}
+                          className="rounded-lg bg-[#B91C1C] px-3 py-2 text-xs font-semibold text-white"
+                        >
+                          Incidencia
+                        </button>
+                        {incidentOpenByItemId[item.id] ? (
+                          <div className="mt-2 space-y-2 rounded-lg bg-red-50 p-2 ring-1 ring-red-200">
+                            <textarea
+                              value={incidentNoteByItemId[item.id] ?? ''}
+                              onChange={(e) =>
+                                setIncidentNoteByItemId((prev) => ({
+                                  ...prev,
+                                  [item.id]: e.target.value,
+                                }))
+                              }
+                              rows={2}
+                              placeholder="Describe la incidencia..."
+                              className="w-full rounded-lg border border-red-300 bg-white px-2 py-1.5 text-xs text-zinc-900 outline-none"
+                            />
+                            <div className="flex gap-2">
+                              <button
+                                type="button"
+                                onClick={() => saveIncident(order.id, item.id)}
+                                className="rounded-md bg-[#B91C1C] px-2 py-1 text-xs font-semibold text-white"
+                              >
+                                Guardar incidencia
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setIncidentOpenByItemId((prev) => ({ ...prev, [item.id]: false }))}
+                                className="rounded-md border border-zinc-300 bg-white px-2 py-1 text-xs font-semibold text-zinc-700"
+                              >
+                                Cerrar
+                              </button>
+                            </div>
+                          </div>
+                        ) : null}
+                        {item.incidentNotes?.trim() ? (
+                          <p className="mt-1 text-xs font-semibold text-[#B91C1C]">Incidencia: {item.incidentNotes.trim()}</p>
+                        ) : null}
                       </div>
                     </div>
                   );

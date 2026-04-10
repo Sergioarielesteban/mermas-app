@@ -9,6 +9,9 @@ import { canAccessPedidos } from '@/lib/pedidos-access';
 import {
   deleteOrder,
   fetchOrders,
+  setOrderStatus,
+  updateOrderItemIncident,
+  updateOrderItemReceived,
   type PedidoOrder,
 } from '@/lib/pedidos-supabase';
 
@@ -83,6 +86,46 @@ export default function PedidosPage() {
   }, [email, localName]);
 
   const [expandedId, setExpandedId] = React.useState<string | null>(null);
+
+  const quickReceiveItem = (orderId: string, itemId: string, expectedQty: number, markOk: boolean) => {
+    if (!localId) return;
+    const supabase = getSupabaseClient();
+    if (!supabase) return;
+    const nextReceived = markOk ? expectedQty : 0;
+
+    let nextItemsSnapshot: PedidoOrder['items'] = [];
+    setOrders((prev) =>
+      prev.map((order) => {
+        if (order.id !== orderId) return order;
+        const nextItems = order.items.map((item) => {
+          if (item.id !== itemId) return item;
+          return {
+            ...item,
+            receivedQuantity: nextReceived,
+            incidentType: markOk ? null : 'missing',
+            incidentNotes: markOk ? undefined : 'No recibido',
+          };
+        });
+        nextItemsSnapshot = nextItems;
+        return { ...order, items: nextItems };
+      }),
+    );
+
+    const allReviewed = nextItemsSnapshot.every((item) => item.receivedQuantity >= item.quantity || Boolean(item.incidentType));
+    void Promise.all([
+      updateOrderItemReceived(supabase, localId, itemId, nextReceived),
+      updateOrderItemIncident(supabase, localId, itemId, markOk ? { type: null, notes: '' } : { type: 'missing', notes: 'No recibido' }),
+    ])
+      .then(async () => {
+        if (!allReviewed) return;
+        await setOrderStatus(supabase, localId, orderId, 'received');
+        await reloadOrders();
+      })
+      .catch((err: Error) => {
+        void reloadOrders();
+        setMessage(err.message);
+      });
+  };
 
   const reloadOrders = React.useCallback(() => {
     if (!canUse || !localId) return;
@@ -226,11 +269,33 @@ export default function PedidosPage() {
                 </button>
               </div>
               {expandedId === order.id ? (
-                <div className="mt-2 space-y-1 text-center">
+                <div className="mt-2 space-y-2 text-left">
                   {order.items.map((item) => (
-                    <p key={item.id} className="text-xs text-zinc-600">
-                      {item.productName}: {item.quantity} {item.unit}
-                    </p>
+                    <div key={item.id} className="flex items-center justify-between gap-2 rounded-lg bg-white p-2 ring-1 ring-zinc-200">
+                      <p className="text-xs text-zinc-700">
+                        {item.productName}: {item.quantity} {item.unit}
+                      </p>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => quickReceiveItem(order.id, item.id, item.quantity, true)}
+                          className="grid h-7 w-7 place-items-center rounded-full bg-[#16A34A] text-sm font-black text-white"
+                          title="Recibido OK"
+                          aria-label="Recibido OK"
+                        >
+                          ✓
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => quickReceiveItem(order.id, item.id, item.quantity, false)}
+                          className="grid h-7 w-7 place-items-center rounded-full bg-[#B91C1C] text-sm font-black text-white"
+                          title="Marcar incidencia"
+                          aria-label="Marcar incidencia"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    </div>
                   ))}
                 </div>
               ) : null}

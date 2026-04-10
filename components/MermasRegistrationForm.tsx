@@ -17,12 +17,6 @@ const MOTIVES: Motive[] = [
   { key: 'cancelado', emoji: '⚠️', label: 'CANCELADO' },
 ] as const;
 
-function toIntClamped(value: string, min: number, max: number) {
-  const parsed = Number(value);
-  if (!Number.isFinite(parsed)) return min;
-  return Math.min(max, Math.max(min, Math.floor(parsed)));
-}
-
 function toNumberClamped(value: string, min: number, max: number, decimals = 2) {
   const normalized = value.replace(',', '.');
   const parsed = Number(normalized);
@@ -61,8 +55,13 @@ export default function MermasRegistrationForm() {
   const validationBannerTimeoutRef = React.useRef<number | null>(null);
 
   const selectedProduct = products.find((p) => p.id === productId) ?? null;
+  const quantityStep = selectedProduct?.unit === 'kg' ? 0.01 : selectedProduct?.unit === 'racion' ? 0.5 : 1;
   const quantityLabel = selectedProduct?.unit === 'kg' ? 'Cantidad (kg)' : 'Cantidad';
-  const quantityHint = selectedProduct?.unit === 'kg' ? 'Admite decimales (ej: 0,30 kg).' : null;
+  const quantityHint = selectedProduct?.unit === 'kg'
+    ? 'Admite decimales (ej: 0,30 kg).'
+    : selectedProduct?.unit === 'racion'
+      ? 'Puedes usar decimales (ej: 0,5 ración).'
+      : 'Puedes escribir decimales si lo necesitas.';
 
   React.useEffect(() => {
     if (!productId && products[0]?.id) {
@@ -71,11 +70,7 @@ export default function MermasRegistrationForm() {
   }, [productId, products]);
 
   React.useEffect(() => {
-    if (selectedProduct?.unit === 'kg') {
-      setQuantityInput(quantity.toFixed(2).replace('.', ','));
-    } else {
-      setQuantityInput(String(Math.max(1, Math.floor(quantity))));
-    }
+    setQuantityInput(quantity.toFixed(2).replace('.', ','));
   }, [quantity, selectedProduct?.unit]);
 
   React.useEffect(() => {
@@ -253,15 +248,11 @@ export default function MermasRegistrationForm() {
               <button
                 type="button"
                 onClick={() => {
-                  if (selectedProduct?.unit === 'kg') {
-                    setQuantity((q) => {
-                      const next = toNumberClamped(String(q - 0.01), 0, 999, 2);
-                      setQuantityInput(next.toFixed(2).replace('.', ','));
-                      return next;
-                    });
-                  } else {
-                    setQuantity((q) => Math.max(0, q - 1));
-                  }
+                  setQuantity((q) => {
+                    const next = toNumberClamped(String(q - quantityStep), 0, 999, 2);
+                    setQuantityInput(next.toFixed(2).replace('.', ','));
+                    return next;
+                  });
                   setLastQtyAction('dec');
                 }}
                 disabled={quantity <= 0}
@@ -279,30 +270,25 @@ export default function MermasRegistrationForm() {
               </button>
 
               <input
-                type={selectedProduct?.unit === 'kg' ? 'text' : 'number'}
-                inputMode={selectedProduct?.unit === 'kg' ? 'decimal' : 'numeric'}
+                type="text"
+                inputMode="decimal"
                 min={0}
                 max={999}
-                step={selectedProduct?.unit === 'kg' ? 0.01 : 1}
+                step={quantityStep}
                 required
-                value={selectedProduct?.unit === 'kg' ? quantityInput : String(quantity)}
+                value={quantityInput}
                 onChange={(e) => {
-                  if (selectedProduct?.unit === 'kg') {
-                    const raw = e.target.value;
-                    if (!/^\d*(?:[.,]\d{0,2})?$/.test(raw)) return;
-                    setQuantityInput(raw);
-                    const normalized = raw.replace(',', '.');
-                    const parsed = Number(normalized);
-                    if (Number.isFinite(parsed)) {
-                      setQuantity(toNumberClamped(normalized, 0, 999, 2));
-                    }
-                  } else {
-                    setQuantity(toIntClamped(e.target.value, 0, 999));
+                  const raw = e.target.value;
+                  if (!/^\d*(?:[.,]\d{0,2})?$/.test(raw)) return;
+                  setQuantityInput(raw);
+                  const normalized = raw.replace(',', '.');
+                  const parsed = Number(normalized);
+                  if (Number.isFinite(parsed)) {
+                    setQuantity(toNumberClamped(normalized, 0, 999, 2));
                   }
                   setLastQtyAction(null);
                 }}
                 onBlur={() => {
-                  if (selectedProduct?.unit !== 'kg') return;
                   const normalized = quantityInput.replace(',', '.');
                   const parsed = Number(normalized);
                   const safe = Number.isFinite(parsed) ? toNumberClamped(normalized, 0, 999, 2) : quantity;
@@ -316,15 +302,11 @@ export default function MermasRegistrationForm() {
               <button
                 type="button"
                 onClick={() => {
-                  if (selectedProduct?.unit === 'kg') {
-                    setQuantity((q) => {
-                      const next = toNumberClamped(String(q + 0.01), 0.01, 999, 2);
-                      setQuantityInput(next.toFixed(2).replace('.', ','));
-                      return next;
-                    });
-                  } else {
-                    setQuantity((q) => Math.min(999, q + 1));
-                  }
+                  setQuantity((q) => {
+                    const next = toNumberClamped(String(q + quantityStep), quantityStep, 999, 2);
+                    setQuantityInput(next.toFixed(2).replace('.', ','));
+                    return next;
+                  });
                   setLastQtyAction('inc');
                 }}
                 className={[
