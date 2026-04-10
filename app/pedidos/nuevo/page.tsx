@@ -337,13 +337,6 @@ export default function NuevoPedidoPage() {
           onChange={(e) => setDeliveryDate(e.target.value)}
           className="mt-2 h-11 w-full rounded-xl border border-zinc-300 bg-white px-3 text-sm text-zinc-900 outline-none"
         />
-        <label className="mt-3 block text-xs font-semibold uppercase tracking-wide text-zinc-500">Pedido por</label>
-        <input
-          value={requestedBy}
-          onChange={(e) => setRequestedBy(e.target.value)}
-          placeholder="Nombre de quien pide"
-          className="mt-2 h-11 w-full rounded-xl border border-zinc-300 bg-white px-3 text-sm text-zinc-900 placeholder:text-zinc-500 outline-none"
-        />
       </section>
 
       <section className="rounded-2xl bg-white p-4 ring-1 ring-zinc-200">
@@ -395,6 +388,13 @@ export default function NuevoPedidoPage() {
             );
           })}
         </div>
+        <label className="mt-4 block text-xs font-semibold uppercase tracking-wide text-zinc-500">Pedido por</label>
+        <input
+          value={requestedBy}
+          onChange={(e) => setRequestedBy(e.target.value)}
+          placeholder="Nombre de quien pide"
+          className="mt-2 h-11 w-full rounded-xl border border-zinc-300 bg-white px-3 text-sm text-zinc-900 placeholder:text-zinc-500 outline-none"
+        />
       </section>
 
       <section className="rounded-2xl bg-white p-4 ring-1 ring-zinc-200">
