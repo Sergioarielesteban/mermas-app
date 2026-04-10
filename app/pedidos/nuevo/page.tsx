@@ -5,7 +5,8 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import React from 'react';
 import { useAuth } from '@/components/AuthProvider';
 import { getSupabaseClient } from '@/lib/supabase-client';
-import { canAccessPedidos } from '@/lib/pedidos-access';
+import PedidosPremiaLockedScreen from '@/components/PedidosPremiaLockedScreen';
+import { canAccessPedidos, canUsePedidosModule } from '@/lib/pedidos-access';
 import { formatQuantityWithUnit, unitPriceCatalogSuffix } from '@/lib/pedidos-format';
 import {
   fetchOrders,
@@ -61,7 +62,8 @@ export default function NuevoPedidoPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { localCode, localName, localId, email } = useAuth();
-  const canUse = canAccessPedidos(localCode, email, localName, localId);
+  const hasPedidosEntry = canAccessPedidos(localCode, email, localName, localId);
+  const canUse = canUsePedidosModule(localCode, email, localName, localId);
   const editingId = searchParams.get('id');
   const [suppliers, setSuppliers] = React.useState<PedidoSupplier[]>([]);
   const [supplierId, setSupplierId] = React.useState('');
@@ -298,13 +300,16 @@ export default function NuevoPedidoPage() {
       });
   };
 
-  if (!canUse) {
+  if (!hasPedidosEntry) {
     return (
       <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-zinc-200">
         <p className="text-sm font-black text-zinc-900">Modulo no habilitado</p>
         <p className="pt-1 text-sm text-zinc-600">Pedidos esta disponible para los locales de Mataro y Premia.</p>
       </section>
     );
+  }
+  if (!canUse) {
+    return <PedidosPremiaLockedScreen />;
   }
 
   return (

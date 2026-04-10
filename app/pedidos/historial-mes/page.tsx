@@ -5,7 +5,8 @@ import React from 'react';
 import { ChevronDown } from 'lucide-react';
 import { useAuth } from '@/components/AuthProvider';
 import { getSupabaseClient } from '@/lib/supabase-client';
-import { canAccessPedidos } from '@/lib/pedidos-access';
+import PedidosPremiaLockedScreen from '@/components/PedidosPremiaLockedScreen';
+import { canAccessPedidos, canUsePedidosModule } from '@/lib/pedidos-access';
 import { formatQuantityWithUnit } from '@/lib/pedidos-format';
 import { fetchOrders, type PedidoOrder } from '@/lib/pedidos-supabase';
 import type { Unit } from '@/lib/types';
@@ -18,7 +19,8 @@ function totalsWithVat(order: PedidoOrder) {
 
 export default function PedidosHistorialMesPage() {
   const { localCode, localName, localId, email } = useAuth();
-  const canUse = canAccessPedidos(localCode, email, localName, localId);
+  const hasPedidosEntry = canAccessPedidos(localCode, email, localName, localId);
+  const canUse = canUsePedidosModule(localCode, email, localName, localId);
   const [orders, setOrders] = React.useState<PedidoOrder[]>([]);
   const [message, setMessage] = React.useState<string | null>(null);
   const [month, setMonth] = React.useState(() => new Date().toISOString().slice(0, 7));
@@ -90,13 +92,16 @@ export default function PedidosHistorialMesPage() {
 
   const [expandedSupplierId, setExpandedSupplierId] = React.useState<string | null>(null);
 
-  if (!canUse) {
+  if (!hasPedidosEntry) {
     return (
       <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-zinc-200">
         <p className="text-sm font-black text-zinc-900">Modulo no habilitado</p>
         <p className="pt-1 text-sm text-zinc-600">Pedidos esta disponible para los locales de Mataro y Premia.</p>
       </section>
     );
+  }
+  if (!canUse) {
+    return <PedidosPremiaLockedScreen />;
   }
 
   return (

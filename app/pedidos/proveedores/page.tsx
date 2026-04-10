@@ -4,7 +4,8 @@ import Link from 'next/link';
 import React from 'react';
 import { useAuth } from '@/components/AuthProvider';
 import { getSupabaseClient } from '@/lib/supabase-client';
-import { canAccessPedidos } from '@/lib/pedidos-access';
+import PedidosPremiaLockedScreen from '@/components/PedidosPremiaLockedScreen';
+import { canAccessPedidos, canUsePedidosModule } from '@/lib/pedidos-access';
 import { unitPriceCatalogSuffix } from '@/lib/pedidos-format';
 import {
   createSupplier,
@@ -65,7 +66,8 @@ type ProductDraft = { name: string; unit: Unit; price: string; vatRate: string; 
 
 export default function ProveedoresPage() {
   const { localCode, localName, localId, email } = useAuth();
-  const canUse = canAccessPedidos(localCode, email, localName, localId);
+  const hasPedidosEntry = canAccessPedidos(localCode, email, localName, localId);
+  const canUse = canUsePedidosModule(localCode, email, localName, localId);
   const [suppliers, setSuppliers] = React.useState<PedidoSupplier[]>([]);
   const [message, setMessage] = React.useState<string | null>(null);
   const [showDeletedBanner, setShowDeletedBanner] = React.useState(false);
@@ -274,13 +276,16 @@ export default function ProveedoresPage() {
       .catch((err: Error) => setMessage(`No se pudo eliminar proveedor: ${err.message}`));
   };
 
-  if (!canUse) {
+  if (!hasPedidosEntry) {
     return (
       <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-zinc-200">
         <p className="text-sm font-black text-zinc-900">Modulo no habilitado</p>
         <p className="pt-1 text-sm text-zinc-600">Pedidos esta disponible para los locales de Mataro y Premia.</p>
       </section>
     );
+  }
+  if (!canUse) {
+    return <PedidosPremiaLockedScreen />;
   }
   return (
     <div className="space-y-4">
