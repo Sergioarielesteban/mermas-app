@@ -731,8 +731,9 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
         const saved = mapMermaRow(data);
         setMermas((prev) => prev.map((m) => (m.id === record.id ? saved : m)));
         markLocalEdit();
-        // Immediate cloud reconciliation to avoid any stale local mismatch.
-        await refetchCloud();
+        // No refetch inmediato: en algunos entornos la lectura puede ir a réplica y
+        // pisar la fila recién insertada hasta que el usuario “actualiza”. El estado
+        // local ya es el devuelto por .select(); realtime y otras pantallas siguen sincronizadas.
         return { ok: true, record: saved };
       }
 

@@ -236,7 +236,14 @@ export default function NuevoPedidoPage() {
         receivedWeightKg: item.receivedWeightKg ?? null,
       })),
     })
-      .then(() => router.push('/pedidos'))
+      .then(() => {
+        try {
+          sessionStorage.setItem('mermas_reload_pedidos', '1');
+        } catch {
+          /* modo privado */
+        }
+        router.push('/pedidos');
+      })
       .catch((err: Error) => setMessage(err.message));
   };
 
@@ -292,6 +299,11 @@ export default function NuevoPedidoPage() {
           }),
         );
         popup.location.href = `https://wa.me/${phone}?text=${text}`;
+        try {
+          sessionStorage.setItem('mermas_reload_pedidos', '1');
+        } catch {
+          /* modo privado */
+        }
         router.push('/pedidos');
       })
       .catch((err: Error) => {

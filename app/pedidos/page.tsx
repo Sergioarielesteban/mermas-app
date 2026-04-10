@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import React from 'react';
 import { useAuth } from '@/components/AuthProvider';
 import { getSupabaseClient } from '@/lib/supabase-client';
@@ -220,6 +220,8 @@ export default function PedidosPage() {
       .catch((err: Error) => setMessage(err.message));
   }, [canUse, localId]);
 
+  const pathname = usePathname();
+
   React.useEffect(() => {
     reloadOrders();
   }, [reloadOrders]);
@@ -238,6 +240,45 @@ export default function PedidosPage() {
   React.useEffect(() => {
     reloadCatalog();
   }, [reloadCatalog]);
+
+  /**
+   * - Tras guardar pedido nuevo: segunda pasada (~450 ms) por si la lectura en Supabase va a réplica.
+   * - Volver con Atrás desde caché del navegador (bfcache) o reabrir la pestaña.
+   */
+  React.useEffect(() => {
+    if (pathname !== '/pedidos') return;
+    let cancelled = false;
+    let delayedId: number | null = null;
+    try {
+      if (sessionStorage.getItem('mermas_reload_pedidos') === '1') {
+        sessionStorage.removeItem('mermas_reload_pedidos');
+        delayedId = window.setTimeout(() => {
+          if (!cancelled) {
+            reloadOrders();
+            reloadCatalog();
+          }
+        }, 450);
+      }
+    } catch {
+      /* sessionStorage no disponible */
+    }
+    const pull = () => {
+      if (document.visibilityState !== 'visible') return;
+      reloadOrders();
+      reloadCatalog();
+    };
+    const onPageShow = (e: PageTransitionEvent) => {
+      if (e.persisted) pull();
+    };
+    window.addEventListener('pageshow', onPageShow);
+    document.addEventListener('visibilitychange', pull);
+    return () => {
+      cancelled = true;
+      if (delayedId != null) window.clearTimeout(delayedId);
+      window.removeEventListener('pageshow', onPageShow);
+      document.removeEventListener('visibilitychange', pull);
+    };
+  }, [pathname, reloadOrders, reloadCatalog]);
 
   React.useEffect(
     () => () => {
