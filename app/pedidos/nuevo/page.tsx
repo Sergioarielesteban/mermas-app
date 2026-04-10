@@ -371,7 +371,7 @@ export default function NuevoPedidoPage() {
                     step={p.unit === 'kg' ? 0.01 : 1}
                     inputMode="decimal"
                     aria-label={`Cantidad ${p.name}`}
-                    className="min-w-[5.5rem] max-w-[6.5rem] rounded-md border-2 border-white/40 bg-[#D32F2F] px-2 py-1.5 text-center text-sm font-black text-white outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                    className="min-w-[2.75rem] max-w-[3.25rem] rounded-md border border-zinc-300 bg-white px-1.5 py-1.5 text-center text-xs font-bold text-zinc-500 outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                     value={qty === 0 ? '' : p.unit === 'kg' ? qty : Math.round(qty)}
                     onChange={(e) => setQtyFromInput(p.id, p.unit, e.target.value)}
                   />

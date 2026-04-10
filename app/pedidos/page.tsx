@@ -86,6 +86,7 @@ export default function PedidosPage() {
   }, [email, localName]);
 
   const [expandedId, setExpandedId] = React.useState<string | null>(null);
+  const [monthlySummaryMonth, setMonthlySummaryMonth] = React.useState(() => new Date().toISOString().slice(0, 7));
 
   const quickReceiveItem = (orderId: string, itemId: string, expectedQty: number, markOk: boolean) => {
     if (!localId) return;
@@ -149,6 +150,51 @@ export default function PedidosPage() {
 
   const sentOrders = orders.filter((row) => row.status === 'sent');
   const receivedOrders = orders.filter((row) => row.status === 'received');
+  const monthlyBySupplier = React.useMemo(() => {
+    const bySupplier = new Map<
+      string,
+      {
+        supplierName: string;
+        totalWithVat: number;
+        byProduct: Map<string, { unit: string; quantity: number }>;
+      }
+    >();
+
+    for (const order of receivedOrders) {
+      const pivotDate = (order.receivedAt ?? order.createdAt).slice(0, 7);
+      if (pivotDate !== monthlySummaryMonth) continue;
+
+      const existing = bySupplier.get(order.supplierId) ?? {
+        supplierName: order.supplierName,
+        totalWithVat: 0,
+        byProduct: new Map<string, { unit: string; quantity: number }>(),
+      };
+
+      const totals = totalsWithVat(order);
+      existing.totalWithVat += totals.total;
+
+      for (const item of order.items) {
+        const prod = existing.byProduct.get(item.productName) ?? { unit: item.unit, quantity: 0 };
+        prod.quantity += item.receivedQuantity;
+        existing.byProduct.set(item.productName, prod);
+      }
+      bySupplier.set(order.supplierId, existing);
+    }
+
+    return Array.from(bySupplier.values())
+      .map((row) => ({
+        ...row,
+        totalWithVat: Math.round(row.totalWithVat * 100) / 100,
+        products: Array.from(row.byProduct.entries())
+          .map(([name, data]) => ({
+            name,
+            unit: data.unit,
+            quantity: Math.round(data.quantity * 100) / 100,
+          }))
+          .sort((a, b) => a.name.localeCompare(b.name, 'es')),
+      }))
+      .sort((a, b) => b.totalWithVat - a.totalWithVat);
+  }, [receivedOrders, monthlySummaryMonth]);
 
   if (!canUse) {
     return (
@@ -366,6 +412,38 @@ export default function PedidosPage() {
                   ))}
                 </div>
               ) : null}
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="rounded-2xl bg-white p-4 ring-1 ring-zinc-200">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <p className="text-sm font-bold text-zinc-800">Total comprado por proveedor (mes)</p>
+          <input
+            type="month"
+            value={monthlySummaryMonth}
+            onChange={(e) => setMonthlySummaryMonth(e.target.value)}
+            className="h-9 rounded-lg border border-zinc-300 bg-white px-2 text-sm text-zinc-800 outline-none"
+          />
+        </div>
+        <div className="mt-3 space-y-2">
+          {monthlyBySupplier.length === 0 ? (
+            <p className="text-sm text-zinc-500">No hay compras recibidas para ese mes.</p>
+          ) : null}
+          {monthlyBySupplier.map((supplier) => (
+            <div key={supplier.supplierName} className="rounded-xl bg-zinc-50 p-3 ring-1 ring-zinc-200">
+              <p className="text-sm font-bold text-zinc-900">{supplier.supplierName}</p>
+              <p className="pt-1 text-xs text-zinc-600">
+                Total del mes (IVA incluido): <span className="font-black text-zinc-900">{supplier.totalWithVat.toFixed(2)} €</span>
+              </p>
+              <div className="mt-2 space-y-1">
+                {supplier.products.map((product) => (
+                  <p key={`${supplier.supplierName}-${product.name}`} className="text-xs text-zinc-700">
+                    {product.name}: <span className="font-semibold">{product.quantity.toFixed(product.unit === 'kg' ? 2 : 0)} {product.unit}</span>
+                  </p>
+                ))}
+              </div>
             </div>
           ))}
         </div>
