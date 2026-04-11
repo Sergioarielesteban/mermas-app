@@ -70,30 +70,24 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             tabIndex={-1}
           />
           <div className="fixed inset-0 z-[80] grid place-items-center px-4">
-            <div className="w-full max-w-sm overflow-hidden rounded-2xl bg-white shadow-xl ring-1 ring-zinc-200">
-              <div className="p-5 pb-4">
-                <p className="text-sm font-extrabold text-zinc-900">Confirmar cierre de sesión</p>
-                <p className="mt-1 text-sm text-zinc-600">¿Seguro que quieres cerrar sesión?</p>
+            <div className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-xl ring-1 ring-zinc-200">
+              <p className="text-sm font-extrabold text-zinc-900">Confirmar cierre de sesión</p>
+              <p className="mt-1 text-sm text-zinc-600">¿Seguro que quieres cerrar sesión?</p>
+              <div className="mt-4 flex gap-2">
                 <button
                   type="button"
                   onClick={() => setConfirmLogoutOpen(false)}
-                  className="mt-4 h-10 w-full rounded-xl border border-zinc-300 bg-white px-3 text-sm font-bold text-zinc-700"
+                  className="h-10 flex-1 rounded-xl border border-zinc-300 bg-white px-3 text-sm font-bold text-zinc-700"
                 >
                   Cancelar
                 </button>
-              </div>
-              <span
-                className="mx-auto my-1 block h-px w-12 bg-gradient-to-r from-transparent via-[#D32F2F] to-transparent opacity-90"
-                aria-hidden
-              />
-              <div className="px-5 pb-5 pt-3">
                 <button
                   type="button"
                   onClick={() => {
                     setConfirmLogoutOpen(false);
                     void logout();
                   }}
-                  className="h-10 w-full rounded-xl bg-[#D32F2F] px-3 text-sm font-bold text-white"
+                  className="h-10 flex-1 rounded-xl bg-[#D32F2F] px-3 text-sm font-bold text-white"
                 >
                   Cerrar sesión
                 </button>
@@ -103,54 +97,47 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         </>
       ) : null}
 
-      <header className="sticky top-0 z-40 flex justify-center bg-zinc-50 px-4">
-        {/* 50% del ancho de pantalla en todos los tamaños (tope max-w-md); dos filas en móvil para que quepa. */}
-        <div className="flex w-[50vw] max-w-md min-w-0 flex-col gap-1.5 rounded-b-2xl border-b border-[#b32020] bg-gradient-to-r from-[#B91C1C] to-[#D32F2F] px-2 py-2 shadow-lg md:flex-row md:items-center md:gap-2 md:py-2.5">
-          <div className="flex items-center justify-between gap-1 md:contents">
-            <button
-              type="button"
-              onClick={() => setOpen(true)}
-              className="grid h-9 w-9 shrink-0 place-items-center rounded-xl text-white/95 hover:bg-white/10 active:scale-[0.99] md:order-1 md:h-10 md:w-10"
-              aria-label="Abrir menú"
-            >
-              <Menu className="h-5 w-5 md:h-6 md:w-6" />
-            </button>
-            <div className="flex h-7 min-w-0 max-w-[5.5rem] shrink-0 items-center justify-center rounded-md border border-[#D32F2F]/30 bg-white px-1.5 md:order-2 md:h-8 md:max-w-none md:min-w-[116px] md:px-3">
-              <span className="text-center text-[8px] font-extrabold leading-tight tracking-wide text-[#D32F2F] md:text-[11px] md:leading-none">
-                XAMPA ONE
-              </span>
-            </div>
-            <div className="flex shrink-0 gap-0.5 md:order-5 md:gap-1">
-              <button
-                type="button"
-                onClick={refreshApp}
-                className="grid h-9 w-9 place-items-center rounded-xl text-white/95 hover:bg-white/10 active:scale-[0.99] md:h-10 md:w-10"
-                aria-label="Actualizar app"
-                title="Actualizar app"
-              >
-                <RefreshCcw className="h-4 w-4 md:h-5 md:w-5" />
-              </button>
-              <button
-                type="button"
-                onClick={confirmAndLogout}
-                className="grid h-9 w-9 place-items-center rounded-xl text-white/95 hover:bg-white/10 active:scale-[0.99] md:h-10 md:w-10"
-                aria-label="Cerrar sesión"
-                title="Cerrar sesión"
-              >
-                <LogOut className="h-4 w-4 md:h-5 md:w-5" />
-              </button>
-            </div>
+      <header className="sticky top-0 z-40 border-b border-[#b32020] bg-gradient-to-r from-[#B91C1C] to-[#D32F2F] shadow-lg">
+        <div className="mx-auto flex min-h-14 w-full max-w-md items-center gap-3 px-3 py-2">
+          <button
+            type="button"
+            onClick={() => setOpen(true)}
+            className="grid h-10 w-10 shrink-0 place-items-center rounded-xl text-white/95 hover:bg-white/10 active:scale-[0.99]"
+            aria-label="Abrir menú"
+          >
+            <Menu className="h-6 w-6" />
+          </button>
+          <div className="flex h-8 min-w-[116px] shrink-0 items-center justify-center rounded-md border border-[#D32F2F]/30 bg-white px-3">
+            <span className="text-center text-[11px] font-extrabold tracking-wide text-[#D32F2F]">XAMPA ONE</span>
           </div>
-          <div className="min-w-0 px-0.5 text-center md:order-3 md:min-w-0 md:flex-1 md:px-0 md:text-left">
-            <h1 className="line-clamp-1 text-[11px] font-extrabold uppercase tracking-wide text-white md:text-sm">
+          <div className="min-w-0 flex-1">
+            <h1 className="line-clamp-1 text-sm font-extrabold uppercase tracking-wide text-white">
               {title}
             </h1>
             {localId && localLabel ? (
-              <p className="line-clamp-1 text-[9px] font-semibold uppercase tracking-wider text-white/85 md:text-[10px]">
+              <p className="line-clamp-1 text-[10px] font-semibold uppercase tracking-wider text-white/85">
                 {localLabel}
               </p>
             ) : null}
           </div>
+          <button
+            type="button"
+            onClick={refreshApp}
+            className="grid h-10 w-10 place-items-center rounded-xl text-white/95 hover:bg-white/10 active:scale-[0.99]"
+            aria-label="Actualizar app"
+            title="Actualizar app"
+          >
+            <RefreshCcw className="h-5 w-5" />
+          </button>
+          <button
+            type="button"
+            onClick={confirmAndLogout}
+            className="grid h-10 w-10 place-items-center rounded-xl text-white/95 hover:bg-white/10 active:scale-[0.99]"
+            aria-label="Cerrar sesión"
+            title="Cerrar sesión"
+          >
+            <LogOut className="h-5 w-5" />
+          </button>
         </div>
       </header>
 
