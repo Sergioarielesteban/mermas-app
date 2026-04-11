@@ -167,22 +167,6 @@ export default function MermasRegistrationForm() {
     }, 1000);
   };
 
-  const handleCancel = () => {
-    const now = nowParts();
-    setProductId(products[0]?.id ?? '');
-    setQuantity(0);
-    setQuantityInput('0');
-    setMotiveKey(null);
-    setDateValue(now.date);
-    setTimeValue(now.time);
-    setPhotoDataUrl(null);
-    setNotes('');
-    setValidationBanner(null);
-    setProductSearch('');
-    setOpenProductPicker(false);
-    setLastQtyAction(null);
-  };
-
   const handlePhoto = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -425,22 +409,17 @@ export default function MermasRegistrationForm() {
           </div>
         </div>
 
-        <div className="pt-5 pb-2">
-          <div className="space-y-3">
-            <button
-              type="submit"
-              className="h-16 w-full rounded-2xl bg-[#D32F2F] text-base font-extrabold uppercase tracking-wide text-white shadow-sm hover:bg-[#c62828] active:scale-[0.99]"
-            >
-              GUARDAR
-            </button>
-            <button
-              type="button"
-              onClick={handleCancel}
-              className="h-12 w-full rounded-2xl bg-zinc-200 text-sm font-bold uppercase tracking-wide text-zinc-700 hover:bg-zinc-300 active:scale-[0.99]"
-            >
-              CANCELAR
-            </button>
-          </div>
+        <div className="pt-5 pb-6">
+          <button
+            type="submit"
+            className="h-16 w-full rounded-2xl bg-[#D32F2F] text-base font-extrabold uppercase tracking-wide text-white shadow-sm hover:bg-[#c62828] active:scale-[0.99]"
+          >
+            GUARDAR
+          </button>
+          <span
+            className="mx-auto mt-4 block h-px w-12 bg-gradient-to-r from-transparent via-[#D32F2F] to-transparent opacity-90"
+            aria-hidden
+          />
         </div>
       </form>
 

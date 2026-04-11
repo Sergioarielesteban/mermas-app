@@ -399,16 +399,18 @@ export default function DashboardPage() {
         </div>
       ) : null}
 
-      <section className="rounded-3xl bg-zinc-950 px-6 py-7 text-white shadow-xl shadow-zinc-900/20">
-        <h1 className="text-center text-[11px] font-semibold uppercase tracking-[0.2em] text-zinc-400">Mermas</h1>
-        <p className="mt-2 text-center text-lg font-semibold uppercase tracking-[0.14em] text-white sm:text-xl">
+      <section className="rounded-3xl bg-zinc-950 px-4 py-3.5 text-white shadow-xl shadow-zinc-900/20 sm:px-5 sm:py-4">
+        <h1 className="text-center text-[10px] font-semibold uppercase tracking-[0.2em] text-zinc-400 sm:text-[11px]">
+          Mermas
+        </h1>
+        <p className="mt-1 text-center text-base font-semibold uppercase tracking-[0.14em] text-white sm:mt-1.5 sm:text-lg">
           Seguimiento en tiempo real
         </p>
         <span
-          className="mx-auto mt-4 block h-px w-12 bg-gradient-to-r from-transparent via-[#D32F2F] to-transparent opacity-90"
+          className="mx-auto mt-2 block h-px w-12 bg-gradient-to-r from-transparent via-[#D32F2F] to-transparent opacity-90 sm:mt-2.5"
           aria-hidden
         />
-        <p className="mx-auto mt-4 max-w-sm text-center text-sm leading-relaxed text-zinc-400">
+        <p className="mx-auto mt-2 max-w-sm text-center text-xs leading-snug text-zinc-400 sm:mt-2.5 sm:text-sm sm:leading-relaxed">
           Registra mermas y consulta costes, alertas y tendencias en la misma pantalla.
         </p>
       </section>
