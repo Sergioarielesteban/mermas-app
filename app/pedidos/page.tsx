@@ -435,26 +435,18 @@ export default function PedidosPage() {
             if (!supabase) return;
             const snap = orders.find((o) => o.id === order.id);
             if (!snap) return;
-            if (
-              !window.confirm(
-                '¿Recepcion rapida? Se marca el pedido como recibido con las lineas actuales (✓/✗), sin cambiar precios ni totales del pedido. Sigue en «Pendientes revision de precios» hasta que lo revises con el albaran y pulses «Revisado».',
-              )
-            ) {
-              return;
-            }
+            setMessage(null);
             void persistSentOrderAsReceived(supabase, localId, snap, { preserveOrderPricing: true })
               .then(() => {
-                setMessage(
-                  'Pedido recibido (rapido). Los precios no se han tocado; revisalos cuando puedas en Pendientes revision de precios.',
-                );
                 void reloadOrders();
                 dispatchPedidosDataChanged();
               })
               .catch((err: Error) => setMessage(err.message));
           }}
-          className="flex w-full items-center justify-center rounded-2xl bg-gradient-to-b from-[#4ADE80] to-[#16A34A] py-3.5 text-center text-xs font-black uppercase tracking-[0.1em] text-white shadow-md shadow-emerald-900/20 ring-1 ring-white/25 transition active:scale-[0.99]"
+          className="flex w-full flex-col items-center justify-center gap-0.5 rounded-2xl bg-gradient-to-b from-[#4ADE80] to-[#16A34A] py-3 text-center text-[11px] font-black uppercase leading-tight tracking-wide text-white shadow-md shadow-emerald-900/20 ring-1 ring-white/25 transition active:scale-[0.99]"
         >
-          Recibido
+          <span>Pendiente de</span>
+          <span>recibir</span>
         </button>
         <button
           type="button"
@@ -573,8 +565,8 @@ export default function PedidosPage() {
           <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Pendientes revision de precios</p>
           <p className="pt-2 text-2xl font-black text-zinc-900">{ordersPendingPriceReview.length}</p>
           <p className="pt-1 text-xs text-zinc-500">
-            Incluye enviados y los ya recibidos en rapido hasta que pulses «Revisado» tras cotejar con el albaran. Toca
-            para abrir la lista.
+            Incluye enviados y los marcados «pendiente de recibir» hasta que pulses «Revisado» tras cotejar con el albaran.
+            Toca para abrir la lista.
           </p>
         </Link>
       </section>

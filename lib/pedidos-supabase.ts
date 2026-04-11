@@ -608,7 +608,7 @@ export async function setOrderPriceReviewArchived(
 
 /**
  * Marca el pedido recibido. Por defecto recalcula subtotales con el precio del snapshot.
- * Con `preserveOrderPricing: true` (recepción rápida desde Pedidos enviados) solo guarda cantidades/peso recibidos
+ * Con `preserveOrderPricing: true` (botón «Pendiente de recibir» en Pedidos) solo guarda cantidades/peso recibidos
  * y no modifica `price_per_unit` ni `line_total`, para cotejar precios más tarde con el albarán.
  */
 export async function persistSentOrderAsReceived(
