@@ -602,12 +602,22 @@ export async function setOrderPriceReviewArchived(
     .update({ price_review_archived_at: archived ? new Date().toISOString() : null })
     .eq('id', orderId)
     .eq('local_id', localId)
-    .eq('status', 'sent');
+    .in('status', ['sent', 'received']);
   if (error) throw new Error(error.message);
 }
 
-/** Persiste cantidades/peso/precio actuales del snapshot y marca el pedido como recibido (flujo rápido desde Pedidos enviados). */
-export async function persistSentOrderAsReceived(supabase: SupabaseClient, localId: string, order: PedidoOrder) {
+/**
+ * Marca el pedido recibido. Por defecto recalcula subtotales con el precio del snapshot.
+ * Con `preserveOrderPricing: true` (recepción rápida desde Pedidos enviados) solo guarda cantidades/peso recibidos
+ * y no modifica `price_per_unit` ni `line_total`, para cotejar precios más tarde con el albarán.
+ */
+export async function persistSentOrderAsReceived(
+  supabase: SupabaseClient,
+  localId: string,
+  order: PedidoOrder,
+  options?: { preserveOrderPricing?: boolean },
+) {
+  const preserveOrderPricing = options?.preserveOrderPricing === true;
   for (const item of order.items) {
     if (item.unit === 'kg') {
       await updateOrderItemReceivedWeightKg(
@@ -625,8 +635,10 @@ export async function persistSentOrderAsReceived(supabase: SupabaseClient, local
       );
     }
     await updateOrderItemReceived(supabase, localId, item.id, item.receivedQuantity);
-    const billingQty = billingQuantityForLine(item);
-    await updateOrderItemPrice(supabase, localId, item.id, item.pricePerUnit, billingQty);
+    if (!preserveOrderPricing) {
+      const billingQty = billingQuantityForLine(item);
+      await updateOrderItemPrice(supabase, localId, item.id, item.pricePerUnit, billingQty);
+    }
   }
   await setOrderStatus(supabase, localId, order.id, 'received');
 }

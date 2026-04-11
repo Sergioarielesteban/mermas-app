@@ -407,7 +407,10 @@ export default function PedidosPage() {
   );
 
   const sentOrders = orders.filter((row) => row.status === 'sent');
-  const sentOrdersPendingPriceReview = sentOrders.filter((row) => !row.priceReviewArchivedAt);
+  const ordersPendingPriceReview = orders.filter(
+    (row) =>
+      (row.status === 'sent' || row.status === 'received') && !row.priceReviewArchivedAt,
+  );
   const receivedOrders = orders.filter((row) => row.status === 'received');
 
   const renderSentOrderReceiveAndIncident = (order: PedidoOrder) => {
@@ -434,14 +437,16 @@ export default function PedidosPage() {
             if (!snap) return;
             if (
               !window.confirm(
-                '¿Marcar este pedido como recibido con el estado actual de las lineas (✓/✗)? Se guardaran cantidades y precios actuales.',
+                '¿Recepcion rapida? Se marca el pedido como recibido con las lineas actuales (✓/✗), sin cambiar precios ni totales del pedido. Sigue en «Pendientes revision de precios» hasta que lo revises con el albaran y pulses «Revisado».',
               )
             ) {
               return;
             }
-            void persistSentOrderAsReceived(supabase, localId, snap)
+            void persistSentOrderAsReceived(supabase, localId, snap, { preserveOrderPricing: true })
               .then(() => {
-                setMessage('Pedido marcado como recibido.');
+                setMessage(
+                  'Pedido recibido (rapido). Los precios no se han tocado; revisalos cuando puedas en Pendientes revision de precios.',
+                );
                 void reloadOrders();
                 dispatchPedidosDataChanged();
               })
@@ -566,10 +571,10 @@ export default function PedidosPage() {
           className="w-full max-w-sm rounded-2xl bg-white p-4 text-center ring-1 ring-zinc-200 block"
         >
           <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Pendientes revision de precios</p>
-          <p className="pt-2 text-2xl font-black text-zinc-900">{sentOrdersPendingPriceReview.length}</p>
+          <p className="pt-2 text-2xl font-black text-zinc-900">{ordersPendingPriceReview.length}</p>
           <p className="pt-1 text-xs text-zinc-500">
-            Pedidos enviados pendientes de comprobar precios y pesos. Toca para abrir la lista (todos los dias si no
-            filtras por fecha).
+            Incluye enviados y los ya recibidos en rapido hasta que pulses «Revisado» tras cotejar con el albaran. Toca
+            para abrir la lista.
           </p>
         </Link>
       </section>

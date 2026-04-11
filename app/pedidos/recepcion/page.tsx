@@ -82,7 +82,9 @@ export default function RecepcionPedidosPage() {
     const supabase = getSupabaseClient();
     if (!supabase) return;
     void fetchOrders(supabase, localId)
-      .then((rows) => setOrders(rows.filter((row) => row.status === 'sent')))
+      .then((rows) =>
+        setOrders(rows.filter((row) => row.status === 'sent' || row.status === 'received')),
+      )
       .catch((err: Error) => setMessage(err.message));
   }, [canUse, localId]);
 
@@ -107,11 +109,19 @@ export default function RecepcionPedidosPage() {
   }, [orders, focusOrderIdFromUrl]);
 
   const pendingPriceReviewOrders = React.useMemo(
-    () => orders.filter((o) => !o.priceReviewArchivedAt),
+    () =>
+      orders.filter(
+        (o) =>
+          (o.status === 'sent' || o.status === 'received') && !o.priceReviewArchivedAt,
+      ),
     [orders],
   );
   const archivedPriceReviewOrders = React.useMemo(
-    () => orders.filter((o) => Boolean(o.priceReviewArchivedAt)),
+    () =>
+      orders.filter(
+        (o) =>
+          (o.status === 'sent' || o.status === 'received') && Boolean(o.priceReviewArchivedAt),
+      ),
     [orders],
   );
 
@@ -488,8 +498,9 @@ export default function RecepcionPedidosPage() {
       <section className="rounded-2xl bg-white p-4 ring-1 ring-zinc-200">
         <p className="text-sm font-semibold text-zinc-800">Pendientes revisión de precios</p>
         <p className="mt-1 text-xs text-zinc-500">
-          Todos los pedidos enviados aparecen aquí hasta que pulses «Revisado» o los marques recibidos. La fecha filtra la
-          lista; déjala vacía para ver todos.
+          Pedidos enviados y los marcados «Recibido» en rapido desde Pedidos (mercancia ok, precios sin tocar). Siguen aqui
+          hasta que pulses «Revisado» tras cotejar con el albaran, o «Marcar todo recibido» si ajustas precios en esta
+          pantalla. La fecha filtra la lista; dejala vacia para ver todos.
         </p>
         {message ? <p className="mt-2 text-sm text-[#B91C1C]">{message}</p> : null}
         <div className="mt-3 grid grid-cols-1 gap-2 md:grid-cols-2">
@@ -536,6 +547,12 @@ export default function RecepcionPedidosPage() {
                 <p className="mt-2 text-[10px] font-medium uppercase tracking-[0.14em] text-zinc-400">
                   Pedido {new Date(order.createdAt).toLocaleDateString('es-ES')}
                 </p>
+                {order.status === 'received' ? (
+                  <p className="mt-2 max-w-[95%] rounded-lg bg-amber-100 px-2 py-1.5 text-[10px] font-bold uppercase leading-snug tracking-wide text-amber-950 ring-1 ring-amber-300/80">
+                    Recibido rapido: mercancia confirmada. Ajusta aqui el precio si el albaran no coincide; luego «Revisado»
+                    o «Marcar todo recibido».
+                  </p>
+                ) : null}
               </div>
               <div className="mt-3 space-y-2">
                 {order.items.map((item) => (
