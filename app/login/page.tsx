@@ -55,20 +55,18 @@ export default function LoginPage() {
 
   return (
     <div className="flex min-h-[100dvh] w-full flex-col bg-white">
-      {/* Tarjeta negra flotante sobre fondo blanco (como el hero del panel) */}
-      <section className="flex flex-shrink-0 justify-center px-4 pb-2 pt-10 sm:px-6 sm:pt-12">
-        <div className="w-full max-w-md rounded-3xl bg-[#000000] px-6 py-8 shadow-[0_24px_56px_-12px_rgba(0,0,0,0.45)] sm:px-8 sm:py-10">
-          <div className="flex flex-col items-center">
-            <img
-              src="/logo-chef-one-wordmark.svg"
-              alt="Chef-One"
-              className="mx-auto w-[min(92vw,440px)] max-w-full select-none"
-              width={512}
-              height={176}
-              decoding="async"
-            />
-            <ChefOneGlowLine className="mx-auto mt-5 w-[72%] max-w-[280px] sm:mt-6" />
-          </div>
+      {/* Fondo blanco: logo + línea sangre (sin caja negra) */}
+      <section className="flex flex-shrink-0 justify-center bg-white px-4 pb-2 pt-10 sm:px-6 sm:pt-12">
+        <div className="flex w-full max-w-md flex-col items-center py-2">
+          <img
+            src="/logo-chef-one-wordmark.svg"
+            alt="Chef-One"
+            className="mx-auto w-[min(92vw,440px)] max-w-full select-none"
+            width={512}
+            height={176}
+            decoding="async"
+          />
+          <ChefOneGlowLine className="mt-5 max-w-[300px] sm:mt-6" />
         </div>
       </section>
 

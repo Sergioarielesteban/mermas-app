@@ -199,7 +199,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               width={512}
               height={176}
             />
-            <ChefOneGlowLine className="mt-4 w-[70%] max-w-[200px]" />
+            <ChefOneGlowLine className="mt-4 max-w-[220px]" />
             <p className="mt-3 text-xs text-zinc-600">Gestión operativa</p>
           </div>
           <div className="mt-4 rounded-xl bg-zinc-50 px-3 py-2.5 text-xs leading-snug text-zinc-600 ring-1 ring-zinc-200">

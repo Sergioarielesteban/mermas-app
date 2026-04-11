@@ -6,6 +6,7 @@ import AppShell from '@/components/AppShell';
 import BottomNav from '@/components/BottomNav';
 import { useAuth } from '@/components/AuthProvider';
 import { SESSION_SHOW_CONTROL_PANEL } from '@/lib/session-flags';
+import ChefOneGlowLine from '@/components/ChefOneGlowLine';
 
 export default function AppFrame({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -105,8 +106,7 @@ export default function AppFrame({ children }: { children: React.ReactNode }) {
             height={176}
             decoding="async"
           />
-          {/* Borde superior = línea 100 % nítida en móvil (evita antialiasing del span 2px) */}
-          <hr className="mx-auto mt-6 w-[70%] max-w-[260px] border-0 border-t-[3px] border-solid border-[#D32F2F] sm:mt-7" />
+          <ChefOneGlowLine className="mt-6 max-w-[280px] sm:mt-7" />
         </div>
       </main>
     );
