@@ -53,27 +53,28 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="flex min-h-screen w-full flex-col">
-      {/* Mitad superior: negro + bloque tipo panel (tercera referencia) */}
-      <div className="flex min-h-[44vh] flex-col items-center justify-center bg-black px-5 pb-6 pt-10 sm:min-h-[40vh]">
-        <div className="w-full max-w-sm rounded-3xl bg-zinc-950 px-6 py-10 text-center shadow-2xl ring-1 ring-white/10">
+    <div className="flex min-h-[100dvh] w-full flex-col bg-white">
+      {/* Mitad superior: un solo negro #000, logo ~50% pantalla, bordes como panel */}
+      <section className="flex min-h-[50dvh] w-full flex-shrink-0 items-center justify-center bg-[#000000] px-4 py-6 sm:px-6">
+        <div className="flex aspect-square h-[min(calc(50dvh-2rem),min(92vw,440px))] w-[min(calc(50dvh-2rem),min(92vw,440px))] max-h-[min(48dvh,440px)] max-w-[min(92vw,440px)] items-center justify-center overflow-hidden rounded-3xl bg-[#000000] shadow-[0_24px_64px_-12px_rgba(0,0,0,0.95)] ring-1 ring-white/[0.08]">
           <img
             src="/logo-chef-one.svg"
             alt="Chef-One"
-            className="mx-auto h-auto w-full max-w-[13rem]"
-            width={260}
-            height={260}
+            className="h-full w-full object-contain p-1"
+            width={512}
+            height={512}
             decoding="async"
           />
         </div>
-      </div>
-      {/* Separador rojo tipo módulos */}
-      <div
-        className="h-[2px] w-full shrink-0 bg-gradient-to-r from-transparent via-[#D32F2F] to-transparent shadow-[0_0_14px_rgba(211,47,47,0.55)]"
-        aria-hidden
-      />
+      </section>
 
-      <div className="mx-auto w-full max-w-md flex-1 bg-white px-5 pb-10 pt-8">
+      {/* Línea roja bien visible entre negro y blanco */}
+      <div className="w-full flex-shrink-0 bg-white px-3 py-1" aria-hidden>
+        <div className="mx-auto h-1 max-w-lg rounded-full bg-gradient-to-r from-transparent via-[#F43F5E] to-transparent shadow-[0_0_20px_5px_rgba(211,47,47,0.85)] sm:h-1.5" />
+        <div className="mx-auto mt-1 h-0.5 max-w-md rounded-full bg-gradient-to-r from-transparent via-[#D32F2F] to-transparent opacity-90" />
+      </div>
+
+      <section className="mx-auto w-full max-w-md flex-1 bg-white px-5 pb-10 pt-6">
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <h1 className="text-lg font-black text-zinc-900">Acceso de Usuario</h1>
@@ -134,7 +135,7 @@ export default function LoginPage() {
             {submitting ? 'Entrando...' : 'Entrar'}
           </button>
         </form>
-      </div>
+      </section>
     </div>
   );
 }

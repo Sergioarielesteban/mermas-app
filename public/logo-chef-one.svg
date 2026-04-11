@@ -14,8 +14,9 @@
     y="248"
     text-anchor="middle"
     font-family="Georgia, 'Times New Roman', Times, serif"
-    font-size="54"
+    font-size="64"
     font-weight="400"
+    font-style="normal"
     fill="#D32F2F"
     letter-spacing="0.06em"
   >

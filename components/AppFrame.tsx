@@ -4,7 +4,6 @@ import React, { useEffect } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import AppShell from '@/components/AppShell';
 import BottomNav from '@/components/BottomNav';
-import ChefOneBrandBlock from '@/components/ChefOneBrandBlock';
 import { useAuth } from '@/components/AuthProvider';
 import { SESSION_SHOW_CONTROL_PANEL } from '@/lib/session-flags';
 
@@ -95,8 +94,17 @@ export default function AppFrame({ children }: { children: React.ReactNode }) {
 
   if (showSplash) {
     return (
-      <main className="grid min-h-screen place-items-center bg-black px-6">
-        <ChefOneBrandBlock className="max-w-[min(18rem,85vw)]" />
+      <main className="grid min-h-screen place-items-center bg-[#000000] px-4">
+        <div className="flex aspect-square h-[min(48dvh,88vw)] w-[min(48dvh,88vw)] max-h-[440px] max-w-[440px] items-center justify-center overflow-hidden rounded-3xl bg-[#000000] shadow-[0_24px_64px_-12px_rgba(0,0,0,0.95)] ring-1 ring-white/[0.08]">
+          <img
+            src="/logo-chef-one.svg"
+            alt="Chef-One"
+            className="h-full w-full object-contain p-1"
+            width={512}
+            height={512}
+            decoding="async"
+          />
+        </div>
       </main>
     );
   }

@@ -71,7 +71,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <div className="min-h-full bg-zinc-50">
+    <div className="min-h-full bg-white">
       {confirmLogoutOpen ? (
         <>
           <button
@@ -189,7 +189,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           >
             <X className="h-5 w-5" />
           </button>
-          <div className="rounded-3xl bg-zinc-950 px-3 py-4 ring-1 ring-white/10">
+          <div className="rounded-3xl bg-[#000000] px-3 py-4 shadow-xl shadow-black/60 ring-1 ring-white/[0.08]">
             <div className="flex items-center gap-3">
               <img
                 src="/logo-chef-one.svg"
@@ -210,7 +210,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             className="mx-auto mt-4 h-[2px] w-28 bg-gradient-to-r from-transparent via-[#D32F2F] to-transparent shadow-[0_0_14px_rgba(211,47,47,0.55)]"
             aria-hidden
           />
-          <div className="mt-4 rounded-xl bg-zinc-950/90 px-3 py-2.5 text-xs leading-snug text-zinc-400 ring-1 ring-white/5">
+          <div className="mt-4 rounded-xl bg-[#000000] px-3 py-2.5 text-xs leading-snug text-zinc-500 ring-1 ring-white/[0.06]">
             Plataforma interna de control de costes y desperdicio.
           </div>
         </div>
