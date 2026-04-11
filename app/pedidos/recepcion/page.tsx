@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import React from 'react';
 import { useAuth } from '@/components/AuthProvider';
+import { CHEF_ONE_TAPER_LINE_CLASS } from '@/components/ChefOneGlowLine';
 import { getSupabaseClient } from '@/lib/supabase-client';
 import PedidosPremiaLockedScreen from '@/components/PedidosPremiaLockedScreen';
 import { dispatchPedidosDataChanged, usePedidosDataChangedListener } from '@/hooks/usePedidosDataChangedListener';
@@ -541,7 +542,7 @@ export default function RecepcionPedidosPage() {
                   {order.supplierName}
                 </p>
                 <span
-                  className="mt-2 block h-[2px] w-20 rounded-[1px] bg-[#D32F2F]"
+                  className={`mx-auto mt-2 w-20 ${CHEF_ONE_TAPER_LINE_CLASS}`}
                   aria-hidden
                 />
                 <p className="mt-2 text-[10px] font-medium uppercase tracking-[0.14em] text-zinc-400">

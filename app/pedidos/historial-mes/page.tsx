@@ -4,6 +4,7 @@ import Link from 'next/link';
 import React from 'react';
 import { ChevronDown } from 'lucide-react';
 import { useAuth } from '@/components/AuthProvider';
+import { CHEF_ONE_TAPER_LINE_CLASS } from '@/components/ChefOneGlowLine';
 import { getSupabaseClient } from '@/lib/supabase-client';
 import PedidosPremiaLockedScreen from '@/components/PedidosPremiaLockedScreen';
 import { canAccessPedidos, canUsePedidosModule } from '@/lib/pedidos-access';
@@ -178,7 +179,7 @@ export default function PedidosHistorialMesPage() {
                     {supplier.supplierName}
                   </span>
                   <span
-                    className="mt-4 block h-[2px] w-24 rounded-[1px] bg-[#D32F2F]"
+                    className={`mx-auto mt-4 w-24 ${CHEF_ONE_TAPER_LINE_CLASS}`}
                     aria-hidden
                   />
                   <span className="mt-4 flex items-center gap-1.5 text-xs text-zinc-500">

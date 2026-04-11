@@ -3,6 +3,7 @@
 import React, { useMemo, useState } from 'react';
 import Image from 'next/image';
 import { Camera, Check, ChevronDown, Search, Upload, X } from 'lucide-react';
+import { CHEF_ONE_TAPER_LINE_CLASS } from '@/components/ChefOneGlowLine';
 import { useMermasStore } from '@/components/MermasStoreProvider';
 import type { MermaMotiveKey } from '@/lib/types';
 
@@ -417,7 +418,7 @@ export default function MermasRegistrationForm() {
             GUARDAR
           </button>
           <span
-            className="mx-auto mt-4 block h-[2px] w-24 rounded-[1px] bg-[#D32F2F]"
+            className={`mx-auto mt-4 w-24 ${CHEF_ONE_TAPER_LINE_CLASS}`}
             aria-hidden
           />
         </div>

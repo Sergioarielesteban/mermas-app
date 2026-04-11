@@ -5,12 +5,13 @@ import { useRouter } from 'next/navigation';
 import React from 'react';
 import type { LucideIcon } from 'lucide-react';
 import { BookOpen, Calculator, ChefHat, ClipboardList, ShieldCheck, ShoppingCart } from 'lucide-react';
+import { CHEF_ONE_TAPER_LINE_CLASS } from '@/components/ChefOneGlowLine';
 import MermasStyleHero from '@/components/MermasStyleHero';
 import { useAuth } from '@/components/AuthProvider';
 import { SESSION_SHOW_CONTROL_PANEL } from '@/lib/session-flags';
 import { canAccessPedidos } from '@/lib/pedidos-access';
 
-const LINE = 'mx-auto mt-4 block h-[2px] w-24 rounded-[1px] bg-[#D32F2F]';
+const LINE = `mx-auto mt-4 w-24 ${CHEF_ONE_TAPER_LINE_CLASS}`;
 
 type TileProps = {
   href?: string;

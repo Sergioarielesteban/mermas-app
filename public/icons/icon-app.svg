@@ -1,4 +1,12 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Chef-One">
+  <defs>
+    <linearGradient id="iconLineTaper" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#D32F2F" stop-opacity="0" />
+      <stop offset="14%" stop-color="#D32F2F" stop-opacity="1" />
+      <stop offset="86%" stop-color="#D32F2F" stop-opacity="1" />
+      <stop offset="100%" stop-color="#D32F2F" stop-opacity="0" />
+    </linearGradient>
+  </defs>
   <rect width="512" height="512" fill="#000000" />
   <text
     x="256"
@@ -14,5 +22,13 @@
   >
     Chef-One
   </text>
-  <rect x="72" y="308" width="368" height="5" fill="#D32F2F" rx="1" />
+  <line
+    x1="56"
+    y1="310.5"
+    x2="456"
+    y2="310.5"
+    stroke="url(#iconLineTaper)"
+    stroke-width="5"
+    stroke-linecap="round"
+  />
 </svg>
