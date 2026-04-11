@@ -119,10 +119,15 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           >
             <Menu className="h-6 w-6" />
           </button>
-          <div className="flex h-8 min-w-[118px] shrink-0 items-center justify-center rounded-md border border-[#D32F2F]/35 bg-white px-2">
-            <span className="bg-gradient-to-r from-[#B91C1C] to-[#D32F2F] bg-clip-text text-center text-[11px] font-bold leading-none tracking-wide text-transparent">
-              Chef-One
-            </span>
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-black ring-1 ring-white/25">
+            <img
+              src="/logo-chef-one.svg"
+              alt=""
+              role="presentation"
+              className="h-full w-full object-cover"
+              width={36}
+              height={36}
+            />
           </div>
           <div className="min-w-0 flex-1">
             <h1 className="line-clamp-1 text-sm font-extrabold uppercase tracking-wide text-white">
@@ -175,34 +180,39 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         ].join(' ')}
         aria-label="Menú lateral"
       >
-        <div className="bg-gradient-to-r from-[#B91C1C] to-[#D32F2F] px-3 pb-4 pt-3 text-white">
-          <div className="flex items-center gap-3">
-            <div className="grid h-14 w-14 place-items-center overflow-hidden rounded-xl border border-[#D32F2F]/30 bg-[#fafafa] p-1 shadow-sm">
-              <img
-                src="/logo-chef-one.svg"
-                alt=""
-                role="presentation"
-                className="h-full w-full object-contain"
-                width={56}
-                height={56}
-              />
-            </div>
-            <div className="min-w-0">
-              <div className="truncate text-sm font-bold tracking-wide text-white">Chef-One</div>
-              <div className="truncate text-xs text-white/85">Gestión operativa</div>
-            </div>
-          </div>
-          <div className="mt-3 rounded-xl bg-white/12 px-3 py-2 text-xs text-white/90 backdrop-blur">
-            Plataforma interna de control de costes y desperdicio.
-          </div>
+        <div className="relative bg-black px-3 pb-5 pt-4">
           <button
             type="button"
             onClick={() => setOpen(false)}
-            className="absolute right-3 top-3 grid h-9 w-9 place-items-center rounded-xl text-white hover:bg-white/15"
+            className="absolute right-3 top-3 grid h-9 w-9 place-items-center rounded-xl text-zinc-400 hover:bg-white/10 hover:text-white"
             aria-label="Cerrar menú"
           >
             <X className="h-5 w-5" />
           </button>
+          <div className="rounded-3xl bg-zinc-950 px-3 py-4 ring-1 ring-white/10">
+            <div className="flex items-center gap-3">
+              <img
+                src="/logo-chef-one.svg"
+                alt=""
+                role="presentation"
+                className="h-14 w-14 shrink-0 rounded-xl object-cover ring-1 ring-white/10"
+                width={56}
+                height={56}
+              />
+              <div className="min-w-0 pr-6">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-zinc-500">CHEF-ONE</p>
+                <p className="mt-0.5 truncate font-serif text-sm font-normal tracking-wide text-[#D32F2F]">Chef-One</p>
+                <p className="truncate text-xs text-zinc-500">Gestión operativa</p>
+              </div>
+            </div>
+          </div>
+          <div
+            className="mx-auto mt-4 h-[2px] w-28 bg-gradient-to-r from-transparent via-[#D32F2F] to-transparent shadow-[0_0_14px_rgba(211,47,47,0.55)]"
+            aria-hidden
+          />
+          <div className="mt-4 rounded-xl bg-zinc-950/90 px-3 py-2.5 text-xs leading-snug text-zinc-400 ring-1 ring-white/5">
+            Plataforma interna de control de costes y desperdicio.
+          </div>
         </div>
 
         <nav className="px-2 py-3">

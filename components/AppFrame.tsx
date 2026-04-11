@@ -4,6 +4,7 @@ import React, { useEffect } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import AppShell from '@/components/AppShell';
 import BottomNav from '@/components/BottomNav';
+import ChefOneBrandBlock from '@/components/ChefOneBrandBlock';
 import { useAuth } from '@/components/AuthProvider';
 import { SESSION_SHOW_CONTROL_PANEL } from '@/lib/session-flags';
 
@@ -89,20 +90,13 @@ export default function AppFrame({ children }: { children: React.ReactNode }) {
   }
 
   if (isLogin) {
-    return <main className="min-h-screen px-4 py-8">{children}</main>;
+    return <main className="min-h-screen flex flex-col bg-white">{children}</main>;
   }
 
   if (showSplash) {
     return (
-      <main className="grid min-h-screen place-items-center bg-[#fafafa] px-6">
-        <img
-          src="/logo-chef-one.svg"
-          alt="Chef-One"
-          className="h-auto w-full max-w-[min(20rem,88vw)] select-none"
-          width={320}
-          height={320}
-          decoding="async"
-        />
+      <main className="grid min-h-screen place-items-center bg-black px-6">
+        <ChefOneBrandBlock className="max-w-[min(18rem,85vw)]" />
       </main>
     );
   }

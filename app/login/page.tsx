@@ -53,22 +53,28 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="mx-auto mt-14 w-full max-w-md">
-      <div className="overflow-hidden rounded-3xl bg-white shadow-xl ring-1 ring-zinc-200">
-        <div className="bg-gradient-to-r from-[#B91C1C] to-[#D32F2F] px-5 py-7">
-          <div className="mx-auto flex max-w-xs justify-center rounded-2xl bg-[#fafafa] px-4 py-5 shadow-sm ring-1 ring-black/5">
-            <img
-              src="/logo-chef-one.svg"
-              alt="Chef-One"
-              className="h-auto w-full max-w-[13.5rem]"
-              width={216}
-              height={216}
-              decoding="async"
-            />
-          </div>
+    <div className="flex min-h-screen w-full flex-col">
+      {/* Mitad superior: negro + bloque tipo panel (tercera referencia) */}
+      <div className="flex min-h-[44vh] flex-col items-center justify-center bg-black px-5 pb-6 pt-10 sm:min-h-[40vh]">
+        <div className="w-full max-w-sm rounded-3xl bg-zinc-950 px-6 py-10 text-center shadow-2xl ring-1 ring-white/10">
+          <img
+            src="/logo-chef-one.svg"
+            alt="Chef-One"
+            className="mx-auto h-auto w-full max-w-[13rem]"
+            width={260}
+            height={260}
+            decoding="async"
+          />
         </div>
+      </div>
+      {/* Separador rojo tipo módulos */}
+      <div
+        className="h-[2px] w-full shrink-0 bg-gradient-to-r from-transparent via-[#D32F2F] to-transparent shadow-[0_0_14px_rgba(211,47,47,0.55)]"
+        aria-hidden
+      />
 
-        <form onSubmit={handleSubmit} className="space-y-4 p-5">
+      <div className="mx-auto w-full max-w-md flex-1 bg-white px-5 pb-10 pt-8">
+        <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <h1 className="text-lg font-black text-zinc-900">Acceso de Usuario</h1>
             <p className="pt-1 text-sm text-zinc-600">Entra con tu email y contraseña.</p>
@@ -123,7 +129,7 @@ export default function LoginPage() {
           <button
             type="submit"
             disabled={submitting}
-            className="h-12 w-full rounded-xl bg-gradient-to-r from-[#B91C1C] to-[#D32F2F] text-sm font-black uppercase tracking-wide text-white shadow-md"
+            className="h-12 w-full rounded-xl bg-[#D32F2F] text-sm font-black uppercase tracking-wide text-white shadow-md shadow-[#D32F2F]/35 hover:bg-[#c62828]"
           >
             {submitting ? 'Entrando...' : 'Entrar'}
           </button>
