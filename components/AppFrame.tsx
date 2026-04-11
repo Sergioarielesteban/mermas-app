@@ -106,7 +106,7 @@ export default function AppFrame({ children }: { children: React.ReactNode }) {
             height={176}
             decoding="async"
           />
-          <ChefOneGlowLine className="mt-6 max-w-[280px] sm:mt-7" />
+          <ChefOneGlowLine className="mx-auto mt-6 w-[min(75vw,280px)] sm:mt-7" />
         </div>
       </main>
     );

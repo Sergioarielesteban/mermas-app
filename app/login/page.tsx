@@ -66,7 +66,7 @@ export default function LoginPage() {
             height={176}
             decoding="async"
           />
-          <ChefOneGlowLine className="mt-5 max-w-[300px] sm:mt-6" />
+          <ChefOneGlowLine className="mx-auto mt-5 w-[min(78vw,300px)] sm:mt-6" />
         </div>
       </section>
 

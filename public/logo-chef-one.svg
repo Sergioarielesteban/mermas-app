@@ -1,13 +1,4 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Chef-One">
-  <defs>
-    <linearGradient id="logoBloodLine" x1="0" y1="0" x2="1" y2="0">
-      <stop offset="0%" stop-color="#B71C1C" stop-opacity="0" />
-      <stop offset="38%" stop-color="#E53935" stop-opacity="0.9" />
-      <stop offset="50%" stop-color="#FF1744" stop-opacity="1" />
-      <stop offset="62%" stop-color="#E53935" stop-opacity="0.9" />
-      <stop offset="100%" stop-color="#B71C1C" stop-opacity="0" />
-    </linearGradient>
-  </defs>
   <rect width="512" height="512" fill="#ffffff" />
   <text
     x="256"
@@ -17,18 +8,10 @@
     font-size="56"
     font-weight="400"
     font-style="normal"
-    fill="#E53935"
+    fill="#D32F2F"
     letter-spacing="0.06em"
   >
     Chef-One
   </text>
-  <line
-    x1="96"
-    y1="272"
-    x2="416"
-    y2="272"
-    stroke="url(#logoBloodLine)"
-    stroke-width="5"
-    stroke-linecap="round"
-  />
+  <rect x="104" y="268" width="304" height="5" fill="#D32F2F" />
 </svg>
