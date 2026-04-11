@@ -69,6 +69,12 @@ export default function RecepcionPedidosPage() {
   const [incidentNoteByOrderId, setIncidentNoteByOrderId] = React.useState<Record<string, string>>({});
   const [showReceivedBanner, setShowReceivedBanner] = React.useState(false);
   const receivedBannerTimeoutRef = React.useRef<number | null>(null);
+  const focusOrderIdFromUrl = searchParams.get('orderId') ?? '';
+  const focusOrderAppliedRef = React.useRef(false);
+
+  React.useEffect(() => {
+    focusOrderAppliedRef.current = false;
+  }, [focusOrderIdFromUrl]);
 
   const reloadOrders = React.useCallback(() => {
     if (!canUse || !localId) return;
@@ -84,6 +90,20 @@ export default function RecepcionPedidosPage() {
   }, [reloadOrders]);
 
   usePedidosDataChangedListener(reloadOrders, Boolean(hasPedidosEntry && canUse));
+
+  React.useEffect(() => {
+    if (!focusOrderIdFromUrl || focusOrderAppliedRef.current) return;
+    const o = orders.find((x) => x.id === focusOrderIdFromUrl);
+    if (!o) return;
+    focusOrderAppliedRef.current = true;
+    setDateFilter(o.createdAt.slice(0, 10));
+    setSupplierFilter('all');
+    setIncidentOpenByOrderId((prev) => ({ ...prev, [focusOrderIdFromUrl]: true }));
+    setIncidentNoteByOrderId((prev) => ({
+      ...prev,
+      [focusOrderIdFromUrl]: prev[focusOrderIdFromUrl] ?? draftIncidentNoteForOrder(o),
+    }));
+  }, [orders, focusOrderIdFromUrl]);
 
   const supplierOptions = React.useMemo(() => {
     return Array.from(new Set(orders.map((o) => o.supplierName))).sort((a, b) => a.localeCompare(b));

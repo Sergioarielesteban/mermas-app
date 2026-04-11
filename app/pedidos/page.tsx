@@ -492,7 +492,6 @@ export default function PedidosPage() {
                     </p>
                   ) : null}
                   {order.items.map((item) => {
-                    const incidentText = formatIncidentLine(item);
                     const mark = quickLineMarks[item.id];
                     const isOk =
                       mark === 'ok' ||
@@ -504,8 +503,35 @@ export default function PedidosPage() {
                     return (
                       <div key={item.id} className="space-y-2 rounded-xl bg-white p-3 ring-1 ring-zinc-200">
                         <div className="flex items-start justify-between gap-2">
-                          <p className="text-sm font-semibold text-zinc-900">{item.productName}</p>
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-semibold text-zinc-900">{item.productName}</p>
+                            <p className="mt-1 text-xs text-zinc-700">
+                              Pedido:{' '}
+                              <span className="font-semibold text-zinc-900">
+                                {formatQuantityWithUnit(item.quantity, item.unit)}
+                              </span>
+                            </p>
+                          </div>
                           <div className="flex shrink-0 items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const serverBad = Boolean(item.incidentType);
+                                if (mark === 'bad' || (mark === undefined && serverBad)) {
+                                  clearQuickReceive(order.id, item);
+                                  return;
+                                }
+                                quickReceiveItem(order.id, item, false);
+                              }}
+                              className={[
+                                'grid h-7 w-7 place-items-center rounded-full border text-sm font-black',
+                                isBad ? 'border-[#B91C1C] bg-[#B91C1C] text-white' : 'border-zinc-300 bg-white text-zinc-400',
+                              ].join(' ')}
+                              title="No recibido (toca otra vez para quitar)"
+                              aria-label="No recibido"
+                            >
+                              {'\u2715'}
+                            </button>
                             <button
                               type="button"
                               onClick={() => {
@@ -528,48 +554,8 @@ export default function PedidosPage() {
                             >
                               {'\u2713'}
                             </button>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                const serverBad = Boolean(item.incidentType);
-                                if (mark === 'bad' || (mark === undefined && serverBad)) {
-                                  clearQuickReceive(order.id, item);
-                                  return;
-                                }
-                                quickReceiveItem(order.id, item, false);
-                              }}
-                              className={[
-                                'grid h-7 w-7 place-items-center rounded-full border text-sm font-black',
-                                isBad ? 'border-[#B91C1C] bg-[#B91C1C] text-white' : 'border-zinc-300 bg-white text-zinc-400',
-                              ].join(' ')}
-                              title="No recibido (toca otra vez para quitar)"
-                              aria-label="No recibido"
-                            >
-                              {'\u2715'}
-                            </button>
                           </div>
                         </div>
-                        <p className="text-xs italic text-zinc-700">
-                          Pedido:{' '}
-                          <span className="font-semibold not-italic text-zinc-900">
-                            {formatQuantityWithUnit(item.quantity, item.unit)}
-                          </span>
-                        </p>
-                        <p className="text-xs italic text-zinc-700">
-                          Precio:{' '}
-                          <span className="font-semibold not-italic text-zinc-900">
-                            {item.pricePerUnit.toFixed(2)} €/{unitPriceCatalogSuffix[item.unit]}
-                          </span>
-                        </p>
-                        <p className="text-xs italic text-zinc-700">
-                          Subt:{' '}
-                          <span className="font-semibold not-italic text-zinc-900">{item.lineTotal.toFixed(2)} €</span>
-                        </p>
-                        {incidentText ? (
-                          <p className="text-xs font-semibold text-[#B91C1C]">
-                            <span aria-hidden>{'\u{1F6A8}'}</span> Incidencia: {incidentText}
-                          </p>
-                        ) : null}
                         {unitCanDeclareScaleKgOnReception(item.unit) &&
                         item.receivedWeightKg != null &&
                         item.receivedWeightKg > 0 ? (
@@ -581,6 +567,33 @@ export default function PedidosPage() {
                       </div>
                     );
                   })}
+                  {(() => {
+                    const hasAnyBad = order.items.some((item) => {
+                      const m = quickLineMarks[item.id];
+                      return m === 'bad' || (m === undefined && Boolean(item.incidentType));
+                    });
+                    return (
+                      <div className="mt-4 border-t border-amber-200/90 pt-3">
+                        <button
+                          type="button"
+                          disabled={!hasAnyBad}
+                          onClick={() =>
+                            router.push(
+                              `/pedidos/recepcion?date=${encodeURIComponent(order.createdAt.slice(0, 10))}&orderId=${encodeURIComponent(order.id)}`,
+                            )
+                          }
+                          className={[
+                            'w-full rounded-lg px-3 py-2.5 text-center text-xs font-bold transition',
+                            hasAnyBad
+                              ? 'bg-[#B91C1C] text-white active:scale-[0.99]'
+                              : 'cursor-not-allowed bg-zinc-200 text-zinc-500',
+                          ].join(' ')}
+                        >
+                          Incidencia
+                        </button>
+                      </div>
+                    );
+                  })()}
                 </div>
               ) : null}
 
