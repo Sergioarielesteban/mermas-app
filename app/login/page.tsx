@@ -55,9 +55,16 @@ export default function LoginPage() {
   return (
     <div className="mx-auto mt-14 w-full max-w-md">
       <div className="overflow-hidden rounded-3xl bg-white shadow-xl ring-1 ring-zinc-200">
-        <div className="bg-gradient-to-r from-[#B91C1C] to-[#D32F2F] p-5">
-          <div className="mx-auto flex h-16 w-full max-w-[280px] items-center justify-center rounded-xl bg-white px-3">
-            <span className="text-center text-2xl font-black italic tracking-wide text-[#D32F2F]">XAMPA ONE</span>
+        <div className="bg-gradient-to-r from-[#B91C1C] to-[#D32F2F] px-5 py-8">
+          <div className="mx-auto flex max-w-sm flex-col items-center gap-5">
+            <div className="h-px w-36 bg-gradient-to-r from-transparent via-white/75 to-transparent" />
+            <p
+              className="text-center font-light text-white drop-shadow-sm"
+              style={{ fontSize: '1.35rem', letterSpacing: '0.36em' }}
+            >
+              CHEF<span className="mx-0.5 font-extralight text-white/90">—</span>ONE
+            </p>
+            <div className="h-px w-36 bg-gradient-to-r from-transparent via-white/55 to-transparent" />
           </div>
         </div>
 

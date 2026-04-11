@@ -28,7 +28,7 @@ function normalizeWhatsappNumber(raw: string | undefined) {
 
 function normalizeLocalForWhatsapp(raw: string) {
   const cleaned = raw.replace(/\bCAN\b/gi, '').replace(/\s+/g, ' ').trim();
-  return cleaned || 'XAMPA MATARO';
+  return cleaned || 'CHEF-ONE MATARO';
 }
 
 function buildWhatsappDraftMessage(input: {
@@ -45,7 +45,7 @@ function buildWhatsappDraftMessage(input: {
     `Proveedor: ${input.supplierName}`,
     `Fecha pedido: ${fechaPedido}`,
     `Fecha entrega: ${input.deliveryDate}`,
-    `Local: ${normalizeLocalForWhatsapp(input.localName || 'XAMPA MATARO')}`,
+    `Local: ${normalizeLocalForWhatsapp(input.localName || 'CHEF-ONE MATARO')}`,
     `Pedido por: ${input.requestedBy}`,
     '------------------------------',
     'PEDIDO:',

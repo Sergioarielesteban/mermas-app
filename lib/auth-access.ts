@@ -1,3 +1,4 @@
+/** Emails permitidos (cuentas reales en Supabase Auth; la marca de la app es Chef-One). */
 const ALLOWED_EMAILS = [
   'sergioarielesteban@hotmail.com',
   'xampacocina2026@gmail.com',

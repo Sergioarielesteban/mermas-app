@@ -158,6 +158,6 @@ with check (local_id = public.current_local_id());
 -- 9) Seed mínimo de locales (ejemplo)
 insert into public.locals (code, name, city)
 values
-  ('MATARO', 'Xampa One Mataro', 'Mataro'),
-  ('PREMIA', 'Xampa One Premia', 'Premia')
+  ('MATARO', 'Chef-One Mataro', 'Mataro'),
+  ('PREMIA', 'Chef-One Premia', 'Premia')
 on conflict (code) do nothing;

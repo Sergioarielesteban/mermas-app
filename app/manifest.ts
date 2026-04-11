@@ -2,8 +2,8 @@ import type { MetadataRoute } from 'next';
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: 'Xampa One',
-    short_name: 'XampaOne',
+    name: 'Chef-One',
+    short_name: 'ChefOne',
     description: 'Gestión operativa para restaurantes',
     start_url: '/',
     display: 'standalone',
@@ -22,7 +22,7 @@ export default function manifest(): MetadataRoute.Manifest {
         type: 'image/jpeg',
       },
       {
-        src: '/logo-xampa-one.svg',
+        src: '/logo-chef-one.svg',
         sizes: '512x160',
         type: 'image/svg+xml',
       },

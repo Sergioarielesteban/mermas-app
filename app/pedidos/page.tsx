@@ -38,7 +38,7 @@ function normalizeWhatsappNumber(raw: string | undefined) {
 
 function normalizeLocalForWhatsapp(raw: string) {
   const cleaned = raw.replace(/\bCAN\b/gi, '').replace(/\s+/g, ' ').trim();
-  return cleaned || 'XAMPA MATARO';
+  return cleaned || 'CHEF-ONE MATARO';
 }
 
 function buildWhatsappOrderMessage(order: PedidoOrder, deliveryDate: string, localName: string, requestedBy: string) {
@@ -50,7 +50,7 @@ function buildWhatsappOrderMessage(order: PedidoOrder, deliveryDate: string, loc
     `Proveedor: ${order.supplierName}`,
     `Fecha pedido: ${fechaPedido}`,
     `Fecha entrega: ${deliveryDate}`,
-    `Local: ${normalizeLocalForWhatsapp(localName || 'XAMPA MATARO')}`,
+    `Local: ${normalizeLocalForWhatsapp(localName || 'CHEF-ONE MATARO')}`,
     `Pedido por: ${requestedBy}`,
     '------------------------------',
     'PEDIDO:',
@@ -130,7 +130,9 @@ export default function PedidosPage() {
       ? new Date(order.createdAt).toLocaleDateString('es-ES')
       : parsed.toLocaleDateString('es-ES');
     const requestedBy = (email ?? 'EQUIPO').split('@')[0] || 'EQUIPO';
-    const text = encodeURIComponent(buildWhatsappOrderMessage(order, deliveryDate, localName ?? 'MATARO', requestedBy));
+    const text = encodeURIComponent(
+      buildWhatsappOrderMessage(order, deliveryDate, localName ?? 'CHEF-ONE MATARO', requestedBy),
+    );
     const url = `https://wa.me/${phone}?text=${text}`;
     window.open(url, '_blank', 'noopener,noreferrer');
   }, [email, localName]);

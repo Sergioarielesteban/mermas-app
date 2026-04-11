@@ -19,7 +19,7 @@ type AuthContextValue = {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 const AUTH_KEY = 'mermas_user_email';
-const PROFILE_CACHE_KEY = 'xampa_profile_cache_v1';
+const PROFILE_CACHE_KEY = 'chef_one_profile_cache_v1';
 const PROFILE_TIMEOUT_MS = 6000;
 
 function isInvalidRefreshTokenError(message: string | undefined) {

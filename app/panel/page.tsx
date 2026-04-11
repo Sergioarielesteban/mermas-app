@@ -108,7 +108,7 @@ export default function PanelControlPage() {
   return (
     <div className="space-y-6">
       <MermasStyleHero
-        eyebrow="Xampa One"
+        eyebrow="Chef-One"
         title="Panel de control"
         description="Accede a los módulos operativos del local. Los marcados como próximamente están en desarrollo."
       />

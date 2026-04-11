@@ -18,25 +18,25 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   metadataBase: new URL("http://localhost:3000"),
-  title: "Xampa One",
+  title: "Chef-One",
   description: "Gestión operativa para restaurantes",
   manifest: "/manifest.webmanifest",
   icons: {
-    icon: "/logo-xampa-one.svg",
-    apple: "/logo-xampa-one.svg",
+    icon: "/logo-chef-one.svg",
+    apple: "/logo-chef-one.svg",
   },
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
-    title: "Xampa One",
+    title: "Chef-One",
   },
   formatDetection: {
     telephone: false,
   },
   openGraph: {
-    title: "Xampa One",
+    title: "Chef-One",
     description: "Gestión operativa para restaurantes",
-    images: ["/logo-xampa-one.svg"],
+    images: ["/logo-chef-one.svg"],
   },
 };
 
