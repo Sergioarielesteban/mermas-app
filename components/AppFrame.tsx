@@ -6,7 +6,7 @@ import AppShell from '@/components/AppShell';
 import BottomNav from '@/components/BottomNav';
 import { useAuth } from '@/components/AuthProvider';
 import { SESSION_SHOW_CONTROL_PANEL } from '@/lib/session-flags';
-import ChefOneGlowLine from '@/components/ChefOneGlowLine';
+import ChefOneLaunchMark from '@/components/ChefOneLaunchMark';
 
 export default function AppFrame({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -64,36 +64,39 @@ export default function AppFrame({ children }: { children: React.ReactNode }) {
   // Resto de rutas: esperar auth o desbloqueo por tiempo.
   if (effectiveLoading) {
     return (
-      <main className="grid min-h-screen place-items-center bg-zinc-50 px-4">
-        <div className="flex flex-col items-center gap-3">
-          <p className="text-sm font-semibold text-zinc-600">Cargando sesión...</p>
-          <button
-            type="button"
-            onClick={() => {
-              if (typeof window !== 'undefined') window.location.assign('/login');
-            }}
-            className="h-10 rounded-xl bg-[#D32F2F] px-4 text-xs font-bold uppercase tracking-wide text-white"
-          >
-            Ir al acceso
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              if (typeof window !== 'undefined') {
-                const keys = Object.keys(window.localStorage);
-                for (const key of keys) {
-                  if (key.startsWith('sb-') && key.includes('-auth-token')) {
-                    window.localStorage.removeItem(key);
+      <main className="flex min-h-[100dvh] flex-col items-center justify-center bg-white px-6">
+        <div className="flex w-full max-w-md flex-col items-center">
+          <ChefOneLaunchMark />
+          <p className="mt-8 text-sm font-medium text-zinc-500">Cargando sesión…</p>
+          <div className="mt-6 flex w-full max-w-xs flex-col gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                if (typeof window !== 'undefined') window.location.assign('/login');
+              }}
+              className="h-10 rounded-xl bg-[#D32F2F] px-4 text-xs font-bold uppercase tracking-wide text-white"
+            >
+              Ir al acceso
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                if (typeof window !== 'undefined') {
+                  const keys = Object.keys(window.localStorage);
+                  for (const key of keys) {
+                    if (key.startsWith('sb-') && key.includes('-auth-token')) {
+                      window.localStorage.removeItem(key);
+                    }
                   }
+                  window.localStorage.removeItem('mermas_user_email');
+                  window.location.replace('/login');
                 }
-                window.localStorage.removeItem('mermas_user_email');
-                window.location.replace('/login');
-              }
-            }}
-            className="h-10 rounded-xl border border-zinc-300 bg-white px-4 text-xs font-bold uppercase tracking-wide text-zinc-700"
-          >
-            Reiniciar sesión
-          </button>
+              }}
+              className="h-10 rounded-xl border border-zinc-300 bg-white px-4 text-xs font-bold uppercase tracking-wide text-zinc-700"
+            >
+              Reiniciar sesión
+            </button>
+          </div>
         </div>
       </main>
     );
@@ -105,17 +108,9 @@ export default function AppFrame({ children }: { children: React.ReactNode }) {
 
   if (showSplash) {
     return (
-      <main className="grid min-h-screen place-items-center bg-white px-6">
-        <div className="flex w-full max-w-sm flex-col items-center">
-          <img
-            src="/logo-chef-one-wordmark.svg"
-            alt="Chef-One"
-            className="w-[min(88vw,400px)] max-w-full select-none"
-            width={512}
-            height={176}
-            decoding="async"
-          />
-          <ChefOneGlowLine className="mx-auto mt-6 w-[min(75vw,280px)] sm:mt-7" />
+      <main className="flex min-h-[100dvh] flex-col items-center justify-center bg-white px-6">
+        <div className="w-full max-w-md">
+          <ChefOneLaunchMark />
         </div>
       </main>
     );

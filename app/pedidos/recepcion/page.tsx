@@ -541,7 +541,7 @@ export default function RecepcionPedidosPage() {
                   {order.supplierName}
                 </p>
                 <span
-                  className="mt-2 block h-px min-h-px w-20 rounded-full bg-gradient-to-r from-transparent via-[#D32F2F] to-transparent shadow-[0_0_8px_2px_rgba(211,47,47,0.38),0_0_3px_rgba(239,68,68,0.22)]"
+                  className="mt-2 block h-[2px] w-20 rounded-[1px] bg-[#D32F2F]"
                   aria-hidden
                 />
                 <p className="mt-2 text-[10px] font-medium uppercase tracking-[0.14em] text-zinc-400">

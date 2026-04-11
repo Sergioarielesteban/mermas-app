@@ -10,8 +10,7 @@ import { useAuth } from '@/components/AuthProvider';
 import { SESSION_SHOW_CONTROL_PANEL } from '@/lib/session-flags';
 import { canAccessPedidos } from '@/lib/pedidos-access';
 
-const LINE =
-  'mx-auto mt-4 block h-px min-h-px w-24 rounded-full bg-gradient-to-r from-transparent via-[#D32F2F] to-transparent shadow-[0_0_10px_2px_rgba(211,47,47,0.4),0_0_4px_rgba(239,68,68,0.25)]';
+const LINE = 'mx-auto mt-4 block h-[2px] w-24 rounded-[1px] bg-[#D32F2F]';
 
 type TileProps = {
   href?: string;
