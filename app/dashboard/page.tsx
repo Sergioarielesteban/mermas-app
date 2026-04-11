@@ -407,7 +407,7 @@ export default function DashboardPage() {
           Seguimiento en tiempo real
         </p>
         <span
-          className="mx-auto mt-2 block h-px w-12 bg-gradient-to-r from-transparent via-[#D32F2F] to-transparent opacity-90 sm:mt-2.5"
+          className="mx-auto mt-2 block h-[2px] w-24 bg-gradient-to-r from-transparent via-[#D32F2F] to-transparent opacity-90 sm:mt-2.5"
           aria-hidden
         />
         <p className="mx-auto mt-2 max-w-sm text-center text-xs leading-snug text-zinc-400 sm:mt-2.5 sm:text-sm sm:leading-relaxed">

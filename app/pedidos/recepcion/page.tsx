@@ -473,7 +473,7 @@ export default function RecepcionPedidosPage() {
                   {order.supplierName}
                 </p>
                 <span
-                  className="mt-2 block h-px w-10 bg-gradient-to-r from-transparent via-[#D32F2F] to-transparent opacity-90"
+                  className="mt-2 block h-[2px] w-20 bg-gradient-to-r from-transparent via-[#D32F2F] to-transparent opacity-90"
                   aria-hidden
                 />
                 <p className="mt-2 text-[10px] font-medium uppercase tracking-[0.14em] text-zinc-400">

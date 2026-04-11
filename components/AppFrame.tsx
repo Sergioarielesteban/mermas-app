@@ -5,6 +5,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import AppShell from '@/components/AppShell';
 import BottomNav from '@/components/BottomNav';
 import { useAuth } from '@/components/AuthProvider';
+import { SESSION_SHOW_CONTROL_PANEL } from '@/lib/session-flags';
 
 export default function AppFrame({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -38,7 +39,14 @@ export default function AppFrame({ children }: { children: React.ReactNode }) {
         }
       }, 400);
     }
-    if (email && isLogin) router.replace('/dashboard');
+    if (email && isLogin) {
+      try {
+        sessionStorage.setItem(SESSION_SHOW_CONTROL_PANEL, '1');
+      } catch {
+        /* modo privado u otro */
+      }
+      router.replace('/panel');
+    }
   }, [effectiveLoading, email, isLogin, router]);
 
   useEffect(() => {
@@ -92,12 +100,18 @@ export default function AppFrame({ children }: { children: React.ReactNode }) {
     );
   }
 
+  const hideBottomNav = pathname === '/panel';
+
   return (
     <>
-      <div className="flex-1 pb-[calc(4.5rem+env(safe-area-inset-bottom))]">
+      <div
+        className={
+          hideBottomNav ? 'flex-1' : 'flex-1 pb-[calc(4.5rem+env(safe-area-inset-bottom))]'
+        }
+      >
         <AppShell>{children}</AppShell>
       </div>
-      <BottomNav />
+      {hideBottomNav ? null : <BottomNav />}
     </>
   );
 }

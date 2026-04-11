@@ -417,7 +417,7 @@ export default function MermasRegistrationForm() {
             GUARDAR
           </button>
           <span
-            className="mx-auto mt-4 block h-px w-12 bg-gradient-to-r from-transparent via-[#D32F2F] to-transparent opacity-90"
+            className="mx-auto mt-4 block h-[2px] w-24 bg-gradient-to-r from-transparent via-[#D32F2F] to-transparent opacity-90"
             aria-hidden
           />
         </div>

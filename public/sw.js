@@ -1,5 +1,5 @@
-const CACHE_NAME = 'xampa-one-app-v2';
-const CORE_ASSETS = ['/', '/login', '/dashboard', '/productos', '/resumen', '/manifest.webmanifest'];
+const CACHE_NAME = 'xampa-one-app-v3';
+const CORE_ASSETS = ['/', '/login', '/panel', '/dashboard', '/productos', '/resumen', '/manifest.webmanifest'];
 
 self.addEventListener('message', (event) => {
   if (event.data?.type === 'SKIP_WAITING') {

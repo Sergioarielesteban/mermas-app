@@ -21,6 +21,7 @@ const NAV_ITEMS: NavItem[] = [
 ];
 function titleForPath(pathname: string | null) {
   if (!pathname) return 'Mermas';
+  if (pathname === '/panel' || pathname.startsWith('/panel/')) return 'Panel de control';
   if (pathname === '/' || pathname.startsWith('/dashboard')) return 'Mermas';
   if (pathname.startsWith('/productos')) return 'Añadir Productos';
   if (pathname.startsWith('/resumen')) return 'Resumen';
