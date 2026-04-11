@@ -119,8 +119,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           >
             <Menu className="h-6 w-6" />
           </button>
-          <div className="flex h-8 min-w-[118px] shrink-0 items-center justify-center rounded-md border border-black/25 bg-white px-2">
-            <span className="text-center font-serif text-[11px] italic font-normal leading-none tracking-wide text-[#D32F2F]">
+          <div className="flex h-8 min-w-[118px] shrink-0 items-center justify-center rounded-md border border-[#D32F2F]/35 bg-white px-2">
+            <span className="bg-gradient-to-r from-[#B91C1C] to-[#D32F2F] bg-clip-text text-center text-[11px] font-bold leading-none tracking-wide text-transparent">
               Chef-One
             </span>
           </div>
@@ -177,7 +177,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       >
         <div className="bg-gradient-to-r from-[#B91C1C] to-[#D32F2F] px-3 pb-4 pt-3 text-white">
           <div className="flex items-center gap-3">
-            <div className="grid h-14 w-14 place-items-center overflow-hidden rounded-xl border border-black/20 bg-[#fafafa] p-1 shadow-sm">
+            <div className="grid h-14 w-14 place-items-center overflow-hidden rounded-xl border border-[#D32F2F]/30 bg-[#fafafa] p-1 shadow-sm">
               <img
                 src="/logo-chef-one.svg"
                 alt=""
@@ -188,7 +188,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               />
             </div>
             <div className="min-w-0">
-              <div className="truncate font-serif text-sm italic font-normal tracking-wide text-white">Chef-One</div>
+              <div className="truncate text-sm font-bold tracking-wide text-white">Chef-One</div>
               <div className="truncate text-xs text-white/85">Gestión operativa</div>
             </div>
           </div>
