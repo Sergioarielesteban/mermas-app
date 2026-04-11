@@ -5,6 +5,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import React from 'react';
 import { useAuth } from '@/components/AuthProvider';
 import { getSupabaseClient } from '@/lib/supabase-client';
+import MermasStyleHero from '@/components/MermasStyleHero';
 import PedidosPremiaLockedScreen from '@/components/PedidosPremiaLockedScreen';
 import { dispatchPedidosDataChanged, usePedidosDataChangedListener } from '@/hooks/usePedidosDataChangedListener';
 import { canAccessPedidos, canUsePedidosModule } from '@/lib/pedidos-access';
@@ -364,8 +365,14 @@ export default function PedidosPage() {
           </div>
         </div>
       ) : null}
+
+      <MermasStyleHero
+        eyebrow="Pedidos"
+        title="Proveedores y recepción"
+        description="Crea pedidos, envía por WhatsApp, controla envíos y recepción en el local."
+      />
+
       <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-zinc-200">
-        <h1 className="text-center text-lg font-black text-zinc-900">PEDIDOS</h1>
         <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-3">
           <Link href="/pedidos/nuevo" className="rounded-xl bg-[#D32F2F] px-3 py-2 text-center text-sm font-bold text-white">
             + Nuevo pedido

@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import React, { useCallback, useMemo, useState } from 'react';
-import { BookOpen, Drumstick, LogOut, Menu, X, FileText, RefreshCcw, ShoppingCart } from 'lucide-react';
+import { BookOpen, Drumstick, LogOut, Menu, X, RefreshCcw, ShoppingCart } from 'lucide-react';
 import { useAuth } from '@/components/AuthProvider';
 import PullToRefreshPedidos from '@/components/PullToRefreshPedidos';
 import { canAccessPedidos } from '@/lib/pedidos-access';
@@ -18,7 +18,6 @@ type NavItem = {
 const NAV_ITEMS: NavItem[] = [
   { href: '/dashboard', label: 'Mermas', Icon: BookOpen },
   { href: '/productos', label: 'Añadir Productos', Icon: Drumstick },
-  { href: '/resumen', label: 'Resumen', Icon: FileText },
 ];
 function titleForPath(pathname: string | null) {
   if (!pathname) return 'Mermas';

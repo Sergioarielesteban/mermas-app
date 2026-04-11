@@ -4,7 +4,8 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import React from 'react';
 import type { LucideIcon } from 'lucide-react';
-import { BookOpen, ChefHat, ClipboardList, ShieldCheck, ShoppingCart } from 'lucide-react';
+import { BookOpen, Calculator, ChefHat, ClipboardList, ShieldCheck, ShoppingCart } from 'lucide-react';
+import MermasStyleHero from '@/components/MermasStyleHero';
 import { useAuth } from '@/components/AuthProvider';
 import { SESSION_SHOW_CONTROL_PANEL } from '@/lib/session-flags';
 import { canAccessPedidos } from '@/lib/pedidos-access';
@@ -106,14 +107,11 @@ export default function PanelControlPage() {
 
   return (
     <div className="space-y-6">
-      <section className="rounded-3xl bg-zinc-950 px-5 py-7 text-white shadow-xl shadow-zinc-900/20 sm:px-8 sm:py-9">
-        <h1 className="text-center text-[11px] font-semibold uppercase tracking-[0.22em] text-zinc-400">Xampa One</h1>
-        <p className="mt-2 text-center text-2xl font-light tracking-tight text-white sm:text-3xl">Panel de control</p>
-        <span className={`mx-auto mt-4 ${LINE}`} aria-hidden />
-        <p className="mx-auto mt-4 max-w-sm text-center text-sm leading-relaxed text-zinc-400">
-          Accede a los módulos operativos del local. Los marcados como próximamente están en desarrollo.
-        </p>
-      </section>
+      <MermasStyleHero
+        eyebrow="Xampa One"
+        title="Panel de control"
+        description="Accede a los módulos operativos del local. Los marcados como próximamente están en desarrollo."
+      />
 
       {stubMessage ? (
         <div className="rounded-2xl border border-amber-200/80 bg-amber-50 px-4 py-3 text-center text-sm font-semibold text-amber-950 ring-1 ring-amber-100">
@@ -137,6 +135,12 @@ export default function PanelControlPage() {
           label="Cocina central"
           sub="Próximamente"
           Icon={ChefHat}
+        />
+        <HubTile
+          onClick={() => onStub('Escandallos')}
+          label="Escandallos"
+          sub="Próximamente"
+          Icon={Calculator}
         />
         <HubTile onClick={() => onStub('APPCC')} label="APPCC" sub="Próximamente" Icon={ShieldCheck} />
       </div>

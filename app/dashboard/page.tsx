@@ -1,9 +1,10 @@
 'use client';
 
+import Link from 'next/link';
 import React from 'react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { CalendarDays, TrendingDown, TrendingUp } from 'lucide-react';
+import { CalendarDays, FileText, TrendingDown, TrendingUp } from 'lucide-react';
 import {
   Bar,
   BarChart,
@@ -16,6 +17,7 @@ import {
   YAxis,
 } from 'recharts';
 import MermasRegistrationForm from '@/components/MermasRegistrationForm';
+import MermasStyleHero from '@/components/MermasStyleHero';
 import { useMermasStore } from '@/components/MermasStoreProvider';
 import { toBusinessDate } from '@/lib/business-day';
 import {
@@ -399,23 +401,30 @@ export default function DashboardPage() {
         </div>
       ) : null}
 
-      <section className="rounded-3xl bg-zinc-950 px-4 py-3.5 text-white shadow-xl shadow-zinc-900/20 sm:px-5 sm:py-4">
-        <h1 className="text-center text-[10px] font-semibold uppercase tracking-[0.2em] text-zinc-400 sm:text-[11px]">
-          Mermas
-        </h1>
-        <p className="mt-1 text-center text-base font-semibold uppercase tracking-[0.14em] text-white sm:mt-1.5 sm:text-lg">
-          Seguimiento en tiempo real
-        </p>
-        <span
-          className="mx-auto mt-2 block h-[2px] w-24 bg-gradient-to-r from-transparent via-[#D32F2F] to-transparent opacity-90 sm:mt-2.5"
-          aria-hidden
-        />
-        <p className="mx-auto mt-2 max-w-sm text-center text-xs leading-snug text-zinc-400 sm:mt-2.5 sm:text-sm sm:leading-relaxed">
-          Registra mermas y consulta costes, alertas y tendencias en la misma pantalla.
-        </p>
-      </section>
+      <MermasStyleHero
+        eyebrow="Mermas"
+        title="Seguimiento en tiempo real"
+        description="Registra mermas y consulta costes, alertas y tendencias en la misma pantalla."
+      />
 
       <MermasRegistrationForm />
+
+      <Link
+        href="/resumen"
+        className="flex items-center gap-4 rounded-3xl bg-zinc-950 px-4 py-4 text-left text-white shadow-lg shadow-zinc-900/30 ring-1 ring-zinc-800/90 transition hover:bg-zinc-900 active:scale-[0.99] sm:px-5"
+      >
+        <div className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-[#D32F2F]/20 text-[#D32F2F] ring-1 ring-[#D32F2F]/30">
+          <FileText className="h-6 w-6" strokeWidth={2.25} />
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-zinc-400">Informes</p>
+          <p className="mt-0.5 text-base font-extrabold uppercase tracking-wide text-white">Resumen</p>
+          <p className="mt-1 text-xs leading-snug text-zinc-400">Totales, exportar y vista global de mermas.</p>
+        </div>
+        <span className="shrink-0 text-lg font-light text-zinc-500" aria-hidden>
+          →
+        </span>
+      </Link>
 
       <section className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-zinc-200">
         <div className="mb-2 flex items-center justify-between">
