@@ -8,6 +8,7 @@ import { useAuth } from '@/components/AuthProvider';
 import PullToRefreshPedidos from '@/components/PullToRefreshPedidos';
 import { canAccessPedidos } from '@/lib/pedidos-access';
 import { SESSION_SHOW_CONTROL_PANEL } from '@/lib/session-flags';
+import ChefOneGlowLine from '@/components/ChefOneGlowLine';
 
 type NavItem = {
   href: string;
@@ -119,14 +120,14 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           >
             <Menu className="h-6 w-6" />
           </button>
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-black ring-1 ring-white/25">
+          <div className="flex h-9 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-white/95 px-1.5 ring-1 ring-white/40">
             <img
-              src="/logo-chef-one.svg"
+              src="/logo-chef-one-wordmark.svg"
               alt=""
               role="presentation"
-              className="h-full w-full object-cover"
-              width={36}
-              height={36}
+              className="h-6 w-auto max-w-[4.5rem] object-contain object-left"
+              width={512}
+              height={160}
             />
           </div>
           <div className="min-w-0 flex-1">
@@ -180,37 +181,29 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         ].join(' ')}
         aria-label="Menú lateral"
       >
-        <div className="relative bg-black px-3 pb-5 pt-4">
+        <div className="relative border-b border-zinc-200 bg-white px-3 pb-5 pt-4">
           <button
             type="button"
             onClick={() => setOpen(false)}
-            className="absolute right-3 top-3 grid h-9 w-9 place-items-center rounded-xl text-zinc-400 hover:bg-white/10 hover:text-white"
+            className="absolute right-3 top-3 grid h-9 w-9 place-items-center rounded-xl text-zinc-500 hover:bg-zinc-100"
             aria-label="Cerrar menú"
           >
             <X className="h-5 w-5" />
           </button>
-          <div className="rounded-3xl bg-[#000000] px-3 py-4 shadow-xl shadow-black/60 ring-1 ring-white/[0.08]">
-            <div className="flex items-center gap-3">
-              <img
-                src="/logo-chef-one.svg"
-                alt=""
-                role="presentation"
-                className="h-14 w-14 shrink-0 rounded-xl object-cover ring-1 ring-white/10"
-                width={56}
-                height={56}
-              />
-              <div className="min-w-0 pr-6">
-                <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-zinc-500">CHEF-ONE</p>
-                <p className="mt-0.5 truncate font-serif text-sm font-normal tracking-wide text-[#D32F2F]">Chef-One</p>
-                <p className="truncate text-xs text-zinc-500">Gestión operativa</p>
-              </div>
-            </div>
+          <div className="pr-10 pt-1">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-zinc-500">CHEF-ONE</p>
+            <img
+              src="/logo-chef-one-wordmark.svg"
+              alt=""
+              role="presentation"
+              className="mt-2 h-8 w-auto max-w-[200px] select-none"
+              width={512}
+              height={160}
+            />
+            <ChefOneGlowLine className="mt-3 w-32 max-w-[55%]" />
+            <p className="mt-3 text-xs text-zinc-600">Gestión operativa</p>
           </div>
-          <div
-            className="mx-auto mt-4 h-[2px] w-28 bg-gradient-to-r from-transparent via-[#D32F2F] to-transparent shadow-[0_0_14px_rgba(211,47,47,0.55)]"
-            aria-hidden
-          />
-          <div className="mt-4 rounded-xl bg-[#000000] px-3 py-2.5 text-xs leading-snug text-zinc-500 ring-1 ring-white/[0.06]">
+          <div className="mt-4 rounded-xl bg-zinc-50 px-3 py-2.5 text-xs leading-snug text-zinc-600 ring-1 ring-zinc-200">
             Plataforma interna de control de costes y desperdicio.
           </div>
         </div>

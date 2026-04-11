@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { useAuth } from '@/components/AuthProvider';
 import { getAllowedEmails, isAllowedEmail } from '@/lib/auth-access';
 import { isSupabaseEnabled } from '@/lib/supabase-client';
+import ChefOneGlowLine from '@/components/ChefOneGlowLine';
 
 const REMEMBERED_EMAIL_KEY = 'mermas_remembered_email';
 
@@ -54,27 +55,24 @@ export default function LoginPage() {
 
   return (
     <div className="flex min-h-[100dvh] w-full flex-col bg-white">
-      {/* Mitad superior: un solo negro #000, logo ~50% pantalla, bordes como panel */}
-      <section className="flex min-h-[50dvh] w-full flex-shrink-0 items-center justify-center bg-[#000000] px-4 py-6 sm:px-6">
-        <div className="flex aspect-square h-[min(calc(50dvh-2rem),min(92vw,440px))] w-[min(calc(50dvh-2rem),min(92vw,440px))] max-h-[min(48dvh,440px)] max-w-[min(92vw,440px)] items-center justify-center overflow-hidden rounded-3xl bg-[#000000] shadow-[0_24px_64px_-12px_rgba(0,0,0,0.95)] ring-1 ring-white/[0.08]">
-          <img
-            src="/logo-chef-one.svg"
-            alt="Chef-One"
-            className="h-full w-full object-contain p-1"
-            width={512}
-            height={512}
-            decoding="async"
-          />
+      {/* Tarjeta negra flotante sobre fondo blanco (como el hero del panel) */}
+      <section className="flex flex-shrink-0 justify-center px-4 pb-2 pt-10 sm:px-6 sm:pt-12">
+        <div className="w-full max-w-md rounded-3xl bg-[#000000] px-6 py-8 shadow-[0_24px_56px_-12px_rgba(0,0,0,0.45)] sm:px-8 sm:py-10">
+          <div className="flex flex-col items-center">
+            <img
+              src="/logo-chef-one-wordmark.svg"
+              alt="Chef-One"
+              className="w-[min(82vw,340px)] max-w-full select-none"
+              width={512}
+              height={160}
+              decoding="async"
+            />
+            <ChefOneGlowLine className="mx-auto mt-5 w-[58%] max-w-[220px] sm:mt-6" />
+          </div>
         </div>
       </section>
 
-      {/* Línea roja bien visible entre negro y blanco */}
-      <div className="w-full flex-shrink-0 bg-white px-3 py-1" aria-hidden>
-        <div className="mx-auto h-1 max-w-lg rounded-full bg-gradient-to-r from-transparent via-[#F43F5E] to-transparent shadow-[0_0_20px_5px_rgba(211,47,47,0.85)] sm:h-1.5" />
-        <div className="mx-auto mt-1 h-0.5 max-w-md rounded-full bg-gradient-to-r from-transparent via-[#D32F2F] to-transparent opacity-90" />
-      </div>
-
-      <section className="mx-auto w-full max-w-md flex-1 bg-white px-5 pb-10 pt-6">
+      <section className="mx-auto w-full max-w-md flex-1 bg-white px-5 pb-10 pt-8">
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <h1 className="text-lg font-black text-zinc-900">Acceso de Usuario</h1>

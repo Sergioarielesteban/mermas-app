@@ -6,6 +6,7 @@ import AppShell from '@/components/AppShell';
 import BottomNav from '@/components/BottomNav';
 import { useAuth } from '@/components/AuthProvider';
 import { SESSION_SHOW_CONTROL_PANEL } from '@/lib/session-flags';
+import ChefOneGlowLine from '@/components/ChefOneGlowLine';
 
 export default function AppFrame({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -94,16 +95,17 @@ export default function AppFrame({ children }: { children: React.ReactNode }) {
 
   if (showSplash) {
     return (
-      <main className="grid min-h-screen place-items-center bg-[#000000] px-4">
-        <div className="flex aspect-square h-[min(48dvh,88vw)] w-[min(48dvh,88vw)] max-h-[440px] max-w-[440px] items-center justify-center overflow-hidden rounded-3xl bg-[#000000] shadow-[0_24px_64px_-12px_rgba(0,0,0,0.95)] ring-1 ring-white/[0.08]">
+      <main className="grid min-h-screen place-items-center bg-white px-6">
+        <div className="flex w-full max-w-sm flex-col items-center">
           <img
-            src="/logo-chef-one.svg"
+            src="/logo-chef-one-wordmark.svg"
             alt="Chef-One"
-            className="h-full w-full object-contain p-1"
+            className="w-[min(72vw,280px)] max-w-full select-none"
             width={512}
-            height={512}
+            height={160}
             decoding="async"
           />
+          <ChefOneGlowLine className="mt-6 w-[55%] max-w-[200px] sm:mt-7" />
         </div>
       </main>
     );
