@@ -100,18 +100,12 @@ export default function AppFrame({ children }: { children: React.ReactNode }) {
     );
   }
 
-  const hideBottomNav = pathname === '/panel';
-
   return (
     <>
-      <div
-        className={
-          hideBottomNav ? 'flex-1' : 'flex-1 pb-[calc(4.5rem+env(safe-area-inset-bottom))]'
-        }
-      >
+      <div className="flex-1 pb-[calc(4.5rem+env(safe-area-inset-bottom))]">
         <AppShell>{children}</AppShell>
       </div>
-      {hideBottomNav ? null : <BottomNav />}
+      <BottomNav />
     </>
   );
 }

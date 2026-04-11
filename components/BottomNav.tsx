@@ -1,57 +1,45 @@
 'use client';
 
-import Link from 'next/link';
-import { usePathname } from 'next/navigation';
-import { BookOpen, ShoppingCart } from 'lucide-react';
-import { useAuth } from '@/components/AuthProvider';
-import { canAccessPedidos } from '@/lib/pedidos-access';
-
-const NAV_ITEMS = [
-  { href: '/dashboard', label: 'Mermas', Icon: BookOpen },
-  { href: '/pedidos', label: 'Pedidos', Icon: ShoppingCart },
-] as const;
+import { LayoutDashboard } from 'lucide-react';
+import { usePathname, useRouter } from 'next/navigation';
+import { SESSION_SHOW_CONTROL_PANEL } from '@/lib/session-flags';
 
 export default function BottomNav() {
   const pathname = usePathname();
-  const { localCode, localName, localId, email } = useAuth();
-  const items = canAccessPedidos(localCode, email, localName, localId)
-    ? NAV_ITEMS
-    : NAV_ITEMS.filter((item) => item.href !== '/pedidos');
+  const router = useRouter();
+
+  const goToControlPanel = () => {
+    try {
+      sessionStorage.setItem(SESSION_SHOW_CONTROL_PANEL, '1');
+    } catch {
+      /* ignore */
+    }
+    router.push('/panel');
+  };
+
+  const onPanel = pathname === '/panel' || pathname?.startsWith('/panel/');
 
   return (
     <nav
       className="fixed inset-x-0 bottom-0 z-[70] border-t border-zinc-200/80 bg-white/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-md"
-      aria-label="Navegación inferior"
+      aria-label="Volver al panel de control"
     >
-      <div className="mx-auto flex h-16 w-full max-w-md px-1">
-        {items.map((item) => {
-          const Icon = item.Icon;
-          const isActive =
-            item.href === '/dashboard'
-              ? pathname === '/dashboard' || pathname === '/'
-              : pathname === item.href || pathname?.startsWith(`${item.href}/`);
-
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              aria-current={isActive ? 'page' : undefined}
-              className={[
-                'flex flex-1 flex-col items-center justify-center gap-1 rounded-xl px-2 transition-all',
-                isActive
-                  ? 'bg-[#D32F2F]/10 text-[#D32F2F] shadow-sm ring-1 ring-[#D32F2F]/20'
-                  : 'text-zinc-500 hover:bg-zinc-100',
-              ].join(' ')}
-            >
-              <Icon className="h-6 w-6" strokeWidth={2.25} />
-              <span className="max-w-[140px] overflow-hidden text-ellipsis whitespace-nowrap text-[11px] font-semibold leading-none">
-                {item.label}
-              </span>
-            </Link>
-          );
-        })}
+      <div className="mx-auto flex h-16 w-full max-w-md items-center justify-center px-4">
+        <button
+          type="button"
+          onClick={goToControlPanel}
+          aria-current={onPanel ? 'page' : undefined}
+          className={[
+            'flex min-w-[12rem] flex-col items-center justify-center gap-0.5 rounded-2xl px-6 py-2 transition-all',
+            onPanel
+              ? 'bg-[#D32F2F]/12 text-[#D32F2F] shadow-sm ring-1 ring-[#D32F2F]/25'
+              : 'text-zinc-600 hover:bg-zinc-100',
+          ].join(' ')}
+        >
+          <LayoutDashboard className="h-6 w-6" strokeWidth={2.25} />
+          <span className="text-[11px] font-bold leading-none tracking-wide">Panel de control</span>
+        </button>
       </div>
     </nav>
   );
 }
-

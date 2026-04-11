@@ -1,12 +1,13 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
-import React, { useMemo, useState } from 'react';
+import { usePathname, useRouter } from 'next/navigation';
+import React, { useCallback, useMemo, useState } from 'react';
 import { BookOpen, Drumstick, LogOut, Menu, X, FileText, RefreshCcw, ShoppingCart } from 'lucide-react';
 import { useAuth } from '@/components/AuthProvider';
 import PullToRefreshPedidos from '@/components/PullToRefreshPedidos';
 import { canAccessPedidos } from '@/lib/pedidos-access';
+import { SESSION_SHOW_CONTROL_PANEL } from '@/lib/session-flags';
 
 type NavItem = {
   href: string;
@@ -31,6 +32,7 @@ function titleForPath(pathname: string | null) {
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const router = useRouter();
   const [open, setOpen] = useState(false);
   const [confirmLogoutOpen, setConfirmLogoutOpen] = useState(false);
   const { email, logout, localId, localCode, localName } = useAuth();
@@ -44,6 +46,16 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   );
 
   const confirmAndLogout = () => setConfirmLogoutOpen(true);
+
+  const goToControlPanel = useCallback(() => {
+    try {
+      sessionStorage.setItem(SESSION_SHOW_CONTROL_PANEL, '1');
+    } catch {
+      /* ignore */
+    }
+    router.push('/panel');
+  }, [router]);
+
   const refreshApp = async () => {
     try {
       if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
@@ -248,6 +260,21 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       </aside>
 
       <main className="mx-auto w-full max-w-md px-4 py-5">
+        {pathname !== '/panel' && !pathname?.startsWith('/panel/') ? (
+          <div className="mb-4 space-y-1.5">
+            <button
+              type="button"
+              onClick={goToControlPanel}
+              className="flex w-full items-center justify-center gap-2 rounded-xl border border-zinc-300 bg-white py-2.5 text-sm font-bold text-zinc-800 shadow-sm ring-1 ring-zinc-200/80 hover:bg-zinc-50 active:scale-[0.99]"
+            >
+              <span aria-hidden>←</span>
+              Panel de control
+            </button>
+            <p className="text-center text-[11px] font-semibold uppercase tracking-wide text-zinc-500">
+              Módulo · {title}
+            </p>
+          </div>
+        ) : null}
         <PullToRefreshPedidos>{children}</PullToRefreshPedidos>
       </main>
     </div>
