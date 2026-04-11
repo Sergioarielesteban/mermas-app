@@ -95,20 +95,14 @@ export default function AppFrame({ children }: { children: React.ReactNode }) {
   if (showSplash) {
     return (
       <main className="grid min-h-screen place-items-center bg-[#fafafa] px-6">
-        <div className="flex flex-col items-center gap-6 select-none" aria-hidden>
-          <div className="h-px w-44 max-w-[72vw] bg-gradient-to-r from-transparent via-[#D32F2F]/90 to-transparent" />
-          <p
-            className="text-center font-light text-[#6e1f2d] antialiased"
-            style={{
-              fontSize: 'clamp(1.2rem, 4.2vw, 1.65rem)',
-              letterSpacing: '0.38em',
-            }}
-          >
-            CHEF<span className="mx-0.5 font-extralight text-[#B91C1C]">—</span>ONE
-          </p>
-          <div className="h-px w-44 max-w-[72vw] bg-gradient-to-r from-transparent via-[#B91C1C]/75 to-transparent" />
-        </div>
-        <span className="sr-only">Chef-One</span>
+        <img
+          src="/logo-chef-one.svg"
+          alt="Chef-One"
+          className="h-auto w-full max-w-[min(20rem,88vw)] select-none"
+          width={320}
+          height={320}
+          decoding="async"
+        />
       </main>
     );
   }

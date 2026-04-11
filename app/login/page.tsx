@@ -55,16 +55,16 @@ export default function LoginPage() {
   return (
     <div className="mx-auto mt-14 w-full max-w-md">
       <div className="overflow-hidden rounded-3xl bg-white shadow-xl ring-1 ring-zinc-200">
-        <div className="bg-gradient-to-r from-[#B91C1C] to-[#D32F2F] px-5 py-8">
-          <div className="mx-auto flex max-w-sm flex-col items-center gap-5">
-            <div className="h-px w-36 bg-gradient-to-r from-transparent via-white/75 to-transparent" />
-            <p
-              className="text-center font-light text-white drop-shadow-sm"
-              style={{ fontSize: '1.35rem', letterSpacing: '0.36em' }}
-            >
-              CHEF<span className="mx-0.5 font-extralight text-white/90">—</span>ONE
-            </p>
-            <div className="h-px w-36 bg-gradient-to-r from-transparent via-white/55 to-transparent" />
+        <div className="bg-gradient-to-r from-[#B91C1C] to-[#D32F2F] px-5 py-7">
+          <div className="mx-auto flex max-w-xs justify-center rounded-2xl bg-[#fafafa] px-4 py-5 shadow-sm ring-1 ring-black/5">
+            <img
+              src="/logo-chef-one.svg"
+              alt="Chef-One"
+              className="h-auto w-full max-w-[13.5rem]"
+              width={216}
+              height={216}
+              decoding="async"
+            />
           </div>
         </div>
 
