@@ -178,7 +178,7 @@ export default function PedidosHistorialMesPage() {
                     {supplier.supplierName}
                   </span>
                   <span
-                    className="mt-4 block h-[2px] w-24 bg-gradient-to-r from-transparent via-[#D32F2F] to-transparent opacity-80"
+                    className="mt-4 block h-px min-h-px w-24 rounded-full bg-gradient-to-r from-transparent via-[#D32F2F] to-transparent shadow-[0_0_10px_2px_rgba(211,47,47,0.4),0_0_4px_rgba(239,68,68,0.25)]"
                     aria-hidden
                   />
                   <span className="mt-4 flex items-center gap-1.5 text-xs text-zinc-500">

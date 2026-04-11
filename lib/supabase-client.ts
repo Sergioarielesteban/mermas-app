@@ -10,14 +10,18 @@ export function getSupabaseClient() {
   const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   if (!url || !anonKey) return null;
 
-  client = createClient(url, anonKey, {
-    auth: {
-      persistSession: true,
-      autoRefreshToken: true,
-      detectSessionInUrl: true,
-    },
-  });
-  return client;
+  try {
+    client = createClient(url, anonKey, {
+      auth: {
+        persistSession: true,
+        autoRefreshToken: true,
+        detectSessionInUrl: true,
+      },
+    });
+    return client;
+  } catch {
+    return null;
+  }
 }
 
 export function isSupabaseEnabled() {

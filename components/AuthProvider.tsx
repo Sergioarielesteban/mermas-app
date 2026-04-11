@@ -21,8 +21,8 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 const AUTH_KEY = 'mermas_user_email';
 const PROFILE_CACHE_KEY = 'chef_one_profile_cache_v1';
 const PROFILE_TIMEOUT_MS = 6000;
-/** Si getSession no responde (red, bug cliente), no bloquear la app más de esto. */
-const GET_SESSION_TIMEOUT_MS = 5000;
+/** Si getSession no responde (red, preview sin storage, etc.), no bloquear la app más de esto. */
+const GET_SESSION_TIMEOUT_MS = 2500;
 
 function isInvalidRefreshTokenError(message: string | undefined) {
   const m = (message ?? '').toLowerCase();
@@ -217,9 +217,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (restoreProfileFromCache()) {
         /* ya aplicado en restore */
       }
-    }, GET_SESSION_TIMEOUT_MS + 2500);
+    }, GET_SESSION_TIMEOUT_MS + 1500);
 
-    const sessionPromise = supabase.auth.getSession();
+    let sessionPromise: ReturnType<typeof supabase.auth.getSession>;
+    try {
+      sessionPromise = supabase.auth.getSession();
+    } catch {
+      window.clearTimeout(safetyTimeout);
+      if (isMounted) {
+        setLoading(false);
+        setProfileReady(true);
+      }
+      return;
+    }
     const timeoutPromise = new Promise<null>((resolve) => {
       window.setTimeout(() => resolve(null), GET_SESSION_TIMEOUT_MS);
     });

@@ -23,7 +23,7 @@ export default function AppFrame({ children }: { children: React.ReactNode }) {
     }
     const timer = window.setTimeout(() => {
       setForceUnlock(true);
-    }, 3500);
+    }, 1800);
     return () => window.clearTimeout(timer);
   }, [loading]);
 
@@ -67,6 +67,15 @@ export default function AppFrame({ children }: { children: React.ReactNode }) {
       <main className="grid min-h-screen place-items-center bg-zinc-50 px-4">
         <div className="flex flex-col items-center gap-3">
           <p className="text-sm font-semibold text-zinc-600">Cargando sesión...</p>
+          <button
+            type="button"
+            onClick={() => {
+              if (typeof window !== 'undefined') window.location.assign('/login');
+            }}
+            className="h-10 rounded-xl bg-[#D32F2F] px-4 text-xs font-bold uppercase tracking-wide text-white"
+          >
+            Ir al acceso
+          </button>
           <button
             type="button"
             onClick={() => {
