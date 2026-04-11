@@ -69,6 +69,8 @@ export type PedidoOrder = {
   sentAt?: string;
   receivedAt?: string;
   deliveryDate?: string;
+  /** Pedido enviado archivado de la bandeja «revisión de precios» (sigue en BD y en Pedidos enviados). */
+  priceReviewArchivedAt?: string;
   items: PedidoOrderItem[];
   total: number;
 };
@@ -103,6 +105,7 @@ type OrderRow = {
   sent_at: string | null;
   received_at: string | null;
   delivery_date: string | null;
+  price_review_archived_at?: string | null;
   pedido_suppliers: { name: string; contact: string | null } | { name: string; contact: string | null }[] | null;
 };
 type OrderItemRow = {
@@ -299,7 +302,9 @@ export async function setSupplierProductActive(
 export async function fetchOrders(supabase: SupabaseClient, localId: string) {
   const { data: orderRows, error: oErr } = await supabase
     .from('purchase_orders')
-    .select('id,supplier_id,status,notes,created_at,sent_at,received_at,delivery_date,pedido_suppliers(name,contact)')
+    .select(
+      'id,supplier_id,status,notes,created_at,sent_at,received_at,delivery_date,price_review_archived_at,pedido_suppliers(name,contact)',
+    )
     .eq('local_id', localId)
     .order('created_at', { ascending: false });
   if (oErr) throw new Error(oErr.message);
@@ -350,6 +355,9 @@ export async function fetchOrders(supabase: SupabaseClient, localId: string) {
       sentAt: row.sent_at ?? undefined,
       receivedAt: row.received_at ?? undefined,
       deliveryDate: row.delivery_date ?? undefined,
+      ...(row.price_review_archived_at != null && row.price_review_archived_at !== ''
+        ? { priceReviewArchivedAt: row.price_review_archived_at }
+        : {}),
       items,
       total: items.reduce((acc, item) => acc + item.lineTotal, 0),
     };
@@ -548,9 +556,17 @@ export async function setOrderStatus(
   status: PedidoStatus,
   nowIso = new Date().toISOString(),
 ) {
-  const patch: { status: PedidoStatus; sent_at?: string | null; received_at?: string | null } = { status };
+  const patch: {
+    status: PedidoStatus;
+    sent_at?: string | null;
+    received_at?: string | null;
+    price_review_archived_at?: string | null;
+  } = { status };
   if (status === 'sent') patch.sent_at = nowIso;
-  if (status === 'received') patch.received_at = nowIso;
+  if (status === 'received') {
+    patch.received_at = nowIso;
+    patch.price_review_archived_at = null;
+  }
   if (status === 'draft') {
     patch.sent_at = null;
     patch.received_at = null;
@@ -563,7 +579,7 @@ export async function setOrderStatus(
 export async function reopenReceivedOrderToSent(supabase: SupabaseClient, localId: string, orderId: string) {
   const { data, error } = await supabase
     .from('purchase_orders')
-    .update({ status: 'sent', received_at: null })
+    .update({ status: 'sent', received_at: null, price_review_archived_at: null })
     .eq('id', orderId)
     .eq('local_id', localId)
     .eq('status', 'received')
@@ -573,6 +589,46 @@ export async function reopenReceivedOrderToSent(supabase: SupabaseClient, localI
   if (!data?.id) {
     throw new Error('No se pudo reabrir: el pedido no está en estado recibido o no existe.');
   }
+}
+
+export async function setOrderPriceReviewArchived(
+  supabase: SupabaseClient,
+  localId: string,
+  orderId: string,
+  archived: boolean,
+) {
+  const { error } = await supabase
+    .from('purchase_orders')
+    .update({ price_review_archived_at: archived ? new Date().toISOString() : null })
+    .eq('id', orderId)
+    .eq('local_id', localId)
+    .eq('status', 'sent');
+  if (error) throw new Error(error.message);
+}
+
+/** Persiste cantidades/peso/precio actuales del snapshot y marca el pedido como recibido (flujo rápido desde Pedidos enviados). */
+export async function persistSentOrderAsReceived(supabase: SupabaseClient, localId: string, order: PedidoOrder) {
+  for (const item of order.items) {
+    if (item.unit === 'kg') {
+      await updateOrderItemReceivedWeightKg(
+        supabase,
+        localId,
+        item.id,
+        item.receivedWeightKg != null && item.receivedWeightKg > 0 ? item.receivedWeightKg : null,
+      );
+    } else if (unitSupportsReceivedWeightKg(item.unit)) {
+      await updateOrderItemReceivedWeightKg(
+        supabase,
+        localId,
+        item.id,
+        item.receivedWeightKg != null && item.receivedWeightKg > 0 ? item.receivedWeightKg : null,
+      );
+    }
+    await updateOrderItemReceived(supabase, localId, item.id, item.receivedQuantity);
+    const billingQty = billingQuantityForLine(item);
+    await updateOrderItemPrice(supabase, localId, item.id, item.pricePerUnit, billingQty);
+  }
+  await setOrderStatus(supabase, localId, order.id, 'received');
 }
 
 export async function updateOrderItemReceived(

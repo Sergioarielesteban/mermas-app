@@ -13,6 +13,7 @@ import { formatQuantityWithUnit, unitPriceCatalogSuffix } from '@/lib/pedidos-fo
 import {
   billingQuantityForLine,
   fetchOrders,
+  setOrderPriceReviewArchived,
   setOrderStatus,
   unitCanDeclareScaleKgOnReception,
   unitSupportsReceivedWeightKg,
@@ -105,18 +106,36 @@ export default function RecepcionPedidosPage() {
     }));
   }, [orders, focusOrderIdFromUrl]);
 
+  const pendingPriceReviewOrders = React.useMemo(
+    () => orders.filter((o) => !o.priceReviewArchivedAt),
+    [orders],
+  );
+  const archivedPriceReviewOrders = React.useMemo(
+    () => orders.filter((o) => Boolean(o.priceReviewArchivedAt)),
+    [orders],
+  );
+
   const supplierOptions = React.useMemo(() => {
     return Array.from(new Set(orders.map((o) => o.supplierName))).sort((a, b) => a.localeCompare(b));
   }, [orders]);
 
   const filteredOrders = React.useMemo(() => {
-    return orders.filter((order) => {
+    return pendingPriceReviewOrders.filter((order) => {
       const bySupplier = supplierFilter === 'all' || order.supplierName === supplierFilter;
       const orderDate = order.createdAt.slice(0, 10);
       const byDate = !dateFilter || orderDate === dateFilter;
       return bySupplier && byDate;
     });
-  }, [orders, supplierFilter, dateFilter]);
+  }, [pendingPriceReviewOrders, supplierFilter, dateFilter]);
+
+  const filteredArchivedOrders = React.useMemo(() => {
+    return archivedPriceReviewOrders.filter((order) => {
+      const bySupplier = supplierFilter === 'all' || order.supplierName === supplierFilter;
+      const orderDate = order.createdAt.slice(0, 10);
+      const byDate = !dateFilter || orderDate === dateFilter;
+      return bySupplier && byDate;
+    });
+  }, [archivedPriceReviewOrders, supplierFilter, dateFilter]);
 
   const persistPackagingReceivedKg = React.useCallback(
     async (supabase: SupabaseClient, items: PedidoOrder['items']) => {
@@ -146,7 +165,8 @@ export default function RecepcionPedidosPage() {
           const parsed = raw == null ? item.pricePerUnit : Number(raw.replace(',', '.'));
           const nextPrice = Number.isNaN(parsed) || parsed < 0 ? item.pricePerUnit : Math.round(parsed * 100) / 100;
 
-          let recvQty = item.quantity;
+          let receivedQty = item.quantity;
+          let weightKg: number | null = null;
 
           if (item.unit === 'kg') {
             const wRaw = weightInputRef.current[item.id];
@@ -157,25 +177,41 @@ export default function RecepcionPedidosPage() {
                 return;
               }
               await updateOrderItemReceivedWeightKg(supabase, localId, item.id, wp);
-              recvQty = wp == null ? item.quantity : wp;
+              if (wp != null) {
+                weightKg = wp;
+                receivedQty = wp;
+              } else {
+                weightKg = null;
+                receivedQty = item.quantity;
+              }
             } else {
               await updateOrderItemReceivedWeightKg(supabase, localId, item.id, null);
-              recvQty = item.quantity;
+              weightKg = null;
+              receivedQty = item.quantity;
             }
-          } else if (unitSupportsReceivedWeightKg(item.unit)) {
-            const wRaw = weightInputRef.current[item.id];
-            if (wRaw !== undefined) {
-              const wp = parseReceivedKg(wRaw);
-              if (wp === 'invalid') {
-                setMessage('Peso recibido (kg) inválido en una línea de bandeja o caja.');
-                return;
+          } else {
+            if (unitSupportsReceivedWeightKg(item.unit)) {
+              const wRaw = weightInputRef.current[item.id];
+              if (wRaw !== undefined) {
+                const wp = parseReceivedKg(wRaw);
+                if (wp === 'invalid') {
+                  setMessage('Peso recibido (kg) inválido en una línea de bandeja o caja.');
+                  return;
+                }
+                await updateOrderItemReceivedWeightKg(supabase, localId, item.id, wp);
+                weightKg = wp;
               }
-              await updateOrderItemReceivedWeightKg(supabase, localId, item.id, wp);
             }
+            receivedQty = item.quantity;
           }
 
-          await updateOrderItemReceived(supabase, localId, item.id, recvQty);
-          await updateOrderItemPrice(supabase, localId, item.id, nextPrice, recvQty);
+          await updateOrderItemReceived(supabase, localId, item.id, receivedQty);
+          const billingQty = billingQuantityForLine({
+            unit: item.unit,
+            receivedQuantity: receivedQty,
+            receivedWeightKg: weightKg,
+          });
+          await updateOrderItemPrice(supabase, localId, item.id, nextPrice, billingQty);
         }
 
         await setOrderStatus(supabase, localId, order.id, 'received');
@@ -192,6 +228,21 @@ export default function RecepcionPedidosPage() {
         setMessage(err instanceof Error ? err.message : 'No se pudo marcar recibido.');
       }
     })();
+  };
+
+  const markPriceReviewArchived = (orderId: string, archived: boolean) => {
+    if (!localId) return;
+    const supabase = getSupabaseClient();
+    if (!supabase) return;
+    void setOrderPriceReviewArchived(supabase, localId, orderId, archived)
+      .then(() => {
+        setMessage(
+          archived ? 'Pedido archivado de la revisión de precios.' : 'Pedido de nuevo en pendientes de revisión.',
+        );
+        reloadOrders();
+        dispatchPedidosDataChanged();
+      })
+      .catch((err: Error) => setMessage(err.message));
   };
 
   React.useEffect(
@@ -255,8 +306,10 @@ export default function RecepcionPedidosPage() {
   };
 
   const commitPriceInput = (orderId: string, itemId: string) => {
-    const raw = priceInputByItemId[itemId];
-    if (raw == null) return;
+    const orderSnap = orders.find((o) => o.id === orderId);
+    const itemSnap = orderSnap?.items.find((i) => i.id === itemId);
+    if (!itemSnap) return;
+    const raw = priceInputByItemId[itemId] ?? itemSnap.pricePerUnit.toFixed(2);
     changeUnitPrice(orderId, itemId, raw);
     const parsed = Number(raw.replace(',', '.'));
     const normalized = Number.isNaN(parsed) || parsed < 0 ? '0.00' : (Math.round(parsed * 100) / 100).toFixed(2);
@@ -433,7 +486,11 @@ export default function RecepcionPedidosPage() {
       </section>
 
       <section className="rounded-2xl bg-white p-4 ring-1 ring-zinc-200">
-        <p className="text-sm font-semibold text-zinc-800">Pendientes de recepcion</p>
+        <p className="text-sm font-semibold text-zinc-800">Pendientes revisión de precios</p>
+        <p className="mt-1 text-xs text-zinc-500">
+          Todos los pedidos enviados aparecen aquí hasta que pulses «Revisado» o los marques recibidos. La fecha filtra la
+          lista; déjala vacía para ver todos.
+        </p>
         {message ? <p className="mt-2 text-sm text-[#B91C1C]">{message}</p> : null}
         <div className="mt-3 grid grid-cols-1 gap-2 md:grid-cols-2">
           <select
@@ -612,7 +669,23 @@ export default function RecepcionPedidosPage() {
                   </p>
                 ) : null}
               </div>
-              <div className="mt-4 border-t border-zinc-200/90 pt-4">
+              <div className="mt-4 space-y-2 border-t border-zinc-200/90 pt-4">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (
+                      !window.confirm(
+                        '¿Archivar este pedido de la lista de revisión de precios? Sigue en «Pedidos enviados» y en el histórico cuando lo recibas.',
+                      )
+                    ) {
+                      return;
+                    }
+                    markPriceReviewArchived(order.id, true);
+                  }}
+                  className="w-full rounded-xl border border-amber-600/80 bg-amber-50 py-2.5 text-center text-xs font-bold text-amber-950"
+                >
+                  Revisado (quitar de esta lista)
+                </button>
                 <button
                   type="button"
                   onClick={() => markAllReceived(order)}
@@ -624,6 +697,36 @@ export default function RecepcionPedidosPage() {
             </div>
             );
           })}
+          {filteredArchivedOrders.length > 0 ? (
+            <div className="mt-8 space-y-2 border-t border-zinc-200 pt-6">
+              <p className="text-center text-[11px] font-bold uppercase tracking-wide text-zinc-500">
+                Archivados (revisión de precios)
+              </p>
+              <p className="text-center text-xs text-zinc-500">
+                Pedidos que quitaste de la bandeja con «Revisado». Siguen en la app; puedes devolverlos a pendientes.
+              </p>
+              {filteredArchivedOrders.map((order) => (
+                <div
+                  key={order.id}
+                  className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-zinc-100/90 p-3 ring-1 ring-zinc-200"
+                >
+                  <div className="min-w-0 text-left">
+                    <p className="text-sm font-semibold text-zinc-900">{order.supplierName}</p>
+                    <p className="text-xs text-zinc-500">
+                      Pedido {new Date(order.createdAt).toLocaleDateString('es-ES')}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => markPriceReviewArchived(order.id, false)}
+                    className="shrink-0 rounded-lg border border-zinc-400 bg-white px-3 py-1.5 text-xs font-semibold text-zinc-800"
+                  >
+                    Volver a pendientes
+                  </button>
+                </div>
+              ))}
+            </div>
+          ) : null}
         </div>
       </section>
     </div>

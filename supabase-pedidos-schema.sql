@@ -80,6 +80,8 @@ alter table public.purchase_order_items
   add column if not exists incident_type text;
 alter table public.purchase_order_items
   add column if not exists incident_notes text;
+alter table public.purchase_orders
+  add column if not exists price_review_archived_at timestamptz;
 
 -- Align unit constraints with app units
 alter table public.pedido_supplier_products

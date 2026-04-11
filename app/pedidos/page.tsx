@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname, useRouter } from 'next/navigation';
+import { usePathname } from 'next/navigation';
 import React from 'react';
 import { useAuth } from '@/components/AuthProvider';
 import { getSupabaseClient } from '@/lib/supabase-client';
@@ -15,6 +15,7 @@ import {
   deleteOrder,
   fetchOrders,
   fetchSuppliersWithProducts,
+  persistSentOrderAsReceived,
   reopenReceivedOrderToSent,
   unitCanDeclareScaleKgOnReception,
   updateOrderItemIncident,
@@ -84,6 +85,17 @@ function receivedOrderHasAttention(order: PedidoOrder) {
 }
 
 /** Pie del histórico: un solo texto si todas las líneas con incidencia coinciden; si no, una línea por producto. */
+function draftIncidentNoteForSentOrder(order: PedidoOrder, marks: Record<string, 'ok' | 'bad'>): string {
+  const notes: string[] = [];
+  for (const item of order.items) {
+    const m = marks[item.id];
+    const isBad = m === 'bad' || (m === undefined && Boolean(item.incidentType));
+    if (isBad && item.incidentNotes?.trim()) notes.push(item.incidentNotes.trim());
+  }
+  const uniq = [...new Set(notes)];
+  return uniq.join(' · ');
+}
+
 function historicoIncidentFooterText(order: PedidoOrder): string | null {
   const rows: { name: string; text: string }[] = [];
   for (const item of order.items) {
@@ -97,7 +109,6 @@ function historicoIncidentFooterText(order: PedidoOrder): string | null {
 }
 
 export default function PedidosPage() {
-  const router = useRouter();
   const { localCode, localName, localId, email } = useAuth();
   const hasPedidosEntry = canAccessPedidos(localCode, email, localName, localId);
   const canUse = canUsePedidosModule(localCode, email, localName, localId);
@@ -128,6 +139,60 @@ export default function PedidosPage() {
   const [expandedHistoricoId, setExpandedHistoricoId] = React.useState<string | null>(null);
   /** Marca visual por línea (varias a la vez); evita que un refetch parcial “borre” el estado al ir recibiendo. */
   const [quickLineMarks, setQuickLineMarks] = React.useState<Record<string, 'ok' | 'bad'>>({});
+  const [incidentOpenBySentOrderId, setIncidentOpenBySentOrderId] = React.useState<Record<string, boolean>>({});
+  const [incidentNoteBySentOrderId, setIncidentNoteBySentOrderId] = React.useState<Record<string, string>>({});
+
+  const toggleSentIncidentPanel = (order: PedidoOrder) => {
+    setIncidentOpenBySentOrderId((prev) => {
+      const willOpen = !prev[order.id];
+      if (willOpen) {
+        setIncidentNoteBySentOrderId((n) => {
+          if (n[order.id] !== undefined) return n;
+          return { ...n, [order.id]: draftIncidentNoteForSentOrder(order, quickLineMarks) };
+        });
+      }
+      return { ...prev, [order.id]: willOpen };
+    });
+  };
+
+  const saveSentOrderIncident = (order: PedidoOrder) => {
+    if (!localId) return;
+    const supabase = getSupabaseClient();
+    if (!supabase) return;
+    const hasAnyBad = order.items.some((item) => {
+      const m = quickLineMarks[item.id];
+      return m === 'bad' || (m === undefined && Boolean(item.incidentType));
+    });
+    if (!hasAnyBad) {
+      setMessage('Marca primero las lineas con problema (✗).');
+      return;
+    }
+    const raw = (incidentNoteBySentOrderId[order.id] ?? '').trim();
+    void Promise.all(
+      order.items.map((item) => {
+        const m = quickLineMarks[item.id];
+        const isBad = m === 'bad' || (m === undefined && Boolean(item.incidentType));
+        if (!isBad) return Promise.resolve();
+        if (raw) {
+          return updateOrderItemIncident(supabase, localId, item.id, {
+            type: item.incidentType ?? 'missing',
+            notes: raw,
+          });
+        }
+        return updateOrderItemIncident(supabase, localId, item.id, { type: 'missing', notes: 'No recibido' });
+      }),
+    )
+      .then(() => {
+        setMessage('Incidencias guardadas.');
+        setIncidentOpenBySentOrderId((prev) => ({ ...prev, [order.id]: false }));
+        void reloadOrders();
+        dispatchPedidosDataChanged();
+      })
+      .catch((err: Error) => {
+        void reloadOrders();
+        setMessage(err.message);
+      });
+  };
 
   const clearQuickReceive = (orderId: string, line: PedidoOrder['items'][number]) => {
     if (!localId) return;
@@ -342,7 +407,104 @@ export default function PedidosPage() {
   );
 
   const sentOrders = orders.filter((row) => row.status === 'sent');
+  const sentOrdersPendingPriceReview = sentOrders.filter((row) => !row.priceReviewArchivedAt);
   const receivedOrders = orders.filter((row) => row.status === 'received');
+
+  const renderSentOrderReceiveAndIncident = (order: PedidoOrder) => {
+    const hasAnyBad = order.items.some((item) => {
+      const m = quickLineMarks[item.id];
+      return m === 'bad' || (m === undefined && Boolean(item.incidentType));
+    });
+    const incidentOpen = Boolean(incidentOpenBySentOrderId[order.id]);
+    const detailOpen = expandedSentId === order.id;
+    return (
+      <div className="mt-3 space-y-3 border-t border-amber-200/70 pt-3 text-left">
+        {!detailOpen ? (
+          <p className="text-center text-[11px] leading-snug text-zinc-600">
+            Toca el recuadro del proveedor (arriba) para desplegar las lineas y marcar cada producto con ✓ o ✗.
+          </p>
+        ) : null}
+        <button
+          type="button"
+          onClick={() => {
+            if (!localId) return;
+            const supabase = getSupabaseClient();
+            if (!supabase) return;
+            const snap = orders.find((o) => o.id === order.id);
+            if (!snap) return;
+            if (
+              !window.confirm(
+                '¿Marcar este pedido como recibido con el estado actual de las lineas (✓/✗)? Se guardaran cantidades y precios actuales.',
+              )
+            ) {
+              return;
+            }
+            void persistSentOrderAsReceived(supabase, localId, snap)
+              .then(() => {
+                setMessage('Pedido marcado como recibido.');
+                void reloadOrders();
+                dispatchPedidosDataChanged();
+              })
+              .catch((err: Error) => setMessage(err.message));
+          }}
+          className="flex w-full items-center justify-center rounded-2xl bg-gradient-to-b from-[#4ADE80] to-[#16A34A] py-3.5 text-center text-xs font-black uppercase tracking-[0.1em] text-white shadow-md shadow-emerald-900/20 ring-1 ring-white/25 transition active:scale-[0.99]"
+        >
+          Recibido
+        </button>
+        <button
+          type="button"
+          onClick={() => toggleSentIncidentPanel(order)}
+          className={[
+            'w-full rounded-lg px-3 py-2.5 text-center text-xs font-bold transition',
+            incidentOpen || hasAnyBad
+              ? 'bg-[#B91C1C] text-white active:scale-[0.99]'
+              : 'bg-zinc-200 text-zinc-600 active:scale-[0.99]',
+          ].join(' ')}
+        >
+          {incidentOpen ? 'Ocultar incidencia' : 'Incidencia'}
+        </button>
+        {incidentOpen ? (
+          <div className="space-y-2 rounded-xl bg-red-50 p-3 ring-1 ring-red-200">
+            <p className="text-[10px] font-bold uppercase tracking-wide text-red-900">
+              Nota para lineas marcadas con ✗
+            </p>
+            <textarea
+              value={
+                incidentNoteBySentOrderId[order.id] ??
+                (incidentOpen ? draftIncidentNoteForSentOrder(order, quickLineMarks) : '')
+              }
+              onChange={(e) => setIncidentNoteBySentOrderId((prev) => ({ ...prev, [order.id]: e.target.value }))}
+              rows={4}
+              placeholder="Describe la incidencia..."
+              className="w-full rounded-lg border border-red-300 bg-white px-2 py-2 text-sm text-zinc-900 outline-none placeholder:text-zinc-400"
+            />
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => saveSentOrderIncident(order)}
+                className="rounded-lg bg-[#B91C1C] px-3 py-2 text-xs font-semibold text-white"
+              >
+                Guardar
+              </button>
+              <button
+                type="button"
+                onClick={() => setIncidentOpenBySentOrderId((prev) => ({ ...prev, [order.id]: false }))}
+                className="rounded-lg border border-zinc-400 bg-white px-3 py-2 text-xs font-semibold text-zinc-800"
+              >
+                Cerrar sin guardar
+              </button>
+            </div>
+            <Link
+              href={`/pedidos/recepcion?orderId=${encodeURIComponent(order.id)}`}
+              className="block text-center text-xs font-semibold text-[#B91C1C] underline"
+            >
+              Abrir pantalla de recepcion (precios y pesos)
+            </Link>
+          </div>
+        ) : null}
+      </div>
+    );
+  };
 
   if (!hasPedidosEntry) {
     return (
@@ -399,18 +561,17 @@ export default function PedidosPage() {
       ) : null}
 
       <section className="flex justify-center">
-        <button
-          type="button"
-          onClick={() => {
-            const today = new Date().toISOString().slice(0, 10);
-            router.push(`/pedidos/recepcion?date=${today}`);
-          }}
-          className="w-full max-w-sm rounded-2xl bg-white p-4 text-center ring-1 ring-zinc-200"
+        <Link
+          href="/pedidos/recepcion"
+          className="w-full max-w-sm rounded-2xl bg-white p-4 text-center ring-1 ring-zinc-200 block"
         >
-          <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Pendientes recepcion</p>
-          <p className="pt-2 text-2xl font-black text-zinc-900">{sentOrders.length}</p>
-          <p className="pt-1 text-xs text-zinc-500">Toca para ver el listado de pedidos de hoy.</p>
-        </button>
+          <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Pendientes revision de precios</p>
+          <p className="pt-2 text-2xl font-black text-zinc-900">{sentOrdersPendingPriceReview.length}</p>
+          <p className="pt-1 text-xs text-zinc-500">
+            Pedidos enviados pendientes de comprobar precios y pesos. Toca para abrir la lista (todos los dias si no
+            filtras por fecha).
+          </p>
+        </Link>
       </section>
 
       <section className="rounded-2xl bg-white p-4 text-center ring-1 ring-zinc-200">
@@ -484,6 +645,7 @@ export default function PedidosPage() {
                   Eliminar
                 </button>
               </div>
+              {renderSentOrderReceiveAndIncident(order)}
               {expandedSentId === order.id ? (
                 <div className="mt-3 space-y-3 text-left">
                   {order.notes?.trim() ? (
@@ -574,33 +736,6 @@ export default function PedidosPage() {
                       </div>
                     );
                   })}
-                  {(() => {
-                    const hasAnyBad = order.items.some((item) => {
-                      const m = quickLineMarks[item.id];
-                      return m === 'bad' || (m === undefined && Boolean(item.incidentType));
-                    });
-                    return (
-                      <div className="mt-4 border-t border-amber-200/90 pt-3">
-                        <button
-                          type="button"
-                          disabled={!hasAnyBad}
-                          onClick={() =>
-                            router.push(
-                              `/pedidos/recepcion?date=${encodeURIComponent(order.createdAt.slice(0, 10))}&orderId=${encodeURIComponent(order.id)}`,
-                            )
-                          }
-                          className={[
-                            'w-full rounded-lg px-3 py-2.5 text-center text-xs font-bold transition',
-                            hasAnyBad
-                              ? 'bg-[#B91C1C] text-white active:scale-[0.99]'
-                              : 'cursor-not-allowed bg-zinc-200 text-zinc-500',
-                          ].join(' ')}
-                        >
-                          Incidencia
-                        </button>
-                      </div>
-                    );
-                  })()}
                 </div>
               ) : null}
 
@@ -649,7 +784,7 @@ export default function PedidosPage() {
                   onClick={() => {
                     if (!localId) return;
                     const ok = window.confirm(
-                      '¿Devolver este pedido a «Pedidos enviados»? El pedido volverá a pendientes de recepción (las líneas no se borran).',
+                      '¿Devolver este pedido a «Pedidos enviados»? Volverá a la bandeja de revisión de precios (las líneas no se borran).',
                     );
                     if (!ok) return;
                     const supabase = getSupabaseClient();
