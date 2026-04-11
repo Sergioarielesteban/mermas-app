@@ -62,12 +62,12 @@ export default function LoginPage() {
             <img
               src="/logo-chef-one-wordmark.svg"
               alt="Chef-One"
-              className="w-[min(82vw,340px)] max-w-full select-none"
+              className="mx-auto w-[min(92vw,440px)] max-w-full select-none"
               width={512}
-              height={160}
+              height={176}
               decoding="async"
             />
-            <ChefOneGlowLine className="mx-auto mt-5 w-[58%] max-w-[220px] sm:mt-6" />
+            <ChefOneGlowLine className="mx-auto mt-5 w-[72%] max-w-[280px] sm:mt-6" />
           </div>
         </div>
       </section>

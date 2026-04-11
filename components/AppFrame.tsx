@@ -6,7 +6,6 @@ import AppShell from '@/components/AppShell';
 import BottomNav from '@/components/BottomNav';
 import { useAuth } from '@/components/AuthProvider';
 import { SESSION_SHOW_CONTROL_PANEL } from '@/lib/session-flags';
-import ChefOneGlowLine from '@/components/ChefOneGlowLine';
 
 export default function AppFrame({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -56,7 +55,12 @@ export default function AppFrame({ children }: { children: React.ReactNode }) {
     return () => window.clearTimeout(timer);
   }, [effectiveLoading, isLogin, email]);
 
-  // Keep server and first client paint aligned to avoid hydration mismatch.
+  // /login nunca debe quedar detrás de "Cargando sesión" (getSession puede tardar o colgarse en red).
+  if (isLogin) {
+    return <main className="min-h-screen flex flex-col bg-white">{children}</main>;
+  }
+
+  // Resto de rutas: esperar auth o desbloqueo por tiempo.
   if (effectiveLoading) {
     return (
       <main className="grid min-h-screen place-items-center bg-zinc-50 px-4">
@@ -89,10 +93,6 @@ export default function AppFrame({ children }: { children: React.ReactNode }) {
     return null;
   }
 
-  if (isLogin) {
-    return <main className="min-h-screen flex flex-col bg-white">{children}</main>;
-  }
-
   if (showSplash) {
     return (
       <main className="grid min-h-screen place-items-center bg-white px-6">
@@ -100,12 +100,13 @@ export default function AppFrame({ children }: { children: React.ReactNode }) {
           <img
             src="/logo-chef-one-wordmark.svg"
             alt="Chef-One"
-            className="w-[min(72vw,280px)] max-w-full select-none"
+            className="w-[min(88vw,400px)] max-w-full select-none"
             width={512}
-            height={160}
+            height={176}
             decoding="async"
           />
-          <ChefOneGlowLine className="mt-6 w-[55%] max-w-[200px] sm:mt-7" />
+          {/* Borde superior = línea 100 % nítida en móvil (evita antialiasing del span 2px) */}
+          <hr className="mx-auto mt-6 w-[70%] max-w-[260px] border-0 border-t-[3px] border-solid border-[#D32F2F] sm:mt-7" />
         </div>
       </main>
     );

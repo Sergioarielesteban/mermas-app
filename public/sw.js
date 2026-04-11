@@ -1,4 +1,4 @@
-const CACHE_NAME = 'chef-one-app-v1';
+const CACHE_NAME = 'chef-one-app-v2';
 const CORE_ASSETS = ['/', '/login', '/panel', '/dashboard', '/productos', '/resumen', '/manifest.webmanifest'];
 
 self.addEventListener('message', (event) => {

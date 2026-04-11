@@ -21,6 +21,8 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 const AUTH_KEY = 'mermas_user_email';
 const PROFILE_CACHE_KEY = 'chef_one_profile_cache_v1';
 const PROFILE_TIMEOUT_MS = 6000;
+/** Si getSession no responde (red, bug cliente), no bloquear la app más de esto. */
+const GET_SESSION_TIMEOUT_MS = 5000;
 
 function isInvalidRefreshTokenError(message: string | undefined) {
   const m = (message ?? '').toLowerCase();
@@ -209,16 +211,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     let isMounted = true;
     const safetyTimeout = window.setTimeout(() => {
       if (!isMounted) return;
-      // Prevent indefinite "Cargando sesión..." when auth request hangs.
+      // Respaldo si getSession nunca termina (además del race abajo).
       setLoading(false);
+      setProfileReady(true);
       if (restoreProfileFromCache()) {
-        setProfileReady(true);
+        /* ya aplicado en restore */
       }
-    }, 8000);
-    void supabase.auth
-      .getSession()
-      .then(({ data, error }) => {
+    }, GET_SESSION_TIMEOUT_MS + 2500);
+
+    const sessionPromise = supabase.auth.getSession();
+    const timeoutPromise = new Promise<null>((resolve) => {
+      window.setTimeout(() => resolve(null), GET_SESSION_TIMEOUT_MS);
+    });
+
+    void Promise.race([sessionPromise, timeoutPromise])
+      .then((result) => {
         if (!isMounted) return;
+        if (result === null) {
+          // Timeout: dejar de bloquear; el listener onAuthStateChange puede completar después.
+          setLoading(false);
+          setProfileReady(true);
+          void restoreProfileFromCache();
+          return;
+        }
+        const { data, error } = result as Awaited<typeof sessionPromise>;
         if (error && isInvalidRefreshTokenError(error.message)) {
           setEmail(null);
           clearProfile();

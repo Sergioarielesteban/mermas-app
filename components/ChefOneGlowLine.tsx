@@ -2,12 +2,7 @@ import React from 'react';
 
 type Props = { className?: string };
 
-/** Línea roja con degradado y glow, como el hero del panel. */
+/** Línea roja sólida y nítida (sin degradado ni glow). */
 export default function ChefOneGlowLine({ className = '' }: Props) {
-  return (
-    <span
-      className={`h-[2px] rounded-full bg-gradient-to-r from-transparent via-[#EF4444] to-transparent shadow-[0_0_14px_5px_rgba(211,47,47,0.55)] ${className}`}
-      aria-hidden
-    />
-  );
+  return <span className={`block h-[2px] shrink-0 bg-[#D32F2F] ${className}`} aria-hidden />;
 }

@@ -3,28 +3,31 @@ import type { MetadataRoute } from 'next';
 export default function manifest(): MetadataRoute.Manifest {
   return {
     name: 'Chef-One',
-    short_name: 'ChefOne',
+    short_name: 'Chef-One',
     description: 'Gestión operativa para restaurantes',
     start_url: '/',
     display: 'standalone',
-    background_color: '#f4f5f7',
+    background_color: '#ffffff',
     theme_color: '#d32f2f',
     orientation: 'portrait',
     icons: [
       {
-        src: '/icons/icon-192.jpg',
+        src: '/icons/icon-app.svg',
         sizes: '192x192',
-        type: 'image/jpeg',
-      },
-      {
-        src: '/icons/icon-512.jpg',
-        sizes: '512x512',
-        type: 'image/jpeg',
-      },
-      {
-        src: '/logo-chef-one.svg',
-        sizes: '512x160',
         type: 'image/svg+xml',
+        purpose: 'any',
+      },
+      {
+        src: '/icons/icon-app.svg',
+        sizes: '512x512',
+        type: 'image/svg+xml',
+        purpose: 'any',
+      },
+      {
+        src: '/icons/icon-app.svg',
+        sizes: '512x512',
+        type: 'image/svg+xml',
+        purpose: 'maskable',
       },
     ],
   };

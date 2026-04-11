@@ -1,10 +1,10 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 160" role="img" aria-label="Chef-One">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 176" role="img" aria-label="Chef-One">
   <text
     x="256"
-    y="108"
+    y="118"
     text-anchor="middle"
     font-family="Georgia, 'Times New Roman', Times, serif"
-    font-size="72"
+    font-size="96"
     font-weight="400"
     font-style="normal"
     fill="#D32F2F"

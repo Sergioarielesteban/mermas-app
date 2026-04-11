@@ -13,5 +13,6 @@
   >
     Chef-One
   </text>
+  <!-- Línea sólida nítida (sin degradado) -->
   <rect x="104" y="268" width="304" height="5" fill="#D32F2F" />
 </svg>
