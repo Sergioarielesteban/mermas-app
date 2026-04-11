@@ -1,5 +1,5 @@
-import MermasRegistrationForm from "@/components/MermasRegistrationForm";
+import { redirect } from 'next/navigation';
 
 export default function Home() {
-  return <MermasRegistrationForm />;
+  redirect('/dashboard');
 }

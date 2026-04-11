@@ -49,7 +49,7 @@ export default function LoginPage() {
       if (rememberEmail) window.localStorage.setItem(REMEMBERED_EMAIL_KEY, clean);
       else window.localStorage.removeItem(REMEMBERED_EMAIL_KEY);
     }
-    window.location.assign('/');
+    window.location.assign('/dashboard');
   };
 
   return (

@@ -2,14 +2,13 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { BookOpen, Info, ShoppingCart } from 'lucide-react';
+import { BookOpen, ShoppingCart } from 'lucide-react';
 import { useAuth } from '@/components/AuthProvider';
 import { canAccessPedidos } from '@/lib/pedidos-access';
 
 const NAV_ITEMS = [
-  { href: '/', label: 'Registro de Mermas', Icon: BookOpen },
+  { href: '/dashboard', label: 'Mermas', Icon: BookOpen },
   { href: '/pedidos', label: 'Pedidos', Icon: ShoppingCart },
-  { href: '/dashboard', label: 'Dashboard', Icon: Info },
 ] as const;
 
 export default function BottomNav() {
@@ -28,8 +27,8 @@ export default function BottomNav() {
         {items.map((item) => {
           const Icon = item.Icon;
           const isActive =
-            item.href === '/'
-              ? pathname === '/'
+            item.href === '/dashboard'
+              ? pathname === '/dashboard' || pathname === '/'
               : pathname === item.href || pathname?.startsWith(`${item.href}/`);
 
           return (

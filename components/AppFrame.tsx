@@ -38,7 +38,7 @@ export default function AppFrame({ children }: { children: React.ReactNode }) {
         }
       }, 400);
     }
-    if (email && isLogin) router.replace('/');
+    if (email && isLogin) router.replace('/dashboard');
   }, [effectiveLoading, email, isLogin, router]);
 
   useEffect(() => {

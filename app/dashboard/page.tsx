@@ -15,6 +15,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
+import MermasRegistrationForm from '@/components/MermasRegistrationForm';
 import { useMermasStore } from '@/components/MermasStoreProvider';
 import { toBusinessDate } from '@/lib/business-day';
 import {
@@ -398,12 +399,21 @@ export default function DashboardPage() {
         </div>
       ) : null}
 
-      <div className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-zinc-200">
-        <p className="text-center text-xs font-semibold uppercase tracking-[0.16em] text-zinc-500">Business Intelligence</p>
-        <p className="pt-1 text-center text-sm font-semibold text-zinc-700">
-          Seguimiento en tiempo real del coste de merma.
+      <section className="rounded-3xl bg-zinc-950 px-6 py-7 text-white shadow-xl shadow-zinc-900/20">
+        <h1 className="text-center text-[11px] font-semibold uppercase tracking-[0.2em] text-zinc-400">Mermas</h1>
+        <p className="mt-2 text-center text-lg font-semibold uppercase tracking-[0.14em] text-white sm:text-xl">
+          Seguimiento en tiempo real
         </p>
-      </div>
+        <span
+          className="mx-auto mt-4 block h-px w-12 bg-gradient-to-r from-transparent via-[#D32F2F] to-transparent opacity-90"
+          aria-hidden
+        />
+        <p className="mx-auto mt-4 max-w-sm text-center text-sm leading-relaxed text-zinc-400">
+          Registra mermas y consulta costes, alertas y tendencias en la misma pantalla.
+        </p>
+      </section>
+
+      <MermasRegistrationForm />
 
       <section className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-zinc-200">
         <div className="mb-2 flex items-center justify-between">

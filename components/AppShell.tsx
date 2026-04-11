@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import React, { useMemo, useState } from 'react';
-import { BookOpen, Drumstick, LayoutDashboard, LogOut, Menu, X, FileText, RefreshCcw, ShoppingCart } from 'lucide-react';
+import { BookOpen, Drumstick, LogOut, Menu, X, FileText, RefreshCcw, ShoppingCart } from 'lucide-react';
 import { useAuth } from '@/components/AuthProvider';
 import PullToRefreshPedidos from '@/components/PullToRefreshPedidos';
 import { canAccessPedidos } from '@/lib/pedidos-access';
@@ -15,15 +15,13 @@ type NavItem = {
 };
 
 const NAV_ITEMS: NavItem[] = [
-  { href: '/', label: 'Registro de Mermas', Icon: BookOpen },
-  { href: '/dashboard', label: 'Dashboard', Icon: LayoutDashboard },
+  { href: '/dashboard', label: 'Mermas', Icon: BookOpen },
   { href: '/productos', label: 'Añadir Productos', Icon: Drumstick },
   { href: '/resumen', label: 'Resumen', Icon: FileText },
 ];
 function titleForPath(pathname: string | null) {
   if (!pathname) return 'Mermas';
-  if (pathname === '/') return 'Registro de Mermas';
-  if (pathname.startsWith('/dashboard')) return 'Dashboard';
+  if (pathname === '/' || pathname.startsWith('/dashboard')) return 'Mermas';
   if (pathname.startsWith('/productos')) return 'Añadir Productos';
   if (pathname.startsWith('/resumen')) return 'Resumen';
   if (pathname.startsWith('/pedidos')) return 'Pedidos';
@@ -189,8 +187,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         <nav className="px-2 py-3">
           {navItems.map((item) => {
             const isActive =
-              item.href === '/'
-                ? pathname === '/'
+              item.href === '/dashboard'
+                ? pathname === '/dashboard' || pathname === '/'
                 : pathname === item.href || pathname?.startsWith(`${item.href}/`);
             const Icon = item.Icon;
 
