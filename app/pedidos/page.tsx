@@ -440,15 +440,26 @@ export default function PedidosPage() {
             setMessage(null);
             void persistSentOrderAsReceived(supabase, localId, snap, { preserveOrderPricing: true })
               .then(() => {
+                const nowIso = new Date().toISOString();
+                setOrders((prev) =>
+                  prev.map((o) =>
+                    o.id === order.id
+                      ? { ...o, status: 'received', receivedAt: nowIso, priceReviewArchivedAt: undefined }
+                      : o,
+                  ),
+                );
+                setExpandedSentId((id) => (id === order.id ? null : id));
+                setMessage('Pedido marcado como recibido. Coteja precios en Recepción.');
                 void reloadOrders();
+                window.setTimeout(() => void reloadOrders(), 500);
                 dispatchPedidosDataChanged();
               })
               .catch((err: Error) => setMessage(err.message));
           }}
           className="flex w-full flex-col items-center justify-center gap-0.5 rounded-2xl bg-gradient-to-b from-[#4ADE80] to-[#16A34A] py-3 text-center text-[11px] font-black uppercase leading-tight tracking-wide text-white shadow-md shadow-emerald-900/20 ring-1 ring-white/25 transition active:scale-[0.99]"
         >
-          <span>Pendiente de</span>
-          <span>recibir</span>
+          <span>Marcar como</span>
+          <span>recibido</span>
         </button>
         <button
           type="button"
@@ -567,8 +578,8 @@ export default function PedidosPage() {
           <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Pendientes revision de precios</p>
           <p className="pt-2 text-2xl font-black text-zinc-900">{ordersPendingPriceReview.length}</p>
           <p className="pt-1 text-xs text-zinc-500">
-            Incluye enviados y los marcados «pendiente de recibir» hasta que pulses «Revisado» tras cotejar con el albaran.
-            Toca para abrir la lista.
+            Incluye enviados y los marcados como recibidos (falta cotejar precios en Recepción). Salen del contador al
+            archivar allí con «Revisado» o «Marcar todo recibido». Toca para abrir la lista.
           </p>
         </Link>
       </section>

@@ -226,14 +226,24 @@ export default function RecepcionPedidosPage() {
         }
 
         await setOrderStatus(supabase, localId, order.id, 'received');
-        setMessage('Pedido marcado como recibido.');
+        await setOrderPriceReviewArchived(supabase, localId, order.id, true);
+        const nowIso = new Date().toISOString();
+        setOrders((prev) =>
+          prev.map((o) =>
+            o.id === order.id
+              ? { ...o, status: 'received', receivedAt: nowIso, priceReviewArchivedAt: nowIso }
+              : o,
+          ),
+        );
+        setMessage('Pedido marcado como recibido y archivado de pendientes.');
         setShowReceivedBanner(true);
         if (receivedBannerTimeoutRef.current) window.clearTimeout(receivedBannerTimeoutRef.current);
         receivedBannerTimeoutRef.current = window.setTimeout(() => {
           setShowReceivedBanner(false);
           receivedBannerTimeoutRef.current = null;
         }, 1000);
-        await reloadOrders();
+        void reloadOrders();
+        window.setTimeout(() => void reloadOrders(), 500);
         dispatchPedidosDataChanged();
       } catch (err) {
         setMessage(err instanceof Error ? err.message : 'No se pudo marcar recibido.');
@@ -499,9 +509,9 @@ export default function RecepcionPedidosPage() {
       <section className="rounded-2xl bg-white p-4 ring-1 ring-zinc-200">
         <p className="text-sm font-semibold text-zinc-800">Pendientes revisión de precios</p>
         <p className="mt-1 text-xs text-zinc-500">
-          Pedidos enviados y los dados a «Pendiente de recibir» desde Pedidos (mercancia anotada, precios sin tocar).
-          Siguen aqui hasta que pulses «Revisado» tras cotejar con el albaran, o «Marcar todo recibido» si ajustas precios
-          en esta pantalla. La fecha filtra la lista; dejala vacia para ver todos.
+          Pedidos enviados y los marcados como recibidos desde Pedidos (mercancía anotada, precios sin tocar hasta aquí).
+          «Marcar todo recibido» archiva el pedido y lo quita de pendientes. «Revisado» archiva tras cotejar el albarán sin
+          reescribir líneas. La fecha filtra la lista; déjala vacía para ver todos.
         </p>
         {message ? <p className="mt-2 text-sm text-[#B91C1C]">{message}</p> : null}
         <div className="mt-3 grid grid-cols-1 gap-2 md:grid-cols-2">
@@ -550,8 +560,8 @@ export default function RecepcionPedidosPage() {
                 </p>
                 {order.status === 'received' ? (
                   <p className="mt-2 max-w-[95%] rounded-lg bg-amber-100 px-2 py-1.5 text-[10px] font-bold uppercase leading-snug tracking-wide text-amber-950 ring-1 ring-amber-300/80">
-                    Pendiente de recibir: mercancia anotada. Ajusta aqui el precio si el albaran no coincide; luego
-                    «Revisado» o «Marcar todo recibido».
+                    Recibido desde Pedidos: falta cotejar precios. Ajusta aquí si el albarán no coincide; luego «Marcar
+                    todo recibido» o «Revisado» para archivar.
                   </p>
                 ) : null}
               </div>

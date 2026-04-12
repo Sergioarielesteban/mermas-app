@@ -4,8 +4,16 @@ import { useEffect, useRef, useState } from 'react';
 
 export default function PwaRegister() {
   const [updateAvailable, setUpdateAvailable] = useState(false);
+  const [applyingUpdate, setApplyingUpdate] = useState(false);
   const waitingWorkerRef = useRef<ServiceWorker | null>(null);
   const registrationRef = useRef<ServiceWorkerRegistration | null>(null);
+  const reloadScheduledRef = useRef(false);
+
+  const scheduleReload = () => {
+    if (reloadScheduledRef.current) return;
+    reloadScheduledRef.current = true;
+    window.location.reload();
+  };
 
   useEffect(() => {
     if (typeof window === 'undefined' || !('serviceWorker' in navigator)) return;
@@ -13,7 +21,7 @@ export default function PwaRegister() {
 
     let updateInterval: number | null = null;
     const onControllerChange = () => {
-      window.location.reload();
+      scheduleReload();
     };
 
     navigator.serviceWorker.addEventListener('controllerchange', onControllerChange);
@@ -64,40 +72,67 @@ export default function PwaRegister() {
   }, []);
 
   const applyUpdate = () => {
-    const waiting = waitingWorkerRef.current ?? registrationRef.current?.waiting ?? null;
-    if (waiting) {
-      waiting.postMessage({ type: 'SKIP_WAITING' });
-      return;
-    }
-    if (registrationRef.current) {
-      void registrationRef.current.update().finally(() => window.location.reload());
-      return;
-    }
-    window.location.reload();
+    setApplyingUpdate(true);
+    void (async () => {
+      try {
+        const reg =
+          (await navigator.serviceWorker.getRegistration()) ?? registrationRef.current ?? (await navigator.serviceWorker.ready);
+        const waiting = reg.waiting ?? waitingWorkerRef.current ?? null;
+
+        if (waiting) {
+          const fallbackMs = 4500;
+          const t = window.setTimeout(() => scheduleReload(), fallbackMs);
+          const clearFallback = () => window.clearTimeout(t);
+          navigator.serviceWorker.addEventListener('controllerchange', clearFallback, { once: true });
+          waiting.postMessage({ type: 'SKIP_WAITING' });
+          return;
+        }
+
+        await reg.update();
+        scheduleReload();
+      } catch {
+        scheduleReload();
+      }
+    })();
   };
 
   if (!updateAvailable) return null;
 
   return (
-    <div className="fixed inset-x-3 bottom-3 z-[90] rounded-2xl bg-zinc-900 px-4 py-3 text-white shadow-2xl ring-1 ring-zinc-700">
-      <p className="text-sm font-semibold">Hay una nueva versión disponible.</p>
-      <div className="mt-2 flex items-center justify-end gap-2">
-        <button
-          type="button"
-          onClick={() => setUpdateAvailable(false)}
-          className="h-9 rounded-lg border border-zinc-600 px-3 text-xs font-bold uppercase tracking-wide text-zinc-200"
+    <>
+      {applyingUpdate ? (
+        <div
+          className="fixed inset-0 z-[200] grid place-items-center bg-black/40 px-6"
+          role="status"
+          aria-live="polite"
         >
-          Luego
-        </button>
-        <button
-          type="button"
-          onClick={applyUpdate}
-          className="h-9 rounded-lg bg-[#D32F2F] px-3 text-xs font-bold uppercase tracking-wide text-white"
-        >
-          Actualizar ahora
-        </button>
+          <div className="max-w-sm rounded-2xl bg-zinc-900 px-6 py-5 text-center text-white shadow-2xl ring-1 ring-zinc-600">
+            <p className="text-sm font-semibold">Aplicando actualización…</p>
+            <p className="mt-2 text-xs text-zinc-400">La app se recargará en un momento.</p>
+          </div>
+        </div>
+      ) : null}
+      <div className="fixed inset-x-3 z-[120] rounded-2xl bg-zinc-900 px-4 py-3 text-white shadow-2xl ring-1 ring-zinc-700 bottom-[max(0.75rem,env(safe-area-inset-bottom,0px))]">
+        <p className="text-sm font-semibold">Hay una nueva versión disponible.</p>
+        <div className="mt-2 flex items-center justify-end gap-2">
+          <button
+            type="button"
+            onClick={() => setUpdateAvailable(false)}
+            className="h-9 rounded-lg border border-zinc-600 px-3 text-xs font-bold uppercase tracking-wide text-zinc-200"
+          >
+            Luego
+          </button>
+          <button
+            type="button"
+            onClick={applyUpdate}
+            disabled={applyingUpdate}
+            className="h-9 rounded-lg bg-[#D32F2F] px-3 text-xs font-bold uppercase tracking-wide text-white disabled:opacity-60"
+          >
+            Actualizar ahora
+          </button>
+        </div>
       </div>
-    </div>
+    </>
   );
 }
 
