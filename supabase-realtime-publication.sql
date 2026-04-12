@@ -22,7 +22,10 @@ declare
     'appcc_cold_units',
     'appcc_temperature_readings',
     'appcc_fryers',
-    'appcc_oil_events'
+    'appcc_oil_events',
+    'inventory_local_categories',
+    'inventory_items',
+    'inventory_movements'
   ];
 begin
   foreach tbl in array tables
@@ -52,6 +55,7 @@ order by tablename;
 -- 1) SUPABASE — Publicación (este archivo)
 --    - Crea las tablas del módulo en SQL (con local_id si es multi-local).
 --    - APPCC: supabase-appcc-schema.sql (frío); supabase-appcc-aceite-schema.sql (freidoras).
+--    - Inventario: supabase-inventory-schema.sql (catálogo global + stock por local).
 --    - Añade el nombre de cada tabla NUEVA al array `tables` de arriba y vuelve a
 --      ejecutar solo el bloque `do $$ ... end $$` (o un ALTER manual).
 --    - Comprueba con el SELECT final que aparecen en pg_publication_tables.
