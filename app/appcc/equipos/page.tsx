@@ -126,11 +126,16 @@ export default function AppccEquiposPage() {
     }
     const so = Number(sortOrder);
     const order = Number.isFinite(so) ? Math.trunc(so) : 0;
-    const minC = emptyToNull(tempMin);
-    const maxC = emptyToNull(tempMax);
-    if (minC != null && maxC != null && minC > maxC) {
-      setBanner('La temperatura mínima no puede ser mayor que la máxima.');
-      return;
+    const rawLo = emptyToNull(tempMin);
+    const rawHi = emptyToNull(tempMax);
+    let minC: number | null = null;
+    let maxC: number | null = null;
+    if (rawLo != null && rawHi != null) {
+      minC = Math.min(rawLo, rawHi);
+      maxC = Math.max(rawLo, rawHi);
+    } else {
+      minC = rawLo;
+      maxC = rawHi;
     }
     const {
       data: { user },
@@ -212,7 +217,7 @@ export default function AppccEquiposPage() {
       <MermasStyleHero
         eyebrow="APPCC"
         title="Equipos de frío"
-        description="Neveras y congeladores de cocina y barra. Los rangos °C son opcionales; sirven para avisar si una lectura sale de lo previsto."
+        description="Neveras y congeladores de cocina y barra. El rango °C es opcional: indica el límite más frío y el más templado. En Celsius el número más bajo es el más frío (ej. congelador entre -13 y -18 → -18 y -13)."
       />
 
       {!isSupabaseEnabled() || !getSupabaseClient() ? (
@@ -281,23 +286,30 @@ export default function AppccEquiposPage() {
               disabled={!localId || submitting}
             />
           </div>
+          <div className="sm:col-span-2">
+            <p className="text-[11px] leading-snug text-zinc-500">
+              Rango permitido en °C: el <strong className="text-zinc-700">más frío</strong> es el número{' '}
+              <strong className="text-zinc-700">más bajo</strong> (p. ej. -18 en congelador). Si pones los
+              dos límites, da igual en qué casilla escribas cada uno: se ordenan al guardar.
+            </p>
+          </div>
           <div>
-            <label className="text-xs font-bold uppercase text-zinc-500">Mín °C (opc.)</label>
+            <label className="text-xs font-bold uppercase text-zinc-500">Límite más frío °C (opc.)</label>
             <input
               value={tempMin}
               onChange={(e) => setTempMin(e.target.value)}
               className="mt-1 h-11 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm"
-              placeholder="Ej. 0"
+              placeholder="Ej. -18 o 2"
               disabled={!localId || submitting}
             />
           </div>
           <div>
-            <label className="text-xs font-bold uppercase text-zinc-500">Máx °C (opc.)</label>
+            <label className="text-xs font-bold uppercase text-zinc-500">Límite más templado °C (opc.)</label>
             <input
               value={tempMax}
               onChange={(e) => setTempMax(e.target.value)}
               className="mt-1 h-11 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm"
-              placeholder="Ej. 4"
+              placeholder="Ej. -13 o 6"
               disabled={!localId || submitting}
             />
           </div>
