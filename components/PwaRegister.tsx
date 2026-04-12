@@ -50,38 +50,12 @@ export default function PwaRegister() {
   const applyUpdate = () => {
     const waiting = waitingWorkerRef.current ?? registrationRef.current?.waiting ?? null;
     if (waiting) {
+      // El nuevo worker pasa a activo; `controllerchange` hace un reload suave (sin borrar SW/cachés).
       waiting.postMessage({ type: 'SKIP_WAITING' });
-      // Fallback in case old workers ignore SKIP_WAITING.
-      window.setTimeout(async () => {
-        try {
-          const regs = await navigator.serviceWorker.getRegistrations();
-          await Promise.all(regs.map((r) => r.unregister()));
-          if ('caches' in window) {
-            const keys = await caches.keys();
-            await Promise.all(keys.map((k) => caches.delete(k)));
-          }
-        } finally {
-          window.location.reload();
-        }
-      }, 1200);
       return;
     }
-    // Fallback: force a fresh update check and reload.
     if (registrationRef.current) {
-      void registrationRef.current
-        .update()
-        .finally(async () => {
-          try {
-            const regs = await navigator.serviceWorker.getRegistrations();
-            await Promise.all(regs.map((r) => r.unregister()));
-            if ('caches' in window) {
-              const keys = await caches.keys();
-              await Promise.all(keys.map((k) => caches.delete(k)));
-            }
-          } finally {
-            window.location.reload();
-          }
-        });
+      void registrationRef.current.update().finally(() => window.location.reload());
       return;
     }
     window.location.reload();

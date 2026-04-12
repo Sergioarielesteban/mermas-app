@@ -56,19 +56,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     router.push('/panel');
   }, [router]);
 
-  const refreshApp = async () => {
-    try {
-      if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
-        const regs = await navigator.serviceWorker.getRegistrations();
-        await Promise.all(regs.map((r) => r.unregister()));
-      }
-      if (typeof window !== 'undefined' && 'caches' in window) {
-        const keys = await caches.keys();
-        await Promise.all(keys.map((k) => caches.delete(k)));
-      }
-    } finally {
-      window.location.reload();
-    }
+  /** Recarga la página sin borrar el service worker ni las cachés (evita “reinicio total” de la PWA). */
+  const refreshApp = () => {
+    window.location.reload();
   };
 
   return (
