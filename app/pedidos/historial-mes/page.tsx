@@ -4,13 +4,12 @@ import Link from 'next/link';
 import React from 'react';
 import { ChevronDown } from 'lucide-react';
 import { useAuth } from '@/components/AuthProvider';
+import { usePedidosOrders } from '@/components/PedidosOrdersProvider';
 import { CHEF_ONE_TAPER_LINE_CLASS } from '@/components/ChefOneGlowLine';
-import { getSupabaseClient } from '@/lib/supabase-client';
 import PedidosPremiaLockedScreen from '@/components/PedidosPremiaLockedScreen';
 import { canAccessPedidos, canUsePedidosModule } from '@/lib/pedidos-access';
-import { usePedidosDataChangedListener } from '@/hooks/usePedidosDataChangedListener';
 import { formatQuantityWithUnit } from '@/lib/pedidos-format';
-import { fetchOrders, mergePedidoOrdersFromServer, type PedidoOrder } from '@/lib/pedidos-supabase';
+import type { PedidoOrder } from '@/lib/pedidos-supabase';
 import type { Unit } from '@/lib/types';
 
 function totalsWithVat(order: PedidoOrder) {
@@ -23,24 +22,9 @@ export default function PedidosHistorialMesPage() {
   const { localCode, localName, localId, email } = useAuth();
   const hasPedidosEntry = canAccessPedidos(localCode, email, localName, localId);
   const canUse = canUsePedidosModule(localCode, email, localName, localId);
-  const [orders, setOrders] = React.useState<PedidoOrder[]>([]);
+  const { orders } = usePedidosOrders();
   const [message, setMessage] = React.useState<string | null>(null);
   const [month, setMonth] = React.useState(() => new Date().toISOString().slice(0, 7));
-
-  const reload = React.useCallback(() => {
-    if (!canUse || !localId) return;
-    const supabase = getSupabaseClient();
-    if (!supabase) return;
-    void fetchOrders(supabase, localId)
-      .then((rows) => setOrders((prev) => mergePedidoOrdersFromServer(prev, rows)))
-      .catch((err: Error) => setMessage(err.message));
-  }, [canUse, localId]);
-
-  React.useEffect(() => {
-    reload();
-  }, [reload]);
-
-  usePedidosDataChangedListener(reload, Boolean(hasPedidosEntry && canUse));
 
   const accountingOrders = React.useMemo(
     () => orders.filter((row) => row.status === 'sent' || row.status === 'received'),

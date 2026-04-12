@@ -5,17 +5,11 @@ import React from 'react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { useAuth } from '@/components/AuthProvider';
+import { usePedidosOrders } from '@/components/PedidosOrdersProvider';
 import PedidosPremiaLockedScreen from '@/components/PedidosPremiaLockedScreen';
 import { canAccessPedidos, canUsePedidosModule } from '@/lib/pedidos-access';
 import { formatQuantityWithUnit } from '@/lib/pedidos-format';
-import { usePedidosDataChangedListener } from '@/hooks/usePedidosDataChangedListener';
-import {
-  billingQuantityForLine,
-  fetchOrders,
-  mergePedidoOrdersFromServer,
-  type PedidoOrder,
-} from '@/lib/pedidos-supabase';
-import { getSupabaseClient } from '@/lib/supabase-client';
+import { billingQuantityForLine, type PedidoOrder } from '@/lib/pedidos-supabase';
 import type { Unit } from '@/lib/types';
 
 type PricePoint = {
@@ -89,25 +83,9 @@ export default function PedidosPreciosPage() {
   const { localCode, localName, localId, email } = useAuth();
   const hasPedidosEntry = canAccessPedidos(localCode, email, localName, localId);
   const canUse = canUsePedidosModule(localCode, email, localName, localId);
-  const [orders, setOrders] = React.useState<PedidoOrder[]>([]);
+  const { orders: allOrders } = usePedidosOrders();
+  const orders = React.useMemo(() => allOrders.filter((o) => o.status !== 'draft'), [allOrders]);
   const [message, setMessage] = React.useState<string | null>(null);
-
-  const reload = React.useCallback(() => {
-    if (!canUse || !localId) return;
-    const supabase = getSupabaseClient();
-    if (!supabase) return;
-    void fetchOrders(supabase, localId)
-      .then((rows) =>
-        setOrders((prev) => mergePedidoOrdersFromServer(prev, rows).filter((o) => o.status !== 'draft')),
-      )
-      .catch((err: Error) => setMessage(err.message));
-  }, [canUse, localId]);
-
-  React.useEffect(() => {
-    reload();
-  }, [reload]);
-
-  usePedidosDataChangedListener(reload, Boolean(hasPedidosEntry && canUse));
 
   const series = React.useMemo<PriceSummary[]>(() => {
     type Acc = {

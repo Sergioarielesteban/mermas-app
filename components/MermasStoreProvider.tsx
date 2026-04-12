@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import { useAuth } from '@/components/AuthProvider';
-import { fetchProductsAndMermas, mapMermaRow } from '@/lib/mermas-supabase';
+import { fetchProductsAndMermas, mapMermaRow, mapProductRow } from '@/lib/mermas-supabase';
 import { uid } from '@/lib/id';
 import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
 import { isBrowser, safeJsonParse } from '@/lib/storage';
@@ -339,11 +339,17 @@ function isSeedProductId(id: string) {
   return id.startsWith('seed-');
 }
 
-function mergeCloudMermas(prev: MermaRecord[], serverCleaned: MermaRecord[], products: Product[]): MermaRecord[] {
+function mergeCloudMermas(
+  prev: MermaRecord[],
+  serverCleaned: MermaRecord[],
+  products: Product[],
+  protectIds: Set<string>,
+): MermaRecord[] {
   const serverIds = new Set(serverCleaned.map((x) => x.id));
   const now = Date.now();
   const extras = prev.filter((m) => {
     if (serverIds.has(m.id)) return false;
+    if (protectIds.has(m.id)) return true;
     if (isSeedMermaId(m.id)) return false;
     if (m.id.startsWith('m_')) return true;
     const created = Date.parse(m.createdAt);
@@ -355,15 +361,17 @@ function mergeCloudMermas(prev: MermaRecord[], serverCleaned: MermaRecord[], pro
   for (const row of extras) {
     if (!byId.has(row.id)) byId.set(row.id, row);
   }
+  for (const id of serverIds) protectIds.delete(id);
   const merged = Array.from(byId.values()).sort((a, b) => (a.occurredAt < b.occurredAt ? 1 : -1));
   return pruneBaconHalfRecords(products, merged);
 }
 
-function mergeCloudProducts(prev: Product[], serverSorted: Product[]): Product[] {
+function mergeCloudProducts(prev: Product[], serverSorted: Product[], protectIds: Set<string>): Product[] {
   const serverIds = new Set(serverSorted.map((x) => x.id));
   const now = Date.now();
   const extras = prev.filter((p) => {
     if (serverIds.has(p.id)) return false;
+    if (protectIds.has(p.id)) return true;
     if (isSeedProductId(p.id)) return false;
     if (p.id.startsWith('p_')) return true;
     const created = Date.parse(p.createdAt);
@@ -375,6 +383,7 @@ function mergeCloudProducts(prev: Product[], serverSorted: Product[]): Product[]
   for (const row of extras) {
     if (!byId.has(row.id)) byId.set(row.id, row);
   }
+  for (const id of serverIds) protectIds.delete(id);
   return sortProductsByName(Array.from(byId.values()));
 }
 
@@ -454,6 +463,8 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
   const lastLocalEditAtRef = React.useRef(0);
   const lastRemoteAppliedAtRef = React.useRef(0);
   const applyingRemoteRef = React.useRef(false);
+  const protectMermaIdsRef = React.useRef(new Set<string>());
+  const protectProductIdsRef = React.useRef(new Set<string>());
   const markLocalEdit = React.useCallback(() => {
     lastLocalEditAtRef.current = Date.now();
   }, []);
@@ -465,12 +476,17 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
       const { products: p, mermas: m } = await fetchProductsAndMermas(supabase, localId);
       const serverProducts = sortProductsByName(p);
       const serverMermas = pruneBaconHalfRecords(p, m);
-      setProducts((prev) => mergeCloudProducts(prev, serverProducts));
-      setMermas((prev) => mergeCloudMermas(prev, serverMermas, serverProducts));
+      setProducts((prev) => mergeCloudProducts(prev, serverProducts, protectProductIdsRef.current));
+      setMermas((prev) => mergeCloudMermas(prev, serverMermas, serverProducts, protectMermaIdsRef.current));
       setCloudDataLoaded(true);
     } catch {
       // Keep last known state; do not wipe UI on transient cloud errors.
     }
+  }, [localId]);
+
+  useEffect(() => {
+    protectMermaIdsRef.current.clear();
+    protectProductIdsRef.current.clear();
   }, [localId]);
 
   useEffect(() => {
@@ -500,37 +516,28 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
 
   useEffect(() => {
     if (!isBrowser() || !hydrated || !cloudMode || !localId) return;
-    const supabase = getSupabaseClient();
-    if (!supabase) return;
-    let cancelled = false;
     void refetchCloud();
-    const t1 = window.setTimeout(() => {
-      if (!cancelled) void refetchCloud();
-    }, 500);
-    const t2 = window.setTimeout(() => {
-      if (!cancelled) void refetchCloud();
-    }, 2500);
-    return () => {
-      cancelled = true;
-      window.clearTimeout(t1);
-      window.clearTimeout(t2);
-    };
   }, [cloudMode, hydrated, localId, refetchCloud]);
 
   useEffect(() => {
     if (!isBrowser() || !hydrated || !cloudMode || !cloudDataLoaded) return;
     const supabase = getSupabaseClient();
     if (!supabase) return;
+    let debounceTimer: number | null = null;
+    const scheduleRefetch = () => {
+      if (debounceTimer != null) window.clearTimeout(debounceTimer);
+      debounceTimer = window.setTimeout(() => {
+        debounceTimer = null;
+        void refetchCloud();
+      }, 2000);
+    };
     const channel = supabase
       .channel('mermas-local-realtime')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'products' }, () => {
-        void refetchCloud();
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'mermas' }, () => {
-        void refetchCloud();
-      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'products' }, scheduleRefetch)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'mermas' }, scheduleRefetch)
       .subscribe();
     return () => {
+      if (debounceTimer != null) window.clearTimeout(debounceTimer);
       void supabase.removeChannel(channel);
     };
   }, [cloudDataLoaded, cloudMode, hydrated, refetchCloud]);
@@ -637,14 +644,23 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
         const supabase = getSupabaseClient();
         if (!supabase) return;
         void (async () => {
-          const { error } = await supabase.from('products').insert({
-            local_id: localId,
-            name: trimmed,
-            unit: input.unit,
-            price_per_unit: Math.round(input.pricePerUnit * 100) / 100,
-            is_active: true,
-          });
-          if (error) return;
+          const { data, error } = await supabase
+            .from('products')
+            .insert({
+              local_id: localId,
+              name: trimmed,
+              unit: input.unit,
+              price_per_unit: Math.round(input.pricePerUnit * 100) / 100,
+              is_active: true,
+            })
+            .select('id,name,unit,price_per_unit,created_at')
+            .single();
+          if (error || !data) return;
+          const p = mapProductRow(
+            data as { id: string; name: string; unit: string; price_per_unit: number; created_at: string },
+          );
+          protectProductIdsRef.current.add(p.id);
+          setProducts((prev) => sortProductsByName([p, ...prev]));
           markLocalEdit();
           await refetchCloud();
         })();
@@ -720,6 +736,7 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
         void (async () => {
           const { error } = await supabase.from('products').update({ is_active: false }).eq('id', id);
           if (error) return;
+          protectProductIdsRef.current.delete(id);
           markLocalEdit();
           await refetchCloud();
         })();
@@ -777,11 +794,9 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
           return { ok: false, reason: error?.message ?? 'No se pudo guardar en nube.' };
         }
         const saved = mapMermaRow(data);
+        protectMermaIdsRef.current.add(saved.id);
         setMermas((prev) => prev.map((m) => (m.id === record.id ? saved : m)));
         markLocalEdit();
-        // No refetch inmediato: en algunos entornos la lectura puede ir a réplica y
-        // pisar la fila recién insertada hasta que el usuario “actualiza”. El estado
-        // local ya es el devuelto por .select(); realtime y otras pantallas siguen sincronizadas.
         return { ok: true, record: saved };
       }
 
@@ -891,6 +906,7 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
             reason: 'No se pudo eliminar: sin permisos o registro no encontrado para este local.',
           };
         }
+        protectMermaIdsRef.current.delete(id);
         markLocalEdit();
         await refetchCloud();
         return { ok: true };

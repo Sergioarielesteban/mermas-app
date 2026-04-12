@@ -4,12 +4,14 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import React from 'react';
 import { useAuth } from '@/components/AuthProvider';
+import { usePedidosOrders } from '@/components/PedidosOrdersProvider';
 import { getSupabaseClient } from '@/lib/supabase-client';
 import PedidosPremiaLockedScreen from '@/components/PedidosPremiaLockedScreen';
 import { canAccessPedidos, canUsePedidosModule } from '@/lib/pedidos-access';
 import { dispatchPedidosDataChanged, usePedidosDataChangedListener } from '@/hooks/usePedidosDataChangedListener';
 import { formatQuantityWithUnit, unitPriceCatalogSuffix } from '@/lib/pedidos-format';
 import {
+  fetchOrderById,
   fetchOrders,
   fetchSuppliersWithProducts,
   saveOrder,
@@ -63,6 +65,28 @@ export default function NuevoPedidoPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { localCode, localName, localId, email } = useAuth();
+  const { upsertOrder } = usePedidosOrders();
+
+  const pullNewOrderIntoStore = React.useCallback(
+    async (orderId: string) => {
+      if (!localId) return;
+      const supabase = getSupabaseClient();
+      if (!supabase) return;
+      for (let attempt = 0; attempt < 5; attempt++) {
+        if (attempt > 0) await new Promise((r) => setTimeout(r, 300 + attempt * 200));
+        try {
+          const o = await fetchOrderById(supabase, localId, orderId);
+          if (o) {
+            upsertOrder(o);
+            return;
+          }
+        } catch {
+          /* réplica u error transitorio: reintentar */
+        }
+      }
+    },
+    [localId, upsertOrder],
+  );
   const hasPedidosEntry = canAccessPedidos(localCode, email, localName, localId);
   const canUse = canUsePedidosModule(localCode, email, localName, localId);
   const editingId = searchParams.get('id');
@@ -239,13 +263,14 @@ export default function NuevoPedidoPage() {
         receivedWeightKg: item.receivedWeightKg ?? null,
       })),
     })
-      .then(() => {
+      .then((orderId) => {
+        void pullNewOrderIntoStore(orderId);
         try {
           sessionStorage.setItem('mermas_reload_pedidos', '1');
         } catch {
           /* modo privado */
         }
-        dispatchPedidosDataChanged();
+        dispatchPedidosDataChanged({ immediate: true });
         router.push('/pedidos');
       })
       .catch((err: Error) => setMessage(err.message));
@@ -290,7 +315,8 @@ export default function NuevoPedidoPage() {
         receivedWeightKg: item.receivedWeightKg ?? null,
       })),
     })
-      .then(() => {
+      .then((orderId) => {
+        void pullNewOrderIntoStore(orderId);
         const text = encodeURIComponent(
           buildWhatsappDraftMessage({
             supplierName: selectedSupplier.name,
@@ -308,7 +334,7 @@ export default function NuevoPedidoPage() {
         } catch {
           /* modo privado */
         }
-        dispatchPedidosDataChanged();
+        dispatchPedidosDataChanged({ immediate: true });
         router.push('/pedidos');
       })
       .catch((err: Error) => {

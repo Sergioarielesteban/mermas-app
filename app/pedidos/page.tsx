@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import React from 'react';
 import { useAuth } from '@/components/AuthProvider';
+import { usePedidosOrders } from '@/components/PedidosOrdersProvider';
 import { getSupabaseClient } from '@/lib/supabase-client';
 import MermasStyleHero from '@/components/MermasStyleHero';
 import PedidosPremiaLockedScreen from '@/components/PedidosPremiaLockedScreen';
@@ -13,8 +14,6 @@ import { formatIncidentLine, formatQuantityWithUnit, unitPriceCatalogSuffix } fr
 import {
   billingQuantityForLine,
   deleteOrder,
-  fetchOrders,
-  mergePedidoOrdersFromServer,
   fetchSuppliersWithProducts,
   persistSentOrderAsReceived,
   reopenReceivedOrderToSent,
@@ -113,7 +112,7 @@ export default function PedidosPage() {
   const { localCode, localName, localId, email } = useAuth();
   const hasPedidosEntry = canAccessPedidos(localCode, email, localName, localId);
   const canUse = canUsePedidosModule(localCode, email, localName, localId);
-  const [orders, setOrders] = React.useState<PedidoOrder[]>([]);
+  const { orders, setOrders, reloadOrders, releasePinOrderId } = usePedidosOrders();
   const [catalogPriceByProductId, setCatalogPriceByProductId] = React.useState<Map<string, number>>(() => new Map());
   const [message, setMessage] = React.useState<string | null>(null);
   const [showDeletedBanner, setShowDeletedBanner] = React.useState(false);
@@ -306,39 +305,26 @@ export default function PedidosPage() {
       });
   };
 
-  const reloadOrders = React.useCallback(() => {
-    if (!canUse || !localId) return;
-    const supabase = getSupabaseClient();
-    if (!supabase) return;
-    void fetchOrders(supabase, localId)
-      .then((rows) => {
-        setOrders((prev) => mergePedidoOrdersFromServer(prev, rows));
-        // No machacar marcas con datos aún viejos del servidor (race: el fetch puede llegar antes que el update).
-        setQuickLineMarks((prev) => {
-          const next: Record<string, 'ok' | 'bad'> = {};
-          for (const o of rows) {
-            if (o.status !== 'sent') continue;
-            for (const i of o.items) {
-              const rq = Number(i.receivedQuantity);
-              const qq = Number(i.quantity);
-              const serverOk = qq > 0 && rq >= qq && !i.incidentType;
-              const serverBad = Boolean(i.incidentType);
-              if (serverOk) next[i.id] = 'ok';
-              else if (serverBad) next[i.id] = 'bad';
-              else if (prev[i.id]) next[i.id] = prev[i.id];
-            }
-          }
-          return next;
-        });
-      })
-      .catch((err: Error) => setMessage(err.message));
-  }, [canUse, localId]);
-
   const pathname = usePathname();
 
   React.useEffect(() => {
-    reloadOrders();
-  }, [reloadOrders]);
+    setQuickLineMarks((prev) => {
+      const next: Record<string, 'ok' | 'bad'> = {};
+      for (const o of orders) {
+        if (o.status !== 'sent') continue;
+        for (const i of o.items) {
+          const rq = Number(i.receivedQuantity);
+          const qq = Number(i.quantity);
+          const serverOk = qq > 0 && rq >= qq && !i.incidentType;
+          const serverBad = Boolean(i.incidentType);
+          if (serverOk) next[i.id] = 'ok';
+          else if (serverBad) next[i.id] = 'bad';
+          else if (prev[i.id]) next[i.id] = prev[i.id];
+        }
+      }
+      return next;
+    });
+  }, [orders]);
 
   const reloadCatalog = React.useCallback(() => {
     if (!canUse || !localId) return;
@@ -378,7 +364,6 @@ export default function PedidosPage() {
     }
     const pull = () => {
       if (document.visibilityState !== 'visible') return;
-      reloadOrders();
       reloadCatalog();
     };
     const onPageShow = (e: PageTransitionEvent) => {
@@ -396,9 +381,8 @@ export default function PedidosPage() {
 
   usePedidosDataChangedListener(
     React.useCallback(() => {
-      reloadOrders();
       reloadCatalog();
-    }, [reloadOrders, reloadCatalog]),
+    }, [reloadCatalog]),
     Boolean(hasPedidosEntry && canUse),
   );
 
@@ -638,6 +622,7 @@ export default function PedidosPage() {
                     if (!supabase) return;
                     void deleteOrder(supabase, localId, order.id)
                       .then(() => {
+                        releasePinOrderId(order.id);
                         setOrders((prev) => prev.filter((o) => o.id !== order.id));
                         setMessage('Pedido enviado eliminado.');
                         setShowDeletedBanner(true);
@@ -821,6 +806,7 @@ export default function PedidosPage() {
                     if (!supabase) return;
                     void deleteOrder(supabase, localId, order.id)
                       .then(() => {
+                        releasePinOrderId(order.id);
                         setOrders((prev) => prev.filter((o) => o.id !== order.id));
                         setMessage('Pedido histórico eliminado.');
                         setShowDeletedBanner(true);

@@ -365,14 +365,86 @@ export async function fetchOrders(supabase: SupabaseClient, localId: string) {
   return orders;
 }
 
+/** Una sola cabecera + líneas (menos datos que `fetchOrders`; útil tras crear un pedido). */
+export async function fetchOrderById(
+  supabase: SupabaseClient,
+  localId: string,
+  orderId: string,
+): Promise<PedidoOrder | null> {
+  const { data: orderRow, error: oErr } = await supabase
+    .from('purchase_orders')
+    .select(
+      'id,supplier_id,status,notes,created_at,sent_at,received_at,delivery_date,price_review_archived_at,pedido_suppliers(name,contact)',
+    )
+    .eq('local_id', localId)
+    .eq('id', orderId)
+    .maybeSingle();
+  if (oErr) throw new Error(oErr.message);
+  const row = orderRow as OrderRow | null;
+  if (!row) return null;
+
+  const { data: itemRows, error: iErr } = await supabase
+    .from('purchase_order_items')
+    .select(
+      'id,order_id,supplier_product_id,product_name,unit,quantity,received_quantity,price_per_unit,vat_rate,line_total,estimated_kg_per_unit,received_weight_kg,incident_type,incident_notes',
+    )
+    .eq('order_id', orderId)
+    .eq('local_id', localId);
+  if (iErr) throw new Error(iErr.message);
+
+  const items: PedidoOrderItem[] = ((itemRows ?? []) as OrderItemRow[]).map((ir) => ({
+    id: ir.id,
+    supplierProductId: ir.supplier_product_id,
+    productName: ir.product_name,
+    unit: ir.unit as Unit,
+    quantity: Number(ir.quantity),
+    receivedQuantity: Number(ir.received_quantity),
+    pricePerUnit: Number(ir.price_per_unit),
+    vatRate: Number(ir.vat_rate ?? 0),
+    lineTotal: Number(ir.line_total),
+    ...(ir.estimated_kg_per_unit != null ? { estimatedKgPerUnit: Number(ir.estimated_kg_per_unit) } : {}),
+    receivedWeightKg: ir.received_weight_kg != null ? Number(ir.received_weight_kg) : null,
+    incidentType: ir.incident_type,
+    incidentNotes: ir.incident_notes ?? undefined,
+  }));
+
+  const supplier = Array.isArray(row.pedido_suppliers) ? row.pedido_suppliers[0] : row.pedido_suppliers;
+  return {
+    id: row.id,
+    supplierId: row.supplier_id,
+    supplierName: supplier?.name ?? 'Proveedor',
+    supplierContact: supplier?.contact ?? undefined,
+    status: row.status,
+    notes: row.notes ?? '',
+    createdAt: row.created_at,
+    sentAt: row.sent_at ?? undefined,
+    receivedAt: row.received_at ?? undefined,
+    deliveryDate: row.delivery_date ?? undefined,
+    ...(row.price_review_archived_at != null && row.price_review_archived_at !== ''
+      ? { priceReviewArchivedAt: row.price_review_archived_at }
+      : {}),
+    items,
+    total: items.reduce((acc, item) => acc + item.lineTotal, 0),
+  };
+}
+
 /** Evita perder pedidos recién creados cuando la lectura va a réplica y aún no incluye la fila nueva. */
 const PEDIDO_MERGE_RECENT_MS = 12 * 60 * 1000;
 
-export function mergePedidoOrdersFromServer(prev: PedidoOrder[], server: PedidoOrder[]): PedidoOrder[] {
+/**
+ * Fusiona lista previa con la respuesta del servidor. Si pasas `pinUntilSeenOnServer`, esas ids se mantienen
+ * en pantalla hasta que el servidor las devuelva; luego se eliminan del Set (mutación intencionada).
+ */
+export function mergePedidoOrdersFromServer(
+  prev: PedidoOrder[],
+  server: PedidoOrder[],
+  pinUntilSeenOnServer?: Set<string>,
+): PedidoOrder[] {
   const serverIds = new Set(server.map((o) => o.id));
   const now = Date.now();
   const extras = prev.filter((o) => {
     if (serverIds.has(o.id)) return false;
+    if (pinUntilSeenOnServer?.has(o.id)) return true;
     const created = Date.parse(o.createdAt);
     if (!Number.isFinite(created)) return false;
     return now - created < PEDIDO_MERGE_RECENT_MS;
@@ -381,6 +453,9 @@ export function mergePedidoOrdersFromServer(prev: PedidoOrder[], server: PedidoO
   for (const row of server) byId.set(row.id, row);
   for (const row of extras) {
     if (!byId.has(row.id)) byId.set(row.id, row);
+  }
+  if (pinUntilSeenOnServer) {
+    for (const id of serverIds) pinUntilSeenOnServer.delete(id);
   }
   return Array.from(byId.values()).sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
 }

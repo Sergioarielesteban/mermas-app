@@ -5,16 +5,15 @@ import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import React from 'react';
 import { useAuth } from '@/components/AuthProvider';
+import { usePedidosOrders } from '@/components/PedidosOrdersProvider';
 import { CHEF_ONE_TAPER_LINE_CLASS } from '@/components/ChefOneGlowLine';
 import { getSupabaseClient } from '@/lib/supabase-client';
 import PedidosPremiaLockedScreen from '@/components/PedidosPremiaLockedScreen';
-import { dispatchPedidosDataChanged, usePedidosDataChangedListener } from '@/hooks/usePedidosDataChangedListener';
+import { dispatchPedidosDataChanged } from '@/hooks/usePedidosDataChangedListener';
 import { canAccessPedidos, canUsePedidosModule } from '@/lib/pedidos-access';
 import { formatQuantityWithUnit, unitPriceCatalogSuffix } from '@/lib/pedidos-format';
 import {
   billingQuantityForLine,
-  fetchOrders,
-  mergePedidoOrdersFromServer,
   setOrderPriceReviewArchived,
   setOrderStatus,
   unitCanDeclareScaleKgOnReception,
@@ -51,7 +50,11 @@ export default function RecepcionPedidosPage() {
   const { localCode, localName, localId, email } = useAuth();
   const hasPedidosEntry = canAccessPedidos(localCode, email, localName, localId);
   const canUse = canUsePedidosModule(localCode, email, localName, localId);
-  const [orders, setOrders] = React.useState<PedidoOrder[]>([]);
+  const { orders: allOrders, setOrders, reloadOrders } = usePedidosOrders();
+  const orders = React.useMemo(
+    () => allOrders.filter((row) => row.status === 'sent' || row.status === 'received'),
+    [allOrders],
+  );
   const [supplierFilter, setSupplierFilter] = React.useState('all');
   const initialDateFilter = searchParams.get('date') ?? '';
   const [dateFilter, setDateFilter] = React.useState(initialDateFilter);
@@ -78,27 +81,6 @@ export default function RecepcionPedidosPage() {
   React.useEffect(() => {
     focusOrderAppliedRef.current = false;
   }, [focusOrderIdFromUrl]);
-
-  const reloadOrders = React.useCallback(() => {
-    if (!canUse || !localId) return;
-    const supabase = getSupabaseClient();
-    if (!supabase) return;
-    void fetchOrders(supabase, localId)
-      .then((rows) =>
-        setOrders((prev) =>
-          mergePedidoOrdersFromServer(prev, rows).filter(
-            (row) => row.status === 'sent' || row.status === 'received',
-          ),
-        ),
-      )
-      .catch((err: Error) => setMessage(err.message));
-  }, [canUse, localId]);
-
-  React.useEffect(() => {
-    reloadOrders();
-  }, [reloadOrders]);
-
-  usePedidosDataChangedListener(reloadOrders, Boolean(hasPedidosEntry && canUse));
 
   React.useEffect(() => {
     if (!focusOrderIdFromUrl || focusOrderAppliedRef.current) return;

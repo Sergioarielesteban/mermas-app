@@ -3,11 +3,10 @@
 import Link from 'next/link';
 import React from 'react';
 import { useAuth } from '@/components/AuthProvider';
+import { usePedidosOrders } from '@/components/PedidosOrdersProvider';
 import PedidosPremiaLockedScreen from '@/components/PedidosPremiaLockedScreen';
 import { canAccessPedidos, canUsePedidosModule } from '@/lib/pedidos-access';
-import { usePedidosDataChangedListener } from '@/hooks/usePedidosDataChangedListener';
-import { fetchOrders, mergePedidoOrdersFromServer, type PedidoOrder } from '@/lib/pedidos-supabase';
-import { getSupabaseClient } from '@/lib/supabase-client';
+import type { PedidoOrder } from '@/lib/pedidos-supabase';
 
 type CalendarGroup = { date: string; orders: PedidoOrder[] };
 
@@ -15,25 +14,8 @@ export default function PedidosCalendarioPage() {
   const { localCode, localName, localId, email } = useAuth();
   const hasPedidosEntry = canAccessPedidos(localCode, email, localName, localId);
   const canUse = canUsePedidosModule(localCode, email, localName, localId);
-  const [orders, setOrders] = React.useState<PedidoOrder[]>([]);
-  const [message, setMessage] = React.useState<string | null>(null);
-
-  const reload = React.useCallback(() => {
-    if (!canUse || !localId) return;
-    const supabase = getSupabaseClient();
-    if (!supabase) return;
-    void fetchOrders(supabase, localId)
-      .then((rows) =>
-        setOrders((prev) => mergePedidoOrdersFromServer(prev, rows).filter((o) => o.status === 'sent')),
-      )
-      .catch((err: Error) => setMessage(err.message));
-  }, [canUse, localId]);
-
-  React.useEffect(() => {
-    reload();
-  }, [reload]);
-
-  usePedidosDataChangedListener(reload, Boolean(hasPedidosEntry && canUse));
+  const { orders: allOrders } = usePedidosOrders();
+  const orders = React.useMemo(() => allOrders.filter((o) => o.status === 'sent'), [allOrders]);
 
   const groups = React.useMemo<CalendarGroup[]>(() => {
     const map = new Map<string, PedidoOrder[]>();
@@ -71,7 +53,6 @@ export default function PedidosCalendarioPage() {
       <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-zinc-200">
         <h1 className="text-lg font-black text-zinc-900">Calendario de entregas</h1>
         <p className="pt-1 text-sm text-zinc-600">Vista por fecha de entrega para organizar recepción.</p>
-        {message ? <p className="pt-2 text-sm text-[#B91C1C]">{message}</p> : null}
       </section>
 
       <section className="space-y-3">
