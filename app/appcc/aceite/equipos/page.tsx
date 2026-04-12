@@ -29,28 +29,31 @@ export default function AppccAceiteEquiposPage() {
 
   const supabaseOk = isSupabaseEnabled() && getSupabaseClient();
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (opts?: { silent?: boolean }) => {
+    const silent = opts?.silent === true;
     if (!localId || !supabaseOk) {
       setFryers([]);
-      setLoading(false);
+      if (!silent) setLoading(false);
       return;
     }
     const supabase = getSupabaseClient()!;
-    setLoading(true);
-    setBanner(null);
+    if (!silent) setLoading(true);
+    if (!silent) setBanner(null);
     try {
       const f = await fetchAppccFryers(supabase, localId, false);
       setFryers(f);
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Error al cargar.';
-      if (msg.toLowerCase().includes('relation') || msg.includes('does not exist')) {
-        setBanner('Ejecuta supabase-appcc-aceite-schema.sql en Supabase antes de usar esta pantalla.');
-      } else {
-        setBanner(msg);
+      if (!silent) {
+        if (msg.toLowerCase().includes('relation') || msg.includes('does not exist')) {
+          setBanner('Ejecuta supabase-appcc-aceite-schema.sql en Supabase antes de usar esta pantalla.');
+        } else {
+          setBanner(msg);
+        }
+        setFryers([]);
       }
-      setFryers([]);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, [localId, supabaseOk]);
 
@@ -63,7 +66,7 @@ export default function AppccAceiteEquiposPage() {
 
   useEffect(() => {
     const ping = () => {
-      if (document.visibilityState === 'visible') void loadRef.current();
+      if (document.visibilityState === 'visible') void loadRef.current({ silent: true });
     };
     document.addEventListener('visibilitychange', ping);
     window.addEventListener('focus', ping);
@@ -91,7 +94,7 @@ export default function AppccAceiteEquiposPage() {
           table: 'appcc_fryers',
           filter: `local_id=eq.${localId}`,
         },
-        () => void load(),
+        () => void load({ silent: true }),
       )
       .subscribe();
     return () => {
@@ -120,7 +123,7 @@ export default function AppccAceiteEquiposPage() {
     setSubmitting(true);
     setBanner(null);
     try {
-      await insertAppccFryer(supabase, {
+      const created = await insertAppccFryer(supabase, {
         localId,
         name: trimmed,
         zone,
@@ -131,7 +134,11 @@ export default function AppccAceiteEquiposPage() {
       setName('');
       setSortOrder('0');
       setNotes('');
-      await load();
+      setFryers((prev) =>
+        [...prev, created].sort((a, b) =>
+          a.sort_order !== b.sort_order ? a.sort_order - b.sort_order : a.name.localeCompare(b.name),
+        ),
+      );
     } catch (err) {
       setBanner(err instanceof Error ? err.message : 'No se pudo crear la freidora.');
     } finally {
@@ -153,7 +160,7 @@ export default function AppccAceiteEquiposPage() {
     setBanner(null);
     try {
       await deleteAppccFryer(supabase, f.id);
-      await load();
+      setFryers((prev) => prev.filter((x) => x.id !== f.id));
     } catch (err) {
       setBanner(err instanceof Error ? err.message : 'No se pudo eliminar la freidora.');
     } finally {

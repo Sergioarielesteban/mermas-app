@@ -41,15 +41,16 @@ export default function AppccAceiteHistorialPage() {
   const to = madridDateKey();
   const from = dateKeyDaysAgo(RANGE_DAYS);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (opts?: { silent?: boolean }) => {
+    const silent = opts?.silent === true;
     if (!localId || !supabaseOk) {
       setRows([]);
-      setLoading(false);
+      if (!silent) setLoading(false);
       return;
     }
     const supabase = getSupabaseClient()!;
-    setLoading(true);
-    setErr(null);
+    if (!silent) setLoading(true);
+    if (!silent) setErr(null);
     try {
       const data = await fetchOilEventsInRangeWithFryer(
         supabase,
@@ -60,10 +61,12 @@ export default function AppccAceiteHistorialPage() {
       );
       setRows(data);
     } catch (e) {
-      setErr(e instanceof Error ? e.message : 'Error al cargar.');
-      setRows([]);
+      if (!silent) {
+        setErr(e instanceof Error ? e.message : 'Error al cargar.');
+        setRows([]);
+      }
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, [localId, supabaseOk, from, to, filter]);
 
@@ -76,7 +79,7 @@ export default function AppccAceiteHistorialPage() {
 
   useEffect(() => {
     const ping = () => {
-      if (document.visibilityState === 'visible') void loadRef.current();
+      if (document.visibilityState === 'visible') void loadRef.current({ silent: true });
     };
     document.addEventListener('visibilitychange', ping);
     window.addEventListener('focus', ping);
@@ -104,7 +107,7 @@ export default function AppccAceiteHistorialPage() {
           table: 'appcc_oil_events',
           filter: `local_id=eq.${localId}`,
         },
-        () => void load(),
+        () => void load({ silent: true }),
       )
       .subscribe();
     return () => {

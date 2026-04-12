@@ -20,7 +20,10 @@ const CORE_ASSETS=['/','/login','/panel','/dashboard','/productos','/resumen','/
 self.addEventListener('message',(e)=>{if(e.data?.type==='SKIP_WAITING')self.skipWaiting();});
 self.addEventListener('install',(e)=>{e.waitUntil(caches.open(CACHE_NAME).then(c=>c.addAll(CORE_ASSETS)));});
 self.addEventListener('activate',(e)=>{e.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k!==CACHE_NAME).map(k=>caches.delete(k)))));self.clients.claim();});
-self.addEventListener('fetch',(e)=>{const{request}=e;if(request.method!=='GET')return;const url=new URL(request.url);const html=request.headers.get('accept')?.includes('text/html');
+self.addEventListener('fetch',(e)=>{const{request}=e;if(request.method!=='GET')return;const url=new URL(request.url);
+// Supabase y cualquier origen distinto al de la PWA: nunca cache-first (GET quedaría obsoleto tras altas/ediciones).
+if(url.origin!==self.location.origin){e.respondWith(fetch(request));return;}
+const html=request.headers.get('accept')?.includes('text/html');
 if(url.pathname.startsWith('/api/')){e.respondWith(fetch(request));return;}
 if(request.mode==='navigate'||html){e.respondWith(fetch(request).catch(()=>caches.match(request).then(c=>c||caches.match('/'))));return;}
 e.respondWith(caches.match(request).then(c=>c||fetch(request).then(r=>{const cl=r.clone();caches.open(CACHE_NAME).then(ch=>ch.put(request,cl));return r;})));});

@@ -45,7 +45,7 @@ function FryerOilCard({
   dayEvents,
   operatorName,
   disabled,
-  onRefresh,
+  onEventSaved,
 }: {
   fryer: AppccFryerRow;
   dateKey: string;
@@ -53,7 +53,7 @@ function FryerOilCard({
   /** Mismo nombre para todas las freidoras del día (campo superior). */
   operatorName: string;
   disabled: boolean;
-  onRefresh: () => void;
+  onEventSaved: (row: AppccOilEventRow) => void;
 }) {
   const { localId } = useAuth();
   const [mode, setMode] = useState<null | AppccOilEventType>(null);
@@ -110,7 +110,7 @@ function FryerOilCard({
     }
     setSaving(true);
     try {
-      await insertOilEvent(supabase, {
+      const row = await insertOilEvent(supabase, {
         localId,
         fryerId: fryer.id,
         eventType,
@@ -122,7 +122,7 @@ function FryerOilCard({
       });
       setMode(null);
       resetForm();
-      onRefresh();
+      onEventSaved(row);
     } catch (e) {
       setErr(e instanceof Error ? e.message : 'Error al guardar.');
     } finally {
@@ -267,16 +267,17 @@ function AppccAceiteRegistroInner() {
 
   const supabaseOk = isSupabaseEnabled() && getSupabaseClient();
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (opts?: { silent?: boolean }) => {
+    const silent = opts?.silent === true;
     if (!localId || !supabaseOk) {
       setFryers([]);
       setEvents([]);
-      setLoading(false);
+      if (!silent) setLoading(false);
       return;
     }
     const supabase = getSupabaseClient()!;
-    setLoading(true);
-    setBanner(null);
+    if (!silent) setLoading(true);
+    if (!silent) setBanner(null);
     try {
       const [f, ev] = await Promise.all([
         fetchAppccFryers(supabase, localId, true),
@@ -286,19 +287,31 @@ function AppccAceiteRegistroInner() {
       setEvents(ev);
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Error al cargar datos.';
-      if (msg.toLowerCase().includes('relation') || msg.includes('does not exist')) {
-        setBanner(
-          'Faltan las tablas de aceite en Supabase. Ejecuta supabase-appcc-aceite-schema.sql y añade appcc_fryers y appcc_oil_events a la publicación Realtime si la usas.',
-        );
-      } else {
-        setBanner(msg);
+      if (!silent) {
+        if (msg.toLowerCase().includes('relation') || msg.includes('does not exist')) {
+          setBanner(
+            'Faltan las tablas de aceite en Supabase. Ejecuta supabase-appcc-aceite-schema.sql y añade appcc_fryers y appcc_oil_events a la publicación Realtime si la usas.',
+          );
+        } else {
+          setBanner(msg);
+        }
+        setFryers([]);
+        setEvents([]);
       }
-      setFryers([]);
-      setEvents([]);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, [dateKey, localId, supabaseOk]);
+
+  const mergeOilEvent = useCallback(
+    (row: AppccOilEventRow) => {
+      if (row.event_date !== dateKey) return;
+      setEvents((prev) =>
+        [...prev, row].sort((a, b) => a.recorded_at.localeCompare(b.recorded_at)),
+      );
+    },
+    [dateKey],
+  );
 
   const loadRef = useRef(load);
   loadRef.current = load;
@@ -309,7 +322,7 @@ function AppccAceiteRegistroInner() {
 
   useEffect(() => {
     const ping = () => {
-      if (document.visibilityState === 'visible') void loadRef.current();
+      if (document.visibilityState === 'visible') void loadRef.current({ silent: true });
     };
     document.addEventListener('visibilitychange', ping);
     window.addEventListener('focus', ping);
@@ -337,7 +350,7 @@ function AppccAceiteRegistroInner() {
           table: 'appcc_oil_events',
           filter: `local_id=eq.${localId}`,
         },
-        () => void load(),
+        () => void load({ silent: true }),
       )
       .on(
         'postgres_changes',
@@ -347,7 +360,7 @@ function AppccAceiteRegistroInner() {
           table: 'appcc_fryers',
           filter: `local_id=eq.${localId}`,
         },
-        () => void load(),
+        () => void load({ silent: true }),
       )
       .subscribe();
     return () => {
@@ -508,7 +521,7 @@ function AppccAceiteRegistroInner() {
                       dayEvents={events}
                       operatorName={operatorName}
                       disabled={disabled}
-                      onRefresh={() => void load()}
+                      onEventSaved={mergeOilEvent}
                     />
                   ))}
                 </div>

@@ -49,7 +49,7 @@ function SlotEditor({
   slot: AppccSlot;
   dateKey: string;
   reading: AppccReadingRow | undefined;
-  onSaved: () => void;
+  onSaved: (row: AppccReadingRow) => void;
   disabled: boolean;
 }) {
   const { localId } = useAuth();
@@ -103,7 +103,7 @@ function SlotEditor({
     }
     setSaving(true);
     try {
-      await upsertAppccReading(supabase, {
+      const row = await upsertAppccReading(supabase, {
         localId,
         coldUnitId: unit.id,
         readingDate: dateKey,
@@ -113,7 +113,7 @@ function SlotEditor({
         userId: user.id,
       });
       setJustSaved(true);
-      onSaved();
+      onSaved(row);
     } catch (e) {
       setErr(e instanceof Error ? e.message : 'Error al guardar.');
     } finally {
@@ -183,13 +183,13 @@ function UnitCard({
   dateKey,
   map,
   disabled,
-  onRefresh,
+  onReadingSaved,
 }: {
   unit: AppccColdUnitRow;
   dateKey: string;
   map: Map<string, AppccReadingRow>;
   disabled: boolean;
-  onRefresh: () => void;
+  onReadingSaved: (row: AppccReadingRow) => void;
 }) {
   const rM = map.get(`${unit.id}:manana`);
   const rT = map.get(`${unit.id}:tarde`);
@@ -218,7 +218,7 @@ function UnitCard({
           slot="manana"
           dateKey={dateKey}
           reading={rM}
-          onSaved={onRefresh}
+          onSaved={onReadingSaved}
           disabled={disabled}
         />
         <SlotEditor
@@ -226,7 +226,7 @@ function UnitCard({
           slot="tarde"
           dateKey={dateKey}
           reading={rT}
-          onSaved={onRefresh}
+          onSaved={onReadingSaved}
           disabled={disabled}
         />
         <SlotEditor
@@ -234,7 +234,7 @@ function UnitCard({
           slot="noche"
           dateKey={dateKey}
           reading={rN}
-          onSaved={onRefresh}
+          onSaved={onReadingSaved}
           disabled={disabled}
         />
       </div>
@@ -259,16 +259,17 @@ function AppccTemperaturasInner() {
 
   const supabaseOk = isSupabaseEnabled() && getSupabaseClient();
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (opts?: { silent?: boolean }) => {
+    const silent = opts?.silent === true;
     if (!localId || !supabaseOk) {
       setUnits([]);
       setReadings([]);
-      setLoading(false);
+      if (!silent) setLoading(false);
       return;
     }
     const supabase = getSupabaseClient()!;
-    setLoading(true);
-    setBanner(null);
+    if (!silent) setLoading(true);
+    if (!silent) setBanner(null);
     try {
       const [u, r] = await Promise.all([
         fetchAppccColdUnits(supabase, localId, true),
@@ -278,19 +279,36 @@ function AppccTemperaturasInner() {
       setReadings(r);
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Error al cargar datos.';
-      if (msg.toLowerCase().includes('relation') || msg.includes('does not exist')) {
-        setBanner(
-          'Faltan las tablas APPCC en Supabase. Ejecuta supabase-appcc-schema.sql y añade las tablas a la publicación Realtime si la usas.',
-        );
-      } else {
-        setBanner(msg);
+      if (!silent) {
+        if (msg.toLowerCase().includes('relation') || msg.includes('does not exist')) {
+          setBanner(
+            'Faltan las tablas APPCC en Supabase. Ejecuta supabase-appcc-schema.sql y añade las tablas a la publicación Realtime si la usas.',
+          );
+        } else {
+          setBanner(msg);
+        }
       }
-      setUnits([]);
-      setReadings([]);
+      if (!silent) {
+        setUnits([]);
+        setReadings([]);
+      }
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, [dateKey, localId, supabaseOk]);
+
+  const mergeReading = useCallback(
+    (row: AppccReadingRow) => {
+      if (row.reading_date !== dateKey) return;
+      setReadings((prev) => {
+        const rest = prev.filter(
+          (x) => !(x.cold_unit_id === row.cold_unit_id && x.slot === row.slot),
+        );
+        return [...rest, row];
+      });
+    },
+    [dateKey],
+  );
 
   const loadRef = useRef(load);
   loadRef.current = load;
@@ -302,7 +320,7 @@ function AppccTemperaturasInner() {
   /** PWA / segundo plano: al volver, volver a pedir equipos (Realtime a veces no llega en móvil). */
   useEffect(() => {
     const ping = () => {
-      if (document.visibilityState === 'visible') void loadRef.current();
+      if (document.visibilityState === 'visible') void loadRef.current({ silent: true });
     };
     document.addEventListener('visibilitychange', ping);
     window.addEventListener('focus', ping);
@@ -330,7 +348,7 @@ function AppccTemperaturasInner() {
           table: 'appcc_temperature_readings',
           filter: `local_id=eq.${localId}`,
         },
-        () => void load(),
+        () => void load({ silent: true }),
       )
       .on(
         'postgres_changes',
@@ -340,7 +358,7 @@ function AppccTemperaturasInner() {
           table: 'appcc_cold_units',
           filter: `local_id=eq.${localId}`,
         },
-        () => void load(),
+        () => void load({ silent: true }),
       )
       .subscribe();
     return () => {
@@ -489,7 +507,7 @@ function AppccTemperaturasInner() {
                       dateKey={dateKey}
                       map={bySlot}
                       disabled={disabled}
-                      onRefresh={() => void load()}
+                      onReadingSaved={mergeReading}
                     />
                   ))}
                 </div>

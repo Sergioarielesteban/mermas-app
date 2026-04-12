@@ -42,28 +42,31 @@ export default function AppccEquiposPage() {
 
   const supabaseOk = isSupabaseEnabled() && getSupabaseClient();
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (opts?: { silent?: boolean }) => {
+    const silent = opts?.silent === true;
     if (!localId || !supabaseOk) {
       setUnits([]);
-      setLoading(false);
+      if (!silent) setLoading(false);
       return;
     }
     const supabase = getSupabaseClient()!;
-    setLoading(true);
-    setBanner(null);
+    if (!silent) setLoading(true);
+    if (!silent) setBanner(null);
     try {
       const u = await fetchAppccColdUnits(supabase, localId, false);
       setUnits(u);
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Error al cargar.';
-      if (msg.toLowerCase().includes('relation') || msg.includes('does not exist')) {
-        setBanner('Ejecuta supabase-appcc-schema.sql en Supabase antes de usar esta pantalla.');
-      } else {
-        setBanner(msg);
+      if (!silent) {
+        if (msg.toLowerCase().includes('relation') || msg.includes('does not exist')) {
+          setBanner('Ejecuta supabase-appcc-schema.sql en Supabase antes de usar esta pantalla.');
+        } else {
+          setBanner(msg);
+        }
+        setUnits([]);
       }
-      setUnits([]);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, [localId, supabaseOk]);
 
@@ -76,7 +79,7 @@ export default function AppccEquiposPage() {
 
   useEffect(() => {
     const ping = () => {
-      if (document.visibilityState === 'visible') void loadRef.current();
+      if (document.visibilityState === 'visible') void loadRef.current({ silent: true });
     };
     document.addEventListener('visibilitychange', ping);
     window.addEventListener('focus', ping);
@@ -90,6 +93,27 @@ export default function AppccEquiposPage() {
       window.removeEventListener('pageshow', onPageShow);
     };
   }, []);
+
+  useEffect(() => {
+    if (!localId || !supabaseOk) return;
+    const supabase = getSupabaseClient()!;
+    const channel = supabase
+      .channel(`appcc-cold-equipos-${localId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'appcc_cold_units',
+          filter: `local_id=eq.${localId}`,
+        },
+        () => void load({ silent: true }),
+      )
+      .subscribe();
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [localId, supabaseOk, load]);
 
   const addUnit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -118,7 +142,7 @@ export default function AppccEquiposPage() {
     setSubmitting(true);
     setBanner(null);
     try {
-      await insertAppccColdUnit(supabase, {
+      const created = await insertAppccColdUnit(supabase, {
         localId,
         name: trimmed,
         zone,
@@ -132,7 +156,11 @@ export default function AppccEquiposPage() {
       setSortOrder('0');
       setTempMin('');
       setTempMax('');
-      await load();
+      setUnits((prev) =>
+        [...prev, created].sort((a, b) =>
+          a.sort_order !== b.sort_order ? a.sort_order - b.sort_order : a.name.localeCompare(b.name),
+        ),
+      );
     } catch (err) {
       setBanner(err instanceof Error ? err.message : 'No se pudo crear el equipo.');
     } finally {
@@ -154,7 +182,7 @@ export default function AppccEquiposPage() {
     setBanner(null);
     try {
       await deleteAppccColdUnit(supabase, u.id);
-      await load();
+      setUnits((prev) => prev.filter((x) => x.id !== u.id));
     } catch (err) {
       setBanner(err instanceof Error ? err.message : 'No se pudo eliminar el equipo.');
     } finally {

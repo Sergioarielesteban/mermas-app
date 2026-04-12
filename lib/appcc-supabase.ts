@@ -158,21 +158,28 @@ export async function upsertAppccReading(
   },
 ) {
   const now = new Date().toISOString();
-  const { error } = await supabase.from('appcc_temperature_readings').upsert(
-    {
-      local_id: params.localId,
-      cold_unit_id: params.coldUnitId,
-      reading_date: params.readingDate,
-      slot: params.slot,
-      temperature_c: params.temperatureC,
-      notes: params.notes ?? '',
-      recorded_by: params.userId,
-      recorded_at: now,
-      updated_at: now,
-    },
-    { onConflict: 'local_id,cold_unit_id,reading_date,slot' },
-  );
+  const { data, error } = await supabase
+    .from('appcc_temperature_readings')
+    .upsert(
+      {
+        local_id: params.localId,
+        cold_unit_id: params.coldUnitId,
+        reading_date: params.readingDate,
+        slot: params.slot,
+        temperature_c: params.temperatureC,
+        notes: params.notes ?? '',
+        recorded_by: params.userId,
+        recorded_at: now,
+        updated_at: now,
+      },
+      { onConflict: 'local_id,cold_unit_id,reading_date,slot' },
+    )
+    .select(
+      'id,local_id,cold_unit_id,reading_date,slot,temperature_c,notes,recorded_by,recorded_at,updated_at',
+    )
+    .single();
   if (error) throw new Error(error.message);
+  return data as AppccReadingRow;
 }
 
 export async function deleteAppccReading(supabase: SupabaseClient, readingId: string) {
@@ -193,18 +200,25 @@ export async function insertAppccColdUnit(
     userId: string;
   },
 ) {
-  const { error } = await supabase.from('appcc_cold_units').insert({
-    local_id: params.localId,
-    name: params.name.trim(),
-    zone: params.zone,
-    unit_type: params.unitType,
-    sort_order: params.sortOrder,
-    is_active: true,
-    temp_min_c: params.tempMinC,
-    temp_max_c: params.tempMaxC,
-    created_by: params.userId,
-  });
+  const { data, error } = await supabase
+    .from('appcc_cold_units')
+    .insert({
+      local_id: params.localId,
+      name: params.name.trim(),
+      zone: params.zone,
+      unit_type: params.unitType,
+      sort_order: params.sortOrder,
+      is_active: true,
+      temp_min_c: params.tempMinC,
+      temp_max_c: params.tempMaxC,
+      created_by: params.userId,
+    })
+    .select(
+      'id,local_id,name,zone,unit_type,sort_order,is_active,temp_min_c,temp_max_c,created_at,updated_at',
+    )
+    .single();
   if (error) throw new Error(error.message);
+  return data as AppccColdUnitRow;
 }
 
 export async function updateAppccColdUnit(

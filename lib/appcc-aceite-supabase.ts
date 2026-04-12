@@ -123,17 +123,24 @@ export async function insertOilEvent(
   } else if (liters != null && (!Number.isFinite(liters) || liters < 0)) {
     throw new Error('Los litros deben ser un número ≥ 0 o dejar el campo vacío.');
   }
-  const { error } = await supabase.from('appcc_oil_events').insert({
-    local_id: params.localId,
-    fryer_id: params.fryerId,
-    event_type: params.eventType,
-    event_date: params.eventDate,
-    liters_used: liters,
-    notes: params.notes?.trim() ?? '',
-    operator_name: params.operatorName.trim(),
-    recorded_by: params.userId,
-  });
+  const { data, error } = await supabase
+    .from('appcc_oil_events')
+    .insert({
+      local_id: params.localId,
+      fryer_id: params.fryerId,
+      event_type: params.eventType,
+      event_date: params.eventDate,
+      liters_used: liters,
+      notes: params.notes?.trim() ?? '',
+      operator_name: params.operatorName.trim(),
+      recorded_by: params.userId,
+    })
+    .select(
+      'id,local_id,fryer_id,event_type,event_date,liters_used,notes,operator_name,recorded_by,recorded_at,updated_at',
+    )
+    .single();
   if (error) throw new Error(error.message);
+  return data as AppccOilEventRow;
 }
 
 export async function insertAppccFryer(
@@ -147,16 +154,21 @@ export async function insertAppccFryer(
     userId: string;
   },
 ) {
-  const { error } = await supabase.from('appcc_fryers').insert({
-    local_id: params.localId,
-    name: params.name.trim(),
-    zone: params.zone,
-    sort_order: params.sortOrder,
-    is_active: true,
-    notes: params.notes?.trim() ?? '',
-    created_by: params.userId,
-  });
+  const { data, error } = await supabase
+    .from('appcc_fryers')
+    .insert({
+      local_id: params.localId,
+      name: params.name.trim(),
+      zone: params.zone,
+      sort_order: params.sortOrder,
+      is_active: true,
+      notes: params.notes?.trim() ?? '',
+      created_by: params.userId,
+    })
+    .select('id,local_id,name,zone,sort_order,is_active,notes,created_at,updated_at')
+    .single();
   if (error) throw new Error(error.message);
+  return data as AppccFryerRow;
 }
 
 export async function updateAppccFryer(
