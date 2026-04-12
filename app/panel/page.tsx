@@ -80,7 +80,7 @@ export default function PanelControlPage() {
       <MermasStyleHero
         eyebrow="CHEF-ONE"
         title="Panel de control"
-        description="Mermas, APPCC (temperaturas) y Pedidos (si tu local lo tiene) ya están activos. Inventario, cocina central y escandallos: próximamente."
+        description="Mermas, inventario, APPCC (temperaturas) y Pedidos (si tu local lo tiene) ya están activos. Cocina central y escandallos: próximamente."
       />
 
       {stubMessage ? (
@@ -101,12 +101,7 @@ export default function PanelControlPage() {
           Icon={ShieldCheck}
           tone="red"
         />
-        <HubTile
-          onClick={() => onStub('Inventario')}
-          label="Inventario"
-          sub="Próximamente"
-          Icon={ClipboardList}
-        />
+        <HubTile href="/inventario" label="Inventario" sub="Stock y valor por local" Icon={ClipboardList} />
         <HubTile
           onClick={() => onStub('Cocina central')}
           label="Cocina central"
