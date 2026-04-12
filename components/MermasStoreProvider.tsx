@@ -349,18 +349,71 @@ function hasNonSeedProducts(list: Product[]) {
   return list.some((p) => !isSeedProductId(p.id));
 }
 
+const MERMA_TOMBSTONE_TTL_MS = 8 * 60 * 1000;
+
+function mermaTombstonesStorageKey(localId: string) {
+  return `chefone_merma_deleted:${localId}`;
+}
+
+function loadMermaTombstones(localId: string): Map<string, number> {
+  if (!isBrowser()) return new Map();
+  try {
+    const raw = sessionStorage.getItem(mermaTombstonesStorageKey(localId));
+    if (!raw) return new Map();
+    const o = JSON.parse(raw) as Record<string, number>;
+    const now = Date.now();
+    const m = new Map<string, number>();
+    for (const [id, exp] of Object.entries(o)) {
+      if (typeof exp === 'number' && exp > now) m.set(id, exp);
+    }
+    return m;
+  } catch {
+    return new Map();
+  }
+}
+
+function saveMermaTombstones(localId: string, map: Map<string, number>) {
+  if (!isBrowser()) return;
+  try {
+    const now = Date.now();
+    const o: Record<string, number> = {};
+    for (const [id, exp] of map) {
+      if (exp > now) o[id] = exp;
+    }
+    sessionStorage.setItem(mermaTombstonesStorageKey(localId), JSON.stringify(o));
+  } catch {
+    /* ignore */
+  }
+}
+
+/** Quita expirados del mapa y devuelve ids activos (borrados recientes que no deben revivir por merge/refresco). */
+function activeMermaTombstoneSet(map: Map<string, number>): Set<string> {
+  const now = Date.now();
+  for (const [id, exp] of [...map]) {
+    if (exp <= now) map.delete(id);
+  }
+  return new Set(map.keys());
+}
+
 function mergeCloudMermas(
   prev: MermaRecord[],
   serverCleaned: MermaRecord[],
   products: Product[],
   protectIds: Set<string>,
+  tombstoneIds: ReadonlySet<string>,
 ): MermaRecord[] {
-  if (serverCleaned.length === 0 && hasNonSeedMermas(prev)) {
-    return pruneBaconHalfRecords(products, prev);
+  const serverRows =
+    tombstoneIds.size > 0 ? serverCleaned.filter((m) => !tombstoneIds.has(m.id)) : serverCleaned;
+  if (serverRows.length === 0 && hasNonSeedMermas(prev)) {
+    const withoutTomb = tombstoneIds.size
+      ? prev.filter((m) => !tombstoneIds.has(m.id))
+      : prev;
+    return pruneBaconHalfRecords(products, withoutTomb);
   }
-  const serverIds = new Set(serverCleaned.map((x) => x.id));
+  const serverIds = new Set(serverRows.map((x) => x.id));
   const now = Date.now();
   const extras = prev.filter((m) => {
+    if (tombstoneIds.has(m.id)) return false;
     if (serverIds.has(m.id)) return false;
     if (protectIds.has(m.id)) return true;
     if (isSeedMermaId(m.id)) return false;
@@ -370,7 +423,7 @@ function mergeCloudMermas(
     return now - created < MERGE_RECENT_MS;
   });
   const byId = new Map<string, MermaRecord>();
-  for (const row of serverCleaned) byId.set(row.id, row);
+  for (const row of serverRows) byId.set(row.id, row);
   for (const row of extras) {
     if (!byId.has(row.id)) byId.set(row.id, row);
   }
@@ -481,6 +534,7 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
   const applyingRemoteRef = React.useRef(false);
   const protectMermaIdsRef = React.useRef(new Set<string>());
   const protectProductIdsRef = React.useRef(new Set<string>());
+  const locallyDeletedMermaIdsRef = React.useRef(new Map<string, number>());
   const markLocalEdit = React.useCallback(() => {
     lastLocalEditAtRef.current = Date.now();
   }, []);
@@ -492,8 +546,12 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
       const { products: p, mermas: m } = await fetchProductsAndMermas(supabase, localId);
       const serverProducts = sortProductsByName(p);
       const serverMermas = pruneBaconHalfRecords(p, m);
+      const tombstones = activeMermaTombstoneSet(locallyDeletedMermaIdsRef.current);
+      saveMermaTombstones(localId, locallyDeletedMermaIdsRef.current);
       setProducts((prev) => mergeCloudProducts(prev, serverProducts, protectProductIdsRef.current));
-      setMermas((prev) => mergeCloudMermas(prev, serverMermas, serverProducts, protectMermaIdsRef.current));
+      setMermas((prev) =>
+        mergeCloudMermas(prev, serverMermas, serverProducts, protectMermaIdsRef.current, tombstones),
+      );
       setCloudDataLoaded(true);
     } catch {
       // Keep last known state; do not wipe UI on transient cloud errors.
@@ -503,6 +561,7 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
   useEffect(() => {
     protectMermaIdsRef.current.clear();
     protectProductIdsRef.current.clear();
+    locallyDeletedMermaIdsRef.current = localId ? loadMermaTombstones(localId) : new Map();
   }, [localId]);
 
   useEffect(() => {
@@ -930,7 +989,24 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
           setMermas(snapshot);
           return { ok: false, reason: `No se pudo eliminar en nube: ${error.message}` };
         }
-        if (!deletedRow?.id) {
+
+        // PostgREST + RLS a veces borran la fila pero no devuelven fila en RETURNING.
+        let rowGone = Boolean(deletedRow?.id);
+        if (!rowGone) {
+          const { data: checkRow, error: checkError } = await supabase
+            .from('mermas')
+            .select('id')
+            .eq('id', id)
+            .eq('local_id', localId)
+            .maybeSingle();
+          if (checkError) {
+            setMermas(snapshot);
+            return { ok: false, reason: `No se pudo verificar borrado: ${checkError.message}` };
+          }
+          rowGone = !checkRow?.id;
+        }
+
+        if (!rowGone) {
           setMermas(snapshot);
           return {
             ok: false,
@@ -938,25 +1014,9 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
           };
         }
 
-        // Defensive verification: some environments return no deleted row payload.
-        const { data: stillExists, error: checkError } = await supabase
-          .from('mermas')
-          .select('id')
-          .eq('id', id)
-          .eq('local_id', localId)
-          .maybeSingle();
-        if (checkError) {
-          setMermas(snapshot);
-          return { ok: false, reason: `No se pudo verificar borrado: ${checkError.message}` };
-        }
-        if (stillExists?.id) {
-          setMermas(snapshot);
-          return {
-            ok: false,
-            reason: 'No se pudo eliminar: sin permisos o registro no encontrado para este local.',
-          };
-        }
         protectMermaIdsRef.current.delete(id);
+        locallyDeletedMermaIdsRef.current.set(id, Date.now() + MERMA_TOMBSTONE_TTL_MS);
+        saveMermaTombstones(localId, locallyDeletedMermaIdsRef.current);
         markLocalEdit();
         await refetchCloud();
         return { ok: true };

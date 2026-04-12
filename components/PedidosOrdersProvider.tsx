@@ -22,6 +22,51 @@ import { getSupabaseClient } from '@/lib/supabase-client';
 
 const ordersSessionKey = (localId: string) => `chefone_pedidos_orders:${localId}`;
 
+const ORDER_TOMBSTONE_TTL_MS = 8 * 60 * 1000;
+
+function orderTombstonesStorageKey(localId: string) {
+  return `chefone_pedidos_deleted_orders:${localId}`;
+}
+
+function loadOrderTombstones(localId: string): Map<string, number> {
+  if (typeof window === 'undefined') return new Map();
+  try {
+    const raw = sessionStorage.getItem(orderTombstonesStorageKey(localId));
+    if (!raw) return new Map();
+    const o = JSON.parse(raw) as Record<string, number>;
+    const now = Date.now();
+    const m = new Map<string, number>();
+    for (const [id, exp] of Object.entries(o)) {
+      if (typeof exp === 'number' && exp > now) m.set(id, exp);
+    }
+    return m;
+  } catch {
+    return new Map();
+  }
+}
+
+function saveOrderTombstones(localId: string, map: Map<string, number>) {
+  if (typeof window === 'undefined') return;
+  try {
+    const now = Date.now();
+    const o: Record<string, number> = {};
+    for (const [id, exp] of map) {
+      if (exp > now) o[id] = exp;
+    }
+    sessionStorage.setItem(orderTombstonesStorageKey(localId), JSON.stringify(o));
+  } catch {
+    /* ignore */
+  }
+}
+
+function activeOrderTombstoneSet(map: Map<string, number>): Set<string> {
+  const now = Date.now();
+  for (const [id, exp] of [...map]) {
+    if (exp <= now) map.delete(id);
+  }
+  return new Set(map.keys());
+}
+
 function readOrdersFromSession(localId: string): PedidoOrder[] | null {
   if (typeof window === 'undefined') return null;
   try {
@@ -74,13 +119,16 @@ export function PedidosOrdersProvider({ children }: { children: React.ReactNode 
   localIdRef.current = localId ?? null;
   /** Evita escribir en sessionStorage el snapshot del local anterior justo tras cambiar de local. */
   const ordersReadyLocalIdRef = useRef<string | null>(null);
-  const locallyDeletedOrderIdsRef = useRef<Set<string>>(new Set());
+  const locallyDeletedOrderIdsRef = useRef<Map<string, number>>(new Map());
   const pendingReceivedByIdRef = useRef(
     new Map<string, { markedAt: number; receivedAtIso: string; priceReviewArchivedAt?: string }>(),
   );
 
   const registerDeletedOrderId = useCallback((id: string) => {
-    locallyDeletedOrderIdsRef.current.add(id);
+    const lid = localIdRef.current;
+    if (!lid) return;
+    locallyDeletedOrderIdsRef.current.set(id, Date.now() + ORDER_TOMBSTONE_TTL_MS);
+    saveOrderTombstones(lid, locallyDeletedOrderIdsRef.current);
   }, []);
 
   const registerPendingReceivedOrder = useCallback(
@@ -126,9 +174,11 @@ export function PedidosOrdersProvider({ children }: { children: React.ReactNode 
           pendingReceivedByIdRef.current.delete(r.id);
         }
       }
+      const tombstones = activeOrderTombstoneSet(locallyDeletedOrderIdsRef.current);
+      saveOrderTombstones(targetId, locallyDeletedOrderIdsRef.current);
       setOrders((prev) =>
         mergePedidoOrdersFromServer(prev, rows, pinUntilSeenRef.current, {
-          tombstoneIds: locallyDeletedOrderIdsRef.current,
+          tombstoneIds: tombstones,
           pendingReceivedById: pendingReceivedByIdRef.current,
         }),
       );
@@ -140,7 +190,7 @@ export function PedidosOrdersProvider({ children }: { children: React.ReactNode 
     ordersReadyLocalIdRef.current = null;
     setOrders([]);
     pinUntilSeenRef.current.clear();
-    locallyDeletedOrderIdsRef.current.clear();
+    locallyDeletedOrderIdsRef.current = localId ? loadOrderTombstones(localId) : new Map();
     pendingReceivedByIdRef.current.clear();
   }, [localId]);
 
