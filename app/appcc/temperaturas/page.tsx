@@ -1,9 +1,9 @@
 'use client';
 
 import Link from 'next/link';
-import React, { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
+import React, { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { ChevronLeft, Download, Thermometer } from 'lucide-react';
+import { ChevronLeft, Download, RefreshCw, Thermometer } from 'lucide-react';
 import AppccCompactHero from '@/components/AppccCompactHero';
 import { useAuth } from '@/components/AuthProvider';
 import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
@@ -280,9 +280,30 @@ function AppccTemperaturasInner() {
     }
   }, [dateKey, localId, supabaseOk]);
 
+  const loadRef = useRef(load);
+  loadRef.current = load;
+
   useEffect(() => {
     void load();
   }, [load]);
+
+  /** PWA / segundo plano: al volver, volver a pedir equipos (Realtime a veces no llega en móvil). */
+  useEffect(() => {
+    const ping = () => {
+      if (document.visibilityState === 'visible') void loadRef.current();
+    };
+    document.addEventListener('visibilitychange', ping);
+    window.addEventListener('focus', ping);
+    const onPageShow = (ev: PageTransitionEvent) => {
+      if (ev.persisted) ping();
+    };
+    window.addEventListener('pageshow', onPageShow);
+    return () => {
+      document.removeEventListener('visibilitychange', ping);
+      window.removeEventListener('focus', ping);
+      window.removeEventListener('pageshow', onPageShow);
+    };
+  }, []);
 
   useEffect(() => {
     if (!localId || !supabaseOk) return;
@@ -389,15 +410,32 @@ function AppccTemperaturasInner() {
           <label htmlFor="appcc-date" className="text-[10px] font-bold uppercase tracking-wide text-zinc-500">
             Día del registro
           </label>
-          <input
-            id="appcc-date"
-            type="date"
-            value={dateKey}
-            onChange={(e) => setDateKey(e.target.value)}
-            className="mt-1 block h-9 w-auto min-w-[11rem] rounded-lg border border-zinc-200 bg-white px-2.5 text-sm font-semibold text-zinc-900"
-          />
+          {/* Input nativo encima (invisible): el texto centrado es formatAppccDateEs; iOS alinea mal type=date */}
+          <div className="relative mt-1 flex h-10 w-full max-w-[15rem] items-center justify-center rounded-lg border border-zinc-200 bg-white shadow-sm">
+            <span className="pointer-events-none px-3 text-center text-sm font-semibold capitalize tracking-tight text-zinc-900">
+              {formatAppccDateEs(dateKey)}
+            </span>
+            <input
+              id="appcc-date"
+              type="date"
+              value={dateKey}
+              onChange={(e) => setDateKey(e.target.value)}
+              className="absolute inset-0 min-h-full min-w-full cursor-pointer opacity-0 text-base"
+              aria-label="Elegir día del registro"
+            />
+          </div>
         </div>
         <div className="flex flex-wrap items-center justify-center gap-2">
+          <button
+            type="button"
+            onClick={() => void load()}
+            disabled={loading || !localId}
+            className="inline-flex h-9 items-center justify-center gap-1 rounded-lg border border-zinc-300 bg-white px-3 text-xs font-bold text-zinc-800 hover:bg-zinc-50 disabled:opacity-45"
+            title="Volver a cargar equipos y lecturas"
+          >
+            <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} aria-hidden />
+            Actualizar
+          </button>
           <Link
             href="/appcc/historial"
             className="inline-flex h-9 items-center justify-center rounded-lg border border-zinc-300 bg-white px-3 text-xs font-bold text-zinc-800 hover:bg-zinc-50"

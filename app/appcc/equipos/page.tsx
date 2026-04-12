@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ChevronLeft } from 'lucide-react';
 import MermasStyleHero from '@/components/MermasStyleHero';
 import { useAuth } from '@/components/AuthProvider';
@@ -67,9 +67,29 @@ export default function AppccEquiposPage() {
     }
   }, [localId, supabaseOk]);
 
+  const loadRef = useRef(load);
+  loadRef.current = load;
+
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    const ping = () => {
+      if (document.visibilityState === 'visible') void loadRef.current();
+    };
+    document.addEventListener('visibilitychange', ping);
+    window.addEventListener('focus', ping);
+    const onPageShow = (ev: PageTransitionEvent) => {
+      if (ev.persisted) ping();
+    };
+    window.addEventListener('pageshow', onPageShow);
+    return () => {
+      document.removeEventListener('visibilitychange', ping);
+      window.removeEventListener('focus', ping);
+      window.removeEventListener('pageshow', onPageShow);
+    };
+  }, []);
 
   const addUnit = async (e: React.FormEvent) => {
     e.preventDefault();
