@@ -7,6 +7,7 @@ import { BookOpen, Drumstick, LogOut, Menu, X, RefreshCcw, ShoppingCart } from '
 import { useAuth } from '@/components/AuthProvider';
 import PullToRefreshPedidos from '@/components/PullToRefreshPedidos';
 import { canAccessPedidos } from '@/lib/pedidos-access';
+import { formatLocalHeaderName } from '@/lib/local-display-name';
 import ChefOneGlowLine from '@/components/ChefOneGlowLine';
 
 type NavItem = {
@@ -35,7 +36,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const [open, setOpen] = useState(false);
   const [confirmLogoutOpen, setConfirmLogoutOpen] = useState(false);
   const { email, logout, localId, localCode, localName } = useAuth();
-  const localLabel = localName ?? localCode;
+  const localLabel = formatLocalHeaderName(localName ?? localCode) ?? localName ?? localCode;
   const showPedidos = canAccessPedidos(localCode, email, localName, localId);
 
   const title = useMemo(() => titleForPath(pathname), [pathname]);

@@ -737,7 +737,7 @@ export async function setOrderPriceReviewArchived(
   if (error) throw new Error(error.message);
   if (!data?.id) {
     throw new Error(
-      'No se pudo actualizar el pedido (0 filas). Comprueba que esté en estado enviado o recibido y que exista la columna price_review_archived_at en Supabase.',
+      'No se pudo archivar: ningún pedido coincidió. Suele ser falta de la columna price_review_archived_at en purchase_orders (ejecuta la migración del módulo pedidos en Supabase) o el pedido ya no está en enviado/recibido.',
     );
   }
 }

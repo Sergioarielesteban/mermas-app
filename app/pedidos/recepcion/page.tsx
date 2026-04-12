@@ -54,9 +54,6 @@ export default function RecepcionPedidosPage() {
     () => allOrders.filter((row) => row.status === 'sent' || row.status === 'received'),
     [allOrders],
   );
-  const [supplierFilter, setSupplierFilter] = React.useState('all');
-  const initialDateFilter = searchParams.get('date') ?? '';
-  const [dateFilter, setDateFilter] = React.useState(initialDateFilter);
   const [message, setMessage] = React.useState<string | null>(null);
   const [priceInputByItemId, setPriceInputByItemId] = React.useState<Record<string, string>>({});
   const [weightInputByItemId, setWeightInputByItemId] = React.useState<Record<string, string>>({});
@@ -86,8 +83,6 @@ export default function RecepcionPedidosPage() {
     const o = orders.find((x) => x.id === focusOrderIdFromUrl);
     if (!o) return;
     focusOrderAppliedRef.current = true;
-    setDateFilter(o.createdAt.slice(0, 10));
-    setSupplierFilter('all');
     setIncidentOpenByOrderId((prev) => ({ ...prev, [focusOrderIdFromUrl]: true }));
     setIncidentNoteByOrderId((prev) => ({
       ...prev,
@@ -111,28 +106,6 @@ export default function RecepcionPedidosPage() {
       ),
     [orders],
   );
-
-  const supplierOptions = React.useMemo(() => {
-    return Array.from(new Set(orders.map((o) => o.supplierName))).sort((a, b) => a.localeCompare(b));
-  }, [orders]);
-
-  const filteredOrders = React.useMemo(() => {
-    return pendingPriceReviewOrders.filter((order) => {
-      const bySupplier = supplierFilter === 'all' || order.supplierName === supplierFilter;
-      const orderDate = order.createdAt.slice(0, 10);
-      const byDate = !dateFilter || orderDate === dateFilter;
-      return bySupplier && byDate;
-    });
-  }, [pendingPriceReviewOrders, supplierFilter, dateFilter]);
-
-  const filteredArchivedOrders = React.useMemo(() => {
-    return archivedPriceReviewOrders.filter((order) => {
-      const bySupplier = supplierFilter === 'all' || order.supplierName === supplierFilter;
-      const orderDate = order.createdAt.slice(0, 10);
-      const byDate = !dateFilter || orderDate === dateFilter;
-      return bySupplier && byDate;
-    });
-  }, [archivedPriceReviewOrders, supplierFilter, dateFilter]);
 
   const markPriceReviewArchived = (orderId: string, archived: boolean) => {
     if (!localId) return;
@@ -391,40 +364,22 @@ export default function RecepcionPedidosPage() {
         </Link>
       </section>
 
-      <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-zinc-200">
-        <h1 className="text-center text-lg font-black text-zinc-900">RECEPCION</h1>
-      </section>
-
-      <section className="rounded-2xl bg-white p-4 ring-1 ring-zinc-200">
-        <p className="text-sm font-semibold text-zinc-800">Pendientes revisión de precios</p>
-        <p className="mt-1 text-xs text-zinc-500">
-          Coteja precios y pesos con el albarán. «Revisado» solo archiva este pedido en la lista de abajo (acordeón); no
-          marca la mercancía como recibida en el flujo rápido de Pedidos. La fecha filtra; déjala vacía para ver todos.
-        </p>
-        {message ? <p className="mt-2 text-sm text-[#B91C1C]">{message}</p> : null}
-        <div className="mt-3 grid grid-cols-1 gap-2 md:grid-cols-2">
-          <select
-            value={supplierFilter}
-            onChange={(e) => setSupplierFilter(e.target.value)}
-            className="h-10 rounded-xl border border-zinc-200 bg-white px-3 text-sm outline-none"
-          >
-            <option value="all">Todos los proveedores</option>
-            {supplierOptions.map((supplier) => (
-              <option key={supplier} value={supplier}>
-                {supplier}
-              </option>
-            ))}
-          </select>
-          <input
-            type="date"
-            value={dateFilter}
-            onChange={(e) => setDateFilter(e.target.value)}
-            className="h-10 rounded-xl border border-zinc-200 bg-white px-3 text-sm outline-none"
-          />
+      <section className="overflow-hidden rounded-2xl bg-white ring-1 ring-zinc-200">
+        <div className="border-b border-zinc-200 bg-gradient-to-r from-zinc-100 to-zinc-50 px-4 py-4 text-center">
+          <h1 className="text-sm font-black uppercase tracking-[0.14em] text-zinc-800">
+            Pendientes de revisión de precios
+          </h1>
         </div>
-        <div className="mt-2 space-y-3">
-          {filteredOrders.length === 0 ? <p className="text-sm text-zinc-500">No hay pedidos con ese filtro.</p> : null}
-          {filteredOrders.map((order) => {
+        <div className="space-y-3 p-4">
+          {message ? (
+            <p className="rounded-xl bg-amber-50 px-3 py-2 text-center text-xs font-medium text-amber-950 ring-1 ring-amber-200/80">
+              {message}
+            </p>
+          ) : null}
+          {pendingPriceReviewOrders.length === 0 ? (
+            <p className="text-center text-sm text-zinc-500">No hay pedidos pendientes de revisión.</p>
+          ) : null}
+          {pendingPriceReviewOrders.map((order) => {
             const orderIncidentMode =
               Boolean(incidentOpenByOrderId[order.id]) || orderHasAnyIncident(order);
             return (
@@ -606,7 +561,7 @@ export default function RecepcionPedidosPage() {
             </div>
             );
           })}
-          {filteredArchivedOrders.length > 0 ? (
+          {archivedPriceReviewOrders.length > 0 ? (
             <details
               className="group mt-8 border-t border-zinc-200 pt-4"
               open={archivedAccordionOpen}
@@ -618,8 +573,8 @@ export default function RecepcionPedidosPage() {
                     Archivados · revisión de precios
                   </p>
                   <p className="text-[11px] text-zinc-500">
-                    {filteredArchivedOrders.length} pedido
-                    {filteredArchivedOrders.length === 1 ? '' : 's'} · toca para plegar o desplegar
+                    {archivedPriceReviewOrders.length} pedido
+                    {archivedPriceReviewOrders.length === 1 ? '' : 's'} · toca para plegar o desplegar
                   </p>
                 </div>
                 <span
@@ -633,7 +588,7 @@ export default function RecepcionPedidosPage() {
                 <p className="text-center text-[11px] text-zinc-500">
                   Toca el proveedor o la fecha para ver líneas del pedido. «Volver a pendientes» reabre arriba.
                 </p>
-                {filteredArchivedOrders.map((order) => {
+                {archivedPriceReviewOrders.map((order) => {
                   const expanded = expandedArchivedOrderId === order.id;
                   return (
                     <div key={order.id} className="overflow-hidden rounded-xl bg-white ring-1 ring-zinc-200">
