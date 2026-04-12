@@ -31,6 +31,10 @@ function titleForPath(pathname: string | null) {
   if (pathname.startsWith('/appcc/temperaturas')) return 'Temperaturas';
   if (pathname.startsWith('/appcc/historial')) return 'Historial';
   if (pathname.startsWith('/appcc/equipos')) return 'Equipos frío';
+  if (pathname.startsWith('/appcc/aceite/registro')) return 'Aceite';
+  if (pathname.startsWith('/appcc/aceite/historial')) return 'Historial aceite';
+  if (pathname.startsWith('/appcc/aceite/equipos')) return 'Freidoras';
+  if (pathname.startsWith('/appcc/aceite')) return 'Aceite';
   if (pathname.startsWith('/appcc')) return 'APPCC';
   return 'Mermas';
 }
