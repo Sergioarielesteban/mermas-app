@@ -3,6 +3,7 @@ import { AuthProvider } from "@/components/AuthProvider";
 import AppFrame from "@/components/AppFrame";
 import { Geist, Geist_Mono } from "next/font/google";
 import { MermasStoreProvider } from "@/components/MermasStoreProvider";
+import { PedidosOrdersProvider } from "@/components/PedidosOrdersProvider";
 import PwaRegister from "@/components/PwaRegister";
 import "./globals.css";
 
@@ -61,7 +62,9 @@ export default function RootLayout({
         <PwaRegister />
         <AuthProvider>
           <MermasStoreProvider>
-            <AppFrame>{children}</AppFrame>
+            <PedidosOrdersProvider>
+              <AppFrame>{children}</AppFrame>
+            </PedidosOrdersProvider>
           </MermasStoreProvider>
         </AuthProvider>
       </body>

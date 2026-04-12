@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
-import { PedidosOrdersProvider } from '@/components/PedidosOrdersProvider';
 
+/** El estado de pedidos vive en `PedidosOrdersProvider` (layout raíz) para no vaciar la lista al cambiar de módulo. */
 export default function PedidosLayout({ children }: { children: ReactNode }) {
-  return <PedidosOrdersProvider>{children}</PedidosOrdersProvider>;
+  return children;
 }

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import React, { createContext, useContext, useEffect, useLayoutEffect, useMemo, useState } from 'react';
 import { useAuth } from '@/components/AuthProvider';
 import { fetchProductsAndMermas, mapMermaRow, mapProductRow } from '@/lib/mermas-supabase';
 import { uid } from '@/lib/id';
@@ -571,25 +571,22 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
     });
   }, [profileReady, localId]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!isBrowser()) return;
     // With Supabase enabled, never fall back to legacy local state while auth/profile is still resolving.
     if (supabaseEnabled && !profileReady) return;
     if (!legacyMode) {
-      queueMicrotask(() => {
-        setHydrated(true);
-      });
+      setHydrated(true);
       return;
     }
     const initial = loadInitialState();
-    queueMicrotask(() => {
-      setProducts(initial.products);
-      setMermas(initial.mermas);
-      setHydrated(true);
-    });
+    setProducts(initial.products);
+    setMermas(initial.mermas);
+    setHydrated(true);
   }, [legacyMode, localId, profileReady, supabaseEnabled]);
 
-  useEffect(() => {
+  /** Caché de nube antes del primer pintado: evita un frame con el catálogo semilla por defecto. */
+  useLayoutEffect(() => {
     if (!isBrowser() || !hydrated || !cloudMode || !localId) return;
     try {
       const raw = sessionStorage.getItem(mermasCloudSessionKey(localId));
@@ -608,6 +605,10 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
     } catch {
       /* ignore */
     }
+  }, [cloudMode, hydrated, localId]);
+
+  useEffect(() => {
+    if (!isBrowser() || !hydrated || !cloudMode || !localId) return;
     void refetchCloud();
   }, [cloudMode, hydrated, localId, refetchCloud]);
 

@@ -194,7 +194,8 @@ export function PedidosOrdersProvider({ children }: { children: React.ReactNode 
     pendingReceivedByIdRef.current.clear();
   }, [localId]);
 
-  useEffect(() => {
+  /** sessionStorage antes del pintado: evita lista vacía al volver a Pedidos desde otro módulo. */
+  useLayoutEffect(() => {
     if (!canUse || !localId) return;
     const cached = readOrdersFromSession(localId);
     if (cached !== null) {
@@ -203,6 +204,10 @@ export function PedidosOrdersProvider({ children }: { children: React.ReactNode 
     } else {
       ordersReadyLocalIdRef.current = null;
     }
+  }, [canUse, localId]);
+
+  useEffect(() => {
+    if (!canUse || !localId) return;
     void reloadOrders();
   }, [canUse, localId, reloadOrders]);
 
