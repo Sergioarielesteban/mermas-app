@@ -90,13 +90,7 @@ export default function PanelControlPage() {
         {showPedidos ? (
           <HubTile href="/pedidos" label="Pedidos" sub="Proveedores y recepción" Icon={ShoppingCart} tone="red" />
         ) : null}
-        <HubTile
-          href="/appcc/temperaturas"
-          label="APPCC"
-          sub="Neveras y congeladores"
-          Icon={ShieldCheck}
-          tone="red"
-        />
+        <HubTile href="/appcc" label="APPCC" sub="Neveras y congeladores" Icon={ShieldCheck} tone="red" />
         <HubTile
           onClick={() => onStub('Inventario')}
           label="Inventario"

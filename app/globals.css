@@ -51,3 +51,10 @@ body {
 .saved-banner-pop {
   animation: saved-banner-pop 220ms ease-out;
 }
+
+@media print {
+  body {
+    background: #fff !important;
+    background-image: none !important;
+  }
+}

@@ -16,7 +16,7 @@ export async function GET() {
   const safeId = String(cacheId).replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 40) || 'local';
 
   const script = `const CACHE_NAME='chef-one-${safeId}';
-const CORE_ASSETS=['/','/login','/panel','/dashboard','/productos','/resumen','/appcc/temperaturas','/appcc/equipos','/manifest.webmanifest'];
+const CORE_ASSETS=['/','/login','/panel','/dashboard','/productos','/resumen','/appcc','/appcc/temperaturas','/appcc/historial','/appcc/equipos','/manifest.webmanifest'];
 self.addEventListener('message',(e)=>{if(e.data?.type==='SKIP_WAITING')self.skipWaiting();});
 self.addEventListener('install',(e)=>{e.waitUntil(caches.open(CACHE_NAME).then(c=>c.addAll(CORE_ASSETS)));});
 self.addEventListener('activate',(e)=>{e.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k!==CACHE_NAME).map(k=>caches.delete(k)))));self.clients.claim();});

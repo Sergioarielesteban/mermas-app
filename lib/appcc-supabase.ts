@@ -98,6 +98,45 @@ export async function fetchAppccReadingsForDate(
   return (data ?? []) as AppccReadingRow[];
 }
 
+/** Lecturas entre dos fechas (YYYY-MM-DD), más recientes primero. */
+export async function fetchAppccReadingsInRange(
+  supabase: SupabaseClient,
+  localId: string,
+  dateFrom: string,
+  dateTo: string,
+) {
+  const { data, error } = await supabase
+    .from('appcc_temperature_readings')
+    .select(
+      'id,local_id,cold_unit_id,reading_date,slot,temperature_c,notes,recorded_by,recorded_at,updated_at',
+    )
+    .eq('local_id', localId)
+    .gte('reading_date', dateFrom)
+    .lte('reading_date', dateTo)
+    .order('reading_date', { ascending: false })
+    .limit(4000);
+  if (error) throw new Error(error.message);
+  return (data ?? []) as AppccReadingRow[];
+}
+
+export function formatAppccDateEs(dateKey: string) {
+  const [y, m, d] = dateKey.split('-').map((n) => Number(n));
+  if (!y || !m || !d) return dateKey;
+  return new Date(y, m - 1, d).toLocaleDateString('es-ES', {
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  });
+}
+
+/** YYYY-MM-DD de hace `days` días (calendario local JS; para historial basta). */
+export function dateKeyDaysAgo(days: number, from: Date = new Date()) {
+  const t = new Date(from);
+  t.setDate(t.getDate() - days);
+  return madridDateKey(t);
+}
+
 export function readingsByUnitAndSlot(rows: AppccReadingRow[]) {
   const map = new Map<string, AppccReadingRow>();
   for (const r of rows) {

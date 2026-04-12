@@ -27,6 +27,10 @@ function titleForPath(pathname: string | null) {
   if (pathname.startsWith('/productos')) return 'Añadir Productos';
   if (pathname.startsWith('/resumen')) return 'Resumen';
   if (pathname.startsWith('/pedidos')) return 'Pedidos';
+  if (pathname === '/appcc') return 'APPCC';
+  if (pathname.startsWith('/appcc/temperaturas')) return 'Temperaturas';
+  if (pathname.startsWith('/appcc/historial')) return 'Historial';
+  if (pathname.startsWith('/appcc/equipos')) return 'Equipos frío';
   if (pathname.startsWith('/appcc')) return 'APPCC';
   return 'Mermas';
 }
@@ -96,7 +100,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         </>
       ) : null}
 
-      <header className="sticky top-0 z-40 border-b border-[#b32020] bg-gradient-to-r from-[#B91C1C] to-[#D32F2F] shadow-lg">
+      <header className="sticky top-0 z-40 border-b border-[#b32020] bg-gradient-to-r from-[#B91C1C] to-[#D32F2F] shadow-lg print:hidden">
         <div className="mx-auto flex min-h-14 w-full max-w-md items-center gap-3 px-3 py-2">
           <button
             type="button"
@@ -153,7 +157,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         aria-hidden={!open}
         onClick={() => setOpen(false)}
         className={[
-          'fixed inset-0 z-50 bg-black/40 transition-opacity',
+          'fixed inset-0 z-50 bg-black/40 transition-opacity print:hidden',
           open ? 'opacity-100' : 'pointer-events-none opacity-0',
         ].join(' ')}
         tabIndex={-1}
@@ -162,7 +166,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       {/* Drawer */}
       <aside
         className={[
-          'fixed left-0 top-0 z-[60] h-full w-[84%] max-w-[320px] bg-white shadow-2xl transition-transform',
+          'fixed left-0 top-0 z-[60] h-full w-[84%] max-w-[320px] bg-white shadow-2xl transition-transform print:hidden',
           open ? 'translate-x-0' : '-translate-x-full',
         ].join(' ')}
         aria-label="Menú lateral"
@@ -257,7 +261,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
       <main className="mx-auto w-full max-w-md px-4 py-5">
         {pathname !== '/panel' && !pathname?.startsWith('/panel/') ? (
-          <div className="mb-4 space-y-1.5">
+          <div className="mb-4 space-y-1.5 print:hidden">
             <button
               type="button"
               onClick={goToControlPanel}

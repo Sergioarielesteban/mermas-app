@@ -134,11 +134,11 @@ export default function AppccEquiposPage() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-center gap-3">
         <Link
-          href="/panel"
+          href="/appcc"
           className="inline-flex items-center gap-1 text-sm font-semibold text-zinc-600 hover:text-[#D32F2F]"
         >
           <ChevronLeft className="h-4 w-4" />
-          Panel
+          APPCC
         </Link>
         <span className="text-zinc-300">·</span>
         <Link
