@@ -169,11 +169,9 @@ export function PedidosOrdersProvider({ children }: { children: React.ReactNode 
     if (!supabase) return;
     void fetchOrders(supabase, targetId).then((rows) => {
       if (localIdRef.current !== targetId) return;
-      for (const r of rows) {
-        if (r.status === 'received' && r.receivedAt) {
-          pendingReceivedByIdRef.current.delete(r.id);
-        }
-      }
+      // No borrar pendingReceived al ver `received`: la primera lectura puede ser correcta y la siguiente
+      // (Realtime / 2.º fetch) venir de réplica con `sent` y sin pin el pedido «rebota» a enviados.
+      // El pin solo se quita con clearPendingReceivedOrder (p. ej. «Volver a enviados» o archivar en Recepción).
       const tombstones = activeOrderTombstoneSet(locallyDeletedOrderIdsRef.current);
       saveOrderTombstones(targetId, locallyDeletedOrderIdsRef.current);
       setOrders((prev) =>

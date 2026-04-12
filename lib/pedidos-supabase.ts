@@ -432,14 +432,13 @@ export type MergePedidoOrdersOptions = {
   /** Ids borrados en BD en esta sesión: no revivirlos aunque sigan en `prev` o en caché local. */
   tombstoneIds?: ReadonlySet<string>;
   /**
-   * Tras marcar recibido: si la lectura va a réplica y aún devuelve `sent`, conservar `received` unos segundos.
-   * `priceReviewArchivedAt` opcional (p. ej. «todo recibido» en Recepción).
+   * Tras marcar recibido: mientras exista entrada, si Supabase devuelve `sent` (réplica atrasada), fusionar como `received`.
+   * Quitar con clearPendingReceivedOrder. `priceReviewArchivedAt` opcional en el pin.
    */
   pendingReceivedById?: ReadonlyMap<
     string,
     { markedAt: number; receivedAtIso: string; priceReviewArchivedAt?: string }
   >;
-  pendingReceivedGraceMs?: number;
 };
 
 /**
@@ -454,9 +453,7 @@ export function mergePedidoOrdersFromServer(
 ): PedidoOrder[] {
   const tombstones = opts?.tombstoneIds;
   const pendingReceived = opts?.pendingReceivedById;
-  const graceMs = opts?.pendingReceivedGraceMs ?? 60_000;
   const serverIds = new Set(server.map((o) => o.id));
-  const now = Date.now();
   /** Solo pins (pedido recién creado): sin ventana «reciente», para que borrados en otro dispositivo no reaparezcan. */
   const extras = prev.filter((o) => {
     if (tombstones?.has(o.id)) return false;
@@ -471,10 +468,10 @@ export function mergePedidoOrdersFromServer(
         ? { ...row, priceReviewArchivedAt: prevRow.priceReviewArchivedAt }
         : row;
     const pend = pendingReceived?.get(out.id);
-    if (pend && out.status === 'sent' && now - pend.markedAt < graceMs) {
-      // No borrar priceReviewArchivedAt del servidor ni forzar undefined: si ya archivó en Recepción, debe conservarse.
+    // Pin de «marcar recibido»: si la lectura sigue en `sent` (réplica), forzar vista recibida hasta quitar el pin.
+    if (pend && out.status === 'sent') {
       out = {
-        ...row,
+        ...out,
         status: 'received',
         receivedAt: pend.receivedAtIso,
         ...(pend.priceReviewArchivedAt != null ? { priceReviewArchivedAt: pend.priceReviewArchivedAt } : {}),
