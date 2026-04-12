@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import React, { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { ChevronLeft, Download, RefreshCw, Thermometer } from 'lucide-react';
+import { ChevronLeft, Download, Thermometer } from 'lucide-react';
 import AppccCompactHero from '@/components/AppccCompactHero';
 import { useAuth } from '@/components/AuthProvider';
 import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
@@ -57,10 +57,13 @@ function SlotEditor({
   const [notes, setNotes] = useState(reading?.notes ?? '');
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  /** Tras Guardar OK: mostrar «Guardado» al instante sin esperar al refetch del padre. */
+  const [justSaved, setJustSaved] = useState(false);
 
   useEffect(() => {
     setValue(reading ? String(reading.temperature_c) : '');
     setNotes(reading?.notes ?? '');
+    setJustSaved(false);
   }, [reading]);
 
   const tInput = parseTempInput(value);
@@ -71,11 +74,13 @@ function SlotEditor({
     hasLimits &&
     isTempOutOfRange(effectiveTemp, unit.temp_min_c, unit.temp_max_c);
 
-  const isSavedSynced =
+  const matchesServerReading =
     reading != null &&
     tInput !== null &&
     Math.round(reading.temperature_c * 100) === Math.round(tInput * 100) &&
     notes.trim() === (reading.notes ?? '').trim();
+
+  const isSavedSynced = justSaved || matchesServerReading;
 
   const save = async () => {
     setErr(null);
@@ -107,6 +112,7 @@ function SlotEditor({
         notes: notes.trim(),
         userId: user.id,
       });
+      setJustSaved(true);
       onSaved();
     } catch (e) {
       setErr(e instanceof Error ? e.message : 'Error al guardar.');
@@ -129,7 +135,10 @@ function SlotEditor({
             type="text"
             inputMode="decimal"
             value={value}
-            onChange={(e) => setValue(e.target.value)}
+            onChange={(e) => {
+              setJustSaved(false);
+              setValue(e.target.value);
+            }}
             disabled={disabled || saving}
             placeholder="°C"
             className="h-7 w-[3.25rem] rounded-md border border-zinc-200 bg-white px-1.5 text-xs font-semibold text-zinc-900 outline-none focus:ring-1 focus:ring-[#D32F2F]/40"
@@ -139,7 +148,10 @@ function SlotEditor({
         <input
           type="text"
           value={notes}
-          onChange={(e) => setNotes(e.target.value)}
+          onChange={(e) => {
+            setJustSaved(false);
+            setNotes(e.target.value);
+          }}
           disabled={disabled || saving}
           placeholder="Notas"
           className="h-7 min-w-0 flex-1 rounded-md border border-zinc-200 bg-white px-1.5 text-[11px] text-zinc-700 outline-none focus:ring-1 focus:ring-[#D32F2F]/30 sm:max-w-[9rem]"
@@ -426,16 +438,6 @@ function AppccTemperaturasInner() {
           </div>
         </div>
         <div className="flex flex-wrap items-center justify-center gap-2">
-          <button
-            type="button"
-            onClick={() => void load()}
-            disabled={loading || !localId}
-            className="inline-flex h-9 items-center justify-center gap-1 rounded-lg border border-zinc-300 bg-white px-3 text-xs font-bold text-zinc-800 hover:bg-zinc-50 disabled:opacity-45"
-            title="Volver a cargar equipos y lecturas"
-          >
-            <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} aria-hidden />
-            Actualizar
-          </button>
           <Link
             href="/appcc/historial"
             className="inline-flex h-9 items-center justify-center rounded-lg border border-zinc-300 bg-white px-3 text-xs font-bold text-zinc-800 hover:bg-zinc-50"
