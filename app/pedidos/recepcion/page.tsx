@@ -49,7 +49,7 @@ export default function RecepcionPedidosPage() {
   const { localCode, localName, localId, email } = useAuth();
   const hasPedidosEntry = canAccessPedidos(localCode, email, localName, localId);
   const canUse = canUsePedidosModule(localCode, email, localName, localId);
-  const { orders: allOrders, setOrders, reloadOrders } = usePedidosOrders();
+  const { orders: allOrders, setOrders, reloadOrders, clearPendingReceivedOrder } = usePedidosOrders();
   const orders = React.useMemo(
     () => allOrders.filter((row) => row.status === 'sent' || row.status === 'received'),
     [allOrders],
@@ -73,6 +73,7 @@ export default function RecepcionPedidosPage() {
   const [incidentOpenByOrderId, setIncidentOpenByOrderId] = React.useState<Record<string, boolean>>({});
   const [incidentNoteByOrderId, setIncidentNoteByOrderId] = React.useState<Record<string, string>>({});
   const [archivedAccordionOpen, setArchivedAccordionOpen] = React.useState(true);
+  const [expandedArchivedOrderId, setExpandedArchivedOrderId] = React.useState<string | null>(null);
   const focusOrderIdFromUrl = searchParams.get('orderId') ?? '';
   const focusOrderAppliedRef = React.useRef(false);
 
@@ -137,16 +138,35 @@ export default function RecepcionPedidosPage() {
     if (!localId) return;
     const supabase = getSupabaseClient();
     if (!supabase) return;
+    clearPendingReceivedOrder(orderId);
+    const optimisticTs = archived ? new Date().toISOString() : undefined;
+    setOrders((prev) =>
+      prev.map((o) => {
+        if (o.id !== orderId) return o;
+        if (archived && optimisticTs) {
+          return { ...o, priceReviewArchivedAt: optimisticTs };
+        }
+        return { ...o, priceReviewArchivedAt: undefined };
+      }),
+    );
+    if (archived) {
+      setArchivedAccordionOpen(true);
+      setExpandedArchivedOrderId(orderId);
+    } else {
+      setExpandedArchivedOrderId((cur) => (cur === orderId ? null : cur));
+    }
     void setOrderPriceReviewArchived(supabase, localId, orderId, archived)
       .then(() => {
-        if (archived) setArchivedAccordionOpen(true);
         setMessage(
           archived ? 'Pedido archivado de la revisión de precios.' : 'Pedido de nuevo en pendientes de revisión.',
         );
-        reloadOrders();
+        void reloadOrders();
         dispatchPedidosDataChanged();
       })
-      .catch((err: Error) => setMessage(err.message));
+      .catch((err: Error) => {
+        void reloadOrders();
+        setMessage(err.message);
+      });
   };
 
   const changeUnitPrice = (orderId: string, itemId: string, rawValue: string) => {
@@ -611,28 +631,75 @@ export default function RecepcionPedidosPage() {
               </summary>
               <div className="mt-3 space-y-2">
                 <p className="text-center text-[11px] text-zinc-500">
-                  Misma vista compacta que al archivar. «Volver a pendientes» reabre el pedido arriba.
+                  Toca el proveedor o la fecha para ver líneas del pedido. «Volver a pendientes» reabre arriba.
                 </p>
-                {filteredArchivedOrders.map((order) => (
-                  <div
-                    key={order.id}
-                    className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-white p-3 ring-1 ring-zinc-200"
-                  >
-                    <div className="min-w-0 text-left">
-                      <p className="text-sm font-semibold text-zinc-900">{order.supplierName}</p>
-                      <p className="text-xs text-zinc-500">
-                        Pedido {new Date(order.createdAt).toLocaleDateString('es-ES')}
-                      </p>
+                {filteredArchivedOrders.map((order) => {
+                  const expanded = expandedArchivedOrderId === order.id;
+                  return (
+                    <div key={order.id} className="overflow-hidden rounded-xl bg-white ring-1 ring-zinc-200">
+                      <div className="flex flex-wrap items-stretch gap-2 p-3">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setExpandedArchivedOrderId((id) => (id === order.id ? null : order.id))
+                          }
+                          className="min-w-0 flex-1 rounded-lg text-left outline-none ring-[#D32F2F] focus-visible:ring-2"
+                        >
+                          <p className="text-sm font-semibold text-zinc-900">{order.supplierName}</p>
+                          <p className="text-xs text-zinc-500">
+                            Pedido {new Date(order.createdAt).toLocaleDateString('es-ES')}
+                            {expanded ? ' · ocultar detalle' : ' · ver detalle'}
+                          </p>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => markPriceReviewArchived(order.id, false)}
+                          className="shrink-0 self-center rounded-lg border border-zinc-400 bg-white px-3 py-1.5 text-xs font-semibold text-zinc-800"
+                        >
+                          Volver a pendientes
+                        </button>
+                      </div>
+                      {expanded ? (
+                        <div className="space-y-2 border-t border-zinc-100 bg-zinc-50/90 px-3 py-3">
+                          {order.items.map((item) => (
+                            <div
+                              key={item.id}
+                              className="space-y-1 rounded-lg bg-white p-3 ring-1 ring-zinc-200"
+                            >
+                              <p className="text-sm font-semibold text-zinc-800">{item.productName}</p>
+                              <p className="text-xs text-zinc-700">
+                                Pedido:{' '}
+                                <span className="font-bold text-zinc-900">
+                                  {formatQuantityWithUnit(item.quantity, item.unit)}
+                                </span>
+                              </p>
+                              {item.receivedWeightKg != null && item.receivedWeightKg > 0 ? (
+                                <p className="text-xs text-zinc-600">
+                                  Kg reales guardados: {item.receivedWeightKg.toFixed(3)} kg
+                                </p>
+                              ) : null}
+                              <p className="text-xs text-zinc-700">
+                                P/unit:{' '}
+                                <span className="font-bold text-zinc-900">
+                                  {item.pricePerUnit.toFixed(2)} €/{unitPriceCatalogSuffix[item.unit]}
+                                </span>
+                              </p>
+                              <p className="text-xs text-zinc-700">
+                                Subt:{' '}
+                                <span className="font-bold text-zinc-900">{item.lineTotal.toFixed(2)} €</span>
+                              </p>
+                              {item.incidentType || item.incidentNotes?.trim() ? (
+                                <p className="text-[11px] font-semibold text-[#B91C1C]">
+                                  Incidencia: {item.incidentNotes?.trim() || item.incidentType}
+                                </p>
+                              ) : null}
+                            </div>
+                          ))}
+                        </div>
+                      ) : null}
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => markPriceReviewArchived(order.id, false)}
-                      className="shrink-0 rounded-lg border border-zinc-400 bg-white px-3 py-1.5 text-xs font-semibold text-zinc-800"
-                    >
-                      Volver a pendientes
-                    </button>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </details>
           ) : null}

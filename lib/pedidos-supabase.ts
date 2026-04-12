@@ -465,16 +465,19 @@ export function mergePedidoOrdersFromServer(
   });
   const byId = new Map<string, PedidoOrder>();
   for (const row of server) {
-    let out: PedidoOrder = row;
-    const pend = pendingReceived?.get(row.id);
-    if (pend && row.status === 'sent' && now - pend.markedAt < graceMs) {
+    const prevRow = prev.find((p) => p.id === row.id);
+    let out: PedidoOrder =
+      prevRow?.priceReviewArchivedAt && row.priceReviewArchivedAt == null
+        ? { ...row, priceReviewArchivedAt: prevRow.priceReviewArchivedAt }
+        : row;
+    const pend = pendingReceived?.get(out.id);
+    if (pend && out.status === 'sent' && now - pend.markedAt < graceMs) {
+      // No borrar priceReviewArchivedAt del servidor ni forzar undefined: si ya archivó en Recepción, debe conservarse.
       out = {
         ...row,
         status: 'received',
         receivedAt: pend.receivedAtIso,
-        ...(pend.priceReviewArchivedAt != null
-          ? { priceReviewArchivedAt: pend.priceReviewArchivedAt }
-          : { priceReviewArchivedAt: undefined }),
+        ...(pend.priceReviewArchivedAt != null ? { priceReviewArchivedAt: pend.priceReviewArchivedAt } : {}),
       };
     }
     byId.set(row.id, out);
@@ -723,13 +726,20 @@ export async function setOrderPriceReviewArchived(
   orderId: string,
   archived: boolean,
 ) {
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from('purchase_orders')
     .update({ price_review_archived_at: archived ? new Date().toISOString() : null })
     .eq('id', orderId)
     .eq('local_id', localId)
-    .in('status', ['sent', 'received']);
+    .in('status', ['sent', 'received'])
+    .select('id')
+    .maybeSingle();
   if (error) throw new Error(error.message);
+  if (!data?.id) {
+    throw new Error(
+      'No se pudo actualizar el pedido (0 filas). Comprueba que esté en estado enviado o recibido y que exista la columna price_review_archived_at en Supabase.',
+    );
+  }
 }
 
 /**
