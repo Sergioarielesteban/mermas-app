@@ -63,9 +63,19 @@ function SlotEditor({
     setNotes(reading?.notes ?? '');
   }, [reading]);
 
-  const out = reading
-    ? isTempOutOfRange(reading.temperature_c, unit.temp_min_c, unit.temp_max_c)
-    : false;
+  const tInput = parseTempInput(value);
+  const hasLimits = unit.temp_min_c != null || unit.temp_max_c != null;
+  const effectiveTemp = tInput !== null ? tInput : (reading?.temperature_c ?? null);
+  const out =
+    effectiveTemp !== null &&
+    hasLimits &&
+    isTempOutOfRange(effectiveTemp, unit.temp_min_c, unit.temp_max_c);
+
+  const isSavedSynced =
+    reading != null &&
+    tInput !== null &&
+    Math.round(reading.temperature_c * 100) === Math.round(tInput * 100) &&
+    notes.trim() === (reading.notes ?? '').trim();
 
   const save = async () => {
     setErr(null);
@@ -106,49 +116,52 @@ function SlotEditor({
   };
 
   return (
-    <div className="flex flex-wrap items-center gap-1 py-0.5 sm:gap-1.5">
-      <span
-        className="w-[2.75rem] shrink-0 text-[9px] font-bold uppercase leading-tight text-zinc-500"
-        title={APPCC_SLOT_LABEL[slot]}
-      >
-        {SLOT_SHORT[slot]}
-      </span>
-      <div className="flex items-center gap-0.5">
+    <div className="py-0.5">
+      <div className="flex flex-wrap items-center gap-1 sm:gap-1.5">
+        <span
+          className="w-[2.75rem] shrink-0 text-[9px] font-bold uppercase leading-tight text-zinc-500"
+          title={APPCC_SLOT_LABEL[slot]}
+        >
+          {SLOT_SHORT[slot]}
+        </span>
+        <div className="flex items-center gap-0.5">
+          <input
+            type="text"
+            inputMode="decimal"
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            disabled={disabled || saving}
+            placeholder="°C"
+            className="h-7 w-[3.25rem] rounded-md border border-zinc-200 bg-white px-1.5 text-xs font-semibold text-zinc-900 outline-none focus:ring-1 focus:ring-[#D32F2F]/40"
+          />
+          <span className="text-[10px] text-zinc-400">°C</span>
+        </div>
         <input
           type="text"
-          inputMode="decimal"
-          value={value}
-          onChange={(e) => setValue(e.target.value)}
+          value={notes}
+          onChange={(e) => setNotes(e.target.value)}
           disabled={disabled || saving}
-          placeholder="°C"
-          className="h-7 w-[3.25rem] rounded-md border border-zinc-200 bg-white px-1.5 text-xs font-semibold text-zinc-900 outline-none focus:ring-1 focus:ring-[#D32F2F]/40"
+          placeholder="Notas"
+          className="h-7 min-w-0 flex-1 rounded-md border border-zinc-200 bg-white px-1.5 text-[11px] text-zinc-700 outline-none focus:ring-1 focus:ring-[#D32F2F]/30 sm:max-w-[9rem]"
         />
-        <span className="text-[10px] text-zinc-400">°C</span>
-      </div>
-      <input
-        type="text"
-        value={notes}
-        onChange={(e) => setNotes(e.target.value)}
-        disabled={disabled || saving}
-        placeholder="Notas"
-        className="h-7 min-w-0 flex-1 rounded-md border border-zinc-200 bg-white px-1.5 text-[11px] text-zinc-700 outline-none focus:ring-1 focus:ring-[#D32F2F]/30 sm:max-w-[9rem]"
-      />
-      <button
-        type="button"
-        onClick={() => void save()}
-        disabled={disabled || saving}
-        className="h-7 shrink-0 rounded-md bg-[#D32F2F] px-2 text-[10px] font-bold uppercase tracking-wide text-white disabled:opacity-50"
-      >
-        {saving ? '…' : 'Guardar'}
-      </button>
-      {reading && (unit.temp_min_c != null || unit.temp_max_c != null) ? (
-        <span
-          className={`w-full text-[9px] sm:ml-0 sm:w-auto ${out ? 'font-semibold text-red-600' : 'text-emerald-700'}`}
+        <button
+          type="button"
+          onClick={() => void save()}
+          disabled={disabled || saving || isSavedSynced}
+          className={[
+            'h-7 shrink-0 rounded-md px-2 text-[10px] font-bold uppercase tracking-wide disabled:opacity-50',
+            isSavedSynced
+              ? 'bg-emerald-600 text-white'
+              : 'bg-[#D32F2F] text-white',
+          ].join(' ')}
         >
-          {out ? 'Fuera de rango' : 'OK rango'}
-        </span>
+          {saving ? '…' : isSavedSynced ? 'Guardado' : 'Guardar'}
+        </button>
+      </div>
+      {out ? (
+        <p className="mt-0.5 text-[9px] font-semibold leading-tight text-red-600">Fuera de rango</p>
       ) : null}
-      {err ? <span className="w-full text-[9px] font-medium text-red-600">{err}</span> : null}
+      {err ? <p className="mt-0.5 text-[9px] font-medium text-red-600">{err}</p> : null}
     </div>
   );
 }
@@ -371,43 +384,41 @@ function AppccTemperaturasInner() {
         <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900">{banner}</div>
       ) : null}
 
-      <div className="flex flex-col gap-2">
-        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end">
-          <div className="min-w-[10rem] flex-1">
-            <label htmlFor="appcc-date" className="text-[10px] font-bold uppercase tracking-wide text-zinc-500">
-              Día del registro
-            </label>
-            <input
-              id="appcc-date"
-              type="date"
-              value={dateKey}
-              onChange={(e) => setDateKey(e.target.value)}
-              className="mt-0.5 block h-9 w-full rounded-lg border border-zinc-200 bg-white px-2.5 text-sm font-semibold text-zinc-900"
-            />
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <Link
-              href="/appcc/historial"
-              className="inline-flex h-9 items-center justify-center rounded-lg border border-zinc-300 bg-white px-3 text-xs font-bold text-zinc-800 hover:bg-zinc-50"
-            >
-              Historial
-            </Link>
-            <button
-              type="button"
-              onClick={handleDownloadPdf}
-              disabled={orderedUnits.length === 0 || pdfBusy}
-              className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border border-zinc-900/15 bg-zinc-900 px-3 text-xs font-bold text-white hover:bg-zinc-800 disabled:opacity-45"
-            >
-              <Download className="h-3.5 w-3.5" aria-hidden />
-              {pdfBusy ? 'PDF…' : 'Descargar PDF'}
-            </button>
-            <Link
-              href="/appcc/equipos"
-              className="inline-flex h-9 items-center justify-center rounded-lg border border-zinc-300 bg-white px-3 text-xs font-bold text-zinc-800 hover:bg-zinc-50"
-            >
-              Equipos
-            </Link>
-          </div>
+      <div className="flex flex-col gap-3">
+        <div className="flex flex-col items-center text-center">
+          <label htmlFor="appcc-date" className="text-[10px] font-bold uppercase tracking-wide text-zinc-500">
+            Día del registro
+          </label>
+          <input
+            id="appcc-date"
+            type="date"
+            value={dateKey}
+            onChange={(e) => setDateKey(e.target.value)}
+            className="mt-1 block h-9 w-auto min-w-[11rem] rounded-lg border border-zinc-200 bg-white px-2.5 text-sm font-semibold text-zinc-900"
+          />
+        </div>
+        <div className="flex flex-wrap items-center justify-center gap-2">
+          <Link
+            href="/appcc/historial"
+            className="inline-flex h-9 items-center justify-center rounded-lg border border-zinc-300 bg-white px-3 text-xs font-bold text-zinc-800 hover:bg-zinc-50"
+          >
+            Historial
+          </Link>
+          <button
+            type="button"
+            onClick={handleDownloadPdf}
+            disabled={orderedUnits.length === 0 || pdfBusy}
+            className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border border-zinc-900/15 bg-zinc-900 px-3 text-xs font-bold text-white hover:bg-zinc-800 disabled:opacity-45"
+          >
+            <Download className="h-3.5 w-3.5" aria-hidden />
+            {pdfBusy ? 'PDF…' : 'Descargar PDF'}
+          </button>
+          <Link
+            href="/appcc/equipos"
+            className="inline-flex h-9 items-center justify-center rounded-lg border border-zinc-300 bg-white px-3 text-xs font-bold text-zinc-800 hover:bg-zinc-50"
+          >
+            Equipos
+          </Link>
         </div>
       </div>
 
