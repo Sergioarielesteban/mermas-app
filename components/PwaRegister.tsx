@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState } from 'react';
 
+const PWA_WAITING_KEY = 'chef-one-pwa-sw-waiting';
+
 export default function PwaRegister() {
   const [updateAvailable, setUpdateAvailable] = useState(false);
   const [applyingUpdate, setApplyingUpdate] = useState(false);
@@ -19,6 +21,14 @@ export default function PwaRegister() {
     if (typeof window === 'undefined' || !('serviceWorker' in navigator)) return;
     if (process.env.NODE_ENV !== 'production') return;
 
+    try {
+      if (sessionStorage.getItem(PWA_WAITING_KEY) === '1') {
+        setUpdateAvailable(true);
+      }
+    } catch {
+      /* sessionStorage no disponible */
+    }
+
     let updateInterval: number | null = null;
     const onControllerChange = () => {
       scheduleReload();
@@ -26,16 +36,40 @@ export default function PwaRegister() {
 
     navigator.serviceWorker.addEventListener('controllerchange', onControllerChange);
 
-    const syncWaitingBanner = (registration: ServiceWorkerRegistration) => {
+    const applyWaitingState = (registration: ServiceWorkerRegistration) => {
       if (registration.waiting) {
         waitingWorkerRef.current = registration.waiting;
         setUpdateAvailable(true);
+        try {
+          sessionStorage.setItem(PWA_WAITING_KEY, '1');
+        } catch {
+          /* ignore */
+        }
+        return;
       }
+      // Mientras instala la nueva versión, `.waiting` puede ser null un instante: no borrar el aviso todavía.
+      if (registration.installing) return;
+
+      waitingWorkerRef.current = null;
+      try {
+        sessionStorage.removeItem(PWA_WAITING_KEY);
+      } catch {
+        /* ignore */
+      }
+      setUpdateAvailable(false);
+    };
+
+    const recheckRegistration = (registration: ServiceWorkerRegistration) => {
+      applyWaitingState(registration);
+      void registration.update().then(() => applyWaitingState(registration));
     };
 
     void navigator.serviceWorker.register('/sw.js').then((registration) => {
       registrationRef.current = registration;
-      syncWaitingBanner(registration);
+      recheckRegistration(registration);
+      window.setTimeout(() => recheckRegistration(registration), 250);
+      window.setTimeout(() => recheckRegistration(registration), 900);
+      window.setTimeout(() => recheckRegistration(registration), 2800);
 
       registration.addEventListener('updatefound', () => {
         const newWorker = registration.installing;
@@ -44,21 +78,24 @@ export default function PwaRegister() {
           if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
             waitingWorkerRef.current = registration.waiting ?? newWorker;
             setUpdateAvailable(true);
+            try {
+              sessionStorage.setItem(PWA_WAITING_KEY, '1');
+            } catch {
+              /* ignore */
+            }
           }
         });
       });
 
       updateInterval = window.setInterval(() => {
-        void registration.update().then(() => syncWaitingBanner(registration));
+        void registration.update().then(() => applyWaitingState(registration));
       }, 60_000);
     });
 
     const onReturnToApp = () => {
       const reg = registrationRef.current;
-      if (document.visibilityState === 'visible' && reg?.waiting) {
-        waitingWorkerRef.current = reg.waiting;
-        setUpdateAvailable(true);
-      }
+      if (document.visibilityState !== 'visible' || !reg) return;
+      void reg.update().then(() => applyWaitingState(reg));
     };
     document.addEventListener('visibilitychange', onReturnToApp);
     window.addEventListener('pageshow', onReturnToApp);
@@ -117,7 +154,14 @@ export default function PwaRegister() {
         <div className="mt-2 flex items-center justify-end gap-2">
           <button
             type="button"
-            onClick={() => setUpdateAvailable(false)}
+            onClick={() => {
+              try {
+                sessionStorage.removeItem(PWA_WAITING_KEY);
+              } catch {
+                /* ignore */
+              }
+              setUpdateAvailable(false);
+            }}
             className="h-9 rounded-lg border border-zinc-600 px-3 text-xs font-bold uppercase tracking-wide text-zinc-200"
           >
             Luego

@@ -452,22 +452,33 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
     const supabase = getSupabaseClient();
     if (!supabase) return;
     let cancelled = false;
-    void (async () => {
-      try {
-        const { products: p, mermas: m } = await fetchProductsAndMermas(supabase, localId);
-        if (cancelled) return;
-        const cleaned = pruneBaconHalfRecords(p, m);
-        setProducts(sortProductsByName(p));
-        setMermas(cleaned);
-        setCloudDataLoaded(true);
-      } catch {
-        // Keep last known state if first cloud load fails.
-      }
-    })();
+    void refetchCloud();
+    const t1 = window.setTimeout(() => {
+      if (!cancelled) void refetchCloud();
+    }, 500);
+    const t2 = window.setTimeout(() => {
+      if (!cancelled) void refetchCloud();
+    }, 2500);
     return () => {
       cancelled = true;
+      window.clearTimeout(t1);
+      window.clearTimeout(t2);
     };
-  }, [cloudMode, hydrated, localId]);
+  }, [cloudMode, hydrated, localId, refetchCloud]);
+
+  useEffect(() => {
+    if (!isBrowser() || !hydrated || !cloudMode || !localId) return;
+    const pull = () => {
+      if (document.visibilityState !== 'visible') return;
+      void refetchCloud();
+    };
+    document.addEventListener('visibilitychange', pull);
+    window.addEventListener('pageshow', pull);
+    return () => {
+      document.removeEventListener('visibilitychange', pull);
+      window.removeEventListener('pageshow', pull);
+    };
+  }, [cloudMode, hydrated, localId, refetchCloud]);
 
   useEffect(() => {
     if (!isBrowser() || !hydrated || !cloudMode || !cloudDataLoaded) return;
