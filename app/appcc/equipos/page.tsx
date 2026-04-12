@@ -12,9 +12,9 @@ import {
   type AppccColdUnitRow,
   type AppccUnitType,
   type AppccZone,
+  deleteAppccColdUnit,
   fetchAppccColdUnits,
   insertAppccColdUnit,
-  updateAppccColdUnit,
 } from '@/lib/appcc-supabase';
 
 function emptyToNull(raw: string): number | null {
@@ -38,6 +38,7 @@ export default function AppccEquiposPage() {
   const [tempMin, setTempMin] = useState('');
   const [tempMax, setTempMax] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const supabaseOk = isSupabaseEnabled() && getSupabaseClient();
 
@@ -119,14 +120,25 @@ export default function AppccEquiposPage() {
     }
   };
 
-  const toggleActive = async (u: AppccColdUnitRow) => {
+  const removeUnit = async (u: AppccColdUnitRow) => {
+    if (
+      !window.confirm(
+        `¿Eliminar «${u.name}»? Se borrará también el historial de temperaturas de este equipo. No se puede deshacer.`,
+      )
+    ) {
+      return;
+    }
     const supabase = getSupabaseClient();
-    if (!supabase) return;
+    if (!supabase || !localId) return;
+    setDeletingId(u.id);
+    setBanner(null);
     try {
-      await updateAppccColdUnit(supabase, u.id, { is_active: !u.is_active });
+      await deleteAppccColdUnit(supabase, u.id);
       await load();
     } catch (err) {
-      setBanner(err instanceof Error ? err.message : 'Error al actualizar.');
+      setBanner(err instanceof Error ? err.message : 'No se pudo eliminar el equipo.');
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -265,8 +277,11 @@ export default function AppccEquiposPage() {
                 className="flex flex-col gap-2 rounded-xl border border-zinc-200 bg-white px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
               >
                 <div>
-                  <p className={`text-sm font-bold ${u.is_active ? 'text-zinc-900' : 'text-zinc-400 line-through'}`}>
+                  <p className="text-sm font-bold text-zinc-900">
                     {u.name}
+                    {!u.is_active ? (
+                      <span className="ml-2 text-xs font-semibold text-amber-700">(inactivo)</span>
+                    ) : null}
                   </p>
                   <p className="text-xs text-zinc-500">
                     {APPCC_ZONE_LABEL[u.zone]} · {APPCC_UNIT_TYPE_LABEL[u.unit_type]}
@@ -277,11 +292,11 @@ export default function AppccEquiposPage() {
                 </div>
                 <button
                   type="button"
-                  onClick={() => void toggleActive(u)}
-                  disabled={!localId}
-                  className="h-9 shrink-0 rounded-lg border border-zinc-300 bg-zinc-50 px-3 text-xs font-bold text-zinc-800 hover:bg-zinc-100 disabled:opacity-50"
+                  onClick={() => void removeUnit(u)}
+                  disabled={!localId || deletingId === u.id}
+                  className="h-9 shrink-0 rounded-lg bg-[#D32F2F] px-3 text-xs font-bold uppercase tracking-wide text-white hover:bg-[#b71c1c] disabled:opacity-50"
                 >
-                  {u.is_active ? 'Desactivar' : 'Reactivar'}
+                  {deletingId === u.id ? '…' : 'Eliminar'}
                 </button>
               </li>
             ))}

@@ -223,3 +223,9 @@ export async function updateAppccColdUnit(
   const { error } = await supabase.from('appcc_cold_units').update(patch).eq('id', unitId);
   if (error) throw new Error(error.message);
 }
+
+/** Borra el equipo; las lecturas asociadas se eliminan en cascada (FK en BD). */
+export async function deleteAppccColdUnit(supabase: SupabaseClient, unitId: string) {
+  const { error } = await supabase.from('appcc_cold_units').delete().eq('id', unitId);
+  if (error) throw new Error(error.message);
+}

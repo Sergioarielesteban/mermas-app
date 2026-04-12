@@ -34,7 +34,11 @@ function HubTile({ href, onClick, label, sub, Icon, tone = 'zinc' }: TileProps) 
       <span className="text-center text-xl font-semibold leading-tight tracking-tight text-zinc-900 sm:text-[1.35rem]">
         {label}
       </span>
-      {sub ? <span className="mt-2 block text-center text-xs font-medium text-zinc-500">{sub}</span> : null}
+      {sub ? (
+        <span className="mt-2 block max-w-[16.5rem] px-1 text-center text-xs font-medium leading-snug text-zinc-500 sm:max-w-none">
+          {sub}
+        </span>
+      ) : null}
       <span className={`mt-4 ${LINE}`} aria-hidden />
     </>
   );
@@ -90,7 +94,13 @@ export default function PanelControlPage() {
         {showPedidos ? (
           <HubTile href="/pedidos" label="Pedidos" sub="Proveedores y recepción" Icon={ShoppingCart} tone="red" />
         ) : null}
-        <HubTile href="/appcc" label="APPCC" sub="Neveras y congeladores" Icon={ShieldCheck} tone="red" />
+        <HubTile
+          href="/appcc"
+          label="APPCC"
+          sub="Análisis de peligros y puntos críticos de control"
+          Icon={ShieldCheck}
+          tone="red"
+        />
         <HubTile
           onClick={() => onStub('Inventario')}
           label="Inventario"
