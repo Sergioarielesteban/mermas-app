@@ -3,18 +3,31 @@
 import { useEffect, useRef, useState } from 'react';
 
 const PWA_WAITING_KEY = 'chef-one-pwa-sw-waiting';
+/** Tras detectar actualización, aplicar sola si el usuario no pulsa (evita equipos con versiones viejas). */
+const AUTO_UPDATE_SECONDS = 12;
 
 export default function PwaRegister() {
   const [updateAvailable, setUpdateAvailable] = useState(false);
   const [applyingUpdate, setApplyingUpdate] = useState(false);
+  const [autoSecondsLeft, setAutoSecondsLeft] = useState<number | null>(null);
   const waitingWorkerRef = useRef<ServiceWorker | null>(null);
   const registrationRef = useRef<ServiceWorkerRegistration | null>(null);
   const reloadScheduledRef = useRef(false);
+  const autoTickRef = useRef<number | null>(null);
+  const applyUpdateRef = useRef<() => void>(() => {});
 
   const scheduleReload = () => {
     if (reloadScheduledRef.current) return;
     reloadScheduledRef.current = true;
     window.location.reload();
+  };
+
+  const clearAutoTimers = (syncUi: boolean) => {
+    if (autoTickRef.current != null) {
+      window.clearInterval(autoTickRef.current);
+      autoTickRef.current = null;
+    }
+    if (syncUi) setAutoSecondsLeft(null);
   };
 
   useEffect(() => {
@@ -47,7 +60,6 @@ export default function PwaRegister() {
         }
         return;
       }
-      // Mientras instala la nueva versión, `.waiting` puede ser null un instante: no borrar el aviso todavía.
       if (registration.installing) return;
 
       waitingWorkerRef.current = null;
@@ -62,6 +74,11 @@ export default function PwaRegister() {
     const recheckRegistration = (registration: ServiceWorkerRegistration) => {
       applyWaitingState(registration);
       void registration.update().then(() => applyWaitingState(registration));
+    };
+
+    const pingUpdate = () => {
+      const reg = registrationRef.current;
+      if (reg) void recheckRegistration(reg);
     };
 
     void navigator.serviceWorker.register('/sw.js').then((registration) => {
@@ -89,21 +106,57 @@ export default function PwaRegister() {
 
       updateInterval = window.setInterval(() => {
         void registration.update().then(() => applyWaitingState(registration));
-      }, 60_000);
+      }, 45_000);
     });
+
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') pingUpdate();
+    };
+    const onPageShow = (ev: PageTransitionEvent) => {
+      if (ev.persisted) pingUpdate();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('focus', pingUpdate);
+    window.addEventListener('pageshow', onPageShow);
 
     return () => {
       navigator.serviceWorker.removeEventListener('controllerchange', onControllerChange);
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('focus', pingUpdate);
+      window.removeEventListener('pageshow', onPageShow);
       if (updateInterval) window.clearInterval(updateInterval);
+      clearAutoTimers(false);
     };
   }, []);
 
+  useEffect(() => {
+    if (!updateAvailable || applyingUpdate) {
+      clearAutoTimers(true);
+      return;
+    }
+    let left = AUTO_UPDATE_SECONDS;
+    setAutoSecondsLeft(left);
+    autoTickRef.current = window.setInterval(() => {
+      left -= 1;
+      setAutoSecondsLeft(left);
+      if (left <= 0 && autoTickRef.current != null) {
+        window.clearInterval(autoTickRef.current);
+        autoTickRef.current = null;
+        applyUpdateRef.current();
+      }
+    }, 1000);
+    return () => clearAutoTimers(true);
+  }, [updateAvailable, applyingUpdate]);
+
   const applyUpdate = () => {
+    clearAutoTimers(true);
     setApplyingUpdate(true);
     void (async () => {
       try {
         const reg =
-          (await navigator.serviceWorker.getRegistration()) ?? registrationRef.current ?? (await navigator.serviceWorker.ready);
+          (await navigator.serviceWorker.getRegistration()) ??
+          registrationRef.current ??
+          (await navigator.serviceWorker.ready);
         const waiting = reg.waiting ?? waitingWorkerRef.current ?? null;
 
         if (waiting) {
@@ -122,6 +175,8 @@ export default function PwaRegister() {
       }
     })();
   };
+
+  applyUpdateRef.current = applyUpdate;
 
   if (!updateAvailable) return null;
 
@@ -151,8 +206,9 @@ export default function PwaRegister() {
           Nueva versión de la app
         </p>
         <p id="pwa-update-desc" className="mt-1.5 text-xs leading-snug text-zinc-300">
-          Hay una actualización lista. Pulsa el botón para cargar la última versión; el aviso no se quita hasta
-          actualizar.
+          Hay una actualización lista. Pulsa para cargarla ya; si no, se aplicará sola en{' '}
+          {autoSecondsLeft != null ? autoSecondsLeft : AUTO_UPDATE_SECONDS} s para que todos los dispositivos
+          coincidan con la última versión.
         </p>
         <div className="mt-3 flex justify-end">
           <button
@@ -161,11 +217,10 @@ export default function PwaRegister() {
             disabled={applyingUpdate}
             className="h-10 w-full rounded-lg bg-[#D32F2F] px-3 text-xs font-bold uppercase tracking-wide text-white disabled:opacity-60 sm:w-auto"
           >
-            Actualizar a la última versión
+            Actualizar ahora
           </button>
         </div>
       </div>
     </>
   );
 }
-

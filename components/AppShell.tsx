@@ -27,6 +27,7 @@ function titleForPath(pathname: string | null) {
   if (pathname.startsWith('/productos')) return 'Añadir Productos';
   if (pathname.startsWith('/resumen')) return 'Resumen';
   if (pathname.startsWith('/pedidos')) return 'Pedidos';
+  if (pathname.startsWith('/appcc')) return 'APPCC';
   return 'Mermas';
 }
 
