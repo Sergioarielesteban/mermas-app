@@ -23,6 +23,8 @@ export type AppccOilEventRow = {
   event_date: string;
   liters_used: number | null;
   notes: string;
+  /** Nombre de quien hizo el filtrado/cambio (mismo para todas las freidoras del día en la UI). */
+  operator_name?: string | null;
   recorded_by: string | null;
   recorded_at: string;
   updated_at: string;
@@ -54,7 +56,7 @@ export async function fetchOilEventsForDate(supabase: SupabaseClient, localId: s
   const { data, error } = await supabase
     .from('appcc_oil_events')
     .select(
-      'id,local_id,fryer_id,event_type,event_date,liters_used,notes,recorded_by,recorded_at,updated_at',
+      'id,local_id,fryer_id,event_type,event_date,liters_used,notes,operator_name,recorded_by,recorded_at,updated_at',
     )
     .eq('local_id', localId)
     .eq('event_date', eventDate)
@@ -73,7 +75,7 @@ export async function fetchOilEventsInRangeWithFryer(
   let q = supabase
     .from('appcc_oil_events')
     .select(
-      'id,local_id,fryer_id,event_type,event_date,liters_used,notes,recorded_by,recorded_at,updated_at, fryer:appcc_fryers(name,zone)',
+      'id,local_id,fryer_id,event_type,event_date,liters_used,notes,operator_name,recorded_by,recorded_at,updated_at, fryer:appcc_fryers(name,zone)',
     )
     .eq('local_id', localId)
     .gte('event_date', dateFrom)
@@ -109,6 +111,7 @@ export async function insertOilEvent(
     eventDate: string;
     litersUsed: number | null;
     notes?: string;
+    operatorName: string;
     userId: string;
   },
 ) {
@@ -127,6 +130,7 @@ export async function insertOilEvent(
     event_date: params.eventDate,
     liters_used: liters,
     notes: params.notes?.trim() ?? '',
+    operator_name: params.operatorName.trim(),
     recorded_by: params.userId,
   });
   if (error) throw new Error(error.message);

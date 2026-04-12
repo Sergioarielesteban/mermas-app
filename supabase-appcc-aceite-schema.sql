@@ -31,6 +31,7 @@ create table if not exists public.appcc_oil_events (
   event_date date not null,
   liters_used numeric(8,2),
   notes text not null default '',
+  operator_name text not null default '',
   recorded_by uuid references auth.users(id),
   recorded_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
@@ -95,4 +96,6 @@ on public.appcc_oil_events for all to authenticated
 using (local_id = public.current_local_id())
 with check (local_id = public.current_local_id());
 
--- Migración en proyectos ya desplegados: supabase-appcc-aceite-migration-filtrado-litros.sql
+-- Migraciones en proyectos ya desplegados:
+-- - supabase-appcc-aceite-migration-filtrado-litros.sql
+-- - supabase-appcc-aceite-migration-operator-name.sql

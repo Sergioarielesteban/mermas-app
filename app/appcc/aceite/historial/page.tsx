@@ -215,6 +215,13 @@ export default function AppccAceiteHistorialPage() {
         <ul className="space-y-2">
           {sortedDates.map((dk) => {
             const list = byDate.get(dk) ?? [];
+            const operators = [
+              ...new Set(
+                list
+                  .map((e) => e.operator_name?.trim())
+                  .filter((n): n is string => Boolean(n)),
+              ),
+            ];
             return (
               <li key={dk}>
                 <Link
@@ -226,6 +233,11 @@ export default function AppccAceiteHistorialPage() {
                     <p className="text-xs text-zinc-500">
                       {list.length} registro{list.length === 1 ? '' : 's'}
                     </p>
+                    {operators.length > 0 ? (
+                      <p className="mt-0.5 line-clamp-2 text-xs text-zinc-600">
+                        {operators.join(' · ')}
+                      </p>
+                    ) : null}
                   </div>
                   <ChevronRight className="h-5 w-5 shrink-0 text-zinc-400" aria-hidden />
                 </Link>

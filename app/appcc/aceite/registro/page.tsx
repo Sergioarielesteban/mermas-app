@@ -20,6 +20,8 @@ import {
 } from '@/lib/appcc-aceite-supabase';
 import { APPCC_ZONE_LABEL, formatAppccDateEs, madridDateKey, type AppccZone } from '@/lib/appcc-supabase';
 
+const LS_OPERATOR_NAME = 'appcc-aceite-operator-name';
+
 function parseLiters(raw: string): number | null {
   const n = Number(String(raw).trim().replace(',', '.'));
   if (!Number.isFinite(n) || n < 0) return null;
@@ -41,12 +43,15 @@ function FryerOilCard({
   fryer,
   dateKey,
   dayEvents,
+  operatorName,
   disabled,
   onRefresh,
 }: {
   fryer: AppccFryerRow;
   dateKey: string;
   dayEvents: AppccOilEventRow[];
+  /** Mismo nombre para todas las freidoras del día (campo superior). */
+  operatorName: string;
   disabled: boolean;
   onRefresh: () => void;
 }) {
@@ -98,6 +103,11 @@ function FryerOilCard({
       setErr('En un cambio indica los litros de aceite usados (≥ 0).');
       return;
     }
+    const op = operatorName.trim();
+    if (!op) {
+      setErr('Indica arriba quién realiza el registro; sirve para todas las freidoras de este día.');
+      return;
+    }
     setSaving(true);
     try {
       await insertOilEvent(supabase, {
@@ -107,6 +117,7 @@ function FryerOilCard({
         eventDate: dateKey,
         litersUsed: litersNum,
         notes: notes.trim(),
+        operatorName: op,
         userId: user.id,
       });
       setMode(null);
@@ -130,6 +141,11 @@ function FryerOilCard({
               {mine.map((e) => (
                 <li
                   key={e.id}
+                  title={
+                    e.operator_name?.trim()
+                      ? `Realizado por: ${e.operator_name.trim()}`
+                      : undefined
+                  }
                   className="rounded-md bg-white/90 px-1.5 py-0.5 text-[9px] font-semibold text-zinc-600 ring-1 ring-zinc-200/80"
                 >
                   {APPCC_OIL_EVENT_LABEL[e.event_type]}
@@ -219,11 +235,30 @@ function AppccAceiteRegistroInner() {
   const searchParams = useSearchParams();
   const { localId, profileReady, localName, localCode } = useAuth();
   const [dateKey, setDateKey] = useState(() => madridDateKey());
+  const [operatorName, setOperatorName] = useState('');
   const [fryers, setFryers] = useState<AppccFryerRow[]>([]);
   const [events, setEvents] = useState<AppccOilEventRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [banner, setBanner] = useState<string | null>(null);
   const [pdfBusy, setPdfBusy] = useState(false);
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(LS_OPERATOR_NAME);
+      if (saved) setOperatorName(saved);
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  const persistOperatorName = (value: string) => {
+    setOperatorName(value);
+    try {
+      localStorage.setItem(LS_OPERATOR_NAME, value);
+    } catch {
+      /* ignore */
+    }
+  };
 
   useEffect(() => {
     const d = searchParams.get('d');
@@ -399,6 +434,27 @@ function AppccAceiteRegistroInner() {
             />
           </div>
         </div>
+        <div className="mx-auto w-full max-w-sm px-1">
+          <label
+            htmlFor="appcc-aceite-operator"
+            className="text-[10px] font-bold uppercase tracking-wide text-zinc-500"
+          >
+            Realizado por
+          </label>
+          <p className="mb-1 text-[10px] leading-snug text-zinc-400">
+            Una vez por día: el mismo nombre se guarda en cada freidora que registres.
+          </p>
+          <input
+            id="appcc-aceite-operator"
+            type="text"
+            value={operatorName}
+            onChange={(e) => persistOperatorName(e.target.value)}
+            disabled={!localId || !profileReady}
+            placeholder="Ej. María / Turno mañana"
+            autoComplete="name"
+            className="mt-0.5 h-10 w-full rounded-lg border border-zinc-200 bg-white px-3 text-sm text-zinc-900 outline-none focus:ring-2 focus:ring-[#D32F2F]/25"
+          />
+        </div>
         <div className="flex flex-wrap items-center justify-center gap-2">
           <Link
             href="/appcc/aceite/historial"
@@ -450,6 +506,7 @@ function AppccAceiteRegistroInner() {
                       fryer={fryer}
                       dateKey={dateKey}
                       dayEvents={events}
+                      operatorName={operatorName}
                       disabled={disabled}
                       onRefresh={() => void load()}
                     />

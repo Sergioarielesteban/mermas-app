@@ -13,6 +13,11 @@ function notesCell(n: string | undefined) {
   return t ? t : '—';
 }
 
+function operatorCell(n: string | null | undefined) {
+  const t = n?.trim();
+  return t ? t : '—';
+}
+
 /** Resumen de eventos de aceite en un rango de fechas (más recientes primero en la tabla). */
 export function downloadAppccAceiteResumenPdf(opts: {
   localLabel: string;
@@ -45,24 +50,26 @@ export function downloadAppccAceiteResumenPdf(opts: {
       name,
       APPCC_OIL_EVENT_LABEL[e.event_type],
       litersCell(e.liters_used),
+      operatorCell(e.operator_name),
       notesCell(e.notes),
     ];
   });
 
   autoTable(doc, {
     startY: 76,
-    head: [['Fecha', 'Día', 'Zona', 'Freidora', 'Tipo', 'Litros', 'Notas']],
+    head: [['Fecha', 'Día', 'Zona', 'Freidora', 'Tipo', 'Litros', 'Realizado por', 'Notas']],
     body,
     styles: { fontSize: 8, cellPadding: 4 },
     headStyles: { fillColor: [211, 47, 47] },
     alternateRowStyles: { fillColor: [252, 252, 252] },
     columnStyles: {
-      0: { cellWidth: 72 },
-      1: { cellWidth: 100 },
-      2: { cellWidth: 52 },
-      3: { cellWidth: 100 },
-      4: { cellWidth: 52 },
-      5: { cellWidth: 48 },
+      0: { cellWidth: 62 },
+      1: { cellWidth: 88 },
+      2: { cellWidth: 48 },
+      3: { cellWidth: 82 },
+      4: { cellWidth: 48 },
+      5: { cellWidth: 40 },
+      6: { cellWidth: 72 },
     },
   });
 
