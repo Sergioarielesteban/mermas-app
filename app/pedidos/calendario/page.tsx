@@ -6,7 +6,7 @@ import { useAuth } from '@/components/AuthProvider';
 import PedidosPremiaLockedScreen from '@/components/PedidosPremiaLockedScreen';
 import { canAccessPedidos, canUsePedidosModule } from '@/lib/pedidos-access';
 import { usePedidosDataChangedListener } from '@/hooks/usePedidosDataChangedListener';
-import { fetchOrders, type PedidoOrder } from '@/lib/pedidos-supabase';
+import { fetchOrders, mergePedidoOrdersFromServer, type PedidoOrder } from '@/lib/pedidos-supabase';
 import { getSupabaseClient } from '@/lib/supabase-client';
 
 type CalendarGroup = { date: string; orders: PedidoOrder[] };
@@ -23,7 +23,9 @@ export default function PedidosCalendarioPage() {
     const supabase = getSupabaseClient();
     if (!supabase) return;
     void fetchOrders(supabase, localId)
-      .then((rows) => setOrders(rows.filter((o) => o.status === 'sent')))
+      .then((rows) =>
+        setOrders((prev) => mergePedidoOrdersFromServer(prev, rows).filter((o) => o.status === 'sent')),
+      )
       .catch((err: Error) => setMessage(err.message));
   }, [canUse, localId]);
 

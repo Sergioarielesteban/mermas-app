@@ -14,6 +14,7 @@ import {
   billingQuantityForLine,
   deleteOrder,
   fetchOrders,
+  mergePedidoOrdersFromServer,
   fetchSuppliersWithProducts,
   persistSentOrderAsReceived,
   reopenReceivedOrderToSent,
@@ -311,7 +312,7 @@ export default function PedidosPage() {
     if (!supabase) return;
     void fetchOrders(supabase, localId)
       .then((rows) => {
-        setOrders(rows);
+        setOrders((prev) => mergePedidoOrdersFromServer(prev, rows));
         // No machacar marcas con datos aún viejos del servidor (race: el fetch puede llegar antes que el update).
         setQuickLineMarks((prev) => {
           const next: Record<string, 'ok' | 'bad'> = {};

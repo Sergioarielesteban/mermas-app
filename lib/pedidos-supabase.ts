@@ -365,6 +365,26 @@ export async function fetchOrders(supabase: SupabaseClient, localId: string) {
   return orders;
 }
 
+/** Evita perder pedidos recién creados cuando la lectura va a réplica y aún no incluye la fila nueva. */
+const PEDIDO_MERGE_RECENT_MS = 12 * 60 * 1000;
+
+export function mergePedidoOrdersFromServer(prev: PedidoOrder[], server: PedidoOrder[]): PedidoOrder[] {
+  const serverIds = new Set(server.map((o) => o.id));
+  const now = Date.now();
+  const extras = prev.filter((o) => {
+    if (serverIds.has(o.id)) return false;
+    const created = Date.parse(o.createdAt);
+    if (!Number.isFinite(created)) return false;
+    return now - created < PEDIDO_MERGE_RECENT_MS;
+  });
+  const byId = new Map<string, PedidoOrder>();
+  for (const row of server) byId.set(row.id, row);
+  for (const row of extras) {
+    if (!byId.has(row.id)) byId.set(row.id, row);
+  }
+  return Array.from(byId.values()).sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+}
+
 export async function saveOrder(
   supabase: SupabaseClient,
   localId: string,

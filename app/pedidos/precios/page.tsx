@@ -9,7 +9,12 @@ import PedidosPremiaLockedScreen from '@/components/PedidosPremiaLockedScreen';
 import { canAccessPedidos, canUsePedidosModule } from '@/lib/pedidos-access';
 import { formatQuantityWithUnit } from '@/lib/pedidos-format';
 import { usePedidosDataChangedListener } from '@/hooks/usePedidosDataChangedListener';
-import { billingQuantityForLine, fetchOrders, type PedidoOrder } from '@/lib/pedidos-supabase';
+import {
+  billingQuantityForLine,
+  fetchOrders,
+  mergePedidoOrdersFromServer,
+  type PedidoOrder,
+} from '@/lib/pedidos-supabase';
 import { getSupabaseClient } from '@/lib/supabase-client';
 import type { Unit } from '@/lib/types';
 
@@ -92,7 +97,9 @@ export default function PedidosPreciosPage() {
     const supabase = getSupabaseClient();
     if (!supabase) return;
     void fetchOrders(supabase, localId)
-      .then((rows) => setOrders(rows.filter((o) => o.status !== 'draft')))
+      .then((rows) =>
+        setOrders((prev) => mergePedidoOrdersFromServer(prev, rows).filter((o) => o.status !== 'draft')),
+      )
       .catch((err: Error) => setMessage(err.message));
   }, [canUse, localId]);
 

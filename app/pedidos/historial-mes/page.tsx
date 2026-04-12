@@ -10,7 +10,7 @@ import PedidosPremiaLockedScreen from '@/components/PedidosPremiaLockedScreen';
 import { canAccessPedidos, canUsePedidosModule } from '@/lib/pedidos-access';
 import { usePedidosDataChangedListener } from '@/hooks/usePedidosDataChangedListener';
 import { formatQuantityWithUnit } from '@/lib/pedidos-format';
-import { fetchOrders, type PedidoOrder } from '@/lib/pedidos-supabase';
+import { fetchOrders, mergePedidoOrdersFromServer, type PedidoOrder } from '@/lib/pedidos-supabase';
 import type { Unit } from '@/lib/types';
 
 function totalsWithVat(order: PedidoOrder) {
@@ -32,7 +32,7 @@ export default function PedidosHistorialMesPage() {
     const supabase = getSupabaseClient();
     if (!supabase) return;
     void fetchOrders(supabase, localId)
-      .then((rows) => setOrders(rows))
+      .then((rows) => setOrders((prev) => mergePedidoOrdersFromServer(prev, rows)))
       .catch((err: Error) => setMessage(err.message));
   }, [canUse, localId]);
 

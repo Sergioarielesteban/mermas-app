@@ -328,6 +328,56 @@ function pruneBaconHalfRecords(products: Product[], records: MermaRecord[]) {
   });
 }
 
+/** Evita que un refetch (p. ej. réplica de lectura) sustituya la lista y borre filas recién insertadas. */
+const MERGE_RECENT_MS = 12 * 60 * 1000;
+
+function isSeedMermaId(id: string) {
+  return id.startsWith('seed-m-') || id.startsWith('fix-bacon-half-');
+}
+
+function isSeedProductId(id: string) {
+  return id.startsWith('seed-');
+}
+
+function mergeCloudMermas(prev: MermaRecord[], serverCleaned: MermaRecord[], products: Product[]): MermaRecord[] {
+  const serverIds = new Set(serverCleaned.map((x) => x.id));
+  const now = Date.now();
+  const extras = prev.filter((m) => {
+    if (serverIds.has(m.id)) return false;
+    if (isSeedMermaId(m.id)) return false;
+    if (m.id.startsWith('m_')) return true;
+    const created = Date.parse(m.createdAt);
+    if (!Number.isFinite(created)) return false;
+    return now - created < MERGE_RECENT_MS;
+  });
+  const byId = new Map<string, MermaRecord>();
+  for (const row of serverCleaned) byId.set(row.id, row);
+  for (const row of extras) {
+    if (!byId.has(row.id)) byId.set(row.id, row);
+  }
+  const merged = Array.from(byId.values()).sort((a, b) => (a.occurredAt < b.occurredAt ? 1 : -1));
+  return pruneBaconHalfRecords(products, merged);
+}
+
+function mergeCloudProducts(prev: Product[], serverSorted: Product[]): Product[] {
+  const serverIds = new Set(serverSorted.map((x) => x.id));
+  const now = Date.now();
+  const extras = prev.filter((p) => {
+    if (serverIds.has(p.id)) return false;
+    if (isSeedProductId(p.id)) return false;
+    if (p.id.startsWith('p_')) return true;
+    const created = Date.parse(p.createdAt);
+    if (!Number.isFinite(created)) return false;
+    return now - created < MERGE_RECENT_MS;
+  });
+  const byId = new Map<string, Product>();
+  for (const row of serverSorted) byId.set(row.id, row);
+  for (const row of extras) {
+    if (!byId.has(row.id)) byId.set(row.id, row);
+  }
+  return sortProductsByName(Array.from(byId.values()));
+}
+
 function buildSeedMermas(products: Product[]): MermaRecord[] {
   const rows = (seedMermasRaw as SeedMermaRow[]) ?? [];
   const out: MermaRecord[] = [];
@@ -413,9 +463,10 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
     if (!supabase || !localId) return;
     try {
       const { products: p, mermas: m } = await fetchProductsAndMermas(supabase, localId);
-      const cleaned = pruneBaconHalfRecords(p, m);
-      setProducts(sortProductsByName(p));
-      setMermas(cleaned);
+      const serverProducts = sortProductsByName(p);
+      const serverMermas = pruneBaconHalfRecords(p, m);
+      setProducts((prev) => mergeCloudProducts(prev, serverProducts));
+      setMermas((prev) => mergeCloudMermas(prev, serverMermas, serverProducts));
       setCloudDataLoaded(true);
     } catch {
       // Keep last known state; do not wipe UI on transient cloud errors.
@@ -463,20 +514,6 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
       cancelled = true;
       window.clearTimeout(t1);
       window.clearTimeout(t2);
-    };
-  }, [cloudMode, hydrated, localId, refetchCloud]);
-
-  useEffect(() => {
-    if (!isBrowser() || !hydrated || !cloudMode || !localId) return;
-    const pull = () => {
-      if (document.visibilityState !== 'visible') return;
-      void refetchCloud();
-    };
-    document.addEventListener('visibilitychange', pull);
-    window.addEventListener('pageshow', pull);
-    return () => {
-      document.removeEventListener('visibilitychange', pull);
-      window.removeEventListener('pageshow', pull);
     };
   }, [cloudMode, hydrated, localId, refetchCloud]);
 

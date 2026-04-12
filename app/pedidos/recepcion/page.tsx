@@ -14,6 +14,7 @@ import { formatQuantityWithUnit, unitPriceCatalogSuffix } from '@/lib/pedidos-fo
 import {
   billingQuantityForLine,
   fetchOrders,
+  mergePedidoOrdersFromServer,
   setOrderPriceReviewArchived,
   setOrderStatus,
   unitCanDeclareScaleKgOnReception,
@@ -84,7 +85,11 @@ export default function RecepcionPedidosPage() {
     if (!supabase) return;
     void fetchOrders(supabase, localId)
       .then((rows) =>
-        setOrders(rows.filter((row) => row.status === 'sent' || row.status === 'received')),
+        setOrders((prev) =>
+          mergePedidoOrdersFromServer(prev, rows).filter(
+            (row) => row.status === 'sent' || row.status === 'received',
+          ),
+        ),
       )
       .catch((err: Error) => setMessage(err.message));
   }, [canUse, localId]);
