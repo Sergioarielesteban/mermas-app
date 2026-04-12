@@ -1,14 +1,12 @@
 'use client';
 
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import React from 'react';
 import type { LucideIcon } from 'lucide-react';
 import { BookOpen, Calculator, ChefHat, ClipboardList, ShieldCheck, ShoppingCart } from 'lucide-react';
 import { CHEF_ONE_TAPER_LINE_CLASS } from '@/components/ChefOneGlowLine';
 import MermasStyleHero from '@/components/MermasStyleHero';
 import { useAuth } from '@/components/AuthProvider';
-import { SESSION_SHOW_CONTROL_PANEL } from '@/lib/session-flags';
 import { canAccessPedidos } from '@/lib/pedidos-access';
 
 const LINE = `mx-auto mt-4 w-24 ${CHEF_ONE_TAPER_LINE_CLASS}`;
@@ -64,41 +62,9 @@ function HubTile({ href, onClick, label, sub, Icon, tone = 'zinc' }: TileProps) 
 }
 
 export default function PanelControlPage() {
-  const router = useRouter();
   const { localCode, localName, localId, email } = useAuth();
   const showPedidos = canAccessPedidos(localCode, email, localName, localId);
   const [stubMessage, setStubMessage] = React.useState<string | null>(null);
-  const [gateOk, setGateOk] = React.useState(false);
-
-  React.useEffect(() => {
-    if (typeof window === 'undefined') return;
-    try {
-      if (sessionStorage.getItem(SESSION_SHOW_CONTROL_PANEL) !== '1') {
-        router.replace('/dashboard');
-        return;
-      }
-      setGateOk(true);
-      // Quitar el flag en el siguiente tick para que React Strict Mode (doble montaje en dev) no pierda el acceso antes de pintar.
-      const t = window.setTimeout(() => {
-        try {
-          sessionStorage.removeItem(SESSION_SHOW_CONTROL_PANEL);
-        } catch {
-          /* ignore */
-        }
-      }, 0);
-      return () => window.clearTimeout(t);
-    } catch {
-      router.replace('/dashboard');
-    }
-  }, [router]);
-
-  if (!gateOk) {
-    return (
-      <div className="grid min-h-[45vh] place-items-center">
-        <p className="text-sm font-medium text-zinc-500">Cargando…</p>
-      </div>
-    );
-  }
 
   const onStub = (name: string) => {
     setStubMessage(`${name}: en construcción.`);

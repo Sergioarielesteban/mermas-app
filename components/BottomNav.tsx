@@ -2,18 +2,12 @@
 
 import { LayoutDashboard } from 'lucide-react';
 import { usePathname, useRouter } from 'next/navigation';
-import { SESSION_SHOW_CONTROL_PANEL } from '@/lib/session-flags';
 
 export default function BottomNav() {
   const pathname = usePathname();
   const router = useRouter();
 
   const goToControlPanel = () => {
-    try {
-      sessionStorage.setItem(SESSION_SHOW_CONTROL_PANEL, '1');
-    } catch {
-      /* ignore */
-    }
     router.push('/panel');
   };
 

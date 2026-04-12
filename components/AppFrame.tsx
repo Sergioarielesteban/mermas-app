@@ -5,7 +5,6 @@ import { usePathname, useRouter } from 'next/navigation';
 import AppShell from '@/components/AppShell';
 import BottomNav from '@/components/BottomNav';
 import { useAuth } from '@/components/AuthProvider';
-import { SESSION_SHOW_CONTROL_PANEL } from '@/lib/session-flags';
 import ChefOneLaunchMark from '@/components/ChefOneLaunchMark';
 
 export default function AppFrame({ children }: { children: React.ReactNode }) {
@@ -14,7 +13,6 @@ export default function AppFrame({ children }: { children: React.ReactNode }) {
   const { email, loading } = useAuth();
   const isLogin = pathname === '/login';
   const [forceUnlock, setForceUnlock] = React.useState(false);
-  const [showSplash, setShowSplash] = React.useState(true);
 
   useEffect(() => {
     if (!loading) {
@@ -41,20 +39,9 @@ export default function AppFrame({ children }: { children: React.ReactNode }) {
       }, 400);
     }
     if (email && isLogin) {
-      try {
-        sessionStorage.setItem(SESSION_SHOW_CONTROL_PANEL, '1');
-      } catch {
-        /* modo privado u otro */
-      }
       router.replace('/panel');
     }
   }, [effectiveLoading, email, isLogin, router]);
-
-  useEffect(() => {
-    if (effectiveLoading || isLogin || !email) return;
-    const timer = window.setTimeout(() => setShowSplash(false), 1800);
-    return () => window.clearTimeout(timer);
-  }, [effectiveLoading, isLogin, email]);
 
   // /login nunca debe quedar detrás de "Cargando sesión" (getSession puede tardar o colgarse en red).
   if (isLogin) {
@@ -104,16 +91,6 @@ export default function AppFrame({ children }: { children: React.ReactNode }) {
 
   if (!email && !isLogin) {
     return null;
-  }
-
-  if (showSplash) {
-    return (
-      <main className="flex min-h-[100dvh] flex-col items-center justify-center bg-white px-6">
-        <div className="w-full max-w-md">
-          <ChefOneLaunchMark />
-        </div>
-      </main>
-    );
   }
 
   return (

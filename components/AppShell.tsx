@@ -7,7 +7,6 @@ import { BookOpen, Drumstick, LogOut, Menu, X, RefreshCcw, ShoppingCart } from '
 import { useAuth } from '@/components/AuthProvider';
 import PullToRefreshPedidos from '@/components/PullToRefreshPedidos';
 import { canAccessPedidos } from '@/lib/pedidos-access';
-import { SESSION_SHOW_CONTROL_PANEL } from '@/lib/session-flags';
 import ChefOneGlowLine from '@/components/ChefOneGlowLine';
 
 type NavItem = {
@@ -48,11 +47,6 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const confirmAndLogout = () => setConfirmLogoutOpen(true);
 
   const goToControlPanel = useCallback(() => {
-    try {
-      sessionStorage.setItem(SESSION_SHOW_CONTROL_PANEL, '1');
-    } catch {
-      /* ignore */
-    }
     router.push('/panel');
   }, [router]);
 
