@@ -83,6 +83,13 @@ alter table public.purchase_order_items
 alter table public.purchase_orders
   add column if not exists price_review_archived_at timestamptz;
 
+-- Precio unitario del pedido al crear/enviar; no se altera al cotejar albarán en Recepción (price_per_unit sí).
+alter table public.purchase_order_items
+  add column if not exists base_price_per_unit numeric(10,2);
+update public.purchase_order_items
+set base_price_per_unit = price_per_unit
+where base_price_per_unit is null;
+
 -- Align unit constraints with app units
 alter table public.pedido_supplier_products
   drop constraint if exists pedido_supplier_products_unit_check;

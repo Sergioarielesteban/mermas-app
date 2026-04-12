@@ -7,7 +7,7 @@ import { ChevronLeft, Download, Thermometer } from 'lucide-react';
 import AppccCompactHero from '@/components/AppccCompactHero';
 import { useAuth } from '@/components/AuthProvider';
 import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
-import { downloadAppccTemperaturasPdf } from '@/lib/appcc-pdf';
+import { downloadAppccTemperaturasPdf, downloadAppccTemperaturasRangePdf } from '@/lib/appcc-pdf';
 import {
   APPCC_SLOT_LABEL,
   APPCC_UNIT_TYPE_LABEL,
@@ -16,14 +16,18 @@ import {
   type AppccReadingRow,
   type AppccSlot,
   type AppccZone,
+  enumerateDateKeysInclusive,
   fetchAppccColdUnits,
   fetchAppccReadingsForDate,
+  fetchAppccReadingsInRange,
   formatAppccDateEs,
   isTempOutOfRange,
   madridDateKey,
   readingsByUnitAndSlot,
   upsertAppccReading,
 } from '@/lib/appcc-supabase';
+
+const PDF_MAX_DAYS = 120;
 
 function parseTempInput(raw: string): number | null {
   const n = Number(String(raw).trim().replace(',', '.'));
@@ -246,6 +250,8 @@ function AppccTemperaturasInner() {
   const searchParams = useSearchParams();
   const { localId, profileReady, localName, localCode } = useAuth();
   const [dateKey, setDateKey] = useState(() => madridDateKey());
+  const [pdfDateFrom, setPdfDateFrom] = useState(() => madridDateKey());
+  const [pdfDateTo, setPdfDateTo] = useState(() => madridDateKey());
   const [units, setUnits] = useState<AppccColdUnitRow[]>([]);
   const [readings, setReadings] = useState<AppccReadingRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -254,7 +260,11 @@ function AppccTemperaturasInner() {
 
   useEffect(() => {
     const d = searchParams.get('d');
-    if (d && /^\d{4}-\d{2}-\d{2}$/.test(d)) setDateKey(d);
+    if (d && /^\d{4}-\d{2}-\d{2}$/.test(d)) {
+      setDateKey(d);
+      setPdfDateFrom(d);
+      setPdfDateTo(d);
+    }
   }, [searchParams]);
 
   const supabaseOk = isSupabaseEnabled() && getSupabaseClient();
@@ -388,19 +398,45 @@ function AppccTemperaturasInner() {
   const disabled = !localId || !profileReady || !supabaseOk || loading;
 
   const localLabel = localName ?? localCode ?? '—';
-  const printTitleDate = formatAppccDateEs(dateKey);
 
-  const handleDownloadPdf = () => {
+  const handleDownloadPdf = async () => {
     if (orderedUnits.length === 0) return;
+    const from = pdfDateFrom <= pdfDateTo ? pdfDateFrom : pdfDateTo;
+    const to = pdfDateFrom <= pdfDateTo ? pdfDateTo : pdfDateFrom;
+    const span = enumerateDateKeysInclusive(from, to).length;
+    if (span === 0) return;
+    if (span > PDF_MAX_DAYS) {
+      setBanner(`El PDF admite como máximo ${PDF_MAX_DAYS} días por archivo.`);
+      return;
+    }
     setPdfBusy(true);
+    setBanner(null);
     try {
-      downloadAppccTemperaturasPdf({
+      const supabase = getSupabaseClient();
+      if (!supabase || !localId) {
+        setBanner('Sesión no disponible para descargar.');
+        return;
+      }
+      if (from === to && from === dateKey) {
+        downloadAppccTemperaturasPdf({
+          localLabel,
+          dateKey: from,
+          dateFormatted: formatAppccDateEs(from),
+          orderedUnits,
+          bySlot,
+        });
+        return;
+      }
+      const rows = await fetchAppccReadingsInRange(supabase, localId, from, to);
+      downloadAppccTemperaturasRangePdf({
         localLabel,
-        dateKey,
-        dateFormatted: printTitleDate,
+        dateFrom: from,
+        dateTo: to,
         orderedUnits,
-        bySlot,
+        readings: rows,
       });
+    } catch (e) {
+      setBanner(e instanceof Error ? e.message : 'Error al generar el PDF.');
     } finally {
       setPdfBusy(false);
     }
@@ -449,11 +485,44 @@ function AppccTemperaturasInner() {
               id="appcc-date"
               type="date"
               value={dateKey}
-              onChange={(e) => setDateKey(e.target.value)}
+              onChange={(e) => {
+                const v = e.target.value;
+                setDateKey(v);
+                setPdfDateFrom(v);
+                setPdfDateTo(v);
+              }}
               className="absolute inset-0 min-h-full min-w-full cursor-pointer opacity-0 text-base"
               aria-label="Elegir día del registro"
             />
           </div>
+        </div>
+        <div className="mx-auto w-full max-w-sm rounded-xl border border-zinc-100 bg-zinc-50/90 px-3 py-2.5">
+          <p className="text-center text-[10px] font-bold uppercase tracking-wide text-zinc-500">
+            Rango para el PDF
+          </p>
+          <div className="mt-2 flex flex-wrap items-end justify-center gap-3">
+            <label className="flex flex-col gap-0.5">
+              <span className="text-[9px] font-medium text-zinc-500">Desde</span>
+              <input
+                type="date"
+                value={pdfDateFrom}
+                onChange={(e) => setPdfDateFrom(e.target.value)}
+                className="h-9 rounded-lg border border-zinc-200 bg-white px-2 text-xs font-semibold text-zinc-900 outline-none focus:ring-2 focus:ring-[#D32F2F]/20"
+              />
+            </label>
+            <label className="flex flex-col gap-0.5">
+              <span className="text-[9px] font-medium text-zinc-500">Hasta</span>
+              <input
+                type="date"
+                value={pdfDateTo}
+                onChange={(e) => setPdfDateTo(e.target.value)}
+                className="h-9 rounded-lg border border-zinc-200 bg-white px-2 text-xs font-semibold text-zinc-900 outline-none focus:ring-2 focus:ring-[#D32F2F]/20"
+              />
+            </label>
+          </div>
+          <p className="mt-1.5 text-center text-[10px] text-zinc-400">
+            Máximo {PDF_MAX_DAYS} días · una página por día
+          </p>
         </div>
         <div className="flex flex-wrap items-center justify-center gap-2">
           <Link
@@ -464,7 +533,7 @@ function AppccTemperaturasInner() {
           </Link>
           <button
             type="button"
-            onClick={handleDownloadPdf}
+            onClick={() => void handleDownloadPdf()}
             disabled={orderedUnits.length === 0 || pdfBusy}
             className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border border-zinc-900/15 bg-zinc-900 px-3 text-xs font-bold text-white hover:bg-zinc-800 disabled:opacity-45"
           >

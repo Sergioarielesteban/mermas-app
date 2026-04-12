@@ -13,7 +13,7 @@ import { dispatchPedidosDataChanged } from '@/hooks/usePedidosDataChangedListene
 import { canAccessPedidos, canUsePedidosModule } from '@/lib/pedidos-access';
 import { formatQuantityWithUnit, unitPriceCatalogSuffix } from '@/lib/pedidos-format';
 import {
-  billingQuantityForLine,
+  billingQuantityForReceptionPrice,
   setOrderPriceReviewArchived,
   unitCanDeclareScaleKgOnReception,
   unitSupportsReceivedWeightKg,
@@ -159,7 +159,7 @@ export default function RecepcionPedidosPage() {
         if (order.id !== orderId) return order;
         const nextItems = order.items.map((item) => {
           if (item.id !== itemId) return item;
-          billingQty = billingQuantityForLine(item);
+          billingQty = billingQuantityForReceptionPrice(item);
           return {
             ...item,
             pricePerUnit: nextPrice,
@@ -187,7 +187,7 @@ export default function RecepcionPedidosPage() {
         if (order.id !== orderId) return order;
         const nextItems = order.items.map((item) => {
           if (item.id !== itemId) return item;
-          const bq = billingQuantityForLine(item);
+          const bq = billingQuantityForReceptionPrice(item);
           return { ...item, pricePerUnit: nextPrice, lineTotal: Math.round(nextPrice * bq * 100) / 100 };
         });
         return { ...order, items: nextItems };
@@ -227,9 +227,10 @@ export default function RecepcionPedidosPage() {
       void (async () => {
         try {
           if (parsed == null) {
+            const q = billingQuantityForReceptionPrice({ ...itemSnap, receivedWeightKg: null });
             await updateOrderItemReceivedWeightKg(supabase, localId, itemId, null);
             await updateOrderItemReceived(supabase, localId, itemId, itemSnap.receivedQuantity);
-            await updateOrderItemPrice(supabase, localId, itemId, price, itemSnap.receivedQuantity);
+            await updateOrderItemPrice(supabase, localId, itemId, price, q);
           } else {
             await updateOrderItemReceivedWeightKg(supabase, localId, itemId, parsed);
             await updateOrderItemReceived(supabase, localId, itemId, parsed);
@@ -243,7 +244,8 @@ export default function RecepcionPedidosPage() {
                 items: order.items.map((item) => {
                   if (item.id !== itemId) return item;
                   if (parsed == null) {
-                    const lt = Math.round(price * item.receivedQuantity * 100) / 100;
+                    const q = billingQuantityForReceptionPrice({ ...item, receivedWeightKg: null });
+                    const lt = Math.round(price * q * 100) / 100;
                     return { ...item, receivedWeightKg: null, lineTotal: lt };
                   }
                   const lt = Math.round(price * parsed * 100) / 100;
@@ -429,12 +431,32 @@ export default function RecepcionPedidosPage() {
                             : ''}
                         </p>
                       ) : null}
+                      {item.basePricePerUnit != null && Number.isFinite(item.basePricePerUnit) ? (
+                        <p className="text-xs text-zinc-600">
+                          Precio base (pedido):{' '}
+                          <span className="font-semibold text-zinc-800">
+                            {item.basePricePerUnit.toFixed(2)} €/{unitPriceCatalogSuffix[item.unit]}
+                          </span>
+                        </p>
+                      ) : null}
                       <p className="text-xs text-zinc-700">
-                        P/unit:{' '}
+                        Precio albarán:{' '}
                         <span className="font-bold text-zinc-900">
                           {item.pricePerUnit.toFixed(2)} €/{unitPriceCatalogSuffix[item.unit]}
                         </span>
                       </p>
+                      {item.basePricePerUnit != null &&
+                      Number.isFinite(item.basePricePerUnit) &&
+                      Math.abs(item.pricePerUnit - item.basePricePerUnit) > 0.005 ? (
+                        <p className="text-xs font-semibold text-amber-900">
+                          Variación:{' '}
+                          {item.pricePerUnit >= item.basePricePerUnit ? '+' : ''}
+                          {(item.pricePerUnit - item.basePricePerUnit).toFixed(2)} €
+                          {item.basePricePerUnit > 0
+                            ? ` (${item.pricePerUnit >= item.basePricePerUnit ? '+' : ''}${((((item.pricePerUnit - item.basePricePerUnit) / item.basePricePerUnit) * 100)).toFixed(1)} %)`
+                            : ''}
+                        </p>
+                      ) : null}
                       <p className="text-xs text-zinc-700">
                         Subt:{' '}
                         <span className="font-bold text-zinc-900">{item.lineTotal.toFixed(2)} €</span>
@@ -633,12 +655,32 @@ export default function RecepcionPedidosPage() {
                                   Kg reales guardados: {item.receivedWeightKg.toFixed(3)} kg
                                 </p>
                               ) : null}
+                              {item.basePricePerUnit != null && Number.isFinite(item.basePricePerUnit) ? (
+                                <p className="text-xs text-zinc-600">
+                                  Precio base (pedido):{' '}
+                                  <span className="font-semibold text-zinc-800">
+                                    {item.basePricePerUnit.toFixed(2)} €/{unitPriceCatalogSuffix[item.unit]}
+                                  </span>
+                                </p>
+                              ) : null}
                               <p className="text-xs text-zinc-700">
-                                P/unit:{' '}
+                                Precio albarán:{' '}
                                 <span className="font-bold text-zinc-900">
                                   {item.pricePerUnit.toFixed(2)} €/{unitPriceCatalogSuffix[item.unit]}
                                 </span>
                               </p>
+                              {item.basePricePerUnit != null &&
+                              Number.isFinite(item.basePricePerUnit) &&
+                              Math.abs(item.pricePerUnit - item.basePricePerUnit) > 0.005 ? (
+                                <p className="text-xs font-semibold text-amber-900">
+                                  Variación:{' '}
+                                  {item.pricePerUnit >= item.basePricePerUnit ? '+' : ''}
+                                  {(item.pricePerUnit - item.basePricePerUnit).toFixed(2)} €
+                                  {item.basePricePerUnit > 0
+                                    ? ` (${item.pricePerUnit >= item.basePricePerUnit ? '+' : ''}${((((item.pricePerUnit - item.basePricePerUnit) / item.basePricePerUnit) * 100)).toFixed(1)} %)`
+                                    : ''}
+                                </p>
+                              ) : null}
                               <p className="text-xs text-zinc-700">
                                 Subt:{' '}
                                 <span className="font-bold text-zinc-900">{item.lineTotal.toFixed(2)} €</span>

@@ -16,9 +16,18 @@ import {
   type AppccOilEventWithFryer,
   fetchAppccFryers,
   fetchOilEventsForDate,
+  fetchOilEventsInRangeWithFryer,
   insertOilEvent,
 } from '@/lib/appcc-aceite-supabase';
-import { APPCC_ZONE_LABEL, formatAppccDateEs, madridDateKey, type AppccZone } from '@/lib/appcc-supabase';
+import {
+  APPCC_ZONE_LABEL,
+  enumerateDateKeysInclusive,
+  formatAppccDateEs,
+  madridDateKey,
+  type AppccZone,
+} from '@/lib/appcc-supabase';
+
+const PDF_MAX_DAYS = 120;
 
 const LS_OPERATOR_NAME = 'appcc-aceite-operator-name';
 
@@ -235,6 +244,8 @@ function AppccAceiteRegistroInner() {
   const searchParams = useSearchParams();
   const { localId, profileReady, localName, localCode } = useAuth();
   const [dateKey, setDateKey] = useState(() => madridDateKey());
+  const [pdfDateFrom, setPdfDateFrom] = useState(() => madridDateKey());
+  const [pdfDateTo, setPdfDateTo] = useState(() => madridDateKey());
   const [operatorName, setOperatorName] = useState('');
   const [fryers, setFryers] = useState<AppccFryerRow[]>([]);
   const [events, setEvents] = useState<AppccOilEventRow[]>([]);
@@ -262,7 +273,11 @@ function AppccAceiteRegistroInner() {
 
   useEffect(() => {
     const d = searchParams.get('d');
-    if (d && /^\d{4}-\d{2}-\d{2}$/.test(d)) setDateKey(d);
+    if (d && /^\d{4}-\d{2}-\d{2}$/.test(d)) {
+      setDateKey(d);
+      setPdfDateFrom(d);
+      setPdfDateTo(d);
+    }
   }, [searchParams]);
 
   const supabaseOk = isSupabaseEnabled() && getSupabaseClient();
@@ -379,19 +394,51 @@ function AppccAceiteRegistroInner() {
   const disabled = !localId || !profileReady || !supabaseOk || loading;
   const localLabel = localName ?? localCode ?? '—';
 
-  const handleDownloadPdf = () => {
-    if (events.length === 0) return;
+  const handleDownloadPdf = async () => {
+    const from = pdfDateFrom <= pdfDateTo ? pdfDateFrom : pdfDateTo;
+    const to = pdfDateFrom <= pdfDateTo ? pdfDateTo : pdfDateFrom;
+    const span = enumerateDateKeysInclusive(from, to).length;
+    if (span === 0) return;
+    if (span > PDF_MAX_DAYS) {
+      setBanner(`El PDF admite como máximo ${PDF_MAX_DAYS} días por archivo.`);
+      return;
+    }
     setPdfBusy(true);
+    setBanner(null);
     try {
-      const enriched = enrichEventsForPdf(events, fryers);
-      enriched.sort((a, b) => a.recorded_at.localeCompare(b.recorded_at));
+      const supabase = getSupabaseClient();
+      if (!supabase || !localId) {
+        setBanner('Sesión no disponible para descargar.');
+        return;
+      }
+      let enriched: AppccOilEventWithFryer[];
+      if (from === to && from === dateKey) {
+        enriched = enrichEventsForPdf(events, fryers);
+      } else {
+        enriched = await fetchOilEventsInRangeWithFryer(supabase, localId, from, to, 'all');
+      }
+      enriched.sort((a, b) => {
+        const dc = a.event_date.localeCompare(b.event_date);
+        if (dc !== 0) return dc;
+        return a.recorded_at.localeCompare(b.recorded_at);
+      });
+      if (enriched.length === 0) {
+        setBanner('No hay registros de aceite en el periodo seleccionado.');
+        return;
+      }
+      const suffix =
+        from === to
+          ? `Día · ${formatAppccDateEs(from)}`
+          : `${formatAppccDateEs(from)} – ${formatAppccDateEs(to)}`;
       downloadAppccAceiteResumenPdf({
         localLabel,
-        dateFrom: dateKey,
-        dateTo: dateKey,
+        dateFrom: from,
+        dateTo: to,
         events: enriched,
-        titleSuffix: `Día · ${formatAppccDateEs(dateKey)}`,
+        titleSuffix: suffix,
       });
+    } catch (e) {
+      setBanner(e instanceof Error ? e.message : 'Error al generar el PDF.');
     } finally {
       setPdfBusy(false);
     }
@@ -441,11 +488,42 @@ function AppccAceiteRegistroInner() {
               id="appcc-aceite-date"
               type="date"
               value={dateKey}
-              onChange={(e) => setDateKey(e.target.value)}
+              onChange={(e) => {
+                const v = e.target.value;
+                setDateKey(v);
+                setPdfDateFrom(v);
+                setPdfDateTo(v);
+              }}
               className="absolute inset-0 min-h-full min-w-full cursor-pointer opacity-0 text-base"
               aria-label="Elegir día del registro"
             />
           </div>
+        </div>
+        <div className="mx-auto w-full max-w-sm rounded-xl border border-zinc-100 bg-zinc-50/90 px-3 py-2.5">
+          <p className="text-center text-[10px] font-bold uppercase tracking-wide text-zinc-500">
+            Rango para el PDF
+          </p>
+          <div className="mt-2 flex flex-wrap items-end justify-center gap-3">
+            <label className="flex flex-col gap-0.5">
+              <span className="text-[9px] font-medium text-zinc-500">Desde</span>
+              <input
+                type="date"
+                value={pdfDateFrom}
+                onChange={(e) => setPdfDateFrom(e.target.value)}
+                className="h-9 rounded-lg border border-zinc-200 bg-white px-2 text-xs font-semibold text-zinc-900 outline-none focus:ring-2 focus:ring-[#D32F2F]/20"
+              />
+            </label>
+            <label className="flex flex-col gap-0.5">
+              <span className="text-[9px] font-medium text-zinc-500">Hasta</span>
+              <input
+                type="date"
+                value={pdfDateTo}
+                onChange={(e) => setPdfDateTo(e.target.value)}
+                className="h-9 rounded-lg border border-zinc-200 bg-white px-2 text-xs font-semibold text-zinc-900 outline-none focus:ring-2 focus:ring-[#D32F2F]/20"
+              />
+            </label>
+          </div>
+          <p className="mt-1.5 text-center text-[10px] text-zinc-400">Máximo {PDF_MAX_DAYS} días</p>
         </div>
         <div className="mx-auto w-full max-w-sm px-1">
           <label
@@ -477,8 +555,8 @@ function AppccAceiteRegistroInner() {
           </Link>
           <button
             type="button"
-            onClick={handleDownloadPdf}
-            disabled={events.length === 0 || pdfBusy}
+            onClick={() => void handleDownloadPdf()}
+            disabled={!localId || !supabaseOk || pdfBusy}
             className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border border-zinc-900/15 bg-zinc-900 px-3 text-xs font-bold text-white hover:bg-zinc-800 disabled:opacity-45"
           >
             <Download className="h-3.5 w-3.5" aria-hidden />

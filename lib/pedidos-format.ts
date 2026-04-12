@@ -1,4 +1,4 @@
-import type { PedidoOrder } from '@/lib/pedidos-supabase';
+import { billingQuantityForLine, type PedidoOrder } from '@/lib/pedidos-supabase';
 import type { Unit } from '@/lib/types';
 
 const UNIT_WORD: Record<Unit, { one: string; many: string }> = {
@@ -75,6 +75,12 @@ export function orderItemHasIncident(item: PedidoOrder['items'][number]): boolea
 export function lineSubtotalForOrderListDisplay(item: PedidoOrder['items'][number]): number {
   if (orderItemHasIncident(item)) {
     return Math.round(item.pricePerUnit * item.quantity * 100) / 100;
+  }
+  if (item.lineTotal > 0) return item.lineTotal;
+  const billed = billingQuantityForLine(item);
+  const effQty = billed > 0 ? billed : item.quantity;
+  if (effQty > 0 && item.pricePerUnit >= 0) {
+    return Math.round(item.pricePerUnit * effQty * 100) / 100;
   }
   return item.lineTotal;
 }

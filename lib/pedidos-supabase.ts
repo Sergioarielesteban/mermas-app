@@ -19,6 +19,22 @@ export function billingQuantityForLine(item: Pick<PedidoOrderItem, 'unit' | 'rec
   return item.receivedQuantity;
 }
 
+function lineIsMissingNotReceived(item: Pick<PedidoOrderItem, 'incidentType'>): boolean {
+  return item.incidentType === 'missing';
+}
+
+/**
+ * Cantidad para recalcular subtotal al ajustar precio en Recepción.
+ * Si aún no hay cantidad recibida/peso en BD (0), usa la cantidad pedida para no dejar line_total en 0.
+ * No aplica si la línea es «no recibida» (missing).
+ */
+export function billingQuantityForReceptionPrice(item: PedidoOrderItem): number {
+  const b = billingQuantityForLine(item);
+  if (b > 0) return b;
+  if (lineIsMissingNotReceived(item)) return 0;
+  return item.quantity > 0 ? item.quantity : 0;
+}
+
 export type PedidoStatus = 'draft' | 'sent' | 'received';
 
 export type PedidoSupplierProduct = {
@@ -56,6 +72,8 @@ export type PedidoOrderItem = {
   receivedWeightKg?: number | null;
   incidentType?: 'missing' | 'damaged' | 'wrong-item' | null;
   incidentNotes?: string;
+  /** Precio unitario del pedido al enviar (no se sobrescribe al revisar albarán). */
+  basePricePerUnit?: number;
 };
 
 export type PedidoOrder = {
@@ -117,6 +135,7 @@ type OrderItemRow = {
   quantity: number;
   received_quantity: number;
   price_per_unit: number;
+  base_price_per_unit?: number | null;
   vat_rate: number;
   line_total: number;
   estimated_kg_per_unit: number | null;
@@ -313,7 +332,7 @@ export async function fetchOrders(supabase: SupabaseClient, localId: string) {
   const { data: itemRows, error: iErr } = await supabase
     .from('purchase_order_items')
     .select(
-      'id,order_id,supplier_product_id,product_name,unit,quantity,received_quantity,price_per_unit,vat_rate,line_total,estimated_kg_per_unit,received_weight_kg,incident_type,incident_notes',
+      'id,order_id,supplier_product_id,product_name,unit,quantity,received_quantity,price_per_unit,base_price_per_unit,vat_rate,line_total,estimated_kg_per_unit,received_weight_kg,incident_type,incident_notes',
     )
     .in('order_id', ids.length ? ids : ['00000000-0000-0000-0000-000000000000']);
   if (iErr) throw new Error(iErr.message);
@@ -331,6 +350,9 @@ export async function fetchOrders(supabase: SupabaseClient, localId: string) {
       pricePerUnit: Number(row.price_per_unit),
       vatRate: Number(row.vat_rate ?? 0),
       lineTotal: Number(row.line_total),
+      ...(row.base_price_per_unit != null && Number.isFinite(Number(row.base_price_per_unit))
+        ? { basePricePerUnit: Number(row.base_price_per_unit) }
+        : {}),
       ...(row.estimated_kg_per_unit != null
         ? { estimatedKgPerUnit: Number(row.estimated_kg_per_unit) }
         : {}),
@@ -386,7 +408,7 @@ export async function fetchOrderById(
   const { data: itemRows, error: iErr } = await supabase
     .from('purchase_order_items')
     .select(
-      'id,order_id,supplier_product_id,product_name,unit,quantity,received_quantity,price_per_unit,vat_rate,line_total,estimated_kg_per_unit,received_weight_kg,incident_type,incident_notes',
+      'id,order_id,supplier_product_id,product_name,unit,quantity,received_quantity,price_per_unit,base_price_per_unit,vat_rate,line_total,estimated_kg_per_unit,received_weight_kg,incident_type,incident_notes',
     )
     .eq('order_id', orderId)
     .eq('local_id', localId);
@@ -402,6 +424,9 @@ export async function fetchOrderById(
     pricePerUnit: Number(ir.price_per_unit),
     vatRate: Number(ir.vat_rate ?? 0),
     lineTotal: Number(ir.line_total),
+    ...(ir.base_price_per_unit != null && Number.isFinite(Number(ir.base_price_per_unit))
+      ? { basePricePerUnit: Number(ir.base_price_per_unit) }
+      : {}),
     ...(ir.estimated_kg_per_unit != null ? { estimatedKgPerUnit: Number(ir.estimated_kg_per_unit) } : {}),
     receivedWeightKg: ir.received_weight_kg != null ? Number(ir.received_weight_kg) : null,
     incidentType: ir.incident_type,
@@ -567,6 +592,7 @@ export async function saveOrder(
         quantity: item.quantity,
         received_quantity: item.receivedQuantity,
         price_per_unit: Math.round(item.pricePerUnit * 100) / 100,
+        base_price_per_unit: Math.round(item.pricePerUnit * 100) / 100,
         vat_rate: Math.max(0, Math.round((item.vatRate ?? 0) * 10000) / 10000),
         line_total: Math.round(item.lineTotal * 100) / 100,
         estimated_kg_per_unit:
@@ -769,7 +795,7 @@ export async function persistSentOrderAsReceived(
     }
     await updateOrderItemReceived(supabase, localId, item.id, item.receivedQuantity);
     if (!preserveOrderPricing) {
-      const billingQty = billingQuantityForLine(item);
+      const billingQty = billingQuantityForReceptionPrice(item);
       await updateOrderItemPrice(supabase, localId, item.id, item.pricePerUnit, billingQty);
     }
   }

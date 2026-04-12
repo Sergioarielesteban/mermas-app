@@ -137,6 +137,30 @@ export function dateKeyDaysAgo(days: number, from: Date = new Date()) {
   return madridDateKey(t);
 }
 
+const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+/** Días civiles entre dos claves YYYY-MM-DD (inclusive), orden corregido si hace falta. */
+export function enumerateDateKeysInclusive(dateFrom: string, dateTo: string): string[] {
+  if (!ISO_DATE_RE.test(dateFrom) || !ISO_DATE_RE.test(dateTo)) return [];
+  let a = dateFrom;
+  let b = dateTo;
+  if (a > b) [a, b] = [b, a];
+  const out: string[] = [];
+  let cur = a;
+  for (;;) {
+    out.push(cur);
+    if (cur === b) break;
+    const [y, mo, d] = cur.split('-').map((n) => Number(n));
+    const next = new Date(y, mo - 1, d + 1);
+    const y2 = next.getFullYear();
+    const m2 = String(next.getMonth() + 1).padStart(2, '0');
+    const d2 = String(next.getDate()).padStart(2, '0');
+    cur = `${y2}-${m2}-${d2}`;
+    if (out.length > 400) break;
+  }
+  return out;
+}
+
 export function readingsByUnitAndSlot(rows: AppccReadingRow[]) {
   const map = new Map<string, AppccReadingRow>();
   for (const r of rows) {
