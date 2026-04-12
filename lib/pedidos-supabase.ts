@@ -428,11 +428,8 @@ export async function fetchOrderById(
   };
 }
 
-/** Evita perder pedidos recién creados cuando la lectura va a réplica y aún no incluye la fila nueva. */
-const PEDIDO_MERGE_RECENT_MS = 12 * 60 * 1000;
-
 export type MergePedidoOrdersOptions = {
-  /** Ids borrados en BD en esta sesión: no revivirlos aunque sigan en `prev` por caché o ventana «reciente». */
+  /** Ids borrados en BD en esta sesión: no revivirlos aunque sigan en `prev` o en caché local. */
   tombstoneIds?: ReadonlySet<string>;
   /**
    * Tras marcar recibido: si la lectura va a réplica y aún devuelve `sent`, conservar `received` unos segundos.
@@ -460,13 +457,11 @@ export function mergePedidoOrdersFromServer(
   const graceMs = opts?.pendingReceivedGraceMs ?? 60_000;
   const serverIds = new Set(server.map((o) => o.id));
   const now = Date.now();
+  /** Solo pins (pedido recién creado): sin ventana «reciente», para que borrados en otro dispositivo no reaparezcan. */
   const extras = prev.filter((o) => {
     if (tombstones?.has(o.id)) return false;
     if (serverIds.has(o.id)) return false;
-    if (pinUntilSeenOnServer?.has(o.id)) return true;
-    const created = Date.parse(o.createdAt);
-    if (!Number.isFinite(created)) return false;
-    return now - created < PEDIDO_MERGE_RECENT_MS;
+    return pinUntilSeenOnServer?.has(o.id) ?? false;
   });
   const byId = new Map<string, PedidoOrder>();
   for (const row of server) {

@@ -140,10 +140,7 @@ export default function ProveedoresPage() {
   React.useEffect(() => {
     if (!canUse || !localId) return;
     const cached = readSuppliersSessionCache(localId);
-    if (cached !== null) {
-      applySupplierRows(cached);
-      return;
-    }
+    if (cached !== null) applySupplierRows(cached);
     reload();
   }, [applySupplierRows, canUse, localId, reload]);
 

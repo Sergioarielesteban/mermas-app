@@ -150,11 +150,42 @@ export function PedidosOrdersProvider({ children }: { children: React.ReactNode 
     if (cached !== null) {
       ordersReadyLocalIdRef.current = localId;
       setOrders(cached);
-      return;
+    } else {
+      ordersReadyLocalIdRef.current = null;
     }
-    ordersReadyLocalIdRef.current = null;
-    reloadOrders();
+    void reloadOrders();
   }, [canUse, localId, reloadOrders]);
+
+  useEffect(() => {
+    if (!canUse || !localId || !hasEntry) return;
+    const supabase = getSupabaseClient();
+    if (!supabase) return;
+    let debounce: number | null = null;
+    const scheduleReload = () => {
+      if (debounce != null) window.clearTimeout(debounce);
+      debounce = window.setTimeout(() => {
+        debounce = null;
+        reloadOrders();
+      }, 1200);
+    };
+    const channel = supabase
+      .channel(`pedidos-orders-rt:${localId}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'purchase_orders', filter: `local_id=eq.${localId}` },
+        scheduleReload,
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'purchase_order_items', filter: `local_id=eq.${localId}` },
+        scheduleReload,
+      )
+      .subscribe();
+    return () => {
+      if (debounce != null) window.clearTimeout(debounce);
+      void supabase.removeChannel(channel);
+    };
+  }, [canUse, hasEntry, localId, reloadOrders]);
 
   useEffect(() => {
     if (!canUse || !localId) return;

@@ -356,10 +356,7 @@ export default function PedidosPage() {
   React.useEffect(() => {
     if (!canUse || !localId) return;
     const cached = readCatalogPricesSessionCache(localId);
-    if (cached !== null) {
-      setCatalogPriceByProductId(cached);
-      return;
-    }
+    if (cached !== null) setCatalogPriceByProductId(cached);
     reloadCatalog();
   }, [canUse, localId, reloadCatalog]);
 

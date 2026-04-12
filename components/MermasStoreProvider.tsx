@@ -562,6 +562,37 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
   }, [cloudDataLoaded, cloudMode, hydrated, localId, products, mermas]);
 
   useEffect(() => {
+    if (!isBrowser() || !hydrated || !cloudMode || !localId || !cloudDataLoaded) return;
+    const supabase = getSupabaseClient();
+    if (!supabase) return;
+    let debounceTimer: number | null = null;
+    const scheduleRefetch = () => {
+      if (debounceTimer != null) window.clearTimeout(debounceTimer);
+      debounceTimer = window.setTimeout(() => {
+        debounceTimer = null;
+        void refetchCloud();
+      }, 1500);
+    };
+    const channel = supabase
+      .channel(`mermas-local-rt:${localId}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'products', filter: `local_id=eq.${localId}` },
+        scheduleRefetch,
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'mermas', filter: `local_id=eq.${localId}` },
+        scheduleRefetch,
+      )
+      .subscribe();
+    return () => {
+      if (debounceTimer != null) window.clearTimeout(debounceTimer);
+      void supabase.removeChannel(channel);
+    };
+  }, [cloudDataLoaded, cloudMode, hydrated, localId, refetchCloud]);
+
+  useEffect(() => {
     if (!isBrowser()) return;
     if (!hydrated) return;
     if (!legacyMode) return;

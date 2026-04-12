@@ -138,31 +138,30 @@ export default function PwaRegister() {
             <p className="mt-2 text-xs text-zinc-400">La app se recargará en un momento.</p>
           </div>
         </div>
-      ) : null}
-      <div className="fixed inset-x-3 z-[120] rounded-2xl bg-zinc-900 px-4 py-3 text-white shadow-2xl ring-1 ring-zinc-700 bottom-[max(0.75rem,env(safe-area-inset-bottom,0px))]">
-        <p className="text-sm font-semibold">Hay una nueva versión disponible.</p>
-        <div className="mt-2 flex items-center justify-end gap-2">
-          <button
-            type="button"
-            onClick={() => {
-              try {
-                sessionStorage.removeItem(PWA_WAITING_KEY);
-              } catch {
-                /* ignore */
-              }
-              setUpdateAvailable(false);
-            }}
-            className="h-9 rounded-lg border border-zinc-600 px-3 text-xs font-bold uppercase tracking-wide text-zinc-200"
-          >
-            Luego
-          </button>
+      ) : (
+        <div className="fixed inset-0 z-[119] bg-black/40" aria-hidden />
+      )}
+      <div
+        className="fixed inset-x-3 z-[120] rounded-2xl bg-zinc-900 px-4 py-4 text-white shadow-2xl ring-2 ring-[#D32F2F]/50 bottom-[max(0.75rem,env(safe-area-inset-bottom,0px))]"
+        role="alertdialog"
+        aria-labelledby="pwa-update-title"
+        aria-describedby="pwa-update-desc"
+      >
+        <p id="pwa-update-title" className="text-sm font-semibold">
+          Nueva versión de la app
+        </p>
+        <p id="pwa-update-desc" className="mt-1.5 text-xs leading-snug text-zinc-300">
+          Hay una actualización lista. Pulsa el botón para cargar la última versión; el aviso no se quita hasta
+          actualizar.
+        </p>
+        <div className="mt-3 flex justify-end">
           <button
             type="button"
             onClick={applyUpdate}
             disabled={applyingUpdate}
-            className="h-9 rounded-lg bg-[#D32F2F] px-3 text-xs font-bold uppercase tracking-wide text-white disabled:opacity-60"
+            className="h-10 w-full rounded-lg bg-[#D32F2F] px-3 text-xs font-bold uppercase tracking-wide text-white disabled:opacity-60 sm:w-auto"
           >
-            Actualizar ahora
+            Actualizar a la última versión
           </button>
         </div>
       </div>

@@ -130,8 +130,6 @@ export default function NuevoPedidoPage() {
     if (cached !== null) {
       setSuppliers(cached);
       setSupplierId((prev) => prev || cached[0]?.id || '');
-      setLoadingSuppliers(false);
-      return;
     }
     reloadSuppliers();
   }, [canUse, localId, reloadSuppliers]);
