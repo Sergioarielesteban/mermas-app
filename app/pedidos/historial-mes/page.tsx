@@ -8,15 +8,9 @@ import { usePedidosOrders } from '@/components/PedidosOrdersProvider';
 import { CHEF_ONE_TAPER_LINE_CLASS } from '@/components/ChefOneGlowLine';
 import PedidosPremiaLockedScreen from '@/components/PedidosPremiaLockedScreen';
 import { canAccessPedidos, canUsePedidosModule } from '@/lib/pedidos-access';
-import { formatQuantityWithUnit } from '@/lib/pedidos-format';
+import { formatQuantityWithUnit, totalsWithVatForOrderListDisplay } from '@/lib/pedidos-format';
 import type { PedidoOrder } from '@/lib/pedidos-supabase';
 import type { Unit } from '@/lib/types';
-
-function totalsWithVat(order: PedidoOrder) {
-  const base = order.items.reduce((acc, item) => acc + item.lineTotal, 0);
-  const vat = order.items.reduce((acc, item) => acc + item.lineTotal * (item.vatRate ?? 0), 0);
-  return { base, vat, total: base + vat };
-}
 
 export default function PedidosHistorialMesPage() {
   const { localCode, localName, localId, email } = useAuth();
@@ -53,7 +47,7 @@ export default function PedidosHistorialMesPage() {
         byProduct: new Map<string, { unit: string; quantity: number }>(),
       };
 
-      const totals = totalsWithVat(order);
+      const totals = totalsWithVatForOrderListDisplay(order);
       existing.totalWithVat += totals.total;
       existing.orderCount += 1;
 

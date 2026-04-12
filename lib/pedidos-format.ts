@@ -1,3 +1,4 @@
+import type { PedidoOrder } from '@/lib/pedidos-supabase';
 import type { Unit } from '@/lib/types';
 
 const UNIT_WORD: Record<Unit, { one: string; many: string }> = {
@@ -61,4 +62,32 @@ export function formatIncidentLine(input: {
   if (typeLabel && notes) return `${typeLabel}: ${notes}`;
   if (notes) return notes;
   return typeLabel;
+}
+
+export function orderItemHasIncident(item: PedidoOrder['items'][number]): boolean {
+  return Boolean(item.incidentType) || Boolean(item.incidentNotes?.trim());
+}
+
+/**
+ * Subtotal mostrado en listas / totales de pedido: si hay incidencia, el albarán puede tener `lineTotal` en 0;
+ * se usa el valor del pedido original (precio × cantidad pedida).
+ */
+export function lineSubtotalForOrderListDisplay(item: PedidoOrder['items'][number]): number {
+  if (orderItemHasIncident(item)) {
+    return Math.round(item.pricePerUnit * item.quantity * 100) / 100;
+  }
+  return item.lineTotal;
+}
+
+export function totalsWithVatForOrderListDisplay(order: PedidoOrder): {
+  base: number;
+  vat: number;
+  total: number;
+} {
+  const base = order.items.reduce((acc, item) => acc + lineSubtotalForOrderListDisplay(item), 0);
+  const vat = order.items.reduce(
+    (acc, item) => acc + lineSubtotalForOrderListDisplay(item) * (item.vatRate ?? 0),
+    0,
+  );
+  return { base, vat, total: base + vat };
 }

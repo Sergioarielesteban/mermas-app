@@ -9,7 +9,13 @@ import MermasStyleHero from '@/components/MermasStyleHero';
 import PedidosPremiaLockedScreen from '@/components/PedidosPremiaLockedScreen';
 import { dispatchPedidosDataChanged, usePedidosDataChangedListener } from '@/hooks/usePedidosDataChangedListener';
 import { canAccessPedidos, canUsePedidosModule } from '@/lib/pedidos-access';
-import { formatIncidentLine, formatQuantityWithUnit, unitPriceCatalogSuffix } from '@/lib/pedidos-format';
+import {
+  formatIncidentLine,
+  formatQuantityWithUnit,
+  lineSubtotalForOrderListDisplay,
+  totalsWithVatForOrderListDisplay,
+  unitPriceCatalogSuffix,
+} from '@/lib/pedidos-format';
 import {
   readCatalogPricesSessionCache,
   writeCatalogPricesSessionCache,
@@ -65,12 +71,6 @@ function buildWhatsappOrderMessage(order: PedidoOrder, deliveryDate: string, loc
   ]
     .filter(Boolean)
     .join('\n');
-}
-
-function totalsWithVat(order: PedidoOrder) {
-  const base = order.items.reduce((acc, item) => acc + item.lineTotal, 0);
-  const vat = order.items.reduce((acc, item) => acc + item.lineTotal * (item.vatRate ?? 0), 0);
-  return { base, vat, total: base + vat };
 }
 
 function catalogPriceMapFromSuppliers(suppliers: PedidoSupplier[]) {
@@ -579,7 +579,7 @@ export default function PedidosPage() {
                 aria-expanded={expandedSentId === order.id}
               >
                 {(() => {
-                  const totals = totalsWithVat(order);
+                  const totals = totalsWithVatForOrderListDisplay(order);
                   return (
                     <>
                       <p className="text-sm font-semibold text-zinc-900">{order.supplierName}</p>
@@ -754,7 +754,7 @@ export default function PedidosPage() {
                 aria-expanded={expandedHistoricoId === order.id}
               >
                 {(() => {
-                  const totals = totalsWithVat(order);
+                  const totals = totalsWithVatForOrderListDisplay(order);
                   return (
                     <>
                       <p className="text-sm font-semibold text-zinc-900">{order.supplierName}</p>
@@ -872,7 +872,9 @@ export default function PedidosPage() {
                         </p>
                         <p className="text-xs italic text-zinc-700">
                           Subt:{' '}
-                          <span className="font-semibold not-italic text-zinc-900">{item.lineTotal.toFixed(2)} €</span>
+                          <span className="font-semibold not-italic text-zinc-900">
+                            {lineSubtotalForOrderListDisplay(item).toFixed(2)} €
+                          </span>
                         </p>
                         {unitCanDeclareScaleKgOnReception(item.unit) &&
                         item.receivedWeightKg != null &&
