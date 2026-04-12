@@ -50,7 +50,7 @@ export default function RecepcionPedidosPage() {
   const { localCode, localName, localId, email } = useAuth();
   const hasPedidosEntry = canAccessPedidos(localCode, email, localName, localId);
   const canUse = canUsePedidosModule(localCode, email, localName, localId);
-  const { orders: allOrders, setOrders, reloadOrders } = usePedidosOrders();
+  const { orders: allOrders, setOrders, reloadOrders, registerPendingReceivedOrder } = usePedidosOrders();
   const orders = React.useMemo(
     () => allOrders.filter((row) => row.status === 'sent' || row.status === 'received'),
     [allOrders],
@@ -215,6 +215,7 @@ export default function RecepcionPedidosPage() {
         await setOrderStatus(supabase, localId, order.id, 'received');
         await setOrderPriceReviewArchived(supabase, localId, order.id, true);
         const nowIso = new Date().toISOString();
+        registerPendingReceivedOrder(order.id, nowIso, nowIso);
         setOrders((prev) =>
           prev.map((o) =>
             o.id === order.id

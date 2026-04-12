@@ -53,6 +53,12 @@ type PedidosOrdersContextValue = {
   releasePinOrderId: (id: string) => void;
   /** Insertar o sustituir un pedido en memoria (p. ej. tras leerlo por id al crear). */
   upsertOrder: (order: PedidoOrder) => void;
+  /** Tras eliminar en Supabase: el merge no debe devolver el pedido por la ventana «reciente». */
+  registerDeletedOrderId: (id: string) => void;
+  /** Tras marcar recibido: si la réplica aún devuelve `sent`, mantener `received` un momento. */
+  registerPendingReceivedOrder: (id: string, receivedAtIso: string, priceReviewArchivedAt?: string) => void;
+  /** Tras volver un pedido a enviados desde BD: cancelar el ajuste por réplica. */
+  clearPendingReceivedOrder: (id: string) => void;
 };
 
 const PedidosOrdersContext = createContext<PedidosOrdersContextValue | null>(null);
@@ -68,6 +74,29 @@ export function PedidosOrdersProvider({ children }: { children: React.ReactNode 
   localIdRef.current = localId ?? null;
   /** Evita escribir en sessionStorage el snapshot del local anterior justo tras cambiar de local. */
   const ordersReadyLocalIdRef = useRef<string | null>(null);
+  const locallyDeletedOrderIdsRef = useRef<Set<string>>(new Set());
+  const pendingReceivedByIdRef = useRef(
+    new Map<string, { markedAt: number; receivedAtIso: string; priceReviewArchivedAt?: string }>(),
+  );
+
+  const registerDeletedOrderId = useCallback((id: string) => {
+    locallyDeletedOrderIdsRef.current.add(id);
+  }, []);
+
+  const registerPendingReceivedOrder = useCallback(
+    (id: string, receivedAtIso: string, priceReviewArchivedAt?: string) => {
+      pendingReceivedByIdRef.current.set(id, {
+        markedAt: Date.now(),
+        receivedAtIso,
+        ...(priceReviewArchivedAt != null ? { priceReviewArchivedAt } : {}),
+      });
+    },
+    [],
+  );
+
+  const clearPendingReceivedOrder = useCallback((id: string) => {
+    pendingReceivedByIdRef.current.delete(id);
+  }, []);
 
   const pinOrderId = useCallback((id: string) => {
     pinUntilSeenRef.current.add(id);
@@ -92,8 +121,16 @@ export function PedidosOrdersProvider({ children }: { children: React.ReactNode 
     if (!supabase) return;
     void fetchOrders(supabase, targetId).then((rows) => {
       if (localIdRef.current !== targetId) return;
+      for (const r of rows) {
+        if (r.status === 'received' && r.receivedAt) {
+          pendingReceivedByIdRef.current.delete(r.id);
+        }
+      }
       setOrders((prev) =>
-        mergePedidoOrdersFromServer(prev, rows, pinUntilSeenRef.current),
+        mergePedidoOrdersFromServer(prev, rows, pinUntilSeenRef.current, {
+          tombstoneIds: locallyDeletedOrderIdsRef.current,
+          pendingReceivedById: pendingReceivedByIdRef.current,
+        }),
       );
       ordersReadyLocalIdRef.current = targetId;
     });
@@ -103,6 +140,8 @@ export function PedidosOrdersProvider({ children }: { children: React.ReactNode 
     ordersReadyLocalIdRef.current = null;
     setOrders([]);
     pinUntilSeenRef.current.clear();
+    locallyDeletedOrderIdsRef.current.clear();
+    pendingReceivedByIdRef.current.clear();
   }, [localId]);
 
   useEffect(() => {
@@ -133,8 +172,20 @@ export function PedidosOrdersProvider({ children }: { children: React.ReactNode 
       pinOrderId,
       releasePinOrderId,
       upsertOrder,
+      registerDeletedOrderId,
+      registerPendingReceivedOrder,
+      clearPendingReceivedOrder,
     }),
-    [orders, reloadOrders, pinOrderId, releasePinOrderId, upsertOrder],
+    [
+      orders,
+      reloadOrders,
+      pinOrderId,
+      releasePinOrderId,
+      upsertOrder,
+      registerDeletedOrderId,
+      registerPendingReceivedOrder,
+      clearPendingReceivedOrder,
+    ],
   );
 
   return <PedidosOrdersContext.Provider value={value}>{children}</PedidosOrdersContext.Provider>;

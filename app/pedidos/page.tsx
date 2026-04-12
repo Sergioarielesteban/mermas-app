@@ -115,7 +115,15 @@ export default function PedidosPage() {
   const { localCode, localName, localId, email } = useAuth();
   const hasPedidosEntry = canAccessPedidos(localCode, email, localName, localId);
   const canUse = canUsePedidosModule(localCode, email, localName, localId);
-  const { orders, setOrders, reloadOrders, releasePinOrderId } = usePedidosOrders();
+  const {
+    orders,
+    setOrders,
+    reloadOrders,
+    releasePinOrderId,
+    registerDeletedOrderId,
+    registerPendingReceivedOrder,
+    clearPendingReceivedOrder,
+  } = usePedidosOrders();
   const [catalogPriceByProductId, setCatalogPriceByProductId] = React.useState<Map<string, number>>(() => new Map());
   const [message, setMessage] = React.useState<string | null>(null);
   const [showDeletedBanner, setShowDeletedBanner] = React.useState(false);
@@ -142,6 +150,8 @@ export default function PedidosPage() {
 
   const [expandedSentId, setExpandedSentId] = React.useState<string | null>(null);
   const [expandedHistoricoId, setExpandedHistoricoId] = React.useState<string | null>(null);
+  /** Feedback visual al marcar recibido (el merge con réplica ya no revierte el estado). */
+  const [receivingOrderId, setReceivingOrderId] = React.useState<string | null>(null);
   /** Marca visual por línea (varias a la vez); evita que un refetch parcial “borre” el estado al ir recibiendo. */
   const [quickLineMarks, setQuickLineMarks] = React.useState<Record<string, 'ok' | 'bad'>>({});
   const [incidentOpenBySentOrderId, setIncidentOpenBySentOrderId] = React.useState<Record<string, boolean>>({});
@@ -390,6 +400,7 @@ export default function PedidosPage() {
         ) : null}
         <button
           type="button"
+          disabled={receivingOrderId === order.id}
           onClick={() => {
             if (!localId) return;
             const supabase = getSupabaseClient();
@@ -397,9 +408,11 @@ export default function PedidosPage() {
             const snap = orders.find((o) => o.id === order.id);
             if (!snap) return;
             setMessage(null);
+            setReceivingOrderId(order.id);
             void persistSentOrderAsReceived(supabase, localId, snap, { preserveOrderPricing: true })
               .then(() => {
                 const nowIso = new Date().toISOString();
+                registerPendingReceivedOrder(order.id, nowIso);
                 setOrders((prev) =>
                   prev.map((o) =>
                     o.id === order.id
@@ -413,12 +426,19 @@ export default function PedidosPage() {
                 window.setTimeout(() => void reloadOrders(), 500);
                 dispatchPedidosDataChanged();
               })
-              .catch((err: Error) => setMessage(err.message));
+              .catch((err: Error) => setMessage(err.message))
+              .finally(() => setReceivingOrderId((id) => (id === order.id ? null : id)));
           }}
-          className="flex w-full flex-col items-center justify-center gap-0.5 rounded-2xl bg-gradient-to-b from-[#4ADE80] to-[#16A34A] py-3 text-center text-[11px] font-black uppercase leading-tight tracking-wide text-white shadow-md shadow-emerald-900/20 ring-1 ring-white/25 transition active:scale-[0.99]"
+          className="flex w-full flex-col items-center justify-center gap-0.5 rounded-2xl bg-gradient-to-b from-[#4ADE80] to-[#16A34A] py-3 text-center text-[11px] font-black uppercase leading-tight tracking-wide text-white shadow-md shadow-emerald-900/20 ring-1 ring-white/25 transition active:scale-[0.99] disabled:opacity-90"
         >
-          <span>Marcar como</span>
-          <span>recibido</span>
+          {receivingOrderId === order.id ? (
+            <span>Recibido</span>
+          ) : (
+            <>
+              <span>Marcar como</span>
+              <span>recibido</span>
+            </>
+          )}
         </button>
         <button
           type="button"
@@ -596,6 +616,7 @@ export default function PedidosPage() {
                     if (!supabase) return;
                     void deleteOrder(supabase, localId, order.id)
                       .then(() => {
+                        registerDeletedOrderId(order.id);
                         releasePinOrderId(order.id);
                         setOrders((prev) => prev.filter((o) => o.id !== order.id));
                         setMessage('Pedido enviado eliminado.');
@@ -761,6 +782,7 @@ export default function PedidosPage() {
                     if (!supabase) return;
                     void reopenReceivedOrderToSent(supabase, localId, order.id)
                       .then(() => {
+                        clearPendingReceivedOrder(order.id);
                         setMessage('Pedido devuelto a enviados.');
                         void reloadOrders();
                         dispatchPedidosDataChanged();
@@ -780,6 +802,7 @@ export default function PedidosPage() {
                     if (!supabase) return;
                     void deleteOrder(supabase, localId, order.id)
                       .then(() => {
+                        registerDeletedOrderId(order.id);
                         releasePinOrderId(order.id);
                         setOrders((prev) => prev.filter((o) => o.id !== order.id));
                         setMessage('Pedido histórico eliminado.');

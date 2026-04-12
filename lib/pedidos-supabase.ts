@@ -431,6 +431,20 @@ export async function fetchOrderById(
 /** Evita perder pedidos recién creados cuando la lectura va a réplica y aún no incluye la fila nueva. */
 const PEDIDO_MERGE_RECENT_MS = 12 * 60 * 1000;
 
+export type MergePedidoOrdersOptions = {
+  /** Ids borrados en BD en esta sesión: no revivirlos aunque sigan en `prev` por caché o ventana «reciente». */
+  tombstoneIds?: ReadonlySet<string>;
+  /**
+   * Tras marcar recibido: si la lectura va a réplica y aún devuelve `sent`, conservar `received` unos segundos.
+   * `priceReviewArchivedAt` opcional (p. ej. «todo recibido» en Recepción).
+   */
+  pendingReceivedById?: ReadonlyMap<
+    string,
+    { markedAt: number; receivedAtIso: string; priceReviewArchivedAt?: string }
+  >;
+  pendingReceivedGraceMs?: number;
+};
+
 /**
  * Fusiona lista previa con la respuesta del servidor. Si pasas `pinUntilSeenOnServer`, esas ids se mantienen
  * en pantalla hasta que el servidor las devuelva; luego se eliminan del Set (mutación intencionada).
@@ -439,10 +453,15 @@ export function mergePedidoOrdersFromServer(
   prev: PedidoOrder[],
   server: PedidoOrder[],
   pinUntilSeenOnServer?: Set<string>,
+  opts?: MergePedidoOrdersOptions,
 ): PedidoOrder[] {
+  const tombstones = opts?.tombstoneIds;
+  const pendingReceived = opts?.pendingReceivedById;
+  const graceMs = opts?.pendingReceivedGraceMs ?? 60_000;
   const serverIds = new Set(server.map((o) => o.id));
   const now = Date.now();
   const extras = prev.filter((o) => {
+    if (tombstones?.has(o.id)) return false;
     if (serverIds.has(o.id)) return false;
     if (pinUntilSeenOnServer?.has(o.id)) return true;
     const created = Date.parse(o.createdAt);
@@ -450,14 +469,31 @@ export function mergePedidoOrdersFromServer(
     return now - created < PEDIDO_MERGE_RECENT_MS;
   });
   const byId = new Map<string, PedidoOrder>();
-  for (const row of server) byId.set(row.id, row);
+  for (const row of server) {
+    let out: PedidoOrder = row;
+    const pend = pendingReceived?.get(row.id);
+    if (pend && row.status === 'sent' && now - pend.markedAt < graceMs) {
+      out = {
+        ...row,
+        status: 'received',
+        receivedAt: pend.receivedAtIso,
+        ...(pend.priceReviewArchivedAt != null
+          ? { priceReviewArchivedAt: pend.priceReviewArchivedAt }
+          : { priceReviewArchivedAt: undefined }),
+      };
+    }
+    byId.set(row.id, out);
+  }
   for (const row of extras) {
+    if (tombstones?.has(row.id)) continue;
     if (!byId.has(row.id)) byId.set(row.id, row);
   }
   if (pinUntilSeenOnServer) {
     for (const id of serverIds) pinUntilSeenOnServer.delete(id);
   }
-  return Array.from(byId.values()).sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+  return Array.from(byId.values())
+    .filter((o) => !tombstones?.has(o.id))
+    .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
 }
 
 export async function saveOrder(
