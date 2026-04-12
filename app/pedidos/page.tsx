@@ -555,7 +555,7 @@ export default function PedidosPage() {
           <p className="pt-2 text-2xl font-black text-zinc-900">{ordersPendingPriceReview.length}</p>
           <p className="pt-1 text-xs text-zinc-500">
             Incluye enviados y los marcados como recibidos (falta cotejar precios en Recepción). Salen del contador al
-            archivar allí con «Revisado» o «Marcar todo recibido». Toca para abrir la lista.
+            archivar allí con «revisado». Toca para abrir la lista.
           </p>
         </Link>
       </section>

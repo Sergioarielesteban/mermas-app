@@ -15,7 +15,6 @@ import { formatQuantityWithUnit, unitPriceCatalogSuffix } from '@/lib/pedidos-fo
 import {
   billingQuantityForLine,
   setOrderPriceReviewArchived,
-  setOrderStatus,
   unitCanDeclareScaleKgOnReception,
   unitSupportsReceivedWeightKg,
   updateOrderItemIncident,
@@ -50,7 +49,7 @@ export default function RecepcionPedidosPage() {
   const { localCode, localName, localId, email } = useAuth();
   const hasPedidosEntry = canAccessPedidos(localCode, email, localName, localId);
   const canUse = canUsePedidosModule(localCode, email, localName, localId);
-  const { orders: allOrders, setOrders, reloadOrders, registerPendingReceivedOrder } = usePedidosOrders();
+  const { orders: allOrders, setOrders, reloadOrders } = usePedidosOrders();
   const orders = React.useMemo(
     () => allOrders.filter((row) => row.status === 'sent' || row.status === 'received'),
     [allOrders],
@@ -73,8 +72,7 @@ export default function RecepcionPedidosPage() {
   }, []);
   const [incidentOpenByOrderId, setIncidentOpenByOrderId] = React.useState<Record<string, boolean>>({});
   const [incidentNoteByOrderId, setIncidentNoteByOrderId] = React.useState<Record<string, string>>({});
-  const [showReceivedBanner, setShowReceivedBanner] = React.useState(false);
-  const receivedBannerTimeoutRef = React.useRef<number | null>(null);
+  const [archivedAccordionOpen, setArchivedAccordionOpen] = React.useState(true);
   const focusOrderIdFromUrl = searchParams.get('orderId') ?? '';
   const focusOrderAppliedRef = React.useRef(false);
 
@@ -135,116 +133,13 @@ export default function RecepcionPedidosPage() {
     });
   }, [archivedPriceReviewOrders, supplierFilter, dateFilter]);
 
-  const persistPackagingReceivedKg = React.useCallback(
-    async (supabase: SupabaseClient, items: PedidoOrder['items']) => {
-      const weights = weightInputRef.current;
-      for (const item of items) {
-        if (!unitSupportsReceivedWeightKg(item.unit)) continue;
-        const wRaw = weights[item.id];
-        if (wRaw === undefined) continue;
-        const wp = parseReceivedKg(wRaw);
-        if (wp === 'invalid') {
-          throw new Error('Peso recibido (kg) inválido en una línea de bandeja o caja.');
-        }
-        await updateOrderItemReceivedWeightKg(supabase, localId!, item.id, wp);
-      }
-    },
-    [localId],
-  );
-
-  const markAllReceived = (order: PedidoOrder) => {
-    if (!localId) return;
-    const supabase = getSupabaseClient();
-    if (!supabase) return;
-    void (async () => {
-      try {
-        for (const item of order.items) {
-          const raw = priceInputRef.current[item.id];
-          const parsed = raw == null ? item.pricePerUnit : Number(raw.replace(',', '.'));
-          const nextPrice = Number.isNaN(parsed) || parsed < 0 ? item.pricePerUnit : Math.round(parsed * 100) / 100;
-
-          let receivedQty = item.quantity;
-          let weightKg: number | null = null;
-
-          if (item.unit === 'kg') {
-            const wRaw = weightInputRef.current[item.id];
-            if (wRaw !== undefined) {
-              const wp = parseReceivedKg(wRaw);
-              if (wp === 'invalid') {
-                setMessage('Peso recibido (kg) inválido en una línea de producto al peso.');
-                return;
-              }
-              await updateOrderItemReceivedWeightKg(supabase, localId, item.id, wp);
-              if (wp != null) {
-                weightKg = wp;
-                receivedQty = wp;
-              } else {
-                weightKg = null;
-                receivedQty = item.quantity;
-              }
-            } else {
-              await updateOrderItemReceivedWeightKg(supabase, localId, item.id, null);
-              weightKg = null;
-              receivedQty = item.quantity;
-            }
-          } else {
-            if (unitSupportsReceivedWeightKg(item.unit)) {
-              const wRaw = weightInputRef.current[item.id];
-              if (wRaw !== undefined) {
-                const wp = parseReceivedKg(wRaw);
-                if (wp === 'invalid') {
-                  setMessage('Peso recibido (kg) inválido en una línea de bandeja o caja.');
-                  return;
-                }
-                await updateOrderItemReceivedWeightKg(supabase, localId, item.id, wp);
-                weightKg = wp;
-              }
-            }
-            receivedQty = item.quantity;
-          }
-
-          await updateOrderItemReceived(supabase, localId, item.id, receivedQty);
-          const billingQty = billingQuantityForLine({
-            unit: item.unit,
-            receivedQuantity: receivedQty,
-            receivedWeightKg: weightKg,
-          });
-          await updateOrderItemPrice(supabase, localId, item.id, nextPrice, billingQty);
-        }
-
-        await setOrderStatus(supabase, localId, order.id, 'received');
-        await setOrderPriceReviewArchived(supabase, localId, order.id, true);
-        const nowIso = new Date().toISOString();
-        registerPendingReceivedOrder(order.id, nowIso, nowIso);
-        setOrders((prev) =>
-          prev.map((o) =>
-            o.id === order.id
-              ? { ...o, status: 'received', receivedAt: nowIso, priceReviewArchivedAt: nowIso }
-              : o,
-          ),
-        );
-        setMessage('Pedido marcado como recibido y archivado de pendientes.');
-        setShowReceivedBanner(true);
-        if (receivedBannerTimeoutRef.current) window.clearTimeout(receivedBannerTimeoutRef.current);
-        receivedBannerTimeoutRef.current = window.setTimeout(() => {
-          setShowReceivedBanner(false);
-          receivedBannerTimeoutRef.current = null;
-        }, 1000);
-        void reloadOrders();
-        window.setTimeout(() => void reloadOrders(), 500);
-        dispatchPedidosDataChanged();
-      } catch (err) {
-        setMessage(err instanceof Error ? err.message : 'No se pudo marcar recibido.');
-      }
-    })();
-  };
-
   const markPriceReviewArchived = (orderId: string, archived: boolean) => {
     if (!localId) return;
     const supabase = getSupabaseClient();
     if (!supabase) return;
     void setOrderPriceReviewArchived(supabase, localId, orderId, archived)
       .then(() => {
+        if (archived) setArchivedAccordionOpen(true);
         setMessage(
           archived ? 'Pedido archivado de la revisión de precios.' : 'Pedido de nuevo en pendientes de revisión.',
         );
@@ -253,13 +148,6 @@ export default function RecepcionPedidosPage() {
       })
       .catch((err: Error) => setMessage(err.message));
   };
-
-  React.useEffect(
-    () => () => {
-      if (receivedBannerTimeoutRef.current) window.clearTimeout(receivedBannerTimeoutRef.current);
-    },
-    [],
-  );
 
   const changeUnitPrice = (orderId: string, itemId: string, rawValue: string) => {
     if (!localId) return;
@@ -474,13 +362,6 @@ export default function RecepcionPedidosPage() {
   }
   return (
     <div className="space-y-4">
-      {showReceivedBanner ? (
-        <div className="pointer-events-none fixed inset-0 z-[90] grid place-items-center bg-black/25 px-6">
-          <div className="rounded-2xl bg-[#16A34A] px-7 py-5 text-center shadow-2xl ring-2 ring-white/75">
-            <p className="text-xl font-black uppercase tracking-wide text-white">RECIBIDO</p>
-          </div>
-        </div>
-      ) : null}
       <section>
         <Link
           href="/pedidos"
@@ -497,9 +378,8 @@ export default function RecepcionPedidosPage() {
       <section className="rounded-2xl bg-white p-4 ring-1 ring-zinc-200">
         <p className="text-sm font-semibold text-zinc-800">Pendientes revisión de precios</p>
         <p className="mt-1 text-xs text-zinc-500">
-          Pedidos enviados y los marcados como recibidos desde Pedidos (mercancía anotada, precios sin tocar hasta aquí).
-          «Marcar todo recibido» archiva el pedido y lo quita de pendientes. «Revisado» archiva tras cotejar el albarán sin
-          reescribir líneas. La fecha filtra la lista; déjala vacía para ver todos.
+          Coteja precios y pesos con el albarán. «Revisado» solo archiva este pedido en la lista de abajo (acordeón); no
+          marca la mercancía como recibida en el flujo rápido de Pedidos. La fecha filtra; déjala vacía para ver todos.
         </p>
         {message ? <p className="mt-2 text-sm text-[#B91C1C]">{message}</p> : null}
         <div className="mt-3 grid grid-cols-1 gap-2 md:grid-cols-2">
@@ -548,8 +428,8 @@ export default function RecepcionPedidosPage() {
                 </p>
                 {order.status === 'received' ? (
                   <p className="mt-2 max-w-[95%] rounded-lg bg-amber-100 px-2 py-1.5 text-[10px] font-bold uppercase leading-snug tracking-wide text-amber-950 ring-1 ring-amber-300/80">
-                    Recibido desde Pedidos: falta cotejar precios. Ajusta aquí si el albarán no coincide; luego «Marcar
-                    todo recibido» o «Revisado» para archivar.
+                    Recibido desde Pedidos: falta cotejar precios. Ajusta aquí si el albarán no coincide; luego pulsa
+                    «revisado» para archivar en la parte inferior.
                   </p>
                 ) : null}
               </div>
@@ -685,63 +565,76 @@ export default function RecepcionPedidosPage() {
                   </p>
                 ) : null}
               </div>
-              <div className="mt-4 space-y-2 border-t border-zinc-200/90 pt-4">
+              <div className="mt-4 border-t border-zinc-200/90 pt-4">
                 <button
                   type="button"
                   onClick={() => {
                     if (
                       !window.confirm(
-                        '¿Archivar este pedido de la lista de revisión de precios? Sigue en «Pedidos enviados» y en el histórico cuando lo recibas.',
+                        '¿Archivar este pedido de la revisión de precios? Pasará al acordeón inferior (sigue en Pedidos enviados). No marca el pedido como recibido.',
                       )
                     ) {
                       return;
                     }
                     markPriceReviewArchived(order.id, true);
                   }}
-                  className="w-full rounded-xl border border-amber-600/80 bg-amber-50 py-2.5 text-center text-xs font-bold text-amber-950"
+                  className="w-full rounded-xl border border-amber-600/80 bg-amber-50 py-3 text-center text-sm font-bold text-amber-950 shadow-sm"
                 >
-                  Revisado (quitar de esta lista)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => markAllReceived(order)}
-                  className="flex w-full items-center justify-center rounded-2xl bg-gradient-to-b from-[#4ADE80] to-[#16A34A] py-3.5 text-center text-xs font-black uppercase tracking-[0.12em] text-white shadow-lg shadow-emerald-900/25 ring-1 ring-white/25 transition active:scale-[0.98] active:shadow-md"
-                >
-                  Marcar todo recibido
+                  revisado
                 </button>
               </div>
             </div>
             );
           })}
           {filteredArchivedOrders.length > 0 ? (
-            <div className="mt-8 space-y-2 border-t border-zinc-200 pt-6">
-              <p className="text-center text-[11px] font-bold uppercase tracking-wide text-zinc-500">
-                Archivados (revisión de precios)
-              </p>
-              <p className="text-center text-xs text-zinc-500">
-                Pedidos que quitaste de la bandeja con «Revisado». Siguen en la app; puedes devolverlos a pendientes.
-              </p>
-              {filteredArchivedOrders.map((order) => (
-                <div
-                  key={order.id}
-                  className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-zinc-100/90 p-3 ring-1 ring-zinc-200"
-                >
-                  <div className="min-w-0 text-left">
-                    <p className="text-sm font-semibold text-zinc-900">{order.supplierName}</p>
-                    <p className="text-xs text-zinc-500">
-                      Pedido {new Date(order.createdAt).toLocaleDateString('es-ES')}
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => markPriceReviewArchived(order.id, false)}
-                    className="shrink-0 rounded-lg border border-zinc-400 bg-white px-3 py-1.5 text-xs font-semibold text-zinc-800"
-                  >
-                    Volver a pendientes
-                  </button>
+            <details
+              className="group mt-8 border-t border-zinc-200 pt-4"
+              open={archivedAccordionOpen}
+              onToggle={(e) => setArchivedAccordionOpen(e.currentTarget.open)}
+            >
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-2 rounded-xl bg-zinc-100/90 px-3 py-2.5 text-left ring-1 ring-zinc-200 [&::-webkit-details-marker]:hidden">
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-wide text-zinc-600">
+                    Archivados · revisión de precios
+                  </p>
+                  <p className="text-[11px] text-zinc-500">
+                    {filteredArchivedOrders.length} pedido
+                    {filteredArchivedOrders.length === 1 ? '' : 's'} · toca para plegar o desplegar
+                  </p>
                 </div>
-              ))}
-            </div>
+                <span
+                  className="shrink-0 text-lg font-light text-zinc-400 transition-transform group-open:rotate-90"
+                  aria-hidden
+                >
+                  ›
+                </span>
+              </summary>
+              <div className="mt-3 space-y-2">
+                <p className="text-center text-[11px] text-zinc-500">
+                  Misma vista compacta que al archivar. «Volver a pendientes» reabre el pedido arriba.
+                </p>
+                {filteredArchivedOrders.map((order) => (
+                  <div
+                    key={order.id}
+                    className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-white p-3 ring-1 ring-zinc-200"
+                  >
+                    <div className="min-w-0 text-left">
+                      <p className="text-sm font-semibold text-zinc-900">{order.supplierName}</p>
+                      <p className="text-xs text-zinc-500">
+                        Pedido {new Date(order.createdAt).toLocaleDateString('es-ES')}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => markPriceReviewArchived(order.id, false)}
+                      className="shrink-0 rounded-lg border border-zinc-400 bg-white px-3 py-1.5 text-xs font-semibold text-zinc-800"
+                    >
+                      Volver a pendientes
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </details>
           ) : null}
         </div>
       </section>
