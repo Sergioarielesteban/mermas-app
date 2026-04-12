@@ -18,12 +18,16 @@ export default function PwaRegister() {
 
     navigator.serviceWorker.addEventListener('controllerchange', onControllerChange);
 
-    void navigator.serviceWorker.register('/sw.js').then((registration) => {
-      registrationRef.current = registration;
+    const syncWaitingBanner = (registration: ServiceWorkerRegistration) => {
       if (registration.waiting) {
         waitingWorkerRef.current = registration.waiting;
         setUpdateAvailable(true);
       }
+    };
+
+    void navigator.serviceWorker.register('/sw.js').then((registration) => {
+      registrationRef.current = registration;
+      syncWaitingBanner(registration);
 
       registration.addEventListener('updatefound', () => {
         const newWorker = registration.installing;
@@ -37,12 +41,24 @@ export default function PwaRegister() {
       });
 
       updateInterval = window.setInterval(() => {
-        void registration.update();
+        void registration.update().then(() => syncWaitingBanner(registration));
       }, 60_000);
     });
 
+    const onReturnToApp = () => {
+      const reg = registrationRef.current;
+      if (document.visibilityState === 'visible' && reg?.waiting) {
+        waitingWorkerRef.current = reg.waiting;
+        setUpdateAvailable(true);
+      }
+    };
+    document.addEventListener('visibilitychange', onReturnToApp);
+    window.addEventListener('pageshow', onReturnToApp);
+
     return () => {
       navigator.serviceWorker.removeEventListener('controllerchange', onControllerChange);
+      document.removeEventListener('visibilitychange', onReturnToApp);
+      window.removeEventListener('pageshow', onReturnToApp);
       if (updateInterval) window.clearInterval(updateInterval);
     };
   }, []);
@@ -50,7 +66,6 @@ export default function PwaRegister() {
   const applyUpdate = () => {
     const waiting = waitingWorkerRef.current ?? registrationRef.current?.waiting ?? null;
     if (waiting) {
-      // El nuevo worker pasa a activo; `controllerchange` hace un reload suave (sin borrar SW/cachés).
       waiting.postMessage({ type: 'SKIP_WAITING' });
       return;
     }

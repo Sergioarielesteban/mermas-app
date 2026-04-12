@@ -1,4 +1,4 @@
-const CACHE_NAME = 'chef-one-app-v6';
+const CACHE_NAME = 'chef-one-app-v7';
 const CORE_ASSETS = ['/', '/login', '/panel', '/dashboard', '/productos', '/resumen', '/manifest.webmanifest'];
 
 self.addEventListener('message', (event) => {
@@ -8,9 +8,9 @@ self.addEventListener('message', (event) => {
 });
 
 self.addEventListener('install', (event) => {
-  event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(CORE_ASSETS)).then(() => self.skipWaiting()),
-  );
+  // No llamar skipWaiting aquí: si no, el nuevo worker se activa solo, salta controllerchange
+  // y la página recarga sin dar tiempo al aviso "Hay una nueva versión".
+  event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(CORE_ASSETS)));
 });
 
 self.addEventListener('activate', (event) => {
