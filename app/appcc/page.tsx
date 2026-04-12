@@ -1,15 +1,14 @@
 'use client';
 
 import Link from 'next/link';
-import { ChevronLeft, History, Thermometer, Wrench } from 'lucide-react';
+import { ChevronLeft, Droplet, History, Thermometer, Wrench } from 'lucide-react';
 import { CHEF_ONE_TAPER_LINE_CLASS } from '@/components/ChefOneGlowLine';
-import MermasStyleHero from '@/components/MermasStyleHero';
 
-const LINE = `mx-auto mt-4 w-24 ${CHEF_ONE_TAPER_LINE_CLASS}`;
+const LINE_SM = `mx-auto mt-2 w-14 ${CHEF_ONE_TAPER_LINE_CLASS}`;
 
 export default function AppccHubPage() {
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <Link
         href="/panel"
         className="inline-flex items-center gap-1 text-sm font-semibold text-zinc-600 hover:text-[#D32F2F]"
@@ -18,49 +17,73 @@ export default function AppccHubPage() {
         Panel
       </Link>
 
-      <MermasStyleHero
-        eyebrow="APPCC"
-        title="Control higiénico"
-        description="Temperaturas de neveras y congeladores, registro e historial."
-      />
+      <section className="rounded-2xl border border-zinc-200/90 bg-white px-3 py-4 shadow-sm ring-1 ring-zinc-100 sm:px-4 sm:py-5">
+        <h2 className="mb-3 text-center text-base font-bold tracking-tight text-zinc-900 sm:text-lg">
+          Control de temperaturas
+        </h2>
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-3 sm:gap-2.5">
+          <Link
+            href="/appcc/temperaturas"
+            className="flex flex-col items-center rounded-xl bg-zinc-50/90 px-2 py-3 text-center ring-1 ring-zinc-200/80 transition hover:bg-white hover:ring-zinc-300"
+          >
+            <div className="mb-1.5 grid h-10 w-10 place-items-center rounded-xl bg-[#D32F2F]/12 text-[#D32F2F] shadow-inner">
+              <Thermometer className="h-5 w-5" strokeWidth={2.1} />
+            </div>
+            <span className="text-xs font-semibold leading-tight text-zinc-900 sm:text-[0.8125rem]">
+              Registrar temperaturas
+            </span>
+            <span className="mt-1 line-clamp-2 text-[10px] font-medium leading-snug text-zinc-500">
+              Mañana, tarde y noche
+            </span>
+            <span className={`${LINE_SM}`} aria-hidden />
+          </Link>
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <Link
-          href="/appcc/temperaturas"
-          className="flex flex-col items-center rounded-3xl bg-zinc-50/80 px-6 py-7 text-center ring-1 ring-zinc-200/90 transition hover:bg-white hover:ring-zinc-300"
-        >
-          <div className="mb-3 grid h-14 w-14 place-items-center rounded-2xl bg-[#D32F2F]/15 text-[#D32F2F] shadow-inner">
-            <Thermometer className="h-7 w-7" strokeWidth={2.1} />
-          </div>
-          <span className="text-lg font-semibold text-zinc-900">Registrar temperaturas</span>
-          <span className="mt-2 text-xs font-medium text-zinc-500">Mañana, tarde y noche</span>
-          <span className={`mt-4 ${LINE}`} aria-hidden />
-        </Link>
+          <Link
+            href="/appcc/historial"
+            className="flex flex-col items-center rounded-xl bg-zinc-50/90 px-2 py-3 text-center ring-1 ring-zinc-200/80 transition hover:bg-white hover:ring-zinc-300"
+          >
+            <div className="mb-1.5 grid h-10 w-10 place-items-center rounded-xl bg-zinc-200/70 text-zinc-700 shadow-inner">
+              <History className="h-5 w-5" strokeWidth={2.1} />
+            </div>
+            <span className="text-xs font-semibold leading-tight text-zinc-900 sm:text-[0.8125rem]">Historial</span>
+            <span className="mt-1 line-clamp-2 text-[10px] font-medium leading-snug text-zinc-500">
+              Últimos días con registros
+            </span>
+            <span className={`${LINE_SM}`} aria-hidden />
+          </Link>
 
-        <Link
-          href="/appcc/historial"
-          className="flex flex-col items-center rounded-3xl bg-zinc-50/80 px-6 py-7 text-center ring-1 ring-zinc-200/90 transition hover:bg-white hover:ring-zinc-300"
-        >
-          <div className="mb-3 grid h-14 w-14 place-items-center rounded-2xl bg-zinc-200/80 text-zinc-700 shadow-inner">
-            <History className="h-7 w-7" strokeWidth={2.1} />
-          </div>
-          <span className="text-lg font-semibold text-zinc-900">Historial</span>
-          <span className="mt-2 text-xs font-medium text-zinc-500">Últimos días con registros</span>
-          <span className={`mt-4 ${LINE}`} aria-hidden />
-        </Link>
+          <Link
+            href="/appcc/equipos"
+            className="flex flex-col items-center rounded-xl bg-zinc-50/90 px-2 py-3 text-center ring-1 ring-zinc-200/80 transition hover:bg-white hover:ring-zinc-300"
+          >
+            <div className="mb-1.5 grid h-10 w-10 place-items-center rounded-xl bg-zinc-200/70 text-zinc-700 shadow-inner">
+              <Wrench className="h-5 w-5" strokeWidth={2.1} />
+            </div>
+            <span className="text-xs font-semibold leading-tight text-zinc-900 sm:text-[0.8125rem]">
+              Gestionar equipos
+            </span>
+            <span className="mt-1 line-clamp-2 text-[10px] font-medium leading-snug text-zinc-500">
+              Neveras y congeladores
+            </span>
+            <span className={`${LINE_SM}`} aria-hidden />
+          </Link>
+        </div>
+      </section>
 
-        <Link
-          href="/appcc/equipos"
-          className="flex flex-col items-center rounded-3xl bg-zinc-50/80 px-6 py-7 text-center ring-1 ring-zinc-200/90 transition hover:bg-white hover:ring-zinc-300 sm:col-span-2"
-        >
-          <div className="mb-3 grid h-14 w-14 place-items-center rounded-2xl bg-zinc-200/80 text-zinc-700 shadow-inner">
-            <Wrench className="h-7 w-7" strokeWidth={2.1} />
+      <section className="rounded-2xl border border-zinc-200/90 bg-white px-3 py-4 shadow-sm ring-1 ring-zinc-100 sm:px-4 sm:py-5">
+        <h2 className="mb-3 text-center text-base font-bold tracking-tight text-zinc-900 sm:text-lg">
+          Cambios de aceite
+        </h2>
+        <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-zinc-200 bg-zinc-50/80 px-4 py-8">
+          <div className="mb-2 grid h-10 w-10 place-items-center rounded-xl bg-zinc-200/60 text-zinc-500">
+            <Droplet className="h-5 w-5" strokeWidth={2} />
           </div>
-          <span className="text-lg font-semibold text-zinc-900">Gestionar equipos</span>
-          <span className="mt-2 text-xs font-medium text-zinc-500">Neveras y congeladores por zona</span>
-          <span className={`mt-4 ${LINE}`} aria-hidden />
-        </Link>
-      </div>
+          <p className="text-center text-sm font-semibold text-zinc-700">Próximamente</p>
+          <p className="mt-1 max-w-xs text-center text-xs text-zinc-500">
+            Registro de freidoras y fechas de cambio de aceite.
+          </p>
+        </div>
+      </section>
     </div>
   );
 }
