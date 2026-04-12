@@ -4,7 +4,7 @@ import Link from 'next/link';
 import React from 'react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { CalendarDays, FileText, TrendingDown, TrendingUp } from 'lucide-react';
+import { CalendarDays, TrendingDown, TrendingUp } from 'lucide-react';
 import {
   Bar,
   BarChart,
@@ -411,19 +411,9 @@ export default function DashboardPage() {
 
       <Link
         href="/resumen"
-        className="flex items-center gap-4 rounded-3xl bg-zinc-950 px-4 py-4 text-left text-white shadow-lg shadow-zinc-900/30 ring-1 ring-zinc-800/90 transition hover:bg-zinc-900 active:scale-[0.99] sm:px-5"
+        className="flex flex-col items-center justify-center rounded-3xl bg-zinc-950 px-4 py-7 text-center text-white shadow-lg shadow-zinc-900/30 ring-1 ring-zinc-800/90 transition hover:bg-zinc-900 active:scale-[0.99] sm:py-8"
       >
-        <div className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-[#D32F2F]/20 text-[#D32F2F] ring-1 ring-[#D32F2F]/30">
-          <FileText className="h-6 w-6" strokeWidth={2.25} />
-        </div>
-        <div className="min-w-0 flex-1">
-          <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-zinc-400">Informes</p>
-          <p className="mt-0.5 text-base font-extrabold uppercase tracking-wide text-white">Resumen</p>
-          <p className="mt-1 text-xs leading-snug text-zinc-400">Totales, exportar y vista global de mermas.</p>
-        </div>
-        <span className="shrink-0 text-lg font-light text-zinc-500" aria-hidden>
-          →
-        </span>
+        <span className="text-xl font-black uppercase tracking-[0.12em] text-white sm:text-2xl">Informes</span>
       </Link>
 
       <section className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-zinc-200">

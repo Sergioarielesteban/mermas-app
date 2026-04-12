@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import React from 'react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -194,6 +195,13 @@ export default function ResumenPage() {
 
   return (
     <div className="space-y-3">
+      <Link
+        href="/dashboard"
+        className="flex w-full items-center justify-center gap-2 rounded-2xl border border-zinc-300 bg-white py-2.5 text-sm font-bold text-zinc-800 shadow-sm ring-1 ring-zinc-200/80 transition hover:bg-zinc-50 active:scale-[0.99]"
+      >
+        <span aria-hidden>←</span>
+        Atrás · Mermas
+      </Link>
       {showDeletedBanner ? (
         <div className="pointer-events-none fixed inset-0 z-[90] grid place-items-center bg-black/25 px-6">
           <div className="rounded-2xl bg-[#D32F2F] px-7 py-5 text-center shadow-2xl ring-2 ring-white/75">
