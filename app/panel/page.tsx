@@ -80,6 +80,7 @@ export default function PanelControlPage() {
       <MermasStyleHero
         eyebrow="CHEF-ONE"
         title="Panel de control"
+        tagline="Toda la gestión de tu cocina, en la palma de tu mano."
         description="Mermas, inventario, APPCC (temperaturas) y Pedidos (si tu local lo tiene) ya están activos. Cocina central y escandallos: próximamente."
       />
 

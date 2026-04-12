@@ -93,9 +93,12 @@ export async function insertInventoryLineFromCatalog(
     localId: string;
     catalogItem: InventoryCatalogItem;
     userId: string | null;
+    /** Cantidad inicial (ej. 0,2); por defecto 0. */
+    initialQuantity?: number;
   },
 ): Promise<InventoryItem> {
   const c = params.catalogItem;
+  const q0 = Math.round((params.initialQuantity ?? 0) * 1000) / 1000;
   const { data: maxRow } = await supabase
     .from('inventory_items')
     .select('sort_order')
@@ -114,7 +117,7 @@ export async function insertInventoryLineFromCatalog(
       name: c.name,
       unit: c.unit,
       price_per_unit: Math.round(c.default_price_per_unit * 100) / 100,
-      quantity_on_hand: 0,
+      quantity_on_hand: q0,
       format_label: c.format_label,
       notes: '',
       sort_order: nextSort,
@@ -141,15 +144,22 @@ export async function updateInventoryItemLine(
     itemId: string;
     quantity_on_hand: number;
     price_per_unit: number;
+    name: string;
+    format_label: string | null;
+    unit: string;
   },
 ): Promise<void> {
   const q = Math.round(params.quantity_on_hand * 1000) / 1000;
   const p = Math.round(params.price_per_unit * 100) / 100;
+  const nm = params.name.trim();
   const { error } = await supabase
     .from('inventory_items')
     .update({
       quantity_on_hand: q,
       price_per_unit: p,
+      name: nm,
+      format_label: params.format_label?.trim() ? params.format_label.trim() : null,
+      unit: params.unit,
     })
     .eq('id', params.itemId)
     .eq('local_id', params.localId);

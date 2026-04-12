@@ -12,6 +12,8 @@ export default function AppFrame({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const { email, loading } = useAuth();
   const isLogin = pathname === '/login';
+  /** Landing pública en `/` (sin sesión); la PWA usa `start_url` `/login` para no pasar por aquí al abrir el icono. */
+  const isPublicHome = pathname === '/';
   const [forceUnlock, setForceUnlock] = React.useState(false);
 
   useEffect(() => {
@@ -29,7 +31,11 @@ export default function AppFrame({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (effectiveLoading) return;
-    if (!email && !isLogin) {
+    if (email && isPublicHome) {
+      router.replace('/panel');
+      return;
+    }
+    if (!email && !isLogin && !isPublicHome) {
       router.replace('/login');
       // Fallback in case client router transition gets stuck.
       window.setTimeout(() => {
@@ -41,10 +47,10 @@ export default function AppFrame({ children }: { children: React.ReactNode }) {
     if (email && isLogin) {
       router.replace('/panel');
     }
-  }, [effectiveLoading, email, isLogin, router]);
+  }, [effectiveLoading, email, isLogin, isPublicHome, router]);
 
-  // /login nunca debe quedar detrás de "Cargando sesión" (getSession puede tardar o colgarse en red).
-  if (isLogin) {
+  // /login y la landing en / no usan el shell de la app ni el bloqueo de "Cargando sesión".
+  if (isLogin || isPublicHome) {
     return <main className="min-h-screen flex flex-col bg-white">{children}</main>;
   }
 

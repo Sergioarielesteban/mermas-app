@@ -17,8 +17,24 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+/** OG / enlaces absolutos: en Vercel pon `NEXT_PUBLIC_SITE_URL=https://chef-one.com` (Producción). */
+function metadataBaseUrl(): URL {
+  const site = process.env.NEXT_PUBLIC_SITE_URL?.trim();
+  if (site) {
+    try {
+      return new URL(site);
+    } catch {
+      /* ignore */
+    }
+  }
+  if (process.env.VERCEL_URL) {
+    return new URL(`https://${process.env.VERCEL_URL}`);
+  }
+  return new URL("http://localhost:3000");
+}
+
 export const metadata: Metadata = {
-  metadataBase: new URL("http://localhost:3000"),
+  metadataBase: metadataBaseUrl(),
   title: "Chef-One",
   description: "Gestión operativa para restaurantes",
   manifest: "/manifest.webmanifest",

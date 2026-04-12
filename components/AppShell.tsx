@@ -50,6 +50,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const showPedidos = canAccessPedidos(localCode, email, localName, localId);
 
   const title = useMemo(() => titleForPath(pathname), [pathname]);
+  const isPanelRoute = pathname === '/panel' || pathname?.startsWith('/panel/');
   const navItems = useMemo<NavItem[]>(
     () => [
       ...(showPedidos ? [...NAV_ITEMS, { href: '/pedidos', label: 'Pedidos', Icon: ShoppingCart }] : NAV_ITEMS),
@@ -108,7 +109,14 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         </>
       ) : null}
 
-      <header className="sticky top-0 z-40 border-b border-[#b32020] bg-gradient-to-r from-[#B91C1C] to-[#D32F2F] shadow-lg print:hidden">
+      <header
+        className={[
+          'sticky top-0 z-40 shadow-lg print:hidden',
+          isPanelRoute
+            ? 'border-b border-zinc-800 bg-zinc-950'
+            : 'border-b border-[#b32020] bg-gradient-to-r from-[#B91C1C] to-[#D32F2F]',
+        ].join(' ')}
+      >
         <div className="mx-auto flex min-h-14 w-full max-w-md items-center gap-3 px-3 py-2">
           <button
             type="button"
