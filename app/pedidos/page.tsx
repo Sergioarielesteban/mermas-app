@@ -1,7 +1,6 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
 import React from 'react';
 import { useAuth } from '@/components/AuthProvider';
 import { usePedidosOrders } from '@/components/PedidosOrdersProvider';
@@ -11,6 +10,10 @@ import PedidosPremiaLockedScreen from '@/components/PedidosPremiaLockedScreen';
 import { dispatchPedidosDataChanged, usePedidosDataChangedListener } from '@/hooks/usePedidosDataChangedListener';
 import { canAccessPedidos, canUsePedidosModule } from '@/lib/pedidos-access';
 import { formatIncidentLine, formatQuantityWithUnit, unitPriceCatalogSuffix } from '@/lib/pedidos-format';
+import {
+  readCatalogPricesSessionCache,
+  writeCatalogPricesSessionCache,
+} from '@/lib/pedidos-session-cache';
 import {
   billingQuantityForLine,
   deleteOrder,
@@ -305,8 +308,6 @@ export default function PedidosPage() {
       });
   };
 
-  const pathname = usePathname();
-
   React.useEffect(() => {
     setQuickLineMarks((prev) => {
       const next: Record<string, 'ok' | 'bad'> = {};
@@ -330,54 +331,27 @@ export default function PedidosPage() {
     if (!canUse || !localId) return;
     const supabase = getSupabaseClient();
     if (!supabase) return;
-    void fetchSuppliersWithProducts(supabase, localId)
-      .then((rows) => setCatalogPriceByProductId(catalogPriceMapFromSuppliers(rows)))
+    const lid = localId;
+    void fetchSuppliersWithProducts(supabase, lid)
+      .then((rows) => {
+        const map = catalogPriceMapFromSuppliers(rows);
+        setCatalogPriceByProductId(map);
+        writeCatalogPricesSessionCache(lid, map);
+      })
       .catch(() => {
         /* catálogo opcional para colorear precio */
       });
   }, [canUse, localId]);
 
   React.useEffect(() => {
-    reloadCatalog();
-  }, [reloadCatalog]);
-
-  /**
-   * - Tras guardar pedido nuevo: segunda pasada (~450 ms) por si la lectura en Supabase va a réplica.
-   * - Volver con Atrás desde caché del navegador (bfcache) o reabrir la pestaña.
-   */
-  React.useEffect(() => {
-    if (pathname !== '/pedidos') return;
-    let cancelled = false;
-    let delayedId: number | null = null;
-    try {
-      if (sessionStorage.getItem('mermas_reload_pedidos') === '1') {
-        sessionStorage.removeItem('mermas_reload_pedidos');
-        delayedId = window.setTimeout(() => {
-          if (!cancelled) {
-            reloadOrders();
-            reloadCatalog();
-          }
-        }, 450);
-      }
-    } catch {
-      /* sessionStorage no disponible */
+    if (!canUse || !localId) return;
+    const cached = readCatalogPricesSessionCache(localId);
+    if (cached !== null) {
+      setCatalogPriceByProductId(cached);
+      return;
     }
-    const pull = () => {
-      if (document.visibilityState !== 'visible') return;
-      reloadCatalog();
-    };
-    const onPageShow = (e: PageTransitionEvent) => {
-      if (e.persisted) pull();
-    };
-    window.addEventListener('pageshow', onPageShow);
-    document.addEventListener('visibilitychange', pull);
-    return () => {
-      cancelled = true;
-      if (delayedId != null) window.clearTimeout(delayedId);
-      window.removeEventListener('pageshow', onPageShow);
-      document.removeEventListener('visibilitychange', pull);
-    };
-  }, [pathname, reloadOrders, reloadCatalog]);
+    reloadCatalog();
+  }, [canUse, localId, reloadCatalog]);
 
   usePedidosDataChangedListener(
     React.useCallback(() => {

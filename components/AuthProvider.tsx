@@ -276,6 +276,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setEmail(nextEmail);
       persistEmail(nextEmail);
       setLoading(false);
+      // No volver a pedir `profiles` en cada refresco de token (p. ej. al volver a la app).
+      if (event === 'TOKEN_REFRESHED') return;
       void loadProfileForUser(session?.user?.id);
     });
 

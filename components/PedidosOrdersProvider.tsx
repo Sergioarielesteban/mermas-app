@@ -1,6 +1,15 @@
 'use client';
 
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import React, {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { useAuth } from '@/components/AuthProvider';
 import { usePedidosDataChangedListener } from '@/hooks/usePedidosDataChangedListener';
 import { canAccessPedidos, canUsePedidosModule } from '@/lib/pedidos-access';
@@ -10,6 +19,29 @@ import {
   type PedidoOrder,
 } from '@/lib/pedidos-supabase';
 import { getSupabaseClient } from '@/lib/supabase-client';
+
+const ordersSessionKey = (localId: string) => `chefone_pedidos_orders:${localId}`;
+
+function readOrdersFromSession(localId: string): PedidoOrder[] | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = sessionStorage.getItem(ordersSessionKey(localId));
+    if (raw == null) return null;
+    const data = JSON.parse(raw) as unknown;
+    return Array.isArray(data) ? (data as PedidoOrder[]) : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeOrdersToSession(localId: string, rows: PedidoOrder[]) {
+  if (typeof window === 'undefined') return;
+  try {
+    sessionStorage.setItem(ordersSessionKey(localId), JSON.stringify(rows));
+  } catch {
+    /* modo privado / cuota */
+  }
+}
 
 type PedidosOrdersContextValue = {
   orders: PedidoOrder[];
@@ -32,6 +64,10 @@ export function PedidosOrdersProvider({ children }: { children: React.ReactNode 
 
   const [orders, setOrders] = useState<PedidoOrder[]>([]);
   const pinUntilSeenRef = useRef<Set<string>>(new Set());
+  const localIdRef = useRef<string | null>(localId ?? null);
+  localIdRef.current = localId ?? null;
+  /** Evita escribir en sessionStorage el snapshot del local anterior justo tras cambiar de local. */
+  const ordersReadyLocalIdRef = useRef<string | null>(null);
 
   const pinOrderId = useCallback((id: string) => {
     pinUntilSeenRef.current.add(id);
@@ -51,22 +87,41 @@ export function PedidosOrdersProvider({ children }: { children: React.ReactNode 
 
   const reloadOrders = useCallback(() => {
     if (!canUse || !localId) return;
+    const targetId = localId;
     const supabase = getSupabaseClient();
     if (!supabase) return;
-    void fetchOrders(supabase, localId).then((rows) => {
-      setOrders((prev) => mergePedidoOrdersFromServer(prev, rows, pinUntilSeenRef.current));
+    void fetchOrders(supabase, targetId).then((rows) => {
+      if (localIdRef.current !== targetId) return;
+      setOrders((prev) =>
+        mergePedidoOrdersFromServer(prev, rows, pinUntilSeenRef.current),
+      );
+      ordersReadyLocalIdRef.current = targetId;
     });
   }, [canUse, localId]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
+    ordersReadyLocalIdRef.current = null;
     setOrders([]);
     pinUntilSeenRef.current.clear();
   }, [localId]);
 
   useEffect(() => {
     if (!canUse || !localId) return;
+    const cached = readOrdersFromSession(localId);
+    if (cached !== null) {
+      ordersReadyLocalIdRef.current = localId;
+      setOrders(cached);
+      return;
+    }
+    ordersReadyLocalIdRef.current = null;
     reloadOrders();
   }, [canUse, localId, reloadOrders]);
+
+  useEffect(() => {
+    if (!canUse || !localId) return;
+    if (ordersReadyLocalIdRef.current !== localId) return;
+    writeOrdersToSession(localId, orders);
+  }, [canUse, localId, orders]);
 
   usePedidosDataChangedListener(reloadOrders, Boolean(hasEntry && canUse));
 

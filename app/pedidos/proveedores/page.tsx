@@ -9,6 +9,10 @@ import { canAccessPedidos, canUsePedidosModule } from '@/lib/pedidos-access';
 import { dispatchPedidosDataChanged, usePedidosDataChangedListener } from '@/hooks/usePedidosDataChangedListener';
 import { unitPriceCatalogSuffix } from '@/lib/pedidos-format';
 import {
+  readSuppliersSessionCache,
+  writeSuppliersSessionCache,
+} from '@/lib/pedidos-session-cache';
+import {
   createSupplier,
   createSupplierProduct,
   deleteSupplier,
@@ -86,50 +90,62 @@ export default function ProveedoresPage() {
   const [supplierDrafts, setSupplierDrafts] = React.useState<Record<string, { name: string; contact: string }>>({});
   const [productDrafts, setProductDrafts] = React.useState<Record<string, ProductDraft>>({});
 
+  const applySupplierRows = React.useCallback((rows: PedidoSupplier[]) => {
+    setSuppliers(rows);
+    setProductSupplierId((prev) => prev || rows[0]?.id || '');
+    setSupplierDrafts((prev) => {
+      const next = { ...prev };
+      for (const supplier of rows) {
+        next[supplier.id] = next[supplier.id] ?? { name: supplier.name, contact: supplier.contact ?? '' };
+      }
+      return next;
+    });
+    setProductDrafts((prev) => {
+      const next = { ...prev };
+      for (const supplier of rows) {
+        for (const p of supplier.products) {
+          next[p.id] = next[p.id] ?? {
+            name: p.name,
+            unit: p.unit,
+            price: String(p.pricePerUnit),
+            vatRate: String(p.vatRate ?? 0),
+            estimatedKg:
+              unitSupportsReceivedWeightKg(p.unit) && p.estimatedKgPerUnit != null && p.estimatedKgPerUnit > 0
+                ? String(p.estimatedKgPerUnit)
+                : '',
+          };
+        }
+      }
+      return next;
+    });
+  }, []);
+
   const reload = React.useCallback(() => {
     if (!canUse) return;
     if (!localId) {
       setMessage('No se pudo cargar proveedores: tu usuario no tiene local_id activo en perfil.');
       return;
     }
+    const lid = localId;
     const supabase = getSupabaseClient();
     if (!supabase) return;
-    void fetchSuppliersWithProducts(supabase, localId)
+    void fetchSuppliersWithProducts(supabase, lid)
       .then((rows) => {
-        setSuppliers(rows);
-        if (!productSupplierId && rows[0]?.id) setProductSupplierId(rows[0].id);
-        setSupplierDrafts((prev) => {
-          const next = { ...prev };
-          for (const supplier of rows) {
-            next[supplier.id] = next[supplier.id] ?? { name: supplier.name, contact: supplier.contact ?? '' };
-          }
-          return next;
-        });
-        setProductDrafts((prev) => {
-          const next = { ...prev };
-          for (const supplier of rows) {
-            for (const p of supplier.products) {
-              next[p.id] = next[p.id] ?? {
-                name: p.name,
-                unit: p.unit,
-                price: String(p.pricePerUnit),
-                vatRate: String(p.vatRate ?? 0),
-                estimatedKg:
-                  unitSupportsReceivedWeightKg(p.unit) && p.estimatedKgPerUnit != null && p.estimatedKgPerUnit > 0
-                    ? String(p.estimatedKgPerUnit)
-                    : '',
-              };
-            }
-          }
-          return next;
-        });
+        applySupplierRows(rows);
+        writeSuppliersSessionCache(lid, rows);
       })
       .catch((err: Error) => setMessage(err.message));
-  }, [canUse, localId, productSupplierId]);
+  }, [applySupplierRows, canUse, localId]);
 
   React.useEffect(() => {
+    if (!canUse || !localId) return;
+    const cached = readSuppliersSessionCache(localId);
+    if (cached !== null) {
+      applySupplierRows(cached);
+      return;
+    }
     reload();
-  }, [reload]);
+  }, [applySupplierRows, canUse, localId, reload]);
 
   usePedidosDataChangedListener(reload, Boolean(hasPedidosEntry && canUse));
 

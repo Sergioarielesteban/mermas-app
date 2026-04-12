@@ -92,18 +92,8 @@ export default function PwaRegister() {
       }, 60_000);
     });
 
-    const onReturnToApp = () => {
-      const reg = registrationRef.current;
-      if (document.visibilityState !== 'visible' || !reg) return;
-      void reg.update().then(() => applyWaitingState(reg));
-    };
-    document.addEventListener('visibilitychange', onReturnToApp);
-    window.addEventListener('pageshow', onReturnToApp);
-
     return () => {
       navigator.serviceWorker.removeEventListener('controllerchange', onControllerChange);
-      document.removeEventListener('visibilitychange', onReturnToApp);
-      window.removeEventListener('pageshow', onReturnToApp);
       if (updateInterval) window.clearInterval(updateInterval);
     };
   }, []);

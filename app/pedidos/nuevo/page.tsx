@@ -11,6 +11,10 @@ import { canAccessPedidos, canUsePedidosModule } from '@/lib/pedidos-access';
 import { dispatchPedidosDataChanged, usePedidosDataChangedListener } from '@/hooks/usePedidosDataChangedListener';
 import { formatQuantityWithUnit, unitPriceCatalogSuffix } from '@/lib/pedidos-format';
 import {
+  readSuppliersSessionCache,
+  writeSuppliersSessionCache,
+} from '@/lib/pedidos-session-cache';
+import {
   fetchOrderById,
   fetchOrders,
   fetchSuppliersWithProducts,
@@ -106,23 +110,31 @@ export default function NuevoPedidoPage() {
 
   const reloadSuppliers = React.useCallback(() => {
     if (!canUse || !localId) return;
+    const lid = localId;
     const supabase = getSupabaseClient();
     if (!supabase) return;
     setLoadingSuppliers(true);
-    void fetchSuppliersWithProducts(supabase, localId)
+    void fetchSuppliersWithProducts(supabase, lid)
       .then((rows) => {
         setSuppliers(rows);
-        if (rows[0]?.id) {
-          setSupplierId((prev) => prev || rows[0].id);
-        }
+        setSupplierId((prev) => prev || rows[0]?.id || '');
+        writeSuppliersSessionCache(lid, rows);
       })
       .catch((err: Error) => setMessage(err.message))
       .finally(() => setLoadingSuppliers(false));
   }, [canUse, localId]);
 
   React.useEffect(() => {
+    if (!canUse || !localId) return;
+    const cached = readSuppliersSessionCache(localId);
+    if (cached !== null) {
+      setSuppliers(cached);
+      setSupplierId((prev) => prev || cached[0]?.id || '');
+      setLoadingSuppliers(false);
+      return;
+    }
     reloadSuppliers();
-  }, [reloadSuppliers]);
+  }, [canUse, localId, reloadSuppliers]);
 
   usePedidosDataChangedListener(reloadSuppliers, Boolean(hasPedidosEntry && canUse));
 
@@ -265,12 +277,7 @@ export default function NuevoPedidoPage() {
     })
       .then((orderId) => {
         void pullNewOrderIntoStore(orderId);
-        try {
-          sessionStorage.setItem('mermas_reload_pedidos', '1');
-        } catch {
-          /* modo privado */
-        }
-        dispatchPedidosDataChanged({ immediate: true });
+        dispatchPedidosDataChanged();
         router.push('/pedidos');
       })
       .catch((err: Error) => setMessage(err.message));
@@ -329,12 +336,7 @@ export default function NuevoPedidoPage() {
           }),
         );
         popup.location.href = `https://wa.me/${phone}?text=${text}`;
-        try {
-          sessionStorage.setItem('mermas_reload_pedidos', '1');
-        } catch {
-          /* modo privado */
-        }
-        dispatchPedidosDataChanged({ immediate: true });
+        dispatchPedidosDataChanged();
         router.push('/pedidos');
       })
       .catch((err: Error) => {

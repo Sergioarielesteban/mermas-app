@@ -190,6 +190,8 @@ PAN BRIOCHE SIN GLUTEN	1,59 €`;
 
 const StoreContext = createContext<MermasStore | null>(null);
 
+const mermasCloudSessionKey = (localId: string) => `chefone_mermas_cloud:${localId}`;
+
 function sortProductsByName(items: Product[]) {
   return [...items].sort((a, b) =>
     a.name.localeCompare(b.name, 'es', { sensitivity: 'base', numeric: true }),
@@ -339,12 +341,23 @@ function isSeedProductId(id: string) {
   return id.startsWith('seed-');
 }
 
+function hasNonSeedMermas(list: MermaRecord[]) {
+  return list.some((m) => !isSeedMermaId(m.id));
+}
+
+function hasNonSeedProducts(list: Product[]) {
+  return list.some((p) => !isSeedProductId(p.id));
+}
+
 function mergeCloudMermas(
   prev: MermaRecord[],
   serverCleaned: MermaRecord[],
   products: Product[],
   protectIds: Set<string>,
 ): MermaRecord[] {
+  if (serverCleaned.length === 0 && hasNonSeedMermas(prev)) {
+    return pruneBaconHalfRecords(products, prev);
+  }
   const serverIds = new Set(serverCleaned.map((x) => x.id));
   const now = Date.now();
   const extras = prev.filter((m) => {
@@ -367,6 +380,9 @@ function mergeCloudMermas(
 }
 
 function mergeCloudProducts(prev: Product[], serverSorted: Product[], protectIds: Set<string>): Product[] {
+  if (serverSorted.length === 0 && hasNonSeedProducts(prev)) {
+    return sortProductsByName([...prev]);
+  }
   const serverIds = new Set(serverSorted.map((x) => x.id));
   const now = Date.now();
   const extras = prev.filter((p) => {
@@ -516,31 +532,34 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
 
   useEffect(() => {
     if (!isBrowser() || !hydrated || !cloudMode || !localId) return;
+    try {
+      const raw = sessionStorage.getItem(mermasCloudSessionKey(localId));
+      if (raw) {
+        const parsed = safeJsonParse<{ products?: Product[]; mermas?: MermaRecord[] }>(raw);
+        if (parsed && Array.isArray(parsed.products) && parsed.products.length > 0) {
+          const prods = sortProductsByName(parsed.products);
+          const nextMermas =
+            Array.isArray(parsed.mermas) && parsed.mermas.length > 0
+              ? pruneBaconHalfRecords(prods, parsed.mermas)
+              : [];
+          setProducts(prods);
+          setMermas(nextMermas);
+        }
+      }
+    } catch {
+      /* ignore */
+    }
     void refetchCloud();
   }, [cloudMode, hydrated, localId, refetchCloud]);
 
   useEffect(() => {
-    if (!isBrowser() || !hydrated || !cloudMode || !cloudDataLoaded) return;
-    const supabase = getSupabaseClient();
-    if (!supabase) return;
-    let debounceTimer: number | null = null;
-    const scheduleRefetch = () => {
-      if (debounceTimer != null) window.clearTimeout(debounceTimer);
-      debounceTimer = window.setTimeout(() => {
-        debounceTimer = null;
-        void refetchCloud();
-      }, 2000);
-    };
-    const channel = supabase
-      .channel('mermas-local-realtime')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'products' }, scheduleRefetch)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'mermas' }, scheduleRefetch)
-      .subscribe();
-    return () => {
-      if (debounceTimer != null) window.clearTimeout(debounceTimer);
-      void supabase.removeChannel(channel);
-    };
-  }, [cloudDataLoaded, cloudMode, hydrated, refetchCloud]);
+    if (!isBrowser() || !hydrated || !cloudMode || !localId || !cloudDataLoaded) return;
+    try {
+      sessionStorage.setItem(mermasCloudSessionKey(localId), JSON.stringify({ products, mermas }));
+    } catch {
+      /* ignore */
+    }
+  }, [cloudDataLoaded, cloudMode, hydrated, localId, products, mermas]);
 
   useEffect(() => {
     if (!isBrowser()) return;
