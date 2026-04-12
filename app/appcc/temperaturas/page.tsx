@@ -30,9 +30,17 @@ import {
 const PDF_MAX_DAYS = 120;
 
 function parseTempInput(raw: string): number | null {
-  const n = Number(String(raw).trim().replace(',', '.'));
+  const s = String(raw).trim().replace(',', '.').replace(/\u2212/g, '-');
+  // Number('') === 0 en JS: vacío o signo suelto no es una temperatura válida.
+  if (s === '' || s === '-' || s === '+' || s === '.' || s === '-.' || s === '+.') return null;
+  const n = Number(s);
   if (!Number.isFinite(n)) return null;
   return Math.round(n * 100) / 100;
+}
+
+function initialTempFieldValue(unit: AppccColdUnitRow, reading: AppccReadingRow | undefined): string {
+  if (reading != null) return String(reading.temperature_c);
+  return unit.unit_type === 'congelador' ? '-' : '';
 }
 
 const SLOT_SHORT: Record<AppccSlot, string> = {
@@ -57,7 +65,7 @@ function SlotEditor({
   disabled: boolean;
 }) {
   const { localId } = useAuth();
-  const [value, setValue] = useState(reading ? String(reading.temperature_c) : '');
+  const [value, setValue] = useState(() => initialTempFieldValue(unit, reading));
   const [notes, setNotes] = useState(reading?.notes ?? '');
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -65,10 +73,10 @@ function SlotEditor({
   const [justSaved, setJustSaved] = useState(false);
 
   useEffect(() => {
-    setValue(reading ? String(reading.temperature_c) : '');
+    setValue(initialTempFieldValue(unit, reading));
     setNotes(reading?.notes ?? '');
     setJustSaved(false);
-  }, [reading]);
+  }, [reading, unit]);
 
   const tInput = parseTempInput(value);
   const hasLimits = unit.temp_min_c != null || unit.temp_max_c != null;
@@ -137,15 +145,23 @@ function SlotEditor({
         <div className="flex items-center gap-0.5">
           <input
             type="text"
-            inputMode="decimal"
+            inputMode={unit.unit_type === 'congelador' ? 'numeric' : 'decimal'}
             value={value}
             onChange={(e) => {
               setJustSaved(false);
               setValue(e.target.value);
             }}
             disabled={disabled || saving}
-            placeholder="°C"
-            className="h-7 w-[3.25rem] rounded-md border border-zinc-200 bg-white px-1.5 text-xs font-semibold text-zinc-900 outline-none focus:ring-1 focus:ring-[#D32F2F]/40"
+            placeholder={unit.unit_type === 'congelador' ? '18' : '°C'}
+            title={
+              unit.unit_type === 'congelador'
+                ? 'Ya hay un «-»; escribe solo el número (ej. 18 → -18 °C)'
+                : undefined
+            }
+            className={[
+              'h-7 rounded-md border border-zinc-200 bg-white px-1.5 text-xs font-semibold text-zinc-900 outline-none focus:ring-1 focus:ring-[#D32F2F]/40',
+              unit.unit_type === 'congelador' ? 'w-[3.65rem]' : 'w-[3.25rem]',
+            ].join(' ')}
           />
           <span className="text-[10px] text-zinc-400">°C</span>
         </div>
@@ -201,7 +217,7 @@ function UnitCard({
 
   const range =
     unit.temp_min_c != null || unit.temp_max_c != null
-      ? ` · ${unit.temp_min_c ?? '—'}–${unit.temp_max_c ?? '—'} °C`
+      ? ` · ${unit.temp_min_c ?? '—'} – ${unit.temp_max_c ?? '—'} °C`
       : '';
 
   return (
