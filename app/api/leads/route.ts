@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { sendLeadNotificationEmail } from '@/lib/server/notify-lead-email';
 import { insertMarketingLead, isSupabaseAdminConfigured } from '@/lib/server/supabase-admin';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -45,6 +46,16 @@ export async function POST(request: Request) {
       restaurantName,
       message,
       source: 'chef-one-landing',
+    });
+    void sendLeadNotificationEmail({
+      name,
+      email,
+      phone,
+      restaurantName,
+      message,
+      source: 'chef-one-landing',
+    }).catch(() => {
+      /* ya logueado en notify-lead-email */
     });
     return NextResponse.json({ ok: true });
   } catch {
