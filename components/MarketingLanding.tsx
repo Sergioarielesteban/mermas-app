@@ -1,10 +1,12 @@
 import Link from 'next/link';
 import { ShieldCheck, TrendingUp, Eye, Layers } from 'lucide-react';
 import MarketingLeadForm from '@/components/MarketingLeadForm';
+import MarketingQuickContact, { MarketingContactLinkRow } from '@/components/marketing/MarketingQuickContact';
 import MarketingHero from '@/components/marketing/MarketingHero';
 import MarketingOriginStory from '@/components/marketing/MarketingOriginStory';
 import MarketingModulesSection from '@/components/marketing/MarketingModulesSection';
 import MarketingPricingHighlight from '@/components/marketing/MarketingPricingHighlight';
+import { getMarketingContactPhone } from '@/lib/marketing-contact-phone';
 
 const BRAND = '#D32F2F';
 
@@ -36,6 +38,8 @@ const benefitBlocks = [
 ] as const;
 
 export default function MarketingLanding() {
+  const phoneContact = getMarketingContactPhone();
+
   return (
     <div className="min-h-[100dvh] bg-[#f8f9fb] text-stone-800 antialiased">
       <a
@@ -75,6 +79,14 @@ export default function MarketingLanding() {
             >
               Solicitar info
             </Link>
+            {phoneContact ? (
+              <Link
+                href="#contacto-rapido"
+                className="rounded-full px-3 py-2 text-xs font-bold text-stone-600 ring-1 ring-stone-200/90 transition hover:bg-stone-50"
+              >
+                Llamar / WhatsApp
+              </Link>
+            ) : null}
             <Link
               href="/login"
               className="rounded-full px-4 py-2.5 text-sm font-bold text-white shadow-md shadow-rose-900/10 transition hover:brightness-105 active:scale-[0.98]"
@@ -139,6 +151,17 @@ export default function MarketingLanding() {
               </p>
             </div>
 
+            {phoneContact ? (
+              <div
+                id="contacto-rapido"
+                className="scroll-mt-[4.5rem] mx-auto mt-10 max-w-lg rounded-2xl border border-stone-200/80 bg-white/90 p-5 text-center shadow-[0_8px_28px_-16px_rgba(15,23,42,0.12)] ring-1 ring-stone-100 sm:scroll-mt-24 sm:p-6"
+              >
+                <p className="text-sm font-bold text-stone-900">¿Prefieres llamar o escribir ya?</p>
+                <p className="mt-1 text-xs text-stone-600 sm:text-sm">Te abrimos el teléfono o WhatsApp con un toque.</p>
+                <MarketingContactLinkRow contact={phoneContact} className="mt-4" />
+              </div>
+            ) : null}
+
             <div className="mt-10 rounded-[1.75rem] border border-stone-200/80 bg-gradient-to-b from-[#fafafa] to-white p-6 shadow-[0_12px_40px_-20px_rgba(15,23,42,0.15)] sm:p-10">
               <div className="mx-auto max-w-lg">
                 <div className="mb-8 rounded-2xl border border-stone-100 bg-white/90 px-4 py-3.5 text-center text-sm text-stone-600 ring-1 ring-stone-100 sm:px-5">
@@ -182,8 +205,28 @@ export default function MarketingLanding() {
           <Link href="#modulos" className="font-medium underline decoration-stone-300 underline-offset-2 hover:text-stone-800">
             Ver módulos
           </Link>
+          {phoneContact ? (
+            <>
+              <a
+                href={phoneContact.telHref}
+                className="font-medium underline decoration-stone-300 underline-offset-2 hover:text-stone-800"
+              >
+                Llamar
+              </a>
+              <a
+                href={phoneContact.whatsappUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-medium underline decoration-stone-300 underline-offset-2 hover:text-stone-800"
+              >
+                WhatsApp
+              </a>
+            </>
+          ) : null}
         </p>
       </footer>
+
+      <MarketingQuickContact />
     </div>
   );
 }
