@@ -152,7 +152,7 @@ export default function PedidosPage() {
 
   const [expandedSentId, setExpandedSentId] = React.useState<string | null>(null);
   const [expandedHistoricoId, setExpandedHistoricoId] = React.useState<string | null>(null);
-  const [pendientesEntregaAccordionOpen, setPendientesEntregaAccordionOpen] = React.useState(true);
+  const [pendientesEntregaAccordionOpen, setPendientesEntregaAccordionOpen] = React.useState(false);
   const [historicoRecibidosAccordionOpen, setHistoricoRecibidosAccordionOpen] = React.useState(false);
   /** Feedback visual al marcar recibido (el merge con réplica ya no revierte el estado). */
   const [receivingOrderId, setReceivingOrderId] = React.useState<string | null>(null);

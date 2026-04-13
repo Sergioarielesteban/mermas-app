@@ -20,6 +20,8 @@ type PricePoint = {
   /** Desempate si varios pedidos comparten la misma fecha de precio */
   orderCreatedAt: string;
   itemId: string;
+  /** 0 = precio pedido (base), 1 = precio albarán; misma fecha ISO → base antes que albarán */
+  sortRank?: number;
 };
 
 type PurchaseRow = {
@@ -45,6 +47,11 @@ type PriceSummary = {
 
 function orderPriceDate(order: PedidoOrder): string {
   return order.receivedAt ?? order.sentAt ?? order.createdAt;
+}
+
+/** Fecha del precio «pedido» (catálogo al enviar) para contrastar con albarán en un mismo pedido. */
+function orderBasePriceDate(order: PedidoOrder): string {
+  return order.sentAt ?? order.createdAt;
 }
 
 /**
@@ -98,7 +105,8 @@ export default function PedidosPreciosPage() {
     };
     const map = new Map<string, Acc>();
     for (const order of orders) {
-      const d = orderPriceDate(order);
+      const dBill = orderPriceDate(order);
+      const dBase = orderBasePriceDate(order);
       for (const item of order.items) {
         const unitPrice = unitPriceForPriceHistory(item);
         if (unitPrice == null) continue;
@@ -113,16 +121,31 @@ export default function PedidosPreciosPage() {
             wSum: 0,
             wQty: 0,
           };
+        const baseRaw = item.basePricePerUnit;
+        const basePrice =
+          baseRaw != null && Number.isFinite(baseRaw) && baseRaw > 0 ? Math.round(baseRaw * 100) / 100 : null;
+        if (basePrice != null && Math.abs(basePrice - unitPrice) > 0.001) {
+          acc.points.push({
+            date: dBase,
+            supplier: order.supplierName,
+            unit: item.unit,
+            price: basePrice,
+            orderCreatedAt: order.createdAt,
+            itemId: `${item.id}:base`,
+            sortRank: 0,
+          });
+        }
         acc.points.push({
-          date: d,
+          date: dBill,
           supplier: order.supplierName,
           unit: item.unit,
           price: unitPrice,
           orderCreatedAt: order.createdAt,
           itemId: item.id,
+          sortRank: 1,
         });
         acc.purchases.push({
-          date: d,
+          date: dBill,
           supplier: order.supplierName,
           qty: wq,
           unit: item.unit,
@@ -140,6 +163,9 @@ export default function PedidosPreciosPage() {
           if (t !== 0) return t;
           const oc = Date.parse(a.orderCreatedAt) - Date.parse(b.orderCreatedAt);
           if (oc !== 0) return oc;
+          const ra = a.sortRank ?? 0;
+          const rb = b.sortRank ?? 0;
+          if (ra !== rb) return ra - rb;
           return a.itemId.localeCompare(b.itemId);
         });
         const base = ordered[0];
