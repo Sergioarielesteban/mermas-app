@@ -6,10 +6,10 @@ import React, { useCallback, useMemo, useState } from 'react';
 import {
   BookOpen,
   ClipboardList,
-  Drumstick,
   LogOut,
   Menu,
   MessageCircle,
+  ShieldCheck,
   X,
   RefreshCcw,
   ShoppingCart,
@@ -26,15 +26,12 @@ type NavItem = {
   Icon: React.ComponentType<{ className?: string }>;
 };
 
-const NAV_ITEMS: NavItem[] = [
-  { href: '/dashboard', label: 'Mermas', Icon: BookOpen },
-  { href: '/productos', label: 'Añadir Productos', Icon: Drumstick },
-];
+const NAV_ITEMS: NavItem[] = [{ href: '/dashboard', label: 'Mermas', Icon: BookOpen }];
 function titleForPath(pathname: string | null) {
   if (!pathname) return 'Mermas';
   if (pathname === '/panel' || pathname.startsWith('/panel/')) return 'Panel de control';
   if (pathname === '/' || pathname.startsWith('/dashboard')) return 'Mermas';
-  if (pathname.startsWith('/productos')) return 'Añadir Productos';
+  if (pathname.startsWith('/productos')) return 'Productos del registro';
   if (pathname.startsWith('/resumen')) return 'Resumen';
   if (pathname.startsWith('/pedidos')) return 'Pedidos';
   if (pathname.startsWith('/inventario')) return 'Inventario';
@@ -56,15 +53,19 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [confirmLogoutOpen, setConfirmLogoutOpen] = useState(false);
-  const { email, logout, localId, localCode, localName } = useAuth();
+  const { email, displayName, loginUsername, logout, localId, localCode, localName } = useAuth();
   const localLabel = formatLocalHeaderName(localName ?? localCode) ?? localName ?? localCode;
+  const sessionLabel = (displayName?.trim() || loginUsername?.trim() || null) ?? 'Usuario';
   const showPedidos = canAccessPedidos(localCode, email, localName, localId);
 
   const title = useMemo(() => titleForPath(pathname), [pathname]);
   const isPanelRoute = pathname === '/panel' || pathname?.startsWith('/panel/');
   const navItems = useMemo<NavItem[]>(
     () => [
-      ...(showPedidos ? [...NAV_ITEMS, { href: '/pedidos', label: 'Pedidos', Icon: ShoppingCart }] : NAV_ITEMS),
+      ...(showPedidos
+        ? [...NAV_ITEMS, { href: '/pedidos', label: 'Pedidos', Icon: ShoppingCart }]
+        : NAV_ITEMS),
+      { href: '/appcc', label: 'APPCC', Icon: ShieldCheck },
       { href: '/inventario', label: 'Inventario', Icon: ClipboardList },
       { href: '/chat', label: 'Chat', Icon: MessageCircle },
     ],
@@ -230,7 +231,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             const isActive =
               item.href === '/dashboard'
                 ? pathname === '/dashboard' || pathname === '/'
-                : pathname === item.href || pathname?.startsWith(`${item.href}/`);
+                : item.href === '/appcc'
+                  ? pathname === '/appcc' || pathname?.startsWith('/appcc/')
+                  : pathname === item.href || pathname?.startsWith(`${item.href}/`);
             const Icon = item.Icon;
 
             return (
@@ -255,7 +258,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         <div className="px-3 py-4">
           <div className="rounded-2xl bg-zinc-50 p-3 ring-1 ring-zinc-200">
             <div className="text-xs font-semibold text-zinc-700">Sesión</div>
-            <div className="mt-1 truncate text-xs text-zinc-500">{email ?? 'Sin usuario'}</div>
+            <div className="mt-1 truncate text-sm font-bold text-zinc-900">{sessionLabel}</div>
             {localId && localLabel ? (
               <div className="mt-1 truncate text-xs font-medium text-zinc-700">{localLabel}</div>
             ) : null}

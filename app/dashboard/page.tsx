@@ -4,7 +4,7 @@ import Link from 'next/link';
 import React from 'react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { CalendarDays, TrendingDown, TrendingUp } from 'lucide-react';
+import { CalendarDays, Drumstick, TrendingDown, TrendingUp } from 'lucide-react';
 import {
   Bar,
   BarChart,
@@ -406,6 +406,24 @@ export default function DashboardPage() {
         title="Seguimiento en tiempo real"
         description="Registra mermas y consulta costes, alertas y tendencias en la misma pantalla."
       />
+
+      <Link
+        href="/productos"
+        className="group flex w-full items-center gap-4 rounded-2xl border border-[#D32F2F]/25 bg-gradient-to-r from-[#D32F2F]/[0.08] via-white to-white px-4 py-4 shadow-sm ring-1 ring-zinc-200/80 transition hover:border-[#D32F2F]/40 hover:shadow-md active:scale-[0.99]"
+      >
+        <span className="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-[#D32F2F] text-white shadow-md shadow-[#D32F2F]/25">
+          <Drumstick className="h-6 w-6" strokeWidth={2} aria-hidden />
+        </span>
+        <span className="min-w-0 flex-1 text-left">
+          <span className="block text-sm font-extrabold text-zinc-900">Productos del registro</span>
+          <span className="mt-0.5 block text-xs font-medium leading-snug text-zinc-600">
+            Añade o edita artículos que aparecen al registrar una merma.
+          </span>
+        </span>
+        <span className="shrink-0 text-lg font-black text-[#D32F2F] transition group-hover:translate-x-0.5" aria-hidden>
+          →
+        </span>
+      </Link>
 
       <MermasRegistrationForm />
 
