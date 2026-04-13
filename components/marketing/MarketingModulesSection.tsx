@@ -1,16 +1,8 @@
 'use client';
 
-import { useCallback, useState } from 'react';
-import ExpandableModuleCard from './ExpandableModuleCard';
-import { MARKETING_MODULES } from './moduleDefinitions';
+import PremiumSaaSModuleCards from './PremiumSaaSModuleCards';
 
 export default function MarketingModulesSection() {
-  const [openId, setOpenId] = useState<string | null>(null);
-
-  const toggle = useCallback((id: string) => {
-    setOpenId((prev) => (prev === id ? null : id));
-  }, []);
-
   return (
     <section
       id="modulos"
@@ -29,13 +21,7 @@ export default function MarketingModulesSection() {
           </p>
         </div>
 
-        <ul className="mt-12 grid gap-4 sm:grid-cols-2 sm:gap-5 lg:grid-cols-3 lg:gap-6">
-          {MARKETING_MODULES.map((mod) => (
-            <li key={mod.id} className="list-none [perspective:1200px]">
-              <ExpandableModuleCard module={mod} isOpen={openId === mod.id} onToggle={() => toggle(mod.id)} />
-            </li>
-          ))}
-        </ul>
+        <PremiumSaaSModuleCards className="mt-12" />
       </div>
     </section>
   );
