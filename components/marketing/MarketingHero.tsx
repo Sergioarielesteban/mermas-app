@@ -107,9 +107,9 @@ export default function MarketingHero() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5, delay: reduceMotion ? 0 : 0.1 }}
           >
-            Chef-One concentra pedidos, mermas, APPCC e inventario en una herramienta seria para{' '}
-            <strong className="font-semibold text-stone-800">dueños y jefes de cocina</strong>. Menos errores, menos
-            información perdida, más claridad día a día.
+            Chef-One concentra pedidos, mermas, APPCC e inventario en una herramienta seria,{' '}
+            <strong className="font-semibold text-stone-800">diseñada para el día a día de cualquier equipo de cocina</strong>.
+            Menos errores, menos información perdida, más claridad cuando más lo necesitas.
           </motion.p>
           <motion.div
             className="mt-9 flex flex-col items-stretch gap-3 sm:flex-row sm:justify-center lg:justify-start"

@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { ShieldCheck, TrendingUp, Eye, Layers } from 'lucide-react';
 import MarketingLeadForm from '@/components/MarketingLeadForm';
 import MarketingHero from '@/components/marketing/MarketingHero';
+import MarketingOriginStory from '@/components/marketing/MarketingOriginStory';
 import MarketingModulesSection from '@/components/marketing/MarketingModulesSection';
 import MarketingPricingHighlight from '@/components/marketing/MarketingPricingHighlight';
 
@@ -10,7 +11,7 @@ const BRAND = '#D32F2F';
 const benefitBlocks = [
   {
     title: 'Menos errores',
-    body: 'Pedidos y recepción con registro claro. Menos “¿esto lo pedimos?” y menos incidencias sin dueño.',
+    body: 'Pedidos y recepción con registro claro. Menos “¿esto lo pedimos?” y menos incidencias que nadie termina de cerrar.',
     Icon: ShieldCheck,
     accent: 'from-rose-50 to-white ring-rose-100/80',
   },
@@ -22,7 +23,7 @@ const benefitBlocks = [
   },
   {
     title: 'Más control operativo',
-    body: 'Dueño y jefe de cocina pueden guiar con datos visibles, no solo con reuniones a final de mes.',
+    body: 'El equipo puede guiarse con datos visibles, no solo con reuniones a final de mes.',
     Icon: Eye,
     accent: 'from-violet-50/70 to-white ring-violet-100/70',
   },
@@ -57,6 +58,12 @@ export default function MarketingLanding() {
           </Link>
           <div className="flex items-center gap-2">
             <Link
+              href="#origen"
+              className="hidden rounded-full px-3 py-2 text-xs font-bold text-stone-600 ring-1 ring-stone-200/90 transition hover:bg-stone-50 sm:inline-flex"
+            >
+              Por qué Chef-One
+            </Link>
+            <Link
               href="#modulos"
               className="hidden rounded-full px-3 py-2 text-xs font-bold text-stone-600 ring-1 ring-stone-200/90 transition hover:bg-stone-50 sm:inline-flex"
             >
@@ -81,6 +88,7 @@ export default function MarketingLanding() {
 
       <main id="contenido">
         <MarketingHero />
+        <MarketingOriginStory />
         <MarketingModulesSection />
         <MarketingPricingHighlight />
 
@@ -167,6 +175,9 @@ export default function MarketingLanding() {
           </Link>
           <Link href="#solicitar-info" className="font-medium underline decoration-stone-300 underline-offset-2 hover:text-stone-800">
             Solicitar información
+          </Link>
+          <Link href="#origen" className="font-medium underline decoration-stone-300 underline-offset-2 hover:text-stone-800">
+            Por qué Chef-One
           </Link>
           <Link href="#modulos" className="font-medium underline decoration-stone-300 underline-offset-2 hover:text-stone-800">
             Ver módulos

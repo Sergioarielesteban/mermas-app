@@ -26,7 +26,7 @@ export const MARKETING_MODULES: MarketingModuleDefinition[] = [
     summary: 'Todo lo que se pide, llega y se revisa, en un solo sitio.',
     Icon: ShoppingCart,
     detailIntro:
-      'Centraliza pedidos por proveedor y lo que ocurre en recepción. El equipo ve el mismo dato, con o sin el jefe de cocina delante.',
+      'Centraliza pedidos por proveedor y lo que ocurre en recepción. El equipo ve el mismo dato, esté quien esté al frente del turno.',
     benefits: [
       'Registra pedidos por proveedor y líneas, sin depender del cuaderno.',
       'Anota incidencias en recepción en el momento (faltas, calidad, errores).',
@@ -42,7 +42,7 @@ export const MARKETING_MODULES: MarketingModuleDefinition[] = [
     summary: 'Lo que se tira deja de ser invisible: motivo, cantidad y coste.',
     Icon: Flame,
     detailIntro:
-      'Registra mermas y residuos en segundos desde el móvil. Pasan de “intuición” a datos que puedes revisar con el dueño.',
+      'Registra mermas y residuos en segundos desde el móvil. Pasan de “intuición” a datos que el equipo puede revisar con calma.',
     benefits: [
       'Motivo y contexto en cada registro, no solo “se ha tirado”.',
       'Coste aproximado para ver el impacto en el margen.',
