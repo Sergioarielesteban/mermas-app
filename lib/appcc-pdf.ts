@@ -43,21 +43,19 @@ function appendTemperaturasDayPage(
 
   const body = opts.orderedUnits.map((u) => {
     const m = opts.bySlot.get(`${u.id}:manana`);
-    const t = opts.bySlot.get(`${u.id}:tarde`);
     const n = opts.bySlot.get(`${u.id}:noche`);
     return [
       APPCC_ZONE_LABEL[u.zone],
       u.name,
       APPCC_UNIT_TYPE_LABEL[u.unit_type],
       tempCell(m),
-      tempCell(t),
       tempCell(n),
     ];
   });
 
   autoTable(doc, {
     startY,
-    head: [['Zona', 'Equipo', 'Tipo', 'Mañana', 'Tarde', 'Noche']],
+    head: [['Zona', 'Equipo', 'Tipo', 'Mañana', 'Noche']],
     body,
     styles: { fontSize: 8, cellPadding: 4 },
     headStyles: { fillColor: [211, 47, 47] },

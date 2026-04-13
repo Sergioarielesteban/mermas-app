@@ -43,8 +43,11 @@ function initialTempFieldValue(unit: AppccColdUnitRow, reading: AppccReadingRow 
   return unit.unit_type === 'congelador' ? '-' : '';
 }
 
+/** Solo dos turnos al día (mañana y noche); «tarde» queda en BD por lecturas antiguas. */
+const TEMP_REGISTRO_SLOTS: AppccSlot[] = ['manana', 'noche'];
+
 const SLOT_SHORT: Record<AppccSlot, string> = {
-  manana: 'Mañ.',
+  manana: 'Mañana',
   tarde: 'Tarde',
   noche: 'Noche',
 };
@@ -233,30 +236,17 @@ function UnitCard({
         <Thermometer className="h-4 w-4 shrink-0 text-[#D32F2F]/65" aria-hidden />
       </div>
       <div className="divide-y divide-zinc-100/90">
-        <SlotEditor
-          unit={unit}
-          slot="manana"
-          dateKey={dateKey}
-          reading={rM}
-          onSaved={onReadingSaved}
-          disabled={disabled}
-        />
-        <SlotEditor
-          unit={unit}
-          slot="tarde"
-          dateKey={dateKey}
-          reading={rT}
-          onSaved={onReadingSaved}
-          disabled={disabled}
-        />
-        <SlotEditor
-          unit={unit}
-          slot="noche"
-          dateKey={dateKey}
-          reading={rN}
-          onSaved={onReadingSaved}
-          disabled={disabled}
-        />
+        {TEMP_REGISTRO_SLOTS.map((slot) => (
+          <SlotEditor
+            key={slot}
+            unit={unit}
+            slot={slot}
+            dateKey={dateKey}
+            reading={slot === 'manana' ? rM : rN}
+            onSaved={onReadingSaved}
+            disabled={disabled}
+          />
+        ))}
       </div>
     </div>
   );

@@ -15,7 +15,7 @@ import sys
 from pathlib import Path
 
 CAT = {
-    "P": "Producción Champanillo",
+    "P": "Producción propia",
     "C": "Carnes",
     "L": "Lácteos, embutidos y salsas",
     "Z": "Congelados",

@@ -30,7 +30,7 @@ for each row execute procedure public.set_updated_at();
 
 -- -----------------------------------------------------------------------------
 -- Lecturas: una fila por equipo, día civil (Europe/Madrid en la app) y turno
--- Turnos: manana, noche (obligatorios en proceso); tarde opcional
+-- Turnos en BD: manana | tarde | noche (tarde por lecturas antiguas). La app registra solo mañana y noche.
 -- -----------------------------------------------------------------------------
 create table if not exists public.appcc_temperature_readings (
   id uuid primary key default gen_random_uuid(),

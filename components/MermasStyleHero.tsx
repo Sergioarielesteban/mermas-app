@@ -25,16 +25,16 @@ export default function MermasStyleHero({
   compact = false,
   className = '',
 }: Props) {
-  const pad = compact ? 'px-4 py-2.5 sm:px-5 sm:py-3' : 'px-4 py-3.5 sm:px-5 sm:py-4';
-  const titleMt = eyebrow ? (compact ? 'mt-0.5 sm:mt-1' : 'mt-1 sm:mt-1.5') : '';
-  const lineMt = compact ? 'mt-1.5 sm:mt-2' : 'mt-2 sm:mt-2.5';
+  const pad = compact ? 'px-4 py-2 sm:px-5 sm:py-2.5' : 'px-4 py-3.5 sm:px-5 sm:py-4';
+  const titleMt = eyebrow ? (compact ? 'mt-0.5' : 'mt-1 sm:mt-1.5') : '';
+  const lineMt = compact ? 'mt-1 sm:mt-1.5' : 'mt-2 sm:mt-2.5';
   const taglineMt = compact ? 'mt-2 sm:mt-2.5' : 'mt-3 sm:mt-3.5';
   const descMt = tagline
     ? compact
       ? 'mt-2 sm:mt-2.5'
       : 'mt-3 sm:mt-3.5'
     : compact
-      ? 'mt-1.5 sm:mt-2'
+      ? 'mt-1 sm:mt-1.5'
       : 'mt-2 sm:mt-2.5';
 
   return (
@@ -57,7 +57,11 @@ export default function MermasStyleHero({
       ) : null}
       {description ? (
         <p
-          className={`mx-auto max-w-sm text-center text-xs leading-snug text-zinc-400 sm:text-sm sm:leading-relaxed ${descMt}`}
+          className={`mx-auto max-w-sm text-center text-zinc-400 ${descMt} ${
+            compact
+              ? 'text-[11px] leading-snug sm:text-xs sm:leading-snug'
+              : 'text-xs leading-snug sm:text-sm sm:leading-relaxed'
+          }`}
         >
           {description}
         </p>

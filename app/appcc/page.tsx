@@ -39,8 +39,8 @@ export default function AppccHubPage() {
             <span className="text-xs font-semibold leading-tight text-zinc-900 sm:text-[0.8125rem]">
               Registrar temperaturas
             </span>
-            <span className="mt-1 line-clamp-2 text-[10px] font-medium leading-snug text-zinc-500">
-              Mañana, tarde y noche
+                       <span className="mt-1 line-clamp-2 text-[10px] font-medium leading-snug text-zinc-500">
+              Mañana y noche
             </span>
             <span className={`${LINE_SM}`} aria-hidden />
           </Link>

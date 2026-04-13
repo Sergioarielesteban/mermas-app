@@ -2,34 +2,22 @@
 
 import Link from 'next/link';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import {
-  ChevronDown,
-  ChevronLeft,
-  CheckCircle2,
-  History,
-  Package,
-  Plus,
-  RotateCcw,
-  Trash2,
-} from 'lucide-react';
+import { ChevronDown, ChevronLeft, CheckCircle2, Package, Plus, RotateCcw, Trash2 } from 'lucide-react';
 import MermasStyleHero from '@/components/MermasStyleHero';
 import InventoryResultadoInventario from '@/components/InventoryResultadoInventario';
 import { useAuth } from '@/components/AuthProvider';
 import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
-import { downloadInventoryMonthlyPdf } from '@/lib/inventory-pdf';
+import { downloadInventoryMonthlyPdf, type InventoryPdfRow } from '@/lib/inventory-pdf';
 import {
   type InventoryCatalogCategory,
   type InventoryCatalogItem,
   type InventoryItem,
   type InventoryMonthSnapshot,
-  computeInventoryCategoryBreakdownEuros,
   currentInventoryYearMonth,
-  deleteAllInventoryHistorySnapshots,
   deleteInventoryItemLine,
   fetchInventoryCatalogCategories,
   fetchInventoryCatalogItems,
   fetchInventoryItems,
-  fetchInventoryHistorySnapshots,
   fetchInventoryMonthSnapshots,
   insertInventoryHistorySnapshot,
   insertInventoryCatalogCategory,
@@ -38,10 +26,8 @@ import {
   deactivateInventoryCatalogCategory,
   deactivateInventoryCatalogItem,
   deleteAllInventoryLinesForLocal,
-  deleteInventoryMonthSnapshot,
   updateInventoryItemLine,
   upsertInventoryMonthSnapshot,
-  type InventoryHistorySnapshot,
 } from '@/lib/inventory-supabase';
 
 function parseDecimal(raw: string): number | null {
@@ -90,7 +76,7 @@ export default function InventarioPage() {
   const [catalogDetailOpen, setCatalogDetailOpen] = useState<Record<string, boolean>>({});
   const [snapshots, setSnapshots] = useState<InventoryMonthSnapshot[]>([]);
   const [pdfBusy, setPdfBusy] = useState(false);
-  const [deleteMonthBusy, setDeleteMonthBusy] = useState(false);
+  const [closingYearMonth, setClosingYearMonth] = useState(() => currentInventoryYearMonth());
   const [formBusy, setFormBusy] = useState(false);
   const [showAddCategory, setShowAddCategory] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState('');
@@ -100,11 +86,6 @@ export default function InventarioPage() {
   const [newArticleUnit, setNewArticleUnit] = useState<string>('kg');
   const [newArticlePrice, setNewArticlePrice] = useState('0');
   const [newArticleFormat, setNewArticleFormat] = useState('');
-  const [showHistoryModal, setShowHistoryModal] = useState(false);
-  const [historyEntries, setHistoryEntries] = useState<InventoryHistorySnapshot[]>([]);
-  const [historyLoading, setHistoryLoading] = useState(false);
-  const [historyExpandedId, setHistoryExpandedId] = useState<string | null>(null);
-  const [historyClearBusy, setHistoryClearBusy] = useState(false);
   const [resetInventoryBusy, setResetInventoryBusy] = useState(false);
   const [finishInventoryBusy, setFinishInventoryBusy] = useState(false);
   const [busyDeletingCategoryId, setBusyDeletingCategoryId] = useState<string | null>(null);
@@ -247,6 +228,85 @@ export default function InventarioPage() {
     format_label: row.format_label ?? '',
     unit: row.unit,
   });
+
+  /** Valores en pantalla (borradores) → PDF, KPI por categoría y copia de historial. */
+  const buildMonthClosureData = useCallback(() => {
+    const itemToCat = new Map(catalogItems.map((i) => [i.id, i.catalog_category_id]));
+    const breakdown: Record<string, number> = {};
+    const pdfRows: InventoryPdfRow[] = [];
+    const historyLines: InventoryItem[] = [];
+    let total = 0;
+    for (const row of lines) {
+      const d = drafts[row.id] ?? {
+        qty: String(row.quantity_on_hand),
+        price: String(row.price_per_unit),
+        name: row.name,
+        format_label: row.format_label ?? '',
+        unit: row.unit,
+      };
+      const q = parseDecimal(d.qty ?? String(row.quantity_on_hand)) ?? row.quantity_on_hand;
+      const p = parseDecimal(d.price ?? String(row.price_per_unit)) ?? row.price_per_unit;
+      const sub = Math.round(q * p * 100) / 100;
+      total += sub;
+      const uKey = d.unit ?? row.unit;
+      pdfRows.push({
+        name: (d.name ?? row.name).trim() || row.name,
+        formatLabel: d.format_label ?? row.format_label ?? '',
+        qty: q,
+        unit: UNIT_SUFFIX[uKey] ?? uKey,
+        price: p,
+        sub,
+      });
+      const cid = row.catalog_item_id ? itemToCat.get(row.catalog_item_id) : undefined;
+      const key = cid ?? '__sin_catalogo__';
+      breakdown[key] = Math.round(((breakdown[key] ?? 0) + sub) * 100) / 100;
+      historyLines.push({
+        ...row,
+        quantity_on_hand: q,
+        price_per_unit: p,
+        name: (d.name ?? row.name).trim() || row.name,
+        format_label: d.format_label?.trim() ? d.format_label.trim() : row.format_label,
+        unit: uKey,
+      });
+    }
+    total = Math.round(total * 100) / 100;
+    return { pdfRows, total, breakdown, historyLines };
+  }, [lines, drafts, catalogItems]);
+
+  const saveMonthClosureToSupabase = useCallback(
+    async (yearMonth: string, opts: { recordHistory: boolean; userId: string | null }) => {
+      if (!localId || !supabaseOk) return;
+      const supabase = getSupabaseClient()!;
+      const { pdfRows, total, breakdown, historyLines } = buildMonthClosureData();
+      await upsertInventoryMonthSnapshot(supabase, {
+        localId,
+        yearMonth,
+        totalValue: total,
+        linesCount: lines.length,
+        categoryBreakdown: breakdown,
+      });
+      downloadInventoryMonthlyPdf({
+        localLabel: localName ?? localCode ?? '—',
+        yearMonth,
+        rows: pdfRows,
+        total,
+      });
+      if (opts.recordHistory) {
+        await insertInventoryHistorySnapshot(supabase, {
+          localId,
+          eventType: 'inventory_final',
+          summary: `Inventario terminado (${yearMonth}) — ${lines.length} línea(s), ${total.toFixed(2)} €`,
+          lines: historyLines,
+          userId: opts.userId,
+        });
+      }
+      const refreshed = await fetchInventoryMonthSnapshots(supabase, localId).catch(
+        () => [] as InventoryMonthSnapshot[],
+      );
+      setSnapshots(refreshed);
+    },
+    [localId, supabaseOk, lines.length, buildMonthClosureData, localName, localCode],
+  );
 
   const saveLine = async (
     row: InventoryItem,
@@ -433,85 +493,15 @@ export default function InventarioPage() {
 
   const handleDownloadMonthlyPdf = async () => {
     if (!localId || !supabaseOk || lines.length === 0) return;
-    const supabase = getSupabaseClient()!;
     setPdfBusy(true);
     setBanner(null);
     try {
-      const ym = currentInventoryYearMonth();
-      const rows = lines.map((row) => {
-        const d = drafts[row.id];
-        const q = parseDecimal(d?.qty ?? String(row.quantity_on_hand)) ?? row.quantity_on_hand;
-        const p = parseDecimal(d?.price ?? String(row.price_per_unit)) ?? row.price_per_unit;
-        const sub = Math.round(q * p * 100) / 100;
-        const uKey = d?.unit ?? row.unit;
-        return {
-          name: (d?.name ?? row.name).trim() || row.name,
-          formatLabel: d?.format_label ?? row.format_label ?? '',
-          qty: q,
-          unit: UNIT_SUFFIX[uKey] ?? uKey,
-          price: p,
-          sub,
-        };
-      });
-      const total = Math.round(rows.reduce((s, r) => s + r.sub, 0) * 100) / 100;
-      const breakdown = computeInventoryCategoryBreakdownEuros(lines, catalogItems);
-      await upsertInventoryMonthSnapshot(supabase, {
-        localId,
-        yearMonth: ym,
-        totalValue: total,
-        linesCount: lines.length,
-        categoryBreakdown: breakdown,
-      });
-      downloadInventoryMonthlyPdf({
-        localLabel: localName ?? localCode ?? '—',
-        yearMonth: ym,
-        rows,
-        total,
-      });
-      const refreshed = await fetchInventoryMonthSnapshots(supabase, localId).catch(() => [] as InventoryMonthSnapshot[]);
-      setSnapshots(refreshed);
+      await saveMonthClosureToSupabase(closingYearMonth, { recordHistory: false, userId: null });
+      setBanner(`PDF descargado y cierre ${closingYearMonth} actualizado en los gráficos.`);
     } catch (e) {
       setBanner(e instanceof Error ? e.message : 'Error al generar el PDF o guardar el mes.');
     } finally {
       setPdfBusy(false);
-    }
-  };
-
-  const handleDeleteMonthlySnapshot = async () => {
-    if (!localId || !supabaseOk) return;
-    if (snapshots.length === 0) {
-      setBanner('No hay cierres mensuales guardados para borrar.');
-      return;
-    }
-    const ym = currentInventoryYearMonth();
-    const latest = [...snapshots].sort((a, b) => b.year_month.localeCompare(a.year_month))[0] ?? null;
-    const target = snapshots.find((s) => s.year_month === ym)?.year_month ?? latest?.year_month ?? null;
-    if (!target) {
-      setBanner('No se pudo detectar qué cierre borrar.');
-      return;
-    }
-    if (
-      !window.confirm(
-        `¿Borrar el cierre mensual ${target}? Esta acción solo afecta al gráfico/PDF mensual y no al inventario actual.`,
-      )
-    ) {
-      return;
-    }
-
-    const supabase = getSupabaseClient()!;
-    setDeleteMonthBusy(true);
-    setBanner(null);
-    try {
-      await deleteInventoryMonthSnapshot(supabase, localId, target);
-      const refreshed = await fetchInventoryMonthSnapshots(supabase, localId).catch(
-        () => [] as InventoryMonthSnapshot[],
-      );
-      setSnapshots(refreshed);
-      setBanner(`Cierre mensual ${target} eliminado.`);
-    } catch (e) {
-      setBanner(e instanceof Error ? e.message : 'No se pudo borrar el cierre mensual.');
-    } finally {
-      setDeleteMonthBusy(false);
     }
   };
 
@@ -552,61 +542,15 @@ export default function InventarioPage() {
     }
   };
 
-  const openHistoryModal = async () => {
-    if (!localId || !supabaseOk) return;
-    setShowHistoryModal(true);
-    setHistoryLoading(true);
-    setHistoryExpandedId(null);
-    setBanner(null);
-    try {
-      const supabase = getSupabaseClient()!;
-      const list = await fetchInventoryHistorySnapshots(supabase, localId);
-      setHistoryEntries(list);
-    } catch (e) {
-      setHistoryEntries([]);
-      const msg = e instanceof Error ? e.message : '';
-      if (msg.includes('does not exist') || msg.includes('relation')) {
-        setBanner('Falta la tabla de historial. Ejecuta supabase-inventory-history.sql en Supabase.');
-      } else {
-        setBanner(msg || 'No se pudo cargar el historial.');
-      }
-    } finally {
-      setHistoryLoading(false);
-    }
-  };
-
-  const clearAllHistory = async () => {
-    if (!localId || !supabaseOk) return;
-    if (
-      !window.confirm(
-        '¿Borrar todo el historial de inventario de este local? Solo podrás recuperar lo que quede en el inventario actual. Esta acción no se puede deshacer.',
-      )
-    ) {
-      return;
-    }
-    const supabase = getSupabaseClient()!;
-    setHistoryClearBusy(true);
-    setBanner(null);
-    try {
-      await deleteAllInventoryHistorySnapshots(supabase, localId);
-      setHistoryEntries([]);
-      setHistoryExpandedId(null);
-    } catch (e) {
-      setBanner(e instanceof Error ? e.message : 'No se pudo vaciar el historial.');
-    } finally {
-      setHistoryClearBusy(false);
-    }
-  };
-
   const finishInventoryToHistory = async () => {
     if (!localId || !supabaseOk) return;
     if (lines.length === 0) {
-      setBanner('No hay líneas en el inventario para guardar en el historial.');
+      setBanner('No hay líneas en el inventario para cerrar.');
       return;
     }
     if (
       !window.confirm(
-        'Se guardará en Historial una copia del inventario actual (todas las líneas y totales). El inventario en pantalla no se borra; para empezar de cero usa «Reiniciar inventario».',
+        `Se guardará el cierre del mes ${closingYearMonth}: copia en historial, PDF descargado y datos en los gráficos/KPI de abajo. Las líneas en pantalla no se borran (usa «Reiniciar inventario» para empezar de cero). ¿Continuar?`,
       )
     ) {
       return;
@@ -618,17 +562,10 @@ export default function InventarioPage() {
     setFinishInventoryBusy(true);
     setBanner(null);
     try {
-      const ym = currentInventoryYearMonth();
-      await insertInventoryHistorySnapshot(supabase, {
-        localId,
-        eventType: 'inventory_final',
-        summary: `Inventario terminado (${ym}) — ${lines.length} línea(s), ${totalValor.toFixed(2)} €`,
-        lines,
-        userId: user?.id ?? null,
-      });
-      setBanner('Inventario guardado en Historial.');
+      await saveMonthClosureToSupabase(closingYearMonth, { recordHistory: true, userId: user?.id ?? null });
+      setBanner(`Cierre ${closingYearMonth} guardado: PDF descargado, KPI actualizados e historial registrado.`);
     } catch (e) {
-      const msg = e instanceof Error ? e.message : 'Error al guardar en historial.';
+      const msg = e instanceof Error ? e.message : 'Error al cerrar inventario.';
       if (
         msg.includes('inventory_history') ||
         msg.includes('does not exist') ||
@@ -652,9 +589,40 @@ export default function InventarioPage() {
       setBanner('No hay líneas en el inventario.');
       return;
     }
-    if (
+    const hasSnap = snapshots.some((s) => s.year_month === closingYearMonth);
+    if (!hasSnap) {
+      const saveFirst = window.confirm(
+        `No hay cierre mensual guardado para ${closingYearMonth} en los gráficos. Pulsa Aceptar para descargar el PDF, guardar ese cierre e historial, y vaciar las líneas. (Si el inventario es de otro mes, cambia primero «Mes del cierre» arriba.)`,
+      );
+      if (saveFirst) {
+        const supabase = getSupabaseClient()!;
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
+        setResetInventoryBusy(true);
+        setBanner(null);
+        try {
+          await saveMonthClosureToSupabase(closingYearMonth, { recordHistory: true, userId: user?.id ?? null });
+          await deleteAllInventoryLinesForLocal(supabase, localId);
+          await load();
+          setBanner(`Cierre ${closingYearMonth} guardado y líneas vaciadas.`);
+        } catch (e) {
+          setBanner(e instanceof Error ? e.message : 'Error al guardar cierre o reiniciar.');
+        } finally {
+          setResetInventoryBusy(false);
+        }
+        return;
+      }
+      if (
+        !window.confirm(
+          'Vas a vaciar las líneas sin guardar cierre en los informes ni PDF. ¿Continuar de todos modos?',
+        )
+      ) {
+        return;
+      }
+    } else if (
       !window.confirm(
-        'Se borrarán todas las líneas de inventario de este local. El valor total quedará en 0. El catálogo no cambia. Para guardar antes una copia, usa «Terminar inventario». ¿Continuar?',
+        'Se borrarán todas las líneas de inventario de este local. El valor total quedará en 0. El catálogo no cambia. ¿Continuar?',
       )
     ) {
       return;
@@ -739,7 +707,6 @@ export default function InventarioPage() {
     }
   };
 
-  const localLabel = localName ?? localCode ?? '—';
   const disabled = !localId || !profileReady || !supabaseOk || loading;
 
   return (
@@ -755,7 +722,8 @@ export default function InventarioPage() {
       <MermasStyleHero
         eyebrow="Chef-One"
         title="Inventario"
-        description={`Stock y valor por artículo (${localLabel}). En el catálogo rellena las cantidades y pulsa OK al final de cada categoría. «Terminar inventario» guarda el estado en Historial. «Reiniciar inventario» borra todas las líneas y deja el total en 0. Al quitar un artículo del inventario se guarda una copia en Historial antes de borrarlo.`}
+        compact
+        description="Stock y valor por artículo de tu local. Elige el mes del cierre (útil si cuadras a las 00:00 entre dos meses). «Terminar inventario» guarda PDF, KPI mensuales e historial; «Reiniciar inventario» vacía líneas. Si reinicias sin cierre guardado, te proponemos guardarlo antes."
       />
 
       {!isSupabaseEnabled() || !getSupabaseClient() ? (
@@ -790,34 +758,39 @@ export default function InventarioPage() {
                   <p className="text-[11px] text-zinc-500">{lines.length} línea(s) activa(s)</p>
                 </div>
               </div>
-              <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  disabled={disabled}
-                  onClick={() => void openHistoryModal()}
-                  className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-zinc-300 bg-white px-3 text-xs font-bold text-zinc-800 shadow-sm disabled:opacity-45"
-                >
-                  <History className="h-4 w-4 text-zinc-600" />
-                  Historial
-                </button>
-                <button
-                  type="button"
-                  disabled={disabled || lines.length === 0 || finishInventoryBusy || resetInventoryBusy}
-                  onClick={() => void finishInventoryToHistory()}
-                  className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-emerald-300 bg-emerald-50 px-3 text-xs font-bold text-emerald-950 shadow-sm disabled:opacity-45"
-                >
-                  <CheckCircle2 className={`h-4 w-4 ${finishInventoryBusy ? 'animate-pulse' : ''}`} />
-                  {finishInventoryBusy ? 'Guardando…' : 'Terminar inventario'}
-                </button>
-                <button
-                  type="button"
-                  disabled={disabled || lines.length === 0 || resetInventoryBusy || finishInventoryBusy}
-                  onClick={() => void resetInventoryClearLines()}
-                  className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-amber-300 bg-amber-50 px-3 text-xs font-bold text-amber-950 shadow-sm disabled:opacity-45"
-                >
-                  <RotateCcw className={`h-4 w-4 ${resetInventoryBusy ? 'animate-spin' : ''}`} />
-                  {resetInventoryBusy ? 'Borrando…' : 'Reiniciar inventario'}
-                </button>
+              <div className="flex w-full min-w-0 flex-col gap-2 sm:max-w-md sm:items-end">
+                <label className="flex w-full flex-col gap-0.5 sm:items-end">
+                  <span className="text-[10px] font-bold uppercase tracking-wide text-zinc-500">
+                    Mes del cierre (KPI / PDF)
+                  </span>
+                  <input
+                    type="month"
+                    value={closingYearMonth}
+                    onChange={(e) => setClosingYearMonth(e.target.value)}
+                    disabled={disabled}
+                    className="h-10 w-full max-w-[11rem] rounded-xl border border-zinc-200 bg-white px-2 text-sm font-semibold text-zinc-900 shadow-sm disabled:opacity-45 sm:text-right"
+                  />
+                </label>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    disabled={disabled || lines.length === 0 || finishInventoryBusy || resetInventoryBusy}
+                    onClick={() => void finishInventoryToHistory()}
+                    className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-emerald-300 bg-emerald-50 px-3 text-xs font-bold text-emerald-950 shadow-sm disabled:opacity-45"
+                  >
+                    <CheckCircle2 className={`h-4 w-4 ${finishInventoryBusy ? 'animate-pulse' : ''}`} />
+                    {finishInventoryBusy ? 'Guardando…' : 'Terminar inventario'}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={disabled || lines.length === 0 || resetInventoryBusy || finishInventoryBusy}
+                    onClick={() => void resetInventoryClearLines()}
+                    className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-amber-300 bg-amber-50 px-3 text-xs font-bold text-amber-950 shadow-sm disabled:opacity-45"
+                  >
+                    <RotateCcw className={`h-4 w-4 ${resetInventoryBusy ? 'animate-spin' : ''}`} />
+                    {resetInventoryBusy ? 'Borrando…' : 'Reiniciar inventario'}
+                  </button>
+                </div>
               </div>
             </div>
           </section>
@@ -1165,154 +1138,13 @@ export default function InventarioPage() {
             lines={lines}
             catalogItems={catalogItems}
             categories={categories}
-            yearMonth={currentInventoryYearMonth()}
+            yearMonth={closingYearMonth}
             onDownloadPdf={handleDownloadMonthlyPdf}
             pdfBusy={pdfBusy}
-            onDeleteMonthlySnapshot={handleDeleteMonthlySnapshot}
-            deleteMonthBusy={deleteMonthBusy}
             disabled={disabled}
           />
         </>
       )}
-
-      {showHistoryModal ? (
-        <div
-          className="fixed inset-0 z-[140] flex items-end justify-center p-3 sm:items-center"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="inv-history-title"
-        >
-          <button
-            type="button"
-            className="absolute inset-0 bg-black/45"
-            aria-label="Cerrar"
-            onClick={() => !historyClearBusy && setShowHistoryModal(false)}
-          />
-          <div className="relative flex max-h-[min(90vh,720px)] w-full max-w-lg flex-col rounded-2xl border border-zinc-200 bg-white shadow-xl">
-            <div className="flex shrink-0 items-start justify-between gap-2 border-b border-zinc-100 px-4 py-3">
-              <div>
-                <h3 id="inv-history-title" className="text-sm font-bold text-zinc-900">
-                  Historial de inventario
-                </h3>
-                <p className="mt-0.5 text-[11px] text-zinc-500">
-                  Aquí ves los inventarios terminados (botón «Terminar inventario»), copias al quitar una línea y
-                  registros antiguos. Solo desde aquí puedes vaciar el historial.
-                </p>
-              </div>
-              <button
-                type="button"
-                disabled={historyClearBusy}
-                onClick={() => !historyClearBusy && setShowHistoryModal(false)}
-                className="shrink-0 rounded-lg px-2 py-1 text-xs font-semibold text-zinc-600"
-              >
-                Cerrar
-              </button>
-            </div>
-            <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
-              {historyLoading ? (
-                <p className="py-8 text-center text-sm text-zinc-500">Cargando…</p>
-              ) : historyEntries.length === 0 ? (
-                <p className="rounded-xl border border-zinc-100 bg-zinc-50 px-3 py-6 text-center text-sm text-zinc-600">
-                  No hay entradas todavía. Usa «Terminar inventario» para guardar un cierre aquí, o quita un artículo
-                  del inventario (se guarda una copia antes de borrarlo).
-                </p>
-              ) : (
-                <ul className="space-y-2">
-                  {historyEntries.map((ent) => {
-                    const expanded = historyExpandedId === ent.id;
-                    const when = new Date(ent.created_at).toLocaleString('es-ES', {
-                      dateStyle: 'short',
-                      timeStyle: 'short',
-                    });
-                    const kind =
-                      ent.event_type === 'inventory_final'
-                        ? 'Inventario terminado'
-                        : ent.event_type === 'before_reset'
-                          ? 'Antes de reinicio (legado)'
-                          : 'Antes de quitar línea';
-                    return (
-                      <li
-                        key={ent.id}
-                        className="overflow-hidden rounded-xl border border-zinc-200 bg-zinc-50/80 ring-1 ring-zinc-100"
-                      >
-                        <button
-                          type="button"
-                          className="flex w-full items-start justify-between gap-2 px-3 py-2.5 text-left"
-                          onClick={() => setHistoryExpandedId(expanded ? null : ent.id)}
-                        >
-                          <div className="min-w-0">
-                            <p className="text-xs font-bold text-zinc-900">{kind}</p>
-                            <p className="text-[10px] text-zinc-500">{when}</p>
-                            {ent.summary ? (
-                              <p className="mt-0.5 text-[11px] text-zinc-700">{ent.summary}</p>
-                            ) : null}
-                          </div>
-                          <div className="shrink-0 text-right">
-                            <p className="text-xs font-extrabold tabular-nums text-zinc-900">
-                              {ent.total_value_snapshot.toFixed(2)} €
-                            </p>
-                            <p className="text-[10px] text-zinc-500">{ent.lines_snapshot.length} líneas</p>
-                            <ChevronDown
-                              className={`ml-auto mt-1 h-4 w-4 text-zinc-400 transition-transform ${expanded ? 'rotate-180' : ''}`}
-                              aria-hidden
-                            />
-                          </div>
-                        </button>
-                        {expanded ? (
-                          <div className="border-t border-zinc-200 bg-white px-2 py-2">
-                            <div className="max-h-52 overflow-auto rounded-lg border border-zinc-100">
-                              <table className="w-full min-w-[280px] border-collapse text-[10px]">
-                                <thead className="sticky top-0 bg-zinc-100 text-left text-zinc-600">
-                                  <tr>
-                                    <th className="px-1.5 py-1 font-bold">Nombre</th>
-                                    <th className="px-1 py-1 font-bold">Cant.</th>
-                                    <th className="px-1 py-1 font-bold">€/u</th>
-                                    <th className="px-1 py-1 font-bold">€</th>
-                                  </tr>
-                                </thead>
-                                <tbody>
-                                  {ent.lines_snapshot.map((ln) => {
-                                    const sub =
-                                      Math.round(ln.quantity_on_hand * ln.price_per_unit * 100) / 100;
-                                    return (
-                                      <tr key={ln.id} className="border-t border-zinc-100">
-                                        <td className="px-1.5 py-1 font-medium text-zinc-900">{ln.name}</td>
-                                        <td className="px-1 py-1 tabular-nums text-zinc-700">
-                                          {ln.quantity_on_hand} {UNIT_SUFFIX[ln.unit] ?? ln.unit}
-                                        </td>
-                                        <td className="px-1 py-1 tabular-nums text-zinc-700">
-                                          {ln.price_per_unit.toFixed(2)}
-                                        </td>
-                                        <td className="px-1 py-1 font-semibold tabular-nums text-zinc-900">
-                                          {sub.toFixed(2)}
-                                        </td>
-                                      </tr>
-                                    );
-                                  })}
-                                </tbody>
-                              </table>
-                            </div>
-                          </div>
-                        ) : null}
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
-            </div>
-            <div className="shrink-0 border-t border-zinc-100 px-4 py-3">
-              <button
-                type="button"
-                disabled={disabled || historyClearBusy || historyEntries.length === 0}
-                onClick={() => void clearAllHistory()}
-                className="h-10 w-full rounded-xl border border-red-200 bg-red-50 text-sm font-bold text-red-900 disabled:opacity-45"
-              >
-                {historyClearBusy ? 'Borrando…' : 'Vaciar historial'}
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
 
       {showAddCategory ? (
         <div className="fixed inset-0 z-[130] flex items-end justify-center p-3 sm:items-center" role="dialog" aria-modal="true" aria-labelledby="inv-add-cat-title">

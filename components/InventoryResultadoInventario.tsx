@@ -12,7 +12,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import { FileDown, Trash2 } from 'lucide-react';
+import { FileDown } from 'lucide-react';
 import type { InventoryCatalogCategory, InventoryCatalogItem, InventoryItem, InventoryMonthSnapshot } from '@/lib/inventory-supabase';
 import { computeInventoryCategoryBreakdownEuros } from '@/lib/inventory-supabase';
 
@@ -37,8 +37,6 @@ type Props = {
   yearMonth: string;
   onDownloadPdf: () => void | Promise<void>;
   pdfBusy: boolean;
-  onDeleteMonthlySnapshot: () => void | Promise<void>;
-  deleteMonthBusy: boolean;
   disabled: boolean;
 };
 
@@ -51,8 +49,6 @@ export default function InventoryResultadoInventario({
   yearMonth,
   onDownloadPdf,
   pdfBusy,
-  onDeleteMonthlySnapshot,
-  deleteMonthBusy,
   disabled,
 }: Props) {
   const barData = useMemo(() => {
@@ -126,15 +122,6 @@ export default function InventoryResultadoInventario({
         <div className="flex flex-wrap gap-2">
           <button
             type="button"
-            disabled={disabled || deleteMonthBusy || snapshots.length === 0}
-            onClick={() => void onDeleteMonthlySnapshot()}
-            className="inline-flex h-9 items-center justify-center gap-2 self-start rounded-lg border border-red-200 bg-red-50 px-3 text-xs font-bold text-red-900 ring-1 ring-red-100 disabled:opacity-45"
-          >
-            <Trash2 className="h-4 w-4" />
-            {deleteMonthBusy ? 'Borrando…' : 'Borrar cierre'}
-          </button>
-          <button
-            type="button"
             disabled={disabled || pdfBusy || lines.length === 0}
             onClick={() => void onDownloadPdf()}
             className="inline-flex h-9 items-center justify-center gap-2 self-start rounded-lg bg-zinc-950 px-3 text-xs font-bold text-white ring-1 ring-zinc-700 disabled:opacity-45"
@@ -145,9 +132,11 @@ export default function InventoryResultadoInventario({
         </div>
       </div>
       <p className="text-[11px] leading-snug text-zinc-500">
-        Al descargar el PDF se guarda el cierre del mes en curso ({yearMonth}) para los gráficos de evolución. Ejecuta en Supabase{' '}
+        «Terminar inventario» y el PDF usan el <span className="font-semibold text-zinc-600">mes del cierre</span>{' '}
+        que eliges arriba ({yearMonth}) para los KPI y este gráfico. Los cierres guardados no se pueden borrar desde la
+        app. Ejecuta en Supabase{' '}
         <code className="rounded bg-zinc-100 px-1 text-[10px] text-zinc-800">supabase-inventory-catalog-write-and-snapshots.sql</code>{' '}
-        si fallan categorías, artículos o snapshots.
+        si fallan snapshots.
       </p>
 
       <div className="grid gap-3 md:grid-cols-3">
