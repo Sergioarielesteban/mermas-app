@@ -107,7 +107,28 @@ export default function RecepcionPedidosPage() {
     [orders],
   );
 
-  const markPriceReviewArchived = (orderId: string, archived: boolean) => {
+  const flushOrderPricesToDatabase = async (order: PedidoOrder) => {
+    if (!localId) throw new Error('Sin local.');
+    const supabase = getSupabaseClient();
+    if (!supabase) throw new Error('Supabase no disponible.');
+    await Promise.all(
+      order.items.map(async (item) => {
+        const price = getLinePrice(item);
+        const qty = billingQuantityForReceptionPrice(item);
+        await updateOrderItemPrice(supabase, localId, item.id, price, qty);
+      }),
+    );
+    setPriceInputByItemId((prev) => {
+      const next = { ...prev };
+      for (const item of order.items) {
+        next[item.id] = getLinePrice(item).toFixed(2);
+      }
+      return next;
+    });
+    dispatchPedidosDataChanged();
+  };
+
+  const markPriceReviewArchived = async (orderId: string, archived: boolean) => {
     if (!localId) return;
     const supabase = getSupabaseClient();
     if (!supabase) return;
@@ -128,18 +149,17 @@ export default function RecepcionPedidosPage() {
     } else {
       setExpandedArchivedOrderId((cur) => (cur === orderId ? null : cur));
     }
-    void setOrderPriceReviewArchived(supabase, localId, orderId, archived)
-      .then(() => {
-        setMessage(
-          archived ? 'Pedido archivado de la revisión de precios.' : 'Pedido de nuevo en pendientes de revisión.',
-        );
-        void reloadOrders();
-        dispatchPedidosDataChanged();
-      })
-      .catch((err: Error) => {
-        void reloadOrders();
-        setMessage(err.message);
-      });
+    try {
+      await setOrderPriceReviewArchived(supabase, localId, orderId, archived);
+      setMessage(
+        archived ? 'Pedido archivado de la revisión de precios.' : 'Pedido de nuevo en pendientes de revisión.',
+      );
+      void reloadOrders();
+      dispatchPedidosDataChanged();
+    } catch (err: unknown) {
+      void reloadOrders();
+      setMessage(err instanceof Error ? err.message : 'Error al actualizar.');
+    }
   };
 
   const changeUnitPrice = (orderId: string, itemId: string, rawValue: string) => {
@@ -573,7 +593,21 @@ export default function RecepcionPedidosPage() {
                     ) {
                       return;
                     }
-                    markPriceReviewArchived(order.id, true);
+                    void (async () => {
+                      const latest = orders.find((o) => o.id === order.id);
+                      if (!latest || !localId) return;
+                      setMessage('Guardando precios…');
+                      try {
+                        await flushOrderPricesToDatabase(latest);
+                        setMessage(null);
+                        await markPriceReviewArchived(order.id, true);
+                      } catch (err: unknown) {
+                        setMessage(
+                          err instanceof Error ? err.message : 'No se pudieron guardar los precios del pedido.',
+                        );
+                        void reloadOrders();
+                      }
+                    })();
                   }}
                   className="w-full rounded-xl border border-amber-600/80 bg-amber-50 py-3 text-center text-sm font-bold text-amber-950 shadow-sm"
                 >
@@ -630,7 +664,7 @@ export default function RecepcionPedidosPage() {
                         </button>
                         <button
                           type="button"
-                          onClick={() => markPriceReviewArchived(order.id, false)}
+                          onClick={() => void markPriceReviewArchived(order.id, false)}
                           className="shrink-0 self-center rounded-lg border border-zinc-400 bg-white px-3 py-1.5 text-xs font-semibold text-zinc-800"
                         >
                           Volver a pendientes
