@@ -3,6 +3,7 @@ import { ShieldCheck, TrendingUp, Eye, Layers } from 'lucide-react';
 import MarketingLeadForm from '@/components/MarketingLeadForm';
 import MarketingHero from '@/components/marketing/MarketingHero';
 import MarketingModulesSection from '@/components/marketing/MarketingModulesSection';
+import MarketingPricingHighlight from '@/components/marketing/MarketingPricingHighlight';
 
 const BRAND = '#D32F2F';
 
@@ -81,6 +82,7 @@ export default function MarketingLanding() {
       <main id="contenido">
         <MarketingHero />
         <MarketingModulesSection />
+        <MarketingPricingHighlight />
 
         {/* Beneficios */}
         <section className="border-t border-stone-200/60 bg-white px-4 py-16 sm:px-6 sm:py-24" aria-labelledby="beneficios-heading">
@@ -112,44 +114,6 @@ export default function MarketingLanding() {
                 </li>
               ))}
             </ul>
-          </div>
-        </section>
-
-        {/* Precio */}
-        <section className="border-t border-stone-200/60 bg-gradient-to-b from-[#f8f9fb] to-white px-4 py-16 sm:px-6 sm:py-20" aria-labelledby="precio-heading">
-          <div className="mx-auto max-w-3xl text-center">
-            <h2 id="precio-heading" className="text-2xl font-bold tracking-tight text-stone-900 sm:text-3xl">
-              Precio claro por local
-            </h2>
-            <div className="relative mt-10 overflow-hidden rounded-[1.75rem] border border-stone-200/80 bg-white p-8 shadow-[0_20px_50px_-24px_rgba(15,23,42,0.2)] ring-1 ring-white sm:p-10">
-              <div
-                className="pointer-events-none absolute -right-20 -top-20 h-40 w-40 rounded-full bg-[#D32F2F]/[0.07]"
-                aria-hidden
-              />
-              <div
-                className="pointer-events-none absolute -bottom-16 -left-16 h-36 w-36 rounded-full bg-stone-900/[0.04]"
-                aria-hidden
-              />
-              <p className="text-sm font-semibold uppercase tracking-wide text-stone-500">Desde</p>
-              <p className="mt-2 text-5xl font-extrabold tracking-tight text-stone-900 sm:text-6xl">
-                39,90&nbsp;€
-                <span className="text-2xl font-bold text-stone-500 sm:text-3xl">/mes</span>
-              </p>
-              <p className="mt-3 inline-flex items-center justify-center gap-2 rounded-full bg-emerald-50 px-4 py-1.5 text-sm font-semibold text-emerald-900 ring-1 ring-emerald-200/80">
-                Menos de 10&nbsp;€ a la semana por local
-              </p>
-              <p className="mx-auto mt-6 max-w-md text-sm leading-relaxed text-stone-600">
-                Un único precio orientativo para tener el núcleo operativo en móvil o tablet. Confirma condiciones al
-                hablar con nosotros según tu tipo de negocio.
-              </p>
-              <Link
-                href="#solicitar-info"
-                className="mt-8 inline-flex h-12 items-center justify-center rounded-2xl px-10 text-sm font-bold text-white shadow-lg transition hover:brightness-105"
-                style={{ backgroundColor: BRAND }}
-              >
-                Solicitar información
-              </Link>
-            </div>
           </div>
         </section>
 
