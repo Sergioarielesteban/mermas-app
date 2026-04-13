@@ -564,30 +564,49 @@ export default function PedidosPage() {
         </Link>
       </section>
 
-      <section className="overflow-hidden rounded-3xl bg-white shadow-sm ring-1 ring-zinc-200/80">
-        <details
-          className="group"
-          open={pendientesEntregaAccordionOpen}
-          onToggle={(e) => setPendientesEntregaAccordionOpen(e.currentTarget.open)}
-        >
-          <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-4 sm:px-5 [&::-webkit-details-marker]:hidden">
-            <div className="min-w-0 text-left">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-zinc-400">Entrega</p>
-              <p className="mt-1 text-lg font-semibold tracking-tight text-zinc-900">Pendientes de entrega</p>
-              <p className="mt-1 text-xs text-zinc-500">
-                {sentOrders.length === 0
-                  ? 'Nada pendiente'
-                  : `${sentOrders.length} pedido${sentOrders.length === 1 ? '' : 's'} enviado${
-                      sentOrders.length === 1 ? '' : 's'
-                    } · toca para plegar`}
-              </p>
-            </div>
+      <details
+        className={[
+          'overflow-hidden rounded-3xl transition-all duration-300 ease-out',
+          pendientesEntregaAccordionOpen
+            ? 'bg-white shadow-lg shadow-zinc-200/60 ring-2 ring-zinc-900/5'
+            : 'bg-zinc-50/80 ring-1 ring-zinc-200/90 hover:bg-white hover:ring-zinc-300',
+        ].join(' ')}
+        open={pendientesEntregaAccordionOpen}
+        onToggle={(e) => setPendientesEntregaAccordionOpen(e.currentTarget.open)}
+      >
+        <summary className="flex w-full cursor-pointer list-none flex-col items-center px-5 py-8 text-center outline-none transition active:bg-zinc-50/50 focus-visible:ring-2 focus-visible:ring-[#D32F2F]/40 focus-visible:ring-offset-2 sm:px-6 [&::-webkit-details-marker]:hidden">
+          <span className="text-[11px] font-semibold uppercase tracking-[0.2em] text-zinc-400">Entrega</span>
+          <span className="mt-2 text-center text-2xl font-semibold leading-[1.15] tracking-tight text-zinc-900 sm:text-[1.75rem] sm:leading-tight">
+            Pendientes de entrega
+          </span>
+          <span className={`mx-auto mt-4 w-24 ${CHEF_ONE_TAPER_LINE_CLASS}`} aria-hidden />
+          <span className="mt-4 flex flex-wrap items-center justify-center gap-x-1.5 text-xs text-zinc-500">
+            {sentOrders.length === 0 ? (
+              <span>Nada pendiente ahora</span>
+            ) : (
+              <>
+                <span>
+                  {`${sentOrders.length} pedido${sentOrders.length === 1 ? '' : 's'} enviado${
+                    sentOrders.length === 1 ? '' : 's'
+                  }`}
+                </span>
+                <span className="text-zinc-400">·</span>
+                <span>IVA incl. en totales</span>
+              </>
+            )}
+          </span>
+          <span className="mt-5 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider text-[#D32F2F]">
+            {pendientesEntregaAccordionOpen ? 'Ocultar pedidos' : 'Ver pedidos pendientes'}
             <ChevronDown
-              className="h-5 w-5 shrink-0 text-zinc-400 transition-transform duration-300 group-open:rotate-180"
+              className={[
+                'h-4 w-4 transition-transform duration-300',
+                pendientesEntregaAccordionOpen ? 'rotate-180' : '',
+              ].join(' ')}
               aria-hidden
             />
-          </summary>
-          <div className="space-y-2 border-t border-amber-200/50 bg-gradient-to-b from-amber-50/95 via-amber-50/80 to-amber-100/50 px-3 pb-4 pt-3 sm:px-4">
+          </span>
+        </summary>
+        <div className="space-y-2 border-t border-zinc-100 bg-gradient-to-b from-amber-50/95 via-amber-50/80 to-amber-100/50 px-3 pb-4 pt-3 sm:px-4">
           {sentOrders.length === 0 ? (
             <p className="py-6 text-center text-sm text-zinc-600">No hay pedidos enviados.</p>
           ) : null}
@@ -756,32 +775,50 @@ export default function PedidosPage() {
 
             </div>
           ))}
-          </div>
-        </details>
-      </section>
+        </div>
+      </details>
 
-      <section className="overflow-hidden rounded-3xl bg-white shadow-sm ring-1 ring-zinc-200/80">
-        <details
-          className="group"
-          open={historicoRecibidosAccordionOpen}
-          onToggle={(e) => setHistoricoRecibidosAccordionOpen(e.currentTarget.open)}
-        >
-          <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-4 sm:px-5 [&::-webkit-details-marker]:hidden">
-            <div className="min-w-0 text-left">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-zinc-400">Almacén</p>
-              <p className="mt-1 text-lg font-semibold tracking-tight text-zinc-900">Histórico recibidos</p>
-              <p className="mt-1 text-xs text-zinc-500">
-                {receivedOrders.length === 0
-                  ? 'Sin pedidos recibidos'
-                  : `${receivedOrders.length} pedido${receivedOrders.length === 1 ? '' : 's'} · con o sin incidencia`}
-              </p>
-            </div>
+      <details
+        className={[
+          'overflow-hidden rounded-3xl transition-all duration-300 ease-out',
+          historicoRecibidosAccordionOpen
+            ? 'bg-white shadow-lg shadow-zinc-200/60 ring-2 ring-zinc-900/5'
+            : 'bg-zinc-50/80 ring-1 ring-zinc-200/90 hover:bg-white hover:ring-zinc-300',
+        ].join(' ')}
+        open={historicoRecibidosAccordionOpen}
+        onToggle={(e) => setHistoricoRecibidosAccordionOpen(e.currentTarget.open)}
+      >
+        <summary className="flex w-full cursor-pointer list-none flex-col items-center px-5 py-8 text-center outline-none transition active:bg-zinc-50/50 focus-visible:ring-2 focus-visible:ring-[#D32F2F]/40 focus-visible:ring-offset-2 sm:px-6 [&::-webkit-details-marker]:hidden">
+          <span className="text-[11px] font-semibold uppercase tracking-[0.2em] text-zinc-400">Almacén</span>
+          <span className="mt-2 text-center text-2xl font-semibold leading-[1.15] tracking-tight text-zinc-900 sm:text-[1.75rem] sm:leading-tight">
+            Histórico recibidos
+          </span>
+          <span className={`mx-auto mt-4 w-24 ${CHEF_ONE_TAPER_LINE_CLASS}`} aria-hidden />
+          <span className="mt-4 flex flex-wrap items-center justify-center gap-x-1.5 text-xs text-zinc-500">
+            {receivedOrders.length === 0 ? (
+              <span>Sin pedidos recibidos</span>
+            ) : (
+              <>
+                <span>
+                  {receivedOrders.length} pedido{receivedOrders.length === 1 ? '' : 's'}
+                </span>
+                <span className="text-zinc-400">·</span>
+                <span>Verde sin incidencia · rojo con incidencia</span>
+              </>
+            )}
+          </span>
+          <span className="mt-5 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider text-[#D32F2F]">
+            {historicoRecibidosAccordionOpen ? 'Ocultar pedidos' : 'Ver pedidos recibidos'}
             <ChevronDown
-              className="h-5 w-5 shrink-0 text-zinc-400 transition-transform duration-300 group-open:rotate-180"
+              className={[
+                'h-4 w-4 transition-transform duration-300',
+                historicoRecibidosAccordionOpen ? 'rotate-180' : '',
+              ].join(' ')}
               aria-hidden
             />
-          </summary>
-          <div className="space-y-4 border-t border-zinc-100 bg-gradient-to-b from-zinc-50/90 to-white px-3 pb-4 pt-4 sm:px-4">
+          </span>
+        </summary>
+        <div className="space-y-4 border-t border-zinc-100 bg-gradient-to-b from-zinc-50/90 to-white px-3 pb-4 pt-4 sm:px-4">
           {receivedOrders.length === 0 ? (
             <p className="py-6 text-center text-sm text-zinc-500">No hay pedidos recibidos.</p>
           ) : null}
@@ -795,15 +832,22 @@ export default function PedidosPage() {
               key={order.id}
               className={[
                 'overflow-hidden rounded-3xl transition-all duration-300 ease-out',
-                detailOpen
-                  ? 'bg-white shadow-lg shadow-zinc-200/60 ring-2 ring-zinc-900/5'
-                  : 'bg-zinc-50/80 ring-1 ring-zinc-200/90 hover:bg-white hover:ring-zinc-300',
+                needsAttention
+                  ? detailOpen
+                    ? 'bg-red-50 shadow-lg shadow-red-200/35 ring-2 ring-red-400/90'
+                    : 'bg-red-50/95 ring-2 ring-red-400/80 shadow-sm hover:bg-red-50'
+                  : detailOpen
+                    ? 'bg-emerald-50 shadow-lg shadow-emerald-200/35 ring-2 ring-emerald-600/80'
+                    : 'bg-emerald-50/95 ring-2 ring-emerald-500/75 shadow-sm hover:bg-emerald-50',
               ].join(' ')}
             >
               <button
                 type="button"
                 onClick={() => setExpandedHistoricoId((prev) => (prev === order.id ? null : order.id))}
-                className="flex w-full flex-col items-center px-4 py-6 text-center outline-none transition active:bg-zinc-50/50 focus-visible:ring-2 focus-visible:ring-[#D32F2F]/40 focus-visible:ring-offset-2"
+                className={[
+                  'flex w-full flex-col items-center px-4 py-6 text-center outline-none transition focus-visible:ring-2 focus-visible:ring-[#D32F2F]/40 focus-visible:ring-offset-2',
+                  needsAttention ? 'active:bg-red-100/50' : 'active:bg-emerald-100/50',
+                ].join(' ')}
                 aria-expanded={detailOpen}
               >
                 <span className="text-center text-xl font-semibold leading-[1.15] tracking-tight text-zinc-900 sm:text-[1.65rem] sm:leading-tight">
@@ -820,7 +864,7 @@ export default function PedidosPage() {
                   <span>IVA incl.</span>
                 </span>
                 {needsAttention ? (
-                  <span className="mt-2 rounded-full bg-amber-100 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-900 ring-1 ring-amber-200">
+                  <span className="mt-2 rounded-full bg-white/90 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-red-800 ring-1 ring-red-200">
                     Incidencia
                   </span>
                 ) : null}
@@ -834,7 +878,14 @@ export default function PedidosPage() {
                   />
                 </span>
               </button>
-              <div className="flex flex-wrap justify-center gap-2 border-t border-zinc-100 bg-white/80 px-3 py-3">
+              <div
+                className={[
+                  'flex flex-wrap justify-center gap-2 border-t px-3 py-3',
+                  needsAttention
+                    ? 'border-red-200/80 bg-white/75'
+                    : 'border-emerald-200/80 bg-white/75',
+                ].join(' ')}
+              >
                 <button
                   type="button"
                   onClick={() => {
@@ -888,7 +939,14 @@ export default function PedidosPage() {
                 </button>
               </div>
               {expandedHistoricoId === order.id ? (
-                <div className="space-y-3 border-t border-zinc-100 bg-gradient-to-b from-zinc-50/90 to-zinc-100/40 px-3 pb-4 pt-3 text-left sm:px-4">
+                <div
+                  className={[
+                    'space-y-3 border-t bg-gradient-to-b px-3 pb-4 pt-3 text-left sm:px-4',
+                    needsAttention
+                      ? 'border-red-200/70 from-red-50/80 to-red-100/30'
+                      : 'border-emerald-200/70 from-emerald-50/80 to-emerald-100/30',
+                  ].join(' ')}
+                >
                   <p className="text-center text-[10px] font-semibold uppercase tracking-[0.18em] text-zinc-400">
                     Lineas del pedido
                   </p>
@@ -973,9 +1031,8 @@ export default function PedidosPage() {
             </div>
             );
           })}
-          </div>
-        </details>
-      </section>
+        </div>
+      </details>
     </div>
   );
 }
