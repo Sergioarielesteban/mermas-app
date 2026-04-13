@@ -387,23 +387,23 @@ export default function MermasRegistrationForm() {
           </div>
 
           <div className="rounded-2xl bg-white p-3 shadow-sm ring-1 ring-zinc-200">
-            <div className="mx-auto grid max-w-[22rem] grid-cols-2 gap-2.5">
-              <label className="mb-2 block text-xs font-semibold text-zinc-700">
+            <div className="mx-auto grid max-w-[17.5rem] grid-cols-2 gap-2">
+              <label className="mb-1.5 block text-[11px] font-semibold text-zinc-700">
                 Fecha
                 <input
                   type="date"
                   value={dateValue}
                   onChange={(e) => setDateValue(e.target.value)}
-                  className="mt-2 h-10 w-full min-w-0 rounded-xl border border-zinc-200 bg-zinc-50 px-2.5 text-xs font-sans text-zinc-900 outline-none focus:border-[#D32F2F] focus:ring-2 focus:ring-[#D32F2F]/20"
+                  className="mt-1.5 h-8 w-full min-w-0 rounded-lg border border-zinc-200 bg-zinc-50 px-2 text-[11px] font-sans leading-none text-zinc-900 outline-none focus:border-[#D32F2F] focus:ring-2 focus:ring-[#D32F2F]/20"
                 />
               </label>
-              <label className="mb-2 block text-xs font-semibold text-zinc-700">
+              <label className="mb-1.5 block text-[11px] font-semibold text-zinc-700">
                 Hora
                 <input
                   type="time"
                   value={timeValue}
                   onChange={(e) => setTimeValue(e.target.value)}
-                  className="mt-2 h-10 w-full min-w-0 rounded-xl border border-zinc-200 bg-zinc-50 px-2.5 text-xs font-sans text-zinc-900 outline-none focus:border-[#D32F2F] focus:ring-2 focus:ring-[#D32F2F]/20"
+                  className="mt-1.5 h-8 w-full min-w-0 rounded-lg border border-zinc-200 bg-zinc-50 px-2 text-[11px] font-sans leading-none text-zinc-900 outline-none focus:border-[#D32F2F] focus:ring-2 focus:ring-[#D32F2F]/20"
                 />
               </label>
             </div>
