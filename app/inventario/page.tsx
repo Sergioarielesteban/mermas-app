@@ -64,9 +64,11 @@ export default function InventarioPage() {
   const [banner, setBanner] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [drafts, setDrafts] = useState<Record<string, LineDraft>>({});
-  /** Cantidad tecleada en catálogo antes de crear la línea (sin fila en `inventory_items`). */
-  const [catalogPendingQty, setCatalogPendingQty] = useState<Record<string, string>>({});
+  /** Cantidades en el catálogo por id de artículo del catálogo (se aplican con OK por categoría). */
+  const [catalogQtyDraft, setCatalogQtyDraft] = useState<Record<string, string>>({});
   const [busyId, setBusyId] = useState<string | null>(null);
+  /** Mientras se guarda una categoría entera tras pulsar OK. */
+  const [busyCategoryId, setBusyCategoryId] = useState<string | null>(null);
   const [snapshots, setSnapshots] = useState<InventoryMonthSnapshot[]>([]);
   const [pdfBusy, setPdfBusy] = useState(false);
   const [formBusy, setFormBusy] = useState(false);
@@ -87,6 +89,7 @@ export default function InventarioPage() {
       setCategories([]);
       setCatalogItems([]);
       setLines([]);
+      setCatalogQtyDraft({});
       setLoading(false);
       return;
     }
@@ -105,6 +108,7 @@ export default function InventarioPage() {
       setLines(inv);
       setSnapshots(snaps);
       const d: Record<string, LineDraft> = {};
+      const cq: Record<string, string> = {};
       for (const row of inv) {
         d[row.id] = {
           qty: String(row.quantity_on_hand),
@@ -113,8 +117,10 @@ export default function InventarioPage() {
           format_label: row.format_label ?? '',
           unit: row.unit,
         };
+        if (row.catalog_item_id) cq[row.catalog_item_id] = String(row.quantity_on_hand);
       }
       setDrafts(d);
+      setCatalogQtyDraft(cq);
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Error al cargar inventario.';
       if (msg.toLowerCase().includes('relation') || msg.includes('does not exist')) {
@@ -128,6 +134,7 @@ export default function InventarioPage() {
       setCatalogItems([]);
       setLines([]);
       setSnapshots([]);
+      setCatalogQtyDraft({});
     } finally {
       setLoading(false);
     }
@@ -184,72 +191,48 @@ export default function InventarioPage() {
     );
   }, [catalogItems, searchLower]);
 
-  const insertCatalogWithQty = async (item: InventoryCatalogItem, rawQty: string) => {
-    if (!localId || !supabaseOk) return;
-    if (!rawQty.trim()) return;
-    const q = parseDecimal(rawQty);
-    if (q === null || q < 0) {
-      setBanner('Cantidad no válida (usa punto o coma para decimales).');
-      return;
-    }
-    const supabase = getSupabaseClient()!;
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    setBusyId(item.id);
-    setBanner(null);
-    try {
-      await insertInventoryLineFromCatalog(supabase, {
-        localId,
-        catalogItem: item,
-        userId: user?.id ?? null,
-        initialQuantity: q,
-      });
-      setCatalogPendingQty((prev) => {
-        const next = { ...prev };
-        delete next[item.id];
-        return next;
-      });
-      await load();
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : 'No se pudo añadir.';
-      if (msg.includes('duplicate') || msg.includes('unique') || msg.includes('23505')) {
-        setBanner('Ese artículo del catálogo ya está en tu inventario.');
-      } else {
-        setBanner(msg);
-      }
-    } finally {
-      setBusyId(null);
-    }
-  };
+  const lineDraftFromRow = (row: InventoryItem): LineDraft => ({
+    qty: String(row.quantity_on_hand),
+    price: String(row.price_per_unit),
+    name: row.name,
+    format_label: row.format_label ?? '',
+    unit: row.unit,
+  });
 
-  const saveLine = async (row: InventoryItem, override?: Partial<LineDraft>) => {
+  const saveLine = async (
+    row: InventoryItem,
+    override?: Partial<LineDraft>,
+    opts?: { skipReload?: boolean; skipBusy?: boolean; throwing?: boolean },
+  ) => {
     if (!localId || !supabaseOk) return;
-    const base = drafts[row.id];
-    if (!base) return;
+    const base = drafts[row.id] ?? lineDraftFromRow(row);
     const d = { ...base, ...override };
     const q = parseDecimal(d.qty);
     const p = parseDecimal(d.price);
+    const fail = (msg: string) => {
+      if (opts?.throwing) throw new Error(msg);
+      setBanner(msg);
+    };
     if (q === null || q < 0) {
-      setBanner('Cantidad no válida.');
+      fail('Cantidad no válida.');
       return;
     }
     if (p === null || p < 0) {
-      setBanner('Precio no válido.');
+      fail('Precio no válido.');
       return;
     }
     const nm = d.name.trim();
     if (!nm) {
-      setBanner('El nombre no puede estar vacío.');
+      fail('El nombre no puede estar vacío.');
       return;
     }
     if (!INVENTORY_UNITS.includes(d.unit as (typeof INVENTORY_UNITS)[number])) {
-      setBanner('Unidad no válida.');
+      fail('Unidad no válida.');
       return;
     }
     const supabase = getSupabaseClient()!;
-    setBusyId(row.id);
-    setBanner(null);
+    if (!opts?.skipBusy) setBusyId(row.id);
+    if (!opts?.skipReload && !opts?.throwing) setBanner(null);
     try {
       await updateInventoryItemLine(supabase, {
         localId,
@@ -261,11 +244,65 @@ export default function InventarioPage() {
         unit: d.unit,
       });
       setDrafts((prev) => ({ ...prev, [row.id]: { ...d, name: nm } }));
-      await load();
+      const catalogId = row.catalog_item_id;
+      if (catalogId) {
+        setCatalogQtyDraft((prev) => ({ ...prev, [catalogId]: String(q) }));
+      }
+      if (!opts?.skipReload) await load();
     } catch (e) {
+      if (opts?.throwing) throw e;
       setBanner(e instanceof Error ? e.message : 'Error al guardar.');
     } finally {
-      setBusyId(null);
+      if (!opts?.skipBusy) setBusyId(null);
+    }
+  };
+
+  const applyCategoryBatch = async (catId: string, items: InventoryCatalogItem[]) => {
+    if (!localId || !supabaseOk || items.length === 0) return;
+    const supabase = getSupabaseClient()!;
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    setBusyCategoryId(catId);
+    setBanner(null);
+    try {
+      for (const it of items) {
+        const line = lines.find((l) => l.catalog_item_id === it.id);
+        const raw = (catalogQtyDraft[it.id] ?? '').trim();
+        if (line) {
+          const q = raw === '' ? 0 : parseDecimal(raw);
+          if (q === null || q < 0) {
+            throw new Error(`Cantidad no válida: ${it.name}`);
+          }
+          await saveLine(line, { qty: String(q) }, { skipReload: true, skipBusy: true, throwing: true });
+        } else {
+          if (raw === '') continue;
+          const q = parseDecimal(raw);
+          if (q === null || q < 0) {
+            throw new Error(`Cantidad no válida: ${it.name}`);
+          }
+          try {
+            await insertInventoryLineFromCatalog(supabase, {
+              localId,
+              catalogItem: it,
+              userId: user?.id ?? null,
+              initialQuantity: q,
+            });
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : '';
+            if (msg.includes('duplicate') || msg.includes('unique') || msg.includes('23505')) {
+              throw new Error(`«${it.name}» ya está en tu inventario; recarga e inténtalo de nuevo.`);
+            }
+            throw err;
+          }
+        }
+      }
+      await load();
+    } catch (e) {
+      setBanner(e instanceof Error ? e.message : 'Error al guardar la categoría.');
+      await load();
+    } finally {
+      setBusyCategoryId(null);
     }
   };
 
@@ -423,7 +460,7 @@ export default function InventarioPage() {
       <MermasStyleHero
         eyebrow="Chef-One"
         title="Inventario"
-        description={`Stock y valor por artículo (${localLabel}). En el catálogo escribe la cantidad para crear la línea; nombre, formato, unidad y precio los editas en cada tarjeta.`}
+        description={`Stock y valor por artículo (${localLabel}). En el catálogo rellena las cantidades y pulsa OK al final de cada categoría para guardar todo de una vez. Nombre, precio y formato puedes ajustarlos en «Mi inventario» si lo necesitas.`}
       />
 
       {!isSupabaseEnabled() || !getSupabaseClient() ? (
@@ -601,7 +638,7 @@ export default function InventarioPage() {
 
           <section>
             <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-              <h2 className="text-base font-bold text-zinc-900">Catálogo (cantidad = añade a tu local)</h2>
+              <h2 className="text-base font-bold text-zinc-900">Catálogo (OK por categoría guarda todo)</h2>
               <div className="flex flex-wrap gap-1.5">
                 <button
                   type="button"
@@ -658,14 +695,9 @@ export default function InventarioPage() {
                       ) : null}
                       {items.map((it) => {
                         const line = lines.find((l) => l.catalog_item_id === it.id);
-                        const has = Boolean(line);
-                        const catBusy = busyId === it.id;
-                        const lineBusy = line ? busyId === line.id : false;
-                        const qtyBusy = catBusy || lineBusy;
+                        const qtyBusy = busyCategoryId === cat.id;
                         const qtyValue =
-                          has && line
-                            ? (drafts[line.id]?.qty ?? String(line.quantity_on_hand))
-                            : (catalogPendingQty[it.id] ?? '');
+                          catalogQtyDraft[it.id] ?? (line ? String(line.quantity_on_hand) : '');
                         return (
                           <li
                             key={it.id}
@@ -685,30 +717,18 @@ export default function InventarioPage() {
                                 inputMode="decimal"
                                 autoComplete="off"
                                 placeholder="0"
-                                aria-label={has ? `Cantidad de ${it.name}` : `Añadir cantidad de ${it.name}`}
+                                aria-label={`Cantidad de ${it.name}`}
                                 value={qtyValue}
                                 disabled={disabled || qtyBusy}
                                 onChange={(e) => {
                                   const v = e.target.value;
-                                  if (has && line) {
+                                  setCatalogQtyDraft((prev) => ({ ...prev, [it.id]: v }));
+                                  if (line) {
                                     setDrafts((prev) => {
-                                      const cur = prev[line.id] ?? {
-                                        qty: String(line.quantity_on_hand),
-                                        price: String(line.price_per_unit),
-                                        name: line.name,
-                                        format_label: line.format_label ?? '',
-                                        unit: line.unit,
-                                      };
+                                      const cur = prev[line.id] ?? lineDraftFromRow(line);
                                       return { ...prev, [line.id]: { ...cur, qty: v } };
                                     });
-                                  } else {
-                                    setCatalogPendingQty((prev) => ({ ...prev, [it.id]: v }));
                                   }
-                                }}
-                                onBlur={(e) => {
-                                  if (disabled || qtyBusy) return;
-                                  if (has && line) void saveLine(line, { qty: e.target.value });
-                                  else void insertCatalogWithQty(it, e.target.value);
                                 }}
                                 className="h-9 w-[4.75rem] rounded-lg border border-zinc-200 px-2 text-center text-sm font-semibold tabular-nums"
                               />
@@ -716,6 +736,18 @@ export default function InventarioPage() {
                           </li>
                         );
                       })}
+                      {items.length > 0 ? (
+                        <li className="px-1 pt-2">
+                          <button
+                            type="button"
+                            disabled={disabled || busyCategoryId === cat.id}
+                            onClick={() => void applyCategoryBatch(cat.id, items)}
+                            className="h-10 w-full rounded-xl bg-[#D32F2F] text-sm font-bold text-white shadow-sm disabled:opacity-45"
+                          >
+                            {busyCategoryId === cat.id ? 'Guardando…' : 'OK'}
+                          </button>
+                        </li>
+                      ) : null}
                     </ul>
                   </details>
                 );
