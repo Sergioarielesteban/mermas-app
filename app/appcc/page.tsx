@@ -3,12 +3,19 @@
 import Link from 'next/link';
 import { ChevronLeft, Droplet, History, Thermometer, Wrench } from 'lucide-react';
 import { CHEF_ONE_TAPER_LINE_CLASS } from '@/components/ChefOneGlowLine';
+import MermasStyleHero from '@/components/MermasStyleHero';
 
 const LINE_SM = `mx-auto mt-2 w-14 ${CHEF_ONE_TAPER_LINE_CLASS}`;
 
 export default function AppccHubPage() {
   return (
     <div className="space-y-4">
+      <MermasStyleHero
+        eyebrow="APPCC"
+        title="Puntos críticos y control diario"
+        description="Registra temperaturas y aceite con trazabilidad clara para el equipo y para inspecciones."
+      />
+
       <Link
         href="/panel"
         className="inline-flex items-center gap-1 text-sm font-semibold text-zinc-600 hover:text-[#D32F2F]"
