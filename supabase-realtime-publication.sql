@@ -25,7 +25,8 @@ declare
     'appcc_oil_events',
     'inventory_local_categories',
     'inventory_items',
-    'inventory_movements'
+    'inventory_movements',
+    'local_chat_messages'
   ];
 begin
   foreach tbl in array tables

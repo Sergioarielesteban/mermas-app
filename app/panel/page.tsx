@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import React from 'react';
 import type { LucideIcon } from 'lucide-react';
-import { BookOpen, Calculator, ChefHat, ClipboardList, ShieldCheck, ShoppingCart } from 'lucide-react';
+import { BookOpen, Calculator, ChefHat, ClipboardList, MessageCircle, ShieldCheck, ShoppingCart } from 'lucide-react';
 import { CHEF_ONE_TAPER_LINE_CLASS } from '@/components/ChefOneGlowLine';
 import MermasStyleHero from '@/components/MermasStyleHero';
 import { useAuth } from '@/components/AuthProvider';
@@ -103,6 +103,13 @@ export default function PanelControlPage() {
           tone="red"
         />
         <HubTile href="/inventario" label="Inventario" sub="Stock y valor por local" Icon={ClipboardList} />
+        <HubTile
+          href="/chat"
+          label="Chat"
+          sub="Habla con tu equipo del mismo local"
+          Icon={MessageCircle}
+          tone="red"
+        />
         <HubTile
           onClick={() => onStub('Cocina central')}
           label="Cocina central"

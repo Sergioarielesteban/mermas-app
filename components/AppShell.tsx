@@ -3,7 +3,17 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import React, { useCallback, useMemo, useState } from 'react';
-import { BookOpen, ClipboardList, Drumstick, LogOut, Menu, X, RefreshCcw, ShoppingCart } from 'lucide-react';
+import {
+  BookOpen,
+  ClipboardList,
+  Drumstick,
+  LogOut,
+  Menu,
+  MessageCircle,
+  X,
+  RefreshCcw,
+  ShoppingCart,
+} from 'lucide-react';
 import { useAuth } from '@/components/AuthProvider';
 import PullToRefreshPedidos from '@/components/PullToRefreshPedidos';
 import { canAccessPedidos } from '@/lib/pedidos-access';
@@ -28,6 +38,7 @@ function titleForPath(pathname: string | null) {
   if (pathname.startsWith('/resumen')) return 'Resumen';
   if (pathname.startsWith('/pedidos')) return 'Pedidos';
   if (pathname.startsWith('/inventario')) return 'Inventario';
+  if (pathname.startsWith('/chat')) return 'Chat del local';
   if (pathname === '/appcc') return 'APPCC';
   if (pathname.startsWith('/appcc/temperaturas')) return 'Temperaturas';
   if (pathname.startsWith('/appcc/historial')) return 'Historial';
@@ -55,6 +66,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     () => [
       ...(showPedidos ? [...NAV_ITEMS, { href: '/pedidos', label: 'Pedidos', Icon: ShoppingCart }] : NAV_ITEMS),
       { href: '/inventario', label: 'Inventario', Icon: ClipboardList },
+      { href: '/chat', label: 'Chat', Icon: MessageCircle },
     ],
     [showPedidos],
   );

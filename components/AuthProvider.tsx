@@ -6,6 +6,8 @@ import { isAllowedEmail } from '@/lib/auth-access';
 
 type AuthContextValue = {
   email: string | null;
+  /** auth.users.id cuando hay sesión Supabase. */
+  userId: string | null;
   /** Supabase multi-local: usuario vinculado a un local (opción B). */
   localId: string | null;
   localCode: string | null;
@@ -51,6 +53,7 @@ async function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [email, setEmail] = useState<string | null>(null);
+  const [userId, setUserId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [localId, setLocalId] = useState<string | null>(null);
   const [localCode, setLocalCode] = useState<string | null>(null);
@@ -100,12 +103,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     window.localStorage.removeItem(PROFILE_CACHE_KEY);
   }, []);
 
-  const loadProfileForUser = React.useCallback(async (userId: string | undefined) => {
-    if (!userId) {
+  const loadProfileForUser = React.useCallback(async (uid: string | undefined) => {
+    if (!uid) {
+      setUserId(null);
       clearProfile();
       setProfileReady(true);
       return;
     }
+    setUserId(uid);
     const supabase = getSupabaseClient();
     if (!supabase || !isSupabaseEnabled()) {
       clearProfile();
@@ -126,7 +131,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           supabase
             .from('profiles')
             .select('local_id, locals(code, name)')
-            .eq('user_id', userId)
+            .eq('user_id', uid)
             .maybeSingle(),
         ),
         PROFILE_TIMEOUT_MS,
@@ -147,7 +152,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             supabase
               .from('profiles')
               .select('local_id')
-              .eq('user_id', userId)
+              .eq('user_id', uid)
               .maybeSingle(),
           ),
           PROFILE_TIMEOUT_MS,
@@ -247,6 +252,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const { data, error } = result as Awaited<typeof sessionPromise>;
         if (error && isInvalidRefreshTokenError(error.message)) {
           setEmail(null);
+          setUserId(null);
           clearProfile();
           clearLocalAuthCache();
           setLoading(false);
@@ -291,6 +297,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const value = useMemo<AuthContextValue>(
     () => ({
       email,
+      userId,
       localId,
       localCode,
       localName,
@@ -317,6 +324,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const supabase = getSupabaseClient();
         if (supabase) await supabase.auth.signOut();
         setEmail(null);
+        setUserId(null);
         clearProfile();
         setProfileReady(true);
         if (typeof window !== 'undefined') {
@@ -326,7 +334,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       },
       loading,
     }),
-    [clearProfile, email, localCode, localId, localName, loading, profileReady],
+    [clearProfile, email, localCode, localId, localName, loading, profileReady, userId],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
