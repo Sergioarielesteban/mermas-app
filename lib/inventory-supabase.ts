@@ -174,3 +174,140 @@ export async function deleteInventoryItemLine(
   const { error } = await supabase.from('inventory_items').delete().eq('id', itemId).eq('local_id', localId);
   if (error) throw new Error(error.message);
 }
+
+export async function insertInventoryCatalogCategory(
+  supabase: SupabaseClient,
+  name: string,
+  sortOrder: number,
+): Promise<InventoryCatalogCategory> {
+  const { data, error } = await supabase
+    .from('inventory_catalog_categories')
+    .insert({ name: name.trim(), sort_order: sortOrder, is_active: true })
+    .select('id,name,sort_order,is_active')
+    .single();
+  if (error) throw new Error(error.message);
+  return data as InventoryCatalogCategory;
+}
+
+export async function insertInventoryCatalogItem(
+  supabase: SupabaseClient,
+  params: {
+    catalogCategoryId: string;
+    name: string;
+    unit: string;
+    defaultPricePerUnit: number;
+    formatLabel: string | null;
+    sortOrder: number;
+  },
+): Promise<InventoryCatalogItem> {
+  const p = Math.round(params.defaultPricePerUnit * 100) / 100;
+  const { data, error } = await supabase
+    .from('inventory_catalog_items')
+    .insert({
+      catalog_category_id: params.catalogCategoryId,
+      name: params.name.trim(),
+      unit: params.unit,
+      default_price_per_unit: p,
+      format_label: params.formatLabel?.trim() ? params.formatLabel.trim() : null,
+      sort_order: params.sortOrder,
+      is_active: true,
+    })
+    .select('id,catalog_category_id,name,unit,default_price_per_unit,format_label,sort_order,is_active')
+    .single();
+  if (error) throw new Error(error.message);
+  const row = data as Record<string, unknown>;
+  return {
+    ...row,
+    default_price_per_unit: Number(row.default_price_per_unit),
+  } as InventoryCatalogItem;
+}
+
+export type InventoryMonthSnapshot = {
+  id: string;
+  local_id: string;
+  year_month: string;
+  total_value: number;
+  lines_count: number;
+  category_breakdown: Record<string, number>;
+  created_at: string;
+};
+
+export async function fetchInventoryMonthSnapshots(
+  supabase: SupabaseClient,
+  localId: string,
+  limit = 24,
+): Promise<InventoryMonthSnapshot[]> {
+  const { data, error } = await supabase
+    .from('inventory_month_snapshots')
+    .select('id,local_id,year_month,total_value,lines_count,category_breakdown,created_at')
+    .eq('local_id', localId)
+    .order('year_month', { ascending: true })
+    .limit(limit);
+  if (error) throw new Error(error.message);
+  return (data ?? []).map((row) => {
+    const r = row as Record<string, unknown>;
+    const raw = r.category_breakdown;
+    let breakdown: Record<string, number> = {};
+    if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+      for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+        const n = Number(v);
+        if (Number.isFinite(n)) breakdown[k] = n;
+      }
+    }
+    return {
+      id: String(r.id),
+      local_id: String(r.local_id),
+      year_month: String(r.year_month),
+      total_value: Number(r.total_value),
+      lines_count: Number(r.lines_count),
+      category_breakdown: breakdown,
+      created_at: String(r.created_at),
+    };
+  });
+}
+
+export async function upsertInventoryMonthSnapshot(
+  supabase: SupabaseClient,
+  params: {
+    localId: string;
+    yearMonth: string;
+    totalValue: number;
+    linesCount: number;
+    categoryBreakdown: Record<string, number>;
+  },
+): Promise<void> {
+  const { error } = await supabase.from('inventory_month_snapshots').upsert(
+    {
+      local_id: params.localId,
+      year_month: params.yearMonth,
+      total_value: Math.round(params.totalValue * 100) / 100,
+      lines_count: params.linesCount,
+      category_breakdown: params.categoryBreakdown,
+    },
+    { onConflict: 'local_id,year_month' },
+  );
+  if (error) throw new Error(error.message);
+}
+
+/** Valor en € por id de categoría de catálogo (clave `__sin_catalogo__` si no hay enlace). */
+export function computeInventoryCategoryBreakdownEuros(
+  lines: InventoryItem[],
+  catalogItems: InventoryCatalogItem[],
+): Record<string, number> {
+  const itemToCat = new Map(catalogItems.map((i) => [i.id, i.catalog_category_id]));
+  const out: Record<string, number> = {};
+  for (const row of lines) {
+    const sub = row.quantity_on_hand * row.price_per_unit;
+    const cid = row.catalog_item_id ? itemToCat.get(row.catalog_item_id) : undefined;
+    const key = cid ?? '__sin_catalogo__';
+    out[key] = Math.round(((out[key] ?? 0) + sub) * 100) / 100;
+  }
+  return out;
+}
+
+export function currentInventoryYearMonth(): string {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  return `${y}-${m}`;
+}
