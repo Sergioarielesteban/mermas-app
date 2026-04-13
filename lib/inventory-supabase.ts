@@ -190,7 +190,7 @@ export type InventoryHistorySnapshot = {
   id: string;
   local_id: string;
   created_at: string;
-  event_type: 'before_reset' | 'before_line_delete';
+  event_type: 'before_reset' | 'before_line_delete' | 'inventory_final';
   summary: string | null;
   total_value_snapshot: number;
   lines_snapshot: InventoryHistoryLineSnapshot[];
@@ -220,7 +220,7 @@ export async function insertInventoryHistorySnapshot(
   supabase: SupabaseClient,
   params: {
     localId: string;
-    eventType: 'before_reset' | 'before_line_delete';
+    eventType: 'before_reset' | 'before_line_delete' | 'inventory_final';
     summary: string | null;
     lines: InventoryItem[];
     userId: string | null;
@@ -273,7 +273,7 @@ export async function fetchInventoryHistorySnapshots(
       id: String(r.id),
       local_id: String(r.local_id),
       created_at: String(r.created_at),
-      event_type: r.event_type as 'before_reset' | 'before_line_delete',
+      event_type: r.event_type as InventoryHistorySnapshot['event_type'],
       summary: r.summary != null ? String(r.summary) : null,
       total_value_snapshot: Number(r.total_value_snapshot),
       lines_snapshot: lines,
@@ -289,13 +289,9 @@ export async function deleteAllInventoryHistorySnapshots(
   if (error) throw new Error(error.message);
 }
 
-/** Pone quantity_on_hand = 0 en todas las líneas activas del local (no borra filas). */
-export async function resetInventoryQuantitiesToZero(supabase: SupabaseClient, localId: string): Promise<void> {
-  const { error } = await supabase
-    .from('inventory_items')
-    .update({ quantity_on_hand: 0 })
-    .eq('local_id', localId)
-    .eq('is_active', true);
+/** Borra todas las líneas de inventario del local (el catálogo no se toca). */
+export async function deleteAllInventoryLinesForLocal(supabase: SupabaseClient, localId: string): Promise<void> {
+  const { error } = await supabase.from('inventory_items').delete().eq('local_id', localId);
   if (error) throw new Error(error.message);
 }
 

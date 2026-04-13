@@ -2,7 +2,15 @@
 
 import Link from 'next/link';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronDown, ChevronLeft, History, Package, Plus, RotateCcw } from 'lucide-react';
+import {
+  ChevronDown,
+  ChevronLeft,
+  CheckCircle2,
+  History,
+  Package,
+  Plus,
+  RotateCcw,
+} from 'lucide-react';
 import MermasStyleHero from '@/components/MermasStyleHero';
 import InventoryResultadoInventario from '@/components/InventoryResultadoInventario';
 import { useAuth } from '@/components/AuthProvider';
@@ -26,7 +34,7 @@ import {
   insertInventoryCatalogCategory,
   insertInventoryCatalogItem,
   insertInventoryLineFromCatalog,
-  resetInventoryQuantitiesToZero,
+  deleteAllInventoryLinesForLocal,
   updateInventoryItemLine,
   upsertInventoryMonthSnapshot,
   type InventoryHistorySnapshot,
@@ -93,6 +101,7 @@ export default function InventarioPage() {
   const [historyExpandedId, setHistoryExpandedId] = useState<string | null>(null);
   const [historyClearBusy, setHistoryClearBusy] = useState(false);
   const [resetInventoryBusy, setResetInventoryBusy] = useState(false);
+  const [finishInventoryBusy, setFinishInventoryBusy] = useState(false);
   const loadRef = useRef<() => Promise<void>>(() => Promise.resolve());
 
   const supabaseOk = isSupabaseEnabled() && getSupabaseClient();
@@ -524,15 +533,15 @@ export default function InventarioPage() {
     }
   };
 
-  const resetInventoryToZero = async () => {
+  const finishInventoryToHistory = async () => {
     if (!localId || !supabaseOk) return;
     if (lines.length === 0) {
-      setBanner('No hay líneas en el inventario.');
+      setBanner('No hay líneas en el inventario para guardar en el historial.');
       return;
     }
     if (
       !window.confirm(
-        'Se guardará el estado actual en Historial y todas las cantidades pasarán a 0. Las líneas siguen en el catálogo (podrás volver a poner cantidades). ¿Continuar?',
+        'Se guardará en Historial una copia del inventario actual (todas las líneas y totales). El inventario en pantalla no se borra; para empezar de cero usa «Reiniciar inventario».',
       )
     ) {
       return;
@@ -541,25 +550,58 @@ export default function InventarioPage() {
     const {
       data: { user },
     } = await supabase.auth.getUser();
-    setResetInventoryBusy(true);
+    setFinishInventoryBusy(true);
     setBanner(null);
     try {
+      const ym = currentInventoryYearMonth();
       await insertInventoryHistorySnapshot(supabase, {
         localId,
-        eventType: 'before_reset',
-        summary: 'Antes de reiniciar inventario (todas las cantidades a cero)',
+        eventType: 'inventory_final',
+        summary: `Inventario terminado (${ym}) — ${lines.length} línea(s), ${totalValor.toFixed(2)} €`,
         lines,
         userId: user?.id ?? null,
       });
-      await resetInventoryQuantitiesToZero(supabase, localId);
-      await load();
+      setBanner('Inventario guardado en Historial.');
     } catch (e) {
-      const msg = e instanceof Error ? e.message : 'Error al reiniciar.';
-      if (msg.includes('inventory_history') || msg.includes('does not exist')) {
-        setBanner('Ejecuta supabase-inventory-history.sql en Supabase para poder reiniciar con copia de seguridad.');
+      const msg = e instanceof Error ? e.message : 'Error al guardar en historial.';
+      if (
+        msg.includes('inventory_history') ||
+        msg.includes('does not exist') ||
+        msg.includes('violates check constraint') ||
+        msg.includes('check constraint')
+      ) {
+        setBanner(
+          'Actualiza Supabase: ejecuta supabase-inventory-history.sql o supabase-inventory-history-inventory-final.sql para permitir «Terminar inventario».',
+        );
       } else {
         setBanner(msg);
       }
+    } finally {
+      setFinishInventoryBusy(false);
+    }
+  };
+
+  const resetInventoryClearLines = async () => {
+    if (!localId || !supabaseOk) return;
+    if (lines.length === 0) {
+      setBanner('No hay líneas en el inventario.');
+      return;
+    }
+    if (
+      !window.confirm(
+        'Se borrarán todas las líneas de inventario de este local. El valor total quedará en 0. El catálogo no cambia. Para guardar antes una copia, usa «Terminar inventario». ¿Continuar?',
+      )
+    ) {
+      return;
+    }
+    const supabase = getSupabaseClient()!;
+    setResetInventoryBusy(true);
+    setBanner(null);
+    try {
+      await deleteAllInventoryLinesForLocal(supabase, localId);
+      await load();
+    } catch (e) {
+      setBanner(e instanceof Error ? e.message : 'Error al reiniciar.');
     } finally {
       setResetInventoryBusy(false);
     }
@@ -581,7 +623,7 @@ export default function InventarioPage() {
       <MermasStyleHero
         eyebrow="Chef-One"
         title="Inventario"
-        description={`Stock y valor por artículo (${localLabel}). En el catálogo rellena las cantidades y pulsa OK al final de cada categoría. Toca un artículo para ver detalles: si ya está en tu inventario, ahí puedes ajustar nombre, precio y formato, o quitarlo. El historial guarda copias antes de reiniciar o de quitar una línea.`}
+        description={`Stock y valor por artículo (${localLabel}). En el catálogo rellena las cantidades y pulsa OK al final de cada categoría. «Terminar inventario» guarda el estado en Historial. «Reiniciar inventario» borra todas las líneas y deja el total en 0. Al quitar un artículo del inventario se guarda una copia en Historial antes de borrarlo.`}
       />
 
       {!isSupabaseEnabled() || !getSupabaseClient() ? (
@@ -628,12 +670,21 @@ export default function InventarioPage() {
                 </button>
                 <button
                   type="button"
-                  disabled={disabled || lines.length === 0 || resetInventoryBusy}
-                  onClick={() => void resetInventoryToZero()}
+                  disabled={disabled || lines.length === 0 || finishInventoryBusy || resetInventoryBusy}
+                  onClick={() => void finishInventoryToHistory()}
+                  className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-emerald-300 bg-emerald-50 px-3 text-xs font-bold text-emerald-950 shadow-sm disabled:opacity-45"
+                >
+                  <CheckCircle2 className={`h-4 w-4 ${finishInventoryBusy ? 'animate-pulse' : ''}`} />
+                  {finishInventoryBusy ? 'Guardando…' : 'Terminar inventario'}
+                </button>
+                <button
+                  type="button"
+                  disabled={disabled || lines.length === 0 || resetInventoryBusy || finishInventoryBusy}
+                  onClick={() => void resetInventoryClearLines()}
                   className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-amber-300 bg-amber-50 px-3 text-xs font-bold text-amber-950 shadow-sm disabled:opacity-45"
                 >
                   <RotateCcw className={`h-4 w-4 ${resetInventoryBusy ? 'animate-spin' : ''}`} />
-                  {resetInventoryBusy ? 'Reiniciando…' : 'Reiniciar inventario'}
+                  {resetInventoryBusy ? 'Borrando…' : 'Reiniciar inventario'}
                 </button>
               </div>
             </div>
@@ -954,8 +1005,8 @@ export default function InventarioPage() {
                   Historial de inventario
                 </h3>
                 <p className="mt-0.5 text-[11px] text-zinc-500">
-                  Copias automáticas antes de reiniciar cantidades o de quitar una línea. Solo aquí puedes vaciar el
-                  historial.
+                  Aquí ves los inventarios terminados (botón «Terminar inventario»), copias al quitar una línea y
+                  registros antiguos. Solo desde aquí puedes vaciar el historial.
                 </p>
               </div>
               <button
@@ -972,7 +1023,8 @@ export default function InventarioPage() {
                 <p className="py-8 text-center text-sm text-zinc-500">Cargando…</p>
               ) : historyEntries.length === 0 ? (
                 <p className="rounded-xl border border-zinc-100 bg-zinc-50 px-3 py-6 text-center text-sm text-zinc-600">
-                  No hay entradas todavía. Aparecerán al reiniciar el inventario o al quitar un artículo del inventario.
+                  No hay entradas todavía. Usa «Terminar inventario» para guardar un cierre aquí, o quita un artículo
+                  del inventario (se guarda una copia antes de borrarlo).
                 </p>
               ) : (
                 <ul className="space-y-2">
@@ -983,9 +1035,11 @@ export default function InventarioPage() {
                       timeStyle: 'short',
                     });
                     const kind =
-                      ent.event_type === 'before_reset'
-                        ? 'Antes de reinicio'
-                        : 'Antes de quitar línea';
+                      ent.event_type === 'inventory_final'
+                        ? 'Inventario terminado'
+                        : ent.event_type === 'before_reset'
+                          ? 'Antes de reinicio (legado)'
+                          : 'Antes de quitar línea';
                     return (
                       <li
                         key={ent.id}

@@ -1,8 +1,9 @@
 -- =============================================================================
--- Historial de inventario (antes de reinicio o de quitar una línea)
+-- Historial de inventario (cierre, copias antes de quitar una línea, legado)
 -- =============================================================================
 -- Ejecutar en Supabase SQL Editor (tras supabase-inventory-schema.sql).
--- La app guarda un snapshot JSON de todas las líneas antes de acciones destructivas.
+-- Tipos: inventory_final (al pulsar Terminar inventario), before_line_delete,
+-- before_reset (filas antiguas).
 -- =============================================================================
 
 create table if not exists public.inventory_history_snapshots (
@@ -15,7 +16,7 @@ create table if not exists public.inventory_history_snapshots (
   lines_snapshot jsonb not null,
   created_by uuid references auth.users (id),
   constraint inventory_history_snapshots_event check (
-    event_type in ('before_reset', 'before_line_delete')
+    event_type in ('before_reset', 'before_line_delete', 'inventory_final')
   )
 );
 
@@ -45,4 +46,4 @@ for delete
 to authenticated
 using (local_id = public.current_local_id());
 
-comment on table public.inventory_history_snapshots is 'Copias de seguridad del inventario local antes de reinicio o borrado de línea.';
+comment on table public.inventory_history_snapshots is 'Snapshots del inventario local: cierre (inventory_final), antes de quitar línea, legado.';
