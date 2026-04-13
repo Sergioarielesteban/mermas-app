@@ -1,8 +1,10 @@
 'use client';
 
 import Link from 'next/link';
+import { ChevronDown } from 'lucide-react';
 import React from 'react';
 import { useAuth } from '@/components/AuthProvider';
+import { CHEF_ONE_TAPER_LINE_CLASS } from '@/components/ChefOneGlowLine';
 import { usePedidosOrders } from '@/components/PedidosOrdersProvider';
 import { getSupabaseClient } from '@/lib/supabase-client';
 import MermasStyleHero from '@/components/MermasStyleHero';
@@ -150,6 +152,8 @@ export default function PedidosPage() {
 
   const [expandedSentId, setExpandedSentId] = React.useState<string | null>(null);
   const [expandedHistoricoId, setExpandedHistoricoId] = React.useState<string | null>(null);
+  const [pendientesEntregaAccordionOpen, setPendientesEntregaAccordionOpen] = React.useState(true);
+  const [historicoRecibidosAccordionOpen, setHistoricoRecibidosAccordionOpen] = React.useState(false);
   /** Feedback visual al marcar recibido (el merge con réplica ya no revierte el estado). */
   const [receivingOrderId, setReceivingOrderId] = React.useState<string | null>(null);
   /** Marca visual por línea (varias a la vez); evita que un refetch parcial “borre” el estado al ir recibiendo. */
@@ -560,10 +564,33 @@ export default function PedidosPage() {
         </Link>
       </section>
 
-      <section className="rounded-2xl bg-white p-4 text-center ring-1 ring-zinc-200">
-        <p className="text-sm font-bold text-zinc-800">Pedidos enviados</p>
-        <div className="mt-2 space-y-2">
-          {sentOrders.length === 0 ? <p className="text-sm text-zinc-500">No hay pedidos enviados.</p> : null}
+      <section className="overflow-hidden rounded-3xl bg-white shadow-sm ring-1 ring-zinc-200/80">
+        <details
+          className="group"
+          open={pendientesEntregaAccordionOpen}
+          onToggle={(e) => setPendientesEntregaAccordionOpen(e.currentTarget.open)}
+        >
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-4 sm:px-5 [&::-webkit-details-marker]:hidden">
+            <div className="min-w-0 text-left">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-zinc-400">Entrega</p>
+              <p className="mt-1 text-lg font-semibold tracking-tight text-zinc-900">Pendientes de entrega</p>
+              <p className="mt-1 text-xs text-zinc-500">
+                {sentOrders.length === 0
+                  ? 'Nada pendiente'
+                  : `${sentOrders.length} pedido${sentOrders.length === 1 ? '' : 's'} enviado${
+                      sentOrders.length === 1 ? '' : 's'
+                    } · toca para plegar`}
+              </p>
+            </div>
+            <ChevronDown
+              className="h-5 w-5 shrink-0 text-zinc-400 transition-transform duration-300 group-open:rotate-180"
+              aria-hidden
+            />
+          </summary>
+          <div className="space-y-2 border-t border-amber-200/50 bg-gradient-to-b from-amber-50/95 via-amber-50/80 to-amber-100/50 px-3 pb-4 pt-3 sm:px-4">
+          {sentOrders.length === 0 ? (
+            <p className="py-6 text-center text-sm text-zinc-600">No hay pedidos enviados.</p>
+          ) : null}
           {sentOrders.map((order) => (
             <div
               key={order.id}
@@ -729,50 +756,91 @@ export default function PedidosPage() {
 
             </div>
           ))}
-        </div>
+          </div>
+        </details>
       </section>
 
-      <section className="rounded-2xl bg-white p-4 text-center ring-1 ring-zinc-200">
-        <p className="text-sm font-bold text-zinc-800">Historico recibido</p>
-        <div className="mt-2 space-y-2">
-          {receivedOrders.length === 0 ? <p className="text-sm text-zinc-500">No hay pedidos recibidos.</p> : null}
+      <section className="overflow-hidden rounded-3xl bg-white shadow-sm ring-1 ring-zinc-200/80">
+        <details
+          className="group"
+          open={historicoRecibidosAccordionOpen}
+          onToggle={(e) => setHistoricoRecibidosAccordionOpen(e.currentTarget.open)}
+        >
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-4 sm:px-5 [&::-webkit-details-marker]:hidden">
+            <div className="min-w-0 text-left">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-zinc-400">Almacén</p>
+              <p className="mt-1 text-lg font-semibold tracking-tight text-zinc-900">Histórico recibidos</p>
+              <p className="mt-1 text-xs text-zinc-500">
+                {receivedOrders.length === 0
+                  ? 'Sin pedidos recibidos'
+                  : `${receivedOrders.length} pedido${receivedOrders.length === 1 ? '' : 's'} · con o sin incidencia`}
+              </p>
+            </div>
+            <ChevronDown
+              className="h-5 w-5 shrink-0 text-zinc-400 transition-transform duration-300 group-open:rotate-180"
+              aria-hidden
+            />
+          </summary>
+          <div className="space-y-4 border-t border-zinc-100 bg-gradient-to-b from-zinc-50/90 to-white px-3 pb-4 pt-4 sm:px-4">
+          {receivedOrders.length === 0 ? (
+            <p className="py-6 text-center text-sm text-zinc-500">No hay pedidos recibidos.</p>
+          ) : null}
           {receivedOrders.map((order) => {
             const needsAttention = receivedOrderHasAttention(order);
             const incidentFooterText = historicoIncidentFooterText(order);
-            const cardTone = needsAttention
-              ? 'bg-red-100 ring-2 ring-red-400/90'
-              : 'bg-green-100 ring-2 ring-green-500/80';
+            const detailOpen = expandedHistoricoId === order.id;
+            const totals = totalsWithVatForOrderListDisplay(order);
             return (
-            <div key={order.id} className={`rounded-xl p-3 text-center shadow-sm ${cardTone}`}>
+            <div
+              key={order.id}
+              className={[
+                'overflow-hidden rounded-3xl transition-all duration-300 ease-out',
+                detailOpen
+                  ? 'bg-white shadow-lg shadow-zinc-200/60 ring-2 ring-zinc-900/5'
+                  : 'bg-zinc-50/80 ring-1 ring-zinc-200/90 hover:bg-white hover:ring-zinc-300',
+              ].join(' ')}
+            >
               <button
                 type="button"
                 onClick={() => setExpandedHistoricoId((prev) => (prev === order.id ? null : order.id))}
-                className="w-full rounded-xl py-1 text-center outline-none focus-visible:ring-2 focus-visible:ring-green-700/30 active:opacity-90"
-                aria-expanded={expandedHistoricoId === order.id}
+                className="flex w-full flex-col items-center px-4 py-6 text-center outline-none transition active:bg-zinc-50/50 focus-visible:ring-2 focus-visible:ring-[#D32F2F]/40 focus-visible:ring-offset-2"
+                aria-expanded={detailOpen}
               >
-                {(() => {
-                  const totals = totalsWithVatForOrderListDisplay(order);
-                  return (
-                    <>
-                      <p className="text-sm font-semibold text-zinc-900">{order.supplierName}</p>
-                      <p className="text-xs text-zinc-500">
-                        recibido {order.receivedAt ? new Date(order.receivedAt).toLocaleDateString('es-ES') : '-'}
-                      </p>
-                      <p className="pt-1 text-sm font-bold text-zinc-700">
-                        Total (IVA incluido):{' '}
-                        <span className="text-base font-black text-zinc-900">{totals.total.toFixed(2)} €</span>
-                      </p>
-                    </>
-                  );
-                })()}
+                <span className="text-center text-xl font-semibold leading-[1.15] tracking-tight text-zinc-900 sm:text-[1.65rem] sm:leading-tight">
+                  {order.supplierName}
+                </span>
+                <span className={`mx-auto mt-3 w-24 ${CHEF_ONE_TAPER_LINE_CLASS}`} aria-hidden />
+                <span className="mt-3 flex flex-wrap items-center justify-center gap-x-1.5 gap-y-0.5 text-xs text-zinc-500">
+                  <span className="tabular-nums font-medium text-zinc-700">{totals.total.toFixed(2)} €</span>
+                  <span className="text-zinc-400">·</span>
+                  <span>
+                    recibido {order.receivedAt ? new Date(order.receivedAt).toLocaleDateString('es-ES') : '-'}
+                  </span>
+                  <span className="text-zinc-400">·</span>
+                  <span>IVA incl.</span>
+                </span>
+                {needsAttention ? (
+                  <span className="mt-2 rounded-full bg-amber-100 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-900 ring-1 ring-amber-200">
+                    Incidencia
+                  </span>
+                ) : null}
+                <span className="mt-4 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider text-[#D32F2F]">
+                  {detailOpen ? 'Ocultar lineas del pedido' : 'Ver lineas del pedido'}
+                  <ChevronDown
+                    className={['h-4 w-4 transition-transform duration-300', detailOpen ? 'rotate-180' : ''].join(
+                      ' ',
+                    )}
+                    aria-hidden
+                  />
+                </span>
               </button>
-              <div className="mt-3 flex flex-wrap justify-center gap-2">
+              <div className="flex flex-wrap justify-center gap-2 border-t border-zinc-100 bg-white/80 px-3 py-3">
                 <button
                   type="button"
                   onClick={() => {
                     if (!localId) return;
                     const ok = window.confirm(
-                      '¿Devolver este pedido a «Pedidos enviados»? Volverá a la bandeja de revisión de precios (las líneas no se borran).',
+                      '¿Devolver este pedido a «Pendientes de entrega»? Volverá a la bandeja de revisión de precios (las líneas no se borran).',
                     );
                     if (!ok) return;
                     const supabase = getSupabaseClient();
@@ -820,10 +888,13 @@ export default function PedidosPage() {
                 </button>
               </div>
               {expandedHistoricoId === order.id ? (
-                <div className="mt-3 space-y-3 text-left">
+                <div className="space-y-3 border-t border-zinc-100 bg-gradient-to-b from-zinc-50/90 to-zinc-100/40 px-3 pb-4 pt-3 text-left sm:px-4">
+                  <p className="text-center text-[10px] font-semibold uppercase tracking-[0.18em] text-zinc-400">
+                    Lineas del pedido
+                  </p>
                   {order.notes?.trim() ? (
-                    <div className="rounded-xl border border-green-200 bg-white px-3 py-2.5 ring-1 ring-green-100">
-                      <p className="text-[10px] font-bold uppercase tracking-wide text-green-900/80">Notas del pedido</p>
+                    <div className="rounded-2xl border border-zinc-100 bg-white px-3 py-2.5 shadow-sm ring-1 ring-zinc-100">
+                      <p className="text-[10px] font-bold uppercase tracking-wide text-zinc-600">Notas del pedido</p>
                       <p className="mt-1 text-sm leading-relaxed text-zinc-900">{order.notes.trim()}</p>
                     </div>
                   ) : null}
@@ -832,7 +903,10 @@ export default function PedidosPage() {
                     const isBad = inc;
                     const isOk = !inc && item.receivedQuantity >= item.quantity && item.quantity > 0;
                     return (
-                      <div key={item.id} className="rounded-xl bg-white p-3 ring-1 ring-zinc-200">
+                      <div
+                        key={item.id}
+                        className="rounded-2xl border border-zinc-100 bg-white p-3 shadow-sm"
+                      >
                         <div className="flex items-start justify-between gap-2">
                           <p className="text-sm font-semibold text-zinc-900">{item.productName}</p>
                           <div className="flex shrink-0 items-center gap-2">
@@ -899,7 +973,8 @@ export default function PedidosPage() {
             </div>
             );
           })}
-        </div>
+          </div>
+        </details>
       </section>
     </div>
   );
