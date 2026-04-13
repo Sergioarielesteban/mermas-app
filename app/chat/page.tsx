@@ -22,6 +22,8 @@ function formatTime(iso: string) {
 
 export default function ChatPage() {
   const { localId, userId, profileReady } = useAuth();
+  /** Respaldo si el contexto aún no tiene userId (evita tratar todos los mensajes como “ajenos” o “propios” mal). */
+  const [sessionUserId, setSessionUserId] = useState<string | null>(null);
   const [messages, setMessages] = useState<LocalChatMessage[]>([]);
   const [draft, setDraft] = useState('');
   const [loading, setLoading] = useState(true);
@@ -30,6 +32,16 @@ export default function ChatPage() {
   const listRef = useRef<HTMLDivElement>(null);
 
   const supabaseOk = isSupabaseEnabled() && getSupabaseClient();
+
+  useEffect(() => {
+    const supabase = getSupabaseClient();
+    if (!supabase) return;
+    void supabase.auth.getSession().then(({ data }) => {
+      setSessionUserId(data.session?.user?.id ?? null);
+    });
+  }, []);
+
+  const effectiveUserId = userId ?? sessionUserId;
 
   const scrollToBottom = useCallback(() => {
     const el = listRef.current;
@@ -156,8 +168,9 @@ export default function ChatPage() {
               Aún no hay mensajes. Escribe el primero para avisar al equipo.
             </p>
           ) : (
-            messages.map((m) => {
-              const mine = userId !== null && m.user_id === userId;
+                       messages.map((m) => {
+              const mine = effectiveUserId !== null && m.user_id === effectiveUserId;
+              const label = (m.author_label ?? '').trim() || 'Sin nombre';
               return (
                 <div key={m.id} className={`flex ${mine ? 'justify-end' : 'justify-start'}`}>
                   <div
@@ -168,10 +181,15 @@ export default function ChatPage() {
                         : 'rounded-bl-md bg-zinc-100 text-zinc-900 ring-1 ring-zinc-200/80',
                     ].join(' ')}
                   >
-                    {!mine ? (
-                      <p className="text-[11px] font-bold uppercase tracking-wide text-zinc-500">{m.author_label}</p>
-                    ) : null}
-                    <p className="mt-0.5 whitespace-pre-wrap break-words leading-relaxed">{m.body}</p>
+                    <p
+                      className={[
+                        'text-[11px] font-bold leading-tight',
+                        mine ? 'text-white/95' : 'uppercase tracking-wide text-zinc-600',
+                      ].join(' ')}
+                    >
+                      {mine ? `Tú · ${label}` : label}
+                    </p>
+                    <p className="mt-1.5 whitespace-pre-wrap break-words leading-relaxed">{m.body}</p>
                     <p
                       className={`mt-1 text-[10px] tabular-nums ${mine ? 'text-white/75' : 'text-zinc-400'}`}
                     >
