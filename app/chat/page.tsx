@@ -2,11 +2,12 @@
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { ChevronLeft, Send } from 'lucide-react';
+import { ChevronLeft, Send, Trash2 } from 'lucide-react';
 import MermasStyleHero from '@/components/MermasStyleHero';
 import { useAuth } from '@/components/AuthProvider';
 import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
 import {
+  deleteAllLocalChatMessages,
   fetchLocalChatMessages,
   insertLocalChatMessage,
   type LocalChatMessage,
@@ -28,6 +29,7 @@ export default function ChatPage() {
   const [draft, setDraft] = useState('');
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [banner, setBanner] = useState<string | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
 
@@ -128,6 +130,33 @@ export default function ChatPage() {
     }
   };
 
+  const clearChat = async () => {
+    if (!localId || !supabaseOk || deleting) return;
+    if (
+      !window.confirm(
+        'Se eliminarán todos los mensajes del chat de este local. Esta acción no se puede deshacer. ¿Continuar?',
+      )
+    ) {
+      return;
+    }
+    const supabase = getSupabaseClient()!;
+    setDeleting(true);
+    setBanner(null);
+    try {
+      await deleteAllLocalChatMessages(supabase, localId);
+      setMessages([]);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'No se pudo vaciar el chat.';
+      if (msg.includes('permission') || msg.includes('policy') || msg.includes('42501')) {
+        setBanner('Falta permiso de borrado. Ejecuta supabase-local-chat-delete-policy.sql en Supabase.');
+      } else {
+        setBanner(msg);
+      }
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   const disabled = !localId || !profileReady || !supabaseOk || loading;
 
   return (
@@ -146,6 +175,15 @@ export default function ChatPage() {
         <ChevronLeft className="h-4 w-4" aria-hidden />
         Panel de control
       </Link>
+      <button
+        type="button"
+        disabled={disabled || deleting || messages.length === 0}
+        onClick={() => void clearChat()}
+        className="inline-flex h-9 items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 text-xs font-bold text-red-800 disabled:opacity-45"
+      >
+        <Trash2 className="h-4 w-4" aria-hidden />
+        {deleting ? 'Eliminando…' : 'Eliminar chat'}
+      </button>
 
       {banner ? (
         <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950">

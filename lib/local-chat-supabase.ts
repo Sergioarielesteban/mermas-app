@@ -43,3 +43,11 @@ export async function insertLocalChatMessage(
   if (error) throw new Error(error.message);
   return data as LocalChatMessage;
 }
+
+export async function deleteAllLocalChatMessages(
+  supabase: SupabaseClient,
+  localId: string,
+): Promise<void> {
+  const { error } = await supabase.from('local_chat_messages').delete().eq('local_id', localId);
+  if (error) throw new Error(error.message);
+}

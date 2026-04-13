@@ -4,7 +4,9 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import React, { useCallback, useMemo, useState } from 'react';
 import {
+  Calculator,
   BookOpen,
+  ChefHat,
   ClipboardList,
   LogOut,
   Menu,
@@ -21,9 +23,10 @@ import { formatLocalHeaderName } from '@/lib/local-display-name';
 import ChefOneGlowLine from '@/components/ChefOneGlowLine';
 
 type NavItem = {
-  href: string;
+  href?: string;
   label: string;
   Icon: React.ComponentType<{ className?: string }>;
+  comingSoon?: boolean;
 };
 
 const NAV_ITEMS: NavItem[] = [{ href: '/dashboard', label: 'Mermas', Icon: BookOpen }];
@@ -68,6 +71,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       { href: '/appcc', label: 'APPCC', Icon: ShieldCheck },
       { href: '/inventario', label: 'Inventario', Icon: ClipboardList },
       { href: '/chat', label: 'Chat', Icon: MessageCircle },
+      { label: 'Escandallos', Icon: Calculator, comingSoon: true },
+      { label: 'Cocina central', Icon: ChefHat, comingSoon: true },
     ],
     [showPedidos],
   );
@@ -228,17 +233,33 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
         <nav className="px-2 py-3">
           {navItems.map((item) => {
+            const Icon = item.Icon;
+            if (item.comingSoon || !item.href) {
+              return (
+                <div
+                  key={item.label}
+                  className="flex items-center justify-between gap-3 rounded-xl px-3 py-3 text-sm font-semibold text-zinc-500 ring-1 ring-zinc-200"
+                >
+                  <span className="flex items-center gap-3">
+                    <Icon className="h-5 w-5" />
+                    <span className="min-w-0 truncate">{item.label}</span>
+                  </span>
+                  <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-zinc-500">
+                    Próximamente
+                  </span>
+                </div>
+              );
+            }
             const isActive =
               item.href === '/dashboard'
                 ? pathname === '/dashboard' || pathname === '/'
                 : item.href === '/appcc'
                   ? pathname === '/appcc' || pathname?.startsWith('/appcc/')
                   : pathname === item.href || pathname?.startsWith(`${item.href}/`);
-            const Icon = item.Icon;
 
             return (
               <Link
-                key={item.href}
+                key={item.href ?? item.label}
                 href={item.href}
                 onClick={() => setOpen(false)}
                 className={[

@@ -479,14 +479,14 @@ export default function NuevoPedidoPage() {
           type="date"
           value={deliveryDate}
           onChange={(e) => setDeliveryDate(e.target.value)}
-          className="mt-2 h-11 w-full rounded-xl border border-zinc-300 bg-white px-3 text-sm text-zinc-900 outline-none"
+          className="mt-2 h-10 w-full min-w-0 rounded-xl border border-zinc-300 bg-white px-3 text-sm font-sans text-zinc-900 outline-none"
         />
         <label className="mt-3 block text-xs font-semibold uppercase tracking-wide text-zinc-500">Quien pide</label>
         <input
           value={requestedBy}
           onChange={(e) => setRequestedBy(e.target.value)}
           placeholder="Nombre de quien pide"
-          className="mt-2 h-11 w-full rounded-xl border border-zinc-300 bg-white px-3 text-sm text-zinc-900 placeholder:text-zinc-500 outline-none"
+          className="mt-2 h-10 w-full min-w-0 rounded-xl border border-zinc-300 bg-white px-3 text-sm font-sans text-zinc-900 placeholder:text-zinc-500 outline-none"
         />
         <div className="mt-4 rounded-xl bg-zinc-50 p-3 ring-1 ring-zinc-200">
           <div className="flex items-center justify-between text-sm text-zinc-700">

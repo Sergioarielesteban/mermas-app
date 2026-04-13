@@ -3,6 +3,7 @@ import {
   Building2,
   ClipboardList,
   Flame,
+  MessageCircle,
   Scale,
   ShoppingCart,
   Thermometer,
@@ -83,6 +84,22 @@ export const MARKETING_MODULES: MarketingModuleDefinition[] = [
     realCase:
       'Haces un cierre mensual o revisión rápida y todos ven el mismo inventario y total, sin versiones sueltas.',
     result: 'Mejor control del capital inmovilizado en producto.',
+  },
+  {
+    id: 'chat',
+    title: 'Chat interno por local',
+    summary: 'Comunicación del equipo dentro de la app, sin depender de grupos externos.',
+    Icon: MessageCircle,
+    detailIntro:
+      'Mensajes por local para coordinar turnos, avisos rápidos y seguimiento operativo desde el mismo panel.',
+    benefits: [
+      'Cada local conversa en su propio hilo, sin mezclar información.',
+      'Más contexto operativo que en mensajes sueltos fuera de la app.',
+      'Ideal para avisos cortos durante servicio o cambios de turno.',
+    ],
+    realCase:
+      'Falta un producto o cambia una entrega: el equipo lo deja en el chat del local y todos lo ven al entrar.',
+    result: 'Menos confusión interna y mejor coordinación del día a día.',
   },
   {
     id: 'escandallos',
