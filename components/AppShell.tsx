@@ -144,18 +144,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           >
             <Menu className="h-6 w-6" />
           </button>
-          <div className="flex h-9 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-white/95 px-1.5 ring-1 ring-white/40">
-            <img
-              src="/logo-chef-one-wordmark.svg"
-              alt=""
-              role="presentation"
-              className="h-6 w-auto max-w-[4.5rem] object-contain object-left"
-              width={512}
-              height={160}
-            />
-          </div>
-          <div className="min-w-0 flex-1">
-            <h1 className="line-clamp-1 text-sm font-extrabold uppercase tracking-wide text-white">
+          <div className="min-w-0 flex-1 pr-1">
+            <h1 className="line-clamp-2 text-sm font-extrabold uppercase leading-tight tracking-wide text-white sm:line-clamp-1">
               {title}
             </h1>
             {localId && localLabel ? (
