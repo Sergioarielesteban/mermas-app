@@ -4,6 +4,7 @@ import MarketingLeadForm from '@/components/MarketingLeadForm';
 import MarketingQuickContact, { MarketingContactLinkRow } from '@/components/marketing/MarketingQuickContact';
 import MarketingHero from '@/components/marketing/MarketingHero';
 import MarketingOriginStory from '@/components/marketing/MarketingOriginStory';
+import MarketingCocinerosSection from '@/components/marketing/MarketingCocinerosSection';
 import MarketingModulesSection from '@/components/marketing/MarketingModulesSection';
 import MarketingPricingHighlight from '@/components/marketing/MarketingPricingHighlight';
 import { getMarketingContactPhone } from '@/lib/marketing-contact-phone';
@@ -68,6 +69,12 @@ export default function MarketingLanding() {
               Por qué Chef-One
             </Link>
             <Link
+              href="#cocineros"
+              className="hidden rounded-full px-3 py-2 text-xs font-bold text-stone-600 ring-1 ring-stone-200/90 transition hover:bg-stone-50 sm:inline-flex"
+            >
+              Cocineros
+            </Link>
+            <Link
               href="#modulos"
               className="hidden rounded-full px-3 py-2 text-xs font-bold text-stone-600 ring-1 ring-stone-200/90 transition hover:bg-stone-50 sm:inline-flex"
             >
@@ -93,6 +100,7 @@ export default function MarketingLanding() {
       <main id="contenido">
         <MarketingHero />
         <MarketingOriginStory />
+        <MarketingCocinerosSection />
         <MarketingModulesSection />
         <MarketingPricingHighlight />
 
@@ -183,7 +191,9 @@ export default function MarketingLanding() {
 
       <footer className="border-t border-stone-200 bg-[#f4f4f5] px-4 py-10 text-center sm:px-6">
         <p className="text-sm font-bold text-stone-900">Chef-One</p>
-        <p className="mt-1 text-xs text-stone-500">Operaciones de cocina y restaurante, sin perder el hilo.</p>
+        <p className="mt-1 text-xs text-stone-500">
+          Para equipos de cocina y profesionales del sector. Sin perder el hilo.
+        </p>
         <p className="mt-5 flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-[11px] text-stone-500">
           <Link href="/login" className="font-medium underline decoration-stone-300 underline-offset-2 hover:text-stone-800">
             Acceso clientes
@@ -193,6 +203,9 @@ export default function MarketingLanding() {
           </Link>
           <Link href="#origen" className="font-medium underline decoration-stone-300 underline-offset-2 hover:text-stone-800">
             Por qué Chef-One
+          </Link>
+          <Link href="#cocineros" className="font-medium underline decoration-stone-300 underline-offset-2 hover:text-stone-800">
+            Cocineros
           </Link>
           <Link href="#modulos" className="font-medium underline decoration-stone-300 underline-offset-2 hover:text-stone-800">
             Ver módulos

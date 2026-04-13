@@ -170,7 +170,7 @@ export default function MarketingHero() {
             transition={{ duration: 0.4 }}
           >
             <Sparkles className="h-3.5 w-3.5 text-[#D32F2F]" aria-hidden />
-            Operaciones de cocina, sin perder el hilo
+            Cocineros, equipos y cocinas que quieren trabajar mejor
           </motion.p>
           <motion.h1
             className="mt-6 text-balance text-3xl font-bold leading-[1.12] tracking-tight text-stone-900 sm:text-4xl sm:leading-[1.1] lg:text-[2.75rem]"
