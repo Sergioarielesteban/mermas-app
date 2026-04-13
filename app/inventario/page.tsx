@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronLeft, Package, Plus, Trash2 } from 'lucide-react';
+import { ChevronDown, ChevronLeft, Package, Plus, Trash2 } from 'lucide-react';
 import MermasStyleHero from '@/components/MermasStyleHero';
 import InventoryResultadoInventario from '@/components/InventoryResultadoInventario';
 import { useAuth } from '@/components/AuthProvider';
@@ -69,6 +69,8 @@ export default function InventarioPage() {
   const [busyId, setBusyId] = useState<string | null>(null);
   /** Mientras se guarda una categoría entera tras pulsar OK. */
   const [busyCategoryId, setBusyCategoryId] = useState<string | null>(null);
+  /** Catálogo: precio, formato y categoría solo al expandir tocando el artículo. */
+  const [catalogDetailOpen, setCatalogDetailOpen] = useState<Record<string, boolean>>({});
   const [snapshots, setSnapshots] = useState<InventoryMonthSnapshot[]>([]);
   const [pdfBusy, setPdfBusy] = useState(false);
   const [formBusy, setFormBusy] = useState(false);
@@ -698,19 +700,56 @@ export default function InventarioPage() {
                         const qtyBusy = busyCategoryId === cat.id;
                         const qtyValue =
                           catalogQtyDraft[it.id] ?? (line ? String(line.quantity_on_hand) : '');
+                        const detailsOpen = Boolean(catalogDetailOpen[it.id]);
                         return (
                           <li
                             key={it.id}
-                            className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-white px-2 py-2 ring-1 ring-zinc-100"
+                            className="flex flex-wrap items-start justify-between gap-2 rounded-lg bg-white px-2 py-2 ring-1 ring-zinc-100"
                           >
-                            <div className="min-w-0 flex-1">
-                              <p className="text-xs font-semibold text-zinc-900">{it.name}</p>
-                              <p className="text-[10px] text-zinc-500">
-                                {it.default_price_per_unit.toFixed(2)} €/{UNIT_SUFFIX[it.unit] ?? it.unit}
-                                {it.format_label ? ` · ${it.format_label}` : ''}
-                              </p>
+                            <div
+                              role="button"
+                              tabIndex={0}
+                              aria-expanded={detailsOpen}
+                              aria-label={
+                                detailsOpen
+                                  ? `Ocultar detalles de ${it.name}`
+                                  : `Ver detalles de ${it.name}`
+                              }
+                              className="min-w-0 flex-1 cursor-pointer rounded-lg py-0.5 pl-0.5 outline-none focus-visible:ring-2 focus-visible:ring-[#D32F2F]/35"
+                              onClick={() =>
+                                setCatalogDetailOpen((prev) => ({
+                                  ...prev,
+                                  [it.id]: !prev[it.id],
+                                }))
+                              }
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter' || e.key === ' ') {
+                                  e.preventDefault();
+                                  setCatalogDetailOpen((prev) => ({
+                                    ...prev,
+                                    [it.id]: !prev[it.id],
+                                  }));
+                                }
+                              }}
+                            >
+                              <div className="flex items-start gap-1.5">
+                                <ChevronDown
+                                  className={`mt-0.5 h-4 w-4 shrink-0 text-zinc-400 transition-transform duration-200 ${detailsOpen ? 'rotate-180' : ''}`}
+                                  aria-hidden
+                                />
+                                <div className="min-w-0">
+                                  <p className="text-xs font-semibold text-zinc-900">{it.name}</p>
+                                  {detailsOpen ? (
+                                    <p className="mt-1 text-[10px] leading-snug text-zinc-500">
+                                      {it.default_price_per_unit.toFixed(2)} €/{UNIT_SUFFIX[it.unit] ?? it.unit}
+                                      {it.format_label ? ` · ${it.format_label}` : ''}
+                                      <span className="text-zinc-400"> · {cat.name}</span>
+                                    </p>
+                                  ) : null}
+                                </div>
+                              </div>
                             </div>
-                            <label className="flex shrink-0 flex-col gap-0.5">
+                            <label className="flex shrink-0 flex-col gap-0.5" onClick={(e) => e.stopPropagation()}>
                               <span className="text-[9px] font-bold uppercase text-zinc-400">Cant.</span>
                               <input
                                 type="text"

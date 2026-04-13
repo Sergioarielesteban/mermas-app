@@ -6,8 +6,7 @@ import {
   BarChart,
   CartesianGrid,
   Cell,
-  Pie,
-  PieChart,
+  LabelList,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -27,7 +26,7 @@ function formatYmShort(ym: string): string {
 
 const CHART_RED = '#D32F2F';
 const CHART_MUTED = '#52525b';
-const PIE_COLORS = ['#D32F2F', '#e57373', '#ffb74d', '#81c784', '#64b5f6', '#9575cd'];
+const CATEGORY_BAR_COLORS = ['#D32F2F', '#e57373', '#ffb74d', '#81c784', '#64b5f6', '#9575cd', '#4dd0e1', '#aed581'];
 
 type Props = {
   snapshots: InventoryMonthSnapshot[];
@@ -83,23 +82,23 @@ export default function InventoryResultadoInventario({
     return ((last - prev) / prev) * 100;
   }, [snapshots]);
 
-  const pieData = useMemo(() => {
+  /** Todas las categorías con valor &gt; 0, ordenadas (mayor primero) para barras horizontales. */
+  const categoryBarData = useMemo(() => {
     const breakdown = computeInventoryCategoryBreakdownEuros(lines, catalogItems);
-    const arr = Object.entries(breakdown)
+    return Object.entries(breakdown)
       .map(([id, value]) => ({
         name:
           id === '__sin_catalogo__'
             ? 'Sin catálogo'
             : (categories.find((c) => c.id === id)?.name ?? 'Categoría'),
         value,
+        labelEuro: `${Math.round(value)} €`,
       }))
       .filter((x) => x.value > 0)
       .sort((a, b) => b.value - a.value);
-    const top = arr.slice(0, 5);
-    const rest = arr.slice(5).reduce((sum, x) => sum + x.value, 0);
-    if (rest > 0) top.push({ name: 'Otros', value: rest });
-    return top;
   }, [lines, catalogItems, categories]);
+
+  const categoryChartHeight = Math.min(320, Math.max(140, categoryBarData.length * 30 + 24));
 
   const stockCoverage = useMemo(() => {
     const withStock = lines.filter((l) => l.quantity_on_hand > 0).length;
@@ -173,32 +172,43 @@ export default function InventoryResultadoInventario({
 
         <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-3 text-zinc-100 shadow-sm ring-1 ring-black/40">
           <p className="text-[10px] font-bold uppercase tracking-wide text-zinc-500">Valor por categoría (ahora)</p>
-          <p className="mt-1 text-xs text-zinc-400">{pieData.length === 0 ? 'Sin líneas con valor' : 'Distribución del inventario actual'}</p>
-          <div className="mt-1 h-[160px] w-full">
-            {pieData.length === 0 ? (
+          <p className="mt-1 text-xs text-zinc-400">
+            {categoryBarData.length === 0 ? 'Sin líneas con valor' : 'Barras horizontales: nombre de categoría e importe'}
+          </p>
+          <div className="mt-2 w-full overflow-x-hidden" style={{ height: categoryChartHeight }}>
+            {categoryBarData.length === 0 ? (
               <p className="pt-10 text-center text-[11px] text-zinc-500">—</p>
             ) : (
               <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={pieData}
-                    dataKey="value"
-                    nameKey="name"
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={28}
-                    outerRadius={52}
-                    paddingAngle={2}
-                  >
-                    {pieData.map((_, i) => (
-                      <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} stroke="#18181b" />
-                    ))}
-                  </Pie>
+                <BarChart
+                  layout="vertical"
+                  data={categoryBarData}
+                  margin={{ top: 2, right: 6, left: 4, bottom: 2 }}
+                  barCategoryGap={6}
+                >
+                  <CartesianGrid strokeDasharray="3 3" stroke="#27272a" horizontal={false} />
+                  <XAxis type="number" hide />
+                  <YAxis
+                    type="category"
+                    dataKey="name"
+                    width={118}
+                    tick={{ fill: '#e4e4e7', fontSize: 9 }}
+                    tickLine={false}
+                    axisLine={false}
+                    interval={0}
+                  />
                   <Tooltip
                     contentStyle={tooltipStyle}
-                    formatter={(v) => [`${Number(v ?? 0).toFixed(2)} €`, '']}
+                    formatter={(v) => [`${Number(v ?? 0).toFixed(2)} €`, 'Valor']}
+                    labelFormatter={(label) => String(label)}
                   />
-                </PieChart>
+                  <Bar dataKey="value" radius={[0, 6, 6, 0]} maxBarSize={22}>
+                    {categoryBarData.map((_, i) => (
+                      <Cell key={i} fill={CATEGORY_BAR_COLORS[i % CATEGORY_BAR_COLORS.length]} />
+                    ))}
+                    <LabelList dataKey="labelEuro" position="right" fill="#a1a1aa" fontSize={9} />
+                  </Bar>
+                </BarChart>
               </ResponsiveContainer>
             )}
           </div>
