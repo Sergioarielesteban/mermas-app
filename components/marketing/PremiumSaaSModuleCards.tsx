@@ -196,7 +196,7 @@ function PremiumExpandableCard({ mod, isOpen, onToggle }: CardProps) {
 }
 
 export type PremiumSaaSModuleCardsProps = {
-  /** Por defecto los 6 módulos de Chef-One; puedes pasar otra lista para pruebas */
+  /** Por defecto la lista de módulos del producto (MARKETING_MODULES); puedes pasar otra lista para pruebas */
   modules?: MarketingModuleDefinition[];
   className?: string;
 };
