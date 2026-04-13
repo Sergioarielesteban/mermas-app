@@ -10,6 +10,7 @@ import {
   Package,
   Plus,
   RotateCcw,
+  Trash2,
 } from 'lucide-react';
 import MermasStyleHero from '@/components/MermasStyleHero';
 import InventoryResultadoInventario from '@/components/InventoryResultadoInventario';
@@ -34,6 +35,8 @@ import {
   insertInventoryCatalogCategory,
   insertInventoryCatalogItem,
   insertInventoryLineFromCatalog,
+  deactivateInventoryCatalogCategory,
+  deactivateInventoryCatalogItem,
   deleteAllInventoryLinesForLocal,
   updateInventoryItemLine,
   upsertInventoryMonthSnapshot,
@@ -102,6 +105,8 @@ export default function InventarioPage() {
   const [historyClearBusy, setHistoryClearBusy] = useState(false);
   const [resetInventoryBusy, setResetInventoryBusy] = useState(false);
   const [finishInventoryBusy, setFinishInventoryBusy] = useState(false);
+  const [busyDeletingCategoryId, setBusyDeletingCategoryId] = useState<string | null>(null);
+  const [busyDeletingCatalogItemId, setBusyDeletingCatalogItemId] = useState<string | null>(null);
   const loadRef = useRef<() => Promise<void>>(() => Promise.resolve());
 
   const supabaseOk = isSupabaseEnabled() && getSupabaseClient();
@@ -120,8 +125,8 @@ export default function InventarioPage() {
     setBanner(null);
     try {
       const [cats, items, inv, snaps] = await Promise.all([
-        fetchInventoryCatalogCategories(supabase),
-        fetchInventoryCatalogItems(supabase),
+        fetchInventoryCatalogCategories(supabase, localId),
+        fetchInventoryCatalogItems(supabase, localId),
         fetchInventoryItems(supabase, localId),
         fetchInventoryMonthSnapshots(supabase, localId).catch(() => [] as InventoryMonthSnapshot[]),
       ]);
@@ -148,6 +153,10 @@ export default function InventarioPage() {
       if (msg.toLowerCase().includes('relation') || msg.includes('does not exist')) {
         setBanner(
           'Faltan las tablas de inventario en Supabase. Ejecuta supabase-inventory-schema.sql y el seed si aún no lo hiciste.',
+        );
+      } else if (msg.toLowerCase().includes('local_id')) {
+        setBanner(
+          'El catálogo debe estar migrado por local. Ejecuta supabase-inventory-catalog-per-local.sql en Supabase (SQL Editor).',
         );
       } else {
         setBanner(msg);
@@ -329,7 +338,7 @@ export default function InventarioPage() {
   };
 
   const submitNewCategory = async () => {
-    if (!supabaseOk) return;
+    if (!supabaseOk || !localId) return;
     const name = newCategoryName.trim();
     if (!name) {
       setBanner('Escribe un nombre de categoría.');
@@ -341,7 +350,7 @@ export default function InventarioPage() {
     setFormBusy(true);
     setBanner(null);
     try {
-      await insertInventoryCatalogCategory(supabase, name, nextOrder);
+      await insertInventoryCatalogCategory(supabase, localId, name, nextOrder);
       setNewCategoryName('');
       setShowAddCategory(false);
       await load();
@@ -349,7 +358,7 @@ export default function InventarioPage() {
       const msg = e instanceof Error ? e.message : 'No se pudo crear la categoría.';
       setBanner(
         msg.includes('unique') || msg.includes('duplicate')
-          ? 'Ya existe una categoría con ese nombre.'
+          ? 'Ya existe una categoría con ese nombre en tu catálogo.'
           : msg,
       );
     } finally {
@@ -358,7 +367,7 @@ export default function InventarioPage() {
   };
 
   const submitNewArticle = async () => {
-    if (!supabaseOk) return;
+    if (!supabaseOk || !localId) return;
     const cid = newArticleCategoryId.trim();
     const nm = newArticleName.trim();
     if (!cid) {
@@ -607,6 +616,73 @@ export default function InventarioPage() {
     }
   };
 
+  const removeCatalogCategory = async (cat: InventoryCatalogCategory) => {
+    if (!localId || !supabaseOk) return;
+    const nItems = catalogItems.filter((i) => i.catalog_category_id === cat.id).length;
+    if (
+      !window.confirm(
+        `¿Ocultar la categoría «${cat.name}» y sus ${nItems} artículo(s) solo en el catálogo de tu local? ` +
+          'Dejarán de mostrarse aquí y se borrarán las líneas de inventario vinculadas en tu local. Otros locales no se ven afectados. Esta acción no se puede deshacer desde la app.',
+      )
+    ) {
+      return;
+    }
+    const supabase = getSupabaseClient()!;
+    setBusyDeletingCategoryId(cat.id);
+    setBanner(null);
+    try {
+      await deactivateInventoryCatalogCategory(supabase, { categoryId: cat.id, localId: localId });
+      setCatalogDetailOpen({});
+      await load();
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Error al eliminar la categoría.';
+      if (msg.includes('policy') || msg.includes('permission') || msg.includes('42501')) {
+        setBanner(
+          'Falta permiso en el catálogo. Ejecuta supabase-inventory-catalog-per-local.sql (o las políticas RLS de inventario) en Supabase.',
+        );
+      } else {
+        setBanner(msg);
+      }
+    } finally {
+      setBusyDeletingCategoryId(null);
+    }
+  };
+
+  const removeCatalogItem = async (it: InventoryCatalogItem) => {
+    if (!localId || !supabaseOk) return;
+    if (
+      !window.confirm(
+        `¿Ocultar «${it.name}» solo en el catálogo de tu local? ` +
+          'Dejará de mostrarse aquí y se borrará la línea de inventario vinculada en tu local, si existe. Otros locales no se ven afectados. Esta acción no se puede deshacer desde la app.',
+      )
+    ) {
+      return;
+    }
+    const supabase = getSupabaseClient()!;
+    setBusyDeletingCatalogItemId(it.id);
+    setBanner(null);
+    try {
+      await deactivateInventoryCatalogItem(supabase, { catalogItemId: it.id, localId: localId });
+      setCatalogDetailOpen((prev) => {
+        const next = { ...prev };
+        delete next[it.id];
+        return next;
+      });
+      await load();
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Error al eliminar el artículo.';
+      if (msg.includes('policy') || msg.includes('permission') || msg.includes('42501')) {
+        setBanner(
+          'Falta permiso en el catálogo. Ejecuta supabase-inventory-catalog-per-local.sql (o las políticas RLS de inventario) en Supabase.',
+        );
+      } else {
+        setBanner(msg);
+      }
+    } finally {
+      setBusyDeletingCatalogItemId(null);
+    }
+  };
+
   const localLabel = localName ?? localCode ?? '—';
   const disabled = !localId || !profileReady || !supabaseOk || loading;
 
@@ -737,8 +813,34 @@ export default function InventarioPage() {
                   >
                     <summary className="cursor-pointer list-none px-3 py-2.5 text-sm font-bold text-zinc-800 [&::-webkit-details-marker]:hidden">
                       <span className="flex items-center justify-between gap-2">
-                        {cat.name}
-                        <span className="text-xs font-semibold text-zinc-500">{items.length}</span>
+                        <span className="min-w-0 truncate">{cat.name}</span>
+                        <span className="flex shrink-0 items-center gap-2">
+                          <button
+                            type="button"
+                            disabled={
+                              disabled ||
+                              busyDeletingCategoryId !== null ||
+                              busyCategoryId === cat.id ||
+                              busyDeletingCatalogItemId !== null
+                            }
+                            onClick={(e) => {
+                              e.preventDefault();
+                              void removeCatalogCategory(cat);
+                            }}
+                            className="inline-flex h-8 min-w-[2rem] items-center justify-center gap-1 rounded-lg border border-red-200/90 bg-white px-2 text-[10px] font-bold uppercase tracking-wide text-red-700 hover:bg-red-50 disabled:opacity-45 sm:px-2.5"
+                            aria-label={`Eliminar categoría ${cat.name}`}
+                          >
+                            {busyDeletingCategoryId === cat.id ? (
+                              <span className="px-1">…</span>
+                            ) : (
+                              <>
+                                <Trash2 className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                                <span className="hidden sm:inline">Eliminar</span>
+                              </>
+                            )}
+                          </button>
+                          <span className="text-xs font-semibold text-zinc-500 tabular-nums">{items.length}</span>
+                        </span>
                       </span>
                     </summary>
                     <ul className="space-y-1 border-t border-zinc-100 px-2 py-2">
@@ -842,16 +944,18 @@ export default function InventarioPage() {
                                 />
                               </label>
                             </div>
-                            {detailsOpen && line && lineDraft ? (
+                            {detailsOpen ? (
                               <div
-                                className="mt-2 space-y-2 border-t border-zinc-100 pt-2"
+                                className="mt-2 space-y-3 border-t border-zinc-100 pt-2"
                                 onClick={(e) => e.stopPropagation()}
                                 onKeyDown={(e) => e.stopPropagation()}
                               >
-                                <p className="text-[10px] font-bold uppercase tracking-wide text-zinc-500">
-                                  Tu línea en inventario
-                                </p>
-                                <label className="block">
+                                {line && lineDraft ? (
+                                  <>
+                                    <p className="text-[10px] font-bold uppercase tracking-wide text-zinc-500">
+                                      Tu línea en inventario
+                                    </p>
+                                    <label className="block">
                                   <span className="text-[9px] font-bold uppercase text-zinc-400">Nombre</span>
                                   <input
                                     type="text"
@@ -946,6 +1050,29 @@ export default function InventarioPage() {
                                       Quitar del inventario
                                     </button>
                                   </div>
+                                </div>
+                                  </>
+                                ) : null}
+                                <div className="rounded-lg border border-red-100 bg-red-50/50 px-3 py-2.5">
+                                  <p className="text-[10px] font-bold uppercase tracking-wide text-red-800/90">
+                                    Catálogo de tu local
+                                  </p>
+                                  <button
+                                    type="button"
+                                    disabled={
+                                      disabled ||
+                                      qtyBusy ||
+                                      busyDeletingCatalogItemId !== null ||
+                                      busyDeletingCategoryId !== null
+                                    }
+                                    onClick={() => void removeCatalogItem(it)}
+                                    className="mt-2 inline-flex w-full items-center justify-center gap-2 rounded-lg border border-red-200 bg-white py-2 text-xs font-bold text-red-800 hover:bg-red-50 disabled:opacity-45 sm:w-auto sm:px-3"
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                                    {busyDeletingCatalogItemId === it.id
+                                      ? 'Eliminando…'
+                                      : 'Eliminar artículo del catálogo'}
+                                  </button>
                                 </div>
                               </div>
                             ) : null}
@@ -1129,9 +1256,9 @@ export default function InventarioPage() {
           <button type="button" className="absolute inset-0 bg-black/45" aria-label="Cerrar" onClick={() => !formBusy && setShowAddCategory(false)} />
           <div className="relative w-full max-w-sm rounded-2xl border border-zinc-200 bg-white p-4 shadow-xl">
             <h3 id="inv-add-cat-title" className="text-sm font-bold text-zinc-900">
-              Nueva categoría (catálogo global)
+              Nueva categoría
             </h3>
-            <p className="mt-1 text-[11px] text-zinc-500">Visible para todos los locales.</p>
+            <p className="mt-1 text-[11px] text-zinc-500">Solo se añade al catálogo de este local.</p>
             <input
               type="text"
               value={newCategoryName}

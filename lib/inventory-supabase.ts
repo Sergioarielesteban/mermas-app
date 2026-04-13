@@ -2,6 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 
 export type InventoryCatalogCategory = {
   id: string;
+  local_id: string;
   name: string;
   sort_order: number;
   is_active: boolean;
@@ -9,6 +10,7 @@ export type InventoryCatalogCategory = {
 
 export type InventoryCatalogItem = {
   id: string;
+  local_id: string;
   catalog_category_id: string;
   name: string;
   unit: string;
@@ -35,11 +37,13 @@ export type InventoryItem = {
 
 export async function fetchInventoryCatalogCategories(
   supabase: SupabaseClient,
+  localId: string,
   activeOnly = true,
 ): Promise<InventoryCatalogCategory[]> {
   let q = supabase
     .from('inventory_catalog_categories')
-    .select('id,name,sort_order,is_active')
+    .select('id,local_id,name,sort_order,is_active')
+    .eq('local_id', localId)
     .order('sort_order', { ascending: true })
     .order('name', { ascending: true });
   if (activeOnly) q = q.eq('is_active', true);
@@ -50,11 +54,15 @@ export async function fetchInventoryCatalogCategories(
 
 export async function fetchInventoryCatalogItems(
   supabase: SupabaseClient,
+  localId: string,
   activeOnly = true,
 ): Promise<InventoryCatalogItem[]> {
   let q = supabase
     .from('inventory_catalog_items')
-    .select('id,catalog_category_id,name,unit,default_price_per_unit,format_label,sort_order,is_active')
+    .select(
+      'id,local_id,catalog_category_id,name,unit,default_price_per_unit,format_label,sort_order,is_active',
+    )
+    .eq('local_id', localId)
     .order('sort_order', { ascending: true })
     .order('name', { ascending: true });
   if (activeOnly) q = q.eq('is_active', true);
@@ -98,6 +106,9 @@ export async function insertInventoryLineFromCatalog(
   },
 ): Promise<InventoryItem> {
   const c = params.catalogItem;
+  if (c.local_id !== params.localId) {
+    throw new Error('El artículo no pertenece al inventario de tu local.');
+  }
   const q0 = Math.round((params.initialQuantity ?? 0) * 1000) / 1000;
   const { data: maxRow } = await supabase
     .from('inventory_items')
@@ -297,16 +308,81 @@ export async function deleteAllInventoryLinesForLocal(supabase: SupabaseClient, 
 
 export async function insertInventoryCatalogCategory(
   supabase: SupabaseClient,
+  localId: string,
   name: string,
   sortOrder: number,
 ): Promise<InventoryCatalogCategory> {
   const { data, error } = await supabase
     .from('inventory_catalog_categories')
-    .insert({ name: name.trim(), sort_order: sortOrder, is_active: true })
-    .select('id,name,sort_order,is_active')
+    .insert({
+      local_id: localId,
+      name: name.trim(),
+      sort_order: sortOrder,
+      is_active: true,
+    })
+    .select('id,local_id,name,sort_order,is_active')
     .single();
   if (error) throw new Error(error.message);
   return data as InventoryCatalogCategory;
+}
+
+/**
+ * Oculta un artículo del catálogo de tu local (is_active = false) y borra las líneas
+ * de inventario vinculadas a ese artículo.
+ */
+export async function deactivateInventoryCatalogItem(
+  supabase: SupabaseClient,
+  params: { catalogItemId: string; localId: string },
+): Promise<void> {
+  const { error: delErr } = await supabase
+    .from('inventory_items')
+    .delete()
+    .eq('local_id', params.localId)
+    .eq('catalog_item_id', params.catalogItemId);
+  if (delErr) throw new Error(delErr.message);
+  const { error: updErr } = await supabase
+    .from('inventory_catalog_items')
+    .update({ is_active: false })
+    .eq('id', params.catalogItemId)
+    .eq('local_id', params.localId);
+  if (updErr) throw new Error(updErr.message);
+}
+
+/**
+ * Oculta una categoría y todos sus artículos del catálogo de tu local; borra las líneas
+ * de inventario vinculadas a esos artículos.
+ */
+export async function deactivateInventoryCatalogCategory(
+  supabase: SupabaseClient,
+  params: { categoryId: string; localId: string },
+): Promise<void> {
+  const { data: itemRows, error: fetchErr } = await supabase
+    .from('inventory_catalog_items')
+    .select('id')
+    .eq('catalog_category_id', params.categoryId)
+    .eq('local_id', params.localId);
+  if (fetchErr) throw new Error(fetchErr.message);
+  const ids = (itemRows ?? []).map((r) => r.id as string);
+  if (ids.length > 0) {
+    const { error: delErr } = await supabase
+      .from('inventory_items')
+      .delete()
+      .eq('local_id', params.localId)
+      .in('catalog_item_id', ids);
+    if (delErr) throw new Error(delErr.message);
+    const { error: updItemsErr } = await supabase
+      .from('inventory_catalog_items')
+      .update({ is_active: false })
+      .eq('catalog_category_id', params.categoryId)
+      .eq('local_id', params.localId);
+    if (updItemsErr) throw new Error(updItemsErr.message);
+  }
+  const { error: updCatErr } = await supabase
+    .from('inventory_catalog_categories')
+    .update({ is_active: false })
+    .eq('id', params.categoryId)
+    .eq('local_id', params.localId);
+  if (updCatErr) throw new Error(updCatErr.message);
 }
 
 export async function insertInventoryCatalogItem(
@@ -332,7 +408,9 @@ export async function insertInventoryCatalogItem(
       sort_order: params.sortOrder,
       is_active: true,
     })
-    .select('id,catalog_category_id,name,unit,default_price_per_unit,format_label,sort_order,is_active')
+    .select(
+      'id,local_id,catalog_category_id,name,unit,default_price_per_unit,format_label,sort_order,is_active',
+    )
     .single();
   if (error) throw new Error(error.message);
   const row = data as Record<string, unknown>;
