@@ -74,11 +74,14 @@ function SlotEditor({
   const [err, setErr] = useState<string | null>(null);
   /** Tras Guardar OK: mostrar «Guardado» al instante sin esperar al refetch del padre. */
   const [justSaved, setJustSaved] = useState(false);
+  /** Segundo toque en «Guardado»: volver a modo Guardar (demos, pruebas, re-guardar). */
+  const [editAgain, setEditAgain] = useState(false);
 
   useEffect(() => {
     setValue(initialTempFieldValue(unit, reading));
     setNotes(reading?.notes ?? '');
     setJustSaved(false);
+    setEditAgain(false);
   }, [reading, unit]);
 
   const tInput = parseTempInput(value);
@@ -95,7 +98,7 @@ function SlotEditor({
     Math.round(reading.temperature_c * 100) === Math.round(tInput * 100) &&
     notes.trim() === (reading.notes ?? '').trim();
 
-  const isSavedSynced = justSaved || matchesServerReading;
+  const isSavedSynced = (justSaved || matchesServerReading) && !editAgain;
 
   const save = async () => {
     setErr(null);
@@ -127,6 +130,7 @@ function SlotEditor({
         notes: notes.trim(),
         userId: user.id,
       });
+      setEditAgain(false);
       setJustSaved(true);
       onSaved(row);
     } catch (e) {
@@ -181,8 +185,17 @@ function SlotEditor({
         />
         <button
           type="button"
-          onClick={() => void save()}
-          disabled={disabled || saving || isSavedSynced}
+          title={isSavedSynced ? 'Pulsa otra vez para editar o volver a guardar' : undefined}
+          onClick={() => {
+            if (disabled || saving) return;
+            if (isSavedSynced) {
+              setEditAgain(true);
+              setJustSaved(false);
+              return;
+            }
+            void save();
+          }}
+          disabled={disabled || saving}
           className={[
             'h-7 shrink-0 rounded-md px-2 text-[10px] font-bold uppercase tracking-wide disabled:opacity-50',
             isSavedSynced

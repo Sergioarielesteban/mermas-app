@@ -500,6 +500,15 @@ export async function deleteInventoryMonthSnapshot(
   if (error) throw new Error(error.message);
 }
 
+/** Borra todos los cierres mensuales usados en el gráfico «Valor por mes» (no toca líneas ni historial). */
+export async function deleteAllInventoryMonthSnapshots(
+  supabase: SupabaseClient,
+  localId: string,
+): Promise<void> {
+  const { error } = await supabase.from('inventory_month_snapshots').delete().eq('local_id', localId);
+  if (error) throw new Error(error.message);
+}
+
 /** Valor en € por id de categoría de catálogo (clave `__sin_catalogo__` si no hay enlace). */
 export function computeInventoryCategoryBreakdownEuros(
   lines: InventoryItem[],

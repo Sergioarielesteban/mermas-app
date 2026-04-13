@@ -12,7 +12,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import { FileDown } from 'lucide-react';
+import { BarChart2, FileDown } from 'lucide-react';
 import type { InventoryCatalogCategory, InventoryCatalogItem, InventoryItem, InventoryMonthSnapshot } from '@/lib/inventory-supabase';
 import { computeInventoryCategoryBreakdownEuros } from '@/lib/inventory-supabase';
 
@@ -38,6 +38,8 @@ type Props = {
   onDownloadPdf: () => void | Promise<void>;
   pdfBusy: boolean;
   disabled: boolean;
+  onResetCharts: () => void | Promise<void>;
+  chartsResetBusy: boolean;
 };
 
 export default function InventoryResultadoInventario({
@@ -50,6 +52,8 @@ export default function InventoryResultadoInventario({
   onDownloadPdf,
   pdfBusy,
   disabled,
+  onResetCharts,
+  chartsResetBusy,
 }: Props) {
   const barData = useMemo(() => {
     const fromSnaps = snapshots.map((s) => ({
@@ -129,6 +133,18 @@ export default function InventoryResultadoInventario({
             <FileDown className="h-4 w-4" />
             {pdfBusy ? 'Generando…' : 'PDF mensual'}
           </button>
+          {snapshots.length > 0 ? (
+            <button
+              type="button"
+              disabled={disabled || chartsResetBusy || pdfBusy}
+              onClick={() => void onResetCharts()}
+              title="Quita del gráfico «Valor por mes» los cierres guardados (KPI). No borra líneas de inventario."
+              className="inline-flex h-9 items-center justify-center gap-2 self-start rounded-lg border border-zinc-300 bg-white px-3 text-xs font-bold text-zinc-800 hover:bg-zinc-50 disabled:opacity-45"
+            >
+              <BarChart2 className={`h-4 w-4 ${chartsResetBusy ? 'animate-pulse' : ''}`} aria-hidden />
+              {chartsResetBusy ? 'Reiniciando…' : 'Reiniciar gráficos'}
+            </button>
+          ) : null}
         </div>
       </div>
       <p className="text-[11px] leading-snug text-zinc-500">

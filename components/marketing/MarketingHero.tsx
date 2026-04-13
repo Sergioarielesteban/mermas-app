@@ -1,39 +1,50 @@
 'use client';
 
 import Link from 'next/link';
+import Image from 'next/image';
 import React from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
 import { ChevronLeft, ChevronRight, Sparkles } from 'lucide-react';
 
 const BRAND = '#D32F2F';
 
-const TOUR_SLIDES = [
+const HERO_SLIDES = [
   {
     title: 'Pedidos y recepción',
-    subtitle: 'Control por proveedor',
-    points: ['Pedido enviado', 'Incidencia registrada', 'Equipo sincronizado'],
+    src: '/marketing/hero-slides/01-pedidos.png',
+    alt: 'Captura de Chef-One: pedidos, entrega y almacén',
+  },
+  {
+    title: 'Escandallos',
+    src: '/marketing/hero-slides/02-escandallos.png',
+    alt: 'Captura de Chef-One: escandallos y costes',
   },
   {
     title: 'Mermas',
-    subtitle: 'Coste visible por motivo',
-    points: ['Turno noche', 'Producto: bacon tiras', 'Impacto estimado al momento'],
+    src: '/marketing/hero-slides/03-mermas.png',
+    alt: 'Captura de Chef-One: resumen de mermas',
   },
   {
     title: 'APPCC',
-    subtitle: 'Registros listos para revisión',
-    points: ['Temperatura: 4.1ºC', 'Freidora: aceite OK', 'Historial guardado'],
+    src: '/marketing/hero-slides/04-appcc.png',
+    alt: 'Captura de Chef-One: registros APPCC y temperaturas',
+  },
+  {
+    title: 'Analítica',
+    src: '/marketing/hero-slides/05-analitica.png',
+    alt: 'Captura de Chef-One: analítica y cobertura de stock',
   },
   {
     title: 'Inventario',
-    subtitle: 'Stock y valor por local',
-    points: ['Categorías ordenadas', 'Cierre mensual', 'Sin Excel suelto'],
+    src: '/marketing/hero-slides/06-inventario.png',
+    alt: 'Captura de Chef-One: inventario y valor',
   },
 ] as const;
 
 function DeviceMockup() {
   const reduceMotion = useReducedMotion();
   const [active, setActive] = React.useState(0);
-  const last = TOUR_SLIDES.length - 1;
+  const last = HERO_SLIDES.length - 1;
 
   const go = React.useCallback((next: number) => {
     if (next < 0) return setActive(last);
@@ -87,24 +98,17 @@ function DeviceMockup() {
                 animate={{ x: `-${active * 100}%` }}
                 transition={{ duration: reduceMotion ? 0 : 0.35, ease: [0.22, 1, 0.36, 1] }}
               >
-                {TOUR_SLIDES.map((slide) => (
-                  <div key={slide.title} className="w-full shrink-0 p-3">
-                    <p className="text-[10px] font-black uppercase tracking-wide text-stone-500">
-                      {slide.subtitle}
-                    </p>
-                    <p className="mt-1 text-sm font-bold text-stone-900">{slide.title}</p>
-                    <div className="mt-3 space-y-2">
-                      {slide.points.map((point, idx) => (
-                        <div
-                          key={point}
-                          className="flex items-center gap-2 rounded-lg border border-stone-100 bg-stone-50/60 px-2.5 py-2"
-                        >
-                          <span
-                            className={`h-2 w-2 rounded-full ${idx === 0 ? 'bg-[#D32F2F]' : idx === 1 ? 'bg-amber-500' : 'bg-emerald-500'}`}
-                          />
-                          <p className="truncate text-[10px] font-medium text-stone-700">{point}</p>
-                        </div>
-                      ))}
+                {HERO_SLIDES.map((slide, idx) => (
+                  <div key={slide.title} className="w-full shrink-0">
+                    <div className="relative aspect-[9/17] w-full overflow-hidden bg-stone-100">
+                      <Image
+                        src={slide.src}
+                        alt={slide.alt}
+                        fill
+                        className="object-cover object-top"
+                        sizes="(max-width: 640px) 240px, 280px"
+                        priority={idx === 0}
+                      />
                     </div>
                   </div>
                 ))}
@@ -121,7 +125,7 @@ function DeviceMockup() {
                 <ChevronLeft className="h-4 w-4" />
               </button>
               <div className="flex items-center gap-1.5">
-                {TOUR_SLIDES.map((slide, idx) => (
+                {HERO_SLIDES.map((slide, idx) => (
                   <button
                     key={slide.title}
                     type="button"

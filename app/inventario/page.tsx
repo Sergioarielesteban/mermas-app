@@ -14,6 +14,7 @@ import {
   type InventoryItem,
   type InventoryMonthSnapshot,
   currentInventoryYearMonth,
+  deleteAllInventoryMonthSnapshots,
   deleteInventoryItemLine,
   fetchInventoryCatalogCategories,
   fetchInventoryCatalogItems,
@@ -89,6 +90,7 @@ export default function InventarioPage() {
   const [catalogDetailOpen, setCatalogDetailOpen] = useState<Record<string, boolean>>({});
   const [snapshots, setSnapshots] = useState<InventoryMonthSnapshot[]>([]);
   const [pdfBusy, setPdfBusy] = useState(false);
+  const [chartsResetBusy, setChartsResetBusy] = useState(false);
   const [closingYearMonth, setClosingYearMonth] = useState(() => currentInventoryYearMonth());
   const [formBusy, setFormBusy] = useState(false);
   const [showAddCategory, setShowAddCategory] = useState(false);
@@ -545,6 +547,32 @@ export default function InventarioPage() {
       setBanner(humanizeClientError(e, 'Error al generar el PDF o guardar el mes.'));
     } finally {
       setPdfBusy(false);
+    }
+  };
+
+  const resetInventoryCharts = async () => {
+    if (!localId || !supabaseOk || snapshots.length === 0) return;
+    if (
+      !window.confirm(
+        'Se borrarán todos los puntos del gráfico «Valor por mes» (cierres mensuales guardados para KPI). No se borran las líneas de inventario, el catálogo ni el historial. ¿Continuar?',
+      )
+    ) {
+      return;
+    }
+    const supabase = getSupabaseClient()!;
+    setChartsResetBusy(true);
+    setBanner(null);
+    try {
+      await deleteAllInventoryMonthSnapshots(supabase, localId);
+      const refreshed = await fetchInventoryMonthSnapshots(supabase, localId).catch(
+        () => [] as InventoryMonthSnapshot[],
+      );
+      setSnapshots(refreshed);
+      setBanner('Gráficos de inventario reiniciados.');
+    } catch (e) {
+      setBanner(humanizeClientError(e, 'Error al reiniciar gráficos.'));
+    } finally {
+      setChartsResetBusy(false);
     }
   };
 
@@ -1185,6 +1213,8 @@ export default function InventarioPage() {
             onDownloadPdf={handleDownloadMonthlyPdf}
             pdfBusy={pdfBusy}
             disabled={disabled}
+            onResetCharts={resetInventoryCharts}
+            chartsResetBusy={chartsResetBusy}
           />
         </>
       )}

@@ -18,17 +18,20 @@ export default function MarketingOriginStory() {
       aria-labelledby="origen-heading"
     >
       <div className="mx-auto max-w-6xl">
-        <div className="grid gap-12 lg:grid-cols-[1fr_minmax(260px,320px)] lg:items-start lg:gap-14">
-          <div>
-            <p className="text-xs font-bold uppercase tracking-[0.12em] text-stone-500">Por qué nace Chef-One</p>
-            <h2 id="origen-heading" className="mt-3 text-balance text-2xl font-extrabold leading-tight tracking-tight text-stone-900 sm:text-3xl sm:leading-tight">
-              Esto no nace en una oficina.
-              <span className="mt-1 block text-[#b71c1c] sm:mt-0 sm:inline sm:before:content-['\00a0']">
-                Nace en una cocina.
-              </span>
-            </h2>
+        <div className="mx-auto max-w-3xl text-center">
+          <p className="text-xs font-bold uppercase tracking-[0.12em] text-stone-500">Por qué nace Chef-One</p>
+          <h2
+            id="origen-heading"
+            className="mt-4 text-balance text-3xl font-semibold leading-[1.2] tracking-tight text-stone-900 sm:mt-5 sm:text-4xl sm:leading-[1.18]"
+          >
+            <span className="block">Chef-One no nace en una oficina,</span>
+            <span className="mt-2 block text-[#b71c1c] sm:mt-2.5">nace en una cocina.</span>
+          </h2>
+        </div>
 
-            <div className="mt-8 space-y-5 text-pretty text-sm leading-relaxed text-stone-700 sm:text-base sm:leading-relaxed">
+        <div className="mt-12 grid gap-12 lg:grid-cols-[1fr_minmax(260px,320px)] lg:items-start lg:gap-14">
+          <div>
+            <div className="space-y-5 text-pretty text-sm leading-relaxed text-stone-700 sm:text-base sm:leading-relaxed">
               <p>
                 Como cocinero, llevaba años buscando algo simple: registrar lo importante en pocos toques, sin marear al
                 equipo y sin comerme minutos que no existen.
