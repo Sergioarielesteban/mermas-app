@@ -6,6 +6,7 @@ import {
   Flame,
   Smartphone,
   ShoppingCart,
+  Sparkles,
   Thermometer,
   Users,
 } from 'lucide-react';
@@ -229,6 +230,35 @@ export default function MarketingLanding() {
               </li>
             ))}
           </ul>
+          <div className="mx-auto mt-12 max-w-2xl rounded-2xl border border-stone-200/90 bg-gradient-to-br from-stone-50 to-white px-5 py-6 shadow-sm ring-1 ring-stone-100 sm:px-6 sm:py-7">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:gap-5">
+              <div
+                className="grid h-12 w-12 shrink-0 place-items-center rounded-xl text-white shadow-sm"
+                style={{ backgroundColor: BRAND }}
+                aria-hidden
+              >
+                <Sparkles className="h-6 w-6" strokeWidth={2} />
+              </div>
+              <div className="min-w-0 text-center sm:text-left">
+                <h3 className="text-base font-black text-stone-900 sm:text-lg">
+                  ¿Necesitas un módulo especial o medir algo que aún no está en la app?
+                </h3>
+                <p className="mt-2 text-sm leading-relaxed text-stone-600">
+                  Si tu cocina o tu cadena necesita un flujo distinto, un registro concreto o{' '}
+                  <strong className="font-semibold text-stone-800">medir un indicador que hoy no cubrimos</strong>, lo
+                  podemos plantear <strong className="font-semibold text-stone-800">a medida</strong>: lo hablamos,
+                  priorizamos contigo y te proponemos cómo encajarlo.
+                </p>
+                <Link
+                  href="#solicitar-info"
+                  className="mt-4 inline-flex h-10 items-center justify-center rounded-xl px-5 text-sm font-bold text-white shadow-sm transition hover:brightness-110"
+                  style={{ backgroundColor: BRAND }}
+                >
+                  Contarnos qué necesitas
+                </Link>
+              </div>
+            </div>
+          </div>
         </section>
 
         {/* Precio + lead */}
