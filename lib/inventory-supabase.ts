@@ -175,6 +175,130 @@ export async function deleteInventoryItemLine(
   if (error) throw new Error(error.message);
 }
 
+/** Línea serializada en historial (JSON en Supabase). */
+export type InventoryHistoryLineSnapshot = {
+  id: string;
+  catalog_item_id: string | null;
+  name: string;
+  unit: string;
+  price_per_unit: number;
+  quantity_on_hand: number;
+  format_label: string | null;
+};
+
+export type InventoryHistorySnapshot = {
+  id: string;
+  local_id: string;
+  created_at: string;
+  event_type: 'before_reset' | 'before_line_delete';
+  summary: string | null;
+  total_value_snapshot: number;
+  lines_snapshot: InventoryHistoryLineSnapshot[];
+};
+
+export function buildLinesSnapshotPayload(lines: InventoryItem[]): InventoryHistoryLineSnapshot[] {
+  return lines.map((row) => ({
+    id: row.id,
+    catalog_item_id: row.catalog_item_id,
+    name: row.name,
+    unit: row.unit,
+    price_per_unit: row.price_per_unit,
+    quantity_on_hand: row.quantity_on_hand,
+    format_label: row.format_label,
+  }));
+}
+
+export function totalInventoryValueFromLines(lines: InventoryItem[]): number {
+  let t = 0;
+  for (const row of lines) {
+    t += row.quantity_on_hand * row.price_per_unit;
+  }
+  return Math.round(t * 100) / 100;
+}
+
+export async function insertInventoryHistorySnapshot(
+  supabase: SupabaseClient,
+  params: {
+    localId: string;
+    eventType: 'before_reset' | 'before_line_delete';
+    summary: string | null;
+    lines: InventoryItem[];
+    userId: string | null;
+  },
+): Promise<void> {
+  const payload = buildLinesSnapshotPayload(params.lines);
+  const total = totalInventoryValueFromLines(params.lines);
+  const { error } = await supabase.from('inventory_history_snapshots').insert({
+    local_id: params.localId,
+    event_type: params.eventType,
+    summary: params.summary,
+    total_value_snapshot: total,
+    lines_snapshot: payload,
+    created_by: params.userId,
+  });
+  if (error) throw new Error(error.message);
+}
+
+export async function fetchInventoryHistorySnapshots(
+  supabase: SupabaseClient,
+  localId: string,
+  limit = 80,
+): Promise<InventoryHistorySnapshot[]> {
+  const { data, error } = await supabase
+    .from('inventory_history_snapshots')
+    .select('id,local_id,created_at,event_type,summary,total_value_snapshot,lines_snapshot')
+    .eq('local_id', localId)
+    .order('created_at', { ascending: false })
+    .limit(limit);
+  if (error) throw new Error(error.message);
+  return (data ?? []).map((row) => {
+    const r = row as Record<string, unknown>;
+    const raw = r.lines_snapshot;
+    let lines: InventoryHistoryLineSnapshot[] = [];
+    if (Array.isArray(raw)) {
+      lines = raw.map((x) => {
+        const o = x as Record<string, unknown>;
+        return {
+          id: String(o.id),
+          catalog_item_id: o.catalog_item_id ? String(o.catalog_item_id) : null,
+          name: String(o.name ?? ''),
+          unit: String(o.unit ?? ''),
+          price_per_unit: Number(o.price_per_unit),
+          quantity_on_hand: Number(o.quantity_on_hand),
+          format_label: o.format_label != null ? String(o.format_label) : null,
+        };
+      });
+    }
+    return {
+      id: String(r.id),
+      local_id: String(r.local_id),
+      created_at: String(r.created_at),
+      event_type: r.event_type as 'before_reset' | 'before_line_delete',
+      summary: r.summary != null ? String(r.summary) : null,
+      total_value_snapshot: Number(r.total_value_snapshot),
+      lines_snapshot: lines,
+    };
+  });
+}
+
+export async function deleteAllInventoryHistorySnapshots(
+  supabase: SupabaseClient,
+  localId: string,
+): Promise<void> {
+  const { error } = await supabase.from('inventory_history_snapshots').delete().eq('local_id', localId);
+  if (error) throw new Error(error.message);
+}
+
+/** Pone quantity_on_hand = 0 en todas las líneas activas del local (no borra filas). */
+export async function resetInventoryQuantitiesToZero(supabase: SupabaseClient, localId: string): Promise<void> {
+  const { error } = await supabase
+    .from('inventory_items')
+    .update({ quantity_on_hand: 0 })
+    .eq('local_id', localId)
+    .eq('is_active', true);
+  if (error) throw new Error(error.message);
+}
+
 export async function insertInventoryCatalogCategory(
   supabase: SupabaseClient,
   name: string,

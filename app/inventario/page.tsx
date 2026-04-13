@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronDown, ChevronLeft, Package, Plus, Trash2 } from 'lucide-react';
+import { ChevronDown, ChevronLeft, History, Package, Plus, RotateCcw } from 'lucide-react';
 import MermasStyleHero from '@/components/MermasStyleHero';
 import InventoryResultadoInventario from '@/components/InventoryResultadoInventario';
 import { useAuth } from '@/components/AuthProvider';
@@ -15,16 +15,21 @@ import {
   type InventoryMonthSnapshot,
   computeInventoryCategoryBreakdownEuros,
   currentInventoryYearMonth,
+  deleteAllInventoryHistorySnapshots,
   deleteInventoryItemLine,
   fetchInventoryCatalogCategories,
   fetchInventoryCatalogItems,
   fetchInventoryItems,
+  fetchInventoryHistorySnapshots,
   fetchInventoryMonthSnapshots,
+  insertInventoryHistorySnapshot,
   insertInventoryCatalogCategory,
   insertInventoryCatalogItem,
   insertInventoryLineFromCatalog,
+  resetInventoryQuantitiesToZero,
   updateInventoryItemLine,
   upsertInventoryMonthSnapshot,
+  type InventoryHistorySnapshot,
 } from '@/lib/inventory-supabase';
 
 function parseDecimal(raw: string): number | null {
@@ -82,6 +87,12 @@ export default function InventarioPage() {
   const [newArticleUnit, setNewArticleUnit] = useState<string>('kg');
   const [newArticlePrice, setNewArticlePrice] = useState('0');
   const [newArticleFormat, setNewArticleFormat] = useState('');
+  const [showHistoryModal, setShowHistoryModal] = useState(false);
+  const [historyEntries, setHistoryEntries] = useState<InventoryHistorySnapshot[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyExpandedId, setHistoryExpandedId] = useState<string | null>(null);
+  const [historyClearBusy, setHistoryClearBusy] = useState(false);
+  const [resetInventoryBusy, setResetInventoryBusy] = useState(false);
   const loadRef = useRef<() => Promise<void>>(() => Promise.resolve());
 
   const supabaseOk = isSupabaseEnabled() && getSupabaseClient();
@@ -432,17 +443,125 @@ export default function InventarioPage() {
 
   const removeLine = async (row: InventoryItem) => {
     if (!localId || !supabaseOk) return;
-    if (!window.confirm(`¿Quitar «${row.name}» de tu inventario local?`)) return;
+    if (
+      !window.confirm(
+        `¿Quitar «${row.name}» del inventario? Se guardará una copia en Historial antes de borrar la línea.`,
+      )
+    ) {
+      return;
+    }
     const supabase = getSupabaseClient()!;
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
     setBusyId(row.id);
     setBanner(null);
     try {
+      await insertInventoryHistorySnapshot(supabase, {
+        localId,
+        eventType: 'before_line_delete',
+        summary: `Antes de quitar: ${row.name}`,
+        lines,
+        userId: user?.id ?? null,
+      });
       await deleteInventoryItemLine(supabase, localId, row.id);
       await load();
     } catch (e) {
-      setBanner(e instanceof Error ? e.message : 'Error al eliminar.');
+      const msg = e instanceof Error ? e.message : 'Error al eliminar.';
+      if (msg.includes('inventory_history') || msg.includes('does not exist')) {
+        setBanner('Ejecuta supabase-inventory-history.sql en Supabase para usar historial y quitar líneas con seguridad.');
+      } else {
+        setBanner(msg);
+      }
     } finally {
       setBusyId(null);
+    }
+  };
+
+  const openHistoryModal = async () => {
+    if (!localId || !supabaseOk) return;
+    setShowHistoryModal(true);
+    setHistoryLoading(true);
+    setHistoryExpandedId(null);
+    setBanner(null);
+    try {
+      const supabase = getSupabaseClient()!;
+      const list = await fetchInventoryHistorySnapshots(supabase, localId);
+      setHistoryEntries(list);
+    } catch (e) {
+      setHistoryEntries([]);
+      const msg = e instanceof Error ? e.message : '';
+      if (msg.includes('does not exist') || msg.includes('relation')) {
+        setBanner('Falta la tabla de historial. Ejecuta supabase-inventory-history.sql en Supabase.');
+      } else {
+        setBanner(msg || 'No se pudo cargar el historial.');
+      }
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
+
+  const clearAllHistory = async () => {
+    if (!localId || !supabaseOk) return;
+    if (
+      !window.confirm(
+        '¿Borrar todo el historial de inventario de este local? Solo podrás recuperar lo que quede en el inventario actual. Esta acción no se puede deshacer.',
+      )
+    ) {
+      return;
+    }
+    const supabase = getSupabaseClient()!;
+    setHistoryClearBusy(true);
+    setBanner(null);
+    try {
+      await deleteAllInventoryHistorySnapshots(supabase, localId);
+      setHistoryEntries([]);
+      setHistoryExpandedId(null);
+    } catch (e) {
+      setBanner(e instanceof Error ? e.message : 'No se pudo vaciar el historial.');
+    } finally {
+      setHistoryClearBusy(false);
+    }
+  };
+
+  const resetInventoryToZero = async () => {
+    if (!localId || !supabaseOk) return;
+    if (lines.length === 0) {
+      setBanner('No hay líneas en el inventario.');
+      return;
+    }
+    if (
+      !window.confirm(
+        'Se guardará el estado actual en Historial y todas las cantidades pasarán a 0. Las líneas siguen en el catálogo (podrás volver a poner cantidades). ¿Continuar?',
+      )
+    ) {
+      return;
+    }
+    const supabase = getSupabaseClient()!;
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    setResetInventoryBusy(true);
+    setBanner(null);
+    try {
+      await insertInventoryHistorySnapshot(supabase, {
+        localId,
+        eventType: 'before_reset',
+        summary: 'Antes de reiniciar inventario (todas las cantidades a cero)',
+        lines,
+        userId: user?.id ?? null,
+      });
+      await resetInventoryQuantitiesToZero(supabase, localId);
+      await load();
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Error al reiniciar.';
+      if (msg.includes('inventory_history') || msg.includes('does not exist')) {
+        setBanner('Ejecuta supabase-inventory-history.sql en Supabase para poder reiniciar con copia de seguridad.');
+      } else {
+        setBanner(msg);
+      }
+    } finally {
+      setResetInventoryBusy(false);
     }
   };
 
@@ -462,7 +581,7 @@ export default function InventarioPage() {
       <MermasStyleHero
         eyebrow="Chef-One"
         title="Inventario"
-        description={`Stock y valor por artículo (${localLabel}). En el catálogo rellena las cantidades y pulsa OK al final de cada categoría para guardar todo de una vez. Nombre, precio y formato puedes ajustarlos en «Mi inventario» si lo necesitas.`}
+        description={`Stock y valor por artículo (${localLabel}). En el catálogo rellena las cantidades y pulsa OK al final de cada categoría. Toca un artículo para ver detalles: si ya está en tu inventario, ahí puedes ajustar nombre, precio y formato, o quitarlo. El historial guarda copias antes de reiniciar o de quitar una línea.`}
       />
 
       {!isSupabaseEnabled() || !getSupabaseClient() ? (
@@ -486,156 +605,38 @@ export default function InventarioPage() {
       ) : (
         <>
           <section className="rounded-2xl border border-zinc-200 bg-gradient-to-br from-zinc-50 to-white px-4 py-4 ring-1 ring-zinc-100">
-            <div className="flex items-center gap-3">
-              <div className="grid h-11 w-11 place-items-center rounded-xl bg-[#D32F2F]/12 text-[#D32F2F]">
-                <Package className="h-5 w-5" />
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-center gap-3">
+                <div className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-[#D32F2F]/12 text-[#D32F2F]">
+                  <Package className="h-5 w-5" />
+                </div>
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-wide text-zinc-500">Valor total inventario</p>
+                  <p className="text-2xl font-extrabold tabular-nums text-zinc-900">{totalValor.toFixed(2)} €</p>
+                  <p className="text-[11px] text-zinc-500">{lines.length} línea(s) activa(s)</p>
+                </div>
               </div>
-              <div>
-                <p className="text-xs font-bold uppercase tracking-wide text-zinc-500">Valor total inventario</p>
-                <p className="text-2xl font-extrabold tabular-nums text-zinc-900">{totalValor.toFixed(2)} €</p>
-                <p className="text-[11px] text-zinc-500">{lines.length} línea(s) activa(s)</p>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  disabled={disabled}
+                  onClick={() => void openHistoryModal()}
+                  className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-zinc-300 bg-white px-3 text-xs font-bold text-zinc-800 shadow-sm disabled:opacity-45"
+                >
+                  <History className="h-4 w-4 text-zinc-600" />
+                  Historial
+                </button>
+                <button
+                  type="button"
+                  disabled={disabled || lines.length === 0 || resetInventoryBusy}
+                  onClick={() => void resetInventoryToZero()}
+                  className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-amber-300 bg-amber-50 px-3 text-xs font-bold text-amber-950 shadow-sm disabled:opacity-45"
+                >
+                  <RotateCcw className={`h-4 w-4 ${resetInventoryBusy ? 'animate-spin' : ''}`} />
+                  {resetInventoryBusy ? 'Reiniciando…' : 'Reiniciar inventario'}
+                </button>
               </div>
             </div>
-          </section>
-
-          <section>
-            <h2 className="mb-2 text-base font-bold text-zinc-900">Mi inventario</h2>
-            {lines.length === 0 ? (
-              <p className="rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-6 text-center text-sm text-zinc-600">
-                Aún no hay artículos. Añade desde el catálogo abajo.
-              </p>
-            ) : (
-              <ul className="space-y-2">
-                {lines.map((row) => {
-                  const d = drafts[row.id] ?? {
-                    qty: String(row.quantity_on_hand),
-                    price: String(row.price_per_unit),
-                    name: row.name,
-                    format_label: row.format_label ?? '',
-                    unit: row.unit,
-                  };
-                  const q = parseDecimal(d.qty) ?? 0;
-                  const p = parseDecimal(d.price) ?? 0;
-                  const sub = Math.round(q * p * 100) / 100;
-                  const u = UNIT_SUFFIX[d.unit] ?? d.unit;
-                  const rowBusy = busyId === row.id;
-                  return (
-                    <li
-                      key={row.id}
-                      className="rounded-xl border border-zinc-200/90 bg-white p-3 ring-1 ring-zinc-100"
-                    >
-                      <label className="block">
-                        <span className="text-[9px] font-bold uppercase text-zinc-400">Nombre</span>
-                        <input
-                          type="text"
-                          value={d.name}
-                          disabled={disabled || rowBusy}
-                          onChange={(e) =>
-                            setDrafts((prev) => ({
-                              ...prev,
-                              [row.id]: { ...d, name: e.target.value },
-                            }))
-                          }
-                          className="mt-0.5 w-full rounded-lg border border-zinc-200 px-2 py-1.5 text-sm font-semibold text-zinc-900"
-                        />
-                      </label>
-                      <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-end">
-                        <label className="min-w-0 flex-1">
-                          <span className="text-[9px] font-bold uppercase text-zinc-400">Formato (texto libre)</span>
-                          <input
-                            type="text"
-                            value={d.format_label}
-                            disabled={disabled || rowBusy}
-                            placeholder="ej. PAQUETE 11 ud"
-                            onChange={(e) =>
-                              setDrafts((prev) => ({
-                                ...prev,
-                                [row.id]: { ...d, format_label: e.target.value },
-                              }))
-                            }
-                            className="mt-0.5 w-full rounded-lg border border-zinc-200 px-2 py-1.5 text-xs text-zinc-800"
-                          />
-                        </label>
-                        <label className="sm:w-36">
-                          <span className="text-[9px] font-bold uppercase text-zinc-400">Unidad</span>
-                          <select
-                            value={d.unit}
-                            disabled={disabled || rowBusy}
-                            onChange={(e) =>
-                              setDrafts((prev) => ({
-                                ...prev,
-                                [row.id]: { ...d, unit: e.target.value },
-                              }))
-                            }
-                            className="mt-0.5 h-9 w-full rounded-lg border border-zinc-200 px-2 text-xs font-semibold text-zinc-900"
-                          >
-                            {INVENTORY_UNITS.map((key) => (
-                              <option key={key} value={key}>
-                                {UNIT_SUFFIX[key] ?? key}
-                              </option>
-                            ))}
-                          </select>
-                        </label>
-                      </div>
-                      <div className="mt-2 flex flex-wrap items-end gap-2">
-                        <label className="flex flex-col gap-0.5">
-                          <span className="text-[9px] font-bold uppercase text-zinc-400">Cant. ({u})</span>
-                          <input
-                            type="text"
-                            inputMode="decimal"
-                            value={d.qty}
-                            disabled={disabled || rowBusy}
-                            onChange={(e) =>
-                              setDrafts((prev) => ({
-                                ...prev,
-                                [row.id]: { ...d, qty: e.target.value },
-                              }))
-                            }
-                            className="h-9 w-[4.75rem] rounded-lg border border-zinc-200 px-2 text-sm font-semibold tabular-nums"
-                          />
-                        </label>
-                        <label className="flex flex-col gap-0.5">
-                          <span className="text-[9px] font-bold uppercase text-zinc-400">€ / {u}</span>
-                          <input
-                            type="text"
-                            inputMode="decimal"
-                            value={d.price}
-                            disabled={disabled || rowBusy}
-                            onChange={(e) =>
-                              setDrafts((prev) => ({
-                                ...prev,
-                                [row.id]: { ...d, price: e.target.value },
-                              }))
-                            }
-                            className="h-9 w-[4.75rem] rounded-lg border border-zinc-200 px-2 text-sm font-semibold tabular-nums"
-                          />
-                        </label>
-                        <div className="flex flex-1 flex-wrap items-center justify-end gap-2">
-                          <span className="text-xs font-bold text-zinc-700">{sub.toFixed(2)} €</span>
-                          <button
-                            type="button"
-                            disabled={disabled || rowBusy}
-                            onClick={() => void saveLine(row)}
-                            className="h-9 rounded-lg bg-[#D32F2F] px-3 text-xs font-bold text-white disabled:opacity-45"
-                          >
-                            {rowBusy ? '…' : 'Guardar'}
-                          </button>
-                          <button
-                            type="button"
-                            disabled={disabled || rowBusy}
-                            onClick={() => void removeLine(row)}
-                            className="grid h-9 w-9 place-items-center rounded-lg border border-zinc-300 text-zinc-600 disabled:opacity-45"
-                            aria-label="Quitar"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
-                        </div>
-                      </div>
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
           </section>
 
           <section>
@@ -701,77 +702,202 @@ export default function InventarioPage() {
                         const qtyValue =
                           catalogQtyDraft[it.id] ?? (line ? String(line.quantity_on_hand) : '');
                         const detailsOpen = Boolean(catalogDetailOpen[it.id]);
+                        const lineDraft = line
+                          ? drafts[line.id] ?? lineDraftFromRow(line)
+                          : null;
+                        const lineBusy = line ? busyId === line.id : false;
+                        const lineSub =
+                          line && lineDraft
+                            ? Math.round(
+                                (parseDecimal(lineDraft.qty) ?? 0) *
+                                  (parseDecimal(lineDraft.price) ?? 0) *
+                                  100,
+                              ) / 100
+                            : 0;
                         return (
                           <li
                             key={it.id}
-                            className="flex flex-wrap items-start justify-between gap-2 rounded-lg bg-white px-2 py-2 ring-1 ring-zinc-100"
+                            className="rounded-lg bg-white px-2 py-2 ring-1 ring-zinc-100"
                           >
-                            <div
-                              role="button"
-                              tabIndex={0}
-                              aria-expanded={detailsOpen}
-                              aria-label={
-                                detailsOpen
-                                  ? `Ocultar detalles de ${it.name}`
-                                  : `Ver detalles de ${it.name}`
-                              }
-                              className="min-w-0 flex-1 cursor-pointer rounded-lg py-0.5 pl-0.5 outline-none focus-visible:ring-2 focus-visible:ring-[#D32F2F]/35"
-                              onClick={() =>
-                                setCatalogDetailOpen((prev) => ({
-                                  ...prev,
-                                  [it.id]: !prev[it.id],
-                                }))
-                              }
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter' || e.key === ' ') {
-                                  e.preventDefault();
+                            <div className="flex flex-wrap items-start justify-between gap-2">
+                              <div
+                                role="button"
+                                tabIndex={0}
+                                aria-expanded={detailsOpen}
+                                aria-label={
+                                  detailsOpen
+                                    ? `Ocultar detalles de ${it.name}`
+                                    : `Ver detalles de ${it.name}`
+                                }
+                                className="min-w-0 flex-1 cursor-pointer rounded-lg py-0.5 pl-0.5 outline-none focus-visible:ring-2 focus-visible:ring-[#D32F2F]/35"
+                                onClick={() =>
                                   setCatalogDetailOpen((prev) => ({
                                     ...prev,
                                     [it.id]: !prev[it.id],
-                                  }));
+                                  }))
                                 }
-                              }}
-                            >
-                              <div className="flex items-start gap-1.5">
-                                <ChevronDown
-                                  className={`mt-0.5 h-4 w-4 shrink-0 text-zinc-400 transition-transform duration-200 ${detailsOpen ? 'rotate-180' : ''}`}
-                                  aria-hidden
-                                />
-                                <div className="min-w-0">
-                                  <p className="text-xs font-semibold text-zinc-900">{it.name}</p>
-                                  {detailsOpen ? (
-                                    <p className="mt-1 text-[10px] leading-snug text-zinc-500">
-                                      {it.default_price_per_unit.toFixed(2)} €/{UNIT_SUFFIX[it.unit] ?? it.unit}
-                                      {it.format_label ? ` · ${it.format_label}` : ''}
-                                      <span className="text-zinc-400"> · {cat.name}</span>
-                                    </p>
-                                  ) : null}
-                                </div>
-                              </div>
-                            </div>
-                            <label className="flex shrink-0 flex-col gap-0.5" onClick={(e) => e.stopPropagation()}>
-                              <span className="text-[9px] font-bold uppercase text-zinc-400">Cant.</span>
-                              <input
-                                type="text"
-                                inputMode="decimal"
-                                autoComplete="off"
-                                placeholder="0"
-                                aria-label={`Cantidad de ${it.name}`}
-                                value={qtyValue}
-                                disabled={disabled || qtyBusy}
-                                onChange={(e) => {
-                                  const v = e.target.value;
-                                  setCatalogQtyDraft((prev) => ({ ...prev, [it.id]: v }));
-                                  if (line) {
-                                    setDrafts((prev) => {
-                                      const cur = prev[line.id] ?? lineDraftFromRow(line);
-                                      return { ...prev, [line.id]: { ...cur, qty: v } };
-                                    });
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter' || e.key === ' ') {
+                                    e.preventDefault();
+                                    setCatalogDetailOpen((prev) => ({
+                                      ...prev,
+                                      [it.id]: !prev[it.id],
+                                    }));
                                   }
                                 }}
-                                className="h-9 w-[4.75rem] rounded-lg border border-zinc-200 px-2 text-center text-sm font-semibold tabular-nums"
-                              />
-                            </label>
+                              >
+                                <div className="flex items-start gap-1.5">
+                                  <ChevronDown
+                                    className={`mt-0.5 h-4 w-4 shrink-0 text-zinc-400 transition-transform duration-200 ${detailsOpen ? 'rotate-180' : ''}`}
+                                    aria-hidden
+                                  />
+                                  <div className="min-w-0">
+                                    <p className="text-xs font-semibold text-zinc-900">{it.name}</p>
+                                    {detailsOpen ? (
+                                      <p className="mt-1 text-[10px] leading-snug text-zinc-500">
+                                        Catálogo: {it.default_price_per_unit.toFixed(2)} €/
+                                        {UNIT_SUFFIX[it.unit] ?? it.unit}
+                                        {it.format_label ? ` · ${it.format_label}` : ''}
+                                        <span className="text-zinc-400"> · {cat.name}</span>
+                                      </p>
+                                    ) : null}
+                                  </div>
+                                </div>
+                              </div>
+                              <label
+                                className="flex shrink-0 flex-col gap-0.5"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <span className="text-[9px] font-bold uppercase text-zinc-400">Cant.</span>
+                                <input
+                                  type="text"
+                                  inputMode="decimal"
+                                  autoComplete="off"
+                                  placeholder="0"
+                                  aria-label={`Cantidad de ${it.name}`}
+                                  value={qtyValue}
+                                  disabled={disabled || qtyBusy}
+                                  onChange={(e) => {
+                                    const v = e.target.value;
+                                    setCatalogQtyDraft((prev) => ({ ...prev, [it.id]: v }));
+                                    if (line) {
+                                      setDrafts((prev) => {
+                                        const cur = prev[line.id] ?? lineDraftFromRow(line);
+                                        return { ...prev, [line.id]: { ...cur, qty: v } };
+                                      });
+                                    }
+                                  }}
+                                  className="h-9 w-[4.75rem] rounded-lg border border-zinc-200 px-2 text-center text-sm font-semibold tabular-nums"
+                                />
+                              </label>
+                            </div>
+                            {detailsOpen && line && lineDraft ? (
+                              <div
+                                className="mt-2 space-y-2 border-t border-zinc-100 pt-2"
+                                onClick={(e) => e.stopPropagation()}
+                                onKeyDown={(e) => e.stopPropagation()}
+                              >
+                                <p className="text-[10px] font-bold uppercase tracking-wide text-zinc-500">
+                                  Tu línea en inventario
+                                </p>
+                                <label className="block">
+                                  <span className="text-[9px] font-bold uppercase text-zinc-400">Nombre</span>
+                                  <input
+                                    type="text"
+                                    value={lineDraft.name}
+                                    disabled={disabled || lineBusy || qtyBusy}
+                                    onChange={(e) =>
+                                      setDrafts((prev) => ({
+                                        ...prev,
+                                        [line.id]: { ...lineDraft, name: e.target.value },
+                                      }))
+                                    }
+                                    className="mt-0.5 w-full rounded-lg border border-zinc-200 px-2 py-1.5 text-sm font-semibold text-zinc-900"
+                                  />
+                                </label>
+                                <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+                                  <label className="min-w-0 flex-1">
+                                    <span className="text-[9px] font-bold uppercase text-zinc-400">
+                                      Formato
+                                    </span>
+                                    <input
+                                      type="text"
+                                      value={lineDraft.format_label}
+                                      disabled={disabled || lineBusy || qtyBusy}
+                                      placeholder="ej. PAQUETE 11 ud"
+                                      onChange={(e) =>
+                                        setDrafts((prev) => ({
+                                          ...prev,
+                                          [line.id]: { ...lineDraft, format_label: e.target.value },
+                                        }))
+                                      }
+                                      className="mt-0.5 w-full rounded-lg border border-zinc-200 px-2 py-1.5 text-xs text-zinc-800"
+                                    />
+                                  </label>
+                                  <label className="sm:w-36">
+                                    <span className="text-[9px] font-bold uppercase text-zinc-400">Unidad</span>
+                                    <select
+                                      value={lineDraft.unit}
+                                      disabled={disabled || lineBusy || qtyBusy}
+                                      onChange={(e) =>
+                                        setDrafts((prev) => ({
+                                          ...prev,
+                                          [line.id]: { ...lineDraft, unit: e.target.value },
+                                        }))
+                                      }
+                                      className="mt-0.5 h-9 w-full rounded-lg border border-zinc-200 px-2 text-xs font-semibold text-zinc-900"
+                                    >
+                                      {INVENTORY_UNITS.map((key) => (
+                                        <option key={key} value={key}>
+                                          {UNIT_SUFFIX[key] ?? key}
+                                        </option>
+                                      ))}
+                                    </select>
+                                  </label>
+                                </div>
+                                <label className="block sm:max-w-[10rem]">
+                                  <span className="text-[9px] font-bold uppercase text-zinc-400">
+                                    € / {UNIT_SUFFIX[lineDraft.unit] ?? lineDraft.unit}
+                                  </span>
+                                  <input
+                                    type="text"
+                                    inputMode="decimal"
+                                    value={lineDraft.price}
+                                    disabled={disabled || lineBusy || qtyBusy}
+                                    onChange={(e) =>
+                                      setDrafts((prev) => ({
+                                        ...prev,
+                                        [line.id]: { ...lineDraft, price: e.target.value },
+                                      }))
+                                    }
+                                    className="mt-0.5 h-9 w-full rounded-lg border border-zinc-200 px-2 text-sm font-semibold tabular-nums"
+                                  />
+                                </label>
+                                <div className="flex flex-wrap items-center justify-between gap-2">
+                                  <span className="text-xs font-bold text-zinc-700">
+                                    Subtotal: {lineSub.toFixed(2)} €
+                                  </span>
+                                  <div className="flex flex-wrap gap-2">
+                                    <button
+                                      type="button"
+                                      disabled={disabled || lineBusy || qtyBusy}
+                                      onClick={() => void saveLine(line)}
+                                      className="h-9 rounded-lg bg-[#D32F2F] px-3 text-xs font-bold text-white disabled:opacity-45"
+                                    >
+                                      {lineBusy ? '…' : 'Guardar línea'}
+                                    </button>
+                                    <button
+                                      type="button"
+                                      disabled={disabled || lineBusy || qtyBusy}
+                                      onClick={() => void removeLine(line)}
+                                      className="h-9 rounded-lg border border-zinc-300 bg-white px-3 text-xs font-bold text-zinc-800 disabled:opacity-45"
+                                    >
+                                      Quitar del inventario
+                                    </button>
+                                  </div>
+                                </div>
+                              </div>
+                            ) : null}
                           </li>
                         );
                       })}
@@ -807,6 +933,142 @@ export default function InventarioPage() {
           />
         </>
       )}
+
+      {showHistoryModal ? (
+        <div
+          className="fixed inset-0 z-[140] flex items-end justify-center p-3 sm:items-center"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="inv-history-title"
+        >
+          <button
+            type="button"
+            className="absolute inset-0 bg-black/45"
+            aria-label="Cerrar"
+            onClick={() => !historyClearBusy && setShowHistoryModal(false)}
+          />
+          <div className="relative flex max-h-[min(90vh,720px)] w-full max-w-lg flex-col rounded-2xl border border-zinc-200 bg-white shadow-xl">
+            <div className="flex shrink-0 items-start justify-between gap-2 border-b border-zinc-100 px-4 py-3">
+              <div>
+                <h3 id="inv-history-title" className="text-sm font-bold text-zinc-900">
+                  Historial de inventario
+                </h3>
+                <p className="mt-0.5 text-[11px] text-zinc-500">
+                  Copias automáticas antes de reiniciar cantidades o de quitar una línea. Solo aquí puedes vaciar el
+                  historial.
+                </p>
+              </div>
+              <button
+                type="button"
+                disabled={historyClearBusy}
+                onClick={() => !historyClearBusy && setShowHistoryModal(false)}
+                className="shrink-0 rounded-lg px-2 py-1 text-xs font-semibold text-zinc-600"
+              >
+                Cerrar
+              </button>
+            </div>
+            <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
+              {historyLoading ? (
+                <p className="py-8 text-center text-sm text-zinc-500">Cargando…</p>
+              ) : historyEntries.length === 0 ? (
+                <p className="rounded-xl border border-zinc-100 bg-zinc-50 px-3 py-6 text-center text-sm text-zinc-600">
+                  No hay entradas todavía. Aparecerán al reiniciar el inventario o al quitar un artículo del inventario.
+                </p>
+              ) : (
+                <ul className="space-y-2">
+                  {historyEntries.map((ent) => {
+                    const expanded = historyExpandedId === ent.id;
+                    const when = new Date(ent.created_at).toLocaleString('es-ES', {
+                      dateStyle: 'short',
+                      timeStyle: 'short',
+                    });
+                    const kind =
+                      ent.event_type === 'before_reset'
+                        ? 'Antes de reinicio'
+                        : 'Antes de quitar línea';
+                    return (
+                      <li
+                        key={ent.id}
+                        className="overflow-hidden rounded-xl border border-zinc-200 bg-zinc-50/80 ring-1 ring-zinc-100"
+                      >
+                        <button
+                          type="button"
+                          className="flex w-full items-start justify-between gap-2 px-3 py-2.5 text-left"
+                          onClick={() => setHistoryExpandedId(expanded ? null : ent.id)}
+                        >
+                          <div className="min-w-0">
+                            <p className="text-xs font-bold text-zinc-900">{kind}</p>
+                            <p className="text-[10px] text-zinc-500">{when}</p>
+                            {ent.summary ? (
+                              <p className="mt-0.5 text-[11px] text-zinc-700">{ent.summary}</p>
+                            ) : null}
+                          </div>
+                          <div className="shrink-0 text-right">
+                            <p className="text-xs font-extrabold tabular-nums text-zinc-900">
+                              {ent.total_value_snapshot.toFixed(2)} €
+                            </p>
+                            <p className="text-[10px] text-zinc-500">{ent.lines_snapshot.length} líneas</p>
+                            <ChevronDown
+                              className={`ml-auto mt-1 h-4 w-4 text-zinc-400 transition-transform ${expanded ? 'rotate-180' : ''}`}
+                              aria-hidden
+                            />
+                          </div>
+                        </button>
+                        {expanded ? (
+                          <div className="border-t border-zinc-200 bg-white px-2 py-2">
+                            <div className="max-h-52 overflow-auto rounded-lg border border-zinc-100">
+                              <table className="w-full min-w-[280px] border-collapse text-[10px]">
+                                <thead className="sticky top-0 bg-zinc-100 text-left text-zinc-600">
+                                  <tr>
+                                    <th className="px-1.5 py-1 font-bold">Nombre</th>
+                                    <th className="px-1 py-1 font-bold">Cant.</th>
+                                    <th className="px-1 py-1 font-bold">€/u</th>
+                                    <th className="px-1 py-1 font-bold">€</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {ent.lines_snapshot.map((ln) => {
+                                    const sub =
+                                      Math.round(ln.quantity_on_hand * ln.price_per_unit * 100) / 100;
+                                    return (
+                                      <tr key={ln.id} className="border-t border-zinc-100">
+                                        <td className="px-1.5 py-1 font-medium text-zinc-900">{ln.name}</td>
+                                        <td className="px-1 py-1 tabular-nums text-zinc-700">
+                                          {ln.quantity_on_hand} {UNIT_SUFFIX[ln.unit] ?? ln.unit}
+                                        </td>
+                                        <td className="px-1 py-1 tabular-nums text-zinc-700">
+                                          {ln.price_per_unit.toFixed(2)}
+                                        </td>
+                                        <td className="px-1 py-1 font-semibold tabular-nums text-zinc-900">
+                                          {sub.toFixed(2)}
+                                        </td>
+                                      </tr>
+                                    );
+                                  })}
+                                </tbody>
+                              </table>
+                            </div>
+                          </div>
+                        ) : null}
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </div>
+            <div className="shrink-0 border-t border-zinc-100 px-4 py-3">
+              <button
+                type="button"
+                disabled={disabled || historyClearBusy || historyEntries.length === 0}
+                onClick={() => void clearAllHistory()}
+                className="h-10 w-full rounded-xl border border-red-200 bg-red-50 text-sm font-bold text-red-900 disabled:opacity-45"
+              >
+                {historyClearBusy ? 'Borrando…' : 'Vaciar historial'}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {showAddCategory ? (
         <div className="fixed inset-0 z-[130] flex items-end justify-center p-3 sm:items-center" role="dialog" aria-modal="true" aria-labelledby="inv-add-cat-title">
