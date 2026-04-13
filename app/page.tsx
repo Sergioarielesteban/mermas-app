@@ -2,13 +2,13 @@ import type { Metadata } from 'next';
 import MarketingLanding from '@/components/MarketingLanding';
 
 export const metadata: Metadata = {
-  title: 'Chef-One | Gestión operativa para cocinas y restaurantes',
+  title: 'Chef-One | Pedidos, mermas y cocina bajo control — desde 39,90 €/mes',
   description:
-    'Inventario valorado, mermas, APPCC (temperaturas, aceite), pedidos y panel de control. Toda la gestión de tu cocina, en la palma de tu mano.',
+    'Menos de 10 €/semana. Pedidos y recepción, mermas y residuos, APPCC e inventario en móvil o tablet. La información que se pierde en WhatsApp y cuadernos, centralizada para jefe de cocina y dueño.',
   openGraph: {
-    title: 'Chef-One',
+    title: 'Chef-One — operaciones de cocina',
     description:
-      'Inventario, mermas, APPCC y pedidos en una sola app para tu equipo y tus locales.',
+      'Control operativo para restaurantes: pedidos, mermas, puntos críticos e inventario. 39,90 €/mes.',
     type: 'website',
   },
 };

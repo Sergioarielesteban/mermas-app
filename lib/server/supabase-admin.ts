@@ -88,3 +88,37 @@ export async function upsertSharedSnapshot(input: { products: Product[]; mermas:
 export async function getSharedSnapshot(): Promise<SnapshotRow | null> {
   return getSnapshotByEmail(SHARED_SNAPSHOT_KEY);
 }
+
+export async function insertMarketingLead(input: {
+  name: string | null;
+  email: string;
+  phone: string | null;
+  restaurantName: string | null;
+  message: string | null;
+  source?: string;
+}): Promise<void> {
+  if (!isSupabaseAdminConfigured()) {
+    throw new Error('Supabase admin not configured');
+  }
+  const response = await fetch(baseUrl('marketing_leads'), {
+    method: 'POST',
+    headers: {
+      ...getHeaders(),
+      Prefer: 'return=minimal',
+    },
+    body: JSON.stringify([
+      {
+        name: input.name?.trim() || null,
+        email: input.email.trim().toLowerCase(),
+        phone: input.phone?.trim() || null,
+        restaurant_name: input.restaurantName?.trim() || null,
+        message: input.message?.trim() || null,
+        source: input.source ?? 'chef-one-landing',
+      },
+    ]),
+  });
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(`marketing_leads insert failed: ${body}`);
+  }
+}
