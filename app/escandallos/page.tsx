@@ -9,16 +9,20 @@ import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
 import {
   deleteEscandalloLine,
   deleteEscandalloRecipe,
+  deleteProcessedProductForEscandallo,
   fetchEscandalloLines,
+  fetchProcessedProductsForEscandallo,
   fetchEscandalloRecipes,
   fetchProductsForEscandallo,
   insertEscandalloLine,
   insertEscandalloRecipe,
+  insertProcessedProductForEscandallo,
   lineUnitPriceEur,
   recipeTotalCostEur,
   updateEscandalloRecipe,
   type EscandalloLine,
-  type EscandalloProductPick,
+  type EscandalloProcessedProduct,
+  type EscandalloRawProduct,
   type EscandalloRecipe,
 } from '@/lib/escandallos-supabase';
 import type { Unit } from '@/lib/types';
@@ -42,7 +46,8 @@ export default function EscandallosPage() {
   const supabaseOk = isSupabaseEnabled() && getSupabaseClient();
   const [recipes, setRecipes] = useState<EscandalloRecipe[]>([]);
   const [linesByRecipe, setLinesByRecipe] = useState<Record<string, EscandalloLine[]>>({});
-  const [products, setProducts] = useState<EscandalloProductPick[]>([]);
+  const [rawProducts, setRawProducts] = useState<EscandalloRawProduct[]>([]);
+  const [processedProducts, setProcessedProducts] = useState<EscandalloProcessedProduct[]>([]);
   const [loading, setLoading] = useState(true);
   const [banner, setBanner] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -57,19 +62,30 @@ export default function EscandallosPage() {
   const [draftYieldQty, setDraftYieldQty] = useState('');
   const [draftYieldLabel, setDraftYieldLabel] = useState('');
 
-  const [addProductId, setAddProductId] = useState('');
+  const [addSourceType, setAddSourceType] = useState<'raw' | 'processed' | 'manual'>('raw');
+  const [addRawProductId, setAddRawProductId] = useState('');
+  const [addProcessedId, setAddProcessedId] = useState('');
   const [addLabel, setAddLabel] = useState('');
   const [addQty, setAddQty] = useState('1');
   const [addUnit, setAddUnit] = useState<Unit>('kg');
   const [addManualPrice, setAddManualPrice] = useState('');
 
-  const productById = useMemo(() => new Map(products.map((p) => [p.id, p])), [products]);
+  const [procName, setProcName] = useState('');
+  const [procRawId, setProcRawId] = useState('');
+  const [procInputQty, setProcInputQty] = useState('5');
+  const [procOutputQty, setProcOutputQty] = useState('3.5');
+  const [procOutputUnit, setProcOutputUnit] = useState<Unit>('kg');
+  const [procExtraCost, setProcExtraCost] = useState('0');
+
+  const rawById = useMemo(() => new Map(rawProducts.map((p) => [p.id, p])), [rawProducts]);
+  const processedById = useMemo(() => new Map(processedProducts.map((p) => [p.id, p])), [processedProducts]);
 
   const load = useCallback(async () => {
     if (!localId || !supabaseOk) {
       setRecipes([]);
       setLinesByRecipe({});
-      setProducts([]);
+      setRawProducts([]);
+      setProcessedProducts([]);
       setLoading(false);
       return;
     }
@@ -77,12 +93,14 @@ export default function EscandallosPage() {
     setLoading(true);
     setBanner(null);
     try {
-      const [r, p] = await Promise.all([
+      const [r, raw, processed] = await Promise.all([
         fetchEscandalloRecipes(supabase, localId),
         fetchProductsForEscandallo(supabase, localId),
+        fetchProcessedProductsForEscandallo(supabase, localId),
       ]);
       setRecipes(r);
-      setProducts(p);
+      setRawProducts(raw);
+      setProcessedProducts(processed);
       const linesEntries = await Promise.all(
         r.map(async (recipe) => {
           const lines = await fetchEscandalloLines(supabase, localId, recipe.id);
@@ -121,11 +139,69 @@ export default function EscandallosPage() {
     setDraftRecipeNotes(recipe.notes);
     setDraftYieldQty(String(recipe.yieldQty));
     setDraftYieldLabel(recipe.yieldLabel);
-    setAddProductId('');
+    setAddSourceType('raw');
+    setAddRawProductId('');
+    setAddProcessedId('');
     setAddLabel('');
     setAddQty('1');
     setAddUnit('kg');
     setAddManualPrice('');
+  };
+
+  const handleCreateProcessed = async () => {
+    if (!localId || !supabaseOk) return;
+    if (!procRawId) {
+      setBanner('Elige un producto crudo de proveedor para el elaborado.');
+      return;
+    }
+    const input = parseDecimal(procInputQty);
+    const output = parseDecimal(procOutputQty);
+    const extra = parseDecimal(procExtraCost);
+    if (!procName.trim()) {
+      setBanner('Escribe nombre del elaborado.');
+      return;
+    }
+    if (input == null || input <= 0 || output == null || output <= 0) {
+      setBanner('Input y output deben ser mayores de 0.');
+      return;
+    }
+    const supabase = getSupabaseClient()!;
+    setBusyId('processed-new');
+    try {
+      const row = await insertProcessedProductForEscandallo(supabase, localId, {
+        name: procName,
+        sourceSupplierProductId: procRawId,
+        inputQty: input,
+        outputQty: output,
+        outputUnit: procOutputUnit,
+        extraCostEur: extra != null && extra >= 0 ? extra : 0,
+      });
+      setProcessedProducts((prev) => [...prev, row].sort((a, b) => a.name.localeCompare(b.name, 'es')));
+      setProcName('');
+      setProcRawId('');
+      setProcInputQty('5');
+      setProcOutputQty('3.5');
+      setProcExtraCost('0');
+    } catch (e: unknown) {
+      setBanner(e instanceof Error ? e.message : 'No se pudo crear el elaborado.');
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const handleDeleteProcessed = async (id: string) => {
+    if (!localId || !supabaseOk) return;
+    if (!window.confirm('¿Eliminar este elaborado interno?')) return;
+    const supabase = getSupabaseClient()!;
+    setBusyId(id);
+    try {
+      await deleteProcessedProductForEscandallo(supabase, localId, id);
+      setProcessedProducts((prev) => prev.filter((p) => p.id !== id));
+    } catch (e: unknown) {
+      setBanner(e instanceof Error ? e.message : 'No se pudo eliminar elaborado.');
+    } finally {
+      setBusyId(null);
+    }
   };
 
   const handleCreateRecipe = async () => {
@@ -221,17 +297,20 @@ export default function EscandallosPage() {
       setBanner('Cantidad inválida.');
       return;
     }
-    const picked = addProductId ? productById.get(addProductId) : undefined;
-    const label = (picked ? picked.name : addLabel.trim()) || '';
-    if (!label) {
-      setBanner('Elige un producto del registro o escribe un nombre.');
-      return;
-    }
+    const raw = addRawProductId ? rawById.get(addRawProductId) : undefined;
+    const processed = addProcessedId ? processedById.get(addProcessedId) : undefined;
+    const label =
+      addSourceType === 'raw'
+        ? raw?.name ?? ''
+        : addSourceType === 'processed'
+          ? processed?.name ?? ''
+          : addLabel.trim();
+    if (!label) return void setBanner('Selecciona un origen de coste válido.');
     let manual: number | null = null;
-    if (!picked) {
+    if (addSourceType === 'manual') {
       const m = parseDecimal(addManualPrice);
       if (m == null || m < 0) {
-        setBanner('Sin producto enlazado, indica precio €/unidad manual.');
+        setBanner('En modo manual indica precio €/unidad.');
         return;
       }
       manual = Math.round(m * 10000) / 10000;
@@ -243,15 +322,18 @@ export default function EscandallosPage() {
     setBanner(null);
     try {
       await insertEscandalloLine(supabase, localId, recipeId, {
+        sourceType: addSourceType,
         label,
         qty,
-        unit: picked ? picked.unit : addUnit,
-        productId: picked ? picked.id : null,
-        manualPricePerUnit: picked ? null : manual,
+        unit: addSourceType === 'raw' ? (raw?.unit ?? addUnit) : addSourceType === 'processed' ? (processed?.outputUnit ?? addUnit) : addUnit,
+        rawSupplierProductId: addSourceType === 'raw' ? (raw?.id ?? null) : null,
+        processedProductId: addSourceType === 'processed' ? (processed?.id ?? null) : null,
+        manualPricePerUnit: addSourceType === 'manual' ? manual : null,
         sortOrder,
       });
       await refreshRecipeLines(recipeId);
-      setAddProductId('');
+      setAddRawProductId('');
+      setAddProcessedId('');
       setAddLabel('');
       setAddQty('1');
       setAddManualPrice('');
@@ -320,6 +402,102 @@ export default function EscandallosPage() {
       ) : null}
 
       <section className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-zinc-200">
+        <p className="text-xs font-bold uppercase tracking-wide text-zinc-500">Productos elaborados (dinámicos)</p>
+        <p className="mt-1 text-xs text-zinc-600">
+          Se recalculan solos cuando cambia el precio del producto crudo en Proveedores.
+        </p>
+        <div className="mt-2 space-y-2 rounded-xl bg-zinc-50 p-3 ring-1 ring-zinc-100">
+          <input
+            value={procName}
+            onChange={(e) => setProcName(e.target.value)}
+            placeholder="Nombre elaborado (ej. Cebolla caramelizada)"
+            className="w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm"
+          />
+          <select
+            value={procRawId}
+            onChange={(e) => setProcRawId(e.target.value)}
+            className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
+          >
+            <option value="">Producto crudo proveedor…</option>
+            {rawProducts.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.supplierName} · {p.name} ({p.pricePerUnit.toFixed(2)} €/{p.unit})
+              </option>
+            ))}
+          </select>
+          <div className="grid grid-cols-2 gap-2">
+            <input
+              value={procInputQty}
+              onChange={(e) => setProcInputQty(e.target.value)}
+              placeholder="Input qty"
+              className="rounded-lg border border-zinc-200 px-3 py-2 text-sm"
+            />
+            <input
+              value={procOutputQty}
+              onChange={(e) => setProcOutputQty(e.target.value)}
+              placeholder="Output qty"
+              className="rounded-lg border border-zinc-200 px-3 py-2 text-sm"
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <select
+              value={procOutputUnit}
+              onChange={(e) => setProcOutputUnit(e.target.value as Unit)}
+              className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
+            >
+              {UNITS.map((u) => (
+                <option key={u.value} value={u.value}>
+                  {u.label}
+                </option>
+              ))}
+            </select>
+            <input
+              value={procExtraCost}
+              onChange={(e) => setProcExtraCost(e.target.value)}
+              placeholder="Extra €"
+              className="rounded-lg border border-zinc-200 px-3 py-2 text-sm"
+            />
+          </div>
+          <button
+            type="button"
+            disabled={busyId !== null}
+            onClick={() => void handleCreateProcessed()}
+            className="rounded-lg bg-zinc-900 px-3 py-2 text-sm font-semibold text-white"
+          >
+            Guardar elaborado
+          </button>
+          {processedProducts.length > 0 ? (
+            <ul className="space-y-2 pt-2">
+              {processedProducts.map((p) => {
+                const raw = rawById.get(p.sourceSupplierProductId);
+                const cost =
+                  raw && p.outputQty > 0
+                    ? ((raw.pricePerUnit * p.inputQty + p.extraCostEur) / p.outputQty).toFixed(2)
+                    : '0.00';
+                return (
+                  <li key={p.id} className="flex items-center justify-between gap-2 rounded-lg bg-white px-3 py-2 ring-1 ring-zinc-200">
+                    <p className="text-xs text-zinc-700">
+                      <span className="font-semibold text-zinc-900">{p.name}</span> · {p.inputQty}→{p.outputQty}{' '}
+                      {p.outputUnit} · {cost} €/{p.outputUnit}
+                    </p>
+                    <button
+                      type="button"
+                      disabled={busyId === p.id}
+                      onClick={() => void handleDeleteProcessed(p.id)}
+                      className="rounded p-1 text-[#B91C1C]"
+                      aria-label="Eliminar elaborado"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          ) : null}
+        </div>
+      </section>
+
+      <section className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-zinc-200">
         <p className="text-xs font-bold uppercase tracking-wide text-zinc-500">Nueva receta</p>
         <div className="mt-2 space-y-2">
           <input
@@ -365,7 +543,7 @@ export default function EscandallosPage() {
         <div className="space-y-3">
           {recipes.map((recipe) => {
             const lines = linesByRecipe[recipe.id] ?? [];
-            const total = recipeTotalCostEur(lines, productById);
+            const total = recipeTotalCostEur(lines, rawById, processedById);
             const perYield = recipe.yieldQty > 0 ? Math.round((total / recipe.yieldQty) * 100) / 100 : 0;
             const open = expandedId === recipe.id;
             return (
@@ -440,9 +618,9 @@ export default function EscandallosPage() {
                       ) : (
                         <ul className="space-y-2">
                           {lines.map((line) => {
-                            const unitEur = lineUnitPriceEur(line, productById);
+                            const unitEur = lineUnitPriceEur(line, rawById, processedById);
                             const lineCost = Math.round(line.qty * unitEur * 100) / 100;
-                            const src = line.productId ? 'Mermas' : 'Manual';
+                            const src = line.sourceType === 'raw' ? 'Crudo' : line.sourceType === 'processed' ? 'Elaborado' : 'Manual';
                             return (
                               <li
                                 key={line.id}
@@ -472,30 +650,50 @@ export default function EscandallosPage() {
 
                     <div className="rounded-xl border border-dashed border-zinc-300 bg-white p-3">
                       <p className="text-[10px] font-bold uppercase text-zinc-500">Añadir ingrediente</p>
-                      <label className="mt-2 block text-[10px] font-semibold text-zinc-500">Desde registro Mermas</label>
-                      <select
-                        value={addProductId}
-                        onChange={(e) => {
-                          setAddProductId(e.target.value);
-                          if (e.target.value) {
-                            const p = productById.get(e.target.value);
-                            if (p) {
-                              setAddLabel('');
-                              setAddUnit(p.unit);
-                              setAddManualPrice('');
-                            }
-                          }
-                        }}
-                        className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-2 py-2 text-sm"
-                      >
-                        <option value="">— Ninguno (manual) —</option>
-                        {products.map((p) => (
-                          <option key={p.id} value={p.id}>
-                            {p.name} ({p.pricePerUnit.toFixed(2)} €/{p.unit})
-                          </option>
+                      <div className="mt-2 grid grid-cols-3 gap-1 rounded-lg bg-zinc-100 p-1 text-xs">
+                        {(['raw', 'processed', 'manual'] as const).map((mode) => (
+                          <button
+                            key={mode}
+                            type="button"
+                            onClick={() => setAddSourceType(mode)}
+                            className={[
+                              'rounded-md px-2 py-1.5 font-semibold',
+                              addSourceType === mode ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-500',
+                            ].join(' ')}
+                          >
+                            {mode === 'raw' ? 'Crudo' : mode === 'processed' ? 'Elaborado' : 'Manual'}
+                          </button>
                         ))}
-                      </select>
-                      {!addProductId ? (
+                      </div>
+                      {addSourceType === 'raw' ? (
+                        <select
+                          value={addRawProductId}
+                          onChange={(e) => setAddRawProductId(e.target.value)}
+                          className="mt-2 w-full rounded-lg border border-zinc-200 bg-white px-2 py-2 text-sm"
+                        >
+                          <option value="">Producto crudo…</option>
+                          {rawProducts.map((p) => (
+                            <option key={p.id} value={p.id}>
+                              {p.supplierName} · {p.name} ({p.pricePerUnit.toFixed(2)} €/{p.unit})
+                            </option>
+                          ))}
+                        </select>
+                      ) : null}
+                      {addSourceType === 'processed' ? (
+                        <select
+                          value={addProcessedId}
+                          onChange={(e) => setAddProcessedId(e.target.value)}
+                          className="mt-2 w-full rounded-lg border border-zinc-200 bg-white px-2 py-2 text-sm"
+                        >
+                          <option value="">Producto elaborado…</option>
+                          {processedProducts.map((p) => (
+                            <option key={p.id} value={p.id}>
+                              {p.name}
+                            </option>
+                          ))}
+                        </select>
+                      ) : null}
+                      {addSourceType === 'manual' ? (
                         <>
                           <label className="mt-2 block text-[10px] font-semibold text-zinc-500">Nombre manual</label>
                           <input

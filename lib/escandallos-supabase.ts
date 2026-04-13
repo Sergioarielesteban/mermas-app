@@ -16,7 +16,9 @@ export type EscandalloLine = {
   id: string;
   localId: string;
   recipeId: string;
-  productId: string | null;
+  sourceType: 'raw' | 'processed' | 'manual';
+  rawSupplierProductId: string | null;
+  processedProductId: string | null;
   label: string;
   qty: number;
   unit: Unit;
@@ -25,11 +27,27 @@ export type EscandalloLine = {
   createdAt: string;
 };
 
-export type EscandalloProductPick = {
+export type EscandalloRawProduct = {
   id: string;
+  supplierId: string;
+  supplierName: string;
   name: string;
   unit: Unit;
   pricePerUnit: number;
+};
+
+export type EscandalloProcessedProduct = {
+  id: string;
+  localId: string;
+  name: string;
+  sourceSupplierProductId: string;
+  inputQty: number;
+  outputQty: number;
+  outputUnit: Unit;
+  extraCostEur: number;
+  notes: string;
+  createdAt: string;
+  updatedAt: string;
 };
 
 type RecipeRow = {
@@ -47,13 +65,38 @@ type LineRow = {
   id: string;
   local_id: string;
   recipe_id: string;
-  product_id: string | null;
+  source_type: 'raw' | 'processed' | 'manual' | null;
+  raw_supplier_product_id: string | null;
+  processed_product_id: string | null;
   label: string;
   qty: number;
   unit: string;
   manual_price_per_unit: number | null;
   sort_order: number;
   created_at: string;
+};
+
+type RawProductRow = {
+  id: string;
+  supplier_id: string;
+  name: string;
+  unit: string;
+  price_per_unit: number;
+  pedido_suppliers: { name: string } | { name: string }[] | null;
+};
+
+type ProcessedRow = {
+  id: string;
+  local_id: string;
+  name: string;
+  source_supplier_product_id: string;
+  input_qty: number;
+  output_qty: number;
+  output_unit: string;
+  extra_cost_eur: number;
+  notes: string;
+  created_at: string;
+  updated_at: string;
 };
 
 function mapRecipe(row: RecipeRow): EscandalloRecipe {
@@ -74,7 +117,9 @@ function mapLine(row: LineRow): EscandalloLine {
     id: row.id,
     localId: row.local_id,
     recipeId: row.recipe_id,
-    productId: row.product_id,
+    sourceType: row.source_type ?? 'manual',
+    rawSupplierProductId: row.raw_supplier_product_id,
+    processedProductId: row.processed_product_id,
     label: row.label,
     qty: Number(row.qty),
     unit: row.unit as Unit,
@@ -84,6 +129,22 @@ function mapLine(row: LineRow): EscandalloLine {
         : null,
     sortOrder: Number(row.sort_order ?? 0),
     createdAt: row.created_at,
+  };
+}
+
+function mapProcessed(row: ProcessedRow): EscandalloProcessedProduct {
+  return {
+    id: row.id,
+    localId: row.local_id,
+    name: row.name,
+    sourceSupplierProductId: row.source_supplier_product_id,
+    inputQty: Number(row.input_qty),
+    outputQty: Number(row.output_qty),
+    outputUnit: row.output_unit as Unit,
+    extraCostEur: Number(row.extra_cost_eur ?? 0),
+    notes: row.notes ?? '',
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
   };
 }
 
@@ -105,7 +166,7 @@ export async function fetchEscandalloLines(
   const { data, error } = await supabase
     .from('escandallo_recipe_lines')
     .select(
-      'id,local_id,recipe_id,product_id,label,qty,unit,manual_price_per_unit,sort_order,created_at',
+      'id,local_id,recipe_id,source_type,raw_supplier_product_id,processed_product_id,label,qty,unit,manual_price_per_unit,sort_order,created_at',
     )
     .eq('local_id', localId)
     .eq('recipe_id', recipeId)
@@ -118,20 +179,83 @@ export async function fetchEscandalloLines(
 export async function fetchProductsForEscandallo(
   supabase: SupabaseClient,
   localId: string,
-): Promise<EscandalloProductPick[]> {
+): Promise<EscandalloRawProduct[]> {
   const { data, error } = await supabase
-    .from('products')
-    .select('id,name,unit,price_per_unit')
+    .from('pedido_supplier_products')
+    .select('id,supplier_id,name,unit,price_per_unit,pedido_suppliers(name)')
     .eq('local_id', localId)
     .eq('is_active', true)
     .order('name');
   if (error) throw new Error(error.message);
-  return (data ?? []).map((r: { id: string; name: string; unit: string; price_per_unit: number }) => ({
+  return ((data ?? []) as RawProductRow[]).map((r) => ({
     id: r.id,
+    supplierId: r.supplier_id,
+    supplierName: Array.isArray(r.pedido_suppliers) ? r.pedido_suppliers[0]?.name ?? '-' : r.pedido_suppliers?.name ?? '-',
     name: r.name,
     unit: r.unit as Unit,
     pricePerUnit: Number(r.price_per_unit),
   }));
+}
+
+export async function fetchProcessedProductsForEscandallo(
+  supabase: SupabaseClient,
+  localId: string,
+): Promise<EscandalloProcessedProduct[]> {
+  const { data, error } = await supabase
+    .from('escandallo_processed_products')
+    .select(
+      'id,local_id,name,source_supplier_product_id,input_qty,output_qty,output_unit,extra_cost_eur,notes,created_at,updated_at',
+    )
+    .eq('local_id', localId)
+    .order('name');
+  if (error) throw new Error(error.message);
+  return ((data ?? []) as ProcessedRow[]).map(mapProcessed);
+}
+
+export async function insertProcessedProductForEscandallo(
+  supabase: SupabaseClient,
+  localId: string,
+  payload: {
+    name: string;
+    sourceSupplierProductId: string;
+    inputQty: number;
+    outputQty: number;
+    outputUnit: Unit;
+    extraCostEur?: number;
+    notes?: string;
+  },
+): Promise<EscandalloProcessedProduct> {
+  const { data, error } = await supabase
+    .from('escandallo_processed_products')
+    .insert({
+      local_id: localId,
+      name: payload.name.trim(),
+      source_supplier_product_id: payload.sourceSupplierProductId,
+      input_qty: Math.round(payload.inputQty * 10000) / 10000,
+      output_qty: Math.round(payload.outputQty * 10000) / 10000,
+      output_unit: payload.outputUnit,
+      extra_cost_eur: Math.max(0, Math.round((payload.extraCostEur ?? 0) * 10000) / 10000),
+      notes: (payload.notes ?? '').trim(),
+    })
+    .select(
+      'id,local_id,name,source_supplier_product_id,input_qty,output_qty,output_unit,extra_cost_eur,notes,created_at,updated_at',
+    )
+    .single();
+  if (error) throw new Error(error.message);
+  return mapProcessed(data as ProcessedRow);
+}
+
+export async function deleteProcessedProductForEscandallo(
+  supabase: SupabaseClient,
+  localId: string,
+  processedId: string,
+): Promise<void> {
+  const { error } = await supabase
+    .from('escandallo_processed_products')
+    .delete()
+    .eq('id', processedId)
+    .eq('local_id', localId);
+  if (error) throw new Error(error.message);
 }
 
 export async function insertEscandalloRecipe(
@@ -190,10 +314,12 @@ export async function insertEscandalloLine(
   localId: string,
   recipeId: string,
   payload: {
+    sourceType: 'raw' | 'processed' | 'manual';
     label: string;
     qty: number;
     unit: Unit;
-    productId?: string | null;
+    rawSupplierProductId?: string | null;
+    processedProductId?: string | null;
     manualPricePerUnit?: number | null;
     sortOrder?: number;
   },
@@ -203,7 +329,9 @@ export async function insertEscandalloLine(
     .insert({
       local_id: localId,
       recipe_id: recipeId,
-      product_id: payload.productId ?? null,
+      source_type: payload.sourceType,
+      raw_supplier_product_id: payload.rawSupplierProductId ?? null,
+      processed_product_id: payload.processedProductId ?? null,
       label: payload.label.trim(),
       qty: Math.max(0.0001, Math.round(payload.qty * 10000) / 10000),
       unit: payload.unit,
@@ -214,7 +342,7 @@ export async function insertEscandalloLine(
       sort_order: payload.sortOrder ?? 0,
     })
     .select(
-      'id,local_id,recipe_id,product_id,label,qty,unit,manual_price_per_unit,sort_order,created_at',
+      'id,local_id,recipe_id,source_type,raw_supplier_product_id,processed_product_id,label,qty,unit,manual_price_per_unit,sort_order,created_at',
     )
     .single();
   if (error) throw new Error(error.message);
@@ -229,7 +357,9 @@ export async function updateEscandalloLine(
     label: string;
     qty: number;
     unit: Unit;
-    productId: string | null;
+    sourceType: 'raw' | 'processed' | 'manual';
+    rawSupplierProductId: string | null;
+    processedProductId: string | null;
     manualPricePerUnit: number | null;
     sortOrder: number;
   }>,
@@ -238,7 +368,9 @@ export async function updateEscandalloLine(
   if (patch.label !== undefined) row.label = patch.label.trim();
   if (patch.qty !== undefined && patch.qty > 0) row.qty = Math.round(patch.qty * 10000) / 10000;
   if (patch.unit !== undefined) row.unit = patch.unit;
-  if (patch.productId !== undefined) row.product_id = patch.productId;
+  if (patch.sourceType !== undefined) row.source_type = patch.sourceType;
+  if (patch.rawSupplierProductId !== undefined) row.raw_supplier_product_id = patch.rawSupplierProductId;
+  if (patch.processedProductId !== undefined) row.processed_product_id = patch.processedProductId;
   if (patch.manualPricePerUnit !== undefined) {
     row.manual_price_per_unit =
       patch.manualPricePerUnit != null && Number.isFinite(patch.manualPricePerUnit)
@@ -263,11 +395,21 @@ export async function deleteEscandalloLine(supabase: SupabaseClient, localId: st
 /** Precio unitario efectivo para coste (producto del registro Mermas o precio manual). */
 export function lineUnitPriceEur(
   line: EscandalloLine,
-  productById: Map<string, EscandalloProductPick>,
+  rawProductById: Map<string, EscandalloRawProduct>,
+  processedById: Map<string, EscandalloProcessedProduct>,
 ): number {
-  if (line.productId) {
-    const p = productById.get(line.productId);
+  if (line.sourceType === 'raw' && line.rawSupplierProductId) {
+    const p = rawProductById.get(line.rawSupplierProductId);
     if (p) return p.pricePerUnit;
+  }
+  if (line.sourceType === 'processed' && line.processedProductId) {
+    const p = processedById.get(line.processedProductId);
+    if (p) {
+      const raw = rawProductById.get(p.sourceSupplierProductId);
+      if (!raw || p.outputQty <= 0) return 0;
+      const totalInput = raw.pricePerUnit * p.inputQty + p.extraCostEur;
+      return Math.round((totalInput / p.outputQty) * 10000) / 10000;
+    }
   }
   if (line.manualPricePerUnit != null && Number.isFinite(line.manualPricePerUnit)) {
     return line.manualPricePerUnit;
@@ -275,10 +417,14 @@ export function lineUnitPriceEur(
   return 0;
 }
 
-export function recipeTotalCostEur(lines: EscandalloLine[], productById: Map<string, EscandalloProductPick>): number {
+export function recipeTotalCostEur(
+  lines: EscandalloLine[],
+  rawProductById: Map<string, EscandalloRawProduct>,
+  processedById: Map<string, EscandalloProcessedProduct>,
+): number {
   let sum = 0;
   for (const line of lines) {
-    sum += line.qty * lineUnitPriceEur(line, productById);
+    sum += line.qty * lineUnitPriceEur(line, rawProductById, processedById);
   }
   return Math.round(sum * 100) / 100;
 }
