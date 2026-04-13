@@ -117,9 +117,9 @@ export default function PanelControlPage() {
           Icon={ChefHat}
         />
         <HubTile
-          onClick={() => onStub('Escandallos')}
+          href="/escandallos"
           label="Escandallos"
-          sub="Próximamente"
+          sub="Recetas y coste por ración"
           Icon={Calculator}
         />
       </div>

@@ -38,6 +38,7 @@ function titleForPath(pathname: string | null) {
   if (pathname.startsWith('/resumen')) return 'Resumen';
   if (pathname.startsWith('/pedidos')) return 'Pedidos';
   if (pathname.startsWith('/inventario')) return 'Inventario';
+  if (pathname.startsWith('/escandallos')) return 'Escandallos';
   if (pathname.startsWith('/chat')) return 'Chat del local';
   if (pathname === '/appcc') return 'APPCC';
   if (pathname.startsWith('/appcc/temperaturas')) return 'Temperaturas';
@@ -69,8 +70,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         : NAV_ITEMS),
       { href: '/appcc', label: 'APPCC', Icon: ShieldCheck },
       { href: '/inventario', label: 'Inventario', Icon: ClipboardList },
+      { href: '/escandallos', label: 'Escandallos', Icon: Calculator },
       { href: '/chat', label: 'Chat', Icon: MessageCircle },
-      { label: 'Escandallos', Icon: Calculator, comingSoon: true },
       { label: 'Cocina central', Icon: ChefHat, comingSoon: true },
     ],
     [showPedidos],
@@ -242,7 +243,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                 ? pathname === '/dashboard' || pathname === '/'
                 : item.href === '/appcc'
                   ? pathname === '/appcc' || pathname?.startsWith('/appcc/')
-                  : pathname === item.href || pathname?.startsWith(`${item.href}/`);
+                  : item.href === '/escandallos'
+                    ? pathname === '/escandallos' || pathname?.startsWith('/escandallos/')
+                    : pathname === item.href || pathname?.startsWith(`${item.href}/`);
 
             return (
               <Link
