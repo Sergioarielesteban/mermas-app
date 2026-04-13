@@ -79,14 +79,6 @@ export default function MarketingLanding() {
             >
               Solicitar info
             </Link>
-            {phoneContact ? (
-              <Link
-                href="#contacto-rapido"
-                className="rounded-full px-3 py-2 text-xs font-bold text-stone-600 ring-1 ring-stone-200/90 transition hover:bg-stone-50"
-              >
-                Llamar / WhatsApp
-              </Link>
-            ) : null}
             <Link
               href="/login"
               className="rounded-full px-4 py-2.5 text-sm font-bold text-white shadow-md shadow-rose-900/10 transition hover:brightness-105 active:scale-[0.98]"
