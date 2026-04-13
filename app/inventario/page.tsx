@@ -236,6 +236,7 @@ export default function InventarioPage() {
     const pdfRows: InventoryPdfRow[] = [];
     const historyLines: InventoryItem[] = [];
     let total = 0;
+    let linesWithStock = 0;
     for (const row of lines) {
       const d = drafts[row.id] ?? {
         qty: String(row.quantity_on_hand),
@@ -248,6 +249,7 @@ export default function InventarioPage() {
       const p = parseDecimal(d.price ?? String(row.price_per_unit)) ?? row.price_per_unit;
       const sub = Math.round(q * p * 100) / 100;
       total += sub;
+      if (q > 0) linesWithStock += 1;
       const uKey = d.unit ?? row.unit;
       pdfRows.push({
         name: (d.name ?? row.name).trim() || row.name,
@@ -270,14 +272,14 @@ export default function InventarioPage() {
       });
     }
     total = Math.round(total * 100) / 100;
-    return { pdfRows, total, breakdown, historyLines };
+    return { pdfRows, total, breakdown, historyLines, linesWithStock };
   }, [lines, drafts, catalogItems]);
 
   const saveMonthClosureToSupabase = useCallback(
     async (yearMonth: string, opts: { recordHistory: boolean; userId: string | null }) => {
       if (!localId || !supabaseOk) return;
       const supabase = getSupabaseClient()!;
-      const { pdfRows, total, breakdown, historyLines } = buildMonthClosureData();
+      const { pdfRows, total, breakdown, historyLines, linesWithStock } = buildMonthClosureData();
       await upsertInventoryMonthSnapshot(supabase, {
         localId,
         yearMonth,
@@ -285,11 +287,25 @@ export default function InventarioPage() {
         linesCount: lines.length,
         categoryBreakdown: breakdown,
       });
+      const categoryRows = Object.entries(breakdown)
+        .map(([id, value]) => ({
+          name:
+            id === '__sin_catalogo__'
+              ? 'Sin categoría'
+              : (categories.find((c) => c.id === id)?.name ?? 'Categoría'),
+          valueEur: value,
+          pct: total > 0 ? Math.round((value / total) * 1000) / 10 : 0,
+        }))
+        .filter((x) => x.valueEur > 0)
+        .sort((a, b) => b.valueEur - a.valueEur);
       downloadInventoryMonthlyPdf({
         localLabel: localName ?? localCode ?? '—',
         yearMonth,
         rows: pdfRows,
         total,
+        categoryRows,
+        linesCount: lines.length,
+        linesWithStock,
       });
       if (opts.recordHistory) {
         await insertInventoryHistorySnapshot(supabase, {
@@ -305,7 +321,7 @@ export default function InventarioPage() {
       );
       setSnapshots(refreshed);
     },
-    [localId, supabaseOk, lines.length, buildMonthClosureData, localName, localCode],
+    [localId, supabaseOk, lines.length, buildMonthClosureData, localName, localCode, categories],
   );
 
   const saveLine = async (
