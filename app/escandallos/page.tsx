@@ -62,9 +62,10 @@ export default function EscandallosPage() {
   const [draftYieldQty, setDraftYieldQty] = useState('');
   const [draftYieldLabel, setDraftYieldLabel] = useState('');
 
-  const [addSourceType, setAddSourceType] = useState<'raw' | 'processed' | 'manual'>('raw');
+  const [addSourceType, setAddSourceType] = useState<'raw' | 'processed' | 'subrecipe' | 'manual'>('raw');
   const [addRawProductId, setAddRawProductId] = useState('');
   const [addProcessedId, setAddProcessedId] = useState('');
+  const [addSubRecipeId, setAddSubRecipeId] = useState('');
   const [addLabel, setAddLabel] = useState('');
   const [addQty, setAddQty] = useState('1');
   const [addUnit, setAddUnit] = useState<Unit>('kg');
@@ -79,6 +80,7 @@ export default function EscandallosPage() {
 
   const rawById = useMemo(() => new Map(rawProducts.map((p) => [p.id, p])), [rawProducts]);
   const processedById = useMemo(() => new Map(processedProducts.map((p) => [p.id, p])), [processedProducts]);
+  const recipesById = useMemo(() => new Map(recipes.map((r) => [r.id, r])), [recipes]);
 
   const load = useCallback(async () => {
     if (!localId || !supabaseOk) {
@@ -299,12 +301,15 @@ export default function EscandallosPage() {
     }
     const raw = addRawProductId ? rawById.get(addRawProductId) : undefined;
     const processed = addProcessedId ? processedById.get(addProcessedId) : undefined;
+    const subRec = addSubRecipeId ? recipesById.get(addSubRecipeId) : undefined;
     const label =
       addSourceType === 'raw'
         ? raw?.name ?? ''
         : addSourceType === 'processed'
           ? processed?.name ?? ''
-          : addLabel.trim();
+          : addSourceType === 'subrecipe'
+            ? subRec?.name ?? ''
+            : addLabel.trim();
     if (!label) return void setBanner('Selecciona un origen de coste válido.');
     let manual: number | null = null;
     if (addSourceType === 'manual') {
@@ -325,15 +330,22 @@ export default function EscandallosPage() {
         sourceType: addSourceType,
         label,
         qty,
-        unit: addSourceType === 'raw' ? (raw?.unit ?? addUnit) : addSourceType === 'processed' ? (processed?.outputUnit ?? addUnit) : addUnit,
+        unit:
+          addSourceType === 'raw'
+            ? (raw?.unit ?? addUnit)
+            : addSourceType === 'processed'
+              ? (processed?.outputUnit ?? addUnit)
+              : addUnit,
         rawSupplierProductId: addSourceType === 'raw' ? (raw?.id ?? null) : null,
         processedProductId: addSourceType === 'processed' ? (processed?.id ?? null) : null,
+        subRecipeId: addSourceType === 'subrecipe' ? (subRec?.id ?? null) : null,
         manualPricePerUnit: addSourceType === 'manual' ? manual : null,
         sortOrder,
       });
       await refreshRecipeLines(recipeId);
       setAddRawProductId('');
       setAddProcessedId('');
+      setAddSubRecipeId('');
       setAddLabel('');
       setAddQty('1');
       setAddManualPrice('');
@@ -382,7 +394,7 @@ export default function EscandallosPage() {
       <MermasStyleHero
         eyebrow="Costes"
         title="Escandallos"
-        description="Recetas del local: ingredientes enlazados al registro Mermas o precio manual. Coste por ración según el rendimiento."
+        description="Recetas con crudos de proveedor, elaborados de un solo ingrediente, sub-recetas (ej. picadillo dentro de nachos) o precio manual. Los costes se recalculan al vuelo."
         compact
       />
 
@@ -497,6 +509,18 @@ export default function EscandallosPage() {
         </div>
       </section>
 
+      <section className="rounded-2xl border border-indigo-100 bg-indigo-50/60 p-4 ring-1 ring-indigo-100">
+        <p className="text-xs font-bold uppercase tracking-wide text-indigo-800">Sub-elaboraciones</p>
+        <p className="mt-1 text-xs text-indigo-950/80">
+          Crea una receta solo para la mezcla intermedia (ej. picadillo con tomate, cebolla y cilantro). En el plato final
+          (ej. nachos), al añadir ingrediente elige <span className="font-semibold">Otra receta</span> y selecciona esa
+          receta. Si sube el tomate, sube el coste del picadillo y, automáticamente, el del nachos. El{' '}
+          <span className="font-semibold">rendimiento</span> de la sub-receta debe estar en la{' '}
+          <span className="font-semibold">misma unidad</span> en que luego la consumes (ej. rendimiento 2,5 con etiqueta kg →
+          en nachos indicarías 0,3 kg de picadillo).
+        </p>
+      </section>
+
       <section className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-zinc-200">
         <p className="text-xs font-bold uppercase tracking-wide text-zinc-500">Nueva receta</p>
         <div className="mt-2 space-y-2">
@@ -543,9 +567,14 @@ export default function EscandallosPage() {
         <div className="space-y-3">
           {recipes.map((recipe) => {
             const lines = linesByRecipe[recipe.id] ?? [];
-            const total = recipeTotalCostEur(lines, rawById, processedById);
+            const total = recipeTotalCostEur(lines, rawById, processedById, {
+              linesByRecipe,
+              recipesById,
+              recipeId: recipe.id,
+            });
             const perYield = recipe.yieldQty > 0 ? Math.round((total / recipe.yieldQty) * 100) / 100 : 0;
             const open = expandedId === recipe.id;
+            const priceInner = { linesByRecipe, recipesById, expanding: new Set<string>([recipe.id]) };
             return (
               <div
                 key={recipe.id}
@@ -618,9 +647,16 @@ export default function EscandallosPage() {
                       ) : (
                         <ul className="space-y-2">
                           {lines.map((line) => {
-                            const unitEur = lineUnitPriceEur(line, rawById, processedById);
+                            const unitEur = lineUnitPriceEur(line, rawById, processedById, priceInner);
                             const lineCost = Math.round(line.qty * unitEur * 100) / 100;
-                            const src = line.sourceType === 'raw' ? 'Crudo' : line.sourceType === 'processed' ? 'Elaborado' : 'Manual';
+                            const src =
+                              line.sourceType === 'raw'
+                                ? 'Crudo'
+                                : line.sourceType === 'processed'
+                                  ? 'Elaborado'
+                                  : line.sourceType === 'subrecipe'
+                                    ? 'Sub-receta'
+                                    : 'Manual';
                             return (
                               <li
                                 key={line.id}
@@ -650,8 +686,8 @@ export default function EscandallosPage() {
 
                     <div className="rounded-xl border border-dashed border-zinc-300 bg-white p-3">
                       <p className="text-[10px] font-bold uppercase text-zinc-500">Añadir ingrediente</p>
-                      <div className="mt-2 grid grid-cols-3 gap-1 rounded-lg bg-zinc-100 p-1 text-xs">
-                        {(['raw', 'processed', 'manual'] as const).map((mode) => (
+                      <div className="mt-2 grid grid-cols-2 gap-1 rounded-lg bg-zinc-100 p-1 text-xs sm:grid-cols-4">
+                        {(['raw', 'processed', 'subrecipe', 'manual'] as const).map((mode) => (
                           <button
                             key={mode}
                             type="button"
@@ -661,7 +697,13 @@ export default function EscandallosPage() {
                               addSourceType === mode ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-500',
                             ].join(' ')}
                           >
-                            {mode === 'raw' ? 'Crudo' : mode === 'processed' ? 'Elaborado' : 'Manual'}
+                            {mode === 'raw'
+                              ? 'Crudo'
+                              : mode === 'processed'
+                                ? 'Elaborado'
+                                : mode === 'subrecipe'
+                                  ? 'Otra receta'
+                                  : 'Manual'}
                           </button>
                         ))}
                       </div>
@@ -692,6 +734,38 @@ export default function EscandallosPage() {
                             </option>
                           ))}
                         </select>
+                      ) : null}
+                      {addSourceType === 'subrecipe' ? (
+                        <>
+                          <select
+                            value={addSubRecipeId}
+                            onChange={(e) => setAddSubRecipeId(e.target.value)}
+                            className="mt-2 w-full rounded-lg border border-zinc-200 bg-white px-2 py-2 text-sm"
+                          >
+                            <option value="">Receta (sub-elaboración)…</option>
+                            {recipes
+                              .filter((r) => r.id !== recipe.id)
+                              .map((r) => (
+                                <option key={r.id} value={r.id}>
+                                  {r.name}
+                                </option>
+                              ))}
+                          </select>
+                          <label className="mt-2 block text-[10px] font-semibold text-zinc-500">
+                            Unidad (debe coincidir con el rendimiento de esa receta)
+                          </label>
+                          <select
+                            value={addUnit}
+                            onChange={(e) => setAddUnit(e.target.value as Unit)}
+                            className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-2 py-2 text-sm"
+                          >
+                            {UNITS.map((u) => (
+                              <option key={u.value} value={u.value}>
+                                {u.label}
+                              </option>
+                            ))}
+                          </select>
+                        </>
                       ) : null}
                       {addSourceType === 'manual' ? (
                         <>

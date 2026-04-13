@@ -40,9 +40,10 @@ create table if not exists public.escandallo_recipe_lines (
   label text not null,
   qty numeric(12,4) not null check (qty > 0),
   unit text not null check (unit in ('kg', 'ud', 'bolsa', 'racion', 'caja', 'paquete', 'bandeja')),
-  source_type text not null default 'manual' check (source_type in ('raw', 'processed', 'manual')),
+  source_type text not null default 'manual' check (source_type in ('raw', 'processed', 'manual', 'subrecipe')),
   raw_supplier_product_id uuid references public.pedido_supplier_products(id) on delete set null,
   processed_product_id uuid references public.escandallo_processed_products(id) on delete set null,
+  sub_recipe_id uuid references public.escandallo_recipes(id) on delete restrict,
   manual_price_per_unit numeric(12,4), -- solo aplica en source_type='manual'
   sort_order int not null default 0,
   created_at timestamptz not null default now()
@@ -53,6 +54,7 @@ create table if not exists public.escandallo_recipe_lines (
 alter table public.escandallo_recipe_lines add column if not exists source_type text;
 alter table public.escandallo_recipe_lines add column if not exists raw_supplier_product_id uuid;
 alter table public.escandallo_recipe_lines add column if not exists processed_product_id uuid;
+alter table public.escandallo_recipe_lines add column if not exists sub_recipe_id uuid;
 alter table public.escandallo_recipe_lines add column if not exists manual_price_per_unit numeric(12,4);
 alter table public.escandallo_recipe_lines add column if not exists unit text;
 
@@ -81,6 +83,18 @@ begin
 exception when duplicate_object then null;
 end $$;
 
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint where conname = 'escandallo_recipe_lines_sub_recipe_id_fkey'
+  ) then
+    alter table public.escandallo_recipe_lines
+      add constraint escandallo_recipe_lines_sub_recipe_id_fkey
+      foreign key (sub_recipe_id) references public.escandallo_recipes(id) on delete restrict;
+  end if;
+exception when duplicate_object then null;
+end $$;
+
 update public.escandallo_recipe_lines
 set source_type = coalesce(source_type, 'manual')
 where source_type is null;
@@ -95,7 +109,7 @@ alter table public.escandallo_recipe_lines
   drop constraint if exists escandallo_recipe_lines_source_type_check;
 alter table public.escandallo_recipe_lines
   add constraint escandallo_recipe_lines_source_type_check
-  check (source_type in ('raw', 'processed', 'manual'));
+  check (source_type in ('raw', 'processed', 'manual', 'subrecipe'));
 
 alter table public.escandallo_recipe_lines
   drop constraint if exists escandallo_recipe_lines_unit_check;
@@ -107,6 +121,7 @@ create index if not exists idx_escandallo_lines_local_id on public.escandallo_re
 create index if not exists idx_escandallo_lines_recipe_id on public.escandallo_recipe_lines(recipe_id);
 create index if not exists idx_escandallo_lines_raw_sp on public.escandallo_recipe_lines(raw_supplier_product_id);
 create index if not exists idx_escandallo_lines_processed_id on public.escandallo_recipe_lines(processed_product_id);
+create index if not exists idx_escandallo_lines_sub_recipe_id on public.escandallo_recipe_lines(sub_recipe_id);
 
 drop trigger if exists trg_escandallo_recipes_updated_at on public.escandallo_recipes;
 create trigger trg_escandallo_recipes_updated_at
