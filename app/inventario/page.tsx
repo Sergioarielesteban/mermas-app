@@ -50,6 +50,19 @@ const UNIT_SUFFIX: Record<string, string> = {
 /** Coincide con el check de `inventory_items.unit` en Supabase. */
 const INVENTORY_UNITS = ['kg', 'ud', 'bolsa', 'racion', 'caja', 'paquete', 'bandeja'] as const;
 
+/** Safari/iOS suele lanzar esto cuando `fetch` no llega a recibir respuesta (red, cambio WiFi/4G, timeout). */
+function isLikelyNetworkError(e: unknown): boolean {
+  const m = e instanceof Error ? e.message : String(e);
+  return /load failed|failed to fetch|networkerror|network request failed|timed out|timeout|quic/i.test(m);
+}
+
+function humanizeClientError(e: unknown, fallback: string): string {
+  if (isLikelyNetworkError(e)) {
+    return 'No hubo conexión con el servidor (red inestable o Supabase no respondió). En iPhone suele pasar al cambiar de WiFi a datos o con la pantalla apagada; inténtalo de nuevo.';
+  }
+  return e instanceof Error ? e.message : fallback;
+}
+
 type LineDraft = {
   qty: string;
   price: string;
@@ -137,18 +150,32 @@ export default function InventarioPage() {
         setBanner(
           'Faltan las tablas de inventario en Supabase. Ejecuta supabase-inventory-schema.sql y el seed si aún no lo hiciste.',
         );
+        setCategories([]);
+        setCatalogItems([]);
+        setLines([]);
+        setSnapshots([]);
+        setCatalogQtyDraft({});
       } else if (msg.toLowerCase().includes('local_id')) {
         setBanner(
           'El catálogo debe estar migrado por local. Ejecuta supabase-inventory-catalog-per-local.sql en Supabase (SQL Editor).',
         );
+        setCategories([]);
+        setCatalogItems([]);
+        setLines([]);
+        setSnapshots([]);
+        setCatalogQtyDraft({});
+      } else if (isLikelyNetworkError(e)) {
+        setBanner(
+          `${humanizeClientError(e, msg)} Los datos en pantalla son la última carga correcta; desliza hacia abajo para reintentar o recarga la página.`,
+        );
       } else {
         setBanner(msg);
+        setCategories([]);
+        setCatalogItems([]);
+        setLines([]);
+        setSnapshots([]);
+        setCatalogQtyDraft({});
       }
-      setCategories([]);
-      setCatalogItems([]);
-      setLines([]);
-      setSnapshots([]);
-      setCatalogQtyDraft({});
     } finally {
       setLoading(false);
     }
@@ -376,7 +403,7 @@ export default function InventarioPage() {
       if (!opts?.skipReload) await load();
     } catch (e) {
       if (opts?.throwing) throw e;
-      setBanner(e instanceof Error ? e.message : 'Error al guardar.');
+      setBanner(humanizeClientError(e, 'Error al guardar.'));
     } finally {
       if (!opts?.skipBusy) setBusyId(null);
     }
@@ -424,7 +451,7 @@ export default function InventarioPage() {
       }
       await load();
     } catch (e) {
-      setBanner(e instanceof Error ? e.message : 'Error al guardar la categoría.');
+      setBanner(humanizeClientError(e, 'Error al guardar la categoría.'));
       await load();
     } finally {
       setBusyCategoryId(null);
@@ -453,7 +480,7 @@ export default function InventarioPage() {
       setBanner(
         msg.includes('unique') || msg.includes('duplicate')
           ? 'Ya existe una categoría con ese nombre en tu catálogo.'
-          : msg,
+          : humanizeClientError(e, msg),
       );
     } finally {
       setFormBusy(false);
@@ -501,7 +528,7 @@ export default function InventarioPage() {
       setShowAddArticle(false);
       await load();
     } catch (e) {
-      setBanner(e instanceof Error ? e.message : 'No se pudo crear el artículo.');
+      setBanner(humanizeClientError(e, 'No se pudo crear el artículo.'));
     } finally {
       setFormBusy(false);
     }
@@ -515,7 +542,7 @@ export default function InventarioPage() {
       await saveMonthClosureToSupabase(closingYearMonth, { recordHistory: false, userId: null });
       setBanner(`PDF descargado y cierre ${closingYearMonth} actualizado en los gráficos.`);
     } catch (e) {
-      setBanner(e instanceof Error ? e.message : 'Error al generar el PDF o guardar el mes.');
+      setBanner(humanizeClientError(e, 'Error al generar el PDF o guardar el mes.'));
     } finally {
       setPdfBusy(false);
     }
@@ -547,11 +574,11 @@ export default function InventarioPage() {
       await deleteInventoryItemLine(supabase, localId, row.id);
       await load();
     } catch (e) {
-      const msg = e instanceof Error ? e.message : 'Error al eliminar.';
-      if (msg.includes('inventory_history') || msg.includes('does not exist')) {
+      const raw = e instanceof Error ? e.message : '';
+      if (raw.includes('inventory_history') || raw.includes('does not exist')) {
         setBanner('Ejecuta supabase-inventory-history.sql en Supabase para usar historial y quitar líneas con seguridad.');
       } else {
-        setBanner(msg);
+        setBanner(humanizeClientError(e, 'Error al eliminar.'));
       }
     } finally {
       setBusyId(null);
@@ -581,18 +608,18 @@ export default function InventarioPage() {
       await saveMonthClosureToSupabase(closingYearMonth, { recordHistory: true, userId: user?.id ?? null });
       setBanner(`Cierre ${closingYearMonth} guardado: PDF descargado, KPI actualizados e historial registrado.`);
     } catch (e) {
-      const msg = e instanceof Error ? e.message : 'Error al cerrar inventario.';
+      const raw = e instanceof Error ? e.message : '';
       if (
-        msg.includes('inventory_history') ||
-        msg.includes('does not exist') ||
-        msg.includes('violates check constraint') ||
-        msg.includes('check constraint')
+        raw.includes('inventory_history') ||
+        raw.includes('does not exist') ||
+        raw.includes('violates check constraint') ||
+        raw.includes('check constraint')
       ) {
         setBanner(
           'Actualiza Supabase: ejecuta supabase-inventory-history.sql o supabase-inventory-history-inventory-final.sql para permitir «Terminar inventario».',
         );
       } else {
-        setBanner(msg);
+        setBanner(humanizeClientError(e, 'Error al cerrar inventario.'));
       }
     } finally {
       setFinishInventoryBusy(false);
@@ -623,7 +650,7 @@ export default function InventarioPage() {
           await load();
           setBanner(`Cierre ${closingYearMonth} guardado y líneas vaciadas.`);
         } catch (e) {
-          setBanner(e instanceof Error ? e.message : 'Error al guardar cierre o reiniciar.');
+          setBanner(humanizeClientError(e, 'Error al guardar cierre o reiniciar.'));
         } finally {
           setResetInventoryBusy(false);
         }
@@ -650,7 +677,7 @@ export default function InventarioPage() {
       await deleteAllInventoryLinesForLocal(supabase, localId);
       await load();
     } catch (e) {
-      setBanner(e instanceof Error ? e.message : 'Error al reiniciar.');
+      setBanner(humanizeClientError(e, 'Error al reiniciar.'));
     } finally {
       setResetInventoryBusy(false);
     }
@@ -681,7 +708,7 @@ export default function InventarioPage() {
           'Falta permiso en el catálogo. Ejecuta supabase-inventory-catalog-per-local.sql (o las políticas RLS de inventario) en Supabase.',
         );
       } else {
-        setBanner(msg);
+        setBanner(humanizeClientError(e, msg));
       }
     } finally {
       setBusyDeletingCategoryId(null);
@@ -716,7 +743,7 @@ export default function InventarioPage() {
           'Falta permiso en el catálogo. Ejecuta supabase-inventory-catalog-per-local.sql (o las políticas RLS de inventario) en Supabase.',
         );
       } else {
-        setBanner(msg);
+        setBanner(humanizeClientError(e, msg));
       }
     } finally {
       setBusyDeletingCatalogItemId(null);
