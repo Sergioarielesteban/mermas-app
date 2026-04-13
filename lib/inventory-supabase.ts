@@ -487,6 +487,19 @@ export async function upsertInventoryMonthSnapshot(
   if (error) throw new Error(error.message);
 }
 
+export async function deleteInventoryMonthSnapshot(
+  supabase: SupabaseClient,
+  localId: string,
+  yearMonth: string,
+): Promise<void> {
+  const { error } = await supabase
+    .from('inventory_month_snapshots')
+    .delete()
+    .eq('local_id', localId)
+    .eq('year_month', yearMonth);
+  if (error) throw new Error(error.message);
+}
+
 /** Valor en € por id de categoría de catálogo (clave `__sin_catalogo__` si no hay enlace). */
 export function computeInventoryCategoryBreakdownEuros(
   lines: InventoryItem[],

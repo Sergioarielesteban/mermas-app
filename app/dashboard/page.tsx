@@ -4,7 +4,7 @@ import Link from 'next/link';
 import React from 'react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { CalendarDays, Drumstick, TrendingDown, TrendingUp } from 'lucide-react';
+import { CalendarDays, Drumstick, FileBarChart2, TrendingDown, TrendingUp } from 'lucide-react';
 import {
   Bar,
   BarChart,
@@ -429,9 +429,20 @@ export default function DashboardPage() {
 
       <Link
         href="/resumen"
-        className="flex flex-col items-center justify-center rounded-3xl bg-zinc-950 px-4 py-7 text-center text-white shadow-lg shadow-zinc-900/30 ring-1 ring-zinc-800/90 transition hover:bg-zinc-900 active:scale-[0.99] sm:py-8"
+        className="group flex w-full items-center gap-4 rounded-2xl border border-[#D32F2F]/25 bg-gradient-to-r from-[#D32F2F]/[0.08] via-white to-white px-4 py-4 shadow-sm ring-1 ring-zinc-200/80 transition hover:border-[#D32F2F]/40 hover:shadow-md active:scale-[0.99]"
       >
-        <span className="text-xl font-black uppercase tracking-[0.12em] text-white sm:text-2xl">Informes</span>
+        <span className="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-[#D32F2F] text-white shadow-md shadow-[#D32F2F]/25">
+          <FileBarChart2 className="h-6 w-6" strokeWidth={2} aria-hidden />
+        </span>
+        <span className="min-w-0 flex-1 text-left">
+          <span className="block text-sm font-extrabold text-zinc-900">Informes</span>
+          <span className="mt-0.5 block text-xs font-medium leading-snug text-zinc-600">
+            Resumen operativo con métricas, alertas y comparativas de mermas.
+          </span>
+        </span>
+        <span className="shrink-0 text-lg font-black text-[#D32F2F] transition group-hover:translate-x-0.5" aria-hidden>
+          →
+        </span>
       </Link>
 
       <section className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-zinc-200">

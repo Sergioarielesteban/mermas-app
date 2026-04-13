@@ -38,6 +38,7 @@ import {
   deactivateInventoryCatalogCategory,
   deactivateInventoryCatalogItem,
   deleteAllInventoryLinesForLocal,
+  deleteInventoryMonthSnapshot,
   updateInventoryItemLine,
   upsertInventoryMonthSnapshot,
   type InventoryHistorySnapshot,
@@ -89,6 +90,7 @@ export default function InventarioPage() {
   const [catalogDetailOpen, setCatalogDetailOpen] = useState<Record<string, boolean>>({});
   const [snapshots, setSnapshots] = useState<InventoryMonthSnapshot[]>([]);
   const [pdfBusy, setPdfBusy] = useState(false);
+  const [deleteMonthBusy, setDeleteMonthBusy] = useState(false);
   const [formBusy, setFormBusy] = useState(false);
   const [showAddCategory, setShowAddCategory] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState('');
@@ -456,6 +458,44 @@ export default function InventarioPage() {
       setBanner(e instanceof Error ? e.message : 'Error al generar el PDF o guardar el mes.');
     } finally {
       setPdfBusy(false);
+    }
+  };
+
+  const handleDeleteMonthlySnapshot = async () => {
+    if (!localId || !supabaseOk) return;
+    if (snapshots.length === 0) {
+      setBanner('No hay cierres mensuales guardados para borrar.');
+      return;
+    }
+    const ym = currentInventoryYearMonth();
+    const latest = [...snapshots].sort((a, b) => b.year_month.localeCompare(a.year_month))[0] ?? null;
+    const target = snapshots.find((s) => s.year_month === ym)?.year_month ?? latest?.year_month ?? null;
+    if (!target) {
+      setBanner('No se pudo detectar qué cierre borrar.');
+      return;
+    }
+    if (
+      !window.confirm(
+        `¿Borrar el cierre mensual ${target}? Esta acción solo afecta al gráfico/PDF mensual y no al inventario actual.`,
+      )
+    ) {
+      return;
+    }
+
+    const supabase = getSupabaseClient()!;
+    setDeleteMonthBusy(true);
+    setBanner(null);
+    try {
+      await deleteInventoryMonthSnapshot(supabase, localId, target);
+      const refreshed = await fetchInventoryMonthSnapshots(supabase, localId).catch(
+        () => [] as InventoryMonthSnapshot[],
+      );
+      setSnapshots(refreshed);
+      setBanner(`Cierre mensual ${target} eliminado.`);
+    } catch (e) {
+      setBanner(e instanceof Error ? e.message : 'No se pudo borrar el cierre mensual.');
+    } finally {
+      setDeleteMonthBusy(false);
     }
   };
 
@@ -1107,6 +1147,8 @@ export default function InventarioPage() {
             yearMonth={currentInventoryYearMonth()}
             onDownloadPdf={handleDownloadMonthlyPdf}
             pdfBusy={pdfBusy}
+            onDeleteMonthlySnapshot={handleDeleteMonthlySnapshot}
+            deleteMonthBusy={deleteMonthBusy}
             disabled={disabled}
           />
         </>
