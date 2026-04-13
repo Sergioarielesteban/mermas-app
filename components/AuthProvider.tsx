@@ -14,7 +14,7 @@ type AuthContextValue = {
   localName: string | null;
   /** true cuando ya se intentó cargar el perfil (o no aplica). */
   profileReady: boolean;
-  login: (email: string, password: string) => Promise<{ ok: boolean; reason?: string }>;
+  login: (identifier: string, password: string) => Promise<{ ok: boolean; reason?: string }>;
   logout: () => Promise<void>;
   loading: boolean;
 };
@@ -34,7 +34,7 @@ function isInvalidRefreshTokenError(message: string | undefined) {
 function mapSupabaseAuthError(message: string): string {
   const m = message.toLowerCase();
   if (m.includes('invalid login credentials') || m.includes('invalid_credentials')) {
-    return 'Email o contraseña incorrectos.';
+    return 'Usuario/email o contraseña incorrectos.';
   }
   if (m.includes('email not confirmed')) {
     return 'Tienes que confirmar el correo (enlace de Supabase) o desactivar “Confirm email” en Authentication → Providers → Email.';
@@ -302,22 +302,40 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       localCode,
       localName,
       profileReady,
-      login: async (nextEmail: string, password: string) => {
-        const clean = nextEmail.trim().toLowerCase();
-        if (!clean || !password) return { ok: false, reason: 'Completa email y contraseña.' };
+      login: async (identifier: string, password: string) => {
+        const clean = identifier.trim().toLowerCase();
+        if (!clean || !password) return { ok: false, reason: 'Completa usuario y contraseña.' };
 
         const supabase = getSupabaseClient();
         if (!supabase || !isSupabaseEnabled()) {
           return { ok: false, reason: 'Supabase no está configurado.' };
         }
 
+        let emailForAuth = clean;
+        // Soporta login por alias (profiles.login_username) además de email.
+        if (!clean.includes('@')) {
+          const { data, error } = await supabase.rpc('resolve_login_email', {
+            login_identifier: clean,
+          });
+          if (error) {
+            return {
+              ok: false,
+              reason:
+                'No se pudo validar el usuario. Ejecuta supabase-auth-username-login.sql en Supabase.',
+            };
+          }
+          const resolved = typeof data === 'string' ? data.trim().toLowerCase() : '';
+          if (!resolved) return { ok: false, reason: 'Usuario/email o contraseña incorrectos.' };
+          emailForAuth = resolved;
+        }
+
         const { error } = await supabase.auth.signInWithPassword({
-          email: clean,
+          email: emailForAuth,
           password,
         });
         if (error) return { ok: false, reason: mapSupabaseAuthError(error.message) };
-        setEmail(clean);
-        if (typeof window !== 'undefined') window.localStorage.setItem(AUTH_KEY, clean);
+        setEmail(emailForAuth);
+        if (typeof window !== 'undefined') window.localStorage.setItem(AUTH_KEY, emailForAuth);
         return { ok: true };
       },
       logout: async () => {

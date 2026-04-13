@@ -1,13 +1,46 @@
 'use client';
 
 import Link from 'next/link';
+import React from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
-import { Sparkles } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Sparkles } from 'lucide-react';
 
 const BRAND = '#D32F2F';
 
+const TOUR_SLIDES = [
+  {
+    title: 'Pedidos y recepción',
+    subtitle: 'Control por proveedor',
+    points: ['Pedido enviado', 'Incidencia registrada', 'Equipo sincronizado'],
+  },
+  {
+    title: 'Mermas',
+    subtitle: 'Coste visible por motivo',
+    points: ['Turno noche', 'Producto: bacon tiras', 'Impacto estimado al momento'],
+  },
+  {
+    title: 'APPCC',
+    subtitle: 'Registros listos para revisión',
+    points: ['Temperatura: 4.1ºC', 'Freidora: aceite OK', 'Historial guardado'],
+  },
+  {
+    title: 'Inventario',
+    subtitle: 'Stock y valor por local',
+    points: ['Categorías ordenadas', 'Cierre mensual', 'Sin Excel suelto'],
+  },
+] as const;
+
 function DeviceMockup() {
   const reduceMotion = useReducedMotion();
+  const [active, setActive] = React.useState(0);
+  const last = TOUR_SLIDES.length - 1;
+
+  const go = React.useCallback((next: number) => {
+    if (next < 0) return setActive(last);
+    if (next > last) return setActive(0);
+    setActive(next);
+  }, [last]);
+
   return (
     <motion.div
       className="relative mx-auto w-full max-w-[280px] sm:max-w-[320px]"
@@ -26,33 +59,88 @@ function DeviceMockup() {
         style={{ transform: 'translateZ(0)' }}
       >
         <div className="overflow-hidden rounded-[1.85rem] bg-gradient-to-b from-stone-50 to-white ring-1 ring-stone-200/80">
-          {/* status */}
           <div className="flex h-7 items-center justify-center gap-1 bg-stone-900 px-6 pt-1">
             <span className="h-1 w-10 rounded-full bg-stone-700" />
           </div>
-          {/* app chrome */}
           <div className="border-b border-stone-100 bg-white px-4 py-3">
             <div className="flex items-center justify-between gap-2">
-              <div className="h-2 w-16 rounded-full bg-stone-200" />
-              <div className="h-7 w-7 rounded-lg bg-[#D32F2F]/12 ring-1 ring-[#D32F2F]/20" />
+              <div>
+                <p className="text-[10px] font-black tracking-wide text-[#D32F2F]">Chef-One</p>
+                <p className="text-[9px] text-stone-500">Tour rápido de la app</p>
+              </div>
+              <div className="rounded-md bg-[#D32F2F]/10 px-2 py-1 text-[9px] font-bold text-[#D32F2F] ring-1 ring-[#D32F2F]/20">
+                Desliza
+              </div>
             </div>
           </div>
-          <div className="space-y-2.5 p-3.5 pb-6">
-            {[1, 2, 3, 4].map((i) => (
-              <div
-                key={i}
-                className="flex items-center gap-3 rounded-xl border border-stone-100 bg-white px-3 py-2.5 shadow-sm"
+
+          <div className="p-3.5 pb-5">
+            <div className="overflow-hidden rounded-2xl border border-stone-200/80 bg-white shadow-sm">
+              <motion.div
+                className="flex"
+                drag={reduceMotion ? false : 'x'}
+                dragConstraints={{ left: 0, right: 0 }}
+                onDragEnd={(_, info) => {
+                  if (info.offset.x < -40) go(active + 1);
+                  if (info.offset.x > 40) go(active - 1);
+                }}
+                animate={{ x: `-${active * 100}%` }}
+                transition={{ duration: reduceMotion ? 0 : 0.35, ease: [0.22, 1, 0.36, 1] }}
               >
-                <div
-                  className={`h-10 w-10 shrink-0 rounded-lg ${i === 1 ? 'bg-rose-100' : i === 2 ? 'bg-amber-50' : 'bg-emerald-50/80'}`}
-                />
-                <div className="min-w-0 flex-1 space-y-1.5">
-                  <div className="h-2.5 w-[72%] max-w-[140px] rounded-full bg-stone-200" />
-                  <div className="h-2 w-[45%] rounded-full bg-stone-100" />
-                </div>
-                <div className="h-6 w-10 rounded-md bg-stone-100" />
+                {TOUR_SLIDES.map((slide) => (
+                  <div key={slide.title} className="w-full shrink-0 p-3">
+                    <p className="text-[10px] font-black uppercase tracking-wide text-stone-500">
+                      {slide.subtitle}
+                    </p>
+                    <p className="mt-1 text-sm font-bold text-stone-900">{slide.title}</p>
+                    <div className="mt-3 space-y-2">
+                      {slide.points.map((point, idx) => (
+                        <div
+                          key={point}
+                          className="flex items-center gap-2 rounded-lg border border-stone-100 bg-stone-50/60 px-2.5 py-2"
+                        >
+                          <span
+                            className={`h-2 w-2 rounded-full ${idx === 0 ? 'bg-[#D32F2F]' : idx === 1 ? 'bg-amber-500' : 'bg-emerald-500'}`}
+                          />
+                          <p className="truncate text-[10px] font-medium text-stone-700">{point}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </motion.div>
+            </div>
+
+            <div className="mt-3 flex items-center justify-between">
+              <button
+                type="button"
+                aria-label="Pantalla anterior"
+                onClick={() => go(active - 1)}
+                className="grid h-8 w-8 place-items-center rounded-lg border border-stone-200 bg-white text-stone-600"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </button>
+              <div className="flex items-center gap-1.5">
+                {TOUR_SLIDES.map((slide, idx) => (
+                  <button
+                    key={slide.title}
+                    type="button"
+                    aria-label={`Ir a ${slide.title}`}
+                    onClick={() => go(idx)}
+                    className={`h-1.5 rounded-full transition-all ${idx === active ? 'w-5 bg-[#D32F2F]' : 'w-2.5 bg-stone-300'}`}
+                  />
+                ))}
               </div>
-            ))}
+              <button
+                type="button"
+                aria-label="Siguiente pantalla"
+                onClick={() => go(active + 1)}
+                className="grid h-8 w-8 place-items-center rounded-lg border border-stone-200 bg-white text-stone-600"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </button>
+            </div>
+
             <div className="mt-3 flex gap-2">
               <div className="h-9 flex-1 rounded-xl bg-[#D32F2F] shadow-md shadow-rose-900/15" />
               <div className="h-9 w-14 rounded-xl bg-stone-100" />
