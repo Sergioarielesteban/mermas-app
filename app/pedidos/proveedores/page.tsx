@@ -23,6 +23,7 @@ import {
   unitSupportsReceivedWeightKg,
   type PedidoSupplier,
 } from '@/lib/pedidos-supabase';
+import { PEDIDOS_SUPPLIERS_FROM_INVENTORY } from '@/lib/pedidos-inventory-import';
 import type { Unit } from '@/lib/types';
 
 const PREFERRED_CONTACT_BY_SUPPLIER: Record<string, string> = {
@@ -38,6 +39,10 @@ const DEFAULT_SUPPLIER_CONTACT = '622915421';
 
 function normalizeUpper(value: string) {
   return value.trim().toUpperCase();
+}
+
+function normalizeMatch(value: string) {
+  return normalizeUpper(value).normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 }
 
 function normalizeUnit(raw: string): Unit {
@@ -89,6 +94,7 @@ export default function ProveedoresPage() {
   const [editingProductId, setEditingProductId] = React.useState<string | null>(null);
   const [supplierDrafts, setSupplierDrafts] = React.useState<Record<string, { name: string; contact: string }>>({});
   const [productDrafts, setProductDrafts] = React.useState<Record<string, ProductDraft>>({});
+  const [bulkImportBusy, setBulkImportBusy] = React.useState(false);
 
   const applySupplierRows = React.useCallback((rows: PedidoSupplier[]) => {
     setSuppliers(rows);
@@ -168,6 +174,68 @@ export default function ProveedoresPage() {
         dispatchPedidosDataChanged();
       })
       .catch((err: Error) => setMessage(err.message));
+  };
+
+  const importMissingSuppliersFromInventory = () => {
+    if (!localId) return setMessage('Perfil del local no cargado. Cierra sesión y vuelve a entrar.');
+    const supabase = getSupabaseClient();
+    if (!supabase) return setMessage('Supabase no disponible en esta sesión.');
+    if (bulkImportBusy) return;
+
+    void (async () => {
+      setBulkImportBusy(true);
+      setMessage(null);
+      try {
+        let providersCreated = 0;
+        let productsCreated = 0;
+        const latestSuppliers = await fetchSuppliersWithProducts(supabase, localId);
+        const suppliersByName = new Map(
+          latestSuppliers.map((s) => [normalizeMatch(s.name), s] as const),
+        );
+
+        for (const [supplierName, seedProducts] of Object.entries(PEDIDOS_SUPPLIERS_FROM_INVENTORY)) {
+          const key = normalizeMatch(supplierName);
+          let supplier = suppliersByName.get(key) ?? null;
+          if (!supplier) {
+            const created = await createSupplier(
+              supabase,
+              localId,
+              supplierName,
+              PREFERRED_CONTACT_BY_SUPPLIER[normalizeUpper(supplierName)] ?? DEFAULT_SUPPLIER_CONTACT,
+            );
+            supplier = { id: created.id, name: created.name, contact: created.contact ?? '', products: [] };
+            suppliersByName.set(key, supplier);
+            providersCreated += 1;
+          }
+
+          const existingProducts = new Set(supplier.products.map((p) => normalizeMatch(p.name)));
+          for (const seed of seedProducts) {
+            const pKey = normalizeMatch(seed.name);
+            if (existingProducts.has(pKey)) continue;
+            await createSupplierProduct(supabase, localId, supplier.id, {
+              name: seed.name,
+              unit: normalizeUnit(seed.unitRaw),
+              pricePerUnit: seed.pricePerUnit,
+              vatRate: 0.21,
+              parStock: 0,
+              estimatedKgPerUnit: null,
+            });
+            existingProducts.add(pKey);
+            productsCreated += 1;
+          }
+        }
+
+        setMessage(
+          `Importación completada. Proveedores nuevos: ${providersCreated}. Productos nuevos: ${productsCreated}.`,
+        );
+        reload();
+        dispatchPedidosDataChanged();
+      } catch (err) {
+        setMessage(err instanceof Error ? err.message : 'No se pudo importar proveedores/artículos.');
+      } finally {
+        setBulkImportBusy(false);
+      }
+    })();
   };
 
   const saveSupplierProduct = () => {
@@ -356,6 +424,14 @@ export default function ProveedoresPage() {
             className="h-10 rounded-xl bg-[#2563EB] px-3 text-sm font-bold text-white"
           >
             Guardar proveedor
+          </button>
+          <button
+            type="button"
+            onClick={importMissingSuppliersFromInventory}
+            disabled={bulkImportBusy}
+            className="h-10 rounded-xl border border-[#D32F2F] bg-white px-3 text-sm font-bold text-[#D32F2F] disabled:opacity-50"
+          >
+            {bulkImportBusy ? 'Importando…' : 'Importar proveedores y artículos (inventario)'}
           </button>
         </div>
       </section>

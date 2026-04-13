@@ -190,7 +190,7 @@ export default function InventoryResultadoInventario({
           <p className="mt-1 text-xs text-zinc-400">
             {categoryBarData.length === 0 ? 'Sin líneas con valor' : 'Barras horizontales: nombre de categoría e importe'}
           </p>
-          <div className="mt-2 w-full overflow-x-hidden" style={{ height: categoryChartHeight }}>
+          <div className="mt-2 w-full" style={{ height: categoryChartHeight }}>
             {categoryBarData.length === 0 ? (
               <p className="pt-10 text-center text-[11px] text-zinc-500">—</p>
             ) : (
@@ -198,7 +198,7 @@ export default function InventoryResultadoInventario({
                 <BarChart
                   layout="vertical"
                   data={categoryBarData}
-                  margin={{ top: 2, right: 6, left: 4, bottom: 2 }}
+                  margin={{ top: 2, right: 36, left: 4, bottom: 2 }}
                   barCategoryGap={6}
                 >
                   <CartesianGrid strokeDasharray="3 3" stroke="#27272a" horizontal={false} />
@@ -221,7 +221,7 @@ export default function InventoryResultadoInventario({
                     {categoryBarData.map((_, i) => (
                       <Cell key={i} fill={CATEGORY_BAR_COLORS[i % CATEGORY_BAR_COLORS.length]} />
                     ))}
-                    <LabelList dataKey="labelEuro" position="right" fill="#a1a1aa" fontSize={9} />
+                    <LabelList dataKey="labelEuro" position="insideRight" fill="#111827" fontSize={9} />
                   </Bar>
                 </BarChart>
               </ResponsiveContainer>

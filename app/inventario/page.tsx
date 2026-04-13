@@ -214,6 +214,22 @@ export default function InventarioPage() {
     return map;
   }, [categories, catalogItems]);
 
+  const categoryTotals = useMemo(() => {
+    const byCatalogItem = new Map(lines.map((l) => [l.catalog_item_id, l] as const));
+    const totals: Record<string, number> = {};
+    for (const cat of categories) {
+      const items = itemsByCategory.get(cat.id) ?? [];
+      let acc = 0;
+      for (const it of items) {
+        const line = byCatalogItem.get(it.id);
+        if (!line) continue;
+        acc += line.quantity_on_hand * line.price_per_unit;
+      }
+      totals[cat.id] = Math.round(acc * 100) / 100;
+    }
+    return totals;
+  }, [categories, itemsByCategory, lines]);
+
   const searchLower = search.trim().toLowerCase();
   const filteredCatalog = useMemo(() => {
     if (!searchLower) return catalogItems;
@@ -879,7 +895,12 @@ export default function InventarioPage() {
                               </>
                             )}
                           </button>
-                          <span className="text-xs font-semibold text-zinc-500 tabular-nums">{items.length}</span>
+                          <span className="inline-flex items-center gap-2 text-xs font-semibold text-zinc-500 tabular-nums">
+                            <span>{items.length}</span>
+                            <span className="rounded-full border border-zinc-200 bg-zinc-50 px-2 py-0.5 text-[10px] font-bold text-zinc-700">
+                              {(categoryTotals[cat.id] ?? 0).toFixed(2)} €
+                            </span>
+                          </span>
                         </span>
                       </span>
                     </summary>
