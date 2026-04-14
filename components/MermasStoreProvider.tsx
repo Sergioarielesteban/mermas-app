@@ -300,34 +300,9 @@ function findProductIdByName(name: string, products: Product[]) {
   return null;
 }
 
-function isBaconHalfSliceName(name: string) {
-  const n = normalizeName(name);
-  return n.includes('loncha bacon burguer 1/2') || n.includes('loncha bacon burger 1/2');
-}
-
-function isBaconHalfSliceText(text: string) {
-  const n = normalizeName(text);
-  return (
-    n.includes('loncha bacon burguer 1/2') ||
-    n.includes('loncha bacon burger 1/2') ||
-    n.includes('bacon 1/2')
-  );
-}
-
-function pruneBaconHalfRecords(products: Product[], records: MermaRecord[]) {
-  const removedProductIds = new Set(products.filter((p) => isBaconHalfSliceName(p.name)).map((p) => p.id));
-  const productNameById = new Map(products.map((p) => [p.id, p.name]));
-
-  return records.filter((m) => {
-    const productName = productNameById.get(m.productId) ?? '';
-    const looksBaconHalf =
-      removedProductIds.has(m.productId) ||
-      isBaconHalfSliceText(productName) ||
-      isBaconHalfSliceText(m.notes ?? '') ||
-      m.id.startsWith('fix-bacon-half-') ||
-      normalizeName(m.id).includes('loncha-bacon-burguer-1-2');
-    return !looksBaconHalf;
-  });
+/** Quita solo filas de corrección legacy; el catálogo puede volver a registrar mermas de bacon 1/2. */
+function pruneBaconHalfRecords(_products: Product[], records: MermaRecord[]) {
+  return records.filter((m) => !m.id.startsWith('fix-bacon-half-'));
 }
 
 /** Evita que un refetch (p. ej. réplica de lectura) sustituya la lista y borre filas recién insertadas. */
@@ -464,8 +439,6 @@ function buildSeedMermas(products: Product[]): MermaRecord[] {
     const productId = findProductIdByName(row.productName, products);
     const motiveKey = mapMotive(row.motiveLabel);
     if (!productId || !motiveKey) return;
-    const product = products.find((p) => p.id === productId);
-    if (product && isBaconHalfSliceName(product.name)) return;
 
     out.push({
       id: `seed-m-${index + 1}`,
