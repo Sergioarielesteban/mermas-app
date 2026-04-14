@@ -19,12 +19,14 @@ import {
   AlertTriangle,
   Calculator,
   ChefHat,
+  FileSpreadsheet,
   LayoutDashboard,
   PieChart as PieChartIcon,
   Receipt,
   RefreshCw,
   TrendingDown,
   TrendingUp,
+  Upload,
 } from 'lucide-react';
 import MermasStyleHero from '@/components/MermasStyleHero';
 import { CHEF_ONE_TAPER_LINE_CLASS } from '@/components/ChefOneGlowLine';
@@ -36,6 +38,14 @@ import {
   computeMonthlyMixFoodCost,
   type EscandalloRecipeDashboardRow,
 } from '@/lib/escandallos-analytics';
+import {
+  downloadSalesTemplateCsv,
+  matchSalesImportToRecipes,
+  parseSalesImportCsv,
+  parseSalesImportExcel,
+  type SalesImportMatchedRow,
+  type SalesImportRawRow,
+} from '@/lib/escandallos-sales-import';
 import {
   fetchEscandalloLines,
   fetchEscandalloMonthlySales,
@@ -159,6 +169,8 @@ export default function EscandallosPage() {
   const [salesYearMonth, setSalesYearMonth] = useState(() => new Date().toISOString().slice(0, 7));
   const [salesQtyDraft, setSalesQtyDraft] = useState<Record<string, string>>({});
   const [salesBusy, setSalesBusy] = useState(false);
+  const [importError, setImportError] = useState<string | null>(null);
+  const [importPreview, setImportPreview] = useState<SalesImportMatchedRow[] | null>(null);
 
   const load = useCallback(async () => {
     if (!localId || !supabaseOk) {
@@ -382,6 +394,73 @@ export default function EscandallosPage() {
     }
   };
 
+  const handleDownloadSalesTemplate = useCallback(() => {
+    downloadSalesTemplateCsv(
+      mainRows.map((r) => ({ id: r.id, name: r.name })),
+      salesYearMonth,
+    );
+  }, [mainRows, salesYearMonth]);
+
+  const handlePickImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    e.target.value = '';
+    if (!f || mainRows.length === 0) return;
+    setImportError(null);
+    setImportPreview(null);
+    try {
+      const low = f.name.toLowerCase();
+      let raw: SalesImportRawRow[] = [];
+      if (low.endsWith('.csv')) {
+        const text = await f.text();
+        const parsed = parseSalesImportCsv(text);
+        if (parsed.error) {
+          setImportError(parsed.error);
+          return;
+        }
+        raw = parsed.rows;
+      } else if (low.endsWith('.xlsx') || low.endsWith('.xls')) {
+        const buf = await f.arrayBuffer();
+        const parsed = await parseSalesImportExcel(buf);
+        if (parsed.error && parsed.rows.length === 0) {
+          setImportError(parsed.error);
+          return;
+        }
+        raw = parsed.rows;
+      } else {
+        setImportError('Usa .csv, .xlsx o .xls.');
+        return;
+      }
+      if (raw.length === 0) {
+        setImportError('No hay filas con cantidad y plato.');
+        return;
+      }
+      const matched = matchSalesImportToRecipes(
+        raw,
+        mainRows.map((r) => ({ id: r.id, name: r.name })),
+      );
+      setImportPreview(matched);
+    } catch (err) {
+      setImportError(err instanceof Error ? err.message : 'No se pudo leer el archivo.');
+    }
+  };
+
+  const handleApplyImport = () => {
+    if (!importPreview) return;
+    setSalesQtyDraft((prev) => {
+      const next = { ...prev };
+      for (const row of importPreview) {
+        if (row.status === 'ok' && row.matchedRecipeId) {
+          next[row.matchedRecipeId] = String(row.qty);
+        }
+      }
+      return next;
+    });
+    setImportPreview(null);
+    setImportError(null);
+    setBanner('Importación aplicada. Revisa la tabla y pulsa «Guardar ventas del mes».');
+    window.setTimeout(() => setBanner(null), 6000);
+  };
+
   if (!profileReady) {
     return (
       <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-zinc-200">
@@ -513,6 +592,108 @@ export default function EscandallosPage() {
               >
                 {salesBusy ? 'Guardando…' : 'Guardar ventas del mes'}
               </button>
+            </div>
+
+            <div className="mt-4 rounded-2xl border border-dashed border-zinc-300/90 bg-zinc-50/70 p-4 ring-1 ring-zinc-100">
+              <div className="flex flex-wrap items-center gap-2">
+                <FileSpreadsheet className="h-5 w-5 shrink-0 text-[#B91C1C]" aria-hidden />
+                <p className="text-sm font-bold text-zinc-900">Importar Excel / CSV</p>
+              </div>
+              <p className="mt-2 text-sm leading-relaxed text-zinc-600">
+                <span className="font-semibold text-zinc-800">Plantilla:</span> descarga el CSV con{' '}
+                <code className="rounded bg-zinc-200/80 px-1 font-mono text-[11px]">recipe_id</code> y{' '}
+                <code className="rounded bg-zinc-200/80 px-1 font-mono text-[11px]">nombre_plato</code>; rellena{' '}
+                <code className="rounded bg-zinc-200/80 px-1 font-mono text-[11px]">unidades_vendidas</code>. Abre en
+                Excel, guarda como .xlsx si quieres, y vuelve a subir. Otros informes: columnas tipo{' '}
+                <em>plato / producto + cantidad / unidades</em> suelen funcionar.
+              </p>
+              <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+                <button
+                  type="button"
+                  disabled={mainRows.length === 0}
+                  onClick={handleDownloadSalesTemplate}
+                  className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-zinc-200 bg-white px-4 text-sm font-bold text-zinc-800 shadow-sm disabled:opacity-50"
+                >
+                  <FileSpreadsheet className="h-4 w-4 shrink-0" aria-hidden />
+                  Descargar plantilla CSV
+                </button>
+                <label className="inline-flex h-10 cursor-pointer items-center justify-center gap-2 rounded-xl bg-zinc-900 px-4 text-sm font-semibold text-white shadow-sm disabled:opacity-50">
+                  <Upload className="h-4 w-4 shrink-0" aria-hidden />
+                  Subir archivo
+                  <input
+                    type="file"
+                    accept=".csv,.xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
+                    className="sr-only"
+                    disabled={mainRows.length === 0}
+                    onChange={(ev) => void handlePickImportFile(ev)}
+                  />
+                </label>
+              </div>
+              {importError ? <p className="mt-3 text-sm font-medium text-red-700">{importError}</p> : null}
+              {importPreview && importPreview.length > 0 ? (
+                <div className="mt-4 space-y-3">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
+                    Vista previa · {importPreview.filter((r) => r.status === 'ok').length} aplicables ·{' '}
+                    {importPreview.filter((r) => r.status === 'no_match').length} sin coincidencia
+                  </p>
+                  <div className="max-h-52 overflow-auto rounded-xl ring-1 ring-zinc-200">
+                    <table className="w-full text-left text-xs">
+                      <thead className="sticky top-0 bg-zinc-100">
+                        <tr className="text-[10px] font-extrabold uppercase text-zinc-600">
+                          <th className="px-2 py-2">Fila</th>
+                          <th className="px-2 py-2">En archivo</th>
+                          <th className="px-2 py-2">Ud.</th>
+                          <th className="px-2 py-2">Receta</th>
+                          <th className="px-2 py-2">Estado</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {importPreview.map((row) => (
+                          <tr key={row.sourceLine} className="border-t border-zinc-100">
+                            <td className="px-2 py-1.5 tabular-nums text-zinc-500">{row.sourceLine}</td>
+                            <td className="max-w-[140px] truncate px-2 py-1.5 text-zinc-800" title={row.rawLabel}>
+                              {row.rawLabel || '—'}
+                            </td>
+                            <td className="px-2 py-1.5 tabular-nums">{row.qty}</td>
+                            <td className="max-w-[120px] truncate px-2 py-1.5 text-zinc-700" title={row.matchedRecipeName ?? ''}>
+                              {row.matchedRecipeName ?? '—'}
+                            </td>
+                            <td className="px-2 py-1.5">
+                              {row.status === 'ok' ? (
+                                <span className="font-semibold text-emerald-700">Ok</span>
+                              ) : row.status === 'no_match' ? (
+                                <span className="font-semibold text-red-600">Sin match</span>
+                              ) : (
+                                <span className="text-zinc-400">{row.status}</span>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={handleApplyImport}
+                      disabled={!importPreview.some((r) => r.status === 'ok')}
+                      className="rounded-xl bg-[#D32F2F] px-4 py-2 text-sm font-bold text-white disabled:opacity-50"
+                    >
+                      Aplicar a la tabla
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setImportPreview(null);
+                        setImportError(null);
+                      }}
+                      className="rounded-xl border border-zinc-300 bg-white px-4 py-2 text-sm font-semibold text-zinc-700"
+                    >
+                      Descartar
+                    </button>
+                  </div>
+                </div>
+              ) : null}
             </div>
 
             {mixMetrics.totalUnitsSold > 0 ? (
