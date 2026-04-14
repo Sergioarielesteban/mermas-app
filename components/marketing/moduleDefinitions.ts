@@ -1,13 +1,14 @@
 import type { LucideIcon } from 'lucide-react';
 import {
-  BrushCleaning,
   Building2,
+  CalendarDays,
   ClipboardList,
   Flame,
   MessageCircle,
   Scale,
+  ShieldCheck,
   ShoppingCart,
-  Thermometer,
+  Timer,
 } from 'lucide-react';
 
 export type MarketingModuleDefinition = {
@@ -52,32 +53,19 @@ export const MARKETING_MODULES: MarketingModuleDefinition[] = [
   },
   {
     id: 'appcc',
-    title: 'APPCC (frío y aceite)',
-    summary: 'Temperaturas, freidoras e historial cuando los pidas.',
-    Icon: Thermometer,
-    detailIntro: 'Registros guiados en el móvil: mañana/noche en frío, filtrados y cambios de aceite con trazabilidad.',
-    benefits: [
-      'Neveras y congeladores por turno, sin cuaderno suelto.',
-      'Aceite por freidora con historial y exportación.',
-      'Menos estrés ante una inspección: fechas y datos agrupados.',
-    ],
-    realCase: 'Auditoría o visita: enseñas historial sin rearmar carpetas.',
-    result: 'Constancia sin frenar al equipo.',
-  },
-  {
-    id: 'limpieza',
-    title: 'Limpieza (APPCC)',
-    summary: 'Categorías y tareas con el método: mañana/noche.',
-    Icon: BrushCleaning,
+    title: 'APPCC',
+    summary: 'Limpieza, temperaturas de frío, aceite y el historial cuando lo pidan.',
+    Icon: ShieldCheck,
     detailIntro:
-      'Define maquinaria, superficies, cubos… Cada punto lleva cómo limpiarlo. El equipo marca hecho por día y turno.',
+      'Un solo bloque para el programa: neveras y congeladores por turno, cambios y filtrados de aceite por freidora, y limpieza con categorías, instrucciones por tarea e historial por día.',
     benefits: [
-      'Tus categorías: neveras, zonas, lo que necesites.',
-      'Instrucciones por tarea (el “cómo” del programa de limpieza).',
-      'Historial por fecha para seguimiento e inspecciones.',
+      'Frío: mañana/noche, equipos claros, sin cuaderno suelto.',
+      'Aceite: trazabilidad por freidora, historial y exportación cuando haga falta.',
+      'Limpieza: el “cómo” por tarea y registro por turno para inspecciones.',
     ],
-    realCase: 'Turno de mañana deja hecha la nevera X; el de noche confirma zona de freidora.',
-    result: 'Programa vivo, no solo un PDF olvidado.',
+    realCase:
+      'Visita o auditoría: temperaturas, aceite y programa de limpieza en el mismo sitio, sin rearmar carpetas.',
+    result: 'Constancia seria sin frenar al equipo.',
   },
   {
     id: 'inventario',
@@ -122,9 +110,39 @@ export const MARKETING_MODULES: MarketingModuleDefinition[] = [
     result: 'Menos ruido y mejor coordinación.',
   },
   {
+    id: 'horarios',
+    title: 'Horarios',
+    summary: 'Próximamente',
+    Icon: CalendarDays,
+    detailIntro:
+      'Estamos cerrando este módulo para quien necesita cuadrar turnos con el ritmo real del servicio, sin vivir del grupo de WhatsApp.',
+    benefits: [
+      'Calendario y relevos compartidos: el equipo ve el mismo cuadre.',
+      'Menos “¿quién entra hoy?” cuando hay baja o cambio de última hora.',
+      'Avísanos si es tu prioridad: sube en la lista.',
+    ],
+    realCase: 'Refuerzo o sustitución: el turno mira la app y sabe quién cubre, sin llamadas en cadena.',
+    result: 'Menos improvisación cuando el equipo rota.',
+  },
+  {
+    id: 'fichaje',
+    title: 'Fichaje',
+    summary: 'Próximamente',
+    Icon: Timer,
+    detailIntro:
+      'Estamos cerrando este módulo para fichar desde el móvil en pocos toques: claro para el equipo y ordenado si hay que revisar horas.',
+    benefits: [
+      'Entrada y salida sin papel suelto ni colas al terminar el servicio.',
+      'Encaja con horarios cuando ambos módulos estén activos en tu local.',
+      'Avísanos si es tu prioridad: sube en la lista.',
+    ],
+    realCase: 'Cierre de noche: marcas la salida en segundos y te vas, sin despacho intermedio.',
+    result: 'Horas registradas sin robar minutos al pasillo.',
+  },
+  {
     id: 'cocina-central',
     title: 'Cocina central',
-    summary: 'Próximamente: producción y reparto entre sedes.',
+    summary: 'Próximamente',
     Icon: Building2,
     detailIntro: 'Estamos cerrando este módulo para quien elabora en un punto y sirve a varios locales.',
     benefits: [

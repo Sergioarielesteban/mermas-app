@@ -105,8 +105,8 @@ export default function MarketingLanding() {
 
       <main id="contenido">
         <MarketingHero />
-        <MarketingPricingHighlight />
         <MarketingModulesSection />
+        <MarketingPricingHighlight />
         <MarketingOriginStory />
         <MarketingCocinerosSection />
 

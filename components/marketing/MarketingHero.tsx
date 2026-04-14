@@ -4,22 +4,23 @@ import Link from 'next/link';
 import Image from 'next/image';
 import React from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
-import { BrushCleaning, ChevronLeft, ChevronRight, Sparkles } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Sparkles } from 'lucide-react';
 
 const BRAND = '#D32F2F';
 
-type HeroSlideImage = { title: string; src: string; alt: string; kind?: 'image' };
-type HeroSlidePlaceholder = { title: string; sub: string; kind: 'placeholder' };
-type HeroSlide = HeroSlideImage | HeroSlidePlaceholder;
+type HeroSlide = { title: string; src: string; alt: string };
 
 const HERO_SLIDES: HeroSlide[] = [
   { title: 'Pedidos', src: '/marketing/hero-slides/01-pedidos.png', alt: 'Chef-One: pedidos y recepción' },
   { title: 'Escandallos', src: '/marketing/hero-slides/02-escandallos.png', alt: 'Chef-One: escandallos y costes' },
   { title: 'Mermas', src: '/marketing/hero-slides/03-mermas.png', alt: 'Chef-One: mermas' },
-  { title: 'APPCC', src: '/marketing/hero-slides/04-appcc.png', alt: 'Chef-One: APPCC y temperaturas' },
+  {
+    title: 'APPCC',
+    src: '/marketing/hero-slides/04-appcc.png',
+    alt: 'Chef-One: APPCC — limpieza, temperaturas y aceite',
+  },
   { title: 'Analítica', src: '/marketing/hero-slides/05-analitica.png', alt: 'Chef-One: analítica' },
   { title: 'Inventario', src: '/marketing/hero-slides/06-inventario.png', alt: 'Chef-One: inventario' },
-  { title: 'Limpieza', sub: 'Programa por categorías y turnos', kind: 'placeholder' },
 ];
 
 function HeroCardCarousel() {
@@ -89,28 +90,14 @@ function HeroCardCarousel() {
               className="overflow-hidden rounded-[1.35rem] border border-white/60 bg-gradient-to-b from-white via-white to-stone-50/95 shadow-[0_20px_50px_-24px_rgba(15,23,42,0.25),0_0_0_1px_rgba(15,23,42,0.04)] ring-1 ring-stone-900/[0.04]"
             >
               <div className="relative aspect-[16/11] w-full overflow-hidden bg-stone-100">
-                {'kind' in slide && slide.kind === 'placeholder' ? (
-                  <div className="flex h-full flex-col items-center justify-center gap-2 bg-gradient-to-br from-[#D32F2F]/12 via-white to-stone-100 px-4">
-                    <div
-                      className="grid h-14 w-14 place-items-center rounded-2xl text-white shadow-lg"
-                      style={{
-                        background: `linear-gradient(155deg, ${BRAND} 0%, #9a1818 100%)`,
-                      }}
-                    >
-                      <BrushCleaning className="h-7 w-7" strokeWidth={1.6} aria-hidden />
-                    </div>
-                    <p className="text-center text-xs font-semibold text-stone-600">{slide.sub}</p>
-                  </div>
-                ) : (
-                  <Image
-                    src={(slide as HeroSlideImage).src}
-                    alt={(slide as HeroSlideImage).alt}
-                    fill
-                    className="object-cover object-top"
-                    sizes="(max-width: 640px) 85vw, 328px"
-                    priority={idx === 0}
-                  />
-                )}
+                <Image
+                  src={slide.src}
+                  alt={slide.alt}
+                  fill
+                  className="object-cover object-top"
+                  sizes="(max-width: 640px) 85vw, 328px"
+                  priority={idx === 0}
+                />
               </div>
               <div className="border-t border-stone-100/90 px-4 py-3">
                 <p className="text-sm font-bold tracking-tight text-stone-900">{slide.title}</p>
@@ -177,12 +164,6 @@ export default function MarketingHero() {
             <span className="inline-flex items-center gap-2 rounded-full border border-stone-200/90 bg-white/90 px-3 py-1.5 text-xs font-semibold text-stone-700 shadow-sm backdrop-blur-sm">
               <Sparkles className="h-3.5 w-3.5 text-[#D32F2F]" aria-hidden />
               Chef-One — operaciones de cocina
-            </span>
-            <span
-              className="inline-flex rounded-full px-3 py-1.5 text-xs font-bold text-white shadow-md shadow-rose-900/20"
-              style={{ backgroundColor: BRAND }}
-            >
-              Desde 39,90&nbsp;€/mes por local
             </span>
           </motion.div>
 

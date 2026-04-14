@@ -15,8 +15,13 @@ export default function MarketingModulesSection() {
           <h2 id="modulos-heading" className="mt-2 text-balance text-2xl font-extrabold tracking-tight text-stone-900 sm:text-3xl sm:leading-tight">
             Módulos que puedes encender a tu ritmo
           </h2>
-          <p className="mt-3 text-pretty text-sm leading-snug text-stone-600 sm:text-base">
-            No todo el mundo necesita todo el día uno. Toca una tarjeta para el detalle: beneficios, ejemplo y resultado.
+          <p className="mt-3 space-y-2 text-pretty text-sm leading-snug text-stone-600 sm:text-base">
+            <span className="block font-semibold text-stone-800">
+              Porque no todo el mundo lo necesita todo.
+            </span>
+            <span className="block">
+              Enciende solo lo que vayas a usar y amplía cuando toque. Toca una tarjeta: beneficios, ejemplo y resultado.
+            </span>
           </p>
         </div>
 

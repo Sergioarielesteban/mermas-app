@@ -6,13 +6,14 @@ import React, { useCallback, useMemo, useState } from 'react';
 import {
   Calculator,
   BookOpen,
+  CalendarDays,
   ChefHat,
   ClipboardList,
-  Clock,
   LogOut,
   Menu,
   MessageCircle,
   ShieldCheck,
+  Timer,
   UtensilsCrossed,
   X,
   RefreshCcw,
@@ -35,8 +36,6 @@ type NavItem = NavItemNote | NavItemLink;
 
 const NAV_ITEMS: NavItem[] = [{ href: '/dashboard', label: 'Mermas', Icon: BookOpen }];
 
-const COMING_SOON_PERSONAL_NOTE =
-  'Próximamente: horarios y fichaje; comida de personal.';
 function titleForPath(pathname: string | null) {
   if (!pathname) return 'Mermas';
   if (pathname === '/panel' || pathname.startsWith('/panel/')) return 'Panel de control';
@@ -85,8 +84,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       { href: '/escandallos', label: 'Escandallos', Icon: Calculator },
       { href: '/chat', label: 'Chat', Icon: MessageCircle },
       { label: 'Cocina central', Icon: ChefHat, comingSoon: true },
-      { kind: 'note', text: COMING_SOON_PERSONAL_NOTE },
-      { label: 'Horarios y fichaje', Icon: Clock, comingSoon: true },
+      { label: 'Horarios', Icon: CalendarDays, comingSoon: true },
+      { label: 'Fichaje', Icon: Timer, comingSoon: true },
       { label: 'Comida de personal', Icon: UtensilsCrossed, comingSoon: true },
     ],
     [showPedidos],

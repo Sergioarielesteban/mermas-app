@@ -30,12 +30,18 @@ export default function MarketingOriginStory() {
 
         <div className="mt-10 grid gap-10 lg:grid-cols-[1fr_minmax(260px,300px)] lg:items-start lg:gap-12">
           <div className="space-y-4 text-pretty text-sm leading-relaxed text-stone-700 sm:text-base">
-            <p>
-              Chef-One lo impulsa un cocinero: había que registrar lo importante en pocos toques, sin marear al equipo.
+            <p className="text-base font-bold leading-snug text-stone-900 sm:text-lg">
+              Chef-One no nace en una oficina.{' '}
+              <span className="text-[#D32F2F]">Nace en una cocina.</span>
             </p>
             <p>
-              Cuando la información vive en fotos, notas y grupos, cualquier cambio de turno es una ruleta. La app
-              nace para que lo crítico quede en un solo sitio — claro, rápido y serio cuando hace falta.
+              La impulsa un cocinero con más de veinte años entre fogones: cansado de herramientas que parecían hechas
+              para reunión y no para servicio. Buscaba algo práctico que aguantara el día a día — picos de carta, cambios
+              de turno, prisa de verdad — sin convertir al equipo en administrador de Excel.
+            </p>
+            <p>
+              Cuando la información vive en fotos, notas y grupos, cualquier relevo es una ruleta. Chef-One está para
+              que lo crítico quede en un solo sitio: claro, rápido y serio cuando hace falta.
             </p>
             <p
               className="border-l-4 pl-4 text-base font-semibold leading-snug text-stone-900 sm:text-lg"

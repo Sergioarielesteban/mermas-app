@@ -6,7 +6,12 @@ import { Check, Layers } from 'lucide-react';
 
 const BRAND = '#D32F2F';
 
-const bullets = ['Pedidos y mermas', 'APPCC: frío, aceite y limpieza', 'Inventario y escandallos', 'Chat por local'] as const;
+const bullets = [
+  'Pedidos y mermas',
+  'APPCC: limpieza, frío y aceite',
+  'Inventario y escandallos',
+  'Chat por local',
+] as const;
 
 const easeOut: [number, number, number, number] = [0.16, 1, 0.3, 1];
 

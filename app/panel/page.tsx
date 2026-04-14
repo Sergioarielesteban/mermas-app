@@ -6,12 +6,13 @@ import type { LucideIcon } from 'lucide-react';
 import {
   BookOpen,
   Calculator,
+  CalendarDays,
   ChefHat,
   ClipboardList,
-  Clock,
   MessageCircle,
   ShieldCheck,
   ShoppingCart,
+  Timer,
   UtensilsCrossed,
 } from 'lucide-react';
 import { CHEF_ONE_TAPER_LINE_CLASS } from '@/components/ChefOneGlowLine';
@@ -21,7 +22,7 @@ import { canAccessPedidos } from '@/lib/pedidos-access';
 
 const LINE = `mx-auto mt-4 w-24 ${CHEF_ONE_TAPER_LINE_CLASS}`;
 
-const PERSONAL_MODULOS_MSG = 'Próximamente: horarios y fichaje; comida de personal.';
+const COMING_SOON_SUB = 'Próximamente';
 
 type TileProps = {
   href?: string;
@@ -82,14 +83,9 @@ export default function PanelControlPage() {
   const showPedidos = canAccessPedidos(localCode, email, localName, localId);
   const [stubMessage, setStubMessage] = React.useState<string | null>(null);
 
-  const onStub = (name: string) => {
-    setStubMessage(`${name}: en construcción.`);
+  const onComingSoonModule = (name: string) => {
+    setStubMessage(`${name}: próximamente.`);
     window.setTimeout(() => setStubMessage(null), 3200);
-  };
-
-  const onComingSoonPersonal = () => {
-    setStubMessage(PERSONAL_MODULOS_MSG);
-    window.setTimeout(() => setStubMessage(null), 4500);
   };
 
   return (
@@ -115,7 +111,7 @@ export default function PanelControlPage() {
         <HubTile
           href="/appcc"
           label="APPCC"
-          sub="Análisis de peligros y puntos críticos de control"
+          sub="Limpieza, temperaturas, aceite y trazabilidad"
           Icon={ShieldCheck}
           tone="red"
         />
@@ -128,21 +124,27 @@ export default function PanelControlPage() {
           tone="red"
         />
         <HubTile
-          onClick={() => onStub('Cocina central')}
+          onClick={() => onComingSoonModule('Cocina central')}
           label="Cocina central"
-          sub="Próximamente"
+          sub={COMING_SOON_SUB}
           Icon={ChefHat}
         />
         <HubTile
-          onClick={onComingSoonPersonal}
-          label="Horarios y fichaje"
-          sub={PERSONAL_MODULOS_MSG}
-          Icon={Clock}
+          onClick={() => onComingSoonModule('Horarios')}
+          label="Horarios"
+          sub={COMING_SOON_SUB}
+          Icon={CalendarDays}
         />
         <HubTile
-          onClick={onComingSoonPersonal}
+          onClick={() => onComingSoonModule('Fichaje')}
+          label="Fichaje"
+          sub={COMING_SOON_SUB}
+          Icon={Timer}
+        />
+        <HubTile
+          onClick={() => onComingSoonModule('Comida de personal')}
           label="Comida de personal"
-          sub={PERSONAL_MODULOS_MSG}
+          sub={COMING_SOON_SUB}
           Icon={UtensilsCrossed}
         />
         <HubTile
