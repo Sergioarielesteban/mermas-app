@@ -74,6 +74,7 @@ export default function EscandallosPage() {
   const [procName, setProcName] = useState('');
   const [procRawId, setProcRawId] = useState('');
   const [procRawSearch, setProcRawSearch] = useState('');
+  const [procRawDropdownOpen, setProcRawDropdownOpen] = useState(false);
   const [procInputQty, setProcInputQty] = useState('5');
   const [procOutputQty, setProcOutputQty] = useState('3.5');
   const [procOutputUnit, setProcOutputUnit] = useState<Unit>('kg');
@@ -202,6 +203,7 @@ export default function EscandallosPage() {
       setProcName('');
       setProcRawId('');
         setProcRawSearch('');
+        setProcRawDropdownOpen(false);
       setProcInputQty('5');
       setProcOutputQty('3.5');
       setProcExtraCost('0');
@@ -446,26 +448,44 @@ export default function EscandallosPage() {
             placeholder="Nombre elaborado (ej. Cebolla caramelizada)"
             className="w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm"
           />
-          <select
-            value={procRawId}
-            onChange={(e) => setProcRawId(e.target.value)}
-            className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
-          >
-            <option value="">Producto crudo proveedor…</option>
-            {filteredProcRawProducts.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.supplierName} · {p.name} ({p.pricePerUnit.toFixed(2)} €/{p.unit})
-              </option>
-            ))}
-          </select>
           <div className="relative">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" aria-hidden />
             <input
               value={procRawSearch}
-              onChange={(e) => setProcRawSearch(e.target.value)}
-              placeholder="Buscar ingrediente crudo…"
+              onFocus={() => setProcRawDropdownOpen(true)}
+              onChange={(e) => {
+                setProcRawSearch(e.target.value);
+                setProcRawDropdownOpen(true);
+                setProcRawId('');
+              }}
+              placeholder="Producto crudo proveedor…"
               className="w-full rounded-lg border border-zinc-200 bg-white py-2 pl-9 pr-3 text-sm"
             />
+            {procRawDropdownOpen ? (
+              <div className="absolute z-20 mt-1 max-h-52 w-full overflow-auto rounded-lg border border-zinc-200 bg-white shadow-lg">
+                {filteredProcRawProducts.length === 0 ? (
+                  <p className="px-3 py-2 text-xs text-zinc-500">Sin resultados</p>
+                ) : (
+                  filteredProcRawProducts.map((p) => {
+                    const label = `${p.supplierName} · ${p.name} (${p.pricePerUnit.toFixed(2)} €/${p.unit})`;
+                    return (
+                      <button
+                        key={p.id}
+                        type="button"
+                        onClick={() => {
+                          setProcRawId(p.id);
+                          setProcRawSearch(label);
+                          setProcRawDropdownOpen(false);
+                        }}
+                        className="block w-full px-3 py-2 text-left text-sm text-zinc-800 hover:bg-zinc-50"
+                      >
+                        {label}
+                      </button>
+                    );
+                  })
+                )}
+              </div>
+            ) : null}
           </div>
           <div className="grid grid-cols-2 gap-2">
             <input
@@ -500,14 +520,29 @@ export default function EscandallosPage() {
               className="rounded-lg border border-zinc-200 px-3 py-2 text-sm"
             />
           </div>
-          <button
-            type="button"
-            disabled={busyId !== null}
-            onClick={() => void handleCreateProcessed()}
-            className="rounded-lg bg-zinc-900 px-3 py-2 text-sm font-semibold text-white"
-          >
-            Guardar elaborado
-          </button>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              disabled={busyId !== null}
+              onClick={() => void handleCreateProcessed()}
+              className="rounded-lg bg-zinc-900 px-3 py-2 text-sm font-semibold text-white"
+            >
+              Guardar elaborado
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setNewName(procName.trim() || 'Nueva sub-receta');
+                setBanner(
+                  'Para una pre-elaboración con varios ingredientes, créala como receta abajo (Nueva receta) y luego úsala como «Otra receta».',
+                );
+                document.getElementById('nueva-receta')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+              }}
+              className="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-xs font-semibold text-zinc-700"
+            >
+              + ingredientes
+            </button>
+          </div>
           {processedProducts.length > 0 ? (
             <ul className="space-y-2 pt-2">
               {processedProducts.map((p) => {
@@ -551,7 +586,7 @@ export default function EscandallosPage() {
         </p>
       </section>
 
-      <section className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-zinc-200">
+      <section id="nueva-receta" className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-zinc-200">
         <p className="text-xs font-bold uppercase tracking-wide text-zinc-500">Nueva receta</p>
         <div className="mt-2 space-y-2">
           <input
