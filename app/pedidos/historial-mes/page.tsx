@@ -2,13 +2,14 @@
 
 import Link from 'next/link';
 import React from 'react';
-import { ChevronDown } from 'lucide-react';
+import { ChevronDown, Download } from 'lucide-react';
 import { useAuth } from '@/components/AuthProvider';
 import { usePedidosOrders } from '@/components/PedidosOrdersProvider';
 import { CHEF_ONE_TAPER_LINE_CLASS } from '@/components/ChefOneGlowLine';
 import PedidosPremiaLockedScreen from '@/components/PedidosPremiaLockedScreen';
 import { canAccessPedidos, canUsePedidosModule } from '@/lib/pedidos-access';
 import { formatQuantityWithUnit, totalsWithVatForOrderListDisplay } from '@/lib/pedidos-format';
+import { downloadPedidosHistorialComprasPdf } from '@/lib/pedidos-historial-compras-pdf';
 import type { PedidoOrder } from '@/lib/pedidos-supabase';
 import type { Unit } from '@/lib/types';
 
@@ -321,6 +322,46 @@ export default function PedidosHistorialMesPage() {
     }
   }, [supplierFilter, monthlyBySupplier]);
 
+  const monthTitle = React.useMemo(() => {
+    const [y, m] = month.split('-').map(Number);
+    if (!y || !m) return month;
+    return new Date(y, m - 1, 15).toLocaleDateString('es-ES', { month: 'long', year: 'numeric' });
+  }, [month]);
+  const viewModeLabel = viewMode === 'real' ? 'Real (recepción)' : 'Previsto (entrega)';
+  const supplierFilterLabel =
+    supplierFilter === 'all'
+      ? 'Todos los proveedores'
+      : monthlyBySupplier.find((s) => s.supplierId === supplierFilter)?.supplierName ?? '—';
+
+  const downloadHistorialPdf = React.useCallback(() => {
+    downloadPedidosHistorialComprasPdf({
+      localLabel: (localName?.trim() || localCode || 'Local').trim(),
+      monthIso: month,
+      monthTitle,
+      viewModeLabel,
+      supplierFilterLabel,
+      orders: filteredMonthlyOrders,
+      kpis,
+      monthlyTopProducts,
+      weeklySummary,
+      supplierPerformance,
+      deviationKpis,
+    });
+  }, [
+    localName,
+    localCode,
+    month,
+    monthTitle,
+    viewModeLabel,
+    supplierFilterLabel,
+    filteredMonthlyOrders,
+    kpis,
+    monthlyTopProducts,
+    weeklySummary,
+    supplierPerformance,
+    deviationKpis,
+  ]);
+
   if (!hasPedidosEntry) {
     return (
       <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-zinc-200">
@@ -423,6 +464,16 @@ export default function PedidosHistorialMesPage() {
             ? 'Modo real: solo cuenta pedidos ya recibidos (fecha de entrada al local).'
             : 'Modo previsto: recibidos por fecha real y pendientes por fecha prevista de entrega.'}
         </p>
+        <div className="mt-4 flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={downloadHistorialPdf}
+            className="inline-flex h-10 items-center gap-2 rounded-xl bg-[#D32F2F] px-4 text-sm font-semibold text-white shadow-sm ring-1 ring-red-900/10"
+          >
+            <Download className="h-4 w-4 shrink-0" aria-hidden />
+            Informe PDF completo
+          </button>
+        </div>
         <div className="mt-4 grid min-w-0 grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
           <div className="rounded-2xl bg-zinc-50 px-3 py-2 ring-1 ring-zinc-200">
             <p className="text-[10px] uppercase tracking-wide text-zinc-500">Total mes</p>
