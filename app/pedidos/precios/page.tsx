@@ -456,7 +456,7 @@ function PriceEvolutionMiniChart({ row }: { row: PriceSummary }) {
           />
         </LineChart>
       </ResponsiveContainer>
-      <p className="mt-1 text-center text-[10px] text-zinc-500">
+      <p className="mb-3 mt-1 text-center text-[10px] leading-snug text-zinc-500">
         Gris = precio pedido · Rojo = albarán · Línea gris = PMP del periodo
       </p>
     </div>
@@ -1064,19 +1064,126 @@ export default function PedidosPreciosPage() {
         `${row.deltaPct >= 0 ? '+' : ''}${row.deltaPct.toFixed(2)}%`,
         `${row.impactMonthlyVsWap >= 0 ? '+' : ''}${row.impactMonthlyVsWap.toFixed(2)}`,
         `${row.volatilityCvPct.toFixed(1)}%`,
+        row.forecast30d != null ? row.forecast30d.toFixed(2) : '—',
+        row.totalWeightedQty.toLocaleString('es-ES', { maximumFractionDigits: 2 }),
       ]);
     }
     autoTable(doc, {
       startY: tableStart + 4,
       head: [
-        ['Producto', 'Proveedor', 'Ud', 'Base', 'PMP', 'Actual', 'Δ €', 'Δ %', 'Impacto mes*', 'Vol CV%'],
+        [
+          'Producto',
+          'Proveedor',
+          'Ud',
+          'Base',
+          'PMP',
+          'Actual',
+          'Δ €',
+          'Δ %',
+          'Impacto mes*',
+          'Vol CV%',
+          'Tend.~30d',
+          'Qty periodo',
+        ],
       ],
       body,
-      styles: { fontSize: 7, cellPadding: 3, textColor: PDF_ZINC_900 },
-      headStyles: { fillColor: PDF_BRAND, textColor: PDF_WHITE },
+      styles: { fontSize: 6.5, cellPadding: 2.5, textColor: PDF_ZINC_900 },
+      headStyles: { fillColor: PDF_BRAND, textColor: PDF_WHITE, fontSize: 6.5 },
       alternateRowStyles: { fillColor: [248, 250, 252] },
       margin: { left: 40, right: 40 },
     });
+
+    const docWithTable = doc as jsPDF & { lastAutoTable?: { finalY?: number } };
+    for (const row of seriesFiltered) {
+      doc.addPage();
+      let y = 44;
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(14);
+      doc.setTextColor(...PDF_ZINC_900);
+      doc.text(row.productName, 40, y);
+      y += 18;
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(9);
+      doc.setTextColor(...PDF_ZINC_500);
+      doc.text(`Proveedor: ${row.supplierName}`, 40, y);
+      y += 14;
+      doc.setTextColor(...PDF_ZINC_900);
+      const trendPdf =
+        row.delta > 0
+          ? `Sube +${row.delta.toFixed(2)} €/${row.displayUnit} (+${row.deltaPct.toFixed(2)}%)`
+          : row.delta < 0
+            ? `Baja ${row.delta.toFixed(2)} €/${row.displayUnit} (${row.deltaPct.toFixed(2)}%)`
+            : 'Sin cambio';
+      const blockLines = [
+        `Base: ${row.base.price.toFixed(2)} €/${row.displayUnit} · Actual: ${row.current.price.toFixed(2)} €/${row.displayUnit}`,
+        `PMP: ${row.weightedAvg.toFixed(2)} €/${row.displayUnit} · Cantidad periodo (ponderado): ${row.totalWeightedQty.toLocaleString('es-ES')}`,
+        `Impacto mensual vs PMP: ${row.impactMonthlyVsWap >= 0 ? '+' : ''}${row.impactMonthlyVsWap.toFixed(2)} € · Volatilidad (CV): ${row.volatilityCvPct.toFixed(1)} %${
+          row.forecast30d != null ? ` · Tendencia ~30d: ${row.forecast30d.toFixed(2)} €/${row.displayUnit}` : ''
+        }`,
+        trendPdf,
+      ];
+      for (const line of blockLines) {
+        const wrapped = doc.splitTextToSize(line, pageW - 80);
+        doc.text(wrapped, 40, y);
+        y += wrapped.length * 11;
+      }
+      y += 10;
+      const pointsAsc = [...row.points].sort((a, b) => Date.parse(a.date) - Date.parse(b.date));
+      y = drawExecutivePriceChart(doc, {
+        x: 40,
+        y,
+        w: pageW - 80,
+        h: 200,
+        title: 'Gráfico de evolución',
+        subtitle: `${row.productName} · ${row.supplierName}`,
+        pointsAsc,
+        weightedAvg: row.weightedAvg,
+        unit: row.displayUnit,
+        basePrice: row.base.price,
+        currentPrice: row.current.price,
+      });
+      y += 14;
+
+      const purchBody =
+        row.purchases.length > 0
+          ? row.purchases.map((p) => [
+              new Date(p.date).toLocaleDateString('es-ES'),
+              p.supplier,
+              formatQuantityWithUnit(p.qty, p.unit),
+              `${p.price.toFixed(2)}`,
+            ])
+          : [['—', '—', 'Sin compras en la ventana', '—']];
+      autoTable(doc, {
+        startY: y,
+        head: [[`Compras (fecha)`, 'Proveedor', 'Cantidad', `€/${row.displayUnit}`]],
+        body: purchBody,
+        styles: { fontSize: 7, cellPadding: 2.5, textColor: PDF_ZINC_900 },
+        headStyles: { fillColor: PDF_BRAND, textColor: PDF_WHITE, fontSize: 7 },
+        alternateRowStyles: { fillColor: [248, 250, 252] },
+        margin: { left: 40, right: 40 },
+      });
+      y = (docWithTable.lastAutoTable?.finalY ?? y) + 14;
+
+      const evoBody = row.points.map((p) => {
+        const tipo = p.sortRank === 0 ? 'Pedido' : 'Albarán';
+        const extra = p.sortRank === 0 ? ' · precio pedido' : '';
+        return [
+          new Date(p.date).toLocaleDateString('es-ES'),
+          p.supplier,
+          `${p.price.toFixed(2)} €/${p.unit}`,
+          `${tipo}${extra}`,
+        ];
+      });
+      autoTable(doc, {
+        startY: y,
+        head: [['Evolución precio — Fecha', 'Proveedor', 'Precio', 'Tipo']],
+        body: evoBody.length > 0 ? evoBody : [['—', '—', '—', 'Sin puntos']],
+        styles: { fontSize: 7, cellPadding: 2.5, textColor: PDF_ZINC_900 },
+        headStyles: { fillColor: PDF_BRAND, textColor: PDF_WHITE, fontSize: 7 },
+        alternateRowStyles: { fillColor: [248, 250, 252] },
+        margin: { left: 40, right: 40 },
+      });
+    }
 
     const totalPages = doc.getNumberOfPages();
     for (let p = 1; p <= totalPages; p++) {
@@ -1514,7 +1621,7 @@ export default function PedidosPreciosPage() {
               <p className={`pt-1 text-xs font-semibold ${trendClass(row)}`}>{trendLabel(row)}</p>
               <p className="pt-2 text-[10px] font-bold uppercase tracking-wide text-zinc-500">Gráfico de evolución</p>
               <PriceEvolutionMiniChart row={row} />
-              <p className="pt-2 text-[10px] font-bold uppercase tracking-wide text-zinc-500">Compras (más reciente primero)</p>
+              <p className="pt-1 text-[10px] font-bold uppercase tracking-wide text-zinc-500">Compras</p>
               <div className="mt-1 max-h-40 space-y-1 overflow-auto rounded-lg bg-zinc-50 p-2 ring-1 ring-zinc-200">
                 {row.purchases.map((pur, idx) => (
                   <p key={`${row.key}-p-${idx}`} className="text-xs text-zinc-600">
