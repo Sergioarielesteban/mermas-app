@@ -437,7 +437,7 @@ export default function EscandallosPage() {
       ) : mainRows.length === 0 && subRows.length === 0 ? (
         <div className="rounded-3xl bg-zinc-50 py-12 text-center ring-1 ring-zinc-200">
           <p className="text-sm font-semibold text-zinc-800">Aún no hay recetas</p>
-          <p className="mt-1 text-sm text-zinc-600">Crea platos y bases desde Escandallos.</p>
+          <p className="mt-1 text-sm text-zinc-600">Crea platos y bases en Recetas.</p>
           <Link href="/escandallos/recetas" className="mt-4 inline-block text-sm font-bold text-[#B91C1C] underline">
             Ir a recetas
           </Link>
