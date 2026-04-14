@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import React from 'react';
+import { ChevronDown } from 'lucide-react';
 import { useAuth } from '@/components/AuthProvider';
 import { getSupabaseClient } from '@/lib/supabase-client';
 import PedidosPremiaLockedScreen from '@/components/PedidosPremiaLockedScreen';
@@ -92,6 +93,7 @@ export default function ProveedoresPage() {
   const [productVat, setProductVat] = React.useState('0,21');
   const [editingSupplierId, setEditingSupplierId] = React.useState<string | null>(null);
   const [editingProductId, setEditingProductId] = React.useState<string | null>(null);
+  const [expandedSupplierId, setExpandedSupplierId] = React.useState<string | null>(null);
   const [supplierDrafts, setSupplierDrafts] = React.useState<Record<string, { name: string; contact: string }>>({});
   const [productDrafts, setProductDrafts] = React.useState<Record<string, ProductDraft>>({});
   const [bulkImportBusy, setBulkImportBusy] = React.useState(false);
@@ -504,37 +506,55 @@ export default function ProveedoresPage() {
       {[...suppliers]
         .sort((a, b) => a.name.localeCompare(b.name, 'es'))
         .map((supplier) => (
-        <section key={supplier.id} className="rounded-2xl bg-white p-4 ring-1 ring-zinc-200">
-          <div className="flex items-center justify-between gap-2">
-            <p className="text-sm font-black text-zinc-900">{supplier.name}</p>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => {
-                  setEditingSupplierId((prev) => (prev === supplier.id ? null : supplier.id));
-                  setSupplierDrafts((prev) => ({
-                    ...prev,
-                    [supplier.id]: {
-                      name: prev[supplier.id]?.name ?? supplier.name,
-                      contact: prev[supplier.id]?.contact ?? supplier.contact ?? '',
-                    },
-                  }));
-                }}
-                className="rounded-lg border border-zinc-300 bg-white px-2 py-1 text-xs font-semibold text-zinc-700"
-              >
-                {editingSupplierId === supplier.id ? 'Cerrar' : 'Editar proveedor'}
-              </button>
-              <button
-                type="button"
-                onClick={() => removeSupplier(supplier.id, supplier.name)}
-                className="rounded-lg border border-[#B91C1C] bg-white px-2 py-1 text-xs font-semibold text-[#B91C1C]"
-              >
-                Eliminar proveedor
-              </button>
+        <section key={supplier.id} className="overflow-hidden rounded-2xl bg-white ring-1 ring-zinc-200">
+          <button
+            type="button"
+            onClick={() => setExpandedSupplierId((id) => (id === supplier.id ? null : supplier.id))}
+            className="flex w-full items-center justify-between gap-2 px-4 py-3 text-left"
+            aria-expanded={expandedSupplierId === supplier.id}
+          >
+            <div className="min-w-0">
+              <p className="truncate text-sm font-black text-zinc-900">{supplier.name}</p>
+              <p className="pt-1 text-xs text-zinc-500">Contacto: {supplier.contact || '-'}</p>
             </div>
-          </div>
-          <p className="pt-1 text-xs text-zinc-500">Contacto: {supplier.contact || '-'}</p>
-          {editingSupplierId === supplier.id ? (
+            <span className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-[#D32F2F]">
+              {expandedSupplierId === supplier.id ? 'Ocultar' : 'Ver artículos'}
+              <ChevronDown
+                className={['h-4 w-4 transition-transform', expandedSupplierId === supplier.id ? 'rotate-180' : ''].join(' ')}
+                aria-hidden
+              />
+            </span>
+          </button>
+
+          {expandedSupplierId === supplier.id ? (
+            <div className="border-t border-zinc-100 px-4 pb-4 pt-3">
+              <div className="mb-2 flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditingSupplierId((prev) => (prev === supplier.id ? null : supplier.id));
+                    setSupplierDrafts((prev) => ({
+                      ...prev,
+                      [supplier.id]: {
+                        name: prev[supplier.id]?.name ?? supplier.name,
+                        contact: prev[supplier.id]?.contact ?? supplier.contact ?? '',
+                      },
+                    }));
+                  }}
+                  className="rounded-lg border border-zinc-300 bg-white px-2 py-1 text-xs font-semibold text-zinc-700"
+                >
+                  {editingSupplierId === supplier.id ? 'Cerrar' : 'Editar proveedor'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => removeSupplier(supplier.id, supplier.name)}
+                  className="rounded-lg border border-[#B91C1C] bg-white px-2 py-1 text-xs font-semibold text-[#B91C1C]"
+                >
+                  Eliminar proveedor
+                </button>
+              </div>
+
+              {editingSupplierId === supplier.id ? (
             <div className="mt-3 grid grid-cols-1 gap-2 rounded-xl border border-zinc-200 bg-zinc-50 p-3">
               <input
                 value={supplierDrafts[supplier.id]?.name ?? ''}
@@ -566,8 +586,8 @@ export default function ProveedoresPage() {
                 Guardar cambios proveedor
               </button>
             </div>
-          ) : null}
-          <div className="mt-3 space-y-2">
+              ) : null}
+              <div className="mt-3 space-y-2">
             {[...supplier.products]
               .sort((a, b) => a.name.localeCompare(b.name, 'es'))
               .map((p) => (
@@ -706,8 +726,10 @@ export default function ProveedoresPage() {
                   </div>
                 ) : null}
               </div>
-            ))}
-          </div>
+              ))}
+              </div>
+            </div>
+          ) : null}
         </section>
       ))}
     </div>

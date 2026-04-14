@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { ChevronDown, Plus, Trash2 } from 'lucide-react';
+import { ChevronDown, Plus, Search, Trash2 } from 'lucide-react';
 import MermasStyleHero from '@/components/MermasStyleHero';
 import { useAuth } from '@/components/AuthProvider';
 import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
@@ -73,14 +73,34 @@ export default function EscandallosPage() {
 
   const [procName, setProcName] = useState('');
   const [procRawId, setProcRawId] = useState('');
+  const [procRawSearch, setProcRawSearch] = useState('');
   const [procInputQty, setProcInputQty] = useState('5');
   const [procOutputQty, setProcOutputQty] = useState('3.5');
   const [procOutputUnit, setProcOutputUnit] = useState<Unit>('kg');
   const [procExtraCost, setProcExtraCost] = useState('0');
+  const [addRawSearch, setAddRawSearch] = useState('');
 
   const rawById = useMemo(() => new Map(rawProducts.map((p) => [p.id, p])), [rawProducts]);
   const processedById = useMemo(() => new Map(processedProducts.map((p) => [p.id, p])), [processedProducts]);
   const recipesById = useMemo(() => new Map(recipes.map((r) => [r.id, r])), [recipes]);
+  const sortedRawProducts = useMemo(
+    () => [...rawProducts].sort((a, b) => a.name.localeCompare(b.name, 'es')),
+    [rawProducts],
+  );
+  const filteredProcRawProducts = useMemo(() => {
+    const q = procRawSearch.trim().toLowerCase();
+    if (!q) return sortedRawProducts;
+    return sortedRawProducts.filter((p) =>
+      `${p.name} ${p.supplierName}`.toLowerCase().includes(q),
+    );
+  }, [procRawSearch, sortedRawProducts]);
+  const filteredAddRawProducts = useMemo(() => {
+    const q = addRawSearch.trim().toLowerCase();
+    if (!q) return sortedRawProducts;
+    return sortedRawProducts.filter((p) =>
+      `${p.name} ${p.supplierName}`.toLowerCase().includes(q),
+    );
+  }, [addRawSearch, sortedRawProducts]);
 
   const load = useCallback(async () => {
     if (!localId || !supabaseOk) {
@@ -181,6 +201,7 @@ export default function EscandallosPage() {
       setProcessedProducts((prev) => [...prev, row].sort((a, b) => a.name.localeCompare(b.name, 'es')));
       setProcName('');
       setProcRawId('');
+        setProcRawSearch('');
       setProcInputQty('5');
       setProcOutputQty('3.5');
       setProcExtraCost('0');
@@ -431,12 +452,21 @@ export default function EscandallosPage() {
             className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
           >
             <option value="">Producto crudo proveedor…</option>
-            {rawProducts.map((p) => (
+            {filteredProcRawProducts.map((p) => (
               <option key={p.id} value={p.id}>
                 {p.supplierName} · {p.name} ({p.pricePerUnit.toFixed(2)} €/{p.unit})
               </option>
             ))}
           </select>
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" aria-hidden />
+            <input
+              value={procRawSearch}
+              onChange={(e) => setProcRawSearch(e.target.value)}
+              placeholder="Buscar ingrediente crudo…"
+              className="w-full rounded-lg border border-zinc-200 bg-white py-2 pl-9 pr-3 text-sm"
+            />
+          </div>
           <div className="grid grid-cols-2 gap-2">
             <input
               value={procInputQty}
@@ -708,18 +738,29 @@ export default function EscandallosPage() {
                         ))}
                       </div>
                       {addSourceType === 'raw' ? (
-                        <select
-                          value={addRawProductId}
-                          onChange={(e) => setAddRawProductId(e.target.value)}
-                          className="mt-2 w-full rounded-lg border border-zinc-200 bg-white px-2 py-2 text-sm"
-                        >
-                          <option value="">Producto crudo…</option>
-                          {rawProducts.map((p) => (
-                            <option key={p.id} value={p.id}>
-                              {p.supplierName} · {p.name} ({p.pricePerUnit.toFixed(2)} €/{p.unit})
-                            </option>
-                          ))}
-                        </select>
+                        <>
+                          <div className="relative mt-2">
+                            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" aria-hidden />
+                            <input
+                              value={addRawSearch}
+                              onChange={(e) => setAddRawSearch(e.target.value)}
+                              placeholder="Buscar ingrediente crudo…"
+                              className="w-full rounded-lg border border-zinc-200 bg-white py-2 pl-9 pr-3 text-sm"
+                            />
+                          </div>
+                          <select
+                            value={addRawProductId}
+                            onChange={(e) => setAddRawProductId(e.target.value)}
+                            className="mt-2 w-full rounded-lg border border-zinc-200 bg-white px-2 py-2 text-sm"
+                          >
+                            <option value="">Producto crudo…</option>
+                            {filteredAddRawProducts.map((p) => (
+                              <option key={p.id} value={p.id}>
+                                {p.supplierName} · {p.name} ({p.pricePerUnit.toFixed(2)} €/{p.unit})
+                              </option>
+                            ))}
+                          </select>
+                        </>
                       ) : null}
                       {addSourceType === 'processed' ? (
                         <select
