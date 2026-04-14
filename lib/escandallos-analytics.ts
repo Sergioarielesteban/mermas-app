@@ -10,6 +10,8 @@ export type EscandalloFoodCostBucket = 'optimal' | 'watch' | 'high' | 'no_pvp' |
 export type EscandalloRecipeDashboardRow = {
   id: string;
   name: string;
+  /** Código TPV enlazado en la ficha de receta (import ventas). */
+  posArticleCode: string | null;
   isSubRecipe: boolean;
   yieldQty: number;
   yieldLabel: string;
@@ -68,6 +70,7 @@ export function buildEscandalloDashboardRows(
     return {
       id: recipe.id,
       name: recipe.name,
+      posArticleCode: recipe.posArticleCode,
       isSubRecipe: recipe.isSubRecipe,
       yieldQty: recipe.yieldQty,
       yieldLabel: recipe.yieldLabel,

@@ -1,13 +1,16 @@
 /**
  * Importación de ventas mensuales desde CSV / Excel para escandallos.
  * Columnas reconocidas (cabecera, sin tildes obligatorias):
- * - ID receta: recipe_id | id_receta | id
- * - Nombre: nombre | plato | producto | name | articulo | descripcion
- * - Unidades: unidades | cantidad | qty | vendidas | uds | unidades_vendidas | ventas
+ * - ID receta: recipe_id | id_receta | id (UUID)
+ * - Código TPV: pos_article_code | codigo_tpv | codigo | articulo (si hay descripcion/nombre/… aparte)
+ * - Nombre: nombre | plato | descripcion | …
+ * - Unidades: unidades | cantidad | qty | …
  */
 
 export type SalesImportRawRow = {
   recipeId?: string;
+  /** Código artículo en el TPV (columna Articulo, etc.). */
+  posArticleCode?: string;
   name?: string;
   qty: number;
 };
@@ -34,15 +37,43 @@ export function normalizeRecipeLabel(s: string): string {
   return stripDiacritics(s).trim().toLowerCase().replace(/\s+/g, ' ');
 }
 
+/** Igual que en recetas: trim, sin espacios; numéricos sin ceros a la izquierda. */
+export function normalizePosArticleCode(s: string): string {
+  const t = stripDiacritics(s).trim().replace(/\s+/g, '');
+  if (t === '') return '';
+  if (/^\d+$/.test(t)) {
+    const stripped = t.replace(/^0+/, '');
+    return stripped === '' ? '0' : stripped;
+  }
+  return t.toLowerCase();
+}
+
 function headerMatches(norm: string, keys: string[]): boolean {
   return keys.some((k) => norm === k || norm.includes(k));
+}
+
+function looksLikeUuid(s: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(s.trim());
+}
+
+function colExact(normHeaders: string[], candidates: string[]): number {
+  for (const c of candidates) {
+    const i = normHeaders.indexOf(c);
+    if (i >= 0) return i;
+  }
+  return -1;
 }
 
 function parseQty(v: unknown): number {
   if (v == null || v === '') return NaN;
   if (typeof v === 'number' && Number.isFinite(v)) return v;
-  const t = String(v).trim().replace(/\s/g, '').replace(',', '.');
+  let t = String(v).trim().replace(/\s/g, '');
   if (t === '') return NaN;
+  if (/^\d{1,3}(\.\d{3})*(,\d+)?$/i.test(t)) {
+    t = t.replace(/\./g, '').replace(',', '.');
+  } else {
+    t = t.replace(',', '.');
+  }
   const n = Number(t);
   return Number.isFinite(n) ? n : NaN;
 }
@@ -79,23 +110,61 @@ function findColumnIndex(headers: string[], keys: string[]): number {
   return -1;
 }
 
+function isFooterRowFirstCell(cell: string): boolean {
+  const n = normalizeRecipeLabel(cell);
+  if (n === '') return false;
+  return (
+    n === 'total' ||
+    n.startsWith('total ') ||
+    n === 'totales' ||
+    n === 'suma' ||
+    n === 'subtotal' ||
+    n === 'importe' ||
+    n === '---'
+  );
+}
+
+function resolveCodeAndNameColumnIndices(headerCells: string[]): { codeIdx: number; nameIdx: number } {
+  const nameBuddyKeys = ['descripcion', 'nombre', 'nombre_plato', 'plato', 'producto', 'name', 'product'];
+  const hasNameBuddy = nameBuddyKeys.some((k) => headerCells.includes(k));
+
+  let codeIdx = colExact(headerCells, [
+    'pos_article_code',
+    'codigo_tpv',
+    'codigo_articulo',
+    'ref_tpv',
+    'sku_tpv',
+    'articulo_tpv',
+    'id_articulo',
+    'codigo',
+  ]);
+  const articuloIdx = colExact(headerCells, ['articulo']);
+  if (codeIdx < 0 && articuloIdx >= 0 && hasNameBuddy) codeIdx = articuloIdx;
+
+  const nameFirst = colExact(headerCells, [
+    'nombre',
+    'nombre_plato',
+    'plato',
+    'producto',
+    'name',
+    'descripcion',
+    'product',
+  ]);
+  let nameIdx = nameFirst;
+  if (nameIdx < 0 && !(codeIdx === articuloIdx && articuloIdx >= 0) && articuloIdx >= 0) {
+    nameIdx = articuloIdx;
+  }
+  return { codeIdx, nameIdx };
+}
+
 export function parseSalesImportCsv(text: string): { rows: SalesImportRawRow[]; error?: string } {
   const raw = text.replace(/^\uFEFF/, '');
   const lines = raw.split(/\r?\n/).filter((l) => l.trim() !== '');
   if (lines.length < 2) return { rows: [], error: 'El archivo está vacío o solo tiene cabecera.' };
 
   const headerCells = parseCsvLine(lines[0]).map(normalizeHeader);
-  const idIdx = findColumnIndex(headerCells, ['recipe_id', 'id_receta', 'id']);
-  const nameIdx = findColumnIndex(headerCells, [
-    'nombre',
-    'nombre_plato',
-    'plato',
-    'producto',
-    'name',
-    'articulo',
-    'descripcion',
-    'product',
-  ]);
+  const idIdx = colExact(headerCells, ['recipe_id', 'id_receta', 'id']);
+  const { codeIdx, nameIdx } = resolveCodeAndNameColumnIndices(headerCells);
   const qtyIdx = findColumnIndex(headerCells, [
     'unidades',
     'unidades_vendidas',
@@ -114,25 +183,31 @@ export function parseSalesImportCsv(text: string): { rows: SalesImportRawRow[]; 
         'No encuentro columna de cantidad. Usa una cabecera como: unidades, cantidad, vendidas o uds.',
     };
   }
-  if (idIdx < 0 && nameIdx < 0) {
+  if (idIdx < 0 && nameIdx < 0 && codeIdx < 0) {
     return {
       rows: [],
       error:
-        'Falta columna de plato. Incluye recipe_id o nombre / plato / producto (o usa la plantilla descargable).',
+        'Falta plato o código TPV. Incluye recipe_id, nombre/descripcion o codigo/articulo (export TPV), o la plantilla descargable.',
     };
   }
 
   const rows: SalesImportRawRow[] = [];
   for (let li = 1; li < lines.length; li++) {
     const cells = parseCsvLine(lines[li]);
+    if (cells.length && isFooterRowFirstCell(cells[0] ?? '')) continue;
+
     const recipeId = idIdx >= 0 ? (cells[idIdx] ?? '').trim() : undefined;
-    const name = nameIdx >= 0 ? (cells[nameIdx] ?? '').trim() : undefined;
+    const posRaw = codeIdx >= 0 ? (cells[codeIdx] ?? '').trim() : '';
+    const posArticleCode = posRaw !== '' ? posRaw : undefined;
+    const nameRaw = nameIdx >= 0 ? (cells[nameIdx] ?? '').trim() : '';
+    const name = nameRaw !== '' ? nameRaw : undefined;
     const qty = parseQty(cells[qtyIdx]);
     if (!Number.isFinite(qty) || qty < 0) continue;
-    if (qty === 0 && !recipeId && !name) continue;
+    if (qty === 0 && !recipeId && !name && !posArticleCode) continue;
     rows.push({
       recipeId: recipeId || undefined,
-      name: name || undefined,
+      posArticleCode,
+      name,
       qty,
     });
   }
@@ -140,30 +215,22 @@ export function parseSalesImportCsv(text: string): { rows: SalesImportRawRow[]; 
 }
 
 function objectToRawRow(obj: Record<string, unknown>): SalesImportRawRow | null {
-  let recipeId: string | undefined;
-  let name: string | undefined;
-  let qty = NaN;
+  const normMap = new Map<string, unknown>();
   for (const [k, v] of Object.entries(obj)) {
-    const nk = normalizeHeader(k);
-    if (headerMatches(nk, ['recipe_id', 'id_receta', 'id'])) {
+    normMap.set(normalizeHeader(k), v);
+  }
+  const get = (key: string) => normMap.get(key);
+  const firstTrimmed = (...keys: string[]): string | undefined => {
+    for (const k of keys) {
+      const v = get(k);
       const s = String(v ?? '').trim();
-      if (s) recipeId = s;
+      if (s) return s;
     }
-    if (
-      headerMatches(nk, [
-        'nombre',
-        'nombre_plato',
-        'plato',
-        'producto',
-        'name',
-        'articulo',
-        'descripcion',
-        'product',
-      ])
-    ) {
-      const s = String(v ?? '').trim();
-      if (s) name = s;
-    }
+    return undefined;
+  };
+
+  let qty = NaN;
+  for (const [nk, v] of normMap.entries()) {
     if (
       headerMatches(nk, [
         'unidades',
@@ -179,10 +246,42 @@ function objectToRawRow(obj: Record<string, unknown>): SalesImportRawRow | null 
       qty = parseQty(v);
     }
   }
+
+  const hasNameBuddy = ['descripcion', 'nombre', 'nombre_plato', 'plato', 'producto', 'name', 'product'].some((k) =>
+    normMap.has(k),
+  );
+
+  let posArticleCode = firstTrimmed(
+    'pos_article_code',
+    'codigo_tpv',
+    'codigo_articulo',
+    'ref_tpv',
+    'sku_tpv',
+    'articulo_tpv',
+    'id_articulo',
+    'codigo',
+  );
+  if (!posArticleCode && hasNameBuddy) {
+    const a = get('articulo');
+    if (a != null && String(a).trim()) posArticleCode = String(a).trim();
+  }
+
+  let name = firstTrimmed('nombre', 'nombre_plato', 'plato', 'producto', 'name', 'descripcion', 'product');
+  if (!name && !posArticleCode) {
+    const a = get('articulo');
+    if (a != null && String(a).trim()) name = String(a).trim();
+  }
+
+  let recipeId = firstTrimmed('recipe_id', 'id_receta');
+  if (!recipeId) {
+    const idCell = get('id');
+    if (idCell != null && String(idCell).trim()) recipeId = String(idCell).trim();
+  }
+
   if (!Number.isFinite(qty) || qty < 0) return null;
-  if (qty === 0 && !recipeId && !name) return null;
-  if (!recipeId && !name) return null;
-  return { recipeId, name, qty };
+  if (qty === 0 && !recipeId && !name && !posArticleCode) return null;
+  if (!recipeId && !name && !posArticleCode) return null;
+  return { recipeId, posArticleCode, name, qty };
 }
 
 export async function parseSalesImportExcel(buffer: ArrayBuffer): Promise<{ rows: SalesImportRawRow[]; error?: string }> {
@@ -201,7 +300,7 @@ export async function parseSalesImportExcel(buffer: ArrayBuffer): Promise<{ rows
     return {
       rows: [],
       error:
-        'No se leyeron filas con cantidad y plato. Revisa cabeceras (nombre/plato + unidades) o usa la plantilla.',
+        'No se leyeron filas con cantidad y plato/código. Revisa cabeceras o usa la plantilla (codigo TPV + nombre + unidades).',
     };
   }
   return { rows };
@@ -209,7 +308,7 @@ export async function parseSalesImportExcel(buffer: ArrayBuffer): Promise<{ rows
 
 export function matchSalesImportToRecipes(
   raw: SalesImportRawRow[],
-  mainRecipes: { id: string; name: string }[],
+  mainRecipes: { id: string; name: string; posArticleCode?: string | null }[],
 ): SalesImportMatchedRow[] {
   const byId = new Map(mainRecipes.map((r) => [r.id, r]));
   const byNorm = new Map<string, string>();
@@ -217,11 +316,19 @@ export function matchSalesImportToRecipes(
     const n = normalizeRecipeLabel(r.name);
     if (!byNorm.has(n)) byNorm.set(n, r.id);
   }
+  const byPos = new Map<string, string>();
+  for (const r of mainRecipes) {
+    const c = r.posArticleCode;
+    if (c == null || String(c).trim() === '') continue;
+    const k = normalizePosArticleCode(String(c));
+    if (k && !byPos.has(k)) byPos.set(k, r.id);
+  }
 
   const out: SalesImportMatchedRow[] = [];
   let line = 2;
   for (const row of raw) {
-    const rawLabel = row.name ?? row.recipeId ?? '';
+    const rawLabel =
+      [row.posArticleCode, row.name, row.recipeId].filter(Boolean).join(' · ') || '(vacío)';
     if (!Number.isFinite(row.qty) || row.qty < 0) {
       out.push({
         sourceLine: line,
@@ -249,10 +356,30 @@ export function matchSalesImportToRecipes(
 
     let matchedId: string | null = null;
     let matchedName: string | null = null;
-    if (row.recipeId && byId.has(row.recipeId)) {
-      matchedId = row.recipeId;
-      matchedName = byId.get(row.recipeId)!.name;
-    } else if (row.name) {
+
+    if (row.posArticleCode) {
+      const pk = normalizePosArticleCode(row.posArticleCode);
+      if (pk && byPos.has(pk)) {
+        matchedId = byPos.get(pk)!;
+        matchedName = byId.get(matchedId)!.name;
+      }
+    }
+
+    if (!matchedId && row.recipeId) {
+      const rid = row.recipeId.trim();
+      if (looksLikeUuid(rid) && byId.has(rid)) {
+        matchedId = rid;
+        matchedName = byId.get(rid)!.name;
+      } else {
+        const pk = normalizePosArticleCode(rid);
+        if (pk && byPos.has(pk)) {
+          matchedId = byPos.get(pk)!;
+          matchedName = byId.get(matchedId)!.name;
+        }
+      }
+    }
+
+    if (!matchedId && row.name) {
       const n = normalizeRecipeLabel(row.name);
       if (byNorm.has(n)) {
         matchedId = byNorm.get(n)!;
@@ -273,13 +400,19 @@ export function matchSalesImportToRecipes(
   return out;
 }
 
-export function downloadSalesTemplateCsv(mainRecipes: { id: string; name: string }[], yearMonth: string) {
+export function downloadSalesTemplateCsv(
+  mainRecipes: { id: string; name: string; posArticleCode?: string | null }[],
+  yearMonth: string,
+) {
   const esc = (s: string) => `"${s.replace(/"/g, '""')}"`;
-  const header = 'recipe_id,nombre_plato,unidades_vendidas';
+  const header = 'recipe_id,pos_article_code,nombre_plato,unidades_vendidas';
   const body = mainRecipes
     .slice()
     .sort((a, b) => a.name.localeCompare(b.name, 'es'))
-    .map((r) => `${r.id},${esc(r.name)},`);
+    .map((r) => {
+      const code = r.posArticleCode?.trim() ?? '';
+      return `${r.id},${code ? esc(code) : ''},${esc(r.name)},`;
+    });
   const csv = ['\ufeff' + header, ...body].join('\n');
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
   const a = document.createElement('a');

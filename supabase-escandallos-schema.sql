@@ -16,8 +16,16 @@ create table if not exists public.escandallo_recipes (
 alter table public.escandallo_recipes add column if not exists is_sub_recipe boolean not null default false;
 alter table public.escandallo_recipes add column if not exists sale_vat_rate_pct numeric(5, 2);
 alter table public.escandallo_recipes add column if not exists sale_price_gross_eur numeric(12, 4);
+alter table public.escandallo_recipes add column if not exists pos_article_code text;
+
+comment on column public.escandallo_recipes.pos_article_code is
+  'Código del artículo en el TPV (ej. 00042). Opcional; único por local si se informa.';
 
 create index if not exists idx_escandallo_recipes_local_id on public.escandallo_recipes(local_id);
+
+create unique index if not exists idx_escandallo_recipes_local_pos_code_unique
+  on public.escandallo_recipes (local_id, pos_article_code)
+  where pos_article_code is not null and btrim(pos_article_code) <> '';
 
 -- Ventas por mes y plato (mix real para food cost ponderado)
 create table if not exists public.escandallo_monthly_sales (

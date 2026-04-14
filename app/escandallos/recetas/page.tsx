@@ -389,6 +389,7 @@ export default function EscandallosRecetasPage() {
   const [draftYieldLabel, setDraftYieldLabel] = useState('');
   const [draftSaleGross, setDraftSaleGross] = useState('');
   const [draftSaleVat, setDraftSaleVat] = useState('10');
+  const [draftPosArticleCode, setDraftPosArticleCode] = useState('');
   const [ingredientDrafts, setIngredientDrafts] = useState<IngredientDraftRow[]>([emptyIngredientDraft()]);
 
   const [subNewName, setSubNewName] = useState('');
@@ -483,6 +484,7 @@ export default function EscandallosRecetasPage() {
     setDraftYieldLabel(recipe.yieldLabel);
     setDraftSaleGross(recipe.salePriceGrossEur != null ? String(recipe.salePriceGrossEur) : '');
     setDraftSaleVat(recipe.saleVatRatePct != null ? String(recipe.saleVatRatePct) : '10');
+    setDraftPosArticleCode(recipe.posArticleCode ?? '');
     setIngredientDrafts([emptyIngredientDraft()]);
   };
 
@@ -621,6 +623,7 @@ export default function EscandallosRecetasPage() {
       };
       const recipe = recipesById.get(recipeId);
       if (recipe && !recipe.isSubRecipe) {
+        patch.posArticleCode = draftPosArticleCode.trim() === '' ? null : draftPosArticleCode.trim();
         if (gross != null && gross > 0) {
           patch.saleVatRatePct = vat != null && vat >= 0 ? vat : 10;
           patch.salePriceGrossEur = gross;
@@ -654,6 +657,7 @@ export default function EscandallosRecetasPage() {
                       : gross != null && gross > 0
                         ? Math.round(gross * 10000) / 10000
                         : null,
+                  posArticleCode: r.isSubRecipe ? r.posArticleCode : draftPosArticleCode.trim() === '' ? null : draftPosArticleCode.trim(),
                 }
               : r,
           )
@@ -780,6 +784,11 @@ export default function EscandallosRecetasPage() {
                 </>
               ) : null}
             </p>
+            {!recipe.isSubRecipe && recipe.posArticleCode ? (
+              <p className="mt-0.5 text-[11px] text-zinc-500">
+                TPV <span className="font-mono tabular-nums">{recipe.posArticleCode}</span>
+              </p>
+            ) : null}
             {!recipe.isSubRecipe && recipe.salePriceGrossEur != null ? (
               <p className="mt-0.5 text-[11px] text-zinc-500">
                 PVP {recipe.salePriceGrossEur.toFixed(2)} € IVA incl. → neto ~{netSale?.toFixed(2) ?? '—'} €
@@ -896,6 +905,23 @@ export default function EscandallosRecetasPage() {
                       </div>
                     );
                   })()}
+                </div>
+              ) : null}
+
+              {!recipe.isSubRecipe ? (
+                <div className="rounded-lg border border-zinc-200 bg-white p-3">
+                  <label className="text-[10px] font-bold uppercase text-zinc-500">Código TPV / POS</label>
+                  <p className="mt-1 text-[11px] text-zinc-600">
+                    Mismo valor que la columna <span className="font-medium">Articulo</span> (o código) del export. Así
+                    puedes importar ventas sin usar el UUID de receta.
+                  </p>
+                  <input
+                    value={draftPosArticleCode}
+                    onChange={(e) => setDraftPosArticleCode(e.target.value)}
+                    className="mt-2 w-full rounded-lg border border-zinc-200 px-2 py-1.5 font-mono text-sm tabular-nums"
+                    placeholder="Ej. 00042"
+                    autoComplete="off"
+                  />
                 </div>
               ) : null}
 

@@ -396,7 +396,7 @@ export default function EscandallosPage() {
 
   const handleDownloadSalesTemplate = useCallback(() => {
     downloadSalesTemplateCsv(
-      mainRows.map((r) => ({ id: r.id, name: r.name })),
+      mainRows.map((r) => ({ id: r.id, name: r.name, posArticleCode: r.posArticleCode })),
       salesYearMonth,
     );
   }, [mainRows, salesYearMonth]);
@@ -436,7 +436,7 @@ export default function EscandallosPage() {
       }
       const matched = matchSalesImportToRecipes(
         raw,
-        mainRows.map((r) => ({ id: r.id, name: r.name })),
+        mainRows.map((r) => ({ id: r.id, name: r.name, posArticleCode: r.posArticleCode })),
       );
       setImportPreview(matched);
     } catch (err) {
@@ -600,12 +600,14 @@ export default function EscandallosPage() {
                 <p className="text-sm font-bold text-zinc-900">Importar Excel / CSV</p>
               </div>
               <p className="mt-2 text-sm leading-relaxed text-zinc-600">
-                <span className="font-semibold text-zinc-800">Plantilla:</span> descarga el CSV con{' '}
+                <span className="font-semibold text-zinc-800">Plantilla:</span> incluye{' '}
+                <code className="rounded bg-zinc-200/80 px-1 font-mono text-[11px]">pos_article_code</code> (código TPV
+                que configuras en Recetas),{' '}
                 <code className="rounded bg-zinc-200/80 px-1 font-mono text-[11px]">recipe_id</code> y{' '}
                 <code className="rounded bg-zinc-200/80 px-1 font-mono text-[11px]">nombre_plato</code>; rellena{' '}
-                <code className="rounded bg-zinc-200/80 px-1 font-mono text-[11px]">unidades_vendidas</code>. Abre en
-                Excel, guarda como .xlsx si quieres, y vuelve a subir. Otros informes: columnas tipo{' '}
-                <em>plato / producto + cantidad / unidades</em> suelen funcionar.
+                <code className="rounded bg-zinc-200/80 px-1 font-mono text-[11px]">unidades_vendidas</code>. Export del
+                TPV con columnas <em>Articulo + Descripcion</em> (o solo código + unidades) encajan automáticamente si el
+                código está en la ficha del plato.
               </p>
               <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
                 <button

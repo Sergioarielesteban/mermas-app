@@ -14,6 +14,8 @@ export type EscandalloRecipe = {
   saleVatRatePct: number | null;
   /** PVP con IVA por unidad de yield (ración). null = sin precio venta. */
   salePriceGrossEur: number | null;
+  /** Código artículo en TPV (ej. 00042). null = sin enlace a export POS. */
+  posArticleCode: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -80,6 +82,7 @@ type RecipeRow = {
   is_sub_recipe?: boolean | null;
   sale_vat_rate_pct?: number | null;
   sale_price_gross_eur?: number | null;
+  pos_article_code?: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -140,6 +143,10 @@ function mapRecipe(row: RecipeRow): EscandalloRecipe {
       gross != null && Number.isFinite(Number(gross)) && Number(gross) > 0
         ? Math.round(Number(gross) * 10000) / 10000
         : null,
+    posArticleCode:
+      row.pos_article_code != null && String(row.pos_article_code).trim() !== ''
+        ? String(row.pos_article_code).trim()
+        : null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -189,7 +196,7 @@ export async function fetchEscandalloRecipes(supabase: SupabaseClient, localId: 
   const { data, error } = await supabase
     .from('escandallo_recipes')
     .select(
-      'id,local_id,name,notes,yield_qty,yield_label,is_sub_recipe,sale_vat_rate_pct,sale_price_gross_eur,created_at,updated_at',
+      'id,local_id,name,notes,yield_qty,yield_label,is_sub_recipe,sale_vat_rate_pct,sale_price_gross_eur,pos_article_code,created_at,updated_at',
     )
     .eq('local_id', localId)
     .order('name');
@@ -308,6 +315,7 @@ export async function insertEscandalloRecipe(
     isSubRecipe?: boolean;
     saleVatRatePct?: number | null;
     salePriceGrossEur?: number | null;
+    posArticleCode?: string | null;
   },
 ): Promise<EscandalloRecipe> {
   const yieldQty = opts?.yieldQty != null && opts.yieldQty > 0 ? opts.yieldQty : 1;
@@ -325,11 +333,15 @@ export async function insertEscandalloRecipe(
   if (opts?.salePriceGrossEur != null && Number.isFinite(opts.salePriceGrossEur) && opts.salePriceGrossEur > 0) {
     row.sale_price_gross_eur = Math.round(opts.salePriceGrossEur * 10000) / 10000;
   }
+  if (opts?.posArticleCode !== undefined) {
+    const c = opts.posArticleCode?.trim() ?? '';
+    row.pos_article_code = c === '' ? null : c;
+  }
   const { data, error } = await supabase
     .from('escandallo_recipes')
     .insert(row)
     .select(
-      'id,local_id,name,notes,yield_qty,yield_label,is_sub_recipe,sale_vat_rate_pct,sale_price_gross_eur,created_at,updated_at',
+      'id,local_id,name,notes,yield_qty,yield_label,is_sub_recipe,sale_vat_rate_pct,sale_price_gross_eur,pos_article_code,created_at,updated_at',
     )
     .single();
   if (error) throw new Error(error.message);
@@ -348,6 +360,7 @@ export async function updateEscandalloRecipe(
     isSubRecipe?: boolean;
     saleVatRatePct?: number | null;
     salePriceGrossEur?: number | null;
+    posArticleCode?: string | null;
   },
 ): Promise<void> {
   const row: Record<string, unknown> = {};
@@ -367,6 +380,10 @@ export async function updateEscandalloRecipe(
       patch.salePriceGrossEur != null && Number.isFinite(patch.salePriceGrossEur) && patch.salePriceGrossEur > 0
         ? Math.round(patch.salePriceGrossEur * 10000) / 10000
         : null;
+  }
+  if (patch.posArticleCode !== undefined) {
+    const c = patch.posArticleCode?.trim() ?? '';
+    row.pos_article_code = c === '' ? null : c;
   }
   if (Object.keys(row).length === 0) return;
   const { error } = await supabase
