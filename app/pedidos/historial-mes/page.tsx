@@ -12,6 +12,23 @@ import { formatQuantityWithUnit, totalsWithVatForOrderListDisplay } from '@/lib/
 import type { PedidoOrder } from '@/lib/pedidos-supabase';
 import type { Unit } from '@/lib/types';
 
+type ViewMode = 'real' | 'previsto';
+
+function accountingYearMonth(order: PedidoOrder, mode: ViewMode): string | null {
+  // REAL: solo cuenta cuando entra de verdad al local.
+  if (mode === 'real') {
+    return order.receivedAt ? order.receivedAt.slice(0, 7) : null;
+  }
+  // PREVISTO:
+  // 1) recibidos por fecha real de recepción
+  // 2) pendientes por fecha prevista de entrega
+  // 3) fallback técnico enviado/creado
+  if (order.receivedAt) return order.receivedAt.slice(0, 7);
+  if (order.deliveryDate) return order.deliveryDate.slice(0, 7);
+  if (order.sentAt) return order.sentAt.slice(0, 7);
+  return order.createdAt.slice(0, 7);
+}
+
 export default function PedidosHistorialMesPage() {
   const { localCode, localName, localId, email } = useAuth();
   const hasPedidosEntry = canAccessPedidos(localCode, email, localName, localId);
@@ -19,6 +36,7 @@ export default function PedidosHistorialMesPage() {
   const { orders } = usePedidosOrders();
   const [message, setMessage] = React.useState<string | null>(null);
   const [month, setMonth] = React.useState(() => new Date().toISOString().slice(0, 7));
+  const [viewMode, setViewMode] = React.useState<ViewMode>('real');
   const [activeWeek, setActiveWeek] = React.useState<number | null>(null);
   const [supplierFilter, setSupplierFilter] = React.useState<'all' | string>('all');
   const [topN, setTopN] = React.useState(10);
@@ -31,10 +49,9 @@ export default function PedidosHistorialMesPage() {
   const monthlyOrders = React.useMemo(
     () =>
       accountingOrders.filter((order) => {
-        const pivotDate = (order.receivedAt ?? order.sentAt ?? order.createdAt).slice(0, 7);
-        return pivotDate === month;
+        return accountingYearMonth(order, viewMode) === month;
       }),
-    [accountingOrders, month],
+    [accountingOrders, month, viewMode],
   );
 
   const filteredMonthlyOrders = React.useMemo(
@@ -58,10 +75,9 @@ export default function PedidosHistorialMesPage() {
   const previousMonthOrders = React.useMemo(
     () =>
       accountingOrders.filter((order) => {
-        const pivotDate = (order.receivedAt ?? order.sentAt ?? order.createdAt).slice(0, 7);
-        return pivotDate === previousMonth;
+        return accountingYearMonth(order, viewMode) === previousMonth;
       }),
-    [accountingOrders, previousMonth],
+    [accountingOrders, previousMonth, viewMode],
   );
   const filteredPreviousMonthOrders = React.useMemo(
     () =>
@@ -251,8 +267,7 @@ export default function PedidosHistorialMesPage() {
     >();
 
     for (const order of accountingOrders) {
-      const pivotDate = (order.receivedAt ?? order.sentAt ?? order.createdAt).slice(0, 7);
-      if (pivotDate !== month) continue;
+      if (accountingYearMonth(order, viewMode) !== month) continue;
 
       const existing = bySupplier.get(order.supplierId) ?? {
         supplierName: order.supplierName,
@@ -288,7 +303,7 @@ export default function PedidosHistorialMesPage() {
           .sort((a, b) => a.name.localeCompare(b.name, 'es')),
       }))
       .sort((a, b) => b.totalWithVat - a.totalWithVat);
-  }, [accountingOrders, month]);
+  }, [accountingOrders, month, viewMode]);
 
   const [expandedSupplierId, setExpandedSupplierId] = React.useState<string | null>(null);
   const displayedSuppliers = React.useMemo(
@@ -330,7 +345,7 @@ export default function PedidosHistorialMesPage() {
       </section>
 
       <section className="rounded-3xl bg-zinc-950 px-6 py-8 text-white shadow-xl shadow-zinc-900/20">
-        <h1 className="text-center text-[11px] font-semibold uppercase tracking-[0.2em] text-zinc-400">Historial</h1>
+        <h1 className="text-center text-[11px] font-semibold uppercase tracking-[0.2em] text-zinc-400">Compras</h1>
         <p className="mt-2 text-center text-2xl font-light tracking-tight text-white sm:text-3xl">Compras del mes</p>
         <p className="mx-auto mt-3 max-w-sm text-center text-sm leading-relaxed text-zinc-400">
           Pulsa sobre el nombre del proveedor para desplegar el listado de productos
@@ -342,7 +357,7 @@ export default function PedidosHistorialMesPage() {
       ) : null}
 
       <section className="min-w-0 rounded-3xl bg-white p-5 shadow-sm ring-1 ring-zinc-200/80">
-        <div className="grid grid-cols-1 gap-3 border-b border-zinc-100 pb-4 sm:grid-cols-3">
+        <div className="grid grid-cols-1 gap-3 border-b border-zinc-100 pb-4 sm:grid-cols-4">
           <label className="text-xs font-medium text-zinc-500">
             <span className="block text-[10px] uppercase tracking-wider text-zinc-400">Período</span>
             <input
@@ -387,7 +402,27 @@ export default function PedidosHistorialMesPage() {
               <option value="20">Top 20</option>
             </select>
           </label>
+          <label className="text-xs font-medium text-zinc-500">
+            <span className="block text-[10px] uppercase tracking-wider text-zinc-400">Modo</span>
+            <select
+              value={viewMode}
+              onChange={(e) => {
+                setViewMode(e.target.value as ViewMode);
+                setActiveWeek(null);
+                setExpandedSupplierId(null);
+              }}
+              className="mt-1 h-11 w-full rounded-2xl border-0 bg-zinc-100 px-4 text-sm font-semibold text-zinc-900 outline-none focus:ring-2 focus:ring-zinc-900/10"
+            >
+              <option value="real">Real (recepción)</option>
+              <option value="previsto">Previsto (entrega)</option>
+            </select>
+          </label>
         </div>
+        <p className="mt-3 text-xs text-zinc-500">
+          {viewMode === 'real'
+            ? 'Modo real: solo cuenta pedidos ya recibidos (fecha de entrada al local).'
+            : 'Modo previsto: recibidos por fecha real y pendientes por fecha prevista de entrega.'}
+        </p>
         <div className="mt-4 grid min-w-0 grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
           <div className="rounded-2xl bg-zinc-50 px-3 py-2 ring-1 ring-zinc-200">
             <p className="text-[10px] uppercase tracking-wide text-zinc-500">Total mes</p>

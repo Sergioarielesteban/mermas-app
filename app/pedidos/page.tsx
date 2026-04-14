@@ -555,7 +555,7 @@ export default function PedidosPage() {
             Evolucion precios
           </Link>
           <Link href="/pedidos/historial-mes" className="rounded-xl border border-zinc-300 bg-white px-3 py-2 text-center text-sm font-semibold text-zinc-700">
-            Historial mes
+            Compras del mes
           </Link>
         </div>
       </section>
