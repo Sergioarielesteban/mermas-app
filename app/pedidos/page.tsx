@@ -378,7 +378,21 @@ export default function PedidosPage() {
     [],
   );
 
-  const sentOrders = orders.filter((row) => row.status === 'sent');
+  const sentOrders = React.useMemo(() => {
+    const rows = orders.filter((row) => row.status === 'sent');
+    return [...rows].sort((a, b) => {
+      const aTs = a.deliveryDate
+        ? new Date(`${a.deliveryDate}T00:00:00`).getTime()
+        : new Date(a.createdAt).getTime();
+      const bTs = b.deliveryDate
+        ? new Date(`${b.deliveryDate}T00:00:00`).getTime()
+        : new Date(b.createdAt).getTime();
+      // Entrega más próxima arriba (mañana primero, luego días posteriores).
+      if (aTs !== bTs) return aTs - bTs;
+      // Desempate estable por fecha de creación.
+      return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+    });
+  }, [orders]);
   const ordersPendingPriceReview = orders.filter(
     (row) =>
       (row.status === 'sent' || row.status === 'received') && !row.priceReviewArchivedAt,
@@ -526,21 +540,21 @@ export default function PedidosPage() {
 
       <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-zinc-200">
         <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-3">
-          <Link href="/pedidos/nuevo" className="rounded-xl bg-[#D32F2F] px-3 py-2 text-center text-sm font-bold text-white">
+          <Link href="/pedidos/nuevo" className="rounded-xl bg-[#D32F2F] px-3 py-2.5 text-center text-sm font-bold text-white">
             + Nuevo pedido
           </Link>
           <Link href="/pedidos/proveedores" className="rounded-xl border border-zinc-300 bg-white px-3 py-2 text-center text-sm font-semibold text-zinc-700">
             Proveedores
           </Link>
         </div>
-        <div className="mt-2 flex flex-wrap gap-2">
-          <Link href="/pedidos/calendario" className="rounded-xl border border-zinc-300 bg-white px-3 py-2 text-center text-sm font-semibold text-zinc-700 inline-block">
+        <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-3">
+          <Link href="/pedidos/calendario" className="rounded-xl border border-zinc-300 bg-white px-3 py-2 text-center text-sm font-semibold text-zinc-700">
             Calendario entregas
           </Link>
-          <Link href="/pedidos/precios" className="rounded-xl border border-zinc-300 bg-white px-3 py-2 text-center text-sm font-semibold text-zinc-700 inline-block">
+          <Link href="/pedidos/precios" className="rounded-xl border border-zinc-300 bg-white px-3 py-2 text-center text-sm font-semibold text-zinc-700">
             Evolucion precios
           </Link>
-          <Link href="/pedidos/historial-mes" className="rounded-xl border border-zinc-300 bg-white px-3 py-2 text-center text-sm font-semibold text-zinc-700 inline-block">
+          <Link href="/pedidos/historial-mes" className="rounded-xl border border-zinc-300 bg-white px-3 py-2 text-center text-sm font-semibold text-zinc-700">
             Historial mes
           </Link>
         </div>
@@ -549,20 +563,6 @@ export default function PedidosPage() {
       {message ? (
         <section className="rounded-2xl bg-white p-4 text-sm text-zinc-700 ring-1 ring-zinc-200">{message}</section>
       ) : null}
-
-      <section className="flex justify-center">
-        <Link
-          href="/pedidos/recepcion"
-          className="w-full max-w-sm rounded-2xl bg-white p-4 text-center ring-1 ring-zinc-200 block"
-        >
-          <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Pendientes revision de precios</p>
-          <p className="pt-2 text-2xl font-black text-zinc-900">{ordersPendingPriceReview.length}</p>
-          <p className="pt-1 text-xs text-zinc-500">
-            Incluye enviados y los marcados como recibidos (falta cotejar precios en Recepción). Salen del contador al
-            archivar allí con «revisado». Toca para abrir la lista.
-          </p>
-        </Link>
-      </section>
 
       <details
         className={[
@@ -1033,6 +1033,31 @@ export default function PedidosPage() {
           })}
         </div>
       </details>
+
+      <section
+        className="overflow-hidden rounded-3xl bg-zinc-50/80 ring-1 ring-zinc-200/90 transition-all duration-300 ease-out hover:bg-white hover:ring-zinc-300"
+      >
+        <Link
+          href="/pedidos/recepcion"
+          className="flex w-full flex-col items-center px-5 py-8 text-center outline-none transition active:bg-zinc-50/50 focus-visible:ring-2 focus-visible:ring-[#D32F2F]/40 focus-visible:ring-offset-2 sm:px-6"
+        >
+          <span className="text-[11px] font-semibold uppercase tracking-[0.2em] text-zinc-400">Recepción</span>
+          <span className="mt-2 text-center text-2xl font-semibold leading-[1.15] tracking-tight text-zinc-900 sm:text-[1.75rem] sm:leading-tight">
+            Pendientes revisión de precios
+          </span>
+          <span className={`mx-auto mt-4 w-24 ${CHEF_ONE_TAPER_LINE_CLASS}`} aria-hidden />
+          <span className="mt-4 text-3xl font-black tabular-nums text-zinc-900">
+            {ordersPendingPriceReview.length}
+          </span>
+          <span className="mt-3 text-xs text-zinc-500">
+            Incluye enviados y recibidos sin revisar en Recepción.
+          </span>
+          <span className="mt-5 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider text-[#D32F2F]">
+            Abrir revisión de precios
+            <ChevronDown className="-rotate-90 h-4 w-4" aria-hidden />
+          </span>
+        </Link>
+      </section>
     </div>
   );
 }

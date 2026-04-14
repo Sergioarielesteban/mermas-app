@@ -4,6 +4,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import React from 'react';
+import { ChevronDown } from 'lucide-react';
 import { useAuth } from '@/components/AuthProvider';
 import { usePedidosOrders } from '@/components/PedidosOrdersProvider';
 import { CHEF_ONE_TAPER_LINE_CLASS } from '@/components/ChefOneGlowLine';
@@ -69,6 +70,7 @@ export default function RecepcionPedidosPage() {
   }, []);
   const [incidentOpenByOrderId, setIncidentOpenByOrderId] = React.useState<Record<string, boolean>>({});
   const [incidentNoteByOrderId, setIncidentNoteByOrderId] = React.useState<Record<string, string>>({});
+  const [expandedPendingOrderId, setExpandedPendingOrderId] = React.useState<string | null>(null);
   const [archivedAccordionOpen, setArchivedAccordionOpen] = React.useState(true);
   const [expandedArchivedOrderId, setExpandedArchivedOrderId] = React.useState<string | null>(null);
   const focusOrderIdFromUrl = searchParams.get('orderId') ?? '';
@@ -83,6 +85,7 @@ export default function RecepcionPedidosPage() {
     const o = orders.find((x) => x.id === focusOrderIdFromUrl);
     if (!o) return;
     focusOrderAppliedRef.current = true;
+    setExpandedPendingOrderId(focusOrderIdFromUrl);
     setIncidentOpenByOrderId((prev) => ({ ...prev, [focusOrderIdFromUrl]: true }));
     setIncidentNoteByOrderId((prev) => ({
       ...prev,
@@ -404,6 +407,7 @@ export default function RecepcionPedidosPage() {
           {pendingPriceReviewOrders.map((order) => {
             const orderIncidentMode =
               Boolean(incidentOpenByOrderId[order.id]) || orderHasAnyIncident(order);
+            const expanded = expandedPendingOrderId === order.id;
             return (
             <div
               key={order.id}
@@ -429,7 +433,20 @@ export default function RecepcionPedidosPage() {
                     «revisado» para archivar en la parte inferior.
                   </p>
                 ) : null}
+                <button
+                  type="button"
+                  onClick={() => setExpandedPendingOrderId((id) => (id === order.id ? null : order.id))}
+                  className="mt-3 inline-flex items-center gap-2 rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-zinc-700"
+                  aria-expanded={expanded}
+                >
+                  {expanded ? 'Ocultar detalle' : 'Ver detalle'}
+                  <ChevronDown
+                    className={['h-4 w-4 transition-transform', expanded ? 'rotate-180' : ''].join(' ')}
+                    aria-hidden
+                  />
+                </button>
               </div>
+              {expanded ? (
               <div className="mt-3 space-y-2">
                 {order.items.map((item) => (
                     <div key={item.id} className="space-y-1.5 rounded-lg bg-white p-3 ring-1 ring-zinc-200">
@@ -614,6 +631,7 @@ export default function RecepcionPedidosPage() {
                   revisado
                 </button>
               </div>
+              ) : null}
             </div>
             );
           })}
