@@ -447,6 +447,7 @@ export default function RecepcionPedidosPage() {
                 </button>
               </div>
               {expanded ? (
+              <>
               <div className="mt-3 space-y-2">
                 {order.items.map((item) => (
                     <div key={item.id} className="space-y-1.5 rounded-lg bg-white p-3 ring-1 ring-zinc-200">
@@ -631,6 +632,7 @@ export default function RecepcionPedidosPage() {
                   revisado
                 </button>
               </div>
+              </>
               ) : null}
             </div>
             );
