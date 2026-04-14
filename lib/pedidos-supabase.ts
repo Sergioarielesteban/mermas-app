@@ -184,6 +184,11 @@ type OrderItemRow = {
   incident_notes: string | null;
 };
 
+function isMissingReceivedPricePerKgColumnError(message: string): boolean {
+  const m = message.toLowerCase();
+  return m.includes('received_price_per_kg') && (m.includes('column') || m.includes('schema cache'));
+}
+
 function normalizeLabelUpper(value: string) {
   return value.trim().toUpperCase();
 }
@@ -369,16 +374,33 @@ export async function fetchOrders(supabase: SupabaseClient, localId: string) {
   if (oErr) throw new Error(oErr.message);
 
   const ids = ((orderRows ?? []) as OrderRow[]).map((row) => row.id);
-  const { data: itemRows, error: iErr } = await supabase
-    .from('purchase_order_items')
-    .select(
-      'id,order_id,supplier_product_id,product_name,unit,quantity,received_quantity,price_per_unit,base_price_per_unit,vat_rate,line_total,estimated_kg_per_unit,received_weight_kg,received_price_per_kg,incident_type,incident_notes',
-    )
-    .in('order_id', ids.length ? ids : ['00000000-0000-0000-0000-000000000000']);
-  if (iErr) throw new Error(iErr.message);
+  let itemRows: OrderItemRow[] = [];
+  {
+    const withPricePerKg = await supabase
+      .from('purchase_order_items')
+      .select(
+        'id,order_id,supplier_product_id,product_name,unit,quantity,received_quantity,price_per_unit,base_price_per_unit,vat_rate,line_total,estimated_kg_per_unit,received_weight_kg,received_price_per_kg,incident_type,incident_notes',
+      )
+      .in('order_id', ids.length ? ids : ['00000000-0000-0000-0000-000000000000']);
+    if (withPricePerKg.error) {
+      if (!isMissingReceivedPricePerKgColumnError(withPricePerKg.error.message)) {
+        throw new Error(withPricePerKg.error.message);
+      }
+      const legacy = await supabase
+        .from('purchase_order_items')
+        .select(
+          'id,order_id,supplier_product_id,product_name,unit,quantity,received_quantity,price_per_unit,base_price_per_unit,vat_rate,line_total,estimated_kg_per_unit,received_weight_kg,incident_type,incident_notes',
+        )
+        .in('order_id', ids.length ? ids : ['00000000-0000-0000-0000-000000000000']);
+      if (legacy.error) throw new Error(legacy.error.message);
+      itemRows = (legacy.data ?? []) as OrderItemRow[];
+    } else {
+      itemRows = (withPricePerKg.data ?? []) as OrderItemRow[];
+    }
+  }
 
   const byOrder = new Map<string, PedidoOrderItem[]>();
-  for (const row of (itemRows ?? []) as OrderItemRow[]) {
+  for (const row of itemRows) {
     const list = byOrder.get(row.order_id) ?? [];
     list.push({
       id: row.id,
@@ -448,16 +470,34 @@ export async function fetchOrderById(
   const row = orderRow as OrderRow | null;
   if (!row) return null;
 
-  const { data: itemRows, error: iErr } = await supabase
-    .from('purchase_order_items')
-    .select(
-      'id,order_id,supplier_product_id,product_name,unit,quantity,received_quantity,price_per_unit,base_price_per_unit,vat_rate,line_total,estimated_kg_per_unit,received_weight_kg,received_price_per_kg,incident_type,incident_notes',
-    )
-    .eq('order_id', orderId)
-    .eq('local_id', localId);
-  if (iErr) throw new Error(iErr.message);
+  let itemRows: OrderItemRow[] = [];
+  {
+    const withPricePerKg = await supabase
+      .from('purchase_order_items')
+      .select(
+        'id,order_id,supplier_product_id,product_name,unit,quantity,received_quantity,price_per_unit,base_price_per_unit,vat_rate,line_total,estimated_kg_per_unit,received_weight_kg,received_price_per_kg,incident_type,incident_notes',
+      )
+      .eq('order_id', orderId)
+      .eq('local_id', localId);
+    if (withPricePerKg.error) {
+      if (!isMissingReceivedPricePerKgColumnError(withPricePerKg.error.message)) {
+        throw new Error(withPricePerKg.error.message);
+      }
+      const legacy = await supabase
+        .from('purchase_order_items')
+        .select(
+          'id,order_id,supplier_product_id,product_name,unit,quantity,received_quantity,price_per_unit,base_price_per_unit,vat_rate,line_total,estimated_kg_per_unit,received_weight_kg,incident_type,incident_notes',
+        )
+        .eq('order_id', orderId)
+        .eq('local_id', localId);
+      if (legacy.error) throw new Error(legacy.error.message);
+      itemRows = (legacy.data ?? []) as OrderItemRow[];
+    } else {
+      itemRows = (withPricePerKg.data ?? []) as OrderItemRow[];
+    }
+  }
 
-  const items: PedidoOrderItem[] = ((itemRows ?? []) as OrderItemRow[]).map((ir) => ({
+  const items: PedidoOrderItem[] = itemRows.map((ir) => ({
     id: ir.id,
     supplierProductId: ir.supplier_product_id,
     productName: ir.product_name,
@@ -926,7 +966,21 @@ export async function persistReceptionItemTotals(supabase: SupabaseClient, local
     })
     .eq('id', item.id)
     .eq('local_id', localId);
-  if (error) throw new Error(error.message);
+  if (error) {
+    if (!isMissingReceivedPricePerKgColumnError(error.message)) {
+      throw new Error(error.message);
+    }
+    const legacy = await supabase
+      .from('purchase_order_items')
+      .update({
+        received_weight_kg: w,
+        price_per_unit: effectivePricePerUnit,
+        line_total: lineTotal,
+      })
+      .eq('id', item.id)
+      .eq('local_id', localId);
+    if (legacy.error) throw new Error(legacy.error.message);
+  }
 }
 
 export async function updateOrderItemPrice(
