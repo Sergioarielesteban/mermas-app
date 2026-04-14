@@ -386,28 +386,45 @@ type ActionRecommendation = {
 function PriceEvolutionMiniChart({ row }: { row: PriceSummary }) {
   const data = React.useMemo(() => {
     const asc = [...row.points].sort((a, b) => Date.parse(a.date) - Date.parse(b.date));
-    return asc.map((p) => ({
-      dateLabel: new Date(p.date).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: '2-digit' }),
-      price: p.price,
-      kind: p.sortRank === 0 ? 'Pedido' : 'Albarán',
-      supplier: p.supplier,
-    }));
+    const dayKeys = asc.map((p) => p.date.slice(0, 10));
+    const allSameCalendarDay = dayKeys.length > 0 && new Set(dayKeys).size === 1;
+
+    return asc.map((p) => {
+      const when = new Date(p.orderCreatedAt || p.date);
+      const dateLabel = allSameCalendarDay
+        ? when.toLocaleString('es-ES', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })
+        : new Date(p.date).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: '2-digit' });
+      return {
+        dateLabel,
+        price: p.price,
+        kind: p.sortRank === 0 ? 'Pedido' : 'Albarán',
+        supplier: p.supplier,
+      };
+    });
   }, [row.points]);
 
   if (data.length < 2) return null;
 
   return (
-    <div className="mt-3 h-52 w-full min-w-0 sm:h-56">
-      <ResponsiveContainer width="100%" height="100%">
-        <LineChart data={data} margin={{ top: 6, right: 6, left: -18, bottom: 2 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke="#e4e4e7" />
-          <XAxis dataKey="dateLabel" tick={{ fontSize: 10, fill: '#71717a' }} interval="preserveStartEnd" />
-          <YAxis
-            tick={{ fontSize: 10, fill: '#71717a' }}
-            width={44}
-            domain={['auto', 'auto']}
-            tickFormatter={(v) => (typeof v === 'number' ? v.toFixed(2) : String(v))}
-          />
+    <div className="mt-3 w-full min-w-0">
+      <div className="h-56 w-full min-h-[14rem] sm:h-60">
+        <ResponsiveContainer width="100%" height="100%">
+          <LineChart data={data} margin={{ top: 10, right: 10, left: 6, bottom: 8 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#e4e4e7" />
+            <XAxis
+              dataKey="dateLabel"
+              tick={{ fontSize: 9, fill: '#71717a' }}
+              interval={data.length > 8 ? 'preserveStartEnd' : 0}
+              height={data.length > 8 ? 28 : 40}
+              tickMargin={6}
+            />
+            <YAxis
+              tick={{ fontSize: 10, fill: '#71717a' }}
+              width={52}
+              domain={['auto', 'auto']}
+              tickMargin={6}
+              tickFormatter={(v) => (typeof v === 'number' ? v.toFixed(2) : String(v))}
+            />
           <Tooltip
             content={({ active, payload }) => {
               if (!active || !payload?.length) return null;
@@ -456,7 +473,8 @@ function PriceEvolutionMiniChart({ row }: { row: PriceSummary }) {
           />
         </LineChart>
       </ResponsiveContainer>
-      <p className="mb-3 mt-1 text-center text-[10px] leading-snug text-zinc-500">
+      </div>
+      <p className="mt-3 rounded-lg bg-zinc-50 px-2.5 py-2 text-center text-[10px] leading-relaxed text-zinc-600 ring-1 ring-zinc-200/80">
         Gris = precio pedido · Rojo = albarán · Línea gris = PMP del periodo
       </p>
     </div>
@@ -1621,10 +1639,10 @@ export default function PedidosPreciosPage() {
               <p className={`pt-1 text-xs font-semibold ${trendClass(row)}`}>{trendLabel(row)}</p>
               <p className="pt-2 text-[10px] font-bold uppercase tracking-wide text-zinc-500">Gráfico de evolución</p>
               <PriceEvolutionMiniChart row={row} />
-              <p className="pt-1 text-[10px] font-bold uppercase tracking-wide text-zinc-500">Compras</p>
-              <div className="mt-1 max-h-40 space-y-1 overflow-auto rounded-lg bg-zinc-50 p-2 ring-1 ring-zinc-200">
+              <p className="pt-5 text-[10px] font-bold uppercase tracking-wide text-zinc-500">Compras</p>
+              <div className="mt-1.5 max-h-44 space-y-1 overflow-y-auto overflow-x-hidden rounded-lg bg-zinc-50 p-2 pb-3 ring-1 ring-zinc-200">
                 {row.purchases.map((pur, idx) => (
-                  <p key={`${row.key}-p-${idx}`} className="text-xs text-zinc-600">
+                  <p key={`${row.key}-p-${idx}`} className="text-xs leading-snug text-zinc-600">
                     {new Date(pur.date).toLocaleDateString('es-ES')} · {pur.supplier} ·{' '}
                     {formatQuantityWithUnit(pur.qty, pur.unit)} · {pur.price.toFixed(2)} €/{pur.unit}
                   </p>
