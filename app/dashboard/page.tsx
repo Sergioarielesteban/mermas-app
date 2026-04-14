@@ -176,6 +176,77 @@ function readStoredTarget(key: string, fallback: number) {
   }
 }
 
+const WEEKLY_TARGET_BOUNDS = { min: 25, max: 800, step: 5 } as const;
+const MONTHLY_TARGET_BOUNDS = { min: 150, max: 8000, step: 25 } as const;
+
+function clampTarget(value: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, value));
+}
+
+function MermaObjectiveSlider({
+  label,
+  hint,
+  value,
+  onChange,
+  bounds,
+  actual,
+  ratio,
+  severityLabel,
+  barClass,
+}: {
+  label: string;
+  hint: string;
+  value: number;
+  onChange: (n: number) => void;
+  bounds: { min: number; max: number; step: number };
+  actual: number;
+  ratio: number;
+  severityLabel: string;
+  barClass: string;
+}) {
+  const { min, max, step } = bounds;
+  const fillPct = max > min ? ((value - min) / (max - min)) * 100 : 0;
+  return (
+    <div className="rounded-xl bg-gradient-to-br from-zinc-50 to-white p-3.5 ring-1 ring-zinc-200/90">
+      <div className="flex flex-wrap items-end justify-between gap-2">
+        <div>
+          <p className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-zinc-500">{label}</p>
+          <p className="mt-0.5 max-w-[220px] text-[11px] leading-snug text-zinc-500">{hint}</p>
+        </div>
+        <p className="text-2xl font-black tabular-nums tracking-tight text-zinc-900">{eur(value)}</p>
+      </div>
+      <input
+        type="range"
+        className="merma-target-range mt-4 touch-manipulation"
+        style={{
+          background: `linear-gradient(90deg, #D32F2F 0%, #B91C1C ${fillPct}%, #e4e4e7 ${fillPct}%, #e4e4e7 100%)`,
+        }}
+        min={min}
+        max={max}
+        step={step}
+        value={value}
+        onChange={(e) => onChange(Number(e.target.value))}
+        aria-label={label}
+      />
+      <div className="mt-1 flex justify-between text-[10px] font-bold tabular-nums text-zinc-400">
+        <span>{eur(min)}</span>
+        <span>{eur(max)}</span>
+      </div>
+      <p className="mt-3 text-sm font-semibold text-zinc-700">
+        Real: <span className="tabular-nums text-zinc-900">{eur(actual)}</span>
+        <span className="text-zinc-400"> · </span>
+        <span className="text-xs font-normal text-zinc-500">
+          {ratio <= 1 ? `${(ratio * 100).toFixed(0)}% del objetivo` : `${(ratio * 100).toFixed(0)}% (por encima)`}
+        </span>
+      </p>
+      <div className="mt-2 h-3 w-full overflow-hidden rounded-full bg-zinc-200">
+        <div className={['h-full rounded-full transition-all duration-300', barClass].join(' ')} style={{ width: `${Math.min(ratio * 100, 100)}%` }} />
+      </div>
+      <p className="mt-2 text-[10px] font-bold uppercase tracking-wide text-zinc-600">Semáforo: {severityLabel}</p>
+    </div>
+  );
+}
+
 export default function DashboardPage() {
   const { products, mermas } = useMermasStore();
   const t = totals(mermas);
@@ -187,8 +258,12 @@ export default function DashboardPage() {
   const alerts = highWasteAlerts(mermas, products);
   const motives = topMotives(mermas);
   const anomalies = anomalyAlerts(mermas, products);
-  const [monthlyTarget, setMonthlyTarget] = React.useState<number>(() => readStoredTarget(MONTHLY_TARGET_KEY, 500));
-  const [weeklyTarget, setWeeklyTarget] = React.useState<number>(() => readStoredTarget(WEEKLY_TARGET_KEY, 125));
+  const [monthlyTarget, setMonthlyTarget] = React.useState<number>(() =>
+    clampTarget(readStoredTarget(MONTHLY_TARGET_KEY, 500), MONTHLY_TARGET_BOUNDS.min, MONTHLY_TARGET_BOUNDS.max),
+  );
+  const [weeklyTarget, setWeeklyTarget] = React.useState<number>(() =>
+    clampTarget(readStoredTarget(WEEKLY_TARGET_KEY, 125), WEEKLY_TARGET_BOUNDS.min, WEEKLY_TARGET_BOUNDS.max),
+  );
   const [detailOpen, setDetailOpen] = React.useState(false);
   const [detailTitle, setDetailTitle] = React.useState('');
   const [detailRows, setDetailRows] = React.useState<Array<{ id: string; occurredAt: string; productName: string; quantity: number; costEur: number; motiveKey: string; notes?: string }>>([]);
@@ -257,16 +332,6 @@ export default function DashboardPage() {
         notes: m.notes?.trim() ? m.notes.trim() : undefined,
       })),
     [mermas, products],
-  );
-
-  const openProductDetail = React.useCallback(
-    (productId: string, productName: string) => {
-      openDetail(
-        `Detalle por producto: ${productName}`,
-        mermasWithProduct.filter((m) => m.productId === productId),
-      );
-    },
-    [mermasWithProduct, openDetail],
   );
 
   const now = toBusinessDate(new Date());
@@ -629,86 +694,45 @@ export default function DashboardPage() {
       </div>
 
       <section className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-zinc-200">
-        <h2 className="text-sm font-extrabold uppercase tracking-wide text-zinc-700">Objetivo Semanal</h2>
-        <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-[1fr_auto]">
-          <input
-            type="number"
-            min={1}
-            value={weeklyTarget}
-            onChange={(e) => setWeeklyTarget(Math.max(1, Number(e.target.value || 1)))}
-            className="h-10 rounded-lg border border-zinc-200 bg-zinc-50 px-3 text-sm outline-none"
-          />
-          <p className="self-center text-sm font-semibold text-zinc-700">
-            Actual: {eur(t.week)} / Objetivo: {eur(weeklyTarget)}
-          </p>
-        </div>
-        <div className="mt-2 grid grid-cols-4 gap-2">
-          {[75, 100, 125, 150].map((value) => (
-            <button
-              key={value}
-              type="button"
-              onClick={() => setWeeklyTarget(value)}
-              className={[
-                'h-9 rounded-lg border text-xs font-bold',
-                weeklyTarget === value
-                  ? 'border-[#D32F2F] bg-[#D32F2F] text-white'
-                  : 'border-zinc-300 bg-white text-zinc-700',
-              ].join(' ')}
-            >
-              {value}€
-            </button>
-          ))}
-        </div>
-        <div className="mt-3 h-3 w-full overflow-hidden rounded-full bg-zinc-200">
-          <div className={['h-full transition-all', weeklyColor].join(' ')} style={{ width: `${Math.min(weeklyRatio * 100, 100)}%` }} />
-        </div>
-        <p className="mt-2 text-xs font-semibold uppercase text-zinc-600">Semáforo: {weeklySeverity}</p>
-      </section>
-
-      <section className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-zinc-200">
-        <div className="flex items-center justify-between gap-3">
-          <h2 className="text-sm font-extrabold uppercase tracking-wide text-zinc-700">Objetivo Mensual</h2>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="text-sm font-extrabold uppercase tracking-wide text-zinc-700">Objetivos de merma</h2>
+            <p className="mt-1 max-w-xl text-xs leading-relaxed text-zinc-600">
+              Desliza la barra para subir o bajar el tope (como el volumen del móvil). Se guarda en este dispositivo.
+            </p>
+          </div>
           <button
             type="button"
             onClick={exportMonthlyExecutivePdf}
-            className="h-9 rounded-lg bg-[#D32F2F] px-3 text-xs font-bold text-white"
+            className="h-9 shrink-0 rounded-lg bg-[#D32F2F] px-3 text-xs font-bold text-white shadow-sm ring-1 ring-red-900/10"
           >
-            PDF Ejecutivo Mensual
+            PDF ejecutivo mensual
           </button>
         </div>
-        <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-[1fr_auto]">
-          <input
-            type="number"
-            min={1}
-            value={monthlyTarget}
-            onChange={(e) => setMonthlyTarget(Math.max(1, Number(e.target.value || 1)))}
-            className="h-10 rounded-lg border border-zinc-200 bg-zinc-50 px-3 text-sm outline-none"
+        <div className="mt-4 space-y-4">
+          <MermaObjectiveSlider
+            label="Objetivo semanal"
+            hint="Tope de merma para la semana en curso (día laborable)."
+            value={weeklyTarget}
+            onChange={(n) => setWeeklyTarget(n)}
+            bounds={WEEKLY_TARGET_BOUNDS}
+            actual={t.week}
+            ratio={weeklyRatio}
+            severityLabel={weeklySeverity}
+            barClass={weeklyColor}
           />
-          <p className="self-center text-sm font-semibold text-zinc-700">
-            Actual: {eur(t.month)} / Objetivo: {eur(monthlyTarget)}
-          </p>
+          <MermaObjectiveSlider
+            label="Objetivo mensual"
+            hint="Tope de merma del mes natural. Puedes cruzarlo con el PDF ejecutivo para dirección."
+            value={monthlyTarget}
+            onChange={(n) => setMonthlyTarget(n)}
+            bounds={MONTHLY_TARGET_BOUNDS}
+            actual={t.month}
+            ratio={targetRatio}
+            severityLabel={targetSeverity}
+            barClass={targetColor}
+          />
         </div>
-        <div className="mt-2 grid grid-cols-4 gap-2">
-          {[500, 750, 1000, 1500].map((value) => (
-            <button
-              key={value}
-              type="button"
-              onClick={() => setMonthlyTarget(value)}
-              className={[
-                'h-9 rounded-lg border text-xs font-bold',
-                monthlyTarget === value
-                  ? 'border-[#D32F2F] bg-[#D32F2F] text-white'
-                  : 'border-zinc-300 bg-white text-zinc-700',
-              ].join(' ')}
-            >
-              {value}€
-            </button>
-          ))}
-        </div>
-        <div className="mt-3 h-3 w-full overflow-hidden rounded-full bg-zinc-200">
-          <div className={['h-full transition-all', targetColor].join(' ')} style={{ width: `${Math.min(targetRatio * 100, 100)}%` }} />
-        </div>
-        <p className="mt-2 text-xs font-semibold uppercase text-zinc-600">Semáforo: {targetSeverity}</p>
       </section>
 
       <Block title="Merma de la Semana (€)">
@@ -816,23 +840,7 @@ export default function DashboardPage() {
         )}
       </section>
 
-      <Block
-        title="Top 5 Productos por Cantidad Tirada"
-        footer={
-          <div className="space-y-1">
-            {dataTopQty.map((item) => (
-              <button
-                key={item.productId}
-                type="button"
-                onClick={() => openProductDetail(item.productId, item.name)}
-                className="w-full rounded-lg border border-zinc-200 bg-zinc-50 px-2 py-1 text-left text-xs font-semibold text-zinc-700 hover:bg-zinc-100"
-              >
-                Ver detalle: {item.name}
-              </button>
-            ))}
-          </div>
-        }
-      >
+      <Block title="Top 5 Productos por Cantidad Tirada">
         <ChartBox>
           {({ width, height }) => (
             <BarChart data={dataTopQty} width={width} height={height} layout="vertical" margin={{ top: 8, right: 52, left: 10, bottom: 2 }}>
@@ -849,18 +857,7 @@ export default function DashboardPage() {
                 formatter={(value) => [qty(Number(value ?? 0)), 'Cantidad']}
                 contentStyle={{ borderRadius: 12, border: '1px solid #e4e4e7', boxShadow: '0 6px 20px rgba(0,0,0,0.08)' }}
               />
-              <Bar
-                dataKey="value"
-                fill="url(#barTopQty)"
-                radius={[0, 10, 10, 0]}
-                barSize={18}
-                onClick={(entry) => {
-                  if (!entry || typeof entry !== 'object') return;
-                  const row = entry as { productId?: string; name?: string };
-                  if (!row.productId || !row.name) return;
-                  openProductDetail(row.productId, row.name);
-                }}
-              >
+              <Bar dataKey="value" fill="url(#barTopQty)" radius={[0, 10, 10, 0]} barSize={18}>
                 <LabelList dataKey="value" position="right" formatter={(v) => qty(Number(v ?? 0))} className="fill-zinc-600 text-[11px] font-semibold" />
               </Bar>
             </BarChart>
@@ -868,23 +865,7 @@ export default function DashboardPage() {
         </ChartBox>
       </Block>
 
-      <Block
-        title="Top 5 Productos por Valor Economico"
-        footer={
-          <div className="space-y-1">
-            {dataTopValue.map((item) => (
-              <button
-                key={item.productId}
-                type="button"
-                onClick={() => openProductDetail(item.productId, item.name)}
-                className="w-full rounded-lg border border-zinc-200 bg-zinc-50 px-2 py-1 text-left text-xs font-semibold text-zinc-700 hover:bg-zinc-100"
-              >
-                Ver detalle: {item.name}
-              </button>
-            ))}
-          </div>
-        }
-      >
+      <Block title="Top 5 Productos por Valor Economico">
         <ChartBox>
           {({ width, height }) => (
             <BarChart data={dataTopValue} width={width} height={height} layout="vertical" margin={{ top: 8, right: 58, left: 10, bottom: 2 }}>
@@ -901,18 +882,7 @@ export default function DashboardPage() {
                 formatter={(value) => [eur(Number(value ?? 0)), 'Valor']}
                 contentStyle={{ borderRadius: 12, border: '1px solid #e4e4e7', boxShadow: '0 6px 20px rgba(0,0,0,0.08)' }}
               />
-              <Bar
-                dataKey="value"
-                fill="url(#barTopValue)"
-                radius={[0, 10, 10, 0]}
-                barSize={18}
-                onClick={(entry) => {
-                  if (!entry || typeof entry !== 'object') return;
-                  const row = entry as { productId?: string; name?: string };
-                  if (!row.productId || !row.name) return;
-                  openProductDetail(row.productId, row.name);
-                }}
-              >
+              <Bar dataKey="value" fill="url(#barTopValue)" radius={[0, 10, 10, 0]} barSize={18}>
                 <LabelList dataKey="value" position="right" formatter={(v) => `${Number(v ?? 0).toFixed(0)}€`} className="fill-zinc-600 text-[11px] font-semibold" />
               </Bar>
             </BarChart>
