@@ -26,6 +26,8 @@ import {
 
 type QtyMap = Record<string, number>;
 
+const basketSessionKey = (localId: string) => `chefone_pedidos_basket:${localId}`;
+
 function shortUnitChip(unit: string): string {
   const u = unit.toLowerCase();
   if (u === 'paquete') return 'PAQ.';
@@ -117,6 +119,15 @@ export default function NuevoPedidoPage() {
   const [existingSentAt, setExistingSentAt] = React.useState<string | null>(null);
   const [existingOrderId, setExistingOrderId] = React.useState<string | null>(null);
 
+  const clearBasketDraft = React.useCallback(() => {
+    if (!localId) return;
+    try {
+      sessionStorage.removeItem(basketSessionKey(localId));
+    } catch {
+      /* ignore */
+    }
+  }, [localId]);
+
   const reloadSuppliers = React.useCallback(() => {
     if (!canUse || !localId) return;
     const lid = localId;
@@ -142,6 +153,48 @@ export default function NuevoPedidoPage() {
     }
     reloadSuppliers();
   }, [canUse, localId, reloadSuppliers]);
+
+  React.useEffect(() => {
+    if (!canUse || !localId || editingId) return;
+    try {
+      const raw = sessionStorage.getItem(basketSessionKey(localId));
+      if (!raw) return;
+      const parsed = JSON.parse(raw) as {
+        supplierId?: string;
+        qtyByProductId?: QtyMap;
+        notes?: string;
+        deliveryDate?: string;
+        requestedBy?: string;
+      };
+      if (parsed.supplierId) setSupplierId(parsed.supplierId);
+      if (parsed.qtyByProductId && typeof parsed.qtyByProductId === 'object') {
+        setQtyByProductId(parsed.qtyByProductId);
+      }
+      if (typeof parsed.notes === 'string') setNotes(parsed.notes);
+      if (typeof parsed.deliveryDate === 'string') setDeliveryDate(parsed.deliveryDate);
+      if (typeof parsed.requestedBy === 'string') setRequestedBy(parsed.requestedBy);
+    } catch {
+      /* ignore */
+    }
+  }, [canUse, localId, editingId]);
+
+  React.useEffect(() => {
+    if (!canUse || !localId || editingId) return;
+    try {
+      sessionStorage.setItem(
+        basketSessionKey(localId),
+        JSON.stringify({
+          supplierId,
+          qtyByProductId,
+          notes,
+          deliveryDate,
+          requestedBy,
+        }),
+      );
+    } catch {
+      /* ignore */
+    }
+  }, [canUse, localId, editingId, supplierId, qtyByProductId, notes, deliveryDate, requestedBy]);
 
   usePedidosDataChangedListener(reloadSuppliers, Boolean(hasPedidosEntry && canUse));
 
@@ -283,6 +336,7 @@ export default function NuevoPedidoPage() {
       })),
     })
       .then((orderId) => {
+        clearBasketDraft();
         void pullNewOrderIntoStore(orderId);
         dispatchPedidosDataChanged();
         router.push('/pedidos');
@@ -330,6 +384,7 @@ export default function NuevoPedidoPage() {
       })),
     })
       .then((orderId) => {
+        clearBasketDraft();
         void pullNewOrderIntoStore(orderId);
         const text = encodeURIComponent(
           buildWhatsappDraftMessage({
@@ -518,7 +573,18 @@ export default function NuevoPedidoPage() {
             <span>{total.toFixed(2)} €</span>
           </div>
         </div>
-        <div className="mt-2 grid grid-cols-2 gap-2">
+        <div className="mt-2 grid grid-cols-3 gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              if (!window.confirm('¿Cancelar pedido y vaciar cesta?')) return;
+              clearBasketDraft();
+              router.push('/pedidos');
+            }}
+            className="h-11 rounded-xl border border-zinc-300 bg-white text-sm font-bold text-zinc-700"
+          >
+            Cancelar
+          </button>
           <button
             type="button"
             onClick={() => saveDraft('draft')}
