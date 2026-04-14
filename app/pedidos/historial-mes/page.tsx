@@ -319,7 +319,7 @@ export default function PedidosHistorialMesPage() {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="min-w-0 space-y-4 overflow-x-hidden">
       <section>
         <Link
           href="/pedidos"
@@ -341,8 +341,8 @@ export default function PedidosHistorialMesPage() {
         <section className="rounded-2xl bg-white p-4 text-sm text-[#B91C1C] ring-1 ring-zinc-200">{message}</section>
       ) : null}
 
-      <section className="rounded-3xl bg-white p-5 shadow-sm ring-1 ring-zinc-200/80">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-zinc-100 pb-4">
+      <section className="min-w-0 rounded-3xl bg-white p-5 shadow-sm ring-1 ring-zinc-200/80">
+        <div className="grid grid-cols-1 gap-3 border-b border-zinc-100 pb-4 sm:grid-cols-3">
           <label className="text-xs font-medium text-zinc-500">
             <span className="block text-[10px] uppercase tracking-wider text-zinc-400">Período</span>
             <input
@@ -352,7 +352,7 @@ export default function PedidosHistorialMesPage() {
                 setMonth(e.target.value);
                 setExpandedSupplierId(null);
               }}
-              className="mt-1 h-11 rounded-2xl border-0 bg-zinc-100 px-4 text-base font-semibold text-zinc-900 outline-none focus:ring-2 focus:ring-zinc-900/10"
+              className="mt-1 h-11 w-full rounded-2xl border-0 bg-zinc-100 px-4 text-base font-semibold text-zinc-900 outline-none focus:ring-2 focus:ring-zinc-900/10"
             />
           </label>
           <label className="text-xs font-medium text-zinc-500">
@@ -364,7 +364,7 @@ export default function PedidosHistorialMesPage() {
                 setActiveWeek(null);
                 setExpandedSupplierId(null);
               }}
-              className="mt-1 h-11 rounded-2xl border-0 bg-zinc-100 px-4 text-sm font-semibold text-zinc-900 outline-none focus:ring-2 focus:ring-zinc-900/10"
+              className="mt-1 h-11 w-full rounded-2xl border-0 bg-zinc-100 px-4 text-sm font-semibold text-zinc-900 outline-none focus:ring-2 focus:ring-zinc-900/10"
             >
               <option value="all">Todos</option>
               {monthlyBySupplier.map((s) => (
@@ -379,7 +379,7 @@ export default function PedidosHistorialMesPage() {
             <select
               value={String(topN)}
               onChange={(e) => setTopN(Number(e.target.value))}
-              className="mt-1 h-11 rounded-2xl border-0 bg-zinc-100 px-4 text-sm font-semibold text-zinc-900 outline-none focus:ring-2 focus:ring-zinc-900/10"
+              className="mt-1 h-11 w-full rounded-2xl border-0 bg-zinc-100 px-4 text-sm font-semibold text-zinc-900 outline-none focus:ring-2 focus:ring-zinc-900/10"
             >
               <option value="5">Top 5</option>
               <option value="10">Top 10</option>
@@ -388,7 +388,7 @@ export default function PedidosHistorialMesPage() {
             </select>
           </label>
         </div>
-        <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+        <div className="mt-4 grid min-w-0 grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
           <div className="rounded-2xl bg-zinc-50 px-3 py-2 ring-1 ring-zinc-200">
             <p className="text-[10px] uppercase tracking-wide text-zinc-500">Total mes</p>
             <p className="text-lg font-black tabular-nums text-zinc-900">{kpis.totalWithVat.toFixed(2)} €</p>
@@ -417,14 +417,14 @@ export default function PedidosHistorialMesPage() {
           </div>
         </div>
 
-        <div className="mt-5 grid gap-4 lg:grid-cols-2">
-          <div className="rounded-2xl border border-zinc-100 bg-zinc-50/80 p-4">
+        <div className="mt-5 grid min-w-0 gap-4 lg:grid-cols-2">
+          <div className="min-w-0 rounded-2xl border border-zinc-100 bg-zinc-50/80 p-4">
             <p className="text-xs font-bold uppercase tracking-wide text-zinc-500">Top productos por gasto (mes)</p>
             <div className="mt-3 space-y-2">
               {monthlyTopProducts.slice(0, topN).map((p) => (
-                <div key={p.productName} className="rounded-xl bg-white px-3 py-2 ring-1 ring-zinc-200">
+                <div key={p.productName} className="min-w-0 rounded-xl bg-white px-3 py-2 ring-1 ring-zinc-200">
                   <div className="flex items-center justify-between gap-2">
-                    <p className="truncate text-sm font-semibold text-zinc-900">{p.productName}</p>
+                    <p className="min-w-0 truncate text-sm font-semibold text-zinc-900">{p.productName}</p>
                     <p className="shrink-0 text-sm font-black tabular-nums text-zinc-900">{p.spend.toFixed(2)} €</p>
                   </div>
                   <div className="mt-1 flex items-center justify-between text-[11px] text-zinc-500">
@@ -441,7 +441,7 @@ export default function PedidosHistorialMesPage() {
               ) : null}
             </div>
           </div>
-          <div className="rounded-2xl border border-zinc-100 bg-zinc-50/80 p-4">
+          <div className="min-w-0 rounded-2xl border border-zinc-100 bg-zinc-50/80 p-4">
             <p className="text-xs font-bold uppercase tracking-wide text-zinc-500">Resumen semanal</p>
             <div className="mt-3 flex flex-wrap gap-2">
               {weeklySummary.map((w) => (
@@ -479,13 +479,13 @@ export default function PedidosHistorialMesPage() {
         </div>
 
         <div className="mt-4 grid gap-4 lg:grid-cols-2">
-          <div className="rounded-2xl border border-zinc-100 bg-zinc-50/80 p-4">
+          <div className="min-w-0 rounded-2xl border border-zinc-100 bg-zinc-50/80 p-4">
             <p className="text-xs font-bold uppercase tracking-wide text-zinc-500">Top proveedores (rendimiento)</p>
             <div className="mt-3 space-y-2">
               {supplierPerformance.slice(0, topN).map((s) => (
-                <div key={s.supplierId} className="rounded-xl bg-white px-3 py-2 ring-1 ring-zinc-200">
+                <div key={s.supplierId} className="min-w-0 rounded-xl bg-white px-3 py-2 ring-1 ring-zinc-200">
                   <div className="flex items-center justify-between gap-2">
-                    <p className="truncate text-sm font-semibold text-zinc-900">{s.supplierName}</p>
+                    <p className="min-w-0 truncate text-sm font-semibold text-zinc-900">{s.supplierName}</p>
                     <p className="shrink-0 text-sm font-black tabular-nums text-zinc-900">{s.spend.toFixed(2)} €</p>
                   </div>
                   <div className="mt-1 flex items-center justify-between text-[11px] text-zinc-500">
