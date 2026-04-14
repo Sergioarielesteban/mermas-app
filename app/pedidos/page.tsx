@@ -540,10 +540,10 @@ export default function PedidosPage() {
 
       <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-zinc-200">
         <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-3">
-          <Link href="/pedidos/nuevo" className="rounded-xl bg-[#D32F2F] px-3 py-2.5 text-center text-sm font-bold text-white">
+          <Link href="/pedidos/nuevo" className="flex h-15 items-center justify-center rounded-xl bg-[#D32F2F] px-3 text-center text-sm font-bold text-white">
             + Nuevo pedido
           </Link>
-          <Link href="/pedidos/proveedores" className="rounded-xl border border-zinc-300 bg-white px-3 py-2 text-center text-sm font-semibold text-zinc-700">
+          <Link href="/pedidos/proveedores" className="flex h-10 items-center justify-center rounded-xl border border-zinc-300 bg-white px-3 text-center text-sm font-semibold text-zinc-700">
             Proveedores
           </Link>
         </div>
