@@ -4,7 +4,17 @@ import Link from 'next/link';
 import React from 'react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { AlertTriangle, Download, TrendingDown, TrendingUp } from 'lucide-react';
+import { AlertTriangle, Download, Lightbulb, TrendingDown, TrendingUp } from 'lucide-react';
+import {
+  CartesianGrid,
+  Line,
+  LineChart,
+  ReferenceLine,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from 'recharts';
 import { useAuth } from '@/components/AuthProvider';
 import { usePedidosOrders } from '@/components/PedidosOrdersProvider';
 import PedidosPremiaLockedScreen from '@/components/PedidosPremiaLockedScreen';
@@ -55,6 +65,10 @@ type PriceSummary = {
   volatilityCvPct: number;
   /** Estimación ~30 días (tendencia lineal sobre últimos puntos). */
   forecast30d: number | null;
+  supplierId: string;
+  supplierName: string;
+  /** Unidad de catálogo (caja, kg…) — clave para comparar entre proveedores. */
+  catalogUnit: Unit;
 };
 
 function orderPriceDate(order: PedidoOrder): string {
@@ -189,6 +203,257 @@ function forecastPriceLinear(
 function escapeCsvCell(v: string): string {
   if (/[;"\n]/.test(v)) return `"${v.replace(/"/g, '""')}"`;
   return v;
+}
+
+function buildPriceSummaries(
+  orders: PedidoOrder[],
+  windowStartMs: number,
+  windowEndMs: number,
+  priceMode: PriceMode,
+  supplierFilter: string,
+): PriceSummary[] {
+  type Acc = {
+    key: string;
+    productName: string;
+    supplierId: string;
+    supplierName: string;
+    catalogUnit: Unit;
+    points: PricePoint[];
+    purchases: PurchaseRow[];
+    wSum: number;
+    wQty: number;
+  };
+  const map = new Map<string, Acc>();
+  for (const order of orders) {
+    if (supplierFilter && order.supplierId !== supplierFilter) continue;
+    const dBill = orderPriceDate(order);
+    const dBase = orderBasePriceDate(order);
+    if (!inPriceWindow(dBill, windowStartMs, windowEndMs)) continue;
+
+    for (const item of order.items) {
+      const evPrice = effectivePriceForEvolution(item, priceMode);
+      if (evPrice == null) continue;
+      const wq = weightQtyForEvolution(item, priceMode);
+      if (wq <= 0) continue;
+
+      const key = evolutionProductKey(order, item);
+      const displayUnit = priceMode === 'per_kg' ? 'kg' : item.unit;
+      const existing = map.get(key);
+      const acc: Acc =
+        existing ??
+        {
+          key,
+          productName: item.productName.trim(),
+          supplierId: order.supplierId,
+          supplierName: order.supplierName,
+          catalogUnit: item.unit,
+          points: [],
+          purchases: [],
+          wSum: 0,
+          wQty: 0,
+        };
+
+      const baseRaw = item.basePricePerUnit;
+      let basePriceEv: number | null = null;
+      if (baseRaw != null && Number.isFinite(baseRaw) && baseRaw > 0) {
+        const b = Math.round(baseRaw * 100) / 100;
+        if (priceMode === 'per_kg' && item.unit !== 'kg') {
+          const est = item.estimatedKgPerUnit;
+          if (est != null && est > 0) {
+            basePriceEv = Math.round((b / est) * 10000) / 10000;
+          }
+        } else {
+          basePriceEv = b;
+        }
+      }
+      if (basePriceEv != null && Math.abs(basePriceEv - evPrice) > 0.001) {
+        acc.points.push({
+          date: dBase,
+          supplier: order.supplierName,
+          unit: displayUnit,
+          price: basePriceEv,
+          orderCreatedAt: order.createdAt,
+          itemId: `${item.id}:base`,
+          sortRank: 0,
+        });
+      }
+      acc.points.push({
+        date: dBill,
+        supplier: order.supplierName,
+        unit: displayUnit,
+        price: evPrice,
+        orderCreatedAt: order.createdAt,
+        itemId: item.id,
+        sortRank: 1,
+      });
+      acc.purchases.push({
+        date: dBill,
+        supplier: order.supplierName,
+        qty: wq,
+        unit: displayUnit as Unit,
+        price: evPrice,
+      });
+      acc.wSum += evPrice * wq;
+      acc.wQty += wq;
+      map.set(key, acc);
+    }
+  }
+
+  const daysWindow = Math.max(1, (windowEndMs - windowStartMs) / 86_400_000);
+  const monthsInWindow = Math.max(1, daysWindow / 30);
+
+  return Array.from(map.values())
+    .map((acc) => {
+      const ordered = [...acc.points].sort((a, b) => {
+        const t = Date.parse(a.date) - Date.parse(b.date);
+        if (t !== 0) return t;
+        const oc = Date.parse(a.orderCreatedAt) - Date.parse(b.orderCreatedAt);
+        if (oc !== 0) return oc;
+        const ra = a.sortRank ?? 0;
+        const rb = b.sortRank ?? 0;
+        if (ra !== rb) return ra - rb;
+        return a.itemId.localeCompare(b.itemId);
+      });
+      const base = ordered[0]!;
+      const current = ordered[ordered.length - 1]!;
+      const delta = Math.round((current.price - base.price) * 100) / 100;
+      const deltaPct = base.price > 0 ? Math.round((delta / base.price) * 10000) / 100 : 0;
+      const weightedAvg = acc.wQty > 0 ? Math.round((acc.wSum / acc.wQty) * 100) / 100 : current.price;
+      const purchasesSorted = [...acc.purchases].sort((a, b) => Date.parse(b.date) - Date.parse(a.date));
+      const billOnly = ordered.filter((p) => p.sortRank === 1).map((p) => p.price);
+      const vol = sampleStdev(billOnly);
+      const volatilityCvPct =
+        weightedAvg > 0 && billOnly.length >= 2 ? Math.round((vol / weightedAvg) * 10000) / 100 : 0;
+      const billAsc = ordered
+        .filter((p) => p.sortRank === 1)
+        .map((p) => ({ date: p.date, price: p.price }));
+      const forecast30d = forecastPriceLinear(billAsc, 30);
+      const monthlyQty = acc.wQty / monthsInWindow;
+      const impactMonthlyVsWap = Math.round((current.price - weightedAvg) * monthlyQty * 100) / 100;
+      return {
+        key: acc.key,
+        productName: acc.productName,
+        points: [...ordered].reverse(),
+        purchases: purchasesSorted,
+        weightedAvg,
+        totalWeightedQty: acc.wQty,
+        base,
+        current,
+        delta,
+        deltaPct,
+        displayUnit: base.unit,
+        impactMonthlyVsWap,
+        volatilityCvPct,
+        forecast30d,
+        supplierId: acc.supplierId,
+        supplierName: acc.supplierName,
+        catalogUnit: acc.catalogUnit,
+      };
+    })
+    .filter((row) => row.points.length >= 2 && Math.abs(row.delta) > 0.001)
+    .sort((a, b) => a.productName.localeCompare(b.productName, 'es'));
+}
+
+type CrossSupplierBenchmark = {
+  compareKey: string;
+  productName: string;
+  catalogUnit: string;
+  displayUnit: string;
+  spreadPct: number;
+  bestSupplierName: string;
+  worstSupplierName: string;
+  suppliers: Array<{
+    supplierName: string;
+    current: number;
+    pmp: number;
+  }>;
+};
+
+type ActionRecommendation = {
+  id: string;
+  priority: 'high' | 'medium';
+  title: string;
+  detail: string;
+};
+
+function PriceEvolutionMiniChart({ row }: { row: PriceSummary }) {
+  const data = React.useMemo(() => {
+    const asc = [...row.points].sort((a, b) => Date.parse(a.date) - Date.parse(b.date));
+    return asc.map((p) => ({
+      dateLabel: new Date(p.date).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: '2-digit' }),
+      price: p.price,
+      kind: p.sortRank === 0 ? 'Pedido' : 'Albarán',
+      supplier: p.supplier,
+    }));
+  }, [row.points]);
+
+  if (data.length < 2) return null;
+
+  return (
+    <div className="mt-3 h-52 w-full min-w-0 sm:h-56">
+      <ResponsiveContainer width="100%" height="100%">
+        <LineChart data={data} margin={{ top: 6, right: 6, left: -18, bottom: 2 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="#e4e4e7" />
+          <XAxis dataKey="dateLabel" tick={{ fontSize: 10, fill: '#71717a' }} interval="preserveStartEnd" />
+          <YAxis
+            tick={{ fontSize: 10, fill: '#71717a' }}
+            width={44}
+            domain={['auto', 'auto']}
+            tickFormatter={(v) => (typeof v === 'number' ? v.toFixed(2) : String(v))}
+          />
+          <Tooltip
+            content={({ active, payload }) => {
+              if (!active || !payload?.length) return null;
+              const p = payload[0]?.payload as {
+                dateLabel: string;
+                price: number;
+                kind: string;
+                supplier: string;
+              };
+              if (!p) return null;
+              return (
+                <div className="rounded-lg border border-zinc-200 bg-white px-2.5 py-2 text-xs shadow-md">
+                  <p className="font-semibold text-zinc-900">{p.dateLabel}</p>
+                  <p className="text-zinc-600">{p.supplier}</p>
+                  <p className="tabular-nums text-zinc-900">
+                    {p.price.toFixed(2)} €/{row.displayUnit} · {p.kind}
+                  </p>
+                </div>
+              );
+            }}
+          />
+          <ReferenceLine
+            y={row.weightedAvg}
+            stroke="#a1a1aa"
+            strokeDasharray="5 4"
+            label={{
+              value: 'PMP',
+              position: 'insideTopRight',
+              fill: '#71717a',
+              fontSize: 10,
+            }}
+          />
+          <Line
+            type="monotone"
+            dataKey="price"
+            name="Precio"
+            stroke="#D32F2F"
+            strokeWidth={2}
+            dot={(props: { cx?: number; cy?: number; payload?: { kind: string } }) => {
+              const { cx, cy, payload } = props;
+              if (cx == null || cy == null) return null;
+              const fill = payload?.kind === 'Pedido' ? '#94a3b8' : '#D32F2F';
+              return <circle cx={cx} cy={cy} r={4} fill={fill} stroke="#fff" strokeWidth={1} />;
+            }}
+            activeDot={{ r: 6, stroke: '#fff', strokeWidth: 2 }}
+          />
+        </LineChart>
+      </ResponsiveContainer>
+      <p className="mt-1 text-center text-[10px] text-zinc-500">
+        Gris = precio pedido · Rojo = albarán · Línea gris = PMP del periodo
+      </p>
+    </div>
+  );
 }
 
 const PDF_BRAND: [number, number, number] = [211, 47, 47];
@@ -504,143 +769,94 @@ export default function PedidosPreciosPage() {
     return { windowStartMs: startMs, windowEndMs: endMs, windowLabel: label };
   }, [orders, windowPreset]);
 
-  const series = React.useMemo<PriceSummary[]>(() => {
-    type Acc = {
-      key: string;
-      productName: string;
-      points: PricePoint[];
-      purchases: PurchaseRow[];
-      wSum: number;
-      wQty: number;
-    };
-    const map = new Map<string, Acc>();
-    for (const order of orders) {
-      if (supplierFilter && order.supplierId !== supplierFilter) continue;
-      const dBill = orderPriceDate(order);
-      const dBase = orderBasePriceDate(order);
-      if (!inPriceWindow(dBill, windowStartMs, windowEndMs)) continue;
+  const series = React.useMemo(
+    () => buildPriceSummaries(orders, windowStartMs, windowEndMs, priceMode, supplierFilter),
+    [orders, supplierFilter, windowStartMs, windowEndMs, priceMode],
+  );
 
-      for (const item of order.items) {
-        const evPrice = effectivePriceForEvolution(item, priceMode);
-        if (evPrice == null) continue;
-        const wq = weightQtyForEvolution(item, priceMode);
-        if (wq <= 0) continue;
+  const seriesAllSuppliers = React.useMemo(
+    () => buildPriceSummaries(orders, windowStartMs, windowEndMs, priceMode, ''),
+    [orders, windowStartMs, windowEndMs, priceMode],
+  );
 
-        const key = evolutionProductKey(order, item);
-        const displayUnit = priceMode === 'per_kg' ? 'kg' : item.unit;
-        const acc =
-          map.get(key) ?? {
-            key,
-            productName: item.productName.trim(),
-            points: [],
-            purchases: [],
-            wSum: 0,
-            wQty: 0,
-          };
-
-        const baseRaw = item.basePricePerUnit;
-        let basePriceEv: number | null = null;
-        if (baseRaw != null && Number.isFinite(baseRaw) && baseRaw > 0) {
-          const b = Math.round(baseRaw * 100) / 100;
-          if (priceMode === 'per_kg' && item.unit !== 'kg') {
-            const est = item.estimatedKgPerUnit;
-            if (est != null && est > 0) {
-              basePriceEv = Math.round((b / est) * 10000) / 10000;
-            }
-          } else {
-            basePriceEv = b;
-          }
-        }
-        if (basePriceEv != null && Math.abs(basePriceEv - evPrice) > 0.001) {
-          acc.points.push({
-            date: dBase,
-            supplier: order.supplierName,
-            unit: displayUnit,
-            price: basePriceEv,
-            orderCreatedAt: order.createdAt,
-            itemId: `${item.id}:base`,
-            sortRank: 0,
-          });
-        }
-        acc.points.push({
-          date: dBill,
-          supplier: order.supplierName,
-          unit: displayUnit,
-          price: evPrice,
-          orderCreatedAt: order.createdAt,
-          itemId: item.id,
-          sortRank: 1,
-        });
-        acc.purchases.push({
-          date: dBill,
-          supplier: order.supplierName,
-          qty: wq,
-          unit: displayUnit as Unit,
-          price: evPrice,
-        });
-        acc.wSum += evPrice * wq;
-        acc.wQty += wq;
-        map.set(key, acc);
-      }
+  const crossSupplierBenchmarks = React.useMemo((): CrossSupplierBenchmark[] => {
+    const byProduct = new Map<string, PriceSummary[]>();
+    for (const row of seriesAllSuppliers) {
+      const k = `${row.productName.trim().toLowerCase()}|${row.catalogUnit}`;
+      const list = byProduct.get(k) ?? [];
+      list.push(row);
+      byProduct.set(k, list);
     }
-
-    const daysWindow = Math.max(1, (windowEndMs - windowStartMs) / 86_400_000);
-    const monthsInWindow = Math.max(1, daysWindow / 30);
-
-    return Array.from(map.values())
-      .map((acc) => {
-        const ordered = [...acc.points].sort((a, b) => {
-          const t = Date.parse(a.date) - Date.parse(b.date);
-          if (t !== 0) return t;
-          const oc = Date.parse(a.orderCreatedAt) - Date.parse(b.orderCreatedAt);
-          if (oc !== 0) return oc;
-          const ra = a.sortRank ?? 0;
-          const rb = b.sortRank ?? 0;
-          if (ra !== rb) return ra - rb;
-          return a.itemId.localeCompare(b.itemId);
-        });
-        const base = ordered[0]!;
-        const current = ordered[ordered.length - 1]!;
-        const delta = Math.round((current.price - base.price) * 100) / 100;
-        const deltaPct = base.price > 0 ? Math.round((delta / base.price) * 10000) / 100 : 0;
-        const weightedAvg = acc.wQty > 0 ? Math.round((acc.wSum / acc.wQty) * 100) / 100 : current.price;
-        const purchasesSorted = [...acc.purchases].sort((a, b) => Date.parse(b.date) - Date.parse(a.date));
-        const billOnly = ordered.filter((p) => p.sortRank === 1).map((p) => p.price);
-        const vol = sampleStdev(billOnly);
-        const volatilityCvPct =
-          weightedAvg > 0 && billOnly.length >= 2 ? Math.round((vol / weightedAvg) * 10000) / 100 : 0;
-        const billAsc = ordered
-          .filter((p) => p.sortRank === 1)
-          .map((p) => ({ date: p.date, price: p.price }));
-        const forecast30d = forecastPriceLinear(billAsc, 30);
-        const monthlyQty = acc.wQty / monthsInWindow;
-        const impactMonthlyVsWap = Math.round((current.price - weightedAvg) * monthlyQty * 100) / 100;
-        return {
-          key: acc.key,
-          productName: acc.productName,
-          points: [...ordered].reverse(),
-          purchases: purchasesSorted,
-          weightedAvg,
-          totalWeightedQty: acc.wQty,
-          base,
-          current,
-          delta,
-          deltaPct,
-          displayUnit: base.unit,
-          impactMonthlyVsWap,
-          volatilityCvPct,
-          forecast30d,
-        };
-      })
-      .filter((row) => row.points.length >= 2 && Math.abs(row.delta) > 0.001)
-      .sort((a, b) => a.productName.localeCompare(b.productName, 'es'));
-  }, [orders, supplierFilter, windowStartMs, windowEndMs, priceMode]);
+    const out: CrossSupplierBenchmark[] = [];
+    for (const [, rows] of byProduct) {
+      if (rows.length < 2) continue;
+      const prices = rows.map((r) => r.current.price);
+      const minP = Math.min(...prices);
+      const maxP = Math.max(...prices);
+      if (minP <= 0) continue;
+      const spreadPct = Math.round(((maxP - minP) / minP) * 10000) / 100;
+      if (spreadPct < 1) continue;
+      const sortedRows = [...rows].sort((a, b) => a.current.price - b.current.price);
+      const best = sortedRows[0]!;
+      const worst = sortedRows[sortedRows.length - 1]!;
+      out.push({
+        compareKey: `${best.productName}|${best.catalogUnit}`,
+        productName: best.productName,
+        catalogUnit: best.catalogUnit,
+        displayUnit: best.displayUnit,
+        spreadPct,
+        bestSupplierName: best.supplierName,
+        worstSupplierName: worst.supplierName,
+        suppliers: sortedRows.map((r) => ({
+          supplierName: r.supplierName,
+          current: r.current.price,
+          pmp: r.weightedAvg,
+        })),
+      });
+    }
+    return out.sort((a, b) => b.spreadPct - a.spreadPct).slice(0, 12);
+  }, [seriesAllSuppliers]);
 
   const seriesFiltered = React.useMemo(() => {
     const q = productSearch.trim().toLowerCase();
     if (!q) return series;
     return series.filter((s) => s.productName.toLowerCase().includes(q));
   }, [series, productSearch]);
+
+  const actionRecommendations = React.useMemo((): ActionRecommendation[] => {
+    const out: ActionRecommendation[] = [];
+    let id = 0;
+    const nextId = () => `r-${++id}`;
+    for (const row of [...seriesFiltered]
+      .filter((s) => s.impactMonthlyVsWap > 0 && s.deltaPct >= alertPct)
+      .sort((a, b) => b.impactMonthlyVsWap - a.impactMonthlyVsWap)
+      .slice(0, 5)) {
+      out.push({
+        id: nextId(),
+        priority: 'high',
+        title: `Negociar con ${row.supplierName}`,
+        detail: `«${row.productName}»: impacto estimado +${row.impactMonthlyVsWap.toFixed(2)} €/mes vs PMP y subida +${row.deltaPct.toFixed(1)} % en la ventana.`,
+      });
+    }
+    for (const b of crossSupplierBenchmarks) {
+      if (b.spreadPct < 3 || out.length >= 10) break;
+      const lo = b.suppliers[0]!;
+      const hi = b.suppliers[b.suppliers.length - 1]!;
+      out.push({
+        id: nextId(),
+        priority: 'medium',
+        title: `Comparar proveedores · ${b.productName}`,
+        detail: `${lo.supplierName} a ${lo.current.toFixed(2)} €/${b.displayUnit} frente a ${hi.supplierName} (${hi.current.toFixed(2)} €): hueco ${b.spreadPct.toFixed(1)} % sobre el más barato.`,
+      });
+    }
+    return out;
+  }, [seriesFiltered, crossSupplierBenchmarks, alertPct]);
+
+  const benchmarksForUi = React.useMemo(() => {
+    const q = productSearch.trim().toLowerCase();
+    if (!q) return crossSupplierBenchmarks;
+    return crossSupplierBenchmarks.filter((b) => b.productName.toLowerCase().includes(q));
+  }, [crossSupplierBenchmarks, productSearch]);
 
   const executiveKpis = React.useMemo(() => {
     const s = seriesFiltered;
@@ -829,6 +1045,7 @@ export default function PedidosPreciosPage() {
     for (const row of seriesFiltered) {
       body.push([
         row.productName,
+        row.supplierName,
         row.displayUnit,
         `${row.base.price.toFixed(2)}`,
         `${row.weightedAvg.toFixed(2)}`,
@@ -842,7 +1059,7 @@ export default function PedidosPreciosPage() {
     autoTable(doc, {
       startY: tableStart + 4,
       head: [
-        ['Producto', 'Ud', 'Base', 'PMP', 'Actual', 'Δ €', 'Δ %', 'Impacto mes*', 'Vol CV%'],
+        ['Producto', 'Proveedor', 'Ud', 'Base', 'PMP', 'Actual', 'Δ €', 'Δ %', 'Impacto mes*', 'Vol CV%'],
       ],
       body,
       styles: { fontSize: 7, cellPadding: 3, textColor: PDF_ZINC_900 },
@@ -890,6 +1107,7 @@ export default function PedidosPreciosPage() {
     ];
     const head = [
       'Producto',
+      'Proveedor linea',
       'Ud',
       'Precio base',
       'PMP',
@@ -910,6 +1128,7 @@ export default function PedidosPreciosPage() {
       lines.push(
         [
           row.productName,
+          row.supplierName,
           row.displayUnit,
           row.base.price.toFixed(4),
           row.weightedAvg.toFixed(4),
@@ -1106,6 +1325,72 @@ export default function PedidosPreciosPage() {
         </div>
       </section>
 
+      {actionRecommendations.length > 0 ? (
+        <section className="rounded-2xl border border-amber-200/80 bg-amber-50/50 p-4 ring-1 ring-amber-100">
+          <div className="flex items-center gap-2">
+            <Lightbulb className="h-5 w-5 text-amber-800" aria-hidden />
+            <p className="text-sm font-black text-zinc-900">Recomendaciones automáticas</p>
+          </div>
+          <p className="mt-1 text-xs text-zinc-600">
+            Basadas en impacto vs PMP, alertas de subida y huecos de precio entre proveedores en la misma ventana y modo
+            de vista.
+          </p>
+          <ul className="mt-3 space-y-2">
+            {actionRecommendations.map((rec) => (
+              <li
+                key={rec.id}
+                className={[
+                  'rounded-xl px-3 py-2 text-xs ring-1',
+                  rec.priority === 'high'
+                    ? 'bg-white font-medium text-zinc-900 ring-red-200/80'
+                    : 'bg-white/90 text-zinc-800 ring-zinc-200',
+                ].join(' ')}
+              >
+                <span className="font-bold text-zinc-900">{rec.title}.</span> {rec.detail}
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+
+      {benchmarksForUi.length > 0 ? (
+        <section className="rounded-2xl bg-white p-4 ring-1 ring-zinc-200">
+          <p className="text-sm font-black text-zinc-900">Mismo producto, varios proveedores</p>
+          <p className="mt-1 text-xs text-zinc-600">
+            Referencias con el mismo nombre y unidad de catálogo en la ventana; ordenadas por diferencia relativa entre el
+            proveedor más caro y el más barato.
+          </p>
+          <div className="mt-3 space-y-3">
+            {benchmarksForUi.map((b) => (
+              <div key={b.compareKey} className="rounded-xl bg-zinc-50 p-3 ring-1 ring-zinc-200">
+                <div className="flex flex-wrap items-baseline justify-between gap-2">
+                  <p className="text-sm font-bold text-zinc-900">
+                    {b.productName}{' '}
+                    <span className="text-xs font-semibold text-zinc-500">({b.catalogUnit})</span>
+                  </p>
+                  <p className="text-xs font-bold text-amber-900">Hueco {b.spreadPct.toFixed(1)} %</p>
+                </div>
+                <p className="mt-1 text-[11px] text-zinc-600">
+                  Mejor: <span className="font-semibold text-emerald-800">{b.bestSupplierName}</span> · Peor:{' '}
+                  <span className="font-semibold text-red-800">{b.worstSupplierName}</span>
+                </p>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {b.suppliers.map((s) => (
+                    <span
+                      key={s.supplierName}
+                      className="inline-flex items-center rounded-lg bg-white px-2 py-1 text-[10px] font-semibold text-zinc-700 ring-1 ring-zinc-200"
+                    >
+                      {s.supplierName}: {s.current.toFixed(2)} €/{b.displayUnit}
+                      <span className="ml-1 text-zinc-500">(PMP {s.pmp.toFixed(2)})</span>
+                    </span>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
       {impactRanking.length > 0 ? (
         <section className="rounded-2xl bg-white p-4 ring-1 ring-zinc-200">
           <p className="text-sm font-black text-zinc-900">Ranking impacto económico (vs PMP)</p>
@@ -1113,11 +1398,12 @@ export default function PedidosPreciosPage() {
             Referencias que más encarecen el mes si se mantiene el volumen y el precio actual frente al PMP de la ventana.
           </p>
           <div className="mt-3 overflow-x-auto rounded-xl ring-1 ring-zinc-100">
-            <table className="w-full min-w-[520px] text-left text-xs">
+            <table className="w-full min-w-[640px] text-left text-xs">
               <thead className="bg-zinc-50 text-[10px] font-bold uppercase tracking-wide text-zinc-500">
                 <tr>
                   <th className="px-3 py-2">#</th>
                   <th className="px-3 py-2">Producto</th>
+                  <th className="px-3 py-2">Proveedor</th>
                   <th className="px-3 py-2 text-right">Impacto €/mes</th>
                   <th className="px-3 py-2 text-right">Δ %</th>
                   <th className="px-3 py-2 text-right">PMP</th>
@@ -1129,6 +1415,7 @@ export default function PedidosPreciosPage() {
                   <tr key={row.key} className="border-t border-zinc-100">
                     <td className="px-3 py-2 tabular-nums text-zinc-500">{idx + 1}</td>
                     <td className="px-3 py-2 font-semibold text-zinc-900">{row.productName}</td>
+                    <td className="px-3 py-2 text-zinc-700">{row.supplierName}</td>
                     <td className="px-3 py-2 text-right font-bold tabular-nums text-red-700">
                       +{row.impactMonthlyVsWap.toFixed(2)} €
                     </td>
@@ -1166,7 +1453,10 @@ export default function PedidosPreciosPage() {
               ].join(' ')}
             >
               <div className="flex flex-wrap items-start justify-between gap-2">
-                <p className="text-sm font-black text-zinc-900">{row.productName}</p>
+                <div>
+                  <p className="text-sm font-black text-zinc-900">{row.productName}</p>
+                  <p className="text-[11px] text-zinc-500">Proveedor: {row.supplierName}</p>
+                </div>
                 {alert ? (
                   <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-950">
                     <AlertTriangle className="h-3 w-3" aria-hidden />
@@ -1207,6 +1497,8 @@ export default function PedidosPreciosPage() {
                 ) : null}
               </p>
               <p className={`pt-1 text-xs font-semibold ${trendClass(row)}`}>{trendLabel(row)}</p>
+              <p className="pt-2 text-[10px] font-bold uppercase tracking-wide text-zinc-500">Gráfico de evolución</p>
+              <PriceEvolutionMiniChart row={row} />
               <p className="pt-2 text-[10px] font-bold uppercase tracking-wide text-zinc-500">Compras (más reciente primero)</p>
               <div className="mt-1 max-h-40 space-y-1 overflow-auto rounded-lg bg-zinc-50 p-2 ring-1 ring-zinc-200">
                 {row.purchases.map((pur, idx) => (
