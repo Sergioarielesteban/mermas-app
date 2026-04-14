@@ -143,6 +143,43 @@ export async function insertOilEvent(
   return data as AppccOilEventRow;
 }
 
+export async function updateOilEvent(
+  supabase: SupabaseClient,
+  params: {
+    eventId: string;
+    eventType: AppccOilEventType;
+    litersUsed: number | null;
+    notes?: string;
+    operatorName: string;
+    userId: string;
+  },
+) {
+  const liters = params.litersUsed;
+  if (params.eventType === 'cambio') {
+    if (liters == null || liters < 0 || !Number.isFinite(liters)) {
+      throw new Error('En un cambio de aceite indica los litros usados (≥ 0).');
+    }
+  } else if (liters != null && (!Number.isFinite(liters) || liters < 0)) {
+    throw new Error('Los litros deben ser un número ≥ 0 o dejar el campo vacío.');
+  }
+  const { data, error } = await supabase
+    .from('appcc_oil_events')
+    .update({
+      event_type: params.eventType,
+      liters_used: liters,
+      notes: params.notes?.trim() ?? '',
+      operator_name: params.operatorName.trim(),
+      recorded_by: params.userId,
+    })
+    .eq('id', params.eventId)
+    .select(
+      'id,local_id,fryer_id,event_type,event_date,liters_used,notes,operator_name,recorded_by,recorded_at,updated_at',
+    )
+    .single();
+  if (error) throw new Error(error.message);
+  return data as AppccOilEventRow;
+}
+
 export async function insertAppccFryer(
   supabase: SupabaseClient,
   params: {

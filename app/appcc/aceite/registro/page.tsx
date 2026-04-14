@@ -18,6 +18,7 @@ import {
   fetchOilEventsForDate,
   fetchOilEventsInRangeWithFryer,
   insertOilEvent,
+  updateOilEvent,
 } from '@/lib/appcc-aceite-supabase';
 import {
   APPCC_ZONE_LABEL,
@@ -71,7 +72,14 @@ function FryerOilCard({
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
-  const mine = useMemo(() => dayEvents.filter((e) => e.fryer_id === fryer.id), [dayEvents, fryer.id]);
+  const mine = useMemo(
+    () =>
+      dayEvents
+        .filter((e) => e.fryer_id === fryer.id)
+        .sort((a, b) => a.recorded_at.localeCompare(b.recorded_at)),
+    [dayEvents, fryer.id],
+  );
+  const latest = mine[mine.length - 1];
 
   const resetForm = () => {
     setLiters('');
@@ -119,16 +127,25 @@ function FryerOilCard({
     }
     setSaving(true);
     try {
-      const row = await insertOilEvent(supabase, {
-        localId,
-        fryerId: fryer.id,
-        eventType,
-        eventDate: dateKey,
-        litersUsed: litersNum,
-        notes: notes.trim(),
-        operatorName: op,
-        userId: user.id,
-      });
+      const row = latest
+        ? await updateOilEvent(supabase, {
+            eventId: latest.id,
+            eventType,
+            litersUsed: litersNum,
+            notes: notes.trim(),
+            operatorName: op,
+            userId: user.id,
+          })
+        : await insertOilEvent(supabase, {
+            localId,
+            fryerId: fryer.id,
+            eventType,
+            eventDate: dateKey,
+            litersUsed: litersNum,
+            notes: notes.trim(),
+            operatorName: op,
+            userId: user.id,
+          });
       setMode(null);
       resetForm();
       onEventSaved(row);
@@ -145,22 +162,20 @@ function FryerOilCard({
         <div className="min-w-0">
           <p className="truncate text-xs font-bold text-zinc-900">{fryer.name}</p>
           <p className="truncate text-[10px] leading-tight text-zinc-500">{APPCC_ZONE_LABEL[fryer.zone]}</p>
-          {mine.length > 0 ? (
+          {latest ? (
             <ul className="mt-1 flex flex-wrap gap-1">
-              {mine.map((e) => (
-                <li
-                  key={e.id}
-                  title={
-                    e.operator_name?.trim()
-                      ? `Realizado por: ${e.operator_name.trim()}`
-                      : undefined
-                  }
-                  className="rounded-md bg-white/90 px-1.5 py-0.5 text-[9px] font-semibold text-zinc-600 ring-1 ring-zinc-200/80"
-                >
-                  {APPCC_OIL_EVENT_LABEL[e.event_type]}
-                  {e.liters_used != null ? ` · ${e.liters_used} L` : ''}
-                </li>
-              ))}
+              <li
+                key={latest.id}
+                title={
+                  latest.operator_name?.trim()
+                    ? `Realizado por: ${latest.operator_name.trim()}`
+                    : undefined
+                }
+                className="rounded-md bg-white/90 px-1.5 py-0.5 text-[9px] font-semibold text-zinc-600 ring-1 ring-zinc-200/80"
+              >
+                {APPCC_OIL_EVENT_LABEL[latest.event_type]}
+                {latest.liters_used != null ? ` · ${latest.liters_used} L` : ''}
+              </li>
             </ul>
           ) : (
             <p className="mt-0.5 text-[9px] text-zinc-400">Sin registros este día</p>
@@ -321,9 +336,10 @@ function AppccAceiteRegistroInner() {
   const mergeOilEvent = useCallback(
     (row: AppccOilEventRow) => {
       if (row.event_date !== dateKey) return;
-      setEvents((prev) =>
-        [...prev, row].sort((a, b) => a.recorded_at.localeCompare(b.recorded_at)),
-      );
+      setEvents((prev) => {
+        const rest = prev.filter((x) => x.id !== row.id);
+        return [...rest, row].sort((a, b) => a.recorded_at.localeCompare(b.recorded_at));
+      });
     },
     [dateKey],
   );
