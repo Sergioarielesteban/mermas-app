@@ -101,3 +101,78 @@ export function bucketLabel(bucket: EscandalloRecipeDashboardRow['bucket']): str
       return bucket;
   }
 }
+
+/** Resultado de comparar ventas reales del mes con escandallos teóricos. */
+export type MonthlyMixFoodCostResult = {
+  totalUnitsSold: number;
+  totalCostEur: number;
+  totalNetRevenueEur: number;
+  totalGrossRevenueEur: number;
+  /** Σ(q×coste) / Σ(q×neto) × 100 con el mix declarado. */
+  realFoodCostPct: number | null;
+  /** Media simple de food cost por plato (carte); la pasas desde KPIs. */
+  theoreticalAvgFoodCostPct: number | null;
+  /** real − teórico (puntos porcentuales). Positivo = peor que la media de carta. */
+  deltaVsTheoreticalPct: number | null;
+  recipesInMix: number;
+  /** Unidades vendidas en platos sin PVP (no entran en el denominador neto). */
+  skippedNoPvpUnits: number;
+  skippedNoPvpRecipeNames: string[];
+};
+
+/**
+ * Calcula food cost del mix mensual: mismas fórmulas que plato a plato, ponderadas por unidades vendidas.
+ */
+export function computeMonthlyMixFoodCost(
+  mainRows: EscandalloRecipeDashboardRow[],
+  quantityByRecipeId: Record<string, number>,
+  theoreticalAvgFoodCostPct: number | null,
+): MonthlyMixFoodCostResult {
+  let totalCost = 0;
+  let totalNet = 0;
+  let totalGross = 0;
+  let totalUnits = 0;
+  let recipesInMix = 0;
+  let skippedNoPvpUnits = 0;
+  const skippedNames: string[] = [];
+
+  for (const r of mainRows) {
+    const q = quantityByRecipeId[r.id] ?? 0;
+    if (q <= 0) continue;
+    recipesInMix += 1;
+    totalUnits += q;
+    totalCost += q * r.costPerYieldEur;
+    if (r.saleNetEur != null && r.saleNetEur > 0) {
+      totalNet += q * r.saleNetEur;
+    } else {
+      skippedNoPvpUnits += q;
+      if (!skippedNames.includes(r.name)) skippedNames.push(r.name);
+    }
+    if (r.saleGrossEur != null && r.saleGrossEur > 0) {
+      totalGross += q * r.saleGrossEur;
+    }
+  }
+
+  const totalCostR = Math.round(totalCost * 100) / 100;
+  const totalNetR = Math.round(totalNet * 100) / 100;
+  const totalGrossR = Math.round(totalGross * 100) / 100;
+  const realFoodCostPct =
+    totalNetR > 0 ? Math.round((totalCostR / totalNetR) * 10000) / 100 : null;
+  const deltaVsTheoreticalPct =
+    realFoodCostPct != null && theoreticalAvgFoodCostPct != null
+      ? Math.round((realFoodCostPct - theoreticalAvgFoodCostPct) * 10) / 10
+      : null;
+
+  return {
+    totalUnitsSold: Math.round(totalUnits * 100) / 100,
+    totalCostEur: totalCostR,
+    totalNetRevenueEur: totalNetR,
+    totalGrossRevenueEur: totalGrossR,
+    realFoodCostPct,
+    theoreticalAvgFoodCostPct,
+    deltaVsTheoreticalPct,
+    recipesInMix,
+    skippedNoPvpUnits: Math.round(skippedNoPvpUnits * 100) / 100,
+    skippedNoPvpRecipeNames: skippedNames,
+  };
+}

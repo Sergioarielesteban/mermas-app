@@ -635,3 +635,72 @@ export function foodCostPercentOfNetSale(
   if (costPerUnit < 0) return null;
   return Math.round((costPerUnit / saleNetPerUnit) * 10000) / 100;
 }
+
+export type EscandalloMonthlySale = {
+  id: string;
+  localId: string;
+  yearMonth: string;
+  recipeId: string;
+  quantitySold: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+type MonthlySaleRow = {
+  id: string;
+  local_id: string;
+  year_month: string;
+  recipe_id: string;
+  quantity_sold: number;
+  created_at: string;
+  updated_at: string;
+};
+
+function mapMonthlySale(row: MonthlySaleRow): EscandalloMonthlySale {
+  return {
+    id: row.id,
+    localId: row.local_id,
+    yearMonth: row.year_month,
+    recipeId: row.recipe_id,
+    quantitySold: Number(row.quantity_sold),
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+export async function fetchEscandalloMonthlySales(
+  supabase: SupabaseClient,
+  localId: string,
+  yearMonth: string,
+): Promise<EscandalloMonthlySale[]> {
+  const { data, error } = await supabase
+    .from('escandallo_monthly_sales')
+    .select('id,local_id,year_month,recipe_id,quantity_sold,created_at,updated_at')
+    .eq('local_id', localId)
+    .eq('year_month', yearMonth);
+  if (error) throw new Error(error.message);
+  return ((data ?? []) as MonthlySaleRow[]).map(mapMonthlySale);
+}
+
+export async function upsertEscandalloMonthlySalesBatch(
+  supabase: SupabaseClient,
+  localId: string,
+  yearMonth: string,
+  rows: { recipeId: string; quantitySold: number }[],
+): Promise<void> {
+  const ym = yearMonth.trim();
+  if (!/^\d{4}-\d{2}$/.test(ym)) throw new Error('Mes inválido (usa YYYY-MM).');
+  const payload = rows
+    .filter((r) => r.recipeId && Number.isFinite(r.quantitySold) && r.quantitySold >= 0)
+    .map((r) => ({
+      local_id: localId,
+      year_month: ym,
+      recipe_id: r.recipeId,
+      quantity_sold: Math.round(Math.min(1e9, r.quantitySold) * 100) / 100,
+    }));
+  if (payload.length === 0) return;
+  const { error } = await supabase.from('escandallo_monthly_sales').upsert(payload, {
+    onConflict: 'local_id,year_month,recipe_id',
+  });
+  if (error) throw new Error(error.message);
+}
