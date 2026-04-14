@@ -56,6 +56,10 @@ function titleForPath(pathname: string | null) {
   if (pathname.startsWith('/appcc/aceite/historial')) return 'Historial aceite';
   if (pathname.startsWith('/appcc/aceite/equipos')) return 'Freidoras';
   if (pathname.startsWith('/appcc/aceite')) return 'Aceite';
+  if (pathname.startsWith('/appcc/limpieza/registro')) return 'Limpieza';
+  if (pathname.startsWith('/appcc/limpieza/historial')) return 'Historial limpieza';
+  if (pathname.startsWith('/appcc/limpieza/tareas')) return 'Tareas limpieza';
+  if (pathname.startsWith('/appcc/limpieza')) return 'Limpieza APPCC';
   if (pathname.startsWith('/appcc')) return 'APPCC';
   return 'Mermas';
 }

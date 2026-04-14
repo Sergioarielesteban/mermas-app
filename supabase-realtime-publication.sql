@@ -23,6 +23,9 @@ declare
     'appcc_temperature_readings',
     'appcc_fryers',
     'appcc_oil_events',
+    'appcc_cleaning_categories',
+    'appcc_cleaning_tasks',
+    'appcc_cleaning_logs',
     'inventory_local_categories',
     'inventory_items',
     'inventory_movements',
@@ -55,7 +58,8 @@ order by tablename;
 -- =============================================================================
 -- 1) SUPABASE — Publicación (este archivo)
 --    - Crea las tablas del módulo en SQL (con local_id si es multi-local).
---    - APPCC: supabase-appcc-schema.sql (frío); supabase-appcc-aceite-schema.sql (freidoras).
+--    - APPCC: supabase-appcc-schema.sql (frío); supabase-appcc-aceite-schema.sql (freidoras);
+--      supabase-appcc-limpieza-schema.sql (limpieza).
 --    - Inventario: supabase-inventory-schema.sql (catálogo global + stock por local).
 --    - Añade el nombre de cada tabla NUEVA al array `tables` de arriba y vuelve a
 --      ejecutar solo el bloque `do $$ ... end $$` (o un ALTER manual).
