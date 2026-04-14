@@ -580,6 +580,9 @@ export default function PedidosPage() {
             Pendientes de entrega
           </span>
           <span className={`mx-auto mt-4 w-24 ${CHEF_ONE_TAPER_LINE_CLASS}`} aria-hidden />
+          <span className="mt-4 text-3xl font-black tabular-nums text-zinc-900">
+            {sentOrders.length}
+          </span>
           <span className="mt-4 flex flex-wrap items-center justify-center gap-x-1.5 text-xs text-zinc-500">
             {sentOrders.length === 0 ? (
               <span>Nada pendiente ahora</span>
@@ -794,6 +797,9 @@ export default function PedidosPage() {
             Histórico recibidos
           </span>
           <span className={`mx-auto mt-4 w-24 ${CHEF_ONE_TAPER_LINE_CLASS}`} aria-hidden />
+          <span className="mt-4 text-3xl font-black tabular-nums text-zinc-900">
+            {receivedOrders.length}
+          </span>
           <span className="mt-4 flex flex-wrap items-center justify-center gap-x-1.5 text-xs text-zinc-500">
             {receivedOrders.length === 0 ? (
               <span>Sin pedidos recibidos</span>
