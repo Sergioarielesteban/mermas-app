@@ -2,9 +2,8 @@
 
 import Link from 'next/link';
 import React from 'react';
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
 import { useMermasStore } from '@/components/MermasStoreProvider';
+import { downloadMermasReportPdf } from '@/lib/mermas-report-pdf';
 import { toBusinessDateKey } from '@/lib/business-day';
 import type { MermaMotiveKey } from '@/lib/types';
 
@@ -132,31 +131,15 @@ export default function ResumenPage() {
   );
 
   const exportPdf = () => {
-    const doc = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'a4' });
-    doc.setFontSize(14);
-    doc.text('Resumen de Mermas', 40, 40);
-    doc.setFontSize(10);
-    doc.text(`Registros: ${filtered.length} | Total: ${totalFiltered.toFixed(2)} €`, 40, 58);
-
-    const body = filtered.map((m) => {
-      const product = products.find((p) => p.id === m.productId);
-      return [
-        new Date(m.occurredAt).toLocaleString('es-ES'),
-        product?.name ?? 'Producto',
-        String(m.quantity),
-        motiveLabel(m.motiveKey),
-        `${m.costEur.toFixed(2)} €`,
-      ];
+    const productLabel =
+      productFilter === 'all' ? 'Todos los productos' : products.find((p) => p.id === productFilter)?.name ?? '—';
+    const fromLabel = fromDate ? new Date(fromDate + 'T12:00:00').toLocaleDateString('es-ES') : 'Sin límite inicial';
+    const toLabel = toDate ? new Date(toDate + 'T12:00:00').toLocaleDateString('es-ES') : 'Sin límite final';
+    downloadMermasReportPdf({
+      rows: filtered,
+      products,
+      filters: { productLabel, fromLabel, toLabel },
     });
-
-    autoTable(doc, {
-      startY: 74,
-      head: [['Fecha/Hora', 'Producto', 'Cantidad', 'Motivo', 'Valor']],
-      body,
-      styles: { fontSize: 8 },
-      headStyles: { fillColor: [211, 47, 47] },
-    });
-    doc.save(`resumen-mermas-${new Date().toISOString().slice(0, 10)}.pdf`);
   };
 
   const backupJson = () => {

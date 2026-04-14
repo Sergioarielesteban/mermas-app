@@ -21,7 +21,7 @@ function startOfBusinessWeek(date: Date) {
   return out;
 }
 
-function normalizedCostForRecord(record: MermaRecord, pricePerUnit: number | undefined) {
+export function normalizedCostForRecord(record: MermaRecord, pricePerUnit: number | undefined) {
   const recorded = Number(record.costEur ?? 0);
   if (!Number.isFinite(recorded) || recorded < 0) return 0;
   if (!pricePerUnit || !Number.isFinite(pricePerUnit) || pricePerUnit <= 0) return recorded;
