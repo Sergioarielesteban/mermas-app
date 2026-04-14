@@ -205,6 +205,13 @@ function escapeCsvCell(v: string): string {
   return v;
 }
 
+/** Umbral 0 = cualquier subida respecto al primer precio en la ventana (mínimo movimiento). */
+function isPriceRiseAlert(row: PriceSummary, alertPct: number): boolean {
+  if (row.delta <= 0) return false;
+  if (alertPct <= 0) return true;
+  return row.deltaPct >= alertPct;
+}
+
 function buildPriceSummaries(
   orders: PedidoOrder[],
   windowStartMs: number,
@@ -729,7 +736,7 @@ export default function PedidosPreciosPage() {
   const [supplierFilter, setSupplierFilter] = React.useState<string>('');
   const [productSearch, setProductSearch] = React.useState('');
   const [priceMode, setPriceMode] = React.useState<PriceMode>('unit');
-  const [alertPct, setAlertPct] = React.useState(5);
+  const [alertPct, setAlertPct] = React.useState(0);
 
   const supplierOptions = React.useMemo(() => {
     const m = new Map<string, string>();
@@ -828,7 +835,7 @@ export default function PedidosPreciosPage() {
     let id = 0;
     const nextId = () => `r-${++id}`;
     for (const row of [...seriesFiltered]
-      .filter((s) => s.impactMonthlyVsWap > 0 && s.deltaPct >= alertPct)
+      .filter((s) => s.impactMonthlyVsWap > 0 && isPriceRiseAlert(s, alertPct))
       .sort((a, b) => b.impactMonthlyVsWap - a.impactMonthlyVsWap)
       .slice(0, 5)) {
       out.push({
@@ -879,7 +886,7 @@ export default function PedidosPreciosPage() {
     const wSum = s.reduce((a, x) => a + x.totalWeightedQty, 0);
     const volWeightedDeltaPct =
       wSum > 0 ? s.reduce((a, x) => a + x.deltaPct * x.totalWeightedQty, 0) / wSum : avgDeltaPct;
-    const alertCount = s.filter((x) => x.delta > 0 && x.deltaPct >= alertPct).length;
+    const alertCount = s.filter((x) => isPriceRiseAlert(x, alertPct)).length;
     const impactUpMonthly = s.filter((x) => x.impactMonthlyVsWap > 0).reduce((a, x) => a + x.impactMonthlyVsWap, 0);
     const impactDownMonthly = s
       .filter((x) => x.impactMonthlyVsWap < 0)
@@ -973,7 +980,10 @@ export default function PedidosPreciosPage() {
     const kpiH = 52;
     const kpis: [string, string][] = [
       ['Referencias', String(executiveKpis.n)],
-      ['Suben / alerta', `${executiveKpis.up} · ${executiveKpis.alertCount} (≥${alertPct}%)`],
+      [
+        'Suben / alerta',
+        `${executiveKpis.up} · ${executiveKpis.alertCount} (${alertPct <= 0 ? 'mín. mov.' : `≥${alertPct}%`})`,
+      ],
       ['Bajan', String(executiveKpis.down)],
       ['Δ % medio', `${executiveKpis.avgDeltaPct >= 0 ? '+' : ''}${executiveKpis.avgDeltaPct.toFixed(2)} %`],
       ['Δ % ponderado vol.', `${executiveKpis.volWeightedDeltaPct >= 0 ? '+' : ''}${executiveKpis.volWeightedDeltaPct.toFixed(2)} %`],
@@ -1240,6 +1250,7 @@ export default function PedidosPreciosPage() {
               onChange={(e) => setAlertPct(Number(e.target.value))}
               className="mt-1 h-10 w-full rounded-lg border border-zinc-300 bg-white px-2 text-sm font-medium text-zinc-900"
             >
+              <option value="0">Cualquier subida (mínimo)</option>
               <option value="3">3 %</option>
               <option value="5">5 %</option>
               <option value="8">8 %</option>
@@ -1296,7 +1307,11 @@ export default function PedidosPreciosPage() {
               {executiveKpis.alertCount}
               <AlertTriangle className="h-5 w-5 shrink-0" aria-hidden />
             </p>
-            <p className="mt-1 text-xs text-zinc-600">≥ {alertPct}% respecto al primer precio en la ventana</p>
+            <p className="mt-1 text-xs text-zinc-600">
+              {alertPct <= 0
+                ? 'Cualquier subida respecto al primer precio de la ventana (listado ya excluye cambios irrelevantes).'
+                : `≥ ${alertPct}% respecto al primer precio en la ventana`}
+            </p>
           </div>
           <div className="rounded-xl bg-white p-4 shadow-sm ring-1 ring-zinc-100">
             <p className="text-[11px] font-semibold text-zinc-500">Δ % ponderado por volumen</p>
@@ -1443,7 +1458,7 @@ export default function PedidosPreciosPage() {
           </div>
         ) : null}
         {seriesFiltered.map((row) => {
-          const alert = row.delta > 0 && row.deltaPct >= alertPct;
+          const alert = isPriceRiseAlert(row, alertPct);
           return (
             <div
               key={row.key}
@@ -1460,7 +1475,7 @@ export default function PedidosPreciosPage() {
                 {alert ? (
                   <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-950">
                     <AlertTriangle className="h-3 w-3" aria-hidden />
-                    Alerta ≥{alertPct}%
+                    {alertPct <= 0 ? 'Subida' : `Alerta ≥${alertPct}%`}
                   </span>
                 ) : null}
               </div>
