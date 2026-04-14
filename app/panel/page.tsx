@@ -3,13 +3,25 @@
 import Link from 'next/link';
 import React from 'react';
 import type { LucideIcon } from 'lucide-react';
-import { BookOpen, Calculator, ChefHat, ClipboardList, MessageCircle, ShieldCheck, ShoppingCart } from 'lucide-react';
+import {
+  BookOpen,
+  Calculator,
+  ChefHat,
+  ClipboardList,
+  Clock,
+  MessageCircle,
+  ShieldCheck,
+  ShoppingCart,
+  UtensilsCrossed,
+} from 'lucide-react';
 import { CHEF_ONE_TAPER_LINE_CLASS } from '@/components/ChefOneGlowLine';
 import MermasStyleHero from '@/components/MermasStyleHero';
 import { useAuth } from '@/components/AuthProvider';
 import { canAccessPedidos } from '@/lib/pedidos-access';
 
 const LINE = `mx-auto mt-4 w-24 ${CHEF_ONE_TAPER_LINE_CLASS}`;
+
+const PERSONAL_MODULOS_MSG = 'Próximamente: horarios y fichaje; comida de personal.';
 
 type TileProps = {
   href?: string;
@@ -75,6 +87,11 @@ export default function PanelControlPage() {
     window.setTimeout(() => setStubMessage(null), 3200);
   };
 
+  const onComingSoonPersonal = () => {
+    setStubMessage(PERSONAL_MODULOS_MSG);
+    window.setTimeout(() => setStubMessage(null), 4500);
+  };
+
   return (
     <div className="space-y-6">
       <MermasStyleHero
@@ -115,6 +132,18 @@ export default function PanelControlPage() {
           label="Cocina central"
           sub="Próximamente"
           Icon={ChefHat}
+        />
+        <HubTile
+          onClick={onComingSoonPersonal}
+          label="Horarios y fichaje"
+          sub={PERSONAL_MODULOS_MSG}
+          Icon={Clock}
+        />
+        <HubTile
+          onClick={onComingSoonPersonal}
+          label="Comida de personal"
+          sub={PERSONAL_MODULOS_MSG}
+          Icon={UtensilsCrossed}
         />
         <HubTile
           href="/escandallos"

@@ -8,10 +8,12 @@ import {
   BookOpen,
   ChefHat,
   ClipboardList,
+  Clock,
   LogOut,
   Menu,
   MessageCircle,
   ShieldCheck,
+  UtensilsCrossed,
   X,
   RefreshCcw,
   ShoppingCart,
@@ -22,14 +24,19 @@ import { canAccessPedidos } from '@/lib/pedidos-access';
 import { formatLocalHeaderName } from '@/lib/local-display-name';
 import ChefOneGlowLine from '@/components/ChefOneGlowLine';
 
-type NavItem = {
+type NavItemNote = { kind: 'note'; text: string };
+type NavItemLink = {
   href?: string;
   label: string;
   Icon: React.ComponentType<{ className?: string }>;
   comingSoon?: boolean;
 };
+type NavItem = NavItemNote | NavItemLink;
 
 const NAV_ITEMS: NavItem[] = [{ href: '/dashboard', label: 'Mermas', Icon: BookOpen }];
+
+const COMING_SOON_PERSONAL_NOTE =
+  'Próximamente: horarios y fichaje; comida de personal.';
 function titleForPath(pathname: string | null) {
   if (!pathname) return 'Mermas';
   if (pathname === '/panel' || pathname.startsWith('/panel/')) return 'Panel de control';
@@ -74,6 +81,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       { href: '/escandallos', label: 'Escandallos', Icon: Calculator },
       { href: '/chat', label: 'Chat', Icon: MessageCircle },
       { label: 'Cocina central', Icon: ChefHat, comingSoon: true },
+      { kind: 'note', text: COMING_SOON_PERSONAL_NOTE },
+      { label: 'Horarios y fichaje', Icon: Clock, comingSoon: true },
+      { label: 'Comida de personal', Icon: UtensilsCrossed, comingSoon: true },
     ],
     [showPedidos],
   );
@@ -222,16 +232,27 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
         <nav className="px-2 py-3">
           {navItems.map((item) => {
-            const Icon = item.Icon;
-            if (item.comingSoon || !item.href) {
+            if ('kind' in item && item.kind === 'note') {
+              return (
+                <p
+                  key={item.text}
+                  className="mx-1 mb-2 rounded-xl bg-amber-50/90 px-3 py-2 text-[11px] font-medium leading-snug text-amber-950 ring-1 ring-amber-100"
+                >
+                  {item.text}
+                </p>
+              );
+            }
+            const entry = item as NavItemLink;
+            const Icon = entry.Icon;
+            if (entry.comingSoon || !entry.href) {
               return (
                 <div
-                  key={item.label}
+                  key={entry.label}
                   className="flex items-center justify-between gap-3 rounded-xl px-3 py-3 text-sm font-semibold text-zinc-500 ring-1 ring-zinc-200"
                 >
                   <span className="flex items-center gap-3">
                     <Icon className="h-5 w-5" />
-                    <span className="min-w-0 truncate">{item.label}</span>
+                    <span className="min-w-0 truncate">{entry.label}</span>
                   </span>
                   <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-zinc-500">
                     Próximamente
@@ -240,18 +261,18 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               );
             }
             const isActive =
-              item.href === '/dashboard'
+              entry.href === '/dashboard'
                 ? pathname === '/dashboard' || pathname === '/'
-                : item.href === '/appcc'
+                : entry.href === '/appcc'
                   ? pathname === '/appcc' || pathname?.startsWith('/appcc/')
-                  : item.href === '/escandallos'
+                  : entry.href === '/escandallos'
                     ? pathname === '/escandallos' || pathname?.startsWith('/escandallos/')
-                    : pathname === item.href || pathname?.startsWith(`${item.href}/`);
+                    : pathname === entry.href || pathname?.startsWith(`${entry.href}/`);
 
             return (
               <Link
-                key={item.href ?? item.label}
-                href={item.href}
+                key={entry.href}
+                href={entry.href}
                 onClick={() => setOpen(false)}
                 className={[
                   'flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-semibold transition-all',
@@ -261,7 +282,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                 ].join(' ')}
               >
                 <Icon className="h-5 w-5" />
-                <span className="min-w-0 truncate">{item.label}</span>
+                <span className="min-w-0 truncate">{entry.label}</span>
               </Link>
             );
           })}
