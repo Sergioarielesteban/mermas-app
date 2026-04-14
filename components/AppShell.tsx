@@ -38,6 +38,7 @@ function titleForPath(pathname: string | null) {
   if (pathname.startsWith('/resumen')) return 'Resumen';
   if (pathname.startsWith('/pedidos')) return 'Pedidos';
   if (pathname.startsWith('/inventario')) return 'Inventario';
+  if (pathname.startsWith('/escandallos/centro')) return 'Centro escandallos';
   if (pathname.startsWith('/escandallos')) return 'Escandallos';
   if (pathname.startsWith('/chat')) return 'Chat del local';
   if (pathname === '/appcc') return 'APPCC';

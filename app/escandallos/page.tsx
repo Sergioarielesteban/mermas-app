@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { ChevronDown, Plus, Search, Trash2 } from 'lucide-react';
+import { ChevronDown, LayoutDashboard, Plus, Search, Trash2 } from 'lucide-react';
 import MermasStyleHero from '@/components/MermasStyleHero';
 import { useAuth } from '@/components/AuthProvider';
 import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
@@ -1026,7 +1026,14 @@ export default function EscandallosPage() {
         compact
       />
 
-      <section>
+      <section className="flex flex-wrap items-center gap-2">
+        <Link
+          href="/escandallos/centro"
+          className="inline-flex h-9 items-center gap-2 rounded-xl border border-[#D32F2F]/35 bg-gradient-to-br from-[#D32F2F]/10 to-white px-3 text-sm font-bold text-[#B91C1C] shadow-sm ring-1 ring-[#D32F2F]/20"
+        >
+          <LayoutDashboard className="h-4 w-4" />
+          Centro de mando
+        </Link>
         <Link
           href="/panel"
           className="inline-flex h-9 items-center rounded-lg border border-zinc-300 bg-white px-3 text-sm font-semibold text-zinc-700"

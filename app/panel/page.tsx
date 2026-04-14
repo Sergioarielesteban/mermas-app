@@ -119,7 +119,7 @@ export default function PanelControlPage() {
         <HubTile
           href="/escandallos"
           label="Escandallos"
-          sub="Recetas y coste por ración"
+          sub="Recetas, food cost y centro de mando con gráficas"
           Icon={Calculator}
         />
       </div>
