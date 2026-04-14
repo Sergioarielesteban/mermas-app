@@ -8,6 +8,12 @@ export type EscandalloRecipe = {
   notes: string;
   yieldQty: number;
   yieldLabel: string;
+  /** true = base / picadillo; false = plato principal en listado. */
+  isSubRecipe: boolean;
+  /** IVA % del PVP (ej. 10). null = no configurado. */
+  saleVatRatePct: number | null;
+  /** PVP con IVA por unidad de yield (ración). null = sin precio venta. */
+  salePriceGrossEur: number | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -71,6 +77,9 @@ type RecipeRow = {
   notes: string;
   yield_qty: number;
   yield_label: string;
+  is_sub_recipe?: boolean | null;
+  sale_vat_rate_pct?: number | null;
+  sale_price_gross_eur?: number | null;
   created_at: string;
   updated_at: string;
 };
@@ -115,6 +124,8 @@ type ProcessedRow = {
 };
 
 function mapRecipe(row: RecipeRow): EscandalloRecipe {
+  const vat = row.sale_vat_rate_pct;
+  const gross = row.sale_price_gross_eur;
   return {
     id: row.id,
     localId: row.local_id,
@@ -122,6 +133,13 @@ function mapRecipe(row: RecipeRow): EscandalloRecipe {
     notes: row.notes ?? '',
     yieldQty: Number(row.yield_qty),
     yieldLabel: row.yield_label ?? 'raciones',
+    isSubRecipe: Boolean(row.is_sub_recipe),
+    saleVatRatePct:
+      vat != null && Number.isFinite(Number(vat)) ? Math.round(Number(vat) * 100) / 100 : null,
+    salePriceGrossEur:
+      gross != null && Number.isFinite(Number(gross)) && Number(gross) > 0
+        ? Math.round(Number(gross) * 10000) / 10000
+        : null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -170,7 +188,9 @@ function mapProcessed(row: ProcessedRow): EscandalloProcessedProduct {
 export async function fetchEscandalloRecipes(supabase: SupabaseClient, localId: string): Promise<EscandalloRecipe[]> {
   const { data, error } = await supabase
     .from('escandallo_recipes')
-    .select('id,local_id,name,notes,yield_qty,yield_label,created_at,updated_at')
+    .select(
+      'id,local_id,name,notes,yield_qty,yield_label,is_sub_recipe,sale_vat_rate_pct,sale_price_gross_eur,created_at,updated_at',
+    )
     .eq('local_id', localId)
     .order('name');
   if (error) throw new Error(error.message);
@@ -281,19 +301,36 @@ export async function insertEscandalloRecipe(
   supabase: SupabaseClient,
   localId: string,
   name: string,
-  opts?: { notes?: string; yieldQty?: number; yieldLabel?: string },
+  opts?: {
+    notes?: string;
+    yieldQty?: number;
+    yieldLabel?: string;
+    isSubRecipe?: boolean;
+    saleVatRatePct?: number | null;
+    salePriceGrossEur?: number | null;
+  },
 ): Promise<EscandalloRecipe> {
   const yieldQty = opts?.yieldQty != null && opts.yieldQty > 0 ? opts.yieldQty : 1;
+  const row: Record<string, unknown> = {
+    local_id: localId,
+    name: name.trim(),
+    notes: (opts?.notes ?? '').trim(),
+    yield_qty: Math.round(yieldQty * 100) / 100,
+    yield_label: (opts?.yieldLabel ?? 'raciones').trim() || 'raciones',
+    is_sub_recipe: opts?.isSubRecipe ?? false,
+  };
+  if (opts?.saleVatRatePct != null && Number.isFinite(opts.saleVatRatePct)) {
+    row.sale_vat_rate_pct = Math.round(opts.saleVatRatePct * 100) / 100;
+  }
+  if (opts?.salePriceGrossEur != null && Number.isFinite(opts.salePriceGrossEur) && opts.salePriceGrossEur > 0) {
+    row.sale_price_gross_eur = Math.round(opts.salePriceGrossEur * 10000) / 10000;
+  }
   const { data, error } = await supabase
     .from('escandallo_recipes')
-    .insert({
-      local_id: localId,
-      name: name.trim(),
-      notes: (opts?.notes ?? '').trim(),
-      yield_qty: Math.round(yieldQty * 100) / 100,
-      yield_label: (opts?.yieldLabel ?? 'raciones').trim() || 'raciones',
-    })
-    .select('id,local_id,name,notes,yield_qty,yield_label,created_at,updated_at')
+    .insert(row)
+    .select(
+      'id,local_id,name,notes,yield_qty,yield_label,is_sub_recipe,sale_vat_rate_pct,sale_price_gross_eur,created_at,updated_at',
+    )
     .single();
   if (error) throw new Error(error.message);
   return mapRecipe(data as RecipeRow);
@@ -303,13 +340,34 @@ export async function updateEscandalloRecipe(
   supabase: SupabaseClient,
   localId: string,
   recipeId: string,
-  patch: { name?: string; notes?: string; yieldQty?: number; yieldLabel?: string },
+  patch: {
+    name?: string;
+    notes?: string;
+    yieldQty?: number;
+    yieldLabel?: string;
+    isSubRecipe?: boolean;
+    saleVatRatePct?: number | null;
+    salePriceGrossEur?: number | null;
+  },
 ): Promise<void> {
   const row: Record<string, unknown> = {};
   if (patch.name !== undefined) row.name = patch.name.trim();
   if (patch.notes !== undefined) row.notes = patch.notes.trim();
   if (patch.yieldQty !== undefined && patch.yieldQty > 0) row.yield_qty = Math.round(patch.yieldQty * 100) / 100;
   if (patch.yieldLabel !== undefined) row.yield_label = patch.yieldLabel.trim() || 'raciones';
+  if (patch.isSubRecipe !== undefined) row.is_sub_recipe = patch.isSubRecipe;
+  if (patch.saleVatRatePct !== undefined) {
+    row.sale_vat_rate_pct =
+      patch.saleVatRatePct != null && Number.isFinite(patch.saleVatRatePct)
+        ? Math.round(patch.saleVatRatePct * 100) / 100
+        : null;
+  }
+  if (patch.salePriceGrossEur !== undefined) {
+    row.sale_price_gross_eur =
+      patch.salePriceGrossEur != null && Number.isFinite(patch.salePriceGrossEur) && patch.salePriceGrossEur > 0
+        ? Math.round(patch.salePriceGrossEur * 10000) / 10000
+        : null;
+  }
   if (Object.keys(row).length === 0) return;
   const { error } = await supabase
     .from('escandallo_recipes')
@@ -375,6 +433,60 @@ export async function insertEscandalloLine(
     .single();
   if (error) throw new Error(error.message);
   return mapLine(data as LineRow);
+}
+
+export type EscandalloLineInsertPayload = {
+  sourceType: 'raw' | 'processed' | 'manual' | 'subrecipe';
+  label: string;
+  qty: number;
+  unit: Unit;
+  rawSupplierProductId?: string | null;
+  processedProductId?: string | null;
+  subRecipeId?: string | null;
+  manualPricePerUnit?: number | null;
+};
+
+export async function insertEscandalloLinesBatch(
+  supabase: SupabaseClient,
+  localId: string,
+  recipeId: string,
+  payloads: EscandalloLineInsertPayload[],
+  startSortOrder: number,
+): Promise<EscandalloLine[]> {
+  if (payloads.length === 0) return [];
+  const rows = payloads.map((payload, i) => {
+    if (payload.sourceType === 'subrecipe' && payload.subRecipeId === recipeId) {
+      throw new Error('Una receta no puede incluirse a sí misma como sub-receta.');
+    }
+    return {
+      local_id: localId,
+      recipe_id: recipeId,
+      source_type: payload.sourceType,
+      raw_supplier_product_id:
+        payload.sourceType === 'raw' ? (payload.rawSupplierProductId ?? null) : null,
+      processed_product_id:
+        payload.sourceType === 'processed' ? (payload.processedProductId ?? null) : null,
+      sub_recipe_id: payload.sourceType === 'subrecipe' ? (payload.subRecipeId ?? null) : null,
+      label: payload.label.trim(),
+      qty: Math.max(0.0001, Math.round(payload.qty * 10000) / 10000),
+      unit: payload.unit,
+      manual_price_per_unit:
+        payload.sourceType === 'manual' &&
+        payload.manualPricePerUnit != null &&
+        Number.isFinite(payload.manualPricePerUnit)
+          ? Math.round(payload.manualPricePerUnit * 10000) / 10000
+          : null,
+      sort_order: startSortOrder + i,
+    };
+  });
+  const { data, error } = await supabase
+    .from('escandallo_recipe_lines')
+    .insert(rows)
+    .select(
+      'id,local_id,recipe_id,source_type,raw_supplier_product_id,processed_product_id,sub_recipe_id,label,qty,unit,manual_price_per_unit,sort_order,created_at',
+    );
+  if (error) throw new Error(error.message);
+  return ((data ?? []) as LineRow[]).map(mapLine);
 }
 
 export async function updateEscandalloLine(
@@ -499,4 +611,27 @@ export function recipeTotalCostEur(
     sum += line.qty * lineUnitPriceEur(line, rawProductById, processedById, innerCtx);
   }
   return Math.round(sum * 100) / 100;
+}
+
+/** Precio neto (sin IVA) por unidad de venta, a partir del PVP con IVA. */
+export function saleNetPerUnitFromGross(grossEur: number, vatRatePct: number): number {
+  const v = Math.max(0, vatRatePct);
+  const denom = 1 + v / 100;
+  if (denom <= 0 || !Number.isFinite(grossEur)) return 0;
+  return Math.round((grossEur / denom) * 10000) / 10000;
+}
+
+/**
+ * Food cost % sobre venta neta: (coste por unidad de yield / precio neto por unidad) × 100.
+ * Referencia orientativa: &lt;30 % suele ser cómodo; 30–35 % revisar; &gt;35 % ajustar carta o precios.
+ */
+export function foodCostPercentOfNetSale(
+  recipeTotalCostEur: number,
+  yieldQty: number,
+  saleNetPerUnit: number | null,
+): number | null {
+  if (saleNetPerUnit == null || saleNetPerUnit <= 0 || yieldQty <= 0) return null;
+  const costPerUnit = recipeTotalCostEur / yieldQty;
+  if (costPerUnit < 0) return null;
+  return Math.round((costPerUnit / saleNetPerUnit) * 10000) / 100;
 }

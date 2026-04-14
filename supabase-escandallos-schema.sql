@@ -13,6 +13,10 @@ create table if not exists public.escandallo_recipes (
   unique (local_id, name)
 );
 
+alter table public.escandallo_recipes add column if not exists is_sub_recipe boolean not null default false;
+alter table public.escandallo_recipes add column if not exists sale_vat_rate_pct numeric(5, 2);
+alter table public.escandallo_recipes add column if not exists sale_price_gross_eur numeric(12, 4);
+
 create index if not exists idx_escandallo_recipes_local_id on public.escandallo_recipes(local_id);
 
 -- Productos elaborados internos (transformación desde un producto crudo proveedor)
