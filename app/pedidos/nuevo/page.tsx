@@ -464,21 +464,6 @@ export default function NuevoPedidoPage() {
       </section>
 
       <section className="rounded-2xl bg-white p-4 ring-1 ring-zinc-200">
-        <p className="text-sm font-bold text-zinc-800">Lineas del pedido</p>
-        <div className="mt-2 space-y-2">
-          {items.length === 0 ? <p className="text-sm text-zinc-500">Sin productos añadidos.</p> : null}
-          {items.map((row) => (
-            <div key={row.id} className="flex items-center justify-between rounded-xl bg-zinc-50 p-3">
-              <div>
-                <p className="text-sm font-semibold text-zinc-800">{row.productName}</p>
-                <p className="text-xs text-zinc-500">
-                  {formatQuantityWithUnit(row.quantity, row.unit)} · Subtotal {row.lineTotal.toFixed(2)} € · IVA{' '}
-                  {(row.lineTotal * row.vatRate).toFixed(2)} €
-                </p>
-              </div>
-            </div>
-          ))}
-        </div>
         <label className="mt-4 block text-xs font-semibold uppercase tracking-wide text-zinc-500">Notas</label>
         <textarea
           value={notes}
