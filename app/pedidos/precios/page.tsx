@@ -4,6 +4,7 @@ import Link from 'next/link';
 import React from 'react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { AlertTriangle, Download, TrendingDown, TrendingUp } from 'lucide-react';
 import { useAuth } from '@/components/AuthProvider';
 import { usePedidosOrders } from '@/components/PedidosOrdersProvider';
 import PedidosPremiaLockedScreen from '@/components/PedidosPremiaLockedScreen';
@@ -11,6 +12,9 @@ import { canAccessPedidos, canUsePedidosModule } from '@/lib/pedidos-access';
 import { formatQuantityWithUnit } from '@/lib/pedidos-format';
 import { billingQuantityForLine, type PedidoOrder } from '@/lib/pedidos-supabase';
 import type { Unit } from '@/lib/types';
+
+type PriceMode = 'unit' | 'per_kg';
+type WindowPreset = '30' | '90' | '365' | 'all';
 
 type PricePoint = {
   date: string;
@@ -43,6 +47,14 @@ type PriceSummary = {
   current: PricePoint;
   delta: number;
   deltaPct: number;
+  /** Unidad mostrada en gráficos/tablas (ud de catálogo o kg). */
+  displayUnit: string;
+  /** Impacto mensual estimado si el ritmo de compra del periodo se mantiene: (actual − PMP) × (qty/mes). */
+  impactMonthlyVsWap: number;
+  /** Coef. variación % entre precios albarán (últimos puntos). */
+  volatilityCvPct: number;
+  /** Estimación ~30 días (tendencia lineal sobre últimos puntos). */
+  forecast30d: number | null;
 };
 
 function orderPriceDate(order: PedidoOrder): string {
@@ -84,6 +96,99 @@ function weightQtyForHistory(item: PedidoOrder['items'][number]): number {
   if (item.quantity > 0) return item.quantity;
   /* Incluir la línea en evolución/media aunque cantidad sea 0 (p. ej. incidencia), para no perder el precio facturado. */
   return 1;
+}
+
+/** Kg comprados (reales, o envase × estimado) para modo €/kg en evolución. */
+function weightKgForEvolution(item: PedidoOrder['items'][number]): number | null {
+  if (item.unit === 'kg') {
+    const b = billingQuantityForLine(item);
+    if (b > 0) return b;
+    if (item.quantity > 0) return item.quantity;
+    return null;
+  }
+  if (item.receivedWeightKg != null && item.receivedWeightKg > 0) return item.receivedWeightKg;
+  const est = item.estimatedKgPerUnit;
+  if (est != null && est > 0) {
+    const env = item.receivedQuantity > 0 ? item.receivedQuantity : item.quantity;
+    if (env > 0) return env * est;
+  }
+  return null;
+}
+
+function effectivePriceForEvolution(
+  item: PedidoOrder['items'][number],
+  mode: PriceMode,
+): number | null {
+  if (mode === 'unit') return unitPriceForPriceHistory(item);
+  if (item.unit === 'kg') return unitPriceForPriceHistory(item);
+  const unitP = unitPriceForPriceHistory(item);
+  if (unitP == null) return null;
+  if (item.receivedPricePerKg != null && item.receivedPricePerKg > 0) {
+    return Math.round(item.receivedPricePerKg * 10000) / 10000;
+  }
+  const w = item.receivedWeightKg;
+  if (w != null && w > 0 && item.lineTotal > 0) {
+    return Math.round((item.lineTotal / w) * 10000) / 10000;
+  }
+  const est = item.estimatedKgPerUnit;
+  if (est != null && est > 0) {
+    return Math.round((unitP / est) * 10000) / 10000;
+  }
+  return null;
+}
+
+function weightQtyForEvolution(item: PedidoOrder['items'][number], mode: PriceMode): number {
+  if (mode === 'per_kg') {
+    const kg = weightKgForEvolution(item);
+    return kg != null && kg > 0 ? kg : 0;
+  }
+  return weightQtyForHistory(item);
+}
+
+function inPriceWindow(iso: string, startMs: number, endMs: number): boolean {
+  const t = Date.parse(iso);
+  if (!Number.isFinite(t)) return false;
+  return t >= startMs && t <= endMs;
+}
+
+function sampleStdev(xs: number[]): number {
+  if (xs.length < 2) return 0;
+  const m = xs.reduce((a, b) => a + b, 0) / xs.length;
+  const v = xs.reduce((a, b) => a + (b - m) ** 2, 0) / (xs.length - 1);
+  return Math.sqrt(v);
+}
+
+/** Regresión lineal simple y precio estimado a +daysAhead días del último punto (solo puntos albarán). */
+function forecastPriceLinear(
+  billPointsAsc: Array<{ date: string; price: number }>,
+  daysAhead: number,
+): number | null {
+  if (billPointsAsc.length < 3) return null;
+  const slice = billPointsAsc.slice(-8);
+  const t0 = Date.parse(slice[0]!.date);
+  const xs = slice.map((p) => (Date.parse(p.date) - t0) / 86_400_000);
+  const ys = slice.map((p) => p.price);
+  const n = xs.length;
+  const mx = xs.reduce((a, b) => a + b, 0) / n;
+  const my = ys.reduce((a, b) => a + b, 0) / n;
+  let num = 0;
+  let den = 0;
+  for (let i = 0; i < n; i++) {
+    num += (xs[i]! - mx) * (ys[i]! - my);
+    den += (xs[i]! - mx) ** 2;
+  }
+  if (den === 0) return null;
+  const slope = num / den;
+  const intercept = my - slope * mx;
+  const lastX = xs[n - 1]!;
+  const targetX = lastX + daysAhead;
+  const y = intercept + slope * targetX;
+  return Number.isFinite(y) && y > 0 ? Math.round(y * 10000) / 10000 : null;
+}
+
+function escapeCsvCell(v: string): string {
+  if (/[;"\n]/.test(v)) return `"${v.replace(/"/g, '""')}"`;
+  return v;
 }
 
 const PDF_BRAND: [number, number, number] = [211, 47, 47];
@@ -355,6 +460,49 @@ export default function PedidosPreciosPage() {
   const { orders: allOrders } = usePedidosOrders();
   const orders = React.useMemo(() => allOrders.filter((o) => o.status !== 'draft'), [allOrders]);
   const [message, setMessage] = React.useState<string | null>(null);
+  const [windowPreset, setWindowPreset] = React.useState<WindowPreset>('90');
+  const [supplierFilter, setSupplierFilter] = React.useState<string>('');
+  const [productSearch, setProductSearch] = React.useState('');
+  const [priceMode, setPriceMode] = React.useState<PriceMode>('unit');
+  const [alertPct, setAlertPct] = React.useState(5);
+
+  const supplierOptions = React.useMemo(() => {
+    const m = new Map<string, string>();
+    for (const o of orders) {
+      if (!m.has(o.supplierId)) m.set(o.supplierId, o.supplierName);
+    }
+    return [...m.entries()].sort((a, b) => a[1].localeCompare(b[1], 'es'));
+  }, [orders]);
+
+  const { windowStartMs, windowEndMs, windowLabel } = React.useMemo(() => {
+    let maxT = 0;
+    for (const o of orders) {
+      const t = Date.parse(orderPriceDate(o));
+      if (Number.isFinite(t) && t > maxT) maxT = t;
+    }
+    const endMs = maxT > 0 ? maxT : Date.now();
+    let startMs = 0;
+    let label = 'Todo el histórico';
+    if (windowPreset === '30') {
+      startMs = endMs - 30 * 86_400_000;
+      label = 'Últimos 30 días';
+    } else if (windowPreset === '90') {
+      startMs = endMs - 90 * 86_400_000;
+      label = 'Últimos 90 días';
+    } else if (windowPreset === '365') {
+      startMs = endMs - 365 * 86_400_000;
+      label = 'Últimos 12 meses';
+    } else {
+      let minT = endMs;
+      for (const o of orders) {
+        const t = Date.parse(orderPriceDate(o));
+        if (Number.isFinite(t) && t < minT) minT = t;
+      }
+      startMs = minT > 0 ? minT : 0;
+      label = 'Todo el histórico';
+    }
+    return { windowStartMs: startMs, windowEndMs: endMs, windowLabel: label };
+  }, [orders, windowPreset]);
 
   const series = React.useMemo<PriceSummary[]>(() => {
     type Acc = {
@@ -367,13 +515,19 @@ export default function PedidosPreciosPage() {
     };
     const map = new Map<string, Acc>();
     for (const order of orders) {
+      if (supplierFilter && order.supplierId !== supplierFilter) continue;
       const dBill = orderPriceDate(order);
       const dBase = orderBasePriceDate(order);
+      if (!inPriceWindow(dBill, windowStartMs, windowEndMs)) continue;
+
       for (const item of order.items) {
-        const unitPrice = unitPriceForPriceHistory(item);
-        if (unitPrice == null) continue;
+        const evPrice = effectivePriceForEvolution(item, priceMode);
+        if (evPrice == null) continue;
+        const wq = weightQtyForEvolution(item, priceMode);
+        if (wq <= 0) continue;
+
         const key = evolutionProductKey(order, item);
-        const wq = weightQtyForHistory(item);
+        const displayUnit = priceMode === 'per_kg' ? 'kg' : item.unit;
         const acc =
           map.get(key) ?? {
             key,
@@ -383,15 +537,26 @@ export default function PedidosPreciosPage() {
             wSum: 0,
             wQty: 0,
           };
+
         const baseRaw = item.basePricePerUnit;
-        const basePrice =
-          baseRaw != null && Number.isFinite(baseRaw) && baseRaw > 0 ? Math.round(baseRaw * 100) / 100 : null;
-        if (basePrice != null && Math.abs(basePrice - unitPrice) > 0.001) {
+        let basePriceEv: number | null = null;
+        if (baseRaw != null && Number.isFinite(baseRaw) && baseRaw > 0) {
+          const b = Math.round(baseRaw * 100) / 100;
+          if (priceMode === 'per_kg' && item.unit !== 'kg') {
+            const est = item.estimatedKgPerUnit;
+            if (est != null && est > 0) {
+              basePriceEv = Math.round((b / est) * 10000) / 10000;
+            }
+          } else {
+            basePriceEv = b;
+          }
+        }
+        if (basePriceEv != null && Math.abs(basePriceEv - evPrice) > 0.001) {
           acc.points.push({
             date: dBase,
             supplier: order.supplierName,
-            unit: item.unit,
-            price: basePrice,
+            unit: displayUnit,
+            price: basePriceEv,
             orderCreatedAt: order.createdAt,
             itemId: `${item.id}:base`,
             sortRank: 0,
@@ -400,8 +565,8 @@ export default function PedidosPreciosPage() {
         acc.points.push({
           date: dBill,
           supplier: order.supplierName,
-          unit: item.unit,
-          price: unitPrice,
+          unit: displayUnit,
+          price: evPrice,
           orderCreatedAt: order.createdAt,
           itemId: item.id,
           sortRank: 1,
@@ -410,14 +575,18 @@ export default function PedidosPreciosPage() {
           date: dBill,
           supplier: order.supplierName,
           qty: wq,
-          unit: item.unit,
-          price: unitPrice,
+          unit: displayUnit as Unit,
+          price: evPrice,
         });
-        acc.wSum += unitPrice * wq;
+        acc.wSum += evPrice * wq;
         acc.wQty += wq;
         map.set(key, acc);
       }
     }
+
+    const daysWindow = Math.max(1, (windowEndMs - windowStartMs) / 86_400_000);
+    const monthsInWindow = Math.max(1, daysWindow / 30);
+
     return Array.from(map.values())
       .map((acc) => {
         const ordered = [...acc.points].sort((a, b) => {
@@ -430,12 +599,22 @@ export default function PedidosPreciosPage() {
           if (ra !== rb) return ra - rb;
           return a.itemId.localeCompare(b.itemId);
         });
-        const base = ordered[0];
-        const current = ordered[ordered.length - 1];
+        const base = ordered[0]!;
+        const current = ordered[ordered.length - 1]!;
         const delta = Math.round((current.price - base.price) * 100) / 100;
         const deltaPct = base.price > 0 ? Math.round((delta / base.price) * 10000) / 100 : 0;
         const weightedAvg = acc.wQty > 0 ? Math.round((acc.wSum / acc.wQty) * 100) / 100 : current.price;
         const purchasesSorted = [...acc.purchases].sort((a, b) => Date.parse(b.date) - Date.parse(a.date));
+        const billOnly = ordered.filter((p) => p.sortRank === 1).map((p) => p.price);
+        const vol = sampleStdev(billOnly);
+        const volatilityCvPct =
+          weightedAvg > 0 && billOnly.length >= 2 ? Math.round((vol / weightedAvg) * 10000) / 100 : 0;
+        const billAsc = ordered
+          .filter((p) => p.sortRank === 1)
+          .map((p) => ({ date: p.date, price: p.price }));
+        const forecast30d = forecastPriceLinear(billAsc, 30);
+        const monthlyQty = acc.wQty / monthsInWindow;
+        const impactMonthlyVsWap = Math.round((current.price - weightedAvg) * monthlyQty * 100) / 100;
         return {
           key: acc.key,
           productName: acc.productName,
@@ -447,18 +626,76 @@ export default function PedidosPreciosPage() {
           current,
           delta,
           deltaPct,
+          displayUnit: base.unit,
+          impactMonthlyVsWap,
+          volatilityCvPct,
+          forecast30d,
         };
       })
       .filter((row) => row.points.length >= 2 && Math.abs(row.delta) > 0.001)
       .sort((a, b) => a.productName.localeCompare(b.productName, 'es'));
-  }, [orders]);
+  }, [orders, supplierFilter, windowStartMs, windowEndMs, priceMode]);
+
+  const seriesFiltered = React.useMemo(() => {
+    const q = productSearch.trim().toLowerCase();
+    if (!q) return series;
+    return series.filter((s) => s.productName.toLowerCase().includes(q));
+  }, [series, productSearch]);
+
+  const executiveKpis = React.useMemo(() => {
+    const s = seriesFiltered;
+    const n = s.length;
+    if (n === 0) {
+      return {
+        n: 0,
+        up: 0,
+        down: 0,
+        avgDeltaPct: 0,
+        volWeightedDeltaPct: 0,
+        alertCount: 0,
+        impactUpMonthly: 0,
+        impactDownMonthly: 0,
+      };
+    }
+    const up = s.filter((x) => x.delta > 0).length;
+    const down = s.filter((x) => x.delta < 0).length;
+    const avgDeltaPct = s.reduce((a, x) => a + x.deltaPct, 0) / n;
+    const wSum = s.reduce((a, x) => a + x.totalWeightedQty, 0);
+    const volWeightedDeltaPct =
+      wSum > 0 ? s.reduce((a, x) => a + x.deltaPct * x.totalWeightedQty, 0) / wSum : avgDeltaPct;
+    const alertCount = s.filter((x) => x.delta > 0 && x.deltaPct >= alertPct).length;
+    const impactUpMonthly = s.filter((x) => x.impactMonthlyVsWap > 0).reduce((a, x) => a + x.impactMonthlyVsWap, 0);
+    const impactDownMonthly = s
+      .filter((x) => x.impactMonthlyVsWap < 0)
+      .reduce((a, x) => a + x.impactMonthlyVsWap, 0);
+    return {
+      n,
+      up,
+      down,
+      avgDeltaPct,
+      volWeightedDeltaPct,
+      alertCount,
+      impactUpMonthly: Math.round(impactUpMonthly * 100) / 100,
+      impactDownMonthly: Math.round(impactDownMonthly * 100) / 100,
+    };
+  }, [seriesFiltered, alertPct]);
+
+  const impactRanking = React.useMemo(
+    () =>
+      [...seriesFiltered]
+        .filter((x) => x.impactMonthlyVsWap > 0)
+        .sort((a, b) => b.impactMonthlyVsWap - a.impactMonthlyVsWap)
+        .slice(0, 15),
+    [seriesFiltered],
+  );
 
   const trendLabel = (row: PriceSummary) => {
+    const u = row.displayUnit;
     if (row.delta > 0) {
-      return `Sube +${row.delta.toFixed(2)} € (+${row.deltaPct.toFixed(2)}%)`;
+      return `Sube +${row.delta.toFixed(2)} €/${u} (+${row.deltaPct.toFixed(2)}%)`;
     }
     if (row.delta < 0) {
-      return `Baja ${row.delta.toFixed(2)} € (${row.deltaPct.toFixed(2)}%)`;
+      return `Baja ${row.delta.toFixed(2)} €/${u} (${row.deltaPct.toFixed(2)}%)`;
     }
     return 'Sin cambio';
   };
@@ -470,14 +707,17 @@ export default function PedidosPreciosPage() {
   };
 
   const downloadReportPdf = React.useCallback(() => {
-    if (series.length === 0) {
-      setMessage('No hay datos con cambios de precio para descargar.');
+    if (seriesFiltered.length === 0) {
+      setMessage('No hay datos con cambios de precio para descargar (ajusta filtros).');
       return;
     }
     const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' });
     const pageW = doc.internal.pageSize.getWidth();
     const pageH = doc.internal.pageSize.getHeight();
     const localLabel = (localName?.trim() || localCode || 'Local').trim();
+    const supplierLabel = supplierFilter
+      ? supplierOptions.find(([id]) => id === supplierFilter)?.[1] ?? 'Proveedor'
+      : 'Todos los proveedores';
 
     doc.setFillColor(...PDF_BRAND);
     doc.rect(0, 0, pageW, 14, 'F');
@@ -497,59 +737,64 @@ export default function PedidosPreciosPage() {
     doc.setTextColor(...PDF_ZINC_500);
     doc.text(localLabel, 40, 58);
     doc.text(
-      'Referencias con variación relevante respecto al primer precio registrado en pedidos.',
+      `${windowLabel} · ${priceMode === 'per_kg' ? 'Vista €/kg' : 'Vista €/ud'} · ${supplierLabel}`,
       40,
       72,
       { maxWidth: pageW - 80 },
     );
+    doc.setFontSize(9);
+    doc.text(
+      'Referencias con variación en el periodo (primer vs último precio en ventana). Impacto mes: estimación vs PMP al ritmo de compra del periodo.',
+      40,
+      86,
+      { maxWidth: pageW - 80 },
+    );
 
-    const up = series.filter((s) => s.delta > 0).length;
-    const down = series.filter((s) => s.delta < 0).length;
-    const avgPct = series.reduce((a, s) => a + s.deltaPct, 0) / series.length;
-
-    const kpiY = 88;
-    const gap = 12;
-    const kpiW = (pageW - 80 - 3 * gap) / 4;
-    const kpiH = 54;
-    const kpiXs = [40, 40 + kpiW + gap, 40 + 2 * (kpiW + gap), 40 + 3 * (kpiW + gap)] as const;
+    const kpiY = 102;
+    const gap = 8;
+    const nKpi = 6;
+    const kpiW = (pageW - 80 - (nKpi - 1) * gap) / nKpi;
+    const kpiH = 52;
     const kpis: [string, string][] = [
-      ['Productos en informe', String(series.length)],
-      ['Suben de precio', String(up)],
-      ['Bajan de precio', String(down)],
-      ['Variación media %', `${avgPct >= 0 ? '+' : ''}${avgPct.toFixed(2)} %`],
+      ['Referencias', String(executiveKpis.n)],
+      ['Suben / alerta', `${executiveKpis.up} · ${executiveKpis.alertCount} (≥${alertPct}%)`],
+      ['Bajan', String(executiveKpis.down)],
+      ['Δ % medio', `${executiveKpis.avgDeltaPct >= 0 ? '+' : ''}${executiveKpis.avgDeltaPct.toFixed(2)} %`],
+      ['Δ % ponderado vol.', `${executiveKpis.volWeightedDeltaPct >= 0 ? '+' : ''}${executiveKpis.volWeightedDeltaPct.toFixed(2)} %`],
+      ['Impacto +€/mes vs PMP', `${executiveKpis.impactUpMonthly.toFixed(2)} €`],
     ];
-    for (let i = 0; i < 4; i++) {
-      const x = kpiXs[i]!;
+    for (let i = 0; i < nKpi; i++) {
+      const x = 40 + i * (kpiW + gap);
       doc.setFillColor(...PDF_ZINC_100);
       doc.roundedRect(x, kpiY, kpiW, kpiH, 3, 3, 'F');
       doc.setFont('helvetica', 'bold');
-      doc.setFontSize(7.5);
+      doc.setFontSize(6.8);
       doc.setTextColor(...PDF_ZINC_500);
-      doc.text(kpis[i]![0], x + 10, kpiY + 18);
-      doc.setFontSize(15);
+      doc.text(kpis[i]![0], x + 8, kpiY + 16);
+      doc.setFontSize(13);
       doc.setTextColor(...PDF_ZINC_900);
-      doc.text(kpis[i]![1], x + 10, kpiY + 40);
+      doc.text(kpis[i]![1], x + 8, kpiY + 38);
     }
 
-    const hero = [...series].sort((a, b) => Math.abs(b.deltaPct) - Math.abs(a.deltaPct))[0]!;
+    const hero = [...seriesFiltered].sort((a, b) => Math.abs(b.deltaPct) - Math.abs(a.deltaPct))[0]!;
     const pointsAsc = [...hero.points].sort((a, b) => Date.parse(a.date) - Date.parse(b.date));
 
-    let yCursor = kpiY + kpiH + 22;
+    let yCursor = kpiY + kpiH + 18;
     yCursor = drawExecutivePriceChart(doc, {
       x: 40,
       y: yCursor,
       w: pageW - 80,
       h: 220,
       title: `Mayor variación relativa: ${hero.productName}`,
-      subtitle: `Δ ${hero.delta >= 0 ? '+' : ''}${hero.delta.toFixed(2)} € (${hero.deltaPct >= 0 ? '+' : ''}${hero.deltaPct.toFixed(2)} %). Compras acumuladas (ponderado): ${hero.totalWeightedQty.toLocaleString('es-ES')} ${hero.current.unit}.`,
+      subtitle: `Δ ${hero.delta >= 0 ? '+' : ''}${hero.delta.toFixed(2)} € (${hero.deltaPct >= 0 ? '+' : ''}${hero.deltaPct.toFixed(2)} %). Compras acumuladas (ponderado): ${hero.totalWeightedQty.toLocaleString('es-ES')} ${hero.displayUnit}.`,
       pointsAsc,
       weightedAvg: hero.weightedAvg,
-      unit: hero.current.unit,
+      unit: hero.displayUnit,
       basePrice: hero.base.price,
       currentPrice: hero.current.price,
     });
 
-    const rest = [...series]
+    const rest = [...seriesFiltered]
       .sort((a, b) => Math.abs(b.deltaPct) - Math.abs(a.deltaPct))
       .filter((s) => s.key !== hero.key)
       .slice(0, 5);
@@ -581,21 +826,26 @@ export default function PedidosPreciosPage() {
     tableStart += 10;
 
     const body: string[][] = [];
-    for (const row of series) {
+    for (const row of seriesFiltered) {
       body.push([
         row.productName,
-        `${row.base.price.toFixed(2)} €/${row.base.unit}`,
-        `${row.weightedAvg.toFixed(2)} €/${row.current.unit}`,
-        `${row.current.price.toFixed(2)} €/${row.current.unit}`,
-        `${row.delta >= 0 ? '+' : ''}${row.delta.toFixed(2)} €`,
+        row.displayUnit,
+        `${row.base.price.toFixed(2)}`,
+        `${row.weightedAvg.toFixed(2)}`,
+        `${row.current.price.toFixed(2)}`,
+        `${row.delta >= 0 ? '+' : ''}${row.delta.toFixed(2)}`,
         `${row.deltaPct >= 0 ? '+' : ''}${row.deltaPct.toFixed(2)}%`,
+        `${row.impactMonthlyVsWap >= 0 ? '+' : ''}${row.impactMonthlyVsWap.toFixed(2)}`,
+        `${row.volatilityCvPct.toFixed(1)}%`,
       ]);
     }
     autoTable(doc, {
       startY: tableStart + 4,
-      head: [['Producto', 'Precio base', 'Precio medio ponderado', 'Precio actual', 'Variación €', 'Variación %']],
+      head: [
+        ['Producto', 'Ud', 'Base', 'PMP', 'Actual', 'Δ €', 'Δ %', 'Impacto mes*', 'Vol CV%'],
+      ],
       body,
-      styles: { fontSize: 8, cellPadding: 4, textColor: PDF_ZINC_900 },
+      styles: { fontSize: 7, cellPadding: 3, textColor: PDF_ZINC_900 },
       headStyles: { fillColor: PDF_BRAND, textColor: PDF_WHITE },
       alternateRowStyles: { fillColor: [248, 250, 252] },
       margin: { left: 40, right: 40 },
@@ -609,7 +859,91 @@ export default function PedidosPreciosPage() {
 
     const stamp = new Date().toISOString().slice(0, 10);
     doc.save(`evolucion-precios-${stamp}.pdf`);
-  }, [series, localName, localCode]);
+  }, [
+    seriesFiltered,
+    executiveKpis,
+    localName,
+    localCode,
+    windowLabel,
+    priceMode,
+    supplierFilter,
+    supplierOptions,
+    alertPct,
+  ]);
+
+  const downloadCsv = React.useCallback(() => {
+    if (seriesFiltered.length === 0) {
+      setMessage('No hay filas para exportar (ajusta filtros).');
+      return;
+    }
+    const supplierLabel = supplierFilter
+      ? supplierOptions.find(([id]) => id === supplierFilter)?.[1] ?? ''
+      : 'Todos';
+    const headerMeta = [
+      ['Chef-One · Evolución de precios'],
+      ['Local', (localName?.trim() || localCode || '').trim()],
+      ['Ventana', windowLabel],
+      ['Modo', priceMode === 'per_kg' ? '€/kg' : '€/ud'],
+      ['Proveedor', supplierLabel],
+      ['Búsqueda', productSearch.trim() || '—'],
+      [],
+    ];
+    const head = [
+      'Producto',
+      'Ud',
+      'Precio base',
+      'PMP',
+      'Precio actual',
+      'Delta EUR',
+      'Delta %',
+      'Impacto mensual vs PMP EUR',
+      'Volatilidad CV %',
+      'Tendencia 30d',
+      'Cantidad periodo (ponderado)',
+    ];
+    const lines: string[] = [];
+    for (const row of headerMeta) {
+      lines.push(row.map((c) => escapeCsvCell(String(c))).join(';'));
+    }
+    lines.push(head.map(escapeCsvCell).join(';'));
+    for (const row of seriesFiltered) {
+      lines.push(
+        [
+          row.productName,
+          row.displayUnit,
+          row.base.price.toFixed(4),
+          row.weightedAvg.toFixed(4),
+          row.current.price.toFixed(4),
+          row.delta.toFixed(4),
+          row.deltaPct.toFixed(2),
+          row.impactMonthlyVsWap.toFixed(2),
+          row.volatilityCvPct.toFixed(2),
+          row.forecast30d != null ? row.forecast30d.toFixed(4) : '',
+          row.totalWeightedQty.toFixed(2),
+        ]
+          .map(escapeCsvCell)
+          .join(';'),
+      );
+    }
+    const bom = '\uFEFF';
+    const blob = new Blob([bom + lines.join('\n')], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `evolucion-precios-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    setMessage(null);
+  }, [
+    seriesFiltered,
+    localName,
+    localCode,
+    windowLabel,
+    priceMode,
+    supplierFilter,
+    supplierOptions,
+    productSearch,
+  ]);
 
   if (!hasPedidosEntry) {
     return (
@@ -624,7 +958,7 @@ export default function PedidosPreciosPage() {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 overflow-x-hidden">
       <section>
         <Link href="/pedidos" className="inline-flex h-9 items-center rounded-lg border border-zinc-300 bg-white px-3 text-sm font-semibold text-zinc-700">
           ← Atras
@@ -632,36 +966,245 @@ export default function PedidosPreciosPage() {
       </section>
 
       <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-zinc-200">
-        <h1 className="text-center text-lg font-black text-zinc-900">EVOLUCION DE PRECIOS</h1>
-        {message ? <p className="pt-2 text-sm text-[#B91C1C]">{message}</p> : null}
+        <p className="text-center text-[10px] font-bold uppercase tracking-[0.2em] text-zinc-500">Pedidos</p>
+        <h1 className="text-center text-lg font-black text-zinc-900">Evolución de precios</h1>
+        <p className="mx-auto mt-2 max-w-2xl text-center text-xs text-zinc-600">
+          Control de tensiones con precio medio ponderado (PMP), impacto mensual estimado y tendencia. Ajusta ventana,
+          proveedor y vista €/ud o €/kg.
+        </p>
+        {message ? <p className="pt-2 text-center text-sm text-[#B91C1C]">{message}</p> : null}
+
+        <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="rounded-xl bg-zinc-50 p-3 ring-1 ring-zinc-200">
+            <label className="text-[10px] font-bold uppercase tracking-wide text-zinc-500">Periodo</label>
+            <select
+              value={windowPreset}
+              onChange={(e) => setWindowPreset(e.target.value as WindowPreset)}
+              className="mt-1 h-10 w-full rounded-lg border border-zinc-300 bg-white px-2 text-sm font-medium text-zinc-900"
+            >
+              <option value="30">Últimos 30 días</option>
+              <option value="90">Últimos 90 días</option>
+              <option value="365">Últimos 12 meses</option>
+              <option value="all">Todo el histórico</option>
+            </select>
+          </div>
+          <div className="rounded-xl bg-zinc-50 p-3 ring-1 ring-zinc-200">
+            <label className="text-[10px] font-bold uppercase tracking-wide text-zinc-500">Proveedor</label>
+            <select
+              value={supplierFilter}
+              onChange={(e) => setSupplierFilter(e.target.value)}
+              className="mt-1 h-10 w-full rounded-lg border border-zinc-300 bg-white px-2 text-sm font-medium text-zinc-900"
+            >
+              <option value="">Todos</option>
+              {supplierOptions.map(([id, name]) => (
+                <option key={id} value={id}>
+                  {name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="rounded-xl bg-zinc-50 p-3 ring-1 ring-zinc-200">
+            <label className="text-[10px] font-bold uppercase tracking-wide text-zinc-500">Vista precio</label>
+            <select
+              value={priceMode}
+              onChange={(e) => setPriceMode(e.target.value as PriceMode)}
+              className="mt-1 h-10 w-full rounded-lg border border-zinc-300 bg-white px-2 text-sm font-medium text-zinc-900"
+            >
+              <option value="unit">€ por unidad de catálogo</option>
+              <option value="per_kg">€/kg (real o estimado)</option>
+            </select>
+          </div>
+          <div className="rounded-xl bg-zinc-50 p-3 ring-1 ring-zinc-200">
+            <label className="text-[10px] font-bold uppercase tracking-wide text-zinc-500">Umbral alerta subida %</label>
+            <select
+              value={String(alertPct)}
+              onChange={(e) => setAlertPct(Number(e.target.value))}
+              className="mt-1 h-10 w-full rounded-lg border border-zinc-300 bg-white px-2 text-sm font-medium text-zinc-900"
+            >
+              <option value="3">3 %</option>
+              <option value="5">5 %</option>
+              <option value="8">8 %</option>
+              <option value="10">10 %</option>
+            </select>
+          </div>
+        </div>
+
         <div className="mt-3">
+          <label className="text-[10px] font-bold uppercase tracking-wide text-zinc-500">Buscar referencia</label>
+          <input
+            value={productSearch}
+            onChange={(e) => setProductSearch(e.target.value)}
+            placeholder="Nombre de producto…"
+            className="mt-1 h-10 w-full rounded-xl border border-zinc-300 bg-white px-3 text-sm text-zinc-900 placeholder:text-zinc-400"
+          />
+        </div>
+
+        <div className="mt-4 flex flex-wrap gap-2">
           <button
             type="button"
             onClick={downloadReportPdf}
-            className="h-10 rounded-xl bg-[#D32F2F] px-3 text-sm font-semibold text-white"
+            className="inline-flex h-10 items-center gap-2 rounded-xl bg-[#D32F2F] px-4 text-sm font-semibold text-white"
           >
-            Descargar informe PDF
+            Informe PDF
+          </button>
+          <button
+            type="button"
+            onClick={downloadCsv}
+            className="inline-flex h-10 items-center gap-2 rounded-xl border border-zinc-300 bg-white px-4 text-sm font-semibold text-zinc-800"
+          >
+            <Download className="h-4 w-4" aria-hidden />
+            CSV (Excel)
           </button>
         </div>
       </section>
 
+      <section className="rounded-2xl bg-gradient-to-br from-zinc-50 to-white p-4 ring-1 ring-zinc-200">
+        <p className="text-[10px] font-bold uppercase tracking-wide text-zinc-500">
+          Resumen · {windowLabel}
+          {priceMode === 'per_kg' ? ' · €/kg' : ' · €/ud'}
+        </p>
+        <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="rounded-xl bg-white p-4 shadow-sm ring-1 ring-zinc-100">
+            <p className="text-[11px] font-semibold text-zinc-500">Referencias con movimiento</p>
+            <p className="mt-1 text-2xl font-black tabular-nums text-zinc-900">{executiveKpis.n}</p>
+            <p className="mt-1 text-xs text-zinc-600">
+              Suben {executiveKpis.up} · Bajan {executiveKpis.down}
+            </p>
+          </div>
+          <div className="rounded-xl bg-white p-4 shadow-sm ring-1 ring-zinc-100">
+            <p className="text-[11px] font-semibold text-zinc-500">Alertas de subida</p>
+            <p className="mt-1 flex items-center gap-2 text-2xl font-black tabular-nums text-amber-800">
+              {executiveKpis.alertCount}
+              <AlertTriangle className="h-5 w-5 shrink-0" aria-hidden />
+            </p>
+            <p className="mt-1 text-xs text-zinc-600">≥ {alertPct}% respecto al primer precio en la ventana</p>
+          </div>
+          <div className="rounded-xl bg-white p-4 shadow-sm ring-1 ring-zinc-100">
+            <p className="text-[11px] font-semibold text-zinc-500">Δ % ponderado por volumen</p>
+            <p className="mt-1 text-2xl font-black tabular-nums text-zinc-900">
+              {executiveKpis.volWeightedDeltaPct >= 0 ? '+' : ''}
+              {executiveKpis.volWeightedDeltaPct.toFixed(2)} %
+            </p>
+            <p className="mt-1 text-xs text-zinc-600">Media simple: {executiveKpis.avgDeltaPct >= 0 ? '+' : ''}{executiveKpis.avgDeltaPct.toFixed(2)} %</p>
+          </div>
+          <div className="rounded-xl bg-white p-4 shadow-sm ring-1 ring-red-100">
+            <p className="text-[11px] font-semibold text-red-800">Impacto mensual vs PMP (subidas)</p>
+            <p className="mt-1 flex items-center gap-2 text-2xl font-black tabular-nums text-red-700">
+              +{executiveKpis.impactUpMonthly.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €
+              <TrendingUp className="h-5 w-5 shrink-0" aria-hidden />
+            </p>
+            <p className="mt-1 text-xs text-zinc-600">Si el ritmo de compra del periodo se mantiene</p>
+          </div>
+          <div className="rounded-xl bg-white p-4 shadow-sm ring-1 ring-emerald-100">
+            <p className="text-[11px] font-semibold text-emerald-800">Ahorro mensual vs PMP (bajadas)</p>
+            <p className="mt-1 flex items-center gap-2 text-2xl font-black tabular-nums text-emerald-700">
+              {executiveKpis.impactDownMonthly.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €
+              <TrendingDown className="h-5 w-5 shrink-0" aria-hidden />
+            </p>
+            <p className="mt-1 text-xs text-zinc-600">Valores negativos = menor coste que la media del periodo</p>
+          </div>
+        </div>
+      </section>
+
+      {impactRanking.length > 0 ? (
+        <section className="rounded-2xl bg-white p-4 ring-1 ring-zinc-200">
+          <p className="text-sm font-black text-zinc-900">Ranking impacto económico (vs PMP)</p>
+          <p className="mt-1 text-xs text-zinc-600">
+            Referencias que más encarecen el mes si se mantiene el volumen y el precio actual frente al PMP de la ventana.
+          </p>
+          <div className="mt-3 overflow-x-auto rounded-xl ring-1 ring-zinc-100">
+            <table className="w-full min-w-[520px] text-left text-xs">
+              <thead className="bg-zinc-50 text-[10px] font-bold uppercase tracking-wide text-zinc-500">
+                <tr>
+                  <th className="px-3 py-2">#</th>
+                  <th className="px-3 py-2">Producto</th>
+                  <th className="px-3 py-2 text-right">Impacto €/mes</th>
+                  <th className="px-3 py-2 text-right">Δ %</th>
+                  <th className="px-3 py-2 text-right">PMP</th>
+                  <th className="px-3 py-2 text-right">Actual</th>
+                </tr>
+              </thead>
+              <tbody>
+                {impactRanking.map((row, idx) => (
+                  <tr key={row.key} className="border-t border-zinc-100">
+                    <td className="px-3 py-2 tabular-nums text-zinc-500">{idx + 1}</td>
+                    <td className="px-3 py-2 font-semibold text-zinc-900">{row.productName}</td>
+                    <td className="px-3 py-2 text-right font-bold tabular-nums text-red-700">
+                      +{row.impactMonthlyVsWap.toFixed(2)} €
+                    </td>
+                    <td className="px-3 py-2 text-right tabular-nums text-zinc-700">+{row.deltaPct.toFixed(1)} %</td>
+                    <td className="px-3 py-2 text-right tabular-nums text-zinc-600">
+                      {row.weightedAvg.toFixed(2)} €/{row.displayUnit}
+                    </td>
+                    <td className="px-3 py-2 text-right tabular-nums text-zinc-900">
+                      {row.current.price.toFixed(2)} €/{row.displayUnit}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      ) : null}
+
       <section className="space-y-2">
-        {series.length === 0 ? <div className="rounded-2xl bg-white p-4 text-sm text-zinc-500 ring-1 ring-zinc-200">No hay evolución de precios para mostrar.</div> : null}
-        {series.map((row) => {
+        {seriesFiltered.length === 0 ? (
+          <div className="rounded-2xl bg-white p-4 text-sm text-zinc-500 ring-1 ring-zinc-200">
+            {series.length === 0
+              ? 'No hay evolución de precios en esta selección. Prueba otro periodo, proveedor o modo €/kg si aplica.'
+              : 'Ninguna referencia coincide con el buscador.'}
+          </div>
+        ) : null}
+        {seriesFiltered.map((row) => {
+          const alert = row.delta > 0 && row.deltaPct >= alertPct;
           return (
-            <div key={row.key} className="rounded-2xl bg-white p-4 ring-1 ring-zinc-200">
-              <p className="text-sm font-black text-zinc-900">{row.productName}</p>
+            <div
+              key={row.key}
+              className={[
+                'rounded-2xl bg-white p-4 ring-1',
+                alert ? 'ring-2 ring-amber-400 shadow-sm' : 'ring-zinc-200',
+              ].join(' ')}
+            >
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <p className="text-sm font-black text-zinc-900">{row.productName}</p>
+                {alert ? (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-950">
+                    <AlertTriangle className="h-3 w-3" aria-hidden />
+                    Alerta ≥{alertPct}%
+                  </span>
+                ) : null}
+              </div>
               <p className="pt-1 text-xs text-zinc-600">
-                Base: {row.base.price.toFixed(2)} €/{row.base.unit} · Actual: {row.current.price.toFixed(2)} €/
-                {row.current.unit}
+                Base: {row.base.price.toFixed(2)} €/{row.displayUnit} · Actual: {row.current.price.toFixed(2)} €/
+                {row.displayUnit}
               </p>
               <p className="pt-1 text-xs font-semibold text-zinc-800">
-                Precio medio ponderado:{' '}
+                PMP:{' '}
                 <span className="tabular-nums">
-                  {row.weightedAvg.toFixed(2)} €/{row.current.unit}
+                  {row.weightedAvg.toFixed(2)} €/{row.displayUnit}
                 </span>{' '}
-                · Cantidad total acumulada:{' '}
+                · Cantidad periodo (ponderado):{' '}
                 <span className="tabular-nums">{row.totalWeightedQty.toLocaleString('es-ES')}</span>
+                {priceMode === 'per_kg' ? ' kg' : ''}
+              </p>
+              <p className="pt-1 text-xs text-zinc-600">
+                Impacto mensual vs PMP:{' '}
+                <span className={`font-bold tabular-nums ${row.impactMonthlyVsWap > 0 ? 'text-red-700' : row.impactMonthlyVsWap < 0 ? 'text-emerald-700' : 'text-zinc-800'}`}>
+                  {row.impactMonthlyVsWap >= 0 ? '+' : ''}
+                  {row.impactMonthlyVsWap.toFixed(2)} €
+                </span>
+                {' · '}
+                Volatilidad (CV):{' '}
+                <span className="font-semibold tabular-nums text-zinc-800">{row.volatilityCvPct.toFixed(1)} %</span>
+                {row.forecast30d != null ? (
+                  <>
+                    {' · '}
+                    Tendencia ~30d:{' '}
+                    <span className="font-semibold tabular-nums text-zinc-800">
+                      {row.forecast30d.toFixed(2)} €/{row.displayUnit}
+                    </span>
+                  </>
+                ) : null}
               </p>
               <p className={`pt-1 text-xs font-semibold ${trendClass(row)}`}>{trendLabel(row)}</p>
               <p className="pt-2 text-[10px] font-bold uppercase tracking-wide text-zinc-500">Compras (más reciente primero)</p>
@@ -673,12 +1216,13 @@ export default function PedidosPreciosPage() {
                   </p>
                 ))}
               </div>
-              <p className="pt-2 text-[10px] font-bold uppercase tracking-wide text-zinc-500">Evolución precio unitario</p>
+              <p className="pt-2 text-[10px] font-bold uppercase tracking-wide text-zinc-500">Evolución precio</p>
               <div className="mt-1 max-h-28 space-y-1 overflow-auto rounded-lg bg-zinc-50 p-2 ring-1 ring-zinc-200">
                 {row.points.slice(0, 12).map((point, idx) => (
                   <p key={`${row.key}-${idx}`} className="text-xs text-zinc-600">
                     {new Date(point.date).toLocaleDateString('es-ES')} · {point.supplier} · {point.price.toFixed(2)} €/
                     {point.unit}
+                    {point.sortRank === 0 ? ' · (precio pedido)' : ''}
                   </p>
                 ))}
               </div>
