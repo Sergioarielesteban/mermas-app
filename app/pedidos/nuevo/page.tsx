@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import React from 'react';
+import { ImagePlus, Loader2 } from 'lucide-react';
 import { useAuth } from '@/components/AuthProvider';
 import { usePedidosOrders } from '@/components/PedidosOrdersProvider';
 import { getSupabaseClient } from '@/lib/supabase-client';
@@ -46,6 +47,41 @@ function normalizeWhatsappNumber(raw: string | undefined) {
 function normalizeLocalForWhatsapp(raw: string) {
   const cleaned = raw.replace(/\bCAN\b/gi, '').replace(/\s+/g, ' ').trim();
   return cleaned || 'CHEF-ONE MATARO';
+}
+
+function normalizeForMatch(value: string) {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase()
+    .replace(/[^A-Z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function tokensForMatch(value: string) {
+  return normalizeForMatch(value)
+    .split(' ')
+    .filter((t) => t.length >= 3);
+}
+
+function extractQtyFromLine(rawLine: string, unit: PedidoOrderItem['unit']): number | null {
+  const line = rawLine.replace(',', '.');
+  const unitMatch = line.match(
+    /(\d+(?:\.\d+)?)\s*(kg|k|ud|uds|unidad|unidades|caja|cajas|paquete|paquetes|bolsa|bolsas|racion|raciones)\b/i,
+  );
+  if (unitMatch) {
+    const n = Number(unitMatch[1]);
+    if (!Number.isFinite(n) || n <= 0) return null;
+    return unit === 'kg' ? Math.round(n * 100) / 100 : Math.max(1, Math.round(n));
+  }
+  const qtyMatch = line.match(/\b(?:x|qty|cant(?:idad)?)\s*[:=]?\s*(\d+(?:\.\d+)?)/i);
+  if (qtyMatch) {
+    const n = Number(qtyMatch[1]);
+    if (!Number.isFinite(n) || n <= 0) return null;
+    return unit === 'kg' ? Math.round(n * 100) / 100 : Math.max(1, Math.round(n));
+  }
+  return null;
 }
 
 function buildWhatsappDraftMessage(input: {
@@ -118,6 +154,9 @@ export default function NuevoPedidoPage() {
   const [existingCreatedAt, setExistingCreatedAt] = React.useState<string | null>(null);
   const [existingSentAt, setExistingSentAt] = React.useState<string | null>(null);
   const [existingOrderId, setExistingOrderId] = React.useState<string | null>(null);
+  const [ocrBusy, setOcrBusy] = React.useState(false);
+  const [ocrFileName, setOcrFileName] = React.useState('');
+  const [ocrRawText, setOcrRawText] = React.useState('');
 
   const clearBasketDraft = React.useCallback(() => {
     if (!localId) return;
@@ -200,6 +239,18 @@ export default function NuevoPedidoPage() {
 
   const selectedSupplier = suppliers.find((s) => s.id === supplierId) ?? null;
   const supplierProducts = React.useMemo(() => selectedSupplier?.products ?? [], [selectedSupplier]);
+  const supplierProductsBySupplier = React.useMemo(
+    () =>
+      suppliers.map((s) => ({
+        supplierId: s.id,
+        products: s.products.map((p) => ({
+          id: p.id,
+          unit: p.unit,
+          tokens: tokensForMatch(p.name),
+        })),
+      })),
+    [suppliers],
+  );
   const filteredProducts = supplierProducts
     .filter((p) => p.name.toLowerCase().includes(search.trim().toLowerCase()))
     .sort((a, b) => a.name.localeCompare(b.name, 'es'));
@@ -407,6 +458,92 @@ export default function NuevoPedidoPage() {
       });
   };
 
+  const applyOcrTextToBasket = React.useCallback(
+    (rawText: string) => {
+      const lines = rawText
+        .split('\n')
+        .map((l) => l.trim())
+        .filter((l) => l.length >= 4);
+      if (lines.length === 0) {
+        setMessage('No se detectó texto en la imagen.');
+        return;
+      }
+
+      const normalizedLines = lines.map((l) => normalizeForMatch(l));
+      let bestSupplierId = supplierId;
+      let bestScore = 0;
+      for (const s of supplierProductsBySupplier) {
+        let score = 0;
+        for (const line of normalizedLines) {
+          for (const p of s.products) {
+            const tokenHits = p.tokens.filter((t) => line.includes(t)).length;
+            if (tokenHits >= 2) score += tokenHits;
+          }
+        }
+        if (score > bestScore) {
+          bestScore = score;
+          bestSupplierId = s.supplierId;
+        }
+      }
+      if (bestSupplierId && bestSupplierId !== supplierId) setSupplierId(bestSupplierId);
+
+      const selectedSet =
+        supplierProductsBySupplier.find((s) => s.supplierId === (bestSupplierId || supplierId))?.products ?? [];
+      if (selectedSet.length === 0) {
+        setMessage('No hay productos para mapear en el proveedor seleccionado.');
+        return;
+      }
+
+      const nextQty: QtyMap = {};
+      let matched = 0;
+      for (const rawLine of lines) {
+        const line = normalizeForMatch(rawLine);
+        let best: { id: string; unit: PedidoOrderItem['unit']; score: number } | null = null;
+        for (const p of selectedSet) {
+          const hits = p.tokens.filter((t) => line.includes(t)).length;
+          if (hits <= 0) continue;
+          if (!best || hits > best.score) best = { id: p.id, unit: p.unit, score: hits };
+        }
+        if (!best || best.score < 2) continue;
+        const qty = extractQtyFromLine(rawLine, best.unit) ?? 1;
+        nextQty[best.id] = (nextQty[best.id] ?? 0) + qty;
+        matched += 1;
+      }
+
+      if (Object.keys(nextQty).length === 0) {
+        setMessage(
+          'No pude mapear líneas automáticamente. Prueba una captura más nítida o selecciona proveedor y ajusta manualmente.',
+        );
+        return;
+      }
+      setQtyByProductId((prev) => ({ ...prev, ...nextQty }));
+      setMessage(
+        `Importación lista: ${Object.keys(nextQty).length} productos detectados (${matched} líneas reconocidas). Revisa y ajusta antes de enviar.`,
+      );
+    },
+    [supplierId, supplierProductsBySupplier],
+  );
+
+  const importFromImage = async (file: File) => {
+    setOcrBusy(true);
+    setMessage(null);
+    setOcrFileName(file.name);
+    try {
+      const { createWorker } = await import('tesseract.js');
+      const worker = await createWorker('spa');
+      const {
+        data: { text },
+      } = await worker.recognize(file);
+      await worker.terminate();
+      setOcrRawText(text);
+      applyOcrTextToBasket(text);
+    } catch (e) {
+      setMessage(e instanceof Error ? e.message : 'No se pudo leer la imagen.');
+    } finally {
+      setOcrBusy(false);
+    }
+  };
+
   if (!hasPedidosEntry) {
     return (
       <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-zinc-200">
@@ -457,6 +594,37 @@ export default function NuevoPedidoPage() {
           placeholder="Buscar..."
           className="mt-2 h-11 w-full rounded-xl border border-zinc-300 bg-white px-3 text-sm text-zinc-900 placeholder:text-zinc-500 outline-none"
         />
+        <div className="mt-3 rounded-xl border border-zinc-200 bg-zinc-50 p-3">
+          <p className="text-[11px] font-bold uppercase tracking-wide text-zinc-600">Importar pedido desde imagen</p>
+          <p className="mt-1 text-[11px] text-zinc-500">
+            Sube captura/foto de la app del proveedor y Chef-One intentará completar la cesta automáticamente.
+          </p>
+          <label className="mt-2 inline-flex h-9 cursor-pointer items-center gap-2 rounded-lg border border-zinc-300 bg-white px-3 text-xs font-semibold text-zinc-700">
+            {ocrBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ImagePlus className="h-3.5 w-3.5" />}
+            {ocrBusy ? 'Procesando imagen…' : 'Subir imagen'}
+            <input
+              type="file"
+              accept="image/png,image/jpeg,image/jpg,image/webp"
+              className="hidden"
+              disabled={ocrBusy}
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+                void importFromImage(file);
+                e.currentTarget.value = '';
+              }}
+            />
+          </label>
+          {ocrFileName ? <p className="mt-1 text-[11px] text-zinc-500">Archivo: {ocrFileName}</p> : null}
+          {ocrRawText ? (
+            <details className="mt-2">
+              <summary className="cursor-pointer text-[11px] font-semibold text-zinc-600">Ver texto detectado</summary>
+              <pre className="mt-1 max-h-28 overflow-auto rounded-lg bg-white p-2 text-[10px] text-zinc-600 ring-1 ring-zinc-200">
+                {ocrRawText}
+              </pre>
+            </details>
+          ) : null}
+        </div>
       </section>
 
       <section className="rounded-2xl bg-white p-4 ring-1 ring-zinc-200">
