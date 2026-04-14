@@ -4,74 +4,64 @@ const BRAND = '#D32F2F';
 
 const painPoints = [
   { Icon: Clock, label: 'Cada minuto cuenta' },
-  { Icon: FileQuestion, label: 'Datos en papeles y notas' },
-  { Icon: MessageCircle, label: 'WhatsApp y mensajes sueltos' },
-  { Icon: UserMinus, label: 'Sin referencia si falta el responsable' },
-  { Icon: Zap, label: 'Tiene que ser rápido o no sirve' },
+  { Icon: FileQuestion, label: 'Datos en papeles' },
+  { Icon: MessageCircle, label: 'Todo en chats sueltos' },
+  { Icon: UserMinus, label: 'Si falta el jefe, se corta el hilo' },
+  { Icon: Zap, label: 'O es rápido o no se usa' },
 ] as const;
 
 export default function MarketingOriginStory() {
   return (
     <section
       id="origen"
-      className="scroll-mt-[4.5rem] border-y border-stone-200/70 bg-gradient-to-b from-stone-100/90 via-[#f6f5f4] to-stone-50/80 px-4 py-16 sm:scroll-mt-24 sm:px-6 sm:py-20"
+      className="scroll-mt-[4.5rem] border-y border-stone-200/70 bg-gradient-to-b from-stone-50/95 via-white to-stone-50/80 px-4 py-14 sm:scroll-mt-24 sm:px-6 sm:py-16"
       aria-labelledby="origen-heading"
     >
       <div className="mx-auto max-w-6xl">
         <div className="mx-auto max-w-3xl text-center">
-          <p className="text-xs font-bold uppercase tracking-[0.12em] text-stone-500">Por qué nace Chef-One</p>
+          <p className="text-xs font-bold uppercase tracking-[0.14em] text-[#D32F2F]/90">Por qué existe Chef-One</p>
           <h2
             id="origen-heading"
-            className="mt-4 text-balance text-3xl font-semibold leading-[1.2] tracking-tight text-stone-900 sm:mt-5 sm:text-4xl sm:leading-[1.18]"
+            className="mt-3 text-balance text-2xl font-extrabold leading-tight tracking-tight text-stone-900 sm:text-3xl sm:leading-tight"
           >
-            <span className="block">Chef-One no nace en una oficina,</span>
-            <span className="mt-2 block text-[#b71c1c] sm:mt-2.5">nace en una cocina.</span>
+            Pensado entre servicio y servicio
           </h2>
         </div>
 
-        <div className="mt-12 grid gap-12 lg:grid-cols-[1fr_minmax(260px,320px)] lg:items-start lg:gap-14">
-          <div>
-            <div className="space-y-5 text-pretty text-sm leading-relaxed text-stone-700 sm:text-base sm:leading-relaxed">
-              <p>
-                Como cocinero, llevaba años buscando algo simple: registrar lo importante en pocos toques, sin marear al
-                equipo y sin comerme minutos que no existen.
-              </p>
-              <p>
-                En cocina la información se pierde entre papeles, fotos y chats. Cuando no está quien suele llevar el
-                ritmo, cuesta saber qué se pidió, qué llegó mal o qué había que vigilar. Todo eso en un sitio que no te
-                obligue a pensar en la herramienta: si te frena, en la práctica no existe.
-              </p>
-              <p>
-                Porque aquí no sobra tiempo. Cualquier cosa que añada fricción acaba en el olvido. Hacía falta algo que
-                aguantara el día a día real —servicio, prisas, cambios de turno— sin convertirse en un trámite más.
-              </p>
-            </div>
-
+        <div className="mt-10 grid gap-10 lg:grid-cols-[1fr_minmax(260px,300px)] lg:items-start lg:gap-12">
+          <div className="space-y-4 text-pretty text-sm leading-relaxed text-stone-700 sm:text-base">
+            <p>
+              Chef-One lo impulsa un cocinero: había que registrar lo importante en pocos toques, sin marear al equipo.
+            </p>
+            <p>
+              Cuando la información vive en fotos, notas y grupos, cualquier cambio de turno es una ruleta. La app
+              nace para que lo crítico quede en un solo sitio — claro, rápido y serio cuando hace falta.
+            </p>
             <p
-              className="mt-10 border-l-4 pl-5 text-base font-semibold leading-snug text-stone-900 sm:text-lg sm:leading-snug"
+              className="border-l-4 pl-4 text-base font-semibold leading-snug text-stone-900 sm:text-lg"
               style={{ borderColor: BRAND }}
             >
-              Chef-One nace para que cualquier equipo de cocina pueda trabajar con orden, sin complicarse la vida.
+              No es un PowerPoint bonito: es herramienta para el día a día de cocina.
             </p>
           </div>
 
           <aside
-            className="rounded-2xl border border-stone-200/80 bg-white/80 p-6 shadow-[0_8px_32px_-16px_rgba(15,23,42,0.12)] ring-1 ring-stone-100/90 backdrop-blur-sm sm:p-7"
-            aria-label="Lo que se vivía en cocina"
+            className="rounded-2xl border border-stone-200/80 bg-white/90 p-5 shadow-[0_12px_40px_-24px_rgba(15,23,42,0.14)] ring-1 ring-stone-100 sm:p-6"
+            aria-label="Dolor del día a día"
           >
-            <p className="text-[11px] font-bold uppercase tracking-wide text-stone-500">El caos de cada día</p>
-            <ul className="mt-5 space-y-4">
+            <p className="text-[11px] font-bold uppercase tracking-wide text-stone-500">Suena familiar</p>
+            <ul className="mt-4 space-y-3">
               {painPoints.map(({ Icon, label }) => (
-                <li key={label} className="flex items-start gap-3">
+                <li key={label} className="flex items-center gap-3">
                   <span
-                    className="grid h-10 w-10 shrink-0 place-items-center rounded-xl text-white shadow-sm"
+                    className="grid h-9 w-9 shrink-0 place-items-center rounded-xl text-white shadow-md"
                     style={{
                       background: `linear-gradient(145deg, ${BRAND} 0%, #9a1818 100%)`,
                     }}
                   >
                     <Icon className="h-4 w-4" strokeWidth={1.75} aria-hidden />
                   </span>
-                  <span className="pt-2 text-sm font-medium leading-snug text-stone-800">{label}</span>
+                  <span className="text-sm font-medium text-stone-800">{label}</span>
                 </li>
               ))}
             </ul>

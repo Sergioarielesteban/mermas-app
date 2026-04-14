@@ -2,13 +2,13 @@ import type { Metadata } from 'next';
 import MarketingLanding from '@/components/MarketingLanding';
 
 export const metadata: Metadata = {
-  title: 'Chef-One | SaaS para operaciones de cocina en hostelería — desde 39,90 €/mes',
+  title: 'Chef-One | Operaciones de cocina — desde 39,90 €/mes por local',
   description:
-    'Controla lo que en cocina casi nadie controla bien: pedidos, mermas, APPCC, inventario y más. Para equipos de cocina y profesionales del sector. Menos de 10 €/semana por local. En móvil o tablet.',
+    'Módulos a tu medida: pedidos, mermas, APPCC (frío, aceite, limpieza), inventario, escandallos y chat. App en móvil y tablet. Desde 39,90 €/mes por local.',
   openGraph: {
-    title: 'Chef-One — operaciones de cocina',
+    title: 'Chef-One — software para cocina',
     description:
-      'SaaS para cocineros y cocinas que quieren trabajar mejor: pedidos, mermas, APPCC, inventario y módulos claros. 39,90 €/mes por local.',
+      'Módulos que eliges tú. Pedidos, mermas, APPCC, inventario, escandallos y más. Desde 39,90 €/mes por local.',
     type: 'website',
   },
 };

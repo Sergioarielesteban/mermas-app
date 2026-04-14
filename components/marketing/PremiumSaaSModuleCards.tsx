@@ -202,7 +202,7 @@ export type PremiumSaaSModuleCardsProps = {
 };
 
 /**
- * Grid de 6 tarjetas premium expansibles para landing SaaS hostelería.
+ * Grid de tarjetas premium expansibles (módulos del producto).
  * Una sola abierta; tilt 3D suave en desktop; tap claro en móvil.
  */
 export default function PremiumSaaSModuleCards({

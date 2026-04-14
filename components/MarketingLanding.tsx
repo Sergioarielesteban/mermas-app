@@ -14,25 +14,25 @@ const BRAND = '#D32F2F';
 const benefitBlocks = [
   {
     title: 'Menos errores',
-    body: 'Pedidos y recepción con registro claro. Menos “¿esto lo pedimos?” y menos incidencias que nadie termina de cerrar.',
+    body: 'Pedidos y recepción con hilo claro.',
     Icon: ShieldCheck,
     accent: 'from-rose-50 to-white ring-rose-100/80',
   },
   {
-    title: 'Menos información perdida',
-    body: 'Lo importante deja de vivir solo en WhatsApp o en el cuaderno del turno.',
+    title: 'Todo en un sitio',
+    body: 'Menos WhatsApp y cuadernos sueltos.',
     Icon: Layers,
     accent: 'from-sky-50/80 to-white ring-sky-100/70',
   },
   {
-    title: 'Más control operativo',
-    body: 'El equipo puede guiarse con datos visibles, no solo con reuniones a final de mes.',
+    title: 'Control visible',
+    body: 'Datos que el turno ve al instante.',
     Icon: Eye,
     accent: 'from-violet-50/70 to-white ring-violet-100/70',
   },
   {
-    title: 'Más rentabilidad',
-    body: 'Mermas medidas, stock más claro y base para escandallos: decisiones con mejor foto del negocio.',
+    title: 'Mejores decisiones',
+    body: 'Mermas, stock y escandallos con base real.',
     Icon: TrendingUp,
     accent: 'from-emerald-50/90 to-white ring-emerald-100/80',
   },
@@ -81,10 +81,16 @@ export default function MarketingLanding() {
               Módulos
             </Link>
             <Link
+              href="#precio"
+              className="hidden rounded-full px-3 py-2 text-xs font-bold text-stone-600 ring-1 ring-stone-200/90 transition hover:bg-stone-50 sm:inline-flex"
+            >
+              Precio
+            </Link>
+            <Link
               href="#solicitar-info"
               className="hidden rounded-full px-3 py-2 text-xs font-bold text-stone-600 ring-1 ring-stone-200/90 transition hover:bg-stone-50 sm:inline-flex"
             >
-              Solicitar info
+              Contacto
             </Link>
             <Link
               href="/login"
@@ -99,27 +105,27 @@ export default function MarketingLanding() {
 
       <main id="contenido">
         <MarketingHero />
+        <MarketingPricingHighlight />
+        <MarketingModulesSection />
         <MarketingOriginStory />
         <MarketingCocinerosSection />
-        <MarketingModulesSection />
-        <MarketingPricingHighlight />
 
         {/* Beneficios */}
-        <section className="border-t border-stone-200/60 bg-white px-4 py-16 sm:px-6 sm:py-24" aria-labelledby="beneficios-heading">
+        <section className="border-t border-stone-200/60 bg-white px-4 py-12 sm:px-6 sm:py-16" aria-labelledby="beneficios-heading">
           <div className="mx-auto max-w-6xl">
             <div className="mx-auto max-w-2xl text-center">
-              <h2 id="beneficios-heading" className="text-balance text-2xl font-bold tracking-tight text-stone-900 sm:text-3xl">
-                Por qué importa en hostelería real
+              <h2 id="beneficios-heading" className="text-balance text-2xl font-extrabold tracking-tight text-stone-900 sm:text-3xl">
+                Por qué mola
               </h2>
-              <p className="mt-3 text-pretty text-sm text-stone-600 sm:text-base">
-                Sin humo: lo que cambia en el día a día cuando la operación deja de estar repartida entre chats y papeles.
+              <p className="mt-2 text-pretty text-sm text-stone-600 sm:text-base">
+                Cuatro ideas. Sin sermón.
               </p>
             </div>
-            <ul className="mt-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-4 lg:gap-5">
+            <ul className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4 lg:gap-5">
               {benefitBlocks.map(({ title, body, Icon, accent }) => (
                 <li
                   key={title}
-                  className={`relative overflow-hidden rounded-2xl border border-stone-100 bg-gradient-to-br p-6 shadow-[0_4px_24px_-12px_rgba(15,23,42,0.12)] ring-1 ${accent}`}
+                  className={`relative overflow-hidden rounded-2xl border border-stone-100 bg-gradient-to-br p-5 shadow-[0_4px_24px_-12px_rgba(15,23,42,0.12)] ring-1 sm:p-6 ${accent}`}
                 >
                   <div
                     className="mb-4 grid h-11 w-11 place-items-center rounded-xl text-white shadow-md"
@@ -130,7 +136,7 @@ export default function MarketingLanding() {
                     <Icon className="h-5 w-5" strokeWidth={1.75} aria-hidden />
                   </div>
                   <h3 className="text-base font-bold text-stone-900">{title}</h3>
-                  <p className="mt-2 text-sm leading-relaxed text-stone-600">{body}</p>
+                  <p className="mt-2 text-sm leading-snug text-stone-600">{body}</p>
                 </li>
               ))}
             </ul>
@@ -140,14 +146,13 @@ export default function MarketingLanding() {
         {/* A medida + formulario */}
         <section
           id="solicitar-info"
-          className="scroll-mt-[4.5rem] border-t border-stone-200/60 bg-white px-4 py-16 sm:scroll-mt-24 sm:px-6 sm:py-24"
+          className="scroll-mt-[4.5rem] border-t border-stone-200/60 bg-white px-4 py-12 sm:scroll-mt-24 sm:px-6 sm:py-16"
         >
           <div className="mx-auto max-w-5xl">
             <div className="mx-auto max-w-xl text-center">
-              <h2 className="text-2xl font-bold tracking-tight text-stone-900 sm:text-3xl">Hablemos de tu cocina</h2>
-              <p className="mt-3 text-pretty text-sm leading-relaxed text-stone-600 sm:text-base">
-                Cuéntanos tu local y qué quieres ordenar primero. Respondemos en persona: sin formularios eternos que
-                nadie lee.
+              <h2 className="text-2xl font-extrabold tracking-tight text-stone-900 sm:text-3xl">¿Hablamos?</h2>
+              <p className="mt-2 text-pretty text-sm leading-snug text-stone-600 sm:text-base">
+                Dinos local y qué te urge ordenar. Te respondemos de verdad.
               </p>
             </div>
 
@@ -156,17 +161,17 @@ export default function MarketingLanding() {
                 id="contacto-rapido"
                 className="scroll-mt-[4.5rem] mx-auto mt-10 max-w-lg rounded-2xl border border-stone-200/80 bg-white/90 p-5 text-center shadow-[0_8px_28px_-16px_rgba(15,23,42,0.12)] ring-1 ring-stone-100 sm:scroll-mt-24 sm:p-6"
               >
-                <p className="text-sm font-bold text-stone-900">¿Prefieres llamar o escribir ya?</p>
-                <p className="mt-1 text-xs text-stone-600 sm:text-sm">Te abrimos el teléfono o WhatsApp con un toque.</p>
+                <p className="text-sm font-bold text-stone-900">Llama o escribe</p>
+                <p className="mt-1 text-xs text-stone-600 sm:text-sm">Un toque y listo.</p>
                 <MarketingContactLinkRow contact={phoneContact} className="mt-4" />
               </div>
             ) : null}
 
-            <div className="mt-10 rounded-[1.75rem] border border-stone-200/80 bg-gradient-to-b from-[#fafafa] to-white p-6 shadow-[0_12px_40px_-20px_rgba(15,23,42,0.15)] sm:p-10">
+            <div className="mt-8 rounded-[1.75rem] border border-stone-200/80 bg-gradient-to-b from-[#fafafa] to-white p-5 shadow-[0_12px_40px_-20px_rgba(15,23,42,0.15)] sm:p-8">
               <div className="mx-auto max-w-lg">
-                <div className="mb-8 rounded-2xl border border-stone-100 bg-white/90 px-4 py-3.5 text-center text-sm text-stone-600 ring-1 ring-stone-100 sm:px-5">
-                  <strong className="font-semibold text-stone-800">¿Módulo especial o medir algo distinto?</strong>{' '}
-                  Lo podemos plantear a medida; indícalo en el mensaje.
+                <div className="mb-6 rounded-2xl border border-stone-100 bg-white/90 px-4 py-3 text-center text-sm text-stone-600 ring-1 ring-stone-100">
+                  <strong className="font-semibold text-stone-800">¿Algo a medida?</strong> Dilo en el mensaje: ajustamos
+                  módulos a tu operación.
                 </div>
                 <MarketingLeadForm />
               </div>
@@ -174,10 +179,10 @@ export default function MarketingLanding() {
           </div>
         </section>
 
-        <section className="border-t border-stone-200/60 bg-gradient-to-br from-stone-50 to-white px-4 py-14 sm:px-6">
+        <section className="border-t border-stone-200/60 bg-gradient-to-br from-stone-50 to-white px-4 py-10 sm:px-6">
           <div className="mx-auto max-w-2xl text-center">
-            <h2 className="text-lg font-bold text-stone-900 sm:text-xl">¿Ya eres cliente?</h2>
-            <p className="mt-2 text-sm text-stone-600">Entra con el usuario que te haya dado tu administrador.</p>
+            <h2 className="text-lg font-extrabold text-stone-900 sm:text-xl">¿Ya eres cliente?</h2>
+            <p className="mt-2 text-sm text-stone-600">Entra con tu usuario.</p>
             <Link
               href="/login"
               className="mt-6 inline-flex h-12 items-center justify-center rounded-2xl px-10 text-sm font-bold text-white shadow-md transition hover:brightness-105"
@@ -198,8 +203,11 @@ export default function MarketingLanding() {
           <Link href="/login" className="font-medium underline decoration-stone-300 underline-offset-2 hover:text-stone-800">
             Acceso clientes
           </Link>
+          <Link href="#precio" className="font-medium underline decoration-stone-300 underline-offset-2 hover:text-stone-800">
+            Precio
+          </Link>
           <Link href="#solicitar-info" className="font-medium underline decoration-stone-300 underline-offset-2 hover:text-stone-800">
-            Solicitar información
+            Contacto
           </Link>
           <Link href="#origen" className="font-medium underline decoration-stone-300 underline-offset-2 hover:text-stone-800">
             Por qué Chef-One
