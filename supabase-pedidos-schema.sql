@@ -175,3 +175,5 @@ alter table public.purchase_order_items
   add column if not exists estimated_kg_per_unit numeric(10,3);
 alter table public.purchase_order_items
   add column if not exists received_weight_kg numeric(10,3);
+alter table public.purchase_order_items
+  add column if not exists received_price_per_kg numeric(10,4);

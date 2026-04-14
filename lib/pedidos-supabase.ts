@@ -35,6 +35,43 @@ export function billingQuantityForReceptionPrice(item: PedidoOrderItem): number 
   return item.quantity > 0 ? item.quantity : 0;
 }
 
+/**
+ * Subtotal e importe unitario efectivo en Recepción.
+ * Bandeja/caja: si hay kg reales y €/kg real, el subtotal es kg × €/kg y el unitario efectivo es subtotal / envases (para albarán e histórico).
+ */
+export function receptionLineTotals(item: PedidoOrderItem): { lineTotal: number; effectivePricePerUnit: number } {
+  if (item.unit === 'kg') {
+    const bq = billingQuantityForReceptionPrice(item);
+    return {
+      lineTotal: Math.round(item.pricePerUnit * bq * 100) / 100,
+      effectivePricePerUnit: item.pricePerUnit,
+    };
+  }
+  if (
+    unitSupportsReceivedWeightKg(item.unit) &&
+    item.receivedWeightKg != null &&
+    item.receivedWeightKg > 0 &&
+    item.receivedPricePerKg != null &&
+    Number.isFinite(item.receivedPricePerKg) &&
+    item.receivedPricePerKg > 0
+  ) {
+    const lt = Math.round(item.receivedWeightKg * item.receivedPricePerKg * 100) / 100;
+    const denom =
+      item.receivedQuantity > 0
+        ? item.receivedQuantity
+        : item.quantity > 0 && !lineIsMissingNotReceived(item)
+          ? item.quantity
+          : 0;
+    const eff = denom > 0 ? Math.round((lt / denom) * 100) / 100 : item.pricePerUnit;
+    return { lineTotal: lt, effectivePricePerUnit: eff };
+  }
+  const bq = billingQuantityForReceptionPrice(item);
+  return {
+    lineTotal: Math.round(item.pricePerUnit * bq * 100) / 100,
+    effectivePricePerUnit: item.pricePerUnit,
+  };
+}
+
 export type PedidoStatus = 'draft' | 'sent' | 'received';
 
 export type PedidoSupplierProduct = {
@@ -70,6 +107,8 @@ export type PedidoOrderItem = {
   estimatedKgPerUnit?: number;
   /** Peso real en recepción (kg), bandeja/caja. */
   receivedWeightKg?: number | null;
+  /** €/kg reales en recepción (bandeja/caja); con kg reales, subtotal = kg × €/kg. */
+  receivedPricePerKg?: number | null;
   incidentType?: 'missing' | 'damaged' | 'wrong-item' | null;
   incidentNotes?: string;
   /** Precio unitario del pedido al enviar (no se sobrescribe al revisar albarán). */
@@ -140,6 +179,7 @@ type OrderItemRow = {
   line_total: number;
   estimated_kg_per_unit: number | null;
   received_weight_kg: number | null;
+  received_price_per_kg?: number | null;
   incident_type: 'missing' | 'damaged' | 'wrong-item' | null;
   incident_notes: string | null;
 };
@@ -332,7 +372,7 @@ export async function fetchOrders(supabase: SupabaseClient, localId: string) {
   const { data: itemRows, error: iErr } = await supabase
     .from('purchase_order_items')
     .select(
-      'id,order_id,supplier_product_id,product_name,unit,quantity,received_quantity,price_per_unit,base_price_per_unit,vat_rate,line_total,estimated_kg_per_unit,received_weight_kg,incident_type,incident_notes',
+      'id,order_id,supplier_product_id,product_name,unit,quantity,received_quantity,price_per_unit,base_price_per_unit,vat_rate,line_total,estimated_kg_per_unit,received_weight_kg,received_price_per_kg,incident_type,incident_notes',
     )
     .in('order_id', ids.length ? ids : ['00000000-0000-0000-0000-000000000000']);
   if (iErr) throw new Error(iErr.message);
@@ -357,6 +397,9 @@ export async function fetchOrders(supabase: SupabaseClient, localId: string) {
         ? { estimatedKgPerUnit: Number(row.estimated_kg_per_unit) }
         : {}),
       receivedWeightKg: row.received_weight_kg != null ? Number(row.received_weight_kg) : null,
+      ...(row.received_price_per_kg != null && Number.isFinite(Number(row.received_price_per_kg))
+        ? { receivedPricePerKg: Number(row.received_price_per_kg) }
+        : {}),
       incidentType: row.incident_type,
       incidentNotes: row.incident_notes ?? undefined,
     });
@@ -408,7 +451,7 @@ export async function fetchOrderById(
   const { data: itemRows, error: iErr } = await supabase
     .from('purchase_order_items')
     .select(
-      'id,order_id,supplier_product_id,product_name,unit,quantity,received_quantity,price_per_unit,base_price_per_unit,vat_rate,line_total,estimated_kg_per_unit,received_weight_kg,incident_type,incident_notes',
+      'id,order_id,supplier_product_id,product_name,unit,quantity,received_quantity,price_per_unit,base_price_per_unit,vat_rate,line_total,estimated_kg_per_unit,received_weight_kg,received_price_per_kg,incident_type,incident_notes',
     )
     .eq('order_id', orderId)
     .eq('local_id', localId);
@@ -429,6 +472,9 @@ export async function fetchOrderById(
       : {}),
     ...(ir.estimated_kg_per_unit != null ? { estimatedKgPerUnit: Number(ir.estimated_kg_per_unit) } : {}),
     receivedWeightKg: ir.received_weight_kg != null ? Number(ir.received_weight_kg) : null,
+    ...(ir.received_price_per_kg != null && Number.isFinite(Number(ir.received_price_per_kg))
+      ? { receivedPricePerKg: Number(ir.received_price_per_kg) }
+      : {}),
     incidentType: ir.incident_type,
     incidentNotes: ir.incident_notes ?? undefined,
   }));
@@ -795,8 +841,12 @@ export async function persistSentOrderAsReceived(
     }
     await updateOrderItemReceived(supabase, localId, item.id, item.receivedQuantity);
     if (!preserveOrderPricing) {
-      const billingQty = billingQuantityForReceptionPrice(item);
-      await updateOrderItemPrice(supabase, localId, item.id, item.pricePerUnit, billingQty);
+      if (unitCanDeclareScaleKgOnReception(item.unit)) {
+        await persistReceptionItemTotals(supabase, localId, item);
+      } else {
+        const billingQty = billingQuantityForReceptionPrice(item);
+        await updateOrderItemPrice(supabase, localId, item.id, item.pricePerUnit, billingQty);
+      }
     }
   }
   await setOrderStatus(supabase, localId, order.id, 'received');
@@ -830,6 +880,51 @@ export async function updateOrderItemReceivedWeightKg(
     .from('purchase_order_items')
     .update({ received_weight_kg: safe })
     .eq('id', itemId)
+    .eq('local_id', localId);
+  if (error) throw new Error(error.message);
+}
+
+/**
+ * Persiste peso, €/kg real (bandeja/caja), precio unitario efectivo y subtotal en una sola escritura.
+ * Para líneas kg/bandeja/caja; el resto delega en `updateOrderItemPrice`.
+ */
+export async function persistReceptionItemTotals(supabase: SupabaseClient, localId: string, item: PedidoOrderItem) {
+  if (!unitCanDeclareScaleKgOnReception(item.unit)) {
+    const qty = billingQuantityForReceptionPrice(item);
+    await updateOrderItemPrice(supabase, localId, item.id, item.pricePerUnit, qty);
+    return;
+  }
+
+  const w =
+    item.receivedWeightKg == null || !Number.isFinite(item.receivedWeightKg) || item.receivedWeightKg <= 0
+      ? null
+      : Math.round(item.receivedWeightKg * 1000) / 1000;
+  let ppk: number | null =
+    item.unit !== 'kg' &&
+    unitSupportsReceivedWeightKg(item.unit) &&
+    w != null &&
+    item.receivedPricePerKg != null &&
+    Number.isFinite(item.receivedPricePerKg) &&
+    item.receivedPricePerKg > 0
+      ? Math.round(item.receivedPricePerKg * 10000) / 10000
+      : null;
+  if (w == null) ppk = null;
+
+  const { lineTotal, effectivePricePerUnit } = receptionLineTotals({
+    ...item,
+    receivedWeightKg: w,
+    receivedPricePerKg: ppk,
+  });
+
+  const { error } = await supabase
+    .from('purchase_order_items')
+    .update({
+      received_weight_kg: w,
+      received_price_per_kg: ppk,
+      price_per_unit: effectivePricePerUnit,
+      line_total: lineTotal,
+    })
+    .eq('id', item.id)
     .eq('local_id', localId);
   if (error) throw new Error(error.message);
 }
