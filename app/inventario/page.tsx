@@ -811,7 +811,7 @@ export default function InventarioPage() {
         eyebrow="Chef-One"
         title="Inventario"
         compact
-        description="Stock y valor por artículo de tu local. Elige el mes del cierre (útil si cuadras a las 00:00 entre dos meses). «Terminar inventario» guarda PDF, KPI mensuales e historial; «Reiniciar inventario» vacía líneas. Si reinicias sin cierre guardado, te proponemos guardarlo antes."
+        description="Stock y valor por artículo de tu local."
       />
 
       {!isSupabaseEnabled() || !getSupabaseClient() ? (
@@ -849,7 +849,7 @@ export default function InventarioPage() {
               <div className="flex w-full min-w-0 flex-col gap-2 sm:max-w-md sm:items-end">
                 <label className="flex w-full flex-col gap-0.5 sm:items-end">
                   <span className="text-[10px] font-bold uppercase tracking-wide text-zinc-500">
-                    Mes del cierre (KPI / PDF)
+                    Mes
                   </span>
                   <input
                     type="month"
@@ -885,7 +885,7 @@ export default function InventarioPage() {
 
           <section>
             <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-              <h2 className="text-base font-bold text-zinc-900">Catálogo (OK por categoría guarda todo)</h2>
+              <h2 className="text-base font-bold text-zinc-900">Catálogo</h2>
               <div className="flex flex-wrap gap-1.5">
                 <button
                   type="button"

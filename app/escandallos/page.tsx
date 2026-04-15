@@ -571,7 +571,7 @@ export default function EscandallosPage() {
 
           <Section
             title="Cierre mensual · ventas por plato"
-            subtitle="Anota unidades vendidas por escandallo (misma unidad que el rendimiento: raciones, uds., etc.). El food cost real = coste de ingredientes / venta neta del mix. Se compara con la media teórica de la carta."
+            subtitle="Ventas del mes por receta."
             icon={Receipt}
           >
             <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between">
@@ -599,16 +599,6 @@ export default function EscandallosPage() {
                 <FileSpreadsheet className="h-5 w-5 shrink-0 text-[#B91C1C]" aria-hidden />
                 <p className="text-sm font-bold text-zinc-900">Importar Excel / CSV</p>
               </div>
-              <p className="mt-2 text-sm leading-relaxed text-zinc-600">
-                <span className="font-semibold text-zinc-800">Plantilla:</span> incluye{' '}
-                <code className="rounded bg-zinc-200/80 px-1 font-mono text-[11px]">pos_article_code</code> (código TPV
-                que configuras en Recetas),{' '}
-                <code className="rounded bg-zinc-200/80 px-1 font-mono text-[11px]">recipe_id</code> y{' '}
-                <code className="rounded bg-zinc-200/80 px-1 font-mono text-[11px]">nombre_plato</code>; rellena{' '}
-                <code className="rounded bg-zinc-200/80 px-1 font-mono text-[11px]">unidades_vendidas</code>. Export del
-                TPV con columnas <em>Articulo + Descripcion</em> (o solo código + unidades) encajan automáticamente si el
-                código está en la ficha del plato.
-              </p>
               <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
                 <button
                   type="button"
