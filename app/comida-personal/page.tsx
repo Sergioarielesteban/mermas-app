@@ -13,12 +13,13 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import { FileDown, Plus, Search, X } from 'lucide-react';
+import { FileDown, Plus, Search, Trash2, X } from 'lucide-react';
 import { useAuth } from '@/components/AuthProvider';
 import { useMermasStore } from '@/components/MermasStoreProvider';
 import {
   createStaffMealWorker,
   createStaffMealRecord,
+  deactivateStaffMealWorker,
   deleteAllStaffMealRecordsForLocal,
   fetchStaffMealRecords,
   fetchStaffMealWorkers,
@@ -229,6 +230,32 @@ export default function ComidaPersonalPage() {
       setMessage(err instanceof Error ? err.message : 'No se pudo crear trabajador.');
     }
   }, [localId, newWorkerName]);
+
+  const removeWorker = React.useCallback(
+    async (w: StaffMealWorker) => {
+      if (!localId) return;
+      const okConfirm = window.confirm(
+        `¿Quitar la ficha «${w.name}» de la lista?\n\nLos consumos ya guardados no se borran; solo deja de aparecer como opción.`,
+      );
+      if (!okConfirm) return;
+      const okPin = await requestDeleteSecurityPin();
+      if (!okPin) return;
+      const supabase = getSupabaseClient();
+      if (!supabase) return;
+      try {
+        await deactivateStaffMealWorker(supabase, localId, w.id);
+        const next = workers.filter((x) => x.id !== w.id);
+        setWorkers(next);
+        setWorkerId((cur) => (cur === w.id ? next[0]?.id ?? '' : cur));
+        setMessageTone('success');
+        setMessage(`Ficha «${w.name}» eliminada de la lista.`);
+      } catch (err) {
+        setMessageTone('error');
+        setMessage(err instanceof Error ? err.message : 'No se pudo quitar la ficha.');
+      }
+    },
+    [localId, workers],
+  );
 
   const registerConsumption = React.useCallback(async () => {
     if (!localId) return;
@@ -500,6 +527,29 @@ export default function ComidaPersonalPage() {
             }
           }}
         />
+        {workers.length > 0 ? (
+          <div className="mt-3">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-zinc-500">Fichas (quitar de la lista)</p>
+            <ul className="mt-1.5 space-y-1">
+              {workers.map((w) => (
+                <li
+                  key={w.id}
+                  className="flex items-center justify-between gap-2 rounded-lg bg-zinc-50 px-2 py-1.5 ring-1 ring-zinc-200"
+                >
+                  <span className="min-w-0 truncate text-sm font-medium text-zinc-800">{w.name}</span>
+                  <button
+                    type="button"
+                    onClick={() => void removeWorker(w)}
+                    className="grid h-8 w-8 shrink-0 place-items-center rounded-lg border border-zinc-200 bg-white text-zinc-500 hover:border-red-200 hover:bg-red-50 hover:text-red-700"
+                    aria-label={`Quitar ficha ${w.name}`}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
       </section>
 
       <section className="rounded-2xl bg-white p-4 ring-1 ring-zinc-200">

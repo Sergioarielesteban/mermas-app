@@ -144,6 +144,25 @@ export async function createStaffMealWorker(
   return mapWorkerRow(data as StaffMealWorkerRow);
 }
 
+/** La ficha deja de mostrarse en la app; los registros antiguos conservan worker_name_snapshot. */
+export async function deactivateStaffMealWorker(
+  supabase: SupabaseClient,
+  localId: string,
+  workerId: string,
+): Promise<void> {
+  const { error } = await supabase
+    .from('staff_meal_workers')
+    .update({ is_active: false })
+    .eq('id', workerId)
+    .eq('local_id', localId);
+  if (error) {
+    if (isMissingWorkersTableError(error.message)) {
+      throw new Error('Falta migración de staff_meal_workers en Supabase.');
+    }
+    throw new Error(error.message);
+  }
+}
+
 export async function fetchStaffMealRecords(
   supabase: SupabaseClient,
   localId: string,
