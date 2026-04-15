@@ -400,7 +400,31 @@ function drawServiceMoMCompare(
   doc.setTextColor(...PDF_ZINC_900);
 }
 
-function appendDetailTable(
+type WorkerTotalsRow = { name: string; meals: number; units: number; totalEur: number };
+
+function aggregateWorkerTotalsForPdf(active: StaffMealRecord[]): WorkerTotalsRow[] {
+  const map = new Map<string, { name: string; totalEur: number; units: number; groupIds: Set<string>; loose: number }>();
+  for (const r of active) {
+    const k = r.workerId ?? '__no_worker__';
+    const name = r.workerName ?? 'Sin trabajador';
+    const cur = map.get(k) ?? { name, totalEur: 0, units: 0, groupIds: new Set<string>(), loose: 0 };
+    cur.totalEur += r.totalCostEur;
+    cur.units += r.peopleCount;
+    if (r.consumptionGroupId) cur.groupIds.add(r.consumptionGroupId);
+    else cur.loose += 1;
+    map.set(k, cur);
+  }
+  return Array.from(map.values())
+    .map((v) => ({
+      name: v.name,
+      meals: v.groupIds.size + v.loose,
+      units: v.units,
+      totalEur: v.totalEur,
+    }))
+    .sort((a, b) => b.totalEur - a.totalEur);
+}
+
+function appendWorkerTotalsTable(
   doc: jsPDF,
   opts: { margin: number; contentW: number; pageH: number; title: string; active: StaffMealRecord[]; startY: number },
 ): number {
@@ -414,44 +438,26 @@ function appendDetailTable(
   doc.setTextColor(...PDF_ZINC_900);
   doc.text(opts.title, opts.margin, y);
 
-  const sorted = [...opts.active].sort((a, b) => {
-    const da = a.mealDate.localeCompare(b.mealDate);
-    if (da !== 0) return da < 0 ? 1 : -1;
-    return a.createdAt < b.createdAt ? 1 : -1;
-  });
-
+  const rows = aggregateWorkerTotalsForPdf(opts.active);
   const body =
-    sorted.length === 0
-      ? [['—', '—', '—', '—', '—', '—', 'Sin registros activos en el periodo']]
-      : sorted.map((r) => {
-          const notes = (r.notes ?? '').trim();
-          const notesShort = notes.length > 48 ? `${notes.slice(0, 45)}…` : notes;
-          return [
-            formatKeyEs(r.mealDate),
-            new Date(r.createdAt).toLocaleString('es-ES', {
-              day: '2-digit',
-              month: '2-digit',
-              year: 'numeric',
-              hour: '2-digit',
-              minute: '2-digit',
-            }),
-            SERVICE_LABEL[r.service],
-            String(r.peopleCount),
-            `${r.unitCostEur.toFixed(2)} €`,
-            `${r.totalCostEur.toFixed(2)} €`,
-            notesShort || '—',
-          ];
-        });
+    rows.length === 0
+      ? [['—', '—', '—', '—']]
+      : rows.map((r) => [
+          r.name,
+          String(r.meals),
+          r.units.toLocaleString('es-ES', { maximumFractionDigits: 2 }),
+          `${r.totalEur.toFixed(2)} €`,
+        ]);
 
   autoTable(doc, {
     startY: y + 10,
-    head: [['Fecha servicio', 'Alta registro', 'Servicio', 'Pers.', '€/pers.', 'Total €', 'Notas']],
+    head: [['Trabajador', 'Comidas registradas', 'Uds (Σ)', 'Total €']],
     body,
-    styles: { fontSize: 7, cellPadding: 2.5, textColor: PDF_ZINC_900 },
-    headStyles: { fillColor: PDF_BRAND, textColor: PDF_WHITE, fontSize: 7.5 },
+    styles: { fontSize: 8, cellPadding: 3, textColor: PDF_ZINC_900 },
+    headStyles: { fillColor: PDF_BRAND, textColor: PDF_WHITE },
     alternateRowStyles: { fillColor: [248, 250, 252] },
-    columnStyles: { 6: { cellWidth: 130 } },
     margin: { left: opts.margin, right: opts.margin },
+    tableWidth: Math.min(480, opts.contentW * 0.55),
   });
   return (doc as DocWithTable).lastAutoTable?.finalY ?? y + 40;
 }
@@ -493,25 +499,17 @@ export function downloadStaffMealReportPdf(input: {
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(10.5);
   doc.setTextColor(...PDF_ZINC_500);
-  doc.text(`Local: ${input.localLabel}`, margin, 58);
-  doc.text(`Periodo principal: ${cur.labelEs} (${formatKeyEs(cur.startYmd)} – ${formatKeyEs(cur.endYmd)})`, margin, 72);
-  if (prev) {
-    doc.text(`Incluye comparativa y anexo con: ${prev.labelEs}`, margin, 86);
-  }
+  let metaY = 58;
+  doc.text(`Local: ${input.localLabel}`, margin, metaY);
+  metaY += 14;
+  doc.text(`Periodo: ${cur.labelEs} (${formatKeyEs(cur.startYmd)} – ${formatKeyEs(cur.endYmd)})`, margin, metaY);
+  metaY += 14;
   if (input.generatedByLabel?.trim()) {
-    doc.text(`Generado por: ${input.generatedByLabel.trim()}`, margin, prev ? 100 : 86);
+    doc.text(`Generado por: ${input.generatedByLabel.trim()}`, margin, metaY);
+    metaY += 14;
   }
-  doc.setFontSize(9);
-  doc.setTextColor(...PDF_ZINC_500);
-  const descY = input.generatedByLabel?.trim() ? (prev ? 114 : 100) : prev ? 100 : 86;
-  doc.text(
-    'Informe económico para imputar consumo de personal a coste de personal. Solo registros activos (no anulados). Importes en € IVA excluido según €/persona registrados.',
-    margin,
-    descY,
-    { maxWidth: contentW },
-  );
 
-  const kpiY = descY + 22;
+  const kpiY = metaY + 10;
   const gap = 8;
   const nKpi = 6;
   const kpiW = (contentW - (nKpi - 1) * gap) / nKpi;
@@ -557,16 +555,7 @@ export function downloadStaffMealReportPdf(input: {
     doc.setFontSize(12);
     doc.setTextColor(...PDF_ZINC_900);
     doc.text('Comparativa vs mes anterior', margin, yAfterKpi);
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(8.5);
-    doc.setTextColor(...PDF_ZINC_500);
-    doc.text(
-      `Mes anterior: ${prev.labelEs} · Coste total ${prev.totalEur.toFixed(2)} € · ${prev.n} registros · ${prev.peopleSum.toLocaleString('es-ES', { maximumFractionDigits: 2 })} personas`,
-      margin,
-      yAfterKpi + 14,
-      { maxWidth: contentW },
-    );
-    yAfterKpi += 28;
+    yAfterKpi += 18;
 
     const compareBody = [
       [
@@ -696,22 +685,22 @@ export function downloadStaffMealReportPdf(input: {
   yAfterKpi = (doc as DocWithTable).lastAutoTable?.finalY ?? yAfterKpi + 60;
   yAfterKpi += 12;
 
-  yAfterKpi = appendDetailTable(doc, {
+  yAfterKpi = appendWorkerTotalsTable(doc, {
     margin,
     contentW,
     pageH,
-    title: `Detalle de registros — ${cur.labelEs} (más reciente primero)`,
+    title: `Totales por trabajador — ${cur.labelEs}`,
     active: cur.active,
     startY: yAfterKpi,
   });
   yAfterKpi += 16;
 
-  if (prev && prev.active.length > 0) {
-    appendDetailTable(doc, {
+  if (prev) {
+    appendWorkerTotalsTable(doc, {
       margin,
       contentW,
       pageH,
-      title: `Anexo: detalle del mes anterior — ${prev.labelEs} (más reciente primero)`,
+      title: `Anexo: totales por trabajador — ${prev.labelEs}`,
       active: prev.active,
       startY: yAfterKpi,
     });

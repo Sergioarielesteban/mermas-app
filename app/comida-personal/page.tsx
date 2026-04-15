@@ -67,39 +67,6 @@ function money(v: number) {
   return `${(Math.round(v * 100) / 100).toFixed(2)} €`;
 }
 
-function workerInitials(name: string) {
-  const parts = name.trim().split(/\s+/).filter(Boolean);
-  if (parts.length === 0) return '?';
-  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
-  return `${parts[0][0] ?? ''}${parts[parts.length - 1][0] ?? ''}`.toUpperCase();
-}
-
-/** Una fila en "Últimos registros" = un grupo (misma comida) o un registro suelto. */
-function buildConsumptionDisplayGroups(sorted: StaffMealRecord[]): StaffMealRecord[][] {
-  const byGroup = new Map<string, StaffMealRecord[]>();
-  for (const r of sorted) {
-    const g = r.consumptionGroupId;
-    if (!g) continue;
-    const arr = byGroup.get(g) ?? [];
-    arr.push(r);
-    byGroup.set(g, arr);
-  }
-  const emitted = new Set<string>();
-  const out: StaffMealRecord[][] = [];
-  for (const r of sorted) {
-    const g = r.consumptionGroupId;
-    if (g) {
-      if (emitted.has(g)) continue;
-      emitted.add(g);
-      const rows = [...(byGroup.get(g) ?? [])].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
-      out.push(rows);
-    } else {
-      out.push([r]);
-    }
-  }
-  return out;
-}
-
 function ymFromDate(d: Date) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 }
@@ -186,6 +153,27 @@ export default function ComidaPersonalPage() {
       return { ...prev, [productId]: next };
     });
   }, []);
+
+  const [addFlashId, setAddFlashId] = React.useState<string | null>(null);
+  const addFlashTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pulseProductAdded = React.useCallback((productId: string) => {
+    setAddFlashId(productId);
+    if (addFlashTimerRef.current) clearTimeout(addFlashTimerRef.current);
+    addFlashTimerRef.current = setTimeout(() => {
+      setAddFlashId((cur) => (cur === productId ? null : cur));
+    }, 480);
+  }, []);
+
+  const addOneToBasket = React.useCallback(
+    (productId: string) => {
+      setQtyByProductId((prev) => {
+        const next = (prev[productId] ?? 0) + 1;
+        return { ...prev, [productId]: next };
+      });
+      pulseProductAdded(productId);
+    },
+    [pulseProductAdded],
+  );
 
   const createWorker = React.useCallback(async () => {
     if (!localId) return;
@@ -315,28 +303,78 @@ export default function ComidaPersonalPage() {
   }, [monthRecords]);
 
   const monthWorkerRanking = React.useMemo(() => {
-    const map = new Map<string, { rowKey: string; name: string; totalEur: number; units: number }>();
+    const map = new Map<
+      string,
+      { rowKey: string; name: string; totalEur: number; units: number; groupIds: Set<string>; looseMeals: number }
+    >();
     for (const r of monthRecords) {
       const rowKey = r.workerId ?? '__no_worker__';
       const name = r.workerName ?? 'Sin trabajador';
-      const cur = map.get(rowKey) ?? { rowKey, name, totalEur: 0, units: 0 };
+      const cur = map.get(rowKey) ?? {
+        rowKey,
+        name,
+        totalEur: 0,
+        units: 0,
+        groupIds: new Set<string>(),
+        looseMeals: 0,
+      };
       cur.totalEur += r.totalCostEur;
       cur.units += r.peopleCount;
+      if (r.consumptionGroupId) cur.groupIds.add(r.consumptionGroupId);
+      else cur.looseMeals += 1;
       map.set(rowKey, cur);
     }
-    return Array.from(map.values()).sort((a, b) => b.totalEur - a.totalEur);
+    return Array.from(map.values())
+      .map((v) => ({
+        rowKey: v.rowKey,
+        name: v.name,
+        totalEur: v.totalEur,
+        units: v.units,
+        mealsRegistered: v.groupIds.size + v.looseMeals,
+      }))
+      .sort((a, b) => b.totalEur - a.totalEur);
   }, [monthRecords]);
 
-  const recentGroups = React.useMemo(
-    () => buildConsumptionDisplayGroups(activeRecords).slice(0, 12),
-    [activeRecords],
-  );
+  const topConsumedProducts = React.useMemo(() => {
+    const map = new Map<string, { productId: string | null; label: string; units: number }>();
+    for (const r of activeRecords) {
+      const pid = r.sourceProductId;
+      const label = r.sourceProductName?.trim();
+      if (!pid && !label) continue;
+      const key = pid ?? `name:${label}`;
+      const cur = map.get(key) ?? { productId: pid, label: label ?? 'Artículo', units: 0 };
+      cur.units += r.peopleCount;
+      if (label) cur.label = label;
+      map.set(key, cur);
+    }
+    return Array.from(map.values())
+      .sort((a, b) => b.units - a.units)
+      .slice(0, 10)
+      .map((row) => {
+        const catalog =
+          (row.productId ? products.find((p) => p.id === row.productId) : undefined) ??
+          products.find((p) => p.name.trim().toLowerCase() === row.label.trim().toLowerCase());
+        return { ...row, addableId: catalog?.id ?? null };
+      });
+  }, [activeRecords, products]);
 
   return (
     <div className="space-y-4">
       <section className="rounded-2xl bg-white p-4 ring-1 ring-zinc-200">
-        <p className="text-sm font-black text-zinc-900">Comida de personal</p>
-        <p className="mt-1 text-xs text-zinc-500">Toca tu nombre, marca artículos consumidos y registra en segundos.</p>
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0">
+            <p className="text-sm font-black text-zinc-900">Comida de personal</p>
+            <p className="mt-1 text-xs text-zinc-500">Registro rápido de consumo interno.</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => void loadData()}
+            className="shrink-0 rounded-lg border border-zinc-200 bg-white px-2.5 py-1.5 text-xs font-bold text-[#D32F2F]"
+          >
+            Actualizar
+          </button>
+        </div>
+        {loading ? <p className="mt-2 text-xs text-zinc-400">Cargando datos…</p> : null}
       </section>
 
       <section className="rounded-2xl bg-white p-4 ring-1 ring-zinc-200">
@@ -351,122 +389,135 @@ export default function ComidaPersonalPage() {
         </div>
       </section>
 
-      <section className="rounded-2xl bg-white p-4 ring-1 ring-zinc-200 shadow-[inset_0_0_0_1px_rgba(0,0,0,0.04)]">
-        <div className="flex items-center justify-between gap-2">
-          <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">¿Quién come?</p>
-          {selectedWorker ? (
-            <span className="truncate text-xs font-bold text-zinc-700">{selectedWorker.name}</span>
-          ) : (
-            <span className="text-xs font-medium text-zinc-400">Elige ficha</span>
-          )}
-        </div>
-        {workers.length === 0 ? (
-          <p className="mt-3 text-sm text-zinc-500">Aún no hay fichas. Crea la primera abajo.</p>
-        ) : (
-          <div className="mt-3 -mx-1 flex gap-2 overflow-x-auto px-1 pb-1 pt-0.5 [scrollbar-width:thin]">
-            {workers.map((w) => {
-              const on = w.id === workerId;
-              return (
-                <button
-                  key={w.id}
-                  type="button"
-                  onClick={() => setWorkerId(w.id)}
-                  className={`flex min-w-[5.5rem] shrink-0 flex-col items-center gap-1.5 rounded-2xl px-3 py-2.5 text-center transition ${
-                    on
-                      ? 'bg-zinc-950 text-white shadow-[inset_0_0_0_2px_#D32F2F]'
-                      : 'bg-zinc-100 text-zinc-800 ring-1 ring-zinc-200 hover:bg-zinc-50'
-                  }`}
-                >
-                  <span
-                    className={`grid h-11 w-11 place-items-center rounded-full text-sm font-black ${
-                      on ? 'bg-white/15 text-white' : 'bg-white text-zinc-900 ring-1 ring-zinc-200'
-                    }`}
-                  >
-                    {workerInitials(w.name)}
-                  </span>
-                  <span className="line-clamp-2 w-full text-[11px] font-bold leading-tight">{w.name}</span>
-                </button>
-              );
-            })}
-          </div>
-        )}
-        <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-center">
-          <input
-            value={newWorkerName}
-            onChange={(e) => setNewWorkerName(e.target.value)}
-            placeholder="Nombre nuevo…"
-            className="h-11 min-w-0 flex-1 rounded-xl border border-zinc-300 bg-zinc-50 px-3 text-sm text-zinc-900 outline-none focus:border-zinc-400"
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') {
-                e.preventDefault();
-                void createWorker();
-              }
-            }}
-          />
+      <section className="rounded-2xl bg-white p-4 ring-1 ring-zinc-200">
+        <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Trabajador</p>
+        <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-[1fr_auto]">
+          <select
+            value={workerId}
+            onChange={(e) => setWorkerId(e.target.value)}
+            className="h-12 min-h-[3rem] w-full rounded-xl border border-zinc-300 bg-white px-3 text-base font-medium text-zinc-900 outline-none focus:border-[#D32F2F]/60"
+          >
+            <option value="">Selecciona trabajador</option>
+            {workers.map((w) => (
+              <option key={w.id} value={w.id}>
+                {w.name}
+              </option>
+            ))}
+          </select>
           <button
             type="button"
             onClick={() => void createWorker()}
-            className="h-11 shrink-0 rounded-xl bg-[#D32F2F] px-4 text-sm font-bold text-white shadow-sm"
+            className="h-12 min-h-[3rem] rounded-xl border border-zinc-300 bg-white px-4 text-sm font-bold text-zinc-800"
           >
             Crear trabajador
           </button>
         </div>
+        <input
+          value={newWorkerName}
+          onChange={(e) => setNewWorkerName(e.target.value)}
+          placeholder="Nombre del trabajador"
+          className="mt-2 h-12 w-full rounded-xl border border-zinc-300 bg-white px-3 text-base text-zinc-900 outline-none focus:border-[#D32F2F]/60"
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              void createWorker();
+            }
+          }}
+        />
       </section>
 
       <section className="rounded-2xl bg-white p-4 ring-1 ring-zinc-200">
-        <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Artículos (catálogo mermas)</p>
-        <p className="mt-1 text-xs text-zinc-500">Abre el buscador, localiza el producto y añádelo al consumo.</p>
+        <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Top 10 · más consumidos</p>
+        <p className="mt-1 text-xs text-zinc-500">Atajos con + (precio según catálogo actual).</p>
+        {topConsumedProducts.length === 0 ? (
+          <p className="mt-2 text-sm text-zinc-500">Cuando haya registros con artículo, aparecerá el ranking.</p>
+        ) : (
+          <ul className="mt-2 space-y-1.5">
+            {topConsumedProducts.map((row, idx) => {
+              const canAdd = Boolean(row.addableId);
+              return (
+                <li
+                  key={`${row.addableId ?? row.label}-${idx}`}
+                  className={`flex items-center gap-2 rounded-xl px-2 py-1.5 ring-1 transition-colors duration-300 ${
+                    row.addableId && addFlashId === row.addableId
+                      ? 'bg-emerald-50 ring-emerald-400/80'
+                      : 'bg-zinc-50 ring-zinc-200'
+                  }`}
+                >
+                  <span className="w-5 shrink-0 text-center text-[11px] font-black text-zinc-400">{idx + 1}</span>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-xs font-semibold text-zinc-900">{row.label}</p>
+                    <p className="text-[10px] text-zinc-500">{row.units.toLocaleString('es-ES', { maximumFractionDigits: 2 })} uds históricas</p>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={!canAdd}
+                    title={canAdd ? 'Añadir 1 al consumo' : 'No enlazado al catálogo actual'}
+                    onClick={() => row.addableId && addOneToBasket(row.addableId)}
+                    className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-[#D32F2F] text-white shadow-sm disabled:cursor-not-allowed disabled:bg-zinc-300"
+                  >
+                    <Plus className="h-4 w-4" />
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        )}
         <button
           type="button"
           onClick={() => setProductPickerOpen(true)}
-          className="mt-3 flex h-12 w-full items-center justify-center gap-2 rounded-xl border-2 border-zinc-900 bg-zinc-950 text-sm font-bold text-white shadow-[inset_0_0_0_1px_rgba(211,47,47,0.85)] outline-none transition hover:bg-zinc-900 focus-visible:ring-2 focus-visible:ring-[#D32F2F]/50"
+          className="mt-3 flex h-11 w-full items-center justify-center gap-2 rounded-xl border-2 border-[#D32F2F] bg-white text-sm font-bold text-zinc-900 shadow-sm outline-none transition hover:bg-zinc-50 focus-visible:ring-2 focus-visible:ring-[#D32F2F]/40"
         >
-          <Search className="h-4 w-4 shrink-0 opacity-90" aria-hidden />
-          Buscar y añadir artículo
+          <Search className="h-4 w-4 shrink-0 text-[#D32F2F]" aria-hidden />
+          Buscar otro artículo
         </button>
       </section>
 
       <section className="rounded-2xl bg-white p-4 ring-1 ring-zinc-200">
         <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Consumo seleccionado</p>
-        <div className="mt-2 space-y-2">
-          {selectedLines.map((line) => (
-            <div key={line.product.id} className="rounded-xl bg-zinc-50 p-2 ring-1 ring-zinc-200">
-              <div className="flex items-center justify-between gap-2">
-                <p className="text-sm font-semibold text-zinc-900">{line.product.name}</p>
-                <p className="text-sm font-bold text-zinc-900">{money(line.quantity * line.product.pricePerUnit)}</p>
-              </div>
-              <div className="mt-2 grid grid-cols-[2.25rem_2.75rem_2.25rem] items-center justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => setProductQty(line.product.id, line.quantity - 1)}
-                  className="grid h-9 w-9 place-items-center rounded-full border border-zinc-300 bg-white text-lg font-semibold text-zinc-500"
+        {selectedLines.length === 0 ? (
+          <p className="mt-2 text-sm text-zinc-500">Aún no hay artículos.</p>
+        ) : (
+          <div className="mt-2 max-h-48 overflow-y-auto rounded-lg border border-zinc-200 bg-zinc-50/90">
+            <ul className="divide-y divide-zinc-200/90">
+              {selectedLines.map((line) => (
+                <li
+                  key={line.product.id}
+                  className={`flex items-center gap-2 px-2 py-1.5 transition-colors ${
+                    addFlashId === line.product.id ? 'bg-emerald-50' : ''
+                  }`}
                 >
-                  {'\u2212'}
-                </button>
-                <input
-                  type="number"
-                  min={0}
-                  value={line.quantity}
-                  onChange={(e) => setProductQty(line.product.id, Number(e.target.value || 0))}
-                  className="h-9 w-11 rounded-lg border border-zinc-300 bg-white px-1 text-center text-sm font-semibold text-zinc-900 outline-none"
-                />
-                <button
-                  type="button"
-                  onClick={() => setProductQty(line.product.id, line.quantity + 1)}
-                  className="grid h-9 w-9 place-items-center rounded-full bg-[#D32F2F] text-lg font-semibold text-white"
-                >
-                  +
-                </button>
-              </div>
-            </div>
-          ))}
-          {selectedLines.length === 0 ? <p className="text-sm text-zinc-500">Aún no hay artículos seleccionados.</p> : null}
-        </div>
+                  <p className="min-w-0 flex-1 truncate text-[11px] font-semibold leading-tight text-zinc-800">{line.product.name}</p>
+                  <div className="flex shrink-0 items-center gap-0.5">
+                    <button
+                      type="button"
+                      onClick={() => setProductQty(line.product.id, line.quantity - 1)}
+                      className="grid h-7 w-7 place-items-center rounded-full border border-zinc-200 bg-white text-sm font-semibold text-zinc-500"
+                    >
+                      {'\u2212'}
+                    </button>
+                    <span className="w-6 text-center text-[11px] font-black text-zinc-900">{line.quantity}</span>
+                    <button
+                      type="button"
+                      onClick={() => addOneToBasket(line.product.id)}
+                      className="grid h-7 w-7 place-items-center rounded-full bg-[#D32F2F] text-sm font-semibold text-white"
+                    >
+                      +
+                    </button>
+                  </div>
+                  <span className="w-[3.25rem] shrink-0 text-right text-[11px] font-bold text-zinc-900 tabular-nums">
+                    {money(line.quantity * line.product.pricePerUnit)}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
         <input
           value={notes}
           onChange={(e) => setNotes(e.target.value)}
           placeholder="Nota (opcional)"
-          className="mt-2 h-11 w-full rounded-xl border border-zinc-300 bg-white px-3 text-sm text-zinc-900 outline-none"
+          className="mt-2 h-10 w-full rounded-xl border border-zinc-300 bg-white px-3 text-sm text-zinc-900 outline-none"
         />
         <div className="mt-2 flex items-center justify-between">
           <p className="text-sm font-semibold text-zinc-700">Total</p>
@@ -479,21 +530,28 @@ export default function ComidaPersonalPage() {
         >
           Registrar consumo
         </button>
+        {message ? (
+          <p
+            className={
+              messageTone === 'success' ? 'mt-2 text-sm font-semibold text-emerald-800' : 'mt-2 text-sm text-[#B91C1C]'
+            }
+          >
+            {message}
+          </p>
+        ) : null}
       </section>
 
       <section className="rounded-2xl bg-white p-4 ring-1 ring-zinc-200">
-        <p className="text-sm font-bold text-zinc-800">Informe mensual PDF</p>
-        <p className="mt-1 text-xs text-zinc-500">
-          Documento para dirección: KPIs del mes elegido, comparativa frente al mes anterior (tabla + gráficas), reparto por servicio,
-          evolución diaria, detalle completo y anexo con el detalle del mes previo si hay datos. Solo PDF.
-        </p>
-        <label className="mt-3 block text-xs font-semibold uppercase tracking-wide text-zinc-500">Mes del informe</label>
-        <input
-          type="month"
-          value={reportMonthYm}
-          onChange={(e) => setReportMonthYm(e.target.value)}
-          className="mt-2 h-11 w-full rounded-xl border border-zinc-300 bg-white px-3 text-sm text-zinc-900 outline-none"
-        />
+        <p className="text-center text-sm font-bold text-zinc-800">Informe mensual PDF</p>
+        <div className="mt-3 flex flex-col items-center">
+          <label className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Mes del informe</label>
+          <input
+            type="month"
+            value={reportMonthYm}
+            onChange={(e) => setReportMonthYm(e.target.value)}
+            className="mt-1.5 box-border h-9 w-full max-w-[11.5rem] rounded-lg border border-zinc-300 bg-white px-2 text-center text-sm text-zinc-900 outline-none focus:border-[#D32F2F]/50"
+          />
+        </div>
         <button
           type="button"
           onClick={exportMonthPdf}
@@ -525,7 +583,6 @@ export default function ComidaPersonalPage() {
 
       <section className="rounded-2xl bg-white p-4 ring-1 ring-zinc-200">
         <p className="text-sm font-bold text-zinc-800">Mes actual — por trabajador</p>
-        <p className="mt-1 text-xs text-zinc-500">Ranking por importe consumido en el mes (todas las líneas sumadas).</p>
         {monthWorkerRanking.length === 0 ? (
           <p className="mt-3 text-sm text-zinc-500">Sin datos en el mes.</p>
         ) : (
@@ -551,7 +608,10 @@ export default function ComidaPersonalPage() {
                   </span>
                   <div className="min-w-0">
                     <p className="truncate text-sm font-bold text-zinc-900">{row.name}</p>
-                    <p className="text-xs text-zinc-500">{row.units.toLocaleString('es-ES', { maximumFractionDigits: 2 })} uds registradas</p>
+                    <p className="text-xs text-zinc-500">
+                      {row.mealsRegistered}{' '}
+                      {row.mealsRegistered === 1 ? 'comida registrada' : 'comidas registradas'}
+                    </p>
                   </div>
                 </div>
                 <p className="shrink-0 text-sm font-black text-zinc-900">{money(row.totalEur)}</p>
@@ -596,68 +656,6 @@ export default function ComidaPersonalPage() {
         </div>
       </section>
 
-      <section className="rounded-2xl bg-white p-4 ring-1 ring-zinc-200">
-        <div className="flex items-center justify-between gap-2">
-          <p className="text-sm font-bold text-zinc-800">Últimos registros</p>
-          <button
-            type="button"
-            onClick={() => void loadData()}
-            className="h-8 rounded-lg border border-zinc-300 bg-white px-2 text-xs font-semibold text-zinc-700"
-          >
-            Actualizar
-          </button>
-        </div>
-        {loading ? <p className="mt-2 text-xs text-zinc-500">Cargando...</p> : null}
-        <div className="mt-2 space-y-2">
-          {recentGroups.map((rows) => {
-            const head = rows[0]!;
-            const total = rows.reduce((acc, r) => acc + r.totalCostEur, 0);
-            const gkey = rows.map((r) => r.id).join('|');
-            return (
-              <details key={gkey} className="rounded-xl bg-zinc-50 ring-1 ring-zinc-200">
-                <summary className="flex cursor-pointer list-none items-center justify-between gap-3 rounded-xl p-2 [&::-webkit-details-marker]:hidden">
-                  <div className="min-w-0">
-                    <p className="text-sm font-semibold text-zinc-800">
-                      {head.workerName ?? 'Sin trabajador'}
-                      {rows.length > 1 ? (
-                        <span className="font-semibold text-zinc-500">{` · ${rows.length} artículos`}</span>
-                      ) : null}
-                    </p>
-                    <p className="mt-0.5 text-xs text-zinc-500">
-                      {new Date(`${head.mealDate}T00:00:00`).toLocaleDateString('es-ES')} · {SERVICE_LABEL[head.service]}
-                    </p>
-                  </div>
-                  <p className="shrink-0 text-sm font-bold text-zinc-900">{money(total)}</p>
-                </summary>
-                <div className="space-y-1 border-t border-zinc-200/80 px-2 pb-2 pt-2">
-                  {rows.map((r) => (
-                    <div key={r.id} className="flex justify-between gap-2 text-xs">
-                      <span className="min-w-0 truncate font-medium text-zinc-700">
-                        {r.sourceProductName ?? SERVICE_LABEL[r.service]}
-                      </span>
-                      <span className="shrink-0 text-zinc-500 tabular-nums">
-                        {r.peopleCount} ud · {money(r.totalCostEur)}
-                      </span>
-                    </div>
-                  ))}
-                  {head.notes.trim() ? <p className="text-xs italic text-zinc-400">Nota: {head.notes}</p> : null}
-                </div>
-              </details>
-            );
-          })}
-          {activeRecords.length === 0 ? <p className="text-sm text-zinc-500">Todavía no hay registros.</p> : null}
-        </div>
-        {message ? (
-          <p
-            className={
-              messageTone === 'success' ? 'mt-2 text-sm font-semibold text-emerald-800' : 'mt-2 text-sm text-[#B91C1C]'
-            }
-          >
-            {message}
-          </p>
-        ) : null}
-      </section>
-
       {productPickerOpen ? (
         <div className="fixed inset-0 z-[100] flex items-end justify-center sm:items-center sm:p-4" role="dialog" aria-modal="true" aria-label="Buscar artículo">
           <button
@@ -679,14 +677,14 @@ export default function ComidaPersonalPage() {
               </button>
             </div>
             <div className="px-4 pt-3">
-              <div className="flex items-center gap-2 rounded-xl border-2 border-zinc-900 bg-zinc-950 px-3 shadow-[inset_0_0_0_1px_rgba(211,47,47,0.85)]">
-                <Search className="h-4 w-4 shrink-0 text-white/70" aria-hidden />
+              <div className="flex items-center gap-2 rounded-xl border border-zinc-300 bg-zinc-50 px-3 ring-1 ring-zinc-200">
+                <Search className="h-4 w-4 shrink-0 text-zinc-500" aria-hidden />
                 <input
                   autoFocus
                   value={pickerSearch}
                   onChange={(e) => setPickerSearch(e.target.value)}
                   placeholder="Escribe para filtrar…"
-                  className="h-11 min-w-0 flex-1 bg-transparent text-sm font-medium text-white outline-none placeholder:text-white/40"
+                  className="h-11 min-w-0 flex-1 bg-transparent text-sm font-medium text-zinc-900 outline-none placeholder:text-zinc-400"
                 />
               </div>
             </div>
@@ -697,7 +695,13 @@ export default function ComidaPersonalPage() {
                 <ul className="space-y-2">
                   {pickerProducts.map((p) => (
                     <li key={p.id}>
-                      <div className="flex items-center justify-between gap-2 rounded-xl bg-zinc-50 p-2.5 ring-1 ring-zinc-200">
+                      <div
+                        className={`flex items-center justify-between gap-2 rounded-xl p-2.5 ring-1 transition-colors duration-300 ${
+                          addFlashId === p.id
+                            ? 'bg-emerald-50 ring-emerald-400/80'
+                            : 'bg-zinc-50 ring-zinc-200'
+                        }`}
+                      >
                         <div className="min-w-0 pr-2">
                           <p className="truncate text-sm font-semibold text-zinc-900">{p.name}</p>
                           <p className="text-xs text-zinc-500">
@@ -706,7 +710,7 @@ export default function ComidaPersonalPage() {
                         </div>
                         <button
                           type="button"
-                          onClick={() => setProductQty(p.id, (qtyByProductId[p.id] ?? 0) + 1)}
+                          onClick={() => addOneToBasket(p.id)}
                           className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-[#D32F2F] text-white shadow-sm"
                           aria-label={`Añadir ${p.name}`}
                         >
