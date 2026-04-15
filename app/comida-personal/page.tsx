@@ -13,6 +13,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
+import { FileDown } from 'lucide-react';
 import { useAuth } from '@/components/AuthProvider';
 import {
   createStaffMealRecord,
@@ -20,6 +21,8 @@ import {
   type StaffMealRecord,
   type StaffMealService,
 } from '@/lib/comida-personal-supabase';
+import { downloadStaffMealReportPdf } from '@/lib/comida-personal-report-pdf';
+import { formatLocalHeaderName } from '@/lib/local-display-name';
 import { getSupabaseClient } from '@/lib/supabase-client';
 
 const QUICK_ACTIONS: Array<{ label: string; service: StaffMealService; unitCostEur: number }> = [
@@ -67,11 +70,17 @@ function money(v: number) {
   return `${(Math.round(v * 100) / 100).toFixed(2)} €`;
 }
 
+function ymFromDate(d: Date) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+
 export default function ComidaPersonalPage() {
-  const { localId } = useAuth();
+  const { localId, localName, localCode, displayName, loginUsername, email } = useAuth();
   const [loading, setLoading] = React.useState(false);
   const [message, setMessage] = React.useState<string | null>(null);
+  const [messageTone, setMessageTone] = React.useState<'error' | 'success'>('error');
   const [records, setRecords] = React.useState<StaffMealRecord[]>([]);
+  const [reportMonthYm, setReportMonthYm] = React.useState(() => ymFromDate(new Date()));
   const [mealDate, setMealDate] = React.useState(() => ymd(new Date()));
   const [service, setService] = React.useState<StaffMealService>('comida');
   const [peopleCount, setPeopleCount] = React.useState('1');
@@ -85,11 +94,12 @@ export default function ComidaPersonalPage() {
     setLoading(true);
     setMessage(null);
     const today = new Date();
-    const from = addDays(today, -89);
+    const from = addDays(today, -460);
     try {
       const rows = await fetchStaffMealRecords(supabase, localId, ymd(from), ymd(today));
       setRecords(rows);
     } catch (err) {
+      setMessageTone('error');
       setMessage(err instanceof Error ? err.message : 'No se pudo cargar comida de personal.');
     } finally {
       setLoading(false);
@@ -114,13 +124,35 @@ export default function ComidaPersonalPage() {
           notes: input.notes,
         });
         setRecords((prev) => [inserted, ...prev]);
+        setMessageTone('success');
         setMessage('Registro guardado.');
       } catch (err) {
+        setMessageTone('error');
         setMessage(err instanceof Error ? err.message : 'No se pudo guardar el registro.');
       }
     },
     [localId, mealDate],
   );
+
+  const exportMonthPdf = React.useCallback(() => {
+    const localLabel =
+      formatLocalHeaderName(localName ?? localCode) ?? localName ?? localCode ?? 'Local';
+    const generatedBy =
+      displayName?.trim() || loginUsername?.trim() || email?.trim() || undefined;
+    try {
+      downloadStaffMealReportPdf({
+        localLabel,
+        monthYm: reportMonthYm,
+        records,
+        generatedByLabel: generatedBy,
+      });
+      setMessageTone('success');
+      setMessage('PDF listo. Revisa descargas.');
+    } catch (err) {
+      setMessageTone('error');
+      setMessage(err instanceof Error ? err.message : 'No se pudo generar el PDF.');
+    }
+  }, [displayName, email, localCode, localName, loginUsername, records, reportMonthYm]);
 
   const activeRecords = React.useMemo(() => records.filter((r) => r.voidedAt == null), [records]);
   const todayYmd = React.useMemo(() => ymd(new Date()), []);
@@ -246,6 +278,28 @@ export default function ComidaPersonalPage() {
         </button>
       </section>
 
+      <section className="rounded-2xl bg-white p-4 ring-1 ring-zinc-200">
+        <p className="text-sm font-bold text-zinc-800">Informe mensual PDF</p>
+        <p className="mt-1 text-xs text-zinc-500">
+          Documento para dirección: KPIs, reparto por servicio, evolución diaria del mes y detalle de líneas. Solo salida PDF.
+        </p>
+        <label className="mt-3 block text-xs font-semibold uppercase tracking-wide text-zinc-500">Mes del informe</label>
+        <input
+          type="month"
+          value={reportMonthYm}
+          onChange={(e) => setReportMonthYm(e.target.value)}
+          className="mt-2 h-11 w-full rounded-xl border border-zinc-300 bg-white px-3 text-sm text-zinc-900 outline-none"
+        />
+        <button
+          type="button"
+          onClick={exportMonthPdf}
+          className="mt-3 flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-zinc-950 px-3 text-sm font-bold text-white shadow-[inset_0_0_0_1px_rgba(211,47,47,0.85)] outline-none ring-1 ring-black/10 hover:bg-zinc-900 focus-visible:ring-2 focus-visible:ring-[#D32F2F]/50"
+        >
+          <FileDown className="h-4 w-4 shrink-0" aria-hidden />
+          Descargar PDF del mes
+        </button>
+      </section>
+
       <section className="grid grid-cols-2 gap-2">
         <div className="rounded-2xl bg-white p-3 ring-1 ring-zinc-200">
           <p className="text-[11px] uppercase tracking-wide text-zinc-500">Hoy</p>
@@ -273,7 +327,7 @@ export default function ComidaPersonalPage() {
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis dataKey="day" tick={{ fontSize: 10 }} />
               <YAxis tick={{ fontSize: 10 }} />
-              <Tooltip formatter={(value: number) => money(value)} />
+              <Tooltip formatter={(value) => money(Number(value ?? 0))} />
               <Bar dataKey="total" fill="#D32F2F" radius={[6, 6, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
@@ -293,7 +347,7 @@ export default function ComidaPersonalPage() {
                     <Cell key={entry.service} fill={entry.color} />
                   ))}
                 </Pie>
-                <Tooltip formatter={(value: number) => money(value)} />
+                <Tooltip formatter={(value) => money(Number(value ?? 0))} />
               </PieChart>
             </ResponsiveContainer>
           )}
@@ -328,7 +382,15 @@ export default function ComidaPersonalPage() {
           ))}
           {activeRecords.length === 0 ? <p className="text-sm text-zinc-500">Todavía no hay registros.</p> : null}
         </div>
-        {message ? <p className="mt-2 text-sm text-[#B91C1C]">{message}</p> : null}
+        {message ? (
+          <p
+            className={
+              messageTone === 'success' ? 'mt-2 text-sm font-semibold text-emerald-800' : 'mt-2 text-sm text-[#B91C1C]'
+            }
+          >
+            {message}
+          </p>
+        ) : null}
       </section>
     </div>
   );
