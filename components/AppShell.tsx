@@ -45,6 +45,7 @@ function titleForPath(pathname: string | null) {
   if (pathname.startsWith('/inventario')) return 'Inventario';
   if (pathname.startsWith('/escandallos/recetas')) return 'Recetas';
   if (pathname.startsWith('/escandallos')) return 'Escandallos';
+  if (pathname.startsWith('/comida-personal')) return 'Comida de personal';
   if (pathname.startsWith('/chat')) return 'Chat del local';
   if (pathname === '/appcc') return 'APPCC';
   if (pathname.startsWith('/appcc/temperaturas')) return 'Temperaturas';
@@ -81,10 +82,10 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       { href: '/appcc', label: 'APPCC', Icon: ShieldCheck },
       { href: '/inventario', label: 'Inventario', Icon: ClipboardList },
       { href: '/escandallos', label: 'Escandallos', Icon: Calculator },
+      { href: '/comida-personal', label: 'Comida de personal', Icon: UtensilsCrossed },
       { href: '/chat', label: 'Chat', Icon: MessageCircle },
       { label: 'Cocina central', Icon: ChefHat, comingSoon: true },
       { label: 'Horarios y fichaje', Icon: CalendarDays, comingSoon: true },
-      { label: 'Comida de personal', Icon: UtensilsCrossed, comingSoon: true },
     ],
     [showPedidos],
   );

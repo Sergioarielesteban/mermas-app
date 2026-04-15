@@ -142,10 +142,11 @@ export default function PanelControlPage() {
           Icon={CalendarDays}
         />
         <HubTile
-          onClick={() => onComingSoonModule('Comida de personal')}
+          href="/comida-personal"
           label="Comida de personal"
-          sub={COMING_SOON_SUB}
+          sub="Registro rápido y coste interno"
           Icon={UtensilsCrossed}
+          tone="red"
         />
       </div>
     </div>
