@@ -182,7 +182,7 @@ export default function AppccEquiposPage() {
     ) {
       return;
     }
-    if (!requestDeleteSecurityPin()) {
+    if (!(await requestDeleteSecurityPin())) {
       setBanner('Clave de seguridad incorrecta.');
       return;
     }

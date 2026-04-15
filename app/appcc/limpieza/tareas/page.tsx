@@ -125,7 +125,7 @@ export default function AppccLimpiezaTareasPage() {
     if (!localId || !supabaseOk) return;
     const n = tasksByCat.get(cat.id)?.length ?? 0;
     if (!window.confirm(`¿Eliminar «${cat.name}»${n ? ` y sus ${n} tareas` : ''}?`)) return;
-    if (!requestDeleteSecurityPin()) {
+    if (!(await requestDeleteSecurityPin())) {
       setBanner('Clave de seguridad incorrecta.');
       return;
     }
@@ -183,7 +183,7 @@ export default function AppccLimpiezaTareasPage() {
   const handleDeleteTask = async (task: AppccCleaningTaskRow) => {
     if (!localId || !supabaseOk) return;
     if (!window.confirm(`¿Eliminar la tarea «${task.title}» y su historial de marcas?`)) return;
-    if (!requestDeleteSecurityPin()) {
+    if (!(await requestDeleteSecurityPin())) {
       setBanner('Clave de seguridad incorrecta.');
       return;
     }

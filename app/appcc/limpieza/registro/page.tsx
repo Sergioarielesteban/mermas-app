@@ -97,7 +97,7 @@ function SlotRow({
   const removeMark = async () => {
     if (!log) return;
     setErr(null);
-    if (!requestDeleteSecurityPin()) {
+    if (!(await requestDeleteSecurityPin())) {
       setErr('Clave de seguridad incorrecta.');
       return;
     }

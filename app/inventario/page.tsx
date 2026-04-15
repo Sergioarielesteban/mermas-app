@@ -30,7 +30,7 @@ import {
   updateInventoryItemLine,
   upsertInventoryMonthSnapshot,
 } from '@/lib/inventory-supabase';
-import { DELETE_BLOCKED_INVENTARIO, requestDeleteSecurityPin } from '@/lib/delete-security';
+import { requestDeleteSecurityPin } from '@/lib/delete-security';
 
 function parseDecimal(raw: string): number | null {
   const t = String(raw).trim().replace(/\s/g, '').replace(',', '.');
@@ -578,11 +578,44 @@ export default function InventarioPage() {
   };
 
   const removeLine = async (row: InventoryItem) => {
-    if (!requestDeleteSecurityPin()) {
+    if (!(await requestDeleteSecurityPin())) {
       setBanner('Clave de seguridad incorrecta.');
       return;
     }
-    setBanner(DELETE_BLOCKED_INVENTARIO);
+    if (!localId || !supabaseOk) return;
+    if (
+      !window.confirm(
+        `¿Quitar «${row.name}» del inventario? Se guardará una copia en Historial antes de borrar la línea.`,
+      )
+    ) {
+      return;
+    }
+    const supabase = getSupabaseClient()!;
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    setBusyId(row.id);
+    setBanner(null);
+    try {
+      await insertInventoryHistorySnapshot(supabase, {
+        localId,
+        eventType: 'before_line_delete',
+        summary: `Antes de quitar: ${row.name}`,
+        lines,
+        userId: user?.id ?? null,
+      });
+      await deleteInventoryItemLine(supabase, localId, row.id);
+      await load();
+    } catch (e) {
+      const raw = e instanceof Error ? e.message : '';
+      if (raw.includes('inventory_history') || raw.includes('does not exist')) {
+        setBanner('Ejecuta supabase-inventory-history.sql en Supabase para usar historial y quitar líneas con seguridad.');
+      } else {
+        setBanner(humanizeClientError(e, 'Error al eliminar.'));
+      }
+    } finally {
+      setBusyId(null);
+    }
   };
 
   const finishInventoryToHistory = async () => {
@@ -627,27 +660,139 @@ export default function InventarioPage() {
   };
 
   const resetInventoryClearLines = async () => {
-    if (!requestDeleteSecurityPin()) {
+    if (!(await requestDeleteSecurityPin())) {
       setBanner('Clave de seguridad incorrecta.');
       return;
     }
-    setBanner(DELETE_BLOCKED_INVENTARIO);
+    if (!localId || !supabaseOk) return;
+    if (lines.length === 0) {
+      setBanner('No hay líneas en el inventario.');
+      return;
+    }
+    const hasSnap = snapshots.some((s) => s.year_month === closingYearMonth);
+    if (!hasSnap) {
+      const saveFirst = window.confirm(
+        `No hay cierre mensual guardado para ${closingYearMonth} en los gráficos. Pulsa Aceptar para descargar el PDF, guardar ese cierre e historial, y vaciar las líneas. (Si el inventario es de otro mes, cambia primero «Mes del cierre» arriba.)`,
+      );
+      if (saveFirst) {
+        const supabase = getSupabaseClient()!;
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
+        setResetInventoryBusy(true);
+        setBanner(null);
+        try {
+          await saveMonthClosureToSupabase(closingYearMonth, { recordHistory: true, userId: user?.id ?? null });
+          await deleteAllInventoryLinesForLocal(supabase, localId);
+          await load();
+          setBanner(`Cierre ${closingYearMonth} guardado y líneas vaciadas.`);
+        } catch (e) {
+          setBanner(humanizeClientError(e, 'Error al guardar cierre o reiniciar.'));
+        } finally {
+          setResetInventoryBusy(false);
+        }
+        return;
+      }
+      if (
+        !window.confirm(
+          'Vas a vaciar las líneas sin guardar cierre en los informes ni PDF. ¿Continuar de todos modos?',
+        )
+      ) {
+        return;
+      }
+    } else if (
+      !window.confirm(
+        'Se borrarán todas las líneas de inventario de este local. El valor total quedará en 0. El catálogo no cambia. ¿Continuar?',
+      )
+    ) {
+      return;
+    }
+    const supabase = getSupabaseClient()!;
+    setResetInventoryBusy(true);
+    setBanner(null);
+    try {
+      await deleteAllInventoryLinesForLocal(supabase, localId);
+      await load();
+    } catch (e) {
+      setBanner(humanizeClientError(e, 'Error al reiniciar.'));
+    } finally {
+      setResetInventoryBusy(false);
+    }
   };
 
   const removeCatalogCategory = async (cat: InventoryCatalogCategory) => {
-    if (!requestDeleteSecurityPin()) {
+    if (!(await requestDeleteSecurityPin())) {
       setBanner('Clave de seguridad incorrecta.');
       return;
     }
-    setBanner(DELETE_BLOCKED_INVENTARIO);
+    if (!localId || !supabaseOk) return;
+    const nItems = catalogItems.filter((i) => i.catalog_category_id === cat.id).length;
+    if (
+      !window.confirm(
+        `¿Ocultar la categoría «${cat.name}» y sus ${nItems} artículo(s) solo en el catálogo de tu local? ` +
+          'Dejarán de mostrarse aquí y se borrarán las líneas de inventario vinculadas en tu local. Otros locales no se ven afectados. Esta acción no se puede deshacer desde la app.',
+      )
+    ) {
+      return;
+    }
+    const supabase = getSupabaseClient()!;
+    setBusyDeletingCategoryId(cat.id);
+    setBanner(null);
+    try {
+      await deactivateInventoryCatalogCategory(supabase, { categoryId: cat.id, localId: localId });
+      setCatalogDetailOpen({});
+      await load();
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Error al eliminar la categoría.';
+      if (msg.includes('policy') || msg.includes('permission') || msg.includes('42501')) {
+        setBanner(
+          'Falta permiso en el catálogo. Ejecuta supabase-inventory-catalog-per-local.sql (o las políticas RLS de inventario) en Supabase.',
+        );
+      } else {
+        setBanner(humanizeClientError(e, msg));
+      }
+    } finally {
+      setBusyDeletingCategoryId(null);
+    }
   };
 
   const removeCatalogItem = async (it: InventoryCatalogItem) => {
-    if (!requestDeleteSecurityPin()) {
+    if (!(await requestDeleteSecurityPin())) {
       setBanner('Clave de seguridad incorrecta.');
       return;
     }
-    setBanner(DELETE_BLOCKED_INVENTARIO);
+    if (!localId || !supabaseOk) return;
+    if (
+      !window.confirm(
+        `¿Ocultar «${it.name}» solo en el catálogo de tu local? ` +
+          'Dejará de mostrarse aquí y se borrará la línea de inventario vinculada en tu local, si existe. Otros locales no se ven afectados. Esta acción no se puede deshacer desde la app.',
+      )
+    ) {
+      return;
+    }
+    const supabase = getSupabaseClient()!;
+    setBusyDeletingCatalogItemId(it.id);
+    setBanner(null);
+    try {
+      await deactivateInventoryCatalogItem(supabase, { catalogItemId: it.id, localId: localId });
+      setCatalogDetailOpen((prev) => {
+        const next = { ...prev };
+        delete next[it.id];
+        return next;
+      });
+      await load();
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Error al eliminar el artículo.';
+      if (msg.includes('policy') || msg.includes('permission') || msg.includes('42501')) {
+        setBanner(
+          'Falta permiso en el catálogo. Ejecuta supabase-inventory-catalog-per-local.sql (o las políticas RLS de inventario) en Supabase.',
+        );
+      } else {
+        setBanner(humanizeClientError(e, msg));
+      }
+    } finally {
+      setBusyDeletingCatalogItemId(null);
+    }
   };
 
   const disabled = !localId || !profileReady || !supabaseOk || loading;

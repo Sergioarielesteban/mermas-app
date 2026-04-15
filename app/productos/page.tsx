@@ -117,10 +117,10 @@ export default function ProductosPage() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => {
+                  onClick={async () => {
                     const confirmed = window.confirm(`¿Eliminar "${p.name}"?`);
                     if (!confirmed) return;
-                    if (!requestDeleteSecurityPin()) {
+                    if (!(await requestDeleteSecurityPin())) {
                       setMessage('Clave de seguridad incorrecta.');
                       return;
                     }
