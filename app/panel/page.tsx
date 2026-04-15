@@ -114,7 +114,7 @@ export default function PanelControlPage() {
           Icon={ShieldCheck}
           tone="red"
         />
-        <HubTile href="/inventario" label="Inventario" sub="Stock y valor por local" Icon={ClipboardList} />
+        <HubTile href="/inventario" label="Inventario" sub="Stock y valor por local" Icon={ClipboardList} tone="red" />
         <HubTile
           href="/chat"
           label="Chat"
