@@ -767,6 +767,62 @@ export default function ComidaPersonalPage() {
         </div>
       </section>
 
+      {workerManageOpen ? (
+        <div
+          className="fixed inset-0 z-[101] flex flex-col sm:items-center sm:justify-center sm:bg-black/45 sm:p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Quitar fichas de trabajador"
+        >
+          <button
+            type="button"
+            aria-label="Cerrar"
+            className="absolute inset-0 hidden bg-black/45 sm:block"
+            onClick={() => setWorkerManageOpen(false)}
+          />
+          <div className="relative z-[1] flex min-h-0 w-full max-w-lg flex-1 flex-col overflow-hidden bg-white shadow-2xl ring-zinc-200 max-sm:h-[100dvh] max-sm:max-h-[100dvh] max-sm:rounded-none max-sm:pt-[env(safe-area-inset-top,0px)] sm:max-h-[min(85vh,44rem)] sm:flex-none sm:rounded-3xl sm:ring-1">
+            <div className="flex shrink-0 items-center justify-between gap-2 border-b border-zinc-100 px-4 py-3">
+              <p className="text-sm font-black text-zinc-900">Quitar fichas</p>
+              <button
+                type="button"
+                onClick={() => setWorkerManageOpen(false)}
+                className="grid h-9 w-9 place-items-center rounded-full bg-zinc-100 text-zinc-700"
+                aria-label="Cerrar"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <p className="shrink-0 px-4 pt-2 text-xs leading-snug text-zinc-500">
+              Pulsa la papelera y confirma con tu PIN. Los consumos ya guardados no se borran.
+            </p>
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-3">
+              {workers.length === 0 ? (
+                <p className="py-8 text-center text-sm text-zinc-500">No hay fichas creadas.</p>
+              ) : (
+                <ul className="space-y-2">
+                  {workers.map((w) => (
+                    <li
+                      key={w.id}
+                      className="flex items-center justify-between gap-2 rounded-xl bg-zinc-50 px-3 py-2.5 ring-1 ring-zinc-200"
+                    >
+                      <span className="min-w-0 truncate text-sm font-semibold text-zinc-900">{w.name}</span>
+                      <button
+                        type="button"
+                        onClick={() => void removeWorker(w)}
+                        className="grid h-9 w-9 shrink-0 place-items-center rounded-lg border border-zinc-200 bg-white text-zinc-500 hover:border-red-200 hover:bg-red-50 hover:text-red-700"
+                        aria-label={`Quitar ficha ${w.name}`}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       {productPickerOpen ? (
         <div
           className="fixed inset-0 z-[100] flex flex-col sm:items-center sm:justify-center sm:bg-black/45 sm:p-4"
