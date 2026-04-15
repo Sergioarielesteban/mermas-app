@@ -140,8 +140,12 @@ export default function ProveedoresPage() {
   const [editingProductId, setEditingProductId] = React.useState<string | null>(null);
   const [expandedSupplierId, setExpandedSupplierId] = React.useState<string | null>(null);
   const [supplierDrafts, setSupplierDrafts] = React.useState<
-    Record<string, { name: string; contact: string; deliveryCycleWeekdays: number[] }>
+    Record<
+      string,
+      { name: string; contact: string; deliveryCycleWeekdays: number[]; deliveryExceptionDates: string[] }
+    >
   >({});
+  const [exceptionInputBySupplier, setExceptionInputBySupplier] = React.useState<Record<string, string>>({});
   const [productDrafts, setProductDrafts] = React.useState<Record<string, ProductDraft>>({});
   const [bulkImportBusy, setBulkImportBusy] = React.useState(false);
 
@@ -155,6 +159,7 @@ export default function ProveedoresPage() {
           name: supplier.name,
           contact: supplier.contact ?? '',
           deliveryCycleWeekdays: [...(supplier.deliveryCycleWeekdays ?? [])],
+          deliveryExceptionDates: [...(supplier.deliveryExceptionDates ?? [])],
         };
       }
       return next;
@@ -266,6 +271,7 @@ export default function ProveedoresPage() {
               deliveryCycleWeekdays: normalizeDeliveryCycleWeekdays(
                 (created as { delivery_cycle_weekdays?: number[] | null }).delivery_cycle_weekdays,
               ),
+              deliveryExceptionDates: [],
               products: [],
             };
             suppliersByName.set(key, supplier);
@@ -358,6 +364,7 @@ export default function ProveedoresPage() {
       name: normalizeUpper(name),
       contact: draft?.contact ?? '',
       deliveryCycleWeekdays: draft?.deliveryCycleWeekdays ?? [],
+      deliveryExceptionDates: draft?.deliveryExceptionDates ?? [],
     })
       .then(() => {
         setEditingSupplierId(null);
@@ -655,6 +662,8 @@ export default function ProveedoresPage() {
                         contact: prev[supplier.id]?.contact ?? supplier.contact ?? '',
                         deliveryCycleWeekdays:
                           prev[supplier.id]?.deliveryCycleWeekdays ?? [...(supplier.deliveryCycleWeekdays ?? [])],
+                        deliveryExceptionDates:
+                          prev[supplier.id]?.deliveryExceptionDates ?? [...(supplier.deliveryExceptionDates ?? [])],
                       },
                     }));
                   }}
@@ -683,6 +692,7 @@ export default function ProveedoresPage() {
                         name: supplier.name,
                         contact: supplier.contact ?? '',
                         deliveryCycleWeekdays: [...(supplier.deliveryCycleWeekdays ?? [])],
+                        deliveryExceptionDates: [...(supplier.deliveryExceptionDates ?? [])],
                       }),
                       name: e.target.value,
                     },
@@ -701,6 +711,7 @@ export default function ProveedoresPage() {
                         name: supplier.name,
                         contact: supplier.contact ?? '',
                         deliveryCycleWeekdays: [...(supplier.deliveryCycleWeekdays ?? [])],
+                        deliveryExceptionDates: [...(supplier.deliveryExceptionDates ?? [])],
                       }),
                       contact: e.target.value,
                     },
@@ -729,6 +740,7 @@ export default function ProveedoresPage() {
                               name: supplier.name,
                               contact: supplier.contact ?? '',
                               deliveryCycleWeekdays: [...(supplier.deliveryCycleWeekdays ?? [])],
+                              deliveryExceptionDates: [...(supplier.deliveryExceptionDates ?? [])],
                             };
                             const set = new Set(cur.deliveryCycleWeekdays);
                             if (set.has(day)) set.delete(day);
@@ -754,6 +766,78 @@ export default function ProveedoresPage() {
                     );
                   })}
                 </div>
+              </div>
+              <div>
+                <p className="text-[11px] font-semibold text-zinc-700">Excepciones de reparto (festivos)</p>
+                <p className="mt-0.5 text-[10px] text-zinc-500">
+                  Si una semana cambia el día (ej. jueves festivo → miércoles), añádelo aquí.
+                </p>
+                <div className="mt-2 flex items-center gap-2">
+                  <input
+                    type="date"
+                    value={exceptionInputBySupplier[supplier.id] ?? ''}
+                    onChange={(e) =>
+                      setExceptionInputBySupplier((prev) => ({ ...prev, [supplier.id]: e.target.value }))
+                    }
+                    className="h-9 flex-1 rounded-lg border border-zinc-300 bg-white px-2 text-sm text-zinc-900 outline-none"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const v = (exceptionInputBySupplier[supplier.id] ?? '').trim();
+                      if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) return;
+                      setSupplierDrafts((prev) => {
+                        const cur = prev[supplier.id] ?? {
+                          name: supplier.name,
+                          contact: supplier.contact ?? '',
+                          deliveryCycleWeekdays: [...(supplier.deliveryCycleWeekdays ?? [])],
+                          deliveryExceptionDates: [...(supplier.deliveryExceptionDates ?? [])],
+                        };
+                        if (cur.deliveryExceptionDates.includes(v)) return prev;
+                        return {
+                          ...prev,
+                          [supplier.id]: {
+                            ...cur,
+                            deliveryExceptionDates: [...cur.deliveryExceptionDates, v].sort(),
+                          },
+                        };
+                      });
+                      setExceptionInputBySupplier((prev) => ({ ...prev, [supplier.id]: '' }));
+                    }}
+                    className="h-9 rounded-lg border border-zinc-300 bg-white px-3 text-xs font-semibold text-zinc-700"
+                  >
+                    Añadir
+                  </button>
+                </div>
+                {(supplierDrafts[supplier.id]?.deliveryExceptionDates ?? []).length > 0 ? (
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {(supplierDrafts[supplier.id]?.deliveryExceptionDates ?? []).map((d) => (
+                      <button
+                        key={d}
+                        type="button"
+                        onClick={() =>
+                          setSupplierDrafts((prev) => {
+                            const cur = prev[supplier.id];
+                            if (!cur) return prev;
+                            return {
+                              ...prev,
+                              [supplier.id]: {
+                                ...cur,
+                                deliveryExceptionDates: cur.deliveryExceptionDates.filter((x) => x !== d),
+                              },
+                            };
+                          })
+                        }
+                        className="rounded-lg border border-amber-300 bg-amber-50 px-2 py-1 text-[11px] font-semibold text-amber-900"
+                        title="Quitar excepción"
+                      >
+                        {new Date(`${d}T00:00:00`).toLocaleDateString('es-ES')} ×
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="mt-2 text-[10px] text-zinc-500">Sin excepciones guardadas.</p>
+                )}
               </div>
               <button
                 type="button"

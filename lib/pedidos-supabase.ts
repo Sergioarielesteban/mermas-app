@@ -1,5 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { normalizeDeliveryCycleWeekdays } from '@/lib/pedidos-coverage';
+import { normalizeDeliveryCycleWeekdays, normalizeDeliveryExceptionDates } from '@/lib/pedidos-coverage';
 import type { Unit } from '@/lib/types';
 
 /** Bandeja o caja: referencia kg por envase en catálogo; en recepción peso báscula opcional (no cambia el subtotal). */
@@ -100,6 +100,8 @@ export type PedidoSupplier = {
   contact: string;
   /** Días de reparto 0=dom..6=sáb. Vacío = cobertura 7 días al escalar PAR semanal. */
   deliveryCycleWeekdays: number[];
+  /** Fechas puntuales válidas de reparto (ej. festivo mueve Jue→Mié): YYYY-MM-DD. */
+  deliveryExceptionDates: string[];
   products: PedidoSupplierProduct[];
 };
 
@@ -157,6 +159,10 @@ type SupplierRow = {
   contact: string;
   delivery_cycle_weekdays?: number[] | null;
 };
+type SupplierDeliveryExceptionRow = {
+  supplier_id: string;
+  delivery_date: string;
+};
 type SupplierProductRow = {
   id: string;
   supplier_id: string;
@@ -210,6 +216,14 @@ function normalizeLabelUpper(value: string) {
   return value.trim().toUpperCase();
 }
 
+function isMissingDeliveryExceptionTableError(message: string): boolean {
+  const m = message.toLowerCase();
+  return (
+    m.includes('pedido_supplier_delivery_exceptions') &&
+    (m.includes('does not exist') || m.includes('not found') || m.includes('schema cache'))
+  );
+}
+
 export async function fetchSuppliersWithProducts(supabase: SupabaseClient, localId: string) {
   const { data: supplierRows, error: sErr } = await supabase
     .from('pedido_suppliers')
@@ -227,6 +241,20 @@ export async function fetchSuppliersWithProducts(supabase: SupabaseClient, local
     .eq('is_active', true)
     .order('name');
   if (pErr) throw new Error(pErr.message);
+
+  let exceptionRows: SupplierDeliveryExceptionRow[] = [];
+  {
+    const exQ = await supabase
+      .from('pedido_supplier_delivery_exceptions')
+      .select('supplier_id,delivery_date')
+      .eq('local_id', localId)
+      .order('delivery_date', { ascending: true });
+    if (exQ.error) {
+      if (!isMissingDeliveryExceptionTableError(exQ.error.message)) throw new Error(exQ.error.message);
+    } else {
+      exceptionRows = (exQ.data ?? []) as SupplierDeliveryExceptionRow[];
+    }
+  }
 
   const bySupplier = new Map<string, PedidoSupplierProduct[]>();
   for (const row of (productRows ?? []) as SupplierProductRow[]) {
@@ -254,11 +282,19 @@ export async function fetchSuppliersWithProducts(supabase: SupabaseClient, local
     bySupplier.set(row.supplier_id, list);
   }
 
+  const exBySupplier = new Map<string, string[]>();
+  for (const row of exceptionRows) {
+    const list = exBySupplier.get(row.supplier_id) ?? [];
+    list.push(String(row.delivery_date));
+    exBySupplier.set(row.supplier_id, list);
+  }
+
   const suppliers: PedidoSupplier[] = ((supplierRows ?? []) as SupplierRow[]).map((row) => ({
     id: row.id,
     name: row.name,
     contact: row.contact ?? '',
     deliveryCycleWeekdays: normalizeDeliveryCycleWeekdays(row.delivery_cycle_weekdays),
+    deliveryExceptionDates: normalizeDeliveryExceptionDates(exBySupplier.get(row.id) ?? []),
     products: bySupplier.get(row.id) ?? [],
   }));
   return suppliers;
@@ -290,7 +326,12 @@ export async function updateSupplier(
   supabase: SupabaseClient,
   localId: string,
   supplierId: string,
-  input: { name: string; contact: string; deliveryCycleWeekdays?: number[] },
+  input: {
+    name: string;
+    contact: string;
+    deliveryCycleWeekdays?: number[];
+    deliveryExceptionDates?: string[];
+  },
 ) {
   const row: Record<string, unknown> = {
     name: normalizeLabelUpper(input.name),
@@ -299,14 +340,34 @@ export async function updateSupplier(
   if (input.deliveryCycleWeekdays !== undefined) {
     row.delivery_cycle_weekdays = normalizeDeliveryCycleWeekdays(input.deliveryCycleWeekdays);
   }
-  const { data, error } = await supabase
-    .from('pedido_suppliers')
-    .update(row)
-    .eq('id', supplierId)
-    .eq('local_id', localId)
-    .select('id,name,contact,delivery_cycle_weekdays')
-    .single();
+  const { data, error } = await supabase.from('pedido_suppliers').update(row).eq('id', supplierId).eq('local_id', localId).select('id,name,contact,delivery_cycle_weekdays').single();
   if (error) throw new Error(error.message);
+
+  if (input.deliveryExceptionDates !== undefined) {
+    const dates = normalizeDeliveryExceptionDates(input.deliveryExceptionDates);
+    const del = await supabase
+      .from('pedido_supplier_delivery_exceptions')
+      .delete()
+      .eq('local_id', localId)
+      .eq('supplier_id', supplierId);
+    if (del.error && !isMissingDeliveryExceptionTableError(del.error.message)) {
+      throw new Error(del.error.message);
+    }
+    if (dates.length > 0) {
+      const ins = await supabase.from('pedido_supplier_delivery_exceptions').insert(
+        dates.map((d) => ({
+          local_id: localId,
+          supplier_id: supplierId,
+          delivery_date: d,
+          reason: 'excepcion-semanal',
+        })),
+      );
+      if (ins.error && !isMissingDeliveryExceptionTableError(ins.error.message)) {
+        throw new Error(ins.error.message);
+      }
+    }
+  }
+
   return data as SupplierRow;
 }
 

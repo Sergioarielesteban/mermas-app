@@ -253,6 +253,7 @@ export default function NuevoPedidoPage() {
     return coverageDaysUntilNextDelivery(
       deliveryDate,
       selectedSupplier.deliveryCycleWeekdays ?? [],
+      selectedSupplier.deliveryExceptionDates ?? [],
     );
   }, [deliveryDate, selectedSupplier]);
 
@@ -263,7 +264,16 @@ export default function NuevoPedidoPage() {
 
   const deliveryDayMismatch = React.useMemo(() => {
     if (!deliveryDate.trim() || !selectedSupplier) return false;
-    return !isDeliveryDateOnConfiguredCycle(deliveryDate, selectedSupplier.deliveryCycleWeekdays ?? []);
+    return !isDeliveryDateOnConfiguredCycle(
+      deliveryDate,
+      selectedSupplier.deliveryCycleWeekdays ?? [],
+      selectedSupplier.deliveryExceptionDates ?? [],
+    );
+  }, [deliveryDate, selectedSupplier]);
+
+  const selectedDateIsException = React.useMemo(() => {
+    if (!deliveryDate.trim() || !selectedSupplier) return false;
+    return (selectedSupplier.deliveryExceptionDates ?? []).includes(deliveryDate);
   }, [deliveryDate, selectedSupplier]);
 
   const supplierProductsBySupplier = React.useMemo(
@@ -664,9 +674,21 @@ export default function NuevoPedidoPage() {
           />
         </div>
         {selectedSupplier ? (
-          <p className="mt-3 text-[11px] text-zinc-500">
-            Reparto configurado: {formatDeliveryCycleSummary(selectedSupplier.deliveryCycleWeekdays ?? [])}
-          </p>
+          <div className="mt-3 space-y-1">
+            <p className="text-[11px] text-zinc-500">
+              Reparto configurado: {formatDeliveryCycleSummary(selectedSupplier.deliveryCycleWeekdays ?? [])}
+            </p>
+            {(selectedSupplier.deliveryExceptionDates ?? []).length > 0 ? (
+              <p className="text-[11px] text-zinc-500">
+                Excepciones activas: {(selectedSupplier.deliveryExceptionDates ?? []).length}
+              </p>
+            ) : null}
+            {selectedDateIsException ? (
+              <p className="text-[11px] font-semibold text-emerald-700">
+                Fecha excepcional válida para este proveedor.
+              </p>
+            ) : null}
+          </div>
         ) : null}
         {coverageRangeLabel ? (
           <div className="mt-3 rounded-xl border border-emerald-200 bg-emerald-50/90 p-3 text-[11px] text-emerald-950 ring-1 ring-emerald-100">

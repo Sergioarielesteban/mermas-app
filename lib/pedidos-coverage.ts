@@ -14,6 +14,15 @@ export function parseLocalDateYmd(ymd: string): Date | null {
   return dt;
 }
 
+/** Normaliza fechas YYYY-MM-DD únicas y ordenadas. */
+export function normalizeDeliveryExceptionDates(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  const dates = raw
+    .map((x) => String(x ?? '').trim())
+    .filter((s) => /^\d{4}-\d{2}-\d{2}$/.test(s) && parseLocalDateYmd(s) != null);
+  return [...new Set(dates)].sort();
+}
+
 /** Normaliza y ordena días 0–6 únicos. */
 export function normalizeDeliveryCycleWeekdays(raw: unknown): number[] {
   if (!Array.isArray(raw)) return [];
@@ -25,18 +34,53 @@ export function normalizeDeliveryCycleWeekdays(raw: unknown): number[] {
 
 /**
  * Días de cobertura desde la fecha de entrega (inclusive) hasta el día anterior al siguiente reparto.
- * Ciclo vacío → 7 días (una sola referencia semanal).
+ * Ciclo vacío → 7 días (una sola referencia semanal), salvo que exista excepción futura.
  */
-export function coverageDaysUntilNextDelivery(deliveryDateYmd: string, cycleWeekdays: number[]): number {
+export function coverageDaysUntilNextDelivery(
+  deliveryDateYmd: string,
+  cycleWeekdays: number[],
+  exceptionDates: string[] = [],
+): number {
   const start = parseLocalDateYmd(deliveryDateYmd);
   if (!start) return 7;
+  const next = nextDeliveryDateYmd(deliveryDateYmd, cycleWeekdays, exceptionDates);
+  if (!next) return 7;
+  const nextDate = parseLocalDateYmd(next);
+  if (!nextDate) return 7;
+  const diff = Math.round((nextDate.getTime() - start.getTime()) / 86400000);
+  return Math.max(1, Math.min(14, diff));
+}
+
+/** Próxima fecha de entrega posterior a `deliveryDateYmd` según ciclo o excepciones. */
+export function nextDeliveryDateYmd(
+  deliveryDateYmd: string,
+  cycleWeekdays: number[],
+  exceptionDates: string[] = [],
+): string | null {
+  const start = parseLocalDateYmd(deliveryDateYmd);
+  if (!start) return null;
   const cycle = normalizeDeliveryCycleWeekdays(cycleWeekdays);
-  if (cycle.length === 0) return 7;
-  const dow = start.getDay();
-  for (const w of cycle) {
-    if (w > dow) return w - dow;
+  const ex = normalizeDeliveryExceptionDates(exceptionDates);
+
+  const nextException = ex.find((d) => d > deliveryDateYmd) ?? null;
+  let nextCycleDate: string | null = null;
+  if (cycle.length > 0) {
+    const dow = start.getDay();
+    let delta = 7;
+    for (const w of cycle) {
+      const cand = w > dow ? w - dow : 7 - dow + w;
+      if (cand > 0 && cand < delta) delta = cand;
+    }
+    const d = new Date(start);
+    d.setDate(d.getDate() + delta);
+    nextCycleDate = [
+      String(d.getFullYear()).padStart(4, '0'),
+      String(d.getMonth() + 1).padStart(2, '0'),
+      String(d.getDate()).padStart(2, '0'),
+    ].join('-');
   }
-  return 7 - dow + cycle[0];
+  if (nextCycleDate && nextException) return nextCycleDate <= nextException ? nextCycleDate : nextException;
+  return nextCycleDate ?? nextException;
 }
 
 /** Escala una referencia semanal (7 días) al tramo actual. */
@@ -64,7 +108,13 @@ export function formatDeliveryCycleSummary(cycleWeekdays: number[]): string {
   return c.map((d) => WD_SHORT[d] ?? d).join(', ');
 }
 
-export function isDeliveryDateOnConfiguredCycle(deliveryDateYmd: string, cycleWeekdays: number[]): boolean {
+export function isDeliveryDateOnConfiguredCycle(
+  deliveryDateYmd: string,
+  cycleWeekdays: number[],
+  exceptionDates: string[] = [],
+): boolean {
+  const ex = normalizeDeliveryExceptionDates(exceptionDates);
+  if (ex.includes(deliveryDateYmd)) return true;
   const cycle = normalizeDeliveryCycleWeekdays(cycleWeekdays);
   if (cycle.length === 0) return true;
   const d = parseLocalDateYmd(deliveryDateYmd);
