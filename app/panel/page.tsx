@@ -12,7 +12,6 @@ import {
   MessageCircle,
   ShieldCheck,
   ShoppingCart,
-  Timer,
   UtensilsCrossed,
 } from 'lucide-react';
 import { CHEF_ONE_TAPER_LINE_CLASS } from '@/components/ChefOneGlowLine';
@@ -103,7 +102,7 @@ export default function PanelControlPage() {
         </div>
       ) : null}
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+      <div className="grid grid-cols-2 gap-4">
         <HubTile href="/dashboard" label="Mermas" sub="Registro y seguimiento" Icon={BookOpen} tone="red" />
         {showPedidos ? (
           <HubTile href="/pedidos" label="Pedidos" sub="Proveedores y recepción" Icon={ShoppingCart} tone="red" />
@@ -130,16 +129,10 @@ export default function PanelControlPage() {
           Icon={ChefHat}
         />
         <HubTile
-          onClick={() => onComingSoonModule('Horarios')}
-          label="Horarios"
+          onClick={() => onComingSoonModule('Horarios y fichaje')}
+          label="Horarios y fichaje"
           sub={COMING_SOON_SUB}
           Icon={CalendarDays}
-        />
-        <HubTile
-          onClick={() => onComingSoonModule('Fichaje')}
-          label="Fichaje"
-          sub={COMING_SOON_SUB}
-          Icon={Timer}
         />
         <HubTile
           onClick={() => onComingSoonModule('Comida de personal')}
