@@ -90,6 +90,7 @@ export default function ComidaPersonalPage() {
   const [workerId, setWorkerId] = React.useState('');
   const [newWorkerName, setNewWorkerName] = React.useState('');
   const [productPickerOpen, setProductPickerOpen] = React.useState(false);
+  const [workerManageOpen, setWorkerManageOpen] = React.useState(false);
   const [pickerSearch, setPickerSearch] = React.useState('');
   const [qtyByProductId, setQtyByProductId] = React.useState<Record<string, number>>({});
   const [notes, setNotes] = React.useState('');
@@ -342,10 +343,10 @@ export default function ComidaPersonalPage() {
         generatedByLabel: generatedBy,
       });
       setMessageTone('success');
-      setMessage('PDF listo. Revisa descargas.');
+      setMessage('Informe listo. Revisa descargas.');
     } catch (err) {
       setMessageTone('error');
-      setMessage(err instanceof Error ? err.message : 'No se pudo generar el PDF.');
+      setMessage(err instanceof Error ? err.message : 'No se pudo generar el informe.');
     }
   }, [displayName, email, localCode, localName, loginUsername, records, reportMonthYm]);
 
@@ -494,27 +495,18 @@ export default function ComidaPersonalPage() {
 
       <section className="rounded-2xl bg-white p-4 ring-1 ring-zinc-200">
         <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Trabajador</p>
-        <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-[1fr_auto]">
-          <select
-            value={workerId}
-            onChange={(e) => setWorkerId(e.target.value)}
-            className="h-12 min-h-[3rem] w-full rounded-xl border border-zinc-300 bg-white px-3 text-base font-medium text-zinc-900 outline-none focus:border-[#D32F2F]/60"
-          >
-            <option value="">Selecciona trabajador</option>
-            {workers.map((w) => (
-              <option key={w.id} value={w.id}>
-                {w.name}
-              </option>
-            ))}
-          </select>
-          <button
-            type="button"
-            onClick={() => void createWorker()}
-            className="h-12 min-h-[3rem] rounded-xl border border-zinc-300 bg-white px-4 text-sm font-bold text-zinc-800"
-          >
-            Crear trabajador
-          </button>
-        </div>
+        <select
+          value={workerId}
+          onChange={(e) => setWorkerId(e.target.value)}
+          className="mt-2 h-12 min-h-[3rem] w-full rounded-xl border border-zinc-300 bg-white px-3 text-base font-medium text-zinc-900 outline-none focus:border-[#D32F2F]/60"
+        >
+          <option value="">Selecciona trabajador</option>
+          {workers.map((w) => (
+            <option key={w.id} value={w.id}>
+              {w.name}
+            </option>
+          ))}
+        </select>
         <input
           value={newWorkerName}
           onChange={(e) => setNewWorkerName(e.target.value)}
@@ -527,29 +519,22 @@ export default function ComidaPersonalPage() {
             }
           }}
         />
-        {workers.length > 0 ? (
-          <div className="mt-3">
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-zinc-500">Fichas (quitar de la lista)</p>
-            <ul className="mt-1.5 space-y-1">
-              {workers.map((w) => (
-                <li
-                  key={w.id}
-                  className="flex items-center justify-between gap-2 rounded-lg bg-zinc-50 px-2 py-1.5 ring-1 ring-zinc-200"
-                >
-                  <span className="min-w-0 truncate text-sm font-medium text-zinc-800">{w.name}</span>
-                  <button
-                    type="button"
-                    onClick={() => void removeWorker(w)}
-                    className="grid h-8 w-8 shrink-0 place-items-center rounded-lg border border-zinc-200 bg-white text-zinc-500 hover:border-red-200 hover:bg-red-50 hover:text-red-700"
-                    aria-label={`Quitar ficha ${w.name}`}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </div>
-        ) : null}
+        <div className="mt-2 grid grid-cols-2 gap-2">
+          <button
+            type="button"
+            onClick={() => void createWorker()}
+            className="h-11 rounded-xl border border-zinc-300 bg-white px-2 text-xs font-bold text-zinc-800 sm:text-sm"
+          >
+            Crear trabajador
+          </button>
+          <button
+            type="button"
+            onClick={() => setWorkerManageOpen(true)}
+            className="h-11 rounded-xl border border-red-200 bg-white px-2 text-xs font-bold text-red-800 hover:bg-red-50 sm:text-sm"
+          >
+            Borrar trabajador
+          </button>
+        </div>
       </section>
 
       <section className="rounded-2xl bg-white p-4 ring-1 ring-zinc-200">
@@ -668,7 +653,7 @@ export default function ComidaPersonalPage() {
       </section>
 
       <section className="rounded-2xl bg-white p-4 ring-1 ring-zinc-200">
-        <p className="text-center text-sm font-bold text-zinc-800">Informe mensual PDF</p>
+        <p className="text-center text-sm font-bold text-zinc-800">Informe mensual</p>
         <div className="mt-3 flex flex-col items-center">
           <label className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Mes del informe</label>
           <input
@@ -684,7 +669,7 @@ export default function ComidaPersonalPage() {
           className="mt-3 flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-zinc-950 px-3 text-sm font-bold text-white shadow-[inset_0_0_0_1px_rgba(211,47,47,0.85)] outline-none ring-1 ring-black/10 hover:bg-zinc-900 focus-visible:ring-2 focus-visible:ring-[#D32F2F]/50"
         >
           <FileDown className="h-4 w-4 shrink-0" aria-hidden />
-          Descargar PDF del mes
+          Descargar informe
         </button>
       </section>
 
