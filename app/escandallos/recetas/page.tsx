@@ -14,11 +14,13 @@ import {
   fetchProcessedProductsForEscandallo,
   fetchEscandalloRecipes,
   fetchProductsForEscandallo,
+  escandalloRecipeUnitForRawProduct,
   foodCostPercentOfNetSale,
   insertEscandalloLinesBatch,
   insertEscandalloRecipe,
   insertProcessedProductForEscandallo,
   lineUnitPriceEur,
+  rawProductPickerSummaryLine,
   recipeTotalCostEur,
   saleNetPerUnitFromGross,
   updateEscandalloRecipe,
@@ -134,7 +136,9 @@ function draftRowsToPayloads(
       qty,
       unit:
         row.sourceType === 'raw'
-          ? raw?.unit ?? row.unit
+          ? raw
+            ? escandalloRecipeUnitForRawProduct(raw)
+            : row.unit
           : row.sourceType === 'processed'
             ? processed?.outputUnit ?? row.unit
             : row.unit,
@@ -268,7 +272,7 @@ function IngredientDraftEditor({
                     <p className="px-3 py-2 text-xs text-zinc-500">Sin resultados</p>
                   ) : (
                     filteredRaw(row.rawSearch).map((p) => {
-                      const lab = `${p.supplierName} · ${p.name} (${p.pricePerUnit.toFixed(2)} €/${p.unit})`;
+                      const lab = rawProductPickerSummaryLine(p);
                       return (
                         <button
                           key={p.id}
@@ -278,7 +282,7 @@ function IngredientDraftEditor({
                               rawId: p.id,
                               rawSearch: lab,
                               rawDropdownOpen: false,
-                              unit: p.unit,
+                              unit: escandalloRecipeUnitForRawProduct(p),
                             })
                           }
                           className="block w-full px-3 py-2 text-left text-xs text-zinc-800 hover:bg-zinc-50"
@@ -1181,7 +1185,10 @@ export default function EscandallosRecetasPage() {
 
         <div className="mt-6 border-t border-zinc-200 pt-4">
           <p className="text-[10px] font-bold uppercase text-zinc-500">Elaborado simple (1 crudo → transformado)</p>
-          <p className="mt-1 text-xs text-zinc-600">Se recalcula si cambia el precio del crudo en Proveedores.</p>
+          <p className="mt-1 text-xs text-zinc-600">
+            La entrada va en la misma unidad que el pedido (caja, kg…). Se recalcula si cambia el precio del crudo en
+            Proveedores.
+          </p>
           <div className="mt-2 space-y-2 rounded-xl bg-white p-3 ring-1 ring-zinc-100">
             <input
               value={procName}
@@ -1208,7 +1215,7 @@ export default function EscandallosRecetasPage() {
                     <p className="px-3 py-2 text-xs text-zinc-500">Sin resultados</p>
                   ) : (
                     filteredProcRawProducts.map((p) => {
-                      const label = `${p.supplierName} · ${p.name} (${p.pricePerUnit.toFixed(2)} €/${p.unit})`;
+                      const label = rawProductPickerSummaryLine(p);
                       return (
                         <button
                           key={p.id}

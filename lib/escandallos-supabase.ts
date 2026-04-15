@@ -55,7 +55,12 @@ export type EscandalloRawProduct = {
   supplierName: string;
   name: string;
   unit: Unit;
+  /** Precio por unidad de pedido (envase, kg…). */
   pricePerUnit: number;
+  /** Piezas de receta por cada unidad de pedido. 1 = el precio ya es €/unidad de receta. */
+  unitsPerPack: number;
+  /** Unidad en escandallo cuando unitsPerPack > 1. */
+  recipeUnit: Unit | null;
 };
 
 export type EscandalloProcessedProduct = {
@@ -109,6 +114,8 @@ type RawProductRow = {
   name: string;
   unit: string;
   price_per_unit: number;
+  units_per_pack?: number | null;
+  recipe_unit?: string | null;
   pedido_suppliers: { name: string } | { name: string }[] | null;
 };
 
@@ -228,19 +235,63 @@ export async function fetchProductsForEscandallo(
 ): Promise<EscandalloRawProduct[]> {
   const { data, error } = await supabase
     .from('pedido_supplier_products')
-    .select('id,supplier_id,name,unit,price_per_unit,pedido_suppliers(name)')
+    .select('id,supplier_id,name,unit,price_per_unit,units_per_pack,recipe_unit,pedido_suppliers(name)')
     .eq('local_id', localId)
     .eq('is_active', true)
     .order('name');
   if (error) throw new Error(error.message);
-  return ((data ?? []) as RawProductRow[]).map((r) => ({
-    id: r.id,
-    supplierId: r.supplier_id,
-    supplierName: Array.isArray(r.pedido_suppliers) ? r.pedido_suppliers[0]?.name ?? '-' : r.pedido_suppliers?.name ?? '-',
-    name: r.name,
-    unit: r.unit as Unit,
-    pricePerUnit: Number(r.price_per_unit),
-  }));
+  return ((data ?? []) as RawProductRow[]).map((r) => {
+    const packRaw = r.units_per_pack != null ? Number(r.units_per_pack) : 1;
+    const unitsPerPack = Number.isFinite(packRaw) && packRaw > 0 ? packRaw : 1;
+    const recipeUnit: Unit | null =
+      unitsPerPack > 1 && r.recipe_unit != null && String(r.recipe_unit).trim() !== ''
+        ? (String(r.recipe_unit) as Unit)
+        : null;
+    return {
+      id: r.id,
+      supplierId: r.supplier_id,
+      supplierName: Array.isArray(r.pedido_suppliers) ? r.pedido_suppliers[0]?.name ?? '-' : r.pedido_suppliers?.name ?? '-',
+      name: r.name,
+      unit: r.unit as Unit,
+      pricePerUnit: Number(r.price_per_unit),
+      unitsPerPack,
+      recipeUnit,
+    };
+  });
+}
+
+/** Unidad en la que se expresa la cantidad del ingrediente en escandallo (p. ej. ud sueltas si la compra es por caja). */
+export function escandalloRecipeUnitForRawProduct(p: EscandalloRawProduct): Unit {
+  const n = p.unitsPerPack > 0 ? p.unitsPerPack : 1;
+  if (n > 1) return p.recipeUnit ?? 'ud';
+  return p.unit;
+}
+
+/** € por unidad de receta (o € por unidad de compra si la línea va en envases). */
+export function rawSupplierLineUnitPriceEur(line: EscandalloLine, p: EscandalloRawProduct): number {
+  const packSize = p.unitsPerPack > 0 ? p.unitsPerPack : 1;
+  const recipeU = escandalloRecipeUnitForRawProduct(p);
+  if (line.unit === p.unit) {
+    return p.pricePerUnit;
+  }
+  if (line.unit === recipeU) {
+    return Math.round((p.pricePerUnit / packSize) * 10000) / 10000;
+  }
+  if (packSize > 1) {
+    return Math.round((p.pricePerUnit / packSize) * 10000) / 10000;
+  }
+  return p.pricePerUnit;
+}
+
+export function rawProductPickerSummaryLine(p: EscandalloRawProduct): string {
+  const pack = p.unitsPerPack > 0 ? p.unitsPerPack : 1;
+  const base = `${p.supplierName} · ${p.name}`;
+  if (pack > 1) {
+    const ru = p.recipeUnit ?? 'ud';
+    const each = p.pricePerUnit / pack;
+    return `${base} (${p.pricePerUnit.toFixed(2)} €/${p.unit} → ${each.toFixed(4)} €/${ru})`;
+  }
+  return `${base} (${p.pricePerUnit.toFixed(2)} €/${p.unit})`;
 }
 
 export async function fetchProcessedProductsForEscandallo(
@@ -595,7 +646,7 @@ export function lineUnitPriceEur(
   }
   if (line.sourceType === 'raw' && line.rawSupplierProductId) {
     const p = rawProductById.get(line.rawSupplierProductId);
-    if (p) return p.pricePerUnit;
+    if (p) return rawSupplierLineUnitPriceEur(line, p);
   }
   if (line.sourceType === 'processed' && line.processedProductId) {
     const p = processedById.get(line.processedProductId);

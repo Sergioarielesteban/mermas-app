@@ -73,7 +73,24 @@ function parseKgEstimate(raw: string) {
   return Math.round(value * 1000) / 1000;
 }
 
-type ProductDraft = { name: string; unit: Unit; price: string; vatRate: string; estimatedKg: string };
+/** Piezas usables en receta por envase; mínimo 1. */
+function parseUnitsPerPack(raw: string): number | null {
+  const normalized = raw.trim().replace(/\s/g, '').replace(',', '.');
+  if (normalized === '' || normalized === '0') return 1;
+  const value = Number(normalized);
+  if (!Number.isFinite(value) || value <= 0) return null;
+  return Math.round(value * 10000) / 10000;
+}
+
+type ProductDraft = {
+  name: string;
+  unit: Unit;
+  price: string;
+  vatRate: string;
+  estimatedKg: string;
+  unitsPerPack: string;
+  recipeUnit: Unit;
+};
 
 export default function ProveedoresPage() {
   const { localCode, localName, localId, email } = useAuth();
@@ -91,6 +108,8 @@ export default function ProveedoresPage() {
   const [productPrice, setProductPrice] = React.useState('');
   const [productEstimatedKg, setProductEstimatedKg] = React.useState('');
   const [productVat, setProductVat] = React.useState('0,21');
+  const [productUnitsPerPack, setProductUnitsPerPack] = React.useState('1');
+  const [productRecipeUnit, setProductRecipeUnit] = React.useState<Unit>('ud');
   const [editingSupplierId, setEditingSupplierId] = React.useState<string | null>(null);
   const [editingProductId, setEditingProductId] = React.useState<string | null>(null);
   const [expandedSupplierId, setExpandedSupplierId] = React.useState<string | null>(null);
@@ -121,6 +140,8 @@ export default function ProveedoresPage() {
               unitSupportsReceivedWeightKg(p.unit) && p.estimatedKgPerUnit != null && p.estimatedKgPerUnit > 0
                 ? String(p.estimatedKgPerUnit)
                 : '',
+            unitsPerPack: String((p.unitsPerPack ?? 1) >= 1 ? (p.unitsPerPack ?? 1) : 1),
+            recipeUnit: ((p.recipeUnit ?? 'ud') as Unit),
           };
         }
       }
@@ -248,6 +269,8 @@ export default function ProveedoresPage() {
     const vatRate = Number(productVat.replace(',', '.'));
     if (!name || !Number.isFinite(price) || price <= 0) return setMessage('Producto y precio válidos son obligatorios.');
     if (!Number.isFinite(vatRate) || vatRate < 0 || vatRate > 1) return setMessage('IVA inválido. Usa 0,21 o 0,10.');
+    const pack = parseUnitsPerPack(productUnitsPerPack);
+    if (pack == null) return setMessage('«Piezas por envase» debe ser un número mayor que 0 (ej. 40).');
     const supabase = getSupabaseClient();
     if (!supabase) return setMessage('Supabase no disponible en esta sesión.');
     let estimatedKgPerUnit: number | null = null;
@@ -263,12 +286,16 @@ export default function ProveedoresPage() {
       vatRate,
       parStock: 0,
       estimatedKgPerUnit,
+      unitsPerPack: pack,
+      recipeUnit: pack > 1 ? productRecipeUnit : null,
     })
       .then(() => {
         setProductName('');
         setProductPrice('');
         setProductEstimatedKg('');
         setProductVat('0,21');
+        setProductUnitsPerPack('1');
+        setProductRecipeUnit('ud');
         setMessage('Producto de proveedor guardado.');
         reload();
         dispatchPedidosDataChanged();
@@ -309,6 +336,8 @@ export default function ProveedoresPage() {
     if (!Number.isFinite(vatRate) || vatRate < 0 || vatRate > 1) {
       return setMessage('IVA inválido. Usa 0,21 o 0,10.');
     }
+    const pack = parseUnitsPerPack(draft.unitsPerPack ?? '1');
+    if (pack == null) return setMessage('«Piezas por envase» debe ser un número mayor que 0.');
     let estimatedKgPerUnit: number | null = null;
     if (unitSupportsReceivedWeightKg(draft.unit)) {
       const parsedKg = parseKgEstimate(draft.estimatedKg ?? '');
@@ -324,6 +353,8 @@ export default function ProveedoresPage() {
       vatRate,
       parStock: 0,
       estimatedKgPerUnit,
+      unitsPerPack: pack,
+      recipeUnit: pack > 1 ? draft.recipeUnit : null,
     })
       .then(() => {
         setEditingProductId(null);
@@ -458,7 +489,7 @@ export default function ProveedoresPage() {
             placeholder="Nombre producto"
             className="h-10 rounded-xl border border-zinc-300 bg-white px-3 text-sm text-zinc-900 placeholder:text-zinc-500 outline-none"
           />
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-4">
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
             <select
               value={productUnit}
               onChange={(e) => setProductUnit(e.target.value as Unit)}
@@ -475,7 +506,7 @@ export default function ProveedoresPage() {
             <input
               value={productPrice}
               onChange={(e) => setProductPrice(e.target.value)}
-              placeholder="Precio unidad"
+              placeholder="Precio por unidad de pedido"
               className="h-10 rounded-xl border border-zinc-300 bg-white px-3 text-sm text-zinc-900 placeholder:text-zinc-500 outline-none"
             />
             <input
@@ -485,6 +516,35 @@ export default function ProveedoresPage() {
               className="h-10 rounded-xl border border-zinc-300 bg-white px-3 text-sm text-zinc-900 placeholder:text-zinc-500 outline-none"
             />
           </div>
+          <input
+            value={productUnitsPerPack}
+            onChange={(e) => setProductUnitsPerPack(e.target.value)}
+            placeholder="Piezas por envase en receta (1 = ya es precio por pieza)"
+            title="Ej. 40 panes en la caja. 1 = el precio ya es por unidad de receta."
+            className="h-10 rounded-xl border border-zinc-300 bg-white px-3 text-sm text-zinc-900 placeholder:text-zinc-500 outline-none"
+          />
+          {parseUnitsPerPack(productUnitsPerPack) != null && parseUnitsPerPack(productUnitsPerPack)! > 1 ? (
+            <div>
+              <label className="text-xs font-semibold text-zinc-600">Unidad en escandallo (por pieza)</label>
+              <select
+                value={productRecipeUnit}
+                onChange={(e) => setProductRecipeUnit(e.target.value as Unit)}
+                className="mt-1 h-10 w-full rounded-xl border border-zinc-300 bg-white px-3 text-sm text-zinc-900 outline-none"
+              >
+                <option value="ud">ud</option>
+                <option value="kg">kg</option>
+                <option value="bolsa">bolsa</option>
+                <option value="racion">racion</option>
+                <option value="caja">caja</option>
+                <option value="paquete">paquete</option>
+                <option value="bandeja">bandeja</option>
+              </select>
+            </div>
+          ) : null}
+          <p className="text-xs text-zinc-500">
+            El precio es por la unidad de pedido (caja, kg…). Si un envase trae varias piezas, indica cuántas: el
+            escandallo usará el precio por pieza automáticamente.
+          </p>
           {unitSupportsReceivedWeightKg(productUnit) ? (
             <input
               value={productEstimatedKg}
@@ -611,6 +671,9 @@ export default function ProveedoresPage() {
                               (unitSupportsReceivedWeightKg(p.unit) && p.estimatedKgPerUnit != null && p.estimatedKgPerUnit > 0
                                 ? String(p.estimatedKgPerUnit)
                                 : ''),
+                            unitsPerPack:
+                              prev[p.id]?.unitsPerPack ?? String((p.unitsPerPack ?? 1) >= 1 ? (p.unitsPerPack ?? 1) : 1),
+                            recipeUnit: prev[p.id]?.recipeUnit ?? (p.recipeUnit ?? 'ud'),
                           },
                         }));
                       }}
@@ -629,6 +692,13 @@ export default function ProveedoresPage() {
                 </div>
                 <p className="pt-1 text-xs font-semibold text-zinc-600">
                   {p.pricePerUnit.toFixed(2)} €/{unitPriceCatalogSuffix[p.unit]} · IVA {(p.vatRate * 100).toFixed(0)}%
+                  {(p.unitsPerPack ?? 1) > 1 ? (
+                    <>
+                      {' '}
+                      · escandallo ~{(p.pricePerUnit / (p.unitsPerPack ?? 1)).toFixed(4)} €/
+                      {unitPriceCatalogSuffix[p.recipeUnit ?? 'ud']} (×{p.unitsPerPack ?? 1})
+                    </>
+                  ) : null}
                   {unitSupportsReceivedWeightKg(p.unit) && p.estimatedKgPerUnit != null && p.estimatedKgPerUnit > 0
                     ? ` · ~${p.estimatedKgPerUnit} kg/${p.unit}`
                     : ''}
@@ -641,7 +711,15 @@ export default function ProveedoresPage() {
                         setProductDrafts((prev) => ({
                           ...prev,
                           [p.id]: {
-                            ...(prev[p.id] ?? { name: '', unit: 'ud', price: '', vatRate: '0', estimatedKg: '' }),
+                            ...(prev[p.id] ?? {
+                              name: '',
+                              unit: 'ud',
+                              price: '',
+                              vatRate: '0',
+                              estimatedKg: '',
+                              unitsPerPack: '1',
+                              recipeUnit: 'ud' as Unit,
+                            }),
                             name: e.target.value,
                           },
                         }))
@@ -656,7 +734,15 @@ export default function ProveedoresPage() {
                           setProductDrafts((prev) => ({
                             ...prev,
                             [p.id]: {
-                              ...(prev[p.id] ?? { name: '', unit: 'ud', price: '', vatRate: '0', estimatedKg: '' }),
+                              ...(prev[p.id] ?? {
+                                name: '',
+                                unit: 'ud',
+                                price: '',
+                                vatRate: '0',
+                                estimatedKg: '',
+                                unitsPerPack: '1',
+                                recipeUnit: 'ud' as Unit,
+                              }),
                               unit: e.target.value as Unit,
                             },
                           }))
@@ -677,7 +763,15 @@ export default function ProveedoresPage() {
                           setProductDrafts((prev) => ({
                             ...prev,
                             [p.id]: {
-                              ...(prev[p.id] ?? { name: '', unit: 'ud', price: '', vatRate: '0', estimatedKg: '' }),
+                              ...(prev[p.id] ?? {
+                                name: '',
+                                unit: 'ud',
+                                price: '',
+                                vatRate: '0',
+                                estimatedKg: '',
+                                unitsPerPack: '1',
+                                recipeUnit: 'ud' as Unit,
+                              }),
                               price: e.target.value,
                             },
                           }))
@@ -691,7 +785,15 @@ export default function ProveedoresPage() {
                           setProductDrafts((prev) => ({
                             ...prev,
                             [p.id]: {
-                              ...(prev[p.id] ?? { name: '', unit: 'ud', price: '', vatRate: '0', estimatedKg: '' }),
+                              ...(prev[p.id] ?? {
+                                name: '',
+                                unit: 'ud',
+                                price: '',
+                                vatRate: '0',
+                                estimatedKg: '',
+                                unitsPerPack: '1',
+                                recipeUnit: 'ud' as Unit,
+                              }),
                               vatRate: e.target.value,
                             },
                           }))
@@ -700,6 +802,60 @@ export default function ProveedoresPage() {
                         className="h-9 rounded-lg border border-zinc-300 bg-white px-3 text-sm text-zinc-900 placeholder:text-zinc-500 outline-none"
                       />
                     </div>
+                    <input
+                      value={productDrafts[p.id]?.unitsPerPack ?? '1'}
+                      onChange={(e) =>
+                        setProductDrafts((prev) => ({
+                          ...prev,
+                          [p.id]: {
+                            ...(prev[p.id] ?? {
+                              name: '',
+                              unit: 'ud',
+                              price: '',
+                              vatRate: '0',
+                              estimatedKg: '',
+                              unitsPerPack: '1',
+                              recipeUnit: 'ud' as Unit,
+                            }),
+                            unitsPerPack: e.target.value,
+                          },
+                        }))
+                      }
+                      placeholder="Piezas por envase (receta)"
+                      className="h-9 rounded-lg border border-zinc-300 bg-white px-3 text-sm text-zinc-900 placeholder:text-zinc-500 outline-none"
+                    />
+                    {parseUnitsPerPack(productDrafts[p.id]?.unitsPerPack ?? '1') != null &&
+                    parseUnitsPerPack(productDrafts[p.id]?.unitsPerPack ?? '1')! > 1 ? (
+                      <select
+                        value={productDrafts[p.id]?.recipeUnit ?? 'ud'}
+                        onChange={(e) =>
+                          setProductDrafts((prev) => ({
+                            ...prev,
+                            [p.id]: {
+                              ...(prev[p.id] ?? {
+                                name: '',
+                                unit: 'ud',
+                                price: '',
+                                vatRate: '0',
+                                estimatedKg: '',
+                                unitsPerPack: '1',
+                                recipeUnit: 'ud' as Unit,
+                              }),
+                              recipeUnit: e.target.value as Unit,
+                            },
+                          }))
+                        }
+                        className="h-9 rounded-lg border border-zinc-300 bg-white px-3 text-sm text-zinc-900 outline-none"
+                      >
+                        <option value="ud">ud (escandallo)</option>
+                        <option value="kg">kg</option>
+                        <option value="bolsa">bolsa</option>
+                        <option value="racion">racion</option>
+                        <option value="caja">caja</option>
+                        <option value="paquete">paquete</option>
+                        <option value="bandeja">bandeja</option>
+                      </select>
+                    ) : null}
                     {unitSupportsReceivedWeightKg(productDrafts[p.id]?.unit ?? p.unit) ? (
                       <input
                         value={productDrafts[p.id]?.estimatedKg ?? ''}
@@ -707,7 +863,15 @@ export default function ProveedoresPage() {
                           setProductDrafts((prev) => ({
                             ...prev,
                             [p.id]: {
-                              ...(prev[p.id] ?? { name: '', unit: 'ud', price: '', vatRate: '0', estimatedKg: '' }),
+                              ...(prev[p.id] ?? {
+                                name: '',
+                                unit: 'ud',
+                                price: '',
+                                vatRate: '0',
+                                estimatedKg: '',
+                                unitsPerPack: '1',
+                                recipeUnit: 'ud' as Unit,
+                              }),
                               estimatedKg: e.target.value,
                             },
                           }))

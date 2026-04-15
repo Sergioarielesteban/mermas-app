@@ -79,6 +79,13 @@ export type PedidoSupplierProduct = {
   name: string;
   unit: Unit;
   pricePerUnit: number;
+  /**
+   * Piezas usables en receta por cada unidad de pedido (ej. 40 panes por caja).
+   * 1 = el precio es directamente por la unidad de receta / pedido.
+   */
+  unitsPerPack: number;
+  /** Unidad en escandallo cuando hay varias piezas por envase (típ. ud). */
+  recipeUnit: Unit | null;
   vatRate: number;
   parStock: number;
   isActive: boolean;
@@ -148,6 +155,8 @@ type SupplierProductRow = {
   name: string;
   unit: string;
   price_per_unit: number;
+  units_per_pack?: number | null;
+  recipe_unit?: string | null;
   vat_rate: number;
   par_stock: number;
   is_active: boolean;
@@ -203,7 +212,9 @@ export async function fetchSuppliersWithProducts(supabase: SupabaseClient, local
 
   const { data: productRows, error: pErr } = await supabase
     .from('pedido_supplier_products')
-    .select('id,supplier_id,name,unit,price_per_unit,vat_rate,par_stock,is_active,estimated_kg_per_unit')
+    .select(
+      'id,supplier_id,name,unit,price_per_unit,units_per_pack,recipe_unit,vat_rate,par_stock,is_active,estimated_kg_per_unit',
+    )
     .eq('local_id', localId)
     .eq('is_active', true)
     .order('name');
@@ -211,12 +222,20 @@ export async function fetchSuppliersWithProducts(supabase: SupabaseClient, local
 
   const bySupplier = new Map<string, PedidoSupplierProduct[]>();
   for (const row of (productRows ?? []) as SupplierProductRow[]) {
+    const packRaw = row.units_per_pack != null ? Number(row.units_per_pack) : 1;
+    const unitsPerPack = Number.isFinite(packRaw) && packRaw > 0 ? packRaw : 1;
+    const recipeUnit: Unit | null =
+      unitsPerPack > 1 && row.recipe_unit != null && String(row.recipe_unit).trim() !== ''
+        ? (String(row.recipe_unit) as Unit)
+        : null;
     const list = bySupplier.get(row.supplier_id) ?? [];
     list.push({
       id: row.id,
       name: row.name,
       unit: row.unit as Unit,
       pricePerUnit: Number(row.price_per_unit),
+      unitsPerPack,
+      recipeUnit,
       vatRate: Number(row.vat_rate ?? 0),
       parStock: Number(row.par_stock ?? 0),
       isActive: Boolean(row.is_active),
@@ -272,6 +291,14 @@ export async function deleteSupplier(supabase: SupabaseClient, localId: string, 
   if (error) throw new Error(error.message);
 }
 
+function normalizePackRecipeFields(input: { unitsPerPack?: number; recipeUnit?: Unit | null }) {
+  const raw = input.unitsPerPack != null && Number.isFinite(input.unitsPerPack) ? Number(input.unitsPerPack) : 1;
+  const unitsPerPack = raw > 0 ? Math.round(raw * 10000) / 10000 : 1;
+  const recipeUnit: Unit | null =
+    unitsPerPack > 1 ? (input.recipeUnit != null ? input.recipeUnit : 'ud') : null;
+  return { unitsPerPack, recipeUnit };
+}
+
 export async function createSupplierProduct(
   supabase: SupabaseClient,
   localId: string,
@@ -283,6 +310,8 @@ export async function createSupplierProduct(
     vatRate?: number;
     parStock?: number;
     estimatedKgPerUnit?: number | null;
+    unitsPerPack?: number;
+    recipeUnit?: Unit | null;
   },
 ) {
   const est =
@@ -292,6 +321,10 @@ export async function createSupplierProduct(
     input.estimatedKgPerUnit > 0
       ? Math.round(input.estimatedKgPerUnit * 1000) / 1000
       : null;
+  const { unitsPerPack, recipeUnit } = normalizePackRecipeFields({
+    unitsPerPack: input.unitsPerPack,
+    recipeUnit: input.recipeUnit,
+  });
   const { data, error } = await supabase
     .from('pedido_supplier_products')
     .insert({
@@ -300,12 +333,16 @@ export async function createSupplierProduct(
       name: normalizeLabelUpper(input.name),
       unit: input.unit,
       price_per_unit: Math.round(input.pricePerUnit * 100) / 100,
+      units_per_pack: unitsPerPack,
+      recipe_unit: recipeUnit,
       vat_rate: Math.max(0, Math.round((input.vatRate ?? 0) * 10000) / 10000),
       par_stock: Math.max(0, Math.round((input.parStock ?? 0) * 100) / 100),
       is_active: true,
       estimated_kg_per_unit: est,
     })
-    .select('id,supplier_id,name,unit,price_per_unit,vat_rate,par_stock,is_active,estimated_kg_per_unit')
+    .select(
+      'id,supplier_id,name,unit,price_per_unit,units_per_pack,recipe_unit,vat_rate,par_stock,is_active,estimated_kg_per_unit',
+    )
     .single();
   if (error) throw new Error(error.message);
   return data as SupplierProductRow;
@@ -322,6 +359,8 @@ export async function updateSupplierProduct(
     vatRate?: number;
     parStock?: number;
     estimatedKgPerUnit?: number | null;
+    unitsPerPack?: number;
+    recipeUnit?: Unit | null;
   },
 ) {
   const est =
@@ -331,19 +370,27 @@ export async function updateSupplierProduct(
     input.estimatedKgPerUnit > 0
       ? Math.round(input.estimatedKgPerUnit * 1000) / 1000
       : null;
+  const { unitsPerPack, recipeUnit } = normalizePackRecipeFields({
+    unitsPerPack: input.unitsPerPack,
+    recipeUnit: input.recipeUnit,
+  });
   const { data, error } = await supabase
     .from('pedido_supplier_products')
     .update({
       name: normalizeLabelUpper(input.name),
       unit: input.unit,
       price_per_unit: Math.round(input.pricePerUnit * 100) / 100,
+      units_per_pack: unitsPerPack,
+      recipe_unit: recipeUnit,
       vat_rate: Math.max(0, Math.round((input.vatRate ?? 0) * 10000) / 10000),
       par_stock: Math.max(0, Math.round((input.parStock ?? 0) * 100) / 100),
       estimated_kg_per_unit: unitSupportsReceivedWeightKg(input.unit) ? est : null,
     })
     .eq('id', supplierProductId)
     .eq('local_id', localId)
-    .select('id,supplier_id,name,unit,price_per_unit,vat_rate,par_stock,is_active,estimated_kg_per_unit')
+    .select(
+      'id,supplier_id,name,unit,price_per_unit,units_per_pack,recipe_unit,vat_rate,par_stock,is_active,estimated_kg_per_unit',
+    )
     .single();
   if (error) throw new Error(error.message);
   return data as SupplierProductRow;

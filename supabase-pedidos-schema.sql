@@ -20,6 +20,13 @@ create table if not exists public.pedido_supplier_products (
   name text not null,
   unit text not null check (unit in ('kg', 'ud', 'bolsa', 'racion', 'caja', 'paquete', 'bandeja')),
   price_per_unit numeric(10,2) not null check (price_per_unit >= 0),
+  /** Piezas usables en receta por cada unidad de pedido (envase). 1 = el precio ya es por esa unidad. */
+  units_per_pack numeric(12,4) not null default 1 check (units_per_pack > 0),
+  /** Unidad en escandallo cuando units_per_pack > 1 (ej. ud). null si no aplica. */
+  recipe_unit text check (
+    recipe_unit is null
+    or recipe_unit in ('kg', 'ud', 'bolsa', 'racion', 'caja', 'paquete', 'bandeja')
+  ),
   vat_rate numeric(6,4) not null default 0 check (vat_rate >= 0 and vat_rate <= 1),
   par_stock numeric(10,2) not null default 0 check (par_stock >= 0),
   is_active boolean not null default true,
@@ -171,6 +178,25 @@ with check (local_id = public.current_local_id());
 -- Bandeja/caja: kg estimado por envase en catálogo y kg reales en recepción (precio sigue en €/envase)
 alter table public.pedido_supplier_products
   add column if not exists estimated_kg_per_unit numeric(10,3);
+
+alter table public.pedido_supplier_products
+  add column if not exists units_per_pack numeric(12,4) not null default 1;
+alter table public.pedido_supplier_products
+  drop constraint if exists pedido_supplier_products_units_per_pack_chk;
+alter table public.pedido_supplier_products
+  add constraint pedido_supplier_products_units_per_pack_chk
+  check (units_per_pack > 0);
+alter table public.pedido_supplier_products
+  add column if not exists recipe_unit text;
+alter table public.pedido_supplier_products
+  drop constraint if exists pedido_supplier_products_recipe_unit_check;
+alter table public.pedido_supplier_products
+  add constraint pedido_supplier_products_recipe_unit_check
+  check (
+    recipe_unit is null
+    or recipe_unit in ('kg', 'ud', 'bolsa', 'racion', 'caja', 'paquete', 'bandeja')
+  );
+
 alter table public.purchase_order_items
   add column if not exists estimated_kg_per_unit numeric(10,3);
 alter table public.purchase_order_items
