@@ -11,6 +11,7 @@ export type StaffMealRecord = {
   unitCostEur: number;
   totalCostEur: number;
   notes: string;
+  consumptionGroupId: string | null;
   workerId: string | null;
   workerName: string | null;
   sourceProductId: string | null;
@@ -37,6 +38,7 @@ type StaffMealRow = {
   unit_cost_eur: number;
   total_cost_eur: number;
   notes: string | null;
+  consumption_group_id?: string | null;
   worker_id?: string | null;
   worker_name_snapshot?: string | null;
   source_product_id?: string | null;
@@ -83,6 +85,7 @@ function mapStaffMealRow(row: StaffMealRow): StaffMealRecord {
     unitCostEur: Number(row.unit_cost_eur ?? 0),
     totalCostEur: Number(row.total_cost_eur ?? 0),
     notes: row.notes ?? '',
+    consumptionGroupId: row.consumption_group_id ?? null,
     workerId: row.worker_id ?? null,
     workerName: row.worker_name_snapshot ?? null,
     sourceProductId: row.source_product_id ?? null,
@@ -147,24 +150,42 @@ export async function fetchStaffMealRecords(
   fromDateYmd: string,
   toDateYmd: string,
 ): Promise<StaffMealRecord[]> {
-  const extendedSelect =
+  const extendedSelectWithGroup =
+    'id,local_id,service,meal_date,people_count,unit_cost_eur,total_cost_eur,notes,consumption_group_id,worker_id,worker_name_snapshot,source_product_id,source_product_name,created_at,created_by,voided_at';
+  const extendedSelectNoGroup =
     'id,local_id,service,meal_date,people_count,unit_cost_eur,total_cost_eur,notes,worker_id,worker_name_snapshot,source_product_id,source_product_name,created_at,created_by,voided_at';
   const baseSelect =
     'id,local_id,service,meal_date,people_count,unit_cost_eur,total_cost_eur,notes,created_at,created_by,voided_at';
   const first = await supabase
     .from('staff_meal_records')
-    .select(extendedSelect)
+    .select(extendedSelectWithGroup)
     .eq('local_id', localId)
     .gte('meal_date', fromDateYmd)
     .lte('meal_date', toDateYmd)
     .order('meal_date', { ascending: false })
     .order('created_at', { ascending: false });
   if (first.error) {
+    const missingGroupOnly =
+      isMissingColumnError(first.error.message, 'consumption_group_id') &&
+      !isMissingColumnError(first.error.message, 'worker_id');
+    if (missingGroupOnly) {
+      const noGroup = await supabase
+        .from('staff_meal_records')
+        .select(extendedSelectNoGroup)
+        .eq('local_id', localId)
+        .gte('meal_date', fromDateYmd)
+        .lte('meal_date', toDateYmd)
+        .order('meal_date', { ascending: false })
+        .order('created_at', { ascending: false });
+      if (noGroup.error) throw new Error(noGroup.error.message);
+      return ((noGroup.data ?? []) as StaffMealRow[]).map(mapStaffMealRow);
+    }
     const missingExtended =
       isMissingColumnError(first.error.message, 'worker_id') ||
       isMissingColumnError(first.error.message, 'worker_name_snapshot') ||
       isMissingColumnError(first.error.message, 'source_product_id') ||
-      isMissingColumnError(first.error.message, 'source_product_name');
+      isMissingColumnError(first.error.message, 'source_product_name') ||
+      isMissingColumnError(first.error.message, 'consumption_group_id');
     if (!missingExtended) throw new Error(first.error.message);
     const fallback = await supabase
       .from('staff_meal_records')
@@ -193,34 +214,42 @@ export async function createStaffMealRecord(
     workerName?: string | null;
     sourceProductId?: string | null;
     sourceProductName?: string | null;
+    consumptionGroupId?: string | null;
   },
 ): Promise<StaffMealRecord> {
   const peopleCount = Math.max(0, Math.round(input.peopleCount * 100) / 100);
   const unitCostEur = normalizeMoney(input.unitCostEur);
   const totalCostEur = computeStaffMealTotal(peopleCount, unitCostEur);
 
-  const extendedSelect =
+  const extendedSelectWithGroup =
+    'id,local_id,service,meal_date,people_count,unit_cost_eur,total_cost_eur,notes,consumption_group_id,worker_id,worker_name_snapshot,source_product_id,source_product_name,created_at,created_by,voided_at';
+  const extendedSelectNoGroup =
     'id,local_id,service,meal_date,people_count,unit_cost_eur,total_cost_eur,notes,worker_id,worker_name_snapshot,source_product_id,source_product_name,created_at,created_by,voided_at';
   const baseSelect =
     'id,local_id,service,meal_date,people_count,unit_cost_eur,total_cost_eur,notes,created_at,created_by,voided_at';
 
-  const first = await supabase
-    .from('staff_meal_records')
-    .insert({
-      local_id: localId,
-      service: input.service,
-      meal_date: input.mealDate,
-      people_count: peopleCount,
-      unit_cost_eur: unitCostEur,
-      total_cost_eur: totalCostEur,
-      notes: (input.notes ?? '').trim(),
-      worker_id: input.workerId ?? null,
-      worker_name_snapshot: input.workerName ?? null,
-      source_product_id: input.sourceProductId ?? null,
-      source_product_name: input.sourceProductName ?? null,
-    })
-    .select(extendedSelect)
-    .single();
+  const insertPayload: Record<string, unknown> = {
+    local_id: localId,
+    service: input.service,
+    meal_date: input.mealDate,
+    people_count: peopleCount,
+    unit_cost_eur: unitCostEur,
+    total_cost_eur: totalCostEur,
+    notes: (input.notes ?? '').trim(),
+    worker_id: input.workerId ?? null,
+    worker_name_snapshot: input.workerName ?? null,
+    source_product_id: input.sourceProductId ?? null,
+    source_product_name: input.sourceProductName ?? null,
+  };
+  if (input.consumptionGroupId) {
+    insertPayload.consumption_group_id = input.consumptionGroupId;
+  }
+
+  let first = await supabase.from('staff_meal_records').insert(insertPayload).select(extendedSelectWithGroup).single();
+  if (first.error && isMissingColumnError(first.error.message, 'consumption_group_id')) {
+    const { consumption_group_id: _cg, ...rest } = insertPayload;
+    first = await supabase.from('staff_meal_records').insert(rest).select(extendedSelectNoGroup).single();
+  }
   if (first.error) {
     const missingExtended =
       isMissingColumnError(first.error.message, 'worker_id') ||
