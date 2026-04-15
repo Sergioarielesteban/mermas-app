@@ -20,12 +20,12 @@ import {
   createStaffMealWorker,
   createStaffMealRecord,
   deactivateStaffMealWorker,
-  deleteAllStaffMealRecordsForLocal,
   fetchStaffMealRecords,
   fetchStaffMealWorkers,
   type StaffMealRecord,
   type StaffMealWorker,
   type StaffMealService,
+  voidStaffMealRecord,
 } from '@/lib/comida-personal-supabase';
 import { requestDeleteSecurityPin } from '@/lib/delete-security';
 import { downloadStaffMealReportPdf } from '@/lib/comida-personal-report-pdf';
@@ -308,27 +308,26 @@ export default function ComidaPersonalPage() {
     }
   }, [localId, mealDate, notes, selectedLines, selectedWorker]);
 
-  const deleteAllRecords = React.useCallback(async () => {
-    if (!localId) return;
-    const okConfirm = window.confirm(
-      '¿Borrar todo el historial de comida de personal de este local?\n\nSe eliminan todas las filas guardadas. No se puede deshacer.',
-    );
-    if (!okConfirm) return;
-    const okPin = await requestDeleteSecurityPin();
-    if (!okPin) return;
-    const supabase = getSupabaseClient();
-    if (!supabase) return;
-    try {
-      await deleteAllStaffMealRecordsForLocal(supabase, localId);
-      setRecords([]);
-      setMessageTone('success');
-      setMessage('Historial de comida de personal eliminado.');
-      void loadData();
-    } catch (err) {
-      setMessageTone('error');
-      setMessage(err instanceof Error ? err.message : 'No se pudo borrar el historial.');
-    }
-  }, [localId, loadData]);
+  const voidOneRecord = React.useCallback(
+    async (r: StaffMealRecord) => {
+      if (!localId) return;
+      const okPin = await requestDeleteSecurityPin();
+      if (!okPin) return;
+      const supabase = getSupabaseClient();
+      if (!supabase) return;
+      try {
+        await voidStaffMealRecord(supabase, localId, r.id);
+        const now = new Date().toISOString();
+        setRecords((prev) => prev.map((x) => (x.id === r.id ? { ...x, voidedAt: now } : x)));
+        setMessageTone('success');
+        setMessage('Registro anulado (deja de contar en totales e informes).');
+      } catch (err) {
+        setMessageTone('error');
+        setMessage(err instanceof Error ? err.message : 'No se pudo anular el registro.');
+      }
+    },
+    [localId],
+  );
 
   const exportMonthPdf = React.useCallback(() => {
     const localLabel =
@@ -351,6 +350,12 @@ export default function ComidaPersonalPage() {
   }, [displayName, email, localCode, localName, loginUsername, records, reportMonthYm]);
 
   const activeRecords = React.useMemo(() => records.filter((r) => r.voidedAt == null), [records]);
+  const recentActiveRecords = React.useMemo(() => {
+    return [...activeRecords].sort((a, b) => {
+      if (b.mealDate !== a.mealDate) return b.mealDate.localeCompare(a.mealDate);
+      return b.createdAt.localeCompare(a.createdAt);
+    });
+  }, [activeRecords]);
   const todayYmd = React.useMemo(() => ymd(new Date()), []);
   const todayDate = React.useMemo(() => new Date(`${todayYmd}T00:00:00`), [todayYmd]);
   const weekStart = startOfWeekMonday(todayDate);
@@ -471,13 +476,6 @@ export default function ComidaPersonalPage() {
           className="rounded-lg border border-zinc-200 bg-white px-2.5 py-1.5 text-xs font-bold text-[#D32F2F] shadow-sm"
         >
           Actualizar
-        </button>
-        <button
-          type="button"
-          onClick={() => void deleteAllRecords()}
-          className="rounded-lg border border-red-200 bg-white px-2.5 py-1.5 text-xs font-bold text-red-700 shadow-sm hover:bg-red-50"
-        >
-          Borrar todos los registros
         </button>
       </div>
 
@@ -652,6 +650,61 @@ export default function ComidaPersonalPage() {
             {message}
           </p>
         ) : null}
+      </section>
+
+      <section className="rounded-2xl bg-white p-4 ring-1 ring-zinc-200">
+        <p className="text-sm font-bold text-zinc-800">Registros recientes</p>
+        <p className="mt-1 text-xs text-zinc-500">
+          Anular con la papelera: pide la clave de seguridad. El registro deja de contar en totales e informes.
+        </p>
+        {recentActiveRecords.length === 0 ? (
+          <p className="mt-2 text-sm text-zinc-500">Aún no hay registros en el periodo cargado.</p>
+        ) : (
+          <ul className="mt-2 max-h-64 divide-y divide-zinc-200 overflow-y-auto rounded-lg border border-zinc-200 bg-zinc-50/80">
+            {recentActiveRecords.map((r) => {
+              const title =
+                r.sourceProductName?.trim() ||
+                (r.workerName ? `${SERVICE_LABEL[r.service]} · ${r.workerName}` : SERVICE_LABEL[r.service]);
+              const sub =
+                r.sourceProductName && r.workerName
+                  ? `${SERVICE_LABEL[r.service]} · ${r.workerName}`
+                  : r.notes.trim() || null;
+              const dateLabel = (() => {
+                try {
+                  return new Date(`${r.mealDate}T12:00:00`).toLocaleDateString('es-ES', {
+                    day: '2-digit',
+                    month: 'short',
+                  });
+                } catch {
+                  return r.mealDate;
+                }
+              })();
+              return (
+                <li key={r.id} className="flex items-center gap-2 px-2 py-1.5">
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-[11px] font-semibold text-zinc-900">{title}</p>
+                    <p className="truncate text-[10px] text-zinc-500">
+                      {dateLabel}
+                      {sub ? ` · ${sub}` : ''}
+                    </p>
+                  </div>
+                  <span className="shrink-0 text-[11px] font-bold tabular-nums text-zinc-800">
+                    {money(r.totalCostEur)}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => void voidOneRecord(r)}
+                    className="grid h-8 w-8 shrink-0 place-items-center rounded-lg border border-zinc-200 bg-white text-zinc-500 hover:border-red-200 hover:bg-red-50 hover:text-red-700"
+                    title="Anular registro"
+                    aria-label={`Anular registro del ${r.mealDate}`}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        )}
       </section>
 
       <section className="rounded-2xl bg-white p-4 ring-1 ring-zinc-200">
