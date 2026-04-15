@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
-import { ChevronDown, FileDown, Plus, Search, Trash2, X } from 'lucide-react';
+import { BarChart3, ChevronDown, FileDown, Plus, Search, Trash2, X } from 'lucide-react';
 import { useAuth } from '@/components/AuthProvider';
 import { useMermasStore } from '@/components/MermasStoreProvider';
 import {
@@ -76,6 +76,12 @@ export default function ComidaPersonalPage() {
   const [qtyByProductId, setQtyByProductId] = React.useState<Record<string, number>>({});
   const [notes, setNotes] = React.useState('');
   const [recentRecordsOpen, setRecentRecordsOpen] = React.useState(false);
+  const [statsUnlocked, setStatsUnlocked] = React.useState(false);
+
+  const unlockStats = React.useCallback(async () => {
+    const ok = await requestDeleteSecurityPin();
+    if (ok) setStatsUnlocked(true);
+  }, []);
 
   const loadData = React.useCallback(async () => {
     if (!localId) return;
@@ -159,8 +165,6 @@ export default function ComidaPersonalPage() {
         .filter((x): x is { product: (typeof products)[number]; quantity: number } => Boolean(x)),
     [products, qtyByProductId],
   );
-
-  const basketTotal = selectedLines.reduce((acc, x) => acc + x.quantity * x.product.pricePerUnit, 0);
 
   const setProductQty = React.useCallback((productId: string, qty: number) => {
     setQtyByProductId((prev) => {
@@ -437,8 +441,8 @@ export default function ComidaPersonalPage() {
       ) : null}
       <MermasStyleHero
         eyebrow="Comida de personal"
-        title="Registro y coste interno"
-        description="Registro en segundos para imputar consumo interno a coste de personal."
+        title="Registro de consumo"
+        description="Aquí solo ves el artículo y la cantidad. Importes e informes están en Estadísticas (clave de gestión)."
       />
       <div className="flex flex-wrap items-center justify-end gap-2">
         {loading ? <span className="text-xs text-zinc-500">Cargando datos…</span> : null}
@@ -508,10 +512,10 @@ export default function ComidaPersonalPage() {
       </section>
 
       <section className="rounded-2xl bg-white p-4 ring-1 ring-zinc-200">
-        <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Top 20 · más consumidos</p>
-        <p className="mt-1 text-xs text-zinc-500">Atajos con + (precio según catálogo actual).</p>
+        <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Atajos frecuentes</p>
+        <p className="mt-1 text-xs text-zinc-500">Pulsa + para añadir el artículo al consumo de hoy.</p>
         {topConsumedProducts.length === 0 ? (
-          <p className="mt-2 text-sm text-zinc-500">Cuando haya registros con artículo, aparecerá el ranking.</p>
+          <p className="mt-2 text-sm text-zinc-500">Cuando haya registros con artículo, aparecerán aquí como atajos.</p>
         ) : (
           <ul className="mt-2 grid grid-cols-2 gap-x-1 gap-y-1 sm:gap-x-2">
             {topConsumedProducts.map((row, idx) => {
@@ -528,9 +532,6 @@ export default function ComidaPersonalPage() {
                   <span className="w-4 shrink-0 text-center text-[10px] font-black text-zinc-400">{idx + 1}</span>
                   <div className="min-w-0 flex-1 leading-tight">
                     <p className="truncate text-[11px] font-semibold text-zinc-900">{row.label}</p>
-                    <p className="truncate text-[9px] text-zinc-500">
-                      {row.units.toLocaleString('es-ES', { maximumFractionDigits: 2 })} uds hist.
-                    </p>
                   </div>
                   <button
                     type="button"
@@ -588,9 +589,6 @@ export default function ComidaPersonalPage() {
                       +
                     </button>
                   </div>
-                  <span className="w-[3.25rem] shrink-0 text-right text-[11px] font-bold text-zinc-900 tabular-nums">
-                    {money(line.quantity * line.product.pricePerUnit)}
-                  </span>
                 </li>
               ))}
             </ul>
@@ -602,10 +600,6 @@ export default function ComidaPersonalPage() {
           placeholder="Nota (opcional)"
           className="mt-2 h-10 w-full rounded-xl border border-zinc-300 bg-white px-3 text-sm text-zinc-900 outline-none"
         />
-        <div className="mt-2 flex items-center justify-between">
-          <p className="text-sm font-semibold text-zinc-700">Total</p>
-          <p className="text-lg font-black text-zinc-900">{money(basketTotal)}</p>
-        </div>
         <button
           type="button"
           onClick={() => void registerConsumption()}
@@ -624,173 +618,212 @@ export default function ComidaPersonalPage() {
         ) : null}
       </section>
 
-      <section className="rounded-2xl bg-white p-4 ring-1 ring-zinc-200">
-        <p className="text-center text-sm font-bold text-zinc-800">Informe mensual</p>
-        <div className="mt-3 flex flex-col items-center">
-          <label className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Mes del informe</label>
-          <input
-            type="month"
-            value={reportMonthYm}
-            onChange={(e) => setReportMonthYm(e.target.value)}
-            className="mt-1.5 box-border h-9 w-full max-w-[11.5rem] rounded-lg border border-zinc-300 bg-white px-2 text-center text-sm text-zinc-900 outline-none focus:border-[#D32F2F]/50"
-          />
+      <section className="rounded-2xl border border-zinc-200/90 bg-gradient-to-b from-zinc-50 to-white p-4 ring-1 ring-zinc-100">
+        <div className="flex items-start gap-3">
+          <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-zinc-200/80 text-zinc-700">
+            <BarChart3 className="h-5 w-5" aria-hidden />
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-black text-zinc-900">Estadísticas</p>
+            <p className="mt-1 text-xs leading-snug text-zinc-600">
+              Importes en €, informe PDF, resúmenes y anular registros. Misma clave de seguridad que otros borrados.
+            </p>
+          </div>
         </div>
-        <button
-          type="button"
-          onClick={exportMonthPdf}
-          className="mt-3 flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-zinc-950 px-3 text-sm font-bold text-white shadow-[inset_0_0_0_1px_rgba(211,47,47,0.85)] outline-none ring-1 ring-black/10 hover:bg-zinc-900 focus-visible:ring-2 focus-visible:ring-[#D32F2F]/50"
-        >
-          <FileDown className="h-4 w-4 shrink-0" aria-hidden />
-          Descargar informe
-        </button>
-      </section>
 
-      <section className="grid grid-cols-2 gap-2">
-        <div className="rounded-2xl bg-white p-3 ring-1 ring-zinc-200">
-          <p className="text-[11px] uppercase tracking-wide text-zinc-500">Hoy</p>
-          <p className="mt-1 text-lg font-black text-zinc-900">{money(todayTotal)}</p>
-        </div>
-        <div className="rounded-2xl bg-white p-3 ring-1 ring-zinc-200">
-          <p className="text-[11px] uppercase tracking-wide text-zinc-500">Semana</p>
-          <p className="mt-1 text-lg font-black text-zinc-900">{money(weekTotal)}</p>
-        </div>
-        <div className="rounded-2xl bg-white p-3 ring-1 ring-zinc-200">
-          <p className="text-[11px] uppercase tracking-wide text-zinc-500">Mes</p>
-          <p className="mt-1 text-lg font-black text-zinc-900">{money(monthTotal)}</p>
-        </div>
-        <div className="rounded-2xl bg-white p-3 ring-1 ring-zinc-200">
-          <p className="text-[11px] uppercase tracking-wide text-zinc-500">Uds mes</p>
-          <p className="mt-1 text-lg font-black text-zinc-900">{monthUnits.toLocaleString('es-ES')}</p>
-        </div>
-      </section>
-
-      <section className="rounded-2xl bg-white p-4 ring-1 ring-zinc-200">
-        <p className="text-sm font-bold text-zinc-800">Mes actual — por trabajador</p>
-        {monthWorkerRanking.length === 0 ? (
-          <p className="mt-3 text-sm text-zinc-500">Sin datos en el mes.</p>
+        {!statsUnlocked ? (
+          <button
+            type="button"
+            onClick={() => void unlockStats()}
+            className="mt-4 h-11 w-full rounded-xl bg-zinc-900 text-sm font-bold text-white shadow-sm ring-1 ring-black/10 hover:bg-zinc-800"
+          >
+            Introducir clave para ver estadísticas
+          </button>
         ) : (
-          <ol className="mt-3 space-y-2">
-            {monthWorkerRanking.map((row, idx) => (
-              <li
-                key={row.rowKey}
-                className="flex items-center justify-between gap-3 rounded-xl bg-zinc-50 px-3 py-2 ring-1 ring-zinc-200"
+          <div className="mt-4 space-y-4 border-t border-zinc-200/80 pt-4">
+            <div className="flex justify-end">
+              <button
+                type="button"
+                onClick={() => {
+                  setStatsUnlocked(false);
+                  setRecentRecordsOpen(false);
+                }}
+                className="text-xs font-bold text-zinc-500 underline decoration-zinc-300 underline-offset-2 hover:text-zinc-800"
               >
-                <div className="flex min-w-0 items-center gap-2">
-                  <span
-                    className={`grid h-8 w-8 shrink-0 place-items-center rounded-full text-xs font-black ${
-                      idx === 0
-                        ? 'bg-amber-100 text-amber-900'
-                        : idx === 1
-                          ? 'bg-zinc-200 text-zinc-800'
-                          : idx === 2
-                            ? 'bg-orange-100 text-orange-900'
-                            : 'bg-white text-zinc-500 ring-1 ring-zinc-200'
-                    }`}
-                  >
-                    {idx + 1}
-                  </span>
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-bold text-zinc-900">{row.name}</p>
-                    <p className="text-xs text-zinc-500">
-                      {row.mealsRegistered}{' '}
-                      {row.mealsRegistered === 1 ? 'comida registrada' : 'comidas registradas'}
-                    </p>
-                  </div>
+                Ocultar estadísticas
+              </button>
+            </div>
+
+            <section className="rounded-2xl bg-white p-4 ring-1 ring-zinc-200">
+              <p className="text-center text-sm font-bold text-zinc-800">Informe mensual</p>
+              <div className="mt-3 flex flex-col items-center">
+                <label className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Mes del informe</label>
+                <input
+                  type="month"
+                  value={reportMonthYm}
+                  onChange={(e) => setReportMonthYm(e.target.value)}
+                  className="mt-1.5 box-border h-9 w-full max-w-[11.5rem] rounded-lg border border-zinc-300 bg-white px-2 text-center text-sm text-zinc-900 outline-none focus:border-[#D32F2F]/50"
+                />
+              </div>
+              <button
+                type="button"
+                onClick={exportMonthPdf}
+                className="mt-3 flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-zinc-950 px-3 text-sm font-bold text-white shadow-[inset_0_0_0_1px_rgba(211,47,47,0.85)] outline-none ring-1 ring-black/10 hover:bg-zinc-900 focus-visible:ring-2 focus-visible:ring-[#D32F2F]/50"
+              >
+                <FileDown className="h-4 w-4 shrink-0" aria-hidden />
+                Descargar informe
+              </button>
+            </section>
+
+            <section className="grid grid-cols-2 gap-2">
+              <div className="rounded-2xl bg-white p-3 ring-1 ring-zinc-200">
+                <p className="text-[11px] uppercase tracking-wide text-zinc-500">Hoy</p>
+                <p className="mt-1 text-lg font-black text-zinc-900">{money(todayTotal)}</p>
+              </div>
+              <div className="rounded-2xl bg-white p-3 ring-1 ring-zinc-200">
+                <p className="text-[11px] uppercase tracking-wide text-zinc-500">Semana</p>
+                <p className="mt-1 text-lg font-black text-zinc-900">{money(weekTotal)}</p>
+              </div>
+              <div className="rounded-2xl bg-white p-3 ring-1 ring-zinc-200">
+                <p className="text-[11px] uppercase tracking-wide text-zinc-500">Mes</p>
+                <p className="mt-1 text-lg font-black text-zinc-900">{money(monthTotal)}</p>
+              </div>
+              <div className="rounded-2xl bg-white p-3 ring-1 ring-zinc-200">
+                <p className="text-[11px] uppercase tracking-wide text-zinc-500">Uds mes</p>
+                <p className="mt-1 text-lg font-black text-zinc-900">{monthUnits.toLocaleString('es-ES')}</p>
+              </div>
+            </section>
+
+            <section className="rounded-2xl bg-white p-4 ring-1 ring-zinc-200">
+              <p className="text-sm font-bold text-zinc-800">Mes actual — por trabajador</p>
+              {monthWorkerRanking.length === 0 ? (
+                <p className="mt-3 text-sm text-zinc-500">Sin datos en el mes.</p>
+              ) : (
+                <ol className="mt-3 space-y-2">
+                  {monthWorkerRanking.map((row, idx) => (
+                    <li
+                      key={row.rowKey}
+                      className="flex items-center justify-between gap-3 rounded-xl bg-zinc-50 px-3 py-2 ring-1 ring-zinc-200"
+                    >
+                      <div className="flex min-w-0 items-center gap-2">
+                        <span
+                          className={`grid h-8 w-8 shrink-0 place-items-center rounded-full text-xs font-black ${
+                            idx === 0
+                              ? 'bg-amber-100 text-amber-900'
+                              : idx === 1
+                                ? 'bg-zinc-200 text-zinc-800'
+                                : idx === 2
+                                  ? 'bg-orange-100 text-orange-900'
+                                  : 'bg-white text-zinc-500 ring-1 ring-zinc-200'
+                          }`}
+                        >
+                          {idx + 1}
+                        </span>
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-bold text-zinc-900">{row.name}</p>
+                          <p className="text-xs text-zinc-500">
+                            {row.mealsRegistered}{' '}
+                            {row.mealsRegistered === 1 ? 'comida registrada' : 'comidas registradas'}
+                          </p>
+                        </div>
+                      </div>
+                      <p className="shrink-0 text-sm font-black text-zinc-900">{money(row.totalEur)}</p>
+                    </li>
+                  ))}
+                </ol>
+              )}
+            </section>
+
+            <section className="rounded-2xl bg-white p-4 ring-1 ring-zinc-200">
+              <p className="text-sm font-bold text-zinc-800">Evolución 14 días (€)</p>
+              <div className="mt-2 h-56">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={last14DaysChart} margin={{ top: 8, right: 8, left: -16, bottom: 8 }}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="day" tick={{ fontSize: 10 }} />
+                    <YAxis tick={{ fontSize: 10 }} />
+                    <Tooltip formatter={(value) => money(Number(value ?? 0))} />
+                    <Bar dataKey="total" fill="#D32F2F" radius={[6, 6, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </section>
+
+            <div className="rounded-xl border border-zinc-200/90 bg-zinc-50/60 p-2 ring-1 ring-zinc-100">
+              <button
+                type="button"
+                onClick={() => setRecentRecordsOpen((o) => !o)}
+                aria-expanded={recentRecordsOpen}
+                className="flex w-full items-center justify-between gap-2 rounded-lg px-2 py-2 text-left outline-none focus-visible:ring-2 focus-visible:ring-[#D32F2F]/30"
+              >
+                <span className="text-[11px] font-medium text-zinc-500">
+                  Anular registros
+                  <span className="font-normal text-zinc-400"> · {recentActiveRecords.length} activos</span>
+                </span>
+                <ChevronDown
+                  className={`h-4 w-4 shrink-0 text-zinc-400 transition-transform ${recentRecordsOpen ? 'rotate-180' : ''}`}
+                  aria-hidden
+                />
+              </button>
+              {recentRecordsOpen ? (
+                <div className="mt-1 border-t border-zinc-200/80 pt-2">
+                  <p className="px-1 pb-1 text-[10px] leading-snug text-zinc-400">
+                    La papelera pide la clave otra vez; el registro deja de contar en totales e informes.
+                  </p>
+                  {recentActiveRecords.length === 0 ? (
+                    <p className="px-1 py-2 text-xs text-zinc-400">Sin registros en el periodo cargado.</p>
+                  ) : (
+                    <ul className="max-h-52 divide-y divide-zinc-200/90 overflow-y-auto rounded-md border border-zinc-200/80 bg-white/80">
+                      {recentActiveRecords.map((r) => {
+                        const title =
+                          r.sourceProductName?.trim() ||
+                          (r.workerName ? `${SERVICE_LABEL[r.service]} · ${r.workerName}` : SERVICE_LABEL[r.service]);
+                        const sub =
+                          r.sourceProductName && r.workerName
+                            ? `${SERVICE_LABEL[r.service]} · ${r.workerName}`
+                            : r.notes.trim() || null;
+                        const dateLabel = (() => {
+                          try {
+                            return new Date(`${r.mealDate}T12:00:00`).toLocaleDateString('es-ES', {
+                              day: '2-digit',
+                              month: 'short',
+                            });
+                          } catch {
+                            return r.mealDate;
+                          }
+                        })();
+                        return (
+                          <li key={r.id} className="flex items-center gap-2 px-2 py-1.5">
+                            <div className="min-w-0 flex-1">
+                              <p className="truncate text-[11px] font-semibold text-zinc-900">{title}</p>
+                              <p className="truncate text-[10px] text-zinc-500">
+                                {dateLabel}
+                                {sub ? ` · ${sub}` : ''}
+                              </p>
+                            </div>
+                            <span className="shrink-0 text-[11px] font-bold tabular-nums text-zinc-800">
+                              {money(r.totalCostEur)}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => void voidOneRecord(r)}
+                              className="grid h-7 w-7 shrink-0 place-items-center rounded-md border border-zinc-200 bg-white text-zinc-500 hover:border-red-200 hover:bg-red-50 hover:text-red-700"
+                              title="Anular registro"
+                              aria-label={`Anular registro del ${r.mealDate}`}
+                            >
+                              <Trash2 className="h-3 w-3" />
+                            </button>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  )}
                 </div>
-                <p className="shrink-0 text-sm font-black text-zinc-900">{money(row.totalEur)}</p>
-              </li>
-            ))}
-          </ol>
+              ) : null}
+            </div>
+          </div>
         )}
       </section>
-
-      <section className="rounded-2xl bg-white p-4 ring-1 ring-zinc-200">
-        <p className="text-sm font-bold text-zinc-800">Evolución 14 días (€)</p>
-        <div className="mt-2 h-56">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={last14DaysChart} margin={{ top: 8, right: 8, left: -16, bottom: 8 }}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="day" tick={{ fontSize: 10 }} />
-              <YAxis tick={{ fontSize: 10 }} />
-              <Tooltip formatter={(value) => money(Number(value ?? 0))} />
-              <Bar dataKey="total" fill="#D32F2F" radius={[6, 6, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      </section>
-
-      <div className="rounded-xl border border-zinc-200/90 bg-zinc-50/60 p-2 ring-1 ring-zinc-100">
-        <button
-          type="button"
-          onClick={() => setRecentRecordsOpen((o) => !o)}
-          aria-expanded={recentRecordsOpen}
-          className="flex w-full items-center justify-between gap-2 rounded-lg px-2 py-2 text-left outline-none focus-visible:ring-2 focus-visible:ring-[#D32F2F]/30"
-        >
-          <span className="text-[11px] font-medium text-zinc-500">
-            Anular registros
-            <span className="font-normal text-zinc-400"> · {recentActiveRecords.length} activos</span>
-          </span>
-          <ChevronDown
-            className={`h-4 w-4 shrink-0 text-zinc-400 transition-transform ${recentRecordsOpen ? 'rotate-180' : ''}`}
-            aria-hidden
-          />
-        </button>
-        {recentRecordsOpen ? (
-          <div className="mt-1 border-t border-zinc-200/80 pt-2">
-            <p className="px-1 pb-1 text-[10px] leading-snug text-zinc-400">
-              La papelera pide la clave; el registro deja de contar en totales e informes.
-            </p>
-            {recentActiveRecords.length === 0 ? (
-              <p className="px-1 py-2 text-xs text-zinc-400">Sin registros en el periodo cargado.</p>
-            ) : (
-              <ul className="max-h-52 divide-y divide-zinc-200/90 overflow-y-auto rounded-md border border-zinc-200/80 bg-white/80">
-                {recentActiveRecords.map((r) => {
-                  const title =
-                    r.sourceProductName?.trim() ||
-                    (r.workerName ? `${SERVICE_LABEL[r.service]} · ${r.workerName}` : SERVICE_LABEL[r.service]);
-                  const sub =
-                    r.sourceProductName && r.workerName
-                      ? `${SERVICE_LABEL[r.service]} · ${r.workerName}`
-                      : r.notes.trim() || null;
-                  const dateLabel = (() => {
-                    try {
-                      return new Date(`${r.mealDate}T12:00:00`).toLocaleDateString('es-ES', {
-                        day: '2-digit',
-                        month: 'short',
-                      });
-                    } catch {
-                      return r.mealDate;
-                    }
-                  })();
-                  return (
-                    <li key={r.id} className="flex items-center gap-2 px-2 py-1.5">
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-[11px] font-semibold text-zinc-900">{title}</p>
-                        <p className="truncate text-[10px] text-zinc-500">
-                          {dateLabel}
-                          {sub ? ` · ${sub}` : ''}
-                        </p>
-                      </div>
-                      <span className="shrink-0 text-[11px] font-bold tabular-nums text-zinc-800">
-                        {money(r.totalCostEur)}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => void voidOneRecord(r)}
-                        className="grid h-7 w-7 shrink-0 place-items-center rounded-md border border-zinc-200 bg-white text-zinc-500 hover:border-red-200 hover:bg-red-50 hover:text-red-700"
-                        title="Anular registro"
-                        aria-label={`Anular registro del ${r.mealDate}`}
-                      >
-                        <Trash2 className="h-3 w-3" />
-                      </button>
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-          </div>
-        ) : null}
-      </div>
 
       {workerManageOpen ? (
         <div
@@ -911,9 +944,6 @@ export default function ComidaPersonalPage() {
                       >
                         <div className="min-w-0 pr-2">
                           <p className="truncate text-sm font-semibold text-zinc-900">{p.name}</p>
-                          <p className="text-xs text-zinc-500">
-                            {money(p.pricePerUnit)}/{p.unit}
-                          </p>
                         </div>
                         <button
                           type="button"
