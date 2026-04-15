@@ -266,18 +266,6 @@ export default function NuevoPedidoPage() {
     return !isDeliveryDateOnConfiguredCycle(deliveryDate, selectedSupplier.deliveryCycleWeekdays ?? []);
   }, [deliveryDate, selectedSupplier]);
 
-  const applySuggestedQtyForCoverage = React.useCallback(() => {
-    if (coverageDays == null || !selectedSupplier) return;
-    setQtyByProductId((prev) => {
-      const next = { ...prev };
-      for (const p of supplierProducts) {
-        const scaled = weeklyParScaledToCoverageDays(p.parStock ?? 0, coverageDays);
-        if (scaled <= 0) continue;
-        next[p.id] = suggestedOrderQuantityForPar(p.unit, scaled);
-      }
-      return next;
-    });
-  }, [coverageDays, selectedSupplier, supplierProducts]);
   const supplierProductsBySupplier = React.useMemo(
     () =>
       suppliers.map((s) => ({
@@ -695,14 +683,6 @@ export default function NuevoPedidoPage() {
             Esta fecha no es un día de reparto marcado para el proveedor. Revisa Proveedores o la fecha del albarán.
           </p>
         ) : null}
-        <button
-          type="button"
-          disabled={coverageDays == null || supplierProducts.every((p) => !(p.parStock > 0))}
-          onClick={applySuggestedQtyForCoverage}
-          className="mt-3 h-10 w-full rounded-xl border border-zinc-300 bg-white text-sm font-bold text-zinc-800 disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          Rellenar cantidades sugeridas (según ref. semanal)
-        </button>
       </section>
 
       <section className="rounded-2xl bg-white p-4 ring-1 ring-zinc-200">
