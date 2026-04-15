@@ -10,6 +10,7 @@ const PDF_ZINC_400: [number, number, number] = [161, 161, 170];
 const PDF_ZINC_500: [number, number, number] = [113, 113, 122];
 const PDF_ZINC_900: [number, number, number] = [24, 24, 27];
 const PDF_WHITE: [number, number, number] = [255, 255, 255];
+const PDF_MUTED_BAR: [number, number, number] = [180, 180, 187];
 
 const SERVICE_ORDER: StaffMealService[] = ['desayuno', 'comida', 'cena', 'snack', 'otro'];
 
@@ -19,6 +20,28 @@ const SERVICE_LABEL: Record<StaffMealService, string> = {
   cena: 'Cena',
   snack: 'Snack',
   otro: 'Otro',
+};
+
+type MonthAggregate = {
+  monthYm: string;
+  labelEs: string;
+  startYmd: string;
+  endYmd: string;
+  daysInMonth: number;
+  voidedInMonth: StaffMealRecord[];
+  active: StaffMealRecord[];
+  totalEur: number;
+  n: number;
+  peopleSum: number;
+  avgPerReg: number;
+  avgPerPerson: number;
+  byServiceCost: Map<StaffMealService, number>;
+  byServiceRegs: Map<StaffMealService, number>;
+  byServicePeople: Map<StaffMealService, number>;
+  days: Array<{ key: string; cost: number }>;
+  peakDay: { key: string; cost: number } | null;
+  daysWithCost: number;
+  topLine: string;
 };
 
 function pdfFooter(doc: jsPDF, page: number, total: number): void {
@@ -43,6 +66,13 @@ function parseMonthYm(ym: string): { y: number; m: number } | null {
   return { y, m: mo };
 }
 
+function previousMonthYm(ym: string): string | null {
+  const p = parseMonthYm(ym);
+  if (!p) return null;
+  if (p.m === 1) return `${p.y - 1}-12`;
+  return `${p.y}-${String(p.m - 1).padStart(2, '0')}`;
+}
+
 function monthBounds(ym: string): { startYmd: string; endYmd: string; daysInMonth: number; labelEs: string } | null {
   const p = parseMonthYm(ym);
   if (!p) return null;
@@ -59,6 +89,150 @@ function formatKeyEs(ymd: string) {
   const [y, mo, d] = ymd.split('-').map(Number);
   if (!y || !mo || !d) return ymd;
   return `${String(d).padStart(2, '0')}/${String(mo).padStart(2, '0')}`;
+}
+
+function aggregateMonth(records: StaffMealRecord[], monthYm: string): MonthAggregate | null {
+  const bounds = monthBounds(monthYm);
+  if (!bounds) return null;
+  const { startYmd, endYmd, daysInMonth, labelEs } = bounds;
+  const inMonth = (r: StaffMealRecord) => r.mealDate >= startYmd && r.mealDate <= endYmd;
+  const voidedInMonth = records.filter((r) => r.voidedAt != null && inMonth(r));
+  const active = records.filter((r) => r.voidedAt == null && inMonth(r));
+
+  const totalEur = active.reduce((s, r) => s + r.totalCostEur, 0);
+  const n = active.length;
+  const peopleSum = active.reduce((s, r) => s + r.peopleCount, 0);
+  const avgPerReg = n > 0 ? totalEur / n : 0;
+  const avgPerPerson = peopleSum > 0 ? totalEur / peopleSum : 0;
+
+  const byServiceCost = new Map<StaffMealService, number>();
+  const byServiceRegs = new Map<StaffMealService, number>();
+  const byServicePeople = new Map<StaffMealService, number>();
+  for (const s of SERVICE_ORDER) {
+    byServiceCost.set(s, 0);
+    byServiceRegs.set(s, 0);
+    byServicePeople.set(s, 0);
+  }
+  for (const r of active) {
+    byServiceCost.set(r.service, (byServiceCost.get(r.service) ?? 0) + r.totalCostEur);
+    byServiceRegs.set(r.service, (byServiceRegs.get(r.service) ?? 0) + 1);
+    byServicePeople.set(r.service, (byServicePeople.get(r.service) ?? 0) + r.peopleCount);
+  }
+  let topService: StaffMealService | null = null;
+  let topEur = 0;
+  for (const s of SERVICE_ORDER) {
+    const v = byServiceCost.get(s) ?? 0;
+    if (v > topEur) {
+      topEur = v;
+      topService = s;
+    }
+  }
+  const topPct = totalEur > 0 && topService ? ((byServiceCost.get(topService) ?? 0) / totalEur) * 100 : 0;
+  const topLine =
+    topService && (byServiceCost.get(topService) ?? 0) > 0
+      ? `${SERVICE_LABEL[topService]} (${topPct.toFixed(0)}%)`
+      : '—';
+
+  const byDay = new Map<string, number>();
+  for (const r of active) {
+    byDay.set(r.mealDate, (byDay.get(r.mealDate) ?? 0) + r.totalCostEur);
+  }
+  const p = parseMonthYm(monthYm)!;
+  const days: Array<{ key: string; cost: number }> = [];
+  for (let d = 1; d <= daysInMonth; d++) {
+    const ymd = `${p.y}-${String(p.m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+    days.push({ key: ymd, cost: Math.round((byDay.get(ymd) ?? 0) * 100) / 100 });
+  }
+  let peakDay: { key: string; cost: number } | null = null;
+  for (const d of days) {
+    if (!peakDay || d.cost > peakDay.cost) peakDay = d;
+  }
+  const daysWithCost = days.filter((d) => d.cost > 0).length;
+
+  return {
+    monthYm,
+    labelEs,
+    startYmd,
+    endYmd,
+    daysInMonth,
+    voidedInMonth,
+    active,
+    totalEur,
+    n,
+    peopleSum,
+    avgPerReg,
+    avgPerPerson,
+    byServiceCost,
+    byServiceRegs,
+    byServicePeople,
+    days,
+    peakDay,
+    daysWithCost,
+    topLine,
+  };
+}
+
+function fmtDeltaAbs(prev: number, curr: number, suffix = ''): string {
+  const d = curr - prev;
+  if (Math.abs(d) < 1e-9) return `0${suffix}`;
+  const sign = d > 0 ? '+' : '';
+  return `${sign}${d.toLocaleString('es-ES', { maximumFractionDigits: 2 })}${suffix}`;
+}
+
+function fmtDeltaPct(prev: number, curr: number): string {
+  if (prev === 0 && curr === 0) return '—';
+  if (prev === 0) return curr > 0 ? 'Nuevo' : '—';
+  const pct = ((curr - prev) / prev) * 100;
+  const sign = pct > 0 ? '+' : '';
+  return `${sign}${pct.toFixed(1)} %`;
+}
+
+function drawTwoMonthTotalCompare(
+  doc: jsPDF,
+  opts: {
+    x: number;
+    y: number;
+    w: number;
+    h: number;
+    labelPrev: string;
+    valuePrev: number;
+    labelCurr: string;
+    valueCurr: number;
+  },
+): void {
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(10);
+  doc.setTextColor(...PDF_ZINC_900);
+  doc.text('Coste total: mes anterior vs mes del informe (€)', opts.x, opts.y + 11);
+  const max = Math.max(opts.valuePrev, opts.valueCurr, 0.01);
+  const baseY = opts.y + opts.h - 8;
+  const chartH = opts.h - 36;
+  const colW = (opts.w - 24) / 2;
+  const barW = Math.min(56, colW - 20);
+  const centers = [opts.x + colW / 2, opts.x + colW + 12 + colW / 2];
+
+  const drawBar = (cx: number, label: string, val: number, color: [number, number, number]) => {
+    const bh = (val / max) * chartH;
+    doc.setFillColor(...PDF_ZINC_100);
+    doc.rect(cx - barW / 2, baseY - chartH, barW, chartH, 'F');
+    if (bh > 0) {
+      doc.setFillColor(...color);
+      doc.rect(cx - barW / 2, baseY - bh, barW, bh, 'F');
+    }
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8);
+    doc.setTextColor(...PDF_ZINC_900);
+    doc.text(`${val.toFixed(2)} €`, cx, baseY - chartH - 6, { align: 'center' });
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7);
+    doc.setTextColor(...PDF_ZINC_500);
+    const lines = doc.splitTextToSize(label, colW - 4);
+    doc.text(lines, cx, baseY + 10, { align: 'center' });
+  };
+
+  drawBar(centers[0]!, opts.labelPrev, opts.valuePrev, PDF_MUTED_BAR);
+  drawBar(centers[1]!, opts.labelCurr, opts.valueCurr, PDF_BRAND);
+  doc.setTextColor(...PDF_ZINC_900);
 }
 
 function drawServiceCostBars(
@@ -155,6 +329,133 @@ function drawDailyCostBars(
   doc.setTextColor(...PDF_ZINC_900);
 }
 
+function drawServiceMoMCompare(
+  doc: jsPDF,
+  opts: {
+    x: number;
+    y: number;
+    w: number;
+    h: number;
+    prev: MonthAggregate;
+    curr: MonthAggregate;
+  },
+): void {
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(10);
+  doc.setTextColor(...PDF_ZINC_900);
+  doc.text('Coste por servicio: anterior vs informe (€)', opts.x, opts.y + 11);
+  const innerTop = opts.y + 22;
+  const row0 = innerTop;
+  const max = Math.max(
+    ...SERVICE_ORDER.map((s) => Math.max(opts.prev.byServiceCost.get(s) ?? 0, opts.curr.byServiceCost.get(s) ?? 0)),
+    0.01,
+  );
+  const wLab = 86;
+  const trackW = opts.w - wLab - 112;
+  const gap = 5;
+  const pairW = (trackW - gap) / 2;
+  let y = row0;
+  for (const s of SERVICE_ORDER) {
+    const a = opts.prev.byServiceCost.get(s) ?? 0;
+    const b = opts.curr.byServiceCost.get(s) ?? 0;
+    if (a <= 0 && b <= 0) continue;
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7.5);
+    doc.setTextColor(...PDF_ZINC_500);
+    doc.text(SERVICE_LABEL[s], opts.x, y + 9);
+    const trackX = opts.x + wLab;
+    const barH = 10;
+    doc.setFillColor(...PDF_ZINC_100);
+    doc.rect(trackX, y, pairW, barH, 'F');
+    doc.rect(trackX + pairW + gap, y, pairW, barH, 'F');
+    const fa = (a / max) * pairW;
+    const fb = (b / max) * pairW;
+    if (fa > 0) {
+      doc.setFillColor(...PDF_MUTED_BAR);
+      doc.rect(trackX, y, Math.max(1, fa), barH, 'F');
+    }
+    if (fb > 0) {
+      doc.setFillColor(...PDF_BRAND);
+      doc.rect(trackX + pairW + gap, y, Math.max(1, fb), barH, 'F');
+    }
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(6.8);
+    doc.setTextColor(...PDF_ZINC_900);
+    doc.text(`${a.toFixed(2)}`, trackX + pairW - 2, y + 7, { align: 'right' });
+    doc.text(`${b.toFixed(2)}`, trackX + pairW + gap + pairW - 2, y + 7, { align: 'right' });
+    y += barH + 8;
+    if (y > opts.y + opts.h - 4) break;
+  }
+  if (y === row0) {
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
+    doc.setTextColor(...PDF_ZINC_500);
+    doc.text('Sin datos comparables por servicio.', opts.x, innerTop + 14);
+  } else {
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(6);
+    doc.setTextColor(...PDF_ZINC_400);
+    doc.text('Izq. = mes anterior · Der. = mes informe', opts.x + wLab, y + 4);
+  }
+  doc.setTextColor(...PDF_ZINC_900);
+}
+
+function appendDetailTable(
+  doc: jsPDF,
+  opts: { margin: number; contentW: number; pageH: number; title: string; active: StaffMealRecord[]; startY: number },
+): number {
+  let y = opts.startY;
+  if (y > opts.pageH - 100) {
+    doc.addPage();
+    y = 36;
+  }
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(12);
+  doc.setTextColor(...PDF_ZINC_900);
+  doc.text(opts.title, opts.margin, y);
+
+  const sorted = [...opts.active].sort((a, b) => {
+    const da = a.mealDate.localeCompare(b.mealDate);
+    if (da !== 0) return da < 0 ? 1 : -1;
+    return a.createdAt < b.createdAt ? 1 : -1;
+  });
+
+  const body =
+    sorted.length === 0
+      ? [['—', '—', '—', '—', '—', '—', 'Sin registros activos en el periodo']]
+      : sorted.map((r) => {
+          const notes = (r.notes ?? '').trim();
+          const notesShort = notes.length > 48 ? `${notes.slice(0, 45)}…` : notes;
+          return [
+            formatKeyEs(r.mealDate),
+            new Date(r.createdAt).toLocaleString('es-ES', {
+              day: '2-digit',
+              month: '2-digit',
+              year: 'numeric',
+              hour: '2-digit',
+              minute: '2-digit',
+            }),
+            SERVICE_LABEL[r.service],
+            String(r.peopleCount),
+            `${r.unitCostEur.toFixed(2)} €`,
+            `${r.totalCostEur.toFixed(2)} €`,
+            notesShort || '—',
+          ];
+        });
+
+  autoTable(doc, {
+    startY: y + 10,
+    head: [['Fecha servicio', 'Alta registro', 'Servicio', 'Pers.', '€/pers.', 'Total €', 'Notas']],
+    body,
+    styles: { fontSize: 7, cellPadding: 2.5, textColor: PDF_ZINC_900 },
+    headStyles: { fillColor: PDF_BRAND, textColor: PDF_WHITE, fontSize: 7.5 },
+    alternateRowStyles: { fillColor: [248, 250, 252] },
+    columnStyles: { 6: { cellWidth: 130 } },
+    margin: { left: opts.margin, right: opts.margin },
+  });
+  return (doc as DocWithTable).lastAutoTable?.finalY ?? y + 40;
+}
+
 export function downloadStaffMealReportPdf(input: {
   localLabel: string;
   /** Mes del informe YYYY-MM */
@@ -162,65 +463,13 @@ export function downloadStaffMealReportPdf(input: {
   records: StaffMealRecord[];
   generatedByLabel?: string;
 }): void {
-  const bounds = monthBounds(input.monthYm);
-  if (!bounds) {
+  const cur = aggregateMonth(input.records, input.monthYm);
+  if (!cur) {
     throw new Error('Mes del informe inválido. Usa AAAA-MM.');
   }
 
-  const { startYmd, endYmd, daysInMonth, labelEs } = bounds;
-  const inMonth = (r: StaffMealRecord) => r.mealDate >= startYmd && r.mealDate <= endYmd;
-  const voidedInMonth = input.records.filter((r) => r.voidedAt != null && inMonth(r));
-  const active = input.records.filter((r) => r.voidedAt == null && inMonth(r));
-
-  const totalEur = active.reduce((s, r) => s + r.totalCostEur, 0);
-  const n = active.length;
-  const peopleSum = active.reduce((s, r) => s + r.peopleCount, 0);
-  const avgPerReg = n > 0 ? totalEur / n : 0;
-  const avgPerPerson = peopleSum > 0 ? totalEur / peopleSum : 0;
-
-  const byServiceCost = new Map<StaffMealService, number>();
-  const byServiceRegs = new Map<StaffMealService, number>();
-  const byServicePeople = new Map<StaffMealService, number>();
-  for (const s of SERVICE_ORDER) {
-    byServiceCost.set(s, 0);
-    byServiceRegs.set(s, 0);
-    byServicePeople.set(s, 0);
-  }
-  for (const r of active) {
-    byServiceCost.set(r.service, (byServiceCost.get(r.service) ?? 0) + r.totalCostEur);
-    byServiceRegs.set(r.service, (byServiceRegs.get(r.service) ?? 0) + 1);
-    byServicePeople.set(r.service, (byServicePeople.get(r.service) ?? 0) + r.peopleCount);
-  }
-  let topService: StaffMealService | null = null;
-  let topEur = 0;
-  for (const s of SERVICE_ORDER) {
-    const v = byServiceCost.get(s) ?? 0;
-    if (v > topEur) {
-      topEur = v;
-      topService = s;
-    }
-  }
-  const topPct = totalEur > 0 && topService ? ((byServiceCost.get(topService) ?? 0) / totalEur) * 100 : 0;
-  const topLine =
-    topService && (byServiceCost.get(topService) ?? 0) > 0
-      ? `${SERVICE_LABEL[topService]} (${topPct.toFixed(0)}%)`
-      : '—';
-
-  const byDay = new Map<string, number>();
-  for (const r of active) {
-    byDay.set(r.mealDate, (byDay.get(r.mealDate) ?? 0) + r.totalCostEur);
-  }
-  const p = parseMonthYm(input.monthYm)!;
-  const days: Array<{ key: string; cost: number }> = [];
-  for (let d = 1; d <= daysInMonth; d++) {
-    const ymd = `${p.y}-${String(p.m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-    days.push({ key: ymd, cost: Math.round((byDay.get(ymd) ?? 0) * 100) / 100 });
-  }
-  let peakDay: { key: string; cost: number } | null = null;
-  for (const d of days) {
-    if (!peakDay || d.cost > peakDay.cost) peakDay = d;
-  }
-  const daysWithCost = days.filter((d) => d.cost > 0).length;
+  const prevYm = previousMonthYm(input.monthYm);
+  const prev = prevYm ? aggregateMonth(input.records, prevYm) : null;
 
   const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' });
   const pageW = doc.internal.pageSize.getWidth();
@@ -245,33 +494,37 @@ export function downloadStaffMealReportPdf(input: {
   doc.setFontSize(10.5);
   doc.setTextColor(...PDF_ZINC_500);
   doc.text(`Local: ${input.localLabel}`, margin, 58);
-  doc.text(`Periodo: ${labelEs} (${formatKeyEs(startYmd)} – ${formatKeyEs(endYmd)})`, margin, 72);
+  doc.text(`Periodo principal: ${cur.labelEs} (${formatKeyEs(cur.startYmd)} – ${formatKeyEs(cur.endYmd)})`, margin, 72);
+  if (prev) {
+    doc.text(`Incluye comparativa y anexo con: ${prev.labelEs}`, margin, 86);
+  }
   if (input.generatedByLabel?.trim()) {
-    doc.text(`Generado por: ${input.generatedByLabel.trim()}`, margin, 86);
+    doc.text(`Generado por: ${input.generatedByLabel.trim()}`, margin, prev ? 100 : 86);
   }
   doc.setFontSize(9);
   doc.setTextColor(...PDF_ZINC_500);
+  const descY = input.generatedByLabel?.trim() ? (prev ? 114 : 100) : prev ? 100 : 86;
   doc.text(
     'Informe económico para imputar consumo de personal a coste de personal. Solo registros activos (no anulados). Importes en € IVA excluido según €/persona registrados.',
     margin,
-    input.generatedByLabel?.trim() ? 100 : 86,
+    descY,
     { maxWidth: contentW },
   );
 
-  const kpiY = input.generatedByLabel?.trim() ? 118 : 104;
+  const kpiY = descY + 22;
   const gap = 8;
   const nKpi = 6;
   const kpiW = (contentW - (nKpi - 1) * gap) / nKpi;
   const kpiH = 52;
   const peakLabel =
-    peakDay && peakDay.cost > 0 ? `${formatKeyEs(peakDay.key)} · ${peakDay.cost.toFixed(2)} €` : '—';
+    cur.peakDay && cur.peakDay.cost > 0 ? `${formatKeyEs(cur.peakDay.key)} · ${cur.peakDay.cost.toFixed(2)} €` : '—';
   const kpis: [string, string][] = [
-    ['Coste total', `${totalEur.toFixed(2)} €`],
-    ['Registros', String(n)],
-    ['Personas (Σ)', peopleSum.toLocaleString('es-ES', { maximumFractionDigits: 2 })],
-    ['Media / registro', n > 0 ? `${avgPerReg.toFixed(2)} €` : '—'],
-    ['Media / persona', peopleSum > 0 ? `${avgPerPerson.toFixed(2)} €` : '—'],
-    ['Servicio principal', topLine],
+    ['Coste total', `${cur.totalEur.toFixed(2)} €`],
+    ['Registros', String(cur.n)],
+    ['Personas (Σ)', cur.peopleSum.toLocaleString('es-ES', { maximumFractionDigits: 2 })],
+    ['Media / registro', cur.n > 0 ? `${cur.avgPerReg.toFixed(2)} €` : '—'],
+    ['Media / persona', cur.peopleSum > 0 ? `${cur.avgPerPerson.toFixed(2)} €` : '—'],
+    ['Servicio principal', cur.topLine],
   ];
   for (let i = 0; i < nKpi; i++) {
     const x = margin + i * (kpiW + gap);
@@ -292,12 +545,113 @@ export function downloadStaffMealReportPdf(input: {
   doc.setFontSize(8.5);
   doc.setTextColor(...PDF_ZINC_500);
   doc.text(
-    `Días con coste > 0: ${daysWithCost} / ${daysInMonth} · Pico diario: ${peakLabel} · Registros anulados en el mes (excluidos): ${voidedInMonth.length}`,
+    `Días con coste > 0: ${cur.daysWithCost} / ${cur.daysInMonth} · Pico diario: ${peakLabel} · Registros anulados en el mes (excluidos): ${cur.voidedInMonth.length}`,
     margin,
     yAfterKpi,
     { maxWidth: contentW },
   );
   yAfterKpi += 18;
+
+  if (prev) {
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(12);
+    doc.setTextColor(...PDF_ZINC_900);
+    doc.text('Comparativa vs mes anterior', margin, yAfterKpi);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8.5);
+    doc.setTextColor(...PDF_ZINC_500);
+    doc.text(
+      `Mes anterior: ${prev.labelEs} · Coste total ${prev.totalEur.toFixed(2)} € · ${prev.n} registros · ${prev.peopleSum.toLocaleString('es-ES', { maximumFractionDigits: 2 })} personas`,
+      margin,
+      yAfterKpi + 14,
+      { maxWidth: contentW },
+    );
+    yAfterKpi += 28;
+
+    const compareBody = [
+      [
+        'Coste total (€)',
+        prev.totalEur.toFixed(2),
+        cur.totalEur.toFixed(2),
+        fmtDeltaAbs(prev.totalEur, cur.totalEur, ' €'),
+        fmtDeltaPct(prev.totalEur, cur.totalEur),
+      ],
+      [
+        'Registros',
+        String(prev.n),
+        String(cur.n),
+        (() => {
+          const dr = cur.n - prev.n;
+          if (dr === 0) return '0';
+          return `${dr > 0 ? '+' : ''}${dr}`;
+        })(),
+        fmtDeltaPct(prev.n, cur.n),
+      ],
+      [
+        'Personas (Σ)',
+        prev.peopleSum.toLocaleString('es-ES', { maximumFractionDigits: 2 }),
+        cur.peopleSum.toLocaleString('es-ES', { maximumFractionDigits: 2 }),
+        fmtDeltaAbs(prev.peopleSum, cur.peopleSum),
+        fmtDeltaPct(prev.peopleSum, cur.peopleSum),
+      ],
+      [
+        'Media € / registro',
+        prev.n > 0 ? prev.avgPerReg.toFixed(2) : '—',
+        cur.n > 0 ? cur.avgPerReg.toFixed(2) : '—',
+        prev.n > 0 && cur.n > 0 ? fmtDeltaAbs(prev.avgPerReg, cur.avgPerReg, ' €') : '—',
+        prev.n > 0 && cur.n > 0 ? fmtDeltaPct(prev.avgPerReg, cur.avgPerReg) : '—',
+      ],
+      [
+        'Media € / persona',
+        prev.peopleSum > 0 ? prev.avgPerPerson.toFixed(2) : '—',
+        cur.peopleSum > 0 ? cur.avgPerPerson.toFixed(2) : '—',
+        prev.peopleSum > 0 && cur.peopleSum > 0 ? fmtDeltaAbs(prev.avgPerPerson, cur.avgPerPerson, ' €') : '—',
+        prev.peopleSum > 0 && cur.peopleSum > 0 ? fmtDeltaPct(prev.avgPerPerson, cur.avgPerPerson) : '—',
+      ],
+    ];
+
+    autoTable(doc, {
+      startY: yAfterKpi,
+      head: [['Concepto', `Mes anterior (${prev.labelEs})`, `Mes informe (${cur.labelEs})`, 'Diferencia', 'Var. %']],
+      body: compareBody,
+      styles: { fontSize: 8, cellPadding: 3, textColor: PDF_ZINC_900 },
+      headStyles: { fillColor: PDF_BRAND, textColor: PDF_WHITE },
+      alternateRowStyles: { fillColor: [248, 250, 252] },
+      margin: { left: margin, right: margin },
+      tableWidth: contentW,
+    });
+    yAfterKpi = (doc as DocWithTable).lastAutoTable?.finalY ?? yAfterKpi + 80;
+    yAfterKpi += 10;
+
+    const compareChartH = 118;
+    const compareGap = 12;
+    const totalW = contentW * 0.38;
+    const svcW = contentW - totalW - compareGap;
+    drawTwoMonthTotalCompare(doc, {
+      x: margin,
+      y: yAfterKpi,
+      w: totalW,
+      h: compareChartH,
+      labelPrev: prev.labelEs,
+      valuePrev: Math.round(prev.totalEur * 100) / 100,
+      labelCurr: cur.labelEs,
+      valueCurr: Math.round(cur.totalEur * 100) / 100,
+    });
+    drawServiceMoMCompare(doc, {
+      x: margin + totalW + compareGap,
+      y: yAfterKpi,
+      w: svcW,
+      h: compareChartH,
+      prev,
+      curr: cur,
+    });
+    yAfterKpi += compareChartH + 18;
+  }
+
+  if (yAfterKpi > pageH - 200) {
+    doc.addPage();
+    yAfterKpi = 36;
+  }
 
   const chartY = yAfterKpi;
   const chartH = 156;
@@ -306,27 +660,27 @@ export function downloadStaffMealReportPdf(input: {
   const rightW = contentW - leftW - chartGap;
   const serviceItems = SERVICE_ORDER.map((s) => ({
     label: SERVICE_LABEL[s],
-    totalCost: Math.round((byServiceCost.get(s) ?? 0) * 100) / 100,
+    totalCost: Math.round((cur.byServiceCost.get(s) ?? 0) * 100) / 100,
   })).filter((x) => x.totalCost > 0);
   drawServiceCostBars(doc, { x: margin, y: chartY, w: leftW, h: chartH, items: serviceItems });
-  drawDailyCostBars(doc, { x: margin + leftW + chartGap, y: chartY, w: rightW, h: chartH, days });
+  drawDailyCostBars(doc, { x: margin + leftW + chartGap, y: chartY, w: rightW, h: chartH, days: cur.days });
   yAfterKpi = chartY + chartH + 16;
 
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(12);
   doc.setTextColor(...PDF_ZINC_900);
-  doc.text('Agregado por servicio', margin, yAfterKpi);
+  doc.text('Agregado por servicio (mes del informe)', margin, yAfterKpi);
   const summaryBody = SERVICE_ORDER.map((s) => {
-    const cost = byServiceCost.get(s) ?? 0;
-    const regs = byServiceRegs.get(s) ?? 0;
-    const pers = byServicePeople.get(s) ?? 0;
-    const pct = totalEur > 0 ? (cost / totalEur) * 100 : 0;
+    const cost = cur.byServiceCost.get(s) ?? 0;
+    const regs = cur.byServiceRegs.get(s) ?? 0;
+    const pers = cur.byServicePeople.get(s) ?? 0;
+    const pct = cur.totalEur > 0 ? (cost / cur.totalEur) * 100 : 0;
     return [
       SERVICE_LABEL[s],
       String(regs),
       pers.toLocaleString('es-ES', { maximumFractionDigits: 2 }),
       `${cost.toFixed(2)} €`,
-      totalEur > 0 ? `${pct.toFixed(1)} %` : '—',
+      cur.totalEur > 0 ? `${pct.toFixed(1)} %` : '—',
     ];
   });
   autoTable(doc, {
@@ -342,55 +696,26 @@ export function downloadStaffMealReportPdf(input: {
   yAfterKpi = (doc as DocWithTable).lastAutoTable?.finalY ?? yAfterKpi + 60;
   yAfterKpi += 12;
 
-  if (yAfterKpi > pageH - 120) {
-    doc.addPage();
-    yAfterKpi = 36;
+  yAfterKpi = appendDetailTable(doc, {
+    margin,
+    contentW,
+    pageH,
+    title: `Detalle de registros — ${cur.labelEs} (más reciente primero)`,
+    active: cur.active,
+    startY: yAfterKpi,
+  });
+  yAfterKpi += 16;
+
+  if (prev && prev.active.length > 0) {
+    appendDetailTable(doc, {
+      margin,
+      contentW,
+      pageH,
+      title: `Anexo: detalle del mes anterior — ${prev.labelEs} (más reciente primero)`,
+      active: prev.active,
+      startY: yAfterKpi,
+    });
   }
-
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(12);
-  doc.setTextColor(...PDF_ZINC_900);
-  doc.text('Detalle de registros (más reciente primero)', margin, yAfterKpi);
-
-  const sorted = [...active].sort((a, b) => {
-    const da = a.mealDate.localeCompare(b.mealDate);
-    if (da !== 0) return da < 0 ? 1 : -1;
-    return a.createdAt < b.createdAt ? 1 : -1;
-  });
-
-  const body =
-    sorted.length === 0
-      ? [['—', '—', '—', '—', '—', '—', 'Sin registros activos en el mes']]
-      : sorted.map((r) => {
-          const notes = (r.notes ?? '').trim();
-          const notesShort = notes.length > 48 ? `${notes.slice(0, 45)}…` : notes;
-          return [
-            formatKeyEs(r.mealDate),
-            new Date(r.createdAt).toLocaleString('es-ES', {
-              day: '2-digit',
-              month: '2-digit',
-              year: 'numeric',
-              hour: '2-digit',
-              minute: '2-digit',
-            }),
-            SERVICE_LABEL[r.service],
-            String(r.peopleCount),
-            `${r.unitCostEur.toFixed(2)} €`,
-            `${r.totalCostEur.toFixed(2)} €`,
-            notesShort || '—',
-          ];
-        });
-
-  autoTable(doc, {
-    startY: yAfterKpi + 10,
-    head: [['Fecha servicio', 'Alta registro', 'Servicio', 'Pers.', '€/pers.', 'Total €', 'Notas']],
-    body,
-    styles: { fontSize: 7, cellPadding: 2.5, textColor: PDF_ZINC_900 },
-    headStyles: { fillColor: PDF_BRAND, textColor: PDF_WHITE, fontSize: 7.5 },
-    alternateRowStyles: { fillColor: [248, 250, 252] },
-    columnStyles: { 6: { cellWidth: 130 } },
-    margin: { left: margin, right: margin },
-  });
 
   const totalPages = doc.getNumberOfPages();
   for (let p = 1; p <= totalPages; p++) {

@@ -281,7 +281,8 @@ export default function ComidaPersonalPage() {
       <section className="rounded-2xl bg-white p-4 ring-1 ring-zinc-200">
         <p className="text-sm font-bold text-zinc-800">Informe mensual PDF</p>
         <p className="mt-1 text-xs text-zinc-500">
-          Documento para dirección: KPIs, reparto por servicio, evolución diaria del mes y detalle de líneas. Solo salida PDF.
+          Documento para dirección: KPIs del mes elegido, comparativa frente al mes anterior (tabla + gráficas), reparto por servicio,
+          evolución diaria, detalle completo y anexo con el detalle del mes previo si hay datos. Solo PDF.
         </p>
         <label className="mt-3 block text-xs font-semibold uppercase tracking-wide text-zinc-500">Mes del informe</label>
         <input
