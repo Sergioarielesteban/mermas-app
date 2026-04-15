@@ -96,12 +96,12 @@ function Card({
       onClick={onClick}
       className={`w-full rounded-2xl bg-gradient-to-br p-[1px] text-left shadow-sm transition-transform hover:scale-[1.01] ${toneStyles.border}`}
     >
-      <div className="rounded-2xl bg-white px-4 py-5 text-center ring-1 ring-zinc-200/80">
+      <div className="rounded-2xl bg-white px-4 py-4 text-center ring-1 ring-zinc-200/80">
         <div className="flex items-center justify-center gap-1.5 text-[11px] font-extrabold uppercase tracking-[0.14em] text-zinc-500">
           {Icon ? <Icon className={`h-3.5 w-3.5 ${toneStyles.icon}`} /> : null}
           <span>{title}</span>
         </div>
-        <p className={`mt-3 inline-flex items-center justify-center rounded-xl px-3 py-1.5 text-2xl font-black ring-1 ${toneStyles.badge}`}>
+        <p className={`mt-2.5 inline-flex items-center justify-center rounded-xl px-3 py-1 text-2xl font-black ring-1 ${toneStyles.badge}`}>
           {eur(value)}
         </p>
         {extra ? <div className="mt-2 flex items-center justify-center">{extra}</div> : null}
@@ -472,45 +472,47 @@ export default function DashboardPage() {
         description="Registra mermas y consulta costes, alertas y tendencias en la misma pantalla."
       />
 
-      <Link
-        href="/productos"
-        className="group flex w-full items-center gap-4 rounded-2xl border border-[#D32F2F]/25 bg-gradient-to-r from-[#D32F2F]/[0.08] via-white to-white px-4 py-4 shadow-sm ring-1 ring-zinc-200/80 transition hover:border-[#D32F2F]/40 hover:shadow-md active:scale-[0.99]"
-      >
-        <span className="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-[#D32F2F] text-white shadow-md shadow-[#D32F2F]/25">
-          <Drumstick className="h-6 w-6" strokeWidth={2} aria-hidden />
-        </span>
-        <span className="min-w-0 flex-1 text-left">
-          <span className="block text-sm font-extrabold text-zinc-900">Productos del registro</span>
-          <span className="mt-0.5 block text-xs font-medium leading-snug text-zinc-600">
-            Añade o edita artículos que aparecen al registrar una merma.
+      <section className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+        <Link
+          href="/productos"
+          className="group flex w-full items-center gap-3 rounded-2xl border border-[#D32F2F]/25 bg-gradient-to-r from-[#D32F2F]/[0.08] via-white to-white px-3 py-3 shadow-sm ring-1 ring-zinc-200/80 transition hover:border-[#D32F2F]/40 hover:shadow-md active:scale-[0.99]"
+        >
+          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[#D32F2F] text-white shadow-md shadow-[#D32F2F]/25">
+            <Drumstick className="h-5 w-5" strokeWidth={2} aria-hidden />
           </span>
-        </span>
-        <span className="shrink-0 text-lg font-black text-[#D32F2F] transition group-hover:translate-x-0.5" aria-hidden>
-          →
-        </span>
-      </Link>
+          <span className="min-w-0 flex-1 text-left">
+            <span className="block text-sm font-extrabold text-zinc-900">Productos del registro</span>
+            <span className="mt-0.5 block text-[11px] font-medium leading-snug text-zinc-600">
+              Alta y edición rápida.
+            </span>
+          </span>
+          <span className="shrink-0 text-lg font-black text-[#D32F2F] transition group-hover:translate-x-0.5" aria-hidden>
+            →
+          </span>
+        </Link>
+
+        <Link
+          href="/resumen"
+          className="group flex w-full items-center gap-3 rounded-2xl border border-[#D32F2F]/25 bg-gradient-to-r from-[#D32F2F]/[0.08] via-white to-white px-3 py-3 shadow-sm ring-1 ring-zinc-200/80 transition hover:border-[#D32F2F]/40 hover:shadow-md active:scale-[0.99]"
+        >
+          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[#D32F2F] text-white shadow-md shadow-[#D32F2F]/25">
+            <FileBarChart2 className="h-5 w-5" strokeWidth={2} aria-hidden />
+          </span>
+          <span className="min-w-0 flex-1 text-left">
+            <span className="block text-sm font-extrabold text-zinc-900">Informes</span>
+            <span className="mt-0.5 block text-[11px] font-medium leading-snug text-zinc-600">
+              Métricas y detalle operativo.
+            </span>
+          </span>
+          <span className="shrink-0 text-lg font-black text-[#D32F2F] transition group-hover:translate-x-0.5" aria-hidden>
+            →
+          </span>
+        </Link>
+      </section>
 
       <MermasRegistrationForm />
 
-      <Link
-        href="/resumen"
-        className="group flex w-full items-center gap-4 rounded-2xl border border-[#D32F2F]/25 bg-gradient-to-r from-[#D32F2F]/[0.08] via-white to-white px-4 py-4 shadow-sm ring-1 ring-zinc-200/80 transition hover:border-[#D32F2F]/40 hover:shadow-md active:scale-[0.99]"
-      >
-        <span className="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-[#D32F2F] text-white shadow-md shadow-[#D32F2F]/25">
-          <FileBarChart2 className="h-6 w-6" strokeWidth={2} aria-hidden />
-        </span>
-        <span className="min-w-0 flex-1 text-left">
-          <span className="block text-sm font-extrabold text-zinc-900">Informes</span>
-          <span className="mt-0.5 block text-xs font-medium leading-snug text-zinc-600">
-            Resumen operativo con métricas, alertas y comparativas de mermas.
-          </span>
-        </span>
-        <span className="shrink-0 text-lg font-black text-[#D32F2F] transition group-hover:translate-x-0.5" aria-hidden>
-          →
-        </span>
-      </Link>
-
-      <section className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-zinc-200">
+      <section className="rounded-2xl bg-white p-3 shadow-sm ring-1 ring-zinc-200">
         <div className="mb-2 flex items-center justify-between">
           <h2 className="text-sm font-extrabold uppercase tracking-wide text-zinc-700">
             Alertas de Merma Alta (Mes actual)
@@ -533,7 +535,7 @@ export default function DashboardPage() {
                     }),
                   )
                 }
-                className="w-full rounded-xl border border-zinc-200 bg-zinc-50 p-3 text-left"
+                className="w-full rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2.5 text-left"
               >
                 <div className="flex items-center justify-between gap-2">
                   <p className="truncate text-sm font-bold text-zinc-900">{item.productName}</p>
@@ -559,7 +561,7 @@ export default function DashboardPage() {
         )}
       </section>
 
-      <section className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-zinc-200">
+      <section className="rounded-2xl bg-white p-3 shadow-sm ring-1 ring-zinc-200">
         <h2 className="text-sm font-extrabold uppercase tracking-wide text-zinc-700">Aviso de Anomalias (7d vs 7d)</h2>
         {anomalies.length === 0 ? (
           <p className="pt-2 text-sm text-zinc-500">Sin anomalías relevantes detectadas.</p>
@@ -579,7 +581,7 @@ export default function DashboardPage() {
                   )
                 }
                 className={[
-                  'w-full rounded-xl border p-3 text-left',
+                  'w-full rounded-xl border px-3 py-2.5 text-left',
                   item.severity === 'alta' ? 'border-red-200 bg-red-50' : 'border-amber-200 bg-amber-50',
                 ].join(' ')}
               >

@@ -37,7 +37,7 @@ function motiveLabel(key: string) {
 }
 
 export default function ResumenPage() {
-  const { mermas, products, exportData, importData, updateMerma, removeMerma } = useMermasStore();
+  const { mermas, products, updateMerma, removeMerma } = useMermasStore();
   const [productFilter, setProductFilter] = React.useState<string>('all');
   const [fromDate, setFromDate] = React.useState('');
   const [toDate, setToDate] = React.useState('');
@@ -60,6 +60,22 @@ export default function ResumenPage() {
   });
 
   const totalFiltered = filtered.reduce((acc, row) => acc + row.costEur, 0);
+  const groupedByDay = (() => {
+    const map = new Map<string, typeof filtered>();
+    for (const row of filtered) {
+      const key = toBusinessDateKey(row.occurredAt);
+      const prev = map.get(key);
+      if (prev) prev.push(row);
+      else map.set(key, [row]);
+    }
+    return [...map.entries()]
+      .sort((a, b) => b[0].localeCompare(a[0]))
+      .map(([dateKey, rows]) => ({
+        dateKey,
+        rows: rows.sort((a, b) => (a.occurredAt < b.occurredAt ? 1 : -1)),
+        total: rows.reduce((sum, r) => sum + r.costEur, 0),
+      }));
+  })();
 
   const toInputDateTime = (iso: string) => {
     const d = new Date(iso);
@@ -145,40 +161,6 @@ export default function ResumenPage() {
     });
   };
 
-  const backupJson = () => {
-    const payload = exportData();
-    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `backup-mermas-${new Date().toISOString().slice(0, 10)}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-    setMessage('Backup descargado correctamente.');
-  };
-
-  const restoreJson = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      try {
-        const text = String(reader.result ?? '');
-        const parsed = JSON.parse(text) as { products: unknown[]; mermas: unknown[] };
-        const result = importData({
-          products: Array.isArray(parsed.products) ? (parsed.products as never[]) : [],
-          mermas: Array.isArray(parsed.mermas) ? (parsed.mermas as never[]) : [],
-        });
-        setMessage(result.ok ? 'Backup restaurado correctamente.' : result.reason ?? 'No se pudo restaurar.');
-      } catch {
-        setMessage('Archivo JSON inválido.');
-      } finally {
-        event.target.value = '';
-      }
-    };
-    reader.readAsText(file);
-  };
-
   return (
     <div className="space-y-3">
       <Link
@@ -226,25 +208,14 @@ export default function ResumenPage() {
             />
           </div>
         </div>
-        <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
+        <div className="mt-3">
           <button
             type="button"
             onClick={exportPdf}
-            className="h-10 rounded-lg bg-[#D32F2F] px-3 text-sm font-bold text-white"
+            className="h-11 w-full rounded-lg bg-[#D32F2F] px-3 text-sm font-extrabold text-white shadow-sm ring-1 ring-red-900/20"
           >
-            Exportar PDF
+            Descargar informe
           </button>
-          <button
-            type="button"
-            onClick={backupJson}
-            className="h-10 rounded-lg border border-zinc-300 bg-white px-3 text-sm font-bold text-zinc-700"
-          >
-            Backup JSON
-          </button>
-          <label className="flex h-10 cursor-pointer items-center justify-center rounded-lg border border-zinc-300 bg-white px-3 text-sm font-bold text-zinc-700">
-            Restaurar JSON
-            <input type="file" accept="application/json" className="hidden" onChange={restoreJson} />
-          </label>
         </div>
         <p className="mt-2 text-xs text-zinc-500">
           Registros filtrados: {filtered.length} | Valor total: {totalFiltered.toFixed(2)} €
@@ -261,110 +232,124 @@ export default function ResumenPage() {
         </div>
       ) : null}
 
-      {filtered.map((m) => {
-        const product = products.find((p) => p.id === m.productId);
-        const isEditing = editingId === m.id;
-        return (
-          <div key={m.id} className="rounded-xl bg-white p-4 shadow-sm ring-1 ring-zinc-200">
-            {!isEditing ? (
-              <>
-                <p className="text-sm font-extrabold uppercase text-zinc-900">
-                  {product?.name ?? 'Producto'}
-                </p>
-                <p className="pt-1 text-sm text-zinc-600">
-                  Cantidad: {m.quantity} | Valor: {m.costEur.toFixed(2)} €
-                </p>
-                <p className="pt-1 text-xs text-zinc-600">Motivo: {motiveLabel(m.motiveKey)}</p>
-                <p className="pt-1 text-xs text-zinc-500">
-                  {new Date(m.occurredAt).toLocaleString('es-ES')}
-                </p>
-                {m.notes?.trim() ? (
-                  <p className="pt-1 text-xs text-zinc-600">Nota: {m.notes.trim()}</p>
-                ) : null}
-                <div className="mt-3 flex gap-2">
-                  <button
-                    type="button"
-                    onClick={() => startEdit(m.id)}
-                    className="h-9 rounded-lg border border-zinc-300 bg-white px-3 text-xs font-bold text-zinc-700"
-                  >
-                    Editar
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      void deleteMerma(m.id);
-                    }}
-                    className="h-9 rounded-lg bg-red-600 px-3 text-xs font-bold text-white"
-                  >
-                    Eliminar
-                  </button>
+      {groupedByDay.map((group) => (
+        <details key={group.dateKey} className="rounded-xl bg-white shadow-sm ring-1 ring-zinc-200">
+          <summary className="cursor-pointer list-none px-4 py-3">
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-sm font-extrabold uppercase text-zinc-900">
+                {new Date(`${group.dateKey}T12:00:00`).toLocaleDateString('es-ES')}
+              </p>
+              <p className="text-sm font-black text-[#B91C1C]">{group.total.toFixed(2)} €</p>
+            </div>
+          </summary>
+          <div className="space-y-2 border-t border-zinc-200 bg-zinc-50/50 p-3">
+            {group.rows.map((m) => {
+              const product = products.find((p) => p.id === m.productId);
+              const isEditing = editingId === m.id;
+              return (
+                <div key={m.id} className="rounded-xl bg-white p-3 ring-1 ring-zinc-200">
+                  {!isEditing ? (
+                    <>
+                      <p className="text-sm font-extrabold uppercase text-zinc-900">
+                        {product?.name ?? 'Producto'}
+                      </p>
+                      <p className="pt-1 text-sm text-zinc-600">
+                        Cantidad: {m.quantity} | Valor: {m.costEur.toFixed(2)} €
+                      </p>
+                      <p className="pt-1 text-xs text-zinc-600">Motivo: {motiveLabel(m.motiveKey)}</p>
+                      <p className="pt-1 text-xs text-zinc-500">
+                        {new Date(m.occurredAt).toLocaleString('es-ES')}
+                      </p>
+                      {m.notes?.trim() ? (
+                        <p className="pt-1 text-xs text-zinc-600">Nota: {m.notes.trim()}</p>
+                      ) : null}
+                      <div className="mt-3 flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => startEdit(m.id)}
+                          className="h-9 rounded-lg border border-zinc-300 bg-white px-3 text-xs font-bold text-zinc-700"
+                        >
+                          Editar
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            void deleteMerma(m.id);
+                          }}
+                          className="h-9 rounded-lg bg-red-600 px-3 text-xs font-bold text-white"
+                        >
+                          Eliminar
+                        </button>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="space-y-2">
+                      <select
+                        value={editProductId}
+                        onChange={(e) => setEditProductId(e.target.value)}
+                        className="h-10 w-full rounded-lg border border-zinc-200 bg-zinc-50 px-3 text-sm outline-none"
+                      >
+                        {products.map((p) => (
+                          <option key={p.id} value={p.id}>
+                            {p.name}
+                          </option>
+                        ))}
+                      </select>
+                      <input
+                        type="number"
+                        min={1}
+                        value={editQuantity}
+                        onChange={(e) => setEditQuantity(Number(e.target.value || 1))}
+                        className="h-10 w-full rounded-lg border border-zinc-200 bg-zinc-50 px-3 text-sm outline-none"
+                      />
+                      <select
+                        value={editMotive}
+                        onChange={(e) => setEditMotive(e.target.value as MermaMotiveKey)}
+                        className="h-10 w-full rounded-lg border border-zinc-200 bg-zinc-50 px-3 text-sm outline-none"
+                      >
+                        {MOTIVES.map((item) => (
+                          <option key={item.key} value={item.key}>
+                            {item.label}
+                          </option>
+                        ))}
+                      </select>
+                      <input
+                        type="datetime-local"
+                        value={editOccurredAt}
+                        onChange={(e) => setEditOccurredAt(e.target.value)}
+                        className="h-10 w-full rounded-lg border border-zinc-200 bg-zinc-50 px-3 text-sm outline-none"
+                      />
+                      <textarea
+                        value={editNotes}
+                        onChange={(e) => setEditNotes(e.target.value)}
+                        rows={2}
+                        placeholder="Notas..."
+                        className="w-full rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm outline-none"
+                      />
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={saveEdit}
+                          className="h-9 rounded-lg bg-[#D32F2F] px-3 text-xs font-bold text-white"
+                        >
+                          Guardar cambios
+                        </button>
+                        <button
+                          type="button"
+                          onClick={cancelEdit}
+                          className="h-9 rounded-lg border border-zinc-300 bg-white px-3 text-xs font-bold text-zinc-700"
+                        >
+                          Cancelar
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
-              </>
-            ) : (
-              <div className="space-y-2">
-                <select
-                  value={editProductId}
-                  onChange={(e) => setEditProductId(e.target.value)}
-                  className="h-10 w-full rounded-lg border border-zinc-200 bg-zinc-50 px-3 text-sm outline-none"
-                >
-                  {products.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name}
-                    </option>
-                  ))}
-                </select>
-                <input
-                  type="number"
-                  min={1}
-                  value={editQuantity}
-                  onChange={(e) => setEditQuantity(Number(e.target.value || 1))}
-                  className="h-10 w-full rounded-lg border border-zinc-200 bg-zinc-50 px-3 text-sm outline-none"
-                />
-                <select
-                  value={editMotive}
-                  onChange={(e) => setEditMotive(e.target.value as MermaMotiveKey)}
-                  className="h-10 w-full rounded-lg border border-zinc-200 bg-zinc-50 px-3 text-sm outline-none"
-                >
-                  {MOTIVES.map((item) => (
-                    <option key={item.key} value={item.key}>
-                      {item.label}
-                    </option>
-                  ))}
-                </select>
-                <input
-                  type="datetime-local"
-                  value={editOccurredAt}
-                  onChange={(e) => setEditOccurredAt(e.target.value)}
-                  className="h-10 w-full rounded-lg border border-zinc-200 bg-zinc-50 px-3 text-sm outline-none"
-                />
-                <textarea
-                  value={editNotes}
-                  onChange={(e) => setEditNotes(e.target.value)}
-                  rows={2}
-                  placeholder="Notas..."
-                  className="w-full rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm outline-none"
-                />
-                <div className="flex gap-2">
-                  <button
-                    type="button"
-                    onClick={saveEdit}
-                    className="h-9 rounded-lg bg-[#D32F2F] px-3 text-xs font-bold text-white"
-                  >
-                    Guardar cambios
-                  </button>
-                  <button
-                    type="button"
-                    onClick={cancelEdit}
-                    className="h-9 rounded-lg border border-zinc-300 bg-white px-3 text-xs font-bold text-zinc-700"
-                  >
-                    Cancelar
-                  </button>
-                </div>
-              </div>
-            )}
+              );
+            })}
           </div>
-        );
-      })}
+        </details>
+      ))}
     </div>
   );
 }

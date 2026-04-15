@@ -322,7 +322,7 @@ export default function MermasRegistrationForm() {
               className="hidden"
             />
 
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-2 gap-1.5">
               {motives.map((m) => {
                 const isSelected = m.key === motiveKey;
                 return (
@@ -331,15 +331,15 @@ export default function MermasRegistrationForm() {
                     type="button"
                     onClick={() => setMotiveKey((prev) => (prev === m.key ? null : m.key))}
                     className={[
-                      'flex h-16 items-center justify-center gap-2 rounded-md border px-2 text-center transition-all',
+                      'flex h-12 items-center justify-center gap-1.5 rounded-md border px-2 text-center transition-all',
                       isSelected
                         ? 'border-[#D32F2F] bg-[#D32F2F]/10 text-zinc-900 shadow-sm'
                         : 'border-zinc-300 bg-zinc-50 text-zinc-800 hover:border-zinc-400',
                     ].join(' ')}
                     aria-pressed={isSelected}
                   >
-                    <span className="text-lg leading-none">{m.emoji}</span>
-                    <span className="text-[11px] font-semibold leading-tight">{m.label}</span>
+                    <span className="text-base leading-none">{m.emoji}</span>
+                    <span className="text-[10px] font-semibold leading-tight">{m.label}</span>
                   </button>
                 );
               })}
@@ -379,9 +379,9 @@ export default function MermasRegistrationForm() {
             <textarea
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              rows={4}
+              rows={3}
               placeholder="Escribe aquí cualquier observación..."
-              className="w-full resize-none rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm text-zinc-900 shadow-sm outline-none focus:border-[#D32F2F] focus:ring-2 focus:ring-[#D32F2F]/20"
+              className="w-full resize-none rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-2 text-sm text-zinc-900 shadow-sm outline-none focus:border-[#D32F2F] focus:ring-2 focus:ring-[#D32F2F]/20"
               aria-label="Notas"
             />
           </div>
