@@ -28,6 +28,7 @@ import {
 import { downloadStaffMealReportPdf } from '@/lib/comida-personal-report-pdf';
 import { formatLocalHeaderName } from '@/lib/local-display-name';
 import { getSupabaseClient } from '@/lib/supabase-client';
+import MermasStyleHero from '@/components/MermasStyleHero';
 
 const SERVICE_LABEL: Record<StaffMealService, string> = {
   desayuno: 'Desayuno',
@@ -360,22 +361,21 @@ export default function ComidaPersonalPage() {
 
   return (
     <div className="space-y-4">
-      <section className="rounded-2xl bg-white p-4 ring-1 ring-zinc-200">
-        <div className="flex items-start justify-between gap-2">
-          <div className="min-w-0">
-            <p className="text-sm font-black text-zinc-900">Comida de personal</p>
-            <p className="mt-1 text-xs text-zinc-500">Registro rápido de consumo interno.</p>
-          </div>
-          <button
-            type="button"
-            onClick={() => void loadData()}
-            className="shrink-0 rounded-lg border border-zinc-200 bg-white px-2.5 py-1.5 text-xs font-bold text-[#D32F2F]"
-          >
-            Actualizar
-          </button>
-        </div>
-        {loading ? <p className="mt-2 text-xs text-zinc-400">Cargando datos…</p> : null}
-      </section>
+      <MermasStyleHero
+        eyebrow="Comida de personal"
+        title="Registro y coste interno"
+        description="Registro en segundos para imputar consumo interno a coste de personal."
+      />
+      <div className="flex items-center justify-end gap-3">
+        {loading ? <span className="text-xs text-zinc-500">Cargando datos…</span> : null}
+        <button
+          type="button"
+          onClick={() => void loadData()}
+          className="rounded-lg border border-zinc-200 bg-white px-2.5 py-1.5 text-xs font-bold text-[#D32F2F] shadow-sm"
+        >
+          Actualizar
+        </button>
+      </div>
 
       <section className="rounded-2xl bg-white p-4 ring-1 ring-zinc-200">
         <div className="flex w-full flex-col items-center">
