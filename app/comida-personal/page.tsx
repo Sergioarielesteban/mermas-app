@@ -131,6 +131,29 @@ export default function ComidaPersonalPage() {
   React.useEffect(() => {
     if (productPickerOpen) setPickerSearch('');
   }, [productPickerOpen]);
+
+  /** Teclado móvil (iOS/Android): espacio visible por encima del teclado para que el catálogo sea usable. */
+  const [keyboardInsetPx, setKeyboardInsetPx] = React.useState(0);
+  React.useEffect(() => {
+    if (!productPickerOpen || typeof window === 'undefined') {
+      setKeyboardInsetPx(0);
+      return;
+    }
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const sync = () => {
+      const inset = Math.max(0, Math.round(window.innerHeight - vv.height - vv.offsetTop));
+      setKeyboardInsetPx(inset);
+    };
+    sync();
+    vv.addEventListener('resize', sync);
+    vv.addEventListener('scroll', sync);
+    return () => {
+      vv.removeEventListener('resize', sync);
+      vv.removeEventListener('scroll', sync);
+      setKeyboardInsetPx(0);
+    };
+  }, [productPickerOpen]);
   const selectedLines = React.useMemo(
     () =>
       Object.entries(qtyByProductId)
@@ -688,15 +711,20 @@ export default function ComidaPersonalPage() {
       </section>
 
       {productPickerOpen ? (
-        <div className="fixed inset-0 z-[100] flex items-end justify-center sm:items-center sm:p-4" role="dialog" aria-modal="true" aria-label="Buscar artículo">
+        <div
+          className="fixed inset-0 z-[100] flex flex-col sm:items-center sm:justify-center sm:bg-black/45 sm:p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Buscar artículo"
+        >
           <button
             type="button"
             aria-label="Cerrar buscador"
-            className="absolute inset-0 bg-black/45"
+            className="absolute inset-0 hidden bg-black/45 sm:block"
             onClick={() => setProductPickerOpen(false)}
           />
-          <div className="relative z-[1] flex max-h-[88vh] w-full max-w-lg flex-col rounded-t-3xl bg-white shadow-2xl ring-1 ring-zinc-200 sm:max-h-[85vh] sm:rounded-3xl">
-            <div className="flex items-center justify-between gap-2 border-b border-zinc-100 px-4 py-3">
+          <div className="relative z-[1] flex min-h-0 w-full max-w-lg flex-1 flex-col overflow-hidden bg-white shadow-2xl ring-zinc-200 max-sm:h-[100dvh] max-sm:max-h-[100dvh] max-sm:rounded-none max-sm:pt-[env(safe-area-inset-top,0px)] sm:max-h-[min(85vh,44rem)] sm:flex-none sm:rounded-3xl sm:ring-1">
+            <div className="flex shrink-0 items-center justify-between gap-2 border-b border-zinc-100 px-4 py-3">
               <p className="text-sm font-black text-zinc-900">Buscar artículo</p>
               <button
                 type="button"
@@ -707,11 +735,14 @@ export default function ComidaPersonalPage() {
                 <X className="h-4 w-4" />
               </button>
             </div>
-            <div className="px-4 pt-3">
+            <div className="shrink-0 px-4 pt-3">
               <div className="flex items-center gap-2 rounded-xl border border-zinc-300 bg-zinc-50 px-3 ring-1 ring-zinc-200">
                 <Search className="h-4 w-4 shrink-0 text-zinc-500" aria-hidden />
                 <input
                   autoFocus
+                  enterKeyHint="search"
+                  autoComplete="off"
+                  autoCorrect="off"
                   value={pickerSearch}
                   onChange={(e) => setPickerSearch(e.target.value)}
                   placeholder="Escribe para filtrar…"
@@ -719,7 +750,14 @@ export default function ComidaPersonalPage() {
                 />
               </div>
             </div>
-            <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
+            <div
+              className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-3"
+              style={
+                keyboardInsetPx > 0
+                  ? { paddingBottom: `${keyboardInsetPx + 12}px` }
+                  : undefined
+              }
+            >
               {pickerProducts.length === 0 ? (
                 <p className="py-8 text-center text-sm text-zinc-500">Sin coincidencias.</p>
               ) : (
