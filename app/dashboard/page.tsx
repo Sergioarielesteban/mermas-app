@@ -472,6 +472,8 @@ export default function DashboardPage() {
         description="Registra mermas y consulta costes, alertas y tendencias en la misma pantalla."
       />
 
+      <MermasRegistrationForm />
+
       <section className="grid grid-cols-1 gap-2 sm:grid-cols-2">
         <Link
           href="/productos"
@@ -509,8 +511,6 @@ export default function DashboardPage() {
           </span>
         </Link>
       </section>
-
-      <MermasRegistrationForm />
 
       <section className="rounded-2xl bg-white p-3 shadow-sm ring-1 ring-zinc-200">
         <div className="mb-2 flex items-center justify-between">
