@@ -123,6 +123,13 @@ export default function PanelControlPage() {
           tone="red"
         />
         <HubTile
+          href="/escandallos"
+          label="Escandallos"
+          sub="Recetas, food cost y centro de mando con gráficas"
+          Icon={Calculator}
+          tone="red"
+        />
+        <HubTile
           onClick={() => onComingSoonModule('Cocina central')}
           label="Cocina central"
           sub={COMING_SOON_SUB}
@@ -139,12 +146,6 @@ export default function PanelControlPage() {
           label="Comida de personal"
           sub={COMING_SOON_SUB}
           Icon={UtensilsCrossed}
-        />
-        <HubTile
-          href="/escandallos"
-          label="Escandallos"
-          sub="Recetas, food cost y centro de mando con gráficas"
-          Icon={Calculator}
         />
       </div>
     </div>
