@@ -6,6 +6,7 @@ import { ChevronLeft } from 'lucide-react';
 import MermasStyleHero from '@/components/MermasStyleHero';
 import { useAuth } from '@/components/AuthProvider';
 import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
+import { requestDeleteSecurityPin } from '@/lib/delete-security';
 import {
   APPCC_UNIT_TYPE_LABEL,
   APPCC_ZONE_LABEL,
@@ -179,6 +180,10 @@ export default function AppccEquiposPage() {
         `¿Eliminar «${u.name}»? Se borrará también el historial de temperaturas de este equipo. No se puede deshacer.`,
       )
     ) {
+      return;
+    }
+    if (!requestDeleteSecurityPin()) {
+      setBanner('Clave de seguridad incorrecta.');
       return;
     }
     const supabase = getSupabaseClient();

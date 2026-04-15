@@ -39,6 +39,39 @@ export const APPCC_OIL_EVENT_LABEL: Record<AppccOilEventType, string> = {
   filtrado: 'Filtrado',
 };
 
+const FILTRADO_EXTRA_LITERS_TAG = /\[FILTRADO\+(\d+(?:[.,]\d+)?)L\]/i;
+
+export function extractFilteredExtraLitersFromNotes(notes: string | null | undefined): number | null {
+  const t = notes?.trim();
+  if (!t) return null;
+  const m = t.match(FILTRADO_EXTRA_LITERS_TAG);
+  if (!m?.[1]) return null;
+  const raw = m[1].replace(',', '.');
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n < 0) return null;
+  return Math.round(n * 100) / 100;
+}
+
+export function stripFilteredExtraLitersTag(notes: string | null | undefined): string {
+  const t = notes?.trim();
+  if (!t) return '';
+  return t.replace(FILTRADO_EXTRA_LITERS_TAG, '').replace(/\s{2,}/g, ' ').trim();
+}
+
+export function withFilteredExtraLitersTag(notes: string | null | undefined, liters: number): string {
+  const clean = stripFilteredExtraLitersTag(notes);
+  const lit = Math.round(liters * 100) / 100;
+  return clean ? `${clean} [FILTRADO+${lit}L]` : `[FILTRADO+${lit}L]`;
+}
+
+export function oilEventEffectiveLiters(e: Pick<AppccOilEventRow, 'event_type' | 'liters_used' | 'notes'>): number | null {
+  if (e.liters_used != null && Number.isFinite(e.liters_used) && e.liters_used >= 0) {
+    return Math.round(e.liters_used * 100) / 100;
+  }
+  if (e.event_type !== 'filtrado') return null;
+  return extractFilteredExtraLitersFromNotes(e.notes);
+}
+
 export async function fetchAppccFryers(supabase: SupabaseClient, localId: string, activeOnly = true) {
   let q = supabase
     .from('appcc_fryers')

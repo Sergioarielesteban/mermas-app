@@ -5,6 +5,7 @@ import React from 'react';
 import { useMermasStore } from '@/components/MermasStoreProvider';
 import { downloadMermasReportPdf } from '@/lib/mermas-report-pdf';
 import { toBusinessDateKey } from '@/lib/business-day';
+import { DELETE_BLOCKED_MERMAS } from '@/lib/delete-security';
 import type { MermaMotiveKey } from '@/lib/types';
 
 const MOTIVES: Array<{ key: MermaMotiveKey; label: string }> = [
@@ -108,19 +109,8 @@ export default function ResumenPage() {
     cancelEdit();
   };
 
-  const deleteMerma = async (id: string) => {
-    const ok = window.confirm('¿Seguro que quieres eliminar esta merma?');
-    if (!ok) return;
-    const result = await removeMerma(id);
-    setMessage(result.ok ? 'Merma eliminada.' : result.reason ?? 'No se pudo eliminar.');
-    if (result.ok) {
-      setShowDeletedBanner(true);
-      if (deletedBannerTimeoutRef.current) window.clearTimeout(deletedBannerTimeoutRef.current);
-      deletedBannerTimeoutRef.current = window.setTimeout(() => {
-        setShowDeletedBanner(false);
-        deletedBannerTimeoutRef.current = null;
-      }, 1000);
-    }
+  const deleteMerma = async (_id: string) => {
+    setMessage(DELETE_BLOCKED_MERMAS);
   };
 
   React.useEffect(

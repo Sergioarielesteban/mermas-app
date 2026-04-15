@@ -6,6 +6,7 @@ import { ChevronLeft } from 'lucide-react';
 import MermasStyleHero from '@/components/MermasStyleHero';
 import { useAuth } from '@/components/AuthProvider';
 import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
+import { requestDeleteSecurityPin } from '@/lib/delete-security';
 import {
   type AppccFryerRow,
   deleteAppccFryer,
@@ -152,6 +153,10 @@ export default function AppccAceiteEquiposPage() {
         `¿Eliminar «${f.name}»? Se borrará también el historial de aceite de esta freidora. No se puede deshacer.`,
       )
     ) {
+      return;
+    }
+    if (!requestDeleteSecurityPin()) {
+      setBanner('Clave de seguridad incorrecta.');
       return;
     }
     const supabase = getSupabaseClient();

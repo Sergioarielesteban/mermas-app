@@ -24,7 +24,6 @@ import {
 } from '@/lib/pedidos-session-cache';
 import {
   billingQuantityForLine,
-  deleteOrder,
   fetchSuppliersWithProducts,
   persistSentOrderAsReceived,
   reopenReceivedOrderToSent,
@@ -36,6 +35,7 @@ import {
   type PedidoOrder,
   type PedidoSupplier,
 } from '@/lib/pedidos-supabase';
+import { DELETE_BLOCKED_PEDIDOS } from '@/lib/delete-security';
 
 function normalizeWhatsappNumber(raw: string | undefined) {
   if (!raw) return null;
@@ -656,26 +656,7 @@ export default function PedidosPage() {
                 <button
                   type="button"
                   onClick={() => {
-                    if (!localId) return;
-                    if (!window.confirm('¿Seguro que quieres eliminar este pedido?')) return;
-                    const supabase = getSupabaseClient();
-                    if (!supabase) return;
-                    void deleteOrder(supabase, localId, order.id)
-                      .then(() => {
-                        registerDeletedOrderId(order.id);
-                        releasePinOrderId(order.id);
-                        setOrders((prev) => prev.filter((o) => o.id !== order.id));
-                        setMessage('Pedido enviado eliminado.');
-                        setShowDeletedBanner(true);
-                        if (deletedBannerTimeoutRef.current) window.clearTimeout(deletedBannerTimeoutRef.current);
-                        deletedBannerTimeoutRef.current = window.setTimeout(() => {
-                          setShowDeletedBanner(false);
-                          deletedBannerTimeoutRef.current = null;
-                        }, 1000);
-                        void reloadOrders();
-                        dispatchPedidosDataChanged();
-                      })
-                      .catch((err: Error) => setMessage(err.message));
+                    setMessage(DELETE_BLOCKED_PEDIDOS);
                   }}
                   className="rounded-lg border border-zinc-300 bg-white px-2 py-1.5 text-center text-xs font-semibold text-[#B91C1C]"
                 >
@@ -918,26 +899,7 @@ export default function PedidosPage() {
                 <button
                   type="button"
                   onClick={() => {
-                    if (!localId) return;
-                    if (!window.confirm('¿Seguro que quieres eliminar este pedido?')) return;
-                    const supabase = getSupabaseClient();
-                    if (!supabase) return;
-                    void deleteOrder(supabase, localId, order.id)
-                      .then(() => {
-                        registerDeletedOrderId(order.id);
-                        releasePinOrderId(order.id);
-                        setOrders((prev) => prev.filter((o) => o.id !== order.id));
-                        setMessage('Pedido histórico eliminado.');
-                        setShowDeletedBanner(true);
-                        if (deletedBannerTimeoutRef.current) window.clearTimeout(deletedBannerTimeoutRef.current);
-                        deletedBannerTimeoutRef.current = window.setTimeout(() => {
-                          setShowDeletedBanner(false);
-                          deletedBannerTimeoutRef.current = null;
-                        }, 1000);
-                        void reloadOrders();
-                        dispatchPedidosDataChanged();
-                      })
-                      .catch((err: Error) => setMessage(err.message));
+                    setMessage(DELETE_BLOCKED_PEDIDOS);
                   }}
                   className="rounded-lg border border-zinc-300 bg-white px-2 py-1.5 text-center text-xs font-semibold text-[#B91C1C]"
                 >

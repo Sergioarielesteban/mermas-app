@@ -7,6 +7,7 @@ import { BrushCleaning, ChevronLeft } from 'lucide-react';
 import AppccCompactHero from '@/components/AppccCompactHero';
 import { useAuth } from '@/components/AuthProvider';
 import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
+import { requestDeleteSecurityPin } from '@/lib/delete-security';
 import {
   APPCC_CLEANING_SLOT_LABEL,
   type AppccCleaningCategoryRow,
@@ -96,6 +97,10 @@ function SlotRow({
   const removeMark = async () => {
     if (!log) return;
     setErr(null);
+    if (!requestDeleteSecurityPin()) {
+      setErr('Clave de seguridad incorrecta.');
+      return;
+    }
     const supabase = getSupabaseClient();
     if (!supabase || !localId) return;
     setSaving(true);

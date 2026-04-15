@@ -1,6 +1,11 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { APPCC_OIL_EVENT_LABEL, type AppccOilEventWithFryer } from '@/lib/appcc-aceite-supabase';
+import {
+  APPCC_OIL_EVENT_LABEL,
+  oilEventEffectiveLiters,
+  stripFilteredExtraLitersTag,
+  type AppccOilEventWithFryer,
+} from '@/lib/appcc-aceite-supabase';
 import { APPCC_ZONE_LABEL, formatAppccDateEs } from '@/lib/appcc-supabase';
 
 function litersCell(l: number | null) {
@@ -9,7 +14,7 @@ function litersCell(l: number | null) {
 }
 
 function notesCell(n: string | undefined) {
-  const t = n?.trim();
+  const t = stripFilteredExtraLitersTag(n);
   return t ? t : '—';
 }
 
@@ -26,6 +31,10 @@ export function downloadAppccAceiteResumenPdf(opts: {
   events: AppccOilEventWithFryer[];
   titleSuffix?: string;
 }) {
+  const totalLiters = Math.round(
+    opts.events.reduce((acc, e) => acc + (oilEventEffectiveLiters(e) ?? 0), 0) * 100,
+  ) / 100;
+
   const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' });
   doc.setFontSize(12);
   doc.text('Chef-One · Aceite en freidoras (APPCC)', 40, 36);
@@ -38,6 +47,7 @@ export function downloadAppccAceiteResumenPdf(opts: {
     40,
     64,
   );
+  doc.text(`Total litros gastados: ${totalLiters.toFixed(2)} L`, 40, 76);
 
   const body = opts.events.map((e) => {
     const z = e.fryer?.zone;
@@ -49,14 +59,14 @@ export function downloadAppccAceiteResumenPdf(opts: {
       zoneLabel,
       name,
       APPCC_OIL_EVENT_LABEL[e.event_type],
-      litersCell(e.liters_used),
+      litersCell(oilEventEffectiveLiters(e)),
       operatorCell(e.operator_name),
       notesCell(e.notes),
     ];
   });
 
   autoTable(doc, {
-    startY: 76,
+    startY: 88,
     head: [['Fecha', 'Día', 'Zona', 'Freidora', 'Tipo', 'Litros', 'Realizado por', 'Notas']],
     body,
     styles: { fontSize: 8, cellPadding: 4 },

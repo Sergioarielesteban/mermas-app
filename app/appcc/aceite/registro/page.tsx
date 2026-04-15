@@ -10,6 +10,8 @@ import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
 import { downloadAppccAceiteResumenPdf } from '@/lib/appcc-aceite-pdf';
 import {
   APPCC_OIL_EVENT_LABEL,
+  oilEventEffectiveLiters,
+  withFilteredExtraLitersTag,
   type AppccFryerRow,
   type AppccOilEventRow,
   type AppccOilEventType,
@@ -47,6 +49,18 @@ function enrichEventsForPdf(events: AppccOilEventRow[], fryers: AppccFryerRow[])
       fryer: f ? { name: f.name, zone: f.zone } : null,
     };
   });
+}
+
+function monthBounds(dateKey: string): { from: string; to: string; monthLabel: string } {
+  const [y, m] = dateKey.split('-').map(Number);
+  const start = new Date(Date.UTC(y, m - 1, 1));
+  const end = new Date(Date.UTC(y, m, 0));
+  const toKey = (d: Date) => d.toISOString().slice(0, 10);
+  return {
+    from: toKey(start),
+    to: toKey(end),
+    monthLabel: start.toLocaleDateString('es-ES', { timeZone: 'UTC', month: 'long', year: 'numeric' }),
+  };
 }
 
 function FryerOilCard({
@@ -127,25 +141,39 @@ function FryerOilCard({
     }
     setSaving(true);
     try {
-      const row = latest
-        ? await updateOilEvent(supabase, {
-            eventId: latest.id,
-            eventType,
-            litersUsed: litersNum,
-            notes: notes.trim(),
-            operatorName: op,
-            userId: user.id,
-          })
-        : await insertOilEvent(supabase, {
-            localId,
-            fryerId: fryer.id,
-            eventType,
-            eventDate: dateKey,
-            litersUsed: litersNum,
-            notes: notes.trim(),
-            operatorName: op,
-            userId: user.id,
-          });
+      const baseNotes = notes.trim();
+      const save = (litersValue: number | null, notesValue: string) =>
+        latest
+          ? updateOilEvent(supabase, {
+              eventId: latest.id,
+              eventType,
+              litersUsed: litersValue,
+              notes: notesValue,
+              operatorName: op,
+              userId: user.id,
+            })
+          : insertOilEvent(supabase, {
+              localId,
+              fryerId: fryer.id,
+              eventType,
+              eventDate: dateKey,
+              litersUsed: litersValue,
+              notes: notesValue,
+              operatorName: op,
+              userId: user.id,
+            });
+
+      let row: AppccOilEventRow;
+      try {
+        row = await save(litersNum, baseNotes);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : '';
+        const oldFilteredConstraint = /appcc_oil_events_filtrado_liters_chk/i.test(msg);
+        if (!(eventType === 'filtrado' && litersNum != null && oldFilteredConstraint)) {
+          throw e;
+        }
+        row = await save(null, withFilteredExtraLitersTag(baseNotes, litersNum));
+      }
       setMode(null);
       resetForm();
       onEventSaved(row);
@@ -174,7 +202,7 @@ function FryerOilCard({
                 className="rounded-md bg-white/90 px-1.5 py-0.5 text-[9px] font-semibold text-zinc-600 ring-1 ring-zinc-200/80"
               >
                 {APPCC_OIL_EVENT_LABEL[latest.event_type]}
-                {latest.liters_used != null ? ` · ${latest.liters_used} L` : ''}
+                {oilEventEffectiveLiters(latest) != null ? ` · ${oilEventEffectiveLiters(latest)} L` : ''}
               </li>
             </ul>
           ) : (
@@ -259,8 +287,6 @@ function AppccAceiteRegistroInner() {
   const searchParams = useSearchParams();
   const { localId, profileReady, localName, localCode } = useAuth();
   const [dateKey, setDateKey] = useState(() => madridDateKey());
-  const [pdfDateFrom, setPdfDateFrom] = useState(() => madridDateKey());
-  const [pdfDateTo, setPdfDateTo] = useState(() => madridDateKey());
   const [operatorName, setOperatorName] = useState('');
   const [fryers, setFryers] = useState<AppccFryerRow[]>([]);
   const [events, setEvents] = useState<AppccOilEventRow[]>([]);
@@ -290,8 +316,6 @@ function AppccAceiteRegistroInner() {
     const d = searchParams.get('d');
     if (d && /^\d{4}-\d{2}-\d{2}$/.test(d)) {
       setDateKey(d);
-      setPdfDateFrom(d);
-      setPdfDateTo(d);
     }
   }, [searchParams]);
 
@@ -411,8 +435,7 @@ function AppccAceiteRegistroInner() {
   const localLabel = localName ?? localCode ?? '—';
 
   const handleDownloadPdf = async () => {
-    const from = pdfDateFrom <= pdfDateTo ? pdfDateFrom : pdfDateTo;
-    const to = pdfDateFrom <= pdfDateTo ? pdfDateTo : pdfDateFrom;
+    const { from, to, monthLabel } = monthBounds(dateKey);
     const span = enumerateDateKeysInclusive(from, to).length;
     if (span === 0) return;
     if (span > PDF_MAX_DAYS) {
@@ -443,9 +466,7 @@ function AppccAceiteRegistroInner() {
         return;
       }
       const suffix =
-        from === to
-          ? `Día · ${formatAppccDateEs(from)}`
-          : `${formatAppccDateEs(from)} – ${formatAppccDateEs(to)}`;
+        from === to ? `Día · ${formatAppccDateEs(from)}` : `Mensual · ${monthLabel}`;
       downloadAppccAceiteResumenPdf({
         localLabel,
         dateFrom: from,
@@ -507,39 +528,18 @@ function AppccAceiteRegistroInner() {
               onChange={(e) => {
                 const v = e.target.value;
                 setDateKey(v);
-                setPdfDateFrom(v);
-                setPdfDateTo(v);
               }}
               className="absolute inset-0 min-h-full min-w-full cursor-pointer opacity-0 text-base"
               aria-label="Elegir día del registro"
             />
           </div>
         </div>
-        <div className="mx-auto w-full max-w-sm rounded-xl border border-zinc-100 bg-zinc-50/90 px-3 py-2.5">
-          <p className="text-center text-[10px] font-bold uppercase tracking-wide text-zinc-500">
-            Rango para el PDF
+        <div className="mx-auto w-full max-w-sm rounded-xl border border-zinc-100 bg-zinc-50/90 px-3 py-2.5 text-center">
+          <p className="text-[10px] font-bold uppercase tracking-wide text-zinc-500">PDF mensual</p>
+          <p className="mt-1 text-[11px] font-semibold text-zinc-700">
+            Se genera el mes completo del día seleccionado ({monthBounds(dateKey).monthLabel}).
           </p>
-          <div className="mt-2 flex flex-wrap items-end justify-center gap-3">
-            <label className="flex flex-col gap-0.5">
-              <span className="text-[9px] font-medium text-zinc-500">Desde</span>
-              <input
-                type="date"
-                value={pdfDateFrom}
-                onChange={(e) => setPdfDateFrom(e.target.value)}
-                className="h-9 rounded-lg border border-zinc-200 bg-white px-2 text-xs font-semibold text-zinc-900 outline-none focus:ring-2 focus:ring-[#D32F2F]/20"
-              />
-            </label>
-            <label className="flex flex-col gap-0.5">
-              <span className="text-[9px] font-medium text-zinc-500">Hasta</span>
-              <input
-                type="date"
-                value={pdfDateTo}
-                onChange={(e) => setPdfDateTo(e.target.value)}
-                className="h-9 rounded-lg border border-zinc-200 bg-white px-2 text-xs font-semibold text-zinc-900 outline-none focus:ring-2 focus:ring-[#D32F2F]/20"
-              />
-            </label>
-          </div>
-          <p className="mt-1.5 text-center text-[10px] text-zinc-400">Máximo {PDF_MAX_DAYS} días</p>
+          <p className="mt-1.5 text-[10px] text-zinc-400">Incluye total de litros gastados.</p>
         </div>
         <div className="mx-auto w-full max-w-sm px-1">
           <label

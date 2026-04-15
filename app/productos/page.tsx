@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import { Pencil, Plus, Search, Trash2, X } from 'lucide-react';
 import { useMermasStore } from '@/components/MermasStoreProvider';
+import { requestDeleteSecurityPin } from '@/lib/delete-security';
 import type { Unit } from '@/lib/types';
 
 export default function ProductosPage() {
@@ -119,6 +120,10 @@ export default function ProductosPage() {
                   onClick={() => {
                     const confirmed = window.confirm(`¿Eliminar "${p.name}"?`);
                     if (!confirmed) return;
+                    if (!requestDeleteSecurityPin()) {
+                      setMessage('Clave de seguridad incorrecta.');
+                      return;
+                    }
                     const result = removeProduct(p.id);
                     setMessage(result.ok ? 'Producto eliminado.' : result.reason ?? 'No se pudo eliminar.');
                     if (result.ok) {
