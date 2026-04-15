@@ -30,7 +30,7 @@ import {
   updateInventoryItemLine,
   upsertInventoryMonthSnapshot,
 } from '@/lib/inventory-supabase';
-import { DELETE_BLOCKED_INVENTARIO } from '@/lib/delete-security';
+import { DELETE_BLOCKED_INVENTARIO, requestDeleteSecurityPin } from '@/lib/delete-security';
 
 function parseDecimal(raw: string): number | null {
   const t = String(raw).trim().replace(/\s/g, '').replace(',', '.');
@@ -578,6 +578,10 @@ export default function InventarioPage() {
   };
 
   const removeLine = async (row: InventoryItem) => {
+    if (!requestDeleteSecurityPin()) {
+      setBanner('Clave de seguridad incorrecta.');
+      return;
+    }
     setBanner(DELETE_BLOCKED_INVENTARIO);
   };
 
@@ -623,14 +627,26 @@ export default function InventarioPage() {
   };
 
   const resetInventoryClearLines = async () => {
+    if (!requestDeleteSecurityPin()) {
+      setBanner('Clave de seguridad incorrecta.');
+      return;
+    }
     setBanner(DELETE_BLOCKED_INVENTARIO);
   };
 
   const removeCatalogCategory = async (cat: InventoryCatalogCategory) => {
+    if (!requestDeleteSecurityPin()) {
+      setBanner('Clave de seguridad incorrecta.');
+      return;
+    }
     setBanner(DELETE_BLOCKED_INVENTARIO);
   };
 
   const removeCatalogItem = async (it: InventoryCatalogItem) => {
+    if (!requestDeleteSecurityPin()) {
+      setBanner('Clave de seguridad incorrecta.');
+      return;
+    }
     setBanner(DELETE_BLOCKED_INVENTARIO);
   };
 

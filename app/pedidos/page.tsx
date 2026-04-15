@@ -35,7 +35,7 @@ import {
   type PedidoOrder,
   type PedidoSupplier,
 } from '@/lib/pedidos-supabase';
-import { DELETE_BLOCKED_PEDIDOS } from '@/lib/delete-security';
+import { DELETE_BLOCKED_PEDIDOS, requestDeleteSecurityPin } from '@/lib/delete-security';
 
 function normalizeWhatsappNumber(raw: string | undefined) {
   if (!raw) return null;
@@ -656,6 +656,10 @@ export default function PedidosPage() {
                 <button
                   type="button"
                   onClick={() => {
+                    if (!requestDeleteSecurityPin()) {
+                      setMessage('Clave de seguridad incorrecta.');
+                      return;
+                    }
                     setMessage(DELETE_BLOCKED_PEDIDOS);
                   }}
                   className="rounded-lg border border-zinc-300 bg-white px-2 py-1.5 text-center text-xs font-semibold text-[#B91C1C]"
@@ -899,6 +903,10 @@ export default function PedidosPage() {
                 <button
                   type="button"
                   onClick={() => {
+                    if (!requestDeleteSecurityPin()) {
+                      setMessage('Clave de seguridad incorrecta.');
+                      return;
+                    }
                     setMessage(DELETE_BLOCKED_PEDIDOS);
                   }}
                   className="rounded-lg border border-zinc-300 bg-white px-2 py-1.5 text-center text-xs font-semibold text-[#B91C1C]"

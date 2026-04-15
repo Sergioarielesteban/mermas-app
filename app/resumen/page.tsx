@@ -5,7 +5,7 @@ import React from 'react';
 import { useMermasStore } from '@/components/MermasStoreProvider';
 import { downloadMermasReportPdf } from '@/lib/mermas-report-pdf';
 import { toBusinessDateKey } from '@/lib/business-day';
-import { DELETE_BLOCKED_MERMAS } from '@/lib/delete-security';
+import { DELETE_BLOCKED_MERMAS, requestDeleteSecurityPin } from '@/lib/delete-security';
 import type { MermaMotiveKey } from '@/lib/types';
 
 const MOTIVES: Array<{ key: MermaMotiveKey; label: string }> = [
@@ -110,6 +110,10 @@ export default function ResumenPage() {
   };
 
   const deleteMerma = async (_id: string) => {
+    if (!requestDeleteSecurityPin()) {
+      setMessage('Clave de seguridad incorrecta.');
+      return;
+    }
     setMessage(DELETE_BLOCKED_MERMAS);
   };
 
