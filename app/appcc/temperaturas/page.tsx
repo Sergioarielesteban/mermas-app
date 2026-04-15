@@ -24,6 +24,7 @@ import {
   isTempOutOfRange,
   madridDateKey,
   readingsByUnitAndSlot,
+  deleteAppccReading,
   upsertAppccReading,
 } from '@/lib/appcc-supabase';
 
@@ -58,6 +59,7 @@ function SlotEditor({
   dateKey,
   reading,
   onSaved,
+  onDeleted,
   disabled,
 }: {
   unit: AppccColdUnitRow;
@@ -65,6 +67,7 @@ function SlotEditor({
   dateKey: string;
   reading: AppccReadingRow | undefined;
   onSaved: (row: AppccReadingRow) => void;
+  onDeleted: (coldUnitId: string, slot: AppccSlot) => void;
   disabled: boolean;
 }) {
   const { localId } = useAuth();
@@ -74,14 +77,11 @@ function SlotEditor({
   const [err, setErr] = useState<string | null>(null);
   /** Tras Guardar OK: mostrar «Guardado» al instante sin esperar al refetch del padre. */
   const [justSaved, setJustSaved] = useState(false);
-  /** Segundo toque en «Guardado»: volver a modo Guardar (demos, pruebas, re-guardar). */
-  const [editAgain, setEditAgain] = useState(false);
 
   useEffect(() => {
     setValue(initialTempFieldValue(unit, reading));
     setNotes(reading?.notes ?? '');
     setJustSaved(false);
-    setEditAgain(false);
   }, [reading, unit]);
 
   const tInput = parseTempInput(value);
@@ -98,7 +98,29 @@ function SlotEditor({
     Math.round(reading.temperature_c * 100) === Math.round(tInput * 100) &&
     notes.trim() === (reading.notes ?? '').trim();
 
-  const isSavedSynced = (justSaved || matchesServerReading) && !editAgain;
+  const isSavedSynced = justSaved || matchesServerReading;
+
+  const remove = async () => {
+    if (!reading) return;
+    setErr(null);
+    const supabase = getSupabaseClient();
+    if (!supabase || !localId) {
+      setErr('Sesión o Supabase no disponible.');
+      return;
+    }
+    setSaving(true);
+    try {
+      await deleteAppccReading(supabase, reading.id);
+      setValue(initialTempFieldValue(unit, undefined));
+      setNotes('');
+      setJustSaved(false);
+      onDeleted(unit.id, slot);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : 'Error al quitar.');
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const save = async () => {
     setErr(null);
@@ -130,7 +152,6 @@ function SlotEditor({
         notes: notes.trim(),
         userId: user.id,
       });
-      setEditAgain(false);
       setJustSaved(true);
       onSaved(row);
     } catch (e) {
@@ -189,8 +210,7 @@ function SlotEditor({
           onClick={() => {
             if (disabled || saving) return;
             if (isSavedSynced) {
-              setEditAgain(true);
-              setJustSaved(false);
+              void remove();
               return;
             }
             void save();
@@ -220,12 +240,14 @@ function UnitCard({
   map,
   disabled,
   onReadingSaved,
+  onReadingDeleted,
 }: {
   unit: AppccColdUnitRow;
   dateKey: string;
   map: Map<string, AppccReadingRow>;
   disabled: boolean;
   onReadingSaved: (row: AppccReadingRow) => void;
+  onReadingDeleted: (coldUnitId: string, slot: AppccSlot) => void;
 }) {
   const rM = map.get(`${unit.id}:manana`);
   const rT = map.get(`${unit.id}:tarde`);
@@ -257,6 +279,7 @@ function UnitCard({
             dateKey={dateKey}
             reading={slot === 'manana' ? rM : rN}
             onSaved={onReadingSaved}
+            onDeleted={onReadingDeleted}
             disabled={disabled}
           />
         ))}
@@ -338,6 +361,10 @@ function AppccTemperaturasInner() {
     },
     [dateKey],
   );
+
+  const dropReading = useCallback((coldUnitId: string, slot: AppccSlot) => {
+    setReadings((prev) => prev.filter((x) => !(x.cold_unit_id === coldUnitId && x.slot === slot)));
+  }, []);
 
   const loadRef = useRef(load);
   loadRef.current = load;
@@ -596,6 +623,7 @@ function AppccTemperaturasInner() {
                       map={bySlot}
                       disabled={disabled}
                       onReadingSaved={mergeReading}
+                      onReadingDeleted={dropReading}
                     />
                   ))}
                 </div>
