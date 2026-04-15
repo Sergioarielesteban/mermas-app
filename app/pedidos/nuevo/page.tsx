@@ -664,20 +664,17 @@ export default function NuevoPedidoPage() {
             </details>
           ) : null}
         </div>
-        <label className="mt-4 block text-xs font-semibold uppercase tracking-wide text-zinc-500">Fecha entrega</label>
-        <input
-          type="date"
-          value={deliveryDate}
-          onChange={(e) => setDeliveryDate(e.target.value)}
-          className="mt-2 h-10 w-full min-w-0 rounded-xl border border-zinc-300 bg-white px-3 text-sm font-sans text-zinc-900 outline-none"
-        />
-        <label className="mt-3 block text-xs font-semibold uppercase tracking-wide text-zinc-500">Quién pide</label>
-        <input
-          value={requestedBy}
-          onChange={(e) => setRequestedBy(e.target.value)}
-          placeholder="Nombre de quien pide"
-          className="mt-2 h-10 w-full min-w-0 rounded-xl border border-zinc-300 bg-white px-3 text-sm font-sans text-zinc-900 placeholder:text-zinc-500 outline-none"
-        />
+        <div className="mt-4 flex w-full flex-col items-center">
+          <label className="text-center text-xs font-semibold uppercase tracking-wide text-zinc-700">
+            Fecha entrega
+          </label>
+          <input
+            type="date"
+            value={deliveryDate}
+            onChange={(e) => setDeliveryDate(e.target.value)}
+            className="mt-2 box-border h-11 w-full max-w-[17.5rem] rounded-xl border-2 border-black bg-zinc-950 px-3 text-center text-sm font-semibold text-white shadow-[inset_0_0_0_1px_rgba(211,47,47,0.85)] outline-none [color-scheme:dark] focus:border-[#D32F2F] focus:shadow-[inset_0_0_0_2px_#D32F2F]"
+          />
+        </div>
         {selectedSupplier ? (
           <p className="mt-3 text-[11px] text-zinc-500">
             Reparto configurado: {formatDeliveryCycleSummary(selectedSupplier.deliveryCycleWeekdays ?? [])}
@@ -685,12 +682,8 @@ export default function NuevoPedidoPage() {
         ) : null}
         {coverageRangeLabel ? (
           <div className="mt-3 rounded-xl border border-emerald-200 bg-emerald-50/90 p-3 text-[11px] text-emerald-950 ring-1 ring-emerald-100">
-            <p className="font-bold uppercase tracking-wide text-emerald-900">Cobertura de este pedido</p>
-            <p className="mt-1 font-medium capitalize">{coverageRangeLabel}</p>
-            <p className="mt-2 text-emerald-900/85">
-              Objetivo por artículo = consumo ref. semanal (en Proveedores) × {coverageDays} días ÷ 7. Ajusta manualmente
-              según stock real en cocina.
-            </p>
+            <p className="text-center font-bold uppercase tracking-wide text-emerald-900">Cobertura de este pedido</p>
+            <p className="mt-1 text-center font-medium capitalize">{coverageRangeLabel}</p>
           </div>
         ) : deliveryDate.trim() !== '' ? null : (
           <p className="mt-3 text-[11px] text-zinc-500">
@@ -727,21 +720,21 @@ export default function NuevoPedidoPage() {
               segmentTarget != null && segmentTarget > 0
                 ? suggestedOrderQuantityForPar(p.unit, segmentTarget)
                 : null;
+            const u = unitPriceCatalogSuffix[p.unit];
             return (
               <div key={p.id} className="rounded-xl bg-zinc-50 p-3 ring-1 ring-zinc-200">
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <p className="text-sm font-semibold text-zinc-800">{p.name}</p>
                     <p className="text-xs text-zinc-500">
-                      {p.pricePerUnit.toFixed(2)} €/{unitPriceCatalogSuffix[p.unit]}
+                      {p.pricePerUnit.toFixed(2)} €/{u}
                     </p>
                     {p.parStock > 0 && coverageDays != null && suggestedQty != null ? (
-                      <p className="mt-1 text-[11px] font-medium text-zinc-600">
-                        Objetivo tramo (~{coverageDays} d): ~{suggestedQty} {unitPriceCatalogSuffix[p.unit]} (ref. sem.{' '}
-                        {p.parStock})
+                      <p className="mt-1 text-[11px] font-semibold text-zinc-700">
+                        Cant. tramo: {suggestedQty} {u}
                       </p>
                     ) : p.parStock > 0 && coverageDays == null ? (
-                      <p className="mt-1 text-[11px] text-zinc-500">Ref. sem. {p.parStock} — indica fecha de entrega.</p>
+                      <p className="mt-1 text-[11px] text-zinc-500">Indica fecha de entrega (ref. sem. {p.parStock}).</p>
                     ) : null}
                   </div>
                   <p className="shrink-0 whitespace-nowrap text-sm font-bold tabular-nums text-zinc-900">
@@ -783,6 +776,13 @@ export default function NuevoPedidoPage() {
             );
           })}
         </div>
+        <label className="mt-4 block text-xs font-semibold uppercase tracking-wide text-zinc-500">Quién pide</label>
+        <input
+          value={requestedBy}
+          onChange={(e) => setRequestedBy(e.target.value)}
+          placeholder="Nombre de quien pide"
+          className="mt-2 h-10 w-full min-w-0 rounded-xl border border-zinc-300 bg-white px-3 text-sm font-sans text-zinc-900 placeholder:text-zinc-500 outline-none"
+        />
       </section>
 
       <section className="rounded-2xl bg-white p-4 ring-1 ring-zinc-200">
