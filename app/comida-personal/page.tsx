@@ -30,6 +30,9 @@ const SERVICE_LABEL: Record<StaffMealService, string> = {
   otro: 'Otro',
 };
 
+/** Texto fijo en historial e informes para comida traída por el trabajador (coste interno 0). */
+const OWN_MEAL_PRODUCT_NAME = 'Comida propia';
+
 function ymd(d: Date) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
@@ -75,6 +78,7 @@ export default function ComidaPersonalPage() {
   const [pickerSearch, setPickerSearch] = React.useState('');
   const [qtyByProductId, setQtyByProductId] = React.useState<Record<string, number>>({});
   const [notes, setNotes] = React.useState('');
+  const [ownMealQty, setOwnMealQty] = React.useState(0);
   const [recentRecordsOpen, setRecentRecordsOpen] = React.useState(false);
   const [statsUnlocked, setStatsUnlocked] = React.useState(false);
 
@@ -253,9 +257,9 @@ export default function ComidaPersonalPage() {
       setMessage('Selecciona trabajador.');
       return;
     }
-    if (selectedLines.length === 0) {
+    if (selectedLines.length === 0 && ownMealQty <= 0) {
       setMessageTone('error');
-      setMessage('Selecciona al menos un artículo.');
+      setMessage('Añade un artículo, busca en el catálogo o pulsa «Trajo su comida».');
       return;
     }
     try {
@@ -277,9 +281,26 @@ export default function ComidaPersonalPage() {
           }),
         );
       }
+      if (ownMealQty > 0) {
+        payloads.push(
+          createStaffMealRecord(supabase, localId, {
+            service: 'comida',
+            mealDate,
+            peopleCount: ownMealQty,
+            unitCostEur: 0,
+            notes: notes.trim(),
+            workerId: selectedWorker.id,
+            workerName: selectedWorker.name,
+            sourceProductId: null,
+            sourceProductName: OWN_MEAL_PRODUCT_NAME,
+            consumptionGroupId,
+          }),
+        );
+      }
       const inserted = await Promise.all(payloads);
       setRecords((prev) => [...inserted, ...prev]);
       setQtyByProductId({});
+      setOwnMealQty(0);
       setNotes('');
       setMessage(null);
       setShowComidaRegisteredBanner(true);
@@ -292,7 +313,7 @@ export default function ComidaPersonalPage() {
       setMessageTone('error');
       setMessage(err instanceof Error ? err.message : 'No se pudo registrar el consumo.');
     }
-  }, [localId, mealDate, notes, selectedLines, selectedWorker]);
+  }, [localId, mealDate, notes, ownMealQty, selectedLines, selectedWorker]);
 
   const voidOneRecord = React.useCallback(
     async (r: StaffMealRecord) => {
@@ -555,12 +576,22 @@ export default function ComidaPersonalPage() {
           <Search className="h-4 w-4 shrink-0 text-[#D32F2F]" aria-hidden />
           Buscar otro artículo
         </button>
+        <button
+          type="button"
+          onClick={() => setOwnMealQty((q) => q + 1)}
+          className="mt-2 flex h-11 w-full items-center justify-center gap-2 rounded-xl border border-zinc-300 bg-zinc-50 text-sm font-bold text-zinc-800 shadow-sm outline-none transition hover:bg-white focus-visible:ring-2 focus-visible:ring-[#D32F2F]/30"
+        >
+          Trajo su comida
+        </button>
+        <p className="mt-1.5 text-center text-[10px] leading-snug text-zinc-500">
+          Queda en el historial como «{OWN_MEAL_PRODUCT_NAME}». Pulsa Registrar cuando termines.
+        </p>
       </section>
 
       <section className="rounded-2xl bg-white p-4 ring-1 ring-zinc-200">
         <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Consumo seleccionado</p>
-        {selectedLines.length === 0 ? (
-          <p className="mt-2 text-sm text-zinc-500">Aún no hay artículos.</p>
+        {selectedLines.length === 0 && ownMealQty <= 0 ? (
+          <p className="mt-2 text-sm text-zinc-500">Aún no hay nada para registrar.</p>
         ) : (
           <div className="mt-2 max-h-48 overflow-y-auto rounded-lg border border-zinc-200 bg-zinc-50/90">
             <ul className="divide-y divide-zinc-200/90">
@@ -591,6 +622,31 @@ export default function ComidaPersonalPage() {
                   </div>
                 </li>
               ))}
+              {ownMealQty > 0 ? (
+                <li className="flex items-center gap-2 px-2 py-1.5">
+                  <p className="min-w-0 flex-1 truncate text-[11px] font-semibold leading-tight text-zinc-800">
+                    {OWN_MEAL_PRODUCT_NAME}
+                    <span className="mt-0.5 block text-[10px] font-normal text-zinc-500">Traída de casa</span>
+                  </p>
+                  <div className="flex shrink-0 items-center gap-0.5">
+                    <button
+                      type="button"
+                      onClick={() => setOwnMealQty((q) => Math.max(0, q - 1))}
+                      className="grid h-7 w-7 place-items-center rounded-full border border-zinc-200 bg-white text-sm font-semibold text-zinc-500"
+                    >
+                      {'\u2212'}
+                    </button>
+                    <span className="w-6 text-center text-[11px] font-black text-zinc-900">{ownMealQty}</span>
+                    <button
+                      type="button"
+                      onClick={() => setOwnMealQty((q) => q + 1)}
+                      className="grid h-7 w-7 place-items-center rounded-full bg-[#D32F2F] text-sm font-semibold text-white"
+                    >
+                      +
+                    </button>
+                  </div>
+                </li>
+              ) : null}
             </ul>
           </div>
         )}
