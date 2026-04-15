@@ -529,10 +529,7 @@ export default function NuevoPedidoPage() {
             const lineTotal = Math.round(qty * p.pricePerUnit * 100) / 100;
             const segmentTarget =
               coverageDays != null ? weeklyParScaledToCoverageDays(p.parStock ?? 0, coverageDays) : null;
-            const suggestedQty =
-              segmentTarget != null && segmentTarget > 0
-                ? suggestedOrderQuantityForPar(p.unit, segmentTarget)
-                : null;
+            const suggestedQty = segmentTarget != null ? suggestedOrderQuantityForPar(p.unit, segmentTarget) : null;
             const u = unitPriceCatalogSuffix[p.unit];
             return (
               <div key={p.id} className="rounded-xl bg-zinc-50 p-3 ring-1 ring-zinc-200">
@@ -542,12 +539,10 @@ export default function NuevoPedidoPage() {
                     <p className="text-xs text-zinc-500">
                       {p.pricePerUnit.toFixed(2)} €/{u}
                     </p>
-                    {p.parStock > 0 && coverageDays != null && suggestedQty != null ? (
+                    {coverageDays != null && suggestedQty != null ? (
                       <p className="mt-1 text-[11px] font-semibold text-zinc-700">
-                        Cant. tramo: {suggestedQty} {u}
+                        Cant. tramo: {formatQuantityWithUnit(suggestedQty, p.unit)}
                       </p>
-                    ) : p.parStock > 0 && coverageDays == null ? (
-                      <p className="mt-1 text-[11px] text-zinc-500">Indica fecha de entrega (ref. sem. {p.parStock}).</p>
                     ) : null}
                   </div>
                   <p className="shrink-0 whitespace-nowrap text-sm font-bold tabular-nums text-zinc-900">
