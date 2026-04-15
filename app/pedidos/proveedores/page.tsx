@@ -8,6 +8,10 @@ import { getSupabaseClient } from '@/lib/supabase-client';
 import PedidosPremiaLockedScreen from '@/components/PedidosPremiaLockedScreen';
 import { canAccessPedidos, canUsePedidosModule } from '@/lib/pedidos-access';
 import { dispatchPedidosDataChanged, usePedidosDataChangedListener } from '@/hooks/usePedidosDataChangedListener';
+import {
+  formatDeliveryCycleSummary,
+  normalizeDeliveryCycleWeekdays,
+} from '@/lib/pedidos-coverage';
 import { unitPriceCatalogSuffix } from '@/lib/pedidos-format';
 import {
   readSuppliersSessionCache,
@@ -82,6 +86,26 @@ function parseUnitsPerPack(raw: string): number | null {
   return Math.round(value * 10000) / 10000;
 }
 
+/** Referencia de consumo semanal (7 días) para escalar al tramo entre repartos en Nuevo pedido. */
+function parseParWeekly(raw: string): number {
+  const t = raw.trim().replace(/\s/g, '').replace(',', '.');
+  if (t === '') return 0;
+  const n = Number(t);
+  if (!Number.isFinite(n) || n < 0) return 0;
+  return Math.round(n * 100) / 100;
+}
+
+/** Días 0=dom … 6=sáb; chips en orden operativo Lun→Dom. */
+const DELIVERY_DAY_CHIPS: { day: number; label: string }[] = [
+  { day: 1, label: 'L' },
+  { day: 2, label: 'M' },
+  { day: 3, label: 'X' },
+  { day: 4, label: 'J' },
+  { day: 5, label: 'V' },
+  { day: 6, label: 'S' },
+  { day: 0, label: 'D' },
+];
+
 type ProductDraft = {
   name: string;
   unit: Unit;
@@ -90,6 +114,7 @@ type ProductDraft = {
   estimatedKg: string;
   unitsPerPack: string;
   recipeUnit: Unit;
+  parWeekly: string;
 };
 
 export default function ProveedoresPage() {
@@ -110,10 +135,13 @@ export default function ProveedoresPage() {
   const [productVat, setProductVat] = React.useState('0,21');
   const [productUnitsPerPack, setProductUnitsPerPack] = React.useState('1');
   const [productRecipeUnit, setProductRecipeUnit] = React.useState<Unit>('ud');
+  const [productParWeekly, setProductParWeekly] = React.useState('');
   const [editingSupplierId, setEditingSupplierId] = React.useState<string | null>(null);
   const [editingProductId, setEditingProductId] = React.useState<string | null>(null);
   const [expandedSupplierId, setExpandedSupplierId] = React.useState<string | null>(null);
-  const [supplierDrafts, setSupplierDrafts] = React.useState<Record<string, { name: string; contact: string }>>({});
+  const [supplierDrafts, setSupplierDrafts] = React.useState<
+    Record<string, { name: string; contact: string; deliveryCycleWeekdays: number[] }>
+  >({});
   const [productDrafts, setProductDrafts] = React.useState<Record<string, ProductDraft>>({});
   const [bulkImportBusy, setBulkImportBusy] = React.useState(false);
 
@@ -123,7 +151,11 @@ export default function ProveedoresPage() {
     setSupplierDrafts((prev) => {
       const next = { ...prev };
       for (const supplier of rows) {
-        next[supplier.id] = next[supplier.id] ?? { name: supplier.name, contact: supplier.contact ?? '' };
+        next[supplier.id] = next[supplier.id] ?? {
+          name: supplier.name,
+          contact: supplier.contact ?? '',
+          deliveryCycleWeekdays: [...(supplier.deliveryCycleWeekdays ?? [])],
+        };
       }
       return next;
     });
@@ -141,7 +173,8 @@ export default function ProveedoresPage() {
                 ? String(p.estimatedKgPerUnit)
                 : '',
             unitsPerPack: String((p.unitsPerPack ?? 1) >= 1 ? (p.unitsPerPack ?? 1) : 1),
-            recipeUnit: ((p.recipeUnit ?? 'ud') as Unit),
+            recipeUnit: (p.recipeUnit ?? 'ud') as Unit,
+            parWeekly: String((p.parStock ?? 0) > 0 ? p.parStock : ''),
           };
         }
       }
@@ -226,7 +259,15 @@ export default function ProveedoresPage() {
               supplierName,
               PREFERRED_CONTACT_BY_SUPPLIER[normalizeUpper(supplierName)] ?? DEFAULT_SUPPLIER_CONTACT,
             );
-            supplier = { id: created.id, name: created.name, contact: created.contact ?? '', products: [] };
+            supplier = {
+              id: created.id,
+              name: created.name,
+              contact: created.contact ?? '',
+              deliveryCycleWeekdays: normalizeDeliveryCycleWeekdays(
+                (created as { delivery_cycle_weekdays?: number[] | null }).delivery_cycle_weekdays,
+              ),
+              products: [],
+            };
             suppliersByName.set(key, supplier);
             providersCreated += 1;
           }
@@ -279,12 +320,13 @@ export default function ProveedoresPage() {
       if (parsedKg === undefined) return setMessage('Kg estimado por envase inválido (usa un número > 0 o déjalo vacío).');
       estimatedKgPerUnit = parsedKg;
     }
+    const parW = parseParWeekly(productParWeekly);
     void createSupplierProduct(supabase, localId, productSupplierId, {
       name,
       unit: productUnit,
       pricePerUnit: price,
       vatRate,
-      parStock: 0,
+      parStock: parW,
       estimatedKgPerUnit,
       unitsPerPack: pack,
       recipeUnit: pack > 1 ? productRecipeUnit : null,
@@ -296,6 +338,7 @@ export default function ProveedoresPage() {
         setProductVat('0,21');
         setProductUnitsPerPack('1');
         setProductRecipeUnit('ud');
+        setProductParWeekly('');
         setMessage('Producto de proveedor guardado.');
         reload();
         dispatchPedidosDataChanged();
@@ -314,6 +357,7 @@ export default function ProveedoresPage() {
     void updateSupplier(supabase, localId, supplierId, {
       name: normalizeUpper(name),
       contact: draft?.contact ?? '',
+      deliveryCycleWeekdays: draft?.deliveryCycleWeekdays ?? [],
     })
       .then(() => {
         setEditingSupplierId(null);
@@ -346,12 +390,13 @@ export default function ProveedoresPage() {
     }
     const supabase = getSupabaseClient();
     if (!supabase) return setMessage('Supabase no disponible en esta sesión.');
+    const parW = parseParWeekly(draft.parWeekly ?? '');
     void updateSupplierProduct(supabase, localId, productId, {
       name: normalizeUpper(name),
       unit: draft.unit,
       pricePerUnit: price,
       vatRate,
-      parStock: 0,
+      parStock: parW,
       estimatedKgPerUnit,
       unitsPerPack: pack,
       recipeUnit: pack > 1 ? draft.recipeUnit : null,
@@ -545,6 +590,13 @@ export default function ProveedoresPage() {
             El precio es por la unidad de pedido (caja, kg…). Si un envase trae varias piezas, indica cuántas: el
             escandallo usará el precio por pieza automáticamente.
           </p>
+          <input
+            value={productParWeekly}
+            onChange={(e) => setProductParWeekly(e.target.value)}
+            placeholder="Consumo ref. semanal (opcional, misma unidad que el pedido)"
+            title="Para sugerencias en Nuevo pedido: necesidad aproximada en 7 días; el sistema la reparte según días hasta el siguiente reparto."
+            className="h-10 rounded-xl border border-zinc-300 bg-white px-3 text-sm text-zinc-900 placeholder:text-zinc-500 outline-none"
+          />
           {unitSupportsReceivedWeightKg(productUnit) ? (
             <input
               value={productEstimatedKg}
@@ -576,6 +628,9 @@ export default function ProveedoresPage() {
             <div className="min-w-0">
               <p className="truncate text-sm font-black text-zinc-900">{supplier.name}</p>
               <p className="pt-1 text-xs text-zinc-500">Contacto: {supplier.contact || '-'}</p>
+              <p className="pt-0.5 text-[11px] text-zinc-500">
+                Reparto: {formatDeliveryCycleSummary(supplier.deliveryCycleWeekdays ?? [])}
+              </p>
             </div>
             <span className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-[#D32F2F]">
               {expandedSupplierId === supplier.id ? 'Ocultar' : 'Ver artículos'}
@@ -598,6 +653,8 @@ export default function ProveedoresPage() {
                       [supplier.id]: {
                         name: prev[supplier.id]?.name ?? supplier.name,
                         contact: prev[supplier.id]?.contact ?? supplier.contact ?? '',
+                        deliveryCycleWeekdays:
+                          prev[supplier.id]?.deliveryCycleWeekdays ?? [...(supplier.deliveryCycleWeekdays ?? [])],
                       },
                     }));
                   }}
@@ -621,7 +678,14 @@ export default function ProveedoresPage() {
                 onChange={(e) =>
                   setSupplierDrafts((prev) => ({
                     ...prev,
-                    [supplier.id]: { ...(prev[supplier.id] ?? { name: '', contact: '' }), name: e.target.value },
+                    [supplier.id]: {
+                      ...(prev[supplier.id] ?? {
+                        name: supplier.name,
+                        contact: supplier.contact ?? '',
+                        deliveryCycleWeekdays: [...(supplier.deliveryCycleWeekdays ?? [])],
+                      }),
+                      name: e.target.value,
+                    },
                   }))
                 }
                 placeholder="Nombre proveedor"
@@ -632,12 +696,65 @@ export default function ProveedoresPage() {
                 onChange={(e) =>
                   setSupplierDrafts((prev) => ({
                     ...prev,
-                    [supplier.id]: { ...(prev[supplier.id] ?? { name: '', contact: '' }), contact: e.target.value },
+                    [supplier.id]: {
+                      ...(prev[supplier.id] ?? {
+                        name: supplier.name,
+                        contact: supplier.contact ?? '',
+                        deliveryCycleWeekdays: [...(supplier.deliveryCycleWeekdays ?? [])],
+                      }),
+                      contact: e.target.value,
+                    },
                   }))
                 }
                 placeholder="Telefono o email de contacto"
                 className="h-10 rounded-xl border border-zinc-300 bg-white px-3 text-sm text-zinc-900 placeholder:text-zinc-500 outline-none"
               />
+              <div>
+                <p className="text-[11px] font-semibold text-zinc-700">Días de reparto</p>
+                <p className="mt-0.5 text-[10px] text-zinc-500">
+                  Ninguno marcado = objetivo semanal completo (7 días). Marca 2 días (ej. L y J) para tramos Lun–Mié y
+                  Jue–Dom en Nuevo pedido.
+                </p>
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {DELIVERY_DAY_CHIPS.map(({ day, label }) => {
+                    const days = supplierDrafts[supplier.id]?.deliveryCycleWeekdays ?? [];
+                    const sel = days.includes(day);
+                    return (
+                      <button
+                        key={day}
+                        type="button"
+                        onClick={() =>
+                          setSupplierDrafts((prev) => {
+                            const cur = prev[supplier.id] ?? {
+                              name: supplier.name,
+                              contact: supplier.contact ?? '',
+                              deliveryCycleWeekdays: [...(supplier.deliveryCycleWeekdays ?? [])],
+                            };
+                            const set = new Set(cur.deliveryCycleWeekdays);
+                            if (set.has(day)) set.delete(day);
+                            else set.add(day);
+                            return {
+                              ...prev,
+                              [supplier.id]: {
+                                ...cur,
+                                deliveryCycleWeekdays: [...set].sort((a, b) => a - b),
+                              },
+                            };
+                          })
+                        }
+                        className={[
+                          'h-8 min-w-[2rem] rounded-lg px-2 text-xs font-bold',
+                          sel
+                            ? 'bg-[#D32F2F] text-white ring-1 ring-[#B91C1C]'
+                            : 'border border-zinc-300 bg-white text-zinc-700',
+                        ].join(' ')}
+                      >
+                        {label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
               <button
                 type="button"
                 onClick={() => saveSupplierChanges(supplier.id)}
@@ -674,6 +791,9 @@ export default function ProveedoresPage() {
                             unitsPerPack:
                               prev[p.id]?.unitsPerPack ?? String((p.unitsPerPack ?? 1) >= 1 ? (p.unitsPerPack ?? 1) : 1),
                             recipeUnit: prev[p.id]?.recipeUnit ?? (p.recipeUnit ?? 'ud'),
+                            parWeekly:
+                              prev[p.id]?.parWeekly ??
+                              ((p.parStock ?? 0) > 0 ? String(p.parStock) : ''),
                           },
                         }));
                       }}
@@ -702,6 +822,7 @@ export default function ProveedoresPage() {
                   {unitSupportsReceivedWeightKg(p.unit) && p.estimatedKgPerUnit != null && p.estimatedKgPerUnit > 0
                     ? ` · ~${p.estimatedKgPerUnit} kg/${p.unit}`
                     : ''}
+                  {(p.parStock ?? 0) > 0 ? ` · ref. sem. ${p.parStock} ${unitPriceCatalogSuffix[p.unit]}` : ''}
                 </p>
                 {editingProductId === p.id ? (
                   <div className="mt-2 grid grid-cols-1 gap-2 rounded-lg border border-zinc-200 bg-white p-2">
@@ -719,6 +840,7 @@ export default function ProveedoresPage() {
                               estimatedKg: '',
                               unitsPerPack: '1',
                               recipeUnit: 'ud' as Unit,
+                              parWeekly: '',
                             }),
                             name: e.target.value,
                           },
@@ -742,6 +864,7 @@ export default function ProveedoresPage() {
                                 estimatedKg: '',
                                 unitsPerPack: '1',
                                 recipeUnit: 'ud' as Unit,
+                                parWeekly: '',
                               }),
                               unit: e.target.value as Unit,
                             },
@@ -771,6 +894,7 @@ export default function ProveedoresPage() {
                                 estimatedKg: '',
                                 unitsPerPack: '1',
                                 recipeUnit: 'ud' as Unit,
+                                parWeekly: '',
                               }),
                               price: e.target.value,
                             },
@@ -793,6 +917,7 @@ export default function ProveedoresPage() {
                                 estimatedKg: '',
                                 unitsPerPack: '1',
                                 recipeUnit: 'ud' as Unit,
+                                parWeekly: '',
                               }),
                               vatRate: e.target.value,
                             },
@@ -802,6 +927,29 @@ export default function ProveedoresPage() {
                         className="h-9 rounded-lg border border-zinc-300 bg-white px-3 text-sm text-zinc-900 placeholder:text-zinc-500 outline-none"
                       />
                     </div>
+                    <input
+                      value={productDrafts[p.id]?.parWeekly ?? ''}
+                      onChange={(e) =>
+                        setProductDrafts((prev) => ({
+                          ...prev,
+                          [p.id]: {
+                            ...(prev[p.id] ?? {
+                              name: '',
+                              unit: 'ud',
+                              price: '',
+                              vatRate: '0',
+                              estimatedKg: '',
+                              unitsPerPack: '1',
+                              recipeUnit: 'ud' as Unit,
+                              parWeekly: '',
+                            }),
+                            parWeekly: e.target.value,
+                          },
+                        }))
+                      }
+                      placeholder="Consumo ref. semanal (opcional)"
+                      className="h-9 rounded-lg border border-zinc-300 bg-white px-3 text-sm text-zinc-900 placeholder:text-zinc-500 outline-none"
+                    />
                     <input
                       value={productDrafts[p.id]?.unitsPerPack ?? '1'}
                       onChange={(e) =>
@@ -816,6 +964,7 @@ export default function ProveedoresPage() {
                               estimatedKg: '',
                               unitsPerPack: '1',
                               recipeUnit: 'ud' as Unit,
+                              parWeekly: '',
                             }),
                             unitsPerPack: e.target.value,
                           },
@@ -840,6 +989,7 @@ export default function ProveedoresPage() {
                                 estimatedKg: '',
                                 unitsPerPack: '1',
                                 recipeUnit: 'ud' as Unit,
+                                parWeekly: '',
                               }),
                               recipeUnit: e.target.value as Unit,
                             },
@@ -871,6 +1021,7 @@ export default function ProveedoresPage() {
                                 estimatedKg: '',
                                 unitsPerPack: '1',
                                 recipeUnit: 'ud' as Unit,
+                                parWeekly: '',
                               }),
                               estimatedKg: e.target.value,
                             },

@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { normalizeDeliveryCycleWeekdays } from '@/lib/pedidos-coverage';
 import type { Unit } from '@/lib/types';
 
 /** Bandeja o caja: referencia kg por envase en catálogo; en recepción peso báscula opcional (no cambia el subtotal). */
@@ -97,6 +98,8 @@ export type PedidoSupplier = {
   id: string;
   name: string;
   contact: string;
+  /** Días de reparto 0=dom..6=sáb. Vacío = cobertura 7 días al escalar PAR semanal. */
+  deliveryCycleWeekdays: number[];
   products: PedidoSupplierProduct[];
 };
 
@@ -148,7 +151,12 @@ export type SupplierProductPriceHistory = {
   samples: number;
 };
 
-type SupplierRow = { id: string; name: string; contact: string };
+type SupplierRow = {
+  id: string;
+  name: string;
+  contact: string;
+  delivery_cycle_weekdays?: number[] | null;
+};
 type SupplierProductRow = {
   id: string;
   supplier_id: string;
@@ -205,7 +213,7 @@ function normalizeLabelUpper(value: string) {
 export async function fetchSuppliersWithProducts(supabase: SupabaseClient, localId: string) {
   const { data: supplierRows, error: sErr } = await supabase
     .from('pedido_suppliers')
-    .select('id,name,contact')
+    .select('id,name,contact,delivery_cycle_weekdays')
     .eq('local_id', localId)
     .order('name');
   if (sErr) throw new Error(sErr.message);
@@ -250,16 +258,29 @@ export async function fetchSuppliersWithProducts(supabase: SupabaseClient, local
     id: row.id,
     name: row.name,
     contact: row.contact ?? '',
+    deliveryCycleWeekdays: normalizeDeliveryCycleWeekdays(row.delivery_cycle_weekdays),
     products: bySupplier.get(row.id) ?? [],
   }));
   return suppliers;
 }
 
-export async function createSupplier(supabase: SupabaseClient, localId: string, name: string, contact: string) {
+export async function createSupplier(
+  supabase: SupabaseClient,
+  localId: string,
+  name: string,
+  contact: string,
+  opts?: { deliveryCycleWeekdays?: number[] },
+) {
+  const cycle = normalizeDeliveryCycleWeekdays(opts?.deliveryCycleWeekdays ?? []);
   const { data, error } = await supabase
     .from('pedido_suppliers')
-    .insert({ local_id: localId, name: normalizeLabelUpper(name), contact: contact.trim() })
-    .select('id,name,contact')
+    .insert({
+      local_id: localId,
+      name: normalizeLabelUpper(name),
+      contact: contact.trim(),
+      delivery_cycle_weekdays: cycle,
+    })
+    .select('id,name,contact,delivery_cycle_weekdays')
     .single();
   if (error) throw new Error(error.message);
   return data as SupplierRow;
@@ -269,14 +290,21 @@ export async function updateSupplier(
   supabase: SupabaseClient,
   localId: string,
   supplierId: string,
-  input: { name: string; contact: string },
+  input: { name: string; contact: string; deliveryCycleWeekdays?: number[] },
 ) {
+  const row: Record<string, unknown> = {
+    name: normalizeLabelUpper(input.name),
+    contact: input.contact.trim(),
+  };
+  if (input.deliveryCycleWeekdays !== undefined) {
+    row.delivery_cycle_weekdays = normalizeDeliveryCycleWeekdays(input.deliveryCycleWeekdays);
+  }
   const { data, error } = await supabase
     .from('pedido_suppliers')
-    .update({ name: normalizeLabelUpper(input.name), contact: input.contact.trim() })
+    .update(row)
     .eq('id', supplierId)
     .eq('local_id', localId)
-    .select('id,name,contact')
+    .select('id,name,contact,delivery_cycle_weekdays')
     .single();
   if (error) throw new Error(error.message);
   return data as SupplierRow;

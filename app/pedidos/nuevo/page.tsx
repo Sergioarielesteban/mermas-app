@@ -10,6 +10,14 @@ import { getSupabaseClient } from '@/lib/supabase-client';
 import PedidosPremiaLockedScreen from '@/components/PedidosPremiaLockedScreen';
 import { canAccessPedidos, canUsePedidosModule } from '@/lib/pedidos-access';
 import { dispatchPedidosDataChanged, usePedidosDataChangedListener } from '@/hooks/usePedidosDataChangedListener';
+import {
+  coverageDateRangeLabel,
+  coverageDaysUntilNextDelivery,
+  formatDeliveryCycleSummary,
+  isDeliveryDateOnConfiguredCycle,
+  suggestedOrderQuantityForPar,
+  weeklyParScaledToCoverageDays,
+} from '@/lib/pedidos-coverage';
 import { formatQuantityWithUnit, unitPriceCatalogSuffix } from '@/lib/pedidos-format';
 import {
   readSuppliersSessionCache,
@@ -239,6 +247,37 @@ export default function NuevoPedidoPage() {
 
   const selectedSupplier = suppliers.find((s) => s.id === supplierId) ?? null;
   const supplierProducts = React.useMemo(() => selectedSupplier?.products ?? [], [selectedSupplier]);
+
+  const coverageDays = React.useMemo(() => {
+    if (!deliveryDate.trim() || !selectedSupplier) return null;
+    return coverageDaysUntilNextDelivery(
+      deliveryDate,
+      selectedSupplier.deliveryCycleWeekdays ?? [],
+    );
+  }, [deliveryDate, selectedSupplier]);
+
+  const coverageRangeLabel = React.useMemo(() => {
+    if (!deliveryDate.trim() || coverageDays == null) return null;
+    return coverageDateRangeLabel(deliveryDate, coverageDays);
+  }, [deliveryDate, coverageDays]);
+
+  const deliveryDayMismatch = React.useMemo(() => {
+    if (!deliveryDate.trim() || !selectedSupplier) return false;
+    return !isDeliveryDateOnConfiguredCycle(deliveryDate, selectedSupplier.deliveryCycleWeekdays ?? []);
+  }, [deliveryDate, selectedSupplier]);
+
+  const applySuggestedQtyForCoverage = React.useCallback(() => {
+    if (coverageDays == null || !selectedSupplier) return;
+    setQtyByProductId((prev) => {
+      const next = { ...prev };
+      for (const p of supplierProducts) {
+        const scaled = weeklyParScaledToCoverageDays(p.parStock ?? 0, coverageDays);
+        if (scaled <= 0) continue;
+        next[p.id] = suggestedOrderQuantityForPar(p.unit, scaled);
+      }
+      return next;
+    });
+  }, [coverageDays, selectedSupplier, supplierProducts]);
   const supplierProductsBySupplier = React.useMemo(
     () =>
       suppliers.map((s) => ({
@@ -625,6 +664,52 @@ export default function NuevoPedidoPage() {
             </details>
           ) : null}
         </div>
+        <label className="mt-4 block text-xs font-semibold uppercase tracking-wide text-zinc-500">Fecha entrega</label>
+        <input
+          type="date"
+          value={deliveryDate}
+          onChange={(e) => setDeliveryDate(e.target.value)}
+          className="mt-2 h-10 w-full min-w-0 rounded-xl border border-zinc-300 bg-white px-3 text-sm font-sans text-zinc-900 outline-none"
+        />
+        <label className="mt-3 block text-xs font-semibold uppercase tracking-wide text-zinc-500">Quién pide</label>
+        <input
+          value={requestedBy}
+          onChange={(e) => setRequestedBy(e.target.value)}
+          placeholder="Nombre de quien pide"
+          className="mt-2 h-10 w-full min-w-0 rounded-xl border border-zinc-300 bg-white px-3 text-sm font-sans text-zinc-900 placeholder:text-zinc-500 outline-none"
+        />
+        {selectedSupplier ? (
+          <p className="mt-3 text-[11px] text-zinc-500">
+            Reparto configurado: {formatDeliveryCycleSummary(selectedSupplier.deliveryCycleWeekdays ?? [])}
+          </p>
+        ) : null}
+        {coverageRangeLabel ? (
+          <div className="mt-3 rounded-xl border border-emerald-200 bg-emerald-50/90 p-3 text-[11px] text-emerald-950 ring-1 ring-emerald-100">
+            <p className="font-bold uppercase tracking-wide text-emerald-900">Cobertura de este pedido</p>
+            <p className="mt-1 font-medium capitalize">{coverageRangeLabel}</p>
+            <p className="mt-2 text-emerald-900/85">
+              Objetivo por artículo = consumo ref. semanal (en Proveedores) × {coverageDays} días ÷ 7. Ajusta manualmente
+              según stock real en cocina.
+            </p>
+          </div>
+        ) : deliveryDate.trim() !== '' ? null : (
+          <p className="mt-3 text-[11px] text-zinc-500">
+            Elige fecha de entrega para ver el tramo hasta el siguiente reparto y los objetivos por línea.
+          </p>
+        )}
+        {deliveryDayMismatch ? (
+          <p className="mt-2 text-[11px] font-semibold text-amber-800">
+            Esta fecha no es un día de reparto marcado para el proveedor. Revisa Proveedores o la fecha del albarán.
+          </p>
+        ) : null}
+        <button
+          type="button"
+          disabled={coverageDays == null || supplierProducts.every((p) => !(p.parStock > 0))}
+          onClick={applySuggestedQtyForCoverage}
+          className="mt-3 h-10 w-full rounded-xl border border-zinc-300 bg-white text-sm font-bold text-zinc-800 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          Rellenar cantidades sugeridas (según ref. semanal)
+        </button>
       </section>
 
       <section className="rounded-2xl bg-white p-4 ring-1 ring-zinc-200">
@@ -636,6 +721,12 @@ export default function NuevoPedidoPage() {
           {filteredProducts.map((p) => {
             const qty = qtyByProductId[p.id] ?? 0;
             const lineTotal = Math.round(qty * p.pricePerUnit * 100) / 100;
+            const segmentTarget =
+              coverageDays != null ? weeklyParScaledToCoverageDays(p.parStock ?? 0, coverageDays) : null;
+            const suggestedQty =
+              segmentTarget != null && segmentTarget > 0
+                ? suggestedOrderQuantityForPar(p.unit, segmentTarget)
+                : null;
             return (
               <div key={p.id} className="rounded-xl bg-zinc-50 p-3 ring-1 ring-zinc-200">
                 <div className="flex items-start justify-between gap-3">
@@ -644,6 +735,14 @@ export default function NuevoPedidoPage() {
                     <p className="text-xs text-zinc-500">
                       {p.pricePerUnit.toFixed(2)} €/{unitPriceCatalogSuffix[p.unit]}
                     </p>
+                    {p.parStock > 0 && coverageDays != null && suggestedQty != null ? (
+                      <p className="mt-1 text-[11px] font-medium text-zinc-600">
+                        Objetivo tramo (~{coverageDays} d): ~{suggestedQty} {unitPriceCatalogSuffix[p.unit]} (ref. sem.{' '}
+                        {p.parStock})
+                      </p>
+                    ) : p.parStock > 0 && coverageDays == null ? (
+                      <p className="mt-1 text-[11px] text-zinc-500">Ref. sem. {p.parStock} — indica fecha de entrega.</p>
+                    ) : null}
                   </div>
                   <p className="shrink-0 whitespace-nowrap text-sm font-bold tabular-nums text-zinc-900">
                     {lineTotal.toFixed(2)} €
@@ -687,27 +786,13 @@ export default function NuevoPedidoPage() {
       </section>
 
       <section className="rounded-2xl bg-white p-4 ring-1 ring-zinc-200">
-        <label className="mt-4 block text-xs font-semibold uppercase tracking-wide text-zinc-500">Notas</label>
+        <label className="mt-1 block text-xs font-semibold uppercase tracking-wide text-zinc-500">Notas</label>
         <textarea
           value={notes}
           onChange={(e) => setNotes(e.target.value)}
           rows={3}
           className="mt-2 w-full rounded-xl border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 placeholder:text-zinc-500 outline-none"
           placeholder="Observaciones del pedido..."
-        />
-        <label className="mt-3 block text-xs font-semibold uppercase tracking-wide text-zinc-500">Fecha entrega</label>
-        <input
-          type="date"
-          value={deliveryDate}
-          onChange={(e) => setDeliveryDate(e.target.value)}
-          className="mt-2 h-10 w-full min-w-0 rounded-xl border border-zinc-300 bg-white px-3 text-sm font-sans text-zinc-900 outline-none"
-        />
-        <label className="mt-3 block text-xs font-semibold uppercase tracking-wide text-zinc-500">Quien pide</label>
-        <input
-          value={requestedBy}
-          onChange={(e) => setRequestedBy(e.target.value)}
-          placeholder="Nombre de quien pide"
-          className="mt-2 h-10 w-full min-w-0 rounded-xl border border-zinc-300 bg-white px-3 text-sm font-sans text-zinc-900 placeholder:text-zinc-500 outline-none"
         />
         {message ? <p className="mt-3 text-sm text-[#B91C1C]">{message}</p> : null}
       </section>

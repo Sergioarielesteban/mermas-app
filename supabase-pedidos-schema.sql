@@ -6,6 +6,8 @@ create table if not exists public.pedido_suppliers (
   local_id uuid not null references public.locals(id) on delete restrict,
   name text not null,
   contact text not null default '',
+  /** Días de entrega 0=dom..6=sáb (Date.getDay). Vacío = cobertura 7 días en sugerencias. */
+  delivery_cycle_weekdays smallint[] not null default '{}',
   created_by uuid references auth.users(id),
   created_at timestamptz not null default now(),
   unique (local_id, name)
@@ -174,6 +176,9 @@ for all
 to authenticated
 using (local_id = public.current_local_id())
 with check (local_id = public.current_local_id());
+
+alter table public.pedido_suppliers
+  add column if not exists delivery_cycle_weekdays smallint[] not null default '{}';
 
 -- Bandeja/caja: kg estimado por envase en catálogo y kg reales en recepción (precio sigue en €/envase)
 alter table public.pedido_supplier_products
