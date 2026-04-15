@@ -81,8 +81,8 @@ export default function ComidaPersonalPage() {
   const [loading, setLoading] = React.useState(false);
   const [message, setMessage] = React.useState<string | null>(null);
   const [messageTone, setMessageTone] = React.useState<'error' | 'success'>('error');
-  const [showMermaRegisteredBanner, setShowMermaRegisteredBanner] = React.useState(false);
-  const mermaBannerTimerRef = React.useRef<number | null>(null);
+  const [showComidaRegisteredBanner, setShowComidaRegisteredBanner] = React.useState(false);
+  const comidaBannerTimerRef = React.useRef<number | null>(null);
   const [records, setRecords] = React.useState<StaffMealRecord[]>([]);
   const [workers, setWorkers] = React.useState<StaffMealWorker[]>([]);
   const [reportMonthYm, setReportMonthYm] = React.useState(() => ymFromDate(new Date()));
@@ -125,8 +125,8 @@ export default function ComidaPersonalPage() {
 
   React.useEffect(() => {
     return () => {
-      if (mermaBannerTimerRef.current != null) {
-        window.clearTimeout(mermaBannerTimerRef.current);
+      if (comidaBannerTimerRef.current != null) {
+        window.clearTimeout(comidaBannerTimerRef.current);
       }
     };
   }, []);
@@ -296,11 +296,11 @@ export default function ComidaPersonalPage() {
       setQtyByProductId({});
       setNotes('');
       setMessage(null);
-      setShowMermaRegisteredBanner(true);
-      if (mermaBannerTimerRef.current != null) window.clearTimeout(mermaBannerTimerRef.current);
-      mermaBannerTimerRef.current = window.setTimeout(() => {
-        setShowMermaRegisteredBanner(false);
-        mermaBannerTimerRef.current = null;
+      setShowComidaRegisteredBanner(true);
+      if (comidaBannerTimerRef.current != null) window.clearTimeout(comidaBannerTimerRef.current);
+      comidaBannerTimerRef.current = window.setTimeout(() => {
+        setShowComidaRegisteredBanner(false);
+        comidaBannerTimerRef.current = null;
       }, 1000);
     } catch (err) {
       setMessageTone('error');
@@ -451,10 +451,10 @@ export default function ComidaPersonalPage() {
 
   return (
     <div className="space-y-4">
-      {showMermaRegisteredBanner ? (
+      {showComidaRegisteredBanner ? (
         <div className="pointer-events-none fixed inset-0 z-[92] grid place-items-center bg-black/25 px-6">
           <div className="saved-banner-pop rounded-2xl bg-[#D32F2F] px-7 py-5 text-center shadow-2xl ring-2 ring-white/75">
-            <p className="text-xl font-black uppercase tracking-wide text-white">Merma registrada</p>
+            <p className="text-xl font-black tracking-wide text-white">Comida registrada</p>
           </div>
         </div>
       ) : null}
