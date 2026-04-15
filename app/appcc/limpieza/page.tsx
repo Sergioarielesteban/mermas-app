@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { BrushCleaning, ChevronLeft, ClipboardList, History } from 'lucide-react';
+import { BrushCleaning, CalendarDays, ChevronLeft, ClipboardList, History } from 'lucide-react';
 import { CHEF_ONE_TAPER_LINE_CLASS } from '@/components/ChefOneGlowLine';
 import MermasStyleHero from '@/components/MermasStyleHero';
 
@@ -28,7 +28,7 @@ export default function AppccLimpiezaHubPage() {
         <h2 className="mb-3 text-center text-base font-bold tracking-tight text-zinc-900 sm:text-lg">
           Programa de limpieza
         </h2>
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-3 sm:gap-2.5">
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4 sm:gap-2.5">
           <Link
             href="/appcc/limpieza/registro"
             className="flex flex-col items-center rounded-xl bg-zinc-50/90 px-2 py-3 text-center ring-1 ring-zinc-200/80 transition hover:bg-white hover:ring-zinc-300"
@@ -71,6 +71,22 @@ export default function AppccLimpiezaHubPage() {
             </span>
             <span className="mt-1 line-clamp-2 text-[10px] font-medium leading-snug text-zinc-500">
               Maquinaria, superficies, cubos…
+            </span>
+            <span className={`${LINE_SM}`} aria-hidden />
+          </Link>
+
+          <Link
+            href="/appcc/limpieza/cronograma"
+            className="flex flex-col items-center rounded-xl bg-zinc-50/90 px-2 py-3 text-center ring-1 ring-zinc-200/80 transition hover:bg-white hover:ring-zinc-300"
+          >
+            <div className="mb-1.5 grid h-10 w-10 place-items-center rounded-xl bg-[#D32F2F]/12 text-[#D32F2F] shadow-inner">
+              <CalendarDays className="h-5 w-5" strokeWidth={2.1} />
+            </div>
+            <span className="text-xs font-semibold leading-tight text-zinc-900 sm:text-[0.8125rem]">
+              Cronograma semanal
+            </span>
+            <span className="mt-1 line-clamp-2 text-[10px] font-medium leading-snug text-zinc-500">
+              Qué toca cada día (tareas y equipos)
             </span>
             <span className={`${LINE_SM}`} aria-hidden />
           </Link>

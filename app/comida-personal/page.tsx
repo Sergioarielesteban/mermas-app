@@ -1,19 +1,8 @@
 'use client';
 
 import React from 'react';
-import {
-  Bar,
-  BarChart,
-  CartesianGrid,
-  Cell,
-  Pie,
-  PieChart,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from 'recharts';
-import { FileDown, Plus, Search, Trash2, X } from 'lucide-react';
+import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { ChevronDown, FileDown, Plus, Search, Trash2, X } from 'lucide-react';
 import { useAuth } from '@/components/AuthProvider';
 import { useMermasStore } from '@/components/MermasStoreProvider';
 import {
@@ -39,14 +28,6 @@ const SERVICE_LABEL: Record<StaffMealService, string> = {
   cena: 'Cena',
   snack: 'Snack',
   otro: 'Otro',
-};
-
-const SERVICE_COLORS: Record<StaffMealService, string> = {
-  desayuno: '#0EA5E9',
-  comida: '#22C55E',
-  cena: '#6366F1',
-  snack: '#F59E0B',
-  otro: '#A3A3A3',
 };
 
 function ymd(d: Date) {
@@ -94,6 +75,7 @@ export default function ComidaPersonalPage() {
   const [pickerSearch, setPickerSearch] = React.useState('');
   const [qtyByProductId, setQtyByProductId] = React.useState<Record<string, number>>({});
   const [notes, setNotes] = React.useState('');
+  const [recentRecordsOpen, setRecentRecordsOpen] = React.useState(false);
 
   const loadData = React.useCallback(async () => {
     if (!localId) return;
@@ -388,16 +370,6 @@ export default function ComidaPersonalPage() {
     });
   }, [activeRecords, todayDate]);
 
-  const monthByService = React.useMemo(() => {
-    const map = new Map<StaffMealService, number>();
-    for (const row of monthRecords) {
-      map.set(row.service, (map.get(row.service) ?? 0) + row.totalCostEur);
-    }
-    return (Object.keys(SERVICE_LABEL) as StaffMealService[])
-      .map((k) => ({ service: SERVICE_LABEL[k], value: Math.round((map.get(k) ?? 0) * 100) / 100, color: SERVICE_COLORS[k] }))
-      .filter((x) => x.value > 0);
-  }, [monthRecords]);
-
   const monthWorkerRanking = React.useMemo(() => {
     const map = new Map<
       string,
@@ -653,61 +625,6 @@ export default function ComidaPersonalPage() {
       </section>
 
       <section className="rounded-2xl bg-white p-4 ring-1 ring-zinc-200">
-        <p className="text-sm font-bold text-zinc-800">Registros recientes</p>
-        <p className="mt-1 text-xs text-zinc-500">
-          Anular con la papelera: pide la clave de seguridad. El registro deja de contar en totales e informes.
-        </p>
-        {recentActiveRecords.length === 0 ? (
-          <p className="mt-2 text-sm text-zinc-500">Aún no hay registros en el periodo cargado.</p>
-        ) : (
-          <ul className="mt-2 max-h-64 divide-y divide-zinc-200 overflow-y-auto rounded-lg border border-zinc-200 bg-zinc-50/80">
-            {recentActiveRecords.map((r) => {
-              const title =
-                r.sourceProductName?.trim() ||
-                (r.workerName ? `${SERVICE_LABEL[r.service]} · ${r.workerName}` : SERVICE_LABEL[r.service]);
-              const sub =
-                r.sourceProductName && r.workerName
-                  ? `${SERVICE_LABEL[r.service]} · ${r.workerName}`
-                  : r.notes.trim() || null;
-              const dateLabel = (() => {
-                try {
-                  return new Date(`${r.mealDate}T12:00:00`).toLocaleDateString('es-ES', {
-                    day: '2-digit',
-                    month: 'short',
-                  });
-                } catch {
-                  return r.mealDate;
-                }
-              })();
-              return (
-                <li key={r.id} className="flex items-center gap-2 px-2 py-1.5">
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-[11px] font-semibold text-zinc-900">{title}</p>
-                    <p className="truncate text-[10px] text-zinc-500">
-                      {dateLabel}
-                      {sub ? ` · ${sub}` : ''}
-                    </p>
-                  </div>
-                  <span className="shrink-0 text-[11px] font-bold tabular-nums text-zinc-800">
-                    {money(r.totalCostEur)}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => void voidOneRecord(r)}
-                    className="grid h-8 w-8 shrink-0 place-items-center rounded-lg border border-zinc-200 bg-white text-zinc-500 hover:border-red-200 hover:bg-red-50 hover:text-red-700"
-                    title="Anular registro"
-                    aria-label={`Anular registro del ${r.mealDate}`}
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-      </section>
-
-      <section className="rounded-2xl bg-white p-4 ring-1 ring-zinc-200">
         <p className="text-center text-sm font-bold text-zinc-800">Informe mensual</p>
         <div className="mt-3 flex flex-col items-center">
           <label className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Mes del informe</label>
@@ -802,25 +719,78 @@ export default function ComidaPersonalPage() {
         </div>
       </section>
 
-      <section className="rounded-2xl bg-white p-4 ring-1 ring-zinc-200">
-        <p className="text-sm font-bold text-zinc-800">Reparto mensual por servicio</p>
-        <div className="mt-2 h-56">
-          {monthByService.length === 0 ? (
-            <p className="pt-16 text-center text-sm text-zinc-500">Sin datos en el mes actual.</p>
-          ) : (
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie data={monthByService} dataKey="value" nameKey="service" outerRadius={84}>
-                  {monthByService.map((entry) => (
-                    <Cell key={entry.service} fill={entry.color} />
-                  ))}
-                </Pie>
-                <Tooltip formatter={(value) => money(Number(value ?? 0))} />
-              </PieChart>
-            </ResponsiveContainer>
-          )}
-        </div>
-      </section>
+      <div className="rounded-xl border border-zinc-200/90 bg-zinc-50/60 p-2 ring-1 ring-zinc-100">
+        <button
+          type="button"
+          onClick={() => setRecentRecordsOpen((o) => !o)}
+          aria-expanded={recentRecordsOpen}
+          className="flex w-full items-center justify-between gap-2 rounded-lg px-2 py-2 text-left outline-none focus-visible:ring-2 focus-visible:ring-[#D32F2F]/30"
+        >
+          <span className="text-[11px] font-medium text-zinc-500">
+            Anular registros
+            <span className="font-normal text-zinc-400"> · {recentActiveRecords.length} activos</span>
+          </span>
+          <ChevronDown
+            className={`h-4 w-4 shrink-0 text-zinc-400 transition-transform ${recentRecordsOpen ? 'rotate-180' : ''}`}
+            aria-hidden
+          />
+        </button>
+        {recentRecordsOpen ? (
+          <div className="mt-1 border-t border-zinc-200/80 pt-2">
+            <p className="px-1 pb-1 text-[10px] leading-snug text-zinc-400">
+              La papelera pide la clave; el registro deja de contar en totales e informes.
+            </p>
+            {recentActiveRecords.length === 0 ? (
+              <p className="px-1 py-2 text-xs text-zinc-400">Sin registros en el periodo cargado.</p>
+            ) : (
+              <ul className="max-h-52 divide-y divide-zinc-200/90 overflow-y-auto rounded-md border border-zinc-200/80 bg-white/80">
+                {recentActiveRecords.map((r) => {
+                  const title =
+                    r.sourceProductName?.trim() ||
+                    (r.workerName ? `${SERVICE_LABEL[r.service]} · ${r.workerName}` : SERVICE_LABEL[r.service]);
+                  const sub =
+                    r.sourceProductName && r.workerName
+                      ? `${SERVICE_LABEL[r.service]} · ${r.workerName}`
+                      : r.notes.trim() || null;
+                  const dateLabel = (() => {
+                    try {
+                      return new Date(`${r.mealDate}T12:00:00`).toLocaleDateString('es-ES', {
+                        day: '2-digit',
+                        month: 'short',
+                      });
+                    } catch {
+                      return r.mealDate;
+                    }
+                  })();
+                  return (
+                    <li key={r.id} className="flex items-center gap-2 px-2 py-1.5">
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-[11px] font-semibold text-zinc-900">{title}</p>
+                        <p className="truncate text-[10px] text-zinc-500">
+                          {dateLabel}
+                          {sub ? ` · ${sub}` : ''}
+                        </p>
+                      </div>
+                      <span className="shrink-0 text-[11px] font-bold tabular-nums text-zinc-800">
+                        {money(r.totalCostEur)}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => void voidOneRecord(r)}
+                        className="grid h-7 w-7 shrink-0 place-items-center rounded-md border border-zinc-200 bg-white text-zinc-500 hover:border-red-200 hover:bg-red-50 hover:text-red-700"
+                        title="Anular registro"
+                        aria-label={`Anular registro del ${r.mealDate}`}
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </div>
+        ) : null}
+      </div>
 
       {workerManageOpen ? (
         <div

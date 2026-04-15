@@ -1,7 +1,17 @@
 'use client';
 
 import Link from 'next/link';
-import { BrushCleaning, ChevronDown, ChevronLeft, ClipboardList, Droplet, History, Thermometer, Wrench } from 'lucide-react';
+import {
+  BrushCleaning,
+  CalendarDays,
+  ChevronDown,
+  ChevronLeft,
+  ClipboardList,
+  Droplet,
+  History,
+  Thermometer,
+  Wrench,
+} from 'lucide-react';
 import { CHEF_ONE_TAPER_LINE_CLASS } from '@/components/ChefOneGlowLine';
 import MermasStyleHero from '@/components/MermasStyleHero';
 
@@ -128,6 +138,7 @@ export default function AppccHubPage() {
         LeadIcon={BrushCleaning}
         items={[
           { href: '/appcc/limpieza/tareas', label: 'Categorías y tareas', sub: 'Maquinaria, superficies, cubos…', Icon: ClipboardList },
+          { href: '/appcc/limpieza/cronograma', label: 'Cronograma semanal', sub: 'Qué toca cada día', Icon: CalendarDays },
           { href: '/appcc/limpieza/historial', label: 'Historial limpieza', sub: 'Registros por día', Icon: History },
         ]}
       />

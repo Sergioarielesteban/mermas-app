@@ -269,3 +269,70 @@ export async function deleteCleaningLog(
     .eq('local_id', localId);
   if (error) throw new Error(error.message);
 }
+
+/** 0 = domingo … 6 = sábado (igual que Date.getDay() en JavaScript). */
+export type AppccCleaningWeekdayItemRow = {
+  id: string;
+  local_id: string;
+  weekday: number;
+  task_id: string | null;
+  cold_unit_id: string | null;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+};
+
+export async function fetchCleaningWeekdayItems(
+  supabase: SupabaseClient,
+  localId: string,
+): Promise<AppccCleaningWeekdayItemRow[]> {
+  const { data, error } = await supabase
+    .from('appcc_cleaning_weekday_items')
+    .select('id,local_id,weekday,task_id,cold_unit_id,sort_order,created_at,updated_at')
+    .eq('local_id', localId)
+    .order('weekday', { ascending: true })
+    .order('sort_order', { ascending: true });
+  if (error) throw new Error(error.message);
+  return (data ?? []) as AppccCleaningWeekdayItemRow[];
+}
+
+export async function replaceCleaningWeekdayItems(
+  supabase: SupabaseClient,
+  localId: string,
+  weekday: number,
+  items: Array<{ taskId?: string | null; coldUnitId?: string | null }>,
+): Promise<void> {
+  if (weekday < 0 || weekday > 6 || !Number.isInteger(weekday)) {
+    throw new Error('weekday debe ser entero 0–6 (Date.getDay).');
+  }
+  const rows: Array<{
+    local_id: string;
+    weekday: number;
+    task_id: string | null;
+    cold_unit_id: string | null;
+    sort_order: number;
+  }> = [];
+  for (let i = 0; i < items.length; i += 1) {
+    const x = items[i];
+    const tid = (x.taskId ?? '').trim() || null;
+    const cid = (x.coldUnitId ?? '').trim() || null;
+    if (tid && cid) throw new Error('Cada ítem debe ser solo tarea o solo equipo frío.');
+    if (!tid && !cid) continue;
+    rows.push({
+      local_id: localId,
+      weekday,
+      task_id: tid,
+      cold_unit_id: cid,
+      sort_order: rows.length,
+    });
+  }
+  const { error: delErr } = await supabase
+    .from('appcc_cleaning_weekday_items')
+    .delete()
+    .eq('local_id', localId)
+    .eq('weekday', weekday);
+  if (delErr) throw new Error(delErr.message);
+  if (rows.length === 0) return;
+  const { error: insErr } = await supabase.from('appcc_cleaning_weekday_items').insert(rows);
+  if (insErr) throw new Error(insErr.message);
+}
