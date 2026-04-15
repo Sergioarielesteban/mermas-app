@@ -543,7 +543,7 @@ export default function ComidaPersonalPage() {
         {topConsumedProducts.length === 0 ? (
           <p className="mt-2 text-sm text-zinc-500">Cuando haya registros con artículo, aparecerá el ranking.</p>
         ) : (
-          <ul className="mt-2 grid grid-cols-1 gap-1 sm:grid-cols-2 sm:gap-x-2 sm:gap-y-1">
+          <ul className="mt-2 grid grid-cols-2 gap-x-1 gap-y-1 sm:gap-x-2">
             {topConsumedProducts.map((row, idx) => {
               const canAdd = Boolean(row.addableId);
               return (
