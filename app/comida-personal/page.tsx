@@ -13,24 +13,21 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import { FileDown } from 'lucide-react';
+import { FileDown, Plus } from 'lucide-react';
 import { useAuth } from '@/components/AuthProvider';
+import { useMermasStore } from '@/components/MermasStoreProvider';
 import {
+  createStaffMealWorker,
   createStaffMealRecord,
   fetchStaffMealRecords,
+  fetchStaffMealWorkers,
   type StaffMealRecord,
+  type StaffMealWorker,
   type StaffMealService,
 } from '@/lib/comida-personal-supabase';
 import { downloadStaffMealReportPdf } from '@/lib/comida-personal-report-pdf';
 import { formatLocalHeaderName } from '@/lib/local-display-name';
 import { getSupabaseClient } from '@/lib/supabase-client';
-
-const QUICK_ACTIONS: Array<{ label: string; service: StaffMealService; unitCostEur: number }> = [
-  { label: '+1 Desayuno', service: 'desayuno', unitCostEur: 2.2 },
-  { label: '+1 Comida', service: 'comida', unitCostEur: 2.8 },
-  { label: '+1 Cena', service: 'cena', unitCostEur: 2.8 },
-  { label: '+1 Snack', service: 'snack', unitCostEur: 1.5 },
-];
 
 const SERVICE_LABEL: Record<StaffMealService, string> = {
   desayuno: 'Desayuno',
@@ -76,18 +73,21 @@ function ymFromDate(d: Date) {
 
 export default function ComidaPersonalPage() {
   const { localId, localName, localCode, displayName, loginUsername, email } = useAuth();
+  const { products } = useMermasStore();
   const [loading, setLoading] = React.useState(false);
   const [message, setMessage] = React.useState<string | null>(null);
   const [messageTone, setMessageTone] = React.useState<'error' | 'success'>('error');
   const [records, setRecords] = React.useState<StaffMealRecord[]>([]);
+  const [workers, setWorkers] = React.useState<StaffMealWorker[]>([]);
   const [reportMonthYm, setReportMonthYm] = React.useState(() => ymFromDate(new Date()));
   const [mealDate, setMealDate] = React.useState(() => ymd(new Date()));
-  const [service, setService] = React.useState<StaffMealService>('comida');
-  const [peopleCount, setPeopleCount] = React.useState('1');
-  const [unitCostEur, setUnitCostEur] = React.useState('2.80');
+  const [workerId, setWorkerId] = React.useState('');
+  const [newWorkerName, setNewWorkerName] = React.useState('');
+  const [productSearch, setProductSearch] = React.useState('');
+  const [qtyByProductId, setQtyByProductId] = React.useState<Record<string, number>>({});
   const [notes, setNotes] = React.useState('');
 
-  const loadRecords = React.useCallback(async () => {
+  const loadData = React.useCallback(async () => {
     if (!localId) return;
     const supabase = getSupabaseClient();
     if (!supabase) return;
@@ -96,8 +96,13 @@ export default function ComidaPersonalPage() {
     const today = new Date();
     const from = addDays(today, -460);
     try {
-      const rows = await fetchStaffMealRecords(supabase, localId, ymd(from), ymd(today));
+      const [rows, workerRows] = await Promise.all([
+        fetchStaffMealRecords(supabase, localId, ymd(from), ymd(today)),
+        fetchStaffMealWorkers(supabase, localId),
+      ]);
       setRecords(rows);
+      setWorkers(workerRows);
+      setWorkerId((prev) => prev || workerRows[0]?.id || '');
     } catch (err) {
       setMessageTone('error');
       setMessage(err instanceof Error ? err.message : 'No se pudo cargar comida de personal.');
@@ -107,32 +112,104 @@ export default function ComidaPersonalPage() {
   }, [localId]);
 
   React.useEffect(() => {
-    void loadRecords();
-  }, [loadRecords]);
+    void loadData();
+  }, [loadData]);
 
-  const addRecord = React.useCallback(
-    async (input: { service: StaffMealService; peopleCount: number; unitCostEur: number; notes?: string }) => {
-      if (!localId) return;
-      const supabase = getSupabaseClient();
-      if (!supabase) return;
-      try {
-        const inserted = await createStaffMealRecord(supabase, localId, {
-          service: input.service,
-          mealDate,
-          peopleCount: input.peopleCount,
-          unitCostEur: input.unitCostEur,
-          notes: input.notes,
-        });
-        setRecords((prev) => [inserted, ...prev]);
-        setMessageTone('success');
-        setMessage('Registro guardado.');
-      } catch (err) {
-        setMessageTone('error');
-        setMessage(err instanceof Error ? err.message : 'No se pudo guardar el registro.');
-      }
-    },
-    [localId, mealDate],
+  const selectedWorker = workers.find((w) => w.id === workerId) ?? null;
+  const filteredProducts = React.useMemo(() => {
+    const s = productSearch.trim().toLowerCase();
+    return products
+      .filter((p) => (s ? p.name.toLowerCase().includes(s) : true))
+      .sort((a, b) => a.name.localeCompare(b.name, 'es'))
+      .slice(0, 30);
+  }, [productSearch, products]);
+  const selectedLines = React.useMemo(
+    () =>
+      Object.entries(qtyByProductId)
+        .map(([productId, quantity]) => {
+          const product = products.find((p) => p.id === productId);
+          if (!product || quantity <= 0) return null;
+          return { product, quantity };
+        })
+        .filter((x): x is { product: (typeof products)[number]; quantity: number } => Boolean(x)),
+    [products, qtyByProductId],
   );
+
+  const basketTotal = selectedLines.reduce((acc, x) => acc + x.quantity * x.product.pricePerUnit, 0);
+
+  const setProductQty = React.useCallback((productId: string, qty: number) => {
+    setQtyByProductId((prev) => {
+      const next = Math.max(0, Math.floor(qty));
+      if (next <= 0) {
+        const clone = { ...prev };
+        delete clone[productId];
+        return clone;
+      }
+      return { ...prev, [productId]: next };
+    });
+  }, []);
+
+  const createWorker = React.useCallback(async () => {
+    if (!localId) return;
+    const name = newWorkerName.trim();
+    if (!name) return;
+    const supabase = getSupabaseClient();
+    if (!supabase) return;
+    try {
+      const w = await createStaffMealWorker(supabase, localId, name);
+      setWorkers((prev) => [...prev, w].sort((a, b) => a.name.localeCompare(b.name, 'es')));
+      setWorkerId(w.id);
+      setNewWorkerName('');
+      setMessageTone('success');
+      setMessage('Trabajador creado.');
+    } catch (err) {
+      setMessageTone('error');
+      setMessage(err instanceof Error ? err.message : 'No se pudo crear trabajador.');
+    }
+  }, [localId, newWorkerName]);
+
+  const registerConsumption = React.useCallback(async () => {
+    if (!localId) return;
+    const supabase = getSupabaseClient();
+    if (!supabase) return;
+    if (!selectedWorker) {
+      setMessageTone('error');
+      setMessage('Selecciona trabajador.');
+      return;
+    }
+    if (selectedLines.length === 0) {
+      setMessageTone('error');
+      setMessage('Selecciona al menos un artículo.');
+      return;
+    }
+    try {
+      const payloads: Array<Promise<StaffMealRecord>> = [];
+      for (const line of selectedLines) {
+        payloads.push(
+          createStaffMealRecord(supabase, localId, {
+            service: 'comida',
+            mealDate,
+            peopleCount: line.quantity,
+            unitCostEur: line.product.pricePerUnit,
+            notes: notes.trim(),
+            workerId: selectedWorker.id,
+            workerName: selectedWorker.name,
+            sourceProductId: line.product.id,
+            sourceProductName: line.product.name,
+          }),
+        );
+      }
+      const inserted = await Promise.all(payloads);
+      setRecords((prev) => [...inserted, ...prev]);
+      setQtyByProductId({});
+      setNotes('');
+      setMessageTone('success');
+      setMessage('Consumo registrado.');
+    } catch (err) {
+      setMessageTone('error');
+      setMessage(err instanceof Error ? err.message : 'No se pudo registrar el consumo.');
+    }
+  }, [localId, mealDate, notes, selectedLines, selectedWorker]);
 
   const exportMonthPdf = React.useCallback(() => {
     const localLabel =
@@ -172,9 +249,8 @@ export default function ComidaPersonalPage() {
     const dt = new Date(`${r.mealDate}T00:00:00`);
     return dt >= monthStart && dt <= todayDate;
   });
+  const monthUnits = monthRecords.reduce((acc, r) => acc + r.peopleCount, 0);
   const monthTotal = monthRecords.reduce((acc, r) => acc + r.totalCostEur, 0);
-  const monthPeople = monthRecords.reduce((acc, r) => acc + r.peopleCount, 0);
-  const monthAvgPerPerson = monthPeople > 0 ? monthTotal / monthPeople : 0;
 
   const last14DaysChart = React.useMemo(() => {
     const days = Array.from({ length: 14 }, (_, i) => addDays(todayDate, -13 + i));
@@ -202,79 +278,133 @@ export default function ComidaPersonalPage() {
     <div className="space-y-4">
       <section className="rounded-2xl bg-white p-4 ring-1 ring-zinc-200">
         <p className="text-sm font-black text-zinc-900">Comida de personal</p>
-        <p className="mt-1 text-xs text-zinc-500">Registro en segundos para imputar consumo interno a coste de personal.</p>
+        <p className="mt-1 text-xs text-zinc-500">Toca tu nombre, marca artículos consumidos y registra en segundos.</p>
       </section>
 
       <section className="rounded-2xl bg-white p-4 ring-1 ring-zinc-200">
-        <label className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Fecha</label>
-        <input
-          type="date"
-          value={mealDate}
-          onChange={(e) => setMealDate(e.target.value)}
-          className="mt-2 h-11 w-full rounded-xl border border-zinc-300 bg-white px-3 text-sm text-zinc-900 outline-none"
-        />
-        <div className="mt-3 grid grid-cols-2 gap-2">
-          {QUICK_ACTIONS.map((item) => (
-            <button
-              key={item.label}
-              type="button"
-              onClick={() => void addRecord({ service: item.service, peopleCount: 1, unitCostEur: item.unitCostEur })}
-              className="h-11 rounded-xl bg-[#D32F2F] px-3 text-sm font-bold text-white"
-            >
-              {item.label}
-            </button>
-          ))}
+        <div className="flex w-full flex-col items-center">
+          <label className="text-center text-xs font-semibold uppercase tracking-wide text-zinc-700">Fecha</label>
+          <input
+            type="date"
+            value={mealDate}
+            onChange={(e) => setMealDate(e.target.value)}
+            className="mt-2 box-border h-11 w-full max-w-[17.5rem] rounded-xl border-2 border-black bg-zinc-950 px-3 text-center text-sm font-semibold text-white shadow-[inset_0_0_0_1px_rgba(211,47,47,0.85)] outline-none [color-scheme:dark] focus:border-[#D32F2F] focus:shadow-[inset_0_0_0_2px_#D32F2F]"
+          />
         </div>
       </section>
 
       <section className="rounded-2xl bg-white p-4 ring-1 ring-zinc-200">
-        <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Registro manual rápido</p>
-        <div className="mt-2 grid grid-cols-2 gap-2">
+        <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Trabajador</p>
+        <div className="mt-2 grid grid-cols-[1fr_auto] gap-2">
           <select
-            value={service}
-            onChange={(e) => setService(e.target.value as StaffMealService)}
+            value={workerId}
+            onChange={(e) => setWorkerId(e.target.value)}
             className="h-11 rounded-xl border border-zinc-300 bg-white px-3 text-sm text-zinc-900 outline-none"
           >
-            {(Object.keys(SERVICE_LABEL) as StaffMealService[]).map((s) => (
-              <option key={s} value={s}>
-                {SERVICE_LABEL[s]}
+            <option value="">Selecciona trabajador</option>
+            {workers.map((w) => (
+              <option key={w.id} value={w.id}>
+                {w.name}
               </option>
             ))}
           </select>
-          <input
-            value={peopleCount}
-            onChange={(e) => setPeopleCount(e.target.value)}
-            inputMode="decimal"
-            placeholder="Personas"
-            className="h-11 rounded-xl border border-zinc-300 bg-white px-3 text-sm text-zinc-900 outline-none"
-          />
-          <input
-            value={unitCostEur}
-            onChange={(e) => setUnitCostEur(e.target.value)}
-            inputMode="decimal"
-            placeholder="€/persona"
-            className="h-11 rounded-xl border border-zinc-300 bg-white px-3 text-sm text-zinc-900 outline-none"
-          />
-          <input
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-            placeholder="Nota (opcional)"
-            className="h-11 rounded-xl border border-zinc-300 bg-white px-3 text-sm text-zinc-900 outline-none"
-          />
+          <button
+            type="button"
+            onClick={createWorker}
+            className="h-11 rounded-xl border border-zinc-300 bg-white px-3 text-sm font-bold text-zinc-800"
+          >
+            Crear trabajador
+          </button>
+        </div>
+        <input
+          value={newWorkerName}
+          onChange={(e) => setNewWorkerName(e.target.value)}
+          placeholder="Nombre del trabajador"
+          className="mt-2 h-11 w-full rounded-xl border border-zinc-300 bg-white px-3 text-sm text-zinc-900 outline-none"
+        />
+      </section>
+
+      <section className="rounded-2xl bg-white p-4 ring-1 ring-zinc-200">
+        <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Artículos (catálogo mermas)</p>
+        <input
+          value={productSearch}
+          onChange={(e) => setProductSearch(e.target.value)}
+          placeholder="Buscar artículo..."
+          className="mt-2 h-11 w-full rounded-xl border border-zinc-300 bg-white px-3 text-sm text-zinc-900 outline-none"
+        />
+        <div className="mt-2 space-y-2">
+          {filteredProducts.map((p) => (
+            <div key={p.id} className="flex items-center justify-between rounded-xl bg-zinc-50 p-2 ring-1 ring-zinc-200">
+              <div className="min-w-0 pr-2">
+                <p className="truncate text-sm font-semibold text-zinc-900">{p.name}</p>
+                <p className="text-xs text-zinc-500">{money(p.pricePerUnit)}/{p.unit}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setProductQty(p.id, (qtyByProductId[p.id] ?? 0) + 1)}
+                className="grid h-9 w-9 place-items-center rounded-full bg-[#D32F2F] text-white"
+                aria-label={`Añadir ${p.name}`}
+              >
+                <Plus className="h-4 w-4" />
+              </button>
+            </div>
+          ))}
+          {filteredProducts.length === 0 ? <p className="text-sm text-zinc-500">Sin coincidencias.</p> : null}
+        </div>
+      </section>
+
+      <section className="rounded-2xl bg-white p-4 ring-1 ring-zinc-200">
+        <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Consumo seleccionado</p>
+        <div className="mt-2 space-y-2">
+          {selectedLines.map((line) => (
+            <div key={line.product.id} className="rounded-xl bg-zinc-50 p-2 ring-1 ring-zinc-200">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-sm font-semibold text-zinc-900">{line.product.name}</p>
+                <p className="text-sm font-bold text-zinc-900">{money(line.quantity * line.product.pricePerUnit)}</p>
+              </div>
+              <div className="mt-2 grid grid-cols-[2.25rem_2.75rem_2.25rem] items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setProductQty(line.product.id, line.quantity - 1)}
+                  className="grid h-9 w-9 place-items-center rounded-full border border-zinc-300 bg-white text-lg font-semibold text-zinc-500"
+                >
+                  {'\u2212'}
+                </button>
+                <input
+                  type="number"
+                  min={0}
+                  value={line.quantity}
+                  onChange={(e) => setProductQty(line.product.id, Number(e.target.value || 0))}
+                  className="h-9 w-11 rounded-lg border border-zinc-300 bg-white px-1 text-center text-sm font-semibold text-zinc-900 outline-none"
+                />
+                <button
+                  type="button"
+                  onClick={() => setProductQty(line.product.id, line.quantity + 1)}
+                  className="grid h-9 w-9 place-items-center rounded-full bg-[#D32F2F] text-lg font-semibold text-white"
+                >
+                  +
+                </button>
+              </div>
+            </div>
+          ))}
+          {selectedLines.length === 0 ? <p className="text-sm text-zinc-500">Aún no hay artículos seleccionados.</p> : null}
+        </div>
+        <input
+          value={notes}
+          onChange={(e) => setNotes(e.target.value)}
+          placeholder="Nota (opcional)"
+          className="mt-2 h-11 w-full rounded-xl border border-zinc-300 bg-white px-3 text-sm text-zinc-900 outline-none"
+        />
+        <div className="mt-2 flex items-center justify-between">
+          <p className="text-sm font-semibold text-zinc-700">Total</p>
+          <p className="text-lg font-black text-zinc-900">{money(basketTotal)}</p>
         </div>
         <button
           type="button"
-          onClick={() =>
-            void addRecord({
-              service,
-              peopleCount: Math.max(0, Number(peopleCount.replace(',', '.')) || 0),
-              unitCostEur: Math.max(0, Number(unitCostEur.replace(',', '.')) || 0),
-              notes,
-            })
-          }
-          className="mt-2 h-11 w-full rounded-xl border border-zinc-300 bg-white text-sm font-bold text-zinc-800"
+          onClick={() => void registerConsumption()}
+          className="mt-2 h-11 w-full rounded-xl bg-[#D32F2F] text-sm font-bold text-white"
         >
-          Registrar
+          Registrar consumo
         </button>
       </section>
 
@@ -315,8 +445,8 @@ export default function ComidaPersonalPage() {
           <p className="mt-1 text-lg font-black text-zinc-900">{money(monthTotal)}</p>
         </div>
         <div className="rounded-2xl bg-white p-3 ring-1 ring-zinc-200">
-          <p className="text-[11px] uppercase tracking-wide text-zinc-500">€/persona mes</p>
-          <p className="mt-1 text-lg font-black text-zinc-900">{money(monthAvgPerPerson)}</p>
+          <p className="text-[11px] uppercase tracking-wide text-zinc-500">Uds mes</p>
+          <p className="mt-1 text-lg font-black text-zinc-900">{monthUnits.toLocaleString('es-ES')}</p>
         </div>
       </section>
 
@@ -360,7 +490,7 @@ export default function ComidaPersonalPage() {
           <p className="text-sm font-bold text-zinc-800">Últimos registros</p>
           <button
             type="button"
-            onClick={() => void loadRecords()}
+            onClick={() => void loadData()}
             className="h-8 rounded-lg border border-zinc-300 bg-white px-2 text-xs font-semibold text-zinc-700"
           >
             Actualizar
@@ -372,12 +502,12 @@ export default function ComidaPersonalPage() {
             <div key={row.id} className="rounded-xl bg-zinc-50 p-2 ring-1 ring-zinc-200">
               <div className="flex items-center justify-between gap-3">
                 <p className="text-sm font-semibold text-zinc-800">
-                  {SERVICE_LABEL[row.service]} · {row.peopleCount} pers.
+                  {row.workerName ?? 'Sin trabajador'} · {row.sourceProductName ?? SERVICE_LABEL[row.service]}
                 </p>
                 <p className="text-sm font-bold text-zinc-900">{money(row.totalCostEur)}</p>
               </div>
               <p className="mt-0.5 text-xs text-zinc-500">
-                {new Date(`${row.mealDate}T00:00:00`).toLocaleDateString('es-ES')} · {money(row.unitCostEur)} por persona
+                {new Date(`${row.mealDate}T00:00:00`).toLocaleDateString('es-ES')} · {row.peopleCount} ud · {money(row.unitCostEur)}/ud
               </p>
             </div>
           ))}
