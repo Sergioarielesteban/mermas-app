@@ -440,7 +440,7 @@ export default function ComidaPersonalPage() {
     }
     return Array.from(map.values())
       .sort((a, b) => b.units - a.units)
-      .slice(0, 10)
+      .slice(0, 20)
       .map((row) => {
         const catalog =
           (row.productId ? products.find((p) => p.id === row.productId) : undefined) ??
@@ -538,36 +538,38 @@ export default function ComidaPersonalPage() {
       </section>
 
       <section className="rounded-2xl bg-white p-4 ring-1 ring-zinc-200">
-        <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Top 10 · más consumidos</p>
+        <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Top 20 · más consumidos</p>
         <p className="mt-1 text-xs text-zinc-500">Atajos con + (precio según catálogo actual).</p>
         {topConsumedProducts.length === 0 ? (
           <p className="mt-2 text-sm text-zinc-500">Cuando haya registros con artículo, aparecerá el ranking.</p>
         ) : (
-          <ul className="mt-2 space-y-1.5">
+          <ul className="mt-2 grid grid-cols-1 gap-1 sm:grid-cols-2 sm:gap-x-2 sm:gap-y-1">
             {topConsumedProducts.map((row, idx) => {
               const canAdd = Boolean(row.addableId);
               return (
                 <li
                   key={`${row.addableId ?? row.label}-${idx}`}
-                  className={`flex items-center gap-2 rounded-xl px-2 py-1.5 ring-1 transition-colors duration-300 ${
+                  className={`flex min-h-0 items-center gap-1.5 rounded-lg px-1.5 py-1 ring-1 transition-colors duration-300 ${
                     row.addableId && addFlashId === row.addableId
                       ? 'bg-emerald-50 ring-emerald-400/80'
                       : 'bg-zinc-50 ring-zinc-200'
                   }`}
                 >
-                  <span className="w-5 shrink-0 text-center text-[11px] font-black text-zinc-400">{idx + 1}</span>
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-xs font-semibold text-zinc-900">{row.label}</p>
-                    <p className="text-[10px] text-zinc-500">{row.units.toLocaleString('es-ES', { maximumFractionDigits: 2 })} uds históricas</p>
+                  <span className="w-4 shrink-0 text-center text-[10px] font-black text-zinc-400">{idx + 1}</span>
+                  <div className="min-w-0 flex-1 leading-tight">
+                    <p className="truncate text-[11px] font-semibold text-zinc-900">{row.label}</p>
+                    <p className="truncate text-[9px] text-zinc-500">
+                      {row.units.toLocaleString('es-ES', { maximumFractionDigits: 2 })} uds hist.
+                    </p>
                   </div>
                   <button
                     type="button"
                     disabled={!canAdd}
                     title={canAdd ? 'Añadir 1 al consumo' : 'No enlazado al catálogo actual'}
                     onClick={() => row.addableId && addOneToBasket(row.addableId)}
-                    className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-[#D32F2F] text-white shadow-sm disabled:cursor-not-allowed disabled:bg-zinc-300"
+                    className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-[#D32F2F] text-white shadow-sm disabled:cursor-not-allowed disabled:bg-zinc-300"
                   >
-                    <Plus className="h-4 w-4" />
+                    <Plus className="h-3.5 w-3.5" />
                   </button>
                 </li>
               );
