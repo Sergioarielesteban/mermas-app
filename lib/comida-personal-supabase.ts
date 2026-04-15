@@ -295,3 +295,12 @@ export async function voidStaffMealRecord(
     .eq('local_id', localId);
   if (error) throw new Error(error.message);
 }
+
+/** Elimina todos los registros de comida de personal del local (definitivo). */
+export async function deleteAllStaffMealRecordsForLocal(
+  supabase: SupabaseClient,
+  localId: string,
+): Promise<void> {
+  const { error } = await supabase.from('staff_meal_records').delete().eq('local_id', localId);
+  if (error) throw new Error(error.message);
+}

@@ -19,12 +19,14 @@ import { useMermasStore } from '@/components/MermasStoreProvider';
 import {
   createStaffMealWorker,
   createStaffMealRecord,
+  deleteAllStaffMealRecordsForLocal,
   fetchStaffMealRecords,
   fetchStaffMealWorkers,
   type StaffMealRecord,
   type StaffMealWorker,
   type StaffMealService,
 } from '@/lib/comida-personal-supabase';
+import { requestDeleteSecurityPin } from '@/lib/delete-security';
 import { downloadStaffMealReportPdf } from '@/lib/comida-personal-report-pdf';
 import { formatLocalHeaderName } from '@/lib/local-display-name';
 import { getSupabaseClient } from '@/lib/supabase-client';
@@ -240,6 +242,28 @@ export default function ComidaPersonalPage() {
     }
   }, [localId, mealDate, notes, selectedLines, selectedWorker]);
 
+  const deleteAllRecords = React.useCallback(async () => {
+    if (!localId) return;
+    const okConfirm = window.confirm(
+      '¿Borrar todo el historial de comida de personal de este local?\n\nSe eliminan todas las filas guardadas. No se puede deshacer.',
+    );
+    if (!okConfirm) return;
+    const okPin = await requestDeleteSecurityPin();
+    if (!okPin) return;
+    const supabase = getSupabaseClient();
+    if (!supabase) return;
+    try {
+      await deleteAllStaffMealRecordsForLocal(supabase, localId);
+      setRecords([]);
+      setMessageTone('success');
+      setMessage('Historial de comida de personal eliminado.');
+      void loadData();
+    } catch (err) {
+      setMessageTone('error');
+      setMessage(err instanceof Error ? err.message : 'No se pudo borrar el historial.');
+    }
+  }, [localId, loadData]);
+
   const exportMonthPdf = React.useCallback(() => {
     const localLabel =
       formatLocalHeaderName(localName ?? localCode) ?? localName ?? localCode ?? 'Local';
@@ -366,7 +390,7 @@ export default function ComidaPersonalPage() {
         title="Registro y coste interno"
         description="Registro en segundos para imputar consumo interno a coste de personal."
       />
-      <div className="flex items-center justify-end gap-3">
+      <div className="flex flex-wrap items-center justify-end gap-2">
         {loading ? <span className="text-xs text-zinc-500">Cargando datos…</span> : null}
         <button
           type="button"
@@ -374,6 +398,13 @@ export default function ComidaPersonalPage() {
           className="rounded-lg border border-zinc-200 bg-white px-2.5 py-1.5 text-xs font-bold text-[#D32F2F] shadow-sm"
         >
           Actualizar
+        </button>
+        <button
+          type="button"
+          onClick={() => void deleteAllRecords()}
+          className="rounded-lg border border-red-200 bg-white px-2.5 py-1.5 text-xs font-bold text-red-700 shadow-sm hover:bg-red-50"
+        >
+          Borrar todos los registros
         </button>
       </div>
 
