@@ -80,6 +80,8 @@ export default function ComidaPersonalPage() {
   const [loading, setLoading] = React.useState(false);
   const [message, setMessage] = React.useState<string | null>(null);
   const [messageTone, setMessageTone] = React.useState<'error' | 'success'>('error');
+  const [showMermaRegisteredBanner, setShowMermaRegisteredBanner] = React.useState(false);
+  const mermaBannerTimerRef = React.useRef<number | null>(null);
   const [records, setRecords] = React.useState<StaffMealRecord[]>([]);
   const [workers, setWorkers] = React.useState<StaffMealWorker[]>([]);
   const [reportMonthYm, setReportMonthYm] = React.useState(() => ymFromDate(new Date()));
@@ -118,6 +120,14 @@ export default function ComidaPersonalPage() {
   React.useEffect(() => {
     void loadData();
   }, [loadData]);
+
+  React.useEffect(() => {
+    return () => {
+      if (mermaBannerTimerRef.current != null) {
+        window.clearTimeout(mermaBannerTimerRef.current);
+      }
+    };
+  }, []);
 
   const selectedWorker = workers.find((w) => w.id === workerId) ?? null;
   const pickerProducts = React.useMemo(() => {
@@ -257,8 +267,13 @@ export default function ComidaPersonalPage() {
       setRecords((prev) => [...inserted, ...prev]);
       setQtyByProductId({});
       setNotes('');
-      setMessageTone('success');
-      setMessage('Consumo registrado.');
+      setMessage(null);
+      setShowMermaRegisteredBanner(true);
+      if (mermaBannerTimerRef.current != null) window.clearTimeout(mermaBannerTimerRef.current);
+      mermaBannerTimerRef.current = window.setTimeout(() => {
+        setShowMermaRegisteredBanner(false);
+        mermaBannerTimerRef.current = null;
+      }, 1000);
     } catch (err) {
       setMessageTone('error');
       setMessage(err instanceof Error ? err.message : 'No se pudo registrar el consumo.');
@@ -408,6 +423,13 @@ export default function ComidaPersonalPage() {
 
   return (
     <div className="space-y-4">
+      {showMermaRegisteredBanner ? (
+        <div className="pointer-events-none fixed inset-0 z-[92] grid place-items-center bg-black/25 px-6">
+          <div className="saved-banner-pop rounded-2xl bg-[#D32F2F] px-7 py-5 text-center shadow-2xl ring-2 ring-white/75">
+            <p className="text-xl font-black uppercase tracking-wide text-white">Merma registrada</p>
+          </div>
+        </div>
+      ) : null}
       <MermasStyleHero
         eyebrow="Comida de personal"
         title="Registro y coste interno"
