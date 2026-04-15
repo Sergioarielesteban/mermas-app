@@ -77,12 +77,20 @@ function SlotEditor({
   const [err, setErr] = useState<string | null>(null);
   /** Tras Guardar OK: mostrar «Guardado» al instante sin esperar al refetch del padre. */
   const [justSaved, setJustSaved] = useState(false);
+  const syncTimerRef = React.useRef<number | null>(null);
 
   useEffect(() => {
     setValue(initialTempFieldValue(unit, reading));
     setNotes(reading?.notes ?? '');
     setJustSaved(false);
   }, [reading, unit]);
+
+  useEffect(
+    () => () => {
+      if (syncTimerRef.current) window.clearTimeout(syncTimerRef.current);
+    },
+    [],
+  );
 
   const tInput = parseTempInput(value);
   const hasLimits = unit.temp_min_c != null || unit.temp_max_c != null;
@@ -161,6 +169,40 @@ function SlotEditor({
     }
   };
 
+  useEffect(() => {
+    if (disabled || saving) return;
+    if (syncTimerRef.current) window.clearTimeout(syncTimerRef.current);
+    setErr(null);
+
+    const t = parseTempInput(value);
+    const hasReading = Boolean(reading?.id);
+    const sameAsServer =
+      reading != null &&
+      t != null &&
+      Math.round(reading.temperature_c * 100) === Math.round(t * 100) &&
+      notes.trim() === (reading.notes ?? '').trim();
+
+    if (sameAsServer) {
+      setJustSaved(true);
+      return;
+    }
+
+    // Campo vacío o inválido: si existía lectura, la quitamos automáticamente.
+    if (t === null) {
+      setJustSaved(false);
+      if (!hasReading) return;
+      syncTimerRef.current = window.setTimeout(() => {
+        void remove();
+      }, 350);
+      return;
+    }
+
+    // Temperatura válida: guardado automático.
+    syncTimerRef.current = window.setTimeout(() => {
+      void save();
+    }, 350);
+  }, [value, notes, reading, disabled, saving]);
+
   return (
     <div className="py-0.5">
       <div className="flex flex-wrap items-center gap-1 sm:gap-1.5">
@@ -206,13 +248,10 @@ function SlotEditor({
         />
         <button
           type="button"
-          title={isSavedSynced ? 'Pulsa otra vez para editar o volver a guardar' : undefined}
+          title={isSavedSynced ? 'Guardado automático activo' : 'Guardar ahora'}
           onClick={() => {
             if (disabled || saving) return;
-            if (isSavedSynced) {
-              void remove();
-              return;
-            }
+            if (isSavedSynced) return;
             void save();
           }}
           disabled={disabled || saving}
