@@ -2053,17 +2053,20 @@ export default function PedidosPage() {
     };
   }, []);
 
-  const renderSentOrderReceiveAndIncident = (order: PedidoOrder) => {
+  const renderSentOrderReceiveAndIncident = (
+    order: PedidoOrder,
+    opts?: { showExpandHint?: boolean },
+  ) => {
     const hasAnyBad = order.items.some((item) => {
       const m = quickLineMarks[item.id];
       return m === 'bad' || (m === undefined && Boolean(item.incidentType));
     });
     const incidentOpen = Boolean(incidentOpenBySentOrderId[order.id]);
-    const detailOpen = expandedSentId === order.id;
     const reviewed = Boolean(order.priceReviewArchivedAt);
+    const showExpandHint = opts?.showExpandHint ?? false;
     return (
       <div className="mt-2 space-y-2 border-t border-amber-200/70 pt-2 text-left">
-        {!detailOpen ? (
+        {showExpandHint ? (
           <p className="text-center text-[11px] leading-snug text-zinc-600">
             Toca el recuadro del proveedor para desplegar líneas, marcar ✓/✗ y rellenar kg/precio recibido aquí mismo.
           </p>
@@ -2527,7 +2530,7 @@ export default function PedidosPage() {
                   Eliminar
                 </button>
               </div>
-              {renderSentOrderReceiveAndIncident(order)}
+              {expandedSentId !== order.id ? renderSentOrderReceiveAndIncident(order, { showExpandHint: true }) : null}
               {expandedSentId === order.id ? (
                 <div className="mt-2 space-y-2 text-left">
                   <div className="rounded-lg border border-[#D32F2F]/30 bg-white px-2.5 py-2 ring-1 ring-[#D32F2F]/12 shadow-sm">
@@ -2725,6 +2728,7 @@ export default function PedidosPage() {
                       </div>
                     );
                   })}
+                  {renderSentOrderReceiveAndIncident(order, { showExpandHint: false })}
                 </div>
               ) : null}
 
