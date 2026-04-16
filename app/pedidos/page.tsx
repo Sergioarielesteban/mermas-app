@@ -787,15 +787,73 @@ export default function PedidosPage() {
         return;
       }
 
+      const sentOrdersSummaryMatch =
+        (normalized.includes('pedido') || normalized.includes('pedidos')) &&
+        (normalized.includes('enviado') ||
+          normalized.includes('por recibir') ||
+          normalized.includes('pendiente') ||
+          normalized.includes('recepcion'));
+      if (sentOrdersSummaryMatch) {
+        if (sentOrders.length === 0) {
+          const msg = 'No hay pedidos en estado enviado.';
+          setAssistantReply(msg);
+          pushAssistantHistory(raw, msg);
+          return;
+        }
+        const fmtDelivery = (o: PedidoOrder) => {
+          const raw = o.deliveryDate ?? o.createdAt.slice(0, 10);
+          const parsed = new Date(`${raw}T00:00:00`);
+          return Number.isNaN(parsed.getTime()) ? raw : parsed.toLocaleDateString('es-ES');
+        };
+        const maxList = 8;
+        const listed = sentOrders.slice(0, maxList);
+        const tail =
+          sentOrders.length > maxList ? ` …y ${sentOrders.length - maxList} más.` : '';
+        const msg = `Pedidos enviados (${sentOrders.length}): ${listed
+          .map((o) => `${o.supplierName} (entrega ${fmtDelivery(o)})`)
+          .join(' · ')}${tail}`;
+        setAssistantReply(msg);
+        pushAssistantHistory(raw, msg);
+        return;
+      }
+
+      const workersComidaListMatch =
+        (normalized.includes('trabajador') || normalized.includes('lista') || normalized.includes('quien')) &&
+        (normalized.includes('comida') || normalized.includes('personal')) &&
+        !normalized.includes('registra');
+      if (workersComidaListMatch) {
+        if (!localId) return;
+        const supabase = getSupabaseClient();
+        if (!supabase) return;
+        const workers = await fetchStaffMealWorkers(supabase, localId);
+        if (workers.length === 0) {
+          const msg = 'No hay trabajadores activos en comida personal (o aún no está configurada la lista).';
+          setAssistantReply(msg);
+          pushAssistantHistory(raw, msg);
+          return;
+        }
+        const msg = `Trabajadores (comida personal): ${workers.map((w) => w.name).join(', ')}.`;
+        setAssistantReply(msg);
+        pushAssistantHistory(raw, msg);
+        return;
+      }
+
       const mealsTodayMatch =
-        normalized.includes('cuantas comidas') &&
-        (normalized.includes('hoy') || normalized.includes('de hoy') || normalized.includes('registramos hoy'));
+        (normalized.includes('cuantas comidas') &&
+          (normalized.includes('hoy') || normalized.includes('de hoy') || normalized.includes('registramos hoy'))) ||
+        ((normalized.includes('hoy') || normalized.includes('de hoy')) &&
+          normalized.includes('comida') &&
+          !normalized.includes('registra') &&
+          !normalized.includes('limpia') &&
+          (normalized.includes('cuantas') ||
+            normalized.includes('cuanto') ||
+            normalized.includes('coste') ||
+            normalized.includes('cuesta') ||
+            normalized.includes('gasto') ||
+            normalized.includes('resumen') ||
+            normalized.includes('llevamos')));
       if (mealsTodayMatch) {
         const today = new Date().toISOString().slice(0, 10);
-        const total = orders
-          .flatMap((o) => o.items)
-          .reduce((acc, i) => acc + (today ? 0 : 0), 0);
-        // Pedidos module has no comida rows loaded; compute via Supabase.
         if (!localId) return;
         const supabase = getSupabaseClient();
         if (!supabase) return;
@@ -808,7 +866,11 @@ export default function PedidosPage() {
         if (error) throw new Error(error.message);
         const units = (data ?? []).reduce((acc, r) => acc + Number((r as { people_count: number }).people_count ?? 0), 0);
         const records = (data ?? []).length;
-        const msg = `Hoy lleváis ${records} líneas de comida personal (${units.toFixed(0)} uds).`;
+        const costEur = (data ?? []).reduce(
+          (acc, r) => acc + Number((r as { total_cost_eur: number | null }).total_cost_eur ?? 0),
+          0,
+        );
+        const msg = `Hoy lleváis ${records} líneas de comida personal (${units.toFixed(0)} uds), coste acumulado ${costEur.toFixed(2)} €.`;
         setAssistantReply(msg);
         pushAssistantHistory(raw, msg);
         return;
@@ -939,7 +1001,7 @@ export default function PedidosPage() {
       }
 
       const msg =
-        'No entendí el comando. Prueba: "buscame a qué precio pagué la lechuga esta semana", "registra comida propia para Ana", "qué toca limpiar hoy" o "actualiza bacon a 7,80".';
+        'No entendí el comando. Prueba: "buscame a qué precio pagué la lechuga esta semana", "qué pedidos tengo enviados", "lista trabajadores comida", "cuánto llevamos en comida hoy", "registra comida propia para Ana", "qué toca limpiar hoy" o "actualiza bacon a 7,80".';
       setAssistantReply(msg);
       pushAssistantHistory(raw, msg);
     } catch (err) {
@@ -1239,7 +1301,8 @@ export default function PedidosPage() {
         {assistantOpen ? (
           <div className="mt-3 space-y-2">
             <p className="text-xs text-zinc-500">
-              Ejemplos: "buscame a qué precio pagué la lechuga esta semana" · "actualiza bacon a 7,80".
+              Ejemplos: precio semanal · pedidos enviados · comida hoy (uds y €) · trabajadores comida · comida propia ·
+              limpieza hoy · actualizar precio en enviado.
             </p>
             <div className="flex gap-2">
               <input
