@@ -172,6 +172,7 @@ type AssistantHistoryRow = {
 };
 
 const ASSISTANT_HISTORY_LS_KEY = 'oido-chef-history-v1';
+const ASSISTANT_PANEL_OPEN_LS_KEY = 'oido-chef-panel-open-v1';
 
 export default function PedidosPage() {
   const { localCode, localName, localId, email } = useAuth();
@@ -229,7 +230,8 @@ export default function PedidosPage() {
   const [quickLineMarks, setQuickLineMarks] = React.useState<Record<string, 'ok' | 'bad'>>({});
   const [incidentOpenBySentOrderId, setIncidentOpenBySentOrderId] = React.useState<Record<string, boolean>>({});
   const [incidentNoteBySentOrderId, setIncidentNoteBySentOrderId] = React.useState<Record<string, string>>({});
-  const [assistantOpen, setAssistantOpen] = React.useState(false);
+  /** Abierto por defecto para que Ejecutar / Voz se vean sin tocar antes; el usuario puede plegar y se guarda en localStorage. */
+  const [assistantOpen, setAssistantOpen] = React.useState(true);
   const [assistantInput, setAssistantInput] = React.useState('');
   const [assistantReply, setAssistantReply] = React.useState<string | null>(null);
   const [assistantPendingAction, setAssistantPendingAction] = React.useState<AssistantPendingAction | null>(null);
@@ -1082,6 +1084,31 @@ export default function PedidosPage() {
     }
   }, []);
 
+  React.useEffect(() => {
+    try {
+      if (typeof window === 'undefined') return;
+      const v = window.localStorage.getItem(ASSISTANT_PANEL_OPEN_LS_KEY);
+      if (v === '0') setAssistantOpen(false);
+      if (v === '1') setAssistantOpen(true);
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  const toggleAssistantOpen = React.useCallback(() => {
+    setAssistantOpen((prev) => {
+      const next = !prev;
+      try {
+        if (typeof window !== 'undefined') {
+          window.localStorage.setItem(ASSISTANT_PANEL_OPEN_LS_KEY, next ? '1' : '0');
+        }
+      } catch {
+        // ignore
+      }
+      return next;
+    });
+  }, []);
+
   const startAssistantVoice = React.useCallback(() => {
     if (assistantListening) return;
     if (typeof window === 'undefined') return;
@@ -1282,21 +1309,29 @@ export default function PedidosPage() {
       <MermasStyleHero
         eyebrow="Pedidos"
         title="Proveedores y recepción"
-        description="Crea pedidos, envía por WhatsApp, controla envíos y recepción en el local."
+        description="Crea pedidos, envía por WhatsApp, controla envíos y recepción en el local. Justo debajo: Oído Chef (órdenes por texto o voz)."
       />
 
-      <section className="rounded-2xl border border-zinc-200/90 bg-white p-4 shadow-sm ring-1 ring-zinc-100">
+      <section
+        id="oido-chef"
+        className="scroll-mt-4 rounded-2xl border border-[#D32F2F]/20 bg-white p-4 shadow-sm ring-2 ring-[#D32F2F]/15"
+      >
         <button
           type="button"
-          onClick={() => setAssistantOpen((v) => !v)}
-          className="flex w-full items-center justify-between gap-2 rounded-xl bg-zinc-50 px-3 py-2.5 text-left ring-1 ring-zinc-200"
+          onClick={toggleAssistantOpen}
+          className="flex w-full items-center justify-between gap-2 rounded-xl bg-gradient-to-r from-red-50/90 to-zinc-50 px-3 py-3 text-left ring-1 ring-[#D32F2F]/25"
           aria-expanded={assistantOpen}
         >
-          <span className="inline-flex items-center gap-2 text-sm font-bold text-zinc-900">
-            <Bot className="h-4 w-4 text-[#D32F2F]" />
-            Oído Chef
+          <span className="min-w-0 text-left">
+            <span className="inline-flex items-center gap-2 text-sm font-bold text-zinc-900">
+              <Bot className="h-5 w-5 shrink-0 text-[#D32F2F]" />
+              Oído Chef
+            </span>
+            <span className="mt-0.5 block text-[11px] font-medium text-zinc-600">
+              Asistente: precios, comida personal, limpieza, pedidos enviados… Toca para plegar.
+            </span>
           </span>
-          <ChevronDown className={['h-4 w-4 text-zinc-500 transition-transform', assistantOpen ? 'rotate-180' : ''].join(' ')} />
+          <ChevronDown className={['h-5 w-5 shrink-0 text-zinc-500 transition-transform', assistantOpen ? 'rotate-180' : ''].join(' ')} />
         </button>
         {assistantOpen ? (
           <div className="mt-3 space-y-2">
