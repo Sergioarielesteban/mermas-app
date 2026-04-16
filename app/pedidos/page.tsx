@@ -54,7 +54,17 @@ import {
   fetchCleaningTasks,
   fetchCleaningWeekdayItems,
 } from '@/lib/appcc-limpieza-supabase';
-import { fetchAppccColdUnits } from '@/lib/appcc-supabase';
+import {
+  APPCC_SLOT_LABEL,
+  fetchAppccColdUnits,
+  fetchAppccReadingsForDate,
+  madridDateKey,
+  readingsByUnitAndSlot,
+  type AppccSlot,
+} from '@/lib/appcc-supabase';
+import { fetchAppccFryers, fetchOilEventsForDate } from '@/lib/appcc-aceite-supabase';
+import { topByValue } from '@/lib/analytics';
+import { fetchProductsAndMermas } from '@/lib/mermas-supabase';
 import { requestDeleteSecurityPin } from '@/lib/delete-security';
 
 function normalizeWhatsappNumber(raw: string | undefined) {
@@ -617,6 +627,50 @@ export default function PedidosPage() {
     [getLinePrice, localId],
   );
 
+  const commitSentOrderAsReceived = React.useCallback(
+    (orderId: string, opts?: { rethrow?: boolean }) => {
+      if (!localId) return Promise.resolve();
+      const supabase = getSupabaseClient();
+      if (!supabase) return Promise.resolve();
+      const snap = orders.find((o) => o.id === orderId);
+      if (!snap) return Promise.resolve();
+      setMessage(null);
+      setReceivingOrderId(orderId);
+      return flushOrderReceptionDrafts(snap)
+        .then(() => persistSentOrderAsReceived(supabase, localId, snap, { preserveOrderPricing: true }))
+        .then(() => {
+          const nowIso = new Date().toISOString();
+          registerPendingReceivedOrder(orderId, nowIso);
+          setOrders((prev) =>
+            prev.map((o) =>
+              o.id === orderId
+                ? { ...o, status: 'received', receivedAt: nowIso, priceReviewArchivedAt: undefined }
+                : o,
+            ),
+          );
+          setExpandedSentId((id) => (id === orderId ? null : id));
+          setMessage('Pedido marcado como recibido.');
+          void reloadOrders();
+          window.setTimeout(() => void reloadOrders(), 500);
+          dispatchPedidosDataChanged();
+        })
+        .catch((err: Error) => {
+          setMessage(err.message);
+          if (opts?.rethrow) throw err;
+        })
+        .finally(() => setReceivingOrderId((id) => (id === orderId ? null : id)));
+    },
+    [
+      dispatchPedidosDataChanged,
+      flushOrderReceptionDrafts,
+      localId,
+      orders,
+      registerPendingReceivedOrder,
+      reloadOrders,
+      setOrders,
+    ],
+  );
+
   const setSentOrderPriceReviewed = React.useCallback(
     (orderId: string, reviewed: boolean) => {
       if (!localId) return;
@@ -718,6 +772,45 @@ export default function PedidosPage() {
     });
   }, [orders]);
   const receivedOrders = orders.filter((row) => row.status === 'received');
+
+  const OIDO_CHEF_TTS_LS_KEY = 'oido-chef-tts-v1';
+  const [assistantTtsEnabled, setAssistantTtsEnabled] = React.useState(false);
+  React.useEffect(() => {
+    try {
+      if (typeof window !== 'undefined' && window.localStorage.getItem(OIDO_CHEF_TTS_LS_KEY) === '1') {
+        setAssistantTtsEnabled(true);
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  const assistantProactiveHint = React.useMemo(() => {
+    const bits: string[] = [];
+    if (sentOrders.length > 0) {
+      bits.push(`${sentOrders.length} pedido(s) enviado(s) pendientes de recepción.`);
+    }
+    try {
+      const nd = getPedidoDrafts().filter((d) => d.status === 'draft').length;
+      if (nd > 0) bits.push(`${nd} borrador(es) de pedido en este dispositivo.`);
+    } catch {
+      // ignore
+    }
+    return bits.join(' ');
+  }, [sentOrders]);
+
+  React.useEffect(() => {
+    if (!assistantTtsEnabled || !assistantReply) return;
+    if (typeof window === 'undefined' || !window.speechSynthesis) return;
+    window.speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(assistantReply.slice(0, 900));
+    u.lang = 'es-ES';
+    u.rate = 1.05;
+    window.speechSynthesis.speak(u);
+    return () => {
+      window.speechSynthesis.cancel();
+    };
+  }, [assistantReply, assistantTtsEnabled]);
 
   const pushAssistantHistory = React.useCallback((command: string, result: string) => {
     setAssistantHistory((prev) => {
@@ -882,7 +975,9 @@ export default function PedidosPage() {
             cleanPart = `Limpieza hoy: ${lines.join(' · ')}.`;
           }
         }
-        const msg = `Resumen del día · Pedidos enviados: ${nSent}. · Recibidos (en pantalla): ${nRec}. · ${mealsPart} · ${cleanPart}`;
+        const ctx = (localName ?? localCode ?? '').trim();
+        const pfx = ctx ? `(${ctx}) ` : '';
+        const msg = `${pfx}Resumen del día · Pedidos enviados: ${nSent}. · Recibidos (en pantalla): ${nRec}. · ${mealsPart} · ${cleanPart}`;
         setAssistantReply(msg);
         pushAssistantHistory(raw, msg);
         return;
@@ -890,10 +985,14 @@ export default function PedidosPage() {
 
       const weekMatch =
         normalized.includes('esta semana') &&
-        (normalized.includes('a que precio') || normalized.includes('precio pague') || normalized.includes('precio pagamos'));
+        (normalized.includes('a que precio') ||
+          normalized.includes('precio pague') ||
+          normalized.includes('precio pagamos') ||
+          normalized.includes('precio de'));
       if (weekMatch) {
         let productPart = normalized;
         const patterns = [
+          /^precio de\s+/,
           /^busca(?:me)?(?:\s+a)?\s+que\s+precio\s+pague\s+/,
           /^busca(?:me)?(?:\s+a)?\s+que\s+precio\s+pagamos\s+/,
           /^a\s+que\s+precio\s+pague\s+/,
@@ -941,6 +1040,184 @@ export default function PedidosPage() {
         const max = Math.max(...prices);
         const last = rows[0];
         const msg = `${last.product}: media ${avg.toFixed(2)} €, min ${min.toFixed(2)} €, max ${max.toFixed(2)} € (último: ${last.price.toFixed(2)} € en ${last.supplier}, ${last.date}).`;
+        setAssistantReply(msg);
+        pushAssistantHistory(raw, msg);
+        return;
+      }
+
+      const lastPurchaseMatch =
+        (normalized.includes('ultima compra') ||
+          normalized.includes('ultimo precio de compra') ||
+          normalized.includes('cuando compramos')) &&
+        !normalized.includes('esta semana');
+      if (lastPurchaseMatch) {
+        let productPart = normalized
+          .replace(/.*ultima compra\s+(?:de|del|la|el)\s+/i, '')
+          .replace(/.*ultimo precio de compra\s+(?:de|del|la|el)\s+/i, '')
+          .replace(/.*cuando compramos\s+(?:de|del|la|el)\s+/i, '')
+          .replace(/\s+/g, ' ')
+          .trim();
+        if (!productPart) {
+          const msg = 'Di el producto. Ejemplo: "última compra de lechuga".';
+          setAssistantReply(msg);
+          pushAssistantHistory(raw, msg);
+          return;
+        }
+        const productNeedle = normalizeText(productPart).replace(/^el\s+|^la\s+|^los\s+|^las\s+/, '');
+        type Hit = { supplier: string; product: string; price: number; date: string; when: number };
+        const hits: Hit[] = [];
+        for (const o of orders) {
+          const when = new Date(o.receivedAt ?? o.sentAt ?? o.createdAt).getTime();
+          if (!Number.isFinite(when)) continue;
+          for (const i of o.items) {
+            if (!normalizeText(i.productName).includes(productNeedle)) continue;
+            hits.push({
+              supplier: o.supplierName,
+              product: i.productName,
+              price: i.pricePerUnit,
+              date: new Date(o.receivedAt ?? o.sentAt ?? o.createdAt).toLocaleDateString('es-ES'),
+              when,
+            });
+          }
+        }
+        hits.sort((a, b) => b.when - a.when);
+        if (hits.length === 0) {
+          const msg = `No encontré compras de "${productPart}" en el histórico cargado.`;
+          setAssistantReply(msg);
+          pushAssistantHistory(raw, msg);
+          return;
+        }
+        const h = hits[0];
+        const msg = `Última compra: ${h.product} a ${h.price.toFixed(2)} € (${h.supplier}, ${h.date}).`;
+        setAssistantReply(msg);
+        pushAssistantHistory(raw, msg);
+        return;
+      }
+
+      const estadoAppccHoyMatch =
+        normalized.includes('appcc') &&
+        (normalized.includes('hoy') ||
+          normalized.includes('estado') ||
+          normalized.includes('resumen') ||
+          normalized.includes('como va'));
+      if (estadoAppccHoyMatch) {
+        if (!localId) return;
+        const supabase = getSupabaseClient();
+        if (!supabase) return;
+        const dateKey = madridDateKey();
+        const tempSlots: AppccSlot[] = ['manana', 'noche'];
+        const [units, readings, fryers, oilEvents] = await Promise.all([
+          fetchAppccColdUnits(supabase, localId, true),
+          fetchAppccReadingsForDate(supabase, localId, dateKey),
+          (async () => {
+            try {
+              return await fetchAppccFryers(supabase, localId, true);
+            } catch {
+              return [];
+            }
+          })(),
+          (async () => {
+            try {
+              return await fetchOilEventsForDate(supabase, localId, dateKey);
+            } catch {
+              return [];
+            }
+          })(),
+        ]);
+        const bySlot = readingsByUnitAndSlot(readings);
+        const missing: string[] = [];
+        for (const u of units) {
+          for (const s of tempSlots) {
+            if (!bySlot.get(`${u.id}:${s}`)) {
+              missing.push(`${u.name} (${APPCC_SLOT_LABEL[s]})`);
+            }
+          }
+        }
+        const tempLine =
+          units.length === 0
+            ? 'Temperaturas: sin equipos frío activos.'
+            : missing.length === 0
+              ? 'Temperaturas: mañana y noche completas para hoy.'
+              : `Temperaturas faltantes hoy: ${missing.join(' · ')}.`;
+        const oilLine =
+          fryers.length === 0
+            ? 'Aceite: sin freidoras configuradas.'
+            : oilEvents.length === 0
+              ? 'Aceite: hoy sin eventos registrados.'
+              : `Aceite hoy: ${oilEvents.length} evento(s) en ${dateKey}.`;
+        const msg = `APPCC hoy · ${tempLine} · ${oilLine}`;
+        setAssistantReply(msg);
+        pushAssistantHistory(raw, msg);
+        return;
+      }
+
+      const tempFaltantesMatch =
+        (normalized.includes('temperatura') || normalized.includes('temperaturas')) &&
+        (normalized.includes('falta') || normalized.includes('faltan') || normalized.includes('pendiente'));
+      if (tempFaltantesMatch) {
+        if (!localId) return;
+        const supabase = getSupabaseClient();
+        if (!supabase) return;
+        const dateKey = madridDateKey();
+        const tempSlots: AppccSlot[] = ['manana', 'noche'];
+        const [units, readings] = await Promise.all([
+          fetchAppccColdUnits(supabase, localId, true),
+          fetchAppccReadingsForDate(supabase, localId, dateKey),
+        ]);
+        const bySlot = readingsByUnitAndSlot(readings);
+        const missing: string[] = [];
+        for (const u of units) {
+          for (const s of tempSlots) {
+            if (!bySlot.get(`${u.id}:${s}`)) {
+              missing.push(`${u.name} (${APPCC_SLOT_LABEL[s]})`);
+            }
+          }
+        }
+        const msg =
+          missing.length === 0
+            ? 'No faltan lecturas de temperatura para hoy (mañana/noche).'
+            : `Faltan lecturas: ${missing.join(' · ')}.`;
+        setAssistantReply(msg);
+        pushAssistantHistory(raw, msg);
+        return;
+      }
+
+      const aceiteHoyMatch =
+        normalized.includes('aceite') && (normalized.includes('hoy') || normalized.includes('registro'));
+      if (aceiteHoyMatch) {
+        if (!localId) return;
+        const supabase = getSupabaseClient();
+        if (!supabase) return;
+        const dateKey = madridDateKey();
+        const events = await fetchOilEventsForDate(supabase, localId, dateKey);
+        const msg =
+          events.length === 0
+            ? 'Aceite: hoy no hay eventos registrados.'
+            : `Aceite hoy (${events.length}): abre APPCC → Aceite para detalle.`;
+        setAssistantReply(msg);
+        pushAssistantHistory(raw, msg);
+        return;
+      }
+
+      const topMermasMesMatch =
+        (normalized.includes('merma') || normalized.includes('mermas')) &&
+        (normalized.includes('top') || normalized.includes('ranking') || normalized.includes('mes'));
+      if (topMermasMesMatch) {
+        if (!localId) return;
+        const supabase = getSupabaseClient();
+        if (!supabase) return;
+        const { products, mermas } = await fetchProductsAndMermas(supabase, localId);
+        const now = new Date();
+        const ms = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+        const monthMermas = mermas.filter((m) => new Date(m.occurredAt).getTime() >= ms);
+        const top = topByValue(monthMermas, products, 5);
+        if (top.length === 0) {
+          const msg = 'No hay mermas registradas este mes.';
+          setAssistantReply(msg);
+          pushAssistantHistory(raw, msg);
+          return;
+        }
+        const msg = `Top mermas del mes (€): ${top.map((t) => `${t.name} ${t.value.toFixed(2)} €`).join(' · ')}.`;
         setAssistantReply(msg);
         pushAssistantHistory(raw, msg);
         return;
@@ -1122,7 +1399,7 @@ export default function PedidosPage() {
         return;
       }
 
-      const ownMealMatch = normalized.match(/registra(?:r)?\s+comida\s+propia\s+para\s+(.+)/);
+      const ownMealMatch = normalized.match(/registra(?:r)?\s+comida\s+propia\s+(?:para|de)\s+(.+)/);
       if (ownMealMatch) {
         if (!localId) return;
         const workerNeedle = normalizeText(ownMealMatch[1]).trim();
@@ -1273,7 +1550,42 @@ export default function PedidosPage() {
         return;
       }
 
+      const markReceivedMatch =
+        (normalized.includes('marcar') || normalized.includes('marca')) && normalized.includes('recibid');
+      const markReceivedSupplierCap = raw.match(
+        /(?:marcar\s+|marca\s+)?(?:como\s+)?recibid[oa]\s+(?:el\s+)?(?:pedido\s+)?(?:de\s+|del\s+)(.+)/i,
+      );
+      if (markReceivedMatch && markReceivedSupplierCap?.[1]?.trim()) {
+        const needle = normalizeText(markReceivedSupplierCap[1]).trim();
+        const hits = sentOrders.filter((o) => normalizeText(o.supplierName).includes(needle));
+        if (hits.length === 0) {
+          const msg = `No hay pedido enviado de "${markReceivedSupplierCap[1].trim()}".`;
+          setAssistantReply(msg);
+          pushAssistantHistory(raw, msg);
+          return;
+        }
+        if (hits.length > 1) {
+          const msg = 'Varios pedidos enviados coinciden; sé más específico con el nombre del proveedor.';
+          setAssistantReply(msg);
+          pushAssistantHistory(raw, msg);
+          return;
+        }
+        try {
+          await commitSentOrderAsReceived(hits[0].id, { rethrow: true });
+          const msg = `Listo: pedido de ${hits[0].supplierName} marcado como recibido.`;
+          setAssistantReply(msg);
+          pushAssistantHistory(raw, msg);
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : 'No se pudo marcar como recibido (revisa kg/precios en recepción).';
+          setAssistantReply(msg);
+          pushAssistantHistory(raw, msg);
+        }
+        return;
+      }
+
       const updateMatch = normalized.match(/(?:oido chef[, ]*)?(?:actualiza|cambia|pon)\s+(.+?)\s+a\s+(\d+(?:[.,]\d{1,4})?)/);
+      const updateSupplierHint = raw.match(/\s+en\s+(.+)\s*$/i)?.[1];
+      const supplierNeedle = updateSupplierHint ? normalizeText(updateSupplierHint).trim() : '';
       if (updateMatch) {
         const productNeedle = normalizeText(updateMatch[1]).replace(/^el\s+|^la\s+|^los\s+|^las\s+/, '');
         const nextPrice = Number(updateMatch[2].replace(',', '.'));
@@ -1283,7 +1595,7 @@ export default function PedidosPage() {
           pushAssistantHistory(raw, msg);
           return;
         }
-        const candidates: Array<{ orderId: string; supplierName: string; itemId: string; productName: string; price: number }> = [];
+        let candidates: Array<{ orderId: string; supplierName: string; itemId: string; productName: string; price: number }> = [];
         for (const o of sentOrders) {
           for (const i of o.items) {
             if (normalizeText(i.productName).includes(productNeedle)) {
@@ -1297,6 +1609,17 @@ export default function PedidosPage() {
             }
           }
         }
+        if (supplierNeedle) {
+          const filtered = candidates.filter((c) => normalizeText(c.supplierName).includes(supplierNeedle));
+          if (filtered.length > 0) {
+            candidates = filtered;
+          } else if (candidates.length > 0) {
+            const msg = `Hay "${updateMatch[1]}" en enviados pero no con el proveedor indicado. Prueba otro nombre o quita "en …".`;
+            setAssistantReply(msg);
+            pushAssistantHistory(raw, msg);
+            return;
+          }
+        }
         if (candidates.length === 0) {
           const msg = `No encontré "${updateMatch[1]}" en pedidos enviados.`;
           setAssistantReply(msg);
@@ -1304,7 +1627,7 @@ export default function PedidosPage() {
           return;
         }
         if (candidates.length > 1) {
-          const msg = `Encontré varias coincidencias de "${updateMatch[1]}". Sé más específico con proveedor o nombre completo.`;
+          const msg = `Encontré varias coincidencias de "${updateMatch[1]}". Sé más específico con proveedor o nombre completo (puedes decir "… en Makro").`;
           setAssistantReply(msg);
           pushAssistantHistory(raw, msg);
           return;
@@ -1325,7 +1648,7 @@ export default function PedidosPage() {
       }
 
       const msg =
-        'No entendí el comando. Prueba: "resumen del día", "abre nuevo pedido" o "abre comida personal", "WhatsApp pedido de [proveedor]", precio semanal, enviados, borradores, comida, limpieza o actualiza precio.';
+        'No entendí el comando. Prueba: "resumen del día", "estado APPCC hoy", "temperaturas faltantes", "top mermas del mes", "última compra de leche", "precio de leche esta semana", "marcar recibido pedido de Makro", "actualiza bacon a 7,80 en Makro", WhatsApp, navegación o voz.';
       setAssistantReply(msg);
       pushAssistantHistory(raw, msg);
     } catch (err) {
@@ -1335,7 +1658,17 @@ export default function PedidosPage() {
     } finally {
       setAssistantBusy(false);
     }
-  }, [localId, orders, pushAssistantHistory, router, sendWhatsappOrder, sentOrders]);
+  }, [
+    commitSentOrderAsReceived,
+    localCode,
+    localId,
+    localName,
+    orders,
+    pushAssistantHistory,
+    router,
+    sendWhatsappOrder,
+    sentOrders,
+  ]);
 
   const runAssistantCommand = React.useCallback(() => {
     void runAssistantCommandFromText(assistantInput);
@@ -1566,33 +1899,7 @@ export default function PedidosPage() {
           type="button"
           disabled={receivingOrderId === order.id}
           onClick={() => {
-            if (!localId) return;
-            const supabase = getSupabaseClient();
-            if (!supabase) return;
-            const snap = orders.find((o) => o.id === order.id);
-            if (!snap) return;
-            setMessage(null);
-            setReceivingOrderId(order.id);
-            void flushOrderReceptionDrafts(snap)
-              .then(() => persistSentOrderAsReceived(supabase, localId, snap, { preserveOrderPricing: true }))
-              .then(() => {
-                const nowIso = new Date().toISOString();
-                registerPendingReceivedOrder(order.id, nowIso);
-                setOrders((prev) =>
-                  prev.map((o) =>
-                    o.id === order.id
-                      ? { ...o, status: 'received', receivedAt: nowIso, priceReviewArchivedAt: undefined }
-                      : o,
-                  ),
-                );
-                setExpandedSentId((id) => (id === order.id ? null : id));
-                setMessage('Pedido marcado como recibido.');
-                void reloadOrders();
-                window.setTimeout(() => void reloadOrders(), 500);
-                dispatchPedidosDataChanged();
-              })
-              .catch((err: Error) => setMessage(err.message))
-              .finally(() => setReceivingOrderId((id) => (id === order.id ? null : id)));
+            void commitSentOrderAsReceived(order.id);
           }}
           className="flex w-full flex-col items-center justify-center gap-0.5 rounded-2xl bg-gradient-to-b from-[#4ADE80] to-[#16A34A] py-3 text-center text-[11px] font-black uppercase leading-tight tracking-wide text-white shadow-md shadow-emerald-900/20 ring-1 ring-white/25 transition active:scale-[0.99] disabled:opacity-90"
         >
@@ -1721,9 +2028,32 @@ export default function PedidosPage() {
         {assistantOpen ? (
           <div className="mt-3 space-y-2">
             <p className="text-xs text-zinc-500">
-              Resumen del día · abrir nuevo pedido / precios / comida personal · WhatsApp pedido de [proveedor] ·
-              pendientes · borradores · comida · voz.
+              Catálogo 7: precio semanal · última compra · actualiza precio en proveedor · marcar recibido · limpieza ·
+              comida propia · top mermas · temperaturas. APPCC: estado hoy, aceite. Navegación y WhatsApp.
             </p>
+            {assistantProactiveHint ? (
+              <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs font-medium text-amber-950 ring-1 ring-amber-200">
+                {assistantProactiveHint}
+              </p>
+            ) : null}
+            <label className="flex cursor-pointer items-center gap-2 text-xs text-zinc-700">
+              <input
+                type="checkbox"
+                checked={assistantTtsEnabled}
+                onChange={(e) => {
+                  const on = e.target.checked;
+                  setAssistantTtsEnabled(on);
+                  try {
+                    window.localStorage.setItem(OIDO_CHEF_TTS_LS_KEY, on ? '1' : '0');
+                  } catch {
+                    // ignore
+                  }
+                  if (!on) window.speechSynthesis?.cancel();
+                }}
+                className="h-4 w-4 rounded border-zinc-400"
+              />
+              Leer respuestas en voz del sistema (TTS)
+            </label>
             <div className="flex gap-2">
               <input
                 type="text"
