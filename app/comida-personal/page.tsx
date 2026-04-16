@@ -22,7 +22,6 @@ import { requestDeleteSecurityPin } from '@/lib/delete-security';
 import { downloadStaffMealReportPdf } from '@/lib/comida-personal-report-pdf';
 import { formatLocalHeaderName } from '@/lib/local-display-name';
 import { getSupabaseClient } from '@/lib/supabase-client';
-import { ModuleBackLink, ModulePageShell } from '@/components/ModulePageShell';
 import MermasStyleHero from '@/components/MermasStyleHero';
 
 const SERVICE_LABEL: Record<StaffMealService, string> = {
@@ -469,7 +468,7 @@ export default function ComidaPersonalPage() {
   }, [activeRecords, products]);
 
   return (
-    <ModulePageShell contentClassName="space-y-4">
+    <div className="space-y-4">
       {showComidaRegisteredBanner ? (
         <div className="pointer-events-none fixed inset-0 z-[92] grid place-items-center bg-black/25 px-6">
           <div className="saved-banner-pop rounded-2xl bg-[#D32F2F] px-7 py-5 text-center shadow-2xl ring-2 ring-white/75">
@@ -477,12 +476,9 @@ export default function ComidaPersonalPage() {
           </div>
         </div>
       ) : null}
-      <ModuleBackLink />
-
       <MermasStyleHero
         eyebrow="Comida de personal"
         title="Registro de consumo"
-        tagline="Control de consumo interno por trabajador y servicio."
         description="Aquí solo ves el artículo y la cantidad. Importes e informes están en Estadísticas (clave de gestión)."
       />
       <div className="flex flex-wrap items-center justify-end gap-2">
@@ -1047,6 +1043,6 @@ export default function ComidaPersonalPage() {
           </div>
         </div>
       ) : null}
-    </ModulePageShell>
+    </div>
   );
 }

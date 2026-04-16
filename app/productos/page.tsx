@@ -2,8 +2,6 @@
 
 import React, { useState } from 'react';
 import { Pencil, Plus, Search, Trash2, X } from 'lucide-react';
-import { ModuleBackLink, ModulePageShell } from '@/components/ModulePageShell';
-import MermasStyleHero from '@/components/MermasStyleHero';
 import { useMermasStore } from '@/components/MermasStoreProvider';
 import { requestDeleteSecurityPin } from '@/lib/delete-security';
 import type { Unit } from '@/lib/types';
@@ -61,17 +59,7 @@ export default function ProductosPage() {
   );
 
   return (
-    <ModulePageShell contentClassName="space-y-3">
-      <ModuleBackLink href="/dashboard" label="Mermas" />
-
-      <MermasStyleHero
-        eyebrow="Catálogo"
-        title="Productos del registro"
-        tagline="Nombre, unidad y precio base para mermas y pedidos."
-        compact
-      />
-
-      <div className="relative">
+    <div className="relative">
       {showDeletedBanner ? (
         <div className="pointer-events-none fixed inset-0 z-[90] grid place-items-center bg-black/25 px-6">
           <div className="rounded-2xl bg-[#D32F2F] px-7 py-5 text-center shadow-2xl ring-2 ring-white/75">
@@ -79,8 +67,10 @@ export default function ProductosPage() {
           </div>
         </div>
       ) : null}
-      <div className="mb-3 rounded-2xl border border-zinc-200/90 bg-white p-4 shadow-[0_16px_40px_-20px_rgba(0,0,0,0.1)] ring-1 ring-black/[0.04]">
-        <label className="flex h-11 items-center gap-2 rounded-xl border border-zinc-200 bg-zinc-50 px-3">
+      <div className="mb-3 rounded-2xl bg-white p-4 shadow-sm ring-1 ring-zinc-200">
+        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-zinc-500">Catalogo de Productos</p>
+        <p className="pt-1 text-sm text-zinc-700">Gestiona nombre, unidad y precio por producto.</p>
+        <label className="mt-3 flex h-11 items-center gap-2 rounded-xl border border-zinc-200 bg-zinc-50 px-3">
           <Search className="h-4 w-4 text-zinc-500" />
           <input
             value={search}
@@ -242,7 +232,6 @@ export default function ProductosPage() {
         </div>
       ) : null}
     </div>
-    </ModulePageShell>
   );
 }
 

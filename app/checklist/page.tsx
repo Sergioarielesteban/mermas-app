@@ -2,9 +2,8 @@
 
 import Link from 'next/link';
 import type { LucideIcon } from 'lucide-react';
-import { ClipboardCheck, History, ListChecks, Play } from 'lucide-react';
+import { ChevronLeft, ClipboardCheck, History, ListChecks, Play } from 'lucide-react';
 import { CHEF_ONE_TAPER_LINE_CLASS } from '@/components/ChefOneGlowLine';
-import { ModuleBackLink, ModulePageShell } from '@/components/ModulePageShell';
 import MermasStyleHero from '@/components/MermasStyleHero';
 
 const LINE_SM = `mx-auto mt-2 w-14 ${CHEF_ONE_TAPER_LINE_CLASS}`;
@@ -23,7 +22,7 @@ function HubCard({
   return (
     <Link
       href={href}
-      className="flex flex-col items-center rounded-2xl border border-zinc-200/90 bg-gradient-to-b from-zinc-50 to-white px-4 py-5 text-center shadow-[0_16px_40px_-20px_rgba(0,0,0,0.15)] ring-1 ring-black/[0.04] transition hover:border-[#D32F2F]/35 hover:shadow-lg active:scale-[0.99]"
+      className="flex flex-col items-center rounded-2xl border border-zinc-200/90 bg-gradient-to-b from-zinc-50 to-white px-4 py-5 text-center shadow-sm ring-1 ring-zinc-100 transition hover:border-[#D32F2F]/35 hover:shadow-md active:scale-[0.99]"
     >
       <div className="mb-2 grid h-12 w-12 place-items-center rounded-2xl bg-[#D32F2F]/12 text-[#D32F2F] shadow-inner ring-1 ring-[#D32F2F]/15">
         <Icon className="h-6 w-6" strokeWidth={2.1} />
@@ -37,16 +36,21 @@ function HubCard({
 
 export default function ChecklistHubPage() {
   return (
-    <ModulePageShell contentClassName="space-y-5">
-      <ModuleBackLink />
-
+    <div className="space-y-5 pb-10">
       <MermasStyleHero
         eyebrow="Operaciones"
         title="Check list"
-        tagline="Listas de apertura, turno y cierre con tu propio contenido."
         description="Listas de apertura, cambio de turno, cierre e higiene. Tú defines categorías e ítems; el equipo las marca al momento."
         compact
       />
+
+      <Link
+        href="/panel"
+        className="inline-flex items-center gap-1 text-sm font-semibold text-zinc-600 hover:text-[#D32F2F]"
+      >
+        <ChevronLeft className="h-4 w-4" />
+        Panel
+      </Link>
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <HubCard
@@ -59,7 +63,7 @@ export default function ChecklistHubPage() {
         <HubCard href="/checklist/historial" label="Historial" sub="Últimas ejecuciones por fecha" Icon={History} />
       </div>
 
-      <section className="rounded-2xl border border-zinc-200/90 bg-white px-4 py-4 shadow-[0_16px_40px_-20px_rgba(0,0,0,0.1)] ring-1 ring-black/[0.04]">
+      <section className="rounded-2xl border border-zinc-200/90 bg-white px-4 py-4 shadow-sm ring-1 ring-zinc-100">
         <div className="flex items-start gap-3">
           <ClipboardCheck className="mt-0.5 h-5 w-5 shrink-0 text-[#D32F2F]" strokeWidth={2.2} aria-hidden />
           <div>
@@ -71,6 +75,6 @@ export default function ChecklistHubPage() {
           </div>
         </div>
       </section>
-    </ModulePageShell>
+    </div>
   );
 }

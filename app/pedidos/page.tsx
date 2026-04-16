@@ -2,14 +2,13 @@
 
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Activity, Bot, ChevronDown, History, Mic, Radio, SendHorizontal, Sparkles } from 'lucide-react';
+import { Bot, ChevronDown } from 'lucide-react';
 import React from 'react';
 import { OIDO_CHEF_START_VOICE_EVENT, OIDO_CHEF_VOICE_NAV_FLAG } from '@/components/BottomNav';
 import { useAuth } from '@/components/AuthProvider';
 import { CHEF_ONE_TAPER_LINE_CLASS } from '@/components/ChefOneGlowLine';
 import { usePedidosOrders } from '@/components/PedidosOrdersProvider';
 import { getSupabaseClient } from '@/lib/supabase-client';
-import { ModulePageShell } from '@/components/ModulePageShell';
 import MermasStyleHero from '@/components/MermasStyleHero';
 import PedidosAlbaranOcrModal from '@/components/PedidosAlbaranOcrModal';
 import PedidosPremiaLockedScreen from '@/components/PedidosPremiaLockedScreen';
@@ -208,15 +207,6 @@ function matchAssistantSingleTopicNav(normalized: string): { href: string; messa
   }
   return null;
 }
-
-const OIDO_QUICK_PROMPTS: Array<{ label: string; text: string }> = [
-  { label: 'Resumen hoy', text: 'resumen' },
-  { label: 'Limpieza', text: 'limpieza' },
-  { label: 'APPCC', text: 'appcc' },
-  { label: 'Pendientes', text: 'abre pendientes de entrega' },
-  { label: 'Enviados', text: 'pedidos enviados' },
-  { label: 'Ayuda', text: 'ayuda' },
-];
 
 const ASSISTANT_FALLBACK_HINT = [
   'No lo tengo claro. Prueba una de estas ideas (también valen palabras sueltas como «limpieza», «recepción», «appcc»):',
@@ -2171,125 +2161,77 @@ export default function PedidosPage() {
     return <PedidosPremiaLockedScreen />;
   }
 
-  const runAssistantQuickPrompt = React.useCallback(
-    (text: string) => {
-      setAssistantInput(text);
-      void runAssistantCommandFromText(text);
-    },
-    [runAssistantCommandFromText],
-  );
-
   const assistantPanel = (
     <section
       id="oido-chef"
-      className="scroll-mt-4 overflow-hidden rounded-2xl border border-zinc-200/90 bg-white shadow-[0_20px_50px_-24px_rgba(0,0,0,0.25)] ring-1 ring-black/[0.04]"
+      className="scroll-mt-4 rounded-2xl border border-[#D32F2F]/15 bg-white p-4 shadow-sm ring-1 ring-zinc-900/5"
     >
-      <div className="relative bg-gradient-to-br from-zinc-900 via-zinc-900 to-zinc-800 px-4 py-4 sm:px-5">
-        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_80%_120%_at_100%_-20%,rgba(211,47,47,0.22),transparent_55%)]" />
-        <div className="relative flex items-start gap-3">
-          <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-white/10 ring-1 ring-white/15 backdrop-blur-sm">
-            <Bot className="h-6 w-6 text-[#FF6B6B]" strokeWidth={2} />
-          </span>
-          <div className="min-w-0 flex-1 pt-0.5">
-            <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-zinc-500">Centro de consultas</p>
-            <h2 className="font-serif text-xl font-bold tracking-tight text-white sm:text-[1.35rem]">Oído Chef</h2>
-            <p className="mt-1 max-w-md text-[11px] leading-relaxed text-zinc-400">
-              Precios, recepción, APPCC, limpieza y comida del personal. Una palabra o una frase completa.
-            </p>
-          </div>
-          <Sparkles className="mt-1 hidden h-5 w-5 shrink-0 text-[#D32F2F]/90 sm:block" strokeWidth={1.75} />
+      <div className="mb-3 flex items-center gap-3 border-b border-zinc-100 pb-3">
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#D32F2F]/10">
+          <Bot className="h-5 w-5 text-[#D32F2F]" />
+        </span>
+        <div className="min-w-0">
+          <h2 className="text-base font-bold text-zinc-900">Oído Chef</h2>
+          <p className="text-[11px] text-zinc-500">Precios, recepción, limpieza, comida del personal y más.</p>
         </div>
       </div>
 
-      <div className="space-y-4 p-4 sm:p-5">
+      <div className="space-y-2">
         {assistantProactiveHint ? (
-          <div className="flex gap-3 rounded-2xl border border-amber-200/60 bg-gradient-to-r from-amber-50 to-amber-50/30 px-3.5 py-3 ring-1 ring-amber-100/80">
-            <Activity className="mt-0.5 h-4 w-4 shrink-0 text-amber-700" strokeWidth={2.25} />
-            <p className="text-xs font-medium leading-snug text-amber-950">{assistantProactiveHint}</p>
-          </div>
-        ) : null}
-
-        <div>
-          <p className="mb-2 text-[10px] font-bold uppercase tracking-wider text-zinc-400">Accesos rápidos</p>
-          <div className="flex flex-wrap gap-2">
-            {OIDO_QUICK_PROMPTS.map((q) => (
-              <button
-                key={q.text}
-                type="button"
-                disabled={assistantBusy}
-                onClick={() => runAssistantQuickPrompt(q.text)}
-                className="rounded-full border border-zinc-200/90 bg-zinc-50 px-3.5 py-2 text-[11px] font-semibold text-zinc-700 shadow-sm transition hover:border-[#D32F2F]/25 hover:bg-white hover:text-zinc-900 active:scale-[0.98] disabled:opacity-50"
-              >
-                {q.label}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <div className="rounded-2xl border border-zinc-200/80 bg-gradient-to-b from-zinc-50/80 to-white p-3 ring-1 ring-zinc-100 sm:p-4">
-          <p className="mb-2 flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider text-zinc-400">
-            <Radio className="h-3.5 w-3.5" strokeWidth={2.5} />
-            Consola de órdenes
+          <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs font-medium text-amber-950 ring-1 ring-amber-200">
+            {assistantProactiveHint}
           </p>
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-stretch">
-            <input
-              type="text"
-              value={assistantInput}
-              onChange={(e) => setAssistantInput(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  e.preventDefault();
-                  void runAssistantCommand();
-                }
-              }}
-              placeholder="Pregunta al chef… (ej. ¿a qué precio compré la mantequilla esta semana?)"
-              className="min-h-11 min-w-0 flex-1 rounded-xl border border-zinc-200 bg-white px-3.5 py-2.5 text-sm text-zinc-900 shadow-inner outline-none ring-0 transition placeholder:text-zinc-400 focus:border-[#D32F2F]/45 focus:ring-2 focus:ring-[#D32F2F]/15"
-            />
-            <div className="flex gap-2 sm:w-auto sm:flex-col sm:justify-stretch">
-              <button
-                type="button"
-                onClick={() => void runAssistantCommand()}
-                disabled={assistantBusy}
-                className="flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl bg-gradient-to-b from-zinc-800 to-zinc-950 px-4 text-xs font-bold uppercase tracking-wide text-white shadow-md shadow-zinc-900/20 transition hover:from-zinc-700 hover:to-zinc-900 disabled:opacity-55 sm:flex-initial"
-              >
-                <SendHorizontal className="h-4 w-4 opacity-90" strokeWidth={2.25} />
-                {assistantBusy ? 'Procesando…' : 'Enviar'}
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  if (assistantListening) stopAssistantVoice();
-                  else startAssistantVoice();
-                }}
-                className={[
-                  'flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl px-4 text-xs font-bold uppercase tracking-wide transition sm:flex-initial',
-                  assistantListening
-                    ? 'bg-[#B91C1C] text-white shadow-md shadow-red-900/25 ring-2 ring-white/20'
-                    : 'border border-zinc-200 bg-white text-zinc-700 shadow-sm hover:border-zinc-300 hover:bg-zinc-50',
-                ].join(' ')}
-              >
-                <Mic className="h-4 w-4" strokeWidth={2.25} />
-                {assistantListening ? 'Escuchando' : 'Voz'}
-              </button>
-            </div>
-          </div>
-        </div>
-
-        {assistantReply ? (
-          <div className="relative overflow-hidden rounded-2xl border border-emerald-200/40 bg-gradient-to-br from-emerald-50/50 via-white to-zinc-50/60 p-4 shadow-sm ring-1 ring-emerald-100/50">
-            <div className="absolute left-0 top-0 h-full w-1 bg-gradient-to-b from-emerald-500 to-[#D32F2F]" />
-            <p className="mb-2 pl-2 text-[10px] font-bold uppercase tracking-wider text-emerald-800/80">Respuesta</p>
-            <p className="whitespace-pre-line pl-2 text-sm leading-relaxed text-zinc-800">{assistantReply}</p>
-          </div>
         ) : null}
 
+        <div className="flex gap-2">
+          <input
+            type="text"
+            value={assistantInput}
+            onChange={(e) => setAssistantInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                void runAssistantCommand();
+              }
+            }}
+            placeholder="Escribe una orden..."
+            className="h-11 min-w-0 flex-1 rounded-xl border border-zinc-300 bg-white px-3 text-sm text-zinc-900 outline-none focus:border-[#D32F2F]/50"
+          />
+          <button
+            type="button"
+            onClick={() => void runAssistantCommand()}
+            disabled={assistantBusy}
+            className="h-11 shrink-0 rounded-xl bg-zinc-900 px-3 text-xs font-bold text-white disabled:opacity-60"
+          >
+            {assistantBusy ? 'Pensando…' : 'Ejecutar'}
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              if (assistantListening) stopAssistantVoice();
+              else startAssistantVoice();
+            }}
+            className={[
+              'h-11 shrink-0 rounded-xl px-3 text-xs font-bold ring-1',
+              assistantListening
+                ? 'bg-[#B91C1C] text-white ring-[#B91C1C]/40'
+                : 'bg-white text-zinc-700 ring-zinc-300',
+            ].join(' ')}
+          >
+            {assistantListening ? 'Escuchando…' : '🎙 Voz'}
+          </button>
+        </div>
+        {assistantReply ? (
+          <p className="whitespace-pre-line rounded-lg bg-zinc-50 px-3 py-2 text-sm text-zinc-700 ring-1 ring-zinc-200">
+            {assistantReply}
+          </p>
+        ) : null}
         {assistantPendingAction ? (
-          <div className="flex flex-wrap gap-2 rounded-2xl border border-zinc-200 bg-zinc-50/80 p-3 ring-1 ring-zinc-100">
-            <p className="w-full text-[11px] font-semibold text-zinc-600">Confirmación pendiente</p>
+          <div className="flex gap-2">
             <button
               type="button"
               onClick={confirmAssistantAction}
-              className="flex-1 rounded-xl bg-gradient-to-b from-emerald-500 to-emerald-600 py-2.5 text-xs font-bold text-white shadow-sm sm:flex-initial sm:px-6"
+              className="h-10 rounded-lg bg-[#16A34A] px-3 text-xs font-bold text-white"
             >
               Confirmar
             </button>
@@ -2304,28 +2246,23 @@ export default function PedidosPage() {
                 setAssistantReply('Acción cancelada.');
                 pushAssistantHistory(cmd, 'Acción cancelada.');
               }}
-              className="flex-1 rounded-xl border border-zinc-300 bg-white py-2.5 text-xs font-bold text-zinc-700 sm:flex-initial sm:px-6"
+              className="h-10 rounded-lg border border-zinc-300 bg-white px-3 text-xs font-bold text-zinc-700"
             >
               Cancelar
             </button>
           </div>
         ) : null}
 
-        <details className="group rounded-2xl border border-zinc-200/90 bg-zinc-50/50 [&_summary::-webkit-details-marker]:hidden">
-          <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-3.5 py-3 text-xs font-semibold text-zinc-700 transition hover:bg-zinc-100/80">
-            <span className="flex items-center gap-2">
-              <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-white text-zinc-500 shadow-sm ring-1 ring-zinc-200/80">
-                <ChevronDown className="h-4 w-4 transition group-open:rotate-180" strokeWidth={2.25} />
-              </span>
-              Guía, voz y privacidad
-            </span>
+        <details className="rounded-xl border border-zinc-200/90 bg-zinc-50/40 px-3 py-2 [&_summary::-webkit-details-marker]:hidden">
+          <summary className="cursor-pointer list-none text-xs font-semibold text-zinc-600">
+            Guía de órdenes y TTS
           </summary>
-          <div className="space-y-3 border-t border-zinc-200/80 px-3.5 pb-3.5 pt-3">
-            <p className="text-[11px] leading-relaxed text-zinc-500">
-              Precio semanal, última compra, actualizar precio en proveedor, marcar recibido, limpieza, comida propia,
-              mermas, temperaturas, APPCC, aceite, WhatsApp y navegación por pantallas.
+          <div className="mt-2 space-y-2 border-t border-zinc-200/80 pt-2">
+            <p className="text-xs leading-snug text-zinc-500">
+              Catálogo 7: precio semanal · última compra · actualiza precio en proveedor · marcar recibido · limpieza ·
+              comida propia · top mermas · temperaturas. APPCC: estado hoy, aceite. Navegación y WhatsApp.
             </p>
-            <label className="flex cursor-pointer items-start gap-2.5 text-xs text-zinc-700">
+            <label className="flex cursor-pointer items-center gap-2 text-xs text-zinc-700">
               <input
                 type="checkbox"
                 checked={assistantTtsEnabled && !assistantTtsNatural}
@@ -2340,12 +2277,12 @@ export default function PedidosPage() {
                   }
                   if (!on) window.speechSynthesis?.cancel();
                 }}
-                className="mt-0.5 h-4 w-4 rounded border-zinc-400"
+                className="h-4 w-4 rounded border-zinc-400"
               />
-              <span>Voz del navegador (gratis, más robótica)</span>
+              Leer respuestas con voz del navegador (gratis, más robótica)
             </label>
             {oidoChefAiEnabled ? (
-              <label className="flex cursor-pointer items-start gap-2.5 text-xs text-zinc-700">
+              <label className="flex cursor-pointer items-center gap-2 text-xs text-zinc-700">
                 <input
                   type="checkbox"
                   checked={assistantTtsNatural}
@@ -2367,31 +2304,24 @@ export default function PedidosPage() {
                     }
                     window.speechSynthesis?.cancel();
                   }}
-                  className="mt-0.5 h-4 w-4 rounded border-zinc-400"
+                  className="h-4 w-4 rounded border-zinc-400"
                 />
-                <span>Voz natural OpenAI (requiere API key en servidor)</span>
+                Voz natural OpenAI (mp3, requiere OPENAI_API_KEY en servidor)
               </label>
             ) : null}
           </div>
         </details>
 
         {assistantHistory.length > 0 ? (
-          <details className="group rounded-2xl border border-zinc-200/90 bg-white [&_summary::-webkit-details-marker]:hidden">
-            <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-3.5 py-3 text-xs font-semibold text-zinc-700 transition hover:bg-zinc-50">
-              <span className="flex items-center gap-2">
-                <History className="h-4 w-4 text-zinc-400" strokeWidth={2} />
-                Registro reciente ({Math.min(5, assistantHistory.length)})
-              </span>
-              <ChevronDown className="h-4 w-4 text-zinc-400 transition group-open:rotate-180" strokeWidth={2.25} />
+          <details className="rounded-xl border border-zinc-200/90 bg-white px-3 py-2 [&_summary::-webkit-details-marker]:hidden">
+            <summary className="cursor-pointer list-none text-xs font-semibold text-zinc-600">
+              Últimos comandos ({Math.min(5, assistantHistory.length)})
             </summary>
-            <ul className="max-h-40 space-y-2 overflow-y-auto border-t border-zinc-100 px-3.5 py-3">
+            <ul className="mt-2 max-h-36 space-y-1 overflow-y-auto border-t border-zinc-100 pt-2">
               {assistantHistory.slice(0, 5).map((row, idx) => (
-                <li
-                  key={`${row.at}-${idx}`}
-                  className="rounded-xl border border-zinc-100 bg-zinc-50/80 px-3 py-2 text-[11px] shadow-sm"
-                >
-                  <p className="font-semibold text-zinc-800">{row.command}</p>
-                  <p className="mt-0.5 line-clamp-2 text-zinc-600">{row.result}</p>
+                <li key={`${row.at}-${idx}`} className="rounded-md bg-zinc-50 px-2 py-1 text-[11px] ring-1 ring-zinc-200">
+                  <p className="truncate font-semibold text-zinc-800">{row.command}</p>
+                  <p className="truncate text-zinc-600">{row.result}</p>
                 </li>
               ))}
             </ul>
@@ -2403,38 +2333,35 @@ export default function PedidosPage() {
 
   if (oidoStandalone) {
     return (
-      <div className="min-h-[100dvh] bg-gradient-to-b from-zinc-100 via-zinc-50 to-white pb-10">
-        <div className="mx-auto max-w-md space-y-5 px-4 py-5 sm:px-5">
-          {showDeletedBanner ? (
-            <div className="pointer-events-none fixed inset-0 z-[90] grid place-items-center bg-black/25 px-6">
-              <div className="rounded-2xl bg-[#D32F2F] px-7 py-5 text-center shadow-2xl ring-2 ring-white/75">
-                <p className="text-xl font-black uppercase tracking-wide text-white">ELIMINADO</p>
-              </div>
+      <div className="mx-auto max-w-md space-y-4 px-4 py-5">
+        {showDeletedBanner ? (
+          <div className="pointer-events-none fixed inset-0 z-[90] grid place-items-center bg-black/25 px-6">
+            <div className="rounded-2xl bg-[#D32F2F] px-7 py-5 text-center shadow-2xl ring-2 ring-white/75">
+              <p className="text-xl font-black uppercase tracking-wide text-white">ELIMINADO</p>
             </div>
-          ) : null}
+          </div>
+        ) : null}
 
-          <Link
-            href="/pedidos"
-            className="inline-flex items-center gap-2 rounded-full border border-zinc-200/90 bg-white/80 px-3 py-1.5 text-xs font-bold uppercase tracking-wide text-zinc-600 shadow-sm backdrop-blur-sm ring-1 ring-black/5 transition hover:border-zinc-300 hover:text-zinc-900"
-          >
-            ← Pedidos
-          </Link>
+        <Link
+          href="/pedidos"
+          className="inline-flex items-center gap-1.5 text-sm font-semibold text-zinc-700 underline-offset-4 hover:text-zinc-900 hover:underline"
+        >
+          ← Volver a pedidos
+        </Link>
 
-          <MermasStyleHero
-            eyebrow="Asistente"
-            title="Oído Chef"
-            tagline="Centro de mando para consultas rápidas sobre tu operación diaria."
-            description="Misma cuenta y datos que en Pedidos: pantalla dedicada para no saturar la lista de envíos."
-          />
+        <MermasStyleHero
+          eyebrow="Asistente"
+          title="Oído Chef"
+          description="Misma cuenta y datos que en Pedidos: aquí solo el asistente, para no saturar la lista de envíos."
+        />
 
-          {assistantPanel}
-        </div>
+        {assistantPanel}
       </div>
     );
   }
 
   return (
-    <ModulePageShell contentClassName="space-y-4">
+    <div className="space-y-4">
       {showDeletedBanner ? (
         <div className="pointer-events-none fixed inset-0 z-[90] grid place-items-center bg-black/25 px-6">
           <div className="rounded-2xl bg-[#D32F2F] px-7 py-5 text-center shadow-2xl ring-2 ring-white/75">
@@ -2446,7 +2373,6 @@ export default function PedidosPage() {
       <MermasStyleHero
         eyebrow="Pedidos"
         title="Proveedores y recepción"
-        tagline="Centro operativo: envíos, recepción y asistente Oído Chef."
         description="Crea pedidos, envía por WhatsApp y controla envíos y recepción en el local."
       />
 
@@ -3100,6 +3026,6 @@ export default function PedidosPage() {
           setMessage('Albarán OCR guardado. Revisa cantidades y precios en el pedido.');
         }}
       />
-    </ModulePageShell>
+    </div>
   );
 }

@@ -2,8 +2,7 @@
 
 import Link from 'next/link';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronDown, CheckCircle2, Package, Plus, RotateCcw, Trash2 } from 'lucide-react';
-import { ModuleBackLink, ModulePageShell } from '@/components/ModulePageShell';
+import { ChevronDown, ChevronLeft, CheckCircle2, Package, Plus, RotateCcw, Trash2 } from 'lucide-react';
 import MermasStyleHero from '@/components/MermasStyleHero';
 import InventoryResultadoInventario from '@/components/InventoryResultadoInventario';
 import { useAuth } from '@/components/AuthProvider';
@@ -799,13 +798,18 @@ export default function InventarioPage() {
   const disabled = !localId || !profileReady || !supabaseOk || loading;
 
   return (
-    <ModulePageShell contentClassName="space-y-5">
-      <ModuleBackLink />
+    <div className="space-y-5">
+      <Link
+        href="/panel"
+        className="inline-flex items-center gap-1 text-sm font-semibold text-zinc-600 hover:text-[#D32F2F]"
+      >
+        <ChevronLeft className="h-4 w-4" />
+        Panel
+      </Link>
 
       <MermasStyleHero
         eyebrow="Chef-One"
         title="Inventario"
-        tagline="Stock y valor por artículo: cierres mensuales y trazabilidad."
         compact
         description="Stock y valor por artículo de tu local."
       />
@@ -1356,6 +1360,6 @@ export default function InventarioPage() {
           </div>
         </div>
       ) : null}
-    </ModulePageShell>
+    </div>
   );
 }

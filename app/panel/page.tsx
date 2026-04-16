@@ -17,7 +17,6 @@ import {
   UtensilsCrossed,
 } from 'lucide-react';
 import { CHEF_ONE_TAPER_LINE_CLASS } from '@/components/ChefOneGlowLine';
-import { ModulePageShell } from '@/components/ModulePageShell';
 import MermasStyleHero from '@/components/MermasStyleHero';
 import { useAuth } from '@/components/AuthProvider';
 import { canAccessPedidos } from '@/lib/pedidos-access';
@@ -60,7 +59,7 @@ function HubTile({ href, onClick, label, sub, Icon, tone = 'zinc' }: TileProps) 
 
   const className = [
     'flex w-full flex-col items-center rounded-3xl px-6 py-8 text-center outline-none transition-all duration-300 ease-out',
-    'bg-zinc-50/90 shadow-[0_18px_45px_-22px_rgba(0,0,0,0.14)] ring-1 ring-black/[0.05] hover:bg-white hover:shadow-[0_22px_50px_-20px_rgba(0,0,0,0.16)] hover:ring-zinc-300/90',
+    'bg-zinc-50/80 ring-1 ring-zinc-200/90 hover:bg-white hover:ring-zinc-300',
     'focus-visible:ring-2 focus-visible:ring-[#D32F2F]/40 focus-visible:ring-offset-2',
     'active:scale-[0.99]',
   ].join(' ');
@@ -91,7 +90,7 @@ export default function PanelControlPage() {
   };
 
   return (
-    <ModulePageShell maxWidthClass="max-w-4xl" contentClassName="space-y-6">
+    <div className="space-y-6">
       <MermasStyleHero
         eyebrow="CHEF-ONE"
         title="Panel de control"
@@ -100,12 +99,12 @@ export default function PanelControlPage() {
       />
 
       {stubMessage ? (
-        <div className="rounded-2xl border border-amber-200/70 bg-gradient-to-r from-amber-50 to-amber-50/40 px-4 py-3 text-center text-sm font-semibold text-amber-950 shadow-sm ring-1 ring-amber-100/90">
+        <div className="rounded-2xl border border-amber-200/80 bg-amber-50 px-4 py-3 text-center text-sm font-semibold text-amber-950 ring-1 ring-amber-100">
           {stubMessage}
         </div>
       ) : null}
 
-      <div className="grid grid-cols-2 gap-4 sm:gap-5">
+      <div className="grid grid-cols-2 gap-4">
         <HubTile href="/dashboard" label="Mermas" sub="Registro y seguimiento" Icon={BookOpen} tone="red" />
         {showPedidos ? (
           <HubTile href="/pedidos" label="Pedidos" sub="Proveedores y recepción" Icon={ShoppingCart} tone="red" />
@@ -166,6 +165,6 @@ export default function PanelControlPage() {
           tone="red"
         />
       </div>
-    </ModulePageShell>
+    </div>
   );
 }
