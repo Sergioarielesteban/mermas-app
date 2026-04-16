@@ -57,11 +57,10 @@ export default function AppFrame({ children }: { children: React.ReactNode }) {
   // Resto de rutas: esperar auth o desbloqueo por tiempo.
   if (effectiveLoading) {
     return (
-      <main className="flex min-h-[100dvh] flex-col items-center justify-center bg-white px-6">
-        <div className="flex w-full max-w-md flex-col items-center">
-          <ChefOneLaunchMark />
-          <p className="mt-8 text-sm font-medium text-zinc-500">Cargando sesión…</p>
-          <div className="mt-6 flex w-full max-w-xs flex-col gap-2">
+      <main className="flex min-h-[100dvh] flex-col items-center justify-start bg-white px-4 py-8 sm:justify-center sm:py-10">
+        <div className="flex w-full max-w-md flex-col items-center gap-4">
+          <p className="order-1 text-center text-sm font-medium text-zinc-500">Cargando sesión…</p>
+          <div className="order-2 flex w-full max-w-xs flex-col gap-2">
             <button
               type="button"
               onClick={() => {
@@ -89,6 +88,23 @@ export default function AppFrame({ children }: { children: React.ReactNode }) {
             >
               Reiniciar sesión
             </button>
+          </div>
+          <p className="order-3 px-2 text-center text-[11px] leading-snug text-zinc-400">
+            Vista previa estrecha: si no ves cambios, abre{' '}
+            <a href="/login" className="font-semibold text-[#D32F2F] underline underline-offset-2">
+              /login
+            </a>{' '}
+            o la landing en{' '}
+            <a href="/" className="font-semibold text-[#D32F2F] underline underline-offset-2">
+              /
+            </a>{' '}
+            en Chrome o Safari.
+          </p>
+          <div className="order-last mt-1 w-full">
+            <ChefOneLaunchMark
+              imgClassName="mx-auto block w-[min(72vw,240px)] max-w-full select-none"
+              lineClassName="mt-3 w-full max-w-[min(70vw,260px)]"
+            />
           </div>
         </div>
       </main>
