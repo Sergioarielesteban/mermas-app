@@ -480,15 +480,19 @@ export default function NuevoPedidoPage() {
             </option>
           ))}
         </select>
-        <div className="mt-4 flex w-full flex-col items-center">
-          <label className="text-center text-xs font-semibold uppercase tracking-wide text-zinc-700">
-            Fecha entrega
-          </label>
-          <div className="relative mt-2 w-full max-w-[17.5rem]">
+        <div className="mx-auto mt-4 w-full max-w-sm rounded-2xl border border-zinc-200/90 bg-gradient-to-b from-zinc-50 to-white px-4 py-3 text-center shadow-sm ring-1 ring-zinc-100">
+          <p className="text-[10px] font-extrabold uppercase tracking-wide text-zinc-500">Fecha de entrega</p>
+          <p className="mt-1.5 text-[11px] font-medium leading-snug text-zinc-600">
+            {deliveryDate
+              ? 'Esta fecha es la que llevará el pedido al enviarlo: el proveedor la verá como día de entrega.'
+              : 'Elige el día de entrega. Al enviar, el pedido saldrá con esa misma fecha.'}
+          </p>
+          <div className="relative mx-auto mt-3 w-full max-w-[17.5rem]">
             <input
               type="date"
               value={deliveryDate}
               onChange={(e) => setDeliveryDate(e.target.value)}
+              aria-label="Fecha de entrega del pedido"
               className={[
                 'box-border h-11 w-full rounded-xl border border-zinc-300 bg-white px-3 text-sm font-semibold outline-none focus:border-[#D32F2F] focus:ring-2 focus:ring-[#D32F2F]/25',
                 deliveryDate ? 'text-zinc-900' : 'text-transparent',
