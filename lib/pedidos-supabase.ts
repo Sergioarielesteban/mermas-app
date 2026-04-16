@@ -1138,3 +1138,69 @@ export async function updateOrderItemPrice(
     .eq('local_id', localId);
   if (error) throw new Error(error.message);
 }
+
+/** Parches aplicados desde OCR (solo campos definidos). */
+export type AlbaranOcrApplyPatch = {
+  itemId: string;
+  pricePerUnit?: number;
+  receivedQuantity?: number;
+  receivedWeightKg?: number | null;
+  receivedPricePerKg?: number | null;
+};
+
+/**
+ * Aplica sugerencias OCR a líneas de recepción (Supabase + modelo coherente con `receptionLineTotals`).
+ */
+export async function applyAlbaranOcrPatches(
+  supabase: SupabaseClient,
+  localId: string,
+  items: PedidoOrderItem[],
+  patches: AlbaranOcrApplyPatch[],
+): Promise<void> {
+  const byId = new Map(items.map((i) => [i.id, i]));
+  for (const patch of patches) {
+    const base = byId.get(patch.itemId);
+    if (!base) continue;
+
+    const merged: PedidoOrderItem = { ...base };
+    if (patch.receivedQuantity !== undefined) {
+      merged.receivedQuantity = Math.max(0, Math.round(patch.receivedQuantity * 100) / 100);
+    }
+    if (patch.pricePerUnit !== undefined) {
+      merged.pricePerUnit = Math.max(0, Math.round(patch.pricePerUnit * 100) / 100);
+    }
+    if (patch.receivedWeightKg !== undefined) {
+      const w = patch.receivedWeightKg;
+      merged.receivedWeightKg =
+        w == null || !Number.isFinite(w) || w <= 0 ? null : Math.round(w * 1000) / 1000;
+    }
+    if (patch.receivedPricePerKg !== undefined) {
+      const p = patch.receivedPricePerKg;
+      merged.receivedPricePerKg =
+        p == null || !Number.isFinite(p) || p <= 0 ? null : Math.round(p * 10000) / 10000;
+    }
+    if (merged.unit === 'kg' && merged.receivedWeightKg != null && merged.receivedWeightKg > 0) {
+      merged.receivedQuantity = merged.receivedWeightKg;
+    }
+
+    await updateOrderItemReceived(supabase, localId, patch.itemId, merged.receivedQuantity);
+
+    if (unitCanDeclareScaleKgOnReception(merged.unit)) {
+      await updateOrderItemReceivedWeightKg(
+        supabase,
+        localId,
+        patch.itemId,
+        merged.receivedWeightKg != null && merged.receivedWeightKg > 0 ? merged.receivedWeightKg : null,
+      );
+      await persistReceptionItemTotals(supabase, localId, merged);
+    } else if (patch.pricePerUnit !== undefined || patch.receivedQuantity !== undefined) {
+      await updateOrderItemPrice(
+        supabase,
+        localId,
+        patch.itemId,
+        merged.pricePerUnit,
+        billingQuantityForReceptionPrice(merged),
+      );
+    }
+  }
+}

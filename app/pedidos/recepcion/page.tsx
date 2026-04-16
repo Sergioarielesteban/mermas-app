@@ -7,6 +7,7 @@ import { ChevronDown } from 'lucide-react';
 import { useAuth } from '@/components/AuthProvider';
 import { usePedidosOrders } from '@/components/PedidosOrdersProvider';
 import { CHEF_ONE_TAPER_LINE_CLASS } from '@/components/ChefOneGlowLine';
+import PedidosAlbaranOcrModal from '@/components/PedidosAlbaranOcrModal';
 import { getSupabaseClient } from '@/lib/supabase-client';
 import PedidosPremiaLockedScreen from '@/components/PedidosPremiaLockedScreen';
 import { dispatchPedidosDataChanged } from '@/hooks/usePedidosDataChangedListener';
@@ -85,6 +86,7 @@ export default function RecepcionPedidosPage() {
   const [expandedPendingOrderId, setExpandedPendingOrderId] = React.useState<string | null>(null);
   const [archivedAccordionOpen, setArchivedAccordionOpen] = React.useState(true);
   const [expandedArchivedOrderId, setExpandedArchivedOrderId] = React.useState<string | null>(null);
+  const [ocrOrder, setOcrOrder] = React.useState<PedidoOrder | null>(null);
   const focusOrderIdFromUrl = searchParams.get('orderId') ?? '';
   const focusOrderAppliedRef = React.useRef(false);
 
@@ -590,18 +592,29 @@ export default function RecepcionPedidosPage() {
                     «revisado» para archivar en la parte inferior.
                   </p>
                 ) : null}
-                <button
-                  type="button"
-                  onClick={() => setExpandedPendingOrderId((id) => (id === order.id ? null : order.id))}
-                  className="mt-3 inline-flex items-center gap-2 rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-zinc-700"
-                  aria-expanded={expanded}
-                >
-                  {expanded ? 'Ocultar detalle' : 'Ver detalle'}
-                  <ChevronDown
-                    className={['h-4 w-4 transition-transform', expanded ? 'rotate-180' : ''].join(' ')}
-                    aria-hidden
-                  />
-                </button>
+                <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setExpandedPendingOrderId((id) => (id === order.id ? null : order.id))}
+                    className="inline-flex items-center gap-2 rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-zinc-700"
+                    aria-expanded={expanded}
+                  >
+                    {expanded ? 'Ocultar detalle' : 'Ver detalle'}
+                    <ChevronDown
+                      className={['h-4 w-4 transition-transform', expanded ? 'rotate-180' : ''].join(' ')}
+                      aria-hidden
+                    />
+                  </button>
+                  {expanded ? (
+                    <button
+                      type="button"
+                      onClick={() => setOcrOrder(order)}
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-[#D32F2F]/40 bg-[#D32F2F]/10 px-3 py-1.5 text-[11px] font-black uppercase tracking-wide text-[#B91C1C]"
+                    >
+                      Escanear albarán
+                    </button>
+                  ) : null}
+                </div>
               </div>
               {expanded ? (
               <>
@@ -949,6 +962,17 @@ export default function RecepcionPedidosPage() {
           ) : null}
         </div>
       </section>
+
+      <PedidosAlbaranOcrModal
+        order={ocrOrder}
+        open={ocrOrder != null}
+        onClose={() => setOcrOrder(null)}
+        onApplied={() => {
+          reloadOrders();
+          dispatchPedidosDataChanged();
+          setMessage('Albarán OCR: cambios guardados. Revisa precios y cantidades.');
+        }}
+      />
     </div>
   );
 }
