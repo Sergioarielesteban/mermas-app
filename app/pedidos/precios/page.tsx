@@ -1329,9 +1329,15 @@ export default function PedidosPreciosPage() {
 
   return (
     <div className="space-y-4 overflow-x-hidden">
-      <section>
+      <section className="flex flex-wrap gap-2">
         <Link href="/pedidos" className="inline-flex h-9 items-center rounded-lg border border-zinc-300 bg-white px-3 text-sm font-semibold text-zinc-700">
           ← Atras
+        </Link>
+        <Link
+          href="/pedidos/historial-mes"
+          className="inline-flex h-9 items-center rounded-lg border border-zinc-300 bg-white px-3 text-sm font-semibold text-zinc-700"
+        >
+          Compras del mes
         </Link>
       </section>
 

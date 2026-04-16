@@ -391,6 +391,12 @@ export default function PedidosHistorialMesPage() {
         <p className="mx-auto mt-3 max-w-sm text-center text-sm leading-relaxed text-zinc-400">
           Pulsa sobre el nombre del proveedor para desplegar el listado de productos
         </p>
+        <Link
+          href="/pedidos/precios"
+          className="mt-5 block w-full rounded-2xl border border-white/25 bg-white/10 px-4 py-3 text-center text-sm font-semibold text-white transition hover:bg-white/15"
+        >
+          Evolución de precios
+        </Link>
       </section>
 
       {message ? (
