@@ -43,29 +43,27 @@ export async function compressImageFileToJpeg(
   }
 }
 
-export type TesseractProgress = { status: string; progress: number };
-
 /**
- * OCR con Tesseract (carga dinámica para no inflar el bundle inicial).
+ * OCR vía AWS Textract (servidor). Requiere sesión Supabase y variables AWS en el despliegue.
  */
-export async function runTesseractOnJpeg(
-  blob: Blob,
-  onProgress?: (p: TesseractProgress) => void,
-): Promise<string> {
-  const { createWorker } = await import('tesseract.js');
-  const worker = await createWorker('spa', undefined, {
-    logger: (m: { status: string; progress: number }) => {
-      if (onProgress && typeof m.progress === 'number') {
-        onProgress({ status: m.status, progress: m.progress });
-      }
-    },
+export async function runAlbaranOcrViaTextract(blob: Blob, accessToken: string): Promise<string> {
+  const form = new FormData();
+  form.append('image', blob, 'albaran.jpg');
+  const res = await fetch('/api/pedidos/textract', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${accessToken}` },
+    body: form,
   });
+  let body: unknown;
   try {
-    const {
-      data: { text },
-    } = await worker.recognize(blob);
-    return text ?? '';
-  } finally {
-    await worker.terminate();
+    body = await res.json();
+  } catch {
+    body = null;
   }
+  const rec = body as { ok?: boolean; reason?: string; text?: string } | null;
+  if (!res.ok || !rec?.ok) {
+    const reason = typeof rec?.reason === 'string' ? rec.reason : `HTTP ${res.status}`;
+    throw new Error(reason);
+  }
+  return rec.text ?? '';
 }

@@ -25,6 +25,7 @@ import {
   readCatalogPricesSessionCache,
   writeCatalogPricesSessionCache,
 } from '@/lib/pedidos-session-cache';
+import { buildOidoChefAiContext } from '@/lib/oido-chef-ai-context';
 import {
   billingQuantityForReceptionPrice,
   billingQuantityForLine,
@@ -169,6 +170,52 @@ function normalizeText(input: string): string {
     .replace(/\s+/g, ' ')
     .trim();
 }
+
+/** Palabra(s) suelta(s) → pantalla (sin tener que decir «abre…»). */
+function matchAssistantSingleTopicNav(normalized: string): { href: string; message: string } | null {
+  const n = normalized.trim();
+  if (!n) return null;
+  const exact: Record<string, { href: string; message: string }> = {
+    proveedores: { href: '/pedidos/proveedores', message: 'Abriendo Proveedores…' },
+    recepcion: { href: '/pedidos/recepcion', message: 'Abriendo Recepción…' },
+    precios: { href: '/pedidos/precios', message: 'Abriendo Precios…' },
+    calendario: { href: '/pedidos/calendario', message: 'Abriendo Calendario de entregas…' },
+    comida: { href: '/comida-personal', message: 'Abriendo Comida personal…' },
+    personal: { href: '/comida-personal', message: 'Abriendo Comida personal…' },
+    equipos: { href: '/appcc/equipos', message: 'Abriendo Equipos (frío)…' },
+    checklist: { href: '/checklist', message: 'Abriendo Checklist…' },
+    produccion: { href: '/produccion', message: 'Abriendo Producción…' },
+    panel: { href: '/panel', message: 'Abriendo Panel…' },
+    inventario: { href: '/inventario', message: 'Abriendo Inventario…' },
+    escandallos: { href: '/escandallos', message: 'Abriendo Escandallos…' },
+  };
+  if (exact[n]) return exact[n];
+  if (n === 'comida personal' || n === 'comida del personal') {
+    return { href: '/comida-personal', message: 'Abriendo Comida personal…' };
+  }
+  if (n === 'nuevo pedido' || n === 'pedido nuevo') {
+    return { href: '/pedidos/nuevo', message: 'Abriendo Nuevo pedido…' };
+  }
+  if (n === 'historial mes' || n === 'compras mes' || n === 'historial del mes') {
+    return { href: '/pedidos/historial-mes', message: 'Abriendo Histórico del mes…' };
+  }
+  if (n === 'cronograma limpieza' || n === 'limpieza cronograma') {
+    return { href: '/appcc/limpieza/cronograma', message: 'Abriendo Cronograma de limpieza…' };
+  }
+  if (n === 'tareas limpieza' || n === 'limpieza tareas') {
+    return { href: '/appcc/limpieza/tareas', message: 'Abriendo Tareas de limpieza…' };
+  }
+  return null;
+}
+
+const ASSISTANT_FALLBACK_HINT = [
+  'No lo tengo claro. Prueba una de estas ideas (también valen palabras sueltas como «limpieza», «recepción», «appcc»):',
+  '',
+  'Pedidos: «resumen», «pedidos enviados», «abre pendientes de entrega», «marcar recibido pedido de …», «WhatsApp pedido de …», «actualiza … a … € en …».',
+  'Pantallas: «recepción», «proveedores», «precios», «calendario», «comida».',
+  'Limpieza: «limpieza», «qué toca limpiar hoy» o «cronograma limpieza».',
+  'APPCC: «appcc», «estado APPCC hoy», «temperaturas», «aceite».',
+].join('\n');
 
 type AssistantPendingAction = {
   kind: 'update_price';
@@ -774,16 +821,22 @@ export default function PedidosPage() {
   const receivedOrders = orders.filter((row) => row.status === 'received');
 
   const OIDO_CHEF_TTS_LS_KEY = 'oido-chef-tts-v1';
+  const OIDO_CHEF_TTS_NATURAL_LS_KEY = 'oido-chef-tts-natural-v1';
+  const oidoChefAiEnabled = process.env.NEXT_PUBLIC_OIDO_CHEF_AI === '1';
   const [assistantTtsEnabled, setAssistantTtsEnabled] = React.useState(false);
+  const [assistantTtsNatural, setAssistantTtsNatural] = React.useState(false);
   React.useEffect(() => {
     try {
       if (typeof window !== 'undefined' && window.localStorage.getItem(OIDO_CHEF_TTS_LS_KEY) === '1') {
         setAssistantTtsEnabled(true);
       }
+      if (oidoChefAiEnabled && window.localStorage.getItem(OIDO_CHEF_TTS_NATURAL_LS_KEY) === '1') {
+        setAssistantTtsNatural(true);
+      }
     } catch {
       // ignore
     }
-  }, []);
+  }, [oidoChefAiEnabled]);
 
   const assistantProactiveHint = React.useMemo(() => {
     const bits: string[] = [];
@@ -800,8 +853,49 @@ export default function PedidosPage() {
   }, [sentOrders]);
 
   React.useEffect(() => {
-    if (!assistantTtsEnabled || !assistantReply) return;
-    if (typeof window === 'undefined' || !window.speechSynthesis) return;
+    if (!assistantReply) return;
+    if (typeof window === 'undefined') return;
+
+    if (assistantTtsNatural && oidoChefAiEnabled) {
+      window.speechSynthesis?.cancel();
+      const ac = new AbortController();
+      const audio = new Audio();
+      const urlRef = { current: null as string | null };
+      void (async () => {
+        try {
+          const supabase = getSupabaseClient();
+          if (!supabase) return;
+          const { data: sessionData } = await supabase.auth.getSession();
+          const token = sessionData.session?.access_token;
+          if (!token) return;
+          const res = await fetch('/api/ai/oido-chef/tts', {
+            method: 'POST',
+            signal: ac.signal,
+            headers: {
+              Authorization: `Bearer ${token}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ text: assistantReply.slice(0, 3800) }),
+          });
+          if (!res.ok) return;
+          const blob = await res.blob();
+          if (ac.signal.aborted) return;
+          urlRef.current = URL.createObjectURL(blob);
+          audio.src = urlRef.current;
+          await audio.play();
+        } catch {
+          /* abort o fallo de red */
+        }
+      })();
+      return () => {
+        ac.abort();
+        audio.pause();
+        if (urlRef.current) URL.revokeObjectURL(urlRef.current);
+      };
+    }
+
+    if (!assistantTtsEnabled) return;
+    if (!window.speechSynthesis) return;
     window.speechSynthesis.cancel();
     const u = new SpeechSynthesisUtterance(assistantReply.slice(0, 900));
     u.lang = 'es-ES';
@@ -810,7 +904,7 @@ export default function PedidosPage() {
     return () => {
       window.speechSynthesis.cancel();
     };
-  }, [assistantReply, assistantTtsEnabled]);
+  }, [assistantReply, assistantTtsEnabled, assistantTtsNatural, oidoChefAiEnabled]);
 
   const pushAssistantHistory = React.useCallback((command: string, result: string) => {
     setAssistantHistory((prev) => {
@@ -837,6 +931,34 @@ export default function PedidosPage() {
     setAssistantBusy(true);
 
     try {
+      if (
+        normalized === 'ayuda' ||
+        normalized === 'help' ||
+        normalized === 'comandos' ||
+        normalized === 'ejemplos' ||
+        normalized === 'que puedes hacer' ||
+        normalized === 'que sabes hacer' ||
+        normalized === 'para que sirves'
+      ) {
+        const msg = [
+          'Puedo leer frases naturales y palabras sueltas.',
+          '',
+          '· Pedidos: «resumen», «pendientes», enviados/recibidos, recepción, proveedores, precios.',
+          '· Limpieza: «limpieza» o «qué toca limpiar hoy».',
+          '· APPCC: «appcc», «estado APPCC hoy», temperaturas, aceite.',
+          '· Comida del personal: «comida», registros y anulaciones (ver ejemplos al fallar un comando).',
+          '',
+          'Tip: una sola palabra suele bastar (ej. «limpieza», «recepción», «appcc»).',
+          '',
+          oidoChefAiEnabled
+            ? 'Con IA activada: puedes preguntar en lenguaje natural (p. ej. precios de la semana); la respuesta usa los pedidos cargados en esta pantalla.'
+            : 'Para preguntas libres con ChatGPT (API OpenAI), activa NEXT_PUBLIC_OIDO_CHEF_AI en el despliegue y OPENAI_API_KEY en el servidor.',
+        ].join('\n');
+        setAssistantReply(msg);
+        pushAssistantHistory(raw, msg);
+        return;
+      }
+
       const openPendientesEntregaMatch =
         (normalized.includes('abre') ||
           normalized.includes('abrir') ||
@@ -881,6 +1003,14 @@ export default function PedidosPage() {
         return;
       }
 
+      const topicJump = matchAssistantSingleTopicNav(normalized);
+      if (topicJump) {
+        router.push(topicJump.href);
+        setAssistantReply(topicJump.message);
+        pushAssistantHistory(raw, topicJump.message);
+        return;
+      }
+
       const navVerb =
         /\b(abre|abrir|vamos|entra|entrar|ir|lleva|llevame|muestrame)\b/.test(normalized) ||
         normalized.startsWith('ir ') ||
@@ -894,6 +1024,26 @@ export default function PedidosPage() {
         if (n.includes('recepcion') || n.includes('albaran')) return '/pedidos/recepcion';
         if ((n.includes('compras') && n.includes('mes')) || (n.includes('historial') && n.includes('mes')))
           return '/pedidos/historial-mes';
+        if (
+          (n.includes('limpieza') || n.includes('limpiar')) &&
+          !n.includes('recibido') &&
+          !n.includes('recibidos')
+        ) {
+          if (n.includes('cronograma')) return '/appcc/limpieza/cronograma';
+          if (n.includes('tarea')) return '/appcc/limpieza/tareas';
+          return '/appcc/limpieza';
+        }
+        if (n.includes('temperatura')) return '/appcc/temperaturas';
+        if (n.includes('aceite') && !n.includes('hoy') && !n.includes('registro')) return '/appcc/aceite';
+        if (
+          (n.includes('appcc') || n.includes('haccp')) &&
+          !n.includes('hoy') &&
+          !n.includes('estado') &&
+          !n.includes('resumen') &&
+          !n.includes('como va')
+        ) {
+          return '/appcc';
+        }
         if (
           (n.includes('precio') || n.includes('precios')) &&
           !n.includes('esta semana') &&
@@ -925,6 +1075,7 @@ export default function PedidosPage() {
       }
 
       const resumenDiaMatch =
+        normalized === 'resumen' ||
         (normalized.includes('resumen') &&
           (normalized.includes('operativo') ||
             normalized.includes('diario') ||
@@ -988,22 +1139,44 @@ export default function PedidosPage() {
         (normalized.includes('a que precio') ||
           normalized.includes('precio pague') ||
           normalized.includes('precio pagamos') ||
-          normalized.includes('precio de'));
+          normalized.includes('precio de') ||
+          normalized.includes('precio compre') ||
+          normalized.includes('cuanto pague') ||
+          normalized.includes('cuanto pagamos') ||
+          normalized.includes('cuanto pago'));
       if (weekMatch) {
-        let productPart = normalized;
-        const patterns = [
-          /^precio de\s+/,
-          /^busca(?:me)?(?:\s+a)?\s+que\s+precio\s+pague\s+/,
-          /^busca(?:me)?(?:\s+a)?\s+que\s+precio\s+pagamos\s+/,
-          /^a\s+que\s+precio\s+pague\s+/,
-          /^a\s+que\s+precio\s+pagamos\s+/,
-        ];
-        for (const p of patterns) {
-          productPart = productPart.replace(p, '');
+        let stem = normalized
+          .replace(/^oido\s*chef\s*[,:]?\s+/i, '')
+          .replace(/^chef\s+[,:]?\s+/i, '')
+          .replace(/\s+esta\s+semana$/i, '')
+          .trim();
+
+        let productPart = '';
+        const compraCap = stem.match(
+          /a\s+que\s+precio\s+(?:compre|compramos|compraste|compraron|pague|pagamos|pago)\s+(?:el|la|los|las)?\s*(.+)/i,
+        );
+        if (compraCap?.[1]?.trim()) {
+          productPart = compraCap[1].trim();
+        } else {
+          productPart = stem;
+          const patterns: RegExp[] = [
+            /^precio de\s+/,
+            /^busca(?:me)?(?:\s+a)?\s+que\s+precio\s+pague\s+/,
+            /^busca(?:me)?(?:\s+a)?\s+que\s+precio\s+pagamos\s+/,
+            /^a\s+que\s+precio\s+pague\s+/,
+            /^a\s+que\s+precio\s+pagamos\s+/,
+            /^a\s+que\s+precio\s+/,
+            /^cuanto\s+pague\s+(?:el|la|los|las)?\s*/,
+            /^cuanto\s+pagamos\s+(?:el|la|los|las)?\s*/,
+            /^cuanto\s+pago\s+(?:el|la|los|las)?\s*/,
+          ];
+          for (const p of patterns) {
+            productPart = productPart.replace(p, '');
+          }
         }
-        productPart = productPart.replace(/\s+esta\s+semana$/, '').replace(/\s+/g, ' ').trim();
+        productPart = productPart.replace(/\s+/g, ' ').trim();
         if (!productPart) {
-          const msg = 'No entendí el producto. Ejemplo: "buscame a qué precio pagué la lechuga esta semana".';
+          const msg = 'No entendí el producto. Ejemplo: «chef, ¿a qué precio compré la mantequilla esta semana?».';
           setAssistantReply(msg);
           pushAssistantHistory(raw, msg);
           return;
@@ -1013,7 +1186,7 @@ export default function PedidosPage() {
         from.setDate(now.getDate() - 7);
         const fromTs = from.getTime();
         const productNeedle = normalizeText(productPart).replace(/^el\s+|^la\s+|^los\s+|^las\s+/, '');
-        const rows: Array<{ supplier: string; product: string; price: number; date: string }> = [];
+        const rows: Array<{ supplier: string; product: string; price: number; date: string; ts: number }> = [];
         for (const o of orders) {
           const when = new Date(o.receivedAt ?? o.sentAt ?? o.createdAt).getTime();
           if (!Number.isFinite(when) || when < fromTs) continue;
@@ -1025,6 +1198,7 @@ export default function PedidosPage() {
               product: i.productName,
               price: i.pricePerUnit,
               date: new Date(o.receivedAt ?? o.sentAt ?? o.createdAt).toLocaleDateString('es-ES'),
+              ts: when,
             });
           }
         }
@@ -1034,6 +1208,7 @@ export default function PedidosPage() {
           pushAssistantHistory(raw, msg);
           return;
         }
+        rows.sort((a, b) => b.ts - a.ts);
         const prices = rows.map((r) => r.price);
         const avg = prices.reduce((a, b) => a + b, 0) / prices.length;
         const min = Math.min(...prices);
@@ -1095,11 +1270,13 @@ export default function PedidosPage() {
       }
 
       const estadoAppccHoyMatch =
-        normalized.includes('appcc') &&
-        (normalized.includes('hoy') ||
-          normalized.includes('estado') ||
-          normalized.includes('resumen') ||
-          normalized.includes('como va'));
+        normalized === 'appcc' ||
+        normalized === 'haccp' ||
+        (normalized.includes('appcc') &&
+          (normalized.includes('hoy') ||
+            normalized.includes('estado') ||
+            normalized.includes('resumen') ||
+            normalized.includes('como va')));
       if (estadoAppccHoyMatch) {
         if (!localId) return;
         const supabase = getSupabaseClient();
@@ -1152,8 +1329,10 @@ export default function PedidosPage() {
       }
 
       const tempFaltantesMatch =
-        (normalized.includes('temperatura') || normalized.includes('temperaturas')) &&
-        (normalized.includes('falta') || normalized.includes('faltan') || normalized.includes('pendiente'));
+        normalized === 'temperaturas' ||
+        normalized === 'temperatura' ||
+        ((normalized.includes('temperatura') || normalized.includes('temperaturas')) &&
+          (normalized.includes('falta') || normalized.includes('faltan') || normalized.includes('pendiente')));
       if (tempFaltantesMatch) {
         if (!localId) return;
         const supabase = getSupabaseClient();
@@ -1183,7 +1362,8 @@ export default function PedidosPage() {
       }
 
       const aceiteHoyMatch =
-        normalized.includes('aceite') && (normalized.includes('hoy') || normalized.includes('registro'));
+        normalized === 'aceite' ||
+        (normalized.includes('aceite') && (normalized.includes('hoy') || normalized.includes('registro')));
       if (aceiteHoyMatch) {
         if (!localId) return;
         const supabase = getSupabaseClient();
@@ -1517,9 +1697,16 @@ export default function PedidosPage() {
       }
 
       const cleaningTodayMatch =
+        normalized === 'limpieza' ||
+        normalized === 'limpiezas' ||
+        normalized === 'limpiar' ||
+        normalized === 'limpieza hoy' ||
+        normalized === 'hoy limpieza' ||
+        normalized.includes('que toca limpiar') ||
         normalized.includes('que toca limpiar hoy') ||
-        normalized.includes('que toca hoy') ||
-        normalized.includes('limpieza de hoy');
+        (normalized.includes('que toca hoy') && !normalized.includes('pedido')) ||
+        normalized.includes('limpieza de hoy') ||
+        (normalized.includes('tareas de limpieza') && normalized.includes('hoy'));
       if (cleaningTodayMatch) {
         if (!localId) return;
         const supabase = getSupabaseClient();
@@ -1647,8 +1834,33 @@ export default function PedidosPage() {
         return;
       }
 
-      const msg =
-        'No entendí el comando. Prueba: "resumen del día", "estado APPCC hoy", "temperaturas faltantes", "top mermas del mes", "última compra de leche", "precio de leche esta semana", "marcar recibido pedido de Makro", "actualiza bacon a 7,80 en Makro", WhatsApp, navegación o voz.';
+      if (oidoChefAiEnabled) {
+        const supabaseAi = getSupabaseClient();
+        if (supabaseAi) {
+          const { data: sessionAi } = await supabaseAi.auth.getSession();
+          const tokenAi = sessionAi.session?.access_token;
+          if (tokenAi) {
+            const context = buildOidoChefAiContext(orders, sentOrders, localName, localCode);
+            const resAi = await fetch('/api/ai/oido-chef', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${tokenAi}`,
+              },
+              body: JSON.stringify({ message: raw, context }),
+            });
+            const j = (await resAi.json().catch(() => ({}))) as { ok?: boolean; reply?: string; reason?: string };
+            if (resAi.ok && j.ok && typeof j.reply === 'string' && j.reply.trim()) {
+              const reply = j.reply.trim();
+              setAssistantReply(reply);
+              pushAssistantHistory(raw, reply);
+              return;
+            }
+          }
+        }
+      }
+
+      const msg = ASSISTANT_FALLBACK_HINT;
       setAssistantReply(msg);
       pushAssistantHistory(raw, msg);
     } catch (err) {
@@ -1663,6 +1875,7 @@ export default function PedidosPage() {
     localCode,
     localId,
     localName,
+    oidoChefAiEnabled,
     orders,
     pushAssistantHistory,
     router,
@@ -2009,7 +2222,9 @@ export default function PedidosPage() {
           </button>
         </div>
         {assistantReply ? (
-          <p className="rounded-lg bg-zinc-50 px-3 py-2 text-sm text-zinc-700 ring-1 ring-zinc-200">{assistantReply}</p>
+          <p className="whitespace-pre-line rounded-lg bg-zinc-50 px-3 py-2 text-sm text-zinc-700 ring-1 ring-zinc-200">
+            {assistantReply}
+          </p>
         ) : null}
         {assistantPendingAction ? (
           <div className="flex gap-2">
@@ -2050,7 +2265,8 @@ export default function PedidosPage() {
             <label className="flex cursor-pointer items-center gap-2 text-xs text-zinc-700">
               <input
                 type="checkbox"
-                checked={assistantTtsEnabled}
+                checked={assistantTtsEnabled && !assistantTtsNatural}
+                disabled={assistantTtsNatural}
                 onChange={(e) => {
                   const on = e.target.checked;
                   setAssistantTtsEnabled(on);
@@ -2063,8 +2279,36 @@ export default function PedidosPage() {
                 }}
                 className="h-4 w-4 rounded border-zinc-400"
               />
-              Leer respuestas en voz del sistema (TTS)
+              Leer respuestas con voz del navegador (gratis, más robótica)
             </label>
+            {oidoChefAiEnabled ? (
+              <label className="flex cursor-pointer items-center gap-2 text-xs text-zinc-700">
+                <input
+                  type="checkbox"
+                  checked={assistantTtsNatural}
+                  onChange={(e) => {
+                    const on = e.target.checked;
+                    setAssistantTtsNatural(on);
+                    try {
+                      window.localStorage.setItem(OIDO_CHEF_TTS_NATURAL_LS_KEY, on ? '1' : '0');
+                    } catch {
+                      // ignore
+                    }
+                    if (on) {
+                      setAssistantTtsEnabled(false);
+                      try {
+                        window.localStorage.setItem(OIDO_CHEF_TTS_LS_KEY, '0');
+                      } catch {
+                        // ignore
+                      }
+                    }
+                    window.speechSynthesis?.cancel();
+                  }}
+                  className="h-4 w-4 rounded border-zinc-400"
+                />
+                Voz natural OpenAI (mp3, requiere OPENAI_API_KEY en servidor)
+              </label>
+            ) : null}
           </div>
         </details>
 

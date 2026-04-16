@@ -4,7 +4,7 @@ import React from 'react';
 import { ScanLine, X } from 'lucide-react';
 import { useAuth } from '@/components/AuthProvider';
 import { getSupabaseClient } from '@/lib/supabase-client';
-import { compressImageFileToJpeg, runTesseractOnJpeg } from '@/lib/pedidos-albaran-ocr';
+import { compressImageFileToJpeg, runAlbaranOcrViaTextract } from '@/lib/pedidos-albaran-ocr';
 import { uploadPedidoAlbaranAttachment } from '@/lib/pedidos-albaran-storage';
 import { buildAlbaranSuggestionsFromOcr, type AlbaranOcrLineSuggestion } from '@/lib/pedidos-albaran-suggest';
 import { applyAlbaranOcrPatches, type AlbaranOcrApplyPatch, type PedidoOrder } from '@/lib/pedidos-supabase';
@@ -61,14 +61,17 @@ export default function PedidosAlbaranOcrModal({ order, open, onClose, onApplied
     setError(null);
     setPhase('Comprimiendo imagen…');
     try {
+      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError || !sessionData.session?.access_token) {
+        setError('Sesión no válida. Vuelve a iniciar sesión.');
+        setPhase(null);
+        setBusy(false);
+        return;
+      }
       const blob = await compressImageFileToJpeg(file);
       setJpegBlob(blob);
-      setPhase('Leyendo texto (OCR)… puede tardar…');
-      const text = await runTesseractOnJpeg(blob, (p) => {
-        if (p.status === 'recognizing text') {
-          setPhase(`OCR… ${Math.round((p.progress || 0) * 100)}%`);
-        }
-      });
+      setPhase('Leyendo albarán con Textract…');
+      const text = await runAlbaranOcrViaTextract(blob, sessionData.session.access_token);
       setOcrText(text);
       const sug = buildAlbaranSuggestionsFromOcr(text, order.items);
       setSuggestions(sug);
@@ -77,7 +80,7 @@ export default function PedidosAlbaranOcrModal({ order, open, onClose, onApplied
       setApplyIds(init);
       setPhase(null);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Error en OCR.');
+      setError(e instanceof Error ? e.message : 'Error al leer el albarán.');
       setPhase(null);
     } finally {
       setBusy(false);
