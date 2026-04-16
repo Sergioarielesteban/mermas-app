@@ -810,7 +810,7 @@ export default function InventarioPage() {
       <MermasStyleHero
         eyebrow="Chef-One"
         title="Inventario"
-        compact
+        slim
         description="Stock y valor por artículo de tu local."
       />
 

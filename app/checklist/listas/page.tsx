@@ -25,6 +25,14 @@ import {
 
 const CONTEXTS: ChecklistContext[] = ['opening', 'shift_change', 'closing', 'hygiene_bathroom', 'custom'];
 
+function formatChecklistMutateError(e: unknown): string {
+  const raw = e instanceof Error ? e.message : String(e);
+  if (/foreign key|violates|chef_checklist/i.test(raw)) {
+    return 'No se puede borrar: esta lista o ítem tiene ejecuciones guardadas. Un administrador debe ejecutar en Supabase el script supabase-chef-ops-checklist-fk-cascade.sql (incluido en el proyecto); después el borrado funcionará y limpiará esas filas del historial.';
+  }
+  return raw;
+}
+
 export default function ChecklistListasPage() {
   const { localId, profileReady } = useAuth();
   const supabaseOk = isSupabaseEnabled() && getSupabaseClient();
@@ -106,7 +114,12 @@ export default function ChecklistListasPage() {
 
   const removeList = async (id: string) => {
     if (!localId || !supabaseOk) return;
-    if (!window.confirm('¿Eliminar esta lista y todo su contenido?')) return;
+    if (
+      !window.confirm(
+        '¿Eliminar esta lista y todo su contenido? También se borrarán las ejecuciones del historial vinculadas a esta lista.',
+      )
+    )
+      return;
     setBusy(true);
     try {
       const supabase = getSupabaseClient()!;
@@ -114,7 +127,7 @@ export default function ChecklistListasPage() {
       await load();
       if (openId === id) setOpenId(null);
     } catch (e) {
-      setBanner(e instanceof Error ? e.message : 'No se pudo eliminar.');
+      setBanner(formatChecklistMutateError(e));
     } finally {
       setBusy(false);
     }
@@ -167,7 +180,7 @@ export default function ChecklistListasPage() {
       await deleteChefChecklistSection(supabase, id);
       await load();
     } catch (e) {
-      setBanner(e instanceof Error ? e.message : 'Error al eliminar.');
+      setBanner(formatChecklistMutateError(e));
     } finally {
       setBusy(false);
     }
@@ -175,13 +188,19 @@ export default function ChecklistListasPage() {
 
   const removeItem = async (id: string) => {
     if (!supabaseOk) return;
+    if (
+      !window.confirm(
+        '¿Quitar este ítem? Las marcas de este ítem en ejecuciones antiguas también se eliminarán del historial.',
+      )
+    )
+      return;
     setBusy(true);
     try {
       const supabase = getSupabaseClient()!;
       await deleteChefChecklistItem(supabase, id);
       await load();
     } catch (e) {
-      setBanner(e instanceof Error ? e.message : 'Error al eliminar.');
+      setBanner(formatChecklistMutateError(e));
     } finally {
       setBusy(false);
     }
@@ -194,7 +213,7 @@ export default function ChecklistListasPage() {
 
   return (
     <div className="space-y-4 pb-10">
-      <MermasStyleHero eyebrow="Check list" title="Mis listas" compact />
+      <MermasStyleHero eyebrow="Check list" title="Mis listas" slim />
 
       <Link
         href="/checklist"
@@ -214,9 +233,9 @@ export default function ChecklistListasPage() {
         <p className="text-center text-sm text-zinc-500">Cargando…</p>
       ) : (
         <>
-          <section className="rounded-2xl border border-zinc-200/90 bg-white p-4 shadow-sm ring-1 ring-zinc-100">
+          <section className="rounded-2xl border border-zinc-200/90 bg-white p-3.5 shadow-sm ring-1 ring-zinc-100">
             <p className="text-xs font-extrabold uppercase tracking-wide text-zinc-500">Nueva lista</p>
-            <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-end">
+            <div className="mt-1.5 flex flex-col gap-2 sm:flex-row sm:items-end">
               <input
                 value={newTitle}
                 onChange={(e) => setNewTitle(e.target.value)}
@@ -244,7 +263,7 @@ export default function ChecklistListasPage() {
                 Crear
               </button>
             </div>
-            <div className="mt-3 flex flex-wrap gap-2">
+            <div className="mt-2.5 flex flex-wrap gap-2">
               <span className="w-full text-[10px] font-bold uppercase text-zinc-400">Atajos</span>
               <button
                 type="button"
@@ -294,7 +313,7 @@ export default function ChecklistListasPage() {
                   <button
                     type="button"
                     onClick={() => setOpenId(open ? null : c.id)}
-                    className="flex w-full items-center justify-between gap-3 px-4 py-3.5 text-left"
+                    className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left"
                   >
                     <div className="min-w-0">
                       <p className="truncate text-sm font-black text-zinc-900">{c.title}</p>
@@ -305,7 +324,7 @@ export default function ChecklistListasPage() {
                     <span className="shrink-0 text-xs font-bold text-zinc-400">{open ? '▲' : '▼'}</span>
                   </button>
                   {open ? (
-                    <div className="space-y-3 border-t border-zinc-100 px-4 py-3">
+                    <div className="space-y-2.5 border-t border-zinc-100 px-4 py-2.5">
                       <div className="flex flex-wrap gap-2">
                         <button
                           type="button"
@@ -356,7 +375,7 @@ export default function ChecklistListasPage() {
                       ) : null}
 
                       {sections.map((s) => (
-                        <div key={s.id} className="rounded-xl border border-zinc-200/80 bg-white/90 p-3 ring-1 ring-zinc-50">
+                        <div key={s.id} className="rounded-xl border border-zinc-200/80 bg-white/90 p-2.5 ring-1 ring-zinc-50">
                           <div className="flex items-center justify-between gap-2">
                             <p className="text-xs font-black uppercase tracking-wide text-zinc-700">{s.title}</p>
                             <div className="flex gap-1">
@@ -372,7 +391,7 @@ export default function ChecklistListasPage() {
                               </button>
                             </div>
                           </div>
-                          <ul className="mt-2 space-y-1">
+                          <ul className="mt-1.5 space-y-1">
                             {items
                               .filter((i) => i.sectionId === s.id)
                               .map((it) => (

@@ -225,3 +225,5 @@ create policy chef_production_run_tasks_rw on public.chef_production_run_tasks f
 
 -- Objetivos Lun–Jue / Vie–Dom por artículo y cantidades Hecho/Hacer por ejecución:
 -- ejecutar también supabase-chef-ops-production-stock-columns.sql
+
+-- Borrado de listas/ítems con historial: ejecutar supabase-chef-ops-checklist-fk-cascade.sql
