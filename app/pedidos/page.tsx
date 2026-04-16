@@ -2376,29 +2376,13 @@ export default function PedidosPage() {
         description="Crea pedidos, envía por WhatsApp y controla envíos y recepción en el local."
       />
 
-      <Link
-        href="/pedidos?oido=1"
-        className="group flex items-center justify-between gap-3 rounded-2xl border border-zinc-200/90 bg-gradient-to-r from-zinc-50 to-white px-4 py-3.5 shadow-sm ring-1 ring-zinc-900/5 transition hover:border-[#D32F2F]/25 hover:shadow-md"
-      >
-        <span className="flex min-w-0 items-center gap-3">
-          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#D32F2F]/10">
-            <Bot className="h-5 w-5 text-[#D32F2F]" />
-          </span>
-          <span className="min-w-0 text-left">
-            <span className="block text-sm font-bold text-zinc-900">Oído Chef</span>
-            <span className="mt-0.5 block text-[11px] text-zinc-500">Abrir asistente por voz o texto (pantalla aparte).</span>
-          </span>
-        </span>
-        <span className="shrink-0 text-xs font-bold text-[#D32F2F]">Abrir</span>
-      </Link>
-
-      <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-zinc-200">
-        <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-3">
-          <Link href="/pedidos/nuevo" className="flex h-15 items-center justify-center rounded-xl bg-[#D32F2F] px-3 text-center text-sm font-bold text-white">
-            + Nuevo pedido
-          </Link>
+      <section className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-zinc-200">
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
           <Link href="/pedidos/proveedores" className="flex h-10 items-center justify-center rounded-xl border border-zinc-300 bg-white px-3 text-center text-sm font-semibold text-zinc-700">
             Proveedores
+          </Link>
+          <Link href="/pedidos/precios" className="flex h-10 items-center justify-center rounded-xl border border-zinc-300 bg-white px-3 text-center text-sm font-semibold text-zinc-700">
+            Evolucion precios
           </Link>
         </div>
         <div className="mt-2">
@@ -2409,14 +2393,8 @@ export default function PedidosPage() {
             Recepción (cotejar precios)
           </Link>
         </div>
-        <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-3">
-          <Link href="/pedidos/calendario" className="rounded-xl border border-zinc-300 bg-white px-3 py-2 text-center text-sm font-semibold text-zinc-700">
-            Calendario entregas
-          </Link>
-          <Link href="/pedidos/precios" className="rounded-xl border border-zinc-300 bg-white px-3 py-2 text-center text-sm font-semibold text-zinc-700">
-            Evolucion precios
-          </Link>
-          <Link href="/pedidos/historial-mes" className="rounded-xl border border-zinc-300 bg-white px-3 py-2 text-center text-sm font-semibold text-zinc-700">
+        <div className="mt-2">
+          <Link href="/pedidos/historial-mes" className="flex h-10 items-center justify-center rounded-xl border border-zinc-300 bg-white px-3 text-center text-sm font-semibold text-zinc-700">
             Compras del mes
           </Link>
         </div>
@@ -2425,6 +2403,13 @@ export default function PedidosPage() {
       {message ? (
         <section className="rounded-2xl bg-white p-4 text-sm text-zinc-700 ring-1 ring-zinc-200">{message}</section>
       ) : null}
+
+      <Link
+        href="/pedidos/nuevo"
+        className="flex min-h-[2.75rem] items-center justify-center rounded-2xl bg-[#D32F2F] px-4 text-center text-sm font-bold text-white shadow-sm ring-1 ring-[#D32F2F]/20"
+      >
+        + Nuevo pedido
+      </Link>
 
       <details
         id="pedidos-pendientes-entrega"
@@ -2678,46 +2663,52 @@ export default function PedidosPage() {
                               : ''}
                           </p>
                         ) : null}
-                        {unitCanDeclareScaleKgOnReception(item.unit) ? (
-                          <div className="flex flex-wrap items-center gap-1.5">
-                            <label className="text-[11px] font-semibold text-zinc-600">Kg reales</label>
-                            <input
-                              type="text"
-                              inputMode="decimal"
-                              autoComplete="off"
-                              autoCorrect="off"
-                              placeholder="Ej: 12,5"
-                              value={
-                                weightInputByItemId[item.id] ??
-                                (item.receivedWeightKg != null ? String(item.receivedWeightKg) : '')
-                              }
-                              onChange={(e) =>
-                                setWeightInputByItemId((prev) => ({ ...prev, [item.id]: e.target.value }))
-                              }
-                              onBlur={() => commitWeightInput(order.id, item.id)}
-                              className="h-7 w-[3.25rem] max-w-[3.25rem] shrink-0 rounded-md border border-zinc-300 bg-white px-1 py-0.5 text-xs font-semibold text-zinc-900 outline-none sm:w-[4rem] sm:max-w-[4rem]"
-                            />
-                          </div>
-                        ) : null}
-                        {unitSupportsReceivedWeightKg(item.unit) ? (
-                          <div className="flex flex-wrap items-center gap-1.5">
-                            <label className="text-[11px] font-semibold text-zinc-600">€/kg real</label>
-                            <input
-                              type="text"
-                              inputMode="decimal"
-                              autoComplete="off"
-                              autoCorrect="off"
-                              placeholder="Ej: 3,45"
-                              value={
-                                pricePerKgInputByItemId[item.id] ??
-                                (item.receivedPricePerKg != null ? String(item.receivedPricePerKg) : '')
-                              }
-                              onChange={(e) =>
-                                setPricePerKgInputByItemId((prev) => ({ ...prev, [item.id]: e.target.value }))
-                              }
-                              onBlur={() => commitPricePerKgInput(order.id, item.id)}
-                              className="h-7 w-14 max-w-[5.5rem] shrink-0 rounded-md border border-zinc-300 bg-white px-1 py-0.5 text-xs font-semibold text-zinc-900 outline-none sm:w-[5rem]"
-                            />
+                        {unitCanDeclareScaleKgOnReception(item.unit) || unitSupportsReceivedWeightKg(item.unit) ? (
+                          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                            {unitCanDeclareScaleKgOnReception(item.unit) ? (
+                              <div className="flex items-center gap-1">
+                                <label className="shrink-0 text-[11px] font-semibold text-zinc-600">Kg</label>
+                                <input
+                                  type="text"
+                                  inputMode="decimal"
+                                  autoComplete="off"
+                                  autoCorrect="off"
+                                  placeholder="12,5"
+                                  title="Kg reales"
+                                  value={
+                                    weightInputByItemId[item.id] ??
+                                    (item.receivedWeightKg != null ? String(item.receivedWeightKg) : '')
+                                  }
+                                  onChange={(e) =>
+                                    setWeightInputByItemId((prev) => ({ ...prev, [item.id]: e.target.value }))
+                                  }
+                                  onBlur={() => commitWeightInput(order.id, item.id)}
+                                  className="h-7 w-[3.25rem] max-w-[3.25rem] shrink-0 rounded-md border border-zinc-300 bg-white px-1 py-0.5 text-xs font-semibold text-zinc-900 outline-none sm:w-[4rem] sm:max-w-[4rem]"
+                                />
+                              </div>
+                            ) : null}
+                            {unitSupportsReceivedWeightKg(item.unit) ? (
+                              <div className="flex items-center gap-1">
+                                <label className="shrink-0 text-[11px] font-semibold text-zinc-600">€/kg</label>
+                                <input
+                                  type="text"
+                                  inputMode="decimal"
+                                  autoComplete="off"
+                                  autoCorrect="off"
+                                  placeholder="3,45"
+                                  title="€/kg real"
+                                  value={
+                                    pricePerKgInputByItemId[item.id] ??
+                                    (item.receivedPricePerKg != null ? String(item.receivedPricePerKg) : '')
+                                  }
+                                  onChange={(e) =>
+                                    setPricePerKgInputByItemId((prev) => ({ ...prev, [item.id]: e.target.value }))
+                                  }
+                                  onBlur={() => commitPricePerKgInput(order.id, item.id)}
+                                  className="h-7 w-14 max-w-[5.5rem] shrink-0 rounded-md border border-zinc-300 bg-white px-1 py-0.5 text-xs font-semibold text-zinc-900 outline-none sm:w-[5rem]"
+                                />
+                              </div>
+                            ) : null}
                           </div>
                         ) : null}
                         <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-t border-zinc-100 pt-1.5">

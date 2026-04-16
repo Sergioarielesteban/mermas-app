@@ -653,58 +653,64 @@ export default function RecepcionPedidosPage() {
                             : ''}
                         </p>
                       ) : null}
-                      {unitCanDeclareScaleKgOnReception(item.unit) ? (
-                        <div className="flex flex-wrap items-center gap-1.5">
-                          <label className="text-[11px] font-semibold text-zinc-600">Kg reales</label>
-                          <input
-                            type="text"
-                            inputMode="decimal"
-                            autoComplete="off"
-                            autoCorrect="off"
-                            placeholder="Ej: 12,5"
-                            value={
-                              weightInputByItemId[item.id] ??
-                              (item.receivedWeightKg != null ? String(item.receivedWeightKg) : '')
-                            }
-                            onChange={(e) =>
-                              setWeightInputByItemId((prev) => ({ ...prev, [item.id]: e.target.value }))
-                            }
-                            onBlur={() => commitWeightInput(order.id, item.id)}
-                            className="h-7 w-[3.25rem] max-w-[3.25rem] shrink-0 rounded-md border border-zinc-300 bg-white px-1 py-0.5 text-xs font-semibold text-zinc-900 outline-none sm:w-[4rem] sm:max-w-[4rem]"
-                          />
-                          {item.receivedWeightKg != null && item.receivedWeightKg > 0 ? (
-                            <span className="text-[10px] text-zinc-500">
-                              {item.receivedWeightKg.toFixed(3)} kg
-                            </span>
+                      {unitCanDeclareScaleKgOnReception(item.unit) || unitSupportsReceivedWeightKg(item.unit) ? (
+                        <div className="space-y-0.5">
+                          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                            {unitCanDeclareScaleKgOnReception(item.unit) ? (
+                              <div className="flex items-center gap-1">
+                                <label className="shrink-0 text-[11px] font-semibold text-zinc-600">Kg</label>
+                                <input
+                                  type="text"
+                                  inputMode="decimal"
+                                  autoComplete="off"
+                                  autoCorrect="off"
+                                  placeholder="12,5"
+                                  title="Kg reales"
+                                  value={
+                                    weightInputByItemId[item.id] ??
+                                    (item.receivedWeightKg != null ? String(item.receivedWeightKg) : '')
+                                  }
+                                  onChange={(e) =>
+                                    setWeightInputByItemId((prev) => ({ ...prev, [item.id]: e.target.value }))
+                                  }
+                                  onBlur={() => commitWeightInput(order.id, item.id)}
+                                  className="h-7 w-[3.25rem] max-w-[3.25rem] shrink-0 rounded-md border border-zinc-300 bg-white px-1 py-0.5 text-xs font-semibold text-zinc-900 outline-none sm:w-[4rem] sm:max-w-[4rem]"
+                                />
+                                {item.receivedWeightKg != null && item.receivedWeightKg > 0 ? (
+                                  <span className="text-[10px] text-zinc-500">{item.receivedWeightKg.toFixed(3)}</span>
+                                ) : null}
+                              </div>
+                            ) : null}
+                            {unitSupportsReceivedWeightKg(item.unit) ? (
+                              <div className="flex items-center gap-1">
+                                <label className="shrink-0 text-[11px] font-semibold text-zinc-600">€/kg</label>
+                                <input
+                                  type="text"
+                                  inputMode="decimal"
+                                  autoComplete="off"
+                                  autoCorrect="off"
+                                  placeholder="3,45"
+                                  title="€/kg real"
+                                  value={
+                                    pricePerKgInputByItemId[item.id] ??
+                                    (item.receivedPricePerKg != null ? String(item.receivedPricePerKg) : '')
+                                  }
+                                  onChange={(e) =>
+                                    setPricePerKgInputByItemId((prev) => ({ ...prev, [item.id]: e.target.value }))
+                                  }
+                                  onBlur={() => commitPricePerKgInput(order.id, item.id)}
+                                  className="h-7 w-14 max-w-[5.5rem] shrink-0 rounded-md border border-zinc-300 bg-white px-1 py-0.5 text-xs font-semibold text-zinc-900 outline-none sm:w-[5rem]"
+                                />
+                              </div>
+                            ) : null}
+                          </div>
+                          {unitSupportsReceivedWeightKg(item.unit) ? (
+                            <p className="text-[10px] leading-tight text-zinc-500">
+                              {item.receivedPricePerKg != null && item.receivedPricePerKg > 0
+                                ? `≈ ${item.pricePerUnit.toFixed(2)} €/${unitPriceCatalogSuffix[item.unit]}`
+                                : '€/kg opcional si hay kg reales.'}
+                            </p>
                           ) : null}
-                        </div>
-                      ) : null}
-                      {unitSupportsReceivedWeightKg(item.unit) ? (
-                        <div className="flex flex-wrap items-center gap-1.5">
-                          <label className="text-[11px] font-semibold text-zinc-600">€/kg real</label>
-                          <input
-                            type="text"
-                            inputMode="decimal"
-                            autoComplete="off"
-                            autoCorrect="off"
-                            placeholder="Ej: 3,45"
-                            value={
-                              pricePerKgInputByItemId[item.id] ??
-                              (item.receivedPricePerKg != null ? String(item.receivedPricePerKg) : '')
-                            }
-                            onChange={(e) =>
-                              setPricePerKgInputByItemId((prev) => ({ ...prev, [item.id]: e.target.value }))
-                            }
-                            onBlur={() => commitPricePerKgInput(order.id, item.id)}
-                            className="h-7 w-14 max-w-[5.5rem] shrink-0 rounded-md border border-zinc-300 bg-white px-1 py-0.5 text-xs font-semibold text-zinc-900 outline-none sm:w-[5rem]"
-                          />
-                          {item.receivedPricePerKg != null && item.receivedPricePerKg > 0 ? (
-                            <span className="text-[10px] text-zinc-500">
-                              ≈ {item.pricePerUnit.toFixed(2)} €/{unitPriceCatalogSuffix[item.unit]}
-                            </span>
-                          ) : (
-                            <span className="text-[10px] text-zinc-500">Opcional con kg reales.</span>
-                          )}
                         </div>
                       ) : null}
                       <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-t border-zinc-100 pt-1.5">
