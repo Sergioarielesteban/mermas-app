@@ -54,10 +54,10 @@ function titleForPath(pathname: string | null) {
   }
   if (pathname.startsWith('/produccion')) {
     if (pathname === '/produccion') return 'Producción';
-    if (pathname.startsWith('/produccion/ejecutar')) return 'Ejecutar producción';
-    if (pathname.startsWith('/produccion/planes')) return 'Planes de producción';
+    if (pathname.startsWith('/produccion/ejecutar')) return 'Lista del día';
+    if (pathname.startsWith('/produccion/planes')) return 'Artículos y stocks';
     if (pathname.startsWith('/produccion/historial')) return 'Historial producción';
-    if (pathname.startsWith('/produccion/correr')) return 'Producción en curso';
+    if (pathname.startsWith('/produccion/correr')) return 'Lista en curso';
     return 'Producción';
   }
   if (pathname.startsWith('/inventario')) return 'Inventario';

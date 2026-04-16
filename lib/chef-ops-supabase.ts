@@ -89,6 +89,10 @@ export type ChefProductionTask = {
   label: string;
   sortOrder: number;
   hint: string | null;
+  /** Objetivo lunes–jueves (plantilla). */
+  stockLunJue: number | null;
+  /** Objetivo viernes–domingo (plantilla). */
+  stockVieDom: number | null;
 };
 
 export type ChefProductionRun = {
@@ -109,6 +113,8 @@ export type ChefProductionRunTask = {
   isDone: boolean;
   doneAt: string | null;
   qtyNote: string | null;
+  qtyOnHand: number | null;
+  qtyToMake: number | null;
 };
 
 function mapChecklist(r: Record<string, unknown>): ChefChecklist {
@@ -172,7 +178,34 @@ function mapTask(r: Record<string, unknown>): ChefProductionTask {
     label: String(r.label),
     sortOrder: Number(r.sort_order ?? 0),
     hint: r.hint != null ? String(r.hint) : null,
+    stockLunJue: r.stock_lun_jue != null && r.stock_lun_jue !== '' ? Number(r.stock_lun_jue) : null,
+    stockVieDom: r.stock_vie_dom != null && r.stock_vie_dom !== '' ? Number(r.stock_vie_dom) : null,
   };
+}
+
+/** Viernes–domingo vs lunes–jueves según la fecha (hora local). */
+export function productionStockBandForDate(isoDate: string): 'weekday' | 'weekend' {
+  const [y, m, d] = isoDate.slice(0, 10).split('-').map(Number);
+  const dt = new Date(y, m - 1, d);
+  const dow = dt.getDay();
+  if (dow === 0 || dow === 5 || dow === 6) return 'weekend';
+  return 'weekday';
+}
+
+export const PRODUCTION_STOCK_BAND_LABEL: Record<'weekday' | 'weekend', string> = {
+  weekday: 'Lun–Jue',
+  weekend: 'Vie–Dom',
+};
+
+export function targetForProductionBand(task: ChefProductionTask, band: 'weekday' | 'weekend'): number {
+  const v = band === 'weekend' ? task.stockVieDom : task.stockLunJue;
+  return v != null && !Number.isNaN(v) ? v : 0;
+}
+
+export function suggestQtyToMake(target: number, onHand: number | null): number {
+  const h = onHand != null && !Number.isNaN(onHand) ? onHand : 0;
+  const diff = target - h;
+  return diff > 0 ? diff : 0;
 }
 
 export async function fetchChefChecklist(
@@ -592,7 +625,7 @@ export async function deleteChefProductionSection(supabase: SupabaseClient, id: 
 export async function fetchChefProductionTasks(supabase: SupabaseClient, sectionId: string): Promise<ChefProductionTask[]> {
   const { data, error } = await supabase
     .from('chef_production_tasks')
-    .select('id,section_id,label,sort_order,hint')
+    .select('id,section_id,label,sort_order,hint,stock_lun_jue,stock_vie_dom')
     .eq('section_id', sectionId)
     .order('sort_order', { ascending: true });
   if (error) throw new Error(error.message);
@@ -602,7 +635,13 @@ export async function fetchChefProductionTasks(supabase: SupabaseClient, section
 export async function insertChefProductionTask(
   supabase: SupabaseClient,
   sectionId: string,
-  input: { label: string; hint?: string | null; sortOrder: number },
+  input: {
+    label: string;
+    hint?: string | null;
+    sortOrder: number;
+    stockLunJue?: number | null;
+    stockVieDom?: number | null;
+  },
 ): Promise<ChefProductionTask> {
   const { data, error } = await supabase
     .from('chef_production_tasks')
@@ -611,11 +650,33 @@ export async function insertChefProductionTask(
       label: input.label.trim(),
       hint: input.hint?.trim() || null,
       sort_order: input.sortOrder,
+      stock_lun_jue: input.stockLunJue ?? null,
+      stock_vie_dom: input.stockVieDom ?? null,
     })
-    .select('id,section_id,label,sort_order,hint')
+    .select('id,section_id,label,sort_order,hint,stock_lun_jue,stock_vie_dom')
     .single();
   if (error) throw new Error(error.message);
   return mapTask(data as Record<string, unknown>);
+}
+
+export async function updateChefProductionTask(
+  supabase: SupabaseClient,
+  taskId: string,
+  patch: {
+    label?: string;
+    hint?: string | null;
+    stockLunJue?: number | null;
+    stockVieDom?: number | null;
+  },
+): Promise<void> {
+  const row: Record<string, unknown> = {};
+  if (patch.label !== undefined) row.label = patch.label.trim();
+  if (patch.hint !== undefined) row.hint = patch.hint?.trim() || null;
+  if (patch.stockLunJue !== undefined) row.stock_lun_jue = patch.stockLunJue;
+  if (patch.stockVieDom !== undefined) row.stock_vie_dom = patch.stockVieDom;
+  if (Object.keys(row).length === 0) return;
+  const { error } = await supabase.from('chef_production_tasks').update(row).eq('id', taskId);
+  if (error) throw new Error(error.message);
 }
 
 export async function deleteChefProductionTask(supabase: SupabaseClient, id: string): Promise<void> {
@@ -665,7 +726,8 @@ export async function startChefProductionRun(
   userId: string | null,
 ): Promise<{ run: ChefProductionRun; tasks: ChefProductionTask[] }> {
   const tasks = await collectAllTasksForPlan(supabase, planId);
-  if (tasks.length === 0) throw new Error('Este plan no tiene tareas. Crea secciones y trabajos antes de ejecutarlo.');
+  if (tasks.length === 0)
+    throw new Error('Esta lista no tiene artículos. Añade categorías y artículos en Artículos y stocks antes de abrir el día.');
 
   const { data: runRow, error: runErr } = await supabase
     .from('chef_production_runs')
@@ -704,7 +766,7 @@ export async function fetchChefProductionRunTasks(
 ): Promise<ChefProductionRunTask[]> {
   const { data, error } = await supabase
     .from('chef_production_run_tasks')
-    .select('id,run_id,task_id,is_done,done_at,qty_note')
+    .select('id,run_id,task_id,is_done,done_at,qty_note,qty_on_hand,qty_to_make')
     .eq('run_id', runId);
   if (error) throw new Error(error.message);
   return (data ?? []).map((r) => ({
@@ -714,6 +776,8 @@ export async function fetchChefProductionRunTasks(
     isDone: Boolean(r.is_done),
     doneAt: r.done_at != null ? String(r.done_at) : null,
     qtyNote: r.qty_note != null ? String(r.qty_note) : null,
+    qtyOnHand: r.qty_on_hand != null && r.qty_on_hand !== '' ? Number(r.qty_on_hand) : null,
+    qtyToMake: r.qty_to_make != null && r.qty_to_make !== '' ? Number(r.qty_to_make) : null,
   }));
 }
 
@@ -729,6 +793,19 @@ export async function setChefProductionRunTaskDone(
   };
   if (qtyNote !== undefined) patch.qty_note = qtyNote?.trim() || null;
   const { error } = await supabase.from('chef_production_run_tasks').update(patch).eq('id', runTaskId);
+  if (error) throw new Error(error.message);
+}
+
+export async function updateChefProductionRunTaskQty(
+  supabase: SupabaseClient,
+  runTaskId: string,
+  patch: { qtyOnHand?: number | null; qtyToMake?: number | null },
+): Promise<void> {
+  const row: Record<string, unknown> = {};
+  if (patch.qtyOnHand !== undefined) row.qty_on_hand = patch.qtyOnHand;
+  if (patch.qtyToMake !== undefined) row.qty_to_make = patch.qtyToMake;
+  if (Object.keys(row).length === 0) return;
+  const { error } = await supabase.from('chef_production_run_tasks').update(row).eq('id', runTaskId);
   if (error) throw new Error(error.message);
 }
 

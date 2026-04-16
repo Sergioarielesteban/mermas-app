@@ -9,7 +9,6 @@ import { useAuth } from '@/components/AuthProvider';
 import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import {
-  PRODUCTION_CADENCE_LABEL,
   type ChefProductionPlan,
   fetchChefProductionPlans,
   fetchChefProductionSections,
@@ -97,7 +96,12 @@ export default function ProduccionEjecutarPage() {
 
   return (
     <div className="space-y-4 pb-10">
-      <MermasStyleHero eyebrow="Producción" title="Ejecutar" compact />
+      <MermasStyleHero
+        eyebrow="Producción"
+        title="Lista del día"
+        description="Elige la lista, la fecha de referencia y abre la hoja para rellenar Hecho y Hacer."
+        slim
+      />
 
       <Link
         href="/produccion"
@@ -118,10 +122,13 @@ export default function ProduccionEjecutarPage() {
       ) : (
         <>
           <section className="rounded-2xl border border-zinc-200/90 bg-white p-4 shadow-sm ring-1 ring-zinc-100">
-            <p className="text-xs font-extrabold uppercase tracking-wide text-zinc-500">Periodo</p>
+            <p className="text-xs font-extrabold uppercase tracking-wide text-zinc-500">Referencia del día</p>
+            <p className="mt-1 text-[11px] text-zinc-500">
+              Define qué día usa la app para proponer Lun–Jue o Vie–Dom; en la hoja puedes cambiar el tramo a mano.
+            </p>
             <div className="mt-3 grid gap-3 sm:grid-cols-2">
               <label className="block">
-                <span className="text-[11px] font-bold uppercase text-zinc-500">Fecha de inicio</span>
+                <span className="text-[11px] font-bold uppercase text-zinc-500">Fecha</span>
                 <input
                   type="date"
                   value={periodStart}
@@ -144,9 +151,9 @@ export default function ProduccionEjecutarPage() {
           <div className="space-y-2">
             {sorted.length === 0 ? (
               <p className="rounded-2xl border border-zinc-200 bg-zinc-50/80 px-4 py-6 text-center text-sm text-zinc-600">
-                No hay planes activos. Configura zonas y tareas en{' '}
+                No hay listas. Crea una y añade artículos en{' '}
                 <Link href="/produccion/planes" className="font-bold text-[#D32F2F] underline">
-                  Mis planes
+                  Artículos y stocks
                 </Link>
                 .
               </p>
@@ -162,7 +169,7 @@ export default function ProduccionEjecutarPage() {
                     <div className="min-w-0">
                       <p className="truncate text-sm font-black text-zinc-900">{p.name}</p>
                       <p className="mt-0.5 text-[10px] font-bold uppercase tracking-wide text-[#B91C1C]">
-                        {PRODUCTION_CADENCE_LABEL[p.cadence]} · {n} tareas
+                        {n} artículo{n === 1 ? '' : 's'}
                       </p>
                     </div>
                     <button

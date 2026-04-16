@@ -7,7 +7,6 @@ import MermasStyleHero from '@/components/MermasStyleHero';
 import { useAuth } from '@/components/AuthProvider';
 import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
 import {
-  PRODUCTION_CADENCE_LABEL,
   type ChefProductionPlan,
   type ChefProductionRun,
   fetchChefProductionPlansByIds,
@@ -85,7 +84,6 @@ export default function ProduccionHistorialPage() {
           {rows.map((r) => {
             const m = metaById[r.planId];
             const title = m?.name ?? 'Plan (desconocido o eliminado)';
-            const cad = m ? PRODUCTION_CADENCE_LABEL[m.cadence] : '—';
             const closed = Boolean(r.completedAt);
             return (
               <li key={r.id}>
@@ -97,7 +95,7 @@ export default function ProduccionHistorialPage() {
                     <div className="min-w-0">
                       <p className="truncate text-sm font-black text-zinc-900">{title}</p>
                       <p className="mt-0.5 text-[10px] font-bold uppercase tracking-wide text-zinc-500">
-                        {cad} · inicio {r.periodStart}
+                        Fecha {r.periodStart}
                         {r.periodLabel ? ` · ${r.periodLabel}` : ''}
                       </p>
                       <p className="mt-1 text-[11px] font-medium text-zinc-400">

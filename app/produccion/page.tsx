@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import type { LucideIcon } from 'lucide-react';
-import { ChevronLeft, Factory, History, ListTree, Play } from 'lucide-react';
+import { ChevronLeft, ClipboardList, History, ListTree, Play } from 'lucide-react';
 import { CHEF_ONE_TAPER_LINE_CLASS } from '@/components/ChefOneGlowLine';
 import MermasStyleHero from '@/components/MermasStyleHero';
 
@@ -39,9 +39,9 @@ export default function ProduccionHubPage() {
     <div className="space-y-5 pb-10">
       <MermasStyleHero
         eyebrow="Operaciones"
-        title="Producción"
-        description="Planes por cadencia (diaria, semanal…), zonas que tú nombras y tareas bajo cada zona. Independiente de Cocina central."
-        compact
+        title="Producción cocina"
+        description="Lista de elaborados con stock Lun–Jue y Vie–Dom. Cada día anotas lo que hay (Hecho) y ajustas lo que falta por hacer (Hacer), con sugerencia automática si quieres."
+        slim
       />
 
       <Link
@@ -55,22 +55,27 @@ export default function ProduccionHubPage() {
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <HubCard
           href="/produccion/ejecutar"
-          label="Ejecutar"
-          sub="Arrancar un plan con fecha y etiqueta de periodo"
+          label="Lista del día"
+          sub="Abrir la hoja con fecha y Hecho / Hacer"
           Icon={Play}
         />
-        <HubCard href="/produccion/planes" label="Mis planes" sub="Zonas, tareas y cadencia" Icon={ListTree} />
-        <HubCard href="/produccion/historial" label="Historial" sub="Últimas corridas de producción" Icon={History} />
+        <HubCard
+          href="/produccion/planes"
+          label="Artículos y stocks"
+          sub="Categorías, artículos y objetivos por tramo"
+          Icon={ListTree}
+        />
+        <HubCard href="/produccion/historial" label="Historial" sub="Listas cerradas por fecha" Icon={History} />
       </div>
 
       <section className="rounded-2xl border border-zinc-200/90 bg-white px-4 py-4 shadow-sm ring-1 ring-zinc-100">
         <div className="flex items-start gap-3">
-          <Factory className="mt-0.5 h-5 w-5 shrink-0 text-[#D32F2F]" strokeWidth={2.2} aria-hidden />
+          <ClipboardList className="mt-0.5 h-5 w-5 shrink-0 text-[#D32F2F]" strokeWidth={2.2} aria-hidden />
           <div>
-            <p className="text-sm font-bold text-zinc-900">Nivel premium</p>
+            <p className="text-sm font-bold text-zinc-900">Cómo encaja con vuestra hoja</p>
             <p className="mt-1 text-xs leading-relaxed text-zinc-600">
-              Ordena por verduras, cuarto frío, quesos o elaborados: los nombres y las tareas los defines tú. Ideal para
-              delegar y auditar sin mezclar con el módulo de Cocina central.
+              Los objetivos Lun–Jue y Vie–Dom los cambiáis cuando cambia la temporada. En el día solo contáis lo que hay:
+              el sugerido para Hacer es objetivo menos Hecho, pero podéis escribir cualquier cantidad.
             </p>
           </div>
         </div>

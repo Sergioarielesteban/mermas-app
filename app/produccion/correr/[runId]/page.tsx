@@ -2,13 +2,13 @@
 
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, CheckCircle2, Circle } from 'lucide-react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ArrowLeft, RotateCcw } from 'lucide-react';
 import MermasStyleHero from '@/components/MermasStyleHero';
 import { useAuth } from '@/components/AuthProvider';
 import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
 import {
-  PRODUCTION_CADENCE_LABEL,
+  PRODUCTION_STOCK_BAND_LABEL,
   type ChefProductionPlan,
   type ChefProductionRun,
   type ChefProductionRunTask,
@@ -20,8 +20,23 @@ import {
   fetchChefProductionRunTasks,
   fetchChefProductionSections,
   fetchChefProductionTasks,
-  setChefProductionRunTaskDone,
+  productionStockBandForDate,
+  suggestQtyToMake,
+  targetForProductionBand,
+  updateChefProductionRunTaskQty,
 } from '@/lib/chef-ops-supabase';
+
+function parseQty(s: string): number | null {
+  const t = s.trim().replace(',', '.');
+  if (t === '') return null;
+  const n = Number(t);
+  return Number.isFinite(n) ? n : null;
+}
+
+function fmtQty(n: number | null): string {
+  if (n == null || Number.isNaN(n)) return '';
+  return String(n);
+}
 
 export default function ProduccionCorrerPage() {
   const params = useParams();
@@ -36,9 +51,19 @@ export default function ProduccionCorrerPage() {
   const [sections, setSections] = useState<ChefProductionSection[]>([]);
   const [tasksBySection, setTasksBySection] = useState<Record<string, ChefProductionTask[]>>({});
   const [runTasks, setRunTasks] = useState<ChefProductionRunTask[]>([]);
-  const [notes, setNotes] = useState<Record<string, string>>({});
-  const [busyId, setBusyId] = useState<string | null>(null);
+  const [band, setBand] = useState<'weekday' | 'weekend'>('weekday');
+  const [hechoDraft, setHechoDraft] = useState<Record<string, string>>({});
+  const [hacerDraft, setHacerDraft] = useState<Record<string, string>>({});
+  /** Si el usuario edita «Hacer», dejamos de sobrescribirlo al cambiar «Hecho». */
+  const [hacerManual, setHacerManual] = useState<Record<string, boolean>>({});
+  const [savingId, setSavingId] = useState<string | null>(null);
   const [closing, setClosing] = useState(false);
+
+  const hechoRef = useRef(hechoDraft);
+  const hacerRef = useRef(hacerDraft);
+  hechoRef.current = hechoDraft;
+  hacerRef.current = hacerDraft;
+  const bandSeededForRunRef = useRef<string | null>(null);
 
   const load = useCallback(async () => {
     if (!runId || !localId || !supabaseOk) {
@@ -68,11 +93,14 @@ export default function ProduccionCorrerPage() {
       setTasksBySection(tb);
       const rt = await fetchChefProductionRunTasks(supabase, runId);
       setRunTasks(rt);
-      const noteMap: Record<string, string> = {};
+      const h: Record<string, string> = {};
+      const m: Record<string, string> = {};
       for (const x of rt) {
-        if (x.qtyNote) noteMap[x.id] = x.qtyNote;
+        h[x.id] = fmtQty(x.qtyOnHand);
+        m[x.id] = fmtQty(x.qtyToMake);
       }
-      setNotes(noteMap);
+      setHechoDraft(h);
+      setHacerDraft(m);
     } catch (e) {
       setBanner(e instanceof Error ? e.message : 'Error al cargar.');
     } finally {
@@ -85,39 +113,76 @@ export default function ProduccionCorrerPage() {
     void load();
   }, [profileReady, load]);
 
+  useEffect(() => {
+    setHacerManual({});
+    bandSeededForRunRef.current = null;
+  }, [runId]);
+
+  useEffect(() => {
+    if (!run?.id || !run.periodStart) return;
+    if (bandSeededForRunRef.current === run.id) return;
+    bandSeededForRunRef.current = run.id;
+    setBand(productionStockBandForDate(run.periodStart));
+  }, [run?.id, run?.periodStart]);
+
   const byTaskId = useMemo(() => {
     const m = new Map<string, ChefProductionRunTask>();
     for (const rt of runTasks) m.set(rt.taskId, rt);
     return m;
   }, [runTasks]);
 
-  const total = runTasks.length;
-  const doneCount = runTasks.filter((x) => x.isDone).length;
-  const allDone = total > 0 && doneCount === total;
   const isClosed = Boolean(run?.completedAt);
 
-  const toggle = async (rt: ChefProductionRunTask) => {
+  const persistRow = async (rt: ChefProductionRunTask, task: ChefProductionTask, syncHacerFromHecho: boolean) => {
     if (!supabaseOk || isClosed) return;
-    setBusyId(rt.id);
+    const supabase = getSupabaseClient()!;
+    const hStr = hechoRef.current[rt.id] ?? '';
+    const mStr = hacerRef.current[rt.id] ?? '';
+    const qtyOnHand = parseQty(hStr);
+    let qtyToMake = parseQty(mStr);
+    const target = targetForProductionBand(task, band);
+    const suggested = suggestQtyToMake(target, qtyOnHand);
+
+    if (syncHacerFromHecho && !hacerManual[rt.id]) {
+      qtyToMake = suggested;
+      setHacerDraft((prev) => ({ ...prev, [rt.id]: fmtQty(suggested) }));
+    }
+
+    setSavingId(rt.id);
+    setBanner(null);
+    try {
+      await updateChefProductionRunTaskQty(supabase, rt.id, { qtyOnHand, qtyToMake });
+      await load();
+    } catch (e) {
+      setBanner(e instanceof Error ? e.message : 'No se pudo guardar.');
+    } finally {
+      setSavingId(null);
+    }
+  };
+
+  const applySuggested = async (rt: ChefProductionRunTask, task: ChefProductionTask) => {
+    if (!supabaseOk || isClosed) return;
+    const target = targetForProductionBand(task, band);
+    const qtyOnHand = parseQty(hechoRef.current[rt.id] ?? '');
+    const suggested = suggestQtyToMake(target, qtyOnHand);
+    setHacerManual((prev) => ({ ...prev, [rt.id]: false }));
+    setHacerDraft((prev) => ({ ...prev, [rt.id]: fmtQty(suggested) }));
+    setSavingId(rt.id);
     setBanner(null);
     try {
       const supabase = getSupabaseClient()!;
-      const next = !rt.isDone;
-      const note = next ? notes[rt.id]?.trim() || null : null;
-      await setChefProductionRunTaskDone(supabase, rt.id, next, note);
+      await updateChefProductionRunTaskQty(supabase, rt.id, { qtyOnHand, qtyToMake: suggested });
       await load();
     } catch (e) {
-      setBanner(e instanceof Error ? e.message : 'No se pudo actualizar.');
+      setBanner(e instanceof Error ? e.message : 'No se pudo guardar.');
     } finally {
-      setBusyId(null);
+      setSavingId(null);
     }
   };
 
   const closeRun = async () => {
     if (!supabaseOk || !run || isClosed) return;
-    if (!allDone) {
-      if (!window.confirm('Aún faltan tareas. ¿Registrar cierre igualmente?')) return;
-    }
+    if (!window.confirm('¿Registrar cierre de esta lista? Podrás verla en el historial.')) return;
     setClosing(true);
     setBanner(null);
     try {
@@ -131,65 +196,16 @@ export default function ProduccionCorrerPage() {
     }
   };
 
-  const Row = ({ rt, task }: { rt: ChefProductionRunTask; task: ChefProductionTask }) => {
-    const loadingRow = busyId === rt.id;
-    return (
-      <div
-        className={[
-          'rounded-xl border px-3 py-3 ring-1 transition',
-          rt.isDone
-            ? 'border-emerald-200/90 bg-emerald-50/60 ring-emerald-100'
-            : 'border-zinc-200/90 bg-white ring-zinc-50',
-        ].join(' ')}
-      >
-        <button
-          type="button"
-          disabled={isClosed || loadingRow}
-          onClick={() => void toggle(rt)}
-          className={['flex w-full items-start gap-3 text-left', isClosed ? 'opacity-80' : ''].join(' ')}
-        >
-          {rt.isDone ? (
-            <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-emerald-600" strokeWidth={2.2} />
-          ) : (
-            <Circle className="mt-0.5 h-5 w-5 shrink-0 text-zinc-300" strokeWidth={2.2} />
-          )}
-          <div className="min-w-0 flex-1">
-            <p
-              className={`text-sm font-semibold leading-snug ${rt.isDone ? 'text-emerald-950 line-through decoration-emerald-700/50' : 'text-zinc-900'}`}
-            >
-              {task.label}
-            </p>
-            {task.hint ? <p className="mt-1 text-[11px] font-medium text-zinc-500">{task.hint}</p> : null}
-          </div>
-        </button>
-        {!isClosed && !rt.isDone ? (
-          <label className="mt-2 block pl-8">
-            <span className="text-[10px] font-bold uppercase text-zinc-400">Nota / cantidad (opcional)</span>
-            <input
-              value={notes[rt.id] ?? ''}
-              onChange={(e) => setNotes((prev) => ({ ...prev, [rt.id]: e.target.value }))}
-              className="mt-1 h-9 w-full rounded-lg border border-zinc-200 bg-zinc-50/80 px-2 text-xs font-semibold text-zinc-900 outline-none focus:border-[#D32F2F]/40"
-              placeholder="Ej. 6 kg, 2 bandejas…"
-            />
-          </label>
-        ) : null}
-        {rt.isDone && rt.qtyNote ? (
-          <p className="mt-2 pl-8 text-[11px] font-semibold text-emerald-900">Nota: {rt.qtyNote}</p>
-        ) : null}
-      </div>
-    );
-  };
-
   return (
     <div className="space-y-4 pb-10">
-      <MermasStyleHero eyebrow="Producción" title={plan?.name ?? 'Ejecución'} compact />
+      <MermasStyleHero eyebrow="Producción" title={plan?.name ?? 'Lista del día'} slim />
 
       <Link
         href="/produccion/ejecutar"
         className="inline-flex items-center gap-2 text-sm font-bold text-zinc-700 hover:text-[#D32F2F]"
       >
         <ArrowLeft className="h-4 w-4" />
-        Otros planes
+        Otras listas
       </Link>
 
       {banner ? (
@@ -203,35 +219,46 @@ export default function ProduccionCorrerPage() {
       ) : !run ? null : (
         <>
           <div className="rounded-2xl border border-zinc-200/90 bg-white p-4 shadow-sm ring-1 ring-zinc-100">
-            <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex flex-wrap items-end justify-between gap-3">
               <div>
-                <p className="text-[10px] font-black uppercase tracking-wide text-zinc-500">Cadencia</p>
-                <p className="text-sm font-bold text-zinc-900">{plan ? PRODUCTION_CADENCE_LABEL[plan.cadence] : '—'}</p>
-              </div>
-              <div className="text-right">
-                <p className="text-[10px] font-black uppercase tracking-wide text-zinc-500">Inicio periodo</p>
+                <p className="text-[10px] font-black uppercase tracking-wide text-zinc-500">Fecha de referencia</p>
                 <p className="text-sm font-bold text-zinc-900">{run.periodStart}</p>
+                {run.periodLabel ? (
+                  <p className="mt-1 text-xs font-semibold text-zinc-600">{run.periodLabel}</p>
+                ) : null}
+              </div>
+              <div className="flex flex-col items-stretch gap-1 sm:items-end">
+                <span className="text-[10px] font-black uppercase text-zinc-500">Objetivo de stock</span>
+                <div className="inline-flex rounded-xl border border-zinc-200 bg-zinc-50 p-0.5">
+                  <button
+                    type="button"
+                    disabled={isClosed}
+                    onClick={() => setBand('weekday')}
+                    className={[
+                      'rounded-lg px-3 py-1.5 text-[11px] font-black uppercase tracking-wide transition',
+                      band === 'weekday' ? 'bg-[#D32F2F] text-white shadow-sm' : 'text-zinc-600 hover:text-zinc-900',
+                    ].join(' ')}
+                  >
+                    Lun–Jue
+                  </button>
+                  <button
+                    type="button"
+                    disabled={isClosed}
+                    onClick={() => setBand('weekend')}
+                    className={[
+                      'rounded-lg px-3 py-1.5 text-[11px] font-black uppercase tracking-wide transition',
+                      band === 'weekend' ? 'bg-[#D32F2F] text-white shadow-sm' : 'text-zinc-600 hover:text-zinc-900',
+                    ].join(' ')}
+                  >
+                    Vie–Dom
+                  </button>
+                </div>
+                <p className="text-[10px] font-medium text-zinc-500">
+                  Por defecto según el día; puedes forzar el tramo si hace falta.
+                </p>
               </div>
             </div>
-            {run.periodLabel ? (
-              <p className="mt-2 text-xs font-semibold text-zinc-600">
-                Etiqueta: <span className="text-zinc-900">{run.periodLabel}</span>
-              </p>
-            ) : null}
-            <div className="mt-4">
-              <div className="mb-1 flex justify-between text-[11px] font-bold uppercase text-zinc-500">
-                <span>Progreso</span>
-                <span>
-                  {doneCount}/{total}
-                </span>
-              </div>
-              <div className="h-2 overflow-hidden rounded-full bg-zinc-100">
-                <div
-                  className="h-full rounded-full bg-[#D32F2F] transition-all duration-300"
-                  style={{ width: `${total ? Math.round((doneCount / total) * 100) : 0}%` }}
-                />
-              </div>
-            </div>
+
             {isClosed ? (
               <p className="mt-3 rounded-xl bg-emerald-50 px-3 py-2 text-center text-xs font-bold text-emerald-900 ring-1 ring-emerald-100">
                 Cerrada · {new Date(run.completedAt!).toLocaleString()}
@@ -262,7 +289,72 @@ export default function ProduccionCorrerPage() {
                       {tasks.map((t) => {
                         const rt = byTaskId.get(t.id);
                         if (!rt) return null;
-                        return <Row key={t.id} rt={rt} task={t} />;
+                        const target = targetForProductionBand(t, band);
+                        const onHand = parseQty(hechoDraft[rt.id] ?? '');
+                        const suggested = suggestQtyToMake(target, onHand);
+                        const saving = savingId === rt.id;
+                        return (
+                          <div
+                            key={t.id}
+                            className="rounded-xl border border-zinc-200/90 bg-white px-3 py-3 shadow-sm ring-1 ring-zinc-50"
+                          >
+                            <div className="flex flex-wrap items-start justify-between gap-2">
+                              <p className="text-sm font-bold leading-snug text-zinc-900">{t.label}</p>
+                              <span className="shrink-0 rounded-full bg-zinc-100 px-2 py-0.5 text-[10px] font-black uppercase text-zinc-600">
+                                {PRODUCTION_STOCK_BAND_LABEL[band]} · obj. {target}
+                              </span>
+                            </div>
+                            <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                              <label className="block sm:col-span-1">
+                                <span className="text-[10px] font-bold uppercase text-zinc-400">Hecho</span>
+                                <input
+                                  disabled={isClosed || saving}
+                                  inputMode="decimal"
+                                  value={hechoDraft[rt.id] ?? ''}
+                                  onChange={(e) =>
+                                    setHechoDraft((prev) => ({ ...prev, [rt.id]: e.target.value }))
+                                  }
+                                  onBlur={() => void persistRow(rt, t, true)}
+                                  className="mt-1 h-10 w-full rounded-lg border border-zinc-200 bg-zinc-50/80 px-2 text-sm font-semibold tabular-nums outline-none focus:border-[#D32F2F]/40 disabled:opacity-60"
+                                  placeholder="0"
+                                />
+                              </label>
+                              <label className="block sm:col-span-1">
+                                <span className="text-[10px] font-bold uppercase text-zinc-400">Hacer</span>
+                                <input
+                                  disabled={isClosed || saving}
+                                  inputMode="decimal"
+                                  value={hacerDraft[rt.id] ?? ''}
+                                  onChange={(e) => {
+                                    setHacerManual((prev) => ({ ...prev, [rt.id]: true }));
+                                    setHacerDraft((prev) => ({ ...prev, [rt.id]: e.target.value }));
+                                  }}
+                                  onBlur={() => void persistRow(rt, t, false)}
+                                  className="mt-1 h-10 w-full rounded-lg border border-zinc-200 bg-zinc-50/80 px-2 text-sm font-semibold tabular-nums outline-none focus:border-[#D32F2F]/40 disabled:opacity-60"
+                                  placeholder="0"
+                                />
+                              </label>
+                              <div className="col-span-2 flex flex-col justify-end gap-1 sm:col-span-2">
+                                <p className="text-[11px] font-semibold text-zinc-600">
+                                  Sugerido:{' '}
+                                  <span className="tabular-nums text-zinc-900">{suggested}</span>
+                                  <span className="font-normal text-zinc-400"> (= objetivo − hecho)</span>
+                                </p>
+                                {!isClosed ? (
+                                  <button
+                                    type="button"
+                                    disabled={saving}
+                                    onClick={() => void applySuggested(rt, t)}
+                                    className="inline-flex items-center gap-1 self-start rounded-lg border border-zinc-200 bg-white px-2 py-1 text-[10px] font-black uppercase text-zinc-700 hover:border-[#D32F2F]/30"
+                                  >
+                                    <RotateCcw className="h-3 w-3" />
+                                    Usar sugerido
+                                  </button>
+                                ) : null}
+                              </div>
+                            </div>
+                          </div>
+                        );
                       })}
                     </div>
                   </div>

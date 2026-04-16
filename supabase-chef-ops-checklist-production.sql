@@ -222,3 +222,6 @@ create policy chef_production_run_tasks_rw on public.chef_production_run_tasks f
   with check (
     exists (select 1 from public.chef_production_runs r where r.id = run_id and r.local_id = public.current_local_id())
   );
+
+-- Objetivos Lun–Jue / Vie–Dom por artículo y cantidades Hecho/Hacer por ejecución:
+-- ejecutar también supabase-chef-ops-production-stock-columns.sql
