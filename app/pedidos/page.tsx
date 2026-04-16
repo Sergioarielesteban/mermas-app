@@ -41,6 +41,16 @@ import {
   type PedidoOrder,
   type PedidoSupplier,
 } from '@/lib/pedidos-supabase';
+import {
+  createStaffMealRecord,
+  fetchStaffMealWorkers,
+  type StaffMealWorker,
+} from '@/lib/comida-personal-supabase';
+import {
+  fetchCleaningTasks,
+  fetchCleaningWeekdayItems,
+} from '@/lib/appcc-limpieza-supabase';
+import { fetchAppccColdUnits } from '@/lib/appcc-supabase';
 import { requestDeleteSecurityPin } from '@/lib/delete-security';
 
 function normalizeWhatsappNumber(raw: string | undefined) {
@@ -155,6 +165,14 @@ type AssistantPendingAction = {
   nextPrice: number;
 };
 
+type AssistantHistoryRow = {
+  at: string;
+  command: string;
+  result: string;
+};
+
+const ASSISTANT_HISTORY_LS_KEY = 'oido-chef-history-v1';
+
 export default function PedidosPage() {
   const { localCode, localName, localId, email } = useAuth();
   const hasPedidosEntry = canAccessPedidos(localCode, email, localName, localId);
@@ -215,6 +233,8 @@ export default function PedidosPage() {
   const [assistantInput, setAssistantInput] = React.useState('');
   const [assistantReply, setAssistantReply] = React.useState<string | null>(null);
   const [assistantPendingAction, setAssistantPendingAction] = React.useState<AssistantPendingAction | null>(null);
+  const [assistantBusy, setAssistantBusy] = React.useState(false);
+  const [assistantHistory, setAssistantHistory] = React.useState<AssistantHistoryRow[]>([]);
   const [assistantListening, setAssistantListening] = React.useState(false);
   const assistantRecognitionRef = React.useRef<{
     stop: () => void;
@@ -684,121 +704,255 @@ export default function PedidosPage() {
   }, [orders]);
   const receivedOrders = orders.filter((row) => row.status === 'received');
 
-  const runAssistantCommandFromText = React.useCallback((inputText: string) => {
+  const pushAssistantHistory = React.useCallback((command: string, result: string) => {
+    setAssistantHistory((prev) => {
+      const next: AssistantHistoryRow[] = [
+        { at: new Date().toISOString(), command: command.trim(), result: result.trim() },
+        ...prev,
+      ].slice(0, 20);
+      try {
+        if (typeof window !== 'undefined') {
+          window.localStorage.setItem(ASSISTANT_HISTORY_LS_KEY, JSON.stringify(next));
+        }
+      } catch {
+        // ignore localStorage errors
+      }
+      return next;
+    });
+  }, []);
+
+  const runAssistantCommandFromText = React.useCallback(async (inputText: string) => {
     const raw = inputText.trim();
     if (!raw) return;
     const normalized = normalizeText(raw);
     setAssistantPendingAction(null);
+    setAssistantBusy(true);
 
-    const weekMatch =
-      normalized.includes('esta semana') &&
-      (normalized.includes('a que precio') || normalized.includes('precio pague') || normalized.includes('precio pagamos'));
-    if (weekMatch) {
-      let productPart = normalized;
-      const patterns = [
-        /^busca(?:me)?(?:\s+a)?\s+que\s+precio\s+pague\s+/,
-        /^busca(?:me)?(?:\s+a)?\s+que\s+precio\s+pagamos\s+/,
-        /^a\s+que\s+precio\s+pague\s+/,
-        /^a\s+que\s+precio\s+pagamos\s+/,
-      ];
-      for (const p of patterns) {
-        productPart = productPart.replace(p, '');
-      }
-      productPart = productPart.replace(/\s+esta\s+semana$/, '').replace(/\s+/g, ' ').trim();
-      if (!productPart) {
-        setAssistantReply('No entendí el producto. Ejemplo: "buscame a qué precio pagué la lechuga esta semana".');
-        return;
-      }
-      const now = new Date();
-      const from = new Date(now);
-      from.setDate(now.getDate() - 7);
-      const fromTs = from.getTime();
-      const productNeedle = normalizeText(productPart).replace(/^el\s+|^la\s+|^los\s+|^las\s+/, '');
-      const rows: Array<{ supplier: string; product: string; price: number; date: string }> = [];
-      for (const o of orders) {
-        const when = new Date(o.receivedAt ?? o.sentAt ?? o.createdAt).getTime();
-        if (!Number.isFinite(when) || when < fromTs) continue;
-        for (const i of o.items) {
-          const name = normalizeText(i.productName);
-          if (!name.includes(productNeedle)) continue;
-          rows.push({
-            supplier: o.supplierName,
-            product: i.productName,
-            price: i.pricePerUnit,
-            date: new Date(o.receivedAt ?? o.sentAt ?? o.createdAt).toLocaleDateString('es-ES'),
-          });
+    try {
+      const weekMatch =
+        normalized.includes('esta semana') &&
+        (normalized.includes('a que precio') || normalized.includes('precio pague') || normalized.includes('precio pagamos'));
+      if (weekMatch) {
+        let productPart = normalized;
+        const patterns = [
+          /^busca(?:me)?(?:\s+a)?\s+que\s+precio\s+pague\s+/,
+          /^busca(?:me)?(?:\s+a)?\s+que\s+precio\s+pagamos\s+/,
+          /^a\s+que\s+precio\s+pague\s+/,
+          /^a\s+que\s+precio\s+pagamos\s+/,
+        ];
+        for (const p of patterns) {
+          productPart = productPart.replace(p, '');
         }
-      }
-      if (rows.length === 0) {
-        setAssistantReply(`No encontré compras recientes para "${productPart}" en los últimos 7 días.`);
-        return;
-      }
-      const prices = rows.map((r) => r.price);
-      const avg = prices.reduce((a, b) => a + b, 0) / prices.length;
-      const min = Math.min(...prices);
-      const max = Math.max(...prices);
-      const last = rows[0];
-      setAssistantReply(
-        `${last.product}: media ${avg.toFixed(2)} €, min ${min.toFixed(2)} €, max ${max.toFixed(2)} € (último: ${last.price.toFixed(2)} € en ${last.supplier}, ${last.date}).`,
-      );
-      return;
-    }
-
-    const updateMatch = normalized.match(/(?:oido chef[, ]*)?(?:actualiza|cambia|pon)\s+(.+?)\s+a\s+(\d+(?:[.,]\d{1,4})?)/);
-    if (updateMatch) {
-      const productNeedle = normalizeText(updateMatch[1]).replace(/^el\s+|^la\s+|^los\s+|^las\s+/, '');
-      const nextPrice = Number(updateMatch[2].replace(',', '.'));
-      if (!Number.isFinite(nextPrice) || nextPrice <= 0) {
-        setAssistantReply('El precio no es válido.');
-        return;
-      }
-      const candidates: Array<{ orderId: string; supplierName: string; itemId: string; productName: string; price: number }> = [];
-      for (const o of sentOrders) {
-        for (const i of o.items) {
-          if (normalizeText(i.productName).includes(productNeedle)) {
-            candidates.push({
-              orderId: o.id,
-              supplierName: o.supplierName,
-              itemId: i.id,
-              productName: i.productName,
+        productPart = productPart.replace(/\s+esta\s+semana$/, '').replace(/\s+/g, ' ').trim();
+        if (!productPart) {
+          const msg = 'No entendí el producto. Ejemplo: "buscame a qué precio pagué la lechuga esta semana".';
+          setAssistantReply(msg);
+          pushAssistantHistory(raw, msg);
+          return;
+        }
+        const now = new Date();
+        const from = new Date(now);
+        from.setDate(now.getDate() - 7);
+        const fromTs = from.getTime();
+        const productNeedle = normalizeText(productPart).replace(/^el\s+|^la\s+|^los\s+|^las\s+/, '');
+        const rows: Array<{ supplier: string; product: string; price: number; date: string }> = [];
+        for (const o of orders) {
+          const when = new Date(o.receivedAt ?? o.sentAt ?? o.createdAt).getTime();
+          if (!Number.isFinite(when) || when < fromTs) continue;
+          for (const i of o.items) {
+            const name = normalizeText(i.productName);
+            if (!name.includes(productNeedle)) continue;
+            rows.push({
+              supplier: o.supplierName,
+              product: i.productName,
               price: i.pricePerUnit,
+              date: new Date(o.receivedAt ?? o.sentAt ?? o.createdAt).toLocaleDateString('es-ES'),
             });
           }
         }
-      }
-      if (candidates.length === 0) {
-        setAssistantReply(`No encontré "${updateMatch[1]}" en pedidos enviados.`);
+        if (rows.length === 0) {
+          const msg = `No encontré compras recientes para "${productPart}" en los últimos 7 días.`;
+          setAssistantReply(msg);
+          pushAssistantHistory(raw, msg);
+          return;
+        }
+        const prices = rows.map((r) => r.price);
+        const avg = prices.reduce((a, b) => a + b, 0) / prices.length;
+        const min = Math.min(...prices);
+        const max = Math.max(...prices);
+        const last = rows[0];
+        const msg = `${last.product}: media ${avg.toFixed(2)} €, min ${min.toFixed(2)} €, max ${max.toFixed(2)} € (último: ${last.price.toFixed(2)} € en ${last.supplier}, ${last.date}).`;
+        setAssistantReply(msg);
+        pushAssistantHistory(raw, msg);
         return;
       }
-      if (candidates.length > 1) {
-        setAssistantReply(
-          `Encontré varias coincidencias de "${updateMatch[1]}". Sé más específico con proveedor o nombre completo.`,
-        );
-        return;
-      }
-      const c = candidates[0];
-      setAssistantPendingAction({
-        kind: 'update_price',
-        orderId: c.orderId,
-        itemId: c.itemId,
-        productName: c.productName,
-        supplierName: c.supplierName,
-        previousPrice: c.price,
-        nextPrice: Math.round(nextPrice * 100) / 100,
-      });
-      setAssistantReply(
-        `¿Confirmas actualizar ${c.productName} (${c.supplierName}) de ${c.price.toFixed(2)} € a ${nextPrice.toFixed(2)} €?`,
-      );
-      return;
-    }
 
-    setAssistantReply(
-      'No entendí el comando. Prueba: "buscame a qué precio pagué la lechuga esta semana" o "actualiza bacon a 7,80".',
-    );
-  }, [orders, sentOrders]);
+      const mealsTodayMatch =
+        normalized.includes('cuantas comidas') &&
+        (normalized.includes('hoy') || normalized.includes('de hoy') || normalized.includes('registramos hoy'));
+      if (mealsTodayMatch) {
+        const today = new Date().toISOString().slice(0, 10);
+        const total = orders
+          .flatMap((o) => o.items)
+          .reduce((acc, i) => acc + (today ? 0 : 0), 0);
+        // Pedidos module has no comida rows loaded; compute via Supabase.
+        if (!localId) return;
+        const supabase = getSupabaseClient();
+        if (!supabase) return;
+        const { data, error } = await supabase
+          .from('staff_meal_records')
+          .select('people_count,total_cost_eur')
+          .eq('local_id', localId)
+          .eq('meal_date', today)
+          .is('voided_at', null);
+        if (error) throw new Error(error.message);
+        const units = (data ?? []).reduce((acc, r) => acc + Number((r as { people_count: number }).people_count ?? 0), 0);
+        const records = (data ?? []).length;
+        const msg = `Hoy lleváis ${records} líneas de comida personal (${units.toFixed(0)} uds).`;
+        setAssistantReply(msg);
+        pushAssistantHistory(raw, msg);
+        return;
+      }
+
+      const ownMealMatch = normalized.match(/registra(?:r)?\s+comida\s+propia\s+para\s+(.+)/);
+      if (ownMealMatch) {
+        if (!localId) return;
+        const workerNeedle = normalizeText(ownMealMatch[1]).trim();
+        const supabase = getSupabaseClient();
+        if (!supabase) return;
+        const workers = await fetchStaffMealWorkers(supabase, localId);
+        const matches = workers.filter((w) => normalizeText(w.name).includes(workerNeedle));
+        if (matches.length === 0) {
+          const msg = `No encontré trabajador para "${ownMealMatch[1]}".`;
+          setAssistantReply(msg);
+          pushAssistantHistory(raw, msg);
+          return;
+        }
+        if (matches.length > 1) {
+          const msg = `Hay varios trabajadores que coinciden con "${ownMealMatch[1]}". Sé más específico.`;
+          setAssistantReply(msg);
+          pushAssistantHistory(raw, msg);
+          return;
+        }
+        const worker: StaffMealWorker = matches[0];
+        const today = new Date().toISOString().slice(0, 10);
+        await createStaffMealRecord(supabase, localId, {
+          service: 'comida',
+          mealDate: today,
+          peopleCount: 1,
+          unitCostEur: 0,
+          workerId: worker.id,
+          workerName: worker.name,
+          sourceProductId: null,
+          sourceProductName: 'Comida propia',
+          notes: 'Registrado desde Oído Chef',
+        });
+        const msg = `Registrado: comida propia para ${worker.name} (hoy, coste 0).`;
+        setAssistantReply(msg);
+        pushAssistantHistory(raw, msg);
+        return;
+      }
+
+      const cleaningTodayMatch =
+        normalized.includes('que toca limpiar hoy') ||
+        normalized.includes('que toca hoy') ||
+        normalized.includes('limpieza de hoy');
+      if (cleaningTodayMatch) {
+        if (!localId) return;
+        const supabase = getSupabaseClient();
+        if (!supabase) return;
+        const [tasks, units, schedule] = await Promise.all([
+          fetchCleaningTasks(supabase, localId, true),
+          fetchAppccColdUnits(supabase, localId, true),
+          fetchCleaningWeekdayItems(supabase, localId),
+        ]);
+        const wd = new Date().getDay();
+        const rows = schedule.filter((s) => s.weekday === wd);
+        if (rows.length === 0) {
+          const msg = 'Hoy no hay tareas programadas en el cronograma de limpieza.';
+          setAssistantReply(msg);
+          pushAssistantHistory(raw, msg);
+          return;
+        }
+        const lines = rows
+          .map((r) => {
+            if (r.task_id) return tasks.find((t) => t.id === r.task_id)?.title ?? null;
+            if (r.cold_unit_id) return units.find((u) => u.id === r.cold_unit_id)?.name ?? null;
+            return null;
+          })
+          .filter(Boolean) as string[];
+        const msg = `Hoy toca: ${lines.join(' · ')}`;
+        setAssistantReply(msg);
+        pushAssistantHistory(raw, msg);
+        return;
+      }
+
+      const updateMatch = normalized.match(/(?:oido chef[, ]*)?(?:actualiza|cambia|pon)\s+(.+?)\s+a\s+(\d+(?:[.,]\d{1,4})?)/);
+      if (updateMatch) {
+        const productNeedle = normalizeText(updateMatch[1]).replace(/^el\s+|^la\s+|^los\s+|^las\s+/, '');
+        const nextPrice = Number(updateMatch[2].replace(',', '.'));
+        if (!Number.isFinite(nextPrice) || nextPrice <= 0) {
+          const msg = 'El precio no es válido.';
+          setAssistantReply(msg);
+          pushAssistantHistory(raw, msg);
+          return;
+        }
+        const candidates: Array<{ orderId: string; supplierName: string; itemId: string; productName: string; price: number }> = [];
+        for (const o of sentOrders) {
+          for (const i of o.items) {
+            if (normalizeText(i.productName).includes(productNeedle)) {
+              candidates.push({
+                orderId: o.id,
+                supplierName: o.supplierName,
+                itemId: i.id,
+                productName: i.productName,
+                price: i.pricePerUnit,
+              });
+            }
+          }
+        }
+        if (candidates.length === 0) {
+          const msg = `No encontré "${updateMatch[1]}" en pedidos enviados.`;
+          setAssistantReply(msg);
+          pushAssistantHistory(raw, msg);
+          return;
+        }
+        if (candidates.length > 1) {
+          const msg = `Encontré varias coincidencias de "${updateMatch[1]}". Sé más específico con proveedor o nombre completo.`;
+          setAssistantReply(msg);
+          pushAssistantHistory(raw, msg);
+          return;
+        }
+        const c = candidates[0];
+        setAssistantPendingAction({
+          kind: 'update_price',
+          orderId: c.orderId,
+          itemId: c.itemId,
+          productName: c.productName,
+          supplierName: c.supplierName,
+          previousPrice: c.price,
+          nextPrice: Math.round(nextPrice * 100) / 100,
+        });
+        const msg = `¿Confirmas actualizar ${c.productName} (${c.supplierName}) de ${c.price.toFixed(2)} € a ${nextPrice.toFixed(2)} €?`;
+        setAssistantReply(msg);
+        return;
+      }
+
+      const msg =
+        'No entendí el comando. Prueba: "buscame a qué precio pagué la lechuga esta semana", "registra comida propia para Ana", "qué toca limpiar hoy" o "actualiza bacon a 7,80".';
+      setAssistantReply(msg);
+      pushAssistantHistory(raw, msg);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Error procesando el comando.';
+      setAssistantReply(msg);
+      pushAssistantHistory(raw, msg);
+    } finally {
+      setAssistantBusy(false);
+    }
+  }, [localId, orders, pushAssistantHistory, sentOrders]);
 
   const runAssistantCommand = React.useCallback(() => {
-    runAssistantCommandFromText(assistantInput);
+    void runAssistantCommandFromText(assistantInput);
   }, [assistantInput, runAssistantCommandFromText]);
 
   const confirmAssistantAction = React.useCallback(() => {
@@ -831,18 +985,40 @@ export default function PedidosPage() {
       );
       void updateOrderItemPrice(supabase, localId, item.id, assistantPendingAction.nextPrice, qty)
         .then(() => {
-          setAssistantReply(`Actualizado: ${assistantPendingAction.productName} a ${assistantPendingAction.nextPrice.toFixed(2)} €.`);
+          const msg = `Actualizado: ${assistantPendingAction.productName} a ${assistantPendingAction.nextPrice.toFixed(2)} €.`;
+          setAssistantReply(msg);
+          pushAssistantHistory(
+            `actualiza ${assistantPendingAction.productName} a ${assistantPendingAction.nextPrice.toFixed(2)}`,
+            msg,
+          );
           setAssistantPendingAction(null);
           void reloadOrders();
           dispatchPedidosDataChanged();
         })
         .catch((err: Error) => {
           void reloadOrders();
-          setAssistantReply(`Error al actualizar: ${err.message}`);
+          const msg = `Error al actualizar: ${err.message}`;
+          setAssistantReply(msg);
+          pushAssistantHistory(
+            `actualiza ${assistantPendingAction.productName} a ${assistantPendingAction.nextPrice.toFixed(2)}`,
+            msg,
+          );
           setAssistantPendingAction(null);
         });
     }
-  }, [assistantPendingAction, localId, orders, reloadOrders, setOrders]);
+  }, [assistantPendingAction, localId, orders, pushAssistantHistory, reloadOrders, setOrders]);
+
+  React.useEffect(() => {
+    try {
+      if (typeof window === 'undefined') return;
+      const raw = window.localStorage.getItem(ASSISTANT_HISTORY_LS_KEY);
+      if (!raw) return;
+      const parsed = JSON.parse(raw) as AssistantHistoryRow[];
+      if (Array.isArray(parsed)) setAssistantHistory(parsed.slice(0, 20));
+    } catch {
+      // ignore localStorage errors
+    }
+  }, []);
 
   const startAssistantVoice = React.useCallback(() => {
     if (assistantListening) return;
@@ -879,7 +1055,7 @@ export default function PedidosPage() {
       const last = event.results?.[event.results.length - 1];
       if (last?.isFinal && text) {
         setAssistantInput(text);
-        runAssistantCommandFromText(text);
+        void runAssistantCommandFromText(text);
       }
     };
     assistantRecognitionRef.current = recognition;
@@ -1073,7 +1249,7 @@ export default function PedidosPage() {
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') {
                     e.preventDefault();
-                    runAssistantCommand();
+                    void runAssistantCommand();
                   }
                 }}
                 placeholder="Escribe una orden..."
@@ -1081,10 +1257,11 @@ export default function PedidosPage() {
               />
               <button
                 type="button"
-                onClick={runAssistantCommand}
-                className="h-11 rounded-xl bg-zinc-900 px-3 text-xs font-bold text-white"
+                onClick={() => void runAssistantCommand()}
+                disabled={assistantBusy}
+                className="h-11 rounded-xl bg-zinc-900 px-3 text-xs font-bold text-white disabled:opacity-60"
               >
-                Ejecutar
+                {assistantBusy ? 'Pensando…' : 'Ejecutar'}
               </button>
               <button
                 type="button"
@@ -1117,13 +1294,31 @@ export default function PedidosPage() {
                 <button
                   type="button"
                   onClick={() => {
+                    const cmd =
+                      assistantPendingAction?.kind === 'update_price'
+                        ? `actualiza ${assistantPendingAction.productName} a ${assistantPendingAction.nextPrice.toFixed(2)}`
+                        : 'acción pendiente';
                     setAssistantPendingAction(null);
                     setAssistantReply('Acción cancelada.');
+                    pushAssistantHistory(cmd, 'Acción cancelada.');
                   }}
                   className="h-10 rounded-lg border border-zinc-300 bg-white px-3 text-xs font-bold text-zinc-700"
                 >
                   Cancelar
                 </button>
+              </div>
+            ) : null}
+            {assistantHistory.length > 0 ? (
+              <div className="rounded-lg border border-zinc-200 bg-white p-2">
+                <p className="px-1 text-[10px] font-bold uppercase tracking-wide text-zinc-500">Últimos comandos</p>
+                <ul className="mt-1 max-h-36 space-y-1 overflow-y-auto">
+                  {assistantHistory.slice(0, 5).map((row, idx) => (
+                    <li key={`${row.at}-${idx}`} className="rounded-md bg-zinc-50 px-2 py-1 text-[11px] ring-1 ring-zinc-200">
+                      <p className="truncate font-semibold text-zinc-800">{row.command}</p>
+                      <p className="truncate text-zinc-600">{row.result}</p>
+                    </li>
+                  ))}
+                </ul>
               </div>
             ) : null}
           </div>
