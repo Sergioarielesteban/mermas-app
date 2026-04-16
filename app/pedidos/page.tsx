@@ -2155,6 +2155,14 @@ export default function PedidosPage() {
             Proveedores
           </Link>
         </div>
+        <div className="mt-2">
+          <Link
+            href="/pedidos/recepcion"
+            className="block w-full rounded-xl border border-[#D32F2F]/35 bg-[#D32F2F]/8 px-3 py-2.5 text-center text-sm font-bold text-[#B91C1C] ring-1 ring-[#D32F2F]/15"
+          >
+            Recepción y albarán (OCR)
+          </Link>
+        </div>
         <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-3">
           <Link href="/pedidos/calendario" className="rounded-xl border border-zinc-300 bg-white px-3 py-2 text-center text-sm font-semibold text-zinc-700">
             Calendario entregas
