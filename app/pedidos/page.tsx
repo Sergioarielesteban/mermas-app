@@ -10,6 +10,7 @@ import { CHEF_ONE_TAPER_LINE_CLASS } from '@/components/ChefOneGlowLine';
 import { usePedidosOrders } from '@/components/PedidosOrdersProvider';
 import { getSupabaseClient } from '@/lib/supabase-client';
 import MermasStyleHero from '@/components/MermasStyleHero';
+import PedidosAlbaranOcrModal from '@/components/PedidosAlbaranOcrModal';
 import PedidosPremiaLockedScreen from '@/components/PedidosPremiaLockedScreen';
 import { dispatchPedidosDataChanged, usePedidosDataChangedListener } from '@/hooks/usePedidosDataChangedListener';
 import { canAccessPedidos, canUsePedidosModule } from '@/lib/pedidos-access';
@@ -239,6 +240,7 @@ export default function PedidosPage() {
 );
 
   const [expandedSentId, setExpandedSentId] = React.useState<string | null>(null);
+  const [ocrOrder, setOcrOrder] = React.useState<PedidoOrder | null>(null);
   const [expandedHistoricoId, setExpandedHistoricoId] = React.useState<string | null>(null);
   const [pendientesEntregaAccordionOpen, setPendientesEntregaAccordionOpen] = React.useState(false);
   const [historicoRecibidosAccordionOpen, setHistoricoRecibidosAccordionOpen] = React.useState(false);
@@ -2160,7 +2162,7 @@ export default function PedidosPage() {
             href="/pedidos/recepcion"
             className="block w-full rounded-xl border border-[#D32F2F]/35 bg-[#D32F2F]/8 px-3 py-2.5 text-center text-sm font-bold text-[#B91C1C] ring-1 ring-[#D32F2F]/15"
           >
-            Recepción y albarán (OCR)
+            Recepción (cotejar precios)
           </Link>
         </div>
         <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-3">
@@ -2312,6 +2314,22 @@ export default function PedidosPage() {
               {renderSentOrderReceiveAndIncident(order)}
               {expandedSentId === order.id ? (
                 <div className="mt-3 space-y-3 text-left">
+                  <div className="rounded-xl border border-[#D32F2F]/30 bg-white px-3 py-3 ring-1 ring-[#D32F2F]/12 shadow-sm">
+                    <p className="text-center text-[11px] font-black uppercase tracking-wide text-[#B91C1C]">
+                      Albarán · OCR
+                    </p>
+                    <p className="mt-1 text-center text-[10px] leading-snug text-zinc-600">
+                      Sube una foto del albarán para sugerir cantidades y precios en las líneas de abajo (siempre
+                      revisables).
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => setOcrOrder(order)}
+                      className="mt-2.5 w-full rounded-xl border border-[#D32F2F]/45 bg-[#D32F2F]/10 py-2.5 text-center text-[11px] font-black uppercase tracking-wide text-[#B91C1C] transition active:scale-[0.99]"
+                    >
+                      Escanear albarán
+                    </button>
+                  </div>
                   {order.notes?.trim() ? (
                     <div className="rounded-xl border border-amber-200 bg-amber-50/90 px-3 py-2.5">
                       <p className="text-[10px] font-bold uppercase tracking-wide text-amber-900/80">Notas del pedido</p>
@@ -2754,6 +2772,16 @@ export default function PedidosPage() {
         </div>
       </details>
 
+      <PedidosAlbaranOcrModal
+        order={ocrOrder}
+        open={ocrOrder != null}
+        onClose={() => setOcrOrder(null)}
+        onApplied={() => {
+          reloadOrders();
+          dispatchPedidosDataChanged();
+          setMessage('Albarán OCR guardado. Revisa cantidades y precios en el pedido.');
+        }}
+      />
     </div>
   );
 }

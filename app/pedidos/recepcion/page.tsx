@@ -7,7 +7,6 @@ import { ChevronDown } from 'lucide-react';
 import { useAuth } from '@/components/AuthProvider';
 import { usePedidosOrders } from '@/components/PedidosOrdersProvider';
 import { CHEF_ONE_TAPER_LINE_CLASS } from '@/components/ChefOneGlowLine';
-import PedidosAlbaranOcrModal from '@/components/PedidosAlbaranOcrModal';
 import { getSupabaseClient } from '@/lib/supabase-client';
 import PedidosPremiaLockedScreen from '@/components/PedidosPremiaLockedScreen';
 import { dispatchPedidosDataChanged } from '@/hooks/usePedidosDataChangedListener';
@@ -86,7 +85,6 @@ export default function RecepcionPedidosPage() {
   const [expandedPendingOrderId, setExpandedPendingOrderId] = React.useState<string | null>(null);
   const [archivedAccordionOpen, setArchivedAccordionOpen] = React.useState(true);
   const [expandedArchivedOrderId, setExpandedArchivedOrderId] = React.useState<string | null>(null);
-  const [ocrOrder, setOcrOrder] = React.useState<PedidoOrder | null>(null);
   const focusOrderIdFromUrl = searchParams.get('orderId') ?? '';
   const focusOrderAppliedRef = React.useRef(false);
 
@@ -553,9 +551,6 @@ export default function RecepcionPedidosPage() {
           <h1 className="text-sm font-black uppercase tracking-[0.14em] text-zinc-800">
             Pendientes de revisión de precios
           </h1>
-          <p className="mt-2 text-[11px] font-medium leading-snug text-zinc-500">
-            En cada pedido: «Ver detalle» para editar líneas · «Escanear albarán» para OCR (visible sin desplegar).
-          </p>
         </div>
         <div className="space-y-3 p-4">
           {message ? (
@@ -564,13 +559,7 @@ export default function RecepcionPedidosPage() {
             </p>
           ) : null}
           {pendingPriceReviewOrders.length === 0 ? (
-            <div className="space-y-2 text-center">
-              <p className="text-sm text-zinc-600">No hay pedidos en la bandeja superior de revisión.</p>
-              <p className="text-xs text-zinc-500">
-                Si ya pulsaste «revisado», abre <span className="font-semibold text-zinc-700">Archivados</span> abajo,
-                despliega un pedido y verás <span className="font-semibold text-[#B91C1C]">Escanear albarán</span>.
-              </p>
-            </div>
+            <p className="text-center text-sm text-zinc-500">No hay pedidos pendientes de revisión.</p>
           ) : null}
           {pendingPriceReviewOrders.map((order) => {
             const orderIncidentMode =
@@ -601,27 +590,18 @@ export default function RecepcionPedidosPage() {
                     «revisado» para archivar en la parte inferior.
                   </p>
                 ) : null}
-                <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setExpandedPendingOrderId((id) => (id === order.id ? null : order.id))}
-                    className="inline-flex items-center gap-2 rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-zinc-700"
-                    aria-expanded={expanded}
-                  >
-                    {expanded ? 'Ocultar detalle' : 'Ver detalle'}
-                    <ChevronDown
-                      className={['h-4 w-4 transition-transform', expanded ? 'rotate-180' : ''].join(' ')}
-                      aria-hidden
-                    />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setOcrOrder(order)}
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-[#D32F2F]/40 bg-[#D32F2F]/10 px-3 py-1.5 text-[11px] font-black uppercase tracking-wide text-[#B91C1C]"
-                  >
-                    Escanear albarán
-                  </button>
-                </div>
+                <button
+                  type="button"
+                  onClick={() => setExpandedPendingOrderId((id) => (id === order.id ? null : order.id))}
+                  className="mt-3 inline-flex items-center gap-2 rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-zinc-700"
+                  aria-expanded={expanded}
+                >
+                  {expanded ? 'Ocultar detalle' : 'Ver detalle'}
+                  <ChevronDown
+                    className={['h-4 w-4 transition-transform', expanded ? 'rotate-180' : ''].join(' ')}
+                    aria-hidden
+                  />
+                </button>
               </div>
               {expanded ? (
               <>
@@ -900,13 +880,6 @@ export default function RecepcionPedidosPage() {
                       </div>
                       {expanded ? (
                         <div className="space-y-2 border-t border-zinc-100 bg-zinc-50/90 px-3 py-3">
-                          <button
-                            type="button"
-                            onClick={() => setOcrOrder(order)}
-                            className="mb-2 w-full rounded-lg border border-[#D32F2F]/40 bg-[#D32F2F]/10 py-2 text-center text-[11px] font-black uppercase tracking-wide text-[#B91C1C]"
-                          >
-                            Escanear albarán (OCR)
-                          </button>
                           {order.items.map((item) => (
                             <div
                               key={item.id}
@@ -977,16 +950,6 @@ export default function RecepcionPedidosPage() {
         </div>
       </section>
 
-      <PedidosAlbaranOcrModal
-        order={ocrOrder}
-        open={ocrOrder != null}
-        onClose={() => setOcrOrder(null)}
-        onApplied={() => {
-          reloadOrders();
-          dispatchPedidosDataChanged();
-          setMessage('Albarán OCR: cambios guardados. Revisa precios y cantidades.');
-        }}
-      />
     </div>
   );
 }
