@@ -191,10 +191,12 @@ export default function PedidosAlbaranOcrModal({ order, open, onClose, onApplied
               ref={fileRef}
               type="file"
               accept="image/*"
-              capture="environment"
               disabled={busy}
               className="block w-full text-xs font-medium text-zinc-700 file:mr-2 file:rounded-lg file:border-0 file:bg-[#D32F2F] file:px-3 file:py-2 file:text-xs file:font-bold file:text-white"
             />
+            <p className="mt-1.5 text-center text-[10px] font-medium text-zinc-500">
+              Puedes elegir una imagen de la galería, del explorador de archivos o hacer la foto al momento.
+            </p>
           </div>
 
           <button
