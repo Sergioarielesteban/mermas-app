@@ -569,7 +569,7 @@ export default function RecepcionPedidosPage() {
             <div
               key={order.id}
               className={[
-                'rounded-xl p-3 ring-1 transition-colors',
+                'rounded-xl p-2.5 ring-1 transition-colors',
                 orderIncidentMode ? 'bg-red-50 ring-2 ring-red-500 shadow-sm' : 'bg-zinc-50 ring-zinc-200',
               ].join(' ')}
             >
@@ -605,37 +605,38 @@ export default function RecepcionPedidosPage() {
               </div>
               {expanded ? (
               <>
-              <div className="mt-3 space-y-2">
+              <div className="mt-2 space-y-1.5">
                 {order.items.map((item) => (
-                    <div key={item.id} className="space-y-1.5 rounded-lg bg-white p-3 ring-1 ring-zinc-200">
-                      <p className="text-sm font-semibold text-zinc-800">{item.productName}</p>
-                      <p className="text-xs text-zinc-700">
+                    <div key={item.id} className="space-y-1 rounded-lg bg-white p-2 ring-1 ring-zinc-200">
+                      <p className="text-sm font-semibold leading-tight text-zinc-800">{item.productName}</p>
+                      <p className="text-xs text-zinc-600">
                         Pedido:{' '}
-                        <span className="font-bold text-zinc-900">
+                        <span className="text-base font-bold tabular-nums text-zinc-900 sm:text-lg">
                           {formatQuantityWithUnit(item.quantity, item.unit)}
                         </span>
                       </p>
                       {unitSupportsReceivedWeightKg(item.unit) &&
                       item.estimatedKgPerUnit != null &&
                       item.estimatedKgPerUnit > 0 ? (
-                        <p className="text-xs text-zinc-600">
-                          Estimado pedido: {(item.quantity * item.estimatedKgPerUnit).toFixed(2)} kg (
+                        <p className="text-[11px] leading-tight text-zinc-600">
+                          Est. {(item.quantity * item.estimatedKgPerUnit).toFixed(2)} kg (
                           {item.estimatedKgPerUnit.toFixed(2)} kg/{item.unit})
                           {item.receivedQuantity > 0
-                            ? ` · referencia con ${item.unit === 'caja' ? 'cajas' : 'bandejas'} recibidas: ${(item.receivedQuantity * item.estimatedKgPerUnit).toFixed(2)} kg`
+                            ? ` · recib.: ${(item.receivedQuantity * item.estimatedKgPerUnit).toFixed(2)} kg`
                             : ''}
                         </p>
                       ) : null}
-                      {item.basePricePerUnit != null && Number.isFinite(item.basePricePerUnit) ? (
-                        <p className="text-xs text-zinc-600">
-                          Precio base (pedido):{' '}
-                          <span className="font-semibold text-zinc-800">
-                            {item.basePricePerUnit.toFixed(2)} €/{unitPriceCatalogSuffix[item.unit]}
-                          </span>
-                        </p>
-                      ) : null}
-                      <p className="text-xs text-zinc-700">
-                        Precio albarán:{' '}
+                      <p className="text-[11px] leading-tight text-zinc-600">
+                        {item.basePricePerUnit != null && Number.isFinite(item.basePricePerUnit) ? (
+                          <>
+                            <span className="font-semibold text-zinc-500">p/base</span>{' '}
+                            <span className="font-semibold text-zinc-900">
+                              {item.basePricePerUnit.toFixed(2)} €/{unitPriceCatalogSuffix[item.unit]}
+                            </span>
+                            <span className="mx-1 text-zinc-300">·</span>
+                          </>
+                        ) : null}
+                        <span className="font-semibold text-zinc-500">p/alb</span>{' '}
                         <span className="font-bold text-zinc-900">
                           {item.pricePerUnit.toFixed(2)} €/{unitPriceCatalogSuffix[item.unit]}
                         </span>
@@ -643,8 +644,8 @@ export default function RecepcionPedidosPage() {
                       {item.basePricePerUnit != null &&
                       Number.isFinite(item.basePricePerUnit) &&
                       Math.abs(item.pricePerUnit - item.basePricePerUnit) > 0.005 ? (
-                        <p className="text-xs font-semibold text-amber-900">
-                          Variación:{' '}
+                        <p className="text-[10px] font-semibold leading-tight text-amber-900">
+                          Δ{' '}
                           {item.pricePerUnit >= item.basePricePerUnit ? '+' : ''}
                           {(item.pricePerUnit - item.basePricePerUnit).toFixed(2)} €
                           {item.basePricePerUnit > 0
@@ -652,13 +653,9 @@ export default function RecepcionPedidosPage() {
                             : ''}
                         </p>
                       ) : null}
-                      <p className="text-xs text-zinc-700">
-                        Subt:{' '}
-                        <span className="font-bold text-zinc-900">{item.lineTotal.toFixed(2)} €</span>
-                      </p>
                       {unitCanDeclareScaleKgOnReception(item.unit) ? (
-                        <div className="mt-2 flex flex-wrap items-center gap-2">
-                          <label className="text-xs font-semibold text-zinc-600">Kg reales</label>
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <label className="text-[11px] font-semibold text-zinc-600">Kg reales</label>
                           <input
                             type="text"
                             inputMode="decimal"
@@ -673,18 +670,18 @@ export default function RecepcionPedidosPage() {
                               setWeightInputByItemId((prev) => ({ ...prev, [item.id]: e.target.value }))
                             }
                             onBlur={() => commitWeightInput(order.id, item.id)}
-                            className="h-8 w-[3.25rem] max-w-[3.25rem] shrink-0 rounded-lg border border-zinc-300 bg-white px-1.5 py-1 text-xs font-semibold text-zinc-900 outline-none sm:w-[4rem] sm:max-w-[4rem]"
+                            className="h-7 w-[3.25rem] max-w-[3.25rem] shrink-0 rounded-md border border-zinc-300 bg-white px-1 py-0.5 text-xs font-semibold text-zinc-900 outline-none sm:w-[4rem] sm:max-w-[4rem]"
                           />
                           {item.receivedWeightKg != null && item.receivedWeightKg > 0 ? (
-                            <span className="text-xs text-zinc-500">
-                              Guardado: {item.receivedWeightKg.toFixed(3)} kg
+                            <span className="text-[10px] text-zinc-500">
+                              {item.receivedWeightKg.toFixed(3)} kg
                             </span>
                           ) : null}
                         </div>
                       ) : null}
                       {unitSupportsReceivedWeightKg(item.unit) ? (
-                        <div className="mt-2 flex flex-wrap items-center gap-2">
-                          <label className="text-xs font-semibold text-zinc-600">€/kg real</label>
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <label className="text-[11px] font-semibold text-zinc-600">€/kg real</label>
                           <input
                             type="text"
                             inputMode="decimal"
@@ -699,35 +696,38 @@ export default function RecepcionPedidosPage() {
                               setPricePerKgInputByItemId((prev) => ({ ...prev, [item.id]: e.target.value }))
                             }
                             onBlur={() => commitPricePerKgInput(order.id, item.id)}
-                            className="h-8 w-14 max-w-[5.5rem] shrink-0 rounded-lg border border-zinc-300 bg-white px-1.5 py-1 text-xs font-semibold text-zinc-900 outline-none sm:w-[5rem]"
+                            className="h-7 w-14 max-w-[5.5rem] shrink-0 rounded-md border border-zinc-300 bg-white px-1 py-0.5 text-xs font-semibold text-zinc-900 outline-none sm:w-[5rem]"
                           />
                           {item.receivedPricePerKg != null && item.receivedPricePerKg > 0 ? (
-                            <span className="text-xs text-zinc-500">
-                              Subtotal = kg × €/kg; equiv.{' '}
-                              {item.pricePerUnit.toFixed(2)} €/{unitPriceCatalogSuffix[item.unit]}
+                            <span className="text-[10px] text-zinc-500">
+                              ≈ {item.pricePerUnit.toFixed(2)} €/{unitPriceCatalogSuffix[item.unit]}
                             </span>
                           ) : (
-                            <span className="text-[10px] text-zinc-500">
-                              Opcional: con kg reales, el importe sigue el albarán por peso.
-                            </span>
+                            <span className="text-[10px] text-zinc-500">Opcional con kg reales.</span>
                           )}
                         </div>
                       ) : null}
-                      <div className="mt-2 flex flex-wrap items-center gap-2">
-                        <label className="text-xs font-semibold text-zinc-600">Precio recibido</label>
-                        <input
-                          type="number"
-                          step="0.01"
-                          min="0"
-                          value={priceInputByItemId[item.id] ?? item.pricePerUnit.toFixed(2)}
-                          onChange={(e) => {
-                            const raw = e.target.value;
-                            setPriceInputByItemId((prev) => ({ ...prev, [item.id]: raw }));
-                            setLocalUnitPrice(order.id, item.id, raw);
-                          }}
-                          onBlur={() => commitPriceInput(order.id, item.id)}
-                          className="h-10 w-20 rounded-lg border border-zinc-300 bg-white px-2 text-sm font-semibold text-zinc-900 outline-none"
-                        />
+                      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-t border-zinc-100 pt-1.5">
+                        <div className="flex min-w-0 items-center gap-1.5">
+                          <label className="shrink-0 text-[11px] font-semibold text-zinc-600">Precio recibido</label>
+                          <input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            value={priceInputByItemId[item.id] ?? item.pricePerUnit.toFixed(2)}
+                            onChange={(e) => {
+                              const raw = e.target.value;
+                              setPriceInputByItemId((prev) => ({ ...prev, [item.id]: raw }));
+                              setLocalUnitPrice(order.id, item.id, raw);
+                            }}
+                            onBlur={() => commitPriceInput(order.id, item.id)}
+                            className="h-8 w-[4.5rem] rounded-md border border-zinc-300 bg-white px-1.5 text-sm font-semibold tabular-nums text-zinc-900 outline-none"
+                          />
+                        </div>
+                        <span className="shrink-0 text-[11px] text-zinc-700">
+                          Subt:{' '}
+                          <span className="font-bold tabular-nums text-zinc-900">{item.lineTotal.toFixed(2)} €</span>
+                        </span>
                       </div>
                     </div>
                   ))}
@@ -879,39 +879,40 @@ export default function RecepcionPedidosPage() {
                         </button>
                       </div>
                       {expanded ? (
-                        <div className="space-y-2 border-t border-zinc-100 bg-zinc-50/90 px-3 py-3">
+                        <div className="space-y-1.5 border-t border-zinc-100 bg-zinc-50/90 px-3 py-2">
                           {order.items.map((item) => (
                             <div
                               key={item.id}
-                              className="space-y-1 rounded-lg bg-white p-3 ring-1 ring-zinc-200"
+                              className="space-y-1 rounded-lg bg-white p-2 ring-1 ring-zinc-200"
                             >
-                              <p className="text-sm font-semibold text-zinc-800">{item.productName}</p>
-                              <p className="text-xs text-zinc-700">
+                              <p className="text-sm font-semibold leading-tight text-zinc-800">{item.productName}</p>
+                              <p className="text-xs text-zinc-600">
                                 Pedido:{' '}
-                                <span className="font-bold text-zinc-900">
+                                <span className="text-base font-bold tabular-nums text-zinc-900">
                                   {formatQuantityWithUnit(item.quantity, item.unit)}
                                 </span>
                               </p>
                               {item.receivedWeightKg != null && item.receivedWeightKg > 0 ? (
-                                <p className="text-xs text-zinc-600">
-                                  Kg reales guardados: {item.receivedWeightKg.toFixed(3)} kg
+                                <p className="text-[11px] text-zinc-600">
+                                  Kg: {item.receivedWeightKg.toFixed(3)}
                                 </p>
                               ) : null}
                               {item.receivedPricePerKg != null && item.receivedPricePerKg > 0 ? (
-                                <p className="text-xs text-zinc-600">
-                                  €/kg real: {item.receivedPricePerKg.toFixed(4)} €/kg
+                                <p className="text-[11px] text-zinc-600">
+                                  €/kg: {item.receivedPricePerKg.toFixed(4)}
                                 </p>
                               ) : null}
-                              {item.basePricePerUnit != null && Number.isFinite(item.basePricePerUnit) ? (
-                                <p className="text-xs text-zinc-600">
-                                  Precio base (pedido):{' '}
-                                  <span className="font-semibold text-zinc-800">
-                                    {item.basePricePerUnit.toFixed(2)} €/{unitPriceCatalogSuffix[item.unit]}
-                                  </span>
-                                </p>
-                              ) : null}
-                              <p className="text-xs text-zinc-700">
-                                Precio albarán:{' '}
+                              <p className="text-[11px] leading-tight text-zinc-600">
+                                {item.basePricePerUnit != null && Number.isFinite(item.basePricePerUnit) ? (
+                                  <>
+                                    <span className="font-semibold text-zinc-500">p/base</span>{' '}
+                                    <span className="font-semibold text-zinc-900">
+                                      {item.basePricePerUnit.toFixed(2)} €/{unitPriceCatalogSuffix[item.unit]}
+                                    </span>
+                                    <span className="mx-1 text-zinc-300">·</span>
+                                  </>
+                                ) : null}
+                                <span className="font-semibold text-zinc-500">p/alb</span>{' '}
                                 <span className="font-bold text-zinc-900">
                                   {item.pricePerUnit.toFixed(2)} €/{unitPriceCatalogSuffix[item.unit]}
                                 </span>
@@ -919,8 +920,8 @@ export default function RecepcionPedidosPage() {
                               {item.basePricePerUnit != null &&
                               Number.isFinite(item.basePricePerUnit) &&
                               Math.abs(item.pricePerUnit - item.basePricePerUnit) > 0.005 ? (
-                                <p className="text-xs font-semibold text-amber-900">
-                                  Variación:{' '}
+                                <p className="text-[10px] font-semibold leading-tight text-amber-900">
+                                  Δ{' '}
                                   {item.pricePerUnit >= item.basePricePerUnit ? '+' : ''}
                                   {(item.pricePerUnit - item.basePricePerUnit).toFixed(2)} €
                                   {item.basePricePerUnit > 0
@@ -928,9 +929,9 @@ export default function RecepcionPedidosPage() {
                                     : ''}
                                 </p>
                               ) : null}
-                              <p className="text-xs text-zinc-700">
+                              <p className="text-[11px] text-zinc-700">
                                 Subt:{' '}
-                                <span className="font-bold text-zinc-900">{item.lineTotal.toFixed(2)} €</span>
+                                <span className="font-bold tabular-nums text-zinc-900">{item.lineTotal.toFixed(2)} €</span>
                               </p>
                               {item.incidentType || item.incidentNotes?.trim() ? (
                                 <p className="text-[11px] font-semibold text-[#B91C1C]">

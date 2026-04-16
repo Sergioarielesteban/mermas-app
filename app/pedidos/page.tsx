@@ -2062,7 +2062,7 @@ export default function PedidosPage() {
     const detailOpen = expandedSentId === order.id;
     const reviewed = Boolean(order.priceReviewArchivedAt);
     return (
-      <div className="mt-3 space-y-3 border-t border-amber-200/70 pt-3 text-left">
+      <div className="mt-2 space-y-2 border-t border-amber-200/70 pt-2 text-left">
         {!detailOpen ? (
           <p className="text-center text-[11px] leading-snug text-zinc-600">
             Toca el recuadro del proveedor para desplegar líneas, marcar ✓/✗ y rellenar kg/precio recibido aquí mismo.
@@ -2074,7 +2074,7 @@ export default function PedidosPage() {
           onClick={() => {
             void commitSentOrderAsReceived(order.id);
           }}
-          className="flex w-full flex-col items-center justify-center gap-0.5 rounded-2xl bg-gradient-to-b from-[#4ADE80] to-[#16A34A] py-3 text-center text-[11px] font-black uppercase leading-tight tracking-wide text-white shadow-md shadow-emerald-900/20 ring-1 ring-white/25 transition active:scale-[0.99] disabled:opacity-90"
+          className="flex w-full flex-col items-center justify-center gap-0.5 rounded-2xl bg-gradient-to-b from-[#4ADE80] to-[#16A34A] py-2 text-center text-[11px] font-black uppercase leading-tight tracking-wide text-white shadow-md shadow-emerald-900/20 ring-1 ring-white/25 transition active:scale-[0.99] disabled:opacity-90"
         >
           {receivingOrderId === order.id ? (
             <span>Recibido</span>
@@ -2089,7 +2089,7 @@ export default function PedidosPage() {
           type="button"
           onClick={() => setSentOrderPriceReviewed(order.id, !reviewed)}
           className={[
-            'w-full rounded-lg px-3 py-2.5 text-center text-xs font-bold transition active:scale-[0.99]',
+            'w-full rounded-lg px-3 py-2 text-center text-xs font-bold transition active:scale-[0.99]',
             reviewed
               ? 'bg-emerald-100 text-emerald-800 ring-1 ring-emerald-300'
               : 'bg-zinc-200 text-zinc-700',
@@ -2101,7 +2101,7 @@ export default function PedidosPage() {
           type="button"
           onClick={() => toggleSentIncidentPanel(order)}
           className={[
-            'w-full rounded-lg px-3 py-2.5 text-center text-xs font-bold transition',
+            'w-full rounded-lg px-3 py-2 text-center text-xs font-bold transition',
             incidentOpen || hasAnyBad
               ? 'bg-[#B91C1C] text-white active:scale-[0.99]'
               : 'bg-zinc-200 text-zinc-600 active:scale-[0.99]',
@@ -2437,16 +2437,16 @@ export default function PedidosPage() {
         open={pendientesEntregaAccordionOpen}
         onToggle={(e) => setPendientesEntregaAccordionOpen(e.currentTarget.open)}
       >
-        <summary className="flex w-full cursor-pointer list-none flex-col items-center px-5 py-8 text-center outline-none transition active:bg-zinc-50/50 focus-visible:ring-2 focus-visible:ring-[#D32F2F]/40 focus-visible:ring-offset-2 sm:px-6 [&::-webkit-details-marker]:hidden">
+        <summary className="flex w-full cursor-pointer list-none flex-col items-center px-5 py-6 text-center outline-none transition active:bg-zinc-50/50 focus-visible:ring-2 focus-visible:ring-[#D32F2F]/40 focus-visible:ring-offset-2 sm:px-6 [&::-webkit-details-marker]:hidden">
           <span className="text-[11px] font-semibold uppercase tracking-[0.2em] text-zinc-400">Entrega</span>
-          <span className="mt-2 text-center text-2xl font-semibold leading-[1.15] tracking-tight text-zinc-900 sm:text-[1.75rem] sm:leading-tight">
+          <span className="mt-1.5 text-center text-2xl font-semibold leading-[1.15] tracking-tight text-zinc-900 sm:text-[1.75rem] sm:leading-tight">
             Pendientes de entrega
           </span>
-          <span className={`mx-auto mt-4 w-24 ${CHEF_ONE_TAPER_LINE_CLASS}`} aria-hidden />
-          <span className="mt-4 text-3xl font-black tabular-nums text-zinc-900">
+          <span className={`mx-auto mt-3 w-24 ${CHEF_ONE_TAPER_LINE_CLASS}`} aria-hidden />
+          <span className="mt-3 text-3xl font-black tabular-nums text-zinc-900">
             {sentOrders.length}
           </span>
-          <span className="mt-4 flex flex-wrap items-center justify-center gap-x-1.5 text-xs text-zinc-500">
+          <span className="mt-3 flex flex-wrap items-center justify-center gap-x-1.5 text-xs text-zinc-500">
             {sentOrders.length === 0 ? (
               <span>Nada pendiente ahora</span>
             ) : (
@@ -2461,7 +2461,7 @@ export default function PedidosPage() {
               </>
             )}
           </span>
-          <span className="mt-5 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider text-[#D32F2F]">
+          <span className="mt-4 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider text-[#D32F2F]">
             {pendientesEntregaAccordionOpen ? 'Ocultar pedidos' : 'Ver pedidos pendientes'}
             <ChevronDown
               className={[
@@ -2472,19 +2472,19 @@ export default function PedidosPage() {
             />
           </span>
         </summary>
-        <div className="space-y-2 border-t border-zinc-100 bg-gradient-to-b from-amber-50/95 via-amber-50/80 to-amber-100/50 px-3 pb-4 pt-3 sm:px-4">
+        <div className="space-y-1.5 border-t border-zinc-100 bg-gradient-to-b from-amber-50/95 via-amber-50/80 to-amber-100/50 px-3 pb-3 pt-2.5 sm:px-4">
           {sentOrders.length === 0 ? (
             <p className="py-6 text-center text-sm text-zinc-600">No hay pedidos enviados.</p>
           ) : null}
           {sentOrders.map((order) => (
             <div
               key={order.id}
-              className="rounded-xl bg-amber-100 p-3 text-center ring-2 ring-amber-300/90 shadow-sm"
+              className="rounded-xl bg-amber-100 p-2.5 text-center ring-2 ring-amber-300/90 shadow-sm"
             >
               <button
                 type="button"
                 onClick={() => setExpandedSentId((prev) => (prev === order.id ? null : order.id))}
-                className="w-full rounded-xl py-1 text-center outline-none focus-visible:ring-2 focus-visible:ring-amber-600/40 active:bg-amber-200/60"
+                className="w-full rounded-lg py-0.5 text-center outline-none focus-visible:ring-2 focus-visible:ring-amber-600/40 active:bg-amber-200/60"
                 aria-expanded={expandedSentId === order.id}
               >
                 {(() => {
@@ -2500,11 +2500,11 @@ export default function PedidosPage() {
                           Entrega: {new Date(`${order.deliveryDate}T00:00:00`).toLocaleDateString('es-ES')}
                         </p>
                       ) : null}
-                      <p className="pt-1 text-sm font-bold text-zinc-700">
+                      <p className="pt-0.5 text-sm font-bold text-zinc-700">
                         Total (IVA incluido):{' '}
                         <span className="text-base font-black text-zinc-900">{totals.total.toFixed(2)} €</span>
                       </p>
-                      <p className="pt-1 text-[10px] font-semibold uppercase tracking-wide text-zinc-500">
+                      <p className="pt-0.5 text-[10px] font-semibold uppercase tracking-wide text-zinc-500">
                         Revisión precios:{' '}
                         <span className={order.priceReviewArchivedAt ? 'text-emerald-700' : 'text-zinc-700'}>
                           {order.priceReviewArchivedAt ? 'completada' : 'pendiente'}
@@ -2514,11 +2514,11 @@ export default function PedidosPage() {
                   );
                 })()}
               </button>
-              <div className="mt-3 grid grid-cols-2 gap-2">
+              <div className="mt-2 grid grid-cols-2 gap-1.5">
                 <button
                   type="button"
                   onClick={() => sendWhatsappOrder(order)}
-                  className="rounded-lg border border-zinc-300 bg-white px-2 py-1.5 text-center text-xs font-semibold text-[#166534]"
+                  className="rounded-lg border border-zinc-300 bg-white px-2 py-1 text-center text-xs font-semibold text-[#166534]"
                 >
                   Enviar WhatsApp
                 </button>
@@ -2550,15 +2550,15 @@ export default function PedidosPage() {
                       })
                       .catch((err: Error) => setMessage(err.message));
                   }}
-                  className="rounded-lg border border-zinc-300 bg-white px-2 py-1.5 text-center text-xs font-semibold text-[#B91C1C]"
+                  className="rounded-lg border border-zinc-300 bg-white px-2 py-1 text-center text-xs font-semibold text-[#B91C1C]"
                 >
                   Eliminar
                 </button>
               </div>
               {renderSentOrderReceiveAndIncident(order)}
               {expandedSentId === order.id ? (
-                <div className="mt-3 space-y-3 text-left">
-                  <div className="rounded-xl border border-[#D32F2F]/30 bg-white px-3 py-3 ring-1 ring-[#D32F2F]/12 shadow-sm">
+                <div className="mt-2 space-y-2 text-left">
+                  <div className="rounded-lg border border-[#D32F2F]/30 bg-white px-2.5 py-2 ring-1 ring-[#D32F2F]/12 shadow-sm">
                     <p className="text-center text-[11px] font-black uppercase tracking-wide text-[#B91C1C]">
                       Albarán · OCR
                     </p>
@@ -2569,13 +2569,13 @@ export default function PedidosPage() {
                     <button
                       type="button"
                       onClick={() => setOcrOrder(order)}
-                      className="mt-2.5 w-full rounded-xl border border-[#D32F2F]/45 bg-[#D32F2F]/10 py-2.5 text-center text-[11px] font-black uppercase tracking-wide text-[#B91C1C] transition active:scale-[0.99]"
+                      className="mt-1.5 w-full rounded-lg border border-[#D32F2F]/45 bg-[#D32F2F]/10 py-2 text-center text-[11px] font-black uppercase tracking-wide text-[#B91C1C] transition active:scale-[0.99]"
                     >
                       Escanear albarán
                     </button>
                   </div>
                   {order.notes?.trim() ? (
-                    <div className="rounded-xl border border-amber-200 bg-amber-50/90 px-3 py-2.5">
+                    <div className="rounded-lg border border-amber-200 bg-amber-50/90 px-2.5 py-2">
                       <p className="text-[10px] font-bold uppercase tracking-wide text-amber-900/80">Notas del pedido</p>
                       <p className="mt-1 text-sm leading-relaxed text-amber-950">{order.notes.trim()}</p>
                     </div>
@@ -2596,18 +2596,18 @@ export default function PedidosPage() {
                         !item.incidentType);
                     const isBad = mark === 'bad' || (mark === undefined && Boolean(item.incidentType));
                     return (
-                      <div key={item.id} className="space-y-2 rounded-xl bg-white p-3 ring-1 ring-zinc-200">
+                      <div key={item.id} className="space-y-1 rounded-lg bg-white p-2 ring-1 ring-zinc-200">
                         <div className="flex items-start justify-between gap-2">
                           <div className="min-w-0 flex-1">
-                            <p className="text-sm font-semibold text-zinc-900">{item.productName}</p>
-                            <p className="mt-1 text-xs text-zinc-700">
+                            <p className="text-sm font-semibold leading-tight text-zinc-900">{item.productName}</p>
+                            <p className="mt-0.5 text-xs text-zinc-600">
                               Pedido:{' '}
-                              <span className="font-semibold text-zinc-900">
+                              <span className="text-base font-bold tabular-nums text-zinc-900 sm:text-lg">
                                 {formatQuantityWithUnit(item.quantity, item.unit)}
                               </span>
                             </p>
                           </div>
-                          <div className="flex shrink-0 items-center gap-2">
+                          <div className="flex shrink-0 items-center gap-1.5">
                             <button
                               type="button"
                               onClick={() => {
@@ -2651,16 +2651,17 @@ export default function PedidosPage() {
                             </button>
                           </div>
                         </div>
-                        <p className="text-xs text-zinc-700">
-                          Precio base (pedido):{' '}
-                          <span className="font-semibold text-zinc-900">
-                            {item.basePricePerUnit != null && Number.isFinite(item.basePricePerUnit)
-                              ? `${item.basePricePerUnit.toFixed(2)} €/${unitPriceCatalogSuffix[item.unit]}`
-                              : '—'}
-                          </span>
-                        </p>
-                        <p className="text-xs text-zinc-700">
-                          Precio albarán:{' '}
+                        <p className="text-[11px] leading-tight text-zinc-600">
+                          {item.basePricePerUnit != null && Number.isFinite(item.basePricePerUnit) ? (
+                            <>
+                              <span className="font-semibold text-zinc-500">p/base</span>{' '}
+                              <span className="font-semibold text-zinc-900">
+                                {item.basePricePerUnit.toFixed(2)} €/{unitPriceCatalogSuffix[item.unit]}
+                              </span>
+                              <span className="mx-1 text-zinc-300">·</span>
+                            </>
+                          ) : null}
+                          <span className="font-semibold text-zinc-500">p/alb</span>{' '}
                           <span className="font-semibold text-zinc-900">
                             {item.pricePerUnit.toFixed(2)} €/{unitPriceCatalogSuffix[item.unit]}
                           </span>
@@ -2668,8 +2669,8 @@ export default function PedidosPage() {
                         {item.basePricePerUnit != null &&
                         Number.isFinite(item.basePricePerUnit) &&
                         Math.abs(item.pricePerUnit - item.basePricePerUnit) > 0.005 ? (
-                          <p className="text-xs font-semibold text-amber-900">
-                            Variación:{' '}
+                          <p className="text-[10px] font-semibold leading-tight text-amber-900">
+                            Δ{' '}
                             {item.pricePerUnit >= item.basePricePerUnit ? '+' : ''}
                             {(item.pricePerUnit - item.basePricePerUnit).toFixed(2)} €
                             {item.basePricePerUnit > 0
@@ -2677,15 +2678,9 @@ export default function PedidosPage() {
                               : ''}
                           </p>
                         ) : null}
-                        <p className="text-xs text-zinc-700">
-                          Subt:{' '}
-                          <span className="font-semibold text-zinc-900">
-                            {lineSubtotalForOrderListDisplay(item).toFixed(2)} €
-                          </span>
-                        </p>
                         {unitCanDeclareScaleKgOnReception(item.unit) ? (
-                          <div className="mt-2 flex flex-wrap items-center gap-2">
-                            <label className="text-xs font-semibold text-zinc-600">Kg reales</label>
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <label className="text-[11px] font-semibold text-zinc-600">Kg reales</label>
                             <input
                               type="text"
                               inputMode="decimal"
@@ -2700,13 +2695,13 @@ export default function PedidosPage() {
                                 setWeightInputByItemId((prev) => ({ ...prev, [item.id]: e.target.value }))
                               }
                               onBlur={() => commitWeightInput(order.id, item.id)}
-                              className="h-8 w-[3.25rem] max-w-[3.25rem] shrink-0 rounded-lg border border-zinc-300 bg-white px-1.5 py-1 text-xs font-semibold text-zinc-900 outline-none sm:w-[4rem] sm:max-w-[4rem]"
+                              className="h-7 w-[3.25rem] max-w-[3.25rem] shrink-0 rounded-md border border-zinc-300 bg-white px-1 py-0.5 text-xs font-semibold text-zinc-900 outline-none sm:w-[4rem] sm:max-w-[4rem]"
                             />
                           </div>
                         ) : null}
                         {unitSupportsReceivedWeightKg(item.unit) ? (
-                          <div className="mt-2 flex flex-wrap items-center gap-2">
-                            <label className="text-xs font-semibold text-zinc-600">€/kg real</label>
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <label className="text-[11px] font-semibold text-zinc-600">€/kg real</label>
                             <input
                               type="text"
                               inputMode="decimal"
@@ -2721,25 +2716,33 @@ export default function PedidosPage() {
                                 setPricePerKgInputByItemId((prev) => ({ ...prev, [item.id]: e.target.value }))
                               }
                               onBlur={() => commitPricePerKgInput(order.id, item.id)}
-                              className="h-8 w-14 max-w-[5.5rem] shrink-0 rounded-lg border border-zinc-300 bg-white px-1.5 py-1 text-xs font-semibold text-zinc-900 outline-none sm:w-[5rem]"
+                              className="h-7 w-14 max-w-[5.5rem] shrink-0 rounded-md border border-zinc-300 bg-white px-1 py-0.5 text-xs font-semibold text-zinc-900 outline-none sm:w-[5rem]"
                             />
                           </div>
                         ) : null}
-                        <div className="mt-2 flex flex-wrap items-center gap-2">
-                          <label className="text-xs font-semibold text-zinc-600">Precio recibido</label>
-                          <input
-                            type="number"
-                            step="0.01"
-                            min="0"
-                            value={priceInputByItemId[item.id] ?? item.pricePerUnit.toFixed(2)}
-                            onChange={(e) => {
-                              const raw = e.target.value;
-                              setPriceInputByItemId((prev) => ({ ...prev, [item.id]: raw }));
-                              setLocalUnitPrice(order.id, item.id, raw);
-                            }}
-                            onBlur={() => commitPriceInput(order.id, item.id)}
-                            className="h-10 w-20 rounded-lg border border-zinc-300 bg-white px-2 text-sm font-semibold text-zinc-900 outline-none"
-                          />
+                        <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-t border-zinc-100 pt-1.5">
+                          <div className="flex min-w-0 items-center gap-1.5">
+                            <label className="shrink-0 text-[11px] font-semibold text-zinc-600">Precio recibido</label>
+                            <input
+                              type="number"
+                              step="0.01"
+                              min="0"
+                              value={priceInputByItemId[item.id] ?? item.pricePerUnit.toFixed(2)}
+                              onChange={(e) => {
+                                const raw = e.target.value;
+                                setPriceInputByItemId((prev) => ({ ...prev, [item.id]: raw }));
+                                setLocalUnitPrice(order.id, item.id, raw);
+                              }}
+                              onBlur={() => commitPriceInput(order.id, item.id)}
+                              className="h-8 w-[4.5rem] rounded-md border border-zinc-300 bg-white px-1.5 text-sm font-semibold tabular-nums text-zinc-900 outline-none"
+                            />
+                          </div>
+                          <span className="shrink-0 text-[11px] text-zinc-700">
+                            Subt:{' '}
+                            <span className="font-bold tabular-nums text-zinc-900">
+                              {lineSubtotalForOrderListDisplay(item).toFixed(2)} €
+                            </span>
+                          </span>
                         </div>
                       </div>
                     );
@@ -2763,16 +2766,16 @@ export default function PedidosPage() {
         open={historicoRecibidosAccordionOpen}
         onToggle={(e) => setHistoricoRecibidosAccordionOpen(e.currentTarget.open)}
       >
-        <summary className="flex w-full cursor-pointer list-none flex-col items-center px-5 py-8 text-center outline-none transition active:bg-zinc-50/50 focus-visible:ring-2 focus-visible:ring-[#D32F2F]/40 focus-visible:ring-offset-2 sm:px-6 [&::-webkit-details-marker]:hidden">
+        <summary className="flex w-full cursor-pointer list-none flex-col items-center px-5 py-6 text-center outline-none transition active:bg-zinc-50/50 focus-visible:ring-2 focus-visible:ring-[#D32F2F]/40 focus-visible:ring-offset-2 sm:px-6 [&::-webkit-details-marker]:hidden">
           <span className="text-[11px] font-semibold uppercase tracking-[0.2em] text-zinc-400">Almacén</span>
-          <span className="mt-2 text-center text-2xl font-semibold leading-[1.15] tracking-tight text-zinc-900 sm:text-[1.75rem] sm:leading-tight">
+          <span className="mt-1.5 text-center text-2xl font-semibold leading-[1.15] tracking-tight text-zinc-900 sm:text-[1.75rem] sm:leading-tight">
             Histórico recibidos
           </span>
-          <span className={`mx-auto mt-4 w-24 ${CHEF_ONE_TAPER_LINE_CLASS}`} aria-hidden />
-          <span className="mt-4 text-3xl font-black tabular-nums text-zinc-900">
+          <span className={`mx-auto mt-3 w-24 ${CHEF_ONE_TAPER_LINE_CLASS}`} aria-hidden />
+          <span className="mt-3 text-3xl font-black tabular-nums text-zinc-900">
             {receivedOrders.length}
           </span>
-          <span className="mt-4 flex flex-wrap items-center justify-center gap-x-1.5 text-xs text-zinc-500">
+          <span className="mt-3 flex flex-wrap items-center justify-center gap-x-1.5 text-xs text-zinc-500">
             {receivedOrders.length === 0 ? (
               <span>Sin pedidos recibidos</span>
             ) : (
@@ -2785,7 +2788,7 @@ export default function PedidosPage() {
               </>
             )}
           </span>
-          <span className="mt-5 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider text-[#D32F2F]">
+          <span className="mt-4 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider text-[#D32F2F]">
             {historicoRecibidosAccordionOpen ? 'Ocultar pedidos' : 'Ver pedidos recibidos'}
             <ChevronDown
               className={[
@@ -2796,7 +2799,7 @@ export default function PedidosPage() {
             />
           </span>
         </summary>
-        <div className="space-y-4 border-t border-zinc-100 bg-gradient-to-b from-zinc-50/90 to-white px-3 pb-4 pt-4 sm:px-4">
+        <div className="space-y-3 border-t border-zinc-100 bg-gradient-to-b from-zinc-50/90 to-white px-3 pb-3 pt-3 sm:px-4">
           {receivedOrders.length === 0 ? (
             <p className="py-6 text-center text-sm text-zinc-500">No hay pedidos recibidos.</p>
           ) : null}
@@ -2823,7 +2826,7 @@ export default function PedidosPage() {
                 type="button"
                 onClick={() => setExpandedHistoricoId((prev) => (prev === order.id ? null : order.id))}
                 className={[
-                  'flex w-full flex-col items-center px-4 py-6 text-center outline-none transition focus-visible:ring-2 focus-visible:ring-[#D32F2F]/40 focus-visible:ring-offset-2',
+                  'flex w-full flex-col items-center px-4 py-4 text-center outline-none transition focus-visible:ring-2 focus-visible:ring-[#D32F2F]/40 focus-visible:ring-offset-2',
                   needsAttention ? 'active:bg-red-100/50' : 'active:bg-emerald-100/50',
                 ].join(' ')}
                 aria-expanded={detailOpen}
@@ -2858,7 +2861,7 @@ export default function PedidosPage() {
               </button>
               <div
                 className={[
-                  'flex flex-wrap justify-center gap-2 border-t px-3 py-3',
+                  'flex flex-wrap justify-center gap-2 border-t px-3 py-2',
                   needsAttention
                     ? 'border-red-200/80 bg-white/75'
                     : 'border-emerald-200/80 bg-white/75',
@@ -2923,7 +2926,7 @@ export default function PedidosPage() {
               {expandedHistoricoId === order.id ? (
                 <div
                   className={[
-                    'space-y-3 border-t bg-gradient-to-b px-3 pb-4 pt-3 text-left sm:px-4',
+                    'space-y-2 border-t bg-gradient-to-b px-3 pb-3 pt-2 text-left sm:px-4',
                     needsAttention
                       ? 'border-red-200/70 from-red-50/80 to-red-100/30'
                       : 'border-emerald-200/70 from-emerald-50/80 to-emerald-100/30',
@@ -2933,7 +2936,7 @@ export default function PedidosPage() {
                     Lineas del pedido
                   </p>
                   {order.notes?.trim() ? (
-                    <div className="rounded-2xl border border-zinc-100 bg-white px-3 py-2.5 shadow-sm ring-1 ring-zinc-100">
+                    <div className="rounded-lg border border-zinc-100 bg-white px-2.5 py-2 shadow-sm ring-1 ring-zinc-100">
                       <p className="text-[10px] font-bold uppercase tracking-wide text-zinc-600">Notas del pedido</p>
                       <p className="mt-1 text-sm leading-relaxed text-zinc-900">{order.notes.trim()}</p>
                     </div>
@@ -2945,11 +2948,11 @@ export default function PedidosPage() {
                     return (
                       <div
                         key={item.id}
-                        className="rounded-2xl border border-zinc-100 bg-white p-3 shadow-sm"
+                        className="rounded-lg border border-zinc-100 bg-white p-2 shadow-sm"
                       >
                         <div className="flex items-start justify-between gap-2">
-                          <p className="text-sm font-semibold text-zinc-900">{item.productName}</p>
-                          <div className="flex shrink-0 items-center gap-2">
+                          <p className="text-sm font-semibold leading-tight text-zinc-900">{item.productName}</p>
+                          <div className="flex shrink-0 items-center gap-1.5">
                             <span
                               className={[
                                 'grid h-7 w-7 place-items-center rounded-full border text-sm font-black',
@@ -2969,24 +2972,35 @@ export default function PedidosPage() {
                             </span>
                           </div>
                         </div>
-                        <p className="mt-2 text-xs italic text-zinc-700">
+                        <p className="mt-1 text-xs text-zinc-600">
                           Pedido:{' '}
-                          <span className="font-semibold not-italic text-zinc-900">
+                          <span className="text-base font-bold not-italic tabular-nums text-zinc-900">
                             {formatQuantityWithUnit(item.quantity, item.unit)}
                           </span>
                         </p>
-                        <p className="text-xs italic text-zinc-700">
-                          Precio recepción:{' '}
-                          <span className="font-semibold not-italic text-zinc-900">
-                            {item.pricePerUnit.toFixed(2)} €/{unitPriceCatalogSuffix[item.unit]}
+                        <div className="mt-0.5 flex flex-wrap items-baseline justify-between gap-x-2 gap-y-0.5 text-[11px] text-zinc-700">
+                          <span className="min-w-0 leading-tight">
+                            {item.basePricePerUnit != null && Number.isFinite(item.basePricePerUnit) ? (
+                              <>
+                                <span className="font-semibold text-zinc-500">p/base</span>{' '}
+                                <span className="font-semibold text-zinc-900">
+                                  {item.basePricePerUnit.toFixed(2)} €/{unitPriceCatalogSuffix[item.unit]}
+                                </span>
+                                <span className="mx-1 text-zinc-300">·</span>
+                              </>
+                            ) : null}
+                            <span className="font-semibold text-zinc-500">p/alb</span>{' '}
+                            <span className="font-semibold text-zinc-900">
+                              {item.pricePerUnit.toFixed(2)} €/{unitPriceCatalogSuffix[item.unit]}
+                            </span>
                           </span>
-                        </p>
-                        <p className="text-xs italic text-zinc-700">
-                          Subt:{' '}
-                          <span className="font-semibold not-italic text-zinc-900">
-                            {lineSubtotalForOrderListDisplay(item).toFixed(2)} €
+                          <span className="shrink-0">
+                            Subt:{' '}
+                            <span className="font-bold not-italic tabular-nums text-zinc-900">
+                              {lineSubtotalForOrderListDisplay(item).toFixed(2)} €
+                            </span>
                           </span>
-                        </p>
+                        </div>
                         {unitCanDeclareScaleKgOnReception(item.unit) &&
                         item.receivedWeightKg != null &&
                         item.receivedWeightKg > 0 ? (
