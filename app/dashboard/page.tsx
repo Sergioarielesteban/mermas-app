@@ -560,47 +560,40 @@ export default function DashboardPage() {
       </section>
 
       {!mermasAnalyticsUnlocked ? (
-        <section className="rounded-2xl border border-zinc-300/90 bg-gradient-to-br from-zinc-100 via-white to-zinc-50/80 p-5 shadow-md ring-1 ring-zinc-200/90">
-          <div className="flex flex-col items-center text-center sm:flex-row sm:items-start sm:text-left sm:gap-4">
-            <div className="grid h-14 w-14 shrink-0 place-items-center rounded-2xl bg-zinc-900 text-white shadow-lg ring-2 ring-zinc-700/30">
-              <Lock className="h-7 w-7" strokeWidth={2.2} aria-hidden />
-            </div>
-            <div className="mt-4 min-w-0 flex-1 sm:mt-0">
-              <h2 className="text-base font-black tracking-tight text-zinc-900">Acceso restringido</h2>
-              <p className="mt-1 text-sm text-zinc-600">
-                Gráficos, alertas y objetivos: misma clave de 4 dígitos que para anular registros o borrados seguros.
-              </p>
-              <div className="mx-auto mt-4 max-w-xs sm:mx-0">
-                <input
-                  type="password"
-                  inputMode="numeric"
-                  maxLength={4}
-                  autoComplete="off"
-                  value={analyticsPin}
-                  onChange={(e) => {
-                    setAnalyticsPin(e.target.value.replace(/\D/g, '').slice(0, 4));
-                    setAnalyticsPinError(null);
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault();
-                      tryUnlockMermasAnalytics();
-                    }
-                  }}
-                  placeholder="••••"
-                  className="h-12 w-full rounded-xl border border-zinc-200 bg-white px-3 text-center text-lg font-bold tracking-[0.35em] text-zinc-900 outline-none focus:border-[#D32F2F] focus:ring-2 focus:ring-[#D32F2F]/20"
-                  aria-label="Clave de acceso al panel analítico"
-                />
-                {analyticsPinError ? <p className="mt-2 text-center text-xs font-semibold text-red-600 sm:text-left">{analyticsPinError}</p> : null}
-                <button
-                  type="button"
-                  onClick={tryUnlockMermasAnalytics}
-                  className="mt-3 h-11 w-full rounded-xl bg-[#D32F2F] text-sm font-bold text-white shadow-sm ring-1 ring-red-900/15 transition hover:bg-[#B91C1C]"
-                >
-                  Desbloquear panel
-                </button>
-              </div>
-            </div>
+        <section className="rounded-2xl border border-zinc-300/90 bg-gradient-to-br from-zinc-100 via-white to-zinc-50/80 p-4 shadow-md ring-1 ring-zinc-200/90">
+          <div className="flex items-center gap-3">
+            <Lock className="h-5 w-5 shrink-0 text-zinc-800" strokeWidth={2.2} aria-hidden />
+            <h2 className="text-base font-black tracking-tight text-zinc-900">Acceso restringido</h2>
+          </div>
+          <div className="mx-auto mt-4 max-w-xs sm:mx-0">
+            <input
+              type="password"
+              inputMode="numeric"
+              maxLength={4}
+              autoComplete="off"
+              value={analyticsPin}
+              onChange={(e) => {
+                setAnalyticsPin(e.target.value.replace(/\D/g, '').slice(0, 4));
+                setAnalyticsPinError(null);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  tryUnlockMermasAnalytics();
+                }
+              }}
+              placeholder="••••"
+              className="h-12 w-full rounded-xl border border-zinc-200 bg-white px-3 text-center text-lg font-bold tracking-[0.35em] text-zinc-900 outline-none focus:border-[#D32F2F] focus:ring-2 focus:ring-[#D32F2F]/20"
+              aria-label="Clave de acceso al panel analítico"
+            />
+            {analyticsPinError ? <p className="mt-2 text-center text-xs font-semibold text-red-600 sm:text-left">{analyticsPinError}</p> : null}
+            <button
+              type="button"
+              onClick={tryUnlockMermasAnalytics}
+              className="mt-3 h-11 w-full rounded-xl bg-[#D32F2F] text-sm font-bold text-white shadow-sm ring-1 ring-red-900/15 transition hover:bg-[#B91C1C]"
+            >
+              Desbloquear panel
+            </button>
           </div>
         </section>
       ) : null}

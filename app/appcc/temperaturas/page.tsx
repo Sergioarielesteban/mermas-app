@@ -77,20 +77,12 @@ function SlotEditor({
   const [err, setErr] = useState<string | null>(null);
   /** Tras Guardar OK: mostrar «Guardado» al instante sin esperar al refetch del padre. */
   const [justSaved, setJustSaved] = useState(false);
-  const syncTimerRef = React.useRef<number | null>(null);
 
   useEffect(() => {
     setValue(initialTempFieldValue(unit, reading));
     setNotes(reading?.notes ?? '');
     setJustSaved(false);
   }, [reading, unit]);
-
-  useEffect(
-    () => () => {
-      if (syncTimerRef.current) window.clearTimeout(syncTimerRef.current);
-    },
-    [],
-  );
 
   const tInput = parseTempInput(value);
   const hasLimits = unit.temp_min_c != null || unit.temp_max_c != null;
@@ -169,9 +161,9 @@ function SlotEditor({
     }
   };
 
-  useEffect(() => {
+  /** Sincroniza con el servidor al salir del cuadro (temp o notas) o al pulsar Guardar; no mientras escribes. */
+  const flushSlot = async () => {
     if (disabled || saving) return;
-    if (syncTimerRef.current) window.clearTimeout(syncTimerRef.current);
     setErr(null);
 
     const t = parseTempInput(value);
@@ -187,21 +179,15 @@ function SlotEditor({
       return;
     }
 
-    // Campo vacío o inválido: si existía lectura, la quitamos automáticamente.
     if (t === null) {
       setJustSaved(false);
       if (!hasReading) return;
-      syncTimerRef.current = window.setTimeout(() => {
-        void remove();
-      }, 350);
+      await remove();
       return;
     }
 
-    // Temperatura válida: guardado automático.
-    syncTimerRef.current = window.setTimeout(() => {
-      void save();
-    }, 350);
-  }, [value, notes, reading, disabled, saving]);
+    await save();
+  };
 
   return (
     <div className="py-0.5">
@@ -215,18 +201,21 @@ function SlotEditor({
         <div className="flex items-center gap-0.5">
           <input
             type="text"
-            inputMode={unit.unit_type === 'congelador' ? 'numeric' : 'decimal'}
+            inputMode="decimal"
             value={value}
             onChange={(e) => {
               setJustSaved(false);
               setValue(e.target.value);
             }}
+            onBlur={() => {
+              void flushSlot();
+            }}
             disabled={disabled || saving}
-            placeholder={unit.unit_type === 'congelador' ? '18' : '°C'}
+            placeholder={unit.unit_type === 'congelador' ? '16 o 16,5' : '°C'}
             title={
               unit.unit_type === 'congelador'
-                ? 'Ya hay un «-»; escribe solo el número (ej. 18 → -18 °C)'
-                : undefined
+                ? 'Ya hay un «-»; número y opcional coma o punto decimal (ej. 16,3 → -16,3 °C)'
+                : 'Número con coma o punto decimal (ej. 4,5 °C)'
             }
             className={[
               'h-7 rounded-md border border-zinc-200 bg-white px-1.5 text-xs font-semibold text-zinc-900 outline-none focus:ring-1 focus:ring-[#D32F2F]/40',
@@ -242,17 +231,20 @@ function SlotEditor({
             setJustSaved(false);
             setNotes(e.target.value);
           }}
+          onBlur={() => {
+            void flushSlot();
+          }}
           disabled={disabled || saving}
           placeholder="Notas"
           className="h-7 min-w-0 flex-1 rounded-md border border-zinc-200 bg-white px-1.5 text-[11px] text-zinc-700 outline-none focus:ring-1 focus:ring-[#D32F2F]/30 sm:max-w-[9rem]"
         />
         <button
           type="button"
-          title={isSavedSynced ? 'Guardado automático activo' : 'Guardar ahora'}
+          title={isSavedSynced ? 'Sincronizado con el servidor' : 'Guardar ahora'}
           onClick={() => {
             if (disabled || saving) return;
             if (isSavedSynced) return;
-            void save();
+            void flushSlot();
           }}
           disabled={disabled || saving}
           className={[

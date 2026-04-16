@@ -420,7 +420,6 @@ export default function EscandallosRecetasPage() {
   const [procOutputQty, setProcOutputQty] = useState('3.5');
   const [procOutputUnit, setProcOutputUnit] = useState<Unit>('kg');
   const [procExtraCost, setProcExtraCost] = useState('0');
-  const [subRecetasPanelOpen, setSubRecetasPanelOpen] = useState(false);
 
   const rawById = useMemo(() => new Map(rawProducts.map((p) => [p.id, p])), [rawProducts]);
   const processedById = useMemo(() => new Map(processedProducts.map((p) => [p.id, p])), [processedProducts]);
@@ -1154,28 +1153,10 @@ export default function EscandallosRecetasPage() {
       </section>
 
       <section className="rounded-3xl bg-gradient-to-b from-zinc-100/80 to-zinc-50 p-4 ring-1 ring-zinc-200/90 sm:p-6">
-        <button
-          type="button"
-          onClick={() => setSubRecetasPanelOpen((o) => !o)}
-          aria-expanded={subRecetasPanelOpen}
-          className="flex w-full items-center justify-between gap-3 rounded-2xl border border-zinc-200 bg-white px-4 py-3.5 text-left shadow-sm ring-1 ring-zinc-200/80 transition hover:bg-zinc-50 active:scale-[0.99]"
-        >
-          <span className="text-base font-black tracking-tight text-zinc-900">Sub recetas</span>
-          <ChevronDown
-            className={['h-5 w-5 shrink-0 text-zinc-400 transition-transform duration-200', subRecetasPanelOpen ? 'rotate-180' : ''].join(' ')}
-            aria-hidden
-          />
-        </button>
+        <p className="text-xs font-bold uppercase tracking-wide text-zinc-600">Bases y elaborados</p>
+        <h2 className="mt-1 text-base font-black tracking-tight text-zinc-900">Sub-receta y elaborado simple</h2>
 
-        {subRecetasPanelOpen ? (
-          <div className="mt-3 space-y-4">
-            <div>
-              <p className="text-xs font-bold uppercase tracking-wide text-zinc-600">Bases y elaborados</p>
-              <h2 className="mt-1 text-base font-black tracking-tight text-zinc-900">
-                Sub-receta y elaborado simple
-              </h2>
-            </div>
-            <div className="space-y-5 rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm sm:p-5">
+        <div className="mt-4 space-y-5 rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm sm:p-5">
           <div>
             <p className="text-sm font-bold text-zinc-900">Nueva sub-receta</p>
             <input
@@ -1346,17 +1327,15 @@ export default function EscandallosRecetasPage() {
               </ul>
             ) : null}
           </div>
-            </div>
+        </div>
 
-            {subRecipes.length > 0 ? (
-              <div className="space-y-2">
-                <p className="text-[10px] font-bold uppercase text-zinc-500">Guardadas</p>
-                {subRecipes.map((r) => renderRecipeCard(r, 'sub'))}
-              </div>
-            ) : !loading ? (
-              <p className="text-xs text-zinc-500">Sin sub-recetas guardadas.</p>
-            ) : null}
+        {subRecipes.length > 0 ? (
+          <div className="mt-4 space-y-2">
+            <p className="text-[10px] font-bold uppercase text-zinc-500">Sub-recetas</p>
+            {subRecipes.map((r) => renderRecipeCard(r, 'sub'))}
           </div>
+        ) : !loading ? (
+          <p className="mt-3 text-xs text-zinc-500">Sin sub-recetas guardadas.</p>
         ) : null}
       </section>
     </div>
