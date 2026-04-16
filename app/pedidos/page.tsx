@@ -204,10 +204,13 @@ export default function PedidosPage() {
   weightInputRef.current = weightInputByItemId;
   const pricePerKgInputRef = React.useRef<Record<string, string>>({});
   pricePerKgInputRef.current = pricePerKgInputByItemId;
-  const sendWhatsappOrder = React.useCallback((order: PedidoOrder) => {
+  const sendWhatsappOrder = React.useCallback(
+    (order: PedidoOrder, options?: { viaAssistant?: boolean }) => {
     const phone = normalizeWhatsappNumber(order.supplierContact);
     if (!phone) {
-      setMessage(`El proveedor "${order.supplierName}" no tiene teléfono válido en contacto.`);
+      const err = `El proveedor "${order.supplierName}" no tiene teléfono válido en contacto.`;
+      setMessage(err);
+      if (options?.viaAssistant) setAssistantReply(err);
       return;
     }
     const fallbackDelivery = order.createdAt.slice(0, 10);
@@ -222,7 +225,9 @@ export default function PedidosPage() {
     );
     const url = `https://wa.me/${phone}?text=${text}`;
     window.open(url, '_blank', 'noopener,noreferrer');
-  }, [email, localName]);
+  },
+  [email, localName],
+);
 
   const [expandedSentId, setExpandedSentId] = React.useState<string | null>(null);
   const [expandedHistoricoId, setExpandedHistoricoId] = React.useState<string | null>(null);
@@ -783,6 +788,106 @@ export default function PedidosPage() {
         return;
       }
 
+      const navVerb =
+        /\b(abre|abrir|vamos|entra|entrar|ir|lleva|llevame|muestrame)\b/.test(normalized) ||
+        normalized.startsWith('ir ') ||
+        normalized.includes('llevame a');
+      const resolveNavHrefFromAssistant = (): string | null => {
+        if (!navVerb) return null;
+        const n = normalized;
+        if (n.includes('nuevo pedido') || (n.includes('pedido') && n.includes('nuevo'))) return '/pedidos/nuevo';
+        if (n.includes('proveedor')) return '/pedidos/proveedores';
+        if (n.includes('calendario') || (n.includes('entrega') && n.includes('calendario'))) return '/pedidos/calendario';
+        if (n.includes('recepcion') || n.includes('albaran')) return '/pedidos/recepcion';
+        if ((n.includes('compras') && n.includes('mes')) || (n.includes('historial') && n.includes('mes')))
+          return '/pedidos/historial-mes';
+        if (
+          (n.includes('precio') || n.includes('precios')) &&
+          !n.includes('esta semana') &&
+          !n.includes('pague') &&
+          !n.includes('pagamos') &&
+          !n.includes('comida')
+        ) {
+          return '/pedidos/precios';
+        }
+        if (
+          (n.includes('comida personal') || n.includes('comida de personal')) &&
+          !n.includes('registra') &&
+          !n.includes('anula') &&
+          !n.includes('cuantas') &&
+          !n.includes('cuantos') &&
+          !n.includes('trabajador')
+        ) {
+          return '/comida-personal';
+        }
+        return null;
+      };
+      const navHrefAssistant = resolveNavHrefFromAssistant();
+      if (navHrefAssistant) {
+        router.push(navHrefAssistant);
+        const msg = `Abriendo ${navHrefAssistant.replace(/^\//, '')}…`;
+        setAssistantReply(msg);
+        pushAssistantHistory(raw, msg);
+        return;
+      }
+
+      const resumenDiaMatch =
+        (normalized.includes('resumen') &&
+          (normalized.includes('operativo') ||
+            normalized.includes('diario') ||
+            normalized.includes('del dia') ||
+            normalized.includes('de hoy'))) ||
+        normalized.includes('como vamos') ||
+        (normalized.includes('que tal') &&
+          (normalized.includes('vamos') || normalized.includes('dia') || normalized.includes('hoy')));
+      if (resumenDiaMatch) {
+        const today = new Date().toISOString().slice(0, 10);
+        const nSent = sentOrders.length;
+        const nRec = orders.filter((o) => o.status === 'received').length;
+        let mealsPart = 'Comida personal hoy: (sin sesión o datos).';
+        let cleanPart = 'Limpieza hoy: (sin sesión o datos).';
+        const supabase = localId ? getSupabaseClient() : null;
+        if (localId && supabase) {
+          const [mealsRes, tasks, units, schedule] = await Promise.all([
+            supabase
+              .from('staff_meal_records')
+              .select('people_count,total_cost_eur')
+              .eq('local_id', localId)
+              .eq('meal_date', today)
+              .is('voided_at', null),
+            fetchCleaningTasks(supabase, localId, true),
+            fetchAppccColdUnits(supabase, localId, true),
+            fetchCleaningWeekdayItems(supabase, localId),
+          ]);
+          if (mealsRes.error) throw new Error(mealsRes.error.message);
+          const mrows = mealsRes.data ?? [];
+          const unitsMeal = mrows.reduce((acc, r) => acc + Number((r as { people_count: number }).people_count ?? 0), 0);
+          const costEur = mrows.reduce(
+            (acc, r) => acc + Number((r as { total_cost_eur: number | null }).total_cost_eur ?? 0),
+            0,
+          );
+          mealsPart = `Comida personal hoy: ${mrows.length} líneas, ${unitsMeal.toFixed(0)} uds, ${costEur.toFixed(2)} €.`;
+          const wd = new Date().getDay();
+          const srows = schedule.filter((s) => s.weekday === wd);
+          if (srows.length === 0) {
+            cleanPart = 'Limpieza hoy: nada programado en cronograma.';
+          } else {
+            const lines = srows
+              .map((r) => {
+                if (r.task_id) return tasks.find((t) => t.id === r.task_id)?.title ?? null;
+                if (r.cold_unit_id) return units.find((u) => u.id === r.cold_unit_id)?.name ?? null;
+                return null;
+              })
+              .filter(Boolean) as string[];
+            cleanPart = `Limpieza hoy: ${lines.join(' · ')}.`;
+          }
+        }
+        const msg = `Resumen del día · Pedidos enviados: ${nSent}. · Recibidos (en pantalla): ${nRec}. · ${mealsPart} · ${cleanPart}`;
+        setAssistantReply(msg);
+        pushAssistantHistory(raw, msg);
+        return;
+      }
+
       const weekMatch =
         normalized.includes('esta semana') &&
         (normalized.includes('a que precio') || normalized.includes('precio pague') || normalized.includes('precio pagamos'));
@@ -868,6 +973,54 @@ export default function PedidosPage() {
           .join(' · ')}${tail}`;
         setAssistantReply(msg);
         pushAssistantHistory(raw, msg);
+        return;
+      }
+
+      const whatsappPedidoMatch =
+        (normalized.includes('whatsapp') || normalized.includes('guasap')) &&
+        (normalized.includes('pedido') || normalized.includes('proveedor'));
+      const waSupplierCap =
+        raw.match(/\b(?:whatsapp|guasap)\b.*?\bde\s+(.+)/i) ||
+        raw.match(/\b(?:whatsapp|guasap)\b.*?\bproveedor\s+(.+)/i);
+      if (whatsappPedidoMatch) {
+        const needleRaw = waSupplierCap?.[1]?.trim();
+        const needle = needleRaw ? normalizeText(needleRaw) : '';
+        const candidates = needle
+          ? sentOrders.filter((o) => normalizeText(o.supplierName).includes(needle))
+          : [...sentOrders];
+        if (candidates.length === 0) {
+          const msg = needleRaw
+            ? `No hay pedido enviado cuyo proveedor coincida con "${needleRaw}".`
+            : 'No hay pedidos enviados.';
+          setAssistantReply(msg);
+          pushAssistantHistory(raw, msg);
+          return;
+        }
+        if (candidates.length > 1 && !needle) {
+          const msg = 'Hay varios pedidos enviados; di por ejemplo: "WhatsApp pedido de Makro".';
+          setAssistantReply(msg);
+          pushAssistantHistory(raw, msg);
+          return;
+        }
+        if (candidates.length > 1) {
+          const msg = `Varios proveedores coinciden con "${needleRaw}". Sé más específico.`;
+          setAssistantReply(msg);
+          pushAssistantHistory(raw, msg);
+          return;
+        }
+        const sel = candidates[0];
+        const phone = normalizeWhatsappNumber(sel.supplierContact);
+        if (!phone) {
+          const msg = `El proveedor "${sel.supplierName}" no tiene teléfono válido en contacto.`;
+          setAssistantReply(msg);
+          setMessage(msg);
+          pushAssistantHistory(raw, msg);
+          return;
+        }
+        sendWhatsappOrder(sel, { viaAssistant: true });
+        const okMsg = `Abriendo WhatsApp para ${sel.supplierName}.`;
+        setAssistantReply(okMsg);
+        pushAssistantHistory(raw, okMsg);
         return;
       }
 
@@ -1172,7 +1325,7 @@ export default function PedidosPage() {
       }
 
       const msg =
-        'No entendí el comando. Prueba: precio semanal, pedidos enviados o recibidos, borradores, "abre pendientes de entrega", "abre histórico recibidos", comida hoy, "anula última comida", "anula comida de Ana", limpieza hoy o actualiza precio.';
+        'No entendí el comando. Prueba: "resumen del día", "abre nuevo pedido" o "abre comida personal", "WhatsApp pedido de [proveedor]", precio semanal, enviados, borradores, comida, limpieza o actualiza precio.';
       setAssistantReply(msg);
       pushAssistantHistory(raw, msg);
     } catch (err) {
@@ -1182,7 +1335,7 @@ export default function PedidosPage() {
     } finally {
       setAssistantBusy(false);
     }
-  }, [localId, orders, pushAssistantHistory, sentOrders]);
+  }, [localId, orders, pushAssistantHistory, router, sendWhatsappOrder, sentOrders]);
 
   const runAssistantCommand = React.useCallback(() => {
     void runAssistantCommandFromText(assistantInput);
@@ -1568,8 +1721,8 @@ export default function PedidosPage() {
         {assistantOpen ? (
           <div className="mt-3 space-y-2">
             <p className="text-xs text-zinc-500">
-              Abrir pendientes o histórico · borradores · anular comida de hoy · precios semana · enviados · comida
-              personal · limpieza · voz.
+              Resumen del día · abrir nuevo pedido / precios / comida personal · WhatsApp pedido de [proveedor] ·
+              pendientes · borradores · comida · voz.
             </p>
             <div className="flex gap-2">
               <input
