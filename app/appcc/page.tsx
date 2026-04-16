@@ -5,7 +5,6 @@ import {
   BrushCleaning,
   CalendarDays,
   ChevronDown,
-  ChevronLeft,
   ClipboardList,
   Droplet,
   History,
@@ -13,6 +12,7 @@ import {
   Wrench,
 } from 'lucide-react';
 import { CHEF_ONE_TAPER_LINE_CLASS } from '@/components/ChefOneGlowLine';
+import { ModuleBackLink, ModulePageShell } from '@/components/ModulePageShell';
 import MermasStyleHero from '@/components/MermasStyleHero';
 
 const LINE_SM = `mx-auto mt-2 w-14 ${CHEF_ONE_TAPER_LINE_CLASS}`;
@@ -62,7 +62,7 @@ function ExpandableControlGroup({
   items: GroupItem[];
 }) {
   return (
-    <details className="rounded-2xl border border-zinc-200/90 bg-white px-3 py-4 shadow-sm ring-1 ring-zinc-100 sm:px-4 sm:py-5">
+    <details className="overflow-hidden rounded-2xl border border-zinc-200/90 bg-white px-3 py-4 shadow-[0_20px_50px_-24px_rgba(0,0,0,0.12)] ring-1 ring-black/[0.04] sm:px-4 sm:py-5">
       <summary className="cursor-pointer list-none [&::-webkit-details-marker]:hidden">
         <h2 className="mb-3 text-center text-base font-bold tracking-tight text-zinc-900 sm:text-lg">{title}</h2>
         <div className="mx-auto max-w-sm rounded-xl bg-zinc-50/90 px-3 py-3 text-center ring-1 ring-zinc-200/80 transition hover:bg-white hover:ring-zinc-300">
@@ -91,20 +91,15 @@ function ExpandableControlGroup({
 
 export default function AppccHubPage() {
   return (
-    <div className="space-y-4">
+    <ModulePageShell contentClassName="space-y-5">
+      <ModuleBackLink />
+
       <MermasStyleHero
         eyebrow="APPCC"
         title="Puntos críticos y control diario"
+        tagline="Centro de mando para temperaturas, aceite y limpieza con trazabilidad."
         description="Temperaturas, aceite y programa de limpieza con trazabilidad para el equipo y para inspecciones."
       />
-
-      <Link
-        href="/panel"
-        className="inline-flex items-center gap-1 text-sm font-semibold text-zinc-600 hover:text-[#D32F2F]"
-      >
-        <ChevronLeft className="h-4 w-4" />
-        Panel
-      </Link>
 
       <ExpandableControlGroup
         title="Control de temperaturas"
@@ -142,6 +137,6 @@ export default function AppccHubPage() {
           { href: '/appcc/limpieza/historial', label: 'Historial limpieza', sub: 'Registros por día', Icon: History },
         ]}
       />
-    </div>
+    </ModulePageShell>
   );
 }

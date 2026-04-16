@@ -1,8 +1,8 @@
 'use client';
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import Link from 'next/link';
-import { ChevronLeft, Send, Trash2 } from 'lucide-react';
+import { Send, Trash2 } from 'lucide-react';
+import { ModuleBackLink, ModulePageShell } from '@/components/ModulePageShell';
 import MermasStyleHero from '@/components/MermasStyleHero';
 import { useAuth } from '@/components/AuthProvider';
 import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
@@ -160,7 +160,9 @@ export default function ChatPage() {
   const disabled = !localId || !profileReady || !supabaseOk || loading;
 
   return (
-    <div className="space-y-4">
+    <ModulePageShell contentClassName="space-y-4">
+      <ModuleBackLink label="Panel" />
+
       <MermasStyleHero
         eyebrow="EQUIPO"
         title="Chat del local"
@@ -168,13 +170,6 @@ export default function ChatPage() {
         compact
       />
 
-      <Link
-        href="/panel"
-        className="inline-flex items-center gap-1 text-sm font-bold text-[#D32F2F] hover:underline"
-      >
-        <ChevronLeft className="h-4 w-4" aria-hidden />
-        Panel de control
-      </Link>
       <button
         type="button"
         disabled={disabled || deleting || messages.length === 0}
@@ -192,7 +187,7 @@ export default function ChatPage() {
       ) : null}
 
       <section
-        className="flex flex-col overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm ring-1 ring-zinc-100"
+        className="flex flex-col overflow-hidden rounded-2xl border border-zinc-200/90 bg-white shadow-[0_20px_50px_-24px_rgba(0,0,0,0.12)] ring-1 ring-black/[0.04]"
         aria-label="Mensajes"
       >
         <div
@@ -273,6 +268,6 @@ export default function ChatPage() {
           <p className="mt-2 text-[10px] text-zinc-500">Enter envía · Mayús+Enter nueva línea</p>
         </div>
       </section>
-    </div>
+    </ModulePageShell>
   );
 }

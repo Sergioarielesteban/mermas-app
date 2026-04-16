@@ -30,6 +30,7 @@ import {
   TrendingUp,
   Upload,
 } from 'lucide-react';
+import { ModuleBackLink, ModulePageShell } from '@/components/ModulePageShell';
 import MermasStyleHero from '@/components/MermasStyleHero';
 import { CHEF_ONE_TAPER_LINE_CLASS } from '@/components/ChefOneGlowLine';
 import { useAuth } from '@/components/AuthProvider';
@@ -466,26 +467,33 @@ export default function EscandallosPage() {
 
   if (!profileReady) {
     return (
-      <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-zinc-200">
-        <p className="text-sm text-zinc-600">Cargando sesión…</p>
-      </section>
+      <ModulePageShell>
+        <section className="rounded-2xl bg-white p-5 shadow-[0_16px_40px_-20px_rgba(0,0,0,0.1)] ring-1 ring-black/[0.04]">
+          <p className="text-sm text-zinc-600">Cargando sesión…</p>
+        </section>
+      </ModulePageShell>
     );
   }
 
   if (!localId || !supabaseOk) {
     return (
-      <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-zinc-200">
-        <p className="text-sm font-semibold text-zinc-900">Escandallos no disponibles</p>
-        <p className="pt-1 text-sm text-zinc-600">Inicia sesión con un local configurado en Supabase.</p>
-      </section>
+      <ModulePageShell>
+        <section className="rounded-2xl bg-white p-5 shadow-[0_16px_40px_-20px_rgba(0,0,0,0.1)] ring-1 ring-black/[0.04]">
+          <p className="text-sm font-semibold text-zinc-900">Escandallos no disponibles</p>
+          <p className="pt-1 text-sm text-zinc-600">Inicia sesión con un local configurado en Supabase.</p>
+        </section>
+      </ModulePageShell>
     );
   }
 
   return (
-    <div className="space-y-5 pb-10">
+    <ModulePageShell maxWidthClass="max-w-6xl" contentClassName="space-y-5">
+      <ModuleBackLink />
+
       <MermasStyleHero
         eyebrow="Inteligencia de carta"
         title="Escandallos"
+        tagline="Food cost, recetas y cierre mensual con datos reales de venta."
         description={`Centro de mando: costes, food cost por plato y cierre mensual con ventas reales (teórico vs mix del mes). Crudos: precio medio ponderado de compras (últimos ${ESCANDALLOS_WEIGHTED_PRICE_WINDOW_DAYS} días) cuando hay albaranes con ese producto; si no, precio de ficha en pedidos.`}
         compact
       />
@@ -1093,6 +1101,6 @@ export default function EscandallosPage() {
           ) : null}
         </>
       )}
-    </div>
+    </ModulePageShell>
   );
 }

@@ -1,7 +1,8 @@
 'use client';
 
-import Link from 'next/link';
 import React from 'react';
+import { ModuleBackLink, ModulePageShell } from '@/components/ModulePageShell';
+import MermasStyleHero from '@/components/MermasStyleHero';
 import { useMermasStore } from '@/components/MermasStoreProvider';
 import { downloadMermasReportPdf } from '@/lib/mermas-report-pdf';
 import { toBusinessDateKey } from '@/lib/business-day';
@@ -162,14 +163,16 @@ export default function ResumenPage() {
   };
 
   return (
-    <div className="space-y-3">
-      <Link
-        href="/dashboard"
-        className="flex w-full items-center justify-center gap-2 rounded-2xl border border-zinc-300 bg-white py-2.5 text-sm font-bold text-zinc-800 shadow-sm ring-1 ring-zinc-200/80 transition hover:bg-zinc-50 active:scale-[0.99]"
-      >
-        <span aria-hidden>←</span>
-        Atrás · Mermas
-      </Link>
+    <ModulePageShell contentClassName="space-y-3">
+      <ModuleBackLink href="/dashboard" label="Mermas" />
+
+      <MermasStyleHero
+        eyebrow="Mermas"
+        title="Resumen de operaciones"
+        tagline="Historial filtrable y exportación a PDF."
+        compact
+      />
+
       {showDeletedBanner ? (
         <div className="pointer-events-none fixed inset-0 z-[90] grid place-items-center bg-black/25 px-6">
           <div className="rounded-2xl bg-[#D32F2F] px-7 py-5 text-center shadow-2xl ring-2 ring-white/75">
@@ -177,10 +180,8 @@ export default function ResumenPage() {
           </div>
         </div>
       ) : null}
-      <div className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-zinc-200">
-        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-zinc-500">Resumen de Operaciones</p>
-        <p className="pt-1 text-sm text-zinc-700">Historial de mermas registradas y su impacto economico.</p>
-        <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+      <div className="rounded-2xl border border-zinc-200/90 bg-white p-4 shadow-[0_16px_40px_-20px_rgba(0,0,0,0.1)] ring-1 ring-black/[0.04]">
+        <div className="mt-1 grid grid-cols-1 gap-2 sm:grid-cols-2">
           <select
             value={productFilter}
             onChange={(e) => setProductFilter(e.target.value)}
@@ -350,7 +351,7 @@ export default function ResumenPage() {
           </div>
         </details>
       ))}
-    </div>
+    </ModulePageShell>
   );
 }
 

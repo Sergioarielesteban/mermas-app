@@ -17,6 +17,7 @@ import {
   YAxis,
 } from 'recharts';
 import MermasRegistrationForm from '@/components/MermasRegistrationForm';
+import { ModuleBackLink, ModulePageShell } from '@/components/ModulePageShell';
 import MermasStyleHero from '@/components/MermasStyleHero';
 import { useMermasStore } from '@/components/MermasStoreProvider';
 import { toBusinessDate } from '@/lib/business-day';
@@ -475,7 +476,7 @@ export default function DashboardPage() {
   };
 
   return (
-    <div className="space-y-4">
+    <ModulePageShell maxWidthClass="max-w-4xl" contentClassName="space-y-4">
       {detailOpen ? (
         <div className="fixed inset-0 z-[95] bg-black/35 p-4" onClick={() => setDetailOpen(false)}>
           <div
@@ -513,9 +514,12 @@ export default function DashboardPage() {
         </div>
       ) : null}
 
+      <ModuleBackLink />
+
       <MermasStyleHero
         eyebrow="Mermas"
         title="Seguimiento en tiempo real"
+        tagline="Costes, alertas y tendencias en una sola vista."
         description="Registra mermas y consulta costes, alertas y tendencias en la misma pantalla."
       />
 
@@ -991,7 +995,7 @@ export default function DashboardPage() {
       </Block>
         </>
       ) : null}
-    </div>
+    </ModulePageShell>
   );
 }
 
