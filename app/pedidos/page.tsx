@@ -44,8 +44,10 @@ import {
 import {
   createStaffMealRecord,
   fetchStaffMealWorkers,
+  voidStaffMealRecord,
   type StaffMealWorker,
 } from '@/lib/comida-personal-supabase';
+import { getPedidoDrafts } from '@/lib/pedidos-storage';
 import {
   fetchCleaningTasks,
   fetchCleaningWeekdayItems,
@@ -731,6 +733,50 @@ export default function PedidosPage() {
     setAssistantBusy(true);
 
     try {
+      const openPendientesEntregaMatch =
+        (normalized.includes('abre') ||
+          normalized.includes('abrir') ||
+          normalized.includes('muestra') ||
+          normalized.includes('desplega')) &&
+        normalized.includes('pendiente') &&
+        (normalized.includes('entrega') ||
+          normalized.includes('enviado') ||
+          normalized.includes('recepcion') ||
+          normalized.includes('pedidos') ||
+          normalized.includes('pedido'));
+      if (openPendientesEntregaMatch) {
+        setPendientesEntregaAccordionOpen(true);
+        const msg = 'Listo: desplegado «Pendientes de entrega». Baja un poco para ver los pedidos.';
+        setAssistantReply(msg);
+        pushAssistantHistory(raw, msg);
+        window.requestAnimationFrame(() => {
+          document.getElementById('pedidos-pendientes-entrega')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        });
+        return;
+      }
+
+      const openHistoricoRecibidosMatch =
+        (normalized.includes('abre') ||
+          normalized.includes('abrir') ||
+          normalized.includes('muestra') ||
+          normalized.includes('desplega')) &&
+        (normalized.includes('historico') ||
+          normalized.includes('historial') ||
+          ((normalized.includes('recibido') || normalized.includes('recibidos')) &&
+            (normalized.includes('pedido') ||
+              normalized.includes('pedidos') ||
+              normalized.includes('almacen'))));
+      if (openHistoricoRecibidosMatch) {
+        setHistoricoRecibidosAccordionOpen(true);
+        const msg = 'Listo: desplegado «Histórico recibidos».';
+        setAssistantReply(msg);
+        pushAssistantHistory(raw, msg);
+        window.requestAnimationFrame(() => {
+          document.getElementById('pedidos-historico-recibidos')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        });
+        return;
+      }
+
       const weekMatch =
         normalized.includes('esta semana') &&
         (normalized.includes('a que precio') || normalized.includes('precio pague') || normalized.includes('precio pagamos'));
@@ -814,6 +860,45 @@ export default function PedidosPage() {
         const msg = `Pedidos enviados (${sentOrders.length}): ${listed
           .map((o) => `${o.supplierName} (entrega ${fmtDelivery(o)})`)
           .join(' · ')}${tail}`;
+        setAssistantReply(msg);
+        pushAssistantHistory(raw, msg);
+        return;
+      }
+
+      const receivedPedidosSummaryMatch =
+        normalized.includes('recibido') &&
+        (normalized.includes('cuantos') ||
+          normalized.includes('cuantas') ||
+          normalized.includes('resumen') ||
+          normalized.includes('lista') ||
+          normalized.includes('cuales') ||
+          normalized.includes('hemos'));
+      if (receivedPedidosSummaryMatch) {
+        const n = orders.filter((o) => o.status === 'received').length;
+        const msg =
+          n === 0
+            ? 'No hay pedidos en estado recibido en la carga actual.'
+            : `Pedidos recibidos en pantalla: ${n}. Di "abre histórico recibidos" para ver el desplegable.`;
+        setAssistantReply(msg);
+        pushAssistantHistory(raw, msg);
+        return;
+      }
+
+      const draftsPedidosMatch = normalized.includes('borrador');
+      if (draftsPedidosMatch) {
+        const drafts = getPedidoDrafts().filter((d) => d.status === 'draft');
+        if (drafts.length === 0) {
+          const msg = 'No hay borradores de pedido guardados en este dispositivo.';
+          setAssistantReply(msg);
+          pushAssistantHistory(raw, msg);
+          return;
+        }
+        const maxList = 6;
+        const listed = drafts.slice(0, maxList);
+        const tail = drafts.length > maxList ? ` …y ${drafts.length - maxList} más.` : '';
+        const msg = `Borradores (${drafts.length}): ${listed
+          .map((d) => `${d.supplierName} (${d.items.length} líneas)`)
+          .join(' · ')}${tail}. Abre «+ Nuevo pedido» para continuar uno.`;
         setAssistantReply(msg);
         pushAssistantHistory(raw, msg);
         return;
@@ -917,6 +1002,84 @@ export default function PedidosPage() {
         return;
       }
 
+      const voidWorkerCap = raw.match(/\b(?:anula|anular|deshaz|deshacer)\s+comida\s+(?:de|para)\s+(.+)/i);
+      const voidComidaHoyMatch =
+        (normalized.includes('anula') ||
+          normalized.includes('anular') ||
+          normalized.includes('deshaz') ||
+          normalized.includes('deshacer') ||
+          (normalized.includes('borra') && normalized.includes('ultim')) ||
+          (normalized.includes('elimina') && normalized.includes('ultim'))) &&
+        normalized.includes('comida') &&
+        !normalized.includes('registra');
+      if (voidWorkerCap?.[1]?.trim() && voidComidaHoyMatch) {
+        if (!localId) return;
+        const supabase = getSupabaseClient();
+        if (!supabase) return;
+        const today = new Date().toISOString().slice(0, 10);
+        const needle = normalizeText(voidWorkerCap[1]).trim();
+        const { data, error } = await supabase
+          .from('staff_meal_records')
+          .select('id,created_at,worker_name_snapshot,source_product_name,notes')
+          .eq('local_id', localId)
+          .eq('meal_date', today)
+          .is('voided_at', null)
+          .order('created_at', { ascending: false })
+          .limit(40);
+        if (error) throw new Error(error.message);
+        const rows = (data ?? []) as Array<{
+          id: string;
+          worker_name_snapshot: string | null;
+          source_product_name: string | null;
+          notes: string | null;
+        }>;
+        const hit = rows.find((r) => {
+          const blob = normalizeText(
+            [r.worker_name_snapshot, r.source_product_name, r.notes].filter(Boolean).join(' '),
+          );
+          return blob.includes(needle);
+        });
+        if (!hit) {
+          const msg = `No encontré un registro de comida de hoy que coincida con "${voidWorkerCap[1].trim()}".`;
+          setAssistantReply(msg);
+          pushAssistantHistory(raw, msg);
+          return;
+        }
+        await voidStaffMealRecord(supabase, localId, hit.id);
+        const msg = `Anulado el registro de comida más reciente que coincidía con "${voidWorkerCap[1].trim()}".`;
+        setAssistantReply(msg);
+        pushAssistantHistory(raw, msg);
+        return;
+      }
+      if (voidComidaHoyMatch) {
+        if (!localId) return;
+        const supabase = getSupabaseClient();
+        if (!supabase) return;
+        const today = new Date().toISOString().slice(0, 10);
+        const { data, error } = await supabase
+          .from('staff_meal_records')
+          .select('id,worker_name_snapshot,source_product_name')
+          .eq('local_id', localId)
+          .eq('meal_date', today)
+          .is('voided_at', null)
+          .order('created_at', { ascending: false })
+          .limit(1);
+        if (error) throw new Error(error.message);
+        const row = (data ?? [])[0] as { id: string; worker_name_snapshot: string | null; source_product_name: string | null } | undefined;
+        if (!row) {
+          const msg = 'No hay registros de comida personal de hoy para anular.';
+          setAssistantReply(msg);
+          pushAssistantHistory(raw, msg);
+          return;
+        }
+        await voidStaffMealRecord(supabase, localId, row.id);
+        const who = row.worker_name_snapshot?.trim() || row.source_product_name?.trim() || 'registro';
+        const msg = `Anulado el último registro de comida de hoy (${who}).`;
+        setAssistantReply(msg);
+        pushAssistantHistory(raw, msg);
+        return;
+      }
+
       const cleaningTodayMatch =
         normalized.includes('que toca limpiar hoy') ||
         normalized.includes('que toca hoy') ||
@@ -1003,7 +1166,7 @@ export default function PedidosPage() {
       }
 
       const msg =
-        'No entendí el comando. Prueba: "buscame a qué precio pagué la lechuga esta semana", "qué pedidos tengo enviados", "lista trabajadores comida", "cuánto llevamos en comida hoy", "registra comida propia para Ana", "qué toca limpiar hoy" o "actualiza bacon a 7,80".';
+        'No entendí el comando. Prueba: precio semanal, pedidos enviados o recibidos, borradores, "abre pendientes de entrega", "abre histórico recibidos", comida hoy, "anula última comida", "anula comida de Ana", limpieza hoy o actualiza precio.';
       setAssistantReply(msg);
       pushAssistantHistory(raw, msg);
     } catch (err) {
@@ -1353,8 +1516,8 @@ export default function PedidosPage() {
         {assistantOpen ? (
           <div className="mt-3 space-y-2">
             <p className="text-xs text-zinc-500">
-              Ejemplos: precio semanal · pedidos enviados · comida hoy (uds y €) · trabajadores comida · comida propia ·
-              limpieza hoy · actualizar precio en enviado.
+              Abrir pendientes o histórico · borradores · anular comida de hoy · precios semana · enviados · comida
+              personal · limpieza · voz.
             </p>
             <div className="flex gap-2">
               <input
@@ -1467,6 +1630,7 @@ export default function PedidosPage() {
       ) : null}
 
       <details
+        id="pedidos-pendientes-entrega"
         className={[
           'overflow-hidden rounded-3xl transition-all duration-300 ease-out',
           pendientesEntregaAccordionOpen
@@ -1776,6 +1940,7 @@ export default function PedidosPage() {
       </details>
 
       <details
+        id="pedidos-historico-recibidos"
         className={[
           'overflow-hidden rounded-3xl transition-all duration-300 ease-out',
           historicoRecibidosAccordionOpen
