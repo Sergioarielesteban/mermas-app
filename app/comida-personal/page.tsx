@@ -11,6 +11,8 @@ import {
   deactivateStaffMealWorker,
   fetchStaffMealRecords,
   fetchStaffMealWorkers,
+  isStaffMealOwnFood,
+  STAFF_MEAL_OWN_PRODUCT_NAME,
   type StaffMealRecord,
   type StaffMealWorker,
   type StaffMealService,
@@ -29,9 +31,6 @@ const SERVICE_LABEL: Record<StaffMealService, string> = {
   snack: 'Snack',
   otro: 'Otro',
 };
-
-/** Texto fijo en historial e informes para comida traída por el trabajador (coste interno 0). */
-const OWN_MEAL_PRODUCT_NAME = 'Comida propia';
 
 function ymd(d: Date) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -292,7 +291,7 @@ export default function ComidaPersonalPage() {
             workerId: selectedWorker.id,
             workerName: selectedWorker.name,
             sourceProductId: null,
-            sourceProductName: OWN_MEAL_PRODUCT_NAME,
+            sourceProductName: STAFF_MEAL_OWN_PRODUCT_NAME,
             consumptionGroupId,
           }),
         );
@@ -398,7 +397,16 @@ export default function ComidaPersonalPage() {
   const monthWorkerRanking = React.useMemo(() => {
     const map = new Map<
       string,
-      { rowKey: string; name: string; totalEur: number; units: number; groupIds: Set<string>; looseMeals: number }
+      {
+        rowKey: string;
+        name: string;
+        totalEur: number;
+        units: number;
+        groupIds: Set<string>;
+        looseMeals: number;
+        ownMealDates: Set<string>;
+        ownMealRegs: number;
+      }
     >();
     for (const r of monthRecords) {
       const rowKey = r.workerId ?? '__no_worker__';
@@ -410,9 +418,15 @@ export default function ComidaPersonalPage() {
         units: 0,
         groupIds: new Set<string>(),
         looseMeals: 0,
+        ownMealDates: new Set<string>(),
+        ownMealRegs: 0,
       };
       cur.totalEur += r.totalCostEur;
       cur.units += r.peopleCount;
+      if (isStaffMealOwnFood(r)) {
+        cur.ownMealRegs += 1;
+        cur.ownMealDates.add(r.mealDate);
+      }
       if (r.consumptionGroupId) cur.groupIds.add(r.consumptionGroupId);
       else cur.looseMeals += 1;
       map.set(rowKey, cur);
@@ -424,6 +438,8 @@ export default function ComidaPersonalPage() {
         totalEur: v.totalEur,
         units: v.units,
         mealsRegistered: v.groupIds.size + v.looseMeals,
+        ownMealDays: v.ownMealDates.size,
+        ownMealRegs: v.ownMealRegs,
       }))
       .sort((a, b) => b.totalEur - a.totalEur);
   }, [monthRecords]);
@@ -584,7 +600,7 @@ export default function ComidaPersonalPage() {
           Trajo su comida
         </button>
         <p className="mt-1.5 text-center text-[10px] leading-snug text-zinc-500">
-          Queda en el historial como «{OWN_MEAL_PRODUCT_NAME}». Pulsa Registrar cuando termines.
+          Queda en el historial como «{STAFF_MEAL_OWN_PRODUCT_NAME}». Pulsa Registrar cuando termines.
         </p>
       </section>
 
@@ -625,7 +641,7 @@ export default function ComidaPersonalPage() {
               {ownMealQty > 0 ? (
                 <li className="flex items-center gap-2 px-2 py-1.5">
                   <p className="min-w-0 flex-1 truncate text-[11px] font-semibold leading-tight text-zinc-800">
-                    {OWN_MEAL_PRODUCT_NAME}
+                    {STAFF_MEAL_OWN_PRODUCT_NAME}
                     <span className="mt-0.5 block text-[10px] font-normal text-zinc-500">Traída de casa</span>
                   </p>
                   <div className="flex shrink-0 items-center gap-0.5">
@@ -780,6 +796,15 @@ export default function ComidaPersonalPage() {
                           <p className="text-xs text-zinc-500">
                             {row.mealsRegistered}{' '}
                             {row.mealsRegistered === 1 ? 'comida registrada' : 'comidas registradas'}
+                            {row.ownMealRegs > 0 ? (
+                              <>
+                                {' '}
+                                · Trajo su comida:{' '}
+                                {row.ownMealRegs === row.ownMealDays
+                                  ? `${row.ownMealDays} día${row.ownMealDays === 1 ? '' : 's'}`
+                                  : `${row.ownMealDays} día${row.ownMealDays === 1 ? '' : 's'} (${row.ownMealRegs} reg.)`}
+                              </>
+                            ) : null}
                           </p>
                         </div>
                       </div>

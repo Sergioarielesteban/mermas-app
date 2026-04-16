@@ -1,6 +1,6 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import type { StaffMealRecord, StaffMealService } from '@/lib/comida-personal-supabase';
+import { isStaffMealOwnFood, type StaffMealRecord, type StaffMealService } from '@/lib/comida-personal-supabase';
 
 type DocWithTable = jsPDF & { lastAutoTable?: { finalY?: number } };
 
@@ -400,28 +400,92 @@ function drawServiceMoMCompare(
   doc.setTextColor(...PDF_ZINC_900);
 }
 
-type WorkerTotalsRow = { name: string; meals: number; units: number; totalEur: number };
+type WorkerTotalsRow = {
+  workerKey: string;
+  name: string;
+  meals: number;
+  units: number;
+  totalEur: number;
+  ownMealDays: number;
+  ownMealRegs: number;
+};
+
+function ingredientLabelForReport(r: StaffMealRecord): string {
+  const n = r.sourceProductName?.trim();
+  if (n) return n;
+  return '(sin artículo catalogado)';
+}
+
+function formatOwnMealSummaryCell(days: number, regs: number): string {
+  if (regs === 0) return '—';
+  if (regs === days) {
+    return `${days} día${days === 1 ? '' : 's'}`;
+  }
+  return `${days} día${days === 1 ? '' : 's'} · ${regs} reg.`;
+}
 
 function aggregateWorkerTotalsForPdf(active: StaffMealRecord[]): WorkerTotalsRow[] {
-  const map = new Map<string, { name: string; totalEur: number; units: number; groupIds: Set<string>; loose: number }>();
+  const map = new Map<
+    string,
+    {
+      name: string;
+      totalEur: number;
+      units: number;
+      groupIds: Set<string>;
+      loose: number;
+      ownMealDates: Set<string>;
+      ownMealRegs: number;
+    }
+  >();
   for (const r of active) {
     const k = r.workerId ?? '__no_worker__';
     const name = r.workerName ?? 'Sin trabajador';
-    const cur = map.get(k) ?? { name, totalEur: 0, units: 0, groupIds: new Set<string>(), loose: 0 };
+    const cur =
+      map.get(k) ??
+      {
+        name,
+        totalEur: 0,
+        units: 0,
+        groupIds: new Set<string>(),
+        loose: 0,
+        ownMealDates: new Set<string>(),
+        ownMealRegs: 0,
+      };
     cur.totalEur += r.totalCostEur;
     cur.units += r.peopleCount;
+    if (isStaffMealOwnFood(r)) {
+      cur.ownMealRegs += 1;
+      cur.ownMealDates.add(r.mealDate);
+    }
     if (r.consumptionGroupId) cur.groupIds.add(r.consumptionGroupId);
     else cur.loose += 1;
     map.set(k, cur);
   }
-  return Array.from(map.values())
-    .map((v) => ({
+  return Array.from(map.entries())
+    .map(([workerKey, v]) => ({
+      workerKey,
       name: v.name,
       meals: v.groupIds.size + v.loose,
       units: v.units,
       totalEur: v.totalEur,
+      ownMealDays: v.ownMealDates.size,
+      ownMealRegs: v.ownMealRegs,
     }))
     .sort((a, b) => b.totalEur - a.totalEur);
+}
+
+function top3IngredientsForWorker(active: StaffMealRecord[], workerKey: string): Array<{ ingredient: string; units: number }> {
+  const byIng = new Map<string, number>();
+  for (const r of active) {
+    const k = r.workerId ?? '__no_worker__';
+    if (k !== workerKey) continue;
+    const ing = ingredientLabelForReport(r);
+    byIng.set(ing, (byIng.get(ing) ?? 0) + r.peopleCount);
+  }
+  return Array.from(byIng.entries())
+    .map(([ingredient, units]) => ({ ingredient, units }))
+    .sort((a, b) => b.units - a.units || a.ingredient.localeCompare(b.ingredient, 'es'))
+    .slice(0, 3);
 }
 
 function appendWorkerTotalsTable(
@@ -437,27 +501,93 @@ function appendWorkerTotalsTable(
   doc.setFontSize(12);
   doc.setTextColor(...PDF_ZINC_900);
   doc.text(opts.title, opts.margin, y);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(7);
+  doc.setTextColor(...PDF_ZINC_500);
+  const noteBlock = doc.splitTextToSize(
+    '«Trajo su comida»: días distintos del mes en los que consta consumo propio (registro «Comida propia», coste 0). Si hay varios registros el mismo día se indica «días · reg.».',
+    opts.contentW,
+  );
+  doc.text(noteBlock, opts.margin, y + 14);
+  const noteLineCount = Array.isArray(noteBlock) ? noteBlock.length : 1;
 
   const rows = aggregateWorkerTotalsForPdf(opts.active);
   const body =
     rows.length === 0
-      ? [['—', '—', '—', '—']]
+      ? [['—', '—', '—', '—', '—']]
       : rows.map((r) => [
           r.name,
           String(r.meals),
           r.units.toLocaleString('es-ES', { maximumFractionDigits: 2 }),
+          formatOwnMealSummaryCell(r.ownMealDays, r.ownMealRegs),
           `${r.totalEur.toFixed(2)} €`,
         ]);
 
+  const tableStartY = y + 14 + noteLineCount * 7 + 4;
+
   autoTable(doc, {
-    startY: y + 10,
-    head: [['Trabajador', 'Comidas registradas', 'Uds (Σ)', 'Total €']],
+    startY: tableStartY,
+    head: [['Trabajador', 'Comidas registradas', 'Uds (Σ)', 'Trajo su comida', 'Total €']],
     body,
     styles: { fontSize: 8, cellPadding: 3, textColor: PDF_ZINC_900 },
     headStyles: { fillColor: PDF_BRAND, textColor: PDF_WHITE },
     alternateRowStyles: { fillColor: [248, 250, 252] },
     margin: { left: opts.margin, right: opts.margin },
-    tableWidth: Math.min(480, opts.contentW * 0.55),
+    tableWidth: Math.min(620, opts.contentW * 0.78),
+  });
+  return (doc as DocWithTable).lastAutoTable?.finalY ?? y + 40;
+}
+
+function formatIngredientTopCell(ingredient: string, units: number, doc: jsPDF, maxW: number): string {
+  const u = units.toLocaleString('es-ES', { maximumFractionDigits: 2 });
+  const base = `${ingredient} · ${u} uds`;
+  const lines = doc.splitTextToSize(base, maxW);
+  return Array.isArray(lines) ? lines.join('\n') : base;
+}
+
+function appendWorkerTopIngredientsTable(
+  doc: jsPDF,
+  opts: { margin: number; contentW: number; pageH: number; title: string; active: StaffMealRecord[]; startY: number },
+): number {
+  let y = opts.startY;
+  if (y > opts.pageH - 120) {
+    doc.addPage();
+    y = 36;
+  }
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(12);
+  doc.setTextColor(...PDF_ZINC_900);
+  doc.text(opts.title, opts.margin, y);
+
+  const rows = aggregateWorkerTotalsForPdf(opts.active);
+  const colWIngredient = (opts.contentW - 100) / 3;
+  const body =
+    rows.length === 0
+      ? [['—', '—', '—', '—']]
+      : rows.map((r) => {
+          const top = top3IngredientsForWorker(opts.active, r.workerKey);
+          const cell = (i: number) => {
+            const t = top[i];
+            return t ? formatIngredientTopCell(t.ingredient, t.units, doc, colWIngredient - 8) : '—';
+          };
+          return [r.name, cell(0), cell(1), cell(2)];
+        });
+
+  autoTable(doc, {
+    startY: y + 10,
+    head: [['Trabajador', '1.º ingrediente (uds)', '2.º ingrediente (uds)', '3.º ingrediente (uds)']],
+    body,
+    styles: { fontSize: 7.5, cellPadding: 3, textColor: PDF_ZINC_900, valign: 'top' },
+    headStyles: { fillColor: PDF_BRAND, textColor: PDF_WHITE, fontSize: 7.5 },
+    alternateRowStyles: { fillColor: [248, 250, 252] },
+    margin: { left: opts.margin, right: opts.margin },
+    tableWidth: opts.contentW,
+    columnStyles: {
+      0: { cellWidth: 100 },
+      1: { cellWidth: colWIngredient },
+      2: { cellWidth: colWIngredient },
+      3: { cellWidth: colWIngredient },
+    },
   });
   return (doc as DocWithTable).lastAutoTable?.finalY ?? y + 40;
 }
@@ -695,12 +825,31 @@ export function downloadStaffMealReportPdf(input: {
   });
   yAfterKpi += 16;
 
+  yAfterKpi = appendWorkerTopIngredientsTable(doc, {
+    margin,
+    contentW,
+    pageH,
+    title: `Top 3 ingredientes consumidos por trabajador — ${cur.labelEs}`,
+    active: cur.active,
+    startY: yAfterKpi,
+  });
+  yAfterKpi += 16;
+
   if (prev) {
-    appendWorkerTotalsTable(doc, {
+    yAfterKpi = appendWorkerTotalsTable(doc, {
       margin,
       contentW,
       pageH,
       title: `Anexo: totales por trabajador — ${prev.labelEs}`,
+      active: prev.active,
+      startY: yAfterKpi,
+    });
+    yAfterKpi += 16;
+    appendWorkerTopIngredientsTable(doc, {
+      margin,
+      contentW,
+      pageH,
+      title: `Anexo: top 3 ingredientes por trabajador — ${prev.labelEs}`,
       active: prev.active,
       startY: yAfterKpi,
     });

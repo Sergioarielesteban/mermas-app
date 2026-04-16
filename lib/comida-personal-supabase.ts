@@ -29,6 +29,14 @@ export type StaffMealWorker = {
   createdAt: string;
 };
 
+/** Texto fijado en `source_product_name` cuando el trabajador trae su comida (coste interno 0). */
+export const STAFF_MEAL_OWN_PRODUCT_NAME = 'Comida propia';
+
+export function isStaffMealOwnFood(r: Pick<StaffMealRecord, 'sourceProductName'>): boolean {
+  const t = (r.sourceProductName ?? '').trim().toLowerCase();
+  return t === STAFF_MEAL_OWN_PRODUCT_NAME.toLowerCase();
+}
+
 type StaffMealRow = {
   id: string;
   local_id: string;

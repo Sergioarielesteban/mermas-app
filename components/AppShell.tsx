@@ -43,7 +43,7 @@ function titleForPath(pathname: string | null) {
   if (pathname.startsWith('/resumen')) return 'Resumen';
   if (pathname.startsWith('/pedidos')) return 'Pedidos';
   if (pathname.startsWith('/inventario')) return 'Inventario';
-  if (pathname.startsWith('/escandallos/recetas')) return 'Recetas';
+  if (pathname.startsWith('/escandallos/recetas')) return 'Libro de recetas';
   if (pathname.startsWith('/escandallos')) return 'Escandallos';
   if (pathname.startsWith('/comida-personal')) return 'Comida de personal';
   if (pathname.startsWith('/chat')) return 'Chat del local';

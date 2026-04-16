@@ -17,8 +17,10 @@ import {
 } from 'recharts';
 import {
   AlertTriangle,
+  BookOpen,
   Calculator,
   ChefHat,
+  ChevronRight,
   FileSpreadsheet,
   LayoutDashboard,
   PieChart as PieChartIcon,
@@ -487,18 +489,36 @@ export default function EscandallosPage() {
         compact
       />
 
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-stretch sm:justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-stretch sm:justify-between sm:gap-4">
         <Link
           href="/escandallos/recetas"
-          className="inline-flex h-10 flex-1 items-center justify-center rounded-xl bg-white px-5 text-sm font-bold text-[#B91C1C] shadow-sm ring-1 ring-[#D32F2F]/28 sm:flex-none sm:min-w-[9rem]"
+          className="group relative flex min-h-[5.75rem] flex-1 items-center gap-4 overflow-hidden rounded-2xl bg-gradient-to-br from-[#B91C1C] via-[#C62828] to-[#7F1D1D] px-5 py-4 text-white shadow-lg shadow-red-900/25 ring-2 ring-white/20 transition hover:shadow-xl hover:ring-white/35 active:scale-[0.99] sm:min-w-[min(100%,22rem)] sm:max-w-xl"
         >
-          Recetas
+          <span
+            className="pointer-events-none absolute -right-6 -top-8 h-28 w-28 rounded-full bg-white/10 blur-2xl"
+            aria-hidden
+          />
+          <span className="relative grid h-14 w-14 shrink-0 place-items-center rounded-2xl bg-white/15 ring-2 ring-white/25 backdrop-blur-sm">
+            <BookOpen className="h-7 w-7 text-white" strokeWidth={2.25} aria-hidden />
+          </span>
+          <span className="relative min-w-0 flex-1 text-left">
+            <span className="block text-[11px] font-bold uppercase tracking-[0.16em] text-white/80">Libro de recetas</span>
+            <span className="mt-0.5 block text-lg font-black leading-tight tracking-tight">Crear y editar recetas</span>
+            <span className="mt-1 block text-xs font-medium leading-snug text-white/85">
+              Platos de carta, ingredientes, PVP y food cost.
+            </span>
+          </span>
+          <ChevronRight
+            className="relative h-6 w-6 shrink-0 text-white/90 transition group-hover:translate-x-0.5"
+            strokeWidth={2.5}
+            aria-hidden
+          />
         </Link>
         <button
           type="button"
           onClick={() => void load()}
           disabled={loading}
-          className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-zinc-950 px-5 text-sm font-semibold text-white shadow-sm disabled:opacity-50 sm:min-w-[11rem]"
+          className="inline-flex min-h-[3.25rem] items-center justify-center gap-2 self-stretch rounded-2xl bg-zinc-950 px-5 text-sm font-semibold text-white shadow-md ring-1 ring-zinc-800/80 transition hover:bg-zinc-900 disabled:opacity-50 sm:min-w-[11rem] sm:self-auto"
         >
           <RefreshCw className={`h-4 w-4 shrink-0 ${loading ? 'animate-spin' : ''}`} />
           Actualizar datos
@@ -514,11 +534,21 @@ export default function EscandallosPage() {
       {loading ? (
         <p className="text-center text-sm text-zinc-500">Cargando escandallos…</p>
       ) : mainRows.length === 0 && subRows.length === 0 ? (
-        <div className="rounded-3xl bg-zinc-50 py-12 text-center ring-1 ring-zinc-200">
-          <p className="text-sm font-semibold text-zinc-800">Aún no hay recetas</p>
-          <p className="mt-1 text-sm text-zinc-600">Crea platos y bases en Recetas.</p>
-          <Link href="/escandallos/recetas" className="mt-4 inline-block text-sm font-bold text-[#B91C1C] underline">
-            Ir a recetas
+        <div className="rounded-3xl bg-gradient-to-b from-zinc-50 to-white py-10 text-center ring-1 ring-zinc-200">
+          <div className="mx-auto grid h-16 w-16 place-items-center rounded-2xl bg-[#D32F2F]/10 text-[#B91C1C] ring-1 ring-[#D32F2F]/20">
+            <BookOpen className="h-8 w-8" strokeWidth={2} aria-hidden />
+          </div>
+          <p className="mt-4 text-base font-bold text-zinc-900">Aún no hay recetas</p>
+          <p className="mx-auto mt-2 max-w-sm text-sm text-zinc-600">
+            Abre el libro de recetas para dar de alta platos de carta y sus ingredientes.
+          </p>
+          <Link
+            href="/escandallos/recetas"
+            className="mt-6 inline-flex items-center gap-2 rounded-xl bg-[#D32F2F] px-5 py-3 text-sm font-bold text-white shadow-md ring-1 ring-red-900/20 transition hover:bg-[#B91C1C]"
+          >
+            <BookOpen className="h-4 w-4" aria-hidden />
+            Ir al libro de recetas
+            <ChevronRight className="h-4 w-4 opacity-90" aria-hidden />
           </Link>
         </div>
       ) : (

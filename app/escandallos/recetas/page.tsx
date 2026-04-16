@@ -2,7 +2,19 @@
 
 import Link from 'next/link';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, ChevronDown, Plus, Search, Trash2 } from 'lucide-react';
+import {
+  ArrowLeft,
+  BookOpen,
+  ChefHat,
+  ChevronDown,
+  ChevronRight,
+  Layers,
+  ListOrdered,
+  Plus,
+  Search,
+  Sparkles,
+  Trash2,
+} from 'lucide-react';
 import MermasStyleHero from '@/components/MermasStyleHero';
 import { useAuth } from '@/components/AuthProvider';
 import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
@@ -190,11 +202,16 @@ function IngredientDraftEditor({
 
   return (
     <div className="space-y-3">
-      {drafts.map((row) => (
+      {drafts.map((row, idx) => (
         <div
           key={row.key}
-          className="rounded-xl border border-zinc-200 bg-zinc-50/80 p-3 ring-1 ring-zinc-100"
+          className="rounded-2xl border border-zinc-200/90 bg-white p-4 shadow-sm ring-1 ring-zinc-100"
         >
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <span className="text-[10px] font-black uppercase tracking-wider text-zinc-400">
+              Ingrediente {idx + 1}
+            </span>
+          </div>
           <div className="flex flex-wrap items-center gap-2">
             <select
               value={row.sourceType}
@@ -209,7 +226,7 @@ function IngredientDraftEditor({
                   rawDropdownOpen: false,
                 })
               }
-              className="rounded-lg border border-zinc-200 bg-white px-2 py-1.5 text-xs font-semibold text-zinc-800"
+              className="min-w-[8.5rem] rounded-xl border border-zinc-200 bg-zinc-50/80 px-3 py-2 text-xs font-bold text-zinc-800 outline-none focus:border-[#D32F2F]/40 focus:ring-2 focus:ring-[#D32F2F]/20"
             >
               <option value="raw">Crudo</option>
               <option value="processed">Elaborado</option>
@@ -220,16 +237,16 @@ function IngredientDraftEditor({
               value={row.qty}
               disabled={disabled}
               onChange={(e) => updateRow(row.key, { qty: e.target.value })}
-              className="w-20 rounded-lg border border-zinc-200 px-2 py-1.5 text-sm"
+              className="w-24 rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm font-semibold tabular-nums outline-none focus:border-[#D32F2F]/40 focus:ring-2 focus:ring-[#D32F2F]/20"
               inputMode="decimal"
-              placeholder="Cant."
+              placeholder="Cantidad"
             />
             {row.sourceType === 'subrecipe' || row.sourceType === 'manual' ? (
               <select
                 value={row.unit}
                 disabled={disabled}
                 onChange={(e) => updateRow(row.key, { unit: e.target.value as Unit })}
-                className="rounded-lg border border-zinc-200 bg-white px-2 py-1.5 text-sm"
+                className="rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm outline-none focus:border-[#D32F2F]/40"
               >
                 {UNITS.map((u) => (
                   <option key={u.value} value={u.value}>
@@ -242,7 +259,7 @@ function IngredientDraftEditor({
               type="button"
               disabled={disabled}
               onClick={() => removeRow(row.key)}
-              className="ml-auto rounded-lg p-1.5 text-red-700 hover:bg-red-50"
+              className="ml-auto rounded-xl border border-transparent p-2 text-red-700 transition hover:border-red-100 hover:bg-red-50"
               aria-label="Quitar fila"
             >
               <Trash2 className="h-4 w-4" />
@@ -264,7 +281,7 @@ function IngredientDraftEditor({
                   });
                 }}
                 placeholder="Buscar crudo de proveedor…"
-                className="w-full rounded-lg border border-zinc-200 bg-white py-2 pl-9 pr-3 text-sm"
+                className="w-full rounded-xl border border-zinc-200 bg-white py-2.5 pl-9 pr-3 text-sm outline-none focus:border-[#D32F2F]/40 focus:ring-2 focus:ring-[#D32F2F]/15"
               />
               {row.rawDropdownOpen ? (
                 <div className="absolute z-30 mt-1 max-h-40 w-full overflow-auto rounded-lg border border-zinc-200 bg-white shadow-lg">
@@ -988,10 +1005,10 @@ export default function EscandallosRecetasPage() {
               )}
             </div>
 
-            <div className="rounded-xl border border-dashed border-zinc-300 bg-white p-3">
-              <p className="text-[10px] font-bold uppercase text-zinc-500">Añadir varios ingredientes</p>
-              <p className="mt-1 text-xs text-zinc-600">
-                Rellena las filas que necesites y pulsa una sola vez para volcar todas en la receta.
+            <div className="rounded-2xl border border-dashed border-zinc-300/90 bg-gradient-to-b from-zinc-50/90 to-white p-4 ring-1 ring-zinc-100">
+              <p className="text-xs font-black uppercase tracking-wide text-zinc-500">Añadir varios ingredientes</p>
+              <p className="mt-1.5 text-sm leading-snug text-zinc-600">
+                Completa las tarjetas de abajo y vuelca todas las líneas a la receta con un solo envío.
               </p>
               <div className="mt-3">
                 <IngredientDraftEditor
@@ -1008,8 +1025,9 @@ export default function EscandallosRecetasPage() {
                 type="button"
                 disabled={busyId !== null}
                 onClick={() => void handleAddLinesBatch(recipe.id)}
-                className="mt-3 w-full rounded-lg bg-[#D32F2F] py-2.5 text-sm font-bold text-white disabled:opacity-60"
+                className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-[#D32F2F] py-3 text-sm font-black text-white shadow-md transition hover:bg-[#B91C1C] disabled:opacity-60"
               >
+                <Plus className="h-4 w-4 shrink-0" aria-hidden />
                 Añadir todas las filas a la receta
               </button>
             </div>
@@ -1048,21 +1066,21 @@ export default function EscandallosRecetasPage() {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5 pb-8">
       <MermasStyleHero
-        eyebrow="Operaciones"
-        title="Escandallos"
-        description="Coste por ración en vivo, precio de carta con IVA y food cost. Sub-recetas y elaborados al final."
+        eyebrow="Escandallos"
+        title="Libro de recetas"
+        description="Crea el plato en tres pasos y completa ingredientes y precios en la ficha. Abajo: bases, sub-recetas y elaborados."
         compact
       />
 
       <section>
         <Link
           href="/escandallos"
-          className="inline-flex h-9 items-center gap-2 rounded-xl border border-zinc-300 bg-white px-3 text-sm font-semibold text-zinc-800 shadow-sm"
+          className="inline-flex h-11 items-center gap-2 rounded-2xl border border-zinc-200 bg-white px-4 text-sm font-bold text-zinc-800 shadow-sm ring-1 ring-zinc-100 transition hover:border-zinc-300 hover:bg-zinc-50"
         >
-          <ArrowLeft className="h-4 w-4" />
-          Centro
+          <ArrowLeft className="h-4 w-4 shrink-0" />
+          Volver al centro de escandallos
         </Link>
       </section>
 
@@ -1072,44 +1090,92 @@ export default function EscandallosRecetasPage() {
         </div>
       ) : null}
 
-      <section className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-zinc-200">
-        <div className="flex flex-wrap items-end justify-between gap-3">
-          <div>
-            <p className="text-xs font-bold uppercase tracking-wide text-zinc-500">Recetas principales</p>
-            <p className="mt-1 text-sm text-zinc-600">Platos de carta: coste, PVP, IVA, neto y food cost.</p>
+      <section className="rounded-3xl bg-white p-4 shadow-md ring-1 ring-zinc-200/90 sm:p-6">
+        <div className="flex flex-wrap items-start gap-3 border-b border-zinc-100 pb-4">
+          <div className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-[#D32F2F]/10 text-[#B91C1C] ring-1 ring-[#D32F2F]/20">
+            <ChefHat className="h-6 w-6" strokeWidth={2.2} aria-hidden />
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-xs font-bold uppercase tracking-wide text-zinc-500">Platos de carta</p>
+            <h2 className="mt-0.5 text-lg font-black tracking-tight text-zinc-900">Recetas principales</h2>
+            <p className="mt-1 text-sm leading-relaxed text-zinc-600">
+              Coste por ración, PVP con IVA, neto y food cost. Cada plato tiene su ficha desplegable para ingredientes.
+            </p>
           </div>
         </div>
-        <div className="mt-4 space-y-3 rounded-xl bg-zinc-50 p-3 ring-1 ring-zinc-100">
-          <p className="text-[10px] font-bold uppercase text-zinc-500">Nueva receta principal</p>
-          <input
-            value={newName}
-            onChange={(e) => setNewName(e.target.value)}
-            placeholder="Nombre (ej. Nachos BBQ)"
-            className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[#D32F2F]/25"
-          />
-          <div className="flex flex-wrap gap-2">
-            <input
-              value={newYieldQty}
-              onChange={(e) => setNewYieldQty(e.target.value)}
-              placeholder="Raciones"
-              className="w-24 rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[#D32F2F]/25"
-              inputMode="decimal"
-            />
-            <input
-              value={newYieldLabel}
-              onChange={(e) => setNewYieldLabel(e.target.value)}
-              placeholder="Etiqueta (raciones)"
-              className="min-w-0 flex-1 rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[#D32F2F]/25"
-            />
+
+        <div className="mt-5 overflow-hidden rounded-2xl border border-[#D32F2F]/20 bg-gradient-to-br from-red-50/80 via-white to-white p-4 shadow-sm ring-1 ring-red-100/60 sm:p-5">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
+            <div className="grid h-14 w-14 shrink-0 place-items-center rounded-2xl bg-[#D32F2F] text-white shadow-lg shadow-red-900/20 ring-2 ring-white/30">
+              <BookOpen className="h-7 w-7" strokeWidth={2.25} aria-hidden />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-[11px] font-black uppercase tracking-[0.14em] text-[#B91C1C]">Nueva receta</p>
+              <p className="mt-1 text-base font-bold text-zinc-900">Añadir un plato al libro</p>
+              <p className="mt-1 text-sm text-zinc-600">
+                Primero nombre y raciones; al crear se abre la ficha para buscar crudos, elaborados o sub-recetas.
+              </p>
+            </div>
           </div>
+
+          <ol className="mt-5 grid gap-3 sm:grid-cols-3">
+            <li className="rounded-xl border border-zinc-200/80 bg-white/95 p-3 shadow-sm">
+              <span className="flex items-center gap-2 text-[10px] font-black uppercase tracking-wide text-zinc-400">
+                <span className="grid h-6 w-6 place-items-center rounded-full bg-zinc-900 text-[11px] text-white">
+                  1
+                </span>
+                Nombre
+              </span>
+              <input
+                value={newName}
+                onChange={(e) => setNewName(e.target.value)}
+                placeholder="Ej. Nachos BBQ"
+                className="mt-2 w-full rounded-xl border border-zinc-200 bg-zinc-50/50 px-3 py-2.5 text-sm font-medium text-zinc-900 outline-none transition focus:border-[#D32F2F]/45 focus:bg-white focus:ring-2 focus:ring-[#D32F2F]/15"
+              />
+            </li>
+            <li className="rounded-xl border border-zinc-200/80 bg-white/95 p-3 shadow-sm">
+              <span className="flex items-center gap-2 text-[10px] font-black uppercase tracking-wide text-zinc-400">
+                <span className="grid h-6 w-6 place-items-center rounded-full bg-zinc-900 text-[11px] text-white">
+                  2
+                </span>
+                Rendimiento
+              </span>
+              <div className="mt-2 flex flex-wrap gap-2">
+                <input
+                  value={newYieldQty}
+                  onChange={(e) => setNewYieldQty(e.target.value)}
+                  placeholder="Cantidad"
+                  className="w-24 rounded-xl border border-zinc-200 bg-zinc-50/50 px-3 py-2.5 text-sm font-semibold tabular-nums outline-none focus:border-[#D32F2F]/45 focus:bg-white focus:ring-2 focus:ring-[#D32F2F]/15"
+                  inputMode="decimal"
+                />
+                <input
+                  value={newYieldLabel}
+                  onChange={(e) => setNewYieldLabel(e.target.value)}
+                  placeholder="Ej. raciones"
+                  className="min-w-0 flex-1 rounded-xl border border-zinc-200 bg-zinc-50/50 px-3 py-2.5 text-sm outline-none focus:border-[#D32F2F]/45 focus:bg-white focus:ring-2 focus:ring-[#D32F2F]/15"
+                />
+              </div>
+            </li>
+            <li className="flex flex-col justify-between rounded-xl border border-dashed border-[#D32F2F]/35 bg-white/90 p-3 sm:min-h-[7.5rem]">
+              <span className="flex items-center gap-2 text-[10px] font-black uppercase tracking-wide text-[#B91C1C]">
+                <ListOrdered className="h-4 w-4" aria-hidden />
+                Listo
+              </span>
+              <p className="mt-2 text-xs leading-snug text-zinc-600">
+                Pulsa crear: abriremos la ficha del plato para que añadas ingredientes y precio de venta.
+              </p>
+            </li>
+          </ol>
+
           <button
             type="button"
             disabled={busyId !== null}
             onClick={() => void handleCreateRecipe(false)}
-            className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#D32F2F] py-2.5 text-sm font-bold text-white disabled:opacity-60"
+            className="mt-5 flex w-full items-center justify-center gap-2 rounded-2xl bg-[#D32F2F] py-4 text-base font-black text-white shadow-lg shadow-red-900/25 ring-2 ring-red-900/10 transition hover:bg-[#B91C1C] disabled:opacity-60"
           >
-            <Plus className="h-4 w-4" />
-            Crear receta principal
+            <Sparkles className="h-5 w-5 shrink-0" aria-hidden />
+            Crear receta y abrir ficha
+            <ChevronRight className="h-5 w-5 shrink-0 opacity-90" aria-hidden />
           </button>
         </div>
 
@@ -1124,33 +1190,49 @@ export default function EscandallosRecetasPage() {
         )}
       </section>
 
-      <section className="rounded-2xl bg-zinc-50 p-4 ring-1 ring-zinc-200">
-        <p className="text-xs font-bold uppercase tracking-wide text-zinc-600">Bases y elaborados</p>
-        <p className="mt-1 text-sm text-zinc-600">
-          Sub-recetas con varios ingredientes (picadillo, fondos…) y transformaciones de un solo crudo.
-        </p>
+      <section className="rounded-3xl bg-gradient-to-b from-zinc-100/80 to-zinc-50 p-4 ring-1 ring-zinc-200/90 sm:p-6">
+        <div className="flex flex-wrap items-start gap-3">
+          <div className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-zinc-800 text-white ring-1 ring-zinc-700">
+            <Layers className="h-6 w-6" strokeWidth={2.2} aria-hidden />
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-xs font-bold uppercase tracking-wide text-zinc-600">Bases y elaborados</p>
+            <h2 className="mt-0.5 text-lg font-black tracking-tight text-zinc-900">Sub-recetas y transformaciones</h2>
+            <p className="mt-1 text-sm leading-relaxed text-zinc-600">
+              Mezclas internas (picadillos, fondos…) con varios ingredientes, o elaborados de un solo crudo más abajo.
+            </p>
+          </div>
+        </div>
 
-        <div className="mt-4 space-y-3 rounded-xl bg-white p-3 shadow-sm ring-1 ring-zinc-200">
-          <p className="text-[10px] font-bold uppercase text-zinc-500">Nueva sub-receta (varios ingredientes)</p>
+        <div className="mt-5 space-y-4 rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm sm:p-5">
+          <div className="flex items-start gap-3 border-b border-zinc-100 pb-3">
+            <ListOrdered className="mt-0.5 h-5 w-5 shrink-0 text-zinc-500" aria-hidden />
+            <div>
+              <p className="text-sm font-bold text-zinc-900">Nueva sub-receta</p>
+              <p className="mt-0.5 text-xs text-zinc-600">
+                Rellena ingredientes en las tarjetas de abajo y se guardan junto con la base en un solo paso.
+              </p>
+            </div>
+          </div>
           <input
             value={subNewName}
             onChange={(e) => setSubNewName(e.target.value)}
             placeholder="Nombre (ej. Picadillo mexicano)"
-            className="w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm"
+            className="w-full rounded-xl border border-zinc-200 bg-zinc-50/50 px-3 py-2.5 text-sm font-medium outline-none focus:border-zinc-400 focus:bg-white focus:ring-2 focus:ring-zinc-200"
           />
           <div className="flex flex-wrap gap-2">
             <input
               value={subNewYieldQty}
               onChange={(e) => setSubNewYieldQty(e.target.value)}
               placeholder="Rendimiento"
-              className="w-28 rounded-lg border border-zinc-200 px-3 py-2 text-sm"
+              className="w-32 rounded-xl border border-zinc-200 bg-zinc-50/50 px-3 py-2.5 text-sm font-semibold tabular-nums outline-none focus:border-zinc-400 focus:bg-white focus:ring-2 focus:ring-zinc-200"
               inputMode="decimal"
             />
             <input
               value={subNewYieldLabel}
               onChange={(e) => setSubNewYieldLabel(e.target.value)}
               placeholder="Unidad (kg, raciones…)"
-              className="min-w-0 flex-1 rounded-lg border border-zinc-200 px-3 py-2 text-sm"
+              className="min-w-0 flex-1 rounded-xl border border-zinc-200 bg-zinc-50/50 px-3 py-2.5 text-sm outline-none focus:border-zinc-400 focus:bg-white focus:ring-2 focus:ring-zinc-200"
             />
           </div>
           <IngredientDraftEditor
@@ -1166,9 +1248,11 @@ export default function EscandallosRecetasPage() {
             type="button"
             disabled={busyId !== null}
             onClick={() => void handleCreateRecipe(true)}
-            className="w-full rounded-lg bg-zinc-900 py-2.5 text-sm font-bold text-white disabled:opacity-60"
+            className="flex w-full items-center justify-center gap-2 rounded-2xl bg-zinc-900 py-3.5 text-sm font-black text-white shadow-md ring-1 ring-zinc-950 transition hover:bg-zinc-800 disabled:opacity-60"
           >
-            Guardar sub-receta (y volcar ingredientes)
+            <Layers className="h-4 w-4 shrink-0" aria-hidden />
+            Guardar sub-receta e ingredientes
+            <ChevronRight className="h-4 w-4 shrink-0 opacity-80" aria-hidden />
           </button>
         </div>
 
