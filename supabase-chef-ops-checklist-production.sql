@@ -101,7 +101,9 @@ create table if not exists public.chef_production_tasks (
   section_id uuid not null references public.chef_production_sections(id) on delete cascade,
   label text not null,
   sort_order int not null default 0,
-  hint text
+  hint text,
+  stock_lun_jue numeric,
+  stock_vie_dom numeric
 );
 
 create index if not exists idx_chef_production_tasks_section on public.chef_production_tasks(section_id);
@@ -126,10 +128,21 @@ create table if not exists public.chef_production_run_tasks (
   is_done boolean not null default false,
   done_at timestamptz,
   qty_note text,
+  qty_on_hand numeric,
+  qty_to_make numeric,
   unique (run_id, task_id)
 );
 
 create index if not exists idx_chef_production_run_tasks_run on public.chef_production_run_tasks(run_id);
+
+-- Si las tablas ya existían de una versión anterior del script, añade columnas que faltan:
+alter table public.chef_production_tasks
+  add column if not exists stock_lun_jue numeric,
+  add column if not exists stock_vie_dom numeric;
+
+alter table public.chef_production_run_tasks
+  add column if not exists qty_on_hand numeric,
+  add column if not exists qty_to_make numeric;
 
 -- RLS
 alter table public.chef_checklists enable row level security;
@@ -223,7 +236,6 @@ create policy chef_production_run_tasks_rw on public.chef_production_run_tasks f
     exists (select 1 from public.chef_production_runs r where r.id = run_id and r.local_id = public.current_local_id())
   );
 
--- Objetivos Lun–Jue / Vie–Dom por artículo y cantidades Hecho/Hacer por ejecución:
--- ejecutar también supabase-chef-ops-production-stock-columns.sql
+-- (Las columnas de stock producción están arriba; el archivo supabase-chef-ops-production-stock-columns.sql es opcional si ya ejecutaste este script completo.)
 
 -- Borrado de listas/ítems con historial: ejecutar supabase-chef-ops-checklist-fk-cascade.sql

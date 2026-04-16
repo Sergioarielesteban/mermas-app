@@ -14,6 +14,7 @@ import {
   fetchChefProductionSections,
   fetchChefProductionTasks,
   startChefProductionRun,
+  formatProductionMigrationError,
 } from '@/lib/chef-ops-supabase';
 
 async function countTasksForPlan(supabase: SupabaseClient, planId: string): Promise<number> {
@@ -54,7 +55,7 @@ export default function ProduccionEjecutarPage() {
       const entries = await Promise.all(ps.map(async (p) => [p.id, await countTasksForPlan(supabase, p.id)] as const));
       setCounts(Object.fromEntries(entries));
     } catch (e) {
-      setBanner(e instanceof Error ? e.message : 'Error al cargar.');
+      setBanner(formatProductionMigrationError(e));
       setPlans([]);
       setCounts({});
     } finally {
@@ -122,30 +123,28 @@ export default function ProduccionEjecutarPage() {
       ) : (
         <>
           <section className="rounded-2xl border border-zinc-200/90 bg-white p-4 shadow-sm ring-1 ring-zinc-100">
-            <p className="text-xs font-extrabold uppercase tracking-wide text-zinc-500">Referencia del día</p>
-            <p className="mt-1 text-[11px] text-zinc-500">
-              Define qué día usa la app para proponer Lun–Jue o Vie–Dom; en la hoja puedes cambiar el tramo a mano.
-            </p>
-            <div className="mt-3 grid gap-3 sm:grid-cols-2">
-              <label className="block">
-                <span className="text-[11px] font-bold uppercase text-zinc-500">Fecha</span>
-                <input
-                  type="date"
-                  value={periodStart}
-                  onChange={(e) => setPeriodStart(e.target.value)}
-                  className="mt-1 h-11 w-full rounded-xl border border-zinc-200 bg-zinc-50/50 px-3 text-sm font-semibold text-zinc-900 outline-none focus:border-[#D32F2F]/50 focus:bg-white focus:ring-2 focus:ring-[#D32F2F]/15"
-                />
-              </label>
-              <label className="block">
-                <span className="text-[11px] font-bold uppercase text-zinc-500">Etiqueta (opcional)</span>
-                <input
-                  value={periodLabel}
-                  onChange={(e) => setPeriodLabel(e.target.value)}
-                  placeholder="Ej. Semana 16, Turno noche…"
-                  className="mt-1 h-11 w-full rounded-xl border border-zinc-200 bg-zinc-50/50 px-3 text-sm font-semibold text-zinc-900 outline-none focus:border-[#D32F2F]/50 focus:bg-white focus:ring-2 focus:ring-[#D32F2F]/15"
-                />
-              </label>
+            <div className="mx-auto w-full max-w-sm rounded-2xl border border-zinc-200/90 bg-gradient-to-b from-zinc-50 to-white px-4 py-3 text-center shadow-sm ring-1 ring-zinc-100">
+              <p className="text-[10px] font-extrabold uppercase tracking-wide text-zinc-500">Fecha de referencia</p>
+              <p className="mt-1.5 text-[11px] font-medium leading-snug text-zinc-600">
+                La app usa esta fecha para proponer objetivos Lun–Jue o Vie–Dom al abrir la hoja (luego puedes cambiar el tramo a mano).
+              </p>
+              <input
+                type="date"
+                value={periodStart}
+                onChange={(e) => setPeriodStart(e.target.value)}
+                aria-label="Fecha de referencia de la lista"
+                className="mx-auto mt-3 box-border h-11 w-full max-w-[17.5rem] rounded-xl border border-zinc-300 bg-white px-3 text-sm font-semibold text-zinc-900 outline-none focus:border-[#D32F2F]/50 focus:ring-2 focus:ring-[#D32F2F]/15"
+              />
             </div>
+            <label className="mt-4 block">
+              <span className="text-[11px] font-bold uppercase text-zinc-500">Etiqueta (opcional)</span>
+              <input
+                value={periodLabel}
+                onChange={(e) => setPeriodLabel(e.target.value)}
+                placeholder="Ej. Semana 16, Turno noche…"
+                className="mt-1 h-11 w-full rounded-xl border border-zinc-200 bg-zinc-50/50 px-3 text-sm font-semibold text-zinc-900 outline-none focus:border-[#D32F2F]/50 focus:bg-white focus:ring-2 focus:ring-[#D32F2F]/15"
+              />
+            </label>
           </section>
 
           <div className="space-y-2">

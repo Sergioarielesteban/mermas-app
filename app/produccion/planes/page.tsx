@@ -20,6 +20,7 @@ import {
   insertChefProductionSection,
   insertChefProductionTask,
   updateChefProductionTask,
+  formatProductionMigrationError,
 } from '@/lib/chef-ops-supabase';
 
 function parseStock(s: string): number | null {
@@ -72,7 +73,7 @@ export default function ProduccionPlanesPage() {
       setSectionsByPlan(sec);
       setTasksBySection(tasks);
     } catch (e) {
-      setBanner(e instanceof Error ? e.message : 'Error al cargar listas.');
+      setBanner(formatProductionMigrationError(e));
       setPlans([]);
     } finally {
       setLoading(false);

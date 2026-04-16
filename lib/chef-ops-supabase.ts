@@ -208,6 +208,19 @@ export function suggestQtyToMake(target: number, onHand: number | null): number 
   return diff > 0 ? diff : 0;
 }
 
+/** Si Supabase aún no tiene las columnas de stocks / Hecho-Hacer de producción. */
+export function formatProductionMigrationError(e: unknown): string {
+  const raw = e instanceof Error ? e.message : String(e);
+  if (
+    /stock_lun_jue|stock_vie_dom|qty_on_hand|qty_to_make|chef_production_tasks|chef_production_run_tasks|does not exist/i.test(
+      raw,
+    )
+  ) {
+    return 'Faltan columnas de Producción en Supabase. Abre SQL Editor y ejecuta de nuevo supabase-chef-ops-checklist-production.sql del repo (trae los ALTER con add column if not exists), o el archivo supabase-chef-ops-production-stock-columns.sql. Después recarga.';
+  }
+  return raw;
+}
+
 export async function fetchChefChecklist(
   supabase: SupabaseClient,
   localId: string,

@@ -24,6 +24,7 @@ import {
   suggestQtyToMake,
   targetForProductionBand,
   updateChefProductionRunTaskQty,
+  formatProductionMigrationError,
 } from '@/lib/chef-ops-supabase';
 
 function parseQty(s: string): number | null {
@@ -102,7 +103,7 @@ export default function ProduccionCorrerPage() {
       setHechoDraft(h);
       setHacerDraft(m);
     } catch (e) {
-      setBanner(e instanceof Error ? e.message : 'Error al cargar.');
+      setBanner(formatProductionMigrationError(e));
     } finally {
       setLoading(false);
     }

@@ -1,5 +1,6 @@
 -- Chef-One: producción con stocks Lun–Jue / Vie–Dom y registro Hecho / Hacer por ejecución.
--- Ejecutar en Supabase SQL Editor después de supabase-chef-ops-checklist-production.sql.
+-- Ejecutar en Supabase SQL Editor si la app muestra «column … stock_lun_jue does not exist».
+-- (El script supabase-chef-ops-checklist-production.sql ya incluye estos ALTER; re-ejecutarlo también sirve.)
 
 alter table public.chef_production_tasks
   add column if not exists stock_lun_jue numeric,
