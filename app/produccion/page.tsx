@@ -52,12 +52,6 @@ export default function ProduccionHubPage() {
         Panel
       </Link>
 
-      <div className="rounded-2xl border border-amber-200/80 bg-amber-50/90 px-4 py-3 text-center text-xs font-semibold leading-snug text-amber-950 ring-1 ring-amber-100">
-        Primera vez: ejecuta{' '}
-        <code className="rounded bg-amber-100/90 px-1.5 py-0.5 text-[10px]">supabase-chef-ops-checklist-production.sql</code>{' '}
-        en Supabase si aún no tienes las tablas de producción.
-      </div>
-
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <HubCard
           href="/produccion/ejecutar"
