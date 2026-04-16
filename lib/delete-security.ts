@@ -4,17 +4,29 @@ export const DELETE_BLOCKED_MERMAS = 'Por seguridad, no se permite borrar regist
 export const DELETE_BLOCKED_PEDIDOS = 'Por seguridad, no se permite borrar registros de pedidos.';
 export const DELETE_BLOCKED_INVENTARIO = 'Por seguridad, no se permite borrar registros de inventario.';
 
-function readExpectedPin() {
-  const configured =
-    (window.localStorage.getItem('chef_one_delete_pin') ?? '').trim() ||
-    process.env.NEXT_PUBLIC_DELETE_SECURITY_PIN ||
-    DEFAULT_DELETE_PIN;
-  return configured.replace(/\D/g, '').slice(0, 4);
+/**
+ * Clave de 4 dígitos para borrados y zonas restringidas (localStorage `chef_one_delete_pin`, env o "1234").
+ */
+export function getDeleteSecurityPinNormalized(): string {
+  try {
+    if (typeof window !== 'undefined') {
+      const configured =
+        (window.localStorage.getItem('chef_one_delete_pin') ?? '').trim() ||
+        process.env.NEXT_PUBLIC_DELETE_SECURITY_PIN ||
+        DEFAULT_DELETE_PIN;
+      return configured.replace(/\D/g, '').slice(0, 4);
+    }
+  } catch {
+    // ignore
+  }
+  return String(process.env.NEXT_PUBLIC_DELETE_SECURITY_PIN ?? DEFAULT_DELETE_PIN)
+    .replace(/\D/g, '')
+    .slice(0, 4);
 }
 
 export function requestDeleteSecurityPin(): Promise<boolean> {
   if (typeof window === 'undefined') return Promise.resolve(true);
-  const expected = readExpectedPin();
+  const expected = getDeleteSecurityPinNormalized();
   return new Promise<boolean>((resolve) => {
     const overlay = document.createElement('div');
     overlay.className = 'fixed inset-0 z-[120] grid place-items-center bg-black/40 px-4';

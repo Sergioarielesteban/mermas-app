@@ -4,7 +4,7 @@ import Link from 'next/link';
 import React from 'react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { CalendarDays, Drumstick, FileBarChart2, TrendingDown, TrendingUp } from 'lucide-react';
+import { CalendarDays, Drumstick, FileBarChart2, Lock, TrendingDown, TrendingUp } from 'lucide-react';
 import {
   Bar,
   BarChart,
@@ -31,10 +31,12 @@ import {
   totals,
   weekBars,
 } from '@/lib/analytics';
+import { getDeleteSecurityPinNormalized } from '@/lib/delete-security';
 
 const eur = (value: number) => `${Number(value).toFixed(2)} €`;
 const MONTHLY_TARGET_KEY = 'mermas_monthly_target_eur';
 const WEEKLY_TARGET_KEY = 'mermas_weekly_target_eur';
+const MERMAS_ANALYTICS_UNLOCK_SESSION_KEY = 'mermas_dashboard_analytics_unlock_v1';
 const qty = (value: number) =>
   Number(value).toLocaleString('es-ES', {
     minimumFractionDigits: 0,
@@ -267,6 +269,19 @@ export default function DashboardPage() {
   const [detailOpen, setDetailOpen] = React.useState(false);
   const [detailTitle, setDetailTitle] = React.useState('');
   const [detailRows, setDetailRows] = React.useState<Array<{ id: string; occurredAt: string; productName: string; quantity: number; costEur: number; motiveKey: string; notes?: string }>>([]);
+  const [mermasAnalyticsUnlocked, setMermasAnalyticsUnlocked] = React.useState(false);
+  const [analyticsPin, setAnalyticsPin] = React.useState('');
+  const [analyticsPinError, setAnalyticsPinError] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    try {
+      if (typeof window !== 'undefined' && window.sessionStorage.getItem(MERMAS_ANALYTICS_UNLOCK_SESSION_KEY) === '1') {
+        setMermasAnalyticsUnlocked(true);
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
 
   React.useEffect(() => {
     try {
@@ -353,6 +368,38 @@ export default function DashboardPage() {
   const monthlyDelta = Math.round((t.month - monthly.previous) * 100) / 100;
   const monthlyTrendUp = monthlyDelta > 0;
   const monthlyTrendFlat = monthlyDelta === 0;
+
+  const tryUnlockMermasAnalytics = React.useCallback(() => {
+    const entered = analyticsPin.replace(/\D/g, '').slice(0, 4);
+    if (entered.length < 4) {
+      setAnalyticsPinError('Introduce 4 dígitos.');
+      return;
+    }
+    if (entered === getDeleteSecurityPinNormalized()) {
+      try {
+        window.sessionStorage.setItem(MERMAS_ANALYTICS_UNLOCK_SESSION_KEY, '1');
+      } catch {
+        // ignore
+      }
+      setMermasAnalyticsUnlocked(true);
+      setAnalyticsPin('');
+      setAnalyticsPinError(null);
+      return;
+    }
+    setAnalyticsPinError('Clave incorrecta.');
+  }, [analyticsPin]);
+
+  const lockMermasAnalytics = React.useCallback(() => {
+    try {
+      window.sessionStorage.removeItem(MERMAS_ANALYTICS_UNLOCK_SESSION_KEY);
+    } catch {
+      // ignore
+    }
+    setMermasAnalyticsUnlocked(false);
+    setAnalyticsPin('');
+    setAnalyticsPinError(null);
+    setDetailOpen(false);
+  }, []);
 
   const exportMonthlyExecutivePdf = () => {
     const doc = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'a4' });
@@ -511,6 +558,64 @@ export default function DashboardPage() {
           </span>
         </Link>
       </section>
+
+      {!mermasAnalyticsUnlocked ? (
+        <section className="rounded-2xl border border-zinc-300/90 bg-gradient-to-br from-zinc-100 via-white to-zinc-50/80 p-5 shadow-md ring-1 ring-zinc-200/90">
+          <div className="flex flex-col items-center text-center sm:flex-row sm:items-start sm:text-left sm:gap-4">
+            <div className="grid h-14 w-14 shrink-0 place-items-center rounded-2xl bg-zinc-900 text-white shadow-lg ring-2 ring-zinc-700/30">
+              <Lock className="h-7 w-7" strokeWidth={2.2} aria-hidden />
+            </div>
+            <div className="mt-4 min-w-0 flex-1 sm:mt-0">
+              <h2 className="text-base font-black tracking-tight text-zinc-900">Acceso restringido</h2>
+              <p className="mt-1 text-sm text-zinc-600">
+                Gráficos, alertas y objetivos: misma clave de 4 dígitos que para anular registros o borrados seguros.
+              </p>
+              <div className="mx-auto mt-4 max-w-xs sm:mx-0">
+                <input
+                  type="password"
+                  inputMode="numeric"
+                  maxLength={4}
+                  autoComplete="off"
+                  value={analyticsPin}
+                  onChange={(e) => {
+                    setAnalyticsPin(e.target.value.replace(/\D/g, '').slice(0, 4));
+                    setAnalyticsPinError(null);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      tryUnlockMermasAnalytics();
+                    }
+                  }}
+                  placeholder="••••"
+                  className="h-12 w-full rounded-xl border border-zinc-200 bg-white px-3 text-center text-lg font-bold tracking-[0.35em] text-zinc-900 outline-none focus:border-[#D32F2F] focus:ring-2 focus:ring-[#D32F2F]/20"
+                  aria-label="Clave de acceso al panel analítico"
+                />
+                {analyticsPinError ? <p className="mt-2 text-center text-xs font-semibold text-red-600 sm:text-left">{analyticsPinError}</p> : null}
+                <button
+                  type="button"
+                  onClick={tryUnlockMermasAnalytics}
+                  className="mt-3 h-11 w-full rounded-xl bg-[#D32F2F] text-sm font-bold text-white shadow-sm ring-1 ring-red-900/15 transition hover:bg-[#B91C1C]"
+                >
+                  Desbloquear panel
+                </button>
+              </div>
+            </div>
+          </div>
+        </section>
+      ) : null}
+
+      {mermasAnalyticsUnlocked ? (
+        <>
+          <div className="flex justify-end">
+            <button
+              type="button"
+              onClick={lockMermasAnalytics}
+              className="text-xs font-semibold text-zinc-500 underline decoration-zinc-300 underline-offset-2 hover:text-zinc-800"
+            >
+              Volver a bloquear panel
+            </button>
+          </div>
 
       <section className="rounded-2xl bg-white p-3 shadow-sm ring-1 ring-zinc-200">
         <div className="mb-2 flex items-center justify-between">
@@ -891,6 +996,8 @@ export default function DashboardPage() {
           )}
         </ChartBox>
       </Block>
+        </>
+      ) : null}
     </div>
   );
 }
