@@ -51,12 +51,6 @@ const UNITS: { value: Unit; label: string }[] = [
   { value: 'racion', label: 'ración' },
 ];
 
-const VAT_PRESETS = [
-  { value: '4', label: '4 %' },
-  { value: '10', label: '10 %' },
-  { value: '21', label: '21 %' },
-];
-
 function parseDecimal(raw: string): number | null {
   const t = String(raw).trim().replace(/\s/g, '').replace(',', '.');
   if (t === '') return null;
@@ -854,15 +848,11 @@ export default function EscandallosRecetasPage() {
               </div>
 
               {!recipe.isSubRecipe ? (
-                <div className="rounded-lg border border-emerald-100 bg-emerald-50/50 p-3">
-                  <p className="text-[10px] font-bold uppercase text-emerald-900">Precio carta & food cost</p>
-                  <p className="mt-1 text-[11px] text-emerald-900/80">
-                    Introduce el PVP con IVA por {draftYieldLabel || 'unidad de venta'}. El neto y el % food cost se
-                    calculan solos (food cost = coste / venta neta).
-                  </p>
+                <div className="rounded-xl border border-zinc-200 bg-zinc-50/80 p-3 ring-1 ring-zinc-100">
+                  <p className="text-[10px] font-bold uppercase text-zinc-600">Precio carta & food cost</p>
                   <div className="mt-2 grid gap-2 sm:grid-cols-2">
                     <div>
-                      <label className="text-[10px] font-semibold text-zinc-600">PVP (€ IVA incl.)</label>
+                      <label className="text-[10px] font-semibold text-zinc-500">PVP (€ IVA incl.)</label>
                       <input
                         value={draftSaleGross}
                         onChange={(e) => setDraftSaleGross(e.target.value)}
@@ -872,30 +862,14 @@ export default function EscandallosRecetasPage() {
                       />
                     </div>
                     <div>
-                      <label className="text-[10px] font-semibold text-zinc-600">IVA %</label>
-                      <div className="mt-0.5 flex flex-wrap gap-1">
-                        {VAT_PRESETS.map((p) => (
-                          <button
-                            key={p.value}
-                            type="button"
-                            onClick={() => setDraftSaleVat(p.value)}
-                            className={[
-                              'rounded-md px-2 py-1 text-[11px] font-semibold ring-1',
-                              draftSaleVat === p.value
-                                ? 'bg-zinc-900 text-white ring-zinc-900'
-                                : 'bg-white text-zinc-700 ring-zinc-200',
-                            ].join(' ')}
-                          >
-                            {p.label}
-                          </button>
-                        ))}
-                        <input
-                          value={draftSaleVat}
-                          onChange={(e) => setDraftSaleVat(e.target.value)}
-                          className="w-14 rounded-md border border-zinc-200 px-1 py-1 text-center text-xs"
-                          inputMode="decimal"
-                        />
-                      </div>
+                      <label className="text-[10px] font-semibold text-zinc-500">IVA %</label>
+                      <input
+                        value={draftSaleVat}
+                        onChange={(e) => setDraftSaleVat(e.target.value)}
+                        className="mt-0.5 w-full rounded-lg border border-zinc-200 bg-white px-2 py-1.5 text-sm tabular-nums"
+                        inputMode="decimal"
+                        placeholder="10"
+                      />
                     </div>
                   </div>
                   {(() => {
@@ -909,19 +883,17 @@ export default function EscandallosRecetasPage() {
                     });
                     const y = parseDecimal(draftYieldQty) ?? recipe.yieldQty;
                     const previewFc = foodCostPercentOfNetSale(t, y > 0 ? y : 1, n);
-                    const st = foodCostStatus(previewFc);
                     return (
-                      <div className="mt-3 grid gap-2 rounded-lg bg-white/80 px-3 py-2 text-sm ring-1 ring-emerald-100 sm:grid-cols-2">
+                      <div className="mt-3 grid gap-2 rounded-lg border border-zinc-100 bg-white px-3 py-2 sm:grid-cols-2">
                         <div>
                           <p className="text-[10px] font-semibold uppercase text-zinc-500">Precio neto (sin IVA)</p>
                           <p className="text-lg font-bold tabular-nums text-zinc-900">{n != null ? `${n.toFixed(2)} €` : '—'}</p>
                         </div>
                         <div>
                           <p className="text-[10px] font-semibold uppercase text-zinc-500">Food cost (preview)</p>
-                          <p className={`text-lg font-bold tabular-nums ${st.className}`}>
+                          <p className="text-lg font-bold tabular-nums text-zinc-900">
                             {previewFc != null ? `${previewFc.toFixed(1)} %` : '—'}
                           </p>
-                          <p className="text-[10px] text-zinc-500">{st.text}</p>
                         </div>
                       </div>
                     );
@@ -930,20 +902,13 @@ export default function EscandallosRecetasPage() {
               ) : null}
 
               {!recipe.isSubRecipe ? (
-                <div className="rounded-lg border border-zinc-200 bg-white p-3">
-                  <label className="text-[10px] font-bold uppercase text-zinc-500">Código TPV / POS</label>
-                  <p className="mt-1 text-[11px] text-zinc-600">
-                    Mismo valor que la columna <span className="font-medium">Articulo</span> (o código) del export. Así
-                    puedes importar ventas sin usar el UUID de receta.
-                  </p>
-                  <input
-                    value={draftPosArticleCode}
-                    onChange={(e) => setDraftPosArticleCode(e.target.value)}
-                    className="mt-2 w-full rounded-lg border border-zinc-200 px-2 py-1.5 font-mono text-sm tabular-nums"
-                    placeholder="Ej. 00042"
-                    autoComplete="off"
-                  />
-                </div>
+                <input
+                  value={draftPosArticleCode}
+                  onChange={(e) => setDraftPosArticleCode(e.target.value)}
+                  className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 font-mono text-sm tabular-nums outline-none focus:ring-2 focus:ring-[#D32F2F]/20"
+                  placeholder="Código TPV / POS (ej. 00042)"
+                  autoComplete="off"
+                />
               ) : null}
 
               <button
@@ -964,7 +929,7 @@ export default function EscandallosRecetasPage() {
                 </p>
               </div>
               {lines.length === 0 ? (
-                <p className="text-xs text-zinc-500">Aún sin líneas. Usa el bloque inferior para añadir varias a la vez.</p>
+                <p className="text-xs text-zinc-400">Sin ingredientes aún.</p>
               ) : (
                 <ul className="space-y-2">
                   {lines.map((line) => {
@@ -1005,12 +970,9 @@ export default function EscandallosRecetasPage() {
               )}
             </div>
 
-            <div className="rounded-2xl border border-dashed border-zinc-300/90 bg-gradient-to-b from-zinc-50/90 to-white p-4 ring-1 ring-zinc-100">
-              <p className="text-xs font-black uppercase tracking-wide text-zinc-500">Añadir varios ingredientes</p>
-              <p className="mt-1.5 text-sm leading-snug text-zinc-600">
-                Completa las tarjetas de abajo y vuelca todas las líneas a la receta con un solo envío.
-              </p>
-              <div className="mt-3">
+            <div className="rounded-2xl border border-zinc-200 bg-zinc-50/50 p-3 ring-1 ring-zinc-100">
+              <p className="text-xs font-black uppercase tracking-wide text-zinc-600">Añadir ingredientes</p>
+              <div className="mt-2">
                 <IngredientDraftEditor
                   drafts={ingredientDrafts}
                   onChange={setIngredientDrafts}
@@ -1191,177 +1153,148 @@ export default function EscandallosRecetasPage() {
       </section>
 
       <section className="rounded-3xl bg-gradient-to-b from-zinc-100/80 to-zinc-50 p-4 ring-1 ring-zinc-200/90 sm:p-6">
-        <div className="flex flex-wrap items-start gap-3">
-          <div className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-zinc-800 text-white ring-1 ring-zinc-700">
-            <Layers className="h-6 w-6" strokeWidth={2.2} aria-hidden />
-          </div>
-          <div className="min-w-0 flex-1">
-            <p className="text-xs font-bold uppercase tracking-wide text-zinc-600">Bases y elaborados</p>
-            <h2 className="mt-0.5 text-lg font-black tracking-tight text-zinc-900">Sub-recetas y transformaciones</h2>
-            <p className="mt-1 text-sm leading-relaxed text-zinc-600">
-              Mezclas internas (picadillos, fondos…) con varios ingredientes, o elaborados de un solo crudo más abajo.
-            </p>
-          </div>
-        </div>
+        <p className="text-xs font-bold uppercase tracking-wide text-zinc-600">Bases y elaborados</p>
+        <h2 className="mt-1 text-base font-black tracking-tight text-zinc-900">Sub-receta y elaborado simple</h2>
 
-        <div className="mt-5 space-y-4 rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm sm:p-5">
-          <div className="flex items-start gap-3 border-b border-zinc-100 pb-3">
-            <ListOrdered className="mt-0.5 h-5 w-5 shrink-0 text-zinc-500" aria-hidden />
-            <div>
-              <p className="text-sm font-bold text-zinc-900">Nueva sub-receta</p>
-              <p className="mt-0.5 text-xs text-zinc-600">
-                Rellena ingredientes en las tarjetas de abajo y se guardan junto con la base en un solo paso.
-              </p>
-            </div>
-          </div>
-          <input
-            value={subNewName}
-            onChange={(e) => setSubNewName(e.target.value)}
-            placeholder="Nombre (ej. Picadillo mexicano)"
-            className="w-full rounded-xl border border-zinc-200 bg-zinc-50/50 px-3 py-2.5 text-sm font-medium outline-none focus:border-zinc-400 focus:bg-white focus:ring-2 focus:ring-zinc-200"
-          />
-          <div className="flex flex-wrap gap-2">
+        <div className="mt-4 space-y-5 rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm sm:p-5">
+          <div>
+            <p className="text-sm font-bold text-zinc-900">Nueva sub-receta</p>
             <input
-              value={subNewYieldQty}
-              onChange={(e) => setSubNewYieldQty(e.target.value)}
-              placeholder="Rendimiento"
-              className="w-32 rounded-xl border border-zinc-200 bg-zinc-50/50 px-3 py-2.5 text-sm font-semibold tabular-nums outline-none focus:border-zinc-400 focus:bg-white focus:ring-2 focus:ring-zinc-200"
-              inputMode="decimal"
+              value={subNewName}
+              onChange={(e) => setSubNewName(e.target.value)}
+              placeholder="Nombre"
+              className="mt-2 w-full rounded-xl border border-zinc-200 bg-zinc-50/50 px-3 py-2.5 text-sm outline-none focus:border-zinc-400 focus:bg-white focus:ring-2 focus:ring-zinc-200"
             />
-            <input
-              value={subNewYieldLabel}
-              onChange={(e) => setSubNewYieldLabel(e.target.value)}
-              placeholder="Unidad (kg, raciones…)"
-              className="min-w-0 flex-1 rounded-xl border border-zinc-200 bg-zinc-50/50 px-3 py-2.5 text-sm outline-none focus:border-zinc-400 focus:bg-white focus:ring-2 focus:ring-zinc-200"
-            />
-          </div>
-          <IngredientDraftEditor
-            drafts={subIngredientDrafts}
-            onChange={setSubIngredientDrafts}
-            sortedRaw={sortedRawProducts}
-            processedProducts={processedProducts}
-            recipes={recipes}
-            excludeRecipeId={null}
-            disabled={busyId !== null}
-          />
-          <button
-            type="button"
-            disabled={busyId !== null}
-            onClick={() => void handleCreateRecipe(true)}
-            className="flex w-full items-center justify-center gap-2 rounded-2xl bg-zinc-900 py-3.5 text-sm font-black text-white shadow-md ring-1 ring-zinc-950 transition hover:bg-zinc-800 disabled:opacity-60"
-          >
-            <Layers className="h-4 w-4 shrink-0" aria-hidden />
-            Guardar sub-receta e ingredientes
-            <ChevronRight className="h-4 w-4 shrink-0 opacity-80" aria-hidden />
-          </button>
-        </div>
-
-        {subRecipes.length > 0 ? (
-          <div className="mt-4 space-y-2">
-            <p className="text-[10px] font-bold uppercase text-zinc-500">Tus sub-recetas</p>
-            {subRecipes.map((r) => renderRecipeCard(r, 'sub'))}
-          </div>
-        ) : (
-          !loading && (
-            <p className="mt-3 text-xs text-zinc-500">Aún no hay sub-recetas guardadas.</p>
-          )
-        )}
-
-        <div className="mt-6 border-t border-zinc-200 pt-4">
-          <p className="text-[10px] font-bold uppercase text-zinc-500">Elaborado simple (1 crudo → transformado)</p>
-          <p className="mt-1 text-xs text-zinc-600">
-            La entrada va en la misma unidad que el pedido (caja, kg…). Se recalcula si cambia el precio del crudo en
-            Proveedores.
-          </p>
-          <div className="mt-2 space-y-2 rounded-xl bg-white p-3 ring-1 ring-zinc-100">
-            <input
-              value={procName}
-              onChange={(e) => setProcName(e.target.value)}
-              placeholder="Nombre (ej. Cebolla caramelizada)"
-              className="w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm"
-            />
-            <div className="relative">
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" aria-hidden />
+            <div className="mt-2 flex flex-wrap gap-2">
               <input
-                value={procRawSearch}
-                onFocus={() => setProcRawDropdownOpen(true)}
-                onChange={(e) => {
-                  setProcRawSearch(e.target.value);
-                  setProcRawDropdownOpen(true);
-                  setProcRawId('');
-                }}
-                placeholder="Producto crudo proveedor…"
-                className="w-full rounded-lg border border-zinc-200 bg-white py-2 pl-9 pr-3 text-sm"
-              />
-              {procRawDropdownOpen ? (
-                <div className="absolute z-20 mt-1 max-h-52 w-full overflow-auto rounded-lg border border-zinc-200 bg-white shadow-lg">
-                  {filteredProcRawProducts.length === 0 ? (
-                    <p className="px-3 py-2 text-xs text-zinc-500">Sin resultados</p>
-                  ) : (
-                    filteredProcRawProducts.map((p) => {
-                      const label = rawProductPickerSummaryLine(p);
-                      return (
-                        <button
-                          key={p.id}
-                          type="button"
-                          onClick={() => {
-                            setProcRawId(p.id);
-                            setProcRawSearch(label);
-                            setProcRawDropdownOpen(false);
-                          }}
-                          className="block w-full px-3 py-2 text-left text-sm text-zinc-800 hover:bg-zinc-50"
-                        >
-                          {label}
-                        </button>
-                      );
-                    })
-                  )}
-                </div>
-              ) : null}
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              <input
-                value={procInputQty}
-                onChange={(e) => setProcInputQty(e.target.value)}
-                placeholder="Entrada qty"
-                className="rounded-lg border border-zinc-200 px-3 py-2 text-sm"
+                value={subNewYieldQty}
+                onChange={(e) => setSubNewYieldQty(e.target.value)}
+                placeholder="Rendimiento"
+                className="w-28 rounded-xl border border-zinc-200 bg-zinc-50/50 px-3 py-2.5 text-sm tabular-nums outline-none focus:border-zinc-400 focus:bg-white"
+                inputMode="decimal"
               />
               <input
-                value={procOutputQty}
-                onChange={(e) => setProcOutputQty(e.target.value)}
-                placeholder="Salida qty"
-                className="rounded-lg border border-zinc-200 px-3 py-2 text-sm"
+                value={subNewYieldLabel}
+                onChange={(e) => setSubNewYieldLabel(e.target.value)}
+                placeholder="Unidad"
+                className="min-w-0 flex-1 rounded-xl border border-zinc-200 bg-zinc-50/50 px-3 py-2.5 text-sm outline-none focus:border-zinc-400 focus:bg-white"
               />
             </div>
-            <div className="grid grid-cols-2 gap-2">
-              <select
-                value={procOutputUnit}
-                onChange={(e) => setProcOutputUnit(e.target.value as Unit)}
-                className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
-              >
-                {UNITS.map((u) => (
-                  <option key={u.value} value={u.value}>
-                    {u.label}
-                  </option>
-                ))}
-              </select>
-              <input
-                value={procExtraCost}
-                onChange={(e) => setProcExtraCost(e.target.value)}
-                placeholder="Extra €"
-                className="rounded-lg border border-zinc-200 px-3 py-2 text-sm"
+            <div className="mt-3">
+              <IngredientDraftEditor
+                drafts={subIngredientDrafts}
+                onChange={setSubIngredientDrafts}
+                sortedRaw={sortedRawProducts}
+                processedProducts={processedProducts}
+                recipes={recipes}
+                excludeRecipeId={null}
+                disabled={busyId !== null}
               />
             </div>
             <button
               type="button"
               disabled={busyId !== null}
-              onClick={() => void handleCreateProcessed()}
-              className="w-full rounded-lg bg-zinc-900 px-3 py-2 text-sm font-semibold text-white"
+              onClick={() => void handleCreateRecipe(true)}
+              className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-zinc-900 py-3 text-sm font-black text-white shadow-sm transition hover:bg-zinc-800 disabled:opacity-60"
             >
-              Guardar elaborado
+              <Layers className="h-4 w-4 shrink-0" aria-hidden />
+              Guardar sub-receta
+              <ChevronRight className="h-4 w-4 shrink-0 opacity-80" aria-hidden />
             </button>
+          </div>
+
+          <div className="border-t border-zinc-100 pt-4">
+            <p className="text-sm font-bold text-zinc-900">Elaborado simple</p>
+            <div className="mt-2 space-y-2">
+              <input
+                value={procName}
+                onChange={(e) => setProcName(e.target.value)}
+                placeholder="Nombre del elaborado"
+                className="w-full rounded-xl border border-zinc-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-zinc-200"
+              />
+              <div className="relative">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" aria-hidden />
+                <input
+                  value={procRawSearch}
+                  onFocus={() => setProcRawDropdownOpen(true)}
+                  onChange={(e) => {
+                    setProcRawSearch(e.target.value);
+                    setProcRawDropdownOpen(true);
+                    setProcRawId('');
+                  }}
+                  placeholder="Crudo de proveedor…"
+                  className="w-full rounded-xl border border-zinc-200 bg-white py-2 pl-9 pr-3 text-sm outline-none focus:ring-2 focus:ring-zinc-200"
+                />
+                {procRawDropdownOpen ? (
+                  <div className="absolute z-20 mt-1 max-h-44 w-full overflow-auto rounded-xl border border-zinc-200 bg-white shadow-lg">
+                    {filteredProcRawProducts.length === 0 ? (
+                      <p className="px-3 py-2 text-xs text-zinc-500">Sin resultados</p>
+                    ) : (
+                      filteredProcRawProducts.map((p) => {
+                        const label = rawProductPickerSummaryLine(p);
+                        return (
+                          <button
+                            key={p.id}
+                            type="button"
+                            onClick={() => {
+                              setProcRawId(p.id);
+                              setProcRawSearch(label);
+                              setProcRawDropdownOpen(false);
+                            }}
+                            className="block w-full px-3 py-2 text-left text-sm text-zinc-800 hover:bg-zinc-50"
+                          >
+                            {label}
+                          </button>
+                        );
+                      })
+                    )}
+                  </div>
+                ) : null}
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <input
+                  value={procInputQty}
+                  onChange={(e) => setProcInputQty(e.target.value)}
+                  placeholder="Entrada"
+                  className="rounded-xl border border-zinc-200 px-3 py-2 text-sm"
+                />
+                <input
+                  value={procOutputQty}
+                  onChange={(e) => setProcOutputQty(e.target.value)}
+                  placeholder="Salida"
+                  className="rounded-xl border border-zinc-200 px-3 py-2 text-sm"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <select
+                  value={procOutputUnit}
+                  onChange={(e) => setProcOutputUnit(e.target.value as Unit)}
+                  className="rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm"
+                >
+                  {UNITS.map((u) => (
+                    <option key={u.value} value={u.value}>
+                      {u.label}
+                    </option>
+                  ))}
+                </select>
+                <input
+                  value={procExtraCost}
+                  onChange={(e) => setProcExtraCost(e.target.value)}
+                  placeholder="Extra €"
+                  className="rounded-xl border border-zinc-200 px-3 py-2 text-sm"
+                />
+              </div>
+              <button
+                type="button"
+                disabled={busyId !== null}
+                onClick={() => void handleCreateProcessed()}
+                className="w-full rounded-xl bg-zinc-800 py-2.5 text-sm font-bold text-white transition hover:bg-zinc-900 disabled:opacity-60"
+              >
+                Guardar elaborado
+              </button>
+            </div>
             {processedProducts.length > 0 ? (
-              <ul className="space-y-2 pt-2">
+              <ul className="mt-3 space-y-1.5">
                 {processedProducts.map((p) => {
                   const raw = rawById.get(p.sourceSupplierProductId);
                   const cost =
@@ -1371,20 +1304,22 @@ export default function EscandallosRecetasPage() {
                   return (
                     <li
                       key={p.id}
-                      className="flex items-center justify-between gap-2 rounded-lg bg-zinc-50 px-3 py-2 ring-1 ring-zinc-200"
+                      className="flex items-center justify-between gap-2 rounded-lg border border-zinc-100 bg-zinc-50/80 px-2.5 py-1.5"
                     >
-                      <p className="text-xs text-zinc-700">
-                        <span className="font-semibold text-zinc-900">{p.name}</span> · {p.inputQty}→{p.outputQty}{' '}
-                        {p.outputUnit} · {cost} €/{p.outputUnit}
+                      <p className="min-w-0 truncate text-xs text-zinc-700">
+                        <span className="font-semibold text-zinc-900">{p.name}</span>{' '}
+                        <span className="text-zinc-500">
+                          {p.inputQty}→{p.outputQty} {p.outputUnit} · {cost} €/{p.outputUnit}
+                        </span>
                       </p>
                       <button
                         type="button"
                         disabled={busyId === p.id}
                         onClick={() => void handleDeleteProcessed(p.id)}
-                        className="rounded p-1 text-[#B91C1C]"
+                        className="shrink-0 rounded p-1 text-[#B91C1C]"
                         aria-label="Eliminar elaborado"
                       >
-                        <Trash2 className="h-4 w-4" />
+                        <Trash2 className="h-3.5 w-3.5" />
                       </button>
                     </li>
                   );
@@ -1393,6 +1328,15 @@ export default function EscandallosRecetasPage() {
             ) : null}
           </div>
         </div>
+
+        {subRecipes.length > 0 ? (
+          <div className="mt-4 space-y-2">
+            <p className="text-[10px] font-bold uppercase text-zinc-500">Sub-recetas</p>
+            {subRecipes.map((r) => renderRecipeCard(r, 'sub'))}
+          </div>
+        ) : !loading ? (
+          <p className="mt-3 text-xs text-zinc-500">Sin sub-recetas guardadas.</p>
+        ) : null}
       </section>
     </div>
   );
