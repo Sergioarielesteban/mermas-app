@@ -23,12 +23,17 @@ import {
   writeCatalogPricesSessionCache,
 } from '@/lib/pedidos-session-cache';
 import {
+  billingQuantityForReceptionPrice,
   billingQuantityForLine,
   deleteOrder,
   fetchSuppliersWithProducts,
+  persistReceptionItemTotals,
   persistSentOrderAsReceived,
+  receptionLineTotals,
   reopenReceivedOrderToSent,
+  setOrderPriceReviewArchived,
   unitCanDeclareScaleKgOnReception,
+  unitSupportsReceivedWeightKg,
   updateOrderItemIncident,
   updateOrderItemReceived,
   updateOrderItemReceivedWeightKg,
@@ -114,6 +119,22 @@ function historicoIncidentFooterText(order: PedidoOrder): string | null {
   return rows.map((r) => `${r.name}: ${r.text}`).join('\n');
 }
 
+function parseReceivedKg(raw: string): number | null | 'invalid' {
+  const t = raw.trim();
+  if (t === '') return null;
+  const n = Number(t.replace(',', '.'));
+  if (!Number.isFinite(n) || n <= 0) return 'invalid';
+  return Math.round(n * 1000) / 1000;
+}
+
+function parsePricePerKg(raw: string): number | null | 'invalid' {
+  const t = raw.trim();
+  if (t === '') return null;
+  const n = Number(t.replace(',', '.'));
+  if (!Number.isFinite(n) || n <= 0) return 'invalid';
+  return Math.round(n * 10000) / 10000;
+}
+
 export default function PedidosPage() {
   const { localCode, localName, localId, email } = useAuth();
   const hasPedidosEntry = canAccessPedidos(localCode, email, localName, localId);
@@ -131,6 +152,15 @@ export default function PedidosPage() {
   const [message, setMessage] = React.useState<string | null>(null);
   const [showDeletedBanner, setShowDeletedBanner] = React.useState(false);
   const deletedBannerTimeoutRef = React.useRef<number | null>(null);
+  const [priceInputByItemId, setPriceInputByItemId] = React.useState<Record<string, string>>({});
+  const [weightInputByItemId, setWeightInputByItemId] = React.useState<Record<string, string>>({});
+  const [pricePerKgInputByItemId, setPricePerKgInputByItemId] = React.useState<Record<string, string>>({});
+  const priceInputRef = React.useRef<Record<string, string>>({});
+  priceInputRef.current = priceInputByItemId;
+  const weightInputRef = React.useRef<Record<string, string>>({});
+  weightInputRef.current = weightInputByItemId;
+  const pricePerKgInputRef = React.useRef<Record<string, string>>({});
+  pricePerKgInputRef.current = pricePerKgInputByItemId;
   const sendWhatsappOrder = React.useCallback((order: PedidoOrder) => {
     const phone = normalizeWhatsappNumber(order.supplierContact);
     if (!phone) {
@@ -323,6 +353,236 @@ export default function PedidosPage() {
       });
   };
 
+  const getLinePrice = React.useCallback((item: PedidoOrder['items'][number]) => {
+    const raw = priceInputRef.current[item.id];
+    const parsed = raw == null ? item.pricePerUnit : Number(raw.replace(',', '.'));
+    return Number.isNaN(parsed) || parsed < 0 ? item.pricePerUnit : Math.round(parsed * 100) / 100;
+  }, []);
+
+  const setLocalUnitPrice = React.useCallback(
+    (orderId: string, itemId: string, rawValue: string) => {
+      const parsed = Number(rawValue.replace(',', '.'));
+      if (Number.isNaN(parsed) || parsed < 0) return;
+      const nextPrice = Math.round(parsed * 100) / 100;
+      setOrders((prev) =>
+        prev.map((order) => {
+          if (order.id !== orderId) return order;
+          const nextItems = order.items.map((item) => {
+            if (item.id !== itemId) return item;
+            const merged = { ...item, pricePerUnit: nextPrice };
+            const { lineTotal, effectivePricePerUnit } = receptionLineTotals(merged);
+            return { ...merged, pricePerUnit: effectivePricePerUnit, lineTotal };
+          });
+          return { ...order, items: nextItems };
+        }),
+      );
+    },
+    [setOrders],
+  );
+
+  const commitPriceInput = React.useCallback(
+    (orderId: string, itemId: string) => {
+      const orderSnap = orders.find((o) => o.id === orderId);
+      const itemSnap = orderSnap?.items.find((i) => i.id === itemId);
+      if (!itemSnap || !localId) return;
+      const supabase = getSupabaseClient();
+      if (!supabase) return;
+      const raw = priceInputByItemId[itemId] ?? itemSnap.pricePerUnit.toFixed(2);
+      const parsed = Number(raw.replace(',', '.'));
+      if (Number.isNaN(parsed) || parsed < 0) {
+        setMessage('Precio inválido.');
+        return;
+      }
+      const nextPrice = Math.round(parsed * 100) / 100;
+      const merged = {
+        ...itemSnap,
+        pricePerUnit: nextPrice,
+        ...(unitSupportsReceivedWeightKg(itemSnap.unit) ? { receivedPricePerKg: null } : {}),
+      };
+      void (unitCanDeclareScaleKgOnReception(itemSnap.unit)
+        ? persistReceptionItemTotals(supabase, localId, merged)
+        : updateOrderItemPrice(
+            supabase,
+            localId,
+            itemId,
+            nextPrice,
+            billingQuantityForReceptionPrice(merged),
+          )
+      )
+        .then(() => dispatchPedidosDataChanged())
+        .catch((err: Error) => {
+          void reloadOrders();
+          setMessage(err.message);
+        });
+      setPriceInputByItemId((prev) => ({ ...prev, [itemId]: nextPrice.toFixed(2) }));
+      if (unitSupportsReceivedWeightKg(itemSnap.unit)) {
+        setPricePerKgInputByItemId((prev) => {
+          const next = { ...prev };
+          delete next[itemId];
+          return next;
+        });
+      }
+    },
+    [localId, orders, priceInputByItemId, reloadOrders],
+  );
+
+  const commitWeightInput = React.useCallback(
+    (orderId: string, itemId: string) => {
+      if (!localId) return;
+      const supabase = getSupabaseClient();
+      if (!supabase) return;
+      const raw = weightInputByItemId[itemId];
+      if (raw === undefined) return;
+      const parsed = parseReceivedKg(raw);
+      if (parsed === 'invalid') {
+        setMessage('Peso recibido inválido.');
+        return;
+      }
+      const orderSnap = orders.find((o) => o.id === orderId);
+      const itemSnap = orderSnap?.items.find((i) => i.id === itemId);
+      if (!itemSnap) return;
+      const price = getLinePrice(itemSnap);
+      const merged = {
+        ...itemSnap,
+        pricePerUnit: price,
+        receivedWeightKg: parsed,
+        ...(itemSnap.unit === 'kg' && parsed != null ? { receivedQuantity: parsed } : {}),
+      };
+      void (async () => {
+        try {
+          await updateOrderItemReceivedWeightKg(supabase, localId, itemId, parsed);
+          if (itemSnap.unit === 'kg') {
+            await updateOrderItemReceived(supabase, localId, itemId, parsed ?? itemSnap.receivedQuantity);
+          }
+          await persistReceptionItemTotals(supabase, localId, merged);
+          dispatchPedidosDataChanged();
+        } catch (err: unknown) {
+          void reloadOrders();
+          setMessage(err instanceof Error ? err.message : 'No se pudo guardar el peso.');
+        }
+      })();
+      setWeightInputByItemId((prev) => {
+        const next = { ...prev };
+        if (parsed == null) delete next[itemId];
+        else next[itemId] = String(parsed);
+        return next;
+      });
+    },
+    [getLinePrice, localId, orders, reloadOrders, weightInputByItemId],
+  );
+
+  const commitPricePerKgInput = React.useCallback(
+    (orderId: string, itemId: string) => {
+      if (!localId) return;
+      const supabase = getSupabaseClient();
+      if (!supabase) return;
+      const raw = pricePerKgInputByItemId[itemId];
+      if (raw === undefined) return;
+      const parsed = parsePricePerKg(raw);
+      if (parsed === 'invalid') {
+        setMessage('€/kg inválido.');
+        return;
+      }
+      const orderSnap = orders.find((o) => o.id === orderId);
+      const itemSnap = orderSnap?.items.find((i) => i.id === itemId);
+      if (!itemSnap || !unitSupportsReceivedWeightKg(itemSnap.unit)) return;
+      if (parsed != null && (itemSnap.receivedWeightKg == null || itemSnap.receivedWeightKg <= 0)) {
+        setMessage('Indica primero los kg reales para aplicar €/kg.');
+        return;
+      }
+      const merged = { ...itemSnap, receivedPricePerKg: parsed };
+      void persistReceptionItemTotals(supabase, localId, merged)
+        .then(() => dispatchPedidosDataChanged())
+        .catch((err: Error) => {
+          void reloadOrders();
+          setMessage(err.message);
+        });
+    },
+    [localId, orders, pricePerKgInputByItemId, reloadOrders],
+  );
+
+  const flushOrderReceptionDrafts = React.useCallback(
+    async (order: PedidoOrder) => {
+      if (!localId) return;
+      const supabase = getSupabaseClient();
+      if (!supabase) return;
+      await Promise.all(
+        order.items.map(async (item) => {
+          const price = getLinePrice(item);
+          const rawW = weightInputRef.current[item.id];
+          const rawPpk = pricePerKgInputRef.current[item.id];
+          let parsedWeight: number | null = item.receivedWeightKg ?? null;
+          if (rawW !== undefined) {
+            const p = parseReceivedKg(rawW);
+            if (p === 'invalid') throw new Error(`Peso inválido en ${item.productName}.`);
+            parsedWeight = p;
+          }
+          let parsedPpk: number | null = item.receivedPricePerKg ?? null;
+          if (rawPpk !== undefined) {
+            const p = parsePricePerKg(rawPpk);
+            if (p === 'invalid') throw new Error(`€/kg inválido en ${item.productName}.`);
+            parsedPpk = p;
+          }
+          if (parsedPpk != null && (parsedWeight == null || parsedWeight <= 0)) {
+            throw new Error(`Faltan kg reales en ${item.productName} para usar €/kg.`);
+          }
+          const merged = {
+            ...item,
+            pricePerUnit: price,
+            receivedWeightKg: parsedWeight,
+            ...(unitSupportsReceivedWeightKg(item.unit) ? { receivedPricePerKg: parsedPpk } : {}),
+            ...(item.unit === 'kg' && parsedWeight != null ? { receivedQuantity: parsedWeight } : {}),
+          };
+          if (unitCanDeclareScaleKgOnReception(item.unit)) {
+            await updateOrderItemReceivedWeightKg(supabase, localId, item.id, parsedWeight);
+            if (item.unit === 'kg') {
+              await updateOrderItemReceived(supabase, localId, item.id, parsedWeight ?? item.receivedQuantity);
+            }
+            await persistReceptionItemTotals(supabase, localId, merged);
+          } else {
+            await updateOrderItemPrice(
+              supabase,
+              localId,
+              item.id,
+              merged.pricePerUnit,
+              billingQuantityForReceptionPrice(merged),
+            );
+          }
+        }),
+      );
+    },
+    [getLinePrice, localId],
+  );
+
+  const setSentOrderPriceReviewed = React.useCallback(
+    (orderId: string, reviewed: boolean) => {
+      if (!localId) return;
+      const supabase = getSupabaseClient();
+      if (!supabase) return;
+      const optimisticTs = reviewed ? new Date().toISOString() : undefined;
+      setOrders((prev) =>
+        prev.map((o) =>
+          o.id === orderId ? { ...o, priceReviewArchivedAt: optimisticTs } : o,
+        ),
+      );
+      void setOrderPriceReviewArchived(supabase, localId, orderId, reviewed)
+        .then(() => {
+          setMessage(
+            reviewed
+              ? 'Revisión de precios marcada como completada.'
+              : 'Revisión de precios reabierta.',
+          );
+          void reloadOrders();
+          dispatchPedidosDataChanged();
+        })
+        .catch((err: Error) => {
+          void reloadOrders();
+          setMessage(err.message);
+        });
+    },
+    [localId, reloadOrders, setOrders],
+  );
+
   React.useEffect(() => {
     setQuickLineMarks((prev) => {
       const next: Record<string, 'ok' | 'bad'> = {};
@@ -394,10 +654,6 @@ export default function PedidosPage() {
       return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
     });
   }, [orders]);
-  const ordersPendingPriceReview = orders.filter(
-    (row) =>
-      (row.status === 'sent' || row.status === 'received') && !row.priceReviewArchivedAt,
-  );
   const receivedOrders = orders.filter((row) => row.status === 'received');
 
   const renderSentOrderReceiveAndIncident = (order: PedidoOrder) => {
@@ -407,11 +663,12 @@ export default function PedidosPage() {
     });
     const incidentOpen = Boolean(incidentOpenBySentOrderId[order.id]);
     const detailOpen = expandedSentId === order.id;
+    const reviewed = Boolean(order.priceReviewArchivedAt);
     return (
       <div className="mt-3 space-y-3 border-t border-amber-200/70 pt-3 text-left">
         {!detailOpen ? (
           <p className="text-center text-[11px] leading-snug text-zinc-600">
-            Toca el recuadro del proveedor (arriba) para desplegar las lineas y marcar cada producto con ✓ o ✗.
+            Toca el recuadro del proveedor para desplegar líneas, marcar ✓/✗ y rellenar kg/precio recibido aquí mismo.
           </p>
         ) : null}
         <button
@@ -425,7 +682,8 @@ export default function PedidosPage() {
             if (!snap) return;
             setMessage(null);
             setReceivingOrderId(order.id);
-            void persistSentOrderAsReceived(supabase, localId, snap, { preserveOrderPricing: true })
+            void flushOrderReceptionDrafts(snap)
+              .then(() => persistSentOrderAsReceived(supabase, localId, snap, { preserveOrderPricing: true }))
               .then(() => {
                 const nowIso = new Date().toISOString();
                 registerPendingReceivedOrder(order.id, nowIso);
@@ -437,7 +695,7 @@ export default function PedidosPage() {
                   ),
                 );
                 setExpandedSentId((id) => (id === order.id ? null : id));
-                setMessage('Pedido marcado como recibido. Coteja precios en Recepción.');
+                setMessage('Pedido marcado como recibido.');
                 void reloadOrders();
                 window.setTimeout(() => void reloadOrders(), 500);
                 dispatchPedidosDataChanged();
@@ -455,6 +713,18 @@ export default function PedidosPage() {
               <span>recibido</span>
             </>
           )}
+        </button>
+        <button
+          type="button"
+          onClick={() => setSentOrderPriceReviewed(order.id, !reviewed)}
+          className={[
+            'w-full rounded-lg px-3 py-2.5 text-center text-xs font-bold transition active:scale-[0.99]',
+            reviewed
+              ? 'bg-emerald-100 text-emerald-800 ring-1 ring-emerald-300'
+              : 'bg-zinc-200 text-zinc-700',
+          ].join(' ')}
+        >
+          {reviewed ? 'Revisión de precios: completada (tocar para reabrir)' : 'Marcar revisión de precios como completada'}
         </button>
         <button
           type="button"
@@ -499,12 +769,9 @@ export default function PedidosPage() {
                 Cerrar sin guardar
               </button>
             </div>
-            <Link
-              href={`/pedidos/recepcion?orderId=${encodeURIComponent(order.id)}`}
-              className="block text-center text-xs font-semibold text-[#B91C1C] underline"
-            >
-              Abrir pantalla de recepcion (precios y pesos)
-            </Link>
+            <p className="text-center text-[11px] text-zinc-500">
+              La incidencia se guarda aquí mismo para este pedido.
+            </p>
           </div>
         ) : null}
       </div>
@@ -642,6 +909,12 @@ export default function PedidosPage() {
                         Total (IVA incluido):{' '}
                         <span className="text-base font-black text-zinc-900">{totals.total.toFixed(2)} €</span>
                       </p>
+                      <p className="pt-1 text-[10px] font-semibold uppercase tracking-wide text-zinc-500">
+                        Revisión precios:{' '}
+                        <span className={order.priceReviewArchivedAt ? 'text-emerald-700' : 'text-zinc-700'}>
+                          {order.priceReviewArchivedAt ? 'completada' : 'pendiente'}
+                        </span>
+                      </p>
                     </>
                   );
                 })()}
@@ -767,14 +1040,96 @@ export default function PedidosPage() {
                             </button>
                           </div>
                         </div>
-                        {unitCanDeclareScaleKgOnReception(item.unit) &&
-                        item.receivedWeightKg != null &&
-                        item.receivedWeightKg > 0 ? (
-                          <p className="text-xs text-zinc-700">
-                            Peso báscula:{' '}
-                            <span className="font-semibold">{item.receivedWeightKg.toFixed(3)} kg</span>
+                        <p className="text-xs text-zinc-700">
+                          Precio base (pedido):{' '}
+                          <span className="font-semibold text-zinc-900">
+                            {item.basePricePerUnit != null && Number.isFinite(item.basePricePerUnit)
+                              ? `${item.basePricePerUnit.toFixed(2)} €/${unitPriceCatalogSuffix[item.unit]}`
+                              : '—'}
+                          </span>
+                        </p>
+                        <p className="text-xs text-zinc-700">
+                          Precio albarán:{' '}
+                          <span className="font-semibold text-zinc-900">
+                            {item.pricePerUnit.toFixed(2)} €/{unitPriceCatalogSuffix[item.unit]}
+                          </span>
+                        </p>
+                        {item.basePricePerUnit != null &&
+                        Number.isFinite(item.basePricePerUnit) &&
+                        Math.abs(item.pricePerUnit - item.basePricePerUnit) > 0.005 ? (
+                          <p className="text-xs font-semibold text-amber-900">
+                            Variación:{' '}
+                            {item.pricePerUnit >= item.basePricePerUnit ? '+' : ''}
+                            {(item.pricePerUnit - item.basePricePerUnit).toFixed(2)} €
+                            {item.basePricePerUnit > 0
+                              ? ` (${item.pricePerUnit >= item.basePricePerUnit ? '+' : ''}${((((item.pricePerUnit - item.basePricePerUnit) / item.basePricePerUnit) * 100)).toFixed(1)} %)`
+                              : ''}
                           </p>
                         ) : null}
+                        <p className="text-xs text-zinc-700">
+                          Subt:{' '}
+                          <span className="font-semibold text-zinc-900">
+                            {lineSubtotalForOrderListDisplay(item).toFixed(2)} €
+                          </span>
+                        </p>
+                        {unitCanDeclareScaleKgOnReception(item.unit) ? (
+                          <div className="mt-2 flex flex-wrap items-center gap-2">
+                            <label className="text-xs font-semibold text-zinc-600">Kg reales</label>
+                            <input
+                              type="text"
+                              inputMode="decimal"
+                              autoComplete="off"
+                              autoCorrect="off"
+                              placeholder="Ej: 12,5"
+                              value={
+                                weightInputByItemId[item.id] ??
+                                (item.receivedWeightKg != null ? String(item.receivedWeightKg) : '')
+                              }
+                              onChange={(e) =>
+                                setWeightInputByItemId((prev) => ({ ...prev, [item.id]: e.target.value }))
+                              }
+                              onBlur={() => commitWeightInput(order.id, item.id)}
+                              className="h-8 w-[3.25rem] max-w-[3.25rem] shrink-0 rounded-lg border border-zinc-300 bg-white px-1.5 py-1 text-xs font-semibold text-zinc-900 outline-none sm:w-[4rem] sm:max-w-[4rem]"
+                            />
+                          </div>
+                        ) : null}
+                        {unitSupportsReceivedWeightKg(item.unit) ? (
+                          <div className="mt-2 flex flex-wrap items-center gap-2">
+                            <label className="text-xs font-semibold text-zinc-600">€/kg real</label>
+                            <input
+                              type="text"
+                              inputMode="decimal"
+                              autoComplete="off"
+                              autoCorrect="off"
+                              placeholder="Ej: 3,45"
+                              value={
+                                pricePerKgInputByItemId[item.id] ??
+                                (item.receivedPricePerKg != null ? String(item.receivedPricePerKg) : '')
+                              }
+                              onChange={(e) =>
+                                setPricePerKgInputByItemId((prev) => ({ ...prev, [item.id]: e.target.value }))
+                              }
+                              onBlur={() => commitPricePerKgInput(order.id, item.id)}
+                              className="h-8 w-14 max-w-[5.5rem] shrink-0 rounded-lg border border-zinc-300 bg-white px-1.5 py-1 text-xs font-semibold text-zinc-900 outline-none sm:w-[5rem]"
+                            />
+                          </div>
+                        ) : null}
+                        <div className="mt-2 flex flex-wrap items-center gap-2">
+                          <label className="text-xs font-semibold text-zinc-600">Precio recibido</label>
+                          <input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            value={priceInputByItemId[item.id] ?? item.pricePerUnit.toFixed(2)}
+                            onChange={(e) => {
+                              const raw = e.target.value;
+                              setPriceInputByItemId((prev) => ({ ...prev, [item.id]: raw }));
+                              setLocalUnitPrice(order.id, item.id, raw);
+                            }}
+                            onBlur={() => commitPriceInput(order.id, item.id)}
+                            className="h-10 w-20 rounded-lg border border-zinc-300 bg-white px-2 text-sm font-semibold text-zinc-900 outline-none"
+                          />
+                        </div>
                       </div>
                     );
                   })}
@@ -1049,30 +1404,6 @@ export default function PedidosPage() {
         </div>
       </details>
 
-      <section
-        className="overflow-hidden rounded-3xl bg-zinc-50/80 ring-1 ring-zinc-200/90 transition-all duration-300 ease-out hover:bg-white hover:ring-zinc-300"
-      >
-        <Link
-          href="/pedidos/recepcion"
-          className="flex w-full flex-col items-center px-5 py-8 text-center outline-none transition active:bg-zinc-50/50 focus-visible:ring-2 focus-visible:ring-[#D32F2F]/40 focus-visible:ring-offset-2 sm:px-6"
-        >
-          <span className="text-[11px] font-semibold uppercase tracking-[0.2em] text-zinc-400">Recepción</span>
-          <span className="mt-2 text-center text-2xl font-semibold leading-[1.15] tracking-tight text-zinc-900 sm:text-[1.75rem] sm:leading-tight">
-            Pendientes revisión de precios
-          </span>
-          <span className={`mx-auto mt-4 w-24 ${CHEF_ONE_TAPER_LINE_CLASS}`} aria-hidden />
-          <span className="mt-4 text-3xl font-black tabular-nums text-zinc-900">
-            {ordersPendingPriceReview.length}
-          </span>
-          <span className="mt-3 text-xs text-zinc-500">
-            Incluye enviados y recibidos sin revisar en Recepción.
-          </span>
-          <span className="mt-5 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider text-[#D32F2F]">
-            Abrir revisión de precios
-            <ChevronDown className="-rotate-90 h-4 w-4" aria-hidden />
-          </span>
-        </Link>
-      </section>
     </div>
   );
 }
