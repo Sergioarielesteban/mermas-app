@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { ChevronDown } from 'lucide-react';
+import { Bot, ChevronDown } from 'lucide-react';
 import React from 'react';
 import { useAuth } from '@/components/AuthProvider';
 import { CHEF_ONE_TAPER_LINE_CLASS } from '@/components/ChefOneGlowLine';
@@ -135,6 +135,26 @@ function parsePricePerKg(raw: string): number | null | 'invalid' {
   return Math.round(n * 10000) / 10000;
 }
 
+function normalizeText(input: string): string {
+  return input
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^\w\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+type AssistantPendingAction = {
+  kind: 'update_price';
+  orderId: string;
+  itemId: string;
+  productName: string;
+  supplierName: string;
+  previousPrice: number;
+  nextPrice: number;
+};
+
 export default function PedidosPage() {
   const { localCode, localName, localId, email } = useAuth();
   const hasPedidosEntry = canAccessPedidos(localCode, email, localName, localId);
@@ -191,6 +211,14 @@ export default function PedidosPage() {
   const [quickLineMarks, setQuickLineMarks] = React.useState<Record<string, 'ok' | 'bad'>>({});
   const [incidentOpenBySentOrderId, setIncidentOpenBySentOrderId] = React.useState<Record<string, boolean>>({});
   const [incidentNoteBySentOrderId, setIncidentNoteBySentOrderId] = React.useState<Record<string, string>>({});
+  const [assistantOpen, setAssistantOpen] = React.useState(false);
+  const [assistantInput, setAssistantInput] = React.useState('');
+  const [assistantReply, setAssistantReply] = React.useState<string | null>(null);
+  const [assistantPendingAction, setAssistantPendingAction] = React.useState<AssistantPendingAction | null>(null);
+  const [assistantListening, setAssistantListening] = React.useState(false);
+  const assistantRecognitionRef = React.useRef<{
+    stop: () => void;
+  } | null>(null);
 
   const toggleSentIncidentPanel = (order: PedidoOrder) => {
     setIncidentOpenBySentOrderId((prev) => {
@@ -656,6 +684,219 @@ export default function PedidosPage() {
   }, [orders]);
   const receivedOrders = orders.filter((row) => row.status === 'received');
 
+  const runAssistantCommandFromText = React.useCallback((inputText: string) => {
+    const raw = inputText.trim();
+    if (!raw) return;
+    const normalized = normalizeText(raw);
+    setAssistantPendingAction(null);
+
+    const weekMatch =
+      normalized.includes('esta semana') &&
+      (normalized.includes('a que precio') || normalized.includes('precio pague') || normalized.includes('precio pagamos'));
+    if (weekMatch) {
+      let productPart = normalized;
+      const patterns = [
+        /^busca(?:me)?(?:\s+a)?\s+que\s+precio\s+pague\s+/,
+        /^busca(?:me)?(?:\s+a)?\s+que\s+precio\s+pagamos\s+/,
+        /^a\s+que\s+precio\s+pague\s+/,
+        /^a\s+que\s+precio\s+pagamos\s+/,
+      ];
+      for (const p of patterns) {
+        productPart = productPart.replace(p, '');
+      }
+      productPart = productPart.replace(/\s+esta\s+semana$/, '').replace(/\s+/g, ' ').trim();
+      if (!productPart) {
+        setAssistantReply('No entendí el producto. Ejemplo: "buscame a qué precio pagué la lechuga esta semana".');
+        return;
+      }
+      const now = new Date();
+      const from = new Date(now);
+      from.setDate(now.getDate() - 7);
+      const fromTs = from.getTime();
+      const productNeedle = normalizeText(productPart).replace(/^el\s+|^la\s+|^los\s+|^las\s+/, '');
+      const rows: Array<{ supplier: string; product: string; price: number; date: string }> = [];
+      for (const o of orders) {
+        const when = new Date(o.receivedAt ?? o.sentAt ?? o.createdAt).getTime();
+        if (!Number.isFinite(when) || when < fromTs) continue;
+        for (const i of o.items) {
+          const name = normalizeText(i.productName);
+          if (!name.includes(productNeedle)) continue;
+          rows.push({
+            supplier: o.supplierName,
+            product: i.productName,
+            price: i.pricePerUnit,
+            date: new Date(o.receivedAt ?? o.sentAt ?? o.createdAt).toLocaleDateString('es-ES'),
+          });
+        }
+      }
+      if (rows.length === 0) {
+        setAssistantReply(`No encontré compras recientes para "${productPart}" en los últimos 7 días.`);
+        return;
+      }
+      const prices = rows.map((r) => r.price);
+      const avg = prices.reduce((a, b) => a + b, 0) / prices.length;
+      const min = Math.min(...prices);
+      const max = Math.max(...prices);
+      const last = rows[0];
+      setAssistantReply(
+        `${last.product}: media ${avg.toFixed(2)} €, min ${min.toFixed(2)} €, max ${max.toFixed(2)} € (último: ${last.price.toFixed(2)} € en ${last.supplier}, ${last.date}).`,
+      );
+      return;
+    }
+
+    const updateMatch = normalized.match(/(?:oido chef[, ]*)?(?:actualiza|cambia|pon)\s+(.+?)\s+a\s+(\d+(?:[.,]\d{1,4})?)/);
+    if (updateMatch) {
+      const productNeedle = normalizeText(updateMatch[1]).replace(/^el\s+|^la\s+|^los\s+|^las\s+/, '');
+      const nextPrice = Number(updateMatch[2].replace(',', '.'));
+      if (!Number.isFinite(nextPrice) || nextPrice <= 0) {
+        setAssistantReply('El precio no es válido.');
+        return;
+      }
+      const candidates: Array<{ orderId: string; supplierName: string; itemId: string; productName: string; price: number }> = [];
+      for (const o of sentOrders) {
+        for (const i of o.items) {
+          if (normalizeText(i.productName).includes(productNeedle)) {
+            candidates.push({
+              orderId: o.id,
+              supplierName: o.supplierName,
+              itemId: i.id,
+              productName: i.productName,
+              price: i.pricePerUnit,
+            });
+          }
+        }
+      }
+      if (candidates.length === 0) {
+        setAssistantReply(`No encontré "${updateMatch[1]}" en pedidos enviados.`);
+        return;
+      }
+      if (candidates.length > 1) {
+        setAssistantReply(
+          `Encontré varias coincidencias de "${updateMatch[1]}". Sé más específico con proveedor o nombre completo.`,
+        );
+        return;
+      }
+      const c = candidates[0];
+      setAssistantPendingAction({
+        kind: 'update_price',
+        orderId: c.orderId,
+        itemId: c.itemId,
+        productName: c.productName,
+        supplierName: c.supplierName,
+        previousPrice: c.price,
+        nextPrice: Math.round(nextPrice * 100) / 100,
+      });
+      setAssistantReply(
+        `¿Confirmas actualizar ${c.productName} (${c.supplierName}) de ${c.price.toFixed(2)} € a ${nextPrice.toFixed(2)} €?`,
+      );
+      return;
+    }
+
+    setAssistantReply(
+      'No entendí el comando. Prueba: "buscame a qué precio pagué la lechuga esta semana" o "actualiza bacon a 7,80".',
+    );
+  }, [orders, sentOrders]);
+
+  const runAssistantCommand = React.useCallback(() => {
+    runAssistantCommandFromText(assistantInput);
+  }, [assistantInput, runAssistantCommandFromText]);
+
+  const confirmAssistantAction = React.useCallback(() => {
+    if (!assistantPendingAction || !localId) return;
+    const supabase = getSupabaseClient();
+    if (!supabase) return;
+    if (assistantPendingAction.kind === 'update_price') {
+      const order = orders.find((o) => o.id === assistantPendingAction.orderId);
+      const item = order?.items.find((i) => i.id === assistantPendingAction.itemId);
+      if (!order || !item) {
+        setAssistantReply('No encontré la línea a actualizar (puede haberse refrescado).');
+        setAssistantPendingAction(null);
+        return;
+      }
+      const merged = { ...item, pricePerUnit: assistantPendingAction.nextPrice };
+      const qty = billingQuantityForReceptionPrice(merged);
+      setOrders((prev) =>
+        prev.map((o) =>
+          o.id !== order.id
+            ? o
+            : {
+                ...o,
+                items: o.items.map((it) =>
+                  it.id !== item.id
+                    ? it
+                    : { ...it, pricePerUnit: assistantPendingAction.nextPrice, lineTotal: Math.round(qty * assistantPendingAction.nextPrice * 100) / 100 },
+                ),
+              },
+        ),
+      );
+      void updateOrderItemPrice(supabase, localId, item.id, assistantPendingAction.nextPrice, qty)
+        .then(() => {
+          setAssistantReply(`Actualizado: ${assistantPendingAction.productName} a ${assistantPendingAction.nextPrice.toFixed(2)} €.`);
+          setAssistantPendingAction(null);
+          void reloadOrders();
+          dispatchPedidosDataChanged();
+        })
+        .catch((err: Error) => {
+          void reloadOrders();
+          setAssistantReply(`Error al actualizar: ${err.message}`);
+          setAssistantPendingAction(null);
+        });
+    }
+  }, [assistantPendingAction, localId, orders, reloadOrders, setOrders]);
+
+  const startAssistantVoice = React.useCallback(() => {
+    if (assistantListening) return;
+    if (typeof window === 'undefined') return;
+    const W = window as unknown as {
+      SpeechRecognition?: new () => any;
+      webkitSpeechRecognition?: new () => any;
+    };
+    const Ctor = W.SpeechRecognition ?? W.webkitSpeechRecognition;
+    if (!Ctor) {
+      setAssistantReply('Tu navegador no soporta dictado de voz en esta pantalla.');
+      return;
+    }
+    const recognition = new Ctor();
+    recognition.lang = 'es-ES';
+    recognition.interimResults = true;
+    recognition.maxAlternatives = 1;
+    recognition.continuous = false;
+    recognition.onstart = () => setAssistantListening(true);
+    recognition.onerror = () => {
+      setAssistantListening(false);
+      setAssistantReply('No se pudo iniciar el micrófono. Revisa permisos del navegador.');
+    };
+    recognition.onend = () => {
+      setAssistantListening(false);
+      assistantRecognitionRef.current = null;
+    };
+    recognition.onresult = (event: any) => {
+      const text = Array.from(event.results as any[])
+        .map((r: any) => r[0]?.transcript ?? '')
+        .join(' ')
+        .trim();
+      if (text) setAssistantInput(text);
+      const last = event.results?.[event.results.length - 1];
+      if (last?.isFinal && text) {
+        setAssistantInput(text);
+        runAssistantCommandFromText(text);
+      }
+    };
+    assistantRecognitionRef.current = recognition;
+    recognition.start();
+  }, [assistantListening, runAssistantCommandFromText]);
+
+  const stopAssistantVoice = React.useCallback(() => {
+    assistantRecognitionRef.current?.stop();
+  }, []);
+
+  React.useEffect(() => {
+    return () => {
+      assistantRecognitionRef.current?.stop();
+      assistantRecognitionRef.current = null;
+    };
+  }, []);
+
   const renderSentOrderReceiveAndIncident = (order: PedidoOrder) => {
     const hasAnyBad = order.items.some((item) => {
       const m = quickLineMarks[item.id];
@@ -805,6 +1046,89 @@ export default function PedidosPage() {
         title="Proveedores y recepción"
         description="Crea pedidos, envía por WhatsApp, controla envíos y recepción en el local."
       />
+
+      <section className="rounded-2xl border border-zinc-200/90 bg-white p-4 shadow-sm ring-1 ring-zinc-100">
+        <button
+          type="button"
+          onClick={() => setAssistantOpen((v) => !v)}
+          className="flex w-full items-center justify-between gap-2 rounded-xl bg-zinc-50 px-3 py-2.5 text-left ring-1 ring-zinc-200"
+          aria-expanded={assistantOpen}
+        >
+          <span className="inline-flex items-center gap-2 text-sm font-bold text-zinc-900">
+            <Bot className="h-4 w-4 text-[#D32F2F]" />
+            Oído Chef
+          </span>
+          <ChevronDown className={['h-4 w-4 text-zinc-500 transition-transform', assistantOpen ? 'rotate-180' : ''].join(' ')} />
+        </button>
+        {assistantOpen ? (
+          <div className="mt-3 space-y-2">
+            <p className="text-xs text-zinc-500">
+              Ejemplos: "buscame a qué precio pagué la lechuga esta semana" · "actualiza bacon a 7,80".
+            </p>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={assistantInput}
+                onChange={(e) => setAssistantInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    runAssistantCommand();
+                  }
+                }}
+                placeholder="Escribe una orden..."
+                className="h-11 min-w-0 flex-1 rounded-xl border border-zinc-300 bg-white px-3 text-sm text-zinc-900 outline-none focus:border-[#D32F2F]/50"
+              />
+              <button
+                type="button"
+                onClick={runAssistantCommand}
+                className="h-11 rounded-xl bg-zinc-900 px-3 text-xs font-bold text-white"
+              >
+                Ejecutar
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (assistantListening) stopAssistantVoice();
+                  else startAssistantVoice();
+                }}
+                className={[
+                  'h-11 rounded-xl px-3 text-xs font-bold ring-1',
+                  assistantListening
+                    ? 'bg-[#B91C1C] text-white ring-[#B91C1C]/40'
+                    : 'bg-white text-zinc-700 ring-zinc-300',
+                ].join(' ')}
+              >
+                {assistantListening ? 'Escuchando…' : '🎙 Voz'}
+              </button>
+            </div>
+            {assistantReply ? (
+              <p className="rounded-lg bg-zinc-50 px-3 py-2 text-sm text-zinc-700 ring-1 ring-zinc-200">{assistantReply}</p>
+            ) : null}
+            {assistantPendingAction ? (
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={confirmAssistantAction}
+                  className="h-10 rounded-lg bg-[#16A34A] px-3 text-xs font-bold text-white"
+                >
+                  Confirmar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAssistantPendingAction(null);
+                    setAssistantReply('Acción cancelada.');
+                  }}
+                  className="h-10 rounded-lg border border-zinc-300 bg-white px-3 text-xs font-bold text-zinc-700"
+                >
+                  Cancelar
+                </button>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+      </section>
 
       <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-zinc-200">
         <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-3">
