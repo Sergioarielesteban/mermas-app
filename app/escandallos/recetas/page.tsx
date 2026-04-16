@@ -25,7 +25,7 @@ import {
   fetchEscandalloLines,
   fetchProcessedProductsForEscandallo,
   fetchEscandalloRecipes,
-  fetchProductsForEscandallo,
+  fetchEscandalloRawProductsWithWeightedPurchasePrices,
   escandalloRecipeUnitForRawProduct,
   foodCostPercentOfNetSale,
   insertEscandalloLinesBatch,
@@ -42,6 +42,7 @@ import {
   type EscandalloRawProduct,
   type EscandalloRecipe,
 } from '@/lib/escandallos-supabase';
+import { ESCANDALLOS_WEIGHTED_PRICE_WINDOW_DAYS } from '@/lib/escandallos-weighted-purchase-prices';
 import type { Unit } from '@/lib/types';
 
 const UNITS: { value: Unit; label: string }[] = [
@@ -454,7 +455,7 @@ export default function EscandallosRecetasPage() {
     try {
       const [r, raw, processed] = await Promise.all([
         fetchEscandalloRecipes(supabase, localId),
-        fetchProductsForEscandallo(supabase, localId),
+        fetchEscandalloRawProductsWithWeightedPurchasePrices(supabase, localId),
         fetchProcessedProductsForEscandallo(supabase, localId),
       ]);
       setRecipes(r);
@@ -1032,7 +1033,7 @@ export default function EscandallosRecetasPage() {
       <MermasStyleHero
         eyebrow="Escandallos"
         title="Libro de recetas"
-        description="Crea el plato en tres pasos y completa ingredientes y precios en la ficha. Abajo: bases, sub-recetas y elaborados."
+        description={`Crea el plato en tres pasos y completa ingredientes y precios en la ficha. Abajo: bases, sub-recetas y elaborados. Coste de crudos: PMP últimos ${ESCANDALLOS_WEIGHTED_PRICE_WINDOW_DAYS} días si hay compras registradas; si no, precio de catálogo.`}
         compact
       />
 

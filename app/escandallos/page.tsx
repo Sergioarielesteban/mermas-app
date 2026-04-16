@@ -53,13 +53,14 @@ import {
   fetchEscandalloMonthlySales,
   fetchEscandalloRecipes,
   fetchProcessedProductsForEscandallo,
-  fetchProductsForEscandallo,
+  fetchEscandalloRawProductsWithWeightedPurchasePrices,
   upsertEscandalloMonthlySalesBatch,
   type EscandalloLine,
   type EscandalloProcessedProduct,
   type EscandalloRawProduct,
   type EscandalloRecipe,
 } from '@/lib/escandallos-supabase';
+import { ESCANDALLOS_WEIGHTED_PRICE_WINDOW_DAYS } from '@/lib/escandallos-weighted-purchase-prices';
 
 const TAPER = `mx-auto w-20 ${CHEF_ONE_TAPER_LINE_CLASS}`;
 
@@ -189,7 +190,7 @@ export default function EscandallosPage() {
     try {
       const [r, raw, processed] = await Promise.all([
         fetchEscandalloRecipes(supabase, localId),
-        fetchProductsForEscandallo(supabase, localId),
+        fetchEscandalloRawProductsWithWeightedPurchasePrices(supabase, localId),
         fetchProcessedProductsForEscandallo(supabase, localId),
       ]);
       setRecipes(r);
@@ -485,7 +486,7 @@ export default function EscandallosPage() {
       <MermasStyleHero
         eyebrow="Inteligencia de carta"
         title="Escandallos"
-        description="Centro de mando: costes, food cost por plato y cierre mensual con ventas reales (teórico vs mix del mes)."
+        description={`Centro de mando: costes, food cost por plato y cierre mensual con ventas reales (teórico vs mix del mes). Crudos: precio medio ponderado de compras (últimos ${ESCANDALLOS_WEIGHTED_PRICE_WINDOW_DAYS} días) cuando hay albaranes con ese producto; si no, precio de ficha en pedidos.`}
         compact
       />
 

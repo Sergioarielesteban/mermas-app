@@ -1,4 +1,9 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import {
+  computeWeightedAvgBySupplierProductId,
+  ESCANDALLOS_WEIGHTED_PRICE_WINDOW_DAYS,
+} from '@/lib/escandallos-weighted-purchase-prices';
+import { fetchOrders } from '@/lib/pedidos-supabase';
 import type { Unit } from '@/lib/types';
 
 export type EscandalloRecipe = {
@@ -55,7 +60,11 @@ export type EscandalloRawProduct = {
   supplierName: string;
   name: string;
   unit: Unit;
-  /** Precio por unidad de pedido (envase, kg…). */
+  /**
+   * Precio por unidad de pedido (envase, kg…) usado en costes.
+   * Tras `fetchEscandalloRawProductsWithWeightedPurchasePrices`, si hay compras en ventana,
+   * es el PMP (misma idea que Pedidos → Precios, modo €/ud); si no, el precio de ficha del catálogo.
+   */
   pricePerUnit: number;
   /** Piezas de receta por cada unidad de pedido. 1 = el precio ya es €/unidad de receta. */
   unitsPerPack: number;
@@ -257,6 +266,32 @@ export async function fetchProductsForEscandallo(
       unitsPerPack,
       recipeUnit,
     };
+  });
+}
+
+/**
+ * Productos de proveedor para escandallo con **precio medio ponderado** de compras (últimos
+ * `ESCANDALLOS_WEIGHTED_PRICE_WINDOW_DAYS` días) cuando la línea de pedido lleva `supplier_product_id`
+ * y hay cantidad facturada; si no hay datos, se usa el `price_per_unit` del catálogo.
+ */
+export async function fetchEscandalloRawProductsWithWeightedPurchasePrices(
+  supabase: SupabaseClient,
+  localId: string,
+): Promise<EscandalloRawProduct[]> {
+  const [products, orders] = await Promise.all([
+    fetchProductsForEscandallo(supabase, localId),
+    fetchOrders(supabase, localId),
+  ]);
+  const weighted = computeWeightedAvgBySupplierProductId(
+    orders.filter((o) => o.status !== 'draft'),
+    ESCANDALLOS_WEIGHTED_PRICE_WINDOW_DAYS,
+  );
+  return products.map((p) => {
+    const w = weighted.get(p.id);
+    if (w != null && w.weightedQty > 0) {
+      return { ...p, pricePerUnit: w.weightedAvg };
+    }
+    return p;
   });
 }
 

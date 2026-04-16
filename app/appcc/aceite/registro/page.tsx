@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import React, { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { ChevronLeft, Download, Droplet } from 'lucide-react';
+import { ChevronLeft, Download, Droplet, Filter, RefreshCw } from 'lucide-react';
 import AppccCompactHero from '@/components/AppccCompactHero';
 import { useAuth } from '@/components/AuthProvider';
 import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
@@ -94,6 +94,11 @@ function FryerOilCard({
     [dayEvents, fryer.id],
   );
   const latest = mine[mine.length - 1];
+  const recordedFiltrado = latest?.event_type === 'filtrado';
+  const recordedCambio = latest?.event_type === 'cambio';
+  const filtradoBtnOn =
+    mode === 'filtrado' || (mode === null && recordedFiltrado);
+  const cambioBtnOn = mode === 'cambio' || (mode === null && recordedCambio);
 
   const resetForm = () => {
     setLiters('');
@@ -199,10 +204,22 @@ function FryerOilCard({
                     ? `Realizado por: ${latest.operator_name.trim()}`
                     : undefined
                 }
-                className="rounded-md bg-white/90 px-1.5 py-0.5 text-[9px] font-semibold text-zinc-600 ring-1 ring-zinc-200/80"
+                className={[
+                  'inline-flex max-w-full items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-bold leading-tight ring-1',
+                  recordedFiltrado
+                    ? 'bg-amber-100 text-amber-950 ring-amber-300/90'
+                    : 'bg-emerald-100 text-emerald-950 ring-emerald-300/90',
+                ].join(' ')}
               >
-                {APPCC_OIL_EVENT_LABEL[latest.event_type]}
-                {oilEventEffectiveLiters(latest) != null ? ` · ${oilEventEffectiveLiters(latest)} L` : ''}
+                {recordedFiltrado ? (
+                  <Filter className="h-3.5 w-3.5 shrink-0 text-amber-800" strokeWidth={2.25} aria-hidden />
+                ) : (
+                  <RefreshCw className="h-3.5 w-3.5 shrink-0 text-emerald-800" strokeWidth={2.25} aria-hidden />
+                )}
+                <span className="min-w-0 truncate">
+                  {APPCC_OIL_EVENT_LABEL[latest.event_type]}
+                  {oilEventEffectiveLiters(latest) != null ? ` · ${oilEventEffectiveLiters(latest)} L` : ''}
+                </span>
               </li>
             </ul>
           ) : (
@@ -212,7 +229,7 @@ function FryerOilCard({
         <Droplet className="h-4 w-4 shrink-0 text-[#D32F2F]/65" aria-hidden />
       </div>
 
-      <div className="flex flex-wrap gap-1">
+      <div className="flex gap-1.5">
         <button
           type="button"
           onClick={() => {
@@ -221,11 +238,14 @@ function FryerOilCard({
           }}
           disabled={disabled || saving}
           className={[
-            'h-7 rounded-md px-2 text-[10px] font-bold uppercase tracking-wide',
-            mode === 'filtrado' ? 'bg-zinc-800 text-white' : 'border border-zinc-300 bg-white text-zinc-800',
+            'flex h-8 min-w-0 flex-1 items-center justify-center gap-1 rounded-lg px-2 text-xs font-black uppercase tracking-wide transition',
+            filtradoBtnOn
+              ? 'bg-amber-500 text-white shadow-sm ring-1 ring-amber-600/40 hover:bg-amber-600'
+              : 'border border-zinc-300 bg-white text-zinc-800 hover:bg-zinc-50',
           ].join(' ')}
         >
-          Filtrado
+          <Filter className="h-3.5 w-3.5 shrink-0 opacity-95" strokeWidth={2.4} aria-hidden />
+          <span>Filtrado</span>
         </button>
         <button
           type="button"
@@ -235,11 +255,14 @@ function FryerOilCard({
           }}
           disabled={disabled || saving}
           className={[
-            'h-7 rounded-md px-2 text-[10px] font-bold uppercase tracking-wide',
-            mode === 'cambio' ? 'bg-[#D32F2F] text-white' : 'border border-zinc-300 bg-white text-zinc-800',
+            'flex h-8 min-w-0 flex-1 items-center justify-center gap-1 rounded-lg px-2 text-xs font-black uppercase tracking-wide transition',
+            cambioBtnOn
+              ? 'bg-emerald-600 text-white shadow-sm ring-1 ring-emerald-800/25 hover:bg-emerald-700'
+              : 'border border-zinc-300 bg-white text-zinc-800 hover:bg-zinc-50',
           ].join(' ')}
         >
-          Cambio
+          <RefreshCw className="h-3.5 w-3.5 shrink-0 opacity-95" strokeWidth={2.4} aria-hidden />
+          <span>Cambio</span>
         </button>
       </div>
 
@@ -272,7 +295,10 @@ function FryerOilCard({
             type="button"
             onClick={() => void submit(mode)}
             disabled={disabled || saving}
-            className="h-7 w-full rounded-md bg-[#D32F2F] text-[10px] font-bold uppercase tracking-wide text-white disabled:opacity-50"
+            className={[
+              'h-8 w-full rounded-lg text-xs font-black uppercase tracking-wide text-white shadow-sm transition disabled:opacity-50',
+              mode === 'filtrado' ? 'bg-amber-600 hover:bg-amber-700' : 'bg-emerald-700 hover:bg-emerald-800',
+            ].join(' ')}
           >
             {saving ? 'Guardando…' : `Registrar ${APPCC_OIL_EVENT_LABEL[mode]}`}
           </button>
