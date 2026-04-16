@@ -2533,18 +2533,11 @@ export default function PedidosPage() {
               {expandedSentId !== order.id ? renderSentOrderReceiveAndIncident(order, { showExpandHint: true }) : null}
               {expandedSentId === order.id ? (
                 <div className="mt-2 space-y-2 text-left">
-                  <div className="rounded-lg border border-[#D32F2F]/30 bg-white px-2.5 py-2 ring-1 ring-[#D32F2F]/12 shadow-sm">
-                    <p className="text-center text-[11px] font-black uppercase tracking-wide text-[#B91C1C]">
-                      Albarán · OCR
-                    </p>
-                    <p className="mt-1 text-center text-[10px] leading-snug text-zinc-600">
-                      Sube una foto del albarán para sugerir cantidades y precios en las líneas de abajo (siempre
-                      revisables).
-                    </p>
+                  <div className="rounded-lg border border-[#D32F2F]/30 bg-white px-2 py-1.5 ring-1 ring-[#D32F2F]/12 shadow-sm">
                     <button
                       type="button"
                       onClick={() => setOcrOrder(order)}
-                      className="mt-1.5 w-full rounded-lg border border-[#D32F2F]/45 bg-[#D32F2F]/10 py-2 text-center text-[11px] font-black uppercase tracking-wide text-[#B91C1C] transition active:scale-[0.99]"
+                      className="w-full rounded-lg border border-[#D32F2F]/45 bg-[#D32F2F]/10 py-2 text-center text-[11px] font-black uppercase tracking-wide text-[#B91C1C] transition active:scale-[0.99]"
                     >
                       Escanear albarán
                     </button>

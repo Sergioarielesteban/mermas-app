@@ -484,12 +484,22 @@ export default function NuevoPedidoPage() {
           <label className="text-center text-xs font-semibold uppercase tracking-wide text-zinc-700">
             Fecha entrega
           </label>
-          <input
-            type="date"
-            value={deliveryDate}
-            onChange={(e) => setDeliveryDate(e.target.value)}
-            className="mt-2 box-border h-11 w-full max-w-[17.5rem] rounded-xl border-2 border-black bg-zinc-950 px-3 text-center text-sm font-semibold text-white shadow-[inset_0_0_0_1px_rgba(211,47,47,0.85)] outline-none [color-scheme:dark] focus:border-[#D32F2F] focus:shadow-[inset_0_0_0_2px_#D32F2F]"
-          />
+          <div className="relative mt-2 w-full max-w-[17.5rem]">
+            <input
+              type="date"
+              value={deliveryDate}
+              onChange={(e) => setDeliveryDate(e.target.value)}
+              className={[
+                'box-border h-11 w-full rounded-xl border border-zinc-300 bg-white px-3 text-sm font-semibold outline-none focus:border-[#D32F2F] focus:ring-2 focus:ring-[#D32F2F]/25',
+                deliveryDate ? 'text-zinc-900' : 'text-transparent',
+              ].join(' ')}
+            />
+            {!deliveryDate ? (
+              <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-zinc-500">
+                Seleccionar fecha
+              </span>
+            ) : null}
+          </div>
         </div>
         {selectedDateIsException ? (
           <p className="mt-3 text-[11px] font-semibold text-emerald-700">Fecha excepcional válida para este proveedor.</p>
