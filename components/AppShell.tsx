@@ -9,6 +9,8 @@ import {
   CalendarDays,
   ChefHat,
   ClipboardList,
+  Factory,
+  ListChecks,
   LogOut,
   Menu,
   MessageCircle,
@@ -42,6 +44,22 @@ function titleForPath(pathname: string | null) {
   if (pathname.startsWith('/productos')) return 'Productos del registro';
   if (pathname.startsWith('/resumen')) return 'Resumen';
   if (pathname.startsWith('/pedidos')) return 'Pedidos';
+  if (pathname.startsWith('/checklist')) {
+    if (pathname === '/checklist') return 'Check list';
+    if (pathname.startsWith('/checklist/ejecutar')) return 'Ejecutar checklist';
+    if (pathname.startsWith('/checklist/listas')) return 'Mis listas';
+    if (pathname.startsWith('/checklist/historial')) return 'Historial checklist';
+    if (pathname.startsWith('/checklist/correr')) return 'Check list en curso';
+    return 'Check list';
+  }
+  if (pathname.startsWith('/produccion')) {
+    if (pathname === '/produccion') return 'Producción';
+    if (pathname.startsWith('/produccion/ejecutar')) return 'Ejecutar producción';
+    if (pathname.startsWith('/produccion/planes')) return 'Planes de producción';
+    if (pathname.startsWith('/produccion/historial')) return 'Historial producción';
+    if (pathname.startsWith('/produccion/correr')) return 'Producción en curso';
+    return 'Producción';
+  }
   if (pathname.startsWith('/inventario')) return 'Inventario';
   if (pathname.startsWith('/escandallos/recetas')) return 'Libro de recetas';
   if (pathname.startsWith('/escandallos')) return 'Escandallos';
@@ -80,6 +98,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         ? [...NAV_ITEMS, { href: '/pedidos', label: 'Pedidos', Icon: ShoppingCart }]
         : NAV_ITEMS),
       { href: '/appcc', label: 'APPCC', Icon: ShieldCheck },
+      { href: '/checklist', label: 'Check list', Icon: ListChecks },
+      { href: '/produccion', label: 'Producción', Icon: Factory },
       { href: '/inventario', label: 'Inventario', Icon: ClipboardList },
       { href: '/escandallos', label: 'Escandallos', Icon: Calculator },
       { href: '/comida-personal', label: 'Comida de personal', Icon: UtensilsCrossed },
@@ -267,9 +287,13 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                 ? pathname === '/dashboard' || pathname === '/'
                 : entry.href === '/appcc'
                   ? pathname === '/appcc' || pathname?.startsWith('/appcc/')
-                  : entry.href === '/escandallos'
-                    ? pathname === '/escandallos' || pathname?.startsWith('/escandallos/')
-                    : pathname === entry.href || pathname?.startsWith(`${entry.href}/`);
+                  : entry.href === '/checklist'
+                    ? pathname === '/checklist' || pathname?.startsWith('/checklist/')
+                    : entry.href === '/produccion'
+                      ? pathname === '/produccion' || pathname?.startsWith('/produccion/')
+                      : entry.href === '/escandallos'
+                        ? pathname === '/escandallos' || pathname?.startsWith('/escandallos/')
+                        : pathname === entry.href || pathname?.startsWith(`${entry.href}/`);
 
             return (
               <Link

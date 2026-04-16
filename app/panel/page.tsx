@@ -9,6 +9,8 @@ import {
   CalendarDays,
   ChefHat,
   ClipboardList,
+  Factory,
+  ListChecks,
   MessageCircle,
   ShieldCheck,
   ShoppingCart,
@@ -112,6 +114,20 @@ export default function PanelControlPage() {
           label="APPCC"
           sub="Limpieza, temperaturas, aceite y trazabilidad"
           Icon={ShieldCheck}
+          tone="red"
+        />
+        <HubTile
+          href="/checklist"
+          label="Check list"
+          sub="Apertura, turno, cierre e higiene con tus ítems"
+          Icon={ListChecks}
+          tone="red"
+        />
+        <HubTile
+          href="/produccion"
+          label="Producción"
+          sub="Planes diarios o semanales por zonas y tareas"
+          Icon={Factory}
           tone="red"
         />
         <HubTile href="/inventario" label="Inventario" sub="Stock y valor por local" Icon={ClipboardList} tone="red" />
