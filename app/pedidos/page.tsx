@@ -1085,14 +1085,31 @@ export default function PedidosPage() {
   }, []);
 
   React.useEffect(() => {
-    try {
+    const syncPanelFromHashOrStorage = () => {
       if (typeof window === 'undefined') return;
-      const v = window.localStorage.getItem(ASSISTANT_PANEL_OPEN_LS_KEY);
-      if (v === '0') setAssistantOpen(false);
-      if (v === '1') setAssistantOpen(true);
-    } catch {
-      // ignore
-    }
+      if (window.location.hash === '#oido-chef') {
+        setAssistantOpen(true);
+        try {
+          window.localStorage.setItem(ASSISTANT_PANEL_OPEN_LS_KEY, '1');
+        } catch {
+          // ignore
+        }
+        window.requestAnimationFrame(() => {
+          document.getElementById('oido-chef')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        });
+        return;
+      }
+      try {
+        const v = window.localStorage.getItem(ASSISTANT_PANEL_OPEN_LS_KEY);
+        if (v === '0') setAssistantOpen(false);
+        else if (v === '1') setAssistantOpen(true);
+      } catch {
+        // ignore
+      }
+    };
+    syncPanelFromHashOrStorage();
+    window.addEventListener('hashchange', syncPanelFromHashOrStorage);
+    return () => window.removeEventListener('hashchange', syncPanelFromHashOrStorage);
   }, []);
 
   const toggleAssistantOpen = React.useCallback(() => {
