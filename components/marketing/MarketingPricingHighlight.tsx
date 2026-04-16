@@ -49,16 +49,16 @@ export default function MarketingPricingHighlight() {
               id="precio-impacto-heading"
               className="text-balance text-2xl font-extrabold leading-tight tracking-tight text-slate-900 sm:text-3xl"
             >
-              Precio claro. Tú eliges el alcance.
+              Paga solo por lo que necesites.
             </h2>
 
             <div className="mt-8 sm:mt-10">
-              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">Desde</p>
-              <p className="mt-2 flex flex-wrap items-baseline justify-center gap-x-2 text-5xl font-extrabold tracking-tight sm:text-6xl md:text-7xl">
+              <p className="mx-auto max-w-lg text-pretty text-lg font-semibold leading-snug text-slate-800 sm:text-xl md:text-2xl">
+                Sin cifra fija en la web:{' '}
                 <span className="bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 bg-clip-text text-transparent">
-                  39,90&nbsp;€
-                </span>
-                <span className="text-2xl font-bold text-slate-500 sm:text-3xl md:text-4xl">/ mes · local</span>
+                  activas solo los módulos que te sirvan
+                </span>{' '}
+                y cerramos condiciones contigo.
               </p>
             </div>
 
@@ -93,7 +93,7 @@ export default function MarketingPricingHighlight() {
             </Link>
 
             <p className="mt-5 text-xs leading-relaxed text-slate-500 sm:text-sm">
-              Condiciones al detalle hablando contigo · Menos de 10&nbsp;€ a la semana en referencia mensual
+              Propuesta y condiciones al detalle cuando hablemos
             </p>
           </div>
         </div>
