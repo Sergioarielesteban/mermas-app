@@ -20,7 +20,7 @@ const benefitBlocks = [
   },
   {
     title: 'Todo en un sitio',
-    body: 'Menos WhatsApp y cuadernos sueltos.',
+    body: 'OCR, asistente Oído Chef, APPCC, checklists y producción donde toque.',
     Icon: Layers,
     accent: 'from-sky-50/80 to-white ring-sky-100/70',
   },

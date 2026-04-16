@@ -185,8 +185,10 @@ export default function MarketingHero() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.45, delay: reduceMotion ? 0 : 0.09 }}
           >
-            Módulos a tu medida: activa solo lo que necesites y crece cuando quieras. Una app pensada para móvil y
-            tablet, con el ritmo de cocina de verdad.
+            Pedidos con OCR de albarán, asistente <strong className="font-semibold text-stone-800">Oído Chef</strong>{' '}
+            (voz y <abbr title="Inteligencia artificial opcional con tu propia API">IA</abbr> opcional), APPCC, checklists,
+            producción, escandallos, inventario, comida de personal y chat del local. Activa solo lo que necesites: app
+            pensada para móvil y tablet, al ritmo del servicio.
           </motion.p>
 
           <motion.div

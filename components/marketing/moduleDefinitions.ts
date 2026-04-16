@@ -1,14 +1,18 @@
 import type { LucideIcon } from 'lucide-react';
 import {
+  Bot,
   Building2,
   CalendarDays,
   ClipboardList,
+  Factory,
   Flame,
+  ListChecks,
   MessageCircle,
   Scale,
   ShieldCheck,
   ShoppingCart,
   Timer,
+  UtensilsCrossed,
 } from 'lucide-react';
 
 export type MarketingModuleDefinition = {
@@ -26,16 +30,32 @@ export const MARKETING_MODULES: MarketingModuleDefinition[] = [
   {
     id: 'pedidos',
     title: 'Pedidos y recepción',
-    summary: 'Lo que pides y lo que llega, sin perder el hilo.',
+    summary: 'Lo que pides y lo que llega, sin perder el hilo. OCR de albarán cuando lo necesites.',
     Icon: ShoppingCart,
-    detailIntro: 'Un solo sitio para pedidos por proveedor y recepción. El turno que entra ve lo mismo que el que sale.',
+    detailIntro:
+      'Un solo sitio para pedidos por proveedor y recepción. El turno que entra ve lo mismo que el que sale. Puedes escanear el albarán (foto o archivo): un motor OCR en la nube propone cantidades y precios para que los revises y apliques con un clic.',
     benefits: [
       'Pedidos y líneas claras, sin depender del cuaderno.',
+      'Lector OCR de albarán para adelantar recepción; tú validas antes de guardar.',
       'Incidencias en recepción anotadas al momento.',
-      'Menos “¿esto quién lo pidió?” entre turnos.',
     ],
     realCase: 'Falta una caja o viene mal: queda registrado al instante, no se pierde en el chat.',
     result: 'Menos errores y menos dinero en el aire.',
+  },
+  {
+    id: 'oido-chef',
+    title: 'Oído Chef (asistente)',
+    summary: 'Voz o texto: precios, limpieza, APPCC, pedidos. IA opcional y lectura de respuestas en voz natural.',
+    Icon: Bot,
+    detailIntro:
+      'Asistente integrado en Pedidos: preguntas en lenguaje coloquial (“¿a qué precio compré la mantequilla esta semana?”, “limpieza hoy”, “estado APPCC”), accesos rápidos y dictado. Si configuras la API de OpenAI en tu despliegue, amplía el entendimiento y puedes usar voz neural para leer las respuestas. Los datos salen de lo que ya tienes cargado en la app.',
+    benefits: [
+      'Menos comandos rígidos: frases naturales y atajos con una palabra.',
+      'Compatible con IA opcional (OpenAI) para consultas abiertas sobre tus pedidos.',
+      'Texto a voz del navegador o voz natural OpenAI cuando lo actives.',
+    ],
+    realCase: 'El jefe pregunta al móvil qué pedidos van pendientes y qué toca limpiar hoy, sin abrir cinco pantallas.',
+    result: 'Información operativa al momento, con menos curva de aprendizaje.',
   },
   {
     id: 'mermas',
@@ -68,6 +88,36 @@ export const MARKETING_MODULES: MarketingModuleDefinition[] = [
     result: 'Constancia seria sin frenar al equipo.',
   },
   {
+    id: 'checklist',
+    title: 'Check list operativa',
+    summary: 'Apertura, cambio de turno, cierre e higiene: tus listas, tus ítems.',
+    Icon: ListChecks,
+    detailIntro:
+      'Tú defines categorías y tareas; el equipo ejecuta listas por día o nota de turno, con historial por fecha. Es complementario al programa de limpieza APPCC: aquí va lo que quieras comprobar en checklist (cámara, cierre, uniformidad…).',
+    benefits: [
+      'Plantillas sugeridas solo orientan el tipo de lista; el contenido lo controlas tú.',
+      'Historial de ejecuciones para auditorías y buenas prácticas.',
+      'Flujo móvil pensado para marcar al vuelo.',
+    ],
+    realCase: 'Cambio de turno: la lista sale en el móvil, se marca lo hecho y queda registro.',
+    result: 'Menos “¿esto se hizo?” y más trazabilidad sin papeles sueltos.',
+  },
+  {
+    id: 'produccion',
+    title: 'Producción',
+    summary: 'Planes por zonas y cadencia: elaborados, cuarto frío, lo que nombréis vosotros.',
+    Icon: Factory,
+    detailIntro:
+      'Organizas zonas con nombre libre, tareas bajo cada zona y cadencia (diaria, semanal…). Ejecución con fecha y etiqueta de periodo, más historial de corridas. Independiente de “Cocina central” (módulo futuro): sirve para delegar elaboración interna.',
+    benefits: [
+      'Delegar sin mezclar con el flujo de pedidos a proveedores.',
+      'Ideal para mise en place repetitivo o bloques mañana/tarde.',
+      'Historial para ver qué se cumplió y cuándo.',
+    ],
+    realCase: 'Viernes de elaborados: el plan de “salsas y bases” se ejecuta y queda constancia.',
+    result: 'Menos conocimiento encerrado en una sola persona.',
+  },
+  {
     id: 'inventario',
     title: 'Inventario',
     summary: 'Stock y valor por local, desde el móvil.',
@@ -94,6 +144,21 @@ export const MARKETING_MODULES: MarketingModuleDefinition[] = [
     ],
     realCase: 'Sube un ingrediente: ves el impacto en el plato y en el margen.',
     result: 'Carta más coherente con la rentabilidad.',
+  },
+  {
+    id: 'comida-personal',
+    title: 'Comida de personal',
+    summary: 'Registro de consumo del equipo: trabajador, servicio y coste interno.',
+    Icon: UtensilsCrossed,
+    detailIntro:
+      'Alta de trabajadores por local, registro por fecha (desayuno, comida, cena…) con productos del catálogo o comida propia, y reportes exportables. Pensado para control interno y transparencia con el equipo.',
+    benefits: [
+      'Lista de personal activa sin depender de hojas sueltas.',
+      'Coste acumulado visible para gestión y cierre.',
+      'PDF e informes por mes cuando lo necesites.',
+    ],
+    realCase: 'Fin de mes: sacas el resumen de consumos sin rearmar Excel desde cero.',
+    result: 'Menos fricción y números compartidos.',
   },
   {
     id: 'chat',

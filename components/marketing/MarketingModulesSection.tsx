@@ -17,7 +17,7 @@ export default function MarketingModulesSection() {
           </h2>
           <p className="mt-3 space-y-2 text-pretty text-sm leading-snug text-stone-600 sm:text-base">
             <span className="block font-semibold text-stone-800">
-              Porque no todo el mundo lo necesita todo.
+              Incluye lector OCR de albaranes, asistente con voz, checklists, producción y el resto de operación diaria.
             </span>
             <span className="block">
               Enciende solo lo que vayas a usar y amplía cuando toque. Toca una tarjeta: beneficios, ejemplo y resultado.
