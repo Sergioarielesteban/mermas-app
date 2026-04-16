@@ -5,6 +5,10 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useAuth } from '@/components/AuthProvider';
 import { canUsePedidosModule } from '@/lib/pedidos-access';
 
+/** Pedidos escucha esto y arranca el micrófono (mismo flujo que 🎙 Voz). */
+export const OIDO_CHEF_START_VOICE_EVENT = 'oido-chef-start-voice';
+export const OIDO_CHEF_VOICE_NAV_FLAG = 'oido-chef-autovoz-v1';
+
 export default function BottomNav() {
   const pathname = usePathname();
   const router = useRouter();
@@ -13,7 +17,22 @@ export default function BottomNav() {
   const showOidoChef = profileReady && canUsePedidosModule(localCode, email, localName, localId);
 
   const goOidoChef = () => {
-    router.push('/pedidos#oido-chef');
+    if (pathname === '/pedidos') {
+      if (typeof window !== 'undefined') {
+        window.location.hash = 'oido-chef';
+        window.dispatchEvent(new Event(OIDO_CHEF_START_VOICE_EVENT));
+      }
+      return;
+    }
+    let useQueryFallback = false;
+    try {
+      if (typeof window !== 'undefined') {
+        window.sessionStorage.setItem(OIDO_CHEF_VOICE_NAV_FLAG, '1');
+      }
+    } catch {
+      useQueryFallback = true;
+    }
+    router.push(useQueryFallback ? '/pedidos?voz=1#oido-chef' : '/pedidos#oido-chef');
   };
 
   const goToControlPanel = () => {
@@ -26,7 +45,7 @@ export default function BottomNav() {
   return (
     <nav
       className="fixed inset-x-0 bottom-0 z-[70] border-t border-zinc-200/80 bg-white/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-md print:hidden"
-      aria-label={showOidoChef ? 'Ir a Oído Chef' : 'Volver al panel de control'}
+      aria-label={showOidoChef ? 'Oído Chef: ir a Pedidos y activar el micrófono' : 'Volver al panel de control'}
     >
       <div className="mx-auto flex h-16 w-full max-w-md items-center justify-center px-4">
         <button

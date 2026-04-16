@@ -1,8 +1,10 @@
 'use client';
 
 import Link from 'next/link';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Bot, ChevronDown } from 'lucide-react';
 import React from 'react';
+import { OIDO_CHEF_START_VOICE_EVENT, OIDO_CHEF_VOICE_NAV_FLAG } from '@/components/BottomNav';
 import { useAuth } from '@/components/AuthProvider';
 import { CHEF_ONE_TAPER_LINE_CLASS } from '@/components/ChefOneGlowLine';
 import { usePedidosOrders } from '@/components/PedidosOrdersProvider';
@@ -243,6 +245,10 @@ export default function PedidosPage() {
   const assistantRecognitionRef = React.useRef<{
     stop: () => void;
   } | null>(null);
+  /** Evita doble arranque (barra inferior + hash + StrictMode). */
+  const assistantVoiceBootRef = React.useRef(false);
+  const router = useRouter();
+  const searchParams = useSearchParams();
 
   const toggleSentIncidentPanel = (order: PedidoOrder) => {
     setIncidentOpenBySentOrderId((prev) => {
@@ -1290,7 +1296,7 @@ export default function PedidosPage() {
   }, []);
 
   const startAssistantVoice = React.useCallback(() => {
-    if (assistantListening) return;
+    if (assistantListening || assistantVoiceBootRef.current) return;
     if (typeof window === 'undefined') return;
     const W = window as unknown as {
       SpeechRecognition?: new () => any;
@@ -1301,6 +1307,7 @@ export default function PedidosPage() {
       setAssistantReply('Tu navegador no soporta dictado de voz en esta pantalla.');
       return;
     }
+    assistantVoiceBootRef.current = true;
     const recognition = new Ctor();
     recognition.lang = 'es-ES';
     recognition.interimResults = true;
@@ -1308,10 +1315,12 @@ export default function PedidosPage() {
     recognition.continuous = false;
     recognition.onstart = () => setAssistantListening(true);
     recognition.onerror = () => {
+      assistantVoiceBootRef.current = false;
       setAssistantListening(false);
       setAssistantReply('No se pudo iniciar el micrófono. Revisa permisos del navegador.');
     };
     recognition.onend = () => {
+      assistantVoiceBootRef.current = false;
       setAssistantListening(false);
       assistantRecognitionRef.current = null;
     };
@@ -1328,8 +1337,51 @@ export default function PedidosPage() {
       }
     };
     assistantRecognitionRef.current = recognition;
-    recognition.start();
+    try {
+      recognition.start();
+    } catch {
+      assistantVoiceBootRef.current = false;
+      setAssistantReply('No se pudo iniciar la escucha de voz.');
+    }
   }, [assistantListening, runAssistantCommandFromText]);
+
+  const scheduleAssistantVoiceFromBottomNav = React.useCallback(() => {
+    setAssistantOpen(true);
+    try {
+      window.localStorage.setItem(ASSISTANT_PANEL_OPEN_LS_KEY, '1');
+    } catch {
+      // ignore
+    }
+    window.requestAnimationFrame(() => {
+      document.getElementById('oido-chef')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      window.setTimeout(() => {
+        startAssistantVoice();
+      }, 140);
+    });
+  }, [startAssistantVoice]);
+
+  React.useEffect(() => {
+    if (searchParams.get('voz') !== '1') return;
+    router.replace('/pedidos#oido-chef', { scroll: false });
+    scheduleAssistantVoiceFromBottomNav();
+  }, [router, scheduleAssistantVoiceFromBottomNav, searchParams]);
+
+  React.useEffect(() => {
+    try {
+      if (window.sessionStorage.getItem(OIDO_CHEF_VOICE_NAV_FLAG) === '1') {
+        window.sessionStorage.removeItem(OIDO_CHEF_VOICE_NAV_FLAG);
+        scheduleAssistantVoiceFromBottomNav();
+      }
+    } catch {
+      // ignore
+    }
+  }, [scheduleAssistantVoiceFromBottomNav]);
+
+  React.useEffect(() => {
+    const onNavVoice = () => scheduleAssistantVoiceFromBottomNav();
+    window.addEventListener(OIDO_CHEF_START_VOICE_EVENT, onNavVoice);
+    return () => window.removeEventListener(OIDO_CHEF_START_VOICE_EVENT, onNavVoice);
+  }, [scheduleAssistantVoiceFromBottomNav]);
 
   const stopAssistantVoice = React.useCallback(() => {
     assistantRecognitionRef.current?.stop();
