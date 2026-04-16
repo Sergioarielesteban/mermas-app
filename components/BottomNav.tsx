@@ -19,10 +19,15 @@ export default function BottomNav() {
   const goOidoChef = () => {
     if (pathname === '/pedidos') {
       if (typeof window !== 'undefined') {
-        window.location.hash = 'oido-chef';
-        window.dispatchEvent(new Event(OIDO_CHEF_START_VOICE_EVENT));
+        const onAssistant = new URLSearchParams(window.location.search).get('oido') === '1';
+        if (onAssistant) {
+          window.location.hash = 'oido-chef';
+          window.dispatchEvent(new Event(OIDO_CHEF_START_VOICE_EVENT));
+          return;
+        }
+        router.push('/pedidos?oido=1#oido-chef');
+        return;
       }
-      return;
     }
     let useQueryFallback = false;
     try {
@@ -32,7 +37,7 @@ export default function BottomNav() {
     } catch {
       useQueryFallback = true;
     }
-    router.push(useQueryFallback ? '/pedidos?voz=1#oido-chef' : '/pedidos#oido-chef');
+    router.push(useQueryFallback ? '/pedidos?voz=1&oido=1#oido-chef' : '/pedidos?oido=1#oido-chef');
   };
 
   const goToControlPanel = () => {

@@ -212,6 +212,22 @@ function isPriceRiseAlert(row: PriceSummary, alertPct: number): boolean {
   return row.deltaPct >= alertPct;
 }
 
+/**
+ * Incluir en la tabla de evolución aunque el primer y último punto coincidan (p. ej. catálogo 2 →
+ * albarán 2,5 → albarán 2): si en algún pedido el albarán se apartó del precio base, o hay más de
+ * un precio de albarán distinto entre sí, la serie sigue siendo relevante.
+ */
+function shouldIncludePriceEvolutionRow(row: PriceSummary): boolean {
+  if (row.points.length < 2) return false;
+  if (Math.abs(row.delta) > 0.001) return true;
+  if (row.points.some((p) => p.sortRank === 0)) return true;
+  const bills = row.points.filter((p) => p.sortRank === 1).map((p) => p.price);
+  if (bills.length < 2) return false;
+  const mn = Math.min(...bills);
+  const mx = Math.max(...bills);
+  return Math.abs(mx - mn) > 0.001;
+}
+
 function buildPriceSummaries(
   orders: PedidoOrder[],
   windowStartMs: number,
@@ -357,7 +373,7 @@ function buildPriceSummaries(
         catalogUnit: acc.catalogUnit,
       };
     })
-    .filter((row) => row.points.length >= 2 && Math.abs(row.delta) > 0.001)
+    .filter(shouldIncludePriceEvolutionRow)
     .sort((a, b) => a.productName.localeCompare(b.productName, 'es'));
 }
 

@@ -186,7 +186,6 @@ type AssistantHistoryRow = {
 };
 
 const ASSISTANT_HISTORY_LS_KEY = 'oido-chef-history-v1';
-const ASSISTANT_PANEL_OPEN_LS_KEY = 'oido-chef-panel-open-v1';
 
 export default function PedidosPage() {
   const { localCode, localName, localId, email } = useAuth();
@@ -249,8 +248,6 @@ export default function PedidosPage() {
   const [quickLineMarks, setQuickLineMarks] = React.useState<Record<string, 'ok' | 'bad'>>({});
   const [incidentOpenBySentOrderId, setIncidentOpenBySentOrderId] = React.useState<Record<string, boolean>>({});
   const [incidentNoteBySentOrderId, setIncidentNoteBySentOrderId] = React.useState<Record<string, string>>({});
-  /** Abierto por defecto para que Ejecutar / Voz se vean sin tocar antes; el usuario puede plegar y se guarda en localStorage. */
-  const [assistantOpen, setAssistantOpen] = React.useState(true);
   const [assistantInput, setAssistantInput] = React.useState('');
   const [assistantReply, setAssistantReply] = React.useState<string | null>(null);
   const [assistantPendingAction, setAssistantPendingAction] = React.useState<AssistantPendingAction | null>(null);
@@ -264,6 +261,7 @@ export default function PedidosPage() {
   const assistantVoiceBootRef = React.useRef(false);
   const router = useRouter();
   const searchParams = useSearchParams();
+  const oidoStandalone = searchParams.get('oido') === '1';
 
   const toggleSentIncidentPanel = (order: PedidoOrder) => {
     setIncidentOpenBySentOrderId((prev) => {
@@ -1739,47 +1737,13 @@ export default function PedidosPage() {
     }
   }, []);
 
+  /** Enlaces antiguos a /pedidos#oido-chef: llevar a la pantalla dedicada del asistente. */
   React.useEffect(() => {
-    const syncPanelFromHashOrStorage = () => {
-      if (typeof window === 'undefined') return;
-      if (window.location.hash === '#oido-chef') {
-        setAssistantOpen(true);
-        try {
-          window.localStorage.setItem(ASSISTANT_PANEL_OPEN_LS_KEY, '1');
-        } catch {
-          // ignore
-        }
-        window.requestAnimationFrame(() => {
-          document.getElementById('oido-chef')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        });
-        return;
-      }
-      try {
-        const v = window.localStorage.getItem(ASSISTANT_PANEL_OPEN_LS_KEY);
-        if (v === '0') setAssistantOpen(false);
-        else if (v === '1') setAssistantOpen(true);
-      } catch {
-        // ignore
-      }
-    };
-    syncPanelFromHashOrStorage();
-    window.addEventListener('hashchange', syncPanelFromHashOrStorage);
-    return () => window.removeEventListener('hashchange', syncPanelFromHashOrStorage);
-  }, []);
-
-  const toggleAssistantOpen = React.useCallback(() => {
-    setAssistantOpen((prev) => {
-      const next = !prev;
-      try {
-        if (typeof window !== 'undefined') {
-          window.localStorage.setItem(ASSISTANT_PANEL_OPEN_LS_KEY, next ? '1' : '0');
-        }
-      } catch {
-        // ignore
-      }
-      return next;
-    });
-  }, []);
+    if (typeof window === 'undefined') return;
+    if (searchParams.get('oido') === '1') return;
+    if (window.location.hash !== '#oido-chef') return;
+    router.replace('/pedidos?oido=1#oido-chef', { scroll: false });
+  }, [router, searchParams]);
 
   const startAssistantVoice = React.useCallback(() => {
     if (assistantListening || assistantVoiceBootRef.current) return;
@@ -1832,12 +1796,6 @@ export default function PedidosPage() {
   }, [assistantListening, runAssistantCommandFromText]);
 
   const scheduleAssistantVoiceFromBottomNav = React.useCallback(() => {
-    setAssistantOpen(true);
-    try {
-      window.localStorage.setItem(ASSISTANT_PANEL_OPEN_LS_KEY, '1');
-    } catch {
-      // ignore
-    }
     window.requestAnimationFrame(() => {
       document.getElementById('oido-chef')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
       window.setTimeout(() => {
@@ -1848,7 +1806,7 @@ export default function PedidosPage() {
 
   React.useEffect(() => {
     if (searchParams.get('voz') !== '1') return;
-    router.replace('/pedidos#oido-chef', { scroll: false });
+    router.replace('/pedidos?oido=1', { scroll: false });
     scheduleAssistantVoiceFromBottomNav();
   }, [router, scheduleAssistantVoiceFromBottomNav, searchParams]);
 
@@ -1988,54 +1946,105 @@ export default function PedidosPage() {
     return <PedidosPremiaLockedScreen />;
   }
 
-  return (
-    <div className="space-y-4">
-      {showDeletedBanner ? (
-        <div className="pointer-events-none fixed inset-0 z-[90] grid place-items-center bg-black/25 px-6">
-          <div className="rounded-2xl bg-[#D32F2F] px-7 py-5 text-center shadow-2xl ring-2 ring-white/75">
-            <p className="text-xl font-black uppercase tracking-wide text-white">ELIMINADO</p>
-          </div>
+  const assistantPanel = (
+    <section
+      id="oido-chef"
+      className="scroll-mt-4 rounded-2xl border border-[#D32F2F]/15 bg-white p-4 shadow-sm ring-1 ring-zinc-900/5"
+    >
+      <div className="mb-3 flex items-center gap-3 border-b border-zinc-100 pb-3">
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#D32F2F]/10">
+          <Bot className="h-5 w-5 text-[#D32F2F]" />
+        </span>
+        <div className="min-w-0">
+          <h2 className="text-base font-bold text-zinc-900">Oído Chef</h2>
+          <p className="text-[11px] text-zinc-500">Precios, recepción, limpieza, comida del personal y más.</p>
         </div>
-      ) : null}
+      </div>
 
-      <MermasStyleHero
-        eyebrow="Pedidos"
-        title="Proveedores y recepción"
-        description="Crea pedidos, envía por WhatsApp, controla envíos y recepción en el local. Justo debajo: Oído Chef (órdenes por texto o voz)."
-      />
+      <div className="space-y-2">
+        {assistantProactiveHint ? (
+          <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs font-medium text-amber-950 ring-1 ring-amber-200">
+            {assistantProactiveHint}
+          </p>
+        ) : null}
 
-      <section
-        id="oido-chef"
-        className="scroll-mt-4 rounded-2xl border border-[#D32F2F]/20 bg-white p-4 shadow-sm ring-2 ring-[#D32F2F]/15"
-      >
-        <button
-          type="button"
-          onClick={toggleAssistantOpen}
-          className="flex w-full items-center justify-between gap-2 rounded-xl bg-gradient-to-r from-red-50/90 to-zinc-50 px-3 py-3 text-left ring-1 ring-[#D32F2F]/25"
-          aria-expanded={assistantOpen}
-        >
-          <span className="min-w-0 text-left">
-            <span className="inline-flex items-center gap-2 text-sm font-bold text-zinc-900">
-              <Bot className="h-5 w-5 shrink-0 text-[#D32F2F]" />
-              Oído Chef
-            </span>
-            <span className="mt-0.5 block text-[11px] font-medium text-zinc-600">
-              Asistente: precios, comida personal, limpieza, pedidos enviados… Toca para plegar.
-            </span>
-          </span>
-          <ChevronDown className={['h-5 w-5 shrink-0 text-zinc-500 transition-transform', assistantOpen ? 'rotate-180' : ''].join(' ')} />
-        </button>
-        {assistantOpen ? (
-          <div className="mt-3 space-y-2">
-            <p className="text-xs text-zinc-500">
+        <div className="flex gap-2">
+          <input
+            type="text"
+            value={assistantInput}
+            onChange={(e) => setAssistantInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                void runAssistantCommand();
+              }
+            }}
+            placeholder="Escribe una orden..."
+            className="h-11 min-w-0 flex-1 rounded-xl border border-zinc-300 bg-white px-3 text-sm text-zinc-900 outline-none focus:border-[#D32F2F]/50"
+          />
+          <button
+            type="button"
+            onClick={() => void runAssistantCommand()}
+            disabled={assistantBusy}
+            className="h-11 shrink-0 rounded-xl bg-zinc-900 px-3 text-xs font-bold text-white disabled:opacity-60"
+          >
+            {assistantBusy ? 'Pensando…' : 'Ejecutar'}
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              if (assistantListening) stopAssistantVoice();
+              else startAssistantVoice();
+            }}
+            className={[
+              'h-11 shrink-0 rounded-xl px-3 text-xs font-bold ring-1',
+              assistantListening
+                ? 'bg-[#B91C1C] text-white ring-[#B91C1C]/40'
+                : 'bg-white text-zinc-700 ring-zinc-300',
+            ].join(' ')}
+          >
+            {assistantListening ? 'Escuchando…' : '🎙 Voz'}
+          </button>
+        </div>
+        {assistantReply ? (
+          <p className="rounded-lg bg-zinc-50 px-3 py-2 text-sm text-zinc-700 ring-1 ring-zinc-200">{assistantReply}</p>
+        ) : null}
+        {assistantPendingAction ? (
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={confirmAssistantAction}
+              className="h-10 rounded-lg bg-[#16A34A] px-3 text-xs font-bold text-white"
+            >
+              Confirmar
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                const cmd =
+                  assistantPendingAction?.kind === 'update_price'
+                    ? `actualiza ${assistantPendingAction.productName} a ${assistantPendingAction.nextPrice.toFixed(2)}`
+                    : 'acción pendiente';
+                setAssistantPendingAction(null);
+                setAssistantReply('Acción cancelada.');
+                pushAssistantHistory(cmd, 'Acción cancelada.');
+              }}
+              className="h-10 rounded-lg border border-zinc-300 bg-white px-3 text-xs font-bold text-zinc-700"
+            >
+              Cancelar
+            </button>
+          </div>
+        ) : null}
+
+        <details className="rounded-xl border border-zinc-200/90 bg-zinc-50/40 px-3 py-2 [&_summary::-webkit-details-marker]:hidden">
+          <summary className="cursor-pointer list-none text-xs font-semibold text-zinc-600">
+            Guía de órdenes y TTS
+          </summary>
+          <div className="mt-2 space-y-2 border-t border-zinc-200/80 pt-2">
+            <p className="text-xs leading-snug text-zinc-500">
               Catálogo 7: precio semanal · última compra · actualiza precio en proveedor · marcar recibido · limpieza ·
               comida propia · top mermas · temperaturas. APPCC: estado hoy, aceite. Navegación y WhatsApp.
             </p>
-            {assistantProactiveHint ? (
-              <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs font-medium text-amber-950 ring-1 ring-amber-200">
-                {assistantProactiveHint}
-              </p>
-            ) : null}
             <label className="flex cursor-pointer items-center gap-2 text-xs text-zinc-700">
               <input
                 type="checkbox"
@@ -2054,89 +2063,88 @@ export default function PedidosPage() {
               />
               Leer respuestas en voz del sistema (TTS)
             </label>
-            <div className="flex gap-2">
-              <input
-                type="text"
-                value={assistantInput}
-                onChange={(e) => setAssistantInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    e.preventDefault();
-                    void runAssistantCommand();
-                  }
-                }}
-                placeholder="Escribe una orden..."
-                className="h-11 min-w-0 flex-1 rounded-xl border border-zinc-300 bg-white px-3 text-sm text-zinc-900 outline-none focus:border-[#D32F2F]/50"
-              />
-              <button
-                type="button"
-                onClick={() => void runAssistantCommand()}
-                disabled={assistantBusy}
-                className="h-11 rounded-xl bg-zinc-900 px-3 text-xs font-bold text-white disabled:opacity-60"
-              >
-                {assistantBusy ? 'Pensando…' : 'Ejecutar'}
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  if (assistantListening) stopAssistantVoice();
-                  else startAssistantVoice();
-                }}
-                className={[
-                  'h-11 rounded-xl px-3 text-xs font-bold ring-1',
-                  assistantListening
-                    ? 'bg-[#B91C1C] text-white ring-[#B91C1C]/40'
-                    : 'bg-white text-zinc-700 ring-zinc-300',
-                ].join(' ')}
-              >
-                {assistantListening ? 'Escuchando…' : '🎙 Voz'}
-              </button>
+          </div>
+        </details>
+
+        {assistantHistory.length > 0 ? (
+          <details className="rounded-xl border border-zinc-200/90 bg-white px-3 py-2 [&_summary::-webkit-details-marker]:hidden">
+            <summary className="cursor-pointer list-none text-xs font-semibold text-zinc-600">
+              Últimos comandos ({Math.min(5, assistantHistory.length)})
+            </summary>
+            <ul className="mt-2 max-h-36 space-y-1 overflow-y-auto border-t border-zinc-100 pt-2">
+              {assistantHistory.slice(0, 5).map((row, idx) => (
+                <li key={`${row.at}-${idx}`} className="rounded-md bg-zinc-50 px-2 py-1 text-[11px] ring-1 ring-zinc-200">
+                  <p className="truncate font-semibold text-zinc-800">{row.command}</p>
+                  <p className="truncate text-zinc-600">{row.result}</p>
+                </li>
+              ))}
+            </ul>
+          </details>
+        ) : null}
+      </div>
+    </section>
+  );
+
+  if (oidoStandalone) {
+    return (
+      <div className="mx-auto max-w-md space-y-4 px-4 py-5">
+        {showDeletedBanner ? (
+          <div className="pointer-events-none fixed inset-0 z-[90] grid place-items-center bg-black/25 px-6">
+            <div className="rounded-2xl bg-[#D32F2F] px-7 py-5 text-center shadow-2xl ring-2 ring-white/75">
+              <p className="text-xl font-black uppercase tracking-wide text-white">ELIMINADO</p>
             </div>
-            {assistantReply ? (
-              <p className="rounded-lg bg-zinc-50 px-3 py-2 text-sm text-zinc-700 ring-1 ring-zinc-200">{assistantReply}</p>
-            ) : null}
-            {assistantPendingAction ? (
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={confirmAssistantAction}
-                  className="h-10 rounded-lg bg-[#16A34A] px-3 text-xs font-bold text-white"
-                >
-                  Confirmar
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    const cmd =
-                      assistantPendingAction?.kind === 'update_price'
-                        ? `actualiza ${assistantPendingAction.productName} a ${assistantPendingAction.nextPrice.toFixed(2)}`
-                        : 'acción pendiente';
-                    setAssistantPendingAction(null);
-                    setAssistantReply('Acción cancelada.');
-                    pushAssistantHistory(cmd, 'Acción cancelada.');
-                  }}
-                  className="h-10 rounded-lg border border-zinc-300 bg-white px-3 text-xs font-bold text-zinc-700"
-                >
-                  Cancelar
-                </button>
-              </div>
-            ) : null}
-            {assistantHistory.length > 0 ? (
-              <div className="rounded-lg border border-zinc-200 bg-white p-2">
-                <p className="px-1 text-[10px] font-bold uppercase tracking-wide text-zinc-500">Últimos comandos</p>
-                <ul className="mt-1 max-h-36 space-y-1 overflow-y-auto">
-                  {assistantHistory.slice(0, 5).map((row, idx) => (
-                    <li key={`${row.at}-${idx}`} className="rounded-md bg-zinc-50 px-2 py-1 text-[11px] ring-1 ring-zinc-200">
-                      <p className="truncate font-semibold text-zinc-800">{row.command}</p>
-                      <p className="truncate text-zinc-600">{row.result}</p>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ) : null}
           </div>
         ) : null}
-      </section>
+
+        <Link
+          href="/pedidos"
+          className="inline-flex items-center gap-1.5 text-sm font-semibold text-zinc-700 underline-offset-4 hover:text-zinc-900 hover:underline"
+        >
+          ← Volver a pedidos
+        </Link>
+
+        <MermasStyleHero
+          eyebrow="Asistente"
+          title="Oído Chef"
+          description="Misma cuenta y datos que en Pedidos: aquí solo el asistente, para no saturar la lista de envíos."
+        />
+
+        {assistantPanel}
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {showDeletedBanner ? (
+        <div className="pointer-events-none fixed inset-0 z-[90] grid place-items-center bg-black/25 px-6">
+          <div className="rounded-2xl bg-[#D32F2F] px-7 py-5 text-center shadow-2xl ring-2 ring-white/75">
+            <p className="text-xl font-black uppercase tracking-wide text-white">ELIMINADO</p>
+          </div>
+        </div>
+      ) : null}
+
+      <MermasStyleHero
+        eyebrow="Pedidos"
+        title="Proveedores y recepción"
+        description="Crea pedidos, envía por WhatsApp y controla envíos y recepción en el local."
+      />
+
+      <Link
+        href="/pedidos?oido=1"
+        className="group flex items-center justify-between gap-3 rounded-2xl border border-zinc-200/90 bg-gradient-to-r from-zinc-50 to-white px-4 py-3.5 shadow-sm ring-1 ring-zinc-900/5 transition hover:border-[#D32F2F]/25 hover:shadow-md"
+      >
+        <span className="flex min-w-0 items-center gap-3">
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#D32F2F]/10">
+            <Bot className="h-5 w-5 text-[#D32F2F]" />
+          </span>
+          <span className="min-w-0 text-left">
+            <span className="block text-sm font-bold text-zinc-900">Oído Chef</span>
+            <span className="mt-0.5 block text-[11px] text-zinc-500">Abrir asistente por voz o texto (pantalla aparte).</span>
+          </span>
+        </span>
+        <span className="shrink-0 text-xs font-bold text-[#D32F2F]">Abrir</span>
+      </Link>
 
       <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-zinc-200">
         <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-3">
