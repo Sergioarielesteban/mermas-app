@@ -360,9 +360,6 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               <span aria-hidden>←</span>
               Panel de control
             </button>
-            <p className="text-center text-[11px] font-semibold uppercase tracking-wide text-zinc-500">
-              Módulo · {title}
-            </p>
           </div>
         ) : null}
         <PullToRefreshPedidos>{children}</PullToRefreshPedidos>
