@@ -1,7 +1,12 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import { X } from 'lucide-react';
+import {
+  getSystemNotifyPermission,
+  requestSystemNotifyPermission,
+  systemNotificationsSupported,
+} from '@/lib/browser-notifications';
 import type { NotificationWithRead } from '@/services/notifications';
 import NotificationItem from './NotificationItem';
 
@@ -22,7 +27,15 @@ export default function NotificationsPanel({
   onMarkAllRead: () => void;
   onItemActivate: (item: NotificationWithRead) => void;
 }) {
+  const [sysPerm, setSysPerm] = useState<NotificationPermission | 'unsupported'>(() =>
+    getSystemNotifyPermission(),
+  );
+
   if (!open) return null;
+
+  const sysSupported = systemNotificationsSupported();
+  const showSysPrompt = sysSupported && sysPerm === 'default';
+  const showSysDenied = sysSupported && sysPerm === 'denied';
 
   return (
     <>
@@ -77,6 +90,29 @@ export default function NotificationsPanel({
               </li>
             ))}
           </ul>
+          {showSysPrompt ? (
+            <div className="border-t border-zinc-100 px-2 py-2">
+              <p className="mb-1.5 text-[10px] leading-snug text-zinc-500">
+                Para ver avisos en la barra del móvil cuando otro usuario del local actúe, activa las notificaciones
+                del navegador.
+              </p>
+              <button
+                type="button"
+                className="w-full rounded-lg bg-zinc-900 py-2 text-[11px] font-bold text-white hover:bg-zinc-800"
+                onClick={() => {
+                  void requestSystemNotifyPermission().then((p) => setSysPerm(p));
+                }}
+              >
+                Activar avisos en este dispositivo
+              </button>
+            </div>
+          ) : null}
+          {showSysDenied ? (
+            <p className="border-t border-zinc-100 px-2 py-2 text-[10px] leading-snug text-zinc-500">
+              Las notificaciones del sistema están bloqueadas. Ábrelas desde ajustes del navegador para este sitio si
+              quieres avisos fuera de la app.
+            </p>
+          ) : null}
         </div>
       </div>
     </>

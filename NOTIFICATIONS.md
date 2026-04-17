@@ -20,8 +20,8 @@ Documentación del módulo de notificaciones internas, Realtime y preparación p
 ### Integraciones en flujos reales
 
 - `app/pedidos/nuevo/page.tsx` — pedido enviado (WhatsApp / envío en un paso)  
-- `app/pedidos/page.tsx` — pedido recibido  
-- `app/pedidos/recepcion/page.tsx` — incidencia en recepción  
+- `app/pedidos/page.tsx` — pedido recibido; incidencias al guardar líneas marcadas (✗)  
+- `app/pedidos/recepcion/page.tsx` — incidencia (nota no vacía) en revisión de precios  
 - `app/inventario/page.tsx` — inventario cerrado  
 - `app/chat/page.tsx` — mensaje al equipo  
 - `app/appcc/temperaturas/page.tsx` — alerta APPCC (temperatura fuera de rango)
@@ -57,6 +57,22 @@ Para **Web Push** completo haría falta, como mínimo:
 5. **Permisos del navegador** y política HTTPS (o localhost en desarrollo).
 
 Hasta entonces, `pushDispatch.ts` documenta el hook sin realizar envíos.
+
+## Avisos en la pantalla del móvil (sin Web Push completo)
+
+Las notificaciones **dentro de la app** (campana) usan Supabase Realtime. Para un **banner del sistema** cuando otro usuario del local genera un evento:
+
+1. Abre el panel de la campana y pulsa **«Activar avisos en este dispositivo»** (permiso del navegador).
+2. Con permiso concedido, cada `INSERT` en `notifications` de tu local dispara un `Notification` nativo **si el evento no lo creó tu propio usuario** (evita avisarte a ti mismo).
+
+**Límites:** en **iOS**, las notificaciones web/PWA son más restrictivas que en Android; sin Web Push + SW no hay avisos con la app totalmente cerrada. Para eso hace falta el bloque «Activar push notifications reales» de arriba.
+
+## Incidencias de pedido (dos sitios)
+
+- **`/pedidos/recepcion`**: al guardar una **nota de incidencia** no vacía en el bloque de incidencias.
+- **`/pedidos`** (pedidos enviados / recepción rápida): al **guardar incidencias** con líneas marcadas como problema (✗), incluido el texto por defecto «No recibido».
+
+Ambos flujos llaman a `notifyIncidenciaRecepcion`.
 
 ## Pasos manuales en Supabase
 

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
+import { showSystemNotification } from '@/lib/browser-notifications';
 import {
   getNotifications,
   getUnreadNotificationsCount,
@@ -68,7 +69,17 @@ export function useNotifications(localId: string | null, userId: string | null) 
           table: 'notifications',
           filter: `local_id=eq.${localId}`,
         },
-        () => {
+        (payload: { new?: Record<string, unknown> }) => {
+          const row = payload.new;
+          if (row && typeof row.title === 'string' && typeof row.message === 'string') {
+            const createdBy = row.created_by;
+            const fromSelf =
+              typeof createdBy === 'string' && Boolean(userId) && createdBy === userId;
+            if (!fromSelf) {
+              const id = typeof row.id === 'string' ? row.id : undefined;
+              showSystemNotification(row.title, row.message, { tag: id ? `chef-one-${id}` : undefined });
+            }
+          }
           void refreshRef.current();
         },
       )

@@ -68,7 +68,7 @@ import { fetchAppccFryers, fetchOilEventsForDate } from '@/lib/appcc-aceite-supa
 import { topByValue } from '@/lib/analytics';
 import { fetchProductsAndMermas } from '@/lib/mermas-supabase';
 import { requestDeleteSecurityPin } from '@/lib/delete-security';
-import { actorLabel, notifyPedidoRecibido } from '@/services/notifications';
+import { actorLabel, notifyIncidenciaRecepcion, notifyPedidoRecibido } from '@/services/notifications';
 
 function normalizeWhatsappNumber(raw: string | undefined) {
   if (!raw) return null;
@@ -358,6 +358,16 @@ export default function PedidosPage() {
         setIncidentOpenBySentOrderId((prev) => ({ ...prev, [order.id]: false }));
         void reloadOrders();
         dispatchPedidosDataChanged();
+        const supa = getSupabaseClient();
+        if (supa && localId) {
+          void notifyIncidenciaRecepcion(supa, {
+            localId,
+            userId,
+            actorName: actorLabel(displayName, loginUsername),
+            supplierName: order.supplierName,
+            orderId: order.id,
+          });
+        }
       })
       .catch((err: Error) => {
         void reloadOrders();
