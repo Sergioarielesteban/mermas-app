@@ -146,10 +146,11 @@ export default function PanelControlPage() {
           tone="red"
         />
         <HubTile
-          onClick={() => onComingSoonModule('Cocina central')}
+          href="/cocina-central"
           label="Cocina central"
-          sub={COMING_SOON_SUB}
+          sub="Producción, lotes, entregas y QR"
           Icon={ChefHat}
+          tone="red"
         />
         <HubTile
           href="/personal"

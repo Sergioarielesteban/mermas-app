@@ -20,6 +20,8 @@ type AuthContextValue = {
   localId: string | null;
   localCode: string | null;
   localName: string | null;
+  /** Cocina central (columna `locals.is_central_kitchen`). */
+  isCentralKitchen: boolean;
   /** true cuando ya se intentó cargar el perfil (o no aplica). */
   profileReady: boolean;
   login: (identifier: string, password: string) => Promise<{ ok: boolean; reason?: string }>;
@@ -34,7 +36,7 @@ type AuthContextValue = {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 const AUTH_KEY = 'mermas_user_email';
-const PROFILE_CACHE_KEY = 'chef_one_profile_cache_v2';
+const PROFILE_CACHE_KEY = 'chef_one_profile_cache_v3';
 const PROFILE_TIMEOUT_MS = 6000;
 /**
  * Si getSession tarda (Wi‑Fi cocina, móvil al volver de suspensión), no enviar al login:
@@ -85,12 +87,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [localId, setLocalId] = useState<string | null>(null);
   const [localCode, setLocalCode] = useState<string | null>(null);
   const [localName, setLocalName] = useState<string | null>(null);
+  const [isCentralKitchen, setIsCentralKitchen] = useState(false);
   const [profileReady, setProfileReady] = useState(false);
 
   const clearProfile = React.useCallback(() => {
     setLocalId(null);
     setLocalCode(null);
     setLocalName(null);
+    setIsCentralKitchen(false);
     setDisplayName(null);
     setLoginUsername(null);
     setProfileRole(null);
@@ -101,6 +105,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       localId: string;
       localCode: string | null;
       localName: string | null;
+      isCentralKitchen: boolean;
       displayName: string | null;
       loginUsername: string | null;
       profileRole: ProfileAppRole | null;
@@ -120,6 +125,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         localId?: string;
         localCode?: string | null;
         localName?: string | null;
+        isCentralKitchen?: boolean;
         displayName?: string | null;
         loginUsername?: string | null;
         profileRole?: ProfileAppRole | null;
@@ -128,6 +134,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setLocalId(parsed.localId);
       setLocalCode(parsed.localCode ?? null);
       setLocalName(parsed.localName ?? null);
+      setIsCentralKitchen(!!parsed.isCentralKitchen);
       setDisplayName(parsed.displayName ?? null);
       setLoginUsername(parsed.loginUsername ?? null);
       setProfileRole(parsed.profileRole ?? null);
@@ -171,7 +178,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           full_name: string | null;
           login_username: string | null;
           role: string | null;
-          locals: { code: string; name: string } | { code: string; name: string }[] | null;
+          locals:
+            | { code: string; name: string; is_central_kitchen?: boolean | null }
+            | { code: string; name: string; is_central_kitchen?: boolean | null }[]
+            | null;
         }
       | null = null;
     let error: Error | null = null;
@@ -180,7 +190,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         Promise.resolve(
           supabase
             .from('profiles')
-            .select('local_id, full_name, login_username, role, locals(code, name)')
+            .select('local_id, full_name, login_username, role, locals(code, name, is_central_kitchen)')
             .eq('user_id', uid)
             .maybeSingle(),
         ),
@@ -231,6 +241,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setLocalId(profileOnly.local_id);
       setLocalCode(null);
       setLocalName(null);
+      let centralFallback = false;
+      try {
+        const lr = await withTimeout(
+          Promise.resolve(
+            supabase
+              .from('locals')
+              .select('is_central_kitchen')
+              .eq('id', profileOnly.local_id)
+              .maybeSingle(),
+          ),
+          PROFILE_TIMEOUT_MS,
+        );
+        centralFallback = !!(lr.data as { is_central_kitchen?: boolean } | null)?.is_central_kitchen;
+      } catch {
+        centralFallback = false;
+      }
+      setIsCentralKitchen(centralFallback);
       const dn = profileOnly.full_name?.trim() ? profileOnly.full_name.trim() : null;
       const lu = profileOnly.login_username?.trim() ? profileOnly.login_username.trim() : null;
       setDisplayName(dn);
@@ -241,6 +268,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         localId: profileOnly.local_id,
         localCode: null,
         localName: null,
+        isCentralKitchen: centralFallback,
         displayName: dn,
         loginUsername: lu,
         profileRole: pr,
@@ -254,7 +282,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       full_name: string | null;
       login_username: string | null;
       role: string | null;
-      locals: { code: string; name: string } | { code: string; name: string }[] | null;
+      locals:
+        | { code: string; name: string; is_central_kitchen?: boolean | null }
+        | { code: string; name: string; is_central_kitchen?: boolean | null }[]
+        | null;
     } | null;
     if (!row) {
       clearProfile();
@@ -262,9 +293,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return;
     }
     const loc = Array.isArray(row.locals) ? row.locals[0] : row.locals;
+    const central = !!loc?.is_central_kitchen;
     setLocalId(row.local_id);
     setLocalCode(loc?.code ?? null);
     setLocalName(loc?.name ?? null);
+    setIsCentralKitchen(central);
     const dn = row.full_name?.trim() ? row.full_name.trim() : null;
     const lu = row.login_username?.trim() ? row.login_username.trim() : null;
     setDisplayName(dn);
@@ -275,6 +308,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       localId: row.local_id,
       localCode: loc?.code ?? null,
       localName: loc?.name ?? null,
+      isCentralKitchen: central,
       displayName: dn,
       loginUsername: lu,
       profileRole: pr,
@@ -469,6 +503,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       localId,
       localCode,
       localName,
+      isCentralKitchen,
       profileReady,
       login: async (identifier: string, password: string) => {
         const clean = identifier.trim().toLowerCase();
@@ -565,6 +600,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       localCode,
       localId,
       localName,
+      isCentralKitchen,
       loading,
       loginUsername,
       profileReady,

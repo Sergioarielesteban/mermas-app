@@ -65,6 +65,17 @@ function titleForPath(pathname: string | null) {
   if (pathname.startsWith('/inventario')) return 'Inventario';
   if (pathname.startsWith('/escandallos/recetas')) return 'Libro de recetas';
   if (pathname.startsWith('/escandallos')) return 'Escandallos';
+  if (pathname.startsWith('/cocina-central')) {
+    if (pathname === '/cocina-central') return 'Cocina central';
+    if (pathname.startsWith('/cocina-central/produccion')) return 'Producción central';
+    if (pathname.startsWith('/cocina-central/lotes')) return 'Lotes';
+    if (pathname.startsWith('/cocina-central/etiquetas')) return 'Etiqueta';
+    if (pathname.startsWith('/cocina-central/entregas')) return 'Entregas';
+    if (pathname.startsWith('/cocina-central/recepciones')) return 'Recepciones';
+    if (pathname.startsWith('/cocina-central/escanear')) return 'Escanear QR';
+    if (pathname.startsWith('/cocina-central/lote')) return 'Lote';
+    return 'Cocina central';
+  }
   if (pathname.startsWith('/personal')) return 'Personal';
   if (pathname.startsWith('/comida-personal')) return 'Comida de personal';
   if (pathname.startsWith('/chat')) return 'Chat del local';
@@ -95,7 +106,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [confirmLogoutOpen, setConfirmLogoutOpen] = useState(false);
-  const { email, displayName, loginUsername, logout, localId, localCode, localName } = useAuth();
+  const { email, displayName, loginUsername, logout, localId, localCode, localName, profileReady } =
+    useAuth();
   const localLabel = formatLocalHeaderName(localName ?? localCode) ?? localName ?? localCode;
   const sessionLabel = (displayName?.trim() || loginUsername?.trim() || null) ?? 'Usuario';
   const showPedidos = canAccessPedidos(localCode, email, localName, localId);
@@ -115,9 +127,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       { href: '/personal', label: 'Personal', Icon: CalendarDays },
       { href: '/chat', label: 'Chat', Icon: MessageCircle },
       { href: '/cuenta/seguridad', label: 'Cuenta y seguridad', Icon: KeyRound },
-      { label: 'Cocina central', Icon: ChefHat, comingSoon: true },
+      ...(profileReady ? [{ href: '/cocina-central', label: 'Cocina central', Icon: ChefHat }] : []),
     ],
-    [showPedidos],
+    [showPedidos, profileReady],
   );
 
   const confirmAndLogout = () => setConfirmLogoutOpen(true);
@@ -320,7 +332,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                         ? pathname === '/escandallos' || pathname?.startsWith('/escandallos/')
                         : entry.href === '/cuenta/seguridad'
                           ? pathname === '/cuenta/seguridad' || pathname?.startsWith('/cuenta/')
-                          : pathname === entry.href || pathname?.startsWith(`${entry.href}/`);
+                          : entry.href === '/cocina-central'
+                            ? pathname === '/cocina-central' || pathname?.startsWith('/cocina-central/')
+                            : pathname === entry.href || pathname?.startsWith(`${entry.href}/`);
 
             return (
               <Link
