@@ -126,6 +126,7 @@ export default function NuevoPedidoPage() {
   const [existingCreatedAt, setExistingCreatedAt] = React.useState<string | null>(null);
   const [existingSentAt, setExistingSentAt] = React.useState<string | null>(null);
   const [existingOrderId, setExistingOrderId] = React.useState<string | null>(null);
+  const [existingOrderUpdatedAt, setExistingOrderUpdatedAt] = React.useState<string | null>(null);
 
   const clearBasketDraft = React.useCallback(() => {
     if (!localId) return;
@@ -244,6 +245,7 @@ export default function NuevoPedidoPage() {
   React.useEffect(() => {
     if (!editingId) return;
     if (!localId) return;
+    setExistingOrderUpdatedAt(null);
     const supabase = getSupabaseClient();
     if (!supabase) return;
     void fetchOrders(supabase, localId)
@@ -260,6 +262,7 @@ export default function NuevoPedidoPage() {
         setDeliveryDate(draft.deliveryDate ?? '');
         setExistingCreatedAt(draft.createdAt);
         setExistingSentAt(draft.sentAt ?? null);
+        setExistingOrderUpdatedAt(draft.updatedAt ?? null);
         setQtyByProductId(
           draft.items.reduce<QtyMap>((acc, item) => {
             if (item.supplierProductId) acc[item.supplierProductId] = item.quantity;
@@ -359,6 +362,7 @@ export default function NuevoPedidoPage() {
       createdAt: existingCreatedAt ?? new Date().toISOString(),
       sentAt: nextStatus === 'sent' ? existingSentAt ?? new Date().toISOString() : undefined,
       deliveryDate: deliveryDate || undefined,
+      expectedOrderUpdatedAt: existingOrderUpdatedAt ?? undefined,
       items: items.map((item) => ({
         supplierProductId: item.supplierProductId,
         productName: item.productName,
@@ -407,6 +411,7 @@ export default function NuevoPedidoPage() {
       createdAt: existingCreatedAt ?? new Date().toISOString(),
       sentAt: existingSentAt ?? new Date().toISOString(),
       deliveryDate,
+      expectedOrderUpdatedAt: existingOrderUpdatedAt ?? undefined,
       items: items.map((item) => ({
         supplierProductId: item.supplierProductId,
         productName: item.productName,

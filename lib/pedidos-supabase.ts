@@ -140,6 +140,8 @@ export type PedidoOrder = {
   deliveryDate?: string;
   /** Pedido enviado archivado de la bandeja «revisión de precios» (sigue en BD y en Pedidos enviados). */
   priceReviewArchivedAt?: string;
+  /** Marca de concurrencia para evitar pisar cambios entre dispositivos. */
+  updatedAt?: string;
   items: PedidoOrderItem[];
   total: number;
 };
@@ -186,6 +188,7 @@ type OrderRow = {
   received_at: string | null;
   delivery_date: string | null;
   price_review_archived_at?: string | null;
+  updated_at?: string | null;
   pedido_suppliers: { name: string; contact: string | null } | { name: string; contact: string | null }[] | null;
 };
 type OrderItemRow = {
@@ -222,6 +225,28 @@ function isMissingDeliveryExceptionTableError(message: string): boolean {
     m.includes('pedido_supplier_delivery_exceptions') &&
     (m.includes('does not exist') || m.includes('not found') || m.includes('schema cache'))
   );
+}
+
+function isMissingPurchaseOrdersUpdatedAtColumnError(message: string): boolean {
+  const m = message.toLowerCase();
+  return (
+    m.includes('updated_at') &&
+    m.includes('purchase_orders') &&
+    (m.includes('column') || m.includes('schema cache') || m.includes('does not exist'))
+  );
+}
+
+function isMissingSaveOrderRpcError(message: string): boolean {
+  const m = message.toLowerCase();
+  return (
+    m.includes('save_purchase_order_with_items') &&
+    (m.includes('function') || m.includes('schema cache') || m.includes('does not exist'))
+  );
+}
+
+function isOrderConcurrencyConflictMessage(message: string): boolean {
+  const m = message.toLowerCase();
+  return m.includes('updated by another user') || m.includes('concurrency');
 }
 
 export async function fetchSuppliersWithProducts(supabase: SupabaseClient, localId: string) {
@@ -500,16 +525,34 @@ export async function setSupplierProductActive(
 }
 
 export async function fetchOrders(supabase: SupabaseClient, localId: string) {
-  const { data: orderRows, error: oErr } = await supabase
-    .from('purchase_orders')
-    .select(
-      'id,supplier_id,status,notes,created_at,sent_at,received_at,delivery_date,price_review_archived_at,pedido_suppliers(name,contact)',
-    )
-    .eq('local_id', localId)
-    .order('created_at', { ascending: false });
-  if (oErr) throw new Error(oErr.message);
+  let orderRows: OrderRow[] = [];
+  {
+    const withUpdated = await supabase
+      .from('purchase_orders')
+      .select(
+        'id,supplier_id,status,notes,created_at,sent_at,received_at,delivery_date,price_review_archived_at,updated_at,pedido_suppliers(name,contact)',
+      )
+      .eq('local_id', localId)
+      .order('created_at', { ascending: false });
+    if (withUpdated.error) {
+      if (!isMissingPurchaseOrdersUpdatedAtColumnError(withUpdated.error.message)) {
+        throw new Error(withUpdated.error.message);
+      }
+      const legacy = await supabase
+        .from('purchase_orders')
+        .select(
+          'id,supplier_id,status,notes,created_at,sent_at,received_at,delivery_date,price_review_archived_at,pedido_suppliers(name,contact)',
+        )
+        .eq('local_id', localId)
+        .order('created_at', { ascending: false });
+      if (legacy.error) throw new Error(legacy.error.message);
+      orderRows = (legacy.data ?? []) as OrderRow[];
+    } else {
+      orderRows = (withUpdated.data ?? []) as OrderRow[];
+    }
+  }
 
-  const ids = ((orderRows ?? []) as OrderRow[]).map((row) => row.id);
+  const ids = orderRows.map((row) => row.id);
   let itemRows: OrderItemRow[] = [];
   {
     const withPricePerKg = await supabase
@@ -564,7 +607,7 @@ export async function fetchOrders(supabase: SupabaseClient, localId: string) {
     byOrder.set(row.order_id, list);
   }
 
-  const orders: PedidoOrder[] = ((orderRows ?? []) as OrderRow[]).map((row) => {
+  const orders: PedidoOrder[] = orderRows.map((row) => {
     const supplier = Array.isArray(row.pedido_suppliers) ? row.pedido_suppliers[0] : row.pedido_suppliers;
     const items = byOrder.get(row.id) ?? [];
     return {
@@ -581,6 +624,7 @@ export async function fetchOrders(supabase: SupabaseClient, localId: string) {
       ...(row.price_review_archived_at != null && row.price_review_archived_at !== ''
         ? { priceReviewArchivedAt: row.price_review_archived_at }
         : {}),
+      ...(row.updated_at != null && row.updated_at !== '' ? { updatedAt: row.updated_at } : {}),
       items,
       total: items.reduce((acc, item) => acc + item.lineTotal, 0),
     };
@@ -594,16 +638,34 @@ export async function fetchOrderById(
   localId: string,
   orderId: string,
 ): Promise<PedidoOrder | null> {
-  const { data: orderRow, error: oErr } = await supabase
-    .from('purchase_orders')
-    .select(
-      'id,supplier_id,status,notes,created_at,sent_at,received_at,delivery_date,price_review_archived_at,pedido_suppliers(name,contact)',
-    )
-    .eq('local_id', localId)
-    .eq('id', orderId)
-    .maybeSingle();
-  if (oErr) throw new Error(oErr.message);
-  const row = orderRow as OrderRow | null;
+  let row: OrderRow | null = null;
+  {
+    const withUpdated = await supabase
+      .from('purchase_orders')
+      .select(
+        'id,supplier_id,status,notes,created_at,sent_at,received_at,delivery_date,price_review_archived_at,updated_at,pedido_suppliers(name,contact)',
+      )
+      .eq('local_id', localId)
+      .eq('id', orderId)
+      .maybeSingle();
+    if (withUpdated.error) {
+      if (!isMissingPurchaseOrdersUpdatedAtColumnError(withUpdated.error.message)) {
+        throw new Error(withUpdated.error.message);
+      }
+      const legacy = await supabase
+        .from('purchase_orders')
+        .select(
+          'id,supplier_id,status,notes,created_at,sent_at,received_at,delivery_date,price_review_archived_at,pedido_suppliers(name,contact)',
+        )
+        .eq('local_id', localId)
+        .eq('id', orderId)
+        .maybeSingle();
+      if (legacy.error) throw new Error(legacy.error.message);
+      row = (legacy.data as OrderRow | null) ?? null;
+    } else {
+      row = (withUpdated.data as OrderRow | null) ?? null;
+    }
+  }
   if (!row) return null;
 
   let itemRows: OrderItemRow[] = [];
@@ -670,6 +732,7 @@ export async function fetchOrderById(
     ...(row.price_review_archived_at != null && row.price_review_archived_at !== ''
       ? { priceReviewArchivedAt: row.price_review_archived_at }
       : {}),
+    ...(row.updated_at != null && row.updated_at !== '' ? { updatedAt: row.updated_at } : {}),
     items,
     total: items.reduce((acc, item) => acc + item.lineTotal, 0),
   };
@@ -749,6 +812,7 @@ export async function saveOrder(
     sentAt?: string;
     createdAt?: string;
     deliveryDate?: string;
+    expectedOrderUpdatedAt?: string;
     items: Array<{
       supplierProductId: string | null;
       productName: string;
@@ -763,87 +827,68 @@ export async function saveOrder(
     }>;
   },
 ) {
-  let orderId = payload.orderId;
-  if (!orderId) {
-    const { data, error } = await supabase
-      .from('purchase_orders')
-      .insert({
-        local_id: localId,
-        supplier_id: payload.supplierId,
-        status: payload.status,
-        notes: payload.notes.trim(),
-        sent_at: payload.status === 'sent' ? payload.sentAt ?? new Date().toISOString() : null,
-        delivery_date: payload.deliveryDate ?? null,
-      })
-      .select('id')
-      .single();
-    if (error) throw new Error(error.message);
-    orderId = data.id as string;
-  } else {
-    const { error } = await supabase
-      .from('purchase_orders')
-      .update({
-        supplier_id: payload.supplierId,
-        status: payload.status,
-        notes: payload.notes.trim(),
-        sent_at: payload.status === 'sent' ? payload.sentAt ?? new Date().toISOString() : null,
-        delivery_date: payload.deliveryDate ?? null,
-      })
-      .eq('id', orderId)
-      .eq('local_id', localId);
-    if (error) throw new Error(error.message);
+  const rpcItems = payload.items.map((item) => ({
+    supplier_product_id: item.supplierProductId,
+    product_name: item.productName,
+    unit: item.unit,
+    quantity: item.quantity,
+    received_quantity: item.receivedQuantity,
+    price_per_unit: Math.round(item.pricePerUnit * 100) / 100,
+    base_price_per_unit: Math.round(item.pricePerUnit * 100) / 100,
+    vat_rate: Math.max(0, Math.round((item.vatRate ?? 0) * 10000) / 10000),
+    line_total: Math.round(item.lineTotal * 100) / 100,
+    estimated_kg_per_unit:
+      unitSupportsReceivedWeightKg(item.unit) &&
+      item.estimatedKgPerUnit != null &&
+      Number.isFinite(item.estimatedKgPerUnit) &&
+      item.estimatedKgPerUnit > 0
+        ? Math.round(item.estimatedKgPerUnit * 1000) / 1000
+        : null,
+    received_weight_kg:
+      item.unit === 'kg'
+        ? item.receivedWeightKg != null &&
+          Number.isFinite(item.receivedWeightKg) &&
+          item.receivedWeightKg > 0
+          ? Math.round(item.receivedWeightKg * 1000) / 1000
+          : null
+        : unitSupportsReceivedWeightKg(item.unit) &&
+            item.receivedWeightKg != null &&
+            Number.isFinite(item.receivedWeightKg) &&
+            item.receivedWeightKg > 0
+          ? Math.round(item.receivedWeightKg * 1000) / 1000
+          : null,
+    incident_type: null,
+    incident_notes: null,
+    received_price_per_kg: null,
+  }));
 
-    const { error: delErr } = await supabase
-      .from('purchase_order_items')
-      .delete()
-      .eq('order_id', orderId)
-      .eq('local_id', localId);
-    if (delErr) throw new Error(delErr.message);
+  const { data, error } = await supabase.rpc('save_purchase_order_with_items', {
+    p_order_id: payload.orderId ?? null,
+    p_local_id: localId,
+    p_supplier_id: payload.supplierId,
+    p_status: payload.status,
+    p_notes: payload.notes.trim(),
+    p_sent_at: payload.status === 'sent' ? payload.sentAt ?? new Date().toISOString() : null,
+    p_delivery_date: payload.deliveryDate ?? null,
+    p_items: rpcItems,
+    p_expected_order_updated_at: payload.expectedOrderUpdatedAt ?? null,
+  });
+
+  if (error) {
+    if (isMissingSaveOrderRpcError(error.message)) {
+      throw new Error(
+        'Falta la función SQL save_purchase_order_with_items en Supabase. Ejecuta el último supabase-pedidos-schema.sql y vuelve a intentar.',
+      );
+    }
+    if (isOrderConcurrencyConflictMessage(error.message)) {
+      throw new Error('Otro dispositivo actualizó este pedido antes que tú. Recarga Pedidos y vuelve a guardar.');
+    }
+    throw new Error(error.message);
   }
 
+  const row = Array.isArray(data) ? data[0] : data;
+  const orderId = row && typeof row === 'object' && 'order_id' in row ? String((row as { order_id: string }).order_id) : '';
   if (!orderId) throw new Error('No se pudo guardar el pedido.');
-
-  if (payload.items.length > 0) {
-       const { error: insErr } = await supabase.from('purchase_order_items').insert(
-      payload.items.map((item) => ({
-        local_id: localId,
-        order_id: orderId,
-        supplier_product_id: item.supplierProductId,
-        product_name: item.productName,
-        unit: item.unit,
-        quantity: item.quantity,
-        received_quantity: item.receivedQuantity,
-        price_per_unit: Math.round(item.pricePerUnit * 100) / 100,
-        base_price_per_unit: Math.round(item.pricePerUnit * 100) / 100,
-        vat_rate: Math.max(0, Math.round((item.vatRate ?? 0) * 10000) / 10000),
-        line_total: Math.round(item.lineTotal * 100) / 100,
-        estimated_kg_per_unit:
-          unitSupportsReceivedWeightKg(item.unit) &&
-          item.estimatedKgPerUnit != null &&
-          Number.isFinite(item.estimatedKgPerUnit) &&
-          item.estimatedKgPerUnit > 0
-            ? Math.round(item.estimatedKgPerUnit * 1000) / 1000
-            : null,
-        received_weight_kg:
-          item.unit === 'kg'
-            ? item.receivedWeightKg != null &&
-              Number.isFinite(item.receivedWeightKg) &&
-              item.receivedWeightKg > 0
-              ? Math.round(item.receivedWeightKg * 1000) / 1000
-              : null
-            : unitSupportsReceivedWeightKg(item.unit) &&
-                item.receivedWeightKg != null &&
-                Number.isFinite(item.receivedWeightKg) &&
-                item.receivedWeightKg > 0
-              ? Math.round(item.receivedWeightKg * 1000) / 1000
-              : null,
-        incident_type: null,
-        incident_notes: null,
-      })),
-    );
-    if (insErr) throw new Error(insErr.message);
-  }
-
   return orderId;
 }
 
@@ -929,6 +974,7 @@ export async function setOrderStatus(
   orderId: string,
   status: PedidoStatus,
   nowIso = new Date().toISOString(),
+  options?: { expectedUpdatedAt?: string },
 ) {
   const patch: {
     status: PedidoStatus;
@@ -945,8 +991,25 @@ export async function setOrderStatus(
     patch.sent_at = null;
     patch.received_at = null;
   }
-  const { error } = await supabase.from('purchase_orders').update(patch).eq('id', orderId).eq('local_id', localId);
-  if (error) throw new Error(error.message);
+  let query = supabase.from('purchase_orders').update(patch).eq('id', orderId).eq('local_id', localId);
+  if (options?.expectedUpdatedAt) {
+    query = query.eq('updated_at', options.expectedUpdatedAt);
+  }
+  const { data, error } = await query.select('id').maybeSingle();
+  if (error) {
+    if (options?.expectedUpdatedAt && isMissingPurchaseOrdersUpdatedAtColumnError(error.message)) {
+      throw new Error(
+        'Falta la columna purchase_orders.updated_at en Supabase. Ejecuta el último supabase-pedidos-schema.sql.',
+      );
+    }
+    throw new Error(error.message);
+  }
+  if (!data?.id) {
+    if (options?.expectedUpdatedAt) {
+      throw new Error('Otro dispositivo cambió este pedido antes de marcarlo. Recarga y vuelve a intentarlo.');
+    }
+    throw new Error('No se pudo actualizar el estado del pedido.');
+  }
 }
 
 /** Pedido marcado recibido por error: vuelve a enviados sin tocar sent_at ni las líneas. */

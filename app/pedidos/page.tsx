@@ -32,9 +32,9 @@ import {
   deleteOrder,
   fetchSuppliersWithProducts,
   persistReceptionItemTotals,
-  persistSentOrderAsReceived,
   receptionLineTotals,
   reopenReceivedOrderToSent,
+  setOrderStatus,
   setOrderPriceReviewArchived,
   unitCanDeclareScaleKgOnReception,
   unitSupportsReceivedWeightKg,
@@ -665,11 +665,9 @@ export default function PedidosPage() {
             ...(unitSupportsReceivedWeightKg(item.unit) ? { receivedPricePerKg: parsedPpk } : {}),
             ...(item.unit === 'kg' && parsedWeight != null ? { receivedQuantity: parsedWeight } : {}),
           };
+          await updateOrderItemReceived(supabase, localId, item.id, merged.receivedQuantity);
           if (unitCanDeclareScaleKgOnReception(item.unit)) {
             await updateOrderItemReceivedWeightKg(supabase, localId, item.id, parsedWeight);
-            if (item.unit === 'kg') {
-              await updateOrderItemReceived(supabase, localId, item.id, parsedWeight ?? item.receivedQuantity);
-            }
             await persistReceptionItemTotals(supabase, localId, merged);
           } else {
             await updateOrderItemPrice(
@@ -696,14 +694,18 @@ export default function PedidosPage() {
       setMessage(null);
       setReceivingOrderId(orderId);
       return flushOrderReceptionDrafts(snap)
-        .then(() => persistSentOrderAsReceived(supabase, localId, snap, { preserveOrderPricing: true }))
+        .then(() =>
+          setOrderStatus(supabase, localId, snap.id, 'received', new Date().toISOString(), {
+            expectedUpdatedAt: snap.updatedAt,
+          }),
+        )
         .then(() => {
           const nowIso = new Date().toISOString();
           registerPendingReceivedOrder(orderId, nowIso);
           setOrders((prev) =>
             prev.map((o) =>
               o.id === orderId
-                ? { ...o, status: 'received', receivedAt: nowIso, priceReviewArchivedAt: undefined }
+                ? { ...o, status: 'received', receivedAt: nowIso, priceReviewArchivedAt: undefined, updatedAt: nowIso }
                 : o,
             ),
           );
