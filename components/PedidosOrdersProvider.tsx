@@ -92,6 +92,7 @@ type PedidosOrdersContextValue = {
   orders: PedidoOrder[];
   setOrders: React.Dispatch<React.SetStateAction<PedidoOrder[]>>;
   reloadOrders: () => void;
+  reloadError: string | null;
   /** Tras crear un pedido: mantenerlo visible hasta que la lectura Supabase lo devuelva (réplica). */
   pinOrderId: (id: string) => void;
   /** Tras borrar en BD: quitar el pin para no resucitar el pedido. */
@@ -114,6 +115,7 @@ export function PedidosOrdersProvider({ children }: { children: React.ReactNode 
   const canUse = canUsePedidosModule(localCode, email, localName, localId);
 
   const [orders, setOrders] = useState<PedidoOrder[]>([]);
+  const [reloadError, setReloadError] = useState<string | null>(null);
   const pinUntilSeenRef = useRef<Set<string>>(new Set());
   const localIdRef = useRef<string | null>(localId ?? null);
   localIdRef.current = localId ?? null;
@@ -167,6 +169,7 @@ export function PedidosOrdersProvider({ children }: { children: React.ReactNode 
     const targetId = localId;
     const supabase = getSupabaseClient();
     if (!supabase) return;
+    setReloadError(null);
     void fetchOrders(supabase, targetId).then((rows) => {
       if (localIdRef.current !== targetId) return;
       // No borrar pendingReceived al ver `received`: la primera lectura puede ser correcta y la siguiente
@@ -181,6 +184,10 @@ export function PedidosOrdersProvider({ children }: { children: React.ReactNode 
         }),
       );
       ordersReadyLocalIdRef.current = targetId;
+    }).catch((error: unknown) => {
+      if (localIdRef.current !== targetId) return;
+      const msg = error instanceof Error ? error.message : 'No se pudo recargar pedidos.';
+      setReloadError(msg);
     });
   }, [canUse, localId]);
 
@@ -253,6 +260,7 @@ export function PedidosOrdersProvider({ children }: { children: React.ReactNode 
       orders,
       setOrders,
       reloadOrders,
+      reloadError,
       pinOrderId,
       releasePinOrderId,
       upsertOrder,
@@ -263,6 +271,7 @@ export function PedidosOrdersProvider({ children }: { children: React.ReactNode 
     [
       orders,
       reloadOrders,
+      reloadError,
       pinOrderId,
       releasePinOrderId,
       upsertOrder,

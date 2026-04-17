@@ -1,6 +1,4 @@
-const DEFAULT_DELETE_PIN = '1234';
-
-/** Clave guardada en el dispositivo; si no existe, se usa env o valor por defecto. */
+/** Clave guardada en el dispositivo (solo UX local). */
 export const DELETE_SECURITY_PIN_STORAGE_KEY = 'chef_one_delete_pin';
 
 export const DELETE_BLOCKED_MERMAS = 'Por seguridad, no se permite borrar registros de mermas.';
@@ -11,24 +9,17 @@ export function normalizeOpsSecurityPin(raw: string): string {
   return raw.replace(/\D/g, '').slice(0, 4);
 }
 
-/**
- * Clave de 4 dígitos para borrados y zonas restringidas (localStorage, env o "1234").
- */
+/** Clave UX local (4 dígitos). No sustituye permisos reales de servidor/RLS. */
 export function getDeleteSecurityPinNormalized(): string {
   try {
     if (typeof window !== 'undefined') {
-      const configured =
-        (window.localStorage.getItem(DELETE_SECURITY_PIN_STORAGE_KEY) ?? '').trim() ||
-        process.env.NEXT_PUBLIC_DELETE_SECURITY_PIN ||
-        DEFAULT_DELETE_PIN;
+      const configured = (window.localStorage.getItem(DELETE_SECURITY_PIN_STORAGE_KEY) ?? '').trim();
       return normalizeOpsSecurityPin(configured);
     }
   } catch {
     // ignore
   }
-  return normalizeOpsSecurityPin(
-    String(process.env.NEXT_PUBLIC_DELETE_SECURITY_PIN ?? DEFAULT_DELETE_PIN),
-  );
+  return '';
 }
 
 /** Persiste la clave de operaciones en este dispositivo (4 dígitos). */
@@ -62,6 +53,10 @@ export function hasDeleteSecurityPinDeviceOverride(): boolean {
 export function requestDeleteSecurityPin(): Promise<boolean> {
   if (typeof window === 'undefined') return Promise.resolve(true);
   const expected = getDeleteSecurityPinNormalized();
+  if (expected.length !== 4) {
+    window.alert('Configura primero la clave de operaciones en Cuenta > Seguridad.');
+    return Promise.resolve(false);
+  }
   return new Promise<boolean>((resolve) => {
     const overlay = document.createElement('div');
     overlay.className = 'fixed inset-0 z-[120] grid place-items-center bg-black/40 px-4';

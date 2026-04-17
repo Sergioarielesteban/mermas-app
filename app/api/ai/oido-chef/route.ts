@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { requireAllowedSupabaseUser } from '@/lib/require-allowed-supabase-user';
+import { requireOidoChefAccess } from '@/lib/server/oido-chef-access';
 import type { OidoChefAiContext } from '@/lib/oido-chef-ai-context';
 
 export const maxDuration = 60;
@@ -10,9 +10,15 @@ Para precios de productos, busca en comprasRecientes.lineas por nombre de produc
 Si hay varias compras, resume (media, última, rango) de forma breve.`;
 
 export async function POST(request: Request) {
-  const auth = await requireAllowedSupabaseUser(request);
+  const auth = await requireOidoChefAccess(request, 'chat');
   if (!auth.ok) {
-    return NextResponse.json({ ok: false, reason: auth.message }, { status: auth.status });
+    return NextResponse.json(
+      { ok: false, reason: auth.message },
+      {
+        status: auth.status,
+        headers: auth.rateLimitRetryAfterSec ? { 'Retry-After': String(auth.rateLimitRetryAfterSec) } : undefined,
+      },
+    );
   }
 
   const apiKey = process.env.OPENAI_API_KEY;
@@ -35,6 +41,11 @@ export async function POST(request: Request) {
     }
 
     const userPayload = JSON.stringify({ pregunta: message, contexto: context });
+    if (userPayload.length > 24000) {
+      return NextResponse.json({ ok: false, reason: 'Contexto demasiado grande para Oído Chef.' }, { status: 413 });
+    }
+    const maxTokensRaw = Number(process.env.OPENAI_OIDO_MAX_TOKENS ?? 500);
+    const maxTokens = Number.isFinite(maxTokensRaw) ? Math.max(120, Math.min(700, Math.floor(maxTokensRaw))) : 500;
 
     const res = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
@@ -45,7 +56,7 @@ export async function POST(request: Request) {
       body: JSON.stringify({
         model: process.env.OPENAI_OIDO_MODEL?.trim() || 'gpt-4o-mini',
         temperature: 0.35,
-        max_tokens: 500,
+        max_tokens: maxTokens,
         messages: [
           { role: 'system', content: SYSTEM_PROMPT },
           {

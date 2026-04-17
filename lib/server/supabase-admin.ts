@@ -7,6 +7,12 @@ type SnapshotRow = {
   updated_at?: string;
 };
 
+export type ProfileAccessRow = {
+  local_id: string;
+  role: string;
+  is_active: boolean;
+};
+
 function resolveSupabaseUrl() {
   const serverUrl = process.env.SUPABASE_URL?.trim() ?? '';
   const publicUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim() ?? '';
@@ -67,6 +73,23 @@ export async function adminRestPost(path: string, body: unknown): Promise<void> 
   }
 }
 
+/** POST a RPC/endpoint y devuelve JSON del body. */
+export async function adminRestPostJson<T>(path: string, body: unknown): Promise<T> {
+  const response = await fetch(baseUrl(path), {
+    method: 'POST',
+    headers: {
+      ...getHeaders(),
+      Prefer: 'return=representation',
+    },
+    body: typeof body === 'string' ? body : JSON.stringify(body),
+  });
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`Supabase admin POST failed: ${response.status} ${text}`);
+  }
+  return (await response.json()) as T;
+}
+
 export async function upsertSnapshot(input: { email: string; products: Product[]; mermas: MermaRecord[] }) {
   const response = await fetch(baseUrl('mermas_snapshots'), {
     method: 'POST',
@@ -103,6 +126,26 @@ export async function getSnapshotByEmail(email: string): Promise<SnapshotRow | n
   }
 
   const rows = (await response.json()) as SnapshotRow[];
+  return rows[0] ?? null;
+}
+
+/** Resuelve alias/email de login vía RPC usando service-role (evita exponer RPC a anon). */
+export async function resolveLoginEmailWithServiceRole(loginIdentifier: string): Promise<string | null> {
+  const normalized = loginIdentifier.trim().toLowerCase();
+  if (!normalized) return null;
+  const out = await adminRestPostJson<string | null>('rpc/resolve_login_email', {
+    login_identifier: normalized,
+  });
+  if (typeof out !== 'string') return null;
+  const email = out.trim().toLowerCase();
+  return email || null;
+}
+
+export async function getProfileAccessByUserId(userId: string): Promise<ProfileAccessRow | null> {
+  const uid = userId.trim();
+  if (!uid) return null;
+  const query = `profiles?user_id=eq.${encodeURIComponent(uid)}&select=local_id,role,is_active&limit=1`;
+  const rows = await adminRestGet<ProfileAccessRow[]>(query);
   return rows[0] ?? null;
 }
 

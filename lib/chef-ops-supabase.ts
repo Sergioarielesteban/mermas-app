@@ -503,7 +503,14 @@ export async function startChefChecklistRun(
     is_done: false,
   }));
   const { error: insErr } = await supabase.from('chef_checklist_run_items').insert(rows);
-  if (insErr) throw new Error(insErr.message);
+  if (insErr) {
+    // Compensación: evitar runs huérfanos si falla el insert de ítems.
+    const { error: rollbackErr } = await supabase.from('chef_checklist_runs').delete().eq('id', run.id);
+    if (rollbackErr) {
+      throw new Error(`Falló al iniciar checklist (${insErr.message}) y no se pudo revertir (${rollbackErr.message}).`);
+    }
+    throw new Error(`No se pudo iniciar el checklist. Se revirtió la apertura: ${insErr.message}`);
+  }
 
   return { run, items };
 }
@@ -768,7 +775,14 @@ export async function startChefProductionRun(
 
   const rows = tasks.map((t) => ({ run_id: run.id, task_id: t.id, is_done: false }));
   const { error: insErr } = await supabase.from('chef_production_run_tasks').insert(rows);
-  if (insErr) throw new Error(insErr.message);
+  if (insErr) {
+    // Compensación: evitar runs huérfanos si falla el insert de tareas.
+    const { error: rollbackErr } = await supabase.from('chef_production_runs').delete().eq('id', run.id);
+    if (rollbackErr) {
+      throw new Error(`Falló al iniciar producción (${insErr.message}) y no se pudo revertir (${rollbackErr.message}).`);
+    }
+    throw new Error(`No se pudo iniciar la producción. Se revirtió la apertura: ${insErr.message}`);
+  }
 
   return { run, tasks };
 }

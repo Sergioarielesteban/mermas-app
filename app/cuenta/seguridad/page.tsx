@@ -63,8 +63,8 @@ export default function CuentaSeguridadPage() {
     const cur = normalizeOpsSecurityPin(pinCurrent);
     const next = normalizeOpsSecurityPin(pinNew);
     const again = normalizeOpsSecurityPin(pinConfirm);
-    if (cur.length !== 4 || next.length !== 4 || again.length !== 4) {
-      setPinMsg('Usa 4 dígitos en cada campo.');
+    if (next.length !== 4 || again.length !== 4) {
+      setPinMsg('Usa 4 dígitos en la nueva clave y su repetición.');
       return;
     }
     if (next !== again) {
@@ -72,9 +72,15 @@ export default function CuentaSeguridadPage() {
       return;
     }
     const expected = getDeleteSecurityPinNormalized();
-    if (cur !== expected) {
-      setPinMsg('La clave actual no es correcta.');
-      return;
+    if (expected.length === 4) {
+      if (cur.length !== 4) {
+        setPinMsg('Introduce la clave actual (4 dígitos).');
+        return;
+      }
+      if (cur !== expected) {
+        setPinMsg('La clave actual no es correcta.');
+        return;
+      }
     }
     setPinBusy(true);
     try {
@@ -91,9 +97,13 @@ export default function CuentaSeguridadPage() {
 
   const onResetPinToDefault = () => {
     setPinMsg(null);
+    if (!hasOverride) {
+      setPinMsg('No hay clave configurada en este dispositivo.');
+      return;
+    }
     const cur = normalizeOpsSecurityPin(pinCurrent);
     if (cur.length !== 4) {
-      setPinMsg('Introduce la clave actual (4 dígitos) para quitar la personalizada.');
+      setPinMsg('Introduce la clave actual (4 dígitos) para quitar la clave.');
       return;
     }
     const expected = getDeleteSecurityPinNormalized();
@@ -103,7 +113,7 @@ export default function CuentaSeguridadPage() {
     }
     clearDeleteSecurityPinOnDevice();
     setHasOverride(false);
-    setPinMsg('Se quitó la clave de este dispositivo. Vuelve a valer la del servidor o 1234.');
+    setPinMsg('Se quitó la clave de este dispositivo. Configura una nueva cuando la necesites.');
     setPinCurrent('');
   };
 
@@ -198,8 +208,7 @@ export default function CuentaSeguridadPage() {
           </p>
         ) : (
           <p className="mt-2 text-[11px] text-zinc-500">
-            Ahora mismo se usa la clave por defecto del sistema o la de variables de entorno (si tu instalación la
-            define).
+            No hay clave de operaciones configurada en este dispositivo.
           </p>
         )}
         <form onSubmit={submitPin} className="mt-4 space-y-3">
@@ -255,14 +264,14 @@ export default function CuentaSeguridadPage() {
         {hasOverride ? (
           <div className="mt-4 border-t border-zinc-100 pt-4">
             <p className="text-[11px] text-zinc-600">
-              Para volver a la clave por defecto del servidor, introduce la clave actual y pulsa quitar.
+              Para quitar la clave de este dispositivo, introduce la clave actual y pulsa quitar.
             </p>
             <button
               type="button"
               onClick={onResetPinToDefault}
               className="mt-2 h-10 w-full rounded-xl border border-zinc-300 bg-white text-xs font-bold text-zinc-700 hover:bg-zinc-50"
             >
-              Quitar clave personalizada de este dispositivo
+              Quitar clave de este dispositivo
             </button>
           </div>
         ) : null}

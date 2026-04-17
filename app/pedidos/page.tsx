@@ -244,6 +244,7 @@ export default function PedidosPage() {
     orders,
     setOrders,
     reloadOrders,
+    reloadError,
     releasePinOrderId,
     registerDeletedOrderId,
     registerPendingReceivedOrder,
@@ -2414,6 +2415,20 @@ export default function PedidosPage() {
           </Link>
         </div>
       </section>
+
+      {reloadError ? (
+        <section className="rounded-2xl border border-red-200 bg-red-50 p-3 text-sm text-red-900">
+          <p className="font-semibold">No se pudieron recargar los pedidos.</p>
+          <p className="mt-0.5 text-xs text-red-800">{reloadError}</p>
+          <button
+            type="button"
+            onClick={() => reloadOrders()}
+            className="mt-2 rounded-lg border border-red-300 bg-white px-3 py-1.5 text-xs font-semibold text-red-800"
+          >
+            Reintentar
+          </button>
+        </section>
+      ) : null}
 
       {message ? (
         <section className="rounded-2xl bg-white p-4 text-sm text-zinc-700 ring-1 ring-zinc-200">{message}</section>

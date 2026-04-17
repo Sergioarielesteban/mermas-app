@@ -448,17 +448,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         let emailForAuth = clean;
         // Soporta login por alias (profiles.login_username) además de email.
         if (!clean.includes('@')) {
-          const { data, error } = await supabase.rpc('resolve_login_email', {
-            login_identifier: clean,
+          const res = await fetch('/api/auth/resolve-login-email', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ identifier: clean }),
           });
-          if (error) {
+          const payload = (await res.json().catch(() => ({}))) as {
+            ok?: boolean;
+            email?: string | null;
+            reason?: string;
+          };
+          if (!res.ok || payload.ok !== true) {
+            if (res.status === 429) {
+              return { ok: false, reason: 'Demasiados intentos. Espera un minuto y vuelve a probar.' };
+            }
             return {
               ok: false,
-              reason:
-                'No se pudo validar el usuario. Ejecuta supabase-auth-username-login.sql en Supabase.',
+              reason: payload.reason ?? 'No se pudo validar el usuario en este momento.',
             };
           }
-          const resolved = typeof data === 'string' ? data.trim().toLowerCase() : '';
+          const resolved = typeof payload.email === 'string' ? payload.email.trim().toLowerCase() : '';
           if (!resolved) return { ok: false, reason: 'Usuario/email o contraseña incorrectos.' };
           emailForAuth = resolved;
         }

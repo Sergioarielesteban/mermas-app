@@ -1,12 +1,18 @@
 import { NextResponse } from 'next/server';
-import { requireAllowedSupabaseUser } from '@/lib/require-allowed-supabase-user';
+import { requireOidoChefAccess } from '@/lib/server/oido-chef-access';
 
 export const maxDuration = 60;
 
 export async function POST(request: Request) {
-  const auth = await requireAllowedSupabaseUser(request);
+  const auth = await requireOidoChefAccess(request, 'tts');
   if (!auth.ok) {
-    return NextResponse.json({ ok: false, reason: auth.message }, { status: auth.status });
+    return NextResponse.json(
+      { ok: false, reason: auth.message },
+      {
+        status: auth.status,
+        headers: auth.rateLimitRetryAfterSec ? { 'Retry-After': String(auth.rateLimitRetryAfterSec) } : undefined,
+      },
+    );
   }
 
   const apiKey = process.env.OPENAI_API_KEY;
@@ -20,7 +26,9 @@ export async function POST(request: Request) {
     if (!text) {
       return NextResponse.json({ ok: false, reason: 'Texto vacío.' }, { status: 400 });
     }
-    const input = text.slice(0, 3800);
+    const maxCharsRaw = Number(process.env.OPENAI_TTS_MAX_CHARS ?? 3800);
+    const maxChars = Number.isFinite(maxCharsRaw) ? Math.max(200, Math.min(5000, Math.floor(maxCharsRaw))) : 3800;
+    const input = text.slice(0, maxChars);
 
     const voice = process.env.OPENAI_TTS_VOICE?.trim() || 'nova';
 

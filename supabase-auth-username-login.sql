@@ -53,7 +53,7 @@ end;
 $$;
 
 revoke all on function public.resolve_login_email(text) from public;
-grant execute on function public.resolve_login_email(text) to anon, authenticated;
+grant execute on function public.resolve_login_email(text) to authenticated, service_role;
 
 -- =============================================================================
 -- EJEMPLOS
