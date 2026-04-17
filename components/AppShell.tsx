@@ -107,6 +107,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       { href: '/escandallos', label: 'Escandallos', Icon: Calculator },
       { href: '/comida-personal', label: 'Comida de personal', Icon: UtensilsCrossed },
       { href: '/chat', label: 'Chat', Icon: MessageCircle },
+      { href: '/cuenta/seguridad', label: 'Cuenta y seguridad', Icon: KeyRound },
       { label: 'Cocina central', Icon: ChefHat, comingSoon: true },
       { label: 'Horarios y fichaje', Icon: CalendarDays, comingSoon: true },
     ],
@@ -249,10 +250,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               height={176}
             />
             <ChefOneGlowLine className="mx-auto mt-4 w-[min(70vw,220px)]" />
-            <p className="mt-3 text-xs text-zinc-600">Gestión operativa</p>
-          </div>
-          <div className="mt-4 rounded-xl bg-zinc-50 px-3 py-2.5 text-xs leading-snug text-zinc-600 ring-1 ring-zinc-200">
-            Plataforma interna de control de costes y desperdicio.
+            <p className="mt-3 text-xs font-medium text-zinc-600">Gestión operativa</p>
           </div>
         </div>
 
@@ -297,7 +295,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                       ? pathname === '/produccion' || pathname?.startsWith('/produccion/')
                       : entry.href === '/escandallos'
                         ? pathname === '/escandallos' || pathname?.startsWith('/escandallos/')
-                        : pathname === entry.href || pathname?.startsWith(`${entry.href}/`);
+                        : entry.href === '/cuenta/seguridad'
+                          ? pathname === '/cuenta/seguridad' || pathname?.startsWith('/cuenta/')
+                          : pathname === entry.href || pathname?.startsWith(`${entry.href}/`);
 
             return (
               <Link
@@ -320,23 +320,26 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
         <div className="px-3 py-4">
           <div className="rounded-2xl bg-zinc-50 p-3 ring-1 ring-zinc-200">
-            <div className="text-xs font-semibold text-zinc-700">Sesión</div>
-            <div className="mt-1 truncate text-sm font-bold text-zinc-900">{sessionLabel}</div>
+            <div className="text-[10px] font-extrabold uppercase tracking-[0.12em] text-zinc-500">Sesión</div>
+            <div className="mt-2 min-w-0 space-y-0.5">
+              <p className="truncate text-sm font-extrabold leading-tight text-zinc-900">{sessionLabel}</p>
+              {email ? (
+                <p className="truncate text-xs font-medium text-zinc-600" title={email}>
+                  {email}
+                </p>
+              ) : (
+                <p className="text-xs font-medium text-zinc-500">Sin correo en sesión</p>
+              )}
+            </div>
             {localId && localLabel ? (
-              <div className="mt-1 truncate text-xs font-medium text-zinc-700">{localLabel}</div>
+              <p className="mt-2 truncate border-t border-zinc-200/90 pt-2 text-[11px] font-semibold text-zinc-700">
+                Local: <span className="font-bold text-zinc-900">{localLabel}</span>
+              </p>
             ) : null}
-            <Link
-              href="/cuenta/seguridad"
-              onClick={() => setOpen(false)}
-              className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs font-bold uppercase tracking-wide text-zinc-700 hover:bg-zinc-100"
-            >
-              <KeyRound className="h-3.5 w-3.5" />
-              Contraseña y clave de app
-            </Link>
             <button
               type="button"
               onClick={refreshApp}
-              className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs font-bold uppercase tracking-wide text-zinc-700 hover:bg-zinc-100"
+              className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs font-bold uppercase tracking-wide text-zinc-700 hover:bg-zinc-100"
             >
               <RefreshCcw className="h-3.5 w-3.5" />
               Actualizar version app
