@@ -24,10 +24,10 @@ self.addEventListener('fetch',(e)=>{const{request}=e;if(request.method!=='GET')r
 if(url.origin!==self.location.origin){e.respondWith(fetch(request));return;}
 if(url.pathname.startsWith('/api/')){e.respondWith(fetch(request));return;}
 const h=request.headers;
-if(url.searchParams.has('_rsc')||h.get('RSC')==='1'||h.get('Next-Router-Prefetch')==='1'||h.get('Next-Router-State-Tree')){e.respondWith(fetch(request));return;}
-if(url.pathname.startsWith('/_next/')&&!url.pathname.startsWith('/_next/static/')){e.respondWith(fetch(request));return;}
+if(url.searchParams.has('_rsc')||h.get('RSC')==='1'||h.get('Next-Router-Prefetch')==='1'||h.get('Next-Router-State-Tree')){e.respondWith(fetch(request,{cache:'no-store'}));return;}
+if(url.pathname.startsWith('/_next/')&&!url.pathname.startsWith('/_next/static/')){e.respondWith(fetch(request,{cache:'no-store'}));return;}
 const html=h.get('accept')?.includes('text/html');
-if(request.mode==='navigate'||html){e.respondWith(fetch(request).catch(()=>caches.match(request).then(c=>c||caches.match('/'))));return;}
+if(request.mode==='navigate'||html){e.respondWith(fetch(request,{cache:'no-store'}).catch(()=>caches.match(request).then(c=>c||caches.match('/'))));return;}
 if(url.pathname.startsWith('/_next/static/')){e.respondWith(caches.match(request).then(c=>c||fetch(request).then(r=>{const cl=r.clone();if(r.ok)caches.open(CACHE_NAME).then(ch=>ch.put(request,cl));return r;})));return;}
 e.respondWith(fetch(request));});
 `;

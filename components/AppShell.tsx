@@ -120,15 +120,20 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     router.push('/panel');
   }, [router]);
 
-  /** Limpia cachés del service worker (chef-one-*) y recarga para traer UI y datos nuevos (Safari/PWA). */
+  /**
+   * Recuperación fuerte: sin desregistrar el SW, `/_next/static/` sigue en cache-first y puedes quedarte
+   * con JS viejo aunque el servidor ya tenga otro deploy. Borra todas las cachés del origen y quita el SW.
+   */
   const refreshApp = () => {
     void (async () => {
       try {
+        if ('serviceWorker' in navigator) {
+          const regs = await navigator.serviceWorker.getRegistrations();
+          await Promise.all(regs.map((r) => r.unregister()));
+        }
         if (typeof caches !== 'undefined') {
           const keys = await caches.keys();
-          await Promise.all(
-            keys.filter((k) => k.toLowerCase().includes('chef-one')).map((k) => caches.delete(k)),
-          );
+          await Promise.all(keys.map((k) => caches.delete(k)));
         }
       } catch {
         /* ignore */

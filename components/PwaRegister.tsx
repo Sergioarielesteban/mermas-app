@@ -97,6 +97,12 @@ export default function PwaRegister() {
       if (reg) void recheckRegistration(reg);
     };
 
+    void navigator.serviceWorker.getRegistration().then((existing) => {
+      if (!existing) return;
+      registrationRef.current = existing;
+      recheckRegistration(existing);
+    });
+
     void navigator.serviceWorker
       .register('/sw.js', {
         scope: '/',
