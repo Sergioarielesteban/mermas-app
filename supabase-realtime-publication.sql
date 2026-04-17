@@ -29,7 +29,8 @@ declare
     'inventory_local_categories',
     'inventory_items',
     'inventory_movements',
-    'local_chat_messages'
+    'local_chat_messages',
+    'notifications'
   ];
 begin
   foreach tbl in array tables

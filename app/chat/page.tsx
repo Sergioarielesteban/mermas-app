@@ -12,6 +12,7 @@ import {
   insertLocalChatMessage,
   type LocalChatMessage,
 } from '@/lib/local-chat-supabase';
+import { actorLabel, notifyMensajeEquipo } from '@/services/notifications';
 
 function formatTime(iso: string) {
   try {
@@ -22,7 +23,7 @@ function formatTime(iso: string) {
 }
 
 export default function ChatPage() {
-  const { localId, userId, profileReady } = useAuth();
+  const { localId, userId, profileReady, displayName, loginUsername } = useAuth();
   /** Respaldo si el contexto aún no tiene userId (evita tratar todos los mensajes como “ajenos” o “propios” mal). */
   const [sessionUserId, setSessionUserId] = useState<string | null>(null);
   const [messages, setMessages] = useState<LocalChatMessage[]>([]);
@@ -121,6 +122,15 @@ export default function ChatPage() {
     setBanner(null);
     try {
       const row = await insertLocalChatMessage(supabase, text);
+      if (localId) {
+        void notifyMensajeEquipo(supabase, {
+          localId,
+          userId: row.user_id ?? effectiveUserId ?? null,
+          actorName: row.author_label?.trim() || actorLabel(displayName, loginUsername),
+          messageId: row.id,
+          preview: text,
+        });
+      }
       setDraft('');
       setMessages((prev) => (prev.some((m) => m.id === row.id) ? prev : [...prev, row]));
     } catch (e) {

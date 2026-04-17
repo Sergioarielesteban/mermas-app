@@ -25,6 +25,7 @@ import PullToRefreshPedidos from '@/components/PullToRefreshPedidos';
 import { canAccessPedidos } from '@/lib/pedidos-access';
 import { formatLocalHeaderName } from '@/lib/local-display-name';
 import ChefOneGlowLine from '@/components/ChefOneGlowLine';
+import NotificationBell from '@/components/notifications/NotificationBell';
 
 type NavItemNote = { kind: 'note'; text: string };
 type NavItemLink = {
@@ -185,6 +186,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               </p>
             ) : null}
           </div>
+          <NotificationBell />
           <button
             type="button"
             onClick={refreshApp}

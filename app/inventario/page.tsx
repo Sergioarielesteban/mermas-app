@@ -31,6 +31,7 @@ import {
   upsertInventoryMonthSnapshot,
 } from '@/lib/inventory-supabase';
 import { requestDeleteSecurityPin } from '@/lib/delete-security';
+import { actorLabel, notifyInventarioCerrado } from '@/services/notifications';
 
 function parseDecimal(raw: string): number | null {
   const t = String(raw).trim().replace(/\s/g, '').replace(',', '.');
@@ -74,7 +75,7 @@ type LineDraft = {
 };
 
 export default function InventarioPage() {
-  const { localId, profileReady, localName, localCode } = useAuth();
+  const { localId, profileReady, localName, localCode, userId, displayName, loginUsername } = useAuth();
   const [categories, setCategories] = useState<InventoryCatalogCategory[]>([]);
   const [catalogItems, setCatalogItems] = useState<InventoryCatalogItem[]>([]);
   const [lines, setLines] = useState<InventoryItem[]>([]);
@@ -639,6 +640,12 @@ export default function InventarioPage() {
     setBanner(null);
     try {
       await saveMonthClosureToSupabase(closingYearMonth, { recordHistory: true, userId: user?.id ?? null });
+      void notifyInventarioCerrado(supabase, {
+        localId,
+        userId: user?.id ?? userId,
+        actorName: actorLabel(displayName, loginUsername),
+        yearMonth: closingYearMonth,
+      });
       setBanner(`Cierre ${closingYearMonth} guardado: PDF descargado, KPI actualizados e historial registrado.`);
     } catch (e) {
       const raw = e instanceof Error ? e.message : '';

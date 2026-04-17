@@ -25,6 +25,7 @@ import {
   updateOrderItemReceivedWeightKg,
   type PedidoOrder,
 } from '@/lib/pedidos-supabase';
+import { actorLabel, notifyIncidenciaRecepcion } from '@/services/notifications';
 
 function parseReceivedKg(raw: string): number | null | 'invalid' {
   const t = raw.trim();
@@ -56,7 +57,7 @@ function draftIncidentNoteForOrder(order: PedidoOrder): string {
 
 export default function RecepcionPedidosPage() {
   const searchParams = useSearchParams();
-  const { localCode, localName, localId, email } = useAuth();
+  const { localCode, localName, localId, email, userId, displayName, loginUsername } = useAuth();
   const hasPedidosEntry = canAccessPedidos(localCode, email, localName, localId);
   const canUse = canUsePedidosModule(localCode, email, localName, localId);
   const { orders: allOrders, setOrders, reloadOrders, clearPendingReceivedOrder } = usePedidosOrders();
@@ -517,7 +518,18 @@ export default function RecepcionPedidosPage() {
         updateOrderItemIncident(supabase, localId, item.id, { type: note ? 'damaged' : null, notes: note }),
       ),
     )
-      .then(() => dispatchPedidosDataChanged())
+      .then(() => {
+        dispatchPedidosDataChanged();
+        if (note) {
+          void notifyIncidenciaRecepcion(supabase, {
+            localId,
+            userId,
+            actorName: actorLabel(displayName, loginUsername),
+            supplierName: order.supplierName,
+            orderId: order.id,
+          });
+        }
+      })
       .catch((err: Error) => {
         void reloadOrders();
         setMessage(err.message);

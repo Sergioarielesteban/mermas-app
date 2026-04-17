@@ -27,6 +27,7 @@ import {
   deleteAppccReading,
   upsertAppccReading,
 } from '@/lib/appcc-supabase';
+import { notifyAppccAlerta } from '@/services/notifications';
 
 const PDF_MAX_DAYS = 120;
 
@@ -70,7 +71,7 @@ function SlotEditor({
   onDeleted: (coldUnitId: string, slot: AppccSlot) => void;
   disabled: boolean;
 }) {
-  const { localId } = useAuth();
+  const { localId, userId: authUserId } = useAuth();
   const [value, setValue] = useState(() => initialTempFieldValue(unit, reading));
   const [notes, setNotes] = useState(reading?.notes ?? '');
   const [saving, setSaving] = useState(false);
@@ -152,6 +153,16 @@ function SlotEditor({
         notes: notes.trim(),
         userId: user.id,
       });
+      const limitsOk = unit.temp_min_c != null || unit.temp_max_c != null;
+      if (limitsOk && isTempOutOfRange(t, unit.temp_min_c, unit.temp_max_c) && localId) {
+        void notifyAppccAlerta(supabase, {
+          localId,
+          userId: user.id ?? authUserId,
+          elemento: unit.name,
+          readingId: row.id,
+          dateKey,
+        });
+      }
       setJustSaved(true);
       onSaved(row);
     } catch (e) {

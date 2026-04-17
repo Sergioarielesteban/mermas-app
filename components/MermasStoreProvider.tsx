@@ -517,7 +517,7 @@ function loadInitialState(): PersistedState {
 }
 
 export function MermasStoreProvider({ children }: { children: React.ReactNode }) {
-  const { localId, profileReady, email } = useAuth();
+  const { localId, profileReady } = useAuth();
   const supabaseEnabled = isSupabaseEnabled();
   const cloudMode = Boolean(profileReady && localId && isSupabaseEnabled());
   // If Supabase is enabled, never fall back to legacy sync/storage.

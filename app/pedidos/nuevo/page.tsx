@@ -30,6 +30,7 @@ import {
   type PedidoOrderItem,
   type PedidoSupplier,
 } from '@/lib/pedidos-supabase';
+import { actorLabel, notifyPedidoEnviado } from '@/services/notifications';
 
 type QtyMap = Record<string, number>;
 
@@ -86,7 +87,7 @@ function buildWhatsappDraftMessage(input: {
 export default function NuevoPedidoPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { localCode, localName, localId, email } = useAuth();
+  const { localCode, localName, localId, email, userId, displayName, loginUsername } = useAuth();
   const { upsertOrder } = usePedidosOrders();
 
   const pullNewOrderIntoStore = React.useCallback(
@@ -420,6 +421,16 @@ export default function NuevoPedidoPage() {
       })),
     })
       .then((orderId) => {
+        const supa = getSupabaseClient();
+        if (supa && localId && selectedSupplier) {
+          void notifyPedidoEnviado(supa, {
+            localId,
+            userId,
+            actorName: actorLabel(displayName, loginUsername),
+            supplierName: selectedSupplier.name,
+            orderId,
+          });
+        }
         clearBasketDraft();
         void pullNewOrderIntoStore(orderId);
         const text = encodeURIComponent(

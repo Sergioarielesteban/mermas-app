@@ -68,6 +68,7 @@ import { fetchAppccFryers, fetchOilEventsForDate } from '@/lib/appcc-aceite-supa
 import { topByValue } from '@/lib/analytics';
 import { fetchProductsAndMermas } from '@/lib/mermas-supabase';
 import { requestDeleteSecurityPin } from '@/lib/delete-security';
+import { actorLabel, notifyPedidoRecibido } from '@/services/notifications';
 
 function normalizeWhatsappNumber(raw: string | undefined) {
   if (!raw) return null;
@@ -236,7 +237,7 @@ type AssistantHistoryRow = {
 const ASSISTANT_HISTORY_LS_KEY = 'oido-chef-history-v1';
 
 export default function PedidosPage() {
-  const { localCode, localName, localId, email } = useAuth();
+  const { localCode, localName, localId, email, userId, displayName, loginUsername } = useAuth();
   const hasPedidosEntry = canAccessPedidos(localCode, email, localName, localId);
   const canUse = canUsePedidosModule(localCode, email, localName, localId);
   const {
@@ -697,6 +698,16 @@ export default function PedidosPage() {
           );
           setExpandedSentId((id) => (id === orderId ? null : id));
           setMessage('Pedido marcado como recibido.');
+          const supa = getSupabaseClient();
+          if (supa && localId) {
+            void notifyPedidoRecibido(supa, {
+              localId,
+              userId,
+              actorName: actorLabel(displayName, loginUsername),
+              supplierName: snap.supplierName,
+              orderId: snap.id,
+            });
+          }
           void reloadOrders();
           window.setTimeout(() => void reloadOrders(), 500);
           dispatchPedidosDataChanged();
@@ -709,12 +720,15 @@ export default function PedidosPage() {
     },
     [
       dispatchPedidosDataChanged,
+      displayName,
       flushOrderReceptionDrafts,
       localId,
+      loginUsername,
       orders,
       registerPendingReceivedOrder,
       reloadOrders,
       setOrders,
+      userId,
     ],
   );
 
