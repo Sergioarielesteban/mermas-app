@@ -304,6 +304,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return;
     }
 
+    const applySessionOrSignOut = (
+      session: { user: { id: string; email?: string | null } } | null,
+      error: { message?: string } | null,
+    ) => {
+      if (!isMounted) return;
+      if (error && isInvalidRefreshTokenError(error.message)) {
+        setEmail(null);
+        setUserId(null);
+        clearProfile();
+        clearLocalAuthCache();
+        return;
+      }
+      const sessionEmail = session?.user?.email?.toLowerCase() ?? null;
+      setEmail(sessionEmail);
+      persistEmail(sessionEmail);
+      if (session?.user?.id) void loadProfileForUser(session.user.id);
+    };
+
     void sessionPromise
       .then(({ data, error }) => {
         if (!isMounted) return;
@@ -332,26 +350,55 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         unlockFromLocalHints();
       });
 
+    /**
+     * Tras rato en segundo plano / pantalla apagada, el access token puede caducar:
+     * refreshSession renueva con el refresh guardado en localStorage (crítico en móvil/PWA).
+     */
+    const rehydrateSessionAfterIdle = () => {
+      if (!isMounted || document.visibilityState !== 'visible') return;
+      void (async () => {
+        try {
+          const { data: ref, error: refErr } = await supabase.auth.refreshSession();
+          if (!isMounted) return;
+          if (ref.session) {
+            applySessionOrSignOut(ref.session, refErr);
+            return;
+          }
+        } catch {
+          /* red / throttling */
+        }
+        const { data, error } = await supabase.auth.getSession();
+        if (!isMounted) return;
+        applySessionOrSignOut(data.session ?? null, error);
+      })();
+    };
+
     const onVisibility = () => {
       if (document.visibilityState !== 'visible' || !isMounted) return;
-      void supabase.auth.getSession().then(({ data, error }) => {
-        if (!isMounted) return;
-        if (error && isInvalidRefreshTokenError(error.message)) {
-          setEmail(null);
-          setUserId(null);
-          clearProfile();
-          clearLocalAuthCache();
-          return;
-        }
-        const visEmail = data.session?.user?.email?.toLowerCase() ?? null;
-        if (visEmail) {
-          setEmail(visEmail);
-          persistEmail(visEmail);
-          void loadProfileForUser(data.session?.user?.id);
-        }
-      });
+      rehydrateSessionAfterIdle();
     };
     document.addEventListener('visibilitychange', onVisibility);
+
+    const onPageShow = (ev: PageTransitionEvent) => {
+      if (!isMounted) return;
+      if (document.visibilityState !== 'visible') return;
+      if (ev.persisted) rehydrateSessionAfterIdle();
+    };
+    window.addEventListener('pageshow', onPageShow);
+
+    const onOnline = () => {
+      rehydrateSessionAfterIdle();
+    };
+    window.addEventListener('online', onOnline);
+
+    let focusDebounce: number | undefined;
+    const onWindowFocus = () => {
+      window.clearTimeout(focusDebounce);
+      focusDebounce = window.setTimeout(() => {
+        if (document.visibilityState === 'visible') rehydrateSessionAfterIdle();
+      }, 400);
+    };
+    window.addEventListener('focus', onWindowFocus);
 
     const { data: sub } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === 'SIGNED_OUT') {
@@ -370,7 +417,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       isMounted = false;
       window.clearTimeout(softUnlockTimer);
       window.clearTimeout(safetyTimer);
+      window.clearTimeout(focusDebounce);
       document.removeEventListener('visibilitychange', onVisibility);
+      window.removeEventListener('pageshow', onPageShow);
+      window.removeEventListener('online', onOnline);
+      window.removeEventListener('focus', onWindowFocus);
       sub.subscription.unsubscribe();
     };
   }, [clearLocalAuthCache, clearProfile, loadProfileForUser]);
