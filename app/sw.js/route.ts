@@ -18,7 +18,7 @@ export async function GET() {
   const script = `const CACHE_NAME='chef-one-${safeId}';
 const CORE_ASSETS=['/','/login','/panel','/dashboard','/productos','/resumen','/appcc','/appcc/temperaturas','/appcc/historial','/appcc/equipos','/appcc/aceite','/appcc/aceite/registro','/appcc/aceite/historial','/appcc/aceite/equipos','/manifest.webmanifest'];
 self.addEventListener('message',(e)=>{if(e.data?.type==='SKIP_WAITING')self.skipWaiting();});
-self.addEventListener('install',(e)=>{e.waitUntil(caches.open(CACHE_NAME).then(c=>c.addAll(CORE_ASSETS)));});
+self.addEventListener('install',(e)=>{e.waitUntil((async()=>{const c=await caches.open(CACHE_NAME);for(const p of CORE_ASSETS){try{await c.add(p);}catch(_){}}})());});
 self.addEventListener('activate',(e)=>{e.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k!==CACHE_NAME).map(k=>caches.delete(k)))));self.clients.claim();});
 self.addEventListener('fetch',(e)=>{const{request}=e;if(request.method!=='GET')return;const url=new URL(request.url);
 if(url.origin!==self.location.origin){e.respondWith(fetch(request));return;}

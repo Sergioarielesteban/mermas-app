@@ -60,7 +60,23 @@ export default function PwaRegister() {
         }
         return;
       }
-      if (registration.installing) return;
+      const installing = registration.installing;
+      if (installing) {
+        /** Entre `statechange` → installed y que `waiting` aparezca, `installing` puede seguir referenciando al worker. */
+        if (
+          installing.state === 'installed' &&
+          navigator.serviceWorker.controller
+        ) {
+          waitingWorkerRef.current = installing;
+          setUpdateAvailable(true);
+          try {
+            sessionStorage.setItem(PWA_WAITING_KEY, '1');
+          } catch {
+            /* ignore */
+          }
+        }
+        return;
+      }
 
       waitingWorkerRef.current = null;
       try {
@@ -81,7 +97,13 @@ export default function PwaRegister() {
       if (reg) void recheckRegistration(reg);
     };
 
-    void navigator.serviceWorker.register('/sw.js').then((registration) => {
+    void navigator.serviceWorker
+      .register('/sw.js', {
+        scope: '/',
+        /** Safari/HTTP cache: siempre descargar el script del SW para detectar deploys. */
+        updateViaCache: 'none',
+      })
+      .then((registration) => {
       registrationRef.current = registration;
       recheckRegistration(registration);
       window.setTimeout(() => recheckRegistration(registration), 250);
@@ -92,21 +114,13 @@ export default function PwaRegister() {
         const newWorker = registration.installing;
         if (!newWorker) return;
         newWorker.addEventListener('statechange', () => {
-          if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-            waitingWorkerRef.current = registration.waiting ?? newWorker;
-            setUpdateAvailable(true);
-            try {
-              sessionStorage.setItem(PWA_WAITING_KEY, '1');
-            } catch {
-              /* ignore */
-            }
-          }
+          applyWaitingState(registration);
         });
       });
 
       updateInterval = window.setInterval(() => {
         void registration.update().then(() => applyWaitingState(registration));
-      }, 45_000);
+      }, 25_000);
     });
 
     const onVisible = () => {
