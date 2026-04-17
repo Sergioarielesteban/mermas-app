@@ -4,7 +4,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import React from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
-import { ChevronLeft, ChevronRight, Sparkles, Smartphone, Tablet, Layers3 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Sparkles } from 'lucide-react';
 
 const BRAND = '#D32F2F';
 
@@ -148,13 +148,13 @@ export default function MarketingHero() {
   const reduceMotion = useReducedMotion();
 
   return (
-    <section className="relative overflow-hidden border-b border-stone-200/60 bg-gradient-to-b from-white via-[#fafafa] to-[#f3f4f6] px-4 pb-14 pt-10 sm:px-6 sm:pb-20 sm:pt-12">
+    <section className="relative overflow-hidden border-b border-stone-200/50 bg-gradient-to-b from-white via-[#fafafa] to-[#f4f4f5] px-4 pb-14 pt-10 sm:px-6 sm:pb-20 sm:pt-12">
       <div
-        className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_90%_55%_at_50%_-25%,rgba(211,47,47,0.12),transparent),radial-gradient(ellipse_50%_40%_at_100%_0%,rgba(15,23,42,0.05),transparent)]"
+        className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_90%_55%_at_50%_-25%,rgba(211,47,47,0.11),transparent),radial-gradient(ellipse_50%_40%_at_100%_0%,rgba(15,23,42,0.05),transparent)]"
         aria-hidden
       />
       <div className="relative mx-auto max-w-6xl">
-        <div className="mx-auto max-w-3xl text-center lg:mx-0 lg:max-w-2xl lg:text-left">
+        <div className="mx-auto max-w-3xl text-center lg:mx-0 lg:max-w-xl lg:text-left">
           <motion.div
             className="flex flex-wrap items-center justify-center gap-2 lg:justify-start"
             initial={reduceMotion ? false : { opacity: 0, y: 8 }}
@@ -163,51 +163,33 @@ export default function MarketingHero() {
           >
             <span className="inline-flex items-center gap-2 rounded-full border border-stone-200/90 bg-white/90 px-3 py-1.5 text-xs font-semibold text-stone-700 shadow-sm backdrop-blur-sm">
               <Sparkles className="h-3.5 w-3.5 text-[#D32F2F]" aria-hidden />
-              Chef-One - operacion real de cocina
+              Chef-One — operaciones de cocina
             </span>
           </motion.div>
 
           <motion.h1
-            className="mt-6 text-balance text-3xl font-extrabold leading-[1.08] tracking-tight text-stone-900 sm:text-4xl sm:leading-[1.06] lg:text-[2.72rem]"
+            className="mt-6 text-balance text-3xl font-extrabold leading-[1.08] tracking-tight text-stone-900 sm:text-4xl sm:leading-[1.06] lg:text-[2.65rem]"
             initial={reduceMotion ? false : { opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5, delay: reduceMotion ? 0 : 0.04 }}
           >
             Menos caos en servicio.
             <span className="mt-1 block bg-gradient-to-r from-[#D32F2F] to-[#9a1818] bg-clip-text text-transparent">
-              Mas control modular, sin sistema pesado.
+              Más control, sin complicarte.
             </span>
           </motion.h1>
 
           <motion.p
-            className="mx-auto mt-4 max-w-xl text-pretty text-base leading-snug text-stone-600 sm:text-lg lg:mx-0"
+            className="mx-auto mt-4 max-w-lg text-pretty text-base leading-snug text-stone-600 sm:text-lg lg:mx-0"
             initial={reduceMotion ? false : { opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.45, delay: reduceMotion ? 0 : 0.09 }}
           >
-            Herramienta hecha desde cocina para cocina: pedidos con OCR de albaran, APPCC, mermas, inventario, produccion,
-            escandallos, checklists y chat del local siempre incluido. Empiezas por lo urgente y creces por modulos.
+            Pedidos con OCR de albarán, asistente <strong className="font-semibold text-stone-800">Oído Chef</strong>{' '}
+            (voz y <abbr title="Inteligencia artificial opcional con tu propia API">IA</abbr> opcional), APPCC, checklists,
+            producción, escandallos, inventario, comida de personal y chat del local. Activa solo lo que necesites: app
+            pensada para móvil y tablet, al ritmo del servicio.
           </motion.p>
-
-          <motion.div
-            className="mx-auto mt-4 flex max-w-2xl flex-wrap justify-center gap-2 lg:mx-0 lg:justify-start"
-            initial={reduceMotion ? false : { opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.45, delay: reduceMotion ? 0 : 0.12 }}
-          >
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-white px-3 py-1 text-xs font-bold text-stone-700 ring-1 ring-stone-200">
-              <Smartphone className="h-3.5 w-3.5 text-[#D32F2F]" />
-              Movil primero
-            </span>
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-white px-3 py-1 text-xs font-bold text-stone-700 ring-1 ring-stone-200">
-              <Tablet className="h-3.5 w-3.5 text-[#D32F2F]" />
-              Tablet y sala de pase
-            </span>
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-white px-3 py-1 text-xs font-bold text-stone-700 ring-1 ring-stone-200">
-              <Layers3 className="h-3.5 w-3.5 text-[#D32F2F]" />
-              Base 29 EUR + packs
-            </span>
-          </motion.div>
 
           <motion.div
             className="mt-8 flex flex-col items-stretch gap-3 sm:flex-row sm:justify-center lg:justify-start"
@@ -220,13 +202,13 @@ export default function MarketingHero() {
               className="inline-flex h-12 items-center justify-center rounded-2xl px-8 text-sm font-bold text-white shadow-[0_10px_28px_-8px_rgba(211,47,47,0.5)] transition hover:brightness-105 active:scale-[0.99]"
               style={{ backgroundColor: BRAND }}
             >
-              Ver demo y propuesta
+              Hablar con nosotros
             </Link>
             <Link
-              href="#precio"
+              href="#modulos"
               className="inline-flex h-12 items-center justify-center rounded-2xl border-2 border-stone-200/95 bg-white/95 px-8 text-sm font-bold text-stone-800 shadow-sm backdrop-blur-sm transition hover:border-stone-300 hover:bg-white"
             >
-              Simular pack y precio
+              Ver módulos
             </Link>
           </motion.div>
         </div>

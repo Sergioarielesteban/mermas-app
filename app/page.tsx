@@ -2,13 +2,13 @@ import type { Metadata } from 'next';
 import MarketingLanding from '@/components/MarketingLanding';
 
 export const metadata: Metadata = {
-  title: 'Chef-One | Software modular para cocina real',
+  title: 'Chef-One | Operaciones de cocina — paga solo por lo que necesites',
   description:
-    'Menos caos en servicio y mas control operativo: pedidos con OCR de albaran, APPCC, mermas, inventario, escandallos, produccion, checklists y chat incluido. Base 29 EUR + packs modulares.',
+    'Módulos a tu medida: pedidos con OCR de albarán, asistente Oído Chef (voz e IA opcional), mermas, APPCC, checklists, producción, inventario, escandallos, comida de personal y chat. App móvil y tablet. Paga solo por lo que necesites.',
   openGraph: {
-    title: 'Chef-One - herramienta hecha para cocina',
+    title: 'Chef-One — software para cocina',
     description:
-      'Software premium para hosteleria real: OCR de albaranes, ayudante IA sobre tus datos y estructura modular por packs.',
+      'Pedidos con OCR, Oído Chef, APPCC, checklists, producción, mermas, inventario, escandallos y más. Paga solo por lo que necesites.',
     type: 'website',
   },
 };
