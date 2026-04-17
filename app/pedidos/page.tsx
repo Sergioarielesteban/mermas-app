@@ -58,8 +58,11 @@ import {
 } from '@/lib/appcc-limpieza-supabase';
 import {
   APPCC_SLOT_LABEL,
+  enumerateDateKeysInclusive,
   fetchAppccColdUnits,
   fetchAppccReadingsForDate,
+  fetchAppccReadingsInRange,
+  isTempOutOfRange,
   madridDateKey,
   readingsByUnitAndSlot,
   type AppccSlot,
@@ -67,8 +70,30 @@ import {
 import { fetchAppccFryers, fetchOilEventsForDate } from '@/lib/appcc-aceite-supabase';
 import { topByValue } from '@/lib/analytics';
 import { fetchProductsAndMermas } from '@/lib/mermas-supabase';
+import { fetchInventoryItems } from '@/lib/inventory-supabase';
+import {
+  fetchChefChecklistsByIds,
+  fetchChefChecklistRunItems,
+  fetchChefChecklistRuns,
+  fetchChefProductionPlansByIds,
+  fetchChefProductionRuns,
+} from '@/lib/chef-ops-supabase';
+import {
+  type EscandalloLine,
+  fetchEscandalloLines,
+  fetchEscandalloRawProductsWithWeightedPurchasePrices,
+  fetchEscandalloRecipes,
+  fetchProcessedProductsForEscandallo,
+} from '@/lib/escandallos-supabase';
+import { buildEscandalloDashboardRows } from '@/lib/escandallos-analytics';
+import {
+  normalizeOidoText,
+  runPremiumOidoChefQuery,
+  type OidoChefPremiumResult,
+} from '@/lib/oido-chef-premium';
 import { requestDeleteSecurityPin } from '@/lib/delete-security';
 import { actorLabel, notifyIncidenciaRecepcion, notifyPedidoRecibido } from '@/services/notifications';
+import OidoChefPremiumResultView from '@/components/oido-chef/OidoChefPremiumResult';
 
 function normalizeWhatsappNumber(raw: string | undefined) {
   if (!raw) return null;
@@ -163,13 +188,7 @@ function parsePricePerKg(raw: string): number | null | 'invalid' {
 }
 
 function normalizeText(input: string): string {
-  return input
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^\w\s]/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
+  return normalizeOidoText(input);
 }
 
 /** Palabra(s) suelta(s) → pantalla (sin tener que decir «abre…»). */
@@ -300,6 +319,7 @@ export default function PedidosPage() {
   const [incidentNoteBySentOrderId, setIncidentNoteBySentOrderId] = React.useState<Record<string, string>>({});
   const [assistantInput, setAssistantInput] = React.useState('');
   const [assistantReply, setAssistantReply] = React.useState<string | null>(null);
+  const [assistantPremiumResult, setAssistantPremiumResult] = React.useState<OidoChefPremiumResult | null>(null);
   const [assistantPendingAction, setAssistantPendingAction] = React.useState<AssistantPendingAction | null>(null);
   const [assistantBusy, setAssistantBusy] = React.useState(false);
   const [assistantHistory, setAssistantHistory] = React.useState<AssistantHistoryRow[]>([]);
@@ -312,6 +332,21 @@ export default function PedidosPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const oidoStandalone = searchParams.get('oido') === '1';
+  const assistantQuickPrompts = React.useMemo(
+    () => [
+      '¿A qué precio viene el bacon esta semana?',
+      '¿Cuántas cajas de lechuga compré este mes?',
+      'Muéstrame todos los bacon',
+      '¿Qué productos subieron esta semana?',
+      '¿Cuánta merma hubo ayer?',
+      '¿Qué checklist faltan por cerrar?',
+      '¿Hay alguna nevera fuera de rango?',
+      '¿Cuánto stock queda de salsa cheddar?',
+      '¿Qué producción se hizo ayer?',
+      '¿Qué productos tienen peor coste?',
+    ],
+    [],
+  );
 
   const toggleSentIncidentPanel = (order: PedidoOrder) => {
     setIncidentOpenBySentOrderId((prev) => {
@@ -952,6 +987,7 @@ export default function PedidosPage() {
     if (!raw) return;
     const normalized = normalizeText(raw);
     setAssistantPendingAction(null);
+    setAssistantPremiumResult(null);
     setAssistantBusy(true);
 
     try {
@@ -980,6 +1016,213 @@ export default function PedidosPage() {
         ].join('\n');
         setAssistantReply(msg);
         pushAssistantHistory(raw, msg);
+        return;
+      }
+
+      const premiumResult = await runPremiumOidoChefQuery({
+        question: raw,
+        orders,
+        loadMermaSummary: async (range) => {
+          if (!localId) {
+            return { totalCostEur: 0, totalQty: 0, unitLabel: 'uds', topItems: [] };
+          }
+          const supabase = getSupabaseClient();
+          if (!supabase) {
+            return { totalCostEur: 0, totalQty: 0, unitLabel: 'uds', topItems: [] };
+          }
+          const { products, mermas } = await fetchProductsAndMermas(supabase, localId);
+          const inRange = mermas.filter((m) => {
+            const when = new Date(m.occurredAt).getTime();
+            return when >= range.from.getTime() && when <= range.to.getTime();
+          });
+          const productById = new Map(products.map((p) => [p.id, p]));
+          const totalCostEur = inRange.reduce((acc, row) => acc + Number(row.costEur ?? 0), 0);
+          const totalQty = inRange.reduce((acc, row) => acc + Number(row.quantity ?? 0), 0);
+          const byProduct = new Map<string, number>();
+          for (const row of inRange) {
+            const key = row.productId;
+            const curr = byProduct.get(key) ?? 0;
+            byProduct.set(key, curr + Number(row.costEur ?? 0));
+          }
+          const topItems = Array.from(byProduct.entries())
+            .map(([productId, costEur]) => ({
+              name: productById.get(productId)?.name ?? 'Producto',
+              costEur,
+            }))
+            .sort((a, b) => b.costEur - a.costEur);
+          return { totalCostEur, totalQty, unitLabel: 'uds', topItems };
+        },
+        loadChecklistPending: async (range) => {
+          if (!localId) {
+            return { totalPending: 0, totalRuns: 0, rows: [] };
+          }
+          const supabase = getSupabaseClient();
+          if (!supabase) {
+            return { totalPending: 0, totalRuns: 0, rows: [] };
+          }
+          const runs = await fetchChefChecklistRuns(supabase, localId, 80);
+          const rangeRuns = runs.filter((run) => {
+            const ts = new Date(`${run.runDate}T12:00:00`).getTime();
+            return ts >= range.from.getTime() && ts <= range.to.getTime();
+          });
+          if (rangeRuns.length === 0) {
+            return { totalPending: 0, totalRuns: 0, rows: [] };
+          }
+          const checklists = await fetchChefChecklistsByIds(
+            supabase,
+            localId,
+            rangeRuns.map((r) => r.checklistId),
+          );
+          const checklistNameById = new Map(checklists.map((c) => [c.id, c.title]));
+          const openRuns = rangeRuns.filter((run) => !run.completedAt);
+          const itemsByRun = await Promise.all(
+            openRuns.map(async (run) => ({
+              run,
+              items: await fetchChefChecklistRunItems(supabase, run.id),
+            })),
+          );
+          const rows = itemsByRun
+            .map(({ run, items }) => ({
+              checklist: checklistNameById.get(run.checklistId) ?? 'Checklist',
+              date: run.runDate,
+              pendingItems: items.filter((item) => !item.isDone).length,
+            }))
+            .filter((row) => row.pendingItems > 0)
+            .sort((a, b) => b.pendingItems - a.pendingItems);
+          return { totalPending: rows.length, totalRuns: rangeRuns.length, rows };
+        },
+        loadAppccAlerts: async (range) => {
+          if (!localId) {
+            return { outOfRangeCount: 0, missingTempCount: 0, rows: [] };
+          }
+          const supabase = getSupabaseClient();
+          if (!supabase) {
+            return { outOfRangeCount: 0, missingTempCount: 0, rows: [] };
+          }
+          const dateFrom = madridDateKey(range.from);
+          const dateTo = madridDateKey(range.to);
+          const [units, readings] = await Promise.all([
+            fetchAppccColdUnits(supabase, localId, true),
+            fetchAppccReadingsInRange(supabase, localId, dateFrom, dateTo),
+          ]);
+          const rows: Array<{ alert: string; detail: string }> = [];
+          const outOfRange = readings.filter((reading) => {
+            const unit = units.find((u) => u.id === reading.cold_unit_id);
+            if (!unit) return false;
+            return isTempOutOfRange(reading.temperature_c, unit.temp_min_c, unit.temp_max_c);
+          });
+          for (const reading of outOfRange.slice(0, 10)) {
+            const unit = units.find((u) => u.id === reading.cold_unit_id);
+            if (!unit) continue;
+            rows.push({
+              alert: 'Nevera fuera de rango',
+              detail: `${unit.name} ${reading.temperature_c.toFixed(1)} C (${reading.reading_date}, ${APPCC_SLOT_LABEL[reading.slot]})`,
+            });
+          }
+          const dateKeys = enumerateDateKeysInclusive(dateFrom, dateTo);
+          const slots: AppccSlot[] = ['manana', 'noche'];
+          let missingTempCount = 0;
+          for (const dk of dateKeys) {
+            const dayReadings = readings.filter((r) => r.reading_date === dk);
+            const bySlot = readingsByUnitAndSlot(dayReadings);
+            for (const unit of units) {
+              for (const slot of slots) {
+                if (!bySlot.get(`${unit.id}:${slot}`)) {
+                  missingTempCount += 1;
+                  if (rows.length < 18) {
+                    rows.push({
+                      alert: 'Lectura pendiente',
+                      detail: `${unit.name} sin ${APPCC_SLOT_LABEL[slot]} (${dk})`,
+                    });
+                  }
+                }
+              }
+            }
+          }
+          return {
+            outOfRangeCount: outOfRange.length,
+            missingTempCount,
+            rows,
+          };
+        },
+        loadInventoryItems: async () => {
+          if (!localId) return [];
+          const supabase = getSupabaseClient();
+          if (!supabase) return [];
+          const inventoryRows = await fetchInventoryItems(supabase, localId);
+          return inventoryRows.map((row) => ({
+            name: row.name,
+            unit: row.unit,
+            qty: row.quantity_on_hand,
+            pricePerUnit: row.price_per_unit,
+          }));
+        },
+        loadProductionSummary: async (range) => {
+          if (!localId) {
+            return { totalRuns: 0, closedRuns: 0, rows: [] };
+          }
+          const supabase = getSupabaseClient();
+          if (!supabase) {
+            return { totalRuns: 0, closedRuns: 0, rows: [] };
+          }
+          const runs = await fetchChefProductionRuns(supabase, localId, 80);
+          const rangeRuns = runs.filter((run) => {
+            const ts = new Date(`${run.periodStart}T12:00:00`).getTime();
+            return ts >= range.from.getTime() && ts <= range.to.getTime();
+          });
+          const plans = await fetchChefProductionPlansByIds(
+            supabase,
+            localId,
+            rangeRuns.map((r) => r.planId),
+          );
+          const planNameById = new Map(plans.map((p) => [p.id, p.name]));
+          const rows = rangeRuns
+            .map((run) => ({
+              plan: planNameById.get(run.planId) ?? 'Produccion',
+              date: run.periodStart,
+              status: run.completedAt ? 'Cerrada' : 'Abierta',
+            }))
+            .sort((a, b) => b.date.localeCompare(a.date));
+          return {
+            totalRuns: rangeRuns.length,
+            closedRuns: rangeRuns.filter((r) => r.completedAt).length,
+            rows,
+          };
+        },
+        loadFoodCostRows: async () => {
+          if (!localId) return [];
+          const supabase = getSupabaseClient();
+          if (!supabase) return [];
+          const [recipes, rawProducts, processedProducts] = await Promise.all([
+            fetchEscandalloRecipes(supabase, localId),
+            fetchEscandalloRawProductsWithWeightedPurchasePrices(supabase, localId),
+            fetchProcessedProductsForEscandallo(supabase, localId),
+          ]);
+          if (recipes.length === 0) return [];
+          const linesArray = await Promise.all(recipes.map((recipe) => fetchEscandalloLines(supabase, localId, recipe.id)));
+          const linesByRecipe: Record<string, EscandalloLine[]> = {};
+          recipes.forEach((recipe, idx) => {
+            linesByRecipe[recipe.id] = linesArray[idx];
+          });
+          const dashboard = buildEscandalloDashboardRows(
+            recipes,
+            linesByRecipe,
+            new Map(rawProducts.map((item) => [item.id, item])),
+            new Map(processedProducts.map((item) => [item.id, item])),
+          );
+          return dashboard
+            .filter((row) => !row.isSubRecipe)
+            .map((row) => ({
+              name: row.name,
+              foodCostPct: row.foodCostPct,
+              costPerYieldEur: row.costPerYieldEur,
+            }));
+        },
+      });
+      if (premiumResult) {
+        setAssistantPremiumResult(premiumResult);
+        setAssistantReply(premiumResult.summary);
+        pushAssistantHistory(raw, premiumResult.summary);
         return;
       }
 
@@ -1913,6 +2156,7 @@ export default function PedidosPage() {
 
   const confirmAssistantAction = React.useCallback(() => {
     if (!assistantPendingAction || !localId) return;
+    setAssistantPremiumResult(null);
     const supabase = getSupabaseClient();
     if (!supabase) return;
     if (assistantPendingAction.kind === 'update_price') {
@@ -2209,6 +2453,24 @@ export default function PedidosPage() {
             {assistantProactiveHint}
           </p>
         ) : null}
+        <div className="rounded-xl border border-zinc-200 bg-zinc-50/70 p-2.5">
+          <p className="mb-2 text-[11px] font-bold uppercase tracking-wide text-zinc-500">Sugerencias rápidas</p>
+          <div className="flex flex-wrap gap-1.5">
+            {assistantQuickPrompts.map((prompt) => (
+              <button
+                key={prompt}
+                type="button"
+                onClick={() => {
+                  setAssistantInput(prompt);
+                  void runAssistantCommandFromText(prompt);
+                }}
+                className="rounded-full border border-zinc-300 bg-white px-2.5 py-1 text-[11px] font-semibold text-zinc-700 transition hover:border-[#D32F2F]/40 hover:text-[#B91C1C]"
+              >
+                {prompt}
+              </button>
+            ))}
+          </div>
+        </div>
 
         <div className="flex gap-2">
           <input
@@ -2248,11 +2510,31 @@ export default function PedidosPage() {
             {assistantListening ? 'Escuchando…' : '🎙 Voz'}
           </button>
         </div>
+        <div className="flex flex-wrap items-center gap-2 text-[11px]">
+          <span
+            className={[
+              'inline-flex items-center rounded-full px-2 py-0.5 font-semibold ring-1',
+              assistantListening
+                ? 'bg-red-50 text-red-700 ring-red-200'
+                : assistantBusy
+                  ? 'bg-amber-50 text-amber-800 ring-amber-200'
+                  : 'bg-zinc-100 text-zinc-600 ring-zinc-200',
+            ].join(' ')}
+          >
+            {assistantListening ? 'Escuchando voz…' : assistantBusy ? 'Procesando consulta…' : 'Listo para consultar'}
+          </span>
+          {assistantInput.trim() ? (
+            <span className="truncate text-zinc-500">Transcripción editable: {assistantInput}</span>
+          ) : (
+            <span className="text-zinc-500">Puedes dictar, editar y luego ejecutar.</span>
+          )}
+        </div>
         {assistantReply ? (
           <p className="whitespace-pre-line rounded-lg bg-zinc-50 px-3 py-2 text-sm text-zinc-700 ring-1 ring-zinc-200">
             {assistantReply}
           </p>
         ) : null}
+        {assistantPremiumResult ? <OidoChefPremiumResultView result={assistantPremiumResult} /> : null}
         {assistantPendingAction ? (
           <div className="flex gap-2">
             <button
@@ -2270,6 +2552,7 @@ export default function PedidosPage() {
                     ? `actualiza ${assistantPendingAction.productName} a ${assistantPendingAction.nextPrice.toFixed(2)}`
                     : 'acción pendiente';
                 setAssistantPendingAction(null);
+                setAssistantPremiumResult(null);
                 setAssistantReply('Acción cancelada.');
                 pushAssistantHistory(cmd, 'Acción cancelada.');
               }}
