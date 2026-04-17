@@ -10,7 +10,7 @@
     },
     {
       "path": "/api/cron/appcc-night-close",
-      "schedule": "0 * * * *"
+      "schedule": "0 1 * * *"
     }
   ]
 }
