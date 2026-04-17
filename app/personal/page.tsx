@@ -113,7 +113,7 @@ export default function PersonalResumenPage() {
 
       {loading ? <p className="text-sm text-zinc-500">Cargando datos…</p> : null}
 
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 md:grid-cols-4">
         <StatCard label="Equipo activo" value={employees.length} Icon={Users} tone="zinc" />
         <StatCard label="Planif. hoy" value={plannedEmps.size} Icon={Clock} tone="red" />
         <StatCard label="Ficharon" value={clockedIds.size} Icon={Clock} tone="emerald" />
@@ -136,7 +136,8 @@ export default function PersonalResumenPage() {
         </p>
       ) : null}
 
-      <section className="rounded-3xl bg-white p-4 ring-1 ring-zinc-200/90">
+      <div className="grid gap-4 md:grid-cols-2 md:gap-5">
+      <section className="rounded-3xl bg-white p-4 ring-1 ring-zinc-200/90 md:p-5">
         <h2 className="text-sm font-extrabold uppercase tracking-wide text-zinc-500">Ahora en el local</h2>
         {workingList.length === 0 ? (
           <p className="mt-2 text-sm text-zinc-600">Nadie con jornada abierta en este momento.</p>
@@ -155,7 +156,7 @@ export default function PersonalResumenPage() {
         )}
       </section>
 
-      <section className="rounded-3xl bg-white p-4 ring-1 ring-zinc-200/90">
+      <section className="rounded-3xl bg-white p-4 ring-1 ring-zinc-200/90 md:p-5">
         <h2 className="text-sm font-extrabold uppercase tracking-wide text-zinc-500">Próximos turnos hoy</h2>
         {nextBlocks.length === 0 ? (
           <p className="mt-2 text-sm text-zinc-600">No quedan turnos por empezar hoy.</p>
@@ -176,6 +177,7 @@ export default function PersonalResumenPage() {
           </ul>
         )}
       </section>
+      </div>
 
       {openInc > 0 ? (
         <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-bold text-amber-950">
@@ -216,10 +218,14 @@ function StatCard({
           ? 'text-amber-800'
           : 'text-zinc-600';
   return (
-    <div className={`rounded-2xl p-3 ring-1 ${ring}`}>
-      <Icon className={`h-4 w-4 ${icon}`} strokeWidth={2.2} />
-      <p className="mt-2 text-[10px] font-extrabold uppercase leading-tight text-zinc-500">{label}</p>
-      <p className={`mt-1 font-extrabold leading-tight text-zinc-900 ${sub ? 'text-sm' : 'text-xl'}`}>{value}</p>
+    <div className={`rounded-2xl p-3 ring-1 md:p-4 ${ring}`}>
+      <Icon className={`h-4 w-4 md:h-5 md:w-5 ${icon}`} strokeWidth={2.2} />
+      <p className="mt-2 text-[10px] font-extrabold uppercase leading-tight text-zinc-500 md:text-[11px]">{label}</p>
+      <p
+        className={`mt-1 font-extrabold leading-tight text-zinc-900 ${sub ? 'text-sm md:text-base' : 'text-xl md:text-2xl'}`}
+      >
+        {value}
+      </p>
     </div>
   );
 }

@@ -69,7 +69,7 @@ export default function MermasStyleHero({
       <ChefOneGlowLine className={`mx-auto ${slim ? 'w-20' : 'w-28'} ${lineMt}`} />
       {tagline ? (
         <p
-          className={`mx-auto max-w-[min(20rem,88vw)] text-center text-[0.8125rem] font-medium leading-snug tracking-wide text-zinc-100 sm:max-w-md sm:text-[0.9375rem] sm:leading-relaxed ${taglineMt}`}
+          className={`mx-auto max-w-[min(20rem,88vw)] text-center text-[0.8125rem] font-medium leading-snug tracking-wide text-zinc-100 sm:max-w-md sm:text-[0.9375rem] sm:leading-relaxed md:max-w-2xl md:text-base ${taglineMt}`}
         >
           {tagline}
         </p>

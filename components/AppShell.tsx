@@ -193,7 +193,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           'border-b border-[#b32020] bg-gradient-to-r from-[#B91C1C] to-[#D32F2F]',
         ].join(' ')}
       >
-        <div className="mx-auto flex min-h-14 w-full max-w-md items-center gap-3 px-3 py-2">
+        <div className="mx-auto flex min-h-14 w-full max-w-full items-center gap-3 px-3 py-2 sm:max-w-2xl sm:px-4 md:max-w-4xl md:px-5 lg:max-w-5xl">
           <button
             type="button"
             onClick={() => setOpen(true)}
@@ -387,7 +387,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         </div>
       </aside>
 
-      <main className="mx-auto w-full max-w-md px-4 py-5">
+      <main className="mx-auto w-full max-w-full px-4 py-5 sm:max-w-2xl sm:px-5 md:max-w-4xl md:px-6 md:py-6 lg:max-w-5xl lg:px-8">
         {pathname !== '/panel' && !pathname?.startsWith('/panel/') ? (
           <div className="mb-4 space-y-1.5 print:hidden">
             <button

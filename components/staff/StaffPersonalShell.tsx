@@ -35,9 +35,9 @@ export default function StaffPersonalShell({ children }: { children: React.React
   const pathname = usePathname();
 
   return (
-    <div className="space-y-4 pb-24 sm:pb-8">
+    <div className="space-y-4 pb-24 sm:pb-8 md:space-y-5">
       <nav
-        className="-mx-1 flex gap-1 overflow-x-auto pb-1 scrollbar-thin sm:flex-wrap sm:overflow-visible"
+        className="-mx-1 flex gap-1 overflow-x-auto pb-1 scrollbar-thin sm:flex-wrap sm:gap-2 sm:overflow-visible md:gap-2"
         aria-label="Secciones Personal"
       >
         {LINKS.map(({ href, label, Icon, end }) => {
@@ -47,13 +47,13 @@ export default function StaffPersonalShell({ children }: { children: React.React
               key={href}
               href={href}
               className={[
-                'flex shrink-0 items-center gap-1.5 rounded-full px-3 py-2 text-xs font-bold transition-colors sm:text-sm',
+                'flex shrink-0 items-center gap-1.5 rounded-full px-3 py-2 text-xs font-bold transition-colors sm:text-sm md:px-4 md:py-2.5 md:text-sm',
                 active
                   ? 'bg-[#D32F2F] text-white shadow-sm'
                   : 'bg-zinc-100 text-zinc-700 ring-1 ring-zinc-200/80 hover:bg-zinc-50',
               ].join(' ')}
             >
-              <Icon className="h-4 w-4 shrink-0 opacity-90" strokeWidth={2.2} />
+              <Icon className="h-4 w-4 shrink-0 opacity-90 md:h-5 md:w-5" strokeWidth={2.2} />
               {label}
             </Link>
           );

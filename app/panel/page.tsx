@@ -39,11 +39,11 @@ function HubTile({ href, onClick, label, sub, Icon, tone = 'zinc' }: TileProps) 
     <>
       <div
         className={[
-          'mb-4 grid h-14 w-14 place-items-center rounded-2xl shadow-inner',
+          'mb-4 grid h-14 w-14 place-items-center rounded-2xl shadow-inner md:h-16 md:w-16',
           tone === 'red' ? 'bg-[#D32F2F]/15 text-[#D32F2F]' : 'bg-zinc-200/80 text-zinc-700',
         ].join(' ')}
       >
-        <Icon className="h-7 w-7" strokeWidth={2.1} />
+        <Icon className="h-7 w-7 md:h-8 md:w-8" strokeWidth={2.1} />
       </div>
       <span className="text-center text-xl font-semibold leading-tight tracking-tight text-zinc-900 sm:text-[1.35rem]">
         {label}
@@ -58,7 +58,7 @@ function HubTile({ href, onClick, label, sub, Icon, tone = 'zinc' }: TileProps) 
   );
 
   const className = [
-    'flex w-full flex-col items-center rounded-3xl px-6 py-8 text-center outline-none transition-all duration-300 ease-out',
+    'flex w-full flex-col items-center rounded-3xl px-6 py-8 text-center outline-none transition-all duration-300 ease-out md:px-5 md:py-7',
     'bg-zinc-50/80 ring-1 ring-zinc-200/90 hover:bg-white hover:ring-zinc-300',
     'focus-visible:ring-2 focus-visible:ring-[#D32F2F]/40 focus-visible:ring-offset-2',
     'active:scale-[0.99]',
@@ -104,7 +104,7 @@ export default function PanelControlPage() {
         </div>
       ) : null}
 
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:gap-5 lg:grid-cols-4">
         <HubTile href="/dashboard" label="Mermas" sub="Registro y seguimiento" Icon={BookOpen} tone="red" />
         {showPedidos ? (
           <HubTile href="/pedidos" label="Pedidos" sub="Proveedores y recepción" Icon={ShoppingCart} tone="red" />
