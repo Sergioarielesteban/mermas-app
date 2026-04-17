@@ -117,6 +117,21 @@ export default function CuentaSeguridadPage() {
     setPinCurrent('');
   };
 
+  const onForgotPinResetDevice = () => {
+    if (typeof window !== 'undefined') {
+      const ok = window.confirm(
+        'Esto borrará la clave de operaciones solo en este dispositivo. Tendrás que crear una nueva para desbloquear paneles protegidos. ¿Continuar?',
+      );
+      if (!ok) return;
+    }
+    clearDeleteSecurityPinOnDevice();
+    setHasOverride(false);
+    setPinCurrent('');
+    setPinNew('');
+    setPinConfirm('');
+    setPinMsg('Clave local borrada. Ya puedes crear una nueva clave de 4 dígitos.');
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-3">
@@ -275,6 +290,15 @@ export default function CuentaSeguridadPage() {
             </button>
           </div>
         ) : null}
+        <div className="mt-3">
+          <button
+            type="button"
+            onClick={onForgotPinResetDevice}
+            className="h-10 w-full rounded-xl border border-zinc-300 bg-white text-xs font-semibold text-zinc-700 hover:bg-zinc-50"
+          >
+            He olvidado la clave (reset solo en este dispositivo)
+          </button>
+        </div>
       </section>
 
       {email ? (

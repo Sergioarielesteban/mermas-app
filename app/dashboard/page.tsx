@@ -371,11 +371,16 @@ export default function DashboardPage() {
 
   const tryUnlockMermasAnalytics = React.useCallback(() => {
     const entered = analyticsPin.replace(/\D/g, '').slice(0, 4);
+    const expected = getDeleteSecurityPinNormalized();
+    if (expected.length !== 4) {
+      setAnalyticsPinError('No hay clave configurada en este dispositivo. Ve a Cuenta > Seguridad.');
+      return;
+    }
     if (entered.length < 4) {
       setAnalyticsPinError('Introduce 4 dígitos.');
       return;
     }
-    if (entered === getDeleteSecurityPinNormalized()) {
+    if (entered === expected) {
       try {
         window.sessionStorage.setItem(MERMAS_ANALYTICS_UNLOCK_SESSION_KEY, '1');
       } catch {
