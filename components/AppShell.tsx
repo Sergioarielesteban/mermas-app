@@ -65,6 +65,7 @@ function titleForPath(pathname: string | null) {
   if (pathname.startsWith('/inventario')) return 'Inventario';
   if (pathname.startsWith('/escandallos/recetas')) return 'Libro de recetas';
   if (pathname.startsWith('/escandallos')) return 'Escandallos';
+  if (pathname.startsWith('/personal')) return 'Personal';
   if (pathname.startsWith('/comida-personal')) return 'Comida de personal';
   if (pathname.startsWith('/chat')) return 'Chat del local';
   if (pathname.startsWith('/cuenta')) return 'Cuenta y seguridad';
@@ -111,10 +112,10 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       { href: '/inventario', label: 'Inventario', Icon: ClipboardList },
       { href: '/escandallos', label: 'Escandallos', Icon: Calculator },
       { href: '/comida-personal', label: 'Comida de personal', Icon: UtensilsCrossed },
+      { href: '/personal', label: 'Personal', Icon: CalendarDays },
       { href: '/chat', label: 'Chat', Icon: MessageCircle },
       { href: '/cuenta/seguridad', label: 'Cuenta y seguridad', Icon: KeyRound },
       { label: 'Cocina central', Icon: ChefHat, comingSoon: true },
-      { label: 'Horarios y fichaje', Icon: CalendarDays, comingSoon: true },
     ],
     [showPedidos],
   );

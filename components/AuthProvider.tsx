@@ -4,6 +4,8 @@ import React, { createContext, useContext, useEffect, useMemo, useState } from '
 import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
 import { isAllowedEmail } from '@/lib/auth-access';
 
+export type ProfileAppRole = 'admin' | 'manager' | 'staff';
+
 type AuthContextValue = {
   email: string | null;
   /** Nombre visible (profiles.full_name). */
@@ -12,6 +14,8 @@ type AuthContextValue = {
   loginUsername: string | null;
   /** auth.users.id cuando hay sesión Supabase. */
   userId: string | null;
+  /** Rol de aplicación (profiles.role). */
+  profileRole: ProfileAppRole | null;
   /** Supabase multi-local: usuario vinculado a un local (opción B). */
   localId: string | null;
   localCode: string | null;
@@ -39,6 +43,12 @@ const PROFILE_TIMEOUT_MS = 6000;
 const SESSION_SOFT_UNLOCK_MS = 4000;
 /** Último recurso si getSession nunca resuelve (muy raro). */
 const SESSION_SAFETY_MS = 20000;
+
+function mapProfileRole(raw: string | null | undefined): ProfileAppRole {
+  const r = (raw ?? 'staff').toLowerCase();
+  if (r === 'admin' || r === 'manager') return r;
+  return 'staff';
+}
 
 function isInvalidRefreshTokenError(message: string | undefined) {
   const m = (message ?? '').toLowerCase();
@@ -70,6 +80,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [displayName, setDisplayName] = useState<string | null>(null);
   const [loginUsername, setLoginUsername] = useState<string | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
+  const [profileRole, setProfileRole] = useState<ProfileAppRole | null>(null);
   const [loading, setLoading] = useState(true);
   const [localId, setLocalId] = useState<string | null>(null);
   const [localCode, setLocalCode] = useState<string | null>(null);
@@ -82,6 +93,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setLocalName(null);
     setDisplayName(null);
     setLoginUsername(null);
+    setProfileRole(null);
   }, []);
 
   const persistProfileCache = React.useCallback(
@@ -91,6 +103,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       localName: string | null;
       displayName: string | null;
       loginUsername: string | null;
+      profileRole: ProfileAppRole | null;
     }) => {
       if (typeof window === 'undefined') return;
       window.localStorage.setItem(PROFILE_CACHE_KEY, JSON.stringify(profile));
@@ -109,6 +122,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         localName?: string | null;
         displayName?: string | null;
         loginUsername?: string | null;
+        profileRole?: ProfileAppRole | null;
       };
       if (!parsed?.localId) return false;
       setLocalId(parsed.localId);
@@ -116,6 +130,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setLocalName(parsed.localName ?? null);
       setDisplayName(parsed.displayName ?? null);
       setLoginUsername(parsed.loginUsername ?? null);
+      setProfileRole(parsed.profileRole ?? null);
       return true;
     } catch {
       return false;
@@ -155,6 +170,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           local_id: string;
           full_name: string | null;
           login_username: string | null;
+          role: string | null;
           locals: { code: string; name: string } | { code: string; name: string }[] | null;
         }
       | null = null;
@@ -164,7 +180,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         Promise.resolve(
           supabase
             .from('profiles')
-            .select('local_id, full_name, login_username, locals(code, name)')
+            .select('local_id, full_name, login_username, role, locals(code, name)')
             .eq('user_id', uid)
             .maybeSingle(),
         ),
@@ -178,21 +194,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     // Some projects have stricter RLS on `locals`; keep local_id even if nested read fails.
     if (error || !data) {
-      let profileOnly: { local_id: string; full_name: string | null; login_username: string | null } | null = null;
+      let profileOnly: {
+        local_id: string;
+        full_name: string | null;
+        login_username: string | null;
+        role: string | null;
+      } | null = null;
       let profileErr: Error | null = null;
       try {
         const res = await withTimeout(
           Promise.resolve(
             supabase
               .from('profiles')
-              .select('local_id, full_name, login_username')
+              .select('local_id, full_name, login_username, role')
               .eq('user_id', uid)
               .maybeSingle(),
           ),
           PROFILE_TIMEOUT_MS,
         );
         profileOnly =
-          (res.data as { local_id: string; full_name: string | null; login_username: string | null } | null) ?? null;
+          (res.data as {
+            local_id: string;
+            full_name: string | null;
+            login_username: string | null;
+            role: string | null;
+          } | null) ?? null;
         profileErr = res.error ? new Error(res.error.message) : null;
       } catch {
         profileErr = new Error('timeout');
@@ -209,12 +235,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const lu = profileOnly.login_username?.trim() ? profileOnly.login_username.trim() : null;
       setDisplayName(dn);
       setLoginUsername(lu);
+      const pr = mapProfileRole(profileOnly.role);
+      setProfileRole(pr);
       persistProfileCache({
         localId: profileOnly.local_id,
         localCode: null,
         localName: null,
         displayName: dn,
         loginUsername: lu,
+        profileRole: pr,
       });
       setProfileReady(true);
       return;
@@ -224,6 +253,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       local_id: string;
       full_name: string | null;
       login_username: string | null;
+      role: string | null;
       locals: { code: string; name: string } | { code: string; name: string }[] | null;
     } | null;
     if (!row) {
@@ -239,12 +269,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const lu = row.login_username?.trim() ? row.login_username.trim() : null;
     setDisplayName(dn);
     setLoginUsername(lu);
+    const pr = mapProfileRole(row.role);
+    setProfileRole(pr);
     persistProfileCache({
       localId: row.local_id,
       localCode: loc?.code ?? null,
       localName: loc?.name ?? null,
       displayName: dn,
       loginUsername: lu,
+      profileRole: pr,
     });
     setProfileReady(true);
   }, [clearProfile, persistProfileCache, restoreProfileFromCache]);
@@ -432,6 +465,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       displayName,
       loginUsername,
       userId,
+      profileRole,
       localId,
       localCode,
       localName,
@@ -534,6 +568,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       loading,
       loginUsername,
       profileReady,
+      profileRole,
       userId,
     ],
   );

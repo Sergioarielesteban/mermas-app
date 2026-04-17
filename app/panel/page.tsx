@@ -152,10 +152,11 @@ export default function PanelControlPage() {
           Icon={ChefHat}
         />
         <HubTile
-          onClick={() => onComingSoonModule('Horarios y fichaje')}
-          label="Horarios y fichaje"
-          sub={COMING_SOON_SUB}
+          href="/personal"
+          label="Personal"
+          sub="Horarios, cuadrante y fichajes"
           Icon={CalendarDays}
+          tone="red"
         />
         <HubTile
           href="/comida-personal"
