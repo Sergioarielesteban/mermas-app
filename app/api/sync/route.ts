@@ -29,7 +29,8 @@ export async function GET(request: Request) {
       snapshot: row
         ? {
             products: row.products,
-            mermas: row.mermas,
+            // Nunca devolver mermas por snapshot de email: evita mezclar registros entre locales.
+            mermas: [],
             updatedAt: row.updated_at ?? null,
           }
         : null,

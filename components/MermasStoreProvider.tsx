@@ -528,6 +528,10 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
     pruneBaconHalfRecords(sortProductsByName(DEFAULT_PRODUCTS), DEFAULT_MERMAS),
   );
   const [hydrated, setHydrated] = useState(false);
+  const localIdRef = React.useRef<string | null>(localId ?? null);
+  localIdRef.current = localId ?? null;
+  /** Tras cambiar de local, el primer fetch debe sustituir estado (no fusionar con mermas del local anterior). */
+  const lastMermasMergeLocalIdRef = React.useRef<string | null>(null);
   const lastLocalEditAtRef = React.useRef(0);
   const lastRemoteAppliedAtRef = React.useRef(0);
   const applyingRemoteRef = React.useRef(false);
@@ -540,17 +544,29 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
 
   const refetchCloud = React.useCallback(async () => {
     const supabase = getSupabaseClient();
-    if (!supabase || !localId) return;
+    const targetLocalId = localId;
+    if (!supabase || !targetLocalId) return;
     try {
-      const { products: p, mermas: m } = await fetchProductsAndMermas(supabase, localId);
+      const { products: p, mermas: m } = await fetchProductsAndMermas(supabase, targetLocalId);
+      if (localIdRef.current !== targetLocalId) return;
       const serverProducts = sortProductsByName(p);
       const serverMermas = pruneBaconHalfRecords(p, m);
       const tombstones = activeMermaTombstoneSet(locallyDeletedMermaIdsRef.current);
-      saveMermaTombstones(localId, locallyDeletedMermaIdsRef.current);
-      setProducts((prev) => mergeCloudProducts(prev, serverProducts, protectProductIdsRef.current));
-      setMermas((prev) =>
-        mergeCloudMermas(prev, serverMermas, serverProducts, protectMermaIdsRef.current, tombstones),
-      );
+      saveMermaTombstones(targetLocalId, locallyDeletedMermaIdsRef.current);
+      const tenantChanged = lastMermasMergeLocalIdRef.current !== targetLocalId;
+      lastMermasMergeLocalIdRef.current = targetLocalId;
+      const serverMermasNoTomb =
+        tombstones.size > 0 ? serverMermas.filter((row) => !tombstones.has(row.id)) : serverMermas;
+
+      if (tenantChanged) {
+        setProducts(serverProducts);
+        setMermas(serverMermasNoTomb);
+      } else {
+        setProducts((prev) => mergeCloudProducts(prev, serverProducts, protectProductIdsRef.current));
+        setMermas((prev) =>
+          mergeCloudMermas(prev, serverMermas, serverProducts, protectMermaIdsRef.current, tombstones),
+        );
+      }
       setCloudDataLoaded(true);
     } catch {
       // Keep last known state; do not wipe UI on transient cloud errors.
@@ -561,6 +577,7 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
     protectMermaIdsRef.current.clear();
     protectProductIdsRef.current.clear();
     locallyDeletedMermaIdsRef.current = localId ? loadMermaTombstones(localId) : new Map();
+    lastMermasMergeLocalIdRef.current = null;
   }, [localId]);
 
   useEffect(() => {
@@ -599,10 +616,17 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
               : [];
           setProducts(prods);
           setMermas(nextMermas);
+          return;
         }
       }
+      // Sin caché para este local: no dejar en pantalla mermas/productos del local anterior.
+      setProducts(sortProductsByName(DEFAULT_PRODUCTS));
+      setMermas([]);
+      setCloudDataLoaded(false);
     } catch {
-      /* ignore */
+      setProducts(sortProductsByName(DEFAULT_PRODUCTS));
+      setMermas([]);
+      setCloudDataLoaded(false);
     }
   }, [cloudMode, hydrated, localId]);
 

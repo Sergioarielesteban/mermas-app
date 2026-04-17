@@ -1,6 +1,7 @@
 create table if not exists public.mermas_snapshots (
   email text primary key,
   products jsonb not null default '[]'::jsonb,
+  -- Legado: la app ya no sincroniza mermas por email (solo catálogo). Mantener columna por compatibilidad.
   mermas jsonb not null default '[]'::jsonb,
   updated_at timestamptz not null default now()
 );

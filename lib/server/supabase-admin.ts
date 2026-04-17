@@ -101,7 +101,8 @@ export async function upsertSnapshot(input: { email: string; products: Product[]
       {
         email: input.email.toLowerCase(),
         products: input.products,
-        mermas: input.mermas,
+        // Las mermas son datos operativos por local (tabla public.mermas + RLS). No replicar por email.
+        mermas: [],
         updated_at: new Date().toISOString(),
       },
     ]),
