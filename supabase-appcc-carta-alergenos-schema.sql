@@ -17,6 +17,7 @@ create table if not exists public.allergens_master (
   updated_at timestamptz not null default now()
 );
 
+
 create index if not exists idx_allergens_master_order on public.allergens_master(display_order);
 
 drop trigger if exists trg_allergens_master_updated_at on public.allergens_master;
@@ -526,6 +527,7 @@ create or replace function public.appcc_exclude_recipe_allergen(
 returns void
 language plpgsql
 security definer
+
 set search_path = public
 as $$
 declare
