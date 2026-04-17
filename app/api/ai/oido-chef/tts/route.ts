@@ -1,10 +1,10 @@
 import { NextResponse } from 'next/server';
-import { verifySupabaseBearer } from '@/lib/supabase-verify-bearer';
+import { requireAllowedSupabaseUser } from '@/lib/require-allowed-supabase-user';
 
 export const maxDuration = 60;
 
 export async function POST(request: Request) {
-  const auth = await verifySupabaseBearer(request);
+  const auth = await requireAllowedSupabaseUser(request);
   if (!auth.ok) {
     return NextResponse.json({ ok: false, reason: auth.message }, { status: auth.status });
   }

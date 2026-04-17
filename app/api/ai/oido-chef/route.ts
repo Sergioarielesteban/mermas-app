@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { verifySupabaseBearer } from '@/lib/supabase-verify-bearer';
+import { requireAllowedSupabaseUser } from '@/lib/require-allowed-supabase-user';
 import type { OidoChefAiContext } from '@/lib/oido-chef-ai-context';
 
 export const maxDuration = 60;
@@ -10,7 +10,7 @@ Para precios de productos, busca en comprasRecientes.lineas por nombre de produc
 Si hay varias compras, resume (media, última, rango) de forma breve.`;
 
 export async function POST(request: Request) {
-  const auth = await verifySupabaseBearer(request);
+  const auth = await requireAllowedSupabaseUser(request);
   if (!auth.ok) {
     return NextResponse.json({ ok: false, reason: auth.message }, { status: auth.status });
   }

@@ -3,6 +3,16 @@ import { sendLeadNotificationEmail } from '@/lib/server/notify-lead-email';
 import { insertMarketingLead, isSupabaseAdminConfigured } from '@/lib/server/supabase-admin';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const MAX_NAME = 200;
+const MAX_EMAIL = 320;
+const MAX_PHONE = 40;
+const MAX_RESTAURANT = 200;
+const MAX_MESSAGE = 4000;
+
+function clip(s: string, max: number) {
+  const t = s.trim();
+  return t.length <= max ? t : t.slice(0, max);
+}
 
 export async function POST(request: Request) {
   let body: Record<string, unknown>;
@@ -16,11 +26,15 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: true });
   }
 
-  const email = String(body.email ?? '').trim();
-  const name = String(body.name ?? '').trim() || null;
-  const phone = String(body.phone ?? '').trim() || null;
-  const restaurantName = String(body.restaurant_name ?? '').trim() || null;
-  const message = String(body.message ?? '').trim() || null;
+  const email = clip(String(body.email ?? ''), MAX_EMAIL);
+  const nameRaw = clip(String(body.name ?? ''), MAX_NAME);
+  const phoneRaw = clip(String(body.phone ?? ''), MAX_PHONE);
+  const restaurantRaw = clip(String(body.restaurant_name ?? ''), MAX_RESTAURANT);
+  const messageRaw = clip(String(body.message ?? ''), MAX_MESSAGE);
+  const name = nameRaw || null;
+  const phone = phoneRaw || null;
+  const restaurantName = restaurantRaw || null;
+  const message = messageRaw || null;
 
   if (!email || !EMAIL_RE.test(email)) {
     return NextResponse.json({ ok: false, error: 'Indica un email válido.' }, { status: 400 });

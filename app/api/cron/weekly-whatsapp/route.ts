@@ -24,16 +24,14 @@ async function sendWhatsappMessage(input: { accountSid: string; authToken: strin
   }
 }
 
-function isAuthorized(request: Request) {
-  const expected = process.env.CRON_SECRET;
-  if (!expected) return false;
-  const auth = request.headers.get('authorization') ?? '';
-  return auth === `Bearer ${expected}`;
-}
-
 export async function GET(request: Request) {
   try {
-    if (!isAuthorized(request)) {
+    const secret = process.env.CRON_SECRET?.trim();
+    if (!secret) {
+      return NextResponse.json({ ok: false, reason: 'CRON_SECRET no configurado.' }, { status: 503 });
+    }
+    const auth = request.headers.get('authorization') ?? '';
+    if (auth !== `Bearer ${secret}`) {
       return NextResponse.json({ ok: false, reason: 'Unauthorized' }, { status: 401 });
     }
 
