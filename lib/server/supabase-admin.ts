@@ -38,6 +38,36 @@ function baseUrl(path: string) {
   return `${SUPABASE_URL}/rest/v1/${path}`;
 }
 
+/** GET al REST de Supabase con service role (solo servidor). */
+export async function adminRestGet<T>(pathAndQuery: string): Promise<T> {
+  const response = await fetch(baseUrl(pathAndQuery), {
+    method: 'GET',
+    headers: getHeaders(),
+    cache: 'no-store',
+  });
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(`Supabase admin GET failed: ${response.status} ${body}`);
+  }
+  return (await response.json()) as T;
+}
+
+/** POST una fila JSON (array de un elemento si la tabla lo espera). */
+export async function adminRestPost(path: string, body: unknown): Promise<void> {
+  const response = await fetch(baseUrl(path), {
+    method: 'POST',
+    headers: {
+      ...getHeaders(),
+      Prefer: 'return=minimal',
+    },
+    body: typeof body === 'string' ? body : JSON.stringify(body),
+  });
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`Supabase admin POST failed: ${response.status} ${text}`);
+  }
+}
+
 export async function upsertSnapshot(input: { email: string; products: Product[]; mermas: MermaRecord[] }) {
   const response = await fetch(baseUrl('mermas_snapshots'), {
     method: 'POST',

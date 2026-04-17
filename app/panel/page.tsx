@@ -10,7 +10,6 @@ import {
   ChefHat,
   ClipboardList,
   Factory,
-  KeyRound,
   ListChecks,
   MessageCircle,
   ShieldCheck,
@@ -106,12 +105,6 @@ export default function PanelControlPage() {
       ) : null}
 
       <div className="grid grid-cols-2 gap-4">
-        <HubTile
-          href="/cuenta/seguridad"
-          label="Cuenta y seguridad"
-          sub="Contraseña de acceso y clave de operaciones"
-          Icon={KeyRound}
-        />
         <HubTile href="/dashboard" label="Mermas" sub="Registro y seguimiento" Icon={BookOpen} tone="red" />
         {showPedidos ? (
           <HubTile href="/pedidos" label="Pedidos" sub="Proveedores y recepción" Icon={ShoppingCart} tone="red" />
