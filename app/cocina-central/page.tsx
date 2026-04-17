@@ -106,7 +106,7 @@ export default function CocinaCentralHubPage() {
         <p className="mt-1">
           {isCentralKitchen
             ? 'Tu local está marcado como cocina central: puedes producir y gestionar entregas salientes (según tu rol).'
-            : 'Local satélite: consulta recepciones y escanea QR de lotes con stock en tu sede.'}
+            : 'Local satélite: aquí solo gestionas recepciones entrantes y la firma de entregas.'}
         </p>
       </div>
     </div>

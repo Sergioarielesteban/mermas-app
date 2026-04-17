@@ -23,11 +23,12 @@ function extractToken(raw: string): string | null {
 
 export default function CocinaCentralEscanearPage() {
   const router = useRouter();
-  const { profileReady, localId } = useAuth();
+  const { profileReady, localId, isCentralKitchen } = useAuth();
   const [err, setErr] = useState<string | null>(null);
   const started = useRef(false);
 
   useEffect(() => {
+    if (!isCentralKitchen) return;
     if (!isSupabaseEnabled() || !getSupabaseClient() || !localId) return;
     if (started.current) return;
     started.current = true;
@@ -52,11 +53,27 @@ export default function CocinaCentralEscanearPage() {
     return () => {
       void html5?.stop().catch(() => {});
     };
-  }, [router, localId]);
+  }, [router, localId, isCentralKitchen]);
 
   if (!profileReady) return <p className="text-sm text-zinc-500">Cargando…</p>;
   if (!isSupabaseEnabled() || !getSupabaseClient() || !localId) {
     return <p className="text-sm text-zinc-600">Necesitas sesión Supabase.</p>;
+  }
+
+  if (!isCentralKitchen) {
+    return (
+      <div className="space-y-4">
+        <Link href="/cocina-central" className="text-sm font-bold text-[#D32F2F]">
+          ← Hub
+        </Link>
+        <h1 className="text-xl font-extrabold text-zinc-900">Escanear QR</h1>
+        <p className="rounded-2xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm text-zinc-700">
+          El escáner de códigos de lote solo está disponible en usuarios de{' '}
+          <strong>cocina central</strong>. En sedes satélite usa recepciones y la ficha del lote cuando te la
+          compartan.
+        </p>
+      </div>
+    );
   }
 
   return (
