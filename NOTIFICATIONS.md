@@ -74,15 +74,6 @@ Las notificaciones **dentro de la app** (campana) usan Supabase Realtime. Para u
 
 Ambos flujos llaman a `notifyIncidenciaRecepcion`.
 
-## Cron APPCC (fin de jornada ~2:00 Madrid)
-
-Ruta: **`GET /api/cron/appcc-night-close`** con header `Authorization: Bearer CRON_SECRET`.
-
-- En **Vercel** está programado **cada hora** (`vercel.json`); solo ejecuta la lógica en la **hora 2** (Europe/Madrid).
-- Revisa el **día civil anterior** en Madrid: si hay equipos de frío activos, al menos **2** lecturas en `appcc_temperature_readings` ese día; si hay **freidoras** activas, al menos **1** fila en `appcc_oil_events` ese día.
-- Inserta una fila en `notifications` por local (`type: appcc_fin_jornada`, `entity_type: appcc_daily_review`) si falta algo y no había ya un aviso con el mismo `metadata.dateKey`.
-- Requiere **`SUPABASE_SERVICE_ROLE_KEY`** (y URL Supabase) en el servidor, igual que otros crons.
-
 ## Pasos manuales en Supabase
 
 1. Ejecutar **`supabase-notifications.sql`** en el SQL Editor (una vez por proyecto).

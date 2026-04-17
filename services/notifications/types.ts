@@ -8,7 +8,6 @@ export type NotificationEventType =
   | 'pedido_recibido'
   | 'incidencia_recepcion'
   | 'appcc_alerta'
-  | 'appcc_fin_jornada'
   | 'inventario_cerrado'
   | 'mensaje_equipo';
 

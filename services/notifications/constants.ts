@@ -6,7 +6,6 @@ export const DEFAULT_SEVERITY_BY_TYPE: Partial<Record<NotificationEventType, Not
   pedido_recibido: 'info',
   incidencia_recepcion: 'warning',
   appcc_alerta: 'critical',
-  appcc_fin_jornada: 'warning',
   inventario_cerrado: 'info',
   mensaje_equipo: 'info',
 };

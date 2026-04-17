@@ -7,10 +7,6 @@
     {
       "path": "/api/cron/weekly-whatsapp",
       "schedule": "0 7 * * 1"
-    },
-    {
-      "path": "/api/cron/appcc-night-close",
-      "schedule": "0 1 * * *"
     }
   ]
 }
