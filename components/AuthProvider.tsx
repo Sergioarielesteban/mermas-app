@@ -32,8 +32,13 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 const AUTH_KEY = 'mermas_user_email';
 const PROFILE_CACHE_KEY = 'chef_one_profile_cache_v2';
 const PROFILE_TIMEOUT_MS = 6000;
-/** Si getSession no responde (red, preview sin storage, etc.), no bloquear la app más de esto. */
-const GET_SESSION_TIMEOUT_MS = 2500;
+/**
+ * Si getSession tarda (Wi‑Fi cocina, móvil al volver de suspensión), no enviar al login:
+ * rellenar email desde localStorage y perfil en caché para desbloquear la UI.
+ */
+const SESSION_SOFT_UNLOCK_MS = 4000;
+/** Último recurso si getSession nunca resuelve (muy raro). */
+const SESSION_SAFETY_MS = 20000;
 
 function isInvalidRefreshTokenError(message: string | undefined) {
   const m = (message ?? '').toLowerCase();
@@ -266,42 +271,44 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     let isMounted = true;
-    const safetyTimeout = window.setTimeout(() => {
-      if (!isMounted) return;
-      // Respaldo si getSession nunca termina (además del race abajo).
+
+    const unlockFromLocalHints = () => {
+      const remembered = window.localStorage.getItem(AUTH_KEY)?.trim().toLowerCase() ?? null;
+      if (remembered) setEmail(remembered);
+      void restoreProfileFromCache();
       setLoading(false);
       setProfileReady(true);
-      if (restoreProfileFromCache()) {
-        /* ya aplicado en restore */
-      }
-    }, GET_SESSION_TIMEOUT_MS + 1500);
+    };
+
+    const softUnlockTimer = window.setTimeout(() => {
+      if (!isMounted) return;
+      unlockFromLocalHints();
+    }, SESSION_SOFT_UNLOCK_MS);
+
+    const safetyTimer = window.setTimeout(() => {
+      if (!isMounted) return;
+      window.clearTimeout(softUnlockTimer);
+      unlockFromLocalHints();
+    }, SESSION_SAFETY_MS);
 
     let sessionPromise: ReturnType<typeof supabase.auth.getSession>;
     try {
       sessionPromise = supabase.auth.getSession();
     } catch {
-      window.clearTimeout(safetyTimeout);
+      window.clearTimeout(softUnlockTimer);
+      window.clearTimeout(safetyTimer);
       if (isMounted) {
         setLoading(false);
         setProfileReady(true);
       }
       return;
     }
-    const timeoutPromise = new Promise<null>((resolve) => {
-      window.setTimeout(() => resolve(null), GET_SESSION_TIMEOUT_MS);
-    });
 
-    void Promise.race([sessionPromise, timeoutPromise])
-      .then((result) => {
+    void sessionPromise
+      .then(({ data, error }) => {
         if (!isMounted) return;
-        if (result === null) {
-          // Timeout: dejar de bloquear; el listener onAuthStateChange puede completar después.
-          setLoading(false);
-          setProfileReady(true);
-          void restoreProfileFromCache();
-          return;
-        }
-        const { data, error } = result as Awaited<typeof sessionPromise>;
+        window.clearTimeout(softUnlockTimer);
+        window.clearTimeout(safetyTimer);
         if (error && isInvalidRefreshTokenError(error.message)) {
           setEmail(null);
           setUserId(null);
@@ -315,16 +322,36 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setEmail(sessionEmail);
         persistEmail(sessionEmail);
         setLoading(false);
+        setProfileReady(true);
         void loadProfileForUser(data.session?.user?.id);
       })
       .catch(() => {
         if (!isMounted) return;
-        setLoading(false);
-        setProfileReady(true);
-      })
-      .finally(() => {
-        window.clearTimeout(safetyTimeout);
+        window.clearTimeout(softUnlockTimer);
+        window.clearTimeout(safetyTimer);
+        unlockFromLocalHints();
       });
+
+    const onVisibility = () => {
+      if (document.visibilityState !== 'visible' || !isMounted) return;
+      void supabase.auth.getSession().then(({ data, error }) => {
+        if (!isMounted) return;
+        if (error && isInvalidRefreshTokenError(error.message)) {
+          setEmail(null);
+          setUserId(null);
+          clearProfile();
+          clearLocalAuthCache();
+          return;
+        }
+        const visEmail = data.session?.user?.email?.toLowerCase() ?? null;
+        if (visEmail) {
+          setEmail(visEmail);
+          persistEmail(visEmail);
+          void loadProfileForUser(data.session?.user?.id);
+        }
+      });
+    };
+    document.addEventListener('visibilitychange', onVisibility);
 
     const { data: sub } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === 'SIGNED_OUT') {
@@ -341,7 +368,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     return () => {
       isMounted = false;
-      window.clearTimeout(safetyTimeout);
+      window.clearTimeout(softUnlockTimer);
+      window.clearTimeout(safetyTimer);
+      document.removeEventListener('visibilitychange', onVisibility);
       sub.subscription.unsubscribe();
     };
   }, [clearLocalAuthCache, clearProfile, loadProfileForUser]);

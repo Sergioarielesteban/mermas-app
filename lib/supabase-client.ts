@@ -16,6 +16,8 @@ export function getSupabaseClient() {
         persistSession: true,
         autoRefreshToken: true,
         detectSessionInUrl: true,
+        /** Sesión en localStorage (PWA/móvil); el refresh se reanuda al volver a primer plano. */
+        storage: typeof window !== 'undefined' ? window.localStorage : undefined,
       },
     });
     return client;
