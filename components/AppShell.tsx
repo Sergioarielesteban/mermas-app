@@ -120,9 +120,21 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     router.push('/panel');
   }, [router]);
 
-  /** Recarga la página sin borrar el service worker ni las cachés (evita “reinicio total” de la PWA). */
+  /** Limpia cachés del service worker (chef-one-*) y recarga para traer UI y datos nuevos (Safari/PWA). */
   const refreshApp = () => {
-    window.location.reload();
+    void (async () => {
+      try {
+        if (typeof caches !== 'undefined') {
+          const keys = await caches.keys();
+          await Promise.all(
+            keys.filter((k) => k.toLowerCase().includes('chef-one')).map((k) => caches.delete(k)),
+          );
+        }
+      } catch {
+        /* ignore */
+      }
+      window.location.reload();
+    })();
   };
 
   return (
