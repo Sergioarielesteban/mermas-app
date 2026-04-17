@@ -21,12 +21,15 @@ self.addEventListener('message',(e)=>{if(e.data?.type==='SKIP_WAITING')self.skip
 self.addEventListener('install',(e)=>{e.waitUntil(caches.open(CACHE_NAME).then(c=>c.addAll(CORE_ASSETS)));});
 self.addEventListener('activate',(e)=>{e.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k!==CACHE_NAME).map(k=>caches.delete(k)))));self.clients.claim();});
 self.addEventListener('fetch',(e)=>{const{request}=e;if(request.method!=='GET')return;const url=new URL(request.url);
-// Supabase y cualquier origen distinto al de la PWA: nunca cache-first (GET quedaría obsoleto tras altas/ediciones).
 if(url.origin!==self.location.origin){e.respondWith(fetch(request));return;}
-const html=request.headers.get('accept')?.includes('text/html');
 if(url.pathname.startsWith('/api/')){e.respondWith(fetch(request));return;}
+const h=request.headers;
+if(url.searchParams.has('_rsc')||h.get('RSC')==='1'||h.get('Next-Router-Prefetch')==='1'||h.get('Next-Router-State-Tree')){e.respondWith(fetch(request));return;}
+if(url.pathname.startsWith('/_next/')&&!url.pathname.startsWith('/_next/static/')){e.respondWith(fetch(request));return;}
+const html=h.get('accept')?.includes('text/html');
 if(request.mode==='navigate'||html){e.respondWith(fetch(request).catch(()=>caches.match(request).then(c=>c||caches.match('/'))));return;}
-e.respondWith(caches.match(request).then(c=>c||fetch(request).then(r=>{const cl=r.clone();caches.open(CACHE_NAME).then(ch=>ch.put(request,cl));return r;})));});
+if(url.pathname.startsWith('/_next/static/')){e.respondWith(caches.match(request).then(c=>c||fetch(request).then(r=>{const cl=r.clone();if(r.ok)caches.open(CACHE_NAME).then(ch=>ch.put(request,cl));return r;})));return;}
+e.respondWith(fetch(request));});
 `;
 
   return new NextResponse(script, {

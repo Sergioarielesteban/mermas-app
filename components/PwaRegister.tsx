@@ -112,8 +112,8 @@ export default function PwaRegister() {
     const onVisible = () => {
       if (document.visibilityState === 'visible') pingUpdate();
     };
-    const onPageShow = (ev: PageTransitionEvent) => {
-      if (ev.persisted) pingUpdate();
+    const onPageShow = () => {
+      pingUpdate();
     };
     document.addEventListener('visibilitychange', onVisible);
     window.addEventListener('focus', pingUpdate);
