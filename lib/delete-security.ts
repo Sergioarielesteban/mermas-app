@@ -1,27 +1,62 @@
 const DEFAULT_DELETE_PIN = '1234';
 
+/** Clave guardada en el dispositivo; si no existe, se usa env o valor por defecto. */
+export const DELETE_SECURITY_PIN_STORAGE_KEY = 'chef_one_delete_pin';
+
 export const DELETE_BLOCKED_MERMAS = 'Por seguridad, no se permite borrar registros de mermas.';
 export const DELETE_BLOCKED_PEDIDOS = 'Por seguridad, no se permite borrar registros de pedidos.';
 export const DELETE_BLOCKED_INVENTARIO = 'Por seguridad, no se permite borrar registros de inventario.';
 
+export function normalizeOpsSecurityPin(raw: string): string {
+  return raw.replace(/\D/g, '').slice(0, 4);
+}
+
 /**
- * Clave de 4 dígitos para borrados y zonas restringidas (localStorage `chef_one_delete_pin`, env o "1234").
+ * Clave de 4 dígitos para borrados y zonas restringidas (localStorage, env o "1234").
  */
 export function getDeleteSecurityPinNormalized(): string {
   try {
     if (typeof window !== 'undefined') {
       const configured =
-        (window.localStorage.getItem('chef_one_delete_pin') ?? '').trim() ||
+        (window.localStorage.getItem(DELETE_SECURITY_PIN_STORAGE_KEY) ?? '').trim() ||
         process.env.NEXT_PUBLIC_DELETE_SECURITY_PIN ||
         DEFAULT_DELETE_PIN;
-      return configured.replace(/\D/g, '').slice(0, 4);
+      return normalizeOpsSecurityPin(configured);
     }
   } catch {
     // ignore
   }
-  return String(process.env.NEXT_PUBLIC_DELETE_SECURITY_PIN ?? DEFAULT_DELETE_PIN)
-    .replace(/\D/g, '')
-    .slice(0, 4);
+  return normalizeOpsSecurityPin(
+    String(process.env.NEXT_PUBLIC_DELETE_SECURITY_PIN ?? DEFAULT_DELETE_PIN),
+  );
+}
+
+/** Persiste la clave de operaciones en este dispositivo (4 dígitos). */
+export function setDeleteSecurityPinOnDevice(pin: string): void {
+  if (typeof window === 'undefined') return;
+  const n = normalizeOpsSecurityPin(pin);
+  if (n.length !== 4) return;
+  window.localStorage.setItem(DELETE_SECURITY_PIN_STORAGE_KEY, n);
+}
+
+/** Quita la clave personalizada del dispositivo (vuelve a env o 1234). */
+export function clearDeleteSecurityPinOnDevice(): void {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.removeItem(DELETE_SECURITY_PIN_STORAGE_KEY);
+  } catch {
+    // ignore
+  }
+}
+
+export function hasDeleteSecurityPinDeviceOverride(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    const v = (window.localStorage.getItem(DELETE_SECURITY_PIN_STORAGE_KEY) ?? '').trim();
+    return normalizeOpsSecurityPin(v).length === 4;
+  } catch {
+    return false;
+  }
 }
 
 export function requestDeleteSecurityPin(): Promise<boolean> {

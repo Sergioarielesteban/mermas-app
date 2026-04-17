@@ -19,6 +19,11 @@ type AuthContextValue = {
   /** true cuando ya se intentó cargar el perfil (o no aplica). */
   profileReady: boolean;
   login: (identifier: string, password: string) => Promise<{ ok: boolean; reason?: string }>;
+  /** Valida la contraseña actual y la sustituye en Supabase Auth (sesión activa). */
+  changePassword: (
+    currentPassword: string,
+    newPassword: string,
+  ) => Promise<{ ok: boolean; reason?: string }>;
   logout: () => Promise<void>;
   loading: boolean;
 };
@@ -387,6 +392,35 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (typeof window !== 'undefined') window.localStorage.setItem(AUTH_KEY, emailForAuth);
         return { ok: true };
       },
+      changePassword: async (currentPassword: string, newPassword: string) => {
+        const trimmedNew = newPassword.trim();
+        if (trimmedNew.length < 8) {
+          return { ok: false, reason: 'La nueva contraseña debe tener al menos 8 caracteres.' };
+        }
+        if (trimmedNew === currentPassword) {
+          return { ok: false, reason: 'La nueva contraseña debe ser distinta de la actual.' };
+        }
+        const supabase = getSupabaseClient();
+        if (!supabase || !isSupabaseEnabled()) {
+          return { ok: false, reason: 'Supabase no está configurado.' };
+        }
+        const sessionEmail = email?.trim().toLowerCase();
+        if (!sessionEmail) {
+          return { ok: false, reason: 'No hay sesión activa.' };
+        }
+        const { error: verifyErr } = await supabase.auth.signInWithPassword({
+          email: sessionEmail,
+          password: currentPassword,
+        });
+        if (verifyErr) {
+          return { ok: false, reason: 'La contraseña actual no es correcta.' };
+        }
+        const { error: updateErr } = await supabase.auth.updateUser({ password: trimmedNew });
+        if (updateErr) {
+          return { ok: false, reason: mapSupabaseAuthError(updateErr.message) };
+        }
+        return { ok: true };
+      },
       logout: async () => {
         const supabase = getSupabaseClient();
         if (supabase) await supabase.auth.signOut();
@@ -401,7 +435,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       },
       loading,
     }),
-    [clearProfile, displayName, email, localCode, localId, localName, loading, loginUsername, profileReady, userId],
+    [
+      clearProfile,
+      displayName,
+      email,
+      localCode,
+      localId,
+      localName,
+      loading,
+      loginUsername,
+      profileReady,
+      userId,
+    ],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

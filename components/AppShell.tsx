@@ -17,6 +17,7 @@ import {
   ShieldCheck,
   UtensilsCrossed,
   X,
+  KeyRound,
   RefreshCcw,
   ShoppingCart,
 } from 'lucide-react';
@@ -66,6 +67,7 @@ function titleForPath(pathname: string | null) {
   if (pathname.startsWith('/escandallos')) return 'Escandallos';
   if (pathname.startsWith('/comida-personal')) return 'Comida de personal';
   if (pathname.startsWith('/chat')) return 'Chat del local';
+  if (pathname.startsWith('/cuenta')) return 'Cuenta y seguridad';
   if (pathname === '/appcc') return 'APPCC';
   if (pathname.startsWith('/appcc/temperaturas')) return 'Temperaturas';
   if (pathname.startsWith('/appcc/historial')) return 'Historial';
@@ -323,10 +325,18 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             {localId && localLabel ? (
               <div className="mt-1 truncate text-xs font-medium text-zinc-700">{localLabel}</div>
             ) : null}
+            <Link
+              href="/cuenta/seguridad"
+              onClick={() => setOpen(false)}
+              className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs font-bold uppercase tracking-wide text-zinc-700 hover:bg-zinc-100"
+            >
+              <KeyRound className="h-3.5 w-3.5" />
+              Contraseña y clave de app
+            </Link>
             <button
               type="button"
               onClick={refreshApp}
-              className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs font-bold uppercase tracking-wide text-zinc-700 hover:bg-zinc-100"
+              className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs font-bold uppercase tracking-wide text-zinc-700 hover:bg-zinc-100"
             >
               <RefreshCcw className="h-3.5 w-3.5" />
               Actualizar version app
