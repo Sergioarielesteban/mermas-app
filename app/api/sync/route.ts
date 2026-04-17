@@ -1,24 +1,35 @@
 import { NextResponse } from 'next/server';
 import { isAllowedEmail } from '@/lib/auth-access';
+import { verifySupabaseBearer } from '@/lib/supabase-verify-bearer';
 import {
-  getSharedSnapshot,
+  getSnapshotByEmail,
   isSupabaseAdminConfigured,
-  upsertSharedSnapshot,
   upsertSnapshot,
 } from '@/lib/server/supabase-admin';
 import type { MermaRecord, Product } from '@/lib/types';
 
 type SyncPayload = {
-  email?: string;
   products?: Product[];
   mermas?: MermaRecord[];
 };
 
-function normalizeAllowedEmail(value: string | null) {
-  const clean = String(value ?? '')
-    .trim()
-    .toLowerCase();
-  return clean && isAllowedEmail(clean) ? clean : null;
+type SyncUserResult =
+  | { ok: true; email: string }
+  | { ok: false; message: string; status: number };
+
+async function resolveSyncUser(request: Request): Promise<SyncUserResult> {
+  const auth = await verifySupabaseBearer(request);
+  if (!auth.ok) {
+    return { ok: false, message: auth.message, status: auth.status };
+  }
+  const email = (auth.email ?? '').trim().toLowerCase();
+  if (!email) {
+    return { ok: false, message: 'Usuario sin email.', status: 403 };
+  }
+  if (!isAllowedEmail(email)) {
+    return { ok: false, message: 'Unauthorized email', status: 401 };
+  }
+  return { ok: true, email };
 }
 
 export async function GET(request: Request) {
@@ -27,20 +38,19 @@ export async function GET(request: Request) {
       return NextResponse.json({ ok: true, skipped: true, reason: 'Sync disabled: missing server env vars' });
     }
 
-    const url = new URL(request.url);
-    const email = normalizeAllowedEmail(url.searchParams.get('email'));
-    if (!email) {
-      return NextResponse.json({ ok: false, reason: 'Unauthorized email' }, { status: 401 });
+    const user = await resolveSyncUser(request);
+    if (!user.ok) {
+      return NextResponse.json({ ok: false, reason: user.message }, { status: user.status });
     }
 
-    const shared = await getSharedSnapshot();
+    const row = await getSnapshotByEmail(user.email);
     return NextResponse.json({
       ok: true,
-      snapshot: shared
+      snapshot: row
         ? {
-            products: shared.products,
-            mermas: shared.mermas,
-            updatedAt: shared.updated_at ?? null,
+            products: row.products,
+            mermas: row.mermas,
+            updatedAt: row.updated_at ?? null,
           }
         : null,
     });
@@ -59,21 +69,18 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: true, skipped: true, reason: 'Sync disabled: missing server env vars' });
     }
 
-    const payload = (await request.json()) as SyncPayload;
-    const email = normalizeAllowedEmail(String(payload.email ?? ''));
-    if (!email) {
-      return NextResponse.json({ ok: false, reason: 'Unauthorized email' }, { status: 401 });
+    const user = await resolveSyncUser(request);
+    if (!user.ok) {
+      return NextResponse.json({ ok: false, reason: user.message }, { status: user.status });
     }
+
+    const payload = (await request.json()) as SyncPayload;
     if (!Array.isArray(payload.products) || !Array.isArray(payload.mermas)) {
       return NextResponse.json({ ok: false, reason: 'Invalid payload' }, { status: 400 });
     }
 
     await upsertSnapshot({
-      email,
-      products: payload.products,
-      mermas: payload.mermas,
-    });
-    await upsertSharedSnapshot({
+      email: user.email,
       products: payload.products,
       mermas: payload.mermas,
     });

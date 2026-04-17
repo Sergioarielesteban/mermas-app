@@ -38,7 +38,6 @@ type MermasStore = {
 };
 
 const STORAGE_KEY = 'mermas_app_v2';
-const AUTH_KEY = 'mermas_user_email';
 
 type PersistedState = {
   products: Product[];
@@ -664,8 +663,6 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
     if (!isBrowser()) return;
     if (!hydrated) return;
     if (!legacyMode) return;
-    const email = localStorage.getItem(AUTH_KEY)?.trim().toLowerCase();
-    if (!email) return;
 
     let cancelled = false;
     const applyRemote = (remote: PersistedState, updatedAt: string | null | undefined) => {
@@ -688,9 +685,16 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
 
     const pull = async () => {
       try {
-        const resp = await fetch(`/api/sync?email=${encodeURIComponent(email)}`, {
+        const supabase = getSupabaseClient();
+        if (!supabase) return;
+        const { data: sessionData } = await supabase.auth.getSession();
+        const token = sessionData.session?.access_token;
+        if (!token) return;
+
+        const resp = await fetch('/api/sync', {
           method: 'GET',
           cache: 'no-store',
+          headers: { Authorization: `Bearer ${token}` },
         });
         if (!resp.ok) return;
         const data = (await resp.json()) as {
@@ -721,17 +725,27 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
     if (!isBrowser()) return;
     if (!hydrated) return;
     if (!legacyMode) return;
-    const email = localStorage.getItem(AUTH_KEY);
-    if (!email) return;
 
     const timeout = window.setTimeout(() => {
-      void fetch('/api/sync', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, products, mermas }),
-      }).catch(() => {
-        // Keep app usable offline; sync retries on next data change.
-      });
+      void (async () => {
+        try {
+          const supabase = getSupabaseClient();
+          if (!supabase) return;
+          const { data: sessionData } = await supabase.auth.getSession();
+          const token = sessionData.session?.access_token;
+          if (!token) return;
+          await fetch('/api/sync', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({ products, mermas }),
+          });
+        } catch {
+          // Keep app usable offline; sync retries on next data change.
+        }
+      })();
     }, 1400);
 
     return () => window.clearTimeout(timeout);

@@ -13,9 +13,16 @@ export function getAllowedEmails() {
   return ALLOWED_EMAILS.map(normalizeEmail);
 }
 
+function isProductionBuild() {
+  return process.env.NODE_ENV === 'production';
+}
+
 export function isAllowedEmail(email: string) {
   const allowed = getAllowedEmails();
-  if (allowed.length === 0) return true; // Mientras esté vacío, permite cualquier email.
+  if (allowed.length === 0) {
+    // En producción, lista vacía = denegar todo (no abrir acceso por accidente).
+    return !isProductionBuild();
+  }
   return allowed.includes(normalizeEmail(email));
 }
 

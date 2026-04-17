@@ -1,7 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 
 export type BearerAuthResult =
-  | { ok: true; userId: string }
+  | { ok: true; userId: string; email: string | null }
   | { ok: false; message: string; status: number };
 
 export async function verifySupabaseBearer(request: Request): Promise<BearerAuthResult> {
@@ -23,5 +23,5 @@ export async function verifySupabaseBearer(request: Request): Promise<BearerAuth
   if (error || !user) {
     return { ok: false, message: 'Sesión no válida.', status: 401 };
   }
-  return { ok: true, userId: user.id };
+  return { ok: true, userId: user.id, email: user.email ?? null };
 }

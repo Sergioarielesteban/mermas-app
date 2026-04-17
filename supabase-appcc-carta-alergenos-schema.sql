@@ -197,6 +197,10 @@ begin
     return;
   end if;
 
+  if auth.uid() is null or v_local_id is distinct from public.current_local_id() then
+    raise exception 'No autorizado para operar alérgenos de esta receta';
+  end if;
+
   delete from public.recipe_allergen_sources s
   where s.recipe_id = p_recipe_id
     and s.local_id = v_local_id;
@@ -391,6 +395,10 @@ as $$
 declare
   rec record;
 begin
+  if auth.uid() is null then
+    raise exception 'No autenticado';
+  end if;
+
   for rec in (
     select distinct l.recipe_id
     from public.escandallo_recipe_lines l
@@ -422,6 +430,10 @@ begin
   select local_id into v_local_id from public.escandallo_recipes where id = p_recipe_id;
   if v_local_id is null then
     raise exception 'Receta no encontrada';
+  end if;
+
+  if auth.uid() is null or v_local_id is distinct from public.current_local_id() then
+    raise exception 'No autorizado para operar alérgenos de esta receta';
   end if;
 
   v_missing := public.appcc_recipe_missing_allergen_products_count(p_recipe_id);
@@ -476,6 +488,10 @@ begin
   select local_id into v_local_id from public.escandallo_recipes where id = p_recipe_id;
   if v_local_id is null then
     raise exception 'Receta no encontrada';
+  end if;
+
+  if auth.uid() is null or v_local_id is distinct from public.current_local_id() then
+    raise exception 'No autorizado para operar alérgenos de esta receta';
   end if;
 
   insert into public.recipe_allergens (
@@ -538,6 +554,10 @@ begin
     raise exception 'Receta no encontrada';
   end if;
 
+  if auth.uid() is null or v_local_id is distinct from public.current_local_id() then
+    raise exception 'No autorizado para operar alérgenos de esta receta';
+  end if;
+
   insert into public.recipe_allergens (
     local_id,
     recipe_id,
@@ -591,6 +611,10 @@ begin
   select local_id into v_local_id from public.escandallo_recipes where id = p_recipe_id;
   if v_local_id is null then
     raise exception 'Receta no encontrada';
+  end if;
+
+  if auth.uid() is null or v_local_id is distinct from public.current_local_id() then
+    raise exception 'No autorizado para operar alérgenos de esta receta';
   end if;
 
   update public.recipe_allergens

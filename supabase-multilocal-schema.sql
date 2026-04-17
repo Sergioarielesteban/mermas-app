@@ -155,6 +155,26 @@ to authenticated
 using (local_id = public.current_local_id())
 with check (local_id = public.current_local_id());
 
+-- 8b) Impedir cambio de local en perfil (anti salto de tenant desde el cliente)
+create or replace function public.profiles_block_local_id_change()
+returns trigger
+language plpgsql
+security invoker
+set search_path = public
+as $$
+begin
+  if new.local_id is distinct from old.local_id then
+    raise exception 'local_id no se puede modificar desde la aplicación';
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_profiles_immutable_local_id on public.profiles;
+create trigger trg_profiles_immutable_local_id
+before update on public.profiles
+for each row execute procedure public.profiles_block_local_id_change();
+
 -- 9) Seed mínimo de locales (ejemplo)
 insert into public.locals (code, name, city)
 values
