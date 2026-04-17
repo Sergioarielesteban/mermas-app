@@ -4,11 +4,14 @@ import Link from 'next/link';
 import {
   BrushCleaning,
   CalendarDays,
+  CircleAlert,
   ChevronDown,
   ChevronLeft,
   ClipboardList,
   Droplet,
   History,
+  Table2,
+  Tags,
   Thermometer,
   Wrench,
 } from 'lucide-react';
@@ -128,6 +131,19 @@ export default function AppccHubPage() {
         items={[
           { href: '/appcc/aceite/equipos', label: 'Freidoras', sub: 'Alta y baja', Icon: Wrench },
           { href: '/appcc/aceite/historial', label: 'Historial aceite', sub: 'Registros y PDF', Icon: History },
+        ]}
+      />
+
+      <ExpandableControlGroup
+        title="Carta y alérgenos"
+        leadHref="/appcc/carta-alergenos"
+        leadLabel="Resumen de carta"
+        leadSub="Estados, revisión y trazabilidad"
+        LeadIcon={Tags}
+        items={[
+          { href: '/appcc/carta-alergenos/productos', label: 'Fichas ingrediente', sub: 'Completar alérgenos base', Icon: ClipboardList },
+          { href: '/appcc/carta-alergenos/matriz', label: 'Matriz de carta', sub: 'Consulta rápida por alérgeno', Icon: Table2 },
+          { href: '/appcc/carta-alergenos/incidencias', label: 'Incidencias', sub: 'Pendientes e incompletos', Icon: CircleAlert },
         ]}
       />
 

@@ -76,6 +76,11 @@ function titleForPath(pathname: string | null) {
   if (pathname.startsWith('/appcc/aceite/historial')) return 'Historial aceite';
   if (pathname.startsWith('/appcc/aceite/equipos')) return 'Freidoras';
   if (pathname.startsWith('/appcc/aceite')) return 'Aceite';
+  if (pathname.startsWith('/appcc/carta-alergenos/matriz')) return 'Matriz alérgenos';
+  if (pathname.startsWith('/appcc/carta-alergenos/incidencias')) return 'Incidencias alérgenos';
+  if (pathname.startsWith('/appcc/carta-alergenos/productos')) return 'Fichas ingrediente';
+  if (pathname.startsWith('/appcc/carta-alergenos/')) return 'Detalle alérgenos';
+  if (pathname.startsWith('/appcc/carta-alergenos')) return 'Carta y alérgenos';
   if (pathname.startsWith('/appcc/limpieza/registro')) return 'Limpieza';
   if (pathname.startsWith('/appcc/limpieza/historial')) return 'Historial limpieza';
   if (pathname.startsWith('/appcc/limpieza/tareas')) return 'Tareas limpieza';
