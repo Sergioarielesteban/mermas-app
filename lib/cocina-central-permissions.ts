@@ -1,29 +1,46 @@
 import type { ProfileAppRole } from '@/components/AuthProvider';
 
-/** Producción, lotes, etiquetas, escaneo en central. */
-export function canCocinaCentralOperate(isCentralKitchen: boolean): boolean {
-  return isCentralKitchen;
+/** Todo el módulo /cocina-central: solo admin y manager (staff no entra). */
+export function canAccessCocinaCentralModule(role: ProfileAppRole | null): boolean {
+  return role === 'admin' || role === 'manager';
 }
 
-/** Crear/editar entregas, añadir líneas, marcar preparado / en reparto. */
+/**
+ * Producción, lotes, etiquetas, escaneo en sede marcada como cocina central.
+ * Requiere además admin/manager (staff queda fuera del módulo por completo).
+ */
+export function canCocinaCentralOperate(
+  isCentralKitchen: boolean,
+  role: ProfileAppRole | null,
+): boolean {
+  return isCentralKitchen && canAccessCocinaCentralModule(role);
+}
+
+/** Crear/editar entregas salientes (solo encargados en central). */
 export function canManageDeliveries(
   isCentralKitchen: boolean,
   role: ProfileAppRole | null,
 ): boolean {
-  if (!isCentralKitchen) return false;
-  return role === 'admin' || role === 'manager' || role === 'staff';
+  return isCentralKitchen && canAccessCocinaCentralModule(role);
 }
 
-/** Confirmar salida: valida stock, descuenta y pasa a entregado (solo responsables). */
+/** Confirmar salida y descuento de stock. */
 export function canConfirmDeliveryDispatch(
   isCentralKitchen: boolean,
   role: ProfileAppRole | null,
 ): boolean {
-  if (!isCentralKitchen) return false;
-  return role === 'admin' || role === 'manager';
+  return isCentralKitchen && canAccessCocinaCentralModule(role);
 }
 
-/** Firmar albarán en destino. */
-export function canSignDeliveryReceipt(): boolean {
-  return true;
+/** Firmar albarán en destino (mismo criterio: sin staff). */
+export function canSignDeliveryReceipt(role: ProfileAppRole | null): boolean {
+  return canAccessCocinaCentralModule(role);
+}
+
+/**
+ * Pedir suministro a cocina central (catálogo con precios del local central).
+ * Cualquier usuario con local satélite; el RPC valida de nuevo en servidor.
+ */
+export function canPlaceCentralSupplyOrder(isCentralKitchen: boolean, localId: string | null): boolean {
+  return !isCentralKitchen && !!localId;
 }

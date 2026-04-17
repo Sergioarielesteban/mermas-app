@@ -14,11 +14,13 @@ import {
   MessageCircle,
   ShieldCheck,
   ShoppingCart,
+  Package,
   UtensilsCrossed,
 } from 'lucide-react';
 import { CHEF_ONE_TAPER_LINE_CLASS } from '@/components/ChefOneGlowLine';
 import MermasStyleHero from '@/components/MermasStyleHero';
 import { useAuth } from '@/components/AuthProvider';
+import { canAccessCocinaCentralModule, canPlaceCentralSupplyOrder } from '@/lib/cocina-central-permissions';
 import { canAccessPedidos } from '@/lib/pedidos-access';
 
 const LINE = `mx-auto mt-4 w-24 ${CHEF_ONE_TAPER_LINE_CLASS}`;
@@ -80,8 +82,10 @@ function HubTile({ href, onClick, label, sub, Icon, tone = 'zinc' }: TileProps) 
 }
 
 export default function PanelControlPage() {
-  const { localCode, localName, localId, email } = useAuth();
+  const { localCode, localName, localId, email, profileRole, isCentralKitchen } = useAuth();
+  const showCocinaCentral = canAccessCocinaCentralModule(profileRole);
   const showPedidos = canAccessPedidos(localCode, email, localName, localId);
+  const showPedidosCocina = canPlaceCentralSupplyOrder(isCentralKitchen, localId);
   const [stubMessage, setStubMessage] = React.useState<string | null>(null);
 
   const onComingSoonModule = (name: string) => {
@@ -108,6 +112,15 @@ export default function PanelControlPage() {
         <HubTile href="/dashboard" label="Mermas" sub="Registro y seguimiento" Icon={BookOpen} tone="red" />
         {showPedidos ? (
           <HubTile href="/pedidos" label="Pedidos" sub="Proveedores y recepción" Icon={ShoppingCart} tone="red" />
+        ) : null}
+        {showPedidosCocina ? (
+          <HubTile
+            href="/pedidos-cocina"
+            label="Pedir a central"
+            sub="Catálogo con precios y fecha de entrega"
+            Icon={Package}
+            tone="red"
+          />
         ) : null}
         <HubTile
           href="/appcc"
@@ -145,13 +158,15 @@ export default function PanelControlPage() {
           Icon={Calculator}
           tone="red"
         />
-        <HubTile
-          href="/cocina-central"
-          label="Cocina central"
-          sub="Producción, lotes, entregas y QR"
-          Icon={ChefHat}
-          tone="red"
-        />
+        {showCocinaCentral ? (
+          <HubTile
+            href="/cocina-central"
+            label="Cocina central"
+            sub="Producción, lotes, entregas y QR"
+            Icon={ChefHat}
+            tone="red"
+          />
+        ) : null}
         <HubTile
           href="/personal"
           label="Personal"

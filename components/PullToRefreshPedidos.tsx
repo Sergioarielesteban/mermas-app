@@ -25,7 +25,9 @@ function atScrollTop() {
  */
 export default function PullToRefreshPedidos({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const enabled = Boolean(pathname?.startsWith('/pedidos'));
+  const enabled = Boolean(
+    pathname?.startsWith('/pedidos') || pathname?.startsWith('/pedidos-cocina'),
+  );
   const wrapRef = useRef<HTMLDivElement>(null);
   const startYRef = useRef<number | null>(null);
   const pullRef = useRef(0);

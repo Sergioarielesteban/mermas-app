@@ -129,8 +129,11 @@ export default function CocinaCentralEntregaNuevaPage() {
   }
   if (!can) {
     return (
-      <div className="rounded-2xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm text-zinc-700">
-        Sin permisos para crear entregas.
+      <div className="space-y-3 rounded-2xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm text-zinc-700">
+        <p>Solo <strong>admin</strong> o <strong>manager</strong> pueden crear entregas salientes.</p>
+        <Link href="/cocina-central" className="inline-block text-sm font-bold text-[#D32F2F]">
+          ← Hub
+        </Link>
       </div>
     );
   }

@@ -20,8 +20,10 @@ import {
   KeyRound,
   RefreshCcw,
   ShoppingCart,
+  Package,
 } from 'lucide-react';
 import { useAuth } from '@/components/AuthProvider';
+import { canAccessCocinaCentralModule, canPlaceCentralSupplyOrder } from '@/lib/cocina-central-permissions';
 import PullToRefreshPedidos from '@/components/PullToRefreshPedidos';
 import { canAccessPedidos } from '@/lib/pedidos-access';
 import { formatLocalHeaderName } from '@/lib/local-display-name';
@@ -45,6 +47,8 @@ function titleForPath(pathname: string | null) {
   if (pathname === '/' || pathname.startsWith('/dashboard')) return 'Mermas';
   if (pathname.startsWith('/productos')) return 'Productos del registro';
   if (pathname.startsWith('/resumen')) return 'Resumen';
+  if (pathname.startsWith('/pedidos-cocina/historial')) return 'Mis pedidos a central';
+  if (pathname.startsWith('/pedidos-cocina')) return 'Pedir a cocina central';
   if (pathname.startsWith('/pedidos')) return 'Pedidos';
   if (pathname.startsWith('/checklist')) {
     if (pathname === '/checklist') return 'Check list';
@@ -74,6 +78,7 @@ function titleForPath(pathname: string | null) {
     if (pathname.startsWith('/cocina-central/recepciones')) return 'Recepciones';
     if (pathname.startsWith('/cocina-central/escanear')) return 'Escanear QR';
     if (pathname.startsWith('/cocina-central/lote')) return 'Lote';
+    if (pathname.startsWith('/cocina-central/pedidos-sedes')) return 'Pedidos de sedes';
     return 'Cocina central';
   }
   if (pathname.startsWith('/personal')) return 'Personal';
@@ -106,8 +111,20 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [confirmLogoutOpen, setConfirmLogoutOpen] = useState(false);
-  const { email, displayName, loginUsername, logout, localId, localCode, localName, profileReady } =
-    useAuth();
+  const {
+    email,
+    displayName,
+    loginUsername,
+    logout,
+    localId,
+    localCode,
+    localName,
+    profileReady,
+    profileRole,
+    isCentralKitchen,
+  } = useAuth();
+  const showCocinaCentral = profileReady && canAccessCocinaCentralModule(profileRole);
+  const showPedidosCocina = profileReady && canPlaceCentralSupplyOrder(isCentralKitchen, localId);
   const localLabel = formatLocalHeaderName(localName ?? localCode) ?? localName ?? localCode;
   const sessionLabel = (displayName?.trim() || loginUsername?.trim() || null) ?? 'Usuario';
   const showPedidos = canAccessPedidos(localCode, email, localName, localId);
@@ -127,9 +144,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       { href: '/personal', label: 'Personal', Icon: CalendarDays },
       { href: '/chat', label: 'Chat', Icon: MessageCircle },
       { href: '/cuenta/seguridad', label: 'Cuenta y seguridad', Icon: KeyRound },
-      ...(profileReady ? [{ href: '/cocina-central', label: 'Cocina central', Icon: ChefHat }] : []),
+      ...(showCocinaCentral ? [{ href: '/cocina-central', label: 'Cocina central', Icon: ChefHat }] : []),
     ],
-    [showPedidos, profileReady],
+    [showPedidos, showPedidosCocina, showCocinaCentral],
   );
 
   const confirmAndLogout = () => setConfirmLogoutOpen(true);

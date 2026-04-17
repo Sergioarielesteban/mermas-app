@@ -2,13 +2,10 @@
 
 import Link from 'next/link';
 import type { LucideIcon } from 'lucide-react';
-import { ChefHat, Package, Truck, QrCode, Inbox, Factory } from 'lucide-react';
+import { ChefHat, Package, Truck, QrCode, Inbox, Factory, ShoppingBag } from 'lucide-react';
 import { useAuth } from '@/components/AuthProvider';
 import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
-import {
-  canCocinaCentralOperate,
-  canManageDeliveries,
-} from '@/lib/cocina-central-permissions';
+import { canCocinaCentralOperate, canManageDeliveries } from '@/lib/cocina-central-permissions';
 
 function Tile({
   href,
@@ -36,7 +33,7 @@ function Tile({
 export default function CocinaCentralHubPage() {
   const { isCentralKitchen, profileReady, profileRole } = useAuth();
   const supabaseOk = isSupabaseEnabled() && !!getSupabaseClient();
-  const operate = canCocinaCentralOperate(isCentralKitchen);
+  const operate = canCocinaCentralOperate(isCentralKitchen, profileRole);
   const deliveries = canManageDeliveries(isCentralKitchen, profileRole);
 
   if (!profileReady) {
@@ -76,12 +73,20 @@ export default function CocinaCentralHubPage() {
         ) : null}
 
         {deliveries ? (
-          <Tile
-            href="/cocina-central/entregas"
-            label="Entregas"
-            sub="Preparar, confirmar salida y PDF"
-            icon={Truck}
-          />
+          <>
+            <Tile
+              href="/cocina-central/entregas"
+              label="Entregas"
+              sub="Preparar, confirmar salida y PDF"
+              icon={Truck}
+            />
+            <Tile
+              href="/cocina-central/pedidos-sedes"
+              label="Pedidos de sedes"
+              sub="Catálogo pedido, totales e informe PDF"
+              icon={ShoppingBag}
+            />
+          </>
         ) : null}
 
         {!isCentralKitchen ? (

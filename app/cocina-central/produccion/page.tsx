@@ -20,8 +20,8 @@ function todayMadrid(): string {
 }
 
 export default function CocinaCentralProduccionPage() {
-  const { localId, userId, profileReady, isCentralKitchen } = useAuth();
-  const canUse = canCocinaCentralOperate(isCentralKitchen);
+  const { localId, userId, profileReady, isCentralKitchen, profileRole } = useAuth();
+  const canUse = canCocinaCentralOperate(isCentralKitchen, profileRole);
   const supabase = getSupabaseClient();
 
   const [orders, setOrders] = useState<Awaited<ReturnType<typeof ccFetchProductionOrders>>>([]);

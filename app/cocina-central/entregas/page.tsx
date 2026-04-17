@@ -36,8 +36,18 @@ export default function CocinaCentralEntregasPage() {
   }
   if (!can) {
     return (
-      <div className="rounded-2xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm text-zinc-700">
-        Solo personal de cocina central gestiona entregas salientes.
+      <div className="space-y-3 rounded-2xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm text-zinc-700">
+        <p>
+          Las <strong>entregas a otras sedes</strong> solo las gestionan perfiles{' '}
+          <strong>administrador</strong> o <strong>encargado</strong> (<code>manager</code>) en Supabase.
+        </p>
+        <p className="text-xs text-zinc-600">
+          Si eres <strong>operario</strong> (<code>staff</code>), usa Producción y Lotes en el hub. Para cambiar tu
+          rol: tabla <code>profiles</code> en Supabase → columna <code>role</code>.
+        </p>
+        <Link href="/cocina-central" className="inline-block text-sm font-bold text-[#D32F2F]">
+          ← Volver al hub
+        </Link>
       </div>
     );
   }

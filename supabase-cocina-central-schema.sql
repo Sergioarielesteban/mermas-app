@@ -204,6 +204,39 @@ as $$
   limit 1
 $$;
 
+-- Encargados en cocina central: pueden crear/gestionar entregas salientes (admin o manager).
+create or replace function public.profile_can_manage_central_shipments()
+returns boolean
+language sql
+stable
+security invoker
+set search_path = public
+as $$
+  select exists (
+    select 1
+    from public.profiles p
+    join public.locals l on l.id = p.local_id
+    where p.user_id = auth.uid()
+      and coalesce(l.is_central_kitchen, false)
+      and lower(p.role) in ('admin', 'manager')
+  );
+$$;
+
+-- App Cocina central: solo administrador o encargado (staff sin acceso al módulo).
+create or replace function public.profile_can_access_cocina_central_module()
+returns boolean
+language sql
+stable
+security invoker
+set search_path = public
+as $$
+  select exists (
+    select 1 from public.profiles p
+    where p.user_id = auth.uid()
+      and lower(p.role) in ('admin', 'manager')
+  );
+$$;
+
 -- Listado de locales destino para entregas (solo cocina central).
 -- Nota: en un único proyecto Supabase por cadena, todos los locals activos son candidatos.
 -- Si conviven varios clientes en un proyecto, añade organization_id y filtra aquí.
@@ -217,8 +250,8 @@ begin
   if auth.uid() is null then
     raise exception 'No autenticado';
   end if;
-  if not public.profile_local_is_central() then
-    raise exception 'Solo cocina central puede listar destinos de entrega';
+  if not public.profile_can_manage_central_shipments() then
+    raise exception 'Solo administradores o encargados de cocina central pueden listar destinos';
   end if;
   return query
   select l.id, l.code, l.name
@@ -277,6 +310,9 @@ declare
   v_code text;
 begin
   if v_uid is null then raise exception 'No autenticado'; end if;
+  if not public.profile_can_access_cocina_central_module() then
+    raise exception 'Solo administradores o encargados pueden registrar producción en cocina central';
+  end if;
   if p_local_central_id is distinct from public.current_local_id() then
     raise exception 'Solo puedes producir en tu local';
   end if;
@@ -343,6 +379,9 @@ declare
   v_orig numeric;
 begin
   if v_uid is null then raise exception 'No autenticado'; end if;
+  if not public.profile_can_manage_central_shipments() then
+    raise exception 'Solo administradores o encargados pueden confirmar la salida';
+  end if;
 
   select * into d from public.deliveries where id = p_delivery_id for update;
   if not found then raise exception 'Entrega no encontrada'; end if;
@@ -424,6 +463,9 @@ declare
   d record;
 begin
   if v_uid is null then raise exception 'No autenticado'; end if;
+  if not public.profile_can_access_cocina_central_module() then
+    raise exception 'Solo administradores o encargados pueden firmar albaranes';
+  end if;
   select * into d from public.deliveries where id = p_delivery_id for update;
   if not found then raise exception 'Entrega no encontrada'; end if;
   if d.local_destino_id is distinct from public.current_local_id() then
@@ -461,6 +503,9 @@ declare
   v_uid uuid := auth.uid();
 begin
   if v_uid is null then raise exception 'No autenticado'; end if;
+  if not public.profile_can_access_cocina_central_module() then
+    raise exception 'Solo administradores o encargados pueden cambiar el estado del lote';
+  end if;
   if not exists (
     select 1 from public.batch_stock s
     where s.batch_id = p_batch_id and s.local_id = public.current_local_id() and s.cantidad > 0
@@ -502,10 +547,12 @@ for all to authenticated
 using (
   local_central_id = public.current_local_id()
   and public.profile_local_is_central()
+  and public.profile_can_access_cocina_central_module()
 )
 with check (
   local_central_id = public.current_local_id()
   and public.profile_local_is_central()
+  and public.profile_can_access_cocina_central_module()
 );
 
 -- batches: ver si soy central que lo creó o tengo stock en mi local
@@ -513,10 +560,13 @@ drop policy if exists cc_batches_select on public.production_batches;
 create policy cc_batches_select on public.production_batches
 for select to authenticated
 using (
-  local_central_id = public.current_local_id()
-  or exists (
-    select 1 from public.batch_stock s
-    where s.batch_id = production_batches.id and s.local_id = public.current_local_id()
+  public.profile_can_access_cocina_central_module()
+  and (
+    local_central_id = public.current_local_id()
+    or exists (
+      select 1 from public.batch_stock s
+      where s.batch_id = production_batches.id and s.local_id = public.current_local_id()
+    )
   )
 );
 
@@ -530,6 +580,7 @@ for insert to authenticated
 with check (
   local_central_id = public.current_local_id()
   and public.profile_local_is_central()
+  and public.profile_can_access_cocina_central_module()
 );
 
 create policy cc_batches_update on public.production_batches
@@ -537,10 +588,12 @@ for update to authenticated
 using (
   local_central_id = public.current_local_id()
   and public.profile_local_is_central()
+  and public.profile_can_access_cocina_central_module()
 )
 with check (
   local_central_id = public.current_local_id()
   and public.profile_local_is_central()
+  and public.profile_can_access_cocina_central_module()
 );
 
 create policy cc_batches_delete on public.production_batches
@@ -548,6 +601,7 @@ for delete to authenticated
 using (
   local_central_id = public.current_local_id()
   and public.profile_local_is_central()
+  and public.profile_can_access_cocina_central_module()
 );
 
 -- ingredient trace
@@ -555,7 +609,8 @@ drop policy if exists cc_bit_select on public.batch_ingredient_trace;
 create policy cc_bit_select on public.batch_ingredient_trace
 for select to authenticated
 using (
-  exists (
+  public.profile_can_access_cocina_central_module()
+  and exists (
     select 1 from public.production_batches b
     where b.id = batch_ingredient_trace.batch_id
     and (
@@ -582,6 +637,7 @@ with check (
       and b.local_central_id = public.current_local_id()
       and public.profile_local_is_central()
   )
+  and public.profile_can_access_cocina_central_module()
 );
 
 create policy cc_bit_update on public.batch_ingredient_trace
@@ -593,6 +649,7 @@ using (
       and b.local_central_id = public.current_local_id()
       and public.profile_local_is_central()
   )
+  and public.profile_can_access_cocina_central_module()
 )
 with check (
   exists (
@@ -601,6 +658,7 @@ with check (
       and b.local_central_id = public.current_local_id()
       and public.profile_local_is_central()
   )
+  and public.profile_can_access_cocina_central_module()
 );
 
 create policy cc_bit_delete on public.batch_ingredient_trace
@@ -612,13 +670,17 @@ using (
       and b.local_central_id = public.current_local_id()
       and public.profile_local_is_central()
   )
+  and public.profile_can_access_cocina_central_module()
 );
 
 -- batch_stock
 drop policy if exists cc_stock_select on public.batch_stock;
 create policy cc_stock_select on public.batch_stock
 for select to authenticated
-using (local_id = public.current_local_id());
+using (
+  local_id = public.current_local_id()
+  and public.profile_can_access_cocina_central_module()
+);
 
 drop policy if exists cc_stock_no_direct on public.batch_stock;
 -- Sin inserts directos salvo RPC interno; permitimos upsert solo vía service o RPC.
@@ -630,8 +692,11 @@ drop policy if exists cc_deliveries_select on public.deliveries;
 create policy cc_deliveries_select on public.deliveries
 for select to authenticated
 using (
-  local_origen_id = public.current_local_id()
-  or local_destino_id = public.current_local_id()
+  public.profile_can_access_cocina_central_module()
+  and (
+    local_origen_id = public.current_local_id()
+    or local_destino_id = public.current_local_id()
+  )
 );
 
 drop policy if exists cc_deliveries_insert on public.deliveries;
@@ -639,19 +704,27 @@ create policy cc_deliveries_insert on public.deliveries
 for insert to authenticated
 with check (
   local_origen_id = public.current_local_id()
-  and public.profile_local_is_central()
+  and public.profile_can_manage_central_shipments()
+  and public.profile_can_access_cocina_central_module()
 );
 
 drop policy if exists cc_deliveries_update_origin on public.deliveries;
 create policy cc_deliveries_update_origin on public.deliveries
 for update to authenticated
-using (local_origen_id = public.current_local_id() and public.profile_local_is_central())
+using (
+  local_origen_id = public.current_local_id()
+  and public.profile_can_manage_central_shipments()
+  and public.profile_can_access_cocina_central_module()
+)
 with check (local_origen_id = public.current_local_id());
 
 drop policy if exists cc_deliveries_update_dest on public.deliveries;
 create policy cc_deliveries_update_dest on public.deliveries
 for update to authenticated
-using (local_destino_id = public.current_local_id())
+using (
+  local_destino_id = public.current_local_id()
+  and public.profile_can_access_cocina_central_module()
+)
 with check (local_destino_id = public.current_local_id());
 
 -- delivery_items
@@ -664,7 +737,8 @@ drop policy if exists cc_di_delete on public.delivery_items;
 create policy cc_di_select on public.delivery_items
 for select to authenticated
 using (
-  exists (
+  public.profile_can_access_cocina_central_module()
+  and exists (
     select 1 from public.deliveries d
     where d.id = delivery_items.delivery_id
       and (
@@ -677,41 +751,45 @@ using (
 create policy cc_di_insert on public.delivery_items
 for insert to authenticated
 with check (
-  exists (
+  public.profile_can_access_cocina_central_module()
+  and exists (
     select 1 from public.deliveries d
     where d.id = delivery_items.delivery_id
       and d.local_origen_id = public.current_local_id()
-      and public.profile_local_is_central()
+      and public.profile_can_manage_central_shipments()
   )
 );
 
 create policy cc_di_update on public.delivery_items
 for update to authenticated
 using (
-  exists (
+  public.profile_can_access_cocina_central_module()
+  and exists (
     select 1 from public.deliveries d
     where d.id = delivery_items.delivery_id
       and d.local_origen_id = public.current_local_id()
-      and public.profile_local_is_central()
+      and public.profile_can_manage_central_shipments()
   )
 )
 with check (
-  exists (
+  public.profile_can_access_cocina_central_module()
+  and exists (
     select 1 from public.deliveries d
     where d.id = delivery_items.delivery_id
       and d.local_origen_id = public.current_local_id()
-      and public.profile_local_is_central()
+      and public.profile_can_manage_central_shipments()
   )
 );
 
 create policy cc_di_delete on public.delivery_items
 for delete to authenticated
 using (
-  exists (
+  public.profile_can_access_cocina_central_module()
+  and exists (
     select 1 from public.deliveries d
     where d.id = delivery_items.delivery_id
       and d.local_origen_id = public.current_local_id()
-      and public.profile_local_is_central()
+      and public.profile_can_manage_central_shipments()
   )
 );
 
@@ -720,8 +798,11 @@ drop policy if exists cc_mov_select on public.batch_movements;
 create policy cc_mov_select on public.batch_movements
 for select to authenticated
 using (
-  local_from = public.current_local_id()
-  or local_to = public.current_local_id()
+  public.profile_can_access_cocina_central_module()
+  and (
+    local_from = public.current_local_id()
+    or local_to = public.current_local_id()
+  )
 );
 
 -- incidents
@@ -729,7 +810,8 @@ drop policy if exists cc_inc_select on public.traceability_incidents;
 create policy cc_inc_select on public.traceability_incidents
 for select to authenticated
 using (
-  exists (
+  public.profile_can_access_cocina_central_module()
+  and exists (
     select 1 from public.production_batches b
     where b.id = traceability_incidents.batch_id
     and (
@@ -746,7 +828,8 @@ drop policy if exists cc_inc_write on public.traceability_incidents;
 create policy cc_inc_write on public.traceability_incidents
 for all to authenticated
 using (
-  exists (
+  public.profile_can_access_cocina_central_module()
+  and exists (
     select 1 from public.production_batches b
     where b.id = traceability_incidents.batch_id
       and (
@@ -764,7 +847,8 @@ using (
   )
 )
 with check (
-  exists (
+  public.profile_can_access_cocina_central_module()
+  and exists (
     select 1 from public.production_batches b
     where b.id = traceability_incidents.batch_id
       and (

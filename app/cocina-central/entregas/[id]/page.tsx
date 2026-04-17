@@ -9,6 +9,7 @@ import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
 import {
   canConfirmDeliveryDispatch,
   canManageDeliveries,
+  canSignDeliveryReceipt,
 } from '@/lib/cocina-central-permissions';
 import {
   ccFetchDeliveryDetail,
@@ -27,6 +28,7 @@ export default function CocinaCentralEntregaDetallePage() {
   const supabase = getSupabaseClient();
   const canDeliveries = canManageDeliveries(isCentralKitchen, profileRole);
   const canConfirm = canConfirmDeliveryDispatch(isCentralKitchen, profileRole);
+  const canSign = canSignDeliveryReceipt(profileRole);
 
   const [delivery, setDelivery] = useState<DeliveryRow | null>(null);
   const [items, setItems] = useState<DeliveryItemRow[]>([]);
@@ -141,9 +143,16 @@ export default function CocinaCentralEntregaDetallePage() {
     );
   }
 
+  const backHref =
+    isOrigin && canDeliveries
+      ? '/cocina-central/entregas'
+      : isOrigin
+        ? '/cocina-central'
+        : '/cocina-central/recepciones';
+
   return (
     <div className="space-y-6">
-      <Link href={isOrigin ? '/cocina-central/entregas' : '/cocina-central/recepciones'} className="text-sm font-bold text-[#D32F2F]">
+      <Link href={backHref} className="text-sm font-bold text-[#D32F2F]">
         ← Volver
       </Link>
 
@@ -179,6 +188,13 @@ export default function CocinaCentralEntregaDetallePage() {
           })}
         </ul>
       </section>
+
+      {isOrigin && !canDeliveries ? (
+        <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-950">
+          Vista de solo lectura: solo <strong>admin</strong> o <strong>manager</strong> pueden preparar o confirmar
+          esta entrega.
+        </p>
+      ) : null}
 
       {isOrigin && canDeliveries ? (
         <section className="space-y-3 rounded-2xl border border-zinc-200 bg-zinc-50 p-4">
@@ -219,7 +235,7 @@ export default function CocinaCentralEntregaDetallePage() {
         </section>
       ) : null}
 
-      {isDest && delivery.estado === 'entregado' ? (
+      {isDest && delivery.estado === 'entregado' && canSign ? (
         <section className="space-y-3 rounded-2xl border border-emerald-200 bg-emerald-50/80 p-4">
           <h2 className="text-sm font-extrabold text-emerald-950">Firma de recepción</h2>
           <label className="block text-xs font-bold uppercase text-emerald-900">
