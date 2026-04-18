@@ -74,6 +74,29 @@ export async function notifyIncidenciaRecepcion(
   });
 }
 
+const INCIDENCIA_RECEPCION_DEDUPE_MS = 12_000;
+const lastIncidenciaRecepcionAtByOrderId = new Map<string, number>();
+
+/**
+ * Evita ráfagas (varias líneas ✗ seguidas + «marcar recibido») duplicando la misma alerta.
+ */
+export function notifyIncidenciaRecepcionDeduped(
+  supabase: SupabaseClient,
+  ctx: {
+    localId: string;
+    userId: string | null;
+    actorName: string;
+    supplierName: string;
+    orderId: string;
+  },
+): void {
+  const now = Date.now();
+  const prev = lastIncidenciaRecepcionAtByOrderId.get(ctx.orderId) ?? 0;
+  if (now - prev < INCIDENCIA_RECEPCION_DEDUPE_MS) return;
+  lastIncidenciaRecepcionAtByOrderId.set(ctx.orderId, now);
+  void notifyIncidenciaRecepcion(supabase, ctx);
+}
+
 export async function notifyAppccAlerta(
   supabase: SupabaseClient,
   ctx: {

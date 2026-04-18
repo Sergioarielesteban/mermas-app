@@ -247,9 +247,7 @@ export default function TerminalFichajePage() {
   }
 
   return (
-    <div className="relative flex min-h-[100dvh] flex-col bg-white text-zinc-900">
-      <div className="pointer-events-none absolute inset-0 opacity-[0.35] [background-image:radial-gradient(circle_at_20%_20%,#a1a1aa_1px,transparent_1px)] [background-size:28px_28px]" />
-
+    <div className="relative flex min-h-[100dvh] flex-col bg-[#ffffff] text-zinc-900">
       <header className="relative z-10 flex items-start justify-between gap-3 px-4 pt-4 sm:px-6 sm:pt-6">
         {step === 'success' && resolved ? (
           <div className="flex min-w-0 flex-1 items-center gap-3">
@@ -276,28 +274,28 @@ export default function TerminalFichajePage() {
         ) : (
           <div className="flex w-full items-center justify-between gap-3">
             <div className="flex min-w-0 flex-1 items-center gap-3 sm:gap-4">
-              <div className="shrink-0 rounded-2xl bg-white/95 p-1.5 shadow-lg ring-1 ring-white/20">
-                <TerminalLogo className="!max-w-[3.25rem] sm:!max-w-[4rem]" />
+              <div className="shrink-0 rounded-2xl bg-white p-2 shadow-md ring-1 ring-zinc-200/80">
+                <TerminalLogo className="!max-w-[5.25rem] sm:!max-w-[6.5rem]" />
               </div>
               <div className="min-w-0 text-left">
-                <p className="truncate font-serif text-lg font-bold text-white sm:text-xl">
+                <p className="truncate font-serif text-lg font-bold text-zinc-900 sm:text-xl">
                   {localName ?? 'Local'}
                 </p>
-                <p className="text-sm font-medium capitalize text-zinc-400">{dateLabel}</p>
+                <p className="text-sm font-medium capitalize text-zinc-500">{dateLabel}</p>
               </div>
             </div>
             <div className="flex shrink-0 items-center gap-2">
               <button
                 type="button"
                 onClick={() => window.location.reload()}
-                className="grid h-11 w-11 place-items-center rounded-full bg-white/10 text-white backdrop-blur hover:bg-white/15"
+                className="grid h-11 w-11 place-items-center rounded-full bg-zinc-100 text-zinc-700 ring-1 ring-zinc-200/80 hover:bg-zinc-200/80"
                 aria-label="Actualizar"
               >
                 <RefreshCw className="h-5 w-5" />
               </button>
               <Link
                 href="/personal/fichaje"
-                className="grid h-11 w-11 place-items-center rounded-full bg-white/10 text-white backdrop-blur hover:bg-white/15"
+                className="grid h-11 w-11 place-items-center rounded-full bg-zinc-100 text-zinc-700 ring-1 ring-zinc-200/80 hover:bg-zinc-200/80"
                 aria-label="Ajustes fichaje"
               >
                 <Settings className="h-5 w-5" />
@@ -307,7 +305,7 @@ export default function TerminalFichajePage() {
         )}
       </header>
 
-      <div className="relative z-10 flex flex-1 flex-col items-center px-4 pb-10 pt-6 sm:px-8">
+      <div className="relative z-10 flex flex-1 flex-col items-center justify-center px-4 pb-10 pt-6 sm:px-8">
         {step === 'home' ? (
           <>
             <p className="text-7xl font-black tabular-nums tracking-tight text-zinc-900 sm:text-8xl">{timeLabel}</p>
@@ -334,25 +332,22 @@ export default function TerminalFichajePage() {
         ) : null}
 
         {step === 'pin' ? (
-          <div className="flex w-full max-w-md flex-col items-center">
-            <div className="mb-5 rounded-3xl bg-white p-3 shadow-md ring-1 ring-zinc-200/80">
-              <TerminalLogo className="!max-w-[6.5rem] sm:!max-w-[8rem]" />
-            </div>
+          <div className="flex w-full max-w-md flex-col items-center text-center">
             <button
               type="button"
               onClick={resetFlow}
-              className="mb-6 self-start text-sm font-bold text-zinc-500 hover:text-zinc-900"
+              className="mb-6 text-sm font-bold text-zinc-500 hover:text-zinc-900"
             >
               ← Volver
             </button>
             <div className="relative mb-6">
               <div className="absolute -inset-6 rounded-full border border-zinc-200/80 bg-zinc-50/80" />
-              <div className="relative grid h-24 w-24 place-items-center rounded-full bg-white ring-2 ring-amber-400/55 shadow-sm">
+              <div className="relative grid h-24 w-24 place-items-center rounded-full bg-[#ffffff] ring-2 ring-amber-400/55 shadow-sm">
                 <Lock className="h-10 w-10 text-amber-600" strokeWidth={2.2} />
               </div>
             </div>
-            <p className="text-center text-xl font-semibold text-zinc-900">Introduce tu código PIN</p>
-            <div className="mt-6 flex gap-3">
+            <p className="text-xl font-semibold text-zinc-900">Introduce tu código PIN</p>
+            <div className="mt-6 flex justify-center gap-3">
               {[0, 1, 2, 3].map((i) => (
                 <span
                   key={i}
@@ -364,16 +359,16 @@ export default function TerminalFichajePage() {
               ))}
             </div>
             {banner ? (
-              <p className="mt-4 text-center text-sm font-semibold text-amber-700">{banner}</p>
+              <p className="mt-4 max-w-[90%] text-sm font-semibold text-amber-700">{banner}</p>
             ) : null}
-            <div className="mt-10 grid w-full max-w-xs grid-cols-3 gap-x-6 gap-y-5 text-3xl font-semibold text-zinc-900 sm:text-4xl">
+            <div className="mt-10 grid w-full max-w-xs grid-cols-3 justify-items-center gap-x-6 gap-y-5 text-3xl font-semibold text-zinc-900 sm:text-4xl">
               {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map((n) => (
                 <button
                   key={n}
                   type="button"
                   disabled={busy}
                   onClick={() => appendDigit(n)}
-                  className="h-14 rounded-2xl transition hover:bg-zinc-100 active:bg-zinc-200/80 disabled:opacity-40 sm:h-16"
+                  className="h-14 w-full max-w-[4.5rem] rounded-2xl transition hover:bg-zinc-100 active:bg-zinc-200/80 disabled:opacity-40 sm:h-16"
                 >
                   {n}
                 </button>
@@ -383,7 +378,7 @@ export default function TerminalFichajePage() {
                 type="button"
                 disabled={busy}
                 onClick={() => appendDigit('0')}
-                className="h-14 rounded-2xl transition hover:bg-zinc-100 active:bg-zinc-200/80 disabled:opacity-40 sm:h-16"
+                className="h-14 w-full max-w-[4.5rem] rounded-2xl transition hover:bg-zinc-100 active:bg-zinc-200/80 disabled:opacity-40 sm:h-16"
               >
                 0
               </button>
@@ -399,13 +394,18 @@ export default function TerminalFichajePage() {
                 Borrar
               </button>
             </div>
+            <div className="mt-12 flex w-full flex-col items-center">
+              <div className="rounded-3xl bg-[#ffffff] p-4 shadow-md ring-1 ring-zinc-200/80">
+                <TerminalLogo className="mx-auto !max-w-[7rem] sm:!max-w-[8.5rem]" />
+              </div>
+            </div>
           </div>
         ) : null}
 
         {step === 'success' && resolved && successAt && successAction ? (
           <div
             className={[
-              'w-full max-w-md rounded-[2rem] border bg-white/95 p-6 shadow-xl shadow-zinc-900/10 ring-1 backdrop-blur-sm sm:p-8',
+              'w-full max-w-md rounded-[2rem] border bg-[#ffffff] p-6 shadow-xl shadow-zinc-900/10 ring-1 sm:p-8',
               successAction === 'clock_in'
                 ? 'border-emerald-200 ring-emerald-100'
                 : 'border-amber-200 ring-amber-100',

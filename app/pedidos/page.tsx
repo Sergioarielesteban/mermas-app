@@ -70,7 +70,11 @@ import { fetchAppccFryers, fetchOilEventsForDate } from '@/lib/appcc-aceite-supa
 import { topByValue } from '@/lib/analytics';
 import { fetchProductsAndMermas } from '@/lib/mermas-supabase';
 import { requestDeleteSecurityPin } from '@/lib/delete-security';
-import { actorLabel, notifyIncidenciaRecepcion, notifyPedidoRecibido } from '@/services/notifications';
+import {
+  actorLabel,
+  notifyIncidenciaRecepcionDeduped,
+  notifyPedidoRecibido,
+} from '@/services/notifications';
 
 function normalizeWhatsappNumber(raw: string | undefined) {
   if (!raw) return null;
@@ -312,9 +316,34 @@ export default function PedidosPage() {
   } | null>(null);
   /** Evita doble arranque (barra inferior + hash + StrictMode). */
   const assistantVoiceBootRef = React.useRef(false);
+  /** Coalesce varias líneas marcadas ✗ en el mismo pedido antes de notificar. */
+  const incidenciaRecepcionDebounceRef = React.useRef<Map<string, number>>(new Map());
   const router = useRouter();
   const searchParams = useSearchParams();
   const oidoStandalone = searchParams.get('oido') === '1';
+
+  const scheduleIncidenciaRecepcionNotifyDebounced = React.useCallback(
+    (order: PedidoOrder) => {
+      if (!localId) return;
+      const supa = getSupabaseClient();
+      if (!supa) return;
+      const timers = incidenciaRecepcionDebounceRef.current;
+      const existing = timers.get(order.id);
+      if (existing != null) window.clearTimeout(existing);
+      const t = window.setTimeout(() => {
+        timers.delete(order.id);
+        notifyIncidenciaRecepcionDeduped(supa, {
+          localId,
+          userId,
+          actorName: actorLabel(displayName, loginUsername),
+          supplierName: order.supplierName,
+          orderId: order.id,
+        });
+      }, 1000);
+      timers.set(order.id, t);
+    },
+    [localId, userId, displayName, loginUsername],
+  );
 
   const toggleSentIncidentPanel = (order: PedidoOrder) => {
     setIncidentOpenBySentOrderId((prev) => {
@@ -363,7 +392,7 @@ export default function PedidosPage() {
         dispatchPedidosDataChanged();
         const supa = getSupabaseClient();
         if (supa && localId) {
-          void notifyIncidenciaRecepcion(supa, {
+          notifyIncidenciaRecepcionDeduped(supa, {
             localId,
             userId,
             actorName: actorLabel(displayName, loginUsername),
@@ -430,6 +459,7 @@ export default function PedidosPage() {
     if (!localId) return;
     const supabase = getSupabaseClient();
     if (!supabase) return;
+    const orderForNotify = orders.find((o) => o.id === orderId);
     const itemId = line.id;
     const nextReceived = markOk ? line.quantity : 0;
     const nextIncidentType: PedidoOrder['items'][number]['incidentType'] = markOk ? null : 'missing';
@@ -479,7 +509,12 @@ export default function PedidosPage() {
       updateOrderItemIncident(supabase, localId, itemId, markOk ? { type: null, notes: '' } : { type: 'missing', notes: 'No recibido' }),
     ])
       .then(() => afterReceive())
-      .then(() => reloadOrders())
+      .then(() => {
+        if (!markOk && orderForNotify) {
+          scheduleIncidenciaRecepcionNotifyDebounced(orderForNotify);
+        }
+        return reloadOrders();
+      })
       .then(() => dispatchPedidosDataChanged())
       .catch((err: Error) => {
         void reloadOrders();
@@ -722,6 +757,15 @@ export default function PedidosPage() {
               supplierName: snap.supplierName,
               orderId: snap.id,
             });
+            if (receivedOrderHasAttention(snap)) {
+              notifyIncidenciaRecepcionDeduped(supa, {
+                localId,
+                userId,
+                actorName: actorLabel(displayName, loginUsername),
+                supplierName: snap.supplierName,
+                orderId: snap.id,
+              });
+            }
           }
           void reloadOrders();
           window.setTimeout(() => void reloadOrders(), 500);

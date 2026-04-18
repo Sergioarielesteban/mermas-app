@@ -29,7 +29,7 @@ import {
   updateOrderItemReceivedWeightKg,
   type PedidoOrder,
 } from '@/lib/pedidos-supabase';
-import { actorLabel, notifyIncidenciaRecepcion } from '@/services/notifications';
+import { actorLabel, notifyIncidenciaRecepcionDeduped } from '@/services/notifications';
 
 function parseReceivedKg(raw: string): number | null | 'invalid' {
   const t = raw.trim();
@@ -525,7 +525,7 @@ export default function RecepcionPedidosPage() {
       .then(() => {
         dispatchPedidosDataChanged();
         if (note) {
-          void notifyIncidenciaRecepcion(supabase, {
+          notifyIncidenciaRecepcionDeduped(supabase, {
             localId,
             userId,
             actorName: actorLabel(displayName, loginUsername),
