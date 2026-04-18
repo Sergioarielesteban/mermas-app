@@ -2100,23 +2100,25 @@ export default function PedidosPage() {
             Toca el recuadro del proveedor para desplegar líneas, marcar ✓/✗ y rellenar kg/precio recibido aquí mismo.
           </p>
         ) : null}
-        <button
-          type="button"
-          disabled={receivingOrderId === order.id}
-          onClick={() => {
-            void commitSentOrderAsReceived(order.id);
-          }}
-          className="flex w-full flex-col items-center justify-center gap-0.5 rounded-2xl bg-gradient-to-b from-[#4ADE80] to-[#16A34A] py-2 text-center text-[11px] font-black uppercase leading-tight tracking-wide text-white shadow-md shadow-emerald-900/20 ring-1 ring-white/25 transition active:scale-[0.99] disabled:opacity-90"
-        >
-          {receivingOrderId === order.id ? (
-            <span>Recibido</span>
-          ) : (
-            <>
-              <span>Marcar como</span>
-              <span>recibido</span>
-            </>
-          )}
-        </button>
+        {showExpandHint ? null : (
+          <button
+            type="button"
+            disabled={receivingOrderId === order.id}
+            onClick={() => {
+              void commitSentOrderAsReceived(order.id);
+            }}
+            className="flex w-full flex-col items-center justify-center gap-0.5 rounded-2xl bg-gradient-to-b from-[#4ADE80] to-[#16A34A] py-2 text-center text-[11px] font-black uppercase leading-tight tracking-wide text-white shadow-md shadow-emerald-900/20 ring-1 ring-white/25 transition active:scale-[0.99] disabled:opacity-90"
+          >
+            {receivingOrderId === order.id ? (
+              <span>Recibido</span>
+            ) : (
+              <>
+                <span>Marcar como</span>
+                <span>recibido</span>
+              </>
+            )}
+          </button>
+        )}
         <button
           type="button"
           onClick={() => setSentOrderPriceReviewed(order.id, !reviewed)}
