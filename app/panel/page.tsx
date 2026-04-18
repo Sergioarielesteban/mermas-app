@@ -4,6 +4,7 @@ import Link from 'next/link';
 import React from 'react';
 import type { LucideIcon } from 'lucide-react';
 import {
+  BarChart3,
   BookOpen,
   Calculator,
   CalendarDays,
@@ -181,6 +182,15 @@ export default function PanelControlPage() {
           Icon={UtensilsCrossed}
           tone="red"
         />
+        {showPedidos ? (
+          <HubTile
+            href="/finanzas"
+            label="Finanzas"
+            sub="Gasto, salud del negocio y compras vs albaranes"
+            Icon={BarChart3}
+            tone="red"
+          />
+        ) : null}
       </div>
     </div>
   );

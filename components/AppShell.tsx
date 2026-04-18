@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import React, { useCallback, useMemo, useState } from 'react';
 import {
+  BarChart3,
   Calculator,
   BookOpen,
   CalendarDays,
@@ -49,6 +50,7 @@ function titleForPath(pathname: string | null) {
   if (pathname.startsWith('/resumen')) return 'Resumen';
   if (pathname.startsWith('/pedidos-cocina/historial')) return 'Mis pedidos a central';
   if (pathname.startsWith('/pedidos-cocina')) return 'Pedir a cocina central';
+  if (pathname.startsWith('/finanzas')) return 'Finanzas';
   if (pathname.startsWith('/pedidos')) return 'Pedidos';
   if (pathname.startsWith('/checklist')) {
     if (pathname === '/checklist') return 'Check list';
@@ -136,7 +138,11 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const navItems = useMemo<NavItem[]>(
     () => [
       ...(showPedidos
-        ? [...NAV_ITEMS, { href: '/pedidos', label: 'Pedidos', Icon: ShoppingCart }]
+        ? [
+            ...NAV_ITEMS,
+            { href: '/pedidos', label: 'Pedidos', Icon: ShoppingCart },
+            { href: '/finanzas', label: 'Finanzas', Icon: BarChart3 },
+          ]
         : NAV_ITEMS),
       { href: '/appcc', label: 'APPCC', Icon: ShieldCheck },
       { href: '/checklist', label: 'Check list', Icon: ListChecks },
