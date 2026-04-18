@@ -80,7 +80,7 @@ export default function OnboardingPage() {
               Empezar
             </Link>
             <Link href="/precio" className="mt-6 block text-center text-sm font-semibold text-zinc-600 underline">
-              Ver precio
+              Saber más sobre Chef-One
             </Link>
             <button
               type="button"

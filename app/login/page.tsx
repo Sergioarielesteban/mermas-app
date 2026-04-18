@@ -69,7 +69,7 @@ export default function LoginPage() {
                 </Link>{' '}
                 ·{' '}
                 <Link href="/precio" className="font-semibold text-zinc-700 underline underline-offset-2">
-                  Precio
+                  Saber más
                 </Link>
               </p>
               {!isSupabaseEnabled() && allowedEmails.length > 0 ? (
