@@ -1,5 +1,8 @@
 -- Pedidos module schema (multi-local)
 -- Run this in Supabase SQL Editor
+--
+-- Artículos base (purchase_articles) y vínculo article_id: ejecutar además
+-- supabase-pedidos-migration-purchase-articles.sql cuando quieras esa capa.
 
 create table if not exists public.pedido_suppliers (
   id uuid primary key default gen_random_uuid(),

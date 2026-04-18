@@ -19,6 +19,7 @@ declare
     'purchase_order_items',
     'pedido_suppliers',
     'pedido_supplier_products',
+    'purchase_articles',
     'appcc_cold_units',
     'appcc_temperature_readings',
     'appcc_fryers',

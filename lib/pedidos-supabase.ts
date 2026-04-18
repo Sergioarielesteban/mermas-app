@@ -1,5 +1,9 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { normalizeDeliveryCycleWeekdays, normalizeDeliveryExceptionDates } from '@/lib/pedidos-coverage';
+import {
+  isMissingPurchaseArticlesError,
+  linkPurchaseArticleToNewSupplierProduct,
+} from '@/lib/purchase-articles-supabase';
 import type { Unit } from '@/lib/types';
 
 /**
@@ -87,6 +91,8 @@ export type PedidoStatus = 'draft' | 'sent' | 'received';
 
 export type PedidoSupplierProduct = {
   id: string;
+  /** Artículo base (purchase_articles); opcional hasta migrar o enlazar. */
+  articleId?: string | null;
   name: string;
   unit: Unit;
   pricePerUnit: number;
@@ -178,6 +184,7 @@ type SupplierDeliveryExceptionRow = {
 type SupplierProductRow = {
   id: string;
   supplier_id: string;
+  article_id?: string | null;
   name: string;
   unit: string;
   price_per_unit: number;
@@ -270,7 +277,7 @@ export async function fetchSuppliersWithProducts(supabase: SupabaseClient, local
   const { data: productRows, error: pErr } = await supabase
     .from('pedido_supplier_products')
     .select(
-      'id,supplier_id,name,unit,price_per_unit,units_per_pack,recipe_unit,vat_rate,par_stock,is_active,estimated_kg_per_unit',
+      'id,supplier_id,article_id,name,unit,price_per_unit,units_per_pack,recipe_unit,vat_rate,par_stock,is_active,estimated_kg_per_unit',
     )
     .eq('local_id', localId)
     .eq('is_active', true)
@@ -302,6 +309,9 @@ export async function fetchSuppliersWithProducts(supabase: SupabaseClient, local
     const list = bySupplier.get(row.supplier_id) ?? [];
     list.push({
       id: row.id,
+      ...(row.article_id != null && String(row.article_id).trim() !== ''
+        ? { articleId: String(row.article_id) }
+        : {}),
       name: row.name,
       unit: row.unit as Unit,
       pricePerUnit: Number(row.price_per_unit),
@@ -465,11 +475,36 @@ export async function createSupplierProduct(
       estimated_kg_per_unit: est,
     })
     .select(
-      'id,supplier_id,name,unit,price_per_unit,units_per_pack,recipe_unit,vat_rate,par_stock,is_active,estimated_kg_per_unit',
+      'id,supplier_id,article_id,name,unit,price_per_unit,units_per_pack,recipe_unit,vat_rate,par_stock,is_active,estimated_kg_per_unit',
     )
     .single();
   if (error) throw new Error(error.message);
-  return data as SupplierProductRow;
+  const row = data as SupplierProductRow;
+  try {
+    const linked = await linkPurchaseArticleToNewSupplierProduct(supabase, localId, row.id, row.supplier_id, {
+      nombre: row.name,
+      unidadBase: row.unit,
+      activo: row.is_active,
+      costeMaster: Number(row.price_per_unit),
+    });
+    if (linked) {
+      const refetch = await supabase
+        .from('pedido_supplier_products')
+        .select(
+          'id,supplier_id,article_id,name,unit,price_per_unit,units_per_pack,recipe_unit,vat_rate,par_stock,is_active,estimated_kg_per_unit',
+        )
+        .eq('id', row.id)
+        .eq('local_id', localId)
+        .single();
+      if (!refetch.error && refetch.data) return refetch.data as SupplierProductRow;
+    }
+  } catch (e: unknown) {
+    if (e instanceof Error && isMissingPurchaseArticlesError(e.message)) {
+      return row;
+    }
+    throw e;
+  }
+  return row;
 }
 
 export async function updateSupplierProduct(
@@ -513,7 +548,7 @@ export async function updateSupplierProduct(
     .eq('id', supplierProductId)
     .eq('local_id', localId)
     .select(
-      'id,supplier_id,name,unit,price_per_unit,units_per_pack,recipe_unit,vat_rate,par_stock,is_active,estimated_kg_per_unit',
+      'id,supplier_id,article_id,name,unit,price_per_unit,units_per_pack,recipe_unit,vat_rate,par_stock,is_active,estimated_kg_per_unit',
     )
     .single();
   if (error) throw new Error(error.message);

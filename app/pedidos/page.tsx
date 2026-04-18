@@ -188,6 +188,8 @@ function matchAssistantSingleTopicNav(normalized: string): { href: string; messa
     albaranes: { href: '/pedidos/albaranes', message: 'Abriendo Albaranes…' },
     albaran: { href: '/pedidos/albaranes', message: 'Abriendo Albaranes…' },
     precios: { href: '/pedidos/precios', message: 'Abriendo Precios…' },
+    articulos: { href: '/pedidos/articulos', message: 'Abriendo Artículos…' },
+    artículos: { href: '/pedidos/articulos', message: 'Abriendo Artículos…' },
     calendario: { href: '/pedidos/calendario', message: 'Abriendo Calendario de entregas…' },
     comida: { href: '/comida-personal', message: 'Abriendo Comida personal…' },
     personal: { href: '/comida-personal', message: 'Abriendo Comida personal…' },
@@ -1095,6 +1097,7 @@ export default function PedidosPage() {
         const n = normalized;
         if (n.includes('nuevo pedido') || (n.includes('pedido') && n.includes('nuevo'))) return '/pedidos/nuevo';
         if (n.includes('proveedor')) return '/pedidos/proveedores';
+        if (n.includes('articulo')) return '/pedidos/articulos';
         if (n.includes('calendario') || (n.includes('entrega') && n.includes('calendario'))) return '/pedidos/calendario';
         if (n.includes('recepcion') || n.includes('albaran')) return '/pedidos/recepcion';
         if ((n.includes('compras') && n.includes('mes')) || (n.includes('historial') && n.includes('mes')))
@@ -2462,9 +2465,12 @@ export default function PedidosPage() {
       />
 
       <section className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-zinc-200">
-        <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-3">
+        <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4">
           <Link href="/pedidos/proveedores" className="flex h-8 items-center justify-center rounded-lg border border-zinc-300 bg-white px-2 text-center text-xs font-semibold text-zinc-700 sm:h-9 sm:text-sm">
             Proveedores
+          </Link>
+          <Link href="/pedidos/articulos" className="flex h-8 items-center justify-center rounded-lg border border-zinc-300 bg-white px-2 text-center text-xs font-semibold text-zinc-700 sm:h-9 sm:text-sm">
+            Artículos
           </Link>
           <Link href="/pedidos/historial-mes" className="flex h-8 items-center justify-center rounded-lg border border-zinc-300 bg-white px-2 text-center text-xs font-semibold text-zinc-700 sm:h-9 sm:text-sm">
             Compras del mes
