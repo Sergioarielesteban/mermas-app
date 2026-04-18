@@ -212,12 +212,11 @@ export default function NuevoAlbaranPage() {
           ref={fileRef}
           type="file"
           accept="image/*,application/pdf"
-          capture="environment"
           className="mt-1 w-full text-sm text-zinc-700 file:mr-3 file:rounded-lg file:border-0 file:bg-zinc-900 file:px-3 file:py-2 file:text-xs file:font-bold file:text-white"
         />
         <p className="mt-2 text-xs text-zinc-500">
-          Imagen: se intenta OCR. PDF: se guarda y se marca para revisión manual (límites del bucket ampliados en la
-          migración).
+          Sin forzar cámara: en móvil podrás elegir galería, archivos o cámara según el sistema. Imagen → OCR; PDF →
+          solo archivo y revisión manual.
         </p>
 
         {error ? <p className="mt-3 text-sm font-semibold text-red-800">{error}</p> : null}
