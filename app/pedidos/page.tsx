@@ -2099,86 +2099,89 @@ export default function PedidosPage() {
           <p className="text-center text-[11px] leading-snug text-zinc-600">
             Toca el recuadro del proveedor para desplegar líneas, marcar ✓/✗ y rellenar kg/precio recibido aquí mismo.
           </p>
-        ) : null}
-        {showExpandHint ? null : (
-          <button
-            type="button"
-            disabled={receivingOrderId === order.id}
-            onClick={() => {
-              void commitSentOrderAsReceived(order.id);
-            }}
-            className="flex w-full flex-col items-center justify-center gap-0.5 rounded-2xl bg-gradient-to-b from-[#4ADE80] to-[#16A34A] py-2 text-center text-[11px] font-black uppercase leading-tight tracking-wide text-white shadow-md shadow-emerald-900/20 ring-1 ring-white/25 transition active:scale-[0.99] disabled:opacity-90"
-          >
-            {receivingOrderId === order.id ? (
-              <span>Recibido</span>
-            ) : (
-              <>
-                <span>Marcar como</span>
-                <span>recibido</span>
-              </>
-            )}
-          </button>
+        ) : (
+          <>
+            <button
+              type="button"
+              disabled={receivingOrderId === order.id}
+              onClick={() => {
+                void commitSentOrderAsReceived(order.id);
+              }}
+              className="flex w-full flex-col items-center justify-center gap-0.5 rounded-2xl bg-gradient-to-b from-[#4ADE80] to-[#16A34A] py-2 text-center text-[11px] font-black uppercase leading-tight tracking-wide text-white shadow-md shadow-emerald-900/20 ring-1 ring-white/25 transition active:scale-[0.99] disabled:opacity-90"
+            >
+              {receivingOrderId === order.id ? (
+                <span>Recibido</span>
+              ) : (
+                <>
+                  <span>Marcar como</span>
+                  <span>recibido</span>
+                </>
+              )}
+            </button>
+            <button
+              type="button"
+              onClick={() => setSentOrderPriceReviewed(order.id, !reviewed)}
+              className={[
+                'w-full rounded-lg px-3 py-2 text-center text-xs font-bold transition active:scale-[0.99]',
+                reviewed
+                  ? 'bg-emerald-100 text-emerald-800 ring-1 ring-emerald-300'
+                  : 'bg-zinc-200 text-zinc-700',
+              ].join(' ')}
+            >
+              {reviewed
+                ? 'Revisión de precios: completada (tocar para reabrir)'
+                : 'Marcar revisión de precios como completada'}
+            </button>
+            <button
+              type="button"
+              onClick={() => toggleSentIncidentPanel(order)}
+              className={[
+                'w-full rounded-lg px-3 py-2 text-center text-xs font-bold transition',
+                incidentOpen || hasAnyBad
+                  ? 'bg-[#B91C1C] text-white active:scale-[0.99]'
+                  : 'bg-zinc-200 text-zinc-600 active:scale-[0.99]',
+              ].join(' ')}
+            >
+              {incidentOpen ? 'Ocultar incidencia' : 'Incidencia'}
+            </button>
+            {incidentOpen ? (
+              <div className="space-y-2 rounded-xl bg-red-50 p-3 ring-1 ring-red-200">
+                <p className="text-[10px] font-bold uppercase tracking-wide text-red-900">
+                  Nota para lineas marcadas con ✗
+                </p>
+                <textarea
+                  value={
+                    incidentNoteBySentOrderId[order.id] ??
+                    (incidentOpen ? draftIncidentNoteForSentOrder(order, quickLineMarks) : '')
+                  }
+                  onChange={(e) => setIncidentNoteBySentOrderId((prev) => ({ ...prev, [order.id]: e.target.value }))}
+                  rows={4}
+                  placeholder="Describe la incidencia..."
+                  className="w-full rounded-lg border border-red-300 bg-white px-2 py-2 text-sm text-zinc-900 outline-none placeholder:text-zinc-400"
+                />
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => saveSentOrderIncident(order)}
+                    className="rounded-lg bg-[#B91C1C] px-3 py-2 text-xs font-semibold text-white"
+                  >
+                    Guardar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIncidentOpenBySentOrderId((prev) => ({ ...prev, [order.id]: false }))}
+                    className="rounded-lg border border-zinc-400 bg-white px-3 py-2 text-xs font-semibold text-zinc-800"
+                  >
+                    Cerrar sin guardar
+                  </button>
+                </div>
+                <p className="text-center text-[11px] text-zinc-500">
+                  La incidencia se guarda aquí mismo para este pedido.
+                </p>
+              </div>
+            ) : null}
+          </>
         )}
-        <button
-          type="button"
-          onClick={() => setSentOrderPriceReviewed(order.id, !reviewed)}
-          className={[
-            'w-full rounded-lg px-3 py-2 text-center text-xs font-bold transition active:scale-[0.99]',
-            reviewed
-              ? 'bg-emerald-100 text-emerald-800 ring-1 ring-emerald-300'
-              : 'bg-zinc-200 text-zinc-700',
-          ].join(' ')}
-        >
-          {reviewed ? 'Revisión de precios: completada (tocar para reabrir)' : 'Marcar revisión de precios como completada'}
-        </button>
-        <button
-          type="button"
-          onClick={() => toggleSentIncidentPanel(order)}
-          className={[
-            'w-full rounded-lg px-3 py-2 text-center text-xs font-bold transition',
-            incidentOpen || hasAnyBad
-              ? 'bg-[#B91C1C] text-white active:scale-[0.99]'
-              : 'bg-zinc-200 text-zinc-600 active:scale-[0.99]',
-          ].join(' ')}
-        >
-          {incidentOpen ? 'Ocultar incidencia' : 'Incidencia'}
-        </button>
-        {incidentOpen ? (
-          <div className="space-y-2 rounded-xl bg-red-50 p-3 ring-1 ring-red-200">
-            <p className="text-[10px] font-bold uppercase tracking-wide text-red-900">
-              Nota para lineas marcadas con ✗
-            </p>
-            <textarea
-              value={
-                incidentNoteBySentOrderId[order.id] ??
-                (incidentOpen ? draftIncidentNoteForSentOrder(order, quickLineMarks) : '')
-              }
-              onChange={(e) => setIncidentNoteBySentOrderId((prev) => ({ ...prev, [order.id]: e.target.value }))}
-              rows={4}
-              placeholder="Describe la incidencia..."
-              className="w-full rounded-lg border border-red-300 bg-white px-2 py-2 text-sm text-zinc-900 outline-none placeholder:text-zinc-400"
-            />
-            <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={() => saveSentOrderIncident(order)}
-                className="rounded-lg bg-[#B91C1C] px-3 py-2 text-xs font-semibold text-white"
-              >
-                Guardar
-              </button>
-              <button
-                type="button"
-                onClick={() => setIncidentOpenBySentOrderId((prev) => ({ ...prev, [order.id]: false }))}
-                className="rounded-lg border border-zinc-400 bg-white px-3 py-2 text-xs font-semibold text-zinc-800"
-              >
-                Cerrar sin guardar
-              </button>
-            </div>
-            <p className="text-center text-[11px] text-zinc-500">
-              La incidencia se guarda aquí mismo para este pedido.
-            </p>
-          </div>
-        ) : null}
       </div>
     );
   };
