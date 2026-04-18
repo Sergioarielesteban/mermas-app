@@ -20,7 +20,15 @@ import { usePedidosOrders } from '@/components/PedidosOrdersProvider';
 import PedidosPremiaLockedScreen from '@/components/PedidosPremiaLockedScreen';
 import { canAccessPedidos, canUsePedidosModule } from '@/lib/pedidos-access';
 import { formatQuantityWithUnit } from '@/lib/pedidos-format';
-import { billingQuantityForLine, type PedidoOrder } from '@/lib/pedidos-supabase';
+import {
+  billingQuantityForLine,
+  fetchSuppliersWithProducts,
+  updateSupplierProductPriceWithHistory,
+  type PedidoOrder,
+  type PedidoSupplier,
+} from '@/lib/pedidos-supabase';
+import { matchSupplierProductFromHint, parseQuickChefPriceText } from '@/lib/pedidos-quick-price-text';
+import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
 import type { Unit } from '@/lib/types';
 
 type PriceMode = 'unit' | 'per_kg';
@@ -760,7 +768,7 @@ function drawComparisonIndexChart(
 }
 
 export default function PedidosPreciosPage() {
-  const { localCode, localName, localId, email } = useAuth();
+  const { localCode, localName, localId, email, userId } = useAuth();
   const hasPedidosEntry = canAccessPedidos(localCode, email, localName, localId);
   const canUse = canUsePedidosModule(localCode, email, localName, localId);
   const { orders: allOrders } = usePedidosOrders();
@@ -771,6 +779,32 @@ export default function PedidosPreciosPage() {
   const [productSearch, setProductSearch] = React.useState('');
   const [priceMode, setPriceMode] = React.useState<PriceMode>('unit');
   const [alertPct, setAlertPct] = React.useState(0);
+  const [quickCatalog, setQuickCatalog] = React.useState<PedidoSupplier[]>([]);
+  const [quickCatalogLoading, setQuickCatalogLoading] = React.useState(false);
+  const [quickText, setQuickText] = React.useState('');
+  const [quickBusy, setQuickBusy] = React.useState(false);
+  const [quickFeedback, setQuickFeedback] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    if (!localId || !canUse) return;
+    if (!isSupabaseEnabled() || !getSupabaseClient()) return;
+    let cancelled = false;
+    (async () => {
+      setQuickCatalogLoading(true);
+      setQuickFeedback(null);
+      try {
+        const list = await fetchSuppliersWithProducts(getSupabaseClient()!, localId);
+        if (!cancelled) setQuickCatalog(list);
+      } catch (e: unknown) {
+        if (!cancelled) setQuickFeedback(e instanceof Error ? e.message : 'No se pudo cargar el catálogo.');
+      } finally {
+        if (!cancelled) setQuickCatalogLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [localId, canUse]);
 
   const supplierOptions = React.useMemo(() => {
     const m = new Map<string, string>();
@@ -1315,6 +1349,47 @@ export default function PedidosPreciosPage() {
     productSearch,
   ]);
 
+  const applyQuickPrice = React.useCallback(async () => {
+    if (!localId) return;
+    setQuickFeedback(null);
+    const parsed = parseQuickChefPriceText(quickText);
+    if (!parsed) {
+      setQuickFeedback('No se detectó un precio. Ejemplo: «el bacon ha subido a 7,80».');
+      return;
+    }
+    const match = matchSupplierProductFromHint(quickCatalog, parsed.nameHint, supplierFilter || undefined);
+    if (!match) {
+      setQuickFeedback(
+        `No encontré un producto que encaje con «${parsed.nameHint}». Prueba otro nombre o quita el filtro de proveedor.`,
+      );
+      return;
+    }
+    setQuickBusy(true);
+    try {
+      const supabase = getSupabaseClient()!;
+      const { changed } = await updateSupplierProductPriceWithHistory(supabase, localId, match.product.id, parsed.price, {
+        source: 'quick_input',
+        userId: userId ?? null,
+      });
+      if (!changed) {
+        setQuickFeedback(
+          `«${match.product.name}» ya tenía ese precio (${parsed.price.toFixed(2)} €/${match.product.unit}).`,
+        );
+      } else {
+        setQuickFeedback(
+          `Actualizado: ${match.supplier.name} · ${match.product.name} → ${parsed.price.toFixed(2)} €/${match.product.unit}.`,
+        );
+        setQuickText('');
+        const list = await fetchSuppliersWithProducts(supabase, localId);
+        setQuickCatalog(list);
+      }
+    } catch (e: unknown) {
+      setQuickFeedback(e instanceof Error ? e.message : 'Error al actualizar.');
+    } finally {
+      setQuickBusy(false);
+    }
+  }, [quickText, quickCatalog, supplierFilter, localId, userId]);
+
   if (!hasPedidosEntry) {
     return (
       <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-zinc-200">
@@ -1339,6 +1414,33 @@ export default function PedidosPreciosPage() {
         >
           Compras del mes
         </Link>
+      </section>
+
+      <section className="rounded-2xl border border-amber-100 bg-amber-50/60 p-4 shadow-sm ring-1 ring-amber-100/80 sm:p-5">
+        <p className="text-[10px] font-black uppercase tracking-wide text-amber-900">Entrada rápida (texto)</p>
+        <p className="mt-1 text-xs text-amber-950">
+          Una frase tipo «Oye Chef: el bacon ha subido a 7,80» — detectamos producto y precio y actualizamos el catálogo.
+        </p>
+        <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-stretch">
+          <input
+            value={quickText}
+            onChange={(e) => setQuickText(e.target.value)}
+            placeholder="Ej.: Oye Chef: el bacon ha subido a 7,80"
+            className="min-h-[48px] flex-1 rounded-xl border border-amber-200 bg-white px-3 text-sm font-medium text-zinc-900 outline-none focus:border-amber-500"
+            disabled={quickBusy || quickCatalogLoading}
+            autoComplete="off"
+          />
+          <button
+            type="button"
+            disabled={quickBusy || quickCatalogLoading || !quickText.trim()}
+            onClick={() => void applyQuickPrice()}
+            className="min-h-[48px] shrink-0 rounded-xl bg-amber-600 px-4 text-sm font-black text-white shadow-sm disabled:opacity-50"
+          >
+            {quickBusy ? 'Aplicando…' : 'Actualizar precio'}
+          </button>
+        </div>
+        {quickCatalogLoading ? <p className="mt-2 text-xs text-amber-900">Cargando catálogo…</p> : null}
+        {quickFeedback ? <p className="mt-2 text-sm font-semibold text-amber-950">{quickFeedback}</p> : null}
       </section>
 
       <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-zinc-200">

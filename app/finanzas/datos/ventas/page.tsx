@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import React, { useCallback, useEffect, useState } from 'react';
 import FinanzasDatosEntryShell from '@/components/FinanzasDatosEntryShell';
 import { emitFinanzasDataChanged } from '@/lib/finanzas-data-changed';
@@ -105,6 +106,15 @@ function VentasForm({ localId }: { localId: string }) {
 
   return (
     <form onSubmit={onSave} className="max-w-lg space-y-4 rounded-2xl border border-zinc-100 bg-white p-4 shadow-sm ring-1 ring-zinc-100 sm:p-5">
+      <p className="text-sm">
+        <Link
+          href="/finanzas/datos/ventas/importar"
+          className="font-bold text-[#D32F2F] underline underline-offset-2"
+        >
+          Importar ventas
+        </Link>
+        <span className="text-zinc-600"> · CSV o varios días en segundos</span>
+      </p>
       <div>
         <label className="text-xs font-bold uppercase tracking-wide text-zinc-500" htmlFor="ventas-fecha">
           Fecha

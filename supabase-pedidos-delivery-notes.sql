@@ -197,3 +197,44 @@ comment on table public.delivery_note_items is
   'Líneas del albarán; match_status vs pedido cuando related_order_id está informado.';
 comment on table public.delivery_note_incidents is
   'Incidencias de recepción / documento asociadas al albarán.';
+
+-- -----------------------------------------------------------------------------
+-- Histórico de precios de catálogo (proveedor) + marca de última actualización
+-- Ejecutar tras existir delivery_notes y pedido_supplier_products.
+-- -----------------------------------------------------------------------------
+alter table public.pedido_supplier_products
+  add column if not exists last_price_update timestamptz;
+
+create table if not exists public.pedido_supplier_product_price_history (
+  id uuid primary key default gen_random_uuid(),
+  local_id uuid not null references public.locals(id) on delete restrict,
+  supplier_product_id uuid not null references public.pedido_supplier_products(id) on delete cascade,
+  old_price_per_unit numeric(10, 2) not null,
+  new_price_per_unit numeric(10, 2) not null,
+  source text not null check (source in ('delivery_note_validated', 'quick_input')),
+  delivery_note_id uuid references public.delivery_notes(id) on delete set null,
+  created_by uuid references auth.users(id),
+  created_at timestamptz not null default now()
+);
+
+create index if not exists idx_psp_price_hist_local_product
+  on public.pedido_supplier_product_price_history (local_id, supplier_product_id, created_at desc);
+
+alter table public.pedido_supplier_product_price_history enable row level security;
+
+drop policy if exists "psp price history same local read" on public.pedido_supplier_product_price_history;
+create policy "psp price history same local read"
+on public.pedido_supplier_product_price_history
+for select
+to authenticated
+using (local_id = public.current_local_id());
+
+drop policy if exists "psp price history same local write" on public.pedido_supplier_product_price_history;
+create policy "psp price history same local write"
+on public.pedido_supplier_product_price_history
+for insert
+to authenticated
+with check (local_id = public.current_local_id());
+
+comment on table public.pedido_supplier_product_price_history is
+  'Cambios de price_per_unit en catálogo proveedor (albarán validado o entrada rápida).';

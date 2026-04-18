@@ -50,6 +50,7 @@ import {
   type DeliveryNoteItemMatchStatus,
   type DeliveryNoteStatus,
 } from '@/lib/delivery-notes-supabase';
+import { syncCatalogPricesFromValidatedDeliveryNote } from '@/lib/delivery-note-catalog-price-sync';
 import { fetchOrderById, fetchOrders, type PedidoOrder, type PedidoOrderItem } from '@/lib/pedidos-supabase';
 import type { Unit } from '@/lib/types';
 
@@ -490,18 +491,53 @@ export default function AlbaranDetallePage() {
     setBusy(true);
     try {
       const supabase = getSupabaseClient()!;
-      if (s === 'validated') {
-        const updated = await updateDeliveryNote(supabase, localId, note.id, {
-          status: s,
-          validatedAt: new Date().toISOString(),
-          validatedBy: userId ?? null,
-        });
-        setNote(updated);
-      } else {
-        const updated = await updateDeliveryNote(supabase, localId, note.id, { status: s });
-        setNote(updated);
-      }
+      const updated = await updateDeliveryNote(supabase, localId, note.id, { status: s });
+      setNote(updated);
       setBanner('Estado actualizado.');
+    } catch (e: unknown) {
+      setBanner(e instanceof Error ? e.message : 'Error.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const confirmAlbaran = async () => {
+    if (!localId || !note) return;
+    if (linesDirty) {
+      setBanner('Guarda las líneas antes de confirmar el albarán.');
+      return;
+    }
+    setBusy(true);
+    setBanner(null);
+    try {
+      const supabase = getSupabaseClient()!;
+      const pack = await fetchDeliveryNoteById(supabase, localId, id);
+      if (!pack) {
+        setBanner('No se pudo recargar el albarán.');
+        return;
+      }
+      let extra = '';
+      try {
+        const syn = await syncCatalogPricesFromValidatedDeliveryNote(
+          supabase,
+          localId,
+          note.id,
+          pack.items,
+          userId ?? null,
+        );
+        if (syn.updated > 0) {
+          extra = ` ${syn.updated} precio(s) de catálogo actualizado(s).`;
+        }
+      } catch (e: unknown) {
+        extra = ` (Aviso: ${e instanceof Error ? e.message : 'precios no actualizados'}.)`;
+      }
+      const updated = await updateDeliveryNote(supabase, localId, note.id, {
+        status: 'validated',
+        validatedAt: new Date().toISOString(),
+        validatedBy: userId ?? null,
+      });
+      setNote(updated);
+      setBanner(`Albarán confirmado.${extra}`);
     } catch (e: unknown) {
       setBanner(e instanceof Error ? e.message : 'Error.');
     } finally {
@@ -670,11 +706,11 @@ export default function AlbaranDetallePage() {
         <button
           type="button"
           disabled={busy}
-          onClick={() => void setStatus('validated')}
+          onClick={() => void confirmAlbaran()}
           className="inline-flex h-10 items-center gap-2 rounded-xl bg-emerald-600 px-3 text-sm font-bold text-white disabled:opacity-50"
         >
           <ShieldCheck className="h-4 w-4" aria-hidden />
-          Validar
+          Confirmar albarán
         </button>
         <button
           type="button"
@@ -900,7 +936,98 @@ export default function AlbaranDetallePage() {
             <span className="text-[11px] font-bold text-emerald-700">Guardado</span>
           )}
         </div>
-        <div className="mt-3 space-y-3">
+        <p className="mt-2 text-xs text-zinc-600">
+          Revisa y corrige producto, cantidad y precio antes de guardar. El OCR puede fallar: puedes editar o añadir líneas a
+          mano.
+        </p>
+        <div className="mt-3 hidden overflow-x-auto rounded-xl border border-zinc-100 sm:block">
+          <table className="min-w-full text-left text-xs">
+            <thead className="bg-zinc-50 text-[10px] font-black uppercase text-zinc-500">
+              <tr>
+                <th className="px-2 py-2">Producto</th>
+                <th className="px-2 py-2">Cant.</th>
+                <th className="px-2 py-2">Ud</th>
+                <th className="px-2 py-2">€ / ud</th>
+                <th className="px-2 py-2">Match</th>
+                <th className="px-2 py-2" />
+              </tr>
+            </thead>
+            <tbody>
+              {lineDrafts.map((row, idx) => {
+                const savedMatch = row.matchStatus as DeliveryNoteItemMatchStatus | null | undefined;
+                return (
+                  <tr key={row._key} className="border-t border-zinc-100">
+                    <td className="px-2 py-2 align-top">
+                      <input
+                        value={row.supplierProductName}
+                        onChange={(e) =>
+                          setLineDrafts((d) => d.map((x, i) => (i === idx ? { ...x, supplierProductName: e.target.value } : x)))
+                        }
+                        className="min-h-[40px] w-full min-w-[140px] rounded-lg border border-zinc-200 px-2 py-1.5 text-sm"
+                        placeholder="Producto"
+                      />
+                    </td>
+                    <td className="px-2 py-2 align-top">
+                      <input
+                        value={String(row.quantity)}
+                        onChange={(e) =>
+                          setLineDrafts((d) =>
+                            d.map((x, i) => (i === idx ? { ...x, quantity: Number(e.target.value.replace(',', '.')) || 0 } : x)),
+                          )
+                        }
+                        className="min-h-[40px] w-20 rounded-lg border border-zinc-200 px-2 py-1.5 text-sm tabular-nums"
+                        inputMode="decimal"
+                      />
+                    </td>
+                    <td className="px-2 py-2 align-top">
+                      <select
+                        value={row.unit}
+                        onChange={(e) =>
+                          setLineDrafts((d) => d.map((x, i) => (i === idx ? { ...x, unit: e.target.value as Unit } : x)))
+                        }
+                        className="min-h-[40px] rounded-lg border border-zinc-200 px-2 py-1.5 text-sm"
+                      >
+                        {UNITS.map((u) => (
+                          <option key={u.v} value={u.v}>
+                            {u.l}
+                          </option>
+                        ))}
+                      </select>
+                    </td>
+                    <td className="px-2 py-2 align-top">
+                      <input
+                        value={row.unitPrice != null ? String(row.unitPrice) : ''}
+                        onChange={(e) =>
+                          setLineDrafts((d) =>
+                            d.map((x, i) => {
+                              const t = e.target.value.trim();
+                              return i === idx ? { ...x, unitPrice: t === '' ? null : Number(t.replace(',', '.')) } : x;
+                            }),
+                          )
+                        }
+                        className="min-h-[40px] w-24 rounded-lg border border-zinc-200 px-2 py-1.5 text-sm tabular-nums"
+                        placeholder="€"
+                      />
+                    </td>
+                    <td className="px-2 py-2 align-middle text-[10px] font-bold text-zinc-600">
+                      {savedMatch && savedMatch !== 'not_applicable' ? MATCH_STATUS_LABEL[savedMatch] : '—'}
+                    </td>
+                    <td className="px-2 py-2 align-middle">
+                      <button
+                        type="button"
+                        onClick={() => setLineDrafts((d) => d.filter((_, i) => i !== idx))}
+                        className="text-[11px] font-bold text-red-700"
+                      >
+                        Quitar
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+        <div className="mt-3 space-y-3 sm:hidden">
           {lineDrafts.map((row, idx) => {
             const savedMatch = row.matchStatus as DeliveryNoteItemMatchStatus | null | undefined;
             return (
@@ -1281,10 +1408,10 @@ export default function AlbaranDetallePage() {
         <button
           type="button"
           disabled={busy}
-          onClick={() => void setStatus('validated')}
+          onClick={() => void confirmAlbaran()}
           className="h-12 flex-1 rounded-xl bg-emerald-600 text-sm font-black text-white disabled:opacity-50"
         >
-          Validar
+          Confirmar
         </button>
       </div>
 

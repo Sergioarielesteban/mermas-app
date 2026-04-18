@@ -650,6 +650,8 @@ export async function updateSupplierProduct(
     estimatedKgPerUnit?: number | null;
     unitsPerPack?: number;
     recipeUnit?: Unit | null;
+    /** Si true, escribe `last_price_update` (requiere migración SQL fase 10). */
+    lastPriceUpdatedAt?: boolean;
   },
 ) {
   const est =
@@ -663,18 +665,22 @@ export async function updateSupplierProduct(
     unitsPerPack: input.unitsPerPack,
     recipeUnit: input.recipeUnit,
   });
+  const patch: Record<string, unknown> = {
+    name: normalizeLabelUpper(input.name),
+    unit: input.unit,
+    price_per_unit: Math.round(input.pricePerUnit * 100) / 100,
+    units_per_pack: unitsPerPack,
+    recipe_unit: recipeUnit,
+    vat_rate: Math.max(0, Math.round((input.vatRate ?? 0) * 10000) / 10000),
+    par_stock: Math.max(0, Math.round((input.parStock ?? 0) * 100) / 100),
+    estimated_kg_per_unit: unitSupportsReceivedWeightKg(input.unit) ? est : null,
+  };
+  if (input.lastPriceUpdatedAt) {
+    patch.last_price_update = new Date().toISOString();
+  }
   const { data, error } = await supabase
     .from('pedido_supplier_products')
-    .update({
-      name: normalizeLabelUpper(input.name),
-      unit: input.unit,
-      price_per_unit: Math.round(input.pricePerUnit * 100) / 100,
-      units_per_pack: unitsPerPack,
-      recipe_unit: recipeUnit,
-      vat_rate: Math.max(0, Math.round((input.vatRate ?? 0) * 10000) / 10000),
-      par_stock: Math.max(0, Math.round((input.parStock ?? 0) * 100) / 100),
-      estimated_kg_per_unit: unitSupportsReceivedWeightKg(input.unit) ? est : null,
-    })
+    .update(patch)
     .eq('id', supplierProductId)
     .eq('local_id', localId)
     .select(
@@ -683,6 +689,91 @@ export async function updateSupplierProduct(
     .single();
   if (error) throw new Error(error.message);
   return data as SupplierProductRow;
+}
+
+export async function fetchSupplierProductRow(
+  supabase: SupabaseClient,
+  localId: string,
+  supplierProductId: string,
+): Promise<SupplierProductRow | null> {
+  const { data, error } = await supabase
+    .from('pedido_supplier_products')
+    .select(
+      'id,supplier_id,article_id,name,unit,price_per_unit,units_per_pack,recipe_unit,vat_rate,par_stock,is_active,estimated_kg_per_unit',
+    )
+    .eq('local_id', localId)
+    .eq('id', supplierProductId)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  return data ? (data as SupplierProductRow) : null;
+}
+
+export type SupplierProductPriceChangeSource = 'delivery_note_validated' | 'quick_input';
+
+/**
+ * Cambia solo el precio de catálogo, guardando fila de histórico.
+ * Omite si el precio redondeado coincide con el actual.
+ */
+export async function updateSupplierProductPriceWithHistory(
+  supabase: SupabaseClient,
+  localId: string,
+  supplierProductId: string,
+  newPricePerUnit: number,
+  meta: {
+    source: SupplierProductPriceChangeSource;
+    deliveryNoteId?: string | null;
+    userId?: string | null;
+    /** Si ya tienes la fila (p. ej. comprobación de unidad), evita un segundo SELECT. */
+    existingRow?: SupplierProductRow | null;
+  },
+): Promise<{ changed: boolean }> {
+  const row = meta.existingRow ?? (await fetchSupplierProductRow(supabase, localId, supplierProductId));
+  if (!row) throw new Error('Producto de proveedor no encontrado.');
+  const oldP = Math.round(Number(row.price_per_unit) * 100) / 100;
+  const newP = Math.round(newPricePerUnit * 100) / 100;
+  if (!Number.isFinite(newP) || newP < 0) throw new Error('Precio no válido.');
+  if (Math.abs(oldP - newP) < 0.005) return { changed: false };
+
+  const { error: hErr } = await supabase.from('pedido_supplier_product_price_history').insert({
+    local_id: localId,
+    supplier_product_id: supplierProductId,
+    old_price_per_unit: oldP,
+    new_price_per_unit: newP,
+    source: meta.source,
+    delivery_note_id: meta.deliveryNoteId ?? null,
+    created_by: meta.userId ?? null,
+  });
+  if (hErr) {
+    const msg = hErr.message.toLowerCase();
+    if (
+      msg.includes('pedido_supplier_product_price_history') &&
+      (msg.includes('does not exist') || msg.includes('schema cache'))
+    ) {
+      throw new Error('Falta la tabla de histórico de precios. Ejecuta el SQL de supabase-pedidos-delivery-notes.sql.');
+    }
+    throw new Error(hErr.message);
+  }
+
+  const packRaw = row.units_per_pack != null ? Number(row.units_per_pack) : 1;
+  const unitsPerPack = Number.isFinite(packRaw) && packRaw > 0 ? packRaw : 1;
+  const recipeUnit: Unit | null =
+    unitsPerPack > 1 && row.recipe_unit != null && String(row.recipe_unit).trim() !== ''
+      ? (String(row.recipe_unit) as Unit)
+      : null;
+
+  await updateSupplierProduct(supabase, localId, supplierProductId, {
+    name: row.name,
+    unit: row.unit as Unit,
+    pricePerUnit: newP,
+    vatRate: Number(row.vat_rate ?? 0),
+    parStock: Number(row.par_stock ?? 0),
+    estimatedKgPerUnit: row.estimated_kg_per_unit != null ? Number(row.estimated_kg_per_unit) : null,
+    unitsPerPack,
+    recipeUnit,
+    lastPriceUpdatedAt: true,
+  });
+
+  return { changed: true };
 }
 
 export async function setSupplierProductActive(

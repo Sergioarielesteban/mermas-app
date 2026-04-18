@@ -290,6 +290,34 @@ export async function insertSalesDaily(
   return mapSalesDaily(data as Record<string, unknown>);
 }
 
+export type SalesDailyUpsertRow = {
+  dateYmd: string;
+  netSalesEur: number | null;
+  ticketsCount: number | null;
+};
+
+/** Inserta o actualiza por (local_id, date); no descarga filas de vuelta (menos egress). */
+export async function upsertSalesDailyMany(
+  client: SupabaseClient,
+  localId: string,
+  rows: SalesDailyUpsertRow[],
+): Promise<void> {
+  if (rows.length === 0) return;
+  for (const r of rows) {
+    if (!isYmd(r.dateYmd)) throw new Error(`Fecha inválida en importación: ${r.dateYmd}`);
+  }
+  const payloads = rows.map((r) => ({
+    local_id: localId,
+    date: r.dateYmd,
+    net_sales_eur: r.netSalesEur,
+    tax_collected_eur: null as number | null,
+    tickets_count: r.ticketsCount,
+    notes: '',
+  }));
+  const { error } = await client.from('sales_daily').upsert(payloads, { onConflict: 'local_id,date' });
+  if (error) throw error;
+}
+
 export async function updateSalesDaily(
   client: SupabaseClient,
   localId: string,
