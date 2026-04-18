@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import React, { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, RefreshCw } from 'lucide-react';
+import { ArrowDown, ArrowLeft, ArrowUp, Minus, RefreshCw } from 'lucide-react';
 import MermasStyleHero from '@/components/MermasStyleHero';
 import { useAuth } from '@/components/AuthProvider';
 import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
@@ -19,11 +19,7 @@ import {
   fetchFinanzasExecutiveRankings,
   type FinanzasExecutiveRankings,
 } from '@/lib/finanzas-supabase';
-import {
-  buildReviewTodayItems,
-  evaluateBusinessHealth,
-  generateFinanceAlerts,
-} from '@/lib/finanzas-health-alerts';
+import { buildReviewTodayItems, generateFinanceAlerts } from '@/lib/finanzas-health-alerts';
 import { FINANZAS_DATA_CHANGED_EVENT } from '@/lib/finanzas-data-changed';
 import {
   FINANZAS_PERIOD_PRESET_OPTIONS,
@@ -41,65 +37,20 @@ function deltaLabel(pct: number | null): string {
   return `${sign}${pct.toFixed(1)}% vs ant.`;
 }
 
-type DeltaTone = 'up_good' | 'down_good' | 'neutral' | 'up_bad' | 'down_bad';
-
-function deltaToneFromPct(pct: number | null, mode: 'higher_better' | 'lower_better'): DeltaTone {
-  if (pct == null) return 'neutral';
-  if (pct === 0) return 'neutral';
-  if (mode === 'higher_better') {
-    if (pct > 0) return 'up_good';
-    return 'down_bad';
+function DeltaGlyph({
+  pct,
+  mode,
+}: {
+  pct: number | null;
+  mode: 'higher_better' | 'lower_better';
+}) {
+  if (pct == null || pct === 0 || !Number.isFinite(pct)) {
+    return <Minus className="h-5 w-5 shrink-0 text-zinc-400" aria-hidden />;
   }
-  if (pct < 0) return 'down_good';
-  return 'up_bad';
-}
-
-function toneClasses(tone: DeltaTone): { ring: string; bg: string; delta: string } {
-  switch (tone) {
-    case 'up_good':
-      return {
-        ring: 'ring-emerald-200',
-        bg: 'bg-emerald-50/90',
-        delta: 'text-emerald-800',
-      };
-    case 'down_good':
-      return {
-        ring: 'ring-emerald-200',
-        bg: 'bg-emerald-50/90',
-        delta: 'text-emerald-800',
-      };
-    case 'up_bad':
-      return {
-        ring: 'ring-red-200',
-        bg: 'bg-red-50/90',
-        delta: 'text-red-800',
-      };
-    case 'down_bad':
-      return {
-        ring: 'ring-red-200',
-        bg: 'bg-red-50/90',
-        delta: 'text-red-800',
-      };
-    default:
-      return {
-        ring: 'ring-amber-100',
-        bg: 'bg-amber-50/50',
-        delta: 'text-amber-900',
-      };
-  }
-}
-
-function marginChipStyles(label: string): string {
-  if (label === 'Rentable') return 'bg-emerald-100 text-emerald-900 ring-emerald-200';
-  if (label === 'Margen bajo') return 'bg-amber-100 text-amber-950 ring-amber-200';
-  if (label === 'En pérdidas') return 'bg-red-100 text-red-900 ring-red-200';
-  return 'bg-zinc-100 text-zinc-800 ring-zinc-200';
-}
-
-function priorityBadgeClass(p: 1 | 2 | 3): string {
-  if (p === 1) return 'bg-red-600 text-white';
-  if (p === 2) return 'bg-amber-500 text-white';
-  return 'bg-zinc-500 text-white';
+  const good = mode === 'higher_better' ? pct > 0 : pct < 0;
+  const cls = good ? 'text-emerald-600' : 'text-red-600';
+  if (pct > 0) return <ArrowUp className={`h-5 w-5 shrink-0 ${cls}`} aria-hidden />;
+  return <ArrowDown className={`h-5 w-5 shrink-0 ${cls}`} aria-hidden />;
 }
 
 type KpiDef = {
@@ -109,16 +60,69 @@ type KpiDef = {
   mode: 'higher_better' | 'lower_better';
 };
 
-function KpiCard({ kpi }: { kpi: KpiDef }) {
-  const tone = deltaToneFromPct(kpi.deltaPct, kpi.mode);
-  const cls = toneClasses(tone);
+function KpiCardExecutive({ kpi }: { kpi: KpiDef }) {
   return (
-    <div className={`min-h-[120px] rounded-2xl p-4 shadow-sm ring-2 ${cls.ring} ${cls.bg} sm:min-h-[132px]`}>
-      <p className="text-[10px] font-black uppercase tracking-wide text-zinc-600">{kpi.title}</p>
+    <div className="flex min-h-[100px] flex-col justify-between rounded-2xl border border-zinc-200/80 bg-white p-4 shadow-sm">
+      <div className="flex items-start justify-between gap-2">
+        <p className="text-[10px] font-black uppercase tracking-wide text-zinc-500">{kpi.title}</p>
+        <DeltaGlyph pct={kpi.deltaPct} mode={kpi.mode} />
+      </div>
       <p className="mt-2 text-xl font-black tabular-nums text-zinc-900 sm:text-2xl">{eur(kpi.valueEur)}</p>
-      <p className={`mt-1 text-xs font-bold ${cls.delta}`}>{deltaLabel(kpi.deltaPct)}</p>
+      <p className="mt-1 text-xs font-bold text-zinc-600">{deltaLabel(kpi.deltaPct)}</p>
     </div>
   );
+}
+
+function priorityBadgeClass(p: 1 | 2 | 3): string {
+  if (p === 1) return 'bg-red-600 text-white';
+  if (p === 2) return 'bg-amber-500 text-white';
+  return 'bg-zinc-500 text-white';
+}
+
+/** Fase 8: verde | rojo | amarillo (cerca de cero). */
+function resultadoCockpitTone(
+  beneficio: number,
+  ventas: number,
+): { headline: string; sub: string; wrap: string; value: string; valueCls: string } {
+  const lowMarginThreshold = ventas > 0 ? ventas * 0.02 : 0;
+
+  if (ventas <= 0) {
+    return {
+      headline: 'HOY ESTÁS SIN VENTAS REGISTRADAS',
+      sub: 'Registra ventas diarias para ver si ganas o pierdes dinero en este periodo.',
+      wrap: 'border-amber-200 bg-amber-50 ring-amber-100',
+      value: eur(beneficio),
+      valueCls: 'text-amber-950',
+    };
+  }
+
+  if (beneficio < 0) {
+    return {
+      headline: 'HOY ESTÁS PERDIENDO DINERO',
+      sub: 'Beneficio neto estimado negativo en el periodo seleccionado.',
+      wrap: 'border-red-200 bg-red-50 ring-red-100',
+      value: eur(beneficio),
+      valueCls: 'text-red-800',
+    };
+  }
+
+  if (beneficio >= 0 && beneficio < lowMarginThreshold) {
+    return {
+      headline: 'HOY ESTÁS CASI SIN MARGEN',
+      sub: 'Cerca de cero: revisa costes y ventas antes de que el periodo se cierre.',
+      wrap: 'border-amber-200 bg-amber-50 ring-amber-100',
+      value: eur(beneficio),
+      valueCls: 'text-amber-950',
+    };
+  }
+
+  return {
+    headline: 'HOY ESTÁS GANANDO DINERO',
+    sub: 'Beneficio neto estimado positivo en el periodo seleccionado.',
+    wrap: 'border-emerald-200 bg-emerald-50 ring-emerald-100',
+    value: eur(beneficio),
+    valueCls: 'text-emerald-900',
+  };
 }
 
 function FinanzasEconomiaBody() {
@@ -192,25 +196,45 @@ function FinanzasEconomiaBody() {
     return () => window.removeEventListener(FINANZAS_DATA_CHANGED_EVENT, onDataChanged);
   }, [load]);
 
-  const healthView = useMemo(() => (summary ? evaluateBusinessHealth(summary) : null), [summary]);
   const financeAlerts = useMemo(() => {
     if (!summary) return [];
     return generateFinanceAlerts(summary, {
       pendingAlbaranesCount: pendingAlbaranesCount ?? undefined,
     });
   }, [summary, pendingAlbaranesCount]);
+
   const reviewToday = useMemo(() => buildReviewTodayItems(financeAlerts), [financeAlerts]);
+
+  const cockpit = useMemo(() => {
+    if (!summary) return null;
+    const v = summary.ingresos.ventas_c;
+    const ben = summary.resultados.beneficio_neto_estimado;
+    const costesTotales =
+      summary.costes_operativos.compras_c +
+      summary.costes_operativos.mermas_c +
+      summary.costes_operativos.comida_personal_c +
+      summary.costes_operativos.coste_personal_c +
+      summary.gastos_fijos.gastos_fijos_c;
+    const operativos =
+      summary.costes_operativos.compras_c +
+      summary.costes_operativos.mermas_c +
+      summary.costes_operativos.comida_personal_c +
+      summary.costes_operativos.coste_personal_c;
+    const estructura = summary.gastos_fijos.gastos_fijos_c;
+    const tone = resultadoCockpitTone(ben, v);
+    return { v, ben, costesTotales, operativos, estructura, tone };
+  }, [summary]);
 
   const kpis: KpiDef[] = summary
     ? [
         {
-          title: 'Ventas (neto)',
+          title: 'Ventas',
           valueEur: summary.ingresos.ventas_c,
           deltaPct: summary.comparativa.ventas_c.delta_pct,
           mode: 'higher_better',
         },
         {
-          title: 'Compras (neto)',
+          title: 'Compras',
           valueEur: summary.costes_operativos.compras_c,
           deltaPct: summary.comparativa.compras_c.delta_pct,
           mode: 'lower_better',
@@ -233,14 +257,39 @@ function FinanzasEconomiaBody() {
           deltaPct: summary.comparativa.resultado_operativo.delta_pct,
           mode: 'higher_better',
         },
+      ]
+    : [];
+
+  const ratioChips = summary
+    ? [
         {
-          title: 'Beneficio neto (estim.)',
-          valueEur: summary.resultados.beneficio_neto_estimado,
-          deltaPct: summary.comparativa.beneficio_neto_estimado.delta_pct,
-          mode: 'higher_better',
+          label: 'Compras / ventas',
+          value: summary.ratios.compras_sobre_ventas,
+          suffix: '%',
+        },
+        {
+          label: 'Personal / ventas',
+          value: summary.ratios.coste_personal_sobre_ventas,
+          suffix: '%',
+        },
+        {
+          label: 'Beneficio neto / ventas',
+          value: summary.ratios.beneficio_neto_sobre_ventas,
+          suffix: '%',
         },
       ]
     : [];
+
+  const dataHints = summary
+    ? {
+        sinCostesOperativos:
+          summary.costes_operativos.compras_c +
+            summary.costes_operativos.mermas_c +
+            summary.costes_operativos.comida_personal_c ===
+          0,
+        sinPersonal: summary.costes_operativos.coste_personal_c === 0,
+      }
+    : null;
 
   if (!profileReady) {
     return (
@@ -265,11 +314,10 @@ function FinanzasEconomiaBody() {
       <MermasStyleHero
         slim
         eyebrow="Finanzas"
-        title="Cuenta de resultados"
-        description="Vista rápida del periodo: ingresos y costes sin IVA en los KPIs principales."
+        title="Cockpit diario"
+        description="Ganas o pierdes, dónde duele y qué revisar. Sin IVA en magnitudes principales."
       />
 
-      {/* A) Cabecera */}
       <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
         <div className="flex flex-wrap items-center gap-2">
           <Link
@@ -309,16 +357,12 @@ function FinanzasEconomiaBody() {
             Registrar datos
           </Link>
         </div>
-        <p className="rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2 text-center text-xs font-semibold text-zinc-800 sm:max-w-sm sm:text-left">
-          Datos sin IVA en KPIs principales
-        </p>
       </div>
 
       {summary ? (
         <p className="text-center text-[11px] text-zinc-500 sm:text-left">
           Periodo: <strong>{summary.period.from}</strong> → <strong>{summary.period.to}</strong> ({summary.period.days}{' '}
-          días) · Anterior: <strong>{summary.comparativa.periodo_anterior.from}</strong> →{' '}
-          <strong>{summary.comparativa.periodo_anterior.to}</strong>
+          días)
         </p>
       ) : null}
 
@@ -326,103 +370,78 @@ function FinanzasEconomiaBody() {
         <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-900">{error}</div>
       ) : null}
 
-      {/* B) KPIs */}
-      <section aria-label="KPIs principales">
-        <h2 className="sr-only">KPIs principales</h2>
-        {loading && !summary ? (
-          <p className="text-sm text-zinc-600">Cargando…</p>
-        ) : (
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {kpis.map((k) => (
-              <KpiCard key={k.title} kpi={k} />
-            ))}
-          </div>
-        )}
-      </section>
-
-      {/* Visual + rankings (Fase 6) */}
-      {summary && fixedByCategory ? (
-        <FinanzasEconomiaVisualExecutive
-          summary={summary}
-          rankings={rankings}
-          fixedByCategory={fixedByCategory}
-          preset={preset}
-          hasFixedData={fixedByCategory.length > 0}
-        />
-      ) : null}
-
-      {/* C) Salud del negocio */}
-      {healthView && summary ? (
+      {/* 1. Resultado dominante */}
+      {loading && !summary ? (
+        <p className="text-sm text-zinc-600">Cargando…</p>
+      ) : cockpit ? (
         <section
-          className={`rounded-2xl p-4 ring-2 sm:p-5 ${healthView.trendStyles.ring} ${healthView.trendStyles.bg}`}
-          aria-label="Salud del negocio"
+          className={`rounded-3xl border-2 p-5 shadow-md ring-2 sm:p-6 ${cockpit.tone.wrap}`}
+          aria-label="Resultado del periodo"
         >
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
-            <span
-              className={`h-14 w-14 shrink-0 rounded-full ${healthView.trendStyles.dot} shadow-inner ring-4 ring-white/80`}
-            />
-            <div className="min-w-0 flex-1">
-              <p className="text-[10px] font-black uppercase tracking-wide text-zinc-600">Salud del negocio</p>
-              <p className={`text-xl font-black sm:text-2xl ${healthView.trendStyles.text}`}>{healthView.trendLabel}</p>
-              <div className="mt-2 flex flex-wrap gap-2">
-                <span
-                  className={`rounded-full px-2.5 py-1 text-[11px] font-bold ring-1 ${marginChipStyles(healthView.marginLabel)}`}
-                >
-                  {healthView.marginLabel}
-                  {healthView.marginPct != null ? ` · ${healthView.marginPct.toFixed(1)}%` : ''}
-                </span>
-                {healthView.chips.slice(0, 4).map((chip) => (
-                  <span
-                    key={chip}
-                    className="rounded-full bg-white/90 px-2.5 py-1 text-[11px] font-semibold text-zinc-800 ring-1 ring-zinc-200/80"
-                  >
-                    {chip}
-                  </span>
-                ))}
-              </div>
-              <p className="mt-3 text-sm leading-snug text-zinc-800">{healthView.explanation}</p>
-              <p className="mt-2 text-[11px] leading-relaxed text-zinc-600">
-                Tendencia: deltas de resultado, compras, mermas y ventas vs periodo anterior. Margen: beneficio neto
-                estimado / ventas (&gt;10% rentable, 0–10% margen bajo, &lt;0% pérdidas).
-              </p>
-            </div>
-          </div>
+          <p className="text-center text-[10px] font-black uppercase tracking-widest text-zinc-600 sm:text-left">
+            Según periodo seleccionado
+          </p>
+          <h2 className="mt-2 text-center text-xl font-black leading-tight sm:text-left sm:text-2xl">
+            {cockpit.tone.headline}
+          </h2>
+          <p className="mt-2 text-center text-sm text-zinc-700 sm:text-left">{cockpit.tone.sub}</p>
+          <p className={`mt-4 text-center text-3xl font-black tabular-nums sm:text-left sm:text-4xl ${cockpit.tone.valueCls}`}>
+            {cockpit.tone.value}
+          </p>
+          <p className="mt-1 text-center text-xs font-semibold text-zinc-600 sm:text-left">
+            Beneficio neto estimado (C) · sin IVA en costes operativos mostrados
+          </p>
+          <p className="mt-4 text-center text-base font-bold text-zinc-900 sm:text-left">
+            Ventas: {eur(cockpit.v)} | Costes: {eur(cockpit.costesTotales)}
+          </p>
+          <p className="mt-1 text-center text-xs text-zinc-600 sm:text-left">
+            Costes = compras + mermas + comida personal + personal + gastos fijos (periodo)
+          </p>
         </section>
       ) : null}
 
-      {/* D) Qué revisar hoy */}
-      <section className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-zinc-200 sm:p-5" aria-label="Qué revisar hoy">
-        <h2 className="text-xs font-black uppercase tracking-wide text-zinc-500">Qué revisar hoy</h2>
+      {/* 2. Qué revisar hoy — máx. 5 */}
+      <section
+        className="rounded-3xl border-2 border-[#D32F2F]/25 bg-white p-4 shadow-md ring-1 ring-[#D32F2F]/10 sm:p-5"
+        aria-label="Qué revisar hoy"
+      >
+        <h2 className="text-sm font-black uppercase tracking-wide text-[#D32F2F]">Qué revisar hoy</h2>
+        <p className="mt-1 text-xs text-zinc-600">Prioridad 1 primero. Máximo 5 avisos.</p>
         {loading && !summary ? (
           <p className="mt-3 text-sm text-zinc-600">Cargando…</p>
         ) : reviewToday.length === 0 ? (
-          <p className="mt-3 text-sm text-zinc-600">Nada crítico por umbrales. Buen momento para revisar datos de rutina.</p>
+          <p className="mt-4 rounded-2xl border border-zinc-100 bg-zinc-50 px-4 py-3 text-sm text-zinc-700">
+            Nada urgente por umbrales. Revisa datos con calma o amplía el periodo si hace falta contexto.
+          </p>
         ) : (
-          <ul className="mt-3 space-y-3">
-            {reviewToday.slice(0, 8).map((item) => (
+          <ul className="mt-4 space-y-3">
+            {reviewToday.slice(0, 5).map((item) => (
               <li
                 key={item.alert_id}
-                className="rounded-2xl border border-zinc-100 bg-zinc-50/80 p-3 sm:flex sm:items-start sm:justify-between sm:gap-3"
+                className="rounded-2xl border border-zinc-100 bg-zinc-50/90 p-4 shadow-sm sm:flex sm:items-start sm:justify-between sm:gap-4"
               >
-                <div className="min-w-0">
+                <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
                     <span
                       className={`rounded-md px-2 py-0.5 text-[10px] font-black text-white ${priorityBadgeClass(item.prioridad)}`}
                     >
                       P{item.prioridad}
                     </span>
-                    <p className="font-bold text-zinc-900">{item.titulo}</p>
+                    <p className="text-base font-black text-zinc-900">{item.titulo}</p>
                   </div>
-                  <p className="mt-1 text-sm text-zinc-700">{item.descripcion}</p>
-                  <p className="mt-1 text-xs font-semibold text-zinc-600">Impacto: {item.impacto_estimado}</p>
-                  <p className="mt-0.5 text-xs text-zinc-600">{item.accion_sugerida}</p>
+                  <p className="mt-2 text-sm font-bold text-zinc-800">
+                    Impacto: <span className="font-black text-zinc-900">{item.impacto_estimado}</span>
+                  </p>
+                  <p className="mt-1 text-sm text-zinc-700">
+                    Acción: <span className="font-semibold">{item.accion_sugerida}</span>
+                  </p>
                 </div>
                 {item.href ? (
                   <Link
                     href={item.href}
-                    className="mt-3 inline-flex min-h-[44px] shrink-0 items-center justify-center rounded-xl bg-[#D32F2F] px-4 text-xs font-bold text-white sm:mt-0"
+                    className="mt-3 inline-flex min-h-[48px] w-full shrink-0 items-center justify-center rounded-xl bg-[#D32F2F] px-4 text-sm font-black text-white sm:mt-0 sm:w-auto"
                   >
-                    Abrir
+                    Ir
                   </Link>
                 ) : null}
               </li>
@@ -431,87 +450,150 @@ function FinanzasEconomiaBody() {
         )}
       </section>
 
-      {/* Resumen alertas (compacto) */}
-      {summary && financeAlerts.length > 0 ? (
-        <section className="rounded-xl border border-zinc-200 bg-zinc-50/60 px-3 py-2 text-xs text-zinc-700" aria-label="Resumen de alertas">
-          <span className="font-bold text-zinc-800">Alertas activas:</span>{' '}
-          {financeAlerts.filter((a) => a.severidad === 'alta').length} alta ·{' '}
-          {financeAlerts.filter((a) => a.severidad === 'media').length} media ·{' '}
-          {financeAlerts.filter((a) => a.severidad === 'baja').length} baja
+      {/* 3. Costes agrupados */}
+      {summary ? (
+        <section className="grid grid-cols-1 gap-3 sm:grid-cols-2" aria-label="Costes agrupados">
+          <div className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm">
+            <p className="text-[10px] font-black uppercase tracking-wide text-zinc-500">Costes operativos</p>
+            <p className="mt-2 text-2xl font-black tabular-nums text-zinc-900">
+              {eur(
+                summary.costes_operativos.compras_c +
+                  summary.costes_operativos.mermas_c +
+                  summary.costes_operativos.comida_personal_c +
+                  summary.costes_operativos.coste_personal_c,
+              )}
+            </p>
+            <p className="mt-1 text-xs text-zinc-600">Compras + mermas + comida personal + personal</p>
+            {dataHints?.sinCostesOperativos ? (
+              <p className="mt-2 text-xs font-bold text-amber-800">Faltan datos de costes operativos en este periodo.</p>
+            ) : null}
+            {dataHints?.sinPersonal ? (
+              <p className="mt-1 text-xs font-semibold text-zinc-600">No hay costes de personal cargados.</p>
+            ) : null}
+          </div>
+          <div className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm">
+            <p className="text-[10px] font-black uppercase tracking-wide text-zinc-500">Estructura (gastos fijos)</p>
+            <p className="mt-2 text-2xl font-black tabular-nums text-zinc-900">
+              {eur(summary.gastos_fijos.gastos_fijos_c)}
+            </p>
+            <p className="mt-1 text-xs text-zinc-600">Recurrentes nominales + puntuales en ventana</p>
+          </div>
         </section>
       ) : null}
 
-      {/* E) Detalle */}
+      {/* 4. KPIs (5) */}
+      <section aria-label="KPIs principales">
+        <h2 className="sr-only">KPIs principales</h2>
+        {!loading || summary ? (
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+            {kpis.map((k) => (
+              <KpiCardExecutive key={k.title} kpi={k} />
+            ))}
+          </div>
+        ) : null}
+      </section>
+
+      {/* 5. Ratios simples */}
       {summary ? (
-        <section className="space-y-3 rounded-2xl bg-white p-4 shadow-sm ring-1 ring-zinc-200 sm:p-5" aria-label="Detalle">
-          <h2 className="text-xs font-black uppercase tracking-wide text-zinc-500">Detalle del periodo</h2>
-
-          <div className="rounded-xl border border-zinc-100 bg-zinc-50/50 p-3">
-            <p className="text-[10px] font-bold uppercase text-zinc-500">Costes operativos</p>
-            <ul className="mt-2 space-y-1.5 text-sm text-zinc-800">
-              <li className="flex justify-between gap-2">
-                <span>Compras (neto)</span>
-                <span className="tabular-nums font-semibold">{eur(summary.costes_operativos.compras_c)}</span>
-              </li>
-              <li className="flex justify-between gap-2">
-                <span>Mermas</span>
-                <span className="tabular-nums font-semibold">{eur(summary.costes_operativos.mermas_c)}</span>
-              </li>
-              <li className="flex justify-between gap-2">
-                <span>Comida personal</span>
-                <span className="tabular-nums font-semibold">{eur(summary.costes_operativos.comida_personal_c)}</span>
-              </li>
-              <li className="flex justify-between gap-2">
-                <span>Coste personal</span>
-                <span className="tabular-nums font-semibold">{eur(summary.costes_operativos.coste_personal_c)}</span>
-              </li>
-            </ul>
-          </div>
-
-          <div className="rounded-xl border border-zinc-100 bg-zinc-50/50 p-3">
-            <p className="text-[10px] font-bold uppercase text-zinc-500">Gastos fijos</p>
-            <p className="mt-1 text-lg font-black tabular-nums text-zinc-900">{eur(summary.gastos_fijos.gastos_fijos_c)}</p>
-            <p className="mt-1 text-xs text-zinc-600">
-              Puntuales en ventana: {eur(summary.gastos_fijos.detalle.one_off_en_ventana_eur)} · Recurrentes (nominal):{' '}
-              {eur(summary.gastos_fijos.detalle.recurrentes_nominales_eur)}
-            </p>
-          </div>
-
-          <div className="rounded-xl border border-indigo-100 bg-indigo-50/60 p-3">
-            <p className="text-[10px] font-bold uppercase text-indigo-800">Impuestos (informativo)</p>
-            <ul className="mt-2 space-y-1.5 text-sm text-indigo-950">
-              <li className="flex justify-between gap-2">
-                <span>IVA repercutido</span>
-                <span className="tabular-nums font-semibold">{eur(summary.impuestos.iva_repercutido_eur)}</span>
-              </li>
-              <li className="flex justify-between gap-2">
-                <span>IVA soportado</span>
-                <span className="tabular-nums font-semibold">{eur(summary.impuestos.iva_soportado_eur)}</span>
-              </li>
-              <li className="flex justify-between gap-2">
-                <span>Saldo IVA (rep. − soport.)</span>
-                <span className="tabular-nums font-semibold">{eur(summary.impuestos.saldo_iva_eur)}</span>
-              </li>
-              <li className="flex justify-between gap-2">
-                <span>Impuesto sociedades (periodo)</span>
-                <span className="tabular-nums font-semibold">{eur(summary.impuestos.impuesto_sociedades_eur)}</span>
-              </li>
-            </ul>
-            <p className="mt-2 text-xs text-indigo-900/90">{summary.impuestos.nota}</p>
-          </div>
-
-          <div className="flex flex-wrap gap-2 text-xs font-bold">
-            <Link href={`/finanzas/compras?p=${preset}`} className="text-[#D32F2F] underline underline-offset-2">
-              Compras
-            </Link>
-            <Link href={`/finanzas/mermas?p=${preset}`} className="text-[#D32F2F] underline underline-offset-2">
-              Mermas
-            </Link>
-            <Link href="/comida-personal" className="text-[#D32F2F] underline underline-offset-2">
-              Comida personal
-            </Link>
-          </div>
+        <section className="flex flex-wrap gap-2" aria-label="Ratios clave">
+          {ratioChips.map((r) => (
+            <span
+              key={r.label}
+              className="inline-flex items-center rounded-full border border-zinc-200 bg-zinc-50 px-3 py-2 text-xs font-bold text-zinc-800"
+            >
+              {r.label}:{' '}
+              <span className="ml-1 tabular-nums text-zinc-900">
+                {r.value != null ? `${r.value.toFixed(1)}${r.suffix}` : 'N/D'}
+              </span>
+            </span>
+          ))}
         </section>
+      ) : null}
+
+      {/* 6. Tendencia + rankings (2 gráficos) */}
+      {summary && fixedByCategory ? (
+        <FinanzasEconomiaVisualExecutive
+          summary={summary}
+          rankings={rankings}
+          fixedByCategory={fixedByCategory}
+          preset={preset}
+        />
+      ) : null}
+
+      {/* 7. Detalle plegable */}
+      {summary ? (
+        <details className="rounded-2xl border border-zinc-200 bg-white shadow-sm ring-1 ring-zinc-100">
+          <summary className="cursor-pointer list-none px-4 py-4 text-sm font-black text-zinc-900 sm:px-5">
+            Ver desglose (IVA, detalle de costes y enlaces)
+          </summary>
+          <div className="space-y-3 border-t border-zinc-100 px-4 pb-4 pt-3 sm:px-5">
+            <div className="rounded-xl border border-zinc-100 bg-zinc-50/50 p-3">
+              <p className="text-[10px] font-bold uppercase text-zinc-500">Costes operativos · detalle</p>
+              <ul className="mt-2 space-y-1.5 text-sm text-zinc-800">
+                <li className="flex justify-between gap-2">
+                  <span>Compras (neto)</span>
+                  <span className="tabular-nums font-semibold">{eur(summary.costes_operativos.compras_c)}</span>
+                </li>
+                <li className="flex justify-between gap-2">
+                  <span>Mermas</span>
+                  <span className="tabular-nums font-semibold">{eur(summary.costes_operativos.mermas_c)}</span>
+                </li>
+                <li className="flex justify-between gap-2">
+                  <span>Comida personal</span>
+                  <span className="tabular-nums font-semibold">{eur(summary.costes_operativos.comida_personal_c)}</span>
+                </li>
+                <li className="flex justify-between gap-2">
+                  <span>Coste personal</span>
+                  <span className="tabular-nums font-semibold">{eur(summary.costes_operativos.coste_personal_c)}</span>
+                </li>
+              </ul>
+            </div>
+
+            <div className="rounded-xl border border-zinc-100 bg-zinc-50/50 p-3">
+              <p className="text-[10px] font-bold uppercase text-zinc-500">Gastos fijos · detalle</p>
+              <p className="mt-1 text-lg font-black tabular-nums text-zinc-900">{eur(summary.gastos_fijos.gastos_fijos_c)}</p>
+              <p className="mt-1 text-xs text-zinc-600">
+                Puntuales en ventana: {eur(summary.gastos_fijos.detalle.one_off_en_ventana_eur)} · Recurrentes (nominal):{' '}
+                {eur(summary.gastos_fijos.detalle.recurrentes_nominales_eur)}
+              </p>
+            </div>
+
+            <div className="rounded-xl border border-indigo-100 bg-indigo-50/60 p-3">
+              <p className="text-[10px] font-bold uppercase text-indigo-800">Impuestos (informativo)</p>
+              <ul className="mt-2 space-y-1.5 text-sm text-indigo-950">
+                <li className="flex justify-between gap-2">
+                  <span>IVA repercutido</span>
+                  <span className="tabular-nums font-semibold">{eur(summary.impuestos.iva_repercutido_eur)}</span>
+                </li>
+                <li className="flex justify-between gap-2">
+                  <span>IVA soportado</span>
+                  <span className="tabular-nums font-semibold">{eur(summary.impuestos.iva_soportado_eur)}</span>
+                </li>
+                <li className="flex justify-between gap-2">
+                  <span>Saldo IVA</span>
+                  <span className="tabular-nums font-semibold">{eur(summary.impuestos.saldo_iva_eur)}</span>
+                </li>
+                <li className="flex justify-between gap-2">
+                  <span>Impuesto sociedades</span>
+                  <span className="tabular-nums font-semibold">{eur(summary.impuestos.impuesto_sociedades_eur)}</span>
+                </li>
+              </ul>
+              <p className="mt-2 text-xs text-indigo-900/90">{summary.impuestos.nota}</p>
+            </div>
+
+            <div className="flex flex-wrap gap-2 text-xs font-bold">
+              <Link href={`/finanzas/compras?p=${preset}`} className="text-[#D32F2F] underline underline-offset-2">
+                Compras
+              </Link>
+              <Link href={`/finanzas/mermas?p=${preset}`} className="text-[#D32F2F] underline underline-offset-2">
+                Mermas
+              </Link>
+              <Link href="/comida-personal" className="text-[#D32F2F] underline underline-offset-2">
+                Comida personal
+              </Link>
+            </div>
+          </div>
+        </details>
       ) : null}
     </div>
   );
