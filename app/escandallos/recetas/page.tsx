@@ -10,13 +10,16 @@ import {
   ChevronRight,
   Layers,
   ListOrdered,
+  PieChart,
   Plus,
   Search,
   Sparkles,
   Trash2,
 } from 'lucide-react';
+import RecipeTechnicalSheetPanel from '@/components/escandallos/RecipeTechnicalSheetPanel';
 import MermasStyleHero from '@/components/MermasStyleHero';
 import { useAuth } from '@/components/AuthProvider';
+import { fetchRecipeAllergens, type RecipeAllergenRow } from '@/lib/appcc-allergens-supabase';
 import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
 import {
   deleteEscandalloLine,
@@ -42,6 +45,16 @@ import {
   type EscandalloRawProduct,
   type EscandalloRecipe,
 } from '@/lib/escandallos-supabase';
+import {
+  fetchEscandalloTechnicalSheetWithSteps,
+  insertEscandalloTechnicalSheet,
+  replaceEscandalloTechnicalSheetSteps,
+  updateEscandalloTechnicalSheet,
+  type EscandalloTechnicalSheet,
+  type EscandalloTechnicalSheetStep,
+  type EscandalloTechnicalSheetUpdate,
+  type TechnicalSheetStepDraft,
+} from '@/lib/escandallos-technical-sheet-supabase';
 import { ESCANDALLOS_WEIGHTED_PRICE_WINDOW_DAYS } from '@/lib/escandallos-weighted-purchase-prices';
 import type { Unit } from '@/lib/types';
 
@@ -92,6 +105,14 @@ function emptyIngredientDraft(): IngredientDraftRow {
     unit: 'kg',
   };
 }
+
+type RecipeDetailTab = 'resumen' | 'ingredientes' | 'costes' | 'ficha';
+
+type RecipeTechBundle = {
+  sheet: EscandalloTechnicalSheet | null;
+  steps: EscandalloTechnicalSheetStep[];
+  loading: boolean;
+};
 
 function foodCostStatus(pct: number | null): { text: string; className: string } {
   if (pct == null) return { text: 'Sin PVP', className: 'text-zinc-500' };
@@ -393,6 +414,9 @@ export default function EscandallosRecetasPage() {
   const [loading, setLoading] = useState(true);
   const [banner, setBanner] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [recipeDetailTab, setRecipeDetailTab] = useState<RecipeDetailTab>('resumen');
+  const [techByRecipe, setTechByRecipe] = useState<Record<string, RecipeTechBundle>>({});
+  const [allergensByRecipe, setAllergensByRecipe] = useState<Record<string, RecipeAllergenRow[]>>({});
   const [busyId, setBusyId] = useState<string | null>(null);
 
   const [newName, setNewName] = useState('');
@@ -493,6 +517,92 @@ export default function EscandallosRecetasPage() {
     setLinesByRecipe((prev) => ({ ...prev, [recipeId]: lines }));
   };
 
+  const loadAuxForRecipe = useCallback(
+    async (recipeId: string) => {
+      if (!localId || !supabaseOk) return;
+      const supabase = getSupabaseClient()!;
+      setTechByRecipe((prev) => ({
+        ...prev,
+        [recipeId]: {
+          sheet: prev[recipeId]?.sheet ?? null,
+          steps: prev[recipeId]?.steps ?? [],
+          loading: true,
+        },
+      }));
+      let sheet: EscandalloTechnicalSheet | null = null;
+      let steps: EscandalloTechnicalSheetStep[] = [];
+      try {
+        const t = await fetchEscandalloTechnicalSheetWithSteps(supabase, localId, recipeId);
+        sheet = t.sheet;
+        steps = t.steps;
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : '';
+        if (msg.includes('does not exist') || msg.includes('schema cache')) {
+          setBanner(
+            'Ficha técnica: ejecuta en Supabase el archivo supabase-escandallos-migration-technical-sheet.sql',
+          );
+        }
+      }
+      setTechByRecipe((prev) => ({
+        ...prev,
+        [recipeId]: { sheet, steps, loading: false },
+      }));
+      try {
+        const allergens = await fetchRecipeAllergens(supabase, localId, recipeId);
+        setAllergensByRecipe((prev) => ({ ...prev, [recipeId]: allergens }));
+      } catch {
+        setAllergensByRecipe((prev) => ({ ...prev, [recipeId]: [] }));
+      }
+    },
+    [localId, supabaseOk],
+  );
+
+  const handleCreateTechnicalSheet = async (recipeId: string) => {
+    if (!localId || !supabaseOk) return;
+    const supabase = getSupabaseClient()!;
+    setBusyId(`tech-${recipeId}`);
+    setBanner(null);
+    try {
+      const sheet = await insertEscandalloTechnicalSheet(supabase, localId, recipeId);
+      setTechByRecipe((prev) => ({
+        ...prev,
+        [recipeId]: { sheet, steps: [], loading: false },
+      }));
+    } catch (e: unknown) {
+      setBanner(
+        e instanceof Error
+          ? e.message
+          : 'No se pudo crear la ficha. ¿Ejecutaste la migración SQL de ficha técnica?',
+      );
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const handleSaveTechnicalSheet = async (
+    recipeId: string,
+    sheetId: string,
+    patch: EscandalloTechnicalSheetUpdate,
+    stepDrafts: TechnicalSheetStepDraft[],
+  ) => {
+    if (!localId || !supabaseOk) return;
+    const supabase = getSupabaseClient()!;
+    setBusyId(`tech-${recipeId}`);
+    setBanner(null);
+    try {
+      const sheet = await updateEscandalloTechnicalSheet(supabase, localId, sheetId, patch);
+      const steps = await replaceEscandalloTechnicalSheetSteps(supabase, localId, sheetId, stepDrafts);
+      setTechByRecipe((prev) => ({
+        ...prev,
+        [recipeId]: { sheet, steps, loading: false },
+      }));
+    } catch (e: unknown) {
+      setBanner(e instanceof Error ? e.message : 'No se pudo guardar la ficha técnica.');
+    } finally {
+      setBusyId(null);
+    }
+  };
+
   const hydrateDraftFromRecipe = (recipe: EscandalloRecipe) => {
     setDraftRecipeName(recipe.name);
     setDraftRecipeNotes(recipe.notes);
@@ -511,6 +621,8 @@ export default function EscandallosRecetasPage() {
     }
     hydrateDraftFromRecipe(recipe);
     setExpandedId(recipe.id);
+    setRecipeDetailTab('resumen');
+    void loadAuxForRecipe(recipe.id);
   };
 
   const handleCreateProcessed = async () => {
@@ -771,6 +883,13 @@ export default function EscandallosRecetasPage() {
       : null;
     const fcHint = foodCostStatus(fcPct);
 
+    const techBundle = techByRecipe[recipe.id] ?? {
+      sheet: null,
+      steps: [],
+      loading: false,
+    };
+    const recipeAllergens = allergensByRecipe[recipe.id] ?? [];
+
     const headerPad = variant === 'main' ? 'px-4 py-3.5' : 'px-3 py-2.5';
     const titleClass = variant === 'main' ? 'text-base' : 'text-sm';
 
@@ -817,183 +936,289 @@ export default function EscandallosRecetasPage() {
         </button>
         {open ? (
           <div className="space-y-3 border-t border-zinc-200 bg-white px-3 pb-4 pt-3 sm:px-4">
-            <div className="space-y-2 rounded-xl bg-zinc-50 p-3 ring-1 ring-zinc-100">
-              <p className="text-[10px] font-bold uppercase text-zinc-500">Ficha</p>
-              <input
-                value={draftRecipeName}
-                onChange={(e) => setDraftRecipeName(e.target.value)}
-                className="w-full rounded-lg border border-zinc-200 px-2 py-1.5 text-sm"
-                placeholder="Nombre"
-              />
-              <textarea
-                value={draftRecipeNotes}
-                onChange={(e) => setDraftRecipeNotes(e.target.value)}
-                rows={2}
-                placeholder="Notas (opcional)"
-                className="w-full rounded-lg border border-zinc-200 px-2 py-1.5 text-sm"
-              />
-              <div className="flex flex-wrap gap-2">
-                <input
-                  value={draftYieldQty}
-                  onChange={(e) => setDraftYieldQty(e.target.value)}
-                  className="w-24 rounded-lg border border-zinc-200 px-2 py-1.5 text-sm"
-                  inputMode="decimal"
-                  placeholder="Rend."
-                />
-                <input
-                  value={draftYieldLabel}
-                  onChange={(e) => setDraftYieldLabel(e.target.value)}
-                  className="min-w-0 flex-1 rounded-lg border border-zinc-200 px-2 py-1.5 text-sm"
-                  placeholder="Unidad (raciones, kg…)"
-                />
-              </div>
+            <div className="-mx-1 flex gap-1.5 overflow-x-auto pb-1 sm:mx-0">
+              {(
+                [
+                  { id: 'resumen' as const, label: 'Resumen' },
+                  { id: 'ingredientes' as const, label: 'Ingredientes' },
+                  { id: 'costes' as const, label: 'Costes' },
+                  { id: 'ficha' as const, label: 'Ficha técnica' },
+                ] satisfies { id: RecipeDetailTab; label: string }[]
+              ).map((tab) => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setRecipeDetailTab(tab.id)}
+                  className={[
+                    'shrink-0 rounded-full px-3.5 py-2 text-[11px] font-black uppercase tracking-wide transition',
+                    recipeDetailTab === tab.id
+                      ? 'bg-[#D32F2F] text-white shadow-md shadow-red-900/20'
+                      : 'bg-zinc-100 text-zinc-700 hover:bg-zinc-200',
+                  ].join(' ')}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
 
-              {!recipe.isSubRecipe ? (
-                <div className="rounded-xl border border-zinc-200 bg-zinc-50/80 p-3 ring-1 ring-zinc-100">
-                  <p className="text-[10px] font-bold uppercase text-zinc-600">Precio carta & food cost</p>
-                  <div className="mt-2 grid gap-2 sm:grid-cols-2">
+            {recipeDetailTab === 'resumen' ? (
+              <div className="space-y-2 rounded-xl bg-zinc-50 p-3 ring-1 ring-zinc-100">
+                <p className="text-[10px] font-bold uppercase text-zinc-500">Datos de la receta</p>
+                <input
+                  value={draftRecipeName}
+                  onChange={(e) => setDraftRecipeName(e.target.value)}
+                  className="w-full rounded-lg border border-zinc-200 px-2 py-1.5 text-sm"
+                  placeholder="Nombre"
+                />
+                <textarea
+                  value={draftRecipeNotes}
+                  onChange={(e) => setDraftRecipeNotes(e.target.value)}
+                  rows={2}
+                  placeholder="Notas (opcional)"
+                  className="w-full rounded-lg border border-zinc-200 px-2 py-1.5 text-sm"
+                />
+                <div className="flex flex-wrap gap-2">
+                  <input
+                    value={draftYieldQty}
+                    onChange={(e) => setDraftYieldQty(e.target.value)}
+                    className="w-24 rounded-lg border border-zinc-200 px-2 py-1.5 text-sm"
+                    inputMode="decimal"
+                    placeholder="Rend."
+                  />
+                  <input
+                    value={draftYieldLabel}
+                    onChange={(e) => setDraftYieldLabel(e.target.value)}
+                    className="min-w-0 flex-1 rounded-lg border border-zinc-200 px-2 py-1.5 text-sm"
+                    placeholder="Unidad (raciones, kg…)"
+                  />
+                </div>
+                <button
+                  type="button"
+                  disabled={busyId === recipe.id}
+                  onClick={() => void handleSaveRecipeMeta(recipe.id)}
+                  className="rounded-lg bg-zinc-900 px-3 py-1.5 text-xs font-bold text-white disabled:opacity-60"
+                >
+                  Guardar resumen
+                </button>
+              </div>
+            ) : null}
+
+            {recipeDetailTab === 'costes' ? (
+              <div className="space-y-3">
+                <div className="rounded-xl border border-zinc-200 bg-zinc-50/90 p-3 ring-1 ring-zinc-100">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[#D32F2F]/10 text-[#B91C1C] ring-1 ring-[#D32F2F]/15">
+                      <PieChart className="h-4 w-4" strokeWidth={2.2} aria-hidden />
+                    </span>
                     <div>
-                      <label className="text-[10px] font-semibold text-zinc-500">PVP (€ IVA incl.)</label>
-                      <input
-                        value={draftSaleGross}
-                        onChange={(e) => setDraftSaleGross(e.target.value)}
-                        className="mt-0.5 w-full rounded-lg border border-zinc-200 bg-white px-2 py-1.5 text-sm"
-                        inputMode="decimal"
-                        placeholder="Ej. 14,50"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-[10px] font-semibold text-zinc-500">IVA %</label>
-                      <input
-                        value={draftSaleVat}
-                        onChange={(e) => setDraftSaleVat(e.target.value)}
-                        className="mt-0.5 w-full rounded-lg border border-zinc-200 bg-white px-2 py-1.5 text-sm tabular-nums"
-                        inputMode="decimal"
-                        placeholder="10"
-                      />
+                      <p className="text-[10px] font-bold uppercase text-zinc-500">Coste del escandallo</p>
+                      <p className="text-sm font-bold text-zinc-900">
+                        Total ~{total.toFixed(2)} € · {perYield.toFixed(2)} € / {recipe.yieldLabel}
+                      </p>
+                      {!recipe.isSubRecipe && fcPct != null ? (
+                        <p className="text-xs text-zinc-600">
+                          Food cost sobre PVP neto:{' '}
+                          <span className={fcHint.className}>{fcPct.toFixed(1)} %</span>
+                          <span className="text-zinc-400"> ({fcHint.text})</span>
+                        </p>
+                      ) : null}
                     </div>
                   </div>
-                  {(() => {
-                    const g = parseDecimal(draftSaleGross);
-                    const v = parseDecimal(draftSaleVat) ?? 10;
-                    const n = g != null && g > 0 ? saleNetPerUnitFromGross(g, v) : null;
-                    const t = recipeTotalCostEur(lines, rawById, processedById, {
-                      linesByRecipe,
-                      recipesById,
-                      recipeId: recipe.id,
-                    });
-                    const y = parseDecimal(draftYieldQty) ?? recipe.yieldQty;
-                    const previewFc = foodCostPercentOfNetSale(t, y > 0 ? y : 1, n);
-                    return (
-                      <div className="mt-3 grid gap-2 rounded-lg border border-zinc-100 bg-white px-3 py-2 sm:grid-cols-2">
-                        <div>
-                          <p className="text-[10px] font-semibold uppercase text-zinc-500">Precio neto (sin IVA)</p>
-                          <p className="text-lg font-bold tabular-nums text-zinc-900">{n != null ? `${n.toFixed(2)} €` : '—'}</p>
-                        </div>
-                        <div>
-                          <p className="text-[10px] font-semibold uppercase text-zinc-500">Food cost (preview)</p>
-                          <p className="text-lg font-bold tabular-nums text-zinc-900">
-                            {previewFc != null ? `${previewFc.toFixed(1)} %` : '—'}
-                          </p>
-                        </div>
-                      </div>
-                    );
-                  })()}
+                  {lines.length === 0 ? (
+                    <p className="mt-3 text-xs text-zinc-400">Sin líneas: añade ingredientes en su pestaña.</p>
+                  ) : (
+                    <ul className="mt-3 max-h-56 space-y-1.5 overflow-y-auto rounded-lg border border-zinc-200 bg-white p-2">
+                      {lines.map((line) => {
+                        const unitEur = lineUnitPriceEur(line, rawById, processedById, priceInner);
+                        const lineCost = Math.round(line.qty * unitEur * 100) / 100;
+                        const src =
+                          line.sourceType === 'raw'
+                            ? 'Crudo'
+                            : line.sourceType === 'processed'
+                              ? 'Elaborado'
+                              : line.sourceType === 'subrecipe'
+                                ? 'Sub-receta'
+                                : 'Manual';
+                        return (
+                          <li key={line.id} className="flex justify-between gap-2 border-b border-zinc-50 py-1.5 text-xs last:border-0">
+                            <span className="min-w-0 font-medium text-zinc-800">{line.label}</span>
+                            <span className="shrink-0 tabular-nums text-zinc-600">
+                              {line.qty} {line.unit} × {unitEur.toFixed(2)} € ({src}) →{' '}
+                              <span className="font-semibold text-zinc-900">{lineCost.toFixed(2)} €</span>
+                            </span>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  )}
                 </div>
-              ) : null}
 
-              {!recipe.isSubRecipe ? (
-                <input
-                  value={draftPosArticleCode}
-                  onChange={(e) => setDraftPosArticleCode(e.target.value)}
-                  className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 font-mono text-sm tabular-nums outline-none focus:ring-2 focus:ring-[#D32F2F]/20"
-                  placeholder="Código TPV / POS (ej. 00042)"
-                  autoComplete="off"
-                />
-              ) : null}
-
-              <button
-                type="button"
-                disabled={busyId === recipe.id}
-                onClick={() => void handleSaveRecipeMeta(recipe.id)}
-                className="rounded-lg bg-zinc-900 px-3 py-1.5 text-xs font-bold text-white disabled:opacity-60"
-              >
-                Guardar ficha
-              </button>
-            </div>
-
-            <div className="space-y-2">
-              <div className="flex items-baseline justify-between gap-2">
-                <p className="text-[10px] font-bold uppercase text-zinc-500">Ingredientes en receta</p>
-                <p className="text-xs font-semibold text-zinc-700">
-                  Total ~{total.toFixed(2)} €
-                </p>
-              </div>
-              {lines.length === 0 ? (
-                <p className="text-xs text-zinc-400">Sin ingredientes aún.</p>
-              ) : (
-                <ul className="space-y-2">
-                  {lines.map((line) => {
-                    const unitEur = lineUnitPriceEur(line, rawById, processedById, priceInner);
-                    const lineCost = Math.round(line.qty * unitEur * 100) / 100;
-                    const src =
-                      line.sourceType === 'raw'
-                        ? 'Crudo'
-                        : line.sourceType === 'processed'
-                          ? 'Elaborado'
-                          : line.sourceType === 'subrecipe'
-                            ? 'Sub-receta'
-                            : 'Manual';
-                    return (
-                      <li
-                        key={line.id}
-                        className="flex items-start justify-between gap-2 rounded-xl border border-zinc-100 bg-zinc-50/80 px-3 py-2"
-                      >
-                        <div className="min-w-0">
-                          <p className="text-sm font-medium text-zinc-900">{line.label}</p>
-                          <p className="text-xs text-zinc-600">
-                            {line.qty} {line.unit} × {unitEur.toFixed(2)} € ({src}) → {lineCost.toFixed(2)} €
-                          </p>
+                {!recipe.isSubRecipe ? (
+                  <div className="space-y-2 rounded-xl border border-zinc-200 bg-zinc-50/80 p-3 ring-1 ring-zinc-100">
+                    <p className="text-[10px] font-bold uppercase text-zinc-600">Precio carta & margen</p>
+                    <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                      <div>
+                        <label className="text-[10px] font-semibold text-zinc-500">PVP (€ IVA incl.)</label>
+                        <input
+                          value={draftSaleGross}
+                          onChange={(e) => setDraftSaleGross(e.target.value)}
+                          className="mt-0.5 w-full rounded-lg border border-zinc-200 bg-white px-2 py-1.5 text-sm"
+                          inputMode="decimal"
+                          placeholder="Ej. 14,50"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-semibold text-zinc-500">IVA %</label>
+                        <input
+                          value={draftSaleVat}
+                          onChange={(e) => setDraftSaleVat(e.target.value)}
+                          className="mt-0.5 w-full rounded-lg border border-zinc-200 bg-white px-2 py-1.5 text-sm tabular-nums"
+                          inputMode="decimal"
+                          placeholder="10"
+                        />
+                      </div>
+                    </div>
+                    <input
+                      value={draftPosArticleCode}
+                      onChange={(e) => setDraftPosArticleCode(e.target.value)}
+                      className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 font-mono text-sm tabular-nums outline-none focus:ring-2 focus:ring-[#D32F2F]/20"
+                      placeholder="Código TPV / POS (ej. 00042)"
+                      autoComplete="off"
+                    />
+                    {(() => {
+                      const g = parseDecimal(draftSaleGross);
+                      const v = parseDecimal(draftSaleVat) ?? 10;
+                      const n = g != null && g > 0 ? saleNetPerUnitFromGross(g, v) : null;
+                      const t = recipeTotalCostEur(lines, rawById, processedById, {
+                        linesByRecipe,
+                        recipesById,
+                        recipeId: recipe.id,
+                      });
+                      const y = parseDecimal(draftYieldQty) ?? recipe.yieldQty;
+                      const previewFc = foodCostPercentOfNetSale(t, y > 0 ? y : 1, n);
+                      return (
+                        <div className="mt-3 grid gap-2 rounded-lg border border-zinc-100 bg-white px-3 py-2 sm:grid-cols-2">
+                          <div>
+                            <p className="text-[10px] font-semibold uppercase text-zinc-500">Precio neto (sin IVA)</p>
+                            <p className="text-lg font-bold tabular-nums text-zinc-900">{n != null ? `${n.toFixed(2)} €` : '—'}</p>
+                          </div>
+                          <div>
+                            <p className="text-[10px] font-semibold uppercase text-zinc-500">Food cost (preview)</p>
+                            <p className="text-lg font-bold tabular-nums text-zinc-900">
+                              {previewFc != null ? `${previewFc.toFixed(1)} %` : '—'}
+                            </p>
+                          </div>
                         </div>
-                        <button
-                          type="button"
-                          disabled={busyId === line.id}
-                          onClick={() => void handleDeleteLine(recipe.id, line.id)}
-                          className="shrink-0 rounded-lg p-1.5 text-[#B91C1C] hover:bg-red-50 disabled:opacity-50"
-                          aria-label="Eliminar línea"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
-            </div>
-
-            <div className="rounded-2xl border border-zinc-200 bg-zinc-50/50 p-3 ring-1 ring-zinc-100">
-              <p className="text-xs font-black uppercase tracking-wide text-zinc-600">Añadir ingredientes</p>
-              <div className="mt-2">
-                <IngredientDraftEditor
-                  drafts={ingredientDrafts}
-                  onChange={setIngredientDrafts}
-                  sortedRaw={sortedRawProducts}
-                  processedProducts={processedProducts}
-                  recipes={recipes}
-                  excludeRecipeId={recipe.id}
-                  disabled={busyId !== null}
-                />
+                      );
+                    })()}
+                    <button
+                      type="button"
+                      disabled={busyId === recipe.id}
+                      onClick={() => void handleSaveRecipeMeta(recipe.id)}
+                      className="mt-2 rounded-lg bg-zinc-900 px-3 py-1.5 text-xs font-bold text-white disabled:opacity-60"
+                    >
+                      Guardar PVP y TPV
+                    </button>
+                  </div>
+                ) : (
+                  <p className="rounded-lg bg-zinc-50 px-3 py-2 text-xs text-zinc-600 ring-1 ring-zinc-100">
+                    Las sub-recetas no llevan PVP en carta; su coste se integra en los platos que las usan.
+                  </p>
+                )}
               </div>
-              <button
-                type="button"
-                disabled={busyId !== null}
-                onClick={() => void handleAddLinesBatch(recipe.id)}
-                className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-[#D32F2F] py-3 text-sm font-black text-white shadow-md transition hover:bg-[#B91C1C] disabled:opacity-60"
-              >
-                <Plus className="h-4 w-4 shrink-0" aria-hidden />
-                Añadir todas las filas a la receta
-              </button>
-            </div>
+            ) : null}
+
+            {recipeDetailTab === 'ingredientes' ? (
+              <>
+                <div className="space-y-2">
+                  <div className="flex items-baseline justify-between gap-2">
+                    <p className="text-[10px] font-bold uppercase text-zinc-500">Ingredientes en receta</p>
+                    <p className="text-xs font-semibold text-zinc-700">Total ~{total.toFixed(2)} €</p>
+                  </div>
+                  {lines.length === 0 ? (
+                    <p className="text-xs text-zinc-400">Sin ingredientes aún.</p>
+                  ) : (
+                    <ul className="space-y-2">
+                      {lines.map((line) => {
+                        const unitEur = lineUnitPriceEur(line, rawById, processedById, priceInner);
+                        const lineCost = Math.round(line.qty * unitEur * 100) / 100;
+                        const src =
+                          line.sourceType === 'raw'
+                            ? 'Crudo'
+                            : line.sourceType === 'processed'
+                              ? 'Elaborado'
+                              : line.sourceType === 'subrecipe'
+                                ? 'Sub-receta'
+                                : 'Manual';
+                        return (
+                          <li
+                            key={line.id}
+                            className="flex items-start justify-between gap-2 rounded-xl border border-zinc-100 bg-zinc-50/80 px-3 py-2"
+                          >
+                            <div className="min-w-0">
+                              <p className="text-sm font-medium text-zinc-900">{line.label}</p>
+                              <p className="text-xs text-zinc-600">
+                                {line.qty} {line.unit} × {unitEur.toFixed(2)} € ({src}) → {lineCost.toFixed(2)} €
+                              </p>
+                            </div>
+                            <button
+                              type="button"
+                              disabled={busyId === line.id}
+                              onClick={() => void handleDeleteLine(recipe.id, line.id)}
+                              className="shrink-0 rounded-lg p-1.5 text-[#B91C1C] hover:bg-red-50 disabled:opacity-50"
+                              aria-label="Eliminar línea"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  )}
+                </div>
+
+                <div className="rounded-2xl border border-zinc-200 bg-zinc-50/50 p-3 ring-1 ring-zinc-100">
+                  <p className="text-xs font-black uppercase tracking-wide text-zinc-600">Añadir ingredientes</p>
+                  <div className="mt-2">
+                    <IngredientDraftEditor
+                      drafts={ingredientDrafts}
+                      onChange={setIngredientDrafts}
+                      sortedRaw={sortedRawProducts}
+                      processedProducts={processedProducts}
+                      recipes={recipes}
+                      excludeRecipeId={recipe.id}
+                      disabled={busyId !== null}
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    disabled={busyId !== null}
+                    onClick={() => void handleAddLinesBatch(recipe.id)}
+                    className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-[#D32F2F] py-3 text-sm font-black text-white shadow-md transition hover:bg-[#B91C1C] disabled:opacity-60"
+                  >
+                    <Plus className="h-4 w-4 shrink-0" aria-hidden />
+                    Añadir todas las filas a la receta
+                  </button>
+                </div>
+              </>
+            ) : null}
+
+            {recipeDetailTab === 'ficha' ? (
+              <RecipeTechnicalSheetPanel
+                recipe={recipe}
+                lines={lines}
+                sheet={techBundle.sheet}
+                steps={techBundle.steps}
+                recipeAllergens={recipeAllergens}
+                loading={techBundle.loading}
+                saving={busyId === `tech-${recipe.id}`}
+                onCreate={() => handleCreateTechnicalSheet(recipe.id)}
+                onSave={(patch, drafts) => {
+                  if (!techBundle.sheet) return Promise.resolve();
+                  return handleSaveTechnicalSheet(recipe.id, techBundle.sheet.id, patch, drafts);
+                }}
+              />
+            ) : null}
 
             <button
               type="button"
