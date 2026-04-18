@@ -201,20 +201,20 @@ function SlotEditor({
   };
 
   return (
-    <div className="rounded-xl border border-zinc-200/80 bg-zinc-50/50 px-3 py-3 ring-1 ring-zinc-100/90">
+    <div className="min-w-0 rounded-lg border border-zinc-200/80 bg-zinc-50/50 px-2 py-2 ring-1 ring-zinc-100/90">
       <div className="flex items-center justify-between gap-2">
         <span
-          className="inline-flex items-center rounded-lg bg-white px-2.5 py-1 text-[10px] font-black uppercase tracking-wide text-zinc-700 ring-1 ring-zinc-200/90"
+          className="inline-flex items-center rounded-md bg-white px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wide text-zinc-700 ring-1 ring-zinc-200/90"
           title={APPCC_SLOT_LABEL[slot]}
         >
           {SLOT_DISPLAY[slot]}
         </span>
         {out ? (
-          <span className="text-[10px] font-bold uppercase tracking-wide text-red-600">Fuera de rango</span>
+          <span className="text-[9px] font-bold uppercase tracking-wide text-red-600">Fuera de rango</span>
         ) : null}
       </div>
-      <div className="mt-3 flex flex-wrap items-end gap-2">
-        <div className="flex min-w-0 flex-1 items-center gap-1.5">
+      <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+        <div className="flex min-w-0 flex-1 items-center gap-1">
           <input
             type="text"
             inputMode="decimal"
@@ -234,11 +234,11 @@ function SlotEditor({
                 : 'Número con coma o punto decimal (ej. 4,5 °C)'
             }
             className={[
-              'h-12 min-w-[5.5rem] flex-1 rounded-xl border-2 border-zinc-200 bg-white px-3 text-center text-lg font-bold tabular-nums text-zinc-900 outline-none transition focus:border-[#D32F2F]/50 focus:ring-2 focus:ring-[#D32F2F]/20 sm:min-w-[6.5rem] sm:text-xl',
+              'h-8 min-w-[4rem] flex-1 rounded-lg border border-zinc-200 bg-white px-2 text-center text-base font-bold tabular-nums text-zinc-900 outline-none transition focus:border-[#D32F2F]/60 focus:ring-1 focus:ring-[#D32F2F]/25 sm:min-w-[4.5rem]',
             ].join(' ')}
             aria-label={`Temperatura ${SLOT_DISPLAY[slot]}`}
           />
-          <span className="pb-2 text-sm font-semibold text-zinc-500">°C</span>
+          <span className="text-xs font-semibold text-zinc-500">°C</span>
         </div>
       </div>
       <input
@@ -253,7 +253,7 @@ function SlotEditor({
         }}
         disabled={disabled || saving}
         placeholder="Notas (opcional)"
-        className="mt-2.5 h-10 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm text-zinc-800 outline-none focus:ring-2 focus:ring-[#D32F2F]/20"
+        className="mt-1.5 h-7 w-full rounded-lg border border-zinc-200 bg-white px-2 text-xs text-zinc-800 outline-none focus:ring-1 focus:ring-[#D32F2F]/25"
       />
       <button
         type="button"
@@ -265,13 +265,13 @@ function SlotEditor({
         }}
         disabled={disabled || saving}
         className={[
-          'mt-3 flex h-10 w-full items-center justify-center rounded-xl text-xs font-black uppercase tracking-wide text-white shadow-sm transition disabled:opacity-50',
+          'mt-1.5 flex h-7 w-full items-center justify-center rounded-lg text-[10px] font-black uppercase tracking-wide text-white shadow-sm transition disabled:opacity-50',
           isSavedSynced ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-[#D32F2F] hover:bg-[#b71c1c]',
         ].join(' ')}
       >
-        {saving ? 'Guardando…' : isSavedSynced ? 'Guardado' : 'Guardar'}
+        {saving ? '…' : isSavedSynced ? 'Guardado' : 'Guardar'}
       </button>
-      {err ? <p className="mt-2 text-xs font-medium text-red-600">{err}</p> : null}
+      {err ? <p className="mt-1 text-[10px] font-medium text-red-600">{err}</p> : null}
     </div>
   );
 }
@@ -300,18 +300,18 @@ function UnitCard({
       : '';
 
   return (
-    <div className="rounded-2xl border border-zinc-200/90 bg-white px-4 py-4 shadow-sm ring-1 ring-zinc-100">
-      <div className="mb-3 flex items-start justify-between gap-3 border-b border-zinc-100 pb-3">
+    <div className="rounded-xl border border-zinc-200/90 bg-white px-3 py-2.5 shadow-sm ring-1 ring-zinc-100">
+      <div className="mb-2 flex items-start justify-between gap-2 border-b border-zinc-100 pb-2">
         <div className="min-w-0">
-          <p className="font-serif text-lg font-bold leading-tight text-zinc-900">{unit.name}</p>
-          <p className="mt-1 text-xs font-medium leading-snug text-zinc-500">
+          <p className="font-serif text-base font-bold leading-tight text-zinc-900">{unit.name}</p>
+          <p className="mt-0.5 text-[11px] font-medium leading-snug text-zinc-500">
             {APPCC_UNIT_TYPE_LABEL[unit.unit_type]}
             {range}
           </p>
         </div>
-        <Thermometer className="h-6 w-6 shrink-0 text-[#D32F2F]/80" aria-hidden />
+        <Thermometer className="h-5 w-5 shrink-0 text-[#D32F2F]/80" aria-hidden />
       </div>
-      <div className="space-y-3">
+      <div className="grid grid-cols-2 gap-2">
         {TEMP_REGISTRO_SLOTS.map((slot) => (
           <SlotEditor
             key={slot}
@@ -655,8 +655,8 @@ function AppccTemperaturasInner() {
           {byZone.map(({ zone, list }) =>
             list.length === 0 ? null : (
               <section key={zone}>
-                <h2 className="mb-3 font-serif text-lg font-bold text-zinc-900">{APPCC_ZONE_LABEL[zone]}</h2>
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <h2 className="mb-2 font-serif text-base font-bold text-zinc-900">{APPCC_ZONE_LABEL[zone]}</h2>
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                   {list.map((unit) => (
                     <UnitCard
                       key={unit.id}
