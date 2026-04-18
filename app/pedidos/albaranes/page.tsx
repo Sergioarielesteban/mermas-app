@@ -15,6 +15,7 @@ import { useAuth } from '@/components/AuthProvider';
 import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
 import PedidosPremiaLockedScreen from '@/components/PedidosPremiaLockedScreen';
 import { canAccessPedidos, canUsePedidosModule } from '@/lib/pedidos-access';
+import { deliveryNoteStatusVisual } from '@/lib/delivery-notes-ui';
 import {
   DELIVERY_NOTE_STATUS_LABEL,
   fetchDeliveryNotesList,
@@ -275,13 +276,7 @@ export default function PedidosAlbaranesPage() {
                     <span
                       className={[
                         'rounded-full px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wide',
-                        r.status === 'validated'
-                          ? 'bg-emerald-100 text-emerald-900'
-                          : r.status === 'with_incidents'
-                            ? 'bg-red-100 text-red-900'
-                            : r.status === 'archived'
-                              ? 'bg-zinc-200 text-zinc-700'
-                              : 'bg-amber-50 text-amber-900 ring-1 ring-amber-200',
+                        deliveryNoteStatusVisual(r.status).chipClass,
                       ].join(' ')}
                     >
                       {DELIVERY_NOTE_STATUS_LABEL[r.status]}
