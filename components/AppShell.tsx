@@ -86,7 +86,7 @@ function titleForPath(pathname: string | null) {
   if (pathname.startsWith('/chat')) return 'Chat del local';
   if (pathname.startsWith('/cuenta')) return 'Cuenta y seguridad';
   if (pathname === '/appcc') return 'APPCC';
-  if (pathname.startsWith('/appcc/temperaturas')) return 'Temperaturas';
+  if (pathname.startsWith('/appcc/temperaturas')) return 'Registros de temperatura';
   if (pathname.startsWith('/appcc/historial')) return 'Historial';
   if (pathname.startsWith('/appcc/equipos')) return 'Equipos frío';
   if (pathname.startsWith('/appcc/aceite/registro')) return 'Aceite';

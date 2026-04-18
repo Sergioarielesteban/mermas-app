@@ -22,7 +22,7 @@ import {
   fetchAppccReadingsInRange,
   formatAppccDateEs,
   isTempOutOfRange,
-  madridDateKey,
+  appccTemperaturasOperationalDateKey,
   readingsByUnitAndSlot,
   deleteAppccReading,
   upsertAppccReading,
@@ -48,7 +48,7 @@ function initialTempFieldValue(unit: AppccColdUnitRow, reading: AppccReadingRow 
 /** Solo dos turnos al día (mañana y noche); «tarde» queda en BD por lecturas antiguas. */
 const TEMP_REGISTRO_SLOTS: AppccSlot[] = ['manana', 'noche'];
 
-const SLOT_SHORT: Record<AppccSlot, string> = {
+const SLOT_DISPLAY: Record<AppccSlot, string> = {
   manana: 'Mañana',
   tarde: 'Tarde',
   noche: 'Noche',
@@ -201,15 +201,20 @@ function SlotEditor({
   };
 
   return (
-    <div className="py-0.5">
-      <div className="flex flex-wrap items-center gap-1 sm:gap-1.5">
+    <div className="rounded-xl border border-zinc-200/80 bg-zinc-50/50 px-3 py-3 ring-1 ring-zinc-100/90">
+      <div className="flex items-center justify-between gap-2">
         <span
-          className="w-[2.75rem] shrink-0 text-[9px] font-bold uppercase leading-tight text-zinc-500"
+          className="inline-flex items-center rounded-lg bg-white px-2.5 py-1 text-[10px] font-black uppercase tracking-wide text-zinc-700 ring-1 ring-zinc-200/90"
           title={APPCC_SLOT_LABEL[slot]}
         >
-          {SLOT_SHORT[slot]}
+          {SLOT_DISPLAY[slot]}
         </span>
-        <div className="flex items-center gap-0.5">
+        {out ? (
+          <span className="text-[10px] font-bold uppercase tracking-wide text-red-600">Fuera de rango</span>
+        ) : null}
+      </div>
+      <div className="mt-3 flex flex-wrap items-end gap-2">
+        <div className="flex min-w-0 flex-1 items-center gap-1.5">
           <input
             type="text"
             inputMode="decimal"
@@ -222,56 +227,51 @@ function SlotEditor({
               void flushSlot();
             }}
             disabled={disabled || saving}
-            placeholder={unit.unit_type === 'congelador' ? '16 o 16,5' : '°C'}
+            placeholder={unit.unit_type === 'congelador' ? 'Ej. 16' : 'Ej. 4,5'}
             title={
               unit.unit_type === 'congelador'
                 ? 'Ya hay un «-»; número y opcional coma o punto decimal (ej. 16,3 → -16,3 °C)'
                 : 'Número con coma o punto decimal (ej. 4,5 °C)'
             }
             className={[
-              'h-7 rounded-md border border-zinc-200 bg-white px-1.5 text-xs font-semibold text-zinc-900 outline-none focus:ring-1 focus:ring-[#D32F2F]/40',
-              unit.unit_type === 'congelador' ? 'w-[3.65rem]' : 'w-[3.25rem]',
+              'h-12 min-w-[5.5rem] flex-1 rounded-xl border-2 border-zinc-200 bg-white px-3 text-center text-lg font-bold tabular-nums text-zinc-900 outline-none transition focus:border-[#D32F2F]/50 focus:ring-2 focus:ring-[#D32F2F]/20 sm:min-w-[6.5rem] sm:text-xl',
             ].join(' ')}
+            aria-label={`Temperatura ${SLOT_DISPLAY[slot]}`}
           />
-          <span className="text-[10px] text-zinc-400">°C</span>
+          <span className="pb-2 text-sm font-semibold text-zinc-500">°C</span>
         </div>
-        <input
-          type="text"
-          value={notes}
-          onChange={(e) => {
-            setJustSaved(false);
-            setNotes(e.target.value);
-          }}
-          onBlur={() => {
-            void flushSlot();
-          }}
-          disabled={disabled || saving}
-          placeholder="Notas"
-          className="h-7 min-w-0 flex-1 rounded-md border border-zinc-200 bg-white px-1.5 text-[11px] text-zinc-700 outline-none focus:ring-1 focus:ring-[#D32F2F]/30 sm:max-w-[9rem]"
-        />
-        <button
-          type="button"
-          title={isSavedSynced ? 'Sincronizado con el servidor' : 'Guardar ahora'}
-          onClick={() => {
-            if (disabled || saving) return;
-            if (isSavedSynced) return;
-            void flushSlot();
-          }}
-          disabled={disabled || saving}
-          className={[
-            'h-7 shrink-0 rounded-md px-2 text-[10px] font-bold uppercase tracking-wide disabled:opacity-50',
-            isSavedSynced
-              ? 'bg-emerald-600 text-white'
-              : 'bg-[#D32F2F] text-white',
-          ].join(' ')}
-        >
-          {saving ? '…' : isSavedSynced ? 'Guardado' : 'Guardar'}
-        </button>
       </div>
-      {out ? (
-        <p className="mt-0.5 text-[9px] font-semibold leading-tight text-red-600">Fuera de rango</p>
-      ) : null}
-      {err ? <p className="mt-0.5 text-[9px] font-medium text-red-600">{err}</p> : null}
+      <input
+        type="text"
+        value={notes}
+        onChange={(e) => {
+          setJustSaved(false);
+          setNotes(e.target.value);
+        }}
+        onBlur={() => {
+          void flushSlot();
+        }}
+        disabled={disabled || saving}
+        placeholder="Notas (opcional)"
+        className="mt-2.5 h-10 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm text-zinc-800 outline-none focus:ring-2 focus:ring-[#D32F2F]/20"
+      />
+      <button
+        type="button"
+        title={isSavedSynced ? 'Sincronizado con el servidor' : 'Guardar ahora'}
+        onClick={() => {
+          if (disabled || saving) return;
+          if (isSavedSynced) return;
+          void flushSlot();
+        }}
+        disabled={disabled || saving}
+        className={[
+          'mt-3 flex h-10 w-full items-center justify-center rounded-xl text-xs font-black uppercase tracking-wide text-white shadow-sm transition disabled:opacity-50',
+          isSavedSynced ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-[#D32F2F] hover:bg-[#b71c1c]',
+        ].join(' ')}
+      >
+        {saving ? 'Guardando…' : isSavedSynced ? 'Guardado' : 'Guardar'}
+      </button>
+      {err ? <p className="mt-2 text-xs font-medium text-red-600">{err}</p> : null}
     </div>
   );
 }
@@ -292,7 +292,6 @@ function UnitCard({
   onReadingDeleted: (coldUnitId: string, slot: AppccSlot) => void;
 }) {
   const rM = map.get(`${unit.id}:manana`);
-  const rT = map.get(`${unit.id}:tarde`);
   const rN = map.get(`${unit.id}:noche`);
 
   const range =
@@ -301,18 +300,18 @@ function UnitCard({
       : '';
 
   return (
-    <div className="rounded-xl border border-zinc-200/90 bg-zinc-50/90 px-2.5 py-2 ring-1 ring-zinc-100">
-      <div className="mb-1 flex items-start justify-between gap-2">
+    <div className="rounded-2xl border border-zinc-200/90 bg-white px-4 py-4 shadow-sm ring-1 ring-zinc-100">
+      <div className="mb-3 flex items-start justify-between gap-3 border-b border-zinc-100 pb-3">
         <div className="min-w-0">
-          <p className="truncate text-xs font-bold text-zinc-900">{unit.name}</p>
-          <p className="truncate text-[10px] leading-tight text-zinc-500">
+          <p className="font-serif text-lg font-bold leading-tight text-zinc-900">{unit.name}</p>
+          <p className="mt-1 text-xs font-medium leading-snug text-zinc-500">
             {APPCC_UNIT_TYPE_LABEL[unit.unit_type]}
             {range}
           </p>
         </div>
-        <Thermometer className="h-4 w-4 shrink-0 text-[#D32F2F]/65" aria-hidden />
+        <Thermometer className="h-6 w-6 shrink-0 text-[#D32F2F]/80" aria-hidden />
       </div>
-      <div className="divide-y divide-zinc-100/90">
+      <div className="space-y-3">
         {TEMP_REGISTRO_SLOTS.map((slot) => (
           <SlotEditor
             key={slot}
@@ -333,9 +332,9 @@ function UnitCard({
 function AppccTemperaturasInner() {
   const searchParams = useSearchParams();
   const { localId, profileReady, localName, localCode } = useAuth();
-  const [dateKey, setDateKey] = useState(() => madridDateKey());
-  const [pdfDateFrom, setPdfDateFrom] = useState(() => madridDateKey());
-  const [pdfDateTo, setPdfDateTo] = useState(() => madridDateKey());
+  const [dateKey, setDateKey] = useState(() => appccTemperaturasOperationalDateKey());
+  const [pdfDateFrom, setPdfDateFrom] = useState(() => appccTemperaturasOperationalDateKey());
+  const [pdfDateTo, setPdfDateTo] = useState(() => appccTemperaturasOperationalDateKey());
   const [units, setUnits] = useState<AppccColdUnitRow[]>([]);
   const [readings, setReadings] = useState<AppccReadingRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -540,7 +539,7 @@ function AppccTemperaturasInner() {
         APPCC
       </Link>
 
-      <AppccCompactHero />
+      <AppccCompactHero title="Registros de temperatura" />
 
       {!isSupabaseEnabled() || !getSupabaseClient() ? (
         <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
@@ -551,7 +550,7 @@ function AppccTemperaturasInner() {
 
       {!localId && profileReady ? (
         <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
-          Tu usuario necesita un perfil con <strong>local</strong> en Supabase para registrar temperaturas.
+          Tu usuario necesita un perfil con <strong>local</strong> en Supabase para usar los registros de temperatura.
         </div>
       ) : null}
 
@@ -562,10 +561,13 @@ function AppccTemperaturasInner() {
       <div className="flex flex-col gap-3">
         <div className="flex flex-col items-center text-center">
           <label htmlFor="appcc-date" className="text-[10px] font-bold uppercase tracking-wide text-zinc-500">
-            Día del registro
+            Día operativo del registro
           </label>
+          <p className="mx-auto mt-1 max-w-sm text-[11px] font-medium leading-snug text-zinc-500">
+            El día cambia a las <strong className="text-zinc-700">02:00</strong> (hora Madrid): antes de esa hora sigues en el día anterior.
+          </p>
           {/* Input nativo encima (invisible): el texto centrado es formatAppccDateEs; iOS alinea mal type=date */}
-          <div className="relative mt-1 flex h-10 w-full max-w-[15rem] items-center justify-center rounded-lg border border-zinc-200 bg-white shadow-sm">
+          <div className="relative mt-2 flex h-11 w-full max-w-[17rem] items-center justify-center rounded-xl border border-zinc-200 bg-white shadow-sm ring-1 ring-zinc-100">
             <span className="pointer-events-none px-3 text-center text-sm font-semibold capitalize tracking-tight text-zinc-900">
               {formatAppccDateEs(dateKey)}
             </span>
@@ -580,42 +582,40 @@ function AppccTemperaturasInner() {
                 setPdfDateTo(v);
               }}
               className="absolute inset-0 min-h-full min-w-full cursor-pointer opacity-0 text-base"
-              aria-label="Elegir día del registro"
+              aria-label="Elegir día operativo del registro"
             />
           </div>
         </div>
-        <div className="mx-auto w-full max-w-sm rounded-xl border border-zinc-100 bg-zinc-50/90 px-3 py-2.5">
-          <p className="text-center text-[10px] font-bold uppercase tracking-wide text-zinc-500">
-            Rango para el PDF
+        <div className="mx-auto w-full max-w-sm rounded-2xl border border-zinc-100 bg-zinc-50/90 px-4 py-3 text-center ring-1 ring-zinc-100">
+          <p className="text-[10px] font-bold uppercase tracking-wide text-zinc-500">Exportar PDF</p>
+          <p className="mt-1.5 text-[11px] font-semibold leading-snug text-zinc-700">
+            Elige el rango de días (clave de registro). Una página por día; máximo {PDF_MAX_DAYS} días.
           </p>
-          <div className="mt-2 flex flex-wrap items-end justify-center gap-3">
-            <label className="flex flex-col gap-0.5">
-              <span className="text-[9px] font-medium text-zinc-500">Desde</span>
+          <div className="mt-3 flex flex-wrap items-end justify-center gap-4">
+            <label className="flex flex-col gap-0.5 text-left">
+              <span className="text-[9px] font-bold uppercase tracking-wide text-zinc-500">Desde</span>
               <input
                 type="date"
                 value={pdfDateFrom}
                 onChange={(e) => setPdfDateFrom(e.target.value)}
-                className="h-9 rounded-lg border border-zinc-200 bg-white px-2 text-xs font-semibold text-zinc-900 outline-none focus:ring-2 focus:ring-[#D32F2F]/20"
+                className="h-10 rounded-xl border border-zinc-200 bg-white px-2.5 text-xs font-semibold text-zinc-900 outline-none focus:ring-2 focus:ring-[#D32F2F]/20"
               />
             </label>
-            <label className="flex flex-col gap-0.5">
-              <span className="text-[9px] font-medium text-zinc-500">Hasta</span>
+            <label className="flex flex-col gap-0.5 text-left">
+              <span className="text-[9px] font-bold uppercase tracking-wide text-zinc-500">Hasta</span>
               <input
                 type="date"
                 value={pdfDateTo}
                 onChange={(e) => setPdfDateTo(e.target.value)}
-                className="h-9 rounded-lg border border-zinc-200 bg-white px-2 text-xs font-semibold text-zinc-900 outline-none focus:ring-2 focus:ring-[#D32F2F]/20"
+                className="h-10 rounded-xl border border-zinc-200 bg-white px-2.5 text-xs font-semibold text-zinc-900 outline-none focus:ring-2 focus:ring-[#D32F2F]/20"
               />
             </label>
           </div>
-          <p className="mt-1.5 text-center text-[10px] text-zinc-400">
-            Máximo {PDF_MAX_DAYS} días · una página por día
-          </p>
         </div>
         <div className="flex flex-wrap items-center justify-center gap-2">
           <Link
             href="/appcc/historial"
-            className="inline-flex h-9 items-center justify-center rounded-lg border border-zinc-300 bg-white px-3 text-xs font-bold text-zinc-800 hover:bg-zinc-50"
+            className="inline-flex h-10 items-center justify-center rounded-xl border border-zinc-300 bg-white px-4 text-xs font-bold text-zinc-800 hover:bg-zinc-50"
           >
             Historial
           </Link>
@@ -623,14 +623,14 @@ function AppccTemperaturasInner() {
             type="button"
             onClick={() => void handleDownloadPdf()}
             disabled={orderedUnits.length === 0 || pdfBusy}
-            className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border border-zinc-900/15 bg-zinc-900 px-3 text-xs font-bold text-white hover:bg-zinc-800 disabled:opacity-45"
+            className="inline-flex h-10 items-center justify-center gap-1.5 rounded-xl border border-zinc-900/15 bg-zinc-900 px-4 text-xs font-bold text-white hover:bg-zinc-800 disabled:opacity-45"
           >
             <Download className="h-3.5 w-3.5" aria-hidden />
             {pdfBusy ? 'PDF…' : 'Descargar PDF'}
           </button>
           <Link
             href="/appcc/equipos"
-            className="inline-flex h-9 items-center justify-center rounded-lg border border-zinc-300 bg-white px-3 text-xs font-bold text-zinc-800 hover:bg-zinc-50"
+            className="inline-flex h-10 items-center justify-center rounded-xl border border-zinc-300 bg-white px-4 text-xs font-bold text-zinc-800 hover:bg-zinc-50"
           >
             Equipos
           </Link>
@@ -655,8 +655,8 @@ function AppccTemperaturasInner() {
           {byZone.map(({ zone, list }) =>
             list.length === 0 ? null : (
               <section key={zone}>
-                <h2 className="mb-2 text-base font-bold text-zinc-900">{APPCC_ZONE_LABEL[zone]}</h2>
-                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                <h2 className="mb-3 font-serif text-lg font-bold text-zinc-900">{APPCC_ZONE_LABEL[zone]}</h2>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   {list.map((unit) => (
                     <UnitCard
                       key={unit.id}

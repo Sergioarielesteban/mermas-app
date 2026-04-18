@@ -81,7 +81,7 @@ export default function AppccHistorialPage() {
       <MermasStyleHero
         eyebrow="APPCC"
         title="Historial de registros"
-        description={`Últimos ${RANGE_DAYS} días con al menos una lectura guardada. Pulsa un día para abrir el registro.`}
+        description={`Últimos ${RANGE_DAYS} días con al menos una lectura guardada (agrupadas por día operativo de temperaturas: cambio a las 02:00). Pulsa un día para abrir el registro.`}
       />
 
       {!localId && profileReady ? (
@@ -98,7 +98,7 @@ export default function AppccHistorialPage() {
         <p className="text-center text-sm text-zinc-500">Cargando…</p>
       ) : sortedDates.length === 0 ? (
         <p className="rounded-2xl border border-zinc-200 bg-zinc-50 px-4 py-8 text-center text-sm text-zinc-600">
-          No hay lecturas en este periodo. Registra temperaturas desde el día actual.
+          No hay lecturas en este periodo. Los registros se hacen en «Registros de temperatura» (día operativo desde las 02:00).
         </p>
       ) : (
         <ul className="space-y-2">

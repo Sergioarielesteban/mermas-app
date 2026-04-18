@@ -34,12 +34,17 @@ function appendTemperaturasDayPage(
   doc.text('Chef-One · Temperaturas de frío (APPCC)', 40, 36);
   doc.setFontSize(9);
   doc.text(`Local: ${opts.localLabel}`, 40, 52);
-  doc.text(`Día: ${opts.dateFormatted} (${opts.dateKey})`, 40, 64);
+  doc.text(`Día operativo: ${opts.dateFormatted} (${opts.dateKey})`, 40, 64);
+  doc.setFontSize(8);
+  doc.setTextColor(90);
+  doc.text('Temperaturas: el día operativo pasa a las 02:00 (Europe/Madrid).', 40, 76);
+  doc.setFontSize(9);
+  doc.setTextColor(0);
   if (opts.periodLine) {
-    doc.text(opts.periodLine, 40, 76);
+    doc.text(opts.periodLine, 40, 90);
   }
 
-  const startY = opts.periodLine ? 88 : 76;
+  const startY = opts.periodLine ? 102 : 90;
 
   const body = opts.orderedUnits.map((u) => {
     const m = opts.bySlot.get(`${u.id}:manana`);

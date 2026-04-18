@@ -57,6 +57,37 @@ export function madridDateKey(d: Date = new Date()): string {
   }).format(d);
 }
 
+/**
+ * Suma días a una clave YYYY-MM-DD (calendario gregoriano puro; sin ambigüedad DST).
+ */
+export function appccCalendarAddDays(dateKey: string, deltaDays: number): string {
+  const [y, m, d] = dateKey.split('-').map((n) => Number(n));
+  if (!y || !m || !d) return dateKey;
+  const t = Date.UTC(y, m - 1, d + deltaDays);
+  const dt = new Date(t);
+  return `${dt.getUTCFullYear()}-${String(dt.getUTCMonth() + 1).padStart(2, '0')}-${String(dt.getUTCDate()).padStart(2, '0')}`;
+}
+
+/**
+ * Día operativo del módulo APPCC **temperaturas** (Europe/Madrid):
+ * de 00:00 a 01:59 cuenta el día civil **anterior**; a partir de las 02:00, el día civil actual.
+ */
+export function appccTemperaturasOperationalDateKey(from: Date = new Date()): string {
+  const civilMadrid = madridDateKey(from);
+  const parts = new Intl.DateTimeFormat('en', {
+    timeZone: 'Europe/Madrid',
+    hour: '2-digit',
+    hour12: false,
+    hourCycle: 'h23',
+  }).formatToParts(from);
+  const hourRaw = parts.find((p) => p.type === 'hour')?.value ?? '12';
+  const hour = Number(hourRaw);
+  if (Number.isFinite(hour) && hour < 2) {
+    return appccCalendarAddDays(civilMadrid, -1);
+  }
+  return civilMadrid;
+}
+
 export function isTempOutOfRange(
   tempC: number,
   minC: number | null | undefined,

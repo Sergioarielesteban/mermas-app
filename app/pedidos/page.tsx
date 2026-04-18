@@ -61,6 +61,7 @@ import {
   fetchAppccColdUnits,
   fetchAppccReadingsForDate,
   madridDateKey,
+  appccTemperaturasOperationalDateKey,
   readingsByUnitAndSlot,
   type AppccSlot,
 } from '@/lib/appcc-supabase';
@@ -1308,11 +1309,12 @@ export default function PedidosPage() {
         if (!localId) return;
         const supabase = getSupabaseClient();
         if (!supabase) return;
+        const dateKeyTemps = appccTemperaturasOperationalDateKey();
         const dateKey = madridDateKey();
         const tempSlots: AppccSlot[] = ['manana', 'noche'];
         const [units, readings, fryers, oilEvents] = await Promise.all([
           fetchAppccColdUnits(supabase, localId, true),
-          fetchAppccReadingsForDate(supabase, localId, dateKey),
+          fetchAppccReadingsForDate(supabase, localId, dateKeyTemps),
           (async () => {
             try {
               return await fetchAppccFryers(supabase, localId, true);
@@ -1341,8 +1343,8 @@ export default function PedidosPage() {
           units.length === 0
             ? 'Temperaturas: sin equipos frío activos.'
             : missing.length === 0
-              ? 'Temperaturas: mañana y noche completas para hoy.'
-              : `Temperaturas faltantes hoy: ${missing.join(' · ')}.`;
+              ? 'Registros de temperatura: mañana y noche completas para el día operativo actual.'
+              : `Faltan registros de temperatura (día operativo): ${missing.join(' · ')}.`;
         const oilLine =
           fryers.length === 0
             ? 'Aceite: sin freidoras configuradas.'
@@ -1364,7 +1366,7 @@ export default function PedidosPage() {
         if (!localId) return;
         const supabase = getSupabaseClient();
         if (!supabase) return;
-        const dateKey = madridDateKey();
+        const dateKey = appccTemperaturasOperationalDateKey();
         const tempSlots: AppccSlot[] = ['manana', 'noche'];
         const [units, readings] = await Promise.all([
           fetchAppccColdUnits(supabase, localId, true),
@@ -1381,8 +1383,8 @@ export default function PedidosPage() {
         }
         const msg =
           missing.length === 0
-            ? 'No faltan lecturas de temperatura para hoy (mañana/noche).'
-            : `Faltan lecturas: ${missing.join(' · ')}.`;
+            ? 'No faltan registros de temperatura para el día operativo actual (mañana/noche).'
+            : `Faltan registros de temperatura: ${missing.join(' · ')}.`;
         setAssistantReply(msg);
         pushAssistantHistory(raw, msg);
         return;

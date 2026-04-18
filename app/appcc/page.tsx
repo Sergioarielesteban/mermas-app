@@ -113,7 +113,7 @@ export default function AppccHubPage() {
       <ExpandableControlGroup
         title="Control de temperaturas"
         leadHref="/appcc/temperaturas"
-        leadLabel="Registrar temperaturas"
+        leadLabel="Registros de temperatura"
         leadSub="Mañana y noche"
         LeadIcon={Thermometer}
         items={[
