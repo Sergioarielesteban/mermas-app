@@ -171,6 +171,13 @@ export type SupplierProductPriceHistory = {
   samples: number;
 };
 
+/** Muestras recientes de precio en líneas de pedido (para gráficos / listas en Artículos). */
+export type SupplierProductPriceSample = {
+  supplierProductId: string;
+  pricePerUnit: number;
+  at: string;
+};
+
 type SupplierRow = {
   id: string;
   name: string;
@@ -987,6 +994,52 @@ export async function fetchSupplierProductPriceHistory(
       maxPrice: Math.max(...prices),
       samples: prices.length,
     });
+  }
+  return out;
+}
+
+/**
+ * Precios efectivos en pedidos recientes por producto de proveedor (más recientes primero).
+ * Agrupa en memoria y recorta a `maxPerProduct` filas por id.
+ */
+export async function fetchSupplierProductPriceSamples(
+  supabase: SupabaseClient,
+  localId: string,
+  supplierProductIds: string[],
+  opts?: { maxTotalRows?: number; maxPerProduct?: number },
+): Promise<Map<string, SupplierProductPriceSample[]>> {
+  const maxTotal = opts?.maxTotalRows ?? 500;
+  const maxPerProduct = opts?.maxPerProduct ?? 14;
+  const out = new Map<string, SupplierProductPriceSample[]>();
+  if (!supplierProductIds.length) return out;
+
+  const { data, error } = await supabase
+    .from('purchase_order_items')
+    .select('supplier_product_id,price_per_unit,created_at')
+    .eq('local_id', localId)
+    .in('supplier_product_id', supplierProductIds)
+    .order('created_at', { ascending: false })
+    .limit(maxTotal);
+  if (error) throw new Error(error.message);
+
+  const counts = new Map<string, number>();
+  for (const row of (data ?? []) as Array<{
+    supplier_product_id: string | null;
+    price_per_unit: number;
+    created_at: string;
+  }>) {
+    const sid = row.supplier_product_id;
+    if (!sid) continue;
+    const c = counts.get(sid) ?? 0;
+    if (c >= maxPerProduct) continue;
+    counts.set(sid, c + 1);
+    const list = out.get(sid) ?? [];
+    list.push({
+      supplierProductId: sid,
+      pricePerUnit: Math.round(Number(row.price_per_unit) * 100) / 100,
+      at: String(row.created_at),
+    });
+    out.set(sid, list);
   }
   return out;
 }

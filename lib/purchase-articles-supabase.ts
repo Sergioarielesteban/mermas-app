@@ -29,6 +29,74 @@ export type PurchaseArticleDuplicateCandidate = {
   score: number;
 };
 
+/** Fila de catálogo proveedor enlazada a un artículo (misma `article_id`). */
+export type SupplierCatalogRow = {
+  id: string;
+  supplierId: string;
+  supplierName: string;
+  articleId: string | null;
+  name: string;
+  unit: string;
+  pricePerUnit: number;
+  isActive: boolean;
+};
+
+export function labelMetodoCosteMaster(code: string | null | undefined): string {
+  if (!code) return 'No indicado';
+  const c = code.trim().toLowerCase();
+  if (c === 'migrado') return 'Migración inicial';
+  if (c === 'alta_proveedor') return 'Alta en catálogo proveedor';
+  return code;
+}
+
+/**
+ * Todos los productos de proveedor que comparten `article_id` (comparativa precios / proveedores).
+ * Ordenados por precio ascendente.
+ */
+export async function fetchSupplierCatalogRowsForArticleIds(
+  supabase: SupabaseClient,
+  localId: string,
+  articleIds: string[],
+): Promise<Map<string, SupplierCatalogRow[]>> {
+  const map = new Map<string, SupplierCatalogRow[]>();
+  if (!articleIds.length) return map;
+  const { data, error } = await supabase
+    .from('pedido_supplier_products')
+    .select('id,supplier_id,article_id,name,unit,price_per_unit,is_active,pedido_suppliers(name)')
+    .eq('local_id', localId)
+    .in('article_id', articleIds);
+  if (error) throw new Error(error.message);
+
+  for (const row of (data ?? []) as Record<string, unknown>[]) {
+    const aid = row.article_id != null ? String(row.article_id) : null;
+    if (!aid) continue;
+    const sup = row.pedido_suppliers;
+    let supplierName = '';
+    if (Array.isArray(sup)) {
+      supplierName = String((sup[0] as { name?: string } | undefined)?.name ?? '');
+    } else if (sup && typeof sup === 'object' && 'name' in sup) {
+      supplierName = String((sup as { name: string }).name ?? '');
+    }
+    const r: SupplierCatalogRow = {
+      id: String(row.id),
+      supplierId: String(row.supplier_id),
+      supplierName,
+      articleId: aid,
+      name: String(row.name ?? ''),
+      unit: String(row.unit ?? ''),
+      pricePerUnit: Number(row.price_per_unit ?? 0),
+      isActive: Boolean(row.is_active),
+    };
+    const list = map.get(aid) ?? [];
+    list.push(r);
+    map.set(aid, list);
+  }
+  for (const list of map.values()) {
+    list.sort((a, b) => a.pricePerUnit - b.pricePerUnit || a.supplierName.localeCompare(b.supplierName));
+  }
+  return map;
+}
+
 type ArticleRow = Record<string, unknown>;
 
 function mapArticleRow(row: ArticleRow): PurchaseArticle {
