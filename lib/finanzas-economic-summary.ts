@@ -20,6 +20,13 @@ function round2(n: number): number {
   return Math.round(n * 100) / 100;
 }
 
+function toYmdLocal(d: Date): string {
+  const y = d.getFullYear();
+  const m = d.getMonth() + 1;
+  const day = d.getDate();
+  return `${y}-${String(m).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+}
+
 function daysInclusive(fromYmd: string, toYmd: string): number {
   const [yf, mf, df] = fromYmd.split('-').map(Number);
   const [yt, mt, dt] = toYmd.split('-').map(Number);
@@ -66,6 +73,26 @@ export type FinanzasComparativaMetrica = {
   delta_abs_eur: number;
   /** Porcentaje respecto al periodo anterior; `null` si no es definido (p. ej. anterior = 0). */
   delta_pct: number | null;
+};
+
+/** Serie diaria derivada del mismo bundle RPC (sin consultas extra). */
+export type FinanzasEconomicVizDay = {
+  date: string;
+  ventas_net: number;
+  compras_net: number;
+  mermas: number;
+  comida_personal: number;
+  /**
+   * Aproximación día a día: ventas − compras − mermas − comida personal.
+   * No incluye coste de personal ni gastos fijos (definidos a nivel periodo).
+   */
+  resultado_operativo_diario_aprox: number;
+};
+
+export type FinanzasEconomicViz = {
+  by_day: FinanzasEconomicVizDay[];
+  /** Media diaria del coste de personal del periodo (el coste real es por periodo de nómina). */
+  coste_personal_diario_equiv: number;
 };
 
 export type FinanzasEconomicSummary = {
@@ -120,6 +147,8 @@ export type FinanzasEconomicSummary = {
     resultado_antes_impuestos: FinanzasComparativaMetrica;
     beneficio_neto_estimado: FinanzasComparativaMetrica;
   };
+  /** Gráficos: mismos agregadores que el resto del resumen (periodo actual). */
+  viz: FinanzasEconomicViz;
 };
 
 type Bundle = {
@@ -156,6 +185,45 @@ async function fetchAggregatesBundle(
     getFinanzasTaxEntriesAggregateByRange(client, localId, fromYmd, toYmd),
   ]);
   return { sales, deliveryNotes, mermas, staffMeal, staffCosts, fixed, tax };
+}
+
+function buildVizFromCurrentBundle(
+  b: Bundle,
+  fromYmd: string,
+  toYmd: string,
+  costePersonalC: number,
+  days: number,
+): FinanzasEconomicViz {
+  const ventasM = new Map(b.sales.byDate.map((x) => [x.date, x.netSalesEur]));
+  const comprasM = new Map(b.deliveryNotes.byDate.map((x) => [x.date, x.netEur]));
+  const mermasM = new Map(b.mermas.byDate.map((x) => [x.date, x.amountEur]));
+  const comidaM = new Map(b.staffMeal.byDate.map((x) => [x.date, x.amountEur]));
+
+  const by_day: FinanzasEconomicVizDay[] = [];
+  for (
+    let t = new Date(`${fromYmd}T12:00:00`).getTime();
+    t <= new Date(`${toYmd}T12:00:00`).getTime();
+    t += 86400000
+  ) {
+    const date = toYmdLocal(new Date(t));
+    const v = round2(ventasM.get(date) ?? 0);
+    const c = round2(comprasM.get(date) ?? 0);
+    const m = round2(mermasM.get(date) ?? 0);
+    const cp = round2(comidaM.get(date) ?? 0);
+    by_day.push({
+      date,
+      ventas_net: v,
+      compras_net: c,
+      mermas: m,
+      comida_personal: cp,
+      resultado_operativo_diario_aprox: round2(v - c - m - cp),
+    });
+  }
+
+  return {
+    by_day,
+    coste_personal_diario_equiv: days > 0 ? round2(costePersonalC / days) : 0,
+  };
 }
 
 function buildCoreFromBundle(b: Bundle): {
@@ -319,5 +387,6 @@ export async function getFinanzasEconomicSummary(
       resultado_antes_impuestos: comparativaMetrica(resultadoAntesImpuestosPrev, resultadoAntesImpuestos),
       beneficio_neto_estimado: comparativaMetrica(beneficioNetoPrev, beneficioNetoEstimado),
     },
+    viz: buildVizFromCurrentBundle(current, fromYmd, toYmd, cur.costePersonalC, days),
   };
 }

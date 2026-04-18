@@ -10,8 +10,15 @@ import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
 import PedidosPremiaLockedScreen from '@/components/PedidosPremiaLockedScreen';
 import { canAccessPedidos, canUsePedidosModule } from '@/lib/pedidos-access';
 import { countPendingDeliveryNotesInImputationRange } from '@/lib/delivery-notes-supabase';
+import FinanzasEconomiaVisualExecutive from '@/components/finanzas/FinanzasEconomiaVisualExecutive';
 import type { FinanzasEconomicSummary } from '@/lib/finanzas-economic-summary';
 import { getFinanzasEconomicSummary } from '@/lib/finanzas-economic-summary';
+import { fetchFixedExpensesForRangeContext } from '@/lib/finanzas-economics-supabase';
+import { aggregateFixedExpensesByCategoryForChart } from '@/lib/finanzas-fixed-expense-viz';
+import {
+  fetchFinanzasExecutiveRankings,
+  type FinanzasExecutiveRankings,
+} from '@/lib/finanzas-supabase';
 import {
   buildReviewTodayItems,
   evaluateBusinessHealth,
@@ -126,6 +133,10 @@ function FinanzasEconomiaBody() {
   const supabaseOk = isSupabaseEnabled() && getSupabaseClient();
 
   const [summary, setSummary] = useState<FinanzasEconomicSummary | null>(null);
+  const [rankings, setRankings] = useState<FinanzasExecutiveRankings | null>(null);
+  const [fixedByCategory, setFixedByCategory] = useState<ReturnType<
+    typeof aggregateFixedExpensesByCategoryForChart
+  > | null>(null);
   const [pendingAlbaranesCount, setPendingAlbaranesCount] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -135,6 +146,8 @@ function FinanzasEconomiaBody() {
   const load = useCallback(async () => {
     if (!localId || !supabaseOk) {
       setSummary(null);
+      setRankings(null);
+      setFixedByCategory(null);
       setLoading(false);
       return;
     }
@@ -142,22 +155,30 @@ function FinanzasEconomiaBody() {
     setError(null);
     try {
       const client = getSupabaseClient()!;
-      const [s, pend] = await Promise.all([
+      const [s, pend, rnk, fixedRows] = await Promise.all([
         getFinanzasEconomicSummary(client, localId, ranges.current.from, ranges.current.to),
         countPendingDeliveryNotesInImputationRange(client, localId, ranges.current.from, ranges.current.to).catch(
           () => null,
         ),
+        fetchFinanzasExecutiveRankings(client, localId, preset),
+        fetchFixedExpensesForRangeContext(client, localId, ranges.current.from, ranges.current.to, {
+          limit: 200,
+        }).catch(() => []),
       ]);
       setSummary(s);
+      setRankings(rnk);
+      setFixedByCategory(aggregateFixedExpensesByCategoryForChart(fixedRows));
       setPendingAlbaranesCount(pend);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Error al cargar el resumen económico.');
       setSummary(null);
+      setRankings(null);
+      setFixedByCategory(null);
       setPendingAlbaranesCount(null);
     } finally {
       setLoading(false);
     }
-  }, [localId, supabaseOk, ranges.current.from, ranges.current.to]);
+  }, [localId, supabaseOk, preset, ranges.current.from, ranges.current.to]);
 
   useEffect(() => {
     if (!profileReady) return;
@@ -305,6 +326,17 @@ function FinanzasEconomiaBody() {
           </div>
         )}
       </section>
+
+      {/* Visual + rankings (Fase 6) */}
+      {summary && fixedByCategory ? (
+        <FinanzasEconomiaVisualExecutive
+          summary={summary}
+          rankings={rankings}
+          fixedByCategory={fixedByCategory}
+          preset={preset}
+          hasFixedData={fixedByCategory.length > 0}
+        />
+      ) : null}
 
       {/* C) Salud del negocio */}
       {healthView && summary ? (

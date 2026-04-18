@@ -4,7 +4,7 @@ import {
   fetchDeliveryNoteItemsForNotes,
   fetchDeliveryNotesForFinanzas,
 } from '@/lib/delivery-notes-supabase';
-import { fetchMermasForFinanzasRange } from '@/lib/mermas-supabase';
+import { fetchMermasForFinanzasRange, type MermaRowLean } from '@/lib/mermas-supabase';
 import {
   fetchOrdersForFinanzasCommitment,
   type PedidoOrder,
@@ -98,6 +98,8 @@ export type FinanzasArticleRow = {
   label: string;
   net: number;
   lines: number;
+  /** Proveedor con mayor coste neto en el periodo para este artículo (rankings ejecutivos). */
+  mainSupplierName?: string;
 };
 
 export type FinanzasMermaRow = {
@@ -352,6 +354,262 @@ function computePriceIncreasesFromDnItems(args: {
   return spikes;
 }
 
+/** Rankings + serie diaria de compras (misma lógica que el dashboard; evita duplicar cálculos a mano). */
+async function loadFinanzasRankingsSlice(
+  supabase: SupabaseClient,
+  localId: string,
+  args: {
+    validatedCurrent: DeliveryNote[];
+    validatedPrev: DeliveryNote[];
+    spendNet: number;
+    spendPrevNet: number;
+    cFrom: string;
+    cTo: string;
+    pFrom: string;
+    pTo: string;
+    mermaRows: MermaRowLean[];
+  },
+): Promise<{
+  dailySpend: { date: string; net: number }[];
+  topSuppliers: FinanzasSupplierRow[];
+  topArticles: FinanzasArticleRow[];
+  topMermas: FinanzasMermaRow[];
+  topPriceIncreases: FinanzasPriceSpikeRow[];
+  priceSpikeCount: number;
+}> {
+  const {
+    validatedCurrent,
+    validatedPrev,
+    spendNet,
+    spendPrevNet,
+    cFrom,
+    cTo,
+    pFrom,
+    pTo,
+    mermaRows,
+  } = args;
+
+  const dailyMap = new Map<string, number>();
+  for (const n of validatedCurrent) {
+    const key = deliveryNoteImputationYmd(n);
+    dailyMap.set(key, Math.round(((dailyMap.get(key) ?? 0) + deliveryNoteNetAmount(n)) * 100) / 100);
+  }
+  const dailySpend: { date: string; net: number }[] = [];
+  for (let t = new Date(cFrom + 'T12:00:00').getTime(); t <= new Date(cTo + 'T12:00:00').getTime(); t += 86400000) {
+    const key = toYmd(new Date(t));
+    dailySpend.push({ date: key, net: dailyMap.get(key) ?? 0 });
+  }
+
+  const supMap = new Map<string, { name: string; net: number; count: number }>();
+  for (const n of validatedCurrent) {
+    const sid = n.supplierId ?? '';
+    const name = n.supplierName || '—';
+    const k = sid || name;
+    const cur = supMap.get(k) ?? { name, net: 0, count: 0 };
+    cur.net += deliveryNoteNetAmount(n);
+    cur.count += 1;
+    supMap.set(k, cur);
+  }
+  const supPrevMap = new Map<string, number>();
+  for (const n of validatedPrev) {
+    const sid = n.supplierId ?? '';
+    const name = n.supplierName || '—';
+    const k = sid || name;
+    supPrevMap.set(k, Math.round(((supPrevMap.get(k) ?? 0) + deliveryNoteNetAmount(n)) * 100) / 100);
+  }
+  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  const topSuppliers: FinanzasSupplierRow[] = [...supMap.entries()]
+    .map(([k, v]) => {
+      const prevN = supPrevMap.get(k) ?? null;
+      const deltaVsPrev = prevN != null && prevN > 0 ? Math.round((v.net / prevN - 1) * 10000) / 100 : null;
+      return {
+        supplierId: uuidRe.test(k) ? k : null,
+        supplierName: v.name,
+        net: Math.round(v.net * 100) / 100,
+        count: v.count,
+        pctOfTotal: spendNet > 0 ? Math.round((v.net / spendNet) * 10000) / 100 : 0,
+        deltaVsPrev,
+      };
+    })
+    .sort((a, b) => b.net - a.net)
+    .slice(0, 15);
+
+  const noteIdsCurrent = validatedCurrent.map((n) => n.id);
+  const items = await fetchDeliveryNoteItemsForNotes(supabase, localId, noteIdsCurrent);
+  const noteIdsPrev = validatedPrev.map((n) => n.id);
+  const itemsPrev =
+    noteIdsPrev.length > 0 ? await fetchDeliveryNoteItemsForNotes(supabase, localId, noteIdsPrev) : [];
+
+  const noteByIdForPricing = new Map<string, DeliveryNote>();
+  for (const n of validatedCurrent) noteByIdForPricing.set(n.id, n);
+  for (const n of validatedPrev) noteByIdForPricing.set(n.id, n);
+
+  const priceSpikeRows = computePriceIncreasesFromDnItems({
+    itemsCurrent: items,
+    itemsPrev,
+    noteById: noteByIdForPricing,
+    minPrevAvg: FINANZAS_UMBRALES.preciosPmp.minPrevAvgEur,
+    spikeRatio: FINANZAS_UMBRALES.preciosPmp.spikeRatio,
+  });
+  const topPriceIncreases = priceSpikeRows.slice(0, 15);
+  const priceSpikeCount = priceSpikeRows.length;
+
+  const articleAgg = new Map<
+    string,
+    { label: string; net: number; lines: number; bySupplier: Map<string, number> }
+  >();
+  for (const it of items) {
+    const note = noteByIdForPricing.get(it.deliveryNoteId);
+    const supName = ((note?.supplierName ?? '') as string).trim() || '—';
+    const key = it.internalProductId ?? (it.supplierProductName.trim().toUpperCase() || '—');
+    const label = it.supplierProductName.trim() || key;
+    const cur = articleAgg.get(key) ?? { label, net: 0, lines: 0, bySupplier: new Map() };
+    const lineNet = dnItemNet(it);
+    cur.net += lineNet;
+    cur.lines += 1;
+    if (!cur.label && label) cur.label = label;
+    cur.bySupplier.set(supName, Math.round(((cur.bySupplier.get(supName) ?? 0) + lineNet) * 100) / 100);
+    articleAgg.set(key, cur);
+  }
+  const topArticles: FinanzasArticleRow[] = [...articleAgg.values()]
+    .map((v) => {
+      let mainSupplierName: string | undefined;
+      let best = 0;
+      for (const [s, x] of v.bySupplier) {
+        if (x > best) {
+          best = x;
+          mainSupplierName = s;
+        }
+      }
+      return {
+        key: v.label,
+        label: v.label,
+        net: Math.round(v.net * 100) / 100,
+        lines: v.lines,
+        mainSupplierName,
+      };
+    })
+    .sort((a, b) => b.net - a.net)
+    .slice(0, 15);
+
+  const mermaAgg = new Map<string, { label: string; eur: number }>();
+  for (const m of mermaRows) {
+    const d = m.occurredAt.slice(0, 10);
+    if (d < cFrom || d > cTo) continue;
+    const key = m.motiveKey;
+    const cur = mermaAgg.get(key) ?? { label: key, eur: 0 };
+    cur.eur += Number(m.costEur ?? 0);
+    mermaAgg.set(key, cur);
+  }
+  const topMermas: FinanzasMermaRow[] = [...mermaAgg.values()]
+    .map((v) => ({
+      key: v.label,
+      label: v.label,
+      eur: Math.round(v.eur * 100) / 100,
+      pctOfSpend: spendNet > 0 ? Math.round((v.eur / spendNet) * 10000) / 100 : 0,
+    }))
+    .sort((a, b) => b.eur - a.eur)
+    .slice(0, 15);
+
+  return {
+    dailySpend,
+    topSuppliers,
+    topArticles,
+    topMermas,
+    topPriceIncreases,
+    priceSpikeCount,
+  };
+}
+
+export type FinanzasExecutiveRankings = {
+  spendValidatedNet: number;
+  topSuppliers: FinanzasSupplierRow[];
+  topArticles: FinanzasArticleRow[];
+  topMermas: FinanzasMermaRow[];
+  topPriceIncreases: FinanzasPriceSpikeRow[];
+  hasDeliveryNotesTable: boolean;
+};
+
+/**
+ * Rankings ejecutivos acotados (mismas fuentes y límites que el dashboard de finanzas, sin pedidos ni incidencias).
+ * Una carga menos que `fetchFinanzasDashboard` (no compromisos de pedido ni mapas de desvío).
+ */
+export async function fetchFinanzasExecutiveRankings(
+  supabase: SupabaseClient,
+  localId: string,
+  preset: FinanzasPeriodPreset,
+): Promise<FinanzasExecutiveRankings> {
+  const { current, previous } = finanzasPeriodRanges(preset);
+  const { from: cFrom, to: cTo } = current;
+  const { from: pFrom, to: pTo } = previous;
+  const boundFrom = cFrom < pFrom ? cFrom : pFrom;
+  const boundTo = cTo > pTo ? cTo : pTo;
+
+  let notes: DeliveryNote[] = [];
+  try {
+    notes = await fetchDeliveryNotesForFinanzas(supabase, localId, {
+      imputeFromYmd: boundFrom,
+      imputeToYmd: boundTo,
+      limit: 1200,
+    });
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : '';
+    if (msg.includes('delivery_notes') && (msg.includes('does not exist') || msg.includes('schema cache'))) {
+      return {
+        spendValidatedNet: 0,
+        topSuppliers: [],
+        topArticles: [],
+        topMermas: [],
+        topPriceIncreases: [],
+        hasDeliveryNotesTable: false,
+      };
+    }
+    throw e;
+  }
+
+  const validatedCurrent = notes.filter(
+    (n) => n.status === 'validated' && noteInClosedPeriod(n, cFrom, cTo),
+  );
+  const validatedPrev = notes.filter(
+    (n) => n.status === 'validated' && noteInClosedPeriod(n, pFrom, pTo),
+  );
+
+  let spendNet = 0;
+  for (const n of validatedCurrent) {
+    spendNet += deliveryNoteNetAmount(n);
+  }
+  spendNet = Math.round(spendNet * 100) / 100;
+
+  let spendPrevNet = 0;
+  for (const n of validatedPrev) {
+    spendPrevNet += deliveryNoteNetAmount(n);
+  }
+  spendPrevNet = Math.round(spendPrevNet * 100) / 100;
+
+  const mermaRows = await fetchMermasForFinanzasRange(supabase, localId, boundFrom, boundTo);
+
+  const slice = await loadFinanzasRankingsSlice(supabase, localId, {
+    validatedCurrent,
+    validatedPrev,
+    spendNet,
+    spendPrevNet,
+    cFrom,
+    cTo,
+    pFrom,
+    pTo,
+    mermaRows,
+  });
+
+  return {
+    spendValidatedNet: spendNet,
+    topSuppliers: slice.topSuppliers,
+    topArticles: slice.topArticles,
+    topMermas: slice.topMermas,
+    topPriceIncreases: slice.topPriceIncreases,
+    hasDeliveryNotesTable: true,
+  };
+}
+
 async function fetchOrderNetTotalsByIds(
   supabase: SupabaseClient,
   localId: string,
@@ -553,108 +811,18 @@ export async function fetchFinanzasDashboard(
   ];
   const orderNetMap = await fetchOrderNetTotalsByIds(supabase, localId, orderIdsForDeviation);
 
-  const dailyMap = new Map<string, number>();
-  for (const n of validatedCurrent) {
-    const key = deliveryNoteImputationYmd(n);
-    dailyMap.set(key, Math.round(((dailyMap.get(key) ?? 0) + deliveryNoteNetAmount(n)) * 100) / 100);
-  }
-  const dailySpend: { date: string; net: number }[] = [];
-  for (let t = new Date(cFrom + 'T12:00:00').getTime(); t <= new Date(cTo + 'T12:00:00').getTime(); t += 86400000) {
-    const key = toYmd(new Date(t));
-    dailySpend.push({ date: key, net: dailyMap.get(key) ?? 0 });
-  }
-
-  const supMap = new Map<string, { name: string; net: number; count: number }>();
-  for (const n of validatedCurrent) {
-    const sid = n.supplierId ?? '';
-    const name = n.supplierName || '—';
-    const k = sid || name;
-    const cur = supMap.get(k) ?? { name, net: 0, count: 0 };
-    cur.net += deliveryNoteNetAmount(n);
-    cur.count += 1;
-    supMap.set(k, cur);
-  }
-  const supPrevMap = new Map<string, number>();
-  for (const n of validatedPrev) {
-    const sid = n.supplierId ?? '';
-    const name = n.supplierName || '—';
-    const k = sid || name;
-    supPrevMap.set(k, Math.round(((supPrevMap.get(k) ?? 0) + deliveryNoteNetAmount(n)) * 100) / 100);
-  }
-  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-  const topSuppliers: FinanzasSupplierRow[] = [...supMap.entries()]
-    .map(([k, v]) => {
-      const prevN = supPrevMap.get(k) ?? null;
-      const deltaVsPrev = prevN != null && prevN > 0 ? Math.round((v.net / prevN - 1) * 10000) / 100 : null;
-      return {
-        supplierId: uuidRe.test(k) ? k : null,
-        supplierName: v.name,
-        net: Math.round(v.net * 100) / 100,
-        count: v.count,
-        pctOfTotal: spendNet > 0 ? Math.round((v.net / spendNet) * 10000) / 100 : 0,
-        deltaVsPrev,
-      };
-    })
-    .sort((a, b) => b.net - a.net)
-    .slice(0, 15);
-
-  const items = await fetchDeliveryNoteItemsForNotes(supabase, localId, noteIdsCurrent);
-  const noteIdsPrev = validatedPrev.map((n) => n.id);
-  const itemsPrev =
-    noteIdsPrev.length > 0 ? await fetchDeliveryNoteItemsForNotes(supabase, localId, noteIdsPrev) : [];
-
-  const noteByIdForPricing = new Map<string, DeliveryNote>();
-  for (const n of validatedCurrent) noteByIdForPricing.set(n.id, n);
-  for (const n of validatedPrev) noteByIdForPricing.set(n.id, n);
-
-  const priceSpikeRows = computePriceIncreasesFromDnItems({
-    itemsCurrent: items,
-    itemsPrev,
-    noteById: noteByIdForPricing,
-    minPrevAvg: FINANZAS_UMBRALES.preciosPmp.minPrevAvgEur,
-    spikeRatio: FINANZAS_UMBRALES.preciosPmp.spikeRatio,
+  const rankSlice = await loadFinanzasRankingsSlice(supabase, localId, {
+    validatedCurrent,
+    validatedPrev,
+    spendNet,
+    spendPrevNet,
+    cFrom,
+    cTo,
+    pFrom,
+    pTo,
+    mermaRows,
   });
-  const topPriceIncreases = priceSpikeRows.slice(0, 15);
-  const priceSpikeCount = priceSpikeRows.length;
-
-  const articleAgg = new Map<string, { label: string; net: number; lines: number }>();
-  for (const it of items) {
-    const key = it.internalProductId ?? (it.supplierProductName.trim().toUpperCase() || '—');
-    const label = it.supplierProductName.trim() || key;
-    const cur = articleAgg.get(key) ?? { label, net: 0, lines: 0 };
-    cur.net += dnItemNet(it);
-    cur.lines += 1;
-    if (!cur.label && label) cur.label = label;
-    articleAgg.set(key, cur);
-  }
-  const topArticles: FinanzasArticleRow[] = [...articleAgg.values()]
-    .map((v) => ({
-      key: v.label,
-      label: v.label,
-      net: Math.round(v.net * 100) / 100,
-      lines: v.lines,
-    }))
-    .sort((a, b) => b.net - a.net)
-    .slice(0, 15);
-
-  const mermaAgg = new Map<string, { label: string; eur: number }>();
-  for (const m of mermaRows) {
-    const d = m.occurredAt.slice(0, 10);
-    if (d < cFrom || d > cTo) continue;
-    const key = m.motiveKey;
-    const cur = mermaAgg.get(key) ?? { label: key, eur: 0 };
-    cur.eur += Number(m.costEur ?? 0);
-    mermaAgg.set(key, cur);
-  }
-  const topMermas: FinanzasMermaRow[] = [...mermaAgg.values()]
-    .map((v) => ({
-      key: v.label,
-      label: v.label,
-      eur: Math.round(v.eur * 100) / 100,
-      pctOfSpend: spendNet > 0 ? Math.round((v.eur / spendNet) * 10000) / 100 : 0,
-    }))
-    .sort((a, b) => b.eur - a.eur)
-    .slice(0, 10);
+  const { dailySpend, topSuppliers, topArticles, topMermas, topPriceIncreases, priceSpikeCount } = rankSlice;
 
   const mermaPrevPctOfSpend =
     spendPrevNet > 0 ? Math.round((mermaPrevEur / spendPrevNet) * 10000) / 100 : 0;
