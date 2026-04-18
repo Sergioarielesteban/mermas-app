@@ -5,6 +5,8 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, BarChart3, BookOpen, RefreshCw } from 'lucide-react';
 import MermasStyleHero from '@/components/MermasStyleHero';
 import { useAuth } from '@/components/AuthProvider';
+import { getDemoEscandalloPack } from '@/lib/demo-dataset';
+import { isDemoMode } from '@/lib/demo-mode';
 import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
 import PedidosPremiaLockedScreen from '@/components/PedidosPremiaLockedScreen';
 import { canAccessPedidos, canUsePedidosModule } from '@/lib/pedidos-access';
@@ -73,6 +75,7 @@ export default function FinanzasRentabilidadPage() {
   const hasPedidosEntry = canAccessPedidos(localCode, email, localName, localId);
   const canUse = canUsePedidosModule(localCode, email, localName, localId);
   const supabaseOk = isSupabaseEnabled() && getSupabaseClient();
+  const rentabilidadDataOk = supabaseOk || isDemoMode();
 
   const [recipes, setRecipes] = useState<EscandalloRecipe[]>([]);
   const [linesByRecipe, setLinesByRecipe] = useState<Record<string, EscandalloLine[]>>({});
@@ -86,7 +89,7 @@ export default function FinanzasRentabilidadPage() {
   const [yearMonth, setYearMonth] = useState(() => new Date().toISOString().slice(0, 7));
 
   const load = useCallback(async () => {
-    if (!localId || !supabaseOk) {
+    if (!localId || !rentabilidadDataOk) {
       setRecipes([]);
       setLinesByRecipe({});
       setRawCatalog([]);
@@ -94,6 +97,25 @@ export default function FinanzasRentabilidadPage() {
       setProcessed([]);
       setQtyByRecipe({});
       setCategoriaByRecipeId(new Map());
+      setLoading(false);
+      return;
+    }
+    if (isDemoMode() && localId) {
+      setLoading(true);
+      setBanner(null);
+      const pack = getDemoEscandalloPack();
+      setRecipes(pack.recipes);
+      setLinesByRecipe(pack.linesByRecipe);
+      setRawCatalog(pack.rawProducts);
+      setRawPmp(pack.rawProducts);
+      setProcessed(pack.processed);
+      setQtyByRecipe({ 'demo-recipe-1': 420, 'demo-recipe-2': 180 });
+      setCategoriaByRecipeId(
+        new Map([
+          ['demo-recipe-1', 'Platos'],
+          ['demo-recipe-2', 'Ensaladas'],
+        ]),
+      );
       setLoading(false);
       return;
     }
@@ -148,7 +170,7 @@ export default function FinanzasRentabilidadPage() {
     } finally {
       setLoading(false);
     }
-  }, [localId, supabaseOk, yearMonth]);
+  }, [localId, rentabilidadDataOk, yearMonth]);
 
   useEffect(() => {
     if (!profileReady) return;
@@ -200,7 +222,7 @@ export default function FinanzasRentabilidadPage() {
     );
   }
   if (!hasPedidosEntry) return <PedidosPremiaLockedScreen />;
-  if (!canUse || !localId || !supabaseOk) {
+  if (!canUse || !localId || !rentabilidadDataOk) {
     return (
       <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-zinc-200">
         <p className="text-sm text-zinc-600">Finanzas no disponible en esta sesión.</p>

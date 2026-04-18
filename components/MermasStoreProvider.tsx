@@ -12,6 +12,8 @@ import {
   type ProductRow,
 } from '@/lib/mermas-supabase';
 import { uid } from '@/lib/id';
+import { getDemoMermasStore } from '@/lib/demo-dataset';
+import { isDemoMode } from '@/lib/demo-mode';
 import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
 import { isBrowser, safeJsonParse } from '@/lib/storage';
 import type { MermaMotiveKey, MermaRecord, Product, Unit } from '@/lib/types';
@@ -543,7 +545,7 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
   const mermasSurfaceActive = mermasDataSurfacePathActive(pathname);
   const { localId, profileReady } = useAuth();
   const supabaseEnabled = isSupabaseEnabled();
-  const cloudMode = Boolean(profileReady && localId && isSupabaseEnabled());
+  const cloudMode = Boolean(profileReady && localId && isSupabaseEnabled() && !isDemoMode());
   // If Supabase is enabled, never fall back to legacy sync/storage.
   const legacyMode = !supabaseEnabled;
   const [cloudDataLoaded, setCloudDataLoaded] = useState(false);
@@ -658,6 +660,15 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
       setCloudDataLoaded(false);
     }
   }, [cloudMode, hydrated, localId]);
+
+  useLayoutEffect(() => {
+    if (!isBrowser() || !hydrated || !profileReady || !localId) return;
+    if (!isDemoMode()) return;
+    const { products: p, mermas: m } = getDemoMermasStore();
+    setProducts(sortProductsByName(p));
+    setMermas(m);
+    setCloudDataLoaded(true);
+  }, [hydrated, profileReady, localId]);
 
   useEffect(() => {
     if (!isBrowser() || !hydrated || !cloudMode || !localId) return;
@@ -868,8 +879,8 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
   }, [hydrated, legacyMode, products, mermas]);
 
   const store = useMemo<MermasStore>(() => {
-    // If Supabase is configured, writes must go through cloud path only.
-    const useCloud = supabaseEnabled;
+    // Sin cliente (p. ej. modo demo) las escrituras son solo locales.
+    const useCloud = Boolean(supabaseEnabled && getSupabaseClient());
 
     const addProduct = (input: CreateProductInput) => {
       const trimmed = input.name.trim();

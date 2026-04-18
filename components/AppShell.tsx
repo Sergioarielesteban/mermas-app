@@ -30,6 +30,7 @@ import { canAccessPedidos } from '@/lib/pedidos-access';
 import { formatLocalHeaderName } from '@/lib/local-display-name';
 import ChefOneGlowLine from '@/components/ChefOneGlowLine';
 import NotificationBell from '@/components/notifications/NotificationBell';
+import DemoModeBanner from '@/components/DemoModeBanner';
 
 type NavItemNote = { kind: 'note'; text: string };
 type NavItemLink = {
@@ -188,6 +189,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="min-h-full bg-white">
+      <DemoModeBanner />
       {confirmLogoutOpen ? (
         <>
           <button

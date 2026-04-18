@@ -22,6 +22,7 @@ import { CHEF_ONE_TAPER_LINE_CLASS } from '@/components/ChefOneGlowLine';
 import MermasStyleHero from '@/components/MermasStyleHero';
 import { useAuth } from '@/components/AuthProvider';
 import { canAccessCocinaCentralModule, canPlaceCentralSupplyOrder } from '@/lib/cocina-central-permissions';
+import ProductoGuiadoChecklist from '@/components/ProductoGuiadoChecklist';
 import { canAccessPedidos } from '@/lib/pedidos-access';
 
 const LINE = `mx-auto mt-4 w-24 ${CHEF_ONE_TAPER_LINE_CLASS}`;
@@ -102,6 +103,8 @@ export default function PanelControlPage() {
         tagline="Toda tu cocina en la palma de tu mano."
         compact
       />
+
+      <ProductoGuiadoChecklist />
 
       {stubMessage ? (
         <div className="rounded-2xl border border-amber-200/80 bg-amber-50 px-4 py-3 text-center text-sm font-semibold text-amber-950 ring-1 ring-amber-100">

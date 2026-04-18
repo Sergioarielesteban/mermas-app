@@ -1,6 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import { DEMO_LOCAL_ID, exitDemoMode, isDemoMode } from '@/lib/demo-mode';
 import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
 import { isAllowedEmail } from '@/lib/auth-access';
 
@@ -317,6 +318,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [clearProfile, persistProfileCache, restoreProfileFromCache]);
 
   useEffect(() => {
+    if (typeof window !== 'undefined' && isDemoMode()) {
+      setEmail('demo@chef-one.app');
+      setDisplayName('Modo demo');
+      setLoginUsername('demo');
+      setUserId(null);
+      setLocalId(DEMO_LOCAL_ID);
+      setLocalCode('DEMO');
+      setLocalName('Restaurante Demo');
+      setIsCentralKitchen(false);
+      setProfileRole('manager');
+      setLoading(false);
+      setProfileReady(true);
+      return;
+    }
+
     const persistEmail = (nextEmail: string | null) => {
       if (typeof window === 'undefined') return;
       if (nextEmail) window.localStorage.setItem(AUTH_KEY, nextEmail);
@@ -580,6 +596,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return { ok: true };
       },
       logout: async () => {
+        if (typeof window !== 'undefined' && isDemoMode()) {
+          exitDemoMode();
+        }
         const supabase = getSupabaseClient();
         if (supabase) await supabase.auth.signOut();
         setEmail(null);

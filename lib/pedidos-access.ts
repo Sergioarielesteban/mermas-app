@@ -1,3 +1,5 @@
+import { isDemoMode } from '@/lib/demo-mode';
+
 function normalize(value: string | null | undefined) {
   return (value ?? '')
     .normalize('NFD')
@@ -17,6 +19,7 @@ export function canAccessPedidos(
   localName?: string | null,
   localId?: string | null,
 ) {
+  if (typeof window !== 'undefined' && isDemoMode()) return true;
   const mail = (email ?? '').trim().toLowerCase();
   const code = normalize(localCode);
   const name = normalize(localName);

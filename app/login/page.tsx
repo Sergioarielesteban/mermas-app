@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import React, { useState } from 'react';
 import { useAuth } from '@/components/AuthProvider';
 import ChefOneLaunchMark from '@/components/ChefOneLaunchMark';
@@ -61,6 +62,16 @@ export default function LoginPage() {
             <div>
               <h1 className="text-lg font-black text-zinc-900">Acceso de Usuario</h1>
               <p className="pt-1 text-sm text-zinc-600">Entra con tu usuario (o email) y contraseña.</p>
+              <p className="pt-2 text-xs text-zinc-500">
+                ¿Primera vez?{' '}
+                <Link href="/onboarding" className="font-semibold text-[#D32F2F] underline underline-offset-2">
+                  Ver introducción
+                </Link>{' '}
+                ·{' '}
+                <Link href="/precio" className="font-semibold text-zinc-700 underline underline-offset-2">
+                  Precio
+                </Link>
+              </p>
               {!isSupabaseEnabled() && allowedEmails.length > 0 ? (
                 <p className="pt-1 text-xs text-zinc-500">Acceso restringido a usuarios autorizados.</p>
               ) : null}

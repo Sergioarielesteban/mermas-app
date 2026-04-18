@@ -21,6 +21,8 @@ import {
   upsertPedidoOrderInList,
   type PedidoOrder,
 } from '@/lib/pedidos-supabase';
+import { getDemoPedidoOrders } from '@/lib/demo-dataset';
+import { isDemoMode } from '@/lib/demo-mode';
 import { getSupabaseClient } from '@/lib/supabase-client';
 
 const ordersSessionKey = (localId: string) => `chefone_pedidos_orders:${localId}`;
@@ -171,6 +173,7 @@ export function PedidosOrdersProvider({ children }: { children: React.ReactNode 
 
   const reloadOrders = useCallback(() => {
     if (!canUse || !localId) return;
+    if (isDemoMode()) return;
     const targetId = localId;
     const supabase = getSupabaseClient();
     if (!supabase) return;
@@ -263,6 +266,11 @@ export function PedidosOrdersProvider({ children }: { children: React.ReactNode 
   /** sessionStorage antes del pintado: evita lista vacía al volver a Pedidos desde otro módulo. */
   useLayoutEffect(() => {
     if (!canUse || !localId) return;
+    if (isDemoMode()) {
+      ordersReadyLocalIdRef.current = localId;
+      setOrders(getDemoPedidoOrders());
+      return;
+    }
     const cached = readOrdersFromSession(localId);
     if (cached !== null) {
       ordersReadyLocalIdRef.current = localId;
@@ -343,11 +351,12 @@ export function PedidosOrdersProvider({ children }: { children: React.ReactNode 
 
   useEffect(() => {
     if (!canUse || !localId) return;
+    if (isDemoMode()) return;
     if (ordersReadyLocalIdRef.current !== localId) return;
     writeOrdersToSession(localId, orders);
   }, [canUse, localId, orders]);
 
-  usePedidosDataChangedListener(reloadOrders, Boolean(hasEntry && canUse));
+  usePedidosDataChangedListener(reloadOrders, Boolean(hasEntry && canUse && !isDemoMode()));
 
   const value = useMemo(
     () => ({

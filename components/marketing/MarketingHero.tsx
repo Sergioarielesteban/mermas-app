@@ -5,6 +5,7 @@ import Image from 'next/image';
 import React from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
 import { ChevronLeft, ChevronRight, Sparkles } from 'lucide-react';
+import { enterDemoMode } from '@/lib/demo-mode';
 
 const BRAND = '#D32F2F';
 
@@ -192,7 +193,7 @@ export default function MarketingHero() {
           </motion.p>
 
           <motion.div
-            className="mt-8 flex flex-col items-stretch gap-3 sm:flex-row sm:justify-center lg:justify-start"
+            className="mt-8 flex flex-col items-stretch gap-3 sm:flex-row sm:flex-wrap sm:justify-center lg:justify-start"
             initial={reduceMotion ? false : { opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.45, delay: reduceMotion ? 0 : 0.14 }}
@@ -204,11 +205,27 @@ export default function MarketingHero() {
             >
               Hablar con nosotros
             </Link>
+            <button
+              type="button"
+              onClick={() => {
+                enterDemoMode();
+                window.location.assign('/panel');
+              }}
+              className="inline-flex h-12 items-center justify-center rounded-2xl border-2 border-[#D32F2F]/40 bg-white px-8 text-sm font-bold text-[#B91C1C] shadow-sm transition hover:bg-red-50 active:scale-[0.99]"
+            >
+              Ver demo
+            </button>
             <Link
               href="#modulos"
               className="inline-flex h-12 items-center justify-center rounded-2xl border-2 border-stone-200/95 bg-white/95 px-8 text-sm font-bold text-stone-800 shadow-sm backdrop-blur-sm transition hover:border-stone-300 hover:bg-white"
             >
               Ver módulos
+            </Link>
+            <Link
+              href="/onboarding"
+              className="inline-flex h-12 items-center justify-center rounded-2xl px-8 text-sm font-bold text-stone-700 underline-offset-4 ring-1 ring-stone-200/90 transition hover:bg-stone-50"
+            >
+              Cómo empezar
             </Link>
           </motion.div>
         </div>

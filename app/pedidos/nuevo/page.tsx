@@ -5,6 +5,9 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import React from 'react';
 import { useAuth } from '@/components/AuthProvider';
 import { usePedidosOrders } from '@/components/PedidosOrdersProvider';
+import { getDemoPedidoSuppliers } from '@/lib/demo-dataset';
+import { isDemoMode } from '@/lib/demo-mode';
+import { uid } from '@/lib/id';
 import { getSupabaseClient } from '@/lib/supabase-client';
 import PedidosPremiaLockedScreen from '@/components/PedidosPremiaLockedScreen';
 import { canAccessPedidos, canUsePedidosModule } from '@/lib/pedidos-access';
@@ -27,6 +30,7 @@ import {
   saveOrder,
   unitSupportsReceivedWeightKg,
   type PedidoOrderItem,
+  type PedidoOrder,
   type PedidoSupplier,
 } from '@/lib/pedidos-supabase';
 import { actorLabel, notifyPedidoEnviado } from '@/services/notifications';
@@ -87,7 +91,7 @@ export default function NuevoPedidoPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { localCode, localName, localId, email, userId, displayName, loginUsername } = useAuth();
-  const { upsertOrder } = usePedidosOrders();
+  const { upsertOrder, orders } = usePedidosOrders();
 
   const pullNewOrderIntoStore = React.useCallback(
     async (orderId: string) => {
@@ -138,6 +142,13 @@ export default function NuevoPedidoPage() {
 
   const reloadSuppliers = React.useCallback(() => {
     if (!canUse || !localId) return;
+    if (isDemoMode()) {
+      const rows = getDemoPedidoSuppliers();
+      setSuppliers(rows);
+      setSupplierId((prev) => prev || rows[0]?.id || '');
+      setLoadingSuppliers(false);
+      return;
+    }
     const lid = localId;
     const supabase = getSupabaseClient();
     if (!supabase) return;
@@ -245,6 +256,29 @@ export default function NuevoPedidoPage() {
     if (!editingId) return;
     if (!localId) return;
     setExistingOrderUpdatedAt(null);
+    if (isDemoMode()) {
+      const draft = orders.find((o) => o.id === editingId) ?? null;
+      if (!draft) {
+        setMessage('No se encontró el pedido en la demo.');
+        setIsLoadedEdit(true);
+        return;
+      }
+      setExistingOrderId(draft.id);
+      setSupplierId(draft.supplierId);
+      setNotes(draft.notes);
+      setDeliveryDate(draft.deliveryDate ?? '');
+      setExistingCreatedAt(draft.createdAt);
+      setExistingSentAt(draft.sentAt ?? null);
+      setExistingOrderUpdatedAt(draft.updatedAt ?? null);
+      setQtyByProductId(
+        draft.items.reduce<QtyMap>((acc, item) => {
+          if (item.supplierProductId) acc[item.supplierProductId] = item.quantity;
+          return acc;
+        }, {}),
+      );
+      setIsLoadedEdit(true);
+      return;
+    }
     const supabase = getSupabaseClient();
     if (!supabase) return;
     void fetchOrderById(supabase, localId, editingId)
@@ -273,7 +307,7 @@ export default function NuevoPedidoPage() {
         setMessage(err.message);
         setIsLoadedEdit(true);
       });
-  }, [editingId, localId]);
+  }, [editingId, localId, orders]);
 
   React.useEffect(() => {
     setSearch('');
@@ -347,6 +381,33 @@ export default function NuevoPedidoPage() {
       setMessage('Perfil del local aún cargando.');
       return;
     }
+    if (isDemoMode()) {
+      const orderId = existingOrderId ?? `demo-order-${uid('o')}`;
+      const created = existingCreatedAt ?? new Date().toISOString();
+      const lineTotalSum = Math.round(items.reduce((s, i) => s + i.lineTotal, 0) * 100) / 100;
+      const order: PedidoOrder = {
+        id: orderId,
+        supplierId: selectedSupplier.id,
+        supplierName: selectedSupplier.name,
+        supplierContact: selectedSupplier.contact,
+        status: nextStatus,
+        notes: notes.trim(),
+        createdAt: created,
+        ...(nextStatus === 'sent' ? { sentAt: existingSentAt ?? new Date().toISOString() } : {}),
+        deliveryDate: deliveryDate || undefined,
+        updatedAt: new Date().toISOString(),
+        items: items.map((item) => ({
+          ...item,
+          id: item.id || `demo-li-${uid('i')}`,
+        })),
+        total: lineTotalSum,
+      };
+      clearBasketDraft();
+      upsertOrder(order);
+      dispatchPedidosDataChanged();
+      router.push('/pedidos');
+      return;
+    }
     const supabase = getSupabaseClient();
     if (!supabase) {
       setMessage('Sin conexión con Supabase.');
@@ -393,6 +454,35 @@ export default function NuevoPedidoPage() {
     if (!phone) return setMessage('El proveedor no tiene teléfono válido en contacto.');
     const parsed = new Date(`${deliveryDate}T00:00:00`);
     if (Number.isNaN(parsed.getTime())) return setMessage('Fecha de entrega inválida. Usa AAAA-MM-DD.');
+    if (isDemoMode()) {
+      const orderId = existingOrderId ?? `demo-order-${uid('o')}`;
+      const created = existingCreatedAt ?? new Date().toISOString();
+      const lineTotalSum = Math.round(items.reduce((s, i) => s + i.lineTotal, 0) * 100) / 100;
+      const order: PedidoOrder = {
+        id: orderId,
+        supplierId: selectedSupplier.id,
+        supplierName: selectedSupplier.name,
+        supplierContact: selectedSupplier.contact,
+        status: 'sent',
+        notes: notes.trim(),
+        createdAt: created,
+        sentAt: existingSentAt ?? new Date().toISOString(),
+        deliveryDate,
+        updatedAt: new Date().toISOString(),
+        items: items.map((item) => ({
+          ...item,
+          id: item.id || `demo-li-${uid('i')}`,
+        })),
+        total: lineTotalSum,
+      };
+      clearBasketDraft();
+      upsertOrder(order);
+      dispatchPedidosDataChanged();
+      setMessage('Demo: pedido guardado como enviado (no se abre WhatsApp).');
+      window.setTimeout(() => setMessage(null), 4000);
+      router.push('/pedidos');
+      return;
+    }
     const supabase = getSupabaseClient();
     if (!supabase) return setMessage('Sin conexión con Supabase.');
     const popup = window.open('about:blank', '_blank');

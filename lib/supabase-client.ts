@@ -1,10 +1,12 @@
 'use client';
 
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import { isDemoMode } from '@/lib/demo-mode';
 
 let client: SupabaseClient | null = null;
 
 export function getSupabaseClient() {
+  if (typeof window !== 'undefined' && isDemoMode()) return null;
   if (client) return client;
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;

@@ -6,6 +6,12 @@ import React, { Suspense, useCallback, useEffect, useMemo, useState } from 'reac
 import { ArrowDown, ArrowLeft, ArrowUp, Minus, RefreshCw } from 'lucide-react';
 import MermasStyleHero from '@/components/MermasStyleHero';
 import { useAuth } from '@/components/AuthProvider';
+import {
+  buildDemoFinanzasEconomicSummary,
+  buildDemoFinanzasRankings,
+  buildDemoFixedExpensesForChart,
+} from '@/lib/demo-finanzas-summary';
+import { isDemoMode } from '@/lib/demo-mode';
 import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
 import PedidosPremiaLockedScreen from '@/components/PedidosPremiaLockedScreen';
 import { canAccessPedidos, canUsePedidosModule } from '@/lib/pedidos-access';
@@ -155,6 +161,7 @@ function FinanzasEconomiaBody() {
   const hasPedidosEntry = canAccessPedidos(localCode, email, localName, localId);
   const canUse = canUsePedidosModule(localCode, email, localName, localId);
   const supabaseOk = isSupabaseEnabled() && getSupabaseClient();
+  const finanzasDataOk = isDemoMode() || supabaseOk;
 
   const [summary, setSummary] = useState<FinanzasEconomicSummary | null>(null);
   const [rankings, setRankings] = useState<FinanzasExecutiveRankings | null>(null);
@@ -167,11 +174,23 @@ function FinanzasEconomiaBody() {
   const ranges = useMemo(() => finanzasPeriodRanges(preset), [preset]);
 
   const load = useCallback(async () => {
-    if (!localId || !supabaseOk) {
+    if (!localId || !finanzasDataOk) {
       setSummary(null);
       setRankings(null);
       setFixedByCategory(null);
       setLoading(false);
+      return;
+    }
+    if (isDemoMode()) {
+      setLoading(true);
+      setError(null);
+      try {
+        setSummary(buildDemoFinanzasEconomicSummary(ranges.current.from, ranges.current.to, preset));
+        setRankings(buildDemoFinanzasRankings());
+        setFixedByCategory(aggregateFixedExpensesByCategoryForChart(buildDemoFixedExpensesForChart()));
+      } finally {
+        setLoading(false);
+      }
       return;
     }
     setLoading(true);
@@ -196,7 +215,7 @@ function FinanzasEconomiaBody() {
     } finally {
       setLoading(false);
     }
-  }, [localId, supabaseOk, preset, ranges.current.from, ranges.current.to]);
+  }, [localId, finanzasDataOk, preset, ranges.current.from, ranges.current.to]);
 
   useEffect(() => {
     if (!profileReady) return;
@@ -300,6 +319,30 @@ function FinanzasEconomiaBody() {
       }
     : null;
 
+  const demoValueLines = useMemo(() => {
+    if (!summary || !isDemoMode()) return [];
+    const lines: string[] = [];
+    const mermas = summary.costes_operativos.mermas_c;
+    const comprasPct = summary.ratios.compras_sobre_ventas;
+    const benDelta = summary.comparativa.beneficio_neto_estimado.delta_pct;
+    if (mermas > 100) {
+      lines.push(
+        `Estás perdiendo dinero aquí: las mermas suman ${mermas.toFixed(0)} € en este periodo (datos demo).`,
+      );
+    }
+    const ahorro = Math.round(mermas * 0.33 * 100) / 100;
+    if (ahorro > 0) {
+      lines.push(`Puedes ahorrar unos ${ahorro.toFixed(0)} € si reduces mermas alrededor de un tercio.`);
+    }
+    if (benDelta != null && benDelta < -0.5) {
+      lines.push('Tu margen está bajando respecto al periodo anterior: revisa compras y mermas.');
+    }
+    if (comprasPct != null && comprasPct > 40) {
+      lines.push('Las compras pesan mucho sobre las ventas: merece la pena revisar precios y escandallos.');
+    }
+    return lines;
+  }, [summary]);
+
   if (!profileReady) {
     return (
       <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-zinc-200">
@@ -310,7 +353,7 @@ function FinanzasEconomiaBody() {
 
   if (!hasPedidosEntry) return <PedidosPremiaLockedScreen />;
 
-  if (!canUse || !localId || !supabaseOk) {
+  if (!canUse || !localId || !finanzasDataOk) {
     return (
       <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-zinc-200">
         <p className="text-sm text-zinc-600">Finanzas no disponible en esta sesión.</p>
@@ -326,6 +369,22 @@ function FinanzasEconomiaBody() {
         title="Cockpit diario"
         description="Ganas o pierdes, dónde duele y qué revisar. Sin IVA en magnitudes principales."
       />
+
+      {demoValueLines.length > 0 ? (
+        <section
+          className="rounded-2xl border border-amber-200/90 bg-amber-50/90 p-4 shadow-sm ring-1 ring-amber-100"
+          aria-label="Mensajes de valor"
+        >
+          <p className="text-[10px] font-black uppercase tracking-wide text-amber-950">Oportunidades (demo)</p>
+          <ul className="mt-2 space-y-2 text-sm font-semibold text-amber-950">
+            {demoValueLines.map((t) => (
+              <li key={t} className="leading-snug">
+                {t}
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
 
       <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
         <div className="flex flex-wrap items-center gap-2">

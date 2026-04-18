@@ -33,6 +33,8 @@ import {
 import MermasStyleHero from '@/components/MermasStyleHero';
 import { CHEF_ONE_TAPER_LINE_CLASS } from '@/components/ChefOneGlowLine';
 import { useAuth } from '@/components/AuthProvider';
+import { getDemoEscandalloPack } from '@/lib/demo-dataset';
+import { isDemoMode } from '@/lib/demo-mode';
 import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
 import {
   buildEscandalloDashboardRows,
@@ -176,11 +178,26 @@ export default function EscandallosPage() {
   const [importPreview, setImportPreview] = useState<SalesImportMatchedRow[] | null>(null);
 
   const load = useCallback(async () => {
-    if (!localId || !supabaseOk) {
+    if (!localId || (!supabaseOk && !isDemoMode())) {
       setRecipes([]);
       setLinesByRecipe({});
       setRawProducts([]);
       setProcessedProducts([]);
+      setLoading(false);
+      return;
+    }
+    if (isDemoMode() && localId) {
+      setLoading(true);
+      setBanner(null);
+      const pack = getDemoEscandalloPack();
+      setRecipes(pack.recipes);
+      setLinesByRecipe(pack.linesByRecipe);
+      setRawProducts(pack.rawProducts);
+      setProcessedProducts(pack.processed);
+      setSalesQtyDraft({
+        'demo-recipe-1': '380',
+        'demo-recipe-2': '140',
+      });
       setLoading(false);
       return;
     }
@@ -317,7 +334,7 @@ export default function EscandallosPage() {
   };
 
   useEffect(() => {
-    if (!localId || !supabaseOk || loading) return;
+    if (!localId || !supabaseOk || loading || isDemoMode()) return;
     const supabase = getSupabaseClient()!;
     let cancel = false;
     void (async () => {
@@ -376,7 +393,13 @@ export default function EscandallosPage() {
   }, [mixMetrics]);
 
   const handleSaveMonthlySales = async () => {
-    if (!localId || !supabaseOk) return;
+    if (!localId) return;
+    if (isDemoMode()) {
+      setBanner('Modo demo: los cambios se quedan solo en esta pantalla.');
+      window.setTimeout(() => setBanner(null), 4000);
+      return;
+    }
+    if (!supabaseOk) return;
     const supabase = getSupabaseClient()!;
     setSalesBusy(true);
     setBanner(null);
@@ -472,7 +495,7 @@ export default function EscandallosPage() {
     );
   }
 
-  if (!localId || !supabaseOk) {
+  if (!localId || (!supabaseOk && !isDemoMode())) {
     return (
       <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-zinc-200">
         <p className="text-sm font-semibold text-zinc-900">Escandallos no disponibles</p>

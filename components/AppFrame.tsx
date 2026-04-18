@@ -14,6 +14,8 @@ export default function AppFrame({ children }: { children: React.ReactNode }) {
   const isLogin = pathname === '/login';
   /** Landing pública en `/` (sin sesión); la PWA usa `start_url` `/login` para no pasar por aquí al abrir el icono. */
   const isPublicHome = pathname === '/';
+  const isOnboarding = pathname === '/onboarding';
+  const isPrecio = pathname === '/precio';
   /** Tablet fichaje a pantalla completa (sesión encargado; empleados solo PIN). */
   const isTerminalFichaje =
     pathname === '/terminal-fichaje' || pathname.startsWith('/terminal-fichaje/');
@@ -38,7 +40,7 @@ export default function AppFrame({ children }: { children: React.ReactNode }) {
       router.replace('/panel');
       return;
     }
-    if (!email && !isLogin && !isPublicHome) {
+    if (!email && !isLogin && !isPublicHome && !isOnboarding && !isPrecio) {
       router.replace('/login');
       // Fallback in case client router transition gets stuck.
       window.setTimeout(() => {
@@ -50,10 +52,10 @@ export default function AppFrame({ children }: { children: React.ReactNode }) {
     if (email && isLogin) {
       router.replace('/panel');
     }
-  }, [effectiveLoading, email, isLogin, isPublicHome, router]);
+  }, [effectiveLoading, email, isLogin, isPublicHome, isOnboarding, isPrecio, router]);
 
   // /login y la landing en / no usan el shell de la app ni el bloqueo de "Cargando sesión".
-  if (isLogin || isPublicHome) {
+  if (isLogin || isPublicHome || isOnboarding || isPrecio) {
     return <main className="flex min-h-screen flex-col bg-white">{children}</main>;
   }
 
@@ -114,7 +116,7 @@ export default function AppFrame({ children }: { children: React.ReactNode }) {
     );
   }
 
-  if (!email && !isLogin) {
+  if (!email && !isLogin && !isOnboarding && !isPrecio) {
     return null;
   }
 
