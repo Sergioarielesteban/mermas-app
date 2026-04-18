@@ -30,7 +30,12 @@ function TerminalLogo({ className }: { className?: string }) {
       alt="Chef-One"
       width={512}
       height={512}
-      className={['h-auto w-full max-w-[4.5rem] object-contain drop-shadow-md sm:max-w-[5.5rem]', className].filter(Boolean).join(' ')}
+      className={[
+        'h-auto w-full max-w-[7.5rem] object-contain drop-shadow-sm sm:max-w-[9rem]',
+        className,
+      ]
+        .filter(Boolean)
+        .join(' ')}
     />
   );
 }
@@ -206,7 +211,7 @@ export default function TerminalFichajePage() {
 
   if (!profileReady) {
     return (
-      <div className="flex min-h-[100dvh] items-center justify-center bg-zinc-950 text-zinc-400">
+      <div className="flex min-h-[100dvh] items-center justify-center bg-white text-zinc-500">
         Cargando…
       </div>
     );
@@ -214,9 +219,9 @@ export default function TerminalFichajePage() {
 
   if (!localId || !supabase) {
     return (
-      <div className="flex min-h-[100dvh] flex-col items-center justify-center gap-4 bg-zinc-950 px-6 text-center text-zinc-300">
+      <div className="flex min-h-[100dvh] flex-col items-center justify-center gap-4 bg-white px-6 text-center text-zinc-600">
         <p>No hay local o conexión. Abre esta pantalla con un usuario configurado.</p>
-        <Link href="/login" className="font-bold text-emerald-400 underline">
+        <Link href="/login" className="font-bold text-emerald-600 underline">
           Ir al acceso
         </Link>
       </div>
@@ -225,15 +230,15 @@ export default function TerminalFichajePage() {
 
   if (!perms.canManageSchedules) {
     return (
-      <div className="flex min-h-[100dvh] flex-col items-center justify-center gap-4 bg-zinc-950 px-6 text-center">
-        <p className="text-lg font-semibold text-white">Terminal solo para encargados</p>
-        <p className="max-w-sm text-sm text-zinc-400">
-          Inicia sesión con un perfil <strong className="text-zinc-200">admin</strong> o{' '}
-          <strong className="text-zinc-200">manager</strong> en esta tablet.
+      <div className="flex min-h-[100dvh] flex-col items-center justify-center gap-4 bg-white px-6 text-center text-zinc-800">
+        <p className="text-lg font-semibold text-zinc-900">Terminal solo para encargados</p>
+        <p className="max-w-sm text-sm text-zinc-600">
+          Inicia sesión con un perfil <strong className="text-zinc-900">admin</strong> o{' '}
+          <strong className="text-zinc-900">manager</strong> en esta tablet.
         </p>
         <Link
           href="/panel"
-          className="rounded-2xl bg-white px-6 py-3 text-sm font-extrabold text-zinc-900"
+          className="rounded-2xl bg-zinc-900 px-6 py-3 text-sm font-extrabold text-white"
         >
           Volver
         </Link>
@@ -242,8 +247,8 @@ export default function TerminalFichajePage() {
   }
 
   return (
-    <div className="relative flex min-h-[100dvh] flex-col bg-gradient-to-b from-zinc-900 via-zinc-950 to-black text-white">
-      <div className="pointer-events-none absolute inset-0 opacity-[0.07] [background-image:radial-gradient(circle_at_20%_20%,#fff_1px,transparent_1px)] [background-size:24px_24px]" />
+    <div className="relative flex min-h-[100dvh] flex-col bg-white text-zinc-900">
+      <div className="pointer-events-none absolute inset-0 opacity-[0.35] [background-image:radial-gradient(circle_at_20%_20%,#a1a1aa_1px,transparent_1px)] [background-size:28px_28px]" />
 
       <header className="relative z-10 flex items-start justify-between gap-3 px-4 pt-4 sm:px-6 sm:pt-6">
         {step === 'success' && resolved ? (
@@ -263,7 +268,7 @@ export default function TerminalFichajePage() {
             <button
               type="button"
               onClick={resetFlow}
-              className="ml-auto shrink-0 text-sm font-bold text-sky-300 underline-offset-4 hover:underline"
+              className="ml-auto shrink-0 text-sm font-bold text-sky-600 underline-offset-4 hover:underline"
             >
               ¡No soy yo!
             </button>
@@ -305,24 +310,24 @@ export default function TerminalFichajePage() {
       <div className="relative z-10 flex flex-1 flex-col items-center px-4 pb-10 pt-6 sm:px-8">
         {step === 'home' ? (
           <>
-            <p className="text-7xl font-black tabular-nums tracking-tight text-white sm:text-8xl">{timeLabel}</p>
+            <p className="text-7xl font-black tabular-nums tracking-tight text-zinc-900 sm:text-8xl">{timeLabel}</p>
             <div className="mt-10 grid w-full max-w-lg grid-cols-2 gap-4 sm:mt-14 sm:gap-5">
               <button
                 type="button"
                 onClick={() => goPin('clock_in')}
-                className="min-h-[88px] rounded-3xl bg-white/15 py-6 text-xl font-extrabold text-white ring-1 ring-white/20 backdrop-blur transition active:scale-[0.98] sm:min-h-[100px] sm:text-2xl"
+                className="min-h-[88px] rounded-3xl bg-zinc-100 py-6 text-xl font-extrabold text-zinc-900 ring-1 ring-zinc-200/90 shadow-sm transition hover:bg-zinc-200/70 active:scale-[0.98] sm:min-h-[100px] sm:text-2xl"
               >
                 Llegada
               </button>
               <button
                 type="button"
                 onClick={() => goPin('clock_out')}
-                className="min-h-[88px] rounded-3xl bg-sky-600 py-6 text-xl font-extrabold text-white shadow-lg shadow-sky-900/40 transition active:scale-[0.98] sm:min-h-[100px] sm:text-2xl"
+                className="min-h-[88px] rounded-3xl bg-sky-600 py-6 text-xl font-extrabold text-white shadow-lg shadow-sky-900/25 transition hover:bg-sky-500 active:scale-[0.98] sm:min-h-[100px] sm:text-2xl"
               >
                 Salida
               </button>
             </div>
-            <p className="mt-10 text-center text-[11px] font-medium text-zinc-500">
+            <p className="mt-10 text-center text-[11px] font-medium text-zinc-400">
               Modo terminal · sesión de encargado
             </p>
           </>
@@ -330,45 +335,45 @@ export default function TerminalFichajePage() {
 
         {step === 'pin' ? (
           <div className="flex w-full max-w-md flex-col items-center">
-            <div className="mb-4 rounded-2xl bg-white/90 p-2 shadow-lg ring-1 ring-white/20">
-              <TerminalLogo className="!max-w-[3rem]" />
+            <div className="mb-5 rounded-3xl bg-white p-3 shadow-md ring-1 ring-zinc-200/80">
+              <TerminalLogo className="!max-w-[6.5rem] sm:!max-w-[8rem]" />
             </div>
             <button
               type="button"
               onClick={resetFlow}
-              className="mb-6 self-start text-sm font-bold text-zinc-400 hover:text-white"
+              className="mb-6 self-start text-sm font-bold text-zinc-500 hover:text-zinc-900"
             >
               ← Volver
             </button>
             <div className="relative mb-6">
-              <div className="absolute -inset-6 rounded-full border border-white/10 bg-white/5" />
-              <div className="relative grid h-24 w-24 place-items-center rounded-full bg-zinc-900 ring-2 ring-amber-400/40">
-                <Lock className="h-10 w-10 text-amber-300" strokeWidth={2.2} />
+              <div className="absolute -inset-6 rounded-full border border-zinc-200/80 bg-zinc-50/80" />
+              <div className="relative grid h-24 w-24 place-items-center rounded-full bg-white ring-2 ring-amber-400/55 shadow-sm">
+                <Lock className="h-10 w-10 text-amber-600" strokeWidth={2.2} />
               </div>
             </div>
-            <p className="text-center text-xl font-semibold text-white">Introduce tu código PIN</p>
+            <p className="text-center text-xl font-semibold text-zinc-900">Introduce tu código PIN</p>
             <div className="mt-6 flex gap-3">
               {[0, 1, 2, 3].map((i) => (
                 <span
                   key={i}
                   className={[
-                    'h-3 w-3 rounded-full border border-white/30 transition-colors',
-                    pin.length > i ? 'bg-sky-400' : 'bg-transparent',
+                    'h-3 w-3 rounded-full border border-zinc-300 transition-colors',
+                    pin.length > i ? 'border-sky-500 bg-sky-500' : 'bg-transparent',
                   ].join(' ')}
                 />
               ))}
             </div>
             {banner ? (
-              <p className="mt-4 text-center text-sm font-semibold text-amber-300">{banner}</p>
+              <p className="mt-4 text-center text-sm font-semibold text-amber-700">{banner}</p>
             ) : null}
-            <div className="mt-10 grid w-full max-w-xs grid-cols-3 gap-x-6 gap-y-5 text-3xl font-semibold sm:text-4xl">
+            <div className="mt-10 grid w-full max-w-xs grid-cols-3 gap-x-6 gap-y-5 text-3xl font-semibold text-zinc-900 sm:text-4xl">
               {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map((n) => (
                 <button
                   key={n}
                   type="button"
                   disabled={busy}
                   onClick={() => appendDigit(n)}
-                  className="h-14 rounded-2xl text-white transition hover:bg-white/10 active:bg-white/15 disabled:opacity-40 sm:h-16"
+                  className="h-14 rounded-2xl transition hover:bg-zinc-100 active:bg-zinc-200/80 disabled:opacity-40 sm:h-16"
                 >
                   {n}
                 </button>
@@ -378,7 +383,7 @@ export default function TerminalFichajePage() {
                 type="button"
                 disabled={busy}
                 onClick={() => appendDigit('0')}
-                className="h-14 rounded-2xl text-white transition hover:bg-white/10 active:bg-white/15 disabled:opacity-40 sm:h-16"
+                className="h-14 rounded-2xl transition hover:bg-zinc-100 active:bg-zinc-200/80 disabled:opacity-40 sm:h-16"
               >
                 0
               </button>
@@ -389,7 +394,7 @@ export default function TerminalFichajePage() {
                   setPin((p) => p.slice(0, -1));
                   setBanner(null);
                 }}
-                className="h-14 text-sm font-extrabold uppercase tracking-wide text-zinc-400 hover:text-white sm:h-16"
+                className="h-14 text-sm font-extrabold uppercase tracking-wide text-zinc-500 hover:text-zinc-900 sm:h-16"
               >
                 Borrar
               </button>
@@ -400,36 +405,36 @@ export default function TerminalFichajePage() {
         {step === 'success' && resolved && successAt && successAction ? (
           <div
             className={[
-              'w-full max-w-md rounded-[2rem] border bg-zinc-900/85 p-6 shadow-2xl backdrop-blur-md sm:p-8',
+              'w-full max-w-md rounded-[2rem] border bg-white/95 p-6 shadow-xl shadow-zinc-900/10 ring-1 backdrop-blur-sm sm:p-8',
               successAction === 'clock_in'
-                ? 'border-emerald-500/35 ring-2 ring-emerald-500/20'
-                : 'border-amber-400/40 ring-2 ring-amber-400/15',
+                ? 'border-emerald-200 ring-emerald-100'
+                : 'border-amber-200 ring-amber-100',
             ].join(' ')}
           >
             <div className="flex justify-center">
-              <div className="rounded-2xl bg-white/95 p-2 shadow-md ring-1 ring-white/30">
-                <TerminalLogo className="!max-w-[2.75rem]" />
+              <div className="rounded-3xl bg-white p-3 shadow-md ring-1 ring-zinc-200/80">
+                <TerminalLogo className="!max-w-[5.5rem] sm:!max-w-[6.5rem]" />
               </div>
             </div>
             <div className="mt-4 text-center text-5xl leading-none">{successEmoji ?? '✨'}</div>
-            <h2 className="mt-3 text-center text-2xl font-extrabold text-white sm:text-3xl">
+            <h2 className="mt-3 text-center text-2xl font-extrabold text-zinc-900 sm:text-3xl">
               ¡Hola {displayFirstName(resolved.firstName, resolved.alias)}!
             </h2>
-            <p className="mt-3 text-center text-sm font-medium text-zinc-300">
+            <p className="mt-3 text-center text-sm font-medium text-zinc-600">
               {successAction === 'clock_in'
                 ? 'Hemos registrado tu llegada a las'
                 : 'Hemos registrado tu salida a las'}
             </p>
-            <div className="mt-5 rounded-2xl bg-zinc-950 px-4 py-5 text-center ring-1 ring-white/10">
-              <span className="text-5xl font-black tabular-nums text-white sm:text-6xl">{successAt}</span>
+            <div className="mt-5 rounded-2xl bg-zinc-50 px-4 py-5 text-center ring-1 ring-zinc-200/90">
+              <span className="text-5xl font-black tabular-nums text-zinc-900 sm:text-6xl">{successAt}</span>
             </div>
             {successPhrase ? (
               <p
                 className={[
                   'mt-5 rounded-2xl px-4 py-3 text-center text-base font-semibold leading-snug sm:text-lg',
                   successAction === 'clock_in'
-                    ? 'bg-emerald-950/60 text-emerald-100 ring-1 ring-emerald-500/25'
-                    : 'bg-amber-950/50 text-amber-50 ring-1 ring-amber-400/30',
+                    ? 'bg-emerald-50 text-emerald-900 ring-1 ring-emerald-200/80'
+                    : 'bg-amber-50 text-amber-950 ring-1 ring-amber-200/80',
                 ].join(' ')}
               >
                 {successPhrase}
