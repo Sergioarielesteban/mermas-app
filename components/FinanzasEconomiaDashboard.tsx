@@ -24,6 +24,7 @@ import {
   evaluateBusinessHealth,
   generateFinanceAlerts,
 } from '@/lib/finanzas-health-alerts';
+import { FINANZAS_DATA_CHANGED_EVENT } from '@/lib/finanzas-data-changed';
 import {
   FINANZAS_PERIOD_PRESET_OPTIONS,
   finanzasPeriodRanges,
@@ -185,6 +186,12 @@ function FinanzasEconomiaBody() {
     void load();
   }, [profileReady, load]);
 
+  useEffect(() => {
+    const onDataChanged = () => void load();
+    window.addEventListener(FINANZAS_DATA_CHANGED_EVENT, onDataChanged);
+    return () => window.removeEventListener(FINANZAS_DATA_CHANGED_EVENT, onDataChanged);
+  }, [load]);
+
   const healthView = useMemo(() => (summary ? evaluateBusinessHealth(summary) : null), [summary]);
   const financeAlerts = useMemo(() => {
     if (!summary) return [];
@@ -295,6 +302,12 @@ function FinanzasEconomiaBody() {
             <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} aria-hidden />
             Actualizar
           </button>
+          <Link
+            href="/finanzas/datos"
+            className="inline-flex min-h-[44px] items-center rounded-xl border border-zinc-200 bg-white px-3 text-sm font-bold text-[#D32F2F]"
+          >
+            Registrar datos
+          </Link>
         </div>
         <p className="rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2 text-center text-xs font-semibold text-zinc-800 sm:max-w-sm sm:text-left">
           Datos sin IVA en KPIs principales
