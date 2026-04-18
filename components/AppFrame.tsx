@@ -14,6 +14,9 @@ export default function AppFrame({ children }: { children: React.ReactNode }) {
   const isLogin = pathname === '/login';
   /** Landing pública en `/` (sin sesión); la PWA usa `start_url` `/login` para no pasar por aquí al abrir el icono. */
   const isPublicHome = pathname === '/';
+  /** Tablet fichaje a pantalla completa (sesión encargado; empleados solo PIN). */
+  const isTerminalFichaje =
+    pathname === '/terminal-fichaje' || pathname.startsWith('/terminal-fichaje/');
   const [forceUnlock, setForceUnlock] = React.useState(false);
 
   useEffect(() => {
@@ -51,7 +54,7 @@ export default function AppFrame({ children }: { children: React.ReactNode }) {
 
   // /login y la landing en / no usan el shell de la app ni el bloqueo de "Cargando sesión".
   if (isLogin || isPublicHome) {
-    return <main className="min-h-screen flex flex-col bg-white">{children}</main>;
+    return <main className="flex min-h-screen flex-col bg-white">{children}</main>;
   }
 
   // Resto de rutas: esperar auth o desbloqueo por tiempo.
@@ -113,6 +116,12 @@ export default function AppFrame({ children }: { children: React.ReactNode }) {
 
   if (!email && !isLogin) {
     return null;
+  }
+
+  if (isTerminalFichaje) {
+    return (
+      <main className="flex min-h-[100dvh] flex-col bg-zinc-950 text-white">{children}</main>
+    );
   }
 
   return (

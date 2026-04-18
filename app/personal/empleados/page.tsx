@@ -207,7 +207,7 @@ export default function PersonalEmpleadosPage() {
                 className="w-full rounded-xl border border-zinc-200 px-3 py-2 text-sm font-mono"
                 placeholder="PIN fichaje (opcional)"
                 value={pin}
-                onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 4))}
               />
               <button
                 type="submit"

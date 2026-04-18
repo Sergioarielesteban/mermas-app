@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useCallback, useMemo, useState } from 'react';
+import Link from 'next/link';
 import MermasStyleHero from '@/components/MermasStyleHero';
 import ClockPanel from '@/components/staff/ClockPanel';
 import { useAuth } from '@/components/AuthProvider';
@@ -40,6 +41,14 @@ export default function PersonalFichajePage() {
       />
       {error ? <p className="rounded-2xl bg-red-50 px-4 py-3 text-sm font-semibold text-red-900">{error}</p> : null}
       {loading ? <p className="text-sm text-zinc-500">Cargando…</p> : null}
+      {perms.canManageSchedules ? (
+        <Link
+          href="/terminal-fichaje"
+          className="flex min-h-[52px] items-center justify-center rounded-2xl border border-zinc-900/20 bg-zinc-900 px-4 text-center text-sm font-extrabold text-white shadow-sm transition hover:bg-zinc-800"
+        >
+          Abrir modo terminal (tablet · PIN)
+        </Link>
+      ) : null}
       <ClockPanel
         supabase={supabase}
         employees={employees}

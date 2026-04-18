@@ -83,6 +83,22 @@ export function workedMinutesForDay(entries: StaffTimeEntry[]): number {
   return Math.max(0, total);
 }
 
+/** Minutos totales en pausa (pares break_start → break_end) en el día. */
+export function breakMinutesForDay(entries: StaffTimeEntry[]): number {
+  const sorted = sortEntriesByTime(entries);
+  let sum = 0;
+  let open: string | null = null;
+  for (const e of sorted) {
+    if (e.eventType === 'break_start') {
+      open = e.occurredAt;
+    } else if (e.eventType === 'break_end' && open) {
+      sum += minutesBetween(open, e.occurredAt);
+      open = null;
+    }
+  }
+  return Math.max(0, sum);
+}
+
 export function formatMinutesHuman(m: number): string {
   const h = Math.floor(m / 60);
   const mm = m % 60;

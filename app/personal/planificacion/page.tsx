@@ -10,7 +10,7 @@ import { useStaffBundle } from '@/hooks/useStaffBundle';
 import { useStaffRealtime } from '@/hooks/useStaffRealtime';
 import { buildStaffPermissions } from '@/lib/staff/permissions';
 import { addDays, parseYmd, startOfWeekMonday, ymdLocal } from '@/lib/staff/staff-dates';
-import { duplicateShiftsWeek } from '@/lib/staff/staff-supabase';
+import { duplicateShiftsWeek, upsertStaffShift } from '@/lib/staff/staff-supabase';
 import type { StaffShift } from '@/lib/staff/types';
 import { getSupabaseClient } from '@/lib/supabase-client';
 
@@ -54,6 +54,29 @@ export default function PersonalPlanificacionPage() {
     setModalOpen(true);
   };
 
+  const onShiftMoved = async (shift: StaffShift, newEmployeeId: string, newDateYmd: string) => {
+    if (!perms.canManageSchedules || !localId || !supabase) return;
+    try {
+      await upsertStaffShift(supabase, {
+        id: shift.id,
+        localId,
+        employeeId: newEmployeeId,
+        shiftDate: newDateYmd,
+        startTime: shift.startTime,
+        endTime: shift.endTime,
+        endsNextDay: shift.endsNextDay,
+        breakMinutes: shift.breakMinutes,
+        zone: shift.zone,
+        notes: shift.notes,
+        status: shift.status,
+        colorHint: shift.colorHint,
+      });
+      void reload();
+    } catch (e: unknown) {
+      alert(e instanceof Error ? e.message : 'No se pudo mover el turno');
+    }
+  };
+
   const duplicateNextWeek = async () => {
     if (!perms.canManageSchedules || !localId || !supabase) return;
     const next = addDays(weekStartDate, 7);
@@ -75,7 +98,12 @@ export default function PersonalPlanificacionPage() {
 
   return (
     <div className="space-y-4">
-      <MermasStyleHero eyebrow="Cuadrante" title="Planificación" tagline="Semana, día y mes en un módulo pensado para hostelería." compact />
+      <MermasStyleHero
+        eyebrow="Cuadrante"
+        title="Planificación"
+        tagline="Vista semanal con colores por puesto, totales y arrastre de turnos (encargados)."
+        compact
+      />
 
       {error ? (
         <p className="rounded-2xl bg-red-50 px-4 py-3 text-sm font-semibold text-red-900">{error}</p>
@@ -140,6 +168,8 @@ export default function PersonalPlanificacionPage() {
             weekStartMonday={weekStartDate}
             employees={employees}
             shifts={shifts}
+            canDragShifts={perms.canManageSchedules}
+            onShiftMoved={onShiftMoved}
             onCellActivate={(empId, ymd, here) => {
               if (here.length === 1) openEdit(here[0]);
               else if (here.length === 0) openNew(empId, ymd);

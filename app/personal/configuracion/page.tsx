@@ -10,7 +10,11 @@ export default function PersonalConfigPage() {
         <p>
           <strong className="text-zinc-900">Migración:</strong> ejecuta{' '}
           <code className="rounded bg-white px-1 ring-1 ring-zinc-200">supabase-staff-attendance-schema.sql</code> en el
-          SQL Editor de Supabase para crear tablas, RLS y la función de fichaje.
+          SQL Editor de Supabase para crear tablas, RLS y la función de fichaje. Para solicitudes de días libres ejecuta
+          también{' '}
+          <code className="rounded bg-white px-1 ring-1 ring-zinc-200">supabase-staff-requests-migration.sql</code>.
+          Para la tablet de fichaje por PIN:{' '}
+          <code className="rounded bg-white px-1 ring-1 ring-zinc-200">supabase-staff-kiosk-resolve-pin.sql</code>.
         </p>
         <p>
           <strong className="text-zinc-900">Realtime:</strong> en el dashboard de Supabase, añade a la publicación{' '}

@@ -16,6 +16,25 @@ export type StaffIncidentType =
 
 export type StaffIncidentStatus = 'open' | 'resolved' | 'dismissed';
 
+export type StaffRequestType = 'time_off' | 'other';
+
+export type StaffRequestStatus = 'pending' | 'approved' | 'rejected';
+
+export type StaffRequest = {
+  id: string;
+  localId: string;
+  employeeId: string;
+  requestType: StaffRequestType;
+  startDate: string;
+  endDate: string | null;
+  notes: string | null;
+  status: StaffRequestStatus;
+  reviewedAt: string | null;
+  reviewedBy: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type StaffEmployee = {
   id: string;
   localId: string;

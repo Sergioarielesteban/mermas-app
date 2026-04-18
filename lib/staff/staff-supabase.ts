@@ -3,6 +3,9 @@ import type {
   StaffEmployee,
   StaffIncident,
   StaffIncidentStatus,
+  StaffRequest,
+  StaffRequestStatus,
+  StaffRequestType,
   StaffShift,
   StaffShiftStatus,
   StaffTimeEntry,
@@ -63,6 +66,23 @@ function mapTimeEntry(r: Record<string, unknown>): StaffTimeEntry {
     source: String(r.source ?? 'app'),
     note: r.note ? String(r.note) : null,
     createdAt: String(r.created_at ?? ''),
+  };
+}
+
+function mapRequest(r: Record<string, unknown>): StaffRequest {
+  return {
+    id: String(r.id),
+    localId: String(r.local_id),
+    employeeId: String(r.employee_id),
+    requestType: r.request_type as StaffRequestType,
+    startDate: String(r.start_date),
+    endDate: r.end_date ? String(r.end_date) : null,
+    notes: r.notes ? String(r.notes) : null,
+    status: r.status as StaffRequestStatus,
+    reviewedAt: r.reviewed_at ? String(r.reviewed_at) : null,
+    reviewedBy: r.reviewed_by ? String(r.reviewed_by) : null,
+    createdAt: String(r.created_at ?? ''),
+    updatedAt: String(r.updated_at ?? ''),
   };
 }
 
@@ -275,6 +295,39 @@ export async function fetchTimeEntriesRange(
   return (data ?? []).map((r) => mapTimeEntry(r as Record<string, unknown>));
 }
 
+export type StaffKioskResolveResult =
+  | {
+      ok: true;
+      employeeId: string;
+      firstName: string;
+      lastName: string;
+      alias: string | null;
+    }
+  | { ok: false; error: string };
+
+/** Solo admin/manager: resuelve ficha por PIN en el local (terminal tablet). */
+export async function staffKioskResolveByPin(
+  supabase: SupabaseClient,
+  pin: string,
+): Promise<StaffKioskResolveResult> {
+  const { data, error } = await supabase.rpc('staff_kiosk_resolve_by_pin', { p_pin: pin });
+  if (error) throw new Error(error.message);
+  if (data == null || typeof data !== 'object') {
+    return { ok: false, error: 'invalid_response' };
+  }
+  const o = data as Record<string, unknown>;
+  if (o.ok !== true) {
+    return { ok: false, error: String(o.error ?? 'unknown') };
+  }
+  return {
+    ok: true,
+    employeeId: String(o.employee_id),
+    firstName: String(o.first_name ?? ''),
+    lastName: String(o.last_name ?? ''),
+    alias: o.alias ? String(o.alias) : null,
+  };
+}
+
 export async function recordStaffTimeEvent(
   supabase: SupabaseClient,
   input: {
@@ -386,6 +439,70 @@ export async function resolveIncident(
 }
 
 /** Copia turnos de una semana a otra (mismos empleados y horas). */
+export async function fetchStaffRequests(
+  supabase: SupabaseClient,
+  localId: string,
+  opts?: { employeeId?: string; status?: StaffRequestStatus },
+): Promise<StaffRequest[]> {
+  let q = supabase
+    .from('staff_requests')
+    .select(
+      'id,local_id,employee_id,request_type,start_date,end_date,notes,status,reviewed_at,reviewed_by,created_at,updated_at',
+    )
+    .eq('local_id', localId)
+    .order('created_at', { ascending: false });
+  if (opts?.employeeId) q = q.eq('employee_id', opts.employeeId);
+  if (opts?.status) q = q.eq('status', opts.status);
+  const { data, error } = await q;
+  if (error) throw new Error(error.message);
+  return (data ?? []).map((r) => mapRequest(r as Record<string, unknown>));
+}
+
+export async function createStaffRequest(
+  supabase: SupabaseClient,
+  input: {
+    localId: string;
+    employeeId: string;
+    requestType?: StaffRequestType;
+    startDate: string;
+    endDate?: string | null;
+    notes?: string | null;
+  },
+): Promise<StaffRequest> {
+  const { data, error } = await supabase
+    .from('staff_requests')
+    .insert({
+      local_id: input.localId,
+      employee_id: input.employeeId,
+      request_type: input.requestType ?? 'time_off',
+      start_date: input.startDate,
+      end_date: input.endDate ?? null,
+      notes: input.notes?.trim() || null,
+      status: 'pending',
+    })
+    .select(
+      'id,local_id,employee_id,request_type,start_date,end_date,notes,status,reviewed_at,reviewed_by,created_at,updated_at',
+    )
+    .single();
+  if (error || !data) throw new Error(error?.message ?? 'No se pudo crear la solicitud');
+  return mapRequest(data as Record<string, unknown>);
+}
+
+export async function setStaffRequestStatus(
+  supabase: SupabaseClient,
+  requestId: string,
+  status: Extract<StaffRequestStatus, 'approved' | 'rejected'>,
+): Promise<void> {
+  const { error } = await supabase
+    .from('staff_requests')
+    .update({
+      status,
+      reviewed_at: new Date().toISOString(),
+    })
+    .eq('id', requestId);
+  if (error) throw new Error(error.message);
+}
+
 export async function duplicateShiftsWeek(
   supabase: SupabaseClient,
   localId: string,

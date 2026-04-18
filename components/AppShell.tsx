@@ -81,6 +81,7 @@ function titleForPath(pathname: string | null) {
     if (pathname.startsWith('/cocina-central/pedidos-sedes')) return 'Pedidos de sedes';
     return 'Cocina central';
   }
+  if (pathname.startsWith('/personal/mi')) return 'Mi espacio';
   if (pathname.startsWith('/personal')) return 'Personal';
   if (pathname.startsWith('/comida-personal')) return 'Comida de personal';
   if (pathname.startsWith('/chat')) return 'Chat del local';

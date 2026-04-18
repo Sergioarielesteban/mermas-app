@@ -165,7 +165,7 @@ export default function ClockPanel({
                 autoComplete="one-time-code"
                 className="mt-1 w-full rounded-2xl border border-zinc-200 px-4 py-3 text-center text-2xl font-mono tracking-widest"
                 value={pin}
-                onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 4))}
                 placeholder="••••"
               />
             </label>
