@@ -227,6 +227,37 @@ export async function fetchDeliveryNotesList(supabase: SupabaseClient, localId: 
   }));
 }
 
+/** Ventana amplia para Finanzas (imputación por fecha entrega en cliente). */
+export async function fetchDeliveryNotesForFinanzas(
+  supabase: SupabaseClient,
+  localId: string,
+  limit = 4000,
+): Promise<DeliveryNote[]> {
+  const { data, error } = await supabase
+    .from('delivery_notes')
+    .select(NOTE_SEL)
+    .eq('local_id', localId)
+    .order('created_at', { ascending: false })
+    .limit(limit);
+  if (error) throw new Error(error.message);
+  return ((data ?? []) as NoteRow[]).map(mapNote);
+}
+
+export async function fetchDeliveryNoteItemsForNotes(
+  supabase: SupabaseClient,
+  localId: string,
+  noteIds: string[],
+): Promise<DeliveryNoteItem[]> {
+  if (!noteIds.length) return [];
+  const { data, error } = await supabase
+    .from('delivery_note_items')
+    .select(ITEM_SEL)
+    .eq('local_id', localId)
+    .in('delivery_note_id', noteIds);
+  if (error) throw new Error(error.message);
+  return ((data ?? []) as ItemRow[]).map(mapItem);
+}
+
 export async function fetchDeliveryNoteById(
   supabase: SupabaseClient,
   localId: string,

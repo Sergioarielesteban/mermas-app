@@ -2482,6 +2482,12 @@ export default function PedidosPage() {
             Albaranes
           </Link>
         </div>
+        <Link
+          href="/finanzas"
+          className="mt-2 flex h-9 w-full items-center justify-center rounded-lg border border-zinc-900/20 bg-zinc-900 px-2 text-center text-xs font-bold text-white sm:text-sm"
+        >
+          Finanzas — gasto y salud
+        </Link>
       </section>
 
       {reloadError ? (
