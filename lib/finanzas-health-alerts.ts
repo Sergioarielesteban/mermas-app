@@ -286,7 +286,7 @@ export function generateFinanceAlerts(
       tipo: 'sin_ventas',
       severidad: 'media',
       titulo: 'Sin ventas cargadas',
-      descripcion: 'No hay ventas netas declaradas en `sales_daily` para este periodo.',
+      descripcion: 'No hay ventas netas declaradas para este periodo (tabla de ventas diarias).',
       impacto_estimado: 'No se puede valorar margen ni varios ratios.',
       accion_sugerida: 'Registrar ventas diarias en el módulo económico o revisar fechas del periodo.',
       modulo_destino: null,
@@ -330,7 +330,7 @@ export function generateFinanceAlerts(
       titulo: 'Coste de personal alto',
       descripcion: `Coste personal ${ratio.toFixed(1)}% de ventas (umbral ${th.costePersonalVentasPct}%).`,
       impacto_estimado: `${ratio.toFixed(0)}% del ingreso a personal.`,
-      accion_sugerida: 'Revisar plantilla, horas y cargas en `staff_costs_period`.',
+      accion_sugerida: 'Revisar plantilla, horas y cargas de personal del periodo.',
       modulo_destino: null,
     });
   }
