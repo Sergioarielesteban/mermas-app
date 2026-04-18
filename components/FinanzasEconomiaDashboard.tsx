@@ -9,7 +9,6 @@ import { useAuth } from '@/components/AuthProvider';
 import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
 import PedidosPremiaLockedScreen from '@/components/PedidosPremiaLockedScreen';
 import { canAccessPedidos, canUsePedidosModule } from '@/lib/pedidos-access';
-import { countPendingDeliveryNotesInImputationRange } from '@/lib/delivery-notes-supabase';
 import FinanzasEconomiaVisualExecutive from '@/components/finanzas/FinanzasEconomiaVisualExecutive';
 import type { FinanzasEconomicSummary } from '@/lib/finanzas-economic-summary';
 import { getFinanzasEconomicSummary } from '@/lib/finanzas-economic-summary';
@@ -19,7 +18,10 @@ import {
   fetchFinanzasExecutiveRankings,
   type FinanzasExecutiveRankings,
 } from '@/lib/finanzas-supabase';
-import { buildReviewTodayItems, generateFinanceAlerts } from '@/lib/finanzas-health-alerts';
+import {
+  buildFinanzasIntelligentAlerts,
+  type AlertItem,
+} from '@/lib/finanzas-intelligent-alerts';
 import { FINANZAS_DATA_CHANGED_EVENT } from '@/lib/finanzas-data-changed';
 import {
   FINANZAS_PERIOD_PRESET_OPTIONS,
@@ -73,10 +75,27 @@ function KpiCardExecutive({ kpi }: { kpi: KpiDef }) {
   );
 }
 
-function priorityBadgeClass(p: 1 | 2 | 3): string {
-  if (p === 1) return 'bg-red-600 text-white';
-  if (p === 2) return 'bg-amber-500 text-white';
+function priorityBadgeClass(p: AlertItem['priority']): string {
+  if (p === 'P1') return 'bg-red-600 text-white';
+  if (p === 'P2') return 'bg-amber-500 text-white';
   return 'bg-zinc-500 text-white';
+}
+
+function formatAlertImpact(a: AlertItem): string | null {
+  const parts: string[] = [];
+  if (a.impact_eur != null) parts.push(`${a.impact_eur.toFixed(2)} €`);
+  if (a.impact_pct != null) {
+    if (a.id === 'fin-a2-beneficio-cae') {
+      parts.push(`${a.impact_pct > 0 ? '+' : ''}${a.impact_pct.toFixed(1)}% vs ant.`);
+    } else if (a.id === 'fin-a6-gf-suben') {
+      parts.push(`+${a.impact_pct.toFixed(1)}% vs ant.`);
+    } else if (a.id === 'fin-a4-mermas') {
+      parts.push(`${a.impact_pct.toFixed(1)}% s/ compras`);
+    } else {
+      parts.push(`${a.impact_pct.toFixed(1)}% s/ ventas`);
+    }
+  }
+  return parts.length ? parts.join(' · ') : null;
 }
 
 /** Fase 8: verde | rojo | amarillo (cerca de cero). */
@@ -142,7 +161,6 @@ function FinanzasEconomiaBody() {
   const [fixedByCategory, setFixedByCategory] = useState<ReturnType<
     typeof aggregateFixedExpensesByCategoryForChart
   > | null>(null);
-  const [pendingAlbaranesCount, setPendingAlbaranesCount] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -160,11 +178,8 @@ function FinanzasEconomiaBody() {
     setError(null);
     try {
       const client = getSupabaseClient()!;
-      const [s, pend, rnk, fixedRows] = await Promise.all([
+      const [s, rnk, fixedRows] = await Promise.all([
         getFinanzasEconomicSummary(client, localId, ranges.current.from, ranges.current.to),
-        countPendingDeliveryNotesInImputationRange(client, localId, ranges.current.from, ranges.current.to).catch(
-          () => null,
-        ),
         fetchFinanzasExecutiveRankings(client, localId, preset),
         fetchFixedExpensesForRangeContext(client, localId, ranges.current.from, ranges.current.to, {
           limit: 200,
@@ -173,13 +188,11 @@ function FinanzasEconomiaBody() {
       setSummary(s);
       setRankings(rnk);
       setFixedByCategory(aggregateFixedExpensesByCategoryForChart(fixedRows));
-      setPendingAlbaranesCount(pend);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Error al cargar el resumen económico.');
       setSummary(null);
       setRankings(null);
       setFixedByCategory(null);
-      setPendingAlbaranesCount(null);
     } finally {
       setLoading(false);
     }
@@ -196,14 +209,10 @@ function FinanzasEconomiaBody() {
     return () => window.removeEventListener(FINANZAS_DATA_CHANGED_EVENT, onDataChanged);
   }, [load]);
 
-  const financeAlerts = useMemo(() => {
-    if (!summary) return [];
-    return generateFinanceAlerts(summary, {
-      pendingAlbaranesCount: pendingAlbaranesCount ?? undefined,
-    });
-  }, [summary, pendingAlbaranesCount]);
-
-  const reviewToday = useMemo(() => buildReviewTodayItems(financeAlerts), [financeAlerts]);
+  const intelligentAlerts = useMemo(
+    () => (summary ? buildFinanzasIntelligentAlerts(summary) : []),
+    [summary],
+  );
 
   const cockpit = useMemo(() => {
     if (!summary) return null;
@@ -409,43 +418,41 @@ function FinanzasEconomiaBody() {
         <p className="mt-1 text-xs text-zinc-600">Prioridad 1 primero. Máximo 5 avisos.</p>
         {loading && !summary ? (
           <p className="mt-3 text-sm text-zinc-600">Cargando…</p>
-        ) : reviewToday.length === 0 ? (
-          <p className="mt-4 rounded-2xl border border-zinc-100 bg-zinc-50 px-4 py-3 text-sm text-zinc-700">
-            Nada urgente por umbrales. Revisa datos con calma o amplía el periodo si hace falta contexto.
+        ) : intelligentAlerts.length === 0 ? (
+          <p className="mt-4 rounded-2xl border border-emerald-100 bg-emerald-50/80 px-4 py-3 text-sm font-semibold text-emerald-950">
+            Todo bajo control
           </p>
         ) : (
           <ul className="mt-4 space-y-3">
-            {reviewToday.slice(0, 5).map((item) => (
-              <li
-                key={item.alert_id}
-                className="rounded-2xl border border-zinc-100 bg-zinc-50/90 p-4 shadow-sm sm:flex sm:items-start sm:justify-between sm:gap-4"
-              >
-                <div className="min-w-0 flex-1">
+            {intelligentAlerts.slice(0, 5).map((item) => {
+              const impactLine = formatAlertImpact(item);
+              return (
+                <li
+                  key={item.id}
+                  className="rounded-2xl border border-zinc-100 bg-zinc-50/90 p-4 shadow-sm"
+                >
                   <div className="flex flex-wrap items-center gap-2">
                     <span
-                      className={`rounded-md px-2 py-0.5 text-[10px] font-black text-white ${priorityBadgeClass(item.prioridad)}`}
+                      className={`rounded-md px-2 py-0.5 text-[10px] font-black text-white ${priorityBadgeClass(item.priority)}`}
                     >
-                      P{item.prioridad}
+                      {item.priority}
                     </span>
-                    <p className="text-base font-black text-zinc-900">{item.titulo}</p>
+                    <p className="text-base font-black text-zinc-900">{item.title}</p>
                   </div>
-                  <p className="mt-2 text-sm font-bold text-zinc-800">
-                    Impacto: <span className="font-black text-zinc-900">{item.impacto_estimado}</span>
-                  </p>
+                  {item.description ? (
+                    <p className="mt-1 text-xs text-zinc-600">{item.description}</p>
+                  ) : null}
+                  {impactLine ? (
+                    <p className="mt-2 text-sm font-bold text-zinc-800">
+                      Impacto: <span className="font-black text-zinc-900">{impactLine}</span>
+                    </p>
+                  ) : null}
                   <p className="mt-1 text-sm text-zinc-700">
-                    Acción: <span className="font-semibold">{item.accion_sugerida}</span>
+                    Acción: <span className="font-semibold">{item.action}</span>
                   </p>
-                </div>
-                {item.href ? (
-                  <Link
-                    href={item.href}
-                    className="mt-3 inline-flex min-h-[48px] w-full shrink-0 items-center justify-center rounded-xl bg-[#D32F2F] px-4 text-sm font-black text-white sm:mt-0 sm:w-auto"
-                  >
-                    Ir
-                  </Link>
-                ) : null}
-              </li>
-            ))}
+                </li>
+              );
+            })}
           </ul>
         )}
       </section>
