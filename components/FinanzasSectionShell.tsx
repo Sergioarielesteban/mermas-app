@@ -31,6 +31,8 @@ type Props = {
   periodBasePath: string;
   backHref?: string;
   backLabel?: string;
+  /** Query adicional al cambiar periodo (debe empezar por `&`), p.ej. `&proveedor=X`. */
+  periodExtraQuery?: string;
   children: (ctx: FinanzasSectionShellRenderContext) => React.ReactNode;
 };
 
@@ -40,6 +42,7 @@ export default function FinanzasSectionShell({
   periodBasePath,
   backHref = '/finanzas',
   backLabel = 'Resumen',
+  periodExtraQuery = '',
   children,
 }: Props) {
   const searchParams = useSearchParams();
@@ -114,7 +117,7 @@ export default function FinanzasSectionShell({
           {FINANZAS_PERIOD_PRESET_OPTIONS.map((pr) => (
             <Link
               key={pr.id}
-              href={`${periodBasePath}?p=${pr.id}`}
+              href={`${periodBasePath}?p=${pr.id}${periodExtraQuery}`}
               scroll={false}
               className={[
                 'rounded-lg px-3 py-2 text-xs font-bold sm:text-sm',
