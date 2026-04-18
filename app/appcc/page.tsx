@@ -53,6 +53,8 @@ function ExpandableControlGroup({
   title,
   leadHref,
   leadLabel,
+  /** Texto de la mini-tarjeta al desplegar; si no se pasa, reutiliza leadLabel. */
+  leadGridLabel,
   leadSub,
   LeadIcon,
   items,
@@ -60,6 +62,7 @@ function ExpandableControlGroup({
   title: string;
   leadHref: string;
   leadLabel: string;
+  leadGridLabel?: string;
   leadSub: string;
   LeadIcon: React.ComponentType<{ className?: string; strokeWidth?: number }>;
   items: GroupItem[];
@@ -83,7 +86,13 @@ function ExpandableControlGroup({
       </summary>
 
       <div className="mt-2.5 grid grid-cols-1 gap-2 sm:grid-cols-3 sm:gap-2.5">
-        <GroupMiniCard href={leadHref} label={leadLabel} sub={leadSub} Icon={LeadIcon} tone="red" />
+        <GroupMiniCard
+          href={leadHref}
+          label={leadGridLabel ?? leadLabel}
+          sub={leadSub}
+          Icon={LeadIcon}
+          tone="red"
+        />
         {items.map((item) => (
           <GroupMiniCard key={item.href} {...item} />
         ))}
@@ -114,6 +123,7 @@ export default function AppccHubPage() {
         title="Control de temperaturas"
         leadHref="/appcc/temperaturas"
         leadLabel="Registros de temperatura"
+        leadGridLabel="Registrar nueva temperatura"
         leadSub="Mañana y noche"
         LeadIcon={Thermometer}
         items={[
