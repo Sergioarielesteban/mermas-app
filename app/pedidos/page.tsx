@@ -2524,10 +2524,29 @@ export default function PedidosPage() {
                           Entrega: {new Date(`${order.deliveryDate}T00:00:00`).toLocaleDateString('es-ES')}
                         </p>
                       ) : null}
-                      <p className="pt-0.5 text-sm font-bold text-zinc-700">
-                        Total (IVA incluido):{' '}
-                        <span className="text-base font-black text-zinc-900">{totals.total.toFixed(2)} €</span>
-                      </p>
+                      <div
+                        className="mx-auto mt-1.5 max-w-[16.5rem] rounded-lg bg-white/70 px-2 py-1.5 text-left ring-1 ring-amber-300/40"
+                        aria-label="Importes del pedido"
+                      >
+                        <div className="flex items-baseline justify-between gap-2 text-[11px] leading-tight text-zinc-600">
+                          <span className="shrink-0 font-medium">
+                            Subt. <abbr title="sin IVA">s/IVA</abbr>
+                          </span>
+                          <span className="tabular-nums font-semibold text-zinc-900">{totals.base.toFixed(2)} €</span>
+                        </div>
+                        <div className="mt-0.5 flex items-baseline justify-between gap-2 text-[11px] leading-tight text-zinc-600">
+                          <span className="shrink-0 font-medium">
+                            <abbr title="Impuesto sobre el valor añadido">IVA</abbr>
+                          </span>
+                          <span className="tabular-nums font-semibold text-zinc-900">{totals.vat.toFixed(2)} €</span>
+                        </div>
+                        <div className="mt-1 flex items-baseline justify-between gap-2 border-t border-amber-200/90 pt-1 text-xs font-bold leading-tight text-zinc-900">
+                          <span className="shrink-0">
+                            Tot. <abbr title="con IVA incluido">c/IVA</abbr>
+                          </span>
+                          <span className="tabular-nums font-black text-zinc-950">{totals.total.toFixed(2)} €</span>
+                        </div>
+                      </div>
                       <p className="pt-0.5 text-[10px] font-semibold uppercase tracking-wide text-zinc-500">
                         Revisión precios:{' '}
                         <span className={order.priceReviewArchivedAt ? 'text-emerald-700' : 'text-zinc-700'}>
@@ -2859,15 +2878,43 @@ export default function PedidosPage() {
                   {order.supplierName}
                 </span>
                 <span className={`mx-auto mt-3 w-24 ${CHEF_ONE_TAPER_LINE_CLASS}`} aria-hidden />
-                <span className="mt-3 flex flex-wrap items-center justify-center gap-x-1.5 gap-y-0.5 text-xs text-zinc-500">
-                  <span className="tabular-nums font-medium text-zinc-700">{totals.total.toFixed(2)} €</span>
-                  <span className="text-zinc-400">·</span>
-                  <span>
-                    recibido {order.receivedAt ? new Date(order.receivedAt).toLocaleDateString('es-ES') : '-'}
+                <p className="mt-3 text-xs text-zinc-500">
+                  Recibido{' '}
+                  <span className="font-medium text-zinc-700">
+                    {order.receivedAt ? new Date(order.receivedAt).toLocaleDateString('es-ES') : '—'}
                   </span>
-                  <span className="text-zinc-400">·</span>
-                  <span>IVA incl.</span>
-                </span>
+                </p>
+                <div
+                  className={[
+                    'mx-auto mt-1.5 max-w-[16.5rem] rounded-lg bg-white/70 px-2 py-1.5 text-left ring-1',
+                    needsAttention ? 'ring-red-300/50' : 'ring-emerald-300/50',
+                  ].join(' ')}
+                  aria-label="Importes del pedido"
+                >
+                  <div className="flex items-baseline justify-between gap-2 text-[11px] leading-tight text-zinc-600">
+                    <span className="shrink-0 font-medium">
+                      Subt. <abbr title="sin IVA">s/IVA</abbr>
+                    </span>
+                    <span className="tabular-nums font-semibold text-zinc-900">{totals.base.toFixed(2)} €</span>
+                  </div>
+                  <div className="mt-0.5 flex items-baseline justify-between gap-2 text-[11px] leading-tight text-zinc-600">
+                    <span className="shrink-0 font-medium">
+                      <abbr title="Impuesto sobre el valor añadido">IVA</abbr>
+                    </span>
+                    <span className="tabular-nums font-semibold text-zinc-900">{totals.vat.toFixed(2)} €</span>
+                  </div>
+                  <div
+                    className={[
+                      'mt-1 flex items-baseline justify-between gap-2 border-t pt-1 text-xs font-bold leading-tight text-zinc-900',
+                      needsAttention ? 'border-red-200/90' : 'border-emerald-200/90',
+                    ].join(' ')}
+                  >
+                    <span className="shrink-0">
+                      Tot. <abbr title="con IVA incluido">c/IVA</abbr>
+                    </span>
+                    <span className="tabular-nums font-black text-zinc-950">{totals.total.toFixed(2)} €</span>
+                  </div>
+                </div>
                 {needsAttention ? (
                   <span className="mt-2 rounded-full bg-white/90 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-red-800 ring-1 ring-red-200">
                     Incidencia
