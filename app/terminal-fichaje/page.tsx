@@ -20,7 +20,20 @@ import {
   staffKioskResolveByPin,
 } from '@/lib/staff/staff-supabase';
 import { getSupabaseClient } from '@/lib/supabase-client';
+import { pickTerminalPhrase, terminalSuccessEmoji } from '@/lib/staff/terminal-fichaje-phrases';
 import type { StaffTimeEventType } from '@/lib/staff/types';
+
+function TerminalLogo({ className }: { className?: string }) {
+  return (
+    <img
+      src="/logo-chef-one.svg"
+      alt="Chef-One"
+      width={512}
+      height={512}
+      className={['h-auto w-full max-w-[4.5rem] object-contain drop-shadow-md sm:max-w-[5.5rem]', className].filter(Boolean).join(' ')}
+    />
+  );
+}
 
 type Step = 'home' | 'pin' | 'success';
 
@@ -63,6 +76,8 @@ export default function TerminalFichajePage() {
 
   const [successAt, setSuccessAt] = useState<string | null>(null);
   const [successAction, setSuccessAction] = useState<'clock_in' | 'clock_out' | null>(null);
+  const [successPhrase, setSuccessPhrase] = useState<string | null>(null);
+  const [successEmoji, setSuccessEmoji] = useState<string | null>(null);
   const [resolved, setResolved] = useState<{
     employeeId: string;
     firstName: string;
@@ -103,6 +118,8 @@ export default function TerminalFichajePage() {
     setResolved(null);
     setSuccessAt(null);
     setSuccessAction(null);
+    setSuccessPhrase(null);
+    setSuccessEmoji(null);
   }, []);
 
   const goPin = (action: 'clock_in' | 'clock_out') => {
@@ -175,6 +192,8 @@ export default function TerminalFichajePage() {
       });
       setSuccessAction(want);
       setSuccessAt(at);
+      setSuccessPhrase(pickTerminalPhrase(want));
+      setSuccessEmoji(terminalSuccessEmoji(want));
       setStep('success');
       setPin('');
     } catch (e: unknown) {
@@ -251,11 +270,16 @@ export default function TerminalFichajePage() {
           </div>
         ) : (
           <div className="flex w-full items-center justify-between gap-3">
-            <div className="min-w-0 text-center sm:text-left">
-              <p className="truncate text-lg font-bold text-white sm:text-xl">
-                {localName ?? 'Local'}
-              </p>
-              <p className="text-sm font-medium capitalize text-zinc-400">{dateLabel}</p>
+            <div className="flex min-w-0 flex-1 items-center gap-3 sm:gap-4">
+              <div className="shrink-0 rounded-2xl bg-white/95 p-1.5 shadow-lg ring-1 ring-white/20">
+                <TerminalLogo className="!max-w-[3.25rem] sm:!max-w-[4rem]" />
+              </div>
+              <div className="min-w-0 text-left">
+                <p className="truncate font-serif text-lg font-bold text-white sm:text-xl">
+                  {localName ?? 'Local'}
+                </p>
+                <p className="text-sm font-medium capitalize text-zinc-400">{dateLabel}</p>
+              </div>
             </div>
             <div className="flex shrink-0 items-center gap-2">
               <button
@@ -298,14 +322,17 @@ export default function TerminalFichajePage() {
                 Salida
               </button>
             </div>
-            <p className="mt-10 text-center text-xs text-zinc-500">
-              Chef-One · modo terminal · sesión de encargado
+            <p className="mt-10 text-center text-[11px] font-medium text-zinc-500">
+              Modo terminal · sesión de encargado
             </p>
           </>
         ) : null}
 
         {step === 'pin' ? (
           <div className="flex w-full max-w-md flex-col items-center">
+            <div className="mb-4 rounded-2xl bg-white/90 p-2 shadow-lg ring-1 ring-white/20">
+              <TerminalLogo className="!max-w-[3rem]" />
+            </div>
             <button
               type="button"
               onClick={resetFlow}
@@ -371,9 +398,21 @@ export default function TerminalFichajePage() {
         ) : null}
 
         {step === 'success' && resolved && successAt && successAction ? (
-          <div className="w-full max-w-md rounded-[2rem] border border-white/10 bg-zinc-900/80 p-6 shadow-2xl ring-1 ring-white/5 backdrop-blur-md sm:p-8">
-            <div className="text-center text-4xl leading-none">😊</div>
-            <h2 className="mt-4 text-center text-2xl font-extrabold text-white sm:text-3xl">
+          <div
+            className={[
+              'w-full max-w-md rounded-[2rem] border bg-zinc-900/85 p-6 shadow-2xl backdrop-blur-md sm:p-8',
+              successAction === 'clock_in'
+                ? 'border-emerald-500/35 ring-2 ring-emerald-500/20'
+                : 'border-amber-400/40 ring-2 ring-amber-400/15',
+            ].join(' ')}
+          >
+            <div className="flex justify-center">
+              <div className="rounded-2xl bg-white/95 p-2 shadow-md ring-1 ring-white/30">
+                <TerminalLogo className="!max-w-[2.75rem]" />
+              </div>
+            </div>
+            <div className="mt-4 text-center text-5xl leading-none">{successEmoji ?? '✨'}</div>
+            <h2 className="mt-3 text-center text-2xl font-extrabold text-white sm:text-3xl">
               ¡Hola {displayFirstName(resolved.firstName, resolved.alias)}!
             </h2>
             <p className="mt-3 text-center text-sm font-medium text-zinc-300">
@@ -384,10 +423,27 @@ export default function TerminalFichajePage() {
             <div className="mt-5 rounded-2xl bg-zinc-950 px-4 py-5 text-center ring-1 ring-white/10">
               <span className="text-5xl font-black tabular-nums text-white sm:text-6xl">{successAt}</span>
             </div>
+            {successPhrase ? (
+              <p
+                className={[
+                  'mt-5 rounded-2xl px-4 py-3 text-center text-base font-semibold leading-snug sm:text-lg',
+                  successAction === 'clock_in'
+                    ? 'bg-emerald-950/60 text-emerald-100 ring-1 ring-emerald-500/25'
+                    : 'bg-amber-950/50 text-amber-50 ring-1 ring-amber-400/30',
+                ].join(' ')}
+              >
+                {successPhrase}
+              </p>
+            ) : null}
             <button
               type="button"
               onClick={resetFlow}
-              className="mt-8 min-h-[56px] w-full rounded-2xl bg-emerald-500 text-lg font-extrabold text-white shadow-lg shadow-emerald-900/30 transition hover:bg-emerald-400 active:scale-[0.99]"
+              className={[
+                'mt-8 min-h-[56px] w-full rounded-2xl text-lg font-extrabold text-white shadow-lg transition active:scale-[0.99]',
+                successAction === 'clock_in'
+                  ? 'bg-emerald-500 shadow-emerald-900/30 hover:bg-emerald-400'
+                  : 'bg-amber-500 shadow-amber-900/35 hover:bg-amber-400',
+              ].join(' ')}
             >
               Aceptar
             </button>
