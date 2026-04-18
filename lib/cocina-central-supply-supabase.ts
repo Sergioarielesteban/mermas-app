@@ -1,6 +1,21 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { CcUnit } from '@/lib/cocina-central-supabase';
 
+/** Etiqueta corta para unidades clásicas de cocina central; si no coincide, se muestra el texto tal cual (ej. «cubo 4kg»). */
+export function formatSupplyUnitLabel(unit: string): string {
+  const u = unit.trim();
+  if (!u) return '—';
+  const map: Record<string, string> = {
+    kg: 'kg',
+    ud: 'ud.',
+    bolsa: 'bolsa',
+    racion: 'ración',
+    litros: 'L',
+    unidades: 'ud.',
+  };
+  return map[u] ?? u;
+}
+
 export type SupplyOrderEstado =
   | 'enviado'
   | 'visto'
@@ -8,11 +23,13 @@ export type SupplyOrderEstado =
   | 'servido'
   | 'cancelado';
 
+/** Catálogo de venta a sedes (RPC `cc_list_central_supply_catalog`). */
 export type CentralSupplyCatalogRow = {
-  product_id: string;
-  product_name: string;
-  unit: string;
-  price_per_unit: number;
+  catalog_product_id: string;
+  nombre_producto: string;
+  descripcion: string;
+  unidad_venta: string;
+  precio_venta: number;
 };
 
 export type CentralSupplyOrderRow = {
@@ -32,10 +49,13 @@ export type CentralSupplyOrderRow = {
 export type CentralSupplyOrderItemRow = {
   id: string;
   order_id: string;
-  product_id: string;
+  catalog_product_id: string | null;
+  /** Legado: líneas antiguas enlazadas a `products` de la cocina central. */
+  product_id: string | null;
   product_name: string;
   cantidad: number;
-  unidad: CcUnit;
+  /** Unidad de venta (texto libre en catálogo o legado CcUnit). */
+  unidad: string;
   precio_unitario_eur: number;
   line_total_eur: number;
   created_at: string;
@@ -80,19 +100,32 @@ export function formatEur(n: number): string {
 export async function ccFetchSupplyCatalog(supabase: SupabaseClient): Promise<CentralSupplyCatalogRow[]> {
   const { data, error } = await supabase.rpc('cc_list_central_supply_catalog');
   if (error) throw new Error(error.message);
-  return (data ?? []) as CentralSupplyCatalogRow[];
+  const rows = (data ?? []) as Array<{
+    catalog_product_id: string;
+    nombre_producto: string;
+    descripcion: string | null;
+    unidad_venta: string;
+    precio_venta: number;
+  }>;
+  return rows.map((r) => ({
+    catalog_product_id: String(r.catalog_product_id),
+    nombre_producto: String(r.nombre_producto),
+    descripcion: r.descripcion != null ? String(r.descripcion) : '',
+    unidad_venta: String(r.unidad_venta),
+    precio_venta: Number(r.precio_venta),
+  }));
 }
 
 export async function ccSubmitSupplyOrder(
   supabase: SupabaseClient,
   args: {
     fechaEntrega: string;
-    items: Array<{ product_id: string; cantidad: number }>;
+    items: Array<{ catalog_product_id: string; cantidad: number }>;
     notas?: string | null;
   },
 ): Promise<string> {
   const payload = args.items.map((i) => ({
-    product_id: i.product_id,
+    catalog_product_id: i.catalog_product_id,
     cantidad: i.cantidad,
   }));
   const { data, error } = await supabase.rpc('cc_submit_supply_order', {
@@ -154,7 +187,9 @@ export async function ccFetchSupplyOrderWithItems(
   if (oErr) throw new Error(oErr.message);
   const { data: items, error: iErr } = await supabase
     .from('central_supply_order_items')
-    .select('*')
+    .select(
+      'id,order_id,catalog_product_id,product_id,product_name,cantidad,unidad,precio_unitario_eur,line_total_eur,created_at',
+    )
     .eq('order_id', orderId)
     .order('product_name');
   if (iErr) throw new Error(iErr.message);
@@ -168,13 +203,20 @@ export async function ccFetchSupplyItemsForOrders(
   if (orderIds.length === 0) return [];
   const { data, error } = await supabase
     .from('central_supply_order_items')
-    .select('*')
+    .select(
+      'id,order_id,catalog_product_id,product_id,product_name,cantidad,unidad,precio_unitario_eur,line_total_eur,created_at',
+    )
     .in('order_id', orderIds);
   if (error) throw new Error(error.message);
   return (data ?? []) as CentralSupplyOrderItemRow[];
 }
 
-export type SupplyProductAgg = { product_name: string; unidad: CcUnit; cantidad_total: number; importe_eur: number };
+export type SupplyProductAgg = {
+  product_name: string;
+  unidad: string;
+  cantidad_total: number;
+  importe_eur: number;
+};
 
 export function aggregateSupplyItemsByProduct(
   orders: CentralSupplyOrderRow[],
@@ -188,7 +230,8 @@ export function aggregateSupplyItemsByProduct(
   const map = new Map<string, SupplyProductAgg>();
   for (const it of items) {
     if (!allowed.has(it.order_id)) continue;
-    const key = `${it.product_id}:${it.unidad}`;
+    const lineKey = it.catalog_product_id ?? it.product_id ?? it.id;
+    const key = `${lineKey}:${it.unidad}`;
     const prev = map.get(key);
     const cant = Number(it.cantidad);
     const imp = Number(it.line_total_eur);

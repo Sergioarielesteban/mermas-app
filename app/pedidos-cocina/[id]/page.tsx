@@ -7,8 +7,8 @@ import { useAuth } from '@/components/AuthProvider';
 import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
 import { canPlaceCentralSupplyOrder } from '@/lib/cocina-central-permissions';
 import {
-  CC_UNIT_SHORT,
   SUPPLY_ORDER_ESTADO_LABEL,
+  formatSupplyUnitLabel,
   type CentralSupplyOrderItemRow,
   type CentralSupplyOrderRow,
   formatEur,
@@ -136,7 +136,7 @@ export default function PedidoCocinaDetallePage() {
               <div>
                 <p className="font-bold text-zinc-900">{it.product_name}</p>
                 <p className="text-xs text-zinc-600">
-                  {it.cantidad} {CC_UNIT_SHORT[it.unidad]} × {formatEur(Number(it.precio_unitario_eur))}
+                  {it.cantidad} {formatSupplyUnitLabel(it.unidad)} × {formatEur(Number(it.precio_unitario_eur))}
                 </p>
               </div>
               <p className="text-sm font-extrabold text-zinc-900">{formatEur(Number(it.line_total_eur))}</p>

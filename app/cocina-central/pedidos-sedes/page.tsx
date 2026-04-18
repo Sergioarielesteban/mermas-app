@@ -187,7 +187,11 @@ export default function CocinaCentralPedidosSedesPage() {
         <div className="rounded-2xl border border-zinc-200 bg-zinc-50 px-4 py-4 text-sm text-zinc-800">
           <p className="font-extrabold text-zinc-900">Pedidos de sedes</p>
           <p className="mt-2 text-zinc-700">
-            Solo la <strong>cocina central</strong> ve el listado de pedidos entrantes. Tu local puede hacer pedidos
+            Solo la <strong>cocina central</strong> ve el listado de pedidos entrantes. El catálogo lo editas en{' '}
+            <Link href="/cocina-central/catalogo-sedes" className="font-bold text-[#D32F2F] underline-offset-2 hover:underline">
+              Catálogo para sedes
+            </Link>
+            . Tu local puede hacer pedidos
             desde «Pedir a central».
           </p>
         </div>
@@ -214,8 +218,11 @@ export default function CocinaCentralPedidosSedesPage() {
       <div>
         <h1 className="text-xl font-extrabold text-zinc-900">Pedidos de sedes</h1>
         <p className="mt-1 text-sm text-zinc-600">
-          Suministro desde satélites: importes con snapshot de precios. Filtra por mes de{' '}
-          <strong>fecha de entrega</strong> y genera PDF para cobrar.
+          Los locales piden desde el <strong>catálogo central</strong> (
+          <Link href="/cocina-central/catalogo-sedes" className="font-bold text-[#D32F2F] underline-offset-2 hover:underline">
+            editar productos y precios
+          </Link>
+          ). Importes con snapshot al enviar. Filtra por mes de <strong>fecha de entrega</strong> y genera PDF.
         </p>
       </div>
 

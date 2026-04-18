@@ -1,7 +1,7 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import {
-  CC_UNIT_SHORT,
+  formatSupplyUnitLabel,
   type CentralSupplyOrderItemRow,
   type CentralSupplyOrderRow,
   SUPPLY_ORDER_ESTADO_LABEL,
@@ -107,7 +107,7 @@ export function downloadCentralSupplyMonthlyInvoicePdf(opts: {
 
     const body = lines.map((it) => [
       it.product_name,
-      CC_UNIT_SHORT[it.unidad],
+      formatSupplyUnitLabel(it.unidad),
       String(it.cantidad),
       formatEur(Number(it.precio_unitario_eur)),
       formatEur(Number(it.line_total_eur)),

@@ -79,6 +79,8 @@ function titleForPath(pathname: string | null) {
     if (pathname.startsWith('/cocina-central/escanear')) return 'Escanear QR';
     if (pathname.startsWith('/cocina-central/lote')) return 'Lote';
     if (pathname.startsWith('/cocina-central/pedidos-sedes')) return 'Pedidos de sedes';
+    if (pathname.startsWith('/cocina-central/catalogo-sedes')) return 'Catálogo sedes';
+    if (pathname.startsWith('/cocina-central/inventario-interno')) return 'Inventario interno';
     return 'Cocina central';
   }
   if (pathname.startsWith('/personal/mi')) return 'Mi espacio';

@@ -2,7 +2,17 @@
 
 import Link from 'next/link';
 import type { LucideIcon } from 'lucide-react';
-import { ChefHat, Package, Truck, QrCode, Inbox, Factory, ShoppingBag } from 'lucide-react';
+import {
+  ChefHat,
+  Package,
+  Truck,
+  QrCode,
+  Inbox,
+  Factory,
+  ShoppingBag,
+  ListOrdered,
+  Warehouse,
+} from 'lucide-react';
 import { useAuth } from '@/components/AuthProvider';
 import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
 import { canCocinaCentralOperate, canManageDeliveries } from '@/lib/cocina-central-permissions';
@@ -69,6 +79,12 @@ export default function CocinaCentralHubPage() {
             />
             <Tile href="/cocina-central/lotes" label="Lotes y stock" sub="Por sede y estado" icon={Package} />
             <Tile href="/cocina-central/escanear" label="Escanear QR" sub="Ficha rápida del lote" icon={QrCode} />
+            <Tile
+              href="/cocina-central/inventario-interno"
+              label="Inventario interno"
+              sub="Referencia interna (locales no ven)"
+              icon={Warehouse}
+            />
           </>
         ) : null}
 
@@ -83,8 +99,14 @@ export default function CocinaCentralHubPage() {
             <Tile
               href="/cocina-central/pedidos-sedes"
               label="Pedidos de sedes"
-              sub="Catálogo pedido, totales e informe PDF"
+              sub="Entrantes, totales e informe PDF"
               icon={ShoppingBag}
+            />
+            <Tile
+              href="/cocina-central/catalogo-sedes"
+              label="Catálogo para sedes"
+              sub="Productos y precios (sin stock)"
+              icon={ListOrdered}
             />
           </>
         ) : null}
