@@ -1,7 +1,7 @@
 import type { NotificationRow, NotificationWithRead } from './types';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
-function mapRow(r: Record<string, unknown>): NotificationRow {
+export function mapNotificationRow(r: Record<string, unknown>): NotificationRow {
   return {
     id: String(r.id),
     localId: String(r.local_id),
@@ -67,7 +67,7 @@ export async function getNotifications(
   }
 
   return rows.map((r) => {
-    const base = mapRow(r);
+    const base = mapNotificationRow(r);
     const ra = readMap.get(base.id) ?? null;
     return { ...base, readAt: ra };
   });

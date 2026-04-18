@@ -8,7 +8,7 @@ export type {
 } from './types';
 export type { GetNotificationsOptions } from './getNotifications';
 export { createNotification, safeCreateNotification } from './createNotification';
-export { getNotifications, getUnreadNotificationsCount } from './getNotifications';
+export { getNotifications, getUnreadNotificationsCount, mapNotificationRow } from './getNotifications';
 export { markNotificationAsRead, markAllNotificationsAsRead } from './markAsRead';
 export { registerDevice } from './registerDevice';
 export { preparePushDispatch, sendPushToLocalUsers } from './pushDispatch';

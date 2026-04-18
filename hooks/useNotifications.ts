@@ -6,6 +6,7 @@ import { showSystemNotification } from '@/lib/browser-notifications';
 import {
   getNotifications,
   getUnreadNotificationsCount,
+  mapNotificationRow,
   markAllNotificationsAsRead,
   markNotificationAsRead,
   type NotificationWithRead,
@@ -71,16 +72,26 @@ export function useNotifications(localId: string | null, userId: string | null) 
         },
         (payload: { new?: Record<string, unknown> }) => {
           const row = payload.new;
-          if (row && typeof row.title === 'string' && typeof row.message === 'string') {
-            const createdBy = row.created_by;
-            const fromSelf =
-              typeof createdBy === 'string' && Boolean(userId) && createdBy === userId;
-            if (!fromSelf) {
-              const id = typeof row.id === 'string' ? row.id : undefined;
-              showSystemNotification(row.title, row.message, { tag: id ? `chef-one-${id}` : undefined });
-            }
+          if (!row || typeof row.id !== 'string') {
+            void refreshRef.current();
+            return;
           }
-          void refreshRef.current();
+          try {
+            const mapped = mapNotificationRow(row);
+            const fromSelf =
+              mapped.createdBy != null && Boolean(userId) && mapped.createdBy === userId;
+            if (!fromSelf) {
+              showSystemNotification(mapped.title, mapped.message, { tag: `chef-one-${mapped.id}` });
+              setUnreadCount((c) => c + 1);
+            }
+            const item: NotificationWithRead = { ...mapped, readAt: null };
+            setItems((prev) => {
+              if (prev.some((n) => n.id === item.id)) return prev;
+              return [item, ...prev].slice(0, 50);
+            });
+          } catch {
+            void refreshRef.current();
+          }
         },
       )
       .subscribe();

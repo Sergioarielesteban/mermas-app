@@ -1,8 +1,16 @@
 'use client';
 
+import { usePathname } from 'next/navigation';
 import React, { createContext, useContext, useEffect, useLayoutEffect, useMemo, useState } from 'react';
 import { useAuth } from '@/components/AuthProvider';
-import { fetchProductsAndMermas, mapMermaRow, mapProductRow } from '@/lib/mermas-supabase';
+import {
+  fetchProductsAndMermas,
+  mapMermaRow,
+  mapMermaRowLean,
+  mapProductRow,
+  type MermaRow,
+  type ProductRow,
+} from '@/lib/mermas-supabase';
 import { uid } from '@/lib/id';
 import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
 import { isBrowser, safeJsonParse } from '@/lib/storage';
@@ -483,6 +491,21 @@ function buildSeedMermas(products: Product[]): MermaRecord[] {
 
 const DEFAULT_MERMAS: MermaRecord[] = buildSeedMermas(DEFAULT_PRODUCTS);
 
+/** Rutas donde tiene sentido sincronizar catálogo/mermas en vivo (evita realtime fuera de contexto). */
+function mermasDataSurfacePathActive(pathname: string): boolean {
+  if (!pathname) return false;
+  return (
+    pathname === '/dashboard' ||
+    pathname.startsWith('/dashboard/') ||
+    pathname === '/resumen' ||
+    pathname.startsWith('/resumen/') ||
+    pathname === '/productos' ||
+    pathname.startsWith('/productos/') ||
+    pathname === '/comida-personal' ||
+    pathname.startsWith('/comida-personal/')
+  );
+}
+
 function mergeProducts(seed: Product[], persisted: Product[]): Product[] {
   const map = new Map<string, Product>();
   for (const item of seed) {
@@ -516,6 +539,8 @@ function loadInitialState(): PersistedState {
 }
 
 export function MermasStoreProvider({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname() ?? '';
+  const mermasSurfaceActive = mermasDataSurfacePathActive(pathname);
   const { localId, profileReady } = useAuth();
   const supabaseEnabled = isSupabaseEnabled();
   const cloudMode = Boolean(profileReady && localId && isSupabaseEnabled());
@@ -528,6 +553,7 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
     pruneBaconHalfRecords(sortProductsByName(DEFAULT_PRODUCTS), DEFAULT_MERMAS),
   );
   const [hydrated, setHydrated] = useState(false);
+  const productsRef = React.useRef<Product[]>([]);
   const localIdRef = React.useRef<string | null>(localId ?? null);
   localIdRef.current = localId ?? null;
   /** Tras cambiar de local, el primer fetch debe sustituir estado (no fusionar con mermas del local anterior). */
@@ -541,6 +567,8 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
   const markLocalEdit = React.useCallback(() => {
     lastLocalEditAtRef.current = Date.now();
   }, []);
+
+  productsRef.current = products;
 
   const refetchCloud = React.useCallback(async () => {
     const supabase = getSupabaseClient();
@@ -616,6 +644,7 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
               : [];
           setProducts(prods);
           setMermas(nextMermas);
+          setCloudDataLoaded(true);
           return;
         }
       }
@@ -632,8 +661,9 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
 
   useEffect(() => {
     if (!isBrowser() || !hydrated || !cloudMode || !localId) return;
+    if (!mermasSurfaceActive) return;
     void refetchCloud();
-  }, [cloudMode, hydrated, localId, refetchCloud]);
+  }, [cloudMode, hydrated, localId, refetchCloud, mermasSurfaceActive]);
 
   useEffect(() => {
     if (!isBrowser() || !hydrated || !cloudMode || !localId || !cloudDataLoaded) return;
@@ -644,36 +674,98 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
     }
   }, [cloudDataLoaded, cloudMode, hydrated, localId, products, mermas]);
 
+  /**
+   * Realtime mermas/productos: actualización incremental en memoria.
+   * Refetch completo (`refetchCloud`) solo si el payload es incompleto o el mapeo falla.
+   */
   useEffect(() => {
     if (!isBrowser() || !hydrated || !cloudMode || !localId || !cloudDataLoaded) return;
+    if (!mermasSurfaceActive) return;
     const supabase = getSupabaseClient();
     if (!supabase) return;
-    let debounceTimer: number | null = null;
-    const scheduleRefetch = () => {
-      if (debounceTimer != null) window.clearTimeout(debounceTimer);
-      debounceTimer = window.setTimeout(() => {
-        debounceTimer = null;
+
+    const onProductPayload = (payload: {
+      eventType: string;
+      new?: Record<string, unknown>;
+      old?: Record<string, unknown>;
+    }) => {
+      const ev = String(payload.eventType ?? '').toUpperCase();
+      if (ev === 'DELETE') {
+        const id = typeof payload.old?.id === 'string' ? payload.old.id : '';
+        if (id) setProducts((prev) => sortProductsByName(prev.filter((p) => p.id !== id)));
+        return;
+      }
+      const row = payload.new;
+      if (!row?.id) {
         void refetchCloud();
-      }, 1500);
+        return;
+      }
+      if (row.is_active === false) {
+        setProducts((prev) => sortProductsByName(prev.filter((p) => p.id !== String(row.id))));
+        return;
+      }
+      try {
+        const p = mapProductRow(row as ProductRow);
+        setProducts((prev) => {
+          const rest = prev.filter((x) => x.id !== p.id);
+          return sortProductsByName([...rest, p]);
+        });
+      } catch {
+        void refetchCloud();
+      }
     };
+
+    const onMermaPayload = (payload: {
+      eventType: string;
+      new?: Record<string, unknown>;
+      old?: Record<string, unknown>;
+    }) => {
+      const ev = String(payload.eventType ?? '').toUpperCase();
+      if (ev === 'DELETE') {
+        const id = typeof payload.old?.id === 'string' ? payload.old.id : '';
+        if (!id) return;
+        if (activeMermaTombstoneSet(locallyDeletedMermaIdsRef.current).has(id)) return;
+        setMermas((prev) => pruneBaconHalfRecords(productsRef.current, prev.filter((m) => m.id !== id)));
+        return;
+      }
+      const row = payload.new;
+      if (!row?.id || row.product_id == null) {
+        void refetchCloud();
+        return;
+      }
+      try {
+        const { photo_data_url: _dropPhoto, ...rest } = row as Record<string, unknown> & {
+          photo_data_url?: unknown;
+        };
+        const m = mapMermaRowLean(rest as Omit<MermaRow, 'photo_data_url'>);
+        if (activeMermaTombstoneSet(locallyDeletedMermaIdsRef.current).has(m.id)) return;
+        setMermas((prev) => {
+          const without = prev.filter((x) => x.id !== m.id);
+          const next = [m, ...without].sort((a, b) => (a.occurredAt < b.occurredAt ? 1 : -1));
+          return pruneBaconHalfRecords(productsRef.current, next);
+        });
+      } catch {
+        void refetchCloud();
+      }
+    };
+
     const channel = supabase
       .channel(`mermas-local-rt:${localId}`)
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'products', filter: `local_id=eq.${localId}` },
-        scheduleRefetch,
+        onProductPayload,
       )
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'mermas', filter: `local_id=eq.${localId}` },
-        scheduleRefetch,
+        onMermaPayload,
       )
       .subscribe();
     return () => {
-      if (debounceTimer != null) window.clearTimeout(debounceTimer);
       void supabase.removeChannel(channel);
     };
-  }, [cloudDataLoaded, cloudMode, hydrated, localId, refetchCloud]);
+  }, [cloudDataLoaded, cloudMode, hydrated, localId, refetchCloud, mermasSurfaceActive]);
 
   useEffect(() => {
     if (!isBrowser()) return;
@@ -965,18 +1057,18 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
         const supabase = getSupabaseClient();
         if (!supabase) return { ok: false, reason: 'Sin conexión.' };
         void (async () => {
-          const { error } = await supabase
-            .from('mermas')
-            .update({
-              product_id: input.productId,
-              quantity: qty,
-              motive_key: input.motiveKey,
-              notes: input.notes.trim(),
-              occurred_at: input.occurredAt,
-              photo_data_url: input.photoDataUrl ?? null,
-              cost_eur: costEur,
-            })
-            .eq('id', id);
+          const patch: Record<string, unknown> = {
+            product_id: input.productId,
+            quantity: qty,
+            motive_key: input.motiveKey,
+            notes: input.notes.trim(),
+            occurred_at: input.occurredAt,
+            cost_eur: costEur,
+          };
+          if (input.photoDataUrl !== undefined) {
+            patch.photo_data_url = input.photoDataUrl ?? null;
+          }
+          const { error } = await supabase.from('mermas').update(patch).eq('id', id);
           if (error) return;
           markLocalEdit();
           await refetchCloud();

@@ -23,7 +23,6 @@ import {
 } from '@/lib/pedidos-session-cache';
 import {
   fetchOrderById,
-  fetchOrders,
   fetchSuppliersWithProducts,
   saveOrder,
   unitSupportsReceivedWeightKg,
@@ -248,9 +247,8 @@ export default function NuevoPedidoPage() {
     setExistingOrderUpdatedAt(null);
     const supabase = getSupabaseClient();
     if (!supabase) return;
-    void fetchOrders(supabase, localId)
-      .then((rows) => {
-        const draft = rows.find((row) => row.id === editingId);
+    void fetchOrderById(supabase, localId, editingId)
+      .then((draft) => {
         if (!draft) {
           setMessage('No se encontro el borrador para editar.');
           setIsLoadedEdit(true);

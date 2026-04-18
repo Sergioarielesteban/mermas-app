@@ -280,7 +280,7 @@ export async function fetchEscandalloRawProductsWithWeightedPurchasePrices(
 ): Promise<EscandalloRawProduct[]> {
   const [products, orders] = await Promise.all([
     fetchProductsForEscandallo(supabase, localId),
-    fetchOrders(supabase, localId),
+    fetchOrders(supabase, localId, { recentDays: 120 }),
   ]);
   const weighted = computeWeightedAvgBySupplierProductId(
     orders.filter((o) => o.status !== 'draft'),

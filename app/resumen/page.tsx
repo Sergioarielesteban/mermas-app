@@ -2,8 +2,11 @@
 
 import Link from 'next/link';
 import React from 'react';
+import { useAuth } from '@/components/AuthProvider';
 import { useMermasStore } from '@/components/MermasStoreProvider';
+import { fetchMermaPhotoDataUrlById } from '@/lib/mermas-supabase';
 import { downloadMermasReportPdf } from '@/lib/mermas-report-pdf';
+import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
 import { toBusinessDateKey } from '@/lib/business-day';
 import { requestDeleteSecurityPin } from '@/lib/delete-security';
 import type { MermaMotiveKey } from '@/lib/types';
@@ -37,6 +40,7 @@ function motiveLabel(key: string) {
 }
 
 export default function ResumenPage() {
+  const { localId } = useAuth();
   const { mermas, products, updateMerma, removeMerma } = useMermasStore();
   const [productFilter, setProductFilter] = React.useState<string>('all');
   const [fromDate, setFromDate] = React.useState('');
@@ -50,6 +54,26 @@ export default function ResumenPage() {
   const [editMotive, setEditMotive] = React.useState<MermaMotiveKey>('se-quemo');
   const [editNotes, setEditNotes] = React.useState('');
   const [editOccurredAt, setEditOccurredAt] = React.useState('');
+  const [photoUrlByMermaId, setPhotoUrlByMermaId] = React.useState<Record<string, string>>({});
+  const [photoLoadingId, setPhotoLoadingId] = React.useState<string | null>(null);
+
+  const loadMermaPhoto = React.useCallback(
+    async (mermaId: string) => {
+      if (!localId || !isSupabaseEnabled()) return;
+      const supabase = getSupabaseClient();
+      if (!supabase) return;
+      setPhotoLoadingId(mermaId);
+      try {
+        const url = await fetchMermaPhotoDataUrlById(supabase, localId, mermaId);
+        if (url) setPhotoUrlByMermaId((prev) => ({ ...prev, [mermaId]: url }));
+      } catch {
+        setMessage('No se pudo cargar la foto.');
+      } finally {
+        setPhotoLoadingId(null);
+      }
+    },
+    [localId],
+  );
 
   const filtered = mermas.filter((m) => {
     const date = toBusinessDateKey(m.occurredAt);
@@ -262,6 +286,27 @@ export default function ResumenPage() {
                       </p>
                       {m.notes?.trim() ? (
                         <p className="pt-1 text-xs text-zinc-600">Nota: {m.notes.trim()}</p>
+                      ) : null}
+                      {m.motiveKey === 'mal-estado' ? (
+                        <div className="mt-2 space-y-2">
+                          {m.photoDataUrl || photoUrlByMermaId[m.id] ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img
+                              src={m.photoDataUrl ?? photoUrlByMermaId[m.id]}
+                              alt="Evidencia merma"
+                              className="max-h-40 w-auto rounded-lg border border-zinc-200 object-contain"
+                            />
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => void loadMermaPhoto(m.id)}
+                              disabled={photoLoadingId === m.id || !localId}
+                              className="h-9 rounded-lg border border-zinc-300 bg-white px-3 text-xs font-bold text-zinc-700 disabled:opacity-50"
+                            >
+                              {photoLoadingId === m.id ? 'Cargando foto…' : 'Cargar foto'}
+                            </button>
+                          )}
+                        </div>
                       ) : null}
                       <div className="mt-3 flex gap-2">
                         <button

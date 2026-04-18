@@ -273,6 +273,129 @@ function isOrderConcurrencyConflictMessage(message: string): boolean {
   return m.includes('updated by another user') || m.includes('concurrency');
 }
 
+const PURCHASE_ORDER_HEADER_SEL_WITH_UPDATED =
+  'id,supplier_id,status,notes,created_at,sent_at,received_at,delivery_date,price_review_archived_at,updated_at,pedido_suppliers(name,contact)';
+const PURCHASE_ORDER_HEADER_SEL_LEGACY =
+  'id,supplier_id,status,notes,created_at,sent_at,received_at,delivery_date,price_review_archived_at,pedido_suppliers(name,contact)';
+
+async function runPurchaseOrderHeaderQuery(
+  supabase: SupabaseClient,
+  localId: string,
+  /** Cadena PostgREST tras `.select().eq('local_id', …)` (tipado laxo por variantes del cliente). */
+  apply: (q: any) => any,
+): Promise<OrderRow[]> {
+  const runSel = async (sel: string) => {
+    let q: any = supabase.from('purchase_orders').select(sel).eq('local_id', localId);
+    q = apply(q);
+    return q.order('created_at', { ascending: false });
+  };
+  let res = await runSel(PURCHASE_ORDER_HEADER_SEL_WITH_UPDATED);
+  if (res.error) {
+    if (!isMissingPurchaseOrdersUpdatedAtColumnError(res.error.message)) {
+      throw new Error(res.error.message);
+    }
+    res = await runSel(PURCHASE_ORDER_HEADER_SEL_LEGACY);
+  }
+  if (res.error) throw new Error(res.error.message);
+  return (res.data ?? []) as OrderRow[];
+}
+
+async function fetchPurchaseOrderItemRows(
+  supabase: SupabaseClient,
+  orderIds: string[],
+  options?: { signal?: AbortSignal },
+): Promise<OrderItemRow[]> {
+  const signal = options?.signal;
+  const ids = orderIds.length ? orderIds : ['00000000-0000-0000-0000-000000000000'];
+  let q = supabase
+    .from('purchase_order_items')
+    .select(
+      'id,order_id,supplier_product_id,product_name,unit,quantity,received_quantity,price_per_unit,base_price_per_unit,vat_rate,line_total,estimated_kg_per_unit,received_weight_kg,received_price_per_kg,incident_type,incident_notes',
+    )
+    .in('order_id', ids);
+  if (signal) q = q.abortSignal(signal);
+  const withPricePerKg = await q;
+  if (withPricePerKg.error) {
+    if (!isMissingReceivedPricePerKgColumnError(withPricePerKg.error.message)) {
+      throw new Error(withPricePerKg.error.message);
+    }
+    let legacy = supabase
+      .from('purchase_order_items')
+      .select(
+        'id,order_id,supplier_product_id,product_name,unit,quantity,received_quantity,price_per_unit,base_price_per_unit,vat_rate,line_total,estimated_kg_per_unit,received_weight_kg,incident_type,incident_notes',
+      )
+      .in('order_id', ids);
+    if (signal) legacy = legacy.abortSignal(signal);
+    const legacyRes = await legacy;
+    if (legacyRes.error) throw new Error(legacyRes.error.message);
+    return (legacyRes.data ?? []) as OrderItemRow[];
+  }
+  return (withPricePerKg.data ?? []) as OrderItemRow[];
+}
+
+function buildPedidoOrdersFromRows(orderRows: OrderRow[], itemRows: OrderItemRow[]): PedidoOrder[] {
+  const byOrder = new Map<string, PedidoOrderItem[]>();
+  for (const row of itemRows) {
+    const list = byOrder.get(row.order_id) ?? [];
+    list.push({
+      id: row.id,
+      supplierProductId: row.supplier_product_id,
+      productName: row.product_name,
+      unit: row.unit as Unit,
+      quantity: Number(row.quantity),
+      receivedQuantity: Number(row.received_quantity),
+      pricePerUnit: Number(row.price_per_unit),
+      vatRate: Number(row.vat_rate ?? 0),
+      lineTotal: Number(row.line_total),
+      ...(row.base_price_per_unit != null && Number.isFinite(Number(row.base_price_per_unit))
+        ? { basePricePerUnit: Number(row.base_price_per_unit) }
+        : {}),
+      ...(row.estimated_kg_per_unit != null
+        ? { estimatedKgPerUnit: Number(row.estimated_kg_per_unit) }
+        : {}),
+      receivedWeightKg: row.received_weight_kg != null ? Number(row.received_weight_kg) : null,
+      ...(row.received_price_per_kg != null && Number.isFinite(Number(row.received_price_per_kg))
+        ? { receivedPricePerKg: Number(row.received_price_per_kg) }
+        : {}),
+      incidentType: row.incident_type,
+      incidentNotes: row.incident_notes ?? undefined,
+    });
+    byOrder.set(row.order_id, list);
+  }
+
+  return orderRows.map((row) => {
+    const supplier = Array.isArray(row.pedido_suppliers) ? row.pedido_suppliers[0] : row.pedido_suppliers;
+    const items = byOrder.get(row.id) ?? [];
+    return {
+      id: row.id,
+      supplierId: row.supplier_id,
+      supplierName: supplier?.name ?? 'Proveedor',
+      supplierContact: supplier?.contact ?? undefined,
+      status: row.status,
+      notes: row.notes ?? '',
+      createdAt: row.created_at,
+      sentAt: row.sent_at ?? undefined,
+      receivedAt: row.received_at ?? undefined,
+      deliveryDate: row.delivery_date ?? undefined,
+      ...(row.price_review_archived_at != null && row.price_review_archived_at !== ''
+        ? { priceReviewArchivedAt: row.price_review_archived_at }
+        : {}),
+      ...(row.updated_at != null && row.updated_at !== '' ? { updatedAt: row.updated_at } : {}),
+      items,
+      total: items.reduce((acc, item) => acc + item.lineTotal, 0),
+    };
+  });
+}
+
+/** Ventana móvil por defecto sobre `created_at` (~26 meses) para no descargar todo el histórico. */
+export const FETCH_ORDERS_DEFAULT_RECENT_DAYS = 800;
+
+export type FetchOrdersOptions = {
+  signal?: AbortSignal;
+  /** `null` = sin tope (histórico completo). Omisión = `FETCH_ORDERS_DEFAULT_RECENT_DAYS`. */
+  recentDays?: number | null;
+};
+
 export async function fetchSuppliersWithProducts(supabase: SupabaseClient, localId: string) {
   const { data: supplierRows, error: sErr } = await supabase
     .from('pedido_suppliers')
@@ -576,112 +699,81 @@ export async function setSupplierProductActive(
   if (error) throw new Error(error.message);
 }
 
-export async function fetchOrders(supabase: SupabaseClient, localId: string) {
-  let orderRows: OrderRow[] = [];
-  {
-    const withUpdated = await supabase
-      .from('purchase_orders')
-      .select(
-        'id,supplier_id,status,notes,created_at,sent_at,received_at,delivery_date,price_review_archived_at,updated_at,pedido_suppliers(name,contact)',
-      )
-      .eq('local_id', localId)
-      .order('created_at', { ascending: false });
-    if (withUpdated.error) {
-      if (!isMissingPurchaseOrdersUpdatedAtColumnError(withUpdated.error.message)) {
-        throw new Error(withUpdated.error.message);
-      }
-      const legacy = await supabase
-        .from('purchase_orders')
-        .select(
-          'id,supplier_id,status,notes,created_at,sent_at,received_at,delivery_date,price_review_archived_at,pedido_suppliers(name,contact)',
-        )
-        .eq('local_id', localId)
-        .order('created_at', { ascending: false });
-      if (legacy.error) throw new Error(legacy.error.message);
-      orderRows = (legacy.data ?? []) as OrderRow[];
-    } else {
-      orderRows = (withUpdated.data ?? []) as OrderRow[];
-    }
-  }
+export async function fetchOrders(
+  supabase: SupabaseClient,
+  localId: string,
+  options?: FetchOrdersOptions,
+): Promise<PedidoOrder[]> {
+  const signal = options?.signal;
+  const recentDays =
+    options?.recentDays === undefined ? FETCH_ORDERS_DEFAULT_RECENT_DAYS : options.recentDays;
+  const createdCutoffIso =
+    recentDays != null && recentDays > 0
+      ? new Date(Date.now() - recentDays * 86_400_000).toISOString()
+      : null;
 
-  const ids = orderRows.map((row) => row.id);
-  let itemRows: OrderItemRow[] = [];
-  {
-    const withPricePerKg = await supabase
-      .from('purchase_order_items')
-      .select(
-        'id,order_id,supplier_product_id,product_name,unit,quantity,received_quantity,price_per_unit,base_price_per_unit,vat_rate,line_total,estimated_kg_per_unit,received_weight_kg,received_price_per_kg,incident_type,incident_notes',
-      )
-      .in('order_id', ids.length ? ids : ['00000000-0000-0000-0000-000000000000']);
-    if (withPricePerKg.error) {
-      if (!isMissingReceivedPricePerKgColumnError(withPricePerKg.error.message)) {
-        throw new Error(withPricePerKg.error.message);
-      }
-      const legacy = await supabase
-        .from('purchase_order_items')
-        .select(
-          'id,order_id,supplier_product_id,product_name,unit,quantity,received_quantity,price_per_unit,base_price_per_unit,vat_rate,line_total,estimated_kg_per_unit,received_weight_kg,incident_type,incident_notes',
-        )
-        .in('order_id', ids.length ? ids : ['00000000-0000-0000-0000-000000000000']);
-      if (legacy.error) throw new Error(legacy.error.message);
-      itemRows = (legacy.data ?? []) as OrderItemRow[];
-    } else {
-      itemRows = (withPricePerKg.data ?? []) as OrderItemRow[];
-    }
-  }
-
-  const byOrder = new Map<string, PedidoOrderItem[]>();
-  for (const row of itemRows) {
-    const list = byOrder.get(row.order_id) ?? [];
-    list.push({
-      id: row.id,
-      supplierProductId: row.supplier_product_id,
-      productName: row.product_name,
-      unit: row.unit as Unit,
-      quantity: Number(row.quantity),
-      receivedQuantity: Number(row.received_quantity),
-      pricePerUnit: Number(row.price_per_unit),
-      vatRate: Number(row.vat_rate ?? 0),
-      lineTotal: Number(row.line_total),
-      ...(row.base_price_per_unit != null && Number.isFinite(Number(row.base_price_per_unit))
-        ? { basePricePerUnit: Number(row.base_price_per_unit) }
-        : {}),
-      ...(row.estimated_kg_per_unit != null
-        ? { estimatedKgPerUnit: Number(row.estimated_kg_per_unit) }
-        : {}),
-      receivedWeightKg: row.received_weight_kg != null ? Number(row.received_weight_kg) : null,
-      ...(row.received_price_per_kg != null && Number.isFinite(Number(row.received_price_per_kg))
-        ? { receivedPricePerKg: Number(row.received_price_per_kg) }
-        : {}),
-      incidentType: row.incident_type,
-      incidentNotes: row.incident_notes ?? undefined,
-    });
-    byOrder.set(row.order_id, list);
-  }
-
-  const orders: PedidoOrder[] = orderRows.map((row) => {
-    const supplier = Array.isArray(row.pedido_suppliers) ? row.pedido_suppliers[0] : row.pedido_suppliers;
-    const items = byOrder.get(row.id) ?? [];
-    return {
-      id: row.id,
-      supplierId: row.supplier_id,
-      supplierName: supplier?.name ?? 'Proveedor',
-      supplierContact: supplier?.contact ?? undefined,
-      status: row.status,
-      notes: row.notes ?? '',
-      createdAt: row.created_at,
-      sentAt: row.sent_at ?? undefined,
-      receivedAt: row.received_at ?? undefined,
-      deliveryDate: row.delivery_date ?? undefined,
-      ...(row.price_review_archived_at != null && row.price_review_archived_at !== ''
-        ? { priceReviewArchivedAt: row.price_review_archived_at }
-        : {}),
-      ...(row.updated_at != null && row.updated_at !== '' ? { updatedAt: row.updated_at } : {}),
-      items,
-      total: items.reduce((acc, item) => acc + item.lineTotal, 0),
-    };
+  const orderRows = await runPurchaseOrderHeaderQuery(supabase, localId, (q) => {
+    let r = q;
+    if (signal) r = r.abortSignal(signal);
+    if (createdCutoffIso) r = r.gte('created_at', createdCutoffIso);
+    return r;
   });
-  return orders;
+
+  const itemRows = await fetchPurchaseOrderItemRows(
+    supabase,
+    orderRows.map((row) => row.id),
+    { signal },
+  );
+  return buildPedidoOrdersFromRows(orderRows, itemRows);
+}
+
+/**
+ * Pedidos enviados/recibidos cuya fecha de compromiso (sent_at o created_at) cae en [fromYmd, toYmd].
+ * Para Finanzas: evita descargar todo el histórico.
+ */
+export async function fetchOrdersForFinanzasCommitment(
+  supabase: SupabaseClient,
+  localId: string,
+  fromYmd: string,
+  toYmd: string,
+  options?: { signal?: AbortSignal },
+): Promise<PedidoOrder[]> {
+  const signal = options?.signal;
+  const fromIso = `${fromYmd}T00:00:00.000Z`;
+  const toIso = `${toYmd}T23:59:59.999Z`;
+
+  const partA = await runPurchaseOrderHeaderQuery(supabase, localId, (q) => {
+    let r = q
+      .in('status', ['sent', 'received'])
+      .not('sent_at', 'is', null)
+      .gte('sent_at', fromIso)
+      .lte('sent_at', toIso);
+    if (signal) r = r.abortSignal(signal);
+    return r;
+  });
+  const partB = await runPurchaseOrderHeaderQuery(supabase, localId, (q) => {
+    let r = q
+      .in('status', ['sent', 'received'])
+      .is('sent_at', null)
+      .gte('created_at', fromIso)
+      .lte('created_at', toIso);
+    if (signal) r = r.abortSignal(signal);
+    return r;
+  });
+
+  const byId = new Map<string, OrderRow>();
+  for (const row of partA) byId.set(row.id, row);
+  for (const row of partB) byId.set(row.id, row);
+  const orderRows = Array.from(byId.values()).sort((a, b) =>
+    a.created_at < b.created_at ? 1 : -1,
+  );
+
+  const itemRows = await fetchPurchaseOrderItemRows(
+    supabase,
+    orderRows.map((r) => r.id),
+    { signal },
+  );
+  return buildPedidoOrdersFromRows(orderRows, itemRows);
 }
 
 /** Una sola cabecera + líneas (menos datos que `fetchOrders`; útil tras crear un pedido). */
@@ -851,6 +943,50 @@ export function mergePedidoOrdersFromServer(
   return Array.from(byId.values())
     .filter((o) => !tombstones?.has(o.id))
     .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+}
+
+/**
+ * Actualización incremental (Realtime): sustituye un pedido en lista sin refetch global.
+ * Replica overlays de `mergePedidoOrdersFromServer` (archivo recepción / pin recibido).
+ */
+export function upsertPedidoOrderInList(
+  prev: PedidoOrder[],
+  fresh: PedidoOrder,
+  opts?: MergePedidoOrdersOptions,
+): PedidoOrder[] {
+  const tombstones = opts?.tombstoneIds;
+  const pendingReceived = opts?.pendingReceivedById;
+  const prevRow = prev.find((p) => p.id === fresh.id);
+  let out = fresh;
+  if (prevRow?.priceReviewArchivedAt && fresh.priceReviewArchivedAt == null) {
+    out = { ...fresh, priceReviewArchivedAt: prevRow.priceReviewArchivedAt };
+  }
+  const pend = pendingReceived?.get(out.id);
+  if (pend && out.status === 'sent') {
+    out = {
+      ...out,
+      status: 'received',
+      receivedAt: pend.receivedAtIso,
+      ...(pend.priceReviewArchivedAt != null ? { priceReviewArchivedAt: pend.priceReviewArchivedAt } : {}),
+    };
+  }
+  const others = prev.filter((o) => o.id !== fresh.id);
+  const merged = [out, ...others];
+  return merged
+    .filter((o) => !tombstones?.has(o.id))
+    .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+}
+
+/** Borrado incremental (Realtime u otra fuente). */
+export function removePedidoOrderFromList(
+  prev: PedidoOrder[],
+  orderId: string,
+  opts?: { tombstoneIds?: ReadonlySet<string> },
+): PedidoOrder[] {
+  const tombstones = opts?.tombstoneIds;
+  return prev
+    .filter((o) => o.id !== orderId)
+    .filter((o) => !tombstones?.has(o.id));
 }
 
 export async function saveOrder(

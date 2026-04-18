@@ -227,20 +227,122 @@ export async function fetchDeliveryNotesList(supabase: SupabaseClient, localId: 
   }));
 }
 
-/** Ventana amplia para Finanzas (imputación por fecha entrega en cliente). */
+function addDaysToYmd(ymd: string, deltaDays: number): string {
+  const [y, m, d] = ymd.split('-').map(Number);
+  const dt = new Date(y!, m! - 1, d!);
+  dt.setDate(dt.getDate() + deltaDays);
+  const yy = dt.getFullYear();
+  const mm = String(dt.getMonth() + 1).padStart(2, '0');
+  const dd = String(dt.getDate()).padStart(2, '0');
+  return `${yy}-${mm}-${dd}`;
+}
+
+/** Margen alrededor del periodo Finanzas para alinear delivery_date vs created_at. */
+const FINANZAS_DN_QUERY_SLACK_DAYS = 50;
+
+export type FetchDeliveryNotesForFinanzasOptions = {
+  /** Fecha mínima/máxima de imputación relevante (YYYY-MM-DD); se amplía con margen interno. */
+  imputeFromYmd?: string;
+  imputeToYmd?: string;
+  limit?: number;
+};
+
+/**
+ * Finanzas / albaranes por periodo: por defecto acota por rango de imputación (+ margen)
+ * en lugar de traer miles de filas irrelevantes.
+ */
 export async function fetchDeliveryNotesForFinanzas(
   supabase: SupabaseClient,
   localId: string,
-  limit = 4000,
+  options?: FetchDeliveryNotesForFinanzasOptions,
 ): Promise<DeliveryNote[]> {
-  const { data, error } = await supabase
+  const hasWindow = Boolean(options?.imputeFromYmd && options?.imputeToYmd);
+  const limit =
+    options?.limit ?? (hasWindow ? 1200 : 2000);
+
+  if (!hasWindow) {
+    const { data, error } = await supabase
+      .from('delivery_notes')
+      .select(NOTE_SEL)
+      .eq('local_id', localId)
+      .order('created_at', { ascending: false })
+      .limit(limit);
+    if (error) throw new Error(error.message);
+    return ((data ?? []) as NoteRow[]).map(mapNote);
+  }
+
+  const dFrom = addDaysToYmd(options!.imputeFromYmd!, -FINANZAS_DN_QUERY_SLACK_DAYS);
+  const dTo = addDaysToYmd(options!.imputeToYmd!, FINANZAS_DN_QUERY_SLACK_DAYS);
+  const isoFrom = `${dFrom}T00:00:00.000Z`;
+  const isoTo = `${dTo}T23:59:59.999Z`;
+
+  const { data: withDeliv, error: e1 } = await supabase
     .from('delivery_notes')
     .select(NOTE_SEL)
     .eq('local_id', localId)
-    .order('created_at', { ascending: false })
-    .limit(limit);
-  if (error) throw new Error(error.message);
-  return ((data ?? []) as NoteRow[]).map(mapNote);
+    .not('delivery_date', 'is', null)
+    .gte('delivery_date', dFrom)
+    .lte('delivery_date', dTo);
+
+  const { data: noDeliv, error: e2 } = await supabase
+    .from('delivery_notes')
+    .select(NOTE_SEL)
+    .eq('local_id', localId)
+    .is('delivery_date', null)
+    .gte('created_at', isoFrom)
+    .lte('created_at', isoTo);
+
+  if (e1) throw new Error(e1.message);
+  if (e2) throw new Error(e2.message);
+
+  const byId = new Map<string, NoteRow>();
+  for (const row of (withDeliv ?? []) as NoteRow[]) {
+    byId.set(String(row.id), row);
+  }
+  for (const row of (noDeliv ?? []) as NoteRow[]) {
+    byId.set(String(row.id), row);
+  }
+  const merged = Array.from(byId.values()).sort((a, b) =>
+    String(b.created_at).localeCompare(String(a.created_at)),
+  );
+  return merged.slice(0, limit).map(mapNote);
+}
+
+/**
+ * Conteo ligero (HEAD) de albaranes no validados ni archivados cuya fecha de imputación cae en [fromYmd, toYmd]:
+ * `delivery_date` en rango, o sin fecha de entrega y `created_at` en el mismo rango UTC.
+ * Usado por Finanzas (alertas) sin traer filas.
+ */
+export async function countPendingDeliveryNotesInImputationRange(
+  supabase: SupabaseClient,
+  localId: string,
+  fromYmd: string,
+  toYmd: string,
+): Promise<number> {
+  const isoStart = `${fromYmd}T00:00:00.000Z`;
+  const isoEnd = `${toYmd}T23:59:59.999Z`;
+
+  const base = () =>
+    supabase
+      .from('delivery_notes')
+      .select('id', { count: 'exact', head: true })
+      .eq('local_id', localId)
+      .neq('status', 'validated')
+      .neq('status', 'archived');
+
+  const { count: c1, error: e1 } = await base()
+    .not('delivery_date', 'is', null)
+    .gte('delivery_date', fromYmd)
+    .lte('delivery_date', toYmd);
+
+  const { count: c2, error: e2 } = await base()
+    .is('delivery_date', null)
+    .gte('created_at', isoStart)
+    .lte('created_at', isoEnd);
+
+  if (e1) throw new Error(e1.message);
+  if (e2) throw new Error(e2.message);
+  return (c1 ?? 0) + (c2 ?? 0);
 }
 
 export async function fetchDeliveryNoteItemsForNotes(

@@ -4,8 +4,12 @@ import {
   fetchDeliveryNoteItemsForNotes,
   fetchDeliveryNotesForFinanzas,
 } from '@/lib/delivery-notes-supabase';
-import { fetchOrders, type PedidoOrder, type PedidoOrderItem } from '@/lib/pedidos-supabase';
-import { fetchProductsAndMermas } from '@/lib/mermas-supabase';
+import { fetchMermasForFinanzasRange } from '@/lib/mermas-supabase';
+import {
+  fetchOrdersForFinanzasCommitment,
+  type PedidoOrder,
+  type PedidoOrderItem,
+} from '@/lib/pedidos-supabase';
 
 export type FinanzasPeriodPreset = 'today' | '7d' | 'this_month' | 'prev_month';
 
@@ -454,10 +458,16 @@ export async function fetchFinanzasDashboard(
   const { current, previous } = finanzasPeriodRanges(preset);
   const { from: cFrom, to: cTo } = current;
   const { from: pFrom, to: pTo } = previous;
+  const boundFrom = cFrom < pFrom ? cFrom : pFrom;
+  const boundTo = cTo > pTo ? cTo : pTo;
 
   let notes: DeliveryNote[] = [];
   try {
-    notes = await fetchDeliveryNotesForFinanzas(supabase, localId);
+    notes = await fetchDeliveryNotesForFinanzas(supabase, localId, {
+      imputeFromYmd: boundFrom,
+      imputeToYmd: boundTo,
+      limit: 1200,
+    });
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : '';
     if (msg.includes('delivery_notes') && (msg.includes('does not exist') || msg.includes('schema cache'))) {
@@ -503,7 +513,7 @@ export async function fetchFinanzasDashboard(
   pendingEstimateNet = Math.round(pendingEstimateNet * 100) / 100;
   pendingEstimateGross = Math.round(pendingEstimateGross * 100) / 100;
 
-  const orders = await fetchOrders(supabase, localId);
+  const orders = await fetchOrdersForFinanzasCommitment(supabase, localId, boundFrom, boundTo);
   let ordersCommitmentNet = 0;
   let ordersCommitmentPrevNet = 0;
   for (const o of orders) {
@@ -519,10 +529,10 @@ export async function fetchFinanzasDashboard(
 
   const deviationOrdersVsDn = Math.round((ordersCommitmentNet - spendNet) * 100) / 100;
 
-  const { mermas } = await fetchProductsAndMermas(supabase, localId);
+  const mermaRows = await fetchMermasForFinanzasRange(supabase, localId, boundFrom, boundTo);
   let mermaEur = 0;
   let mermaPrevEur = 0;
-  for (const m of mermas) {
+  for (const m of mermaRows) {
     const d = m.occurredAt.slice(0, 10);
     const c = Number(m.costEur ?? 0);
     if (d >= cFrom && d <= cTo) mermaEur += c;
@@ -628,7 +638,7 @@ export async function fetchFinanzasDashboard(
     .slice(0, 15);
 
   const mermaAgg = new Map<string, { label: string; eur: number }>();
-  for (const m of mermas) {
+  for (const m of mermaRows) {
     const d = m.occurredAt.slice(0, 10);
     if (d < cFrom || d > cTo) continue;
     const key = m.motiveKey;

@@ -14,8 +14,11 @@ import { useAuth } from '@/components/AuthProvider';
 import { usePedidosDataChangedListener } from '@/hooks/usePedidosDataChangedListener';
 import { canAccessPedidos, canUsePedidosModule } from '@/lib/pedidos-access';
 import {
+  fetchOrderById,
   fetchOrders,
   mergePedidoOrdersFromServer,
+  removePedidoOrderFromList,
+  upsertPedidoOrderInList,
   type PedidoOrder,
 } from '@/lib/pedidos-supabase';
 import { getSupabaseClient } from '@/lib/supabase-client';
@@ -125,6 +128,8 @@ export function PedidosOrdersProvider({ children }: { children: React.ReactNode 
   const pendingReceivedByIdRef = useRef(
     new Map<string, { markedAt: number; receivedAtIso: string; priceReviewArchivedAt?: string }>(),
   );
+  const reloadAbortRef = useRef<AbortController | null>(null);
+  const orderRefreshTimersRef = useRef<Map<string, number>>(new Map());
 
   const registerDeletedOrderId = useCallback((id: string) => {
     const lid = localIdRef.current;
@@ -170,26 +175,82 @@ export function PedidosOrdersProvider({ children }: { children: React.ReactNode 
     const supabase = getSupabaseClient();
     if (!supabase) return;
     setReloadError(null);
-    void fetchOrders(supabase, targetId).then((rows) => {
-      if (localIdRef.current !== targetId) return;
-      // No borrar pendingReceived al ver `received`: la primera lectura puede ser correcta y la siguiente
-      // (Realtime / 2.º fetch) venir de réplica con `sent` y sin pin el pedido «rebota» a enviados.
-      // El pin solo se quita con clearPendingReceivedOrder (p. ej. «Volver a enviados» o archivar en Recepción).
-      const tombstones = activeOrderTombstoneSet(locallyDeletedOrderIdsRef.current);
-      saveOrderTombstones(targetId, locallyDeletedOrderIdsRef.current);
-      setOrders((prev) =>
-        mergePedidoOrdersFromServer(prev, rows, pinUntilSeenRef.current, {
-          tombstoneIds: tombstones,
-          pendingReceivedById: pendingReceivedByIdRef.current,
-        }),
-      );
-      ordersReadyLocalIdRef.current = targetId;
-    }).catch((error: unknown) => {
-      if (localIdRef.current !== targetId) return;
-      const msg = error instanceof Error ? error.message : 'No se pudo recargar pedidos.';
-      setReloadError(msg);
-    });
+    reloadAbortRef.current?.abort();
+    const ac = new AbortController();
+    reloadAbortRef.current = ac;
+    void fetchOrders(supabase, targetId, { signal: ac.signal })
+      .then((rows) => {
+        if (ac.signal.aborted) return;
+        if (localIdRef.current !== targetId) return;
+        // No borrar pendingReceived al ver `received`: la primera lectura puede ser correcta y la siguiente
+        // (Realtime / 2.º fetch) venir de réplica con `sent` y sin pin el pedido «rebota» a enviados.
+        // El pin solo se quita con clearPendingReceivedOrder (p. ej. «Volver a enviados» o archivar en Recepción).
+        const tombstones = activeOrderTombstoneSet(locallyDeletedOrderIdsRef.current);
+        saveOrderTombstones(targetId, locallyDeletedOrderIdsRef.current);
+        setOrders((prev) =>
+          mergePedidoOrdersFromServer(prev, rows, pinUntilSeenRef.current, {
+            tombstoneIds: tombstones,
+            pendingReceivedById: pendingReceivedByIdRef.current,
+          }),
+        );
+        ordersReadyLocalIdRef.current = targetId;
+      })
+      .catch((error: unknown) => {
+        if (ac.signal.aborted) return;
+        if (localIdRef.current !== targetId) return;
+        const msg = error instanceof Error ? error.message : 'No se pudo recargar pedidos.';
+        setReloadError(msg);
+      });
   }, [canUse, localId]);
+
+  /**
+   * Realtime incremental: un solo pedido vía `fetchOrderById`.
+   * Refetch completo solo si falla la lectura parcial o falta id (caso extremo).
+   */
+  const scheduleOrderRefreshFromRealtime = useCallback(
+    (orderId: string) => {
+      if (!orderId) return;
+      const existing = orderRefreshTimersRef.current.get(orderId);
+      if (existing != null) window.clearTimeout(existing);
+      const t = window.setTimeout(() => {
+        orderRefreshTimersRef.current.delete(orderId);
+        void (async () => {
+          const supabase = getSupabaseClient();
+          const lid = localIdRef.current;
+          if (!supabase || !lid || !canUse) return;
+          try {
+            const fresh = await fetchOrderById(supabase, lid, orderId);
+            const tombstones = activeOrderTombstoneSet(locallyDeletedOrderIdsRef.current);
+            saveOrderTombstones(lid, locallyDeletedOrderIdsRef.current);
+            if (!fresh) {
+              setOrders((prev) => removePedidoOrderFromList(prev, orderId, { tombstoneIds: tombstones }));
+              return;
+            }
+            setOrders((prev) =>
+              upsertPedidoOrderInList(prev, fresh, {
+                tombstoneIds: tombstones,
+                pendingReceivedById: pendingReceivedByIdRef.current,
+              }),
+            );
+          } catch {
+            reloadOrders();
+          }
+        })();
+      }, 450);
+      orderRefreshTimersRef.current.set(orderId, t);
+    },
+    [canUse, reloadOrders],
+  );
+
+  useEffect(() => {
+    return () => {
+      reloadAbortRef.current?.abort();
+      for (const t of orderRefreshTimersRef.current.values()) {
+        window.clearTimeout(t);
+      }
+      orderRefreshTimersRef.current.clear();
+    };
+  }, []);
 
   useLayoutEffect(() => {
     ordersReadyLocalIdRef.current = null;
@@ -220,32 +281,65 @@ export function PedidosOrdersProvider({ children }: { children: React.ReactNode 
     if (!canUse || !localId || !hasEntry) return;
     const supabase = getSupabaseClient();
     if (!supabase) return;
-    let debounce: number | null = null;
-    const scheduleReload = () => {
-      if (debounce != null) window.clearTimeout(debounce);
-      debounce = window.setTimeout(() => {
-        debounce = null;
+
+    const onOrderRow = (payload: {
+      eventType?: string;
+      new?: Record<string, unknown>;
+      old?: Record<string, unknown>;
+    }) => {
+      const ev = String(payload.eventType ?? '').toUpperCase();
+      if (ev === 'DELETE') {
+        const id = typeof payload.old?.id === 'string' ? payload.old.id : '';
+        if (!id) {
+          reloadOrders();
+          return;
+        }
+        registerDeletedOrderId(id);
+        const tombstones = activeOrderTombstoneSet(locallyDeletedOrderIdsRef.current);
+        saveOrderTombstones(localId, locallyDeletedOrderIdsRef.current);
+        setOrders((prev) => removePedidoOrderFromList(prev, id, { tombstoneIds: tombstones }));
+        return;
+      }
+      const id = typeof payload.new?.id === 'string' ? payload.new.id : '';
+      if (!id) {
         reloadOrders();
-      }, 1200);
+        return;
+      }
+      scheduleOrderRefreshFromRealtime(id);
     };
+
+    const onItemRow = (payload: {
+      eventType?: string;
+      new?: Record<string, unknown>;
+      old?: Record<string, unknown>;
+    }) => {
+      const oid =
+        (typeof payload.new?.order_id === 'string' ? payload.new.order_id : null) ??
+        (typeof payload.old?.order_id === 'string' ? payload.old.order_id : null);
+      if (!oid) {
+        reloadOrders();
+        return;
+      }
+      scheduleOrderRefreshFromRealtime(oid);
+    };
+
     const channel = supabase
       .channel(`pedidos-orders-rt:${localId}`)
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'purchase_orders', filter: `local_id=eq.${localId}` },
-        scheduleReload,
+        onOrderRow,
       )
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'purchase_order_items', filter: `local_id=eq.${localId}` },
-        scheduleReload,
+        onItemRow,
       )
       .subscribe();
     return () => {
-      if (debounce != null) window.clearTimeout(debounce);
       void supabase.removeChannel(channel);
     };
-  }, [canUse, hasEntry, localId, reloadOrders]);
+  }, [canUse, hasEntry, localId, reloadOrders, registerDeletedOrderId, scheduleOrderRefreshFromRealtime]);
 
   useEffect(() => {
     if (!canUse || !localId) return;

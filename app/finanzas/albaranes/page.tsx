@@ -139,7 +139,10 @@ function FinanzasAlbaranesInner({
   const [notesLoading, setNotesLoading] = useState(false);
   const [notesError, setNotesError] = useState<string | null>(null);
 
-  const { from, to } = finanzasPeriodRanges(preset).current;
+  const { current, previous } = finanzasPeriodRanges(preset);
+  const { from, to } = current;
+  const boundFrom = current.from < previous.from ? current.from : previous.from;
+  const boundTo = current.to > previous.to ? current.to : previous.to;
 
   useEffect(() => {
     if (!data?.hasDeliveryNotesTable) {
@@ -153,7 +156,11 @@ function FinanzasAlbaranesInner({
       setNotesLoading(true);
       setNotesError(null);
       try {
-        const n = await fetchDeliveryNotesForFinanzas(getSupabaseClient()!, localId);
+        const n = await fetchDeliveryNotesForFinanzas(getSupabaseClient()!, localId, {
+          imputeFromYmd: boundFrom,
+          imputeToYmd: boundTo,
+          limit: 1200,
+        });
         if (!cancelled) setNotes(n);
       } catch (e: unknown) {
         if (!cancelled) {
@@ -167,7 +174,7 @@ function FinanzasAlbaranesInner({
     return () => {
       cancelled = true;
     };
-  }, [data, localId]);
+  }, [data, localId, preset, boundFrom, boundTo]);
 
   const { validados, pendientes } = useMemo(() => {
     const validados: DeliveryNote[] = [];
