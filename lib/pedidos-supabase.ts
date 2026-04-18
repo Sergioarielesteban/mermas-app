@@ -2,9 +2,19 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { normalizeDeliveryCycleWeekdays, normalizeDeliveryExceptionDates } from '@/lib/pedidos-coverage';
 import type { Unit } from '@/lib/types';
 
-/** Bandeja o caja: referencia kg por envase en catálogo; en recepción peso báscula opcional (no cambia el subtotal). */
+/**
+ * Unidades de catálogo que no son kg pero permiten anotar **kg reales** y **€/kg** en recepción
+ * (pedido en envase/unidad, cobro por peso). No incluye `kg` (esa línea usa el flujo propio de báscula).
+ */
 export function unitSupportsReceivedWeightKg(unit: Unit): boolean {
-  return unit === 'bandeja' || unit === 'caja';
+  return (
+    unit === 'bandeja' ||
+    unit === 'caja' ||
+    unit === 'paquete' ||
+    unit === 'bolsa' ||
+    unit === 'ud' ||
+    unit === 'racion'
+  );
 }
 
 /** Líneas donde se puede anotar peso en báscula al recibir (kg: el peso actualiza subtotal e IVA del albarán). */
@@ -38,7 +48,7 @@ export function billingQuantityForReceptionPrice(item: PedidoOrderItem): number 
 
 /**
  * Subtotal e importe unitario efectivo en Recepción.
- * Bandeja/caja: si hay kg reales y €/kg real, el subtotal es kg × €/kg y el unitario efectivo es subtotal / envases (para albarán e histórico).
+ * Envases/unidades ponderables: si hay kg reales y €/kg real, el subtotal es kg × €/kg y el unitario efectivo es subtotal / envases recibidos (albarán, histórico y PMP en €/unidad de catálogo).
  */
 export function receptionLineTotals(item: PedidoOrderItem): { lineTotal: number; effectivePricePerUnit: number } {
   if (item.unit === 'kg') {
@@ -115,11 +125,11 @@ export type PedidoOrderItem = {
   pricePerUnit: number;
   vatRate: number;
   lineTotal: number;
-  /** Copia del catálogo al guardar (bandeja/caja). */
+  /** Copia del catálogo al guardar (unidades que admiten kg estimado por envase). */
   estimatedKgPerUnit?: number;
-  /** Peso real en recepción (kg), bandeja/caja. */
+  /** Peso real en recepción (kg) cuando la unidad de pedido admite anotación de báscula + €/kg. */
   receivedWeightKg?: number | null;
-  /** €/kg reales en recepción (bandeja/caja); con kg reales, subtotal = kg × €/kg. */
+  /** €/kg reales en recepción; con kg reales, subtotal = kg × €/kg y `price_per_unit` queda como €/unidad de catálogo efectiva. */
   receivedPricePerKg?: number | null;
   incidentType?: 'missing' | 'damaged' | 'wrong-item' | null;
   incidentNotes?: string;
@@ -1124,8 +1134,8 @@ export async function updateOrderItemReceivedWeightKg(
 }
 
 /**
- * Persiste peso, €/kg real (bandeja/caja), precio unitario efectivo y subtotal en una sola escritura.
- * Para líneas kg/bandeja/caja; el resto delega en `updateOrderItemPrice`.
+ * Persiste peso, €/kg real (envases ponderables), precio unitario efectivo y subtotal en una sola escritura.
+ * Para líneas kg o `unitSupportsReceivedWeightKg`; el resto delega en `updateOrderItemPrice`.
  */
 export async function persistReceptionItemTotals(supabase: SupabaseClient, localId: string, item: PedidoOrderItem) {
   if (!unitCanDeclareScaleKgOnReception(item.unit)) {

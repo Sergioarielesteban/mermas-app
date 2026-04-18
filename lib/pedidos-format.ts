@@ -1,4 +1,9 @@
-import { billingQuantityForLine, type PedidoOrder } from '@/lib/pedidos-supabase';
+import {
+  billingQuantityForLine,
+  receptionLineTotals,
+  unitSupportsReceivedWeightKg,
+  type PedidoOrder,
+} from '@/lib/pedidos-supabase';
 import type { Unit } from '@/lib/types';
 
 const UNIT_WORD: Record<Unit, { one: string; many: string }> = {
@@ -83,6 +88,71 @@ export function lineSubtotalForOrderListDisplay(item: PedidoOrder['items'][numbe
     return Math.round(item.pricePerUnit * effQty * 100) / 100;
   }
   return item.lineTotal;
+}
+
+/** Resumen legible pedido / recepción / precio cobrado / total (alineado con `receptionLineTotals` y subtotal de lista). */
+export type ReceptionBillingSummary = {
+  pedido: string;
+  recibido: string;
+  precioAplicado: string;
+  /** Si el cobro es €/kg, equivalencia en €/unidad de catálogo (coherente con histórico/PMP). */
+  precioEquivCatalogo?: string;
+  totalLinea: string;
+};
+
+export function receptionBillingSummary(item: PedidoOrder['items'][number]): ReceptionBillingSummary {
+  const pedido = formatQuantityWithUnit(item.quantity, item.unit);
+  const suf = unitPriceCatalogSuffix[item.unit];
+
+  let recibido: string;
+  if (item.incidentType === 'missing') {
+    recibido = 'No recibido';
+  } else if (item.unit === 'kg') {
+    if (item.receivedWeightKg != null && item.receivedWeightKg > 0) {
+      recibido = `${item.receivedWeightKg.toLocaleString('es-ES', { minimumFractionDigits: 0, maximumFractionDigits: 3 })} kg`;
+    } else {
+      recibido = formatQuantityWithUnit(item.receivedQuantity, 'kg');
+    }
+  } else if (
+    unitSupportsReceivedWeightKg(item.unit) &&
+    item.receivedWeightKg != null &&
+    item.receivedWeightKg > 0
+  ) {
+    const kgStr = `${item.receivedWeightKg.toLocaleString('es-ES', { minimumFractionDigits: 0, maximumFractionDigits: 3 })} kg`;
+    recibido =
+      item.receivedQuantity > 0
+        ? `${kgStr} (${formatQuantityWithUnit(item.receivedQuantity, item.unit)})`
+        : kgStr;
+  } else {
+    const q = item.receivedQuantity > 0 ? item.receivedQuantity : item.quantity;
+    recibido = formatQuantityWithUnit(q, item.unit);
+  }
+
+  let precioAplicado: string;
+  let precioEquivCatalogo: string | undefined;
+  if (item.incidentType === 'missing') {
+    precioAplicado = '—';
+  } else if (item.unit === 'kg') {
+    precioAplicado = `${item.pricePerUnit.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €/kg`;
+  } else if (
+    unitSupportsReceivedWeightKg(item.unit) &&
+    item.receivedWeightKg != null &&
+    item.receivedWeightKg > 0 &&
+    item.receivedPricePerKg != null &&
+    Number.isFinite(item.receivedPricePerKg) &&
+    item.receivedPricePerKg > 0
+  ) {
+    precioAplicado = `${item.receivedPricePerKg.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 4 })} €/kg`;
+    const { effectivePricePerUnit } = receptionLineTotals(item);
+    precioEquivCatalogo = `${effectivePricePerUnit.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €/${suf} (equiv. catálogo)`;
+  } else {
+    precioAplicado = `${item.pricePerUnit.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €/${suf}`;
+  }
+
+  const sub = lineSubtotalForOrderListDisplay(item);
+  const totalLinea = `${sub.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`;
+
+  return { pedido, recibido, precioAplicado, precioEquivCatalogo, totalLinea };
 }
 
 export function totalsWithVatForOrderListDisplay(order: PedidoOrder): {

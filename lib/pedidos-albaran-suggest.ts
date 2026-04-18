@@ -1,4 +1,4 @@
-import type { PedidoOrderItem } from '@/lib/pedidos-supabase';
+import { unitCanDeclareScaleKgOnReception, type PedidoOrderItem } from '@/lib/pedidos-supabase';
 
 export type AlbaranOcrLineSuggestion = {
   itemId: string;
@@ -91,7 +91,8 @@ export function buildAlbaranSuggestionsFromOcr(ocrText: string, items: PedidoOrd
     if (nums.length === 0) continue;
 
     const snippet = picked.line.replace(/\s+/g, ' ').trim();
-    let confidence: AlbaranOcrLineSuggestion['confidence'] = picked.score >= 2 ? 'alta' : picked.score >= 1 ? 'media' : 'baja';
+    const confidence: AlbaranOcrLineSuggestion['confidence'] =
+      picked.score >= 2 ? 'alta' : picked.score >= 1 ? 'media' : 'baja';
 
     const sug: AlbaranOcrLineSuggestion = {
       itemId: item.id,
@@ -102,7 +103,7 @@ export function buildAlbaranSuggestionsFromOcr(ocrText: string, items: PedidoOrd
     };
 
     const isKgUnit = item.unit === 'kg';
-    const supportsScale = item.unit === 'kg' || item.unit === 'bandeja' || item.unit === 'caja';
+    const supportsScale = unitCanDeclareScaleKgOnReception(item.unit);
 
     let ppk: number | undefined;
     const ppkMatch = picked.line.match(/(\d+[.,]\d+)\s*(?:€|eur)?\s*\/\s*kg/i);

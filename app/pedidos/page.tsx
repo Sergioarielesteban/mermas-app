@@ -18,6 +18,7 @@ import {
   formatIncidentLine,
   formatQuantityWithUnit,
   lineSubtotalForOrderListDisplay,
+  receptionBillingSummary,
   totalsWithVatForOrderListDisplay,
   unitPriceCatalogSuffix,
 } from '@/lib/pedidos-format';
@@ -2631,6 +2632,7 @@ export default function PedidosPage() {
                         item.quantity > 0 &&
                         !item.incidentType);
                     const isBad = mark === 'bad' || (mark === undefined && Boolean(item.incidentType));
+                    const lineSummary = receptionBillingSummary(item);
                     return (
                       <div key={item.id} className="space-y-1 rounded-lg bg-white p-2 ring-1 ring-zinc-200">
                         <div className="flex items-start justify-between gap-2">
@@ -2686,6 +2688,28 @@ export default function PedidosPage() {
                               {'\u2713'}
                             </button>
                           </div>
+                        </div>
+                        <div className="rounded-lg border border-zinc-200/90 bg-zinc-50 px-2 py-1.5 text-[11px] leading-snug text-zinc-700">
+                          <p>
+                            <span className="font-semibold text-zinc-500">Resumen albarán</span>
+                          </p>
+                          <p className="mt-0.5">
+                            <span className="font-semibold text-zinc-500">Pedido</span> {lineSummary.pedido}
+                          </p>
+                          <p>
+                            <span className="font-semibold text-zinc-500">Recibido</span> {lineSummary.recibido}
+                          </p>
+                          <p>
+                            <span className="font-semibold text-zinc-500">Precio aplicado</span>{' '}
+                            {lineSummary.precioAplicado}
+                          </p>
+                          {lineSummary.precioEquivCatalogo ? (
+                            <p className="text-[10px] text-zinc-600">{lineSummary.precioEquivCatalogo}</p>
+                          ) : null}
+                          <p>
+                            <span className="font-semibold text-zinc-500">Total línea</span>{' '}
+                            <span className="font-bold tabular-nums text-zinc-900">{lineSummary.totalLinea}</span>
+                          </p>
                         </div>
                         <p className="text-[11px] leading-tight text-zinc-600">
                           {item.basePricePerUnit != null && Number.isFinite(item.basePricePerUnit) ? (
@@ -3016,6 +3040,7 @@ export default function PedidosPage() {
                     const inc = Boolean(item.incidentType) || Boolean(item.incidentNotes?.trim());
                     const isBad = inc;
                     const isOk = !inc && item.receivedQuantity >= item.quantity && item.quantity > 0;
+                    const histSummary = receptionBillingSummary(item);
                     return (
                       <div
                         key={item.id}
@@ -3049,6 +3074,23 @@ export default function PedidosPage() {
                             {formatQuantityWithUnit(item.quantity, item.unit)}
                           </span>
                         </p>
+                        <div className="mt-1 rounded-lg border border-zinc-200/90 bg-zinc-50 px-2 py-1.5 text-[11px] leading-snug text-zinc-700">
+                          <p className="font-semibold text-zinc-500">Resumen albarán</p>
+                          <p className="mt-0.5">
+                            <span className="font-semibold text-zinc-500">Recibido</span> {histSummary.recibido}
+                          </p>
+                          <p>
+                            <span className="font-semibold text-zinc-500">Precio aplicado</span>{' '}
+                            {histSummary.precioAplicado}
+                          </p>
+                          {histSummary.precioEquivCatalogo ? (
+                            <p className="text-[10px] text-zinc-600">{histSummary.precioEquivCatalogo}</p>
+                          ) : null}
+                          <p>
+                            <span className="font-semibold text-zinc-500">Total línea</span>{' '}
+                            <span className="font-bold tabular-nums text-zinc-900">{histSummary.totalLinea}</span>
+                          </p>
+                        </div>
                         <div className="mt-0.5 flex flex-wrap items-baseline justify-between gap-x-2 gap-y-0.5 text-[11px] text-zinc-700">
                           <span className="min-w-0 leading-tight">
                             {item.basePricePerUnit != null && Number.isFinite(item.basePricePerUnit) ? (

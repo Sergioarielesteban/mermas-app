@@ -11,7 +11,11 @@ import { getSupabaseClient } from '@/lib/supabase-client';
 import PedidosPremiaLockedScreen from '@/components/PedidosPremiaLockedScreen';
 import { dispatchPedidosDataChanged } from '@/hooks/usePedidosDataChangedListener';
 import { canAccessPedidos, canUsePedidosModule } from '@/lib/pedidos-access';
-import { formatQuantityWithUnit, unitPriceCatalogSuffix } from '@/lib/pedidos-format';
+import {
+  formatQuantityWithUnit,
+  receptionBillingSummary,
+  unitPriceCatalogSuffix,
+} from '@/lib/pedidos-format';
 import {
   billingQuantityForReceptionPrice,
   persistReceptionItemTotals,
@@ -618,7 +622,9 @@ export default function RecepcionPedidosPage() {
               {expanded ? (
               <>
               <div className="mt-2 space-y-1.5">
-                {order.items.map((item) => (
+                {order.items.map((item) => {
+                  const lineSummary = receptionBillingSummary(item);
+                  return (
                     <div key={item.id} className="space-y-1 rounded-lg bg-white p-2 ring-1 ring-zinc-200">
                       <p className="text-sm font-semibold leading-tight text-zinc-800">{item.productName}</p>
                       <p className="text-xs text-zinc-600">
@@ -627,6 +633,26 @@ export default function RecepcionPedidosPage() {
                           {formatQuantityWithUnit(item.quantity, item.unit)}
                         </span>
                       </p>
+                      <div className="rounded-lg border border-zinc-200/90 bg-zinc-50 px-2 py-1.5 text-[11px] leading-snug text-zinc-700">
+                        <p className="font-semibold text-zinc-500">Resumen albarán</p>
+                        <p className="mt-0.5">
+                          <span className="font-semibold text-zinc-500">Pedido</span> {lineSummary.pedido}
+                        </p>
+                        <p>
+                          <span className="font-semibold text-zinc-500">Recibido</span> {lineSummary.recibido}
+                        </p>
+                        <p>
+                          <span className="font-semibold text-zinc-500">Precio aplicado</span>{' '}
+                          {lineSummary.precioAplicado}
+                        </p>
+                        {lineSummary.precioEquivCatalogo ? (
+                          <p className="text-[10px] text-zinc-600">{lineSummary.precioEquivCatalogo}</p>
+                        ) : null}
+                        <p>
+                          <span className="font-semibold text-zinc-500">Total línea</span>{' '}
+                          <span className="font-bold tabular-nums text-zinc-900">{lineSummary.totalLinea}</span>
+                        </p>
+                      </div>
                       {unitSupportsReceivedWeightKg(item.unit) &&
                       item.estimatedKgPerUnit != null &&
                       item.estimatedKgPerUnit > 0 ? (
@@ -748,7 +774,8 @@ export default function RecepcionPedidosPage() {
                         </span>
                       </div>
                     </div>
-                  ))}
+                  );
+                })}
               </div>
               <div className="mt-3 border-t border-red-200/70 pt-3">
                 <button
