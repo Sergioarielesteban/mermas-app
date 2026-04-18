@@ -553,12 +553,18 @@ export default function RecepcionPedidosPage() {
   }
   return (
     <div className="space-y-4">
-      <section>
+      <section className="flex flex-wrap gap-2">
         <Link
           href="/pedidos"
           className="inline-flex h-9 items-center rounded-lg border border-zinc-300 bg-white px-3 text-sm font-semibold text-zinc-700"
         >
           ← Atras
+        </Link>
+        <Link
+          href="/pedidos/albaranes"
+          className="inline-flex h-9 items-center rounded-lg border border-[#D32F2F]/25 bg-red-50/80 px-3 text-sm font-semibold text-[#B91C1C]"
+        >
+          Albaranes
         </Link>
       </section>
 

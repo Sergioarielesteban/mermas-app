@@ -185,6 +185,8 @@ function matchAssistantSingleTopicNav(normalized: string): { href: string; messa
   const exact: Record<string, { href: string; message: string }> = {
     proveedores: { href: '/pedidos/proveedores', message: 'Abriendo Proveedores…' },
     recepcion: { href: '/pedidos/recepcion', message: 'Abriendo Recepción…' },
+    albaranes: { href: '/pedidos/albaranes', message: 'Abriendo Albaranes…' },
+    albaran: { href: '/pedidos/albaranes', message: 'Abriendo Albaranes…' },
     precios: { href: '/pedidos/precios', message: 'Abriendo Precios…' },
     calendario: { href: '/pedidos/calendario', message: 'Abriendo Calendario de entregas…' },
     comida: { href: '/comida-personal', message: 'Abriendo Comida personal…' },
@@ -2460,12 +2462,18 @@ export default function PedidosPage() {
       />
 
       <section className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-zinc-200">
-        <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-3">
           <Link href="/pedidos/proveedores" className="flex h-8 items-center justify-center rounded-lg border border-zinc-300 bg-white px-2 text-center text-xs font-semibold text-zinc-700 sm:h-9 sm:text-sm">
             Proveedores
           </Link>
           <Link href="/pedidos/historial-mes" className="flex h-8 items-center justify-center rounded-lg border border-zinc-300 bg-white px-2 text-center text-xs font-semibold text-zinc-700 sm:h-9 sm:text-sm">
             Compras del mes
+          </Link>
+          <Link
+            href="/pedidos/albaranes"
+            className="flex h-8 items-center justify-center rounded-lg border border-[#D32F2F]/25 bg-red-50/80 px-2 text-center text-xs font-semibold text-[#B91C1C] sm:h-9 sm:text-sm"
+          >
+            Albaranes
           </Link>
         </div>
       </section>
