@@ -133,6 +133,12 @@ function roleLabel(role: 'admin' | 'manager' | 'staff' | null): string {
   return 'Staff';
 }
 
+function planLabel(plan: 'OPERATIVO' | 'CONTROL' | 'PRO'): string {
+  if (plan === 'OPERATIVO') return 'Operativo';
+  if (plan === 'CONTROL') return 'Control';
+  return 'PRO';
+}
+
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -458,6 +464,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             <div className="mt-2 min-w-0 space-y-0.5">
               <p className="truncate text-sm font-extrabold leading-tight text-zinc-900">{sessionLabel}</p>
               <p className="text-[11px] font-semibold uppercase tracking-wide text-zinc-500">Rol: {sessionRoleLabel}</p>
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-zinc-500">Plan: {planLabel(plan)}</p>
             </div>
             {localId && localLabel ? (
               <p className="mt-2 truncate border-t border-zinc-200/90 pt-2 text-[11px] font-semibold text-zinc-700">

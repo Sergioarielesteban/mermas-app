@@ -6,7 +6,7 @@ import { useAuth } from '@/components/AuthProvider';
 import { isSupabaseEnabled } from '@/lib/supabase-client';
 
 export default function CuentaSeguridadPage() {
-  const { email, changePassword } = useAuth();
+  const { email, plan, changePassword } = useAuth();
   const supabaseOk = isSupabaseEnabled();
 
   const [currentPass, setCurrentPass] = React.useState('');
@@ -118,9 +118,14 @@ export default function CuentaSeguridadPage() {
       )}
 
       {email ? (
-        <p className="text-center text-[11px] text-zinc-500">
-          Sesión: <span className="font-medium text-zinc-700">{email}</span>
-        </p>
+        <div className="space-y-1 text-center text-[11px] text-zinc-500">
+          <p>
+            Sesión: <span className="font-medium text-zinc-700">{email}</span>
+          </p>
+          <p>
+            Plan actual: <span className="font-bold text-zinc-800">{plan}</span>
+          </p>
+        </div>
       ) : null}
     </div>
   );
