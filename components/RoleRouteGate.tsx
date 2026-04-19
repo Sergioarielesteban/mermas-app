@@ -3,7 +3,7 @@
 import { usePathname, useRouter } from 'next/navigation';
 import React, { useEffect, useMemo } from 'react';
 import { useAuth } from '@/components/AuthProvider';
-import { isRouteBlockedForRole } from '@/lib/permissions';
+import { isPotentiallyRoleGatedPath, isRouteBlockedForRole } from '@/lib/permissions';
 
 export default function RoleRouteGate({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -20,6 +20,13 @@ export default function RoleRouteGate({ children }: { children: React.ReactNode 
     router.replace('/panel');
   }, [profileReady, blocked, router]);
 
+  if (!profileReady && isPotentiallyRoleGatedPath(pathname)) {
+    return (
+      <div className="mx-auto max-w-md px-4 py-10 text-center">
+        <p className="text-sm text-zinc-600">Cargando permisos…</p>
+      </div>
+    );
+  }
   if (!profileReady) return <>{children}</>;
   if (blocked) {
     return (

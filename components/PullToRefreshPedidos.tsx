@@ -14,7 +14,10 @@ function dampen(deltaY: number) {
   return Math.min(deltaY * 0.38, MAX_PULL_PX);
 }
 
-function atScrollTop() {
+/** El scroll real está en <main> (AppShell), no en document — en Android window.scrollY suele ser 0. */
+function atScrollTop(fromEl: HTMLElement | null) {
+  const main = fromEl?.closest('main');
+  if (main) return main.scrollTop <= 2;
   const y = window.scrollY ?? document.documentElement.scrollTop ?? 0;
   return y <= 2;
 }
@@ -43,13 +46,13 @@ export default function PullToRefreshPedidos({ children }: { children: React.Rea
 
     const touchStart = (e: TouchEvent) => {
       if (refreshingRef.current) return;
-      if (!atScrollTop()) return;
+      if (!atScrollTop(el)) return;
       startYRef.current = e.touches[0].clientY;
     };
 
     const touchMove = (e: TouchEvent) => {
       if (startYRef.current == null || refreshingRef.current) return;
-      if (!atScrollTop()) {
+      if (!atScrollTop(el)) {
         startYRef.current = null;
         pullRef.current = 0;
         setPullPx(0);

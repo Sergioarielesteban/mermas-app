@@ -1,56 +1,54 @@
 /**
  * Pre-login: no se exige Bearer de usuario (el cliente aún no tiene sesión).
- * Protección: rate limit + validación de formato; resolución vía service role acotada en servidor.
+ * Anti enumeración: misma forma de respuesta en éxito; email solo si el alias resuelve.
  */
 import { NextResponse } from 'next/server';
 import { isSupabaseAdminConfigured, resolveLoginEmailWithServiceRole } from '@/lib/server/supabase-admin';
-import { checkRateLimit } from '@/lib/server/simple-rate-limit';
+import { jsonGenericError, logCriticalAndGeneric } from '@/lib/server/api-safe';
+import { readJsonBodyLimitedEx } from '@/lib/server/read-json-limited';
+import { enforceRateLimitPublic } from '@/lib/server/security-rate-limit';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const USERNAME_RE = /^[a-z0-9._-]{2,80}$/i;
+const MAX_BODY_BYTES = 4096;
 
-function clientKey(request: Request) {
-  const forwarded = request.headers.get('x-forwarded-for') ?? '';
-  const ip = forwarded.split(',')[0]?.trim() || request.headers.get('x-real-ip') || 'unknown';
-  return ip;
+function successEmail(email: string | null) {
+  return NextResponse.json({ ok: true, email });
 }
 
 export async function POST(request: Request) {
-  const rate = checkRateLimit({
-    key: `resolve-login:${clientKey(request)}`,
-    limit: 20,
-    windowMs: 60 * 1000,
-  });
-  if (!rate.ok) {
-    return NextResponse.json(
-      { ok: false, reason: 'Demasiados intentos. Espera un poco e inténtalo de nuevo.' },
-      {
-        status: 429,
-        headers: { 'Retry-After': String(rate.retryAfterSec) },
-      },
-    );
-  }
+  const limited = enforceRateLimitPublic(request, 'resolve_login');
+  if (limited) return limited;
 
   if (!isSupabaseAdminConfigured()) {
-    return NextResponse.json({ ok: false, reason: 'Servicio no disponible.' }, { status: 503 });
+    return jsonGenericError(503);
   }
 
   try {
-    const body = (await request.json()) as { identifier?: string };
-    const raw = String(body.identifier ?? '').trim().toLowerCase();
-    if (!raw) return NextResponse.json({ ok: true, email: null });
+    const parsedIn = await readJsonBodyLimitedEx(request, MAX_BODY_BYTES);
+    if (!parsedIn.ok) {
+      return NextResponse.json(
+        { ok: false, error: 'Request failed' },
+        { status: parsedIn.kind === 'too_large' ? 413 : 400 },
+      );
+    }
+    const parsed = parsedIn.data as { identifier?: unknown };
+    const raw = String(parsed.identifier ?? '')
+      .trim()
+      .toLowerCase();
+    if (!raw) return successEmail(null);
 
+    /** No resolver ni devolver email tecleado: este endpoint es solo para alias (cliente no envía @). */
     if (EMAIL_RE.test(raw)) {
-      return NextResponse.json({ ok: true, email: raw });
+      return successEmail(null);
     }
     if (!USERNAME_RE.test(raw)) {
-      // Evita filtrar demasiado: inválidos se tratan como no encontrados.
-      return NextResponse.json({ ok: true, email: null });
+      return successEmail(null);
     }
 
     const resolved = await resolveLoginEmailWithServiceRole(raw);
-    return NextResponse.json({ ok: true, email: resolved });
-  } catch {
-    return NextResponse.json({ ok: false, reason: 'No se pudo validar el usuario.' }, { status: 500 });
+    return successEmail(resolved);
+  } catch (err) {
+    return logCriticalAndGeneric('POST /api/auth/resolve-login-email', err);
   }
 }

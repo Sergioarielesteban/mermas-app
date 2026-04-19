@@ -64,3 +64,16 @@ export function isRouteBlockedForRole(pathname: string | null, role: ProfileAppR
   if (pathname.startsWith('/cuenta/seguridad')) return !canAccessCuentaSeguridad(role);
   return false;
 }
+
+/** Rutas sujetas a rol: no renderizar la página hasta conocer el perfil (evita flash antes del gate). */
+export function isPotentiallyRoleGatedPath(pathname: string | null): boolean {
+  if (!pathname) return false;
+  return (
+    pathname.startsWith('/finanzas') ||
+    pathname.startsWith('/escandallos') ||
+    pathname.startsWith('/cocina-central') ||
+    pathname.startsWith('/inventario') ||
+    pathname.startsWith('/chat') ||
+    pathname.startsWith('/cuenta/seguridad')
+  );
+}

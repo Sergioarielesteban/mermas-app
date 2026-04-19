@@ -163,7 +163,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     const esc: NavItem[] = canAccessEscandallos(role)
       ? [{ href: '/escandallos', label: 'Escandallos', Icon: Calculator }]
       : [];
-    const tail: NavItem[] = [
+    /** Comida + personal justo tras producción (flujo cocina / turno). */
+    const comidaYHorarios: NavItem[] = [
       { href: '/comida-personal', label: 'Comida de personal', Icon: UtensilsCrossed },
       { href: '/personal', label: 'Personal', Icon: CalendarDays },
     ];
@@ -178,7 +179,18 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     const pedirCentral: NavItem[] = showPedidosCocina
       ? [{ href: '/pedidos-cocina', label: 'Pedir a central', Icon: Package }]
       : [];
-    return [...core, ...finanzas, ...mid, ...inv, ...esc, ...tail, ...chat, ...cuenta, ...cocina, ...pedirCentral];
+    return [
+      ...core,
+      ...finanzas,
+      ...mid,
+      ...comidaYHorarios,
+      ...inv,
+      ...esc,
+      ...chat,
+      ...cuenta,
+      ...cocina,
+      ...pedirCentral,
+    ];
   }, [showPedidos, showPedidosCocina, showCocinaCentral, profileRole]);
 
   const confirmAndLogout = () => setConfirmLogoutOpen(true);
@@ -210,7 +222,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <div className="flex min-h-[100dvh] min-h-0 flex-col bg-white">
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-white">
       <DemoModeBanner />
       {confirmLogoutOpen ? (
         <>

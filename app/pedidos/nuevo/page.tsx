@@ -19,7 +19,9 @@ import {
   suggestedOrderQuantityForPar,
   weeklyParScaledToCoverageDays,
 } from '@/lib/pedidos-coverage';
-import { formatQuantityWithUnit, unitPriceCatalogSuffix } from '@/lib/pedidos-format';
+import PedidosNuevoCatalogLine from '@/components/PedidosNuevoCatalogLine';
+import { formatQuantityWithUnit } from '@/lib/pedidos-format';
+import { applyQuantityTapDelta, parseQuantityManualInput } from '@/lib/pedidos-order-quantity';
 import {
   readSuppliersSessionCache,
   writeSuppliersSessionCache,
@@ -38,15 +40,6 @@ import { actorLabel, notifyPedidoEnviado } from '@/services/notifications';
 type QtyMap = Record<string, number>;
 
 const basketSessionKey = (localId: string) => `chefone_pedidos_basket:${localId}`;
-
-function shortUnitChip(unit: string): string {
-  const u = unit.toLowerCase();
-  if (u === 'paquete') return 'PAQ.';
-  if (u === 'caja') return 'CAJ.';
-  if (u === 'bolsa') return 'BOL.';
-  if (u === 'racion') return 'RAC.';
-  return unit.toUpperCase();
-}
 
 function normalizeWhatsappNumber(raw: string | undefined) {
   if (!raw) return null;
@@ -337,28 +330,19 @@ export default function NuevoPedidoPage() {
     });
   }, [supplierId, supplierProducts, editingId, isLoadedEdit]);
 
-  const setQtyFromInput = (productId: string, unit: PedidoOrderItem['unit'], raw: string) => {
-    if (raw.trim() === '') {
-      setQtyByProductId((prev) => ({ ...prev, [productId]: 0 }));
-      return;
-    }
-    const num = Number(raw.replace(',', '.'));
-    if (Number.isNaN(num) || num < 0) return;
-    const next = unit === 'kg' ? Math.round(num * 100) / 100 : Math.floor(num);
-    setQtyByProductId((prev) => ({ ...prev, [productId]: next }));
-  };
+  const setQtyFromInput = React.useCallback((productId: string, unit: PedidoOrderItem['unit'], raw: string) => {
+    const parsed = parseQuantityManualInput(unit, raw);
+    if (parsed === null) return;
+    setQtyByProductId((prev) => ({ ...prev, [productId]: parsed }));
+  }, []);
 
-  const adjustQty = (productId: string, unit: PedidoOrderItem['unit'], delta: number) => {
+  const adjustQty = React.useCallback((productId: string, unit: PedidoOrderItem['unit'], delta: number) => {
     setQtyByProductId((prev) => {
       const current = prev[productId] ?? 0;
-      const u = String(unit).toLowerCase();
-      const step = 1;
-      const raw = current + delta * step;
-      const next =
-        u === 'kg' ? Math.max(0, Math.round(raw * 100) / 100) : Math.max(0, Math.floor(raw));
+      const next = applyQuantityTapDelta(unit, current, delta);
       return { ...prev, [productId]: next };
     });
-  };
+  }, []);
 
   const items: PedidoOrderItem[] = supplierProducts
     .map((p) => {
@@ -422,7 +406,7 @@ export default function NuevoPedidoPage() {
       resetPedidoFormAfterSuccess();
       upsertOrder(order);
       dispatchPedidosDataChanged();
-      router.push('/pedidos');
+      router.replace('/pedidos?pedido=borrador');
       return;
     }
     const supabase = getSupabaseClient();
@@ -456,7 +440,7 @@ export default function NuevoPedidoPage() {
         resetPedidoFormAfterSuccess();
         void pullNewOrderIntoStore(orderId);
         dispatchPedidosDataChanged();
-        router.push('/pedidos');
+        router.replace('/pedidos?pedido=borrador');
       })
       .catch((err: Error) => setMessage(err.message));
   };
@@ -497,7 +481,7 @@ export default function NuevoPedidoPage() {
       dispatchPedidosDataChanged();
       setMessage('Demo: pedido guardado como enviado (no se abre WhatsApp).');
       window.setTimeout(() => setMessage(null), 4000);
-      router.push('/pedidos');
+      router.replace('/pedidos?pedido=enviado');
       return;
     }
     const supabase = getSupabaseClient();
@@ -556,7 +540,7 @@ export default function NuevoPedidoPage() {
         );
         popup.location.href = `https://wa.me/${phone}?text=${text}`;
         dispatchPedidosDataChanged();
-        router.push('/pedidos');
+        router.replace('/pedidos?pedido=enviado');
       })
       .catch((err: Error) => {
         popup.close();
@@ -665,57 +649,16 @@ export default function NuevoPedidoPage() {
             const segmentTarget =
               coverageDays != null ? weeklyParScaledToCoverageDays(p.parStock ?? 0, coverageDays) : null;
             const suggestedQty = segmentTarget != null ? suggestedOrderQuantityForPar(p.unit, segmentTarget) : null;
-            const u = unitPriceCatalogSuffix[p.unit];
             return (
-              <div key={p.id} className="rounded-xl bg-zinc-50 p-3 ring-1 ring-zinc-200">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="text-sm font-semibold text-zinc-800">{p.name}</p>
-                    <p className="text-xs text-zinc-500">
-                      {p.pricePerUnit.toFixed(2)} €/{u}
-                    </p>
-                    {coverageDays != null && suggestedQty != null ? (
-                      <p className="mt-1 text-[11px] font-semibold text-zinc-700">
-                        Cant. tramo: {formatQuantityWithUnit(suggestedQty, p.unit)}
-                      </p>
-                    ) : null}
-                  </div>
-                  <p className="shrink-0 whitespace-nowrap text-sm font-bold tabular-nums text-zinc-900">
-                    {lineTotal.toFixed(2)} €
-                  </p>
-                </div>
-                <div className="mt-3 grid grid-cols-[2.25rem_2.75rem_2.25rem_2.75rem] items-center justify-end gap-2">
-                  <button
-                    type="button"
-                    onClick={() => adjustQty(p.id, p.unit, -1)}
-                    className="grid h-9 w-9 shrink-0 place-items-center rounded-full border border-zinc-300 bg-white text-lg font-semibold leading-none text-zinc-400 shadow-sm active:bg-zinc-50"
-                    aria-label={`Quitar una unidad de ${p.name}`}
-                  >
-                    {'\u2212'}
-                  </button>
-                  <input
-                    type="number"
-                    min={0}
-                    step={p.unit === 'kg' ? 0.01 : 1}
-                    inputMode="decimal"
-                    aria-label={`Cantidad ${p.name}`}
-                    className="h-9 w-11 shrink-0 rounded-lg border border-zinc-300 bg-white px-1 text-center text-sm font-semibold text-zinc-900 outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-                    value={qty === 0 ? '' : p.unit === 'kg' ? qty : Math.round(qty)}
-                    onChange={(e) => setQtyFromInput(p.id, p.unit, e.target.value)}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => adjustQty(p.id, p.unit, 1)}
-                    className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-[#D32F2F] text-lg font-semibold leading-none text-white shadow-sm active:bg-[#B71C1C]"
-                    aria-label={`Añadir una unidad de ${p.name}`}
-                  >
-                    +
-                  </button>
-                  <span className="w-11 text-left text-[10px] font-semibold uppercase text-zinc-500">
-                    {shortUnitChip(p.unit)}
-                  </span>
-                </div>
-              </div>
+              <PedidosNuevoCatalogLine
+                key={p.id}
+                product={p}
+                qty={qty}
+                lineTotal={lineTotal}
+                suggestedQty={coverageDays != null && suggestedQty != null ? suggestedQty : null}
+                onDelta={(d) => adjustQty(p.id, p.unit, d)}
+                onManual={(raw) => setQtyFromInput(p.id, p.unit, raw)}
+              />
             );
           })}
         </div>

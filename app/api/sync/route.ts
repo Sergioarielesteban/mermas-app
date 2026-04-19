@@ -1,10 +1,10 @@
 /**
  * Snapshot legacy (service role): lectura/escritura acotada al email del JWT.
- * Categoría auditoría A: sesión + perfil + local en servidor; debe ser usable por staff (mermas).
- * Finanzas / datos económicos no pasan por esta ruta (van a Supabase + RLS).
  */
 import { NextResponse } from 'next/server';
 import { requireAllowedSupabaseUser } from '@/lib/require-allowed-supabase-user';
+import { logCriticalAndGeneric } from '@/lib/server/api-safe';
+import { readJsonBodyLimitedEx } from '@/lib/server/read-json-limited';
 import {
   getSnapshotByEmail,
   isSupabaseAdminConfigured,
@@ -17,6 +17,8 @@ type SyncPayload = {
   mermas?: MermaRecord[];
 };
 
+const MAX_POST_BYTES = 12 * 1024 * 1024;
+
 export async function GET(request: Request) {
   try {
     if (!isSupabaseAdminConfigured()) {
@@ -25,7 +27,7 @@ export async function GET(request: Request) {
 
     const user = await requireAllowedSupabaseUser(request);
     if (!user.ok) {
-      return NextResponse.json({ ok: false, reason: user.message }, { status: user.status });
+      return NextResponse.json({ ok: false, error: 'Unauthorized' }, { status: user.status });
     }
 
     const row = await getSnapshotByEmail(user.email);
@@ -34,35 +36,37 @@ export async function GET(request: Request) {
       snapshot: row
         ? {
             products: row.products,
-            // Nunca devolver mermas por snapshot de email: evita mezclar registros entre locales.
             mermas: [],
             updatedAt: row.updated_at ?? null,
           }
         : null,
     });
-  } catch (error) {
-    return NextResponse.json(
-      { ok: false, reason: error instanceof Error ? error.message : 'Sync failed' },
-      { status: 500 },
-    );
+  } catch (err) {
+    return logCriticalAndGeneric('GET /api/sync', err);
   }
 }
 
 export async function POST(request: Request) {
   try {
     if (!isSupabaseAdminConfigured()) {
-      // Allow local development without service-role secrets.
       return NextResponse.json({ ok: true, skipped: true, reason: 'Sync disabled: missing server env vars' });
     }
 
     const user = await requireAllowedSupabaseUser(request);
     if (!user.ok) {
-      return NextResponse.json({ ok: false, reason: user.message }, { status: user.status });
+      return NextResponse.json({ ok: false, error: 'Unauthorized' }, { status: user.status });
     }
 
-    const payload = (await request.json()) as SyncPayload;
+    const raw = await readJsonBodyLimitedEx(request, MAX_POST_BYTES);
+    if (!raw.ok) {
+      return NextResponse.json(
+        { ok: false, error: 'Request failed' },
+        { status: raw.kind === 'too_large' ? 413 : 400 },
+      );
+    }
+    const payload = raw.data as SyncPayload;
     if (!Array.isArray(payload.products) || !Array.isArray(payload.mermas)) {
-      return NextResponse.json({ ok: false, reason: 'Invalid payload' }, { status: 400 });
+      return NextResponse.json({ ok: false, error: 'Request failed' }, { status: 400 });
     }
 
     await upsertSnapshot({
@@ -71,10 +75,7 @@ export async function POST(request: Request) {
       mermas: payload.mermas,
     });
     return NextResponse.json({ ok: true });
-  } catch (error) {
-    return NextResponse.json(
-      { ok: false, reason: error instanceof Error ? error.message : 'Sync failed' },
-      { status: 500 },
-    );
+  } catch (err) {
+    return logCriticalAndGeneric('POST /api/sync', err);
   }
 }

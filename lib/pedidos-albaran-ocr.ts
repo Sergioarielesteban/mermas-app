@@ -60,9 +60,14 @@ export async function runAlbaranOcrViaTextract(blob: Blob, accessToken: string):
   } catch {
     body = null;
   }
-  const rec = body as { ok?: boolean; reason?: string; text?: string } | null;
+  const rec = body as { ok?: boolean; reason?: string; error?: string; text?: string } | null;
   if (!res.ok || !rec?.ok) {
-    const reason = typeof rec?.reason === 'string' ? rec.reason : `HTTP ${res.status}`;
+    const reason =
+      typeof rec?.reason === 'string'
+        ? rec.reason
+        : typeof rec?.error === 'string'
+          ? rec.error
+          : `HTTP ${res.status}`;
     throw new Error(reason);
   }
   return rec.text ?? '';

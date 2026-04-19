@@ -1,10 +1,11 @@
 /**
- * OCR albarán (coste AWS): restringido a sesión + perfil operativo (pedidos).
- * Categoría auditoría A: no exige admin; finanzas no usan esta API.
+ * OCR albarán (coste AWS): sesión + perfil + rate limit por IP+usuario.
  */
 import { DetectDocumentTextCommand, TextractClient, type Block } from '@aws-sdk/client-textract';
 import { NextResponse } from 'next/server';
 import { requireAllowedSupabaseUser } from '@/lib/require-allowed-supabase-user';
+import { logCriticalAndGeneric } from '@/lib/server/api-safe';
+import { enforceRateLimitAuth } from '@/lib/server/security-rate-limit';
 
 export const maxDuration = 60;
 
@@ -29,7 +30,7 @@ function blocksToPlainText(blocks: Block[] | undefined) {
 function getTextractClient() {
   const region = process.env.AWS_REGION;
   if (!region) {
-    throw new Error('Falta AWS_REGION en el servidor.');
+    throw new Error('config');
   }
   const accessKeyId = process.env.AWS_ACCESS_KEY_ID;
   const secretAccessKey = process.env.AWS_SECRET_ACCESS_KEY;
@@ -50,24 +51,24 @@ export async function POST(request: Request) {
   try {
     const auth = await requireAllowedSupabaseUser(request);
     if (!auth.ok) {
-      return NextResponse.json({ ok: false, reason: auth.message }, { status: auth.status });
+      return NextResponse.json({ ok: false, error: 'Unauthorized' }, { status: auth.status });
     }
+
+    const rl = enforceRateLimitAuth(request, auth.userId, 'textract');
+    if (rl) return rl;
 
     const form = await request.formData();
     const image = form.get('image');
     if (!(image instanceof Blob)) {
-      return NextResponse.json({ ok: false, reason: 'Falta el campo image.' }, { status: 400 });
+      return NextResponse.json({ ok: false, error: 'Request failed' }, { status: 400 });
     }
 
     const buf = Buffer.from(await image.arrayBuffer());
     if (buf.length === 0) {
-      return NextResponse.json({ ok: false, reason: 'Imagen vacía.' }, { status: 400 });
+      return NextResponse.json({ ok: false, error: 'Request failed' }, { status: 400 });
     }
     if (buf.length > TEXTRACT_MAX_BYTES) {
-      return NextResponse.json(
-        { ok: false, reason: `Imagen demasiado grande (máx. ${TEXTRACT_MAX_BYTES} bytes para Textract).` },
-        { status: 413 },
-      );
+      return NextResponse.json({ ok: false, error: 'Request failed' }, { status: 413 });
     }
 
     const client = getTextractClient();
@@ -79,8 +80,7 @@ export async function POST(request: Request) {
 
     const text = blocksToPlainText(out.Blocks);
     return NextResponse.json({ ok: true, text });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Textract falló.';
-    return NextResponse.json({ ok: false, reason: message }, { status: 500 });
+  } catch (err) {
+    return logCriticalAndGeneric('POST /api/pedidos/textract', err);
   }
 }

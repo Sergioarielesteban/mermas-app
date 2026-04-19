@@ -13,6 +13,7 @@ import MermasStyleHero from '@/components/MermasStyleHero';
 import PedidosAlbaranOcrModal from '@/components/PedidosAlbaranOcrModal';
 import PedidosPremiaLockedScreen from '@/components/PedidosPremiaLockedScreen';
 import { dispatchPedidosDataChanged, usePedidosDataChangedListener } from '@/hooks/usePedidosDataChangedListener';
+import { canAccessFinanzas } from '@/lib/app-role-permissions';
 import { canAccessPedidos, canUsePedidosModule } from '@/lib/pedidos-access';
 import {
   formatIncidentLine,
@@ -325,6 +326,15 @@ export default function PedidosPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const oidoStandalone = searchParams.get('oido') === '1';
+  const avisoPedido = searchParams.get('pedido');
+
+  React.useEffect(() => {
+    if (!avisoPedido) return;
+    const t = window.setTimeout(() => {
+      router.replace('/pedidos', { scroll: false });
+    }, 6000);
+    return () => window.clearTimeout(t);
+  }, [avisoPedido, router]);
 
   const scheduleIncidenciaRecepcionNotifyDebounced = React.useCallback(
     (order: PedidoOrder) => {
@@ -2464,6 +2474,41 @@ export default function PedidosPage() {
         description="Crea pedidos, envía por WhatsApp y controla envíos y recepción en el local."
       />
 
+      {avisoPedido === 'enviado' ? (
+        <div
+          className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-950 shadow-sm ring-1 ring-emerald-100"
+          role="status"
+        >
+          <div className="flex items-start justify-between gap-3">
+            <p className="min-w-0 leading-snug">Pedido enviado. Revisa WhatsApp si se abrió la conversación.</p>
+            <button
+              type="button"
+              onClick={() => router.replace('/pedidos', { scroll: false })}
+              className="shrink-0 rounded-lg border border-emerald-300 bg-white px-2.5 py-1 text-xs font-bold text-emerald-900"
+            >
+              OK
+            </button>
+          </div>
+        </div>
+      ) : null}
+      {avisoPedido === 'borrador' ? (
+        <div
+          className="rounded-2xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm font-semibold text-sky-950 shadow-sm ring-1 ring-sky-100"
+          role="status"
+        >
+          <div className="flex items-start justify-between gap-3">
+            <p className="min-w-0 leading-snug">Borrador guardado. Lo verás en la lista de pedidos.</p>
+            <button
+              type="button"
+              onClick={() => router.replace('/pedidos', { scroll: false })}
+              className="shrink-0 rounded-lg border border-sky-300 bg-white px-2.5 py-1 text-xs font-bold text-sky-900"
+            >
+              OK
+            </button>
+          </div>
+        </div>
+      ) : null}
+
       <section className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-zinc-200">
         <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4">
           <Link href="/pedidos/proveedores" className="flex h-8 items-center justify-center rounded-lg border border-zinc-300 bg-white px-2 text-center text-xs font-semibold text-zinc-700 sm:h-9 sm:text-sm">
@@ -2482,12 +2527,14 @@ export default function PedidosPage() {
             Albaranes
           </Link>
         </div>
-        <Link
-          href="/finanzas"
-          className="mt-2 flex h-9 w-full items-center justify-center rounded-lg border border-zinc-900/20 bg-zinc-900 px-2 text-center text-xs font-bold text-white sm:text-sm"
-        >
-          Finanzas — gasto y salud
-        </Link>
+        {canAccessFinanzas(profileRole) ? (
+          <Link
+            href="/finanzas"
+            className="mt-2 flex h-9 w-full items-center justify-center rounded-lg border border-zinc-900/20 bg-zinc-900 px-2 text-center text-xs font-bold text-white sm:text-sm"
+          >
+            Finanzas — gasto y salud
+          </Link>
+        ) : null}
       </section>
 
       {reloadError ? (

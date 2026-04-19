@@ -158,6 +158,20 @@ export default function PanelControlPage() {
           Icon={Factory}
           tone="red"
         />
+        <HubTile
+          href="/comida-personal"
+          label="Comida de personal"
+          sub="Registro rápido y coste interno"
+          Icon={UtensilsCrossed}
+          tone="red"
+        />
+        <HubTile
+          href="/personal"
+          label="Personal"
+          sub="Horarios, cuadrante y fichajes"
+          Icon={CalendarDays}
+          tone="red"
+        />
         {showInventario ? (
           <HubTile href="/inventario" label="Inventario" sub="Stock y valor por local" Icon={ClipboardList} tone="red" />
         ) : null}
@@ -188,20 +202,6 @@ export default function PanelControlPage() {
             tone="red"
           />
         ) : null}
-        <HubTile
-          href="/personal"
-          label="Personal"
-          sub="Horarios, cuadrante y fichajes"
-          Icon={CalendarDays}
-          tone="red"
-        />
-        <HubTile
-          href="/comida-personal"
-          label="Comida de personal"
-          sub="Registro rápido y coste interno"
-          Icon={UtensilsCrossed}
-          tone="red"
-        />
         {showFinanzas ? (
           <HubTile
             href="/finanzas"

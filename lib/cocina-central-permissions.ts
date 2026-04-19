@@ -8,7 +8,7 @@ export function canAccessCocinaCentralModule(role: ProfileAppRole | null): boole
 
 /**
  * Producción, lotes, etiquetas, escaneo en sede marcada como cocina central.
- * Requiere además admin/manager (staff queda fuera del módulo por completo).
+ * Solo administración en el local central (staff/manager no acceden al módulo).
  */
 export function canCocinaCentralOperate(
   isCentralKitchen: boolean,
@@ -17,7 +17,7 @@ export function canCocinaCentralOperate(
   return isCentralKitchen && canAccessCocinaCentralModule(role);
 }
 
-/** Crear/editar entregas salientes (solo encargados en central). */
+/** Crear/editar entregas salientes (solo admin en central). */
 export function canManageDeliveries(
   isCentralKitchen: boolean,
   role: ProfileAppRole | null,

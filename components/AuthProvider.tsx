@@ -537,6 +537,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             ok?: boolean;
             email?: string | null;
             reason?: string;
+            error?: string;
           };
           if (!res.ok || payload.ok !== true) {
             if (res.status === 429) {
@@ -544,7 +545,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             }
             return {
               ok: false,
-              reason: payload.reason ?? 'No se pudo validar el usuario en este momento.',
+              reason:
+                (typeof payload.reason === 'string' ? payload.reason : undefined) ??
+                (typeof payload.error === 'string' ? payload.error : undefined) ??
+                'No se pudo validar el usuario en este momento.',
             };
           }
           const resolved = typeof payload.email === 'string' ? payload.email.trim().toLowerCase() : '';

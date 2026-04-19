@@ -1,7 +1,10 @@
 /**
- * Cron externo (Vercel u otro): solo Bearer CRON_SECRET; no sesión de usuario.
+ * Cron externo: Bearer CRON_SECRET con comparación en tiempo constante.
  */
 import { NextResponse } from 'next/server';
+import { jsonGenericError, logCriticalAndGeneric } from '@/lib/server/api-safe';
+import { logSecurityEvent } from '@/lib/server/security-log';
+import { timingSafeEqualString } from '@/lib/server/timing-safe-secret';
 import { getSnapshotByEmail } from '@/lib/server/supabase-admin';
 import { buildWeeklyWhatsappMessage, shouldSendNowMadrid } from '@/lib/server/weekly-summary';
 
@@ -22,8 +25,8 @@ async function sendWhatsappMessage(input: { accountSid: string; authToken: strin
   });
 
   if (!response.ok) {
-    const body = await response.text();
-    throw new Error(`Twilio error: ${body}`);
+    await response.text().catch(() => undefined);
+    throw new Error('twilio');
   }
 }
 
@@ -31,11 +34,18 @@ export async function GET(request: Request) {
   try {
     const secret = process.env.CRON_SECRET?.trim();
     if (!secret) {
-      return NextResponse.json({ ok: false, reason: 'CRON_SECRET no configurado.' }, { status: 503 });
+      logSecurityEvent('access_denied', { route: 'cron/weekly-whatsapp', reason: 'no_secret' });
+      return jsonGenericError(503);
     }
-    const auth = request.headers.get('authorization') ?? '';
-    if (auth !== `Bearer ${secret}`) {
-      return NextResponse.json({ ok: false, reason: 'Unauthorized' }, { status: 401 });
+
+    const authHeader = request.headers.get('authorization') ?? '';
+    const prefix = 'Bearer ';
+    const token =
+      authHeader.startsWith(prefix) ? authHeader.slice(prefix.length).trim() : '';
+
+    if (!token || !timingSafeEqualString(token, secret)) {
+      logSecurityEvent('access_denied', { route: 'cron/weekly-whatsapp', reason: 'bad_token' });
+      return NextResponse.json({ ok: false, error: 'Request failed' }, { status: 401 });
     }
 
     if (!shouldSendNowMadrid(new Date())) {
@@ -49,12 +59,12 @@ export async function GET(request: Request) {
     const authToken = process.env.TWILIO_AUTH_TOKEN;
 
     if (!ownerEmail || !to || !from || !accountSid || !authToken) {
-      return NextResponse.json({ ok: false, reason: 'Missing env vars' }, { status: 500 });
+      return jsonGenericError(500);
     }
 
     const snapshot = await getSnapshotByEmail(ownerEmail);
     if (!snapshot) {
-      return NextResponse.json({ ok: false, reason: 'No synced data found' }, { status: 404 });
+      return jsonGenericError(404);
     }
 
     const summary = buildWeeklyWhatsappMessage({
@@ -78,10 +88,7 @@ export async function GET(request: Request) {
       total: summary.total,
       records: summary.count,
     });
-  } catch (error) {
-    return NextResponse.json(
-      { ok: false, reason: error instanceof Error ? error.message : 'Cron failed' },
-      { status: 500 },
-    );
+  } catch (err) {
+    return logCriticalAndGeneric('GET /api/cron/weekly-whatsapp', err);
   }
 }
