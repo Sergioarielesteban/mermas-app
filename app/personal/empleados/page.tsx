@@ -11,7 +11,7 @@ import { getSupabaseClient } from '@/lib/supabase-client';
 import type { StaffEmployee } from '@/lib/staff/types';
 
 export default function PersonalEmpleadosPage() {
-  const { localId, profileRole, profileReady } = useAuth();
+  const { localId, profileRole, profileReady, maxUsers } = useAuth();
   const perms = useMemo(() => buildStaffPermissions(profileRole), [profileRole]);
   const [list, setList] = useState<StaffEmployee[]>([]);
   const [loading, setLoading] = useState(false);
@@ -26,6 +26,7 @@ export default function PersonalEmpleadosPage() {
   const [color, setColor] = useState('#D32F2F');
   const [pin, setPin] = useState('');
   const [busy, setBusy] = useState(false);
+  const userLimitReached = list.length >= maxUsers;
 
   const reload = useCallback(async () => {
     if (!localId) return;
@@ -50,6 +51,10 @@ export default function PersonalEmpleadosPage() {
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!localId || !perms.canManageEmployees) return;
+    if (userLimitReached) {
+      setErr('Has alcanzado el límite de usuarios de tu plan');
+      return;
+    }
     const supabase = getSupabaseClient();
     if (!supabase) return;
     setBusy(true);
@@ -104,6 +109,10 @@ export default function PersonalEmpleadosPage() {
       {!perms.canManageEmployees ? (
         <p className="rounded-2xl bg-zinc-50 px-4 py-3 text-sm text-zinc-600 ring-1 ring-zinc-200">
           Solo los encargados gestionan el equipo.
+        </p>
+      ) : userLimitReached ? (
+        <p className="rounded-2xl bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-900 ring-1 ring-amber-200">
+          Has alcanzado el límite de usuarios de tu plan
         </p>
       ) : (
         <button
@@ -211,7 +220,7 @@ export default function PersonalEmpleadosPage() {
               />
               <button
                 type="submit"
-                disabled={busy}
+                disabled={busy || userLimitReached}
                 className="w-full rounded-2xl bg-zinc-900 py-3 text-sm font-extrabold text-white"
               >
                 Guardar

@@ -22,6 +22,7 @@ import {
   RefreshCcw,
   ShoppingCart,
   Package,
+  Lock,
 } from 'lucide-react';
 import { useAuth } from '@/components/AuthProvider';
 import { canAccessCocinaCentralModule, canPlaceCentralSupplyOrder } from '@/lib/cocina-central-permissions';
@@ -40,6 +41,7 @@ import {
   canAccessFinanzas,
   canAccessInventario,
 } from '@/lib/app-role-permissions';
+import { canAccessModule } from '@/lib/canAccessModule';
 
 type NavItemNote = { kind: 'note'; text: string };
 type NavItemLink = {
@@ -47,6 +49,8 @@ type NavItemLink = {
   label: string;
   Icon: React.ComponentType<{ className?: string }>;
   comingSoon?: boolean;
+  blocked?: boolean;
+  blockedText?: string;
 };
 type NavItem = NavItemNote | NavItemLink;
 
@@ -137,6 +141,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     profileReady,
     profileRole,
     isCentralKitchen,
+    plan,
   } = useAuth();
   const showCocinaCentral = profileReady && canAccessCocinaCentralModule(profileRole);
   const showPedidosCocina = profileReady && canPlaceCentralSupplyOrder(isCentralKitchen, localId);
@@ -148,33 +153,42 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const navItems = useMemo<NavItem[]>(() => {
     const role = profileRole ?? 'staff';
     const core: NavItem[] = showPedidos
-      ? [...NAV_ITEMS, { href: '/pedidos', label: 'Pedidos', Icon: ShoppingCart }]
+      ? [...NAV_ITEMS, { href: '/pedidos', label: 'Pedidos', Icon: ShoppingCart, blocked: !canAccessModule(plan, 'pedidos') }]
       : [...NAV_ITEMS];
     const finanzas: NavItem[] =
-      showPedidos && canAccessFinanzas(role) ? [{ href: '/finanzas', label: 'Finanzas', Icon: BarChart3 }] : [];
+      showPedidos && canAccessFinanzas(role)
+        ? [{
+            href: '/finanzas',
+            label: 'Finanzas',
+            Icon: BarChart3,
+            blocked: !canAccessModule(plan, 'finanzas'),
+            blockedText: 'Disponible en plan superior',
+          }]
+        : [];
     const mid: NavItem[] = [
-      { href: '/appcc', label: 'APPCC', Icon: ShieldCheck },
-      { href: '/checklist', label: 'Check list', Icon: ListChecks },
-      { href: '/produccion', label: 'Producción', Icon: Factory },
+      { href: '/appcc', label: 'APPCC', Icon: ShieldCheck, blocked: !canAccessModule(plan, 'appcc') },
+      { href: '/checklist', label: 'Check list', Icon: ListChecks, blocked: !canAccessModule(plan, 'checklist') },
+      { href: '/produccion', label: 'Producción', Icon: Factory, blocked: !canAccessModule(plan, 'produccion') },
     ];
     const inv: NavItem[] = canAccessInventario(role)
-      ? [{ href: '/inventario', label: 'Inventario', Icon: ClipboardList }]
+      ? [{ href: '/inventario', label: 'Inventario', Icon: ClipboardList, blocked: !canAccessModule(plan, 'inventario') }]
       : [];
     const esc: NavItem[] = canAccessEscandallos(role)
-      ? [{ href: '/escandallos', label: 'Escandallos', Icon: Calculator }]
+      ? [{ href: '/escandallos', label: 'Escandallos', Icon: Calculator, blocked: !canAccessModule(plan, 'escandallos') }]
       : [];
     /** Comida + personal justo tras producción (flujo cocina / turno). */
     const comidaYHorarios: NavItem[] = [
-      { href: '/comida-personal', label: 'Comida de personal', Icon: UtensilsCrossed },
-      { href: '/personal', label: 'Personal', Icon: CalendarDays },
+      { href: '/comida-personal', label: 'Comida de personal', Icon: UtensilsCrossed, blocked: !canAccessModule(plan, 'comida_personal') },
+      { href: '/personal', label: 'Personal', Icon: CalendarDays, blocked: !canAccessModule(plan, 'personal') },
     ];
-    const chat: NavItem[] = canAccessChat(role) ? [{ href: '/chat', label: 'Chat', Icon: MessageCircle }] : [];
+    const chat: NavItem[] =
+      canAccessChat(role) ? [{ href: '/chat', label: 'Chat', Icon: MessageCircle, blocked: !canAccessModule(plan, 'chat') }] : [];
     const cuenta: NavItem[] = canAccessCuentaSeguridad(role)
       ? [{ href: '/cuenta/seguridad', label: 'Cuenta y seguridad', Icon: KeyRound }]
       : [];
     const cocina: NavItem[] =
       showCocinaCentral && canAccessCocinaCentral(role)
-        ? [{ href: '/cocina-central', label: 'Cocina central', Icon: ChefHat }]
+        ? [{ href: '/cocina-central', label: 'Cocina central', Icon: ChefHat, blocked: !canAccessModule(plan, 'cocina_central') }]
         : [];
     const pedirCentral: NavItem[] = showPedidosCocina
       ? [{ href: '/pedidos-cocina', label: 'Pedir a central', Icon: Package }]
@@ -191,7 +205,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       ...cocina,
       ...pedirCentral,
     ];
-  }, [showPedidos, showPedidosCocina, showCocinaCentral, profileRole]);
+  }, [showPedidos, showPedidosCocina, showCocinaCentral, profileRole, plan]);
 
   const confirmAndLogout = () => setConfirmLogoutOpen(true);
 
@@ -405,13 +419,22 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                 onClick={() => setOpen(false)}
                 className={[
                   'flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-semibold transition-all',
+                  entry.blocked ? 'opacity-55' : '',
                   isActive
                     ? 'bg-[#D32F2F]/10 text-[#D32F2F] shadow-sm ring-1 ring-[#D32F2F]/25'
                     : 'text-zinc-800 hover:bg-zinc-100',
                 ].join(' ')}
               >
-                <Icon className="h-5 w-5" />
-                <span className="min-w-0 truncate">{entry.label}</span>
+                <Icon className="h-5 w-5 shrink-0" />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate">{entry.label}</span>
+                  {entry.blocked ? (
+                    <span className="block text-[10px] font-semibold uppercase tracking-wide text-zinc-500">
+                      {entry.blockedText ?? 'Disponible en plan superior'}
+                    </span>
+                  ) : null}
+                </span>
+                {entry.blocked ? <Lock className="h-4 w-4 shrink-0 text-zinc-500" /> : null}
               </Link>
             );
           })}

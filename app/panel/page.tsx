@@ -17,6 +17,7 @@ import {
   ShoppingCart,
   Package,
   UtensilsCrossed,
+  Lock,
 } from 'lucide-react';
 import { CHEF_ONE_TAPER_LINE_CLASS } from '@/components/ChefOneGlowLine';
 import MermasStyleHero from '@/components/MermasStyleHero';
@@ -30,10 +31,9 @@ import {
 import { canAccessCocinaCentralModule, canPlaceCentralSupplyOrder } from '@/lib/cocina-central-permissions';
 import ProductoGuiadoChecklist from '@/components/ProductoGuiadoChecklist';
 import { canAccessPedidos } from '@/lib/pedidos-access';
+import { canAccessModule } from '@/lib/canAccessModule';
 
 const LINE = `mx-auto mt-4 w-24 ${CHEF_ONE_TAPER_LINE_CLASS}`;
-
-const COMING_SOON_SUB = 'Próximamente';
 
 type TileProps = {
   href?: string;
@@ -42,9 +42,10 @@ type TileProps = {
   sub?: string;
   Icon: LucideIcon;
   tone?: 'red' | 'zinc';
+  blocked?: boolean;
 };
 
-function HubTile({ href, onClick, label, sub, Icon, tone = 'zinc' }: TileProps) {
+function HubTile({ href, onClick, label, sub, Icon, tone = 'zinc', blocked = false }: TileProps) {
   const inner = (
     <>
       <div
@@ -58,9 +59,20 @@ function HubTile({ href, onClick, label, sub, Icon, tone = 'zinc' }: TileProps) 
       <span className="text-center text-xl font-semibold leading-tight tracking-tight text-zinc-900 sm:text-[1.35rem]">
         {label}
       </span>
+      {blocked ? (
+        <span className="mt-1 inline-flex items-center gap-1 rounded-full bg-zinc-100 px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wide text-zinc-600">
+          <Lock className="h-3 w-3" />
+          Bloqueado
+        </span>
+      ) : null}
       {sub ? (
         <span className="mt-2 block max-w-[16.5rem] px-1 text-center text-xs font-medium leading-snug text-zinc-500 sm:max-w-none">
           {sub}
+        </span>
+      ) : null}
+      {blocked ? (
+        <span className="mt-1 block max-w-[16.5rem] px-1 text-center text-[11px] font-semibold leading-snug text-zinc-500 sm:max-w-none">
+          Disponible en plan superior
         </span>
       ) : null}
       <span className={`mt-4 ${LINE}`} aria-hidden />
@@ -70,6 +82,7 @@ function HubTile({ href, onClick, label, sub, Icon, tone = 'zinc' }: TileProps) 
   const className = [
     'flex w-full flex-col items-center rounded-3xl px-6 py-8 text-center outline-none transition-all duration-300 ease-out md:px-5 md:py-7',
     'bg-zinc-50/80 ring-1 ring-zinc-200/90 hover:bg-white hover:ring-zinc-300',
+    blocked ? 'opacity-55' : '',
     'focus-visible:ring-2 focus-visible:ring-[#D32F2F]/40 focus-visible:ring-offset-2',
     'active:scale-[0.99]',
   ].join(' ');
@@ -90,7 +103,7 @@ function HubTile({ href, onClick, label, sub, Icon, tone = 'zinc' }: TileProps) 
 }
 
 export default function PanelControlPage() {
-  const { localCode, localName, localId, email, profileRole, isCentralKitchen } = useAuth();
+  const { localCode, localName, localId, email, profileRole, isCentralKitchen, plan } = useAuth();
   const role = profileRole ?? 'staff';
   const showCocinaCentral = canAccessCocinaCentralModule(profileRole);
   const showPedidos = canAccessPedidos(localCode, email, localName, localId);
@@ -99,12 +112,6 @@ export default function PanelControlPage() {
   const showEscandallos = canAccessEscandallos(role);
   const showInventario = canAccessInventario(role);
   const showChat = canAccessChat(role);
-  const [stubMessage, setStubMessage] = React.useState<string | null>(null);
-
-  const onComingSoonModule = (name: string) => {
-    setStubMessage(`${name}: próximamente.`);
-    window.setTimeout(() => setStubMessage(null), 3200);
-  };
 
   return (
     <div className="space-y-6">
@@ -117,16 +124,17 @@ export default function PanelControlPage() {
 
       <ProductoGuiadoChecklist />
 
-      {stubMessage ? (
-        <div className="rounded-2xl border border-amber-200/80 bg-amber-50 px-4 py-3 text-center text-sm font-semibold text-amber-950 ring-1 ring-amber-100">
-          {stubMessage}
-        </div>
-      ) : null}
-
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:gap-5 lg:grid-cols-4">
         <HubTile href="/dashboard" label="Mermas" sub="Registro y seguimiento" Icon={BookOpen} tone="red" />
         {showPedidos ? (
-          <HubTile href="/pedidos" label="Pedidos" sub="Proveedores y recepción" Icon={ShoppingCart} tone="red" />
+          <HubTile
+            href="/pedidos"
+            label="Pedidos"
+            sub="Proveedores y recepción"
+            Icon={ShoppingCart}
+            tone="red"
+            blocked={!canAccessModule(plan, 'pedidos')}
+          />
         ) : null}
         {showPedidosCocina ? (
           <HubTile
@@ -143,6 +151,7 @@ export default function PanelControlPage() {
           sub="Limpieza, temperaturas, aceite y trazabilidad"
           Icon={ShieldCheck}
           tone="red"
+          blocked={!canAccessModule(plan, 'appcc')}
         />
         <HubTile
           href="/checklist"
@@ -150,6 +159,7 @@ export default function PanelControlPage() {
           sub="Apertura, turno, cierre e higiene con tus ítems"
           Icon={ListChecks}
           tone="red"
+          blocked={!canAccessModule(plan, 'checklist')}
         />
         <HubTile
           href="/produccion"
@@ -157,6 +167,7 @@ export default function PanelControlPage() {
           sub="Planes diarios o semanales por zonas y tareas"
           Icon={Factory}
           tone="red"
+          blocked={!canAccessModule(plan, 'produccion')}
         />
         <HubTile
           href="/comida-personal"
@@ -164,6 +175,7 @@ export default function PanelControlPage() {
           sub="Registro rápido y coste interno"
           Icon={UtensilsCrossed}
           tone="red"
+          blocked={!canAccessModule(plan, 'comida_personal')}
         />
         <HubTile
           href="/personal"
@@ -171,9 +183,17 @@ export default function PanelControlPage() {
           sub="Horarios, cuadrante y fichajes"
           Icon={CalendarDays}
           tone="red"
+          blocked={!canAccessModule(plan, 'personal')}
         />
         {showInventario ? (
-          <HubTile href="/inventario" label="Inventario" sub="Stock y valor por local" Icon={ClipboardList} tone="red" />
+          <HubTile
+            href="/inventario"
+            label="Inventario"
+            sub="Stock y valor por local"
+            Icon={ClipboardList}
+            tone="red"
+            blocked={!canAccessModule(plan, 'inventario')}
+          />
         ) : null}
         {showChat ? (
           <HubTile
@@ -182,6 +202,7 @@ export default function PanelControlPage() {
             sub="Habla con tu equipo del mismo local"
             Icon={MessageCircle}
             tone="red"
+            blocked={!canAccessModule(plan, 'chat')}
           />
         ) : null}
         {showEscandallos ? (
@@ -191,6 +212,7 @@ export default function PanelControlPage() {
             sub="Recetas, food cost y centro de mando con gráficas"
             Icon={Calculator}
             tone="red"
+            blocked={!canAccessModule(plan, 'escandallos')}
           />
         ) : null}
         {showCocinaCentral ? (
@@ -200,6 +222,7 @@ export default function PanelControlPage() {
             sub="Producción, lotes, entregas y QR"
             Icon={ChefHat}
             tone="red"
+            blocked={!canAccessModule(plan, 'cocina_central')}
           />
         ) : null}
         {showFinanzas ? (
@@ -209,6 +232,7 @@ export default function PanelControlPage() {
             sub="Gasto, salud del negocio y compras vs albaranes"
             Icon={BarChart3}
             tone="red"
+            blocked={!canAccessModule(plan, 'finanzas')}
           />
         ) : null}
       </div>

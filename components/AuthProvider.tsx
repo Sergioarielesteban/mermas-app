@@ -5,6 +5,7 @@ import { DEMO_LOCAL_ID, exitDemoMode, isDemoMode } from '@/lib/demo-mode';
 import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
 import { isAllowedEmail } from '@/lib/auth-access';
 import { parseProfileAppRole, type ProfileAppRole } from '@/lib/profile-app-role';
+import { DEFAULT_MAX_USERS, DEFAULT_PLAN, type PlanCode } from '@/lib/planPermissions';
 
 export type { ProfileAppRole };
 
@@ -24,6 +25,12 @@ type AuthContextValue = {
   localName: string | null;
   /** Cocina central (columna `locals.is_central_kitchen`). */
   isCentralKitchen: boolean;
+  /** Plan de suscripcion del local. */
+  plan: PlanCode;
+  /** Limite de usuarios del plan. */
+  maxUsers: number;
+  /** Simulación local de cambio de plan (sin persistir en backend). */
+  selectPlan: (plan: PlanCode) => void;
   /** true cuando ya se intentó cargar el perfil (o no aplica). */
   profileReady: boolean;
   login: (identifier: string, password: string) => Promise<{ ok: boolean; reason?: string }>;
@@ -38,7 +45,8 @@ type AuthContextValue = {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 const AUTH_KEY = 'mermas_user_email';
-const PROFILE_CACHE_KEY = 'chef_one_profile_cache_v3';
+const PROFILE_CACHE_KEY = 'chef_one_profile_cache_v4';
+const PLAN_OVERRIDE_KEY = 'chef_one_plan_override_v1';
 const PROFILE_TIMEOUT_MS = 6000;
 /**
  * Si getSession tarda (Wi‑Fi cocina, móvil al volver de suspensión), no enviar al login:
@@ -84,6 +92,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [localCode, setLocalCode] = useState<string | null>(null);
   const [localName, setLocalName] = useState<string | null>(null);
   const [isCentralKitchen, setIsCentralKitchen] = useState(false);
+  const [plan, setPlan] = useState<PlanCode>(DEFAULT_PLAN);
+  const [maxUsers, setMaxUsers] = useState<number>(DEFAULT_MAX_USERS);
   const [profileReady, setProfileReady] = useState(false);
 
   const clearProfile = React.useCallback(() => {
@@ -91,6 +101,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setLocalCode(null);
     setLocalName(null);
     setIsCentralKitchen(false);
+    setPlan(DEFAULT_PLAN);
+    setMaxUsers(DEFAULT_MAX_USERS);
     setDisplayName(null);
     setLoginUsername(null);
     setProfileRole(null);
@@ -102,6 +114,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       localCode: string | null;
       localName: string | null;
       isCentralKitchen: boolean;
+      plan: PlanCode;
+      maxUsers: number;
       displayName: string | null;
       loginUsername: string | null;
       profileRole: ProfileAppRole | null;
@@ -122,6 +136,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         localCode?: string | null;
         localName?: string | null;
         isCentralKitchen?: boolean;
+        plan?: PlanCode;
+        maxUsers?: number;
         displayName?: string | null;
         loginUsername?: string | null;
         profileRole?: ProfileAppRole | null;
@@ -131,6 +147,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setLocalCode(parsed.localCode ?? null);
       setLocalName(parsed.localName ?? null);
       setIsCentralKitchen(!!parsed.isCentralKitchen);
+      setPlan(parsed.plan ?? DEFAULT_PLAN);
+      setMaxUsers(typeof parsed.maxUsers === 'number' && parsed.maxUsers > 0 ? parsed.maxUsers : DEFAULT_MAX_USERS);
       setDisplayName(parsed.displayName ?? null);
       setLoginUsername(parsed.loginUsername ?? null);
       setProfileRole(parsed.profileRole ?? null);
@@ -151,7 +169,81 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     }
     window.localStorage.removeItem(PROFILE_CACHE_KEY);
+    window.localStorage.removeItem(PLAN_OVERRIDE_KEY);
   }, []);
+
+  const readPlanOverride = React.useCallback((localIdArg: string | null): PlanCode | null => {
+    if (typeof window === 'undefined' || !localIdArg) return null;
+    try {
+      const raw = window.localStorage.getItem(PLAN_OVERRIDE_KEY);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw) as Record<string, PlanCode>;
+      const value = parsed[localIdArg];
+      if (value === 'OPERATIVO' || value === 'CONTROL' || value === 'PRO') return value;
+      return null;
+    } catch {
+      return null;
+    }
+  }, []);
+
+  const writePlanOverride = React.useCallback((localIdArg: string | null, nextPlan: PlanCode) => {
+    if (typeof window === 'undefined' || !localIdArg) return;
+    try {
+      const raw = window.localStorage.getItem(PLAN_OVERRIDE_KEY);
+      const parsed = raw ? (JSON.parse(raw) as Record<string, PlanCode>) : {};
+      parsed[localIdArg] = nextPlan;
+      window.localStorage.setItem(PLAN_OVERRIDE_KEY, JSON.stringify(parsed));
+    } catch {
+      /* ignore localStorage quota/parse errors */
+    }
+  }, []);
+
+  const loadPlanForLocal = React.useCallback(async (localId: string): Promise<{ plan: PlanCode; maxUsers: number }> => {
+    const supabase = getSupabaseClient();
+    if (!supabase || !isSupabaseEnabled()) {
+      const fallback = { plan: DEFAULT_PLAN, maxUsers: DEFAULT_MAX_USERS };
+      setPlan(fallback.plan);
+      setMaxUsers(fallback.maxUsers);
+      return fallback;
+    }
+    try {
+      const { data, error } = await withTimeout(
+        Promise.resolve(
+          supabase
+            .from('subscriptions')
+            .select('plan, max_users, status, created_at')
+            .eq('local_id', localId)
+            .eq('status', 'active')
+            .order('created_at', { ascending: false })
+            .limit(1),
+        ),
+        PROFILE_TIMEOUT_MS,
+      );
+      if (error || !Array.isArray(data) || data.length === 0) {
+        const fallback = { plan: DEFAULT_PLAN, maxUsers: DEFAULT_MAX_USERS };
+        const overriddenPlan = readPlanOverride(localId) ?? fallback.plan;
+        setPlan(overriddenPlan);
+        setMaxUsers(fallback.maxUsers);
+        return { plan: overriddenPlan, maxUsers: fallback.maxUsers };
+      }
+      const row = data[0] as { plan?: string | null; max_users?: number | null };
+      const nextPlan = row.plan === 'OPERATIVO' || row.plan === 'CONTROL' || row.plan === 'PRO' ? row.plan : DEFAULT_PLAN;
+      const effectivePlan = readPlanOverride(localId) ?? nextPlan;
+      const nextMaxUsers =
+        typeof row.max_users === 'number' && Number.isFinite(row.max_users) && row.max_users > 0
+          ? Math.floor(row.max_users)
+          : DEFAULT_MAX_USERS;
+      setPlan(effectivePlan);
+      setMaxUsers(nextMaxUsers);
+      return { plan: effectivePlan, maxUsers: nextMaxUsers };
+    } catch {
+      const fallback = { plan: DEFAULT_PLAN, maxUsers: DEFAULT_MAX_USERS };
+      const overriddenPlan = readPlanOverride(localId) ?? fallback.plan;
+      setPlan(overriddenPlan);
+      setMaxUsers(fallback.maxUsers);
+      return { plan: overriddenPlan, maxUsers: fallback.maxUsers };
+    }
+  }, [readPlanOverride]);
 
   const loadProfileForUser = React.useCallback(async (uid: string | undefined) => {
     if (!uid) {
@@ -254,6 +346,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         centralFallback = false;
       }
       setIsCentralKitchen(centralFallback);
+      const planState = await loadPlanForLocal(profileOnly.local_id);
       const dn = profileOnly.full_name?.trim() ? profileOnly.full_name.trim() : null;
       const lu = profileOnly.login_username?.trim() ? profileOnly.login_username.trim() : null;
       setDisplayName(dn);
@@ -265,6 +358,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         localCode: null,
         localName: null,
         isCentralKitchen: centralFallback,
+        plan: planState.plan,
+        maxUsers: planState.maxUsers,
         displayName: dn,
         loginUsername: lu,
         profileRole: pr,
@@ -294,6 +389,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setLocalCode(loc?.code ?? null);
     setLocalName(loc?.name ?? null);
     setIsCentralKitchen(central);
+    const planState = await loadPlanForLocal(row.local_id);
     const dn = row.full_name?.trim() ? row.full_name.trim() : null;
     const lu = row.login_username?.trim() ? row.login_username.trim() : null;
     setDisplayName(dn);
@@ -305,15 +401,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       localCode: loc?.code ?? null,
       localName: loc?.name ?? null,
       isCentralKitchen: central,
+      plan: planState.plan,
+      maxUsers: planState.maxUsers,
       displayName: dn,
       loginUsername: lu,
       profileRole: pr,
     });
     setProfileReady(true);
-  }, [clearProfile, persistProfileCache, restoreProfileFromCache]);
+  }, [clearProfile, loadPlanForLocal, persistProfileCache, restoreProfileFromCache]);
 
   useEffect(() => {
     if (typeof window !== 'undefined' && isDemoMode()) {
+      /* eslint-disable react-hooks/set-state-in-effect */
       setEmail('demo@chef-one.app');
       setDisplayName('Modo demo');
       setLoginUsername('demo');
@@ -322,9 +421,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setLocalCode('DEMO');
       setLocalName('Restaurante Demo');
       setIsCentralKitchen(false);
+      setPlan('PRO');
+      setMaxUsers(999);
       setProfileRole('staff');
       setLoading(false);
       setProfileReady(true);
+      /* eslint-enable react-hooks/set-state-in-effect */
       return;
     }
 
@@ -502,7 +604,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       window.removeEventListener('focus', onWindowFocus);
       sub.subscription.unsubscribe();
     };
-  }, [clearLocalAuthCache, clearProfile, loadProfileForUser]);
+  }, [clearLocalAuthCache, clearProfile, loadProfileForUser, restoreProfileFromCache]);
 
   const value = useMemo<AuthContextValue>(
     () => ({
@@ -515,6 +617,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       localCode,
       localName,
       isCentralKitchen,
+      plan,
+      maxUsers,
+      selectPlan: (nextPlan: PlanCode) => {
+        setPlan(nextPlan);
+        writePlanOverride(localId, nextPlan);
+      },
       profileReady,
       login: async (identifier: string, password: string) => {
         const clean = identifier.trim().toLowerCase();
@@ -619,11 +727,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       localId,
       localName,
       isCentralKitchen,
+      maxUsers,
       loading,
       loginUsername,
+      plan,
       profileReady,
       profileRole,
       userId,
+      writePlanOverride,
     ],
   );
 
