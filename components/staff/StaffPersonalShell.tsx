@@ -26,19 +26,20 @@ type NavLink = {
   Icon: LucideIcon;
   end?: boolean;
   managerOnly?: boolean;
+  adminOnly?: boolean;
   staffVisible?: boolean;
 };
 
 const LINKS: NavLink[] = [
   { href: '/personal', label: 'Resumen', Icon: LayoutGrid, end: true, staffVisible: true },
-  { href: '/personal/planificacion', label: 'Cuadrante', Icon: CalendarRange, managerOnly: true },
-  { href: '/personal/control', label: 'Control', Icon: LayoutPanelTop, managerOnly: true },
-  { href: '/personal/fichaje', label: 'Fichaje', Icon: Clock, managerOnly: true },
-  { href: '/personal/registro', label: 'Registro', Icon: ClipboardList, managerOnly: true },
-  { href: '/personal/empleados', label: 'Equipo', Icon: Users, managerOnly: true },
-  { href: '/personal/solicitudes', label: 'Solicitudes', Icon: Send, managerOnly: true },
-  { href: '/personal/incidencias', label: 'Incidencias', Icon: AlertTriangle, managerOnly: true },
-  { href: '/personal/configuracion', label: 'Ajustes', Icon: Settings2, managerOnly: true },
+  { href: '/personal/planificacion', label: 'Cuadrante', Icon: CalendarRange, adminOnly: true },
+  { href: '/personal/control', label: 'Control', Icon: LayoutPanelTop, adminOnly: true },
+  { href: '/personal/fichaje', label: 'Fichaje', Icon: Clock, staffVisible: true },
+  { href: '/personal/registro', label: 'Registro', Icon: ClipboardList, staffVisible: true },
+  { href: '/personal/empleados', label: 'Equipo', Icon: Users, adminOnly: true },
+  { href: '/personal/solicitudes', label: 'Solicitudes', Icon: Send, adminOnly: true },
+  { href: '/personal/incidencias', label: 'Incidencias', Icon: AlertTriangle, adminOnly: true },
+  { href: '/personal/configuracion', label: 'Ajustes', Icon: Settings2, adminOnly: true },
 ];
 
 export default function StaffPersonalShell({ children }: { children: React.ReactNode }) {
@@ -46,6 +47,9 @@ export default function StaffPersonalShell({ children }: { children: React.React
   const { profileRole } = useAuth();
   const perms = React.useMemo(() => buildStaffPermissions(profileRole), [profileRole]);
   const isMiApp = pathname.startsWith('/personal/mi');
+  const role = profileRole ?? 'staff';
+  const isAdmin = role === 'admin';
+  const isManager = role === 'manager';
 
   return (
     <div className={isMiApp ? 'space-y-4 pb-24 sm:pb-24 md:space-y-5' : 'space-y-4 pb-24 sm:pb-8 md:space-y-5'}>
@@ -54,7 +58,12 @@ export default function StaffPersonalShell({ children }: { children: React.React
           className="-mx-1 flex gap-1 overflow-x-auto pb-1 scrollbar-thin sm:flex-wrap sm:gap-2 sm:overflow-visible md:gap-2"
           aria-label="Secciones Personal"
         >
-          {LINKS.filter((l) => !l.managerOnly || perms.canViewTeamSummary).map((link) => {
+          {LINKS.filter((l) => {
+            if (l.adminOnly) return isAdmin;
+            if (l.managerOnly) return perms.canViewTeamSummary;
+            if (isManager) return Boolean(l.staffVisible);
+            return true;
+          }).map((link) => {
             if (!perms.canViewTeamSummary && !link.staffVisible) return null;
             const { href, label, Icon, end } = link;
             const active = end ? pathname === href : pathname === href || pathname.startsWith(`${href}/`);

@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import React, { useCallback, useMemo, useState } from 'react';
 import type { LucideIcon } from 'lucide-react';
 import { AlertTriangle, Clock, Users } from 'lucide-react';
@@ -18,7 +19,7 @@ import {
   workedMinutesTodayAll,
 } from '@/lib/staff/staff-heuristics';
 import { staffDisplayName } from '@/lib/staff/staff-supabase';
-import { formatMinutesHuman } from '@/lib/staff/attendance-logic';
+import { formatMinutesHuman, plannedShiftMinutes } from '@/lib/staff/attendance-logic';
 import { todayYmd } from '@/lib/staff/attendance-logic';
 import { shiftDateTimeIso } from '@/lib/staff/staff-dates';
 import { zoneBlockStyle, zoneLabel } from '@/lib/staff/staff-zone-styles';
@@ -80,6 +81,7 @@ export default function PersonalResumenPage() {
 
   const workingList = employees.filter((e) => working.has(e.id));
   const isStaffOnly = profileRole === 'staff';
+  const isManagerOnly = profileRole === 'manager';
   const linkedEmployee = employees.find((e) => e.userId === userId) ?? null;
   const zoneChipStyle = (zone: string | null | undefined, colorHint: string | null | undefined) => {
     if (colorHint) return { background: colorHint, color: '#fff' };
@@ -108,6 +110,33 @@ export default function PersonalResumenPage() {
       };
     })
     .sort((a, b) => (a.startTime === b.startTime ? a.name.localeCompare(b.name, 'es') : a.startTime.localeCompare(b.startTime)));
+  const managerTeamToday = todayShifts
+    .map((s) => {
+      const employee = employees.find((e) => e.id === s.employeeId);
+      return {
+        id: s.id,
+        name: employee ? staffDisplayName(employee) : '—',
+        startTime: s.startTime.slice(0, 5),
+        endTime: s.endTime.slice(0, 5),
+        zone: s.zone,
+      };
+    })
+    .sort((a, b) => (a.startTime === b.startTime ? a.name.localeCompare(b.name, 'es') : a.startTime.localeCompare(b.startTime)));
+  const managerWeekPlan = [...shifts]
+    .sort((a, b) => (a.shiftDate === b.shiftDate ? a.startTime.localeCompare(b.startTime) : a.shiftDate.localeCompare(b.shiftDate)))
+    .slice(0, 28)
+    .map((s) => {
+      const employee = employees.find((e) => e.id === s.employeeId);
+      return {
+        id: s.id,
+        day: new Date(`${s.shiftDate}T12:00:00`).toLocaleDateString('es-ES', { weekday: 'long', day: '2-digit', month: '2-digit' }),
+        name: employee ? staffDisplayName(employee) : '—',
+        startTime: s.startTime.slice(0, 5),
+        endTime: s.endTime.slice(0, 5),
+        zone: s.zone,
+        minutes: plannedShiftMinutes(s),
+      };
+    });
 
   if (!profileReady) {
     return <p className="text-sm text-zinc-500">Cargando perfil…</p>;
@@ -220,6 +249,71 @@ export default function PersonalResumenPage() {
             )}
           </section>
         </div>
+      ) : isManagerOnly ? (
+        <div className="space-y-4">
+          <section className="grid gap-2 sm:grid-cols-2">
+            <Link
+              href="/personal/fichaje"
+              className="flex min-h-[48px] items-center justify-center rounded-2xl border border-zinc-300 bg-white px-3 py-2 text-sm font-extrabold text-zinc-800"
+            >
+              Registrar jornada
+            </Link>
+            <Link
+              href="/personal/registro"
+              className="flex min-h-[48px] items-center justify-center rounded-2xl border border-zinc-300 bg-white px-3 py-2 text-sm font-extrabold text-zinc-800"
+            >
+              Ver registro del equipo
+            </Link>
+          </section>
+
+          <section className="rounded-3xl bg-white p-4 ring-1 ring-zinc-200/90 md:p-5">
+            <h2 className="text-sm font-extrabold uppercase tracking-wide text-zinc-500">Equipo del día</h2>
+            {managerTeamToday.length === 0 ? (
+              <p className="mt-2 text-sm text-zinc-600">No hay personal planificado hoy.</p>
+            ) : (
+              <ul className="mt-3 grid gap-2 sm:grid-cols-2">
+                {managerTeamToday.map((member) => (
+                  <li key={member.id} className="rounded-xl bg-zinc-50 px-3 py-2 text-sm ring-1 ring-zinc-100">
+                    <p className="font-semibold text-zinc-800">{member.name}</p>
+                    <p className="text-xs font-bold text-zinc-600">
+                      {member.startTime} - {member.endTime}
+                    </p>
+                    {member.zone ? (
+                      <span
+                        className="mt-1 inline-flex rounded-full px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wide"
+                        style={zoneChipStyle(member.zone, null)}
+                      >
+                        {zoneLabel(member.zone)}
+                      </span>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+
+          <section className="rounded-3xl bg-white p-4 ring-1 ring-zinc-200/90 md:p-5">
+            <h2 className="text-sm font-extrabold uppercase tracking-wide text-zinc-500">Planificación semanal</h2>
+            {managerWeekPlan.length === 0 ? (
+              <p className="mt-2 text-sm text-zinc-600">No hay turnos cargados para esta semana.</p>
+            ) : (
+              <ul className="mt-3 space-y-2">
+                {managerWeekPlan.map((item) => (
+                  <li key={item.id} className="rounded-xl bg-zinc-50 px-3 py-2 text-sm ring-1 ring-zinc-100">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span className="font-semibold capitalize text-zinc-700">{item.day}</span>
+                      <span className="font-bold text-zinc-900">
+                        {item.startTime} - {item.endTime}
+                      </span>
+                    </div>
+                    <p className="text-xs font-semibold text-zinc-600">{item.name}</p>
+                    <p className="text-xs font-bold text-zinc-500">{formatMinutesHuman(item.minutes)}</p>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+        </div>
       ) : (
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 md:grid-cols-4">
         <StatCard label="Equipo activo" value={employees.length} Icon={Users} tone="zinc" />
@@ -239,7 +333,7 @@ export default function PersonalResumenPage() {
       </div>
       )}
 
-      {!isStaffOnly ? (
+      {!isStaffOnly && !isManagerOnly ? (
       <div className="grid gap-4 md:grid-cols-2 md:gap-5">
       <section className="rounded-3xl bg-white p-4 ring-1 ring-zinc-200/90 md:p-5">
         <h2 className="text-sm font-extrabold uppercase tracking-wide text-zinc-500">Ahora en el local</h2>
@@ -284,7 +378,7 @@ export default function PersonalResumenPage() {
       </div>
       ) : null}
 
-      {openInc > 0 && !isStaffOnly ? (
+      {openInc > 0 && !isStaffOnly && !isManagerOnly ? (
         <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-bold text-amber-950">
           Hay {openInc} incidencia(s) abierta(s). Revisa la pestaña Incidencias.
         </div>

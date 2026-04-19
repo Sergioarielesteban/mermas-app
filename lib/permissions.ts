@@ -68,11 +68,22 @@ export function canAccessMermasExecutiveAnalytics(role: ProfileAppRole | null): 
  */
 export function isRouteBlockedForRole(pathname: string | null, role: ProfileAppRole | null): boolean {
   if (!pathname) return false;
+  const isManager = role === 'manager';
   if (pathname.startsWith('/finanzas')) return !canAccessFinanzas(role);
   if (pathname.startsWith('/escandallos')) return !canAccessEscandallos(role);
   if (pathname.startsWith('/cocina-central')) return !canAccessCocinaCentral(role);
   if (pathname.startsWith('/pedidos')) return !canAccessPedidosByRole(role);
   if (pathname.startsWith('/comida-personal')) return !canAccessComidaPersonal(role);
+  if (
+    isManager &&
+    (pathname.startsWith('/personal/control') ||
+      pathname.startsWith('/personal/planificacion') ||
+      pathname.startsWith('/personal/empleados') ||
+      pathname.startsWith('/personal/solicitudes') ||
+      pathname.startsWith('/personal/incidencias'))
+  ) {
+    return true;
+  }
   if (pathname.startsWith('/personal/empleados')) return !canAccessTeamManagement(role);
   if (pathname.startsWith('/inventario')) return !canAccessInventario(role);
   if (pathname.startsWith('/chat')) return !canAccessChat(role);
@@ -89,6 +100,10 @@ export function isPotentiallyRoleGatedPath(pathname: string | null): boolean {
     pathname.startsWith('/cocina-central') ||
     pathname.startsWith('/pedidos') ||
     pathname.startsWith('/comida-personal') ||
+    pathname.startsWith('/personal/control') ||
+    pathname.startsWith('/personal/planificacion') ||
+    pathname.startsWith('/personal/solicitudes') ||
+    pathname.startsWith('/personal/incidencias') ||
     pathname.startsWith('/personal/empleados') ||
     pathname.startsWith('/inventario') ||
     pathname.startsWith('/chat') ||

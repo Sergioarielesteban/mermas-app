@@ -3,14 +3,15 @@ import type { StaffPermissions } from '@/lib/staff/types';
 
 export function buildStaffPermissions(profileRole: ProfileAppRole | null): StaffPermissions {
   const role = profileRole ?? 'staff';
-  const isManager = role === 'admin' || role === 'manager';
+  const isAdmin = role === 'admin';
+  const canViewTeamSummary = role === 'admin' || role === 'manager';
   return {
     profileRole: profileRole ?? null,
-    canManageSchedules: isManager,
-    canManageEmployees: isManager,
-    canCorrectEntries: isManager,
-    canResolveIncidents: isManager,
-    canViewTeamSummary: isManager,
+    canManageSchedules: isAdmin,
+    canManageEmployees: isAdmin,
+    canCorrectEntries: isAdmin,
+    canResolveIncidents: isAdmin,
+    canViewTeamSummary,
   };
 }
 
