@@ -200,6 +200,11 @@ export async function updateStaffEmployee(
   if (error) throw new Error(error.message);
 }
 
+export async function deleteStaffEmployee(supabase: SupabaseClient, id: string): Promise<void> {
+  const { error } = await supabase.from('staff_employees').delete().eq('id', id);
+  if (error) throw new Error(error.message);
+}
+
 export async function fetchShiftsRange(
   supabase: SupabaseClient,
   localId: string,

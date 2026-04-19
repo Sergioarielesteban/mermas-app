@@ -1,13 +1,19 @@
 'use client';
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Plus } from 'lucide-react';
+import { Plus, Trash2 } from 'lucide-react';
 import Link from 'next/link';
 import MermasStyleHero from '@/components/MermasStyleHero';
 import { useAuth } from '@/components/AuthProvider';
 import { buildStaffPermissions } from '@/lib/staff/permissions';
 import { STAFF_ZONE_PRESETS } from '@/lib/staff/types';
-import { createStaffEmployee, fetchStaffEmployees, staffDisplayName, updateStaffEmployee } from '@/lib/staff/staff-supabase';
+import {
+  createStaffEmployee,
+  deleteStaffEmployee,
+  fetchStaffEmployees,
+  staffDisplayName,
+  updateStaffEmployee,
+} from '@/lib/staff/staff-supabase';
 import { countOperationalUsersForLocal } from '@/lib/subscriptions-supabase';
 import { getSupabaseClient } from '@/lib/supabase-client';
 import type { StaffEmployee } from '@/lib/staff/types';
@@ -106,6 +112,22 @@ export default function PersonalEmpleadosPage() {
     }
   };
 
+  const removeEmployee = async (em: StaffEmployee) => {
+    if (!perms.canManageEmployees) return;
+    const supabase = getSupabaseClient();
+    if (!supabase) return;
+    const ok = window.confirm(
+      `Se eliminará el empleado "${staffDisplayName(em)}". Esta acción no se puede deshacer. ¿Continuar?`,
+    );
+    if (!ok) return;
+    try {
+      await deleteStaffEmployee(supabase, em.id);
+      await reload();
+    } catch (er: unknown) {
+      alert(er instanceof Error ? er.message : 'No se pudo eliminar');
+    }
+  };
+
   if (!profileReady) return <p className="text-sm text-zinc-500">Cargando…</p>;
   if (!localId) return <p className="text-sm text-amber-800">Sin local.</p>;
   if (!perms.canManageEmployees) {
@@ -167,16 +189,26 @@ export default function PersonalEmpleadosPage() {
               </div>
             </div>
             {perms.canManageEmployees ? (
-              <button
-                type="button"
-                onClick={() => void toggleActive(em)}
-                className={[
-                  'rounded-xl px-3 py-2 text-xs font-extrabold',
-                  em.active ? 'bg-zinc-100 text-zinc-800' : 'bg-emerald-100 text-emerald-900',
-                ].join(' ')}
-              >
-                {em.active ? 'Desactivar' : 'Reactivar'}
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => void toggleActive(em)}
+                  className={[
+                    'rounded-xl px-3 py-2 text-xs font-extrabold',
+                    em.active ? 'bg-zinc-100 text-zinc-800' : 'bg-emerald-100 text-emerald-900',
+                  ].join(' ')}
+                >
+                  {em.active ? 'Desactivar' : 'Reactivar'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void removeEmployee(em)}
+                  className="inline-flex items-center gap-1 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-extrabold text-red-800"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                  Eliminar
+                </button>
+              </div>
             ) : null}
           </li>
         ))}
