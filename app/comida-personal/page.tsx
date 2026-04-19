@@ -79,7 +79,8 @@ export default function ComidaPersonalPage() {
   const [notes, setNotes] = React.useState('');
   const [ownMealQty, setOwnMealQty] = React.useState(0);
   const [recentRecordsOpen, setRecentRecordsOpen] = React.useState(false);
-  const showMoneyStats = profileRole === 'admin' || profileRole === 'manager';
+  const canSeeSummaryStats = profileRole === 'admin' || profileRole === 'manager';
+  const showDetailedWorkerAnalytics = profileRole === 'admin';
 
   const loadData = React.useCallback(async () => {
     if (!localId) return;
@@ -697,7 +698,7 @@ export default function ComidaPersonalPage() {
           </div>
         </div>
 
-        {!showMoneyStats ? (
+        {!canSeeSummaryStats ? (
           <p className="mt-4 text-xs leading-snug text-zinc-600">
             Los totales en euros y el informe PDF los ven encargados y administración. Sigue registrando consumos arriba.
           </p>
@@ -743,142 +744,146 @@ export default function ComidaPersonalPage() {
               </div>
             </section>
 
-            <section className="rounded-2xl bg-white p-4 ring-1 ring-zinc-200">
-              <p className="text-sm font-bold text-zinc-800">Mes actual — por trabajador</p>
-              {monthWorkerRanking.length === 0 ? (
-                <p className="mt-3 text-sm text-zinc-500">Sin datos en el mes.</p>
-              ) : (
-                <ol className="mt-3 space-y-2">
-                  {monthWorkerRanking.map((row, idx) => (
-                    <li
-                      key={row.rowKey}
-                      className="flex items-center justify-between gap-3 rounded-xl bg-zinc-50 px-3 py-2 ring-1 ring-zinc-200"
-                    >
-                      <div className="flex min-w-0 items-center gap-2">
-                        <span
-                          className={`grid h-8 w-8 shrink-0 place-items-center rounded-full text-xs font-black ${
-                            idx === 0
-                              ? 'bg-amber-100 text-amber-900'
-                              : idx === 1
-                                ? 'bg-zinc-200 text-zinc-800'
-                                : idx === 2
-                                  ? 'bg-orange-100 text-orange-900'
-                                  : 'bg-white text-zinc-500 ring-1 ring-zinc-200'
-                          }`}
-                        >
-                          {idx + 1}
-                        </span>
-                        <div className="min-w-0">
-                          <p className="truncate text-sm font-bold text-zinc-900">{row.name}</p>
-                          <p className="text-xs text-zinc-500">
-                            {row.mealsRegistered}{' '}
-                            {row.mealsRegistered === 1 ? 'comida registrada' : 'comidas registradas'}
-                            {row.ownMealRegs > 0 ? (
-                              <>
-                                {' '}
-                                · Trajo su comida:{' '}
-                                {row.ownMealRegs === row.ownMealDays
-                                  ? `${row.ownMealDays} día${row.ownMealDays === 1 ? '' : 's'}`
-                                  : `${row.ownMealDays} día${row.ownMealDays === 1 ? '' : 's'} (${row.ownMealRegs} reg.)`}
-                              </>
-                            ) : null}
-                          </p>
-                        </div>
-                      </div>
-                      <p className="shrink-0 text-sm font-black text-zinc-900">{money(row.totalEur)}</p>
-                    </li>
-                  ))}
-                </ol>
-              )}
-            </section>
-
-            <section className="rounded-2xl bg-white p-4 ring-1 ring-zinc-200">
-              <p className="text-sm font-bold text-zinc-800">Evolución 14 días (€)</p>
-              <div className="mt-2 h-56">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={last14DaysChart} margin={{ top: 8, right: 8, left: -16, bottom: 8 }}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="day" tick={{ fontSize: 10 }} />
-                    <YAxis tick={{ fontSize: 10 }} />
-                    <Tooltip formatter={(value) => money(Number(value ?? 0))} />
-                    <Bar dataKey="total" fill="#D32F2F" radius={[6, 6, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            </section>
-
-            <div className="rounded-xl border border-zinc-200/90 bg-zinc-50/60 p-2 ring-1 ring-zinc-100">
-              <button
-                type="button"
-                onClick={() => setRecentRecordsOpen((o) => !o)}
-                aria-expanded={recentRecordsOpen}
-                className="flex w-full items-center justify-between gap-2 rounded-lg px-2 py-2 text-left outline-none focus-visible:ring-2 focus-visible:ring-[#D32F2F]/30"
-              >
-                <span className="text-[11px] font-medium text-zinc-500">
-                  Anular registros
-                  <span className="font-normal text-zinc-400"> · {recentActiveRecords.length} activos</span>
-                </span>
-                <ChevronDown
-                  className={`h-4 w-4 shrink-0 text-zinc-400 transition-transform ${recentRecordsOpen ? 'rotate-180' : ''}`}
-                  aria-hidden
-                />
-              </button>
-              {recentRecordsOpen ? (
-                <div className="mt-1 border-t border-zinc-200/80 pt-2">
-                  <p className="px-1 pb-1 text-[10px] leading-snug text-zinc-400">
-                    Confirma la anulación; el registro deja de contar en totales e informes.
-                  </p>
-                  {recentActiveRecords.length === 0 ? (
-                    <p className="px-1 py-2 text-xs text-zinc-400">Sin registros en el periodo cargado.</p>
+            {showDetailedWorkerAnalytics ? (
+              <>
+                <section className="rounded-2xl bg-white p-4 ring-1 ring-zinc-200">
+                  <p className="text-sm font-bold text-zinc-800">Mes actual — por trabajador</p>
+                  {monthWorkerRanking.length === 0 ? (
+                    <p className="mt-3 text-sm text-zinc-500">Sin datos en el mes.</p>
                   ) : (
-                    <ul className="max-h-52 divide-y divide-zinc-200/90 overflow-y-auto rounded-md border border-zinc-200/80 bg-white/80">
-                      {recentActiveRecords.map((r) => {
-                        const title =
-                          r.sourceProductName?.trim() ||
-                          (r.workerName ? `${SERVICE_LABEL[r.service]} · ${r.workerName}` : SERVICE_LABEL[r.service]);
-                        const sub =
-                          r.sourceProductName && r.workerName
-                            ? `${SERVICE_LABEL[r.service]} · ${r.workerName}`
-                            : r.notes.trim() || null;
-                        const dateLabel = (() => {
-                          try {
-                            return new Date(`${r.mealDate}T12:00:00`).toLocaleDateString('es-ES', {
-                              day: '2-digit',
-                              month: 'short',
-                            });
-                          } catch {
-                            return r.mealDate;
-                          }
-                        })();
-                        return (
-                          <li key={r.id} className="flex items-center gap-2 px-2 py-1.5">
-                            <div className="min-w-0 flex-1">
-                              <p className="truncate text-[11px] font-semibold text-zinc-900">{title}</p>
-                              <p className="truncate text-[10px] text-zinc-500">
-                                {dateLabel}
-                                {sub ? ` · ${sub}` : ''}
+                    <ol className="mt-3 space-y-2">
+                      {monthWorkerRanking.map((row, idx) => (
+                        <li
+                          key={row.rowKey}
+                          className="flex items-center justify-between gap-3 rounded-xl bg-zinc-50 px-3 py-2 ring-1 ring-zinc-200"
+                        >
+                          <div className="flex min-w-0 items-center gap-2">
+                            <span
+                              className={`grid h-8 w-8 shrink-0 place-items-center rounded-full text-xs font-black ${
+                                idx === 0
+                                  ? 'bg-amber-100 text-amber-900'
+                                  : idx === 1
+                                    ? 'bg-zinc-200 text-zinc-800'
+                                    : idx === 2
+                                      ? 'bg-orange-100 text-orange-900'
+                                      : 'bg-white text-zinc-500 ring-1 ring-zinc-200'
+                              }`}
+                            >
+                              {idx + 1}
+                            </span>
+                            <div className="min-w-0">
+                              <p className="truncate text-sm font-bold text-zinc-900">{row.name}</p>
+                              <p className="text-xs text-zinc-500">
+                                {row.mealsRegistered}{' '}
+                                {row.mealsRegistered === 1 ? 'comida registrada' : 'comidas registradas'}
+                                {row.ownMealRegs > 0 ? (
+                                  <>
+                                    {' '}
+                                    · Trajo su comida:{' '}
+                                    {row.ownMealRegs === row.ownMealDays
+                                      ? `${row.ownMealDays} día${row.ownMealDays === 1 ? '' : 's'}`
+                                      : `${row.ownMealDays} día${row.ownMealDays === 1 ? '' : 's'} (${row.ownMealRegs} reg.)`}
+                                  </>
+                                ) : null}
                               </p>
                             </div>
-                            <span className="shrink-0 text-[11px] font-bold tabular-nums text-zinc-800">
-                              {money(r.totalCostEur)}
-                            </span>
-                            <button
-                              type="button"
-                              onClick={() => void voidOneRecord(r)}
-                              className="grid h-7 w-7 shrink-0 place-items-center rounded-md border border-zinc-200 bg-white text-zinc-500 hover:border-red-200 hover:bg-red-50 hover:text-red-700"
-                              title="Anular registro"
-                              aria-label={`Anular registro del ${r.mealDate}`}
-                            >
-                              <Trash2 className="h-3 w-3" />
-                            </button>
-                          </li>
-                        );
-                      })}
-                    </ul>
+                          </div>
+                          <p className="shrink-0 text-sm font-black text-zinc-900">{money(row.totalEur)}</p>
+                        </li>
+                      ))}
+                    </ol>
                   )}
+                </section>
+
+                <section className="rounded-2xl bg-white p-4 ring-1 ring-zinc-200">
+                  <p className="text-sm font-bold text-zinc-800">Evolución 14 días (€)</p>
+                  <div className="mt-2 h-56">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={last14DaysChart} margin={{ top: 8, right: 8, left: -16, bottom: 8 }}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="day" tick={{ fontSize: 10 }} />
+                        <YAxis tick={{ fontSize: 10 }} />
+                        <Tooltip formatter={(value) => money(Number(value ?? 0))} />
+                        <Bar dataKey="total" fill="#D32F2F" radius={[6, 6, 0, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </section>
+
+                <div className="rounded-xl border border-zinc-200/90 bg-zinc-50/60 p-2 ring-1 ring-zinc-100">
+                  <button
+                    type="button"
+                    onClick={() => setRecentRecordsOpen((o) => !o)}
+                    aria-expanded={recentRecordsOpen}
+                    className="flex w-full items-center justify-between gap-2 rounded-lg px-2 py-2 text-left outline-none focus-visible:ring-2 focus-visible:ring-[#D32F2F]/30"
+                  >
+                    <span className="text-[11px] font-medium text-zinc-500">
+                      Anular registros
+                      <span className="font-normal text-zinc-400"> · {recentActiveRecords.length} activos</span>
+                    </span>
+                    <ChevronDown
+                      className={`h-4 w-4 shrink-0 text-zinc-400 transition-transform ${recentRecordsOpen ? 'rotate-180' : ''}`}
+                      aria-hidden
+                    />
+                  </button>
+                  {recentRecordsOpen ? (
+                    <div className="mt-1 border-t border-zinc-200/80 pt-2">
+                      <p className="px-1 pb-1 text-[10px] leading-snug text-zinc-400">
+                        Confirma la anulación; el registro deja de contar en totales e informes.
+                      </p>
+                      {recentActiveRecords.length === 0 ? (
+                        <p className="px-1 py-2 text-xs text-zinc-400">Sin registros en el periodo cargado.</p>
+                      ) : (
+                        <ul className="max-h-52 divide-y divide-zinc-200/90 overflow-y-auto rounded-md border border-zinc-200/80 bg-white/80">
+                          {recentActiveRecords.map((r) => {
+                            const title =
+                              r.sourceProductName?.trim() ||
+                              (r.workerName ? `${SERVICE_LABEL[r.service]} · ${r.workerName}` : SERVICE_LABEL[r.service]);
+                            const sub =
+                              r.sourceProductName && r.workerName
+                                ? `${SERVICE_LABEL[r.service]} · ${r.workerName}`
+                                : r.notes.trim() || null;
+                            const dateLabel = (() => {
+                              try {
+                                return new Date(`${r.mealDate}T12:00:00`).toLocaleDateString('es-ES', {
+                                  day: '2-digit',
+                                  month: 'short',
+                                });
+                              } catch {
+                                return r.mealDate;
+                              }
+                            })();
+                            return (
+                              <li key={r.id} className="flex items-center gap-2 px-2 py-1.5">
+                                <div className="min-w-0 flex-1">
+                                  <p className="truncate text-[11px] font-semibold text-zinc-900">{title}</p>
+                                  <p className="truncate text-[10px] text-zinc-500">
+                                    {dateLabel}
+                                    {sub ? ` · ${sub}` : ''}
+                                  </p>
+                                </div>
+                                <span className="shrink-0 text-[11px] font-bold tabular-nums text-zinc-800">
+                                  {money(r.totalCostEur)}
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => void voidOneRecord(r)}
+                                  className="grid h-7 w-7 shrink-0 place-items-center rounded-md border border-zinc-200 bg-white text-zinc-500 hover:border-red-200 hover:bg-red-50 hover:text-red-700"
+                                  title="Anular registro"
+                                  aria-label={`Anular registro del ${r.mealDate}`}
+                                >
+                                  <Trash2 className="h-3 w-3" />
+                                </button>
+                              </li>
+                            );
+                          })}
+                        </ul>
+                      )}
+                    </div>
+                  ) : null}
                 </div>
-              ) : null}
-            </div>
+              </>
+            ) : null}
           </div>
         )}
       </section>
