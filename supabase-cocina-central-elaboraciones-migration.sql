@@ -6,6 +6,50 @@
 -- =============================================================================
 
 -- ---------------------------------------------------------------------------
+-- 0) Bootstrap mínimo de tablas base (por si no se ejecutó catalog-locales)
+-- ---------------------------------------------------------------------------
+create table if not exists public.central_inventory_products (
+  id uuid primary key default gen_random_uuid(),
+  local_central_id uuid not null references public.locals(id) on delete cascade,
+  nombre text not null,
+  unidad_base text not null check (unidad_base in ('kg', 'litros', 'unidades')),
+  activo boolean not null default true,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists idx_central_inventory_products_local
+  on public.central_inventory_products (local_central_id, nombre);
+
+drop trigger if exists trg_central_inventory_products_u on public.central_inventory_products;
+create trigger trg_central_inventory_products_u
+before update on public.central_inventory_products
+for each row execute procedure public.set_updated_at();
+
+create table if not exists public.central_catalog_products (
+  id uuid primary key default gen_random_uuid(),
+  local_central_id uuid not null references public.locals(id) on delete cascade,
+  nombre_producto text not null,
+  descripcion text,
+  precio_venta numeric(14,4) not null default 0 check (precio_venta >= 0),
+  unidad_venta text not null default 'ud.',
+  activo boolean not null default true,
+  visible_para_locales boolean not null default true,
+  orden integer not null default 0,
+  inventory_product_id uuid references public.central_inventory_products(id) on delete set null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists idx_central_catalog_products_local_order
+  on public.central_catalog_products (local_central_id, orden, nombre_producto);
+
+drop trigger if exists trg_central_catalog_products_u on public.central_catalog_products;
+create trigger trg_central_catalog_products_u
+before update on public.central_catalog_products
+for each row execute procedure public.set_updated_at();
+
+-- ---------------------------------------------------------------------------
 -- 1) Entidad de elaboraciones internas
 -- ---------------------------------------------------------------------------
 create table if not exists public.central_preparations (
@@ -172,25 +216,27 @@ set ingredient_preparation_id = cp.id
 from public.production_batches pb
 join public.central_preparations cp
   on cp.local_central_id = pb.local_central_id
- and cp.legacy_product_id = bit.ingredient_product_id
 where bit.batch_id = pb.id
   and bit.ingredient_preparation_id is null
-  and bit.ingredient_product_id is not null;
+  and bit.ingredient_product_id is not null
+  and cp.legacy_product_id = bit.ingredient_product_id;
 
 update public.delivery_items di
 set preparation_id = cp.id
 from public.deliveries d
 join public.central_preparations cp
   on cp.local_central_id = d.local_origen_id
- and cp.legacy_product_id = di.product_id
 where di.delivery_id = d.id
   and di.preparation_id is null
-  and di.product_id is not null;
+  and di.product_id is not null
+  and cp.legacy_product_id = di.product_id;
 
 -- ---------------------------------------------------------------------------
 -- 4) RPC v2: registrar lote por elaboración (mantiene lógica stock/movimientos)
 -- ---------------------------------------------------------------------------
-create or replace function public.cc_register_production_batch_v2(
+drop function if exists public.cc_register_production_batch_v2(uuid, uuid, uuid, date, date, numeric, text, jsonb);
+
+create function public.cc_register_production_batch_v2(
   p_order_id uuid,
   p_preparation_id uuid,
   p_local_central_id uuid,
@@ -204,12 +250,12 @@ returns uuid
 language plpgsql
 security definer
 set search_path = public
-as $$
+as $fn$
 declare
   v_uid uuid := auth.uid();
   v_batch_id uuid;
   v_code text;
-  v_product_id uuid;
+  v_legacy_product_id uuid;
 begin
   if v_uid is null then raise exception 'No autenticado'; end if;
   if not public.profile_can_access_cocina_central_module() then
@@ -229,7 +275,7 @@ begin
   end if;
 
   select cp.legacy_product_id
-    into v_product_id
+    into v_legacy_product_id
   from public.central_preparations cp
   where cp.id = p_preparation_id
     and cp.local_central_id = p_local_central_id
@@ -245,7 +291,7 @@ begin
     production_order_id, product_id, preparation_id, local_central_id, codigo_lote,
     fecha_elaboracion, fecha_caducidad, cantidad_producida, unidad, estado
   ) values (
-    p_order_id, v_product_id, p_preparation_id, p_local_central_id, v_code,
+    p_order_id, v_legacy_product_id, p_preparation_id, p_local_central_id, v_code,
     p_fecha_elaboracion, p_fecha_caducidad, p_cantidad, p_unidad, 'disponible'
   )
   returning id into v_batch_id;
@@ -284,7 +330,7 @@ begin
 
   return v_batch_id;
 end;
-$$;
+$fn$;
 
 revoke all on function public.cc_register_production_batch_v2(uuid, uuid, uuid, date, date, numeric, text, jsonb) from public;
 grant execute on function public.cc_register_production_batch_v2(uuid, uuid, uuid, date, date, numeric, text, jsonb) to authenticated;
