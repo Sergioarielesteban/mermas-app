@@ -134,39 +134,50 @@ export default function SuperadminLocalesPage() {
       const current = stateByLocal[item.localId];
       if (!current) return;
       patchLocalState(item.localId, { saving: true, message: null });
-      const token = await readAccessToken();
-      if (!token) {
-        patchLocalState(item.localId, { saving: false, message: 'Token no disponible.' });
-        return;
-      }
-      const res = await fetch(`/api/superadmin/locals/${encodeURIComponent(item.localId)}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ planCode: current.planCode, status: current.status }),
-      });
-      const payload = (await res.json().catch(() => ({}))) as {
-        ok?: boolean;
-        error?: string;
-        subscription?: { planCode?: PlanCode; status?: SubscriptionStatus };
-      };
-      if (!res.ok || payload.ok !== true) {
+      try {
+        const token = await readAccessToken();
+        if (!token) {
+          patchLocalState(item.localId, { saving: false, message: 'Token no disponible.' });
+          return;
+        }
+        const res = await fetch(`/api/superadmin/locals/${encodeURIComponent(item.localId)}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ planCode: current.planCode, status: current.status }),
+        });
+        const payload = (await res.json().catch(() => ({}))) as {
+          ok?: boolean;
+          error?: string;
+          detail?: string;
+          subscription?: { planCode?: PlanCode; status?: SubscriptionStatus };
+        };
+        if (!res.ok || payload.ok !== true) {
+          patchLocalState(item.localId, {
+            saving: false,
+            message:
+              payload.detail ??
+              payload.error ??
+              'No se pudo guardar la suscripción del local.',
+          });
+          return;
+        }
+        const nextPlan = payload.subscription?.planCode ?? current.planCode;
+        const nextStatus = payload.subscription?.status ?? current.status;
+        patchLocalState(item.localId, {
+          planCode: nextPlan,
+          status: nextStatus,
+          saving: false,
+          message: 'Cambios guardados.',
+        });
+        setLocals((prev) =>
+          prev.map((x) => (x.localId === item.localId ? { ...x, planCode: nextPlan, status: nextStatus } : x)),
+        );
+      } catch (error) {
         patchLocalState(item.localId, {
           saving: false,
-          message: payload.error ?? 'No se pudo guardar.',
+          message: error instanceof Error ? error.message : 'No se pudo guardar la suscripción del local.',
         });
-        return;
       }
-      const nextPlan = payload.subscription?.planCode ?? current.planCode;
-      const nextStatus = payload.subscription?.status ?? current.status;
-      patchLocalState(item.localId, {
-        planCode: nextPlan,
-        status: nextStatus,
-        saving: false,
-        message: 'Cambios guardados.',
-      });
-      setLocals((prev) =>
-        prev.map((x) => (x.localId === item.localId ? { ...x, planCode: nextPlan, status: nextStatus } : x)),
-      );
     },
     [patchLocalState, readAccessToken, stateByLocal],
   );
