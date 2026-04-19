@@ -10,7 +10,6 @@ create table if not exists public.subscriptions (
   plan_code text not null default 'OPERATIVO',
   provider text not null default 'manual',
   status text not null default 'active',
-  max_users integer not null default 5,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   expires_at timestamptz null
@@ -62,16 +61,10 @@ set status = 'inactive'
 where status is null
    or status not in ('active', 'inactive', 'canceled');
 
-update public.subscriptions
-set max_users = 5
-where max_users is null or max_users <= 0;
-
 alter table public.subscriptions
   alter column plan_code set not null,
   alter column provider set not null,
   alter column status set not null,
-  alter column max_users set not null,
-  alter column max_users set default 5,
   alter column updated_at set not null;
 
 alter table public.subscriptions

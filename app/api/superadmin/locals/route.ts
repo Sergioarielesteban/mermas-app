@@ -241,7 +241,6 @@ export async function POST(request: Request) {
           plan_code: planCode,
           status,
           provider: 'manual',
-          max_users: 5,
         },
       ],
     );

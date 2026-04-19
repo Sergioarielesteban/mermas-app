@@ -12,6 +12,7 @@ import {
 import { jsonGenericError, logCriticalAndGeneric } from '@/lib/server/api-safe';
 import { readJsonBodyLimitedEx } from '@/lib/server/read-json-limited';
 import { parseProfileAppRole, type ProfileAppRole } from '@/lib/profile-app-role';
+import { DEFAULT_MAX_USERS } from '@/lib/planPermissions';
 
 const MAX_BODY_BYTES = 32 * 1024;
 const MIN_PASSWORD_LEN = 8;
@@ -50,12 +51,8 @@ function isRoleOperational(role: ProfileAppRole): boolean {
 }
 
 async function readMaxUsersForLocal(localId: string): Promise<number> {
-  const rows = await adminRestGet<Array<{ max_users?: number | null }>>(
-    `subscriptions?local_id=eq.${encodeURIComponent(localId)}&status=eq.active&select=max_users&order=updated_at.desc&limit=1`,
-  );
-  const max = rows[0]?.max_users;
-  if (typeof max === 'number' && Number.isFinite(max) && max > 0) return Math.floor(max);
-  return 5;
+  void localId;
+  return DEFAULT_MAX_USERS;
 }
 
 async function countOperationalUsers(localId: string): Promise<number> {

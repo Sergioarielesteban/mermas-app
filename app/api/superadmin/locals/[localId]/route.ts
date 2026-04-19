@@ -18,7 +18,6 @@ type SubscriptionRow = {
   plan_code?: string | null;
   provider?: string | null;
   status?: string | null;
-  max_users?: number | null;
   created_at?: string | null;
   updated_at?: string | null;
 };
@@ -40,13 +39,13 @@ async function upsertSubscriptionByLocal(input: {
 }): Promise<{ row: SubscriptionRow | null; updatedAt: string }> {
   const nowIso = new Date().toISOString();
   const rows = await adminRestGet<SubscriptionRow[]>(
-    `subscriptions?local_id=eq.${encodeURIComponent(input.localId)}&select=id,local_id,plan_code,provider,status,max_users,created_at,updated_at&order=updated_at.desc.nullslast&order=created_at.desc.nullslast&limit=1`,
+    `subscriptions?local_id=eq.${encodeURIComponent(input.localId)}&select=id,local_id,plan_code,provider,status,created_at,updated_at&order=updated_at.desc.nullslast&order=created_at.desc.nullslast&limit=1`,
   );
   const existing = rows[0];
 
   if (existing?.id) {
     const patched = await adminRestPatch<SubscriptionRow[]>(
-      `subscriptions?id=eq.${encodeURIComponent(String(existing.id))}&select=id,local_id,plan_code,provider,status,max_users,created_at,updated_at`,
+      `subscriptions?id=eq.${encodeURIComponent(String(existing.id))}&select=id,local_id,plan_code,provider,status,created_at,updated_at`,
       {
         plan_code: input.planCode,
         status: input.status,
@@ -58,14 +57,13 @@ async function upsertSubscriptionByLocal(input: {
   }
 
   const created = await adminRestPostJson<SubscriptionRow[]>(
-    'subscriptions?select=id,local_id,plan_code,provider,status,max_users,created_at,updated_at',
+    'subscriptions?select=id,local_id,plan_code,provider,status,created_at,updated_at',
     [
       {
         local_id: input.localId,
         plan_code: input.planCode,
         status: input.status,
         provider: 'manual',
-        max_users: 5,
         created_at: nowIso,
         updated_at: nowIso,
       },

@@ -276,7 +276,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
       const next = {
         plan: subscription.planCode,
-        maxUsers: subscription.maxUsers,
+        maxUsers: DEFAULT_MAX_USERS,
         subscriptionStatus: subscription.status,
         subscriptionProvider: subscription.provider,
       };
@@ -768,9 +768,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           return { ok: false, reason: 'Supabase no está disponible para cambiar el plan.' };
         }
         try {
-          const updated = await upsertManualSubscriptionPlan(supabase, localId, nextPlan, maxUsers);
+          const updated = await upsertManualSubscriptionPlan(supabase, localId, nextPlan);
           setPlan(updated.planCode);
-          setMaxUsers(updated.maxUsers);
+          setMaxUsers(DEFAULT_MAX_USERS);
           setSubscriptionStatus(updated.status);
           setSubscriptionProvider(updated.provider);
           persistProfileCache({
@@ -779,7 +779,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             localName,
             isCentralKitchen,
             plan: updated.planCode,
-            maxUsers: updated.maxUsers,
+            maxUsers: DEFAULT_MAX_USERS,
             subscriptionStatus: updated.status,
             subscriptionProvider: updated.provider,
             displayName,

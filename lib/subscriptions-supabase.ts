@@ -10,7 +10,6 @@ export type LocalSubscription = {
   planCode: PlanCode;
   provider: SubscriptionProvider;
   status: SubscriptionStatus;
-  maxUsers: number;
   createdAt: string;
   updatedAt: string;
   expiresAt: string | null;
@@ -39,10 +38,6 @@ function mapSubscriptionRow(row: Record<string, unknown>): LocalSubscription {
     planCode: normalizePlan(typeof row.plan_code === 'string' ? row.plan_code : null),
     provider: normalizeProvider(typeof row.provider === 'string' ? row.provider : null),
     status: normalizeStatus(typeof row.status === 'string' ? row.status : null),
-    maxUsers:
-      typeof row.max_users === 'number' && Number.isFinite(row.max_users) && row.max_users > 0
-        ? Math.floor(row.max_users)
-        : 5,
     createdAt: String(row.created_at ?? ''),
     updatedAt: String(row.updated_at ?? ''),
     expiresAt: typeof row.expires_at === 'string' ? row.expires_at : null,
@@ -55,7 +50,7 @@ export async function fetchActiveSubscriptionByLocal(
 ): Promise<LocalSubscription | null> {
   const { data, error } = await supabase
     .from('subscriptions')
-    .select('id, local_id, plan_code, provider, status, max_users, created_at, updated_at, expires_at')
+    .select('id, local_id, plan_code, provider, status, created_at, updated_at, expires_at')
     .eq('local_id', localId)
     .eq('status', 'active')
     .order('updated_at', { ascending: false })
@@ -71,7 +66,6 @@ export async function upsertManualSubscriptionPlan(
   supabase: SupabaseClient,
   localId: string,
   nextPlan: PlanCode,
-  maxUsers: number,
 ): Promise<LocalSubscription> {
   const active = await fetchActiveSubscriptionByLocal(supabase, localId);
   if (active) {
@@ -81,11 +75,10 @@ export async function upsertManualSubscriptionPlan(
         plan_code: nextPlan,
         provider: 'manual',
         status: 'active',
-        max_users: maxUsers > 0 ? Math.floor(maxUsers) : 5,
         updated_at: new Date().toISOString(),
       })
       .eq('id', active.id)
-      .select('id, local_id, plan_code, provider, status, max_users, created_at, updated_at, expires_at')
+      .select('id, local_id, plan_code, provider, status, created_at, updated_at, expires_at')
       .single();
     if (error || !data) throw new Error(error?.message ?? 'No se pudo actualizar la suscripción');
     return mapSubscriptionRow(data as Record<string, unknown>);
@@ -98,9 +91,8 @@ export async function upsertManualSubscriptionPlan(
       plan_code: nextPlan,
       provider: 'manual',
       status: 'active',
-      max_users: maxUsers > 0 ? Math.floor(maxUsers) : 5,
     })
-    .select('id, local_id, plan_code, provider, status, max_users, created_at, updated_at, expires_at')
+    .select('id, local_id, plan_code, provider, status, created_at, updated_at, expires_at')
     .single();
   if (error || !data) throw new Error(error?.message ?? 'No se pudo crear la suscripción');
   return mapSubscriptionRow(data as Record<string, unknown>);
