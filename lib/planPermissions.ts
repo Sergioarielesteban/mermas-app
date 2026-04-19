@@ -19,13 +19,14 @@ export const PLAN_MODULES = {
 
 export type PlanCode = keyof typeof PLAN_MODULES;
 export type PlanModule = (typeof PLAN_MODULES)[PlanCode][number];
+export const PLAN_MODULES_BY_PLAN: Record<PlanCode, readonly PlanModule[]> = PLAN_MODULES;
 
 export const DEFAULT_PLAN: PlanCode = 'OPERATIVO';
 export const DEFAULT_MAX_USERS = 5;
 
 export function getRequiredPlanForModule(module: PlanModule): PlanCode {
-  if (PLAN_MODULES.OPERATIVO.includes(module)) return 'OPERATIVO';
-  if (PLAN_MODULES.CONTROL.includes(module)) return 'CONTROL';
+  if (PLAN_MODULES_BY_PLAN.OPERATIVO.includes(module)) return 'OPERATIVO';
+  if (PLAN_MODULES_BY_PLAN.CONTROL.includes(module)) return 'CONTROL';
   return 'PRO';
 }
 
