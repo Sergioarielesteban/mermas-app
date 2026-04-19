@@ -57,6 +57,7 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 const AUTH_KEY = 'mermas_user_email';
 const PROFILE_CACHE_KEY = 'chef_one_profile_cache_v4';
 const PROFILE_TIMEOUT_MS = 6000;
+const FALLBACK_PLAN: PlanCode = 'PRO';
 /**
  * Si getSession tarda (Wi‑Fi cocina, móvil al volver de suspensión), no enviar al login:
  * rellenar email desde localStorage y perfil en caché para desbloquear la UI.
@@ -198,14 +199,40 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     subscriptionStatus: SubscriptionStatus;
     subscriptionProvider: SubscriptionProvider;
   }> => {
-    const supabase = getSupabaseClient();
-    if (!supabase || !isSupabaseEnabled()) {
-      const fallback = {
-        plan: DEFAULT_PLAN,
+    const resolveFallbackPlan = (cause: 'supabase_unavailable' | 'no_subscription' | 'query_error') => {
+      const isDev = process.env.NODE_ENV !== 'production';
+      if (cause === 'no_subscription' || cause === 'query_error') return FALLBACK_PLAN;
+      return isDev ? FALLBACK_PLAN : DEFAULT_PLAN;
+    };
+    const buildFallbackState = (
+      cause: 'supabase_unavailable' | 'no_subscription' | 'query_error',
+      errorMessage?: string,
+    ) => {
+      const fallbackPlan = resolveFallbackPlan(cause);
+      if (cause === 'no_subscription') {
+        console.warn(
+          `[plans] No hay suscripción activa para local=${localId}. Usando fallback plan=${fallbackPlan}.`,
+        );
+      } else if (cause === 'query_error') {
+        console.warn(
+          `[plans] Falló lectura de subscriptions para local=${localId}: ${errorMessage ?? 'error desconocido'}. Usando fallback plan=${fallbackPlan}.`,
+        );
+      } else {
+        console.warn(
+          `[plans] Supabase no disponible para local=${localId}. Usando fallback plan=${fallbackPlan}.`,
+        );
+      }
+      return {
+        plan: fallbackPlan,
         maxUsers: DEFAULT_MAX_USERS,
         subscriptionStatus: 'inactive' as SubscriptionStatus,
         subscriptionProvider: 'manual' as SubscriptionProvider,
       };
+    };
+
+    const supabase = getSupabaseClient();
+    if (!supabase || !isSupabaseEnabled()) {
+      const fallback = buildFallbackState('supabase_unavailable');
       setPlan(fallback.plan);
       setMaxUsers(fallback.maxUsers);
       setSubscriptionStatus(fallback.subscriptionStatus);
@@ -215,12 +242,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const subscription = await withTimeout(Promise.resolve(fetchActiveSubscriptionByLocal(supabase, localId)), PROFILE_TIMEOUT_MS);
       if (!subscription) {
-        const next = {
-          plan: DEFAULT_PLAN,
-          maxUsers: DEFAULT_MAX_USERS,
-          subscriptionStatus: 'inactive' as SubscriptionStatus,
-          subscriptionProvider: 'manual' as SubscriptionProvider,
-        };
+        const next = buildFallbackState('no_subscription');
         setPlan(next.plan);
         setMaxUsers(next.maxUsers);
         setSubscriptionStatus(next.subscriptionStatus);
@@ -238,13 +260,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setSubscriptionStatus(next.subscriptionStatus);
       setSubscriptionProvider(next.subscriptionProvider);
       return next;
-    } catch {
-      const next = {
-        plan: DEFAULT_PLAN,
-        maxUsers: DEFAULT_MAX_USERS,
-        subscriptionStatus: 'inactive' as SubscriptionStatus,
-        subscriptionProvider: 'manual' as SubscriptionProvider,
-      };
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'error desconocido';
+      const next = buildFallbackState('query_error', message);
       setPlan(next.plan);
       setMaxUsers(next.maxUsers);
       setSubscriptionStatus(next.subscriptionStatus);

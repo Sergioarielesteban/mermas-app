@@ -27,7 +27,12 @@ const ROLE_MODULES: Record<ProfileAppRole, readonly PlanModule[]> = {
   staff: ['mermas', 'appcc', 'checklist', 'chat', 'produccion', 'personal'],
 };
 
+function isAdminRole(role: ProfileAppRole | null | undefined): boolean {
+  return role === 'admin';
+}
+
 export function canRoleAccessModule(role: ProfileAppRole | null | undefined, module: PlanModule): boolean {
+  if (isAdminRole(role)) return true;
   if (!role) return false;
   return ROLE_MODULES[role].includes(module);
 }
@@ -38,6 +43,7 @@ export function canPlanAccessModule(plan: PlanCode | null | undefined, module: P
 }
 
 export function getModuleAccess(user: ModuleAccessUser, module: PlanModule): ModuleAccessResult {
+  if (isAdminRole(user.role)) return { allowed: true, blockedBy: null };
   const roleOk = canRoleAccessModule(user.role, module);
   if (!roleOk) return { allowed: false, blockedBy: 'role' };
   const planOk = canPlanAccessModule(user.plan, module);
@@ -57,6 +63,7 @@ export function canAccessModule(
   module: PlanModule,
 ): boolean {
   if (typeof planOrUser === 'object' && planOrUser !== null && 'plan' in planOrUser) {
+    if (isAdminRole(planOrUser.role)) return true;
     return getModuleAccess(planOrUser, module).allowed;
   }
   return canPlanAccessModule(planOrUser, module);
