@@ -21,7 +21,7 @@ export type CreateNotificationInput = {
 export type NotificationRow = {
   id: string;
   localId: string;
-  type: string;
+  type: NotificationType;
   severity: NotificationSeverity;
   title: string;
   message: string;
