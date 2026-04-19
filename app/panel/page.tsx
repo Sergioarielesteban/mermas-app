@@ -90,8 +90,9 @@ function HubTile({ href, onClick, label, sub, Icon, tone = 'zinc', blocked = fal
   ].join(' ');
 
   if (href) {
+    const targetHref = blocked ? '/planes' : href;
     return (
-      <Link href={href} className={className}>
+      <Link href={targetHref} className={className}>
         {inner}
       </Link>
     );

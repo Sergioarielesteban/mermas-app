@@ -3,7 +3,6 @@
 import { usePathname, useRouter } from 'next/navigation';
 import React, { useEffect, useMemo } from 'react';
 import { useAuth } from '@/components/AuthProvider';
-import BlockedModule from '@/components/BlockedModule';
 import { getModuleAccess } from '@/lib/canAccessModule';
 import { logAccessBlocked } from '@/lib/moduleAccessControl';
 import { isPotentiallyPlanGatedPath, moduleForPath } from '@/lib/planPermissions';
@@ -53,7 +52,8 @@ export default function RoleRouteGate({ children }: { children: React.ReactNode 
       cause: 'plan',
       path: pathname,
     });
-  }, [profileReady, moduleAccess, userId, profileRole, plan, pathname]);
+    router.replace('/planes');
+  }, [profileReady, moduleAccess, userId, profileRole, plan, pathname, router]);
 
   if (!profileReady && (isPotentiallyRoleGatedPath(pathname) || isPotentiallyPlanGatedPath(pathname))) {
     return (
@@ -63,16 +63,7 @@ export default function RoleRouteGate({ children }: { children: React.ReactNode 
     );
   }
   if (!profileReady) return <>{children}</>;
-  if (roleBlocked || moduleAccess?.blockedBy === 'role') {
-    return (
-      <div className="mx-auto max-w-md px-4 py-10 text-center">
-        <p className="text-sm font-semibold text-zinc-800">Este módulo no está disponible para tu rol.</p>
-        <p className="mt-2 text-xs text-zinc-600">Redirigiendo al panel…</p>
-      </div>
-    );
-  }
-  if (moduleAccess?.blockedBy === 'plan') {
-    return <BlockedModule module={moduleAccess.module} />;
-  }
+  if (roleBlocked || moduleAccess?.blockedBy === 'role') return null;
+  if (moduleAccess?.blockedBy === 'plan') return null;
   return <>{children}</>;
 }

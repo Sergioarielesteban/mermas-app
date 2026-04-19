@@ -422,11 +422,12 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                           : entry.href === '/cocina-central'
                             ? pathname === '/cocina-central' || pathname?.startsWith('/cocina-central/')
                             : pathname === entry.href || pathname?.startsWith(`${entry.href}/`);
+            const targetHref = entry.blocked ? '/planes' : entry.href;
 
             return (
               <Link
                 key={entry.href}
-                href={entry.href}
+                href={targetHref}
                 onClick={() => setOpen(false)}
                 className={[
                   'flex w-full items-center gap-3 rounded-xl px-3 py-3 text-sm font-semibold transition-all',
