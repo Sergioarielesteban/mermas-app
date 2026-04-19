@@ -140,6 +140,22 @@ export default function NuevoPedidoPage() {
     }
   }, [localId]);
 
+  const resetPedidoFormAfterSuccess = React.useCallback(() => {
+    clearBasketDraft();
+    setNotes('');
+    setQtyByProductId({});
+    setSearch('');
+    setDeliveryDate('');
+    setRequestedBy('');
+    setMessage(null);
+    setExistingOrderId(null);
+    setExistingCreatedAt(null);
+    setExistingSentAt(null);
+    setExistingOrderUpdatedAt(null);
+    setIsLoadedEdit(false);
+    setSupplierId((sid) => suppliers[0]?.id ?? sid);
+  }, [clearBasketDraft, suppliers]);
+
   const reloadSuppliers = React.useCallback(() => {
     if (!canUse || !localId) return;
     if (isDemoMode()) {
@@ -335,10 +351,11 @@ export default function NuevoPedidoPage() {
   const adjustQty = (productId: string, unit: PedidoOrderItem['unit'], delta: number) => {
     setQtyByProductId((prev) => {
       const current = prev[productId] ?? 0;
-      const step = unit === 'kg' ? 0.01 : 1;
+      const u = String(unit).toLowerCase();
+      const step = 1;
       const raw = current + delta * step;
       const next =
-        unit === 'kg' ? Math.max(0, Math.round(raw * 100) / 100) : Math.max(0, Math.floor(raw));
+        u === 'kg' ? Math.max(0, Math.round(raw * 100) / 100) : Math.max(0, Math.floor(raw));
       return { ...prev, [productId]: next };
     });
   };
@@ -402,7 +419,7 @@ export default function NuevoPedidoPage() {
         })),
         total: lineTotalSum,
       };
-      clearBasketDraft();
+      resetPedidoFormAfterSuccess();
       upsertOrder(order);
       dispatchPedidosDataChanged();
       router.push('/pedidos');
@@ -436,7 +453,7 @@ export default function NuevoPedidoPage() {
       })),
     })
       .then((orderId) => {
-        clearBasketDraft();
+        resetPedidoFormAfterSuccess();
         void pullNewOrderIntoStore(orderId);
         dispatchPedidosDataChanged();
         router.push('/pedidos');
@@ -475,7 +492,7 @@ export default function NuevoPedidoPage() {
         })),
         total: lineTotalSum,
       };
-      clearBasketDraft();
+      resetPedidoFormAfterSuccess();
       upsertOrder(order);
       dispatchPedidosDataChanged();
       setMessage('Demo: pedido guardado como enviado (no se abre WhatsApp).');
@@ -524,7 +541,7 @@ export default function NuevoPedidoPage() {
             orderId,
           });
         }
-        clearBasketDraft();
+        resetPedidoFormAfterSuccess();
         void pullNewOrderIntoStore(orderId);
         const text = encodeURIComponent(
           buildWhatsappDraftMessage({
@@ -743,7 +760,7 @@ export default function NuevoPedidoPage() {
             type="button"
             onClick={() => {
               if (!window.confirm('¿Cancelar pedido y vaciar cesta?')) return;
-              clearBasketDraft();
+              resetPedidoFormAfterSuccess();
               router.push('/pedidos');
             }}
             className="h-11 rounded-xl border border-zinc-300 bg-white text-sm font-bold text-zinc-700"

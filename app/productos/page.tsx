@@ -3,10 +3,12 @@
 import React, { useState } from 'react';
 import { Pencil, Plus, Search, Trash2, X } from 'lucide-react';
 import { useMermasStore } from '@/components/MermasStoreProvider';
-import { requestDeleteSecurityPin } from '@/lib/delete-security';
+import { useAuth } from '@/components/AuthProvider';
+import { confirmDestructiveOperation } from '@/lib/ops-role-confirm';
 import type { Unit } from '@/lib/types';
 
 export default function ProductosPage() {
+  const { profileRole } = useAuth();
   const { products, addProduct, updateProduct, removeProduct } = useMermasStore();
   const [open, setOpen] = useState(false);
   const [name, setName] = useState('');
@@ -120,8 +122,7 @@ export default function ProductosPage() {
                   onClick={async () => {
                     const confirmed = window.confirm(`¿Eliminar "${p.name}"?`);
                     if (!confirmed) return;
-                    if (!(await requestDeleteSecurityPin())) {
-                      setMessage('Clave de seguridad incorrecta.');
+                    if (!(await confirmDestructiveOperation(profileRole, '¿Confirmar eliminación de este producto?'))) {
                       return;
                     }
                     const result = removeProduct(p.id);

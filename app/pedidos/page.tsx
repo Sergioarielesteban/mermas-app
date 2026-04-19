@@ -69,7 +69,7 @@ import {
 import { fetchAppccFryers, fetchOilEventsForDate } from '@/lib/appcc-aceite-supabase';
 import { topByValue } from '@/lib/analytics';
 import { fetchProductsAndMermas } from '@/lib/mermas-supabase';
-import { requestDeleteSecurityPin } from '@/lib/delete-security';
+import { confirmDestructiveOperation } from '@/lib/ops-role-confirm';
 import {
   actorLabel,
   notifyIncidenciaRecepcionDeduped,
@@ -247,7 +247,7 @@ type AssistantHistoryRow = {
 const ASSISTANT_HISTORY_LS_KEY = 'oido-chef-history-v1';
 
 export default function PedidosPage() {
-  const { localCode, localName, localId, email, userId, displayName, loginUsername } = useAuth();
+  const { localCode, localName, localId, email, userId, displayName, loginUsername, profileRole } = useAuth();
   const hasPedidosEntry = canAccessPedidos(localCode, email, localName, localId);
   const canUse = canUsePedidosModule(localCode, email, localName, localId);
   const {
@@ -2633,8 +2633,7 @@ export default function PedidosPage() {
                 <button
                   type="button"
                   onClick={async () => {
-                    if (!(await requestDeleteSecurityPin())) {
-                      setMessage('Clave de seguridad incorrecta.');
+                    if (!(await confirmDestructiveOperation(profileRole, '¿Confirmar eliminación de este pedido?'))) {
                       return;
                     }
                     if (!localId) return;
@@ -3052,8 +3051,7 @@ export default function PedidosPage() {
                 <button
                   type="button"
                   onClick={async () => {
-                    if (!(await requestDeleteSecurityPin())) {
-                      setMessage('Clave de seguridad incorrecta.');
+                    if (!(await confirmDestructiveOperation(profileRole, '¿Confirmar eliminación de este pedido?'))) {
                       return;
                     }
                     if (!localId) return;

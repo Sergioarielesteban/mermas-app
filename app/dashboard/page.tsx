@@ -4,7 +4,7 @@ import Link from 'next/link';
 import React from 'react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { CalendarDays, Drumstick, FileBarChart2, Lock, TrendingDown, TrendingUp } from 'lucide-react';
+import { CalendarDays, Drumstick, FileBarChart2, TrendingDown, TrendingUp } from 'lucide-react';
 import {
   Bar,
   BarChart,
@@ -18,7 +18,9 @@ import {
 } from 'recharts';
 import MermasRegistrationForm from '@/components/MermasRegistrationForm';
 import MermasStyleHero from '@/components/MermasStyleHero';
+import { useAuth } from '@/components/AuthProvider';
 import { useMermasStore } from '@/components/MermasStoreProvider';
+import { canAccessMermasExecutiveAnalytics } from '@/lib/app-role-permissions';
 import { toBusinessDate } from '@/lib/business-day';
 import {
   anomalyAlerts,
@@ -31,12 +33,9 @@ import {
   totals,
   weekBars,
 } from '@/lib/analytics';
-import { getDeleteSecurityPinNormalized } from '@/lib/delete-security';
-
 const eur = (value: number) => `${Number(value).toFixed(2)} €`;
 const MONTHLY_TARGET_KEY = 'mermas_monthly_target_eur';
 const WEEKLY_TARGET_KEY = 'mermas_weekly_target_eur';
-const MERMAS_ANALYTICS_UNLOCK_SESSION_KEY = 'mermas_dashboard_analytics_unlock_v1';
 const qty = (value: number) =>
   Number(value).toLocaleString('es-ES', {
     minimumFractionDigits: 0,
@@ -250,6 +249,8 @@ function MermaObjectiveSlider({
 }
 
 export default function DashboardPage() {
+  const { profileRole } = useAuth();
+  const showExecutive = canAccessMermasExecutiveAnalytics(profileRole);
   const { products, mermas } = useMermasStore();
   const t = totals(mermas);
   const dataWeek = weekBars(mermas);
@@ -269,20 +270,6 @@ export default function DashboardPage() {
   const [detailOpen, setDetailOpen] = React.useState(false);
   const [detailTitle, setDetailTitle] = React.useState('');
   const [detailRows, setDetailRows] = React.useState<Array<{ id: string; occurredAt: string; productName: string; quantity: number; costEur: number; motiveKey: string; notes?: string }>>([]);
-  const [mermasAnalyticsUnlocked, setMermasAnalyticsUnlocked] = React.useState(false);
-  const [analyticsPin, setAnalyticsPin] = React.useState('');
-  const [analyticsPinError, setAnalyticsPinError] = React.useState<string | null>(null);
-
-  React.useEffect(() => {
-    try {
-      if (typeof window !== 'undefined' && window.sessionStorage.getItem(MERMAS_ANALYTICS_UNLOCK_SESSION_KEY) === '1') {
-        setMermasAnalyticsUnlocked(true);
-      }
-    } catch {
-      // ignore
-    }
-  }, []);
-
   React.useEffect(() => {
     try {
       localStorage.setItem(MONTHLY_TARGET_KEY, String(monthlyTarget));
@@ -369,43 +356,6 @@ export default function DashboardPage() {
   const monthlyTrendUp = monthlyDelta > 0;
   const monthlyTrendFlat = monthlyDelta === 0;
 
-  const tryUnlockMermasAnalytics = React.useCallback(() => {
-    const entered = analyticsPin.replace(/\D/g, '').slice(0, 4);
-    const expected = getDeleteSecurityPinNormalized();
-    if (expected.length !== 4) {
-      setAnalyticsPinError('No hay clave configurada en este dispositivo. Ve a Cuenta > Seguridad.');
-      return;
-    }
-    if (entered.length < 4) {
-      setAnalyticsPinError('Introduce 4 dígitos.');
-      return;
-    }
-    if (entered === expected) {
-      try {
-        window.sessionStorage.setItem(MERMAS_ANALYTICS_UNLOCK_SESSION_KEY, '1');
-      } catch {
-        // ignore
-      }
-      setMermasAnalyticsUnlocked(true);
-      setAnalyticsPin('');
-      setAnalyticsPinError(null);
-      return;
-    }
-    setAnalyticsPinError('Clave incorrecta.');
-  }, [analyticsPin]);
-
-  const lockMermasAnalytics = React.useCallback(() => {
-    try {
-      window.sessionStorage.removeItem(MERMAS_ANALYTICS_UNLOCK_SESSION_KEY);
-    } catch {
-      // ignore
-    }
-    setMermasAnalyticsUnlocked(false);
-    setAnalyticsPin('');
-    setAnalyticsPinError(null);
-    setDetailOpen(false);
-  }, []);
-
   const exportMonthlyExecutivePdf = () => {
     const doc = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'a4' });
     const monthLabel = monthNow.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' });
@@ -482,9 +432,9 @@ export default function DashboardPage() {
   return (
     <div className="space-y-4">
       {detailOpen ? (
-        <div className="fixed inset-0 z-[95] bg-black/35 p-4" onClick={() => setDetailOpen(false)}>
+        <div className="fixed inset-0 z-[95] overflow-y-auto bg-black/35 p-4" onClick={() => setDetailOpen(false)}>
           <div
-            className="mx-auto mt-8 max-h-[82vh] w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-2xl ring-1 ring-zinc-200"
+            className="mx-auto my-8 max-h-[min(82vh,720px)] w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-2xl ring-1 ring-zinc-200"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between border-b border-zinc-200 px-4 py-3">
@@ -564,57 +514,17 @@ export default function DashboardPage() {
         </Link>
       </section>
 
-      {!mermasAnalyticsUnlocked ? (
-        <section className="rounded-2xl border border-zinc-300/90 bg-gradient-to-br from-zinc-100 via-white to-zinc-50/80 p-4 shadow-md ring-1 ring-zinc-200/90">
-          <div className="flex items-center gap-3">
-            <Lock className="h-5 w-5 shrink-0 text-zinc-800" strokeWidth={2.2} aria-hidden />
-            <h2 className="text-base font-black tracking-tight text-zinc-900">Acceso restringido</h2>
-          </div>
-          <div className="mx-auto mt-4 max-w-xs sm:mx-0">
-            <input
-              type="password"
-              inputMode="numeric"
-              maxLength={4}
-              autoComplete="off"
-              value={analyticsPin}
-              onChange={(e) => {
-                setAnalyticsPin(e.target.value.replace(/\D/g, '').slice(0, 4));
-                setAnalyticsPinError(null);
-              }}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  e.preventDefault();
-                  tryUnlockMermasAnalytics();
-                }
-              }}
-              placeholder="••••"
-              className="h-12 w-full rounded-xl border border-zinc-200 bg-white px-3 text-center text-lg font-bold tracking-[0.35em] text-zinc-900 outline-none focus:border-[#D32F2F] focus:ring-2 focus:ring-[#D32F2F]/20"
-              aria-label="Clave de acceso al panel analítico"
-            />
-            {analyticsPinError ? <p className="mt-2 text-center text-xs font-semibold text-red-600 sm:text-left">{analyticsPinError}</p> : null}
-            <button
-              type="button"
-              onClick={tryUnlockMermasAnalytics}
-              className="mt-3 h-11 w-full rounded-xl bg-[#D32F2F] text-sm font-bold text-white shadow-sm ring-1 ring-red-900/15 transition hover:bg-[#B91C1C]"
-            >
-              Desbloquear panel
-            </button>
-          </div>
+      {!showExecutive ? (
+        <section className="rounded-2xl border border-zinc-200 bg-zinc-50/90 p-4 text-sm text-zinc-700 ring-1 ring-zinc-100">
+          <p className="font-semibold text-zinc-900">Vista analítica ampliada</p>
+          <p className="mt-1 text-xs leading-relaxed text-zinc-600">
+            Gráficas, objetivos y comparativas con impacto económico están disponibles solo para el perfil de administración.
+          </p>
         </section>
       ) : null}
 
-      {mermasAnalyticsUnlocked ? (
+      {showExecutive ? (
         <>
-          <div className="flex justify-end">
-            <button
-              type="button"
-              onClick={lockMermasAnalytics}
-              className="text-xs font-semibold text-zinc-500 underline decoration-zinc-300 underline-offset-2 hover:text-zinc-800"
-            >
-              Volver a bloquear panel
-            </button>
-          </div>
-
       <section className="rounded-2xl bg-white p-3 shadow-sm ring-1 ring-zinc-200">
         <div className="mb-2 flex items-center justify-between">
           <h2 className="text-sm font-extrabold uppercase tracking-wide text-zinc-700">
@@ -999,4 +909,5 @@ export default function DashboardPage() {
     </div>
   );
 }
+
 

@@ -6,7 +6,7 @@ import { ChevronLeft, Plus, Trash2 } from 'lucide-react';
 import MermasStyleHero from '@/components/MermasStyleHero';
 import { useAuth } from '@/components/AuthProvider';
 import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
-import { requestDeleteSecurityPin } from '@/lib/delete-security';
+import { confirmDestructiveOperation } from '@/lib/ops-role-confirm';
 import {
   type AppccCleaningCategoryRow,
   type AppccCleaningTaskRow,
@@ -20,7 +20,7 @@ import {
 } from '@/lib/appcc-limpieza-supabase';
 
 export default function AppccLimpiezaTareasPage() {
-  const { localId, profileReady } = useAuth();
+  const { localId, profileReady, profileRole } = useAuth();
   const [categories, setCategories] = useState<AppccCleaningCategoryRow[]>([]);
   const [tasks, setTasks] = useState<AppccCleaningTaskRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -125,8 +125,7 @@ export default function AppccLimpiezaTareasPage() {
     if (!localId || !supabaseOk) return;
     const n = tasksByCat.get(cat.id)?.length ?? 0;
     if (!window.confirm(`¿Eliminar «${cat.name}»${n ? ` y sus ${n} tareas` : ''}?`)) return;
-    if (!(await requestDeleteSecurityPin())) {
-      setBanner('Clave de seguridad incorrecta.');
+    if (!(await confirmDestructiveOperation(profileRole, '¿Confirmar eliminación de esta categoría?'))) {
       return;
     }
     const supabase = getSupabaseClient()!;
@@ -183,8 +182,7 @@ export default function AppccLimpiezaTareasPage() {
   const handleDeleteTask = async (task: AppccCleaningTaskRow) => {
     if (!localId || !supabaseOk) return;
     if (!window.confirm(`¿Eliminar la tarea «${task.title}» y su historial de marcas?`)) return;
-    if (!(await requestDeleteSecurityPin())) {
-      setBanner('Clave de seguridad incorrecta.');
+    if (!(await confirmDestructiveOperation(profileRole, '¿Confirmar eliminación de esta tarea de limpieza?'))) {
       return;
     }
     const supabase = getSupabaseClient()!;

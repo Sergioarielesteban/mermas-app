@@ -6,7 +6,7 @@ import { ChevronLeft } from 'lucide-react';
 import MermasStyleHero from '@/components/MermasStyleHero';
 import { useAuth } from '@/components/AuthProvider';
 import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
-import { requestDeleteSecurityPin } from '@/lib/delete-security';
+import { confirmDestructiveOperation } from '@/lib/ops-role-confirm';
 import {
   APPCC_UNIT_TYPE_LABEL,
   APPCC_ZONE_LABEL,
@@ -27,7 +27,7 @@ function emptyToNull(raw: string): number | null {
 }
 
 export default function AppccEquiposPage() {
-  const { localId, profileReady } = useAuth();
+  const { localId, profileReady, profileRole } = useAuth();
   const [units, setUnits] = useState<AppccColdUnitRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [banner, setBanner] = useState<string | null>(null);
@@ -182,8 +182,7 @@ export default function AppccEquiposPage() {
     ) {
       return;
     }
-    if (!(await requestDeleteSecurityPin())) {
-      setBanner('Clave de seguridad incorrecta.');
+    if (!(await confirmDestructiveOperation(profileRole, '¿Confirmar eliminación de este equipo?'))) {
       return;
     }
     const supabase = getSupabaseClient();

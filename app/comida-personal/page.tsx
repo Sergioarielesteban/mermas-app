@@ -18,7 +18,7 @@ import {
   type StaffMealService,
   voidStaffMealRecord,
 } from '@/lib/comida-personal-supabase';
-import { requestDeleteSecurityPin } from '@/lib/delete-security';
+import { confirmDestructiveOperation } from '@/lib/ops-role-confirm';
 import { downloadStaffMealReportPdf } from '@/lib/comida-personal-report-pdf';
 import { formatLocalHeaderName } from '@/lib/local-display-name';
 import { getSupabaseClient } from '@/lib/supabase-client';
@@ -59,7 +59,7 @@ function ymFromDate(d: Date) {
 }
 
 export default function ComidaPersonalPage() {
-  const { localId, localName, localCode, displayName, loginUsername, email } = useAuth();
+  const { localId, localName, localCode, displayName, loginUsername, email, profileRole } = useAuth();
   const { products } = useMermasStore();
   const [loading, setLoading] = React.useState(false);
   const [message, setMessage] = React.useState<string | null>(null);
@@ -79,12 +79,7 @@ export default function ComidaPersonalPage() {
   const [notes, setNotes] = React.useState('');
   const [ownMealQty, setOwnMealQty] = React.useState(0);
   const [recentRecordsOpen, setRecentRecordsOpen] = React.useState(false);
-  const [statsUnlocked, setStatsUnlocked] = React.useState(false);
-
-  const unlockStats = React.useCallback(async () => {
-    const ok = await requestDeleteSecurityPin();
-    if (ok) setStatsUnlocked(true);
-  }, []);
+  const showMoneyStats = profileRole === 'admin' || profileRole === 'manager';
 
   const loadData = React.useCallback(async () => {
     if (!localId) return;
@@ -228,8 +223,8 @@ export default function ComidaPersonalPage() {
         `¿Quitar la ficha «${w.name}» de la lista?\n\nLos consumos ya guardados no se borran; solo deja de aparecer como opción.`,
       );
       if (!okConfirm) return;
-      const okPin = await requestDeleteSecurityPin();
-      if (!okPin) return;
+      const okRole = await confirmDestructiveOperation(profileRole, '¿Confirmar quitar esta ficha de la lista?');
+      if (!okRole) return;
       const supabase = getSupabaseClient();
       if (!supabase) return;
       try {
@@ -244,7 +239,7 @@ export default function ComidaPersonalPage() {
         setMessage(err instanceof Error ? err.message : 'No se pudo quitar la ficha.');
       }
     },
-    [localId, workers],
+    [localId, workers, profileRole],
   );
 
   const registerConsumption = React.useCallback(async () => {
@@ -317,8 +312,7 @@ export default function ComidaPersonalPage() {
   const voidOneRecord = React.useCallback(
     async (r: StaffMealRecord) => {
       if (!localId) return;
-      const okPin = await requestDeleteSecurityPin();
-      if (!okPin) return;
+      if (!window.confirm('¿Anular este registro? Dejará de contar en totales e informes.')) return;
       const supabase = getSupabaseClient();
       if (!supabase) return;
       try {
@@ -698,34 +692,17 @@ export default function ComidaPersonalPage() {
           <div className="min-w-0 flex-1">
             <p className="text-sm font-black text-zinc-900">Estadísticas</p>
             <p className="mt-1 text-xs leading-snug text-zinc-600">
-              Importes en €, informe PDF, resúmenes y anular registros. Misma clave de seguridad que otros borrados.
+              Importes en €, informe PDF, resúmenes y anular registros (encargados y administración).
             </p>
           </div>
         </div>
 
-        {!statsUnlocked ? (
-          <button
-            type="button"
-            onClick={() => void unlockStats()}
-            className="mt-4 h-11 w-full rounded-xl bg-zinc-900 text-sm font-bold text-white shadow-sm ring-1 ring-black/10 hover:bg-zinc-800"
-          >
-            Introducir clave para ver estadísticas
-          </button>
+        {!showMoneyStats ? (
+          <p className="mt-4 text-xs leading-snug text-zinc-600">
+            Los totales en euros y el informe PDF los ven encargados y administración. Sigue registrando consumos arriba.
+          </p>
         ) : (
           <div className="mt-4 space-y-4 border-t border-zinc-200/80 pt-4">
-            <div className="flex justify-end">
-              <button
-                type="button"
-                onClick={() => {
-                  setStatsUnlocked(false);
-                  setRecentRecordsOpen(false);
-                }}
-                className="text-xs font-bold text-zinc-500 underline decoration-zinc-300 underline-offset-2 hover:text-zinc-800"
-              >
-                Ocultar estadísticas
-              </button>
-            </div>
-
             <section className="rounded-2xl bg-white p-4 ring-1 ring-zinc-200">
               <p className="text-center text-sm font-bold text-zinc-800">Informe mensual</p>
               <div className="mt-3 flex flex-col items-center">
@@ -849,7 +826,7 @@ export default function ComidaPersonalPage() {
               {recentRecordsOpen ? (
                 <div className="mt-1 border-t border-zinc-200/80 pt-2">
                   <p className="px-1 pb-1 text-[10px] leading-snug text-zinc-400">
-                    La papelera pide la clave otra vez; el registro deja de contar en totales e informes.
+                    Confirma la anulación; el registro deja de contar en totales e informes.
                   </p>
                   {recentActiveRecords.length === 0 ? (
                     <p className="px-1 py-2 text-xs text-zinc-400">Sin registros en el periodo cargado.</p>
@@ -932,7 +909,7 @@ export default function ComidaPersonalPage() {
               </button>
             </div>
             <p className="shrink-0 px-4 pt-2 text-xs leading-snug text-zinc-500">
-              Pulsa la papelera y confirma con tu PIN. Los consumos ya guardados no se borran.
+              Pulsa la papelera y confirma. Los consumos ya guardados no se borran.
             </p>
             <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-3">
               {workers.length === 0 ? (

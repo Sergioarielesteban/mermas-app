@@ -31,6 +31,15 @@ import { formatLocalHeaderName } from '@/lib/local-display-name';
 import ChefOneGlowLine from '@/components/ChefOneGlowLine';
 import NotificationBell from '@/components/notifications/NotificationBell';
 import DemoModeBanner from '@/components/DemoModeBanner';
+import RoleRouteGate from '@/components/RoleRouteGate';
+import {
+  canAccessChat,
+  canAccessCocinaCentral,
+  canAccessCuentaSeguridad,
+  canAccessEscandallos,
+  canAccessFinanzas,
+  canAccessInventario,
+} from '@/lib/app-role-permissions';
 
 type NavItemNote = { kind: 'note'; text: string };
 type NavItemLink = {
@@ -136,28 +145,41 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const showPedidos = canAccessPedidos(localCode, email, localName, localId);
 
   const title = useMemo(() => titleForPath(pathname), [pathname]);
-  const navItems = useMemo<NavItem[]>(
-    () => [
-      ...(showPedidos
-        ? [
-            ...NAV_ITEMS,
-            { href: '/pedidos', label: 'Pedidos', Icon: ShoppingCart },
-            { href: '/finanzas', label: 'Finanzas', Icon: BarChart3 },
-          ]
-        : NAV_ITEMS),
+  const navItems = useMemo<NavItem[]>(() => {
+    const role = profileRole ?? 'staff';
+    const core: NavItem[] = showPedidos
+      ? [...NAV_ITEMS, { href: '/pedidos', label: 'Pedidos', Icon: ShoppingCart }]
+      : [...NAV_ITEMS];
+    const finanzas: NavItem[] =
+      showPedidos && canAccessFinanzas(role) ? [{ href: '/finanzas', label: 'Finanzas', Icon: BarChart3 }] : [];
+    const mid: NavItem[] = [
       { href: '/appcc', label: 'APPCC', Icon: ShieldCheck },
       { href: '/checklist', label: 'Check list', Icon: ListChecks },
       { href: '/produccion', label: 'Producción', Icon: Factory },
-      { href: '/inventario', label: 'Inventario', Icon: ClipboardList },
-      { href: '/escandallos', label: 'Escandallos', Icon: Calculator },
+    ];
+    const inv: NavItem[] = canAccessInventario(role)
+      ? [{ href: '/inventario', label: 'Inventario', Icon: ClipboardList }]
+      : [];
+    const esc: NavItem[] = canAccessEscandallos(role)
+      ? [{ href: '/escandallos', label: 'Escandallos', Icon: Calculator }]
+      : [];
+    const tail: NavItem[] = [
       { href: '/comida-personal', label: 'Comida de personal', Icon: UtensilsCrossed },
       { href: '/personal', label: 'Personal', Icon: CalendarDays },
-      { href: '/chat', label: 'Chat', Icon: MessageCircle },
-      { href: '/cuenta/seguridad', label: 'Cuenta y seguridad', Icon: KeyRound },
-      ...(showCocinaCentral ? [{ href: '/cocina-central', label: 'Cocina central', Icon: ChefHat }] : []),
-    ],
-    [showPedidos, showPedidosCocina, showCocinaCentral],
-  );
+    ];
+    const chat: NavItem[] = canAccessChat(role) ? [{ href: '/chat', label: 'Chat', Icon: MessageCircle }] : [];
+    const cuenta: NavItem[] = canAccessCuentaSeguridad(role)
+      ? [{ href: '/cuenta/seguridad', label: 'Cuenta y seguridad', Icon: KeyRound }]
+      : [];
+    const cocina: NavItem[] =
+      showCocinaCentral && canAccessCocinaCentral(role)
+        ? [{ href: '/cocina-central', label: 'Cocina central', Icon: ChefHat }]
+        : [];
+    const pedirCentral: NavItem[] = showPedidosCocina
+      ? [{ href: '/pedidos-cocina', label: 'Pedir a central', Icon: Package }]
+      : [];
+    return [...core, ...finanzas, ...mid, ...inv, ...esc, ...tail, ...chat, ...cuenta, ...cocina, ...pedirCentral];
+  }, [showPedidos, showPedidosCocina, showCocinaCentral, profileRole]);
 
   const confirmAndLogout = () => setConfirmLogoutOpen(true);
 
@@ -188,7 +210,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <div className="min-h-full bg-white">
+    <div className="flex min-h-[100dvh] min-h-0 flex-col bg-white">
       <DemoModeBanner />
       {confirmLogoutOpen ? (
         <>
@@ -199,8 +221,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             className="fixed inset-0 z-[70] bg-black/45"
             tabIndex={-1}
           />
-          <div className="fixed inset-0 z-[80] grid place-items-center px-4">
-            <div className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-xl ring-1 ring-zinc-200">
+          <div className="fixed inset-0 z-[80] grid place-items-center overflow-y-auto px-4 py-8">
+            <div className="my-auto w-full max-w-sm rounded-2xl bg-white p-5 shadow-xl ring-1 ring-zinc-200">
               <p className="text-sm font-extrabold text-zinc-900">Confirmar cierre de sesión</p>
               <p className="mt-1 text-sm text-zinc-600">¿Seguro que quieres cerrar sesión?</p>
               <div className="mt-4 flex gap-2">
@@ -229,7 +251,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
       <header
         className={[
-          'sticky top-0 z-40 shadow-lg print:hidden',
+          'sticky top-0 z-40 shrink-0 shadow-lg print:hidden',
           'border-b border-[#b32020] bg-gradient-to-r from-[#B91C1C] to-[#D32F2F]',
         ].join(' ')}
       >
@@ -289,12 +311,12 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       {/* Drawer */}
       <aside
         className={[
-          'fixed left-0 top-0 z-[60] h-full w-[84%] max-w-[320px] bg-white shadow-2xl transition-transform print:hidden',
+          'fixed left-0 top-0 z-[60] flex h-full max-h-[100dvh] w-[84%] max-w-[320px] flex-col overflow-hidden bg-white shadow-2xl transition-transform print:hidden',
           open ? 'translate-x-0' : '-translate-x-full',
         ].join(' ')}
         aria-label="Menú lateral"
       >
-        <div className="relative border-b border-zinc-200 bg-white px-3 pb-5 pt-4">
+        <div className="relative shrink-0 border-b border-zinc-200 bg-white px-3 pb-5 pt-4">
           <button
             type="button"
             onClick={() => setOpen(false)}
@@ -317,7 +339,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           </div>
         </div>
 
-        <nav className="px-2 py-3">
+        <nav className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-2 py-3">
           {navItems.map((item) => {
             if ('kind' in item && item.kind === 'note') {
               return (
@@ -383,7 +405,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           })}
         </nav>
 
-        <div className="px-3 py-4">
+        <div className="shrink-0 px-3 py-4">
           <div className="rounded-2xl bg-zinc-50 p-3 ring-1 ring-zinc-200">
             <div className="text-[10px] font-extrabold uppercase tracking-[0.12em] text-zinc-500">Sesión</div>
             <div className="mt-2 min-w-0 space-y-0.5">
@@ -429,7 +451,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         </div>
       </aside>
 
-      <main className="mx-auto w-full max-w-full px-4 py-5 sm:max-w-2xl sm:px-5 md:max-w-4xl md:px-6 md:py-6 lg:max-w-5xl lg:px-8">
+      <main className="mx-auto min-h-0 w-full max-w-full flex-1 overflow-y-auto overscroll-contain px-4 py-5 sm:max-w-2xl sm:px-5 md:max-w-4xl md:px-6 md:py-6 lg:max-w-5xl lg:px-8">
         {pathname !== '/panel' && !pathname?.startsWith('/panel/') ? (
           <div className="mb-4 space-y-1.5 print:hidden">
             <button
@@ -442,7 +464,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             </button>
           </div>
         ) : null}
-        <PullToRefreshPedidos>{children}</PullToRefreshPedidos>
+        <PullToRefreshPedidos>
+          <RoleRouteGate>{children}</RoleRouteGate>
+        </PullToRefreshPedidos>
       </main>
     </div>
   );

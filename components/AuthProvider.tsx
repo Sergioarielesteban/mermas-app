@@ -48,8 +48,9 @@ const SESSION_SOFT_UNLOCK_MS = 4000;
 const SESSION_SAFETY_MS = 20000;
 
 function mapProfileRole(raw: string | null | undefined): ProfileAppRole {
-  const r = (raw ?? 'staff').toLowerCase();
-  if (r === 'admin' || r === 'manager') return r;
+  const r = (raw ?? 'staff').trim().toLowerCase();
+  if (r === 'admin') return 'admin';
+  if (r === 'manager') return 'manager';
   return 'staff';
 }
 
@@ -327,7 +328,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setLocalCode('DEMO');
       setLocalName('Restaurante Demo');
       setIsCentralKitchen(false);
-      setProfileRole('manager');
+      setProfileRole('admin');
       setLoading(false);
       setProfileReady(true);
       return;

@@ -8,7 +8,7 @@ import { fetchMermaPhotoDataUrlById } from '@/lib/mermas-supabase';
 import { downloadMermasReportPdf } from '@/lib/mermas-report-pdf';
 import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
 import { toBusinessDateKey } from '@/lib/business-day';
-import { requestDeleteSecurityPin } from '@/lib/delete-security';
+import { confirmDestructiveOperation } from '@/lib/ops-role-confirm';
 import type { MermaMotiveKey } from '@/lib/types';
 
 const MOTIVES: Array<{ key: MermaMotiveKey; label: string }> = [
@@ -40,7 +40,7 @@ function motiveLabel(key: string) {
 }
 
 export default function ResumenPage() {
-  const { localId } = useAuth();
+  const { localId, profileRole } = useAuth();
   const { mermas, products, updateMerma, removeMerma } = useMermasStore();
   const [productFilter, setProductFilter] = React.useState<string>('all');
   const [fromDate, setFromDate] = React.useState('');
@@ -150,8 +150,7 @@ export default function ResumenPage() {
   };
 
   const deleteMerma = async (_id: string) => {
-    if (!(await requestDeleteSecurityPin())) {
-      setMessage('Clave de seguridad incorrecta.');
+    if (!(await confirmDestructiveOperation(profileRole, '¿Confirmar eliminación de esta merma?'))) {
       return;
     }
     const result = await removeMerma(_id);

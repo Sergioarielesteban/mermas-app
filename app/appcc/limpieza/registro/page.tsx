@@ -7,7 +7,7 @@ import { BrushCleaning, CalendarDays, ChevronLeft } from 'lucide-react';
 import AppccCompactHero from '@/components/AppccCompactHero';
 import { useAuth } from '@/components/AuthProvider';
 import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
-import { requestDeleteSecurityPin } from '@/lib/delete-security';
+import { confirmDestructiveOperation } from '@/lib/ops-role-confirm';
 import {
   APPCC_CLEANING_SLOT_LABEL,
   type AppccCleaningCategoryRow,
@@ -46,7 +46,7 @@ function SlotRow({
   onSaved: (row: AppccCleaningLogRow) => void;
   onDeleted: (logId: string) => void;
 }) {
-  const { localId } = useAuth();
+  const { localId, profileRole } = useAuth();
   const [notes, setNotes] = useState(log?.notes ?? '');
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -97,8 +97,7 @@ function SlotRow({
   const removeMark = async () => {
     if (!log) return;
     setErr(null);
-    if (!(await requestDeleteSecurityPin())) {
-      setErr('Clave de seguridad incorrecta.');
+    if (!(await confirmDestructiveOperation(profileRole, '¿Confirmar eliminación de este registro de limpieza?'))) {
       return;
     }
     const supabase = getSupabaseClient();

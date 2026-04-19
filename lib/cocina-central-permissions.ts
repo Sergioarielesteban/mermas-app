@@ -1,8 +1,9 @@
 import type { ProfileAppRole } from '@/components/AuthProvider';
+import { canAccessCocinaCentral } from '@/lib/app-role-permissions';
 
-/** Todo el módulo /cocina-central: solo admin y manager (staff no entra). */
+/** Todo el módulo /cocina-central: solo administración. */
 export function canAccessCocinaCentralModule(role: ProfileAppRole | null): boolean {
-  return role === 'admin' || role === 'manager';
+  return canAccessCocinaCentral(role);
 }
 
 /**

@@ -6,7 +6,7 @@ import { ChevronLeft } from 'lucide-react';
 import MermasStyleHero from '@/components/MermasStyleHero';
 import { useAuth } from '@/components/AuthProvider';
 import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
-import { requestDeleteSecurityPin } from '@/lib/delete-security';
+import { confirmDestructiveOperation } from '@/lib/ops-role-confirm';
 import {
   type AppccFryerRow,
   deleteAppccFryer,
@@ -16,7 +16,7 @@ import {
 import { APPCC_ZONE_LABEL, type AppccZone } from '@/lib/appcc-supabase';
 
 export default function AppccAceiteEquiposPage() {
-  const { localId, profileReady } = useAuth();
+  const { localId, profileReady, profileRole } = useAuth();
   const [fryers, setFryers] = useState<AppccFryerRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [banner, setBanner] = useState<string | null>(null);
@@ -155,8 +155,7 @@ export default function AppccAceiteEquiposPage() {
     ) {
       return;
     }
-    if (!(await requestDeleteSecurityPin())) {
-      setBanner('Clave de seguridad incorrecta.');
+    if (!(await confirmDestructiveOperation(profileRole, '¿Confirmar eliminación de esta freidora?'))) {
       return;
     }
     const supabase = getSupabaseClient();

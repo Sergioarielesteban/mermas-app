@@ -30,7 +30,7 @@ import {
   updateInventoryItemLine,
   upsertInventoryMonthSnapshot,
 } from '@/lib/inventory-supabase';
-import { requestDeleteSecurityPin } from '@/lib/delete-security';
+import { confirmDestructiveOperation } from '@/lib/ops-role-confirm';
 import { actorLabel, notifyInventarioCerrado } from '@/services/notifications';
 
 function parseDecimal(raw: string): number | null {
@@ -75,7 +75,8 @@ type LineDraft = {
 };
 
 export default function InventarioPage() {
-  const { localId, profileReady, localName, localCode, userId, displayName, loginUsername } = useAuth();
+  const { localId, profileReady, localName, localCode, userId, displayName, loginUsername, profileRole } =
+    useAuth();
   const [categories, setCategories] = useState<InventoryCatalogCategory[]>([]);
   const [catalogItems, setCatalogItems] = useState<InventoryCatalogItem[]>([]);
   const [lines, setLines] = useState<InventoryItem[]>([]);
@@ -579,8 +580,7 @@ export default function InventarioPage() {
   };
 
   const removeLine = async (row: InventoryItem) => {
-    if (!(await requestDeleteSecurityPin())) {
-      setBanner('Clave de seguridad incorrecta.');
+    if (!(await confirmDestructiveOperation(profileRole, '¿Confirmar eliminación de esta línea de inventario?'))) {
       return;
     }
     if (!localId || !supabaseOk) return;
@@ -667,8 +667,7 @@ export default function InventarioPage() {
   };
 
   const resetInventoryClearLines = async () => {
-    if (!(await requestDeleteSecurityPin())) {
-      setBanner('Clave de seguridad incorrecta.');
+    if (!(await confirmDestructiveOperation(profileRole, '¿Confirmar vaciar todas las líneas de inventario?'))) {
       return;
     }
     if (!localId || !supabaseOk) return;
@@ -728,8 +727,7 @@ export default function InventarioPage() {
   };
 
   const removeCatalogCategory = async (cat: InventoryCatalogCategory) => {
-    if (!(await requestDeleteSecurityPin())) {
-      setBanner('Clave de seguridad incorrecta.');
+    if (!(await confirmDestructiveOperation(profileRole, '¿Eliminar esta categoría del catálogo?'))) {
       return;
     }
     if (!localId || !supabaseOk) return;
@@ -764,8 +762,7 @@ export default function InventarioPage() {
   };
 
   const removeCatalogItem = async (it: InventoryCatalogItem) => {
-    if (!(await requestDeleteSecurityPin())) {
-      setBanner('Clave de seguridad incorrecta.');
+    if (!(await confirmDestructiveOperation(profileRole, '¿Eliminar este artículo del catálogo de inventario?'))) {
       return;
     }
     if (!localId || !supabaseOk) return;

@@ -21,6 +21,12 @@ import {
 import { CHEF_ONE_TAPER_LINE_CLASS } from '@/components/ChefOneGlowLine';
 import MermasStyleHero from '@/components/MermasStyleHero';
 import { useAuth } from '@/components/AuthProvider';
+import {
+  canAccessChat,
+  canAccessEscandallos,
+  canAccessFinanzas,
+  canAccessInventario,
+} from '@/lib/app-role-permissions';
 import { canAccessCocinaCentralModule, canPlaceCentralSupplyOrder } from '@/lib/cocina-central-permissions';
 import ProductoGuiadoChecklist from '@/components/ProductoGuiadoChecklist';
 import { canAccessPedidos } from '@/lib/pedidos-access';
@@ -85,9 +91,14 @@ function HubTile({ href, onClick, label, sub, Icon, tone = 'zinc' }: TileProps) 
 
 export default function PanelControlPage() {
   const { localCode, localName, localId, email, profileRole, isCentralKitchen } = useAuth();
+  const role = profileRole ?? 'staff';
   const showCocinaCentral = canAccessCocinaCentralModule(profileRole);
   const showPedidos = canAccessPedidos(localCode, email, localName, localId);
   const showPedidosCocina = canPlaceCentralSupplyOrder(isCentralKitchen, localId);
+  const showFinanzas = showPedidos && canAccessFinanzas(role);
+  const showEscandallos = canAccessEscandallos(role);
+  const showInventario = canAccessInventario(role);
+  const showChat = canAccessChat(role);
   const [stubMessage, setStubMessage] = React.useState<string | null>(null);
 
   const onComingSoonModule = (name: string) => {
@@ -147,21 +158,27 @@ export default function PanelControlPage() {
           Icon={Factory}
           tone="red"
         />
-        <HubTile href="/inventario" label="Inventario" sub="Stock y valor por local" Icon={ClipboardList} tone="red" />
-        <HubTile
-          href="/chat"
-          label="Chat"
-          sub="Habla con tu equipo del mismo local"
-          Icon={MessageCircle}
-          tone="red"
-        />
-        <HubTile
-          href="/escandallos"
-          label="Escandallos"
-          sub="Recetas, food cost y centro de mando con gráficas"
-          Icon={Calculator}
-          tone="red"
-        />
+        {showInventario ? (
+          <HubTile href="/inventario" label="Inventario" sub="Stock y valor por local" Icon={ClipboardList} tone="red" />
+        ) : null}
+        {showChat ? (
+          <HubTile
+            href="/chat"
+            label="Chat"
+            sub="Habla con tu equipo del mismo local"
+            Icon={MessageCircle}
+            tone="red"
+          />
+        ) : null}
+        {showEscandallos ? (
+          <HubTile
+            href="/escandallos"
+            label="Escandallos"
+            sub="Recetas, food cost y centro de mando con gráficas"
+            Icon={Calculator}
+            tone="red"
+          />
+        ) : null}
         {showCocinaCentral ? (
           <HubTile
             href="/cocina-central"
@@ -185,7 +202,7 @@ export default function PanelControlPage() {
           Icon={UtensilsCrossed}
           tone="red"
         />
-        {showPedidos ? (
+        {showFinanzas ? (
           <HubTile
             href="/finanzas"
             label="Finanzas"
