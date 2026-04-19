@@ -6,6 +6,7 @@ import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
 import { isAllowedEmail } from '@/lib/auth-access';
 import { parseProfileAppRole, type ProfileAppRole } from '@/lib/profile-app-role';
 import { DEFAULT_MAX_USERS, DEFAULT_PLAN, type PlanCode } from '@/lib/planPermissions';
+import { isEmailInAllowlist } from '@/lib/superadmin-access';
 import {
   fetchActiveSubscriptionByLocal,
   upsertManualSubscriptionPlan,
@@ -39,6 +40,19 @@ type AuthContextValue = {
   subscriptionStatus: SubscriptionStatus;
   /** Proveedor de suscripción del local actual. */
   subscriptionProvider: SubscriptionProvider;
+  /** Acceso global de plataforma (no admin de restaurante). */
+  isSuperadmin: boolean;
+  /** Local actualmente simulado por superadmin (si aplica). */
+  superadminViewingLocalId: string | null;
+  /** Simula entrar a un local específico desde panel global. */
+  enterSuperadminLocal: (input: {
+    localId: string;
+    localCode: string | null;
+    localName: string | null;
+    isCentralKitchen: boolean;
+  }) => Promise<{ ok: boolean; reason?: string }>;
+  /** Sale del modo de simulación y vuelve al local del perfil. */
+  clearSuperadminLocal: () => Promise<{ ok: boolean; reason?: string }>;
   /** Cambio manual de plan para desarrollo/pilotos (persiste en backend si es posible). */
   selectPlan: (plan: PlanCode) => Promise<{ ok: boolean; reason?: string }>;
   /** true cuando ya se intentó cargar el perfil (o no aplica). */
@@ -56,6 +70,7 @@ type AuthContextValue = {
 const AuthContext = createContext<AuthContextValue | null>(null);
 const AUTH_KEY = 'mermas_user_email';
 const PROFILE_CACHE_KEY = 'chef_one_profile_cache_v4';
+const SUPERADMIN_LOCAL_OVERRIDE_KEY = 'chef_one_superadmin_local_override_v1';
 const PROFILE_TIMEOUT_MS = 6000;
 const FALLBACK_PLAN: PlanCode = 'PRO';
 /**
@@ -65,6 +80,11 @@ const FALLBACK_PLAN: PlanCode = 'PRO';
 const SESSION_SOFT_UNLOCK_MS = 4000;
 /** Último recurso si getSession nunca resuelve (muy raro). */
 const SESSION_SAFETY_MS = 20000;
+
+function isSuperadminEmail(email: string | null): boolean {
+  const csv = process.env.NEXT_PUBLIC_SUPERADMIN_EMAILS ?? '';
+  return isEmailInAllowlist(email, csv);
+}
 
 function isInvalidRefreshTokenError(message: string | undefined) {
   const m = (message ?? '').toLowerCase();
@@ -106,6 +126,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [maxUsers, setMaxUsers] = useState<number>(DEFAULT_MAX_USERS);
   const [subscriptionStatus, setSubscriptionStatus] = useState<SubscriptionStatus>('inactive');
   const [subscriptionProvider, setSubscriptionProvider] = useState<SubscriptionProvider>('manual');
+  const [isSuperadmin, setIsSuperadmin] = useState(false);
+  const [superadminViewingLocalId, setSuperadminViewingLocalId] = useState<string | null>(null);
   const [profileReady, setProfileReady] = useState(false);
 
   const clearProfile = React.useCallback(() => {
@@ -117,6 +139,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setMaxUsers(DEFAULT_MAX_USERS);
     setSubscriptionStatus('inactive');
     setSubscriptionProvider('manual');
+    setIsSuperadmin(false);
+    setSuperadminViewingLocalId(null);
     setDisplayName(null);
     setLoginUsername(null);
     setProfileRole(null);
@@ -189,6 +213,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     }
     window.localStorage.removeItem(PROFILE_CACHE_KEY);
+    window.localStorage.removeItem(SUPERADMIN_LOCAL_OVERRIDE_KEY);
   }, []);
 
   const loadPlanForLocal = React.useCallback(async (
@@ -441,6 +466,36 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [clearProfile, loadPlanForLocal, persistProfileCache, restoreProfileFromCache]);
 
   useEffect(() => {
+    const next = isSuperadminEmail(email);
+    setIsSuperadmin(next);
+    if (!next) setSuperadminViewingLocalId(null);
+  }, [email]);
+
+  useEffect(() => {
+    if (!profileReady || !isSuperadmin || typeof window === 'undefined') return;
+    try {
+      const raw = window.localStorage.getItem(SUPERADMIN_LOCAL_OVERRIDE_KEY);
+      if (!raw) return;
+      const parsed = JSON.parse(raw) as {
+        localId?: string;
+        localCode?: string | null;
+        localName?: string | null;
+        isCentralKitchen?: boolean;
+      };
+      const targetId = typeof parsed.localId === 'string' ? parsed.localId.trim() : '';
+      if (!targetId || targetId === superadminViewingLocalId) return;
+      setLocalId(targetId);
+      setLocalCode(parsed.localCode ?? null);
+      setLocalName(parsed.localName ?? null);
+      setIsCentralKitchen(!!parsed.isCentralKitchen);
+      setSuperadminViewingLocalId(targetId);
+      void loadPlanForLocal(targetId);
+    } catch {
+      window.localStorage.removeItem(SUPERADMIN_LOCAL_OVERRIDE_KEY);
+    }
+  }, [isSuperadmin, loadPlanForLocal, profileReady, superadminViewingLocalId]);
+
+  useEffect(() => {
     if (typeof window !== 'undefined' && isDemoMode()) {
       /* eslint-disable react-hooks/set-state-in-effect */
       setEmail('demo@chef-one.app');
@@ -456,6 +511,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setSubscriptionStatus('active');
       setSubscriptionProvider('manual');
       setProfileRole('staff');
+      setIsSuperadmin(false);
+      setSuperadminViewingLocalId(null);
       setLoading(false);
       setProfileReady(true);
       /* eslint-enable react-hooks/set-state-in-effect */
@@ -638,6 +695,53 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
   }, [clearLocalAuthCache, clearProfile, loadProfileForUser, restoreProfileFromCache]);
 
+  const enterSuperadminLocal = React.useCallback(
+    async (input: {
+      localId: string;
+      localCode: string | null;
+      localName: string | null;
+      isCentralKitchen: boolean;
+    }) => {
+      if (!isSuperadmin) return { ok: false, reason: 'Solo superadmin puede entrar a otros locales.' };
+      const nextId = input.localId.trim();
+      if (!nextId) return { ok: false, reason: 'Local inválido.' };
+      setLocalId(nextId);
+      setLocalCode(input.localCode ?? null);
+      setLocalName(input.localName ?? null);
+      setIsCentralKitchen(!!input.isCentralKitchen);
+      setSuperadminViewingLocalId(nextId);
+      if (typeof window !== 'undefined') {
+        window.localStorage.setItem(
+          SUPERADMIN_LOCAL_OVERRIDE_KEY,
+          JSON.stringify({
+            localId: nextId,
+            localCode: input.localCode ?? null,
+            localName: input.localName ?? null,
+            isCentralKitchen: !!input.isCentralKitchen,
+          }),
+        );
+      }
+      await loadPlanForLocal(nextId);
+      return { ok: true };
+    },
+    [isSuperadmin, loadPlanForLocal],
+  );
+
+  const clearSuperadminLocal = React.useCallback(async () => {
+    if (!isSuperadmin) return { ok: false, reason: 'Solo superadmin puede salir de simulación.' };
+    if (typeof window !== 'undefined') {
+      window.localStorage.removeItem(SUPERADMIN_LOCAL_OVERRIDE_KEY);
+    }
+    setSuperadminViewingLocalId(null);
+    if (userId) {
+      await loadProfileForUser(userId);
+      return { ok: true };
+    }
+    clearProfile();
+    setProfileReady(true);
+    return { ok: true };
+  }, [clearProfile, isSuperadmin, loadProfileForUser, userId]);
+
   const value = useMemo<AuthContextValue>(
     () => ({
       email,
@@ -653,6 +757,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       maxUsers,
       subscriptionStatus,
       subscriptionProvider,
+      isSuperadmin,
+      superadminViewingLocalId,
+      enterSuperadminLocal,
+      clearSuperadminLocal,
       selectPlan: async (nextPlan: PlanCode) => {
         const supabase = getSupabaseClient();
         if (!localId) return { ok: false, reason: 'No se pudo resolver el local actual.' };
@@ -788,6 +896,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       localId,
       localName,
       isCentralKitchen,
+      isSuperadmin,
       maxUsers,
       loading,
       loginUsername,
@@ -795,9 +904,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       profileReady,
       profileRole,
       persistProfileCache,
+      superadminViewingLocalId,
       subscriptionProvider,
       subscriptionStatus,
       userId,
+      enterSuperadminLocal,
+      clearSuperadminLocal,
     ],
   );
 

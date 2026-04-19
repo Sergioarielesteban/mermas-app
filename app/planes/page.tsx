@@ -39,9 +39,10 @@ const PLAN_CARDS: PlanCard[] = [
 
 export default function PlanesPage() {
   const router = useRouter();
-  const { plan, selectPlan, subscriptionProvider, subscriptionStatus } = useAuth();
+  const { plan, profileRole, selectPlan, subscriptionProvider, subscriptionStatus } = useAuth();
   const [feedback, setFeedback] = React.useState<string | null>(null);
   const [busyPlan, setBusyPlan] = React.useState<PlanCode | null>(null);
+  const isAdmin = profileRole === 'admin';
 
   const onSelectPlan = async (nextPlan: PlanCode) => {
     if (plan === nextPlan) return;
@@ -72,6 +73,11 @@ export default function PlanesPage() {
       <p className="rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-xs font-semibold uppercase tracking-wide text-zinc-600">
         Suscripción actual: {subscriptionStatus} · proveedor: {subscriptionProvider}
       </p>
+      {isAdmin ? (
+        <p className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs font-semibold text-emerald-900">
+          Modo admin activo: tienes acceso completo a todos los modulos, incluso durante setup sin suscripción activa.
+        </p>
+      ) : null}
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
         {PLAN_CARDS.map((card) => {

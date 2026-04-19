@@ -43,7 +43,7 @@ import {
   canAccessInventario,
   canAccessPedidosByRole,
 } from '@/lib/app-role-permissions';
-import { canAccessModule } from '@/lib/canAccessModule';
+import { getModuleAccess } from '@/lib/canAccessModule';
 
 type NavItemNote = { kind: 'note'; text: string };
 type NavItemLink = {
@@ -105,6 +105,7 @@ function titleForPath(pathname: string | null) {
   if (pathname.startsWith('/personal')) return 'Horarios';
   if (pathname.startsWith('/comida-personal')) return 'Comida de personal';
   if (pathname.startsWith('/chat')) return 'Chat del local';
+  if (pathname.startsWith('/superadmin/locales')) return 'Panel global de locales';
   if (pathname.startsWith('/cuenta')) return 'Cuenta y seguridad';
   if (pathname === '/appcc') return 'APPCC';
   if (pathname.startsWith('/appcc/temperaturas')) return 'Registros de temperatura';
@@ -156,6 +157,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     profileRole,
     isCentralKitchen,
     plan,
+    isSuperadmin,
+    superadminViewingLocalId,
+    clearSuperadminLocal,
   } = useAuth();
   const showCocinaCentral = profileReady && canAccessCocinaCentralModule(profileRole);
   const showPedidosCocina = profileReady && canPlaceCentralSupplyOrder(isCentralKitchen, localId);
@@ -167,8 +171,12 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const title = useMemo(() => titleForPath(pathname), [pathname]);
   const navItems = useMemo<NavItem[]>(() => {
     const role = profileRole ?? 'staff';
+    const isBlockedByPlan = (module: Parameters<typeof getModuleAccess>[1]) => {
+      if (!profileReady || !profileRole) return false;
+      return !getModuleAccess({ plan, role: profileRole }, module).allowed;
+    };
     const core: NavItem[] = showPedidos && canAccessPedidosByRole(role)
-      ? [...NAV_ITEMS, { href: '/pedidos', label: 'Pedidos', Icon: ShoppingCart, blocked: !canAccessModule({ plan, role }, 'pedidos') }]
+      ? [...NAV_ITEMS, { href: '/pedidos', label: 'Pedidos', Icon: ShoppingCart, blocked: isBlockedByPlan('pedidos') }]
       : [...NAV_ITEMS];
     const finanzas: NavItem[] =
       showPedidos && canAccessFinanzas(role)
@@ -176,36 +184,36 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             href: '/finanzas',
             label: 'Finanzas',
             Icon: BarChart3,
-            blocked: !canAccessModule({ plan, role }, 'finanzas'),
+            blocked: isBlockedByPlan('finanzas'),
             blockedText: 'Disponible en plan superior',
           }]
         : [];
     const mid: NavItem[] = [
-      { href: '/appcc', label: 'APPCC', Icon: ShieldCheck, blocked: !canAccessModule({ plan, role }, 'appcc') },
-      { href: '/checklist', label: 'Check list', Icon: ListChecks, blocked: !canAccessModule({ plan, role }, 'checklist') },
-      { href: '/produccion', label: 'Producción', Icon: Factory, blocked: !canAccessModule({ plan, role }, 'produccion') },
+      { href: '/appcc', label: 'APPCC', Icon: ShieldCheck, blocked: isBlockedByPlan('appcc') },
+      { href: '/checklist', label: 'Check list', Icon: ListChecks, blocked: isBlockedByPlan('checklist') },
+      { href: '/produccion', label: 'Producción', Icon: Factory, blocked: isBlockedByPlan('produccion') },
     ];
     const inv: NavItem[] = canAccessInventario(role)
-      ? [{ href: '/inventario', label: 'Inventario', Icon: ClipboardList, blocked: !canAccessModule({ plan, role }, 'inventario') }]
+      ? [{ href: '/inventario', label: 'Inventario', Icon: ClipboardList, blocked: isBlockedByPlan('inventario') }]
       : [];
     const esc: NavItem[] = canAccessEscandallos(role)
-      ? [{ href: '/escandallos', label: 'Escandallos', Icon: Calculator, blocked: !canAccessModule({ plan, role }, 'escandallos') }]
+      ? [{ href: '/escandallos', label: 'Escandallos', Icon: Calculator, blocked: isBlockedByPlan('escandallos') }]
       : [];
     /** Comida + personal justo tras producción (flujo cocina / turno). */
     const comidaYHorarios: NavItem[] = [
       ...(canAccessComidaPersonal(role)
-        ? [{ href: '/comida-personal', label: 'Comida de personal', Icon: UtensilsCrossed, blocked: !canAccessModule({ plan, role }, 'comida_personal') }]
+        ? [{ href: '/comida-personal', label: 'Comida de personal', Icon: UtensilsCrossed, blocked: isBlockedByPlan('comida_personal') }]
         : []),
-      { href: '/personal', label: 'Horarios', Icon: CalendarDays, blocked: !canAccessModule({ plan, role }, 'personal') },
+      { href: '/personal', label: 'Horarios', Icon: CalendarDays, blocked: isBlockedByPlan('personal') },
     ];
     const chat: NavItem[] =
-      canAccessChat(role) ? [{ href: '/chat', label: 'Chat', Icon: MessageCircle, blocked: !canAccessModule({ plan, role }, 'chat') }] : [];
+      canAccessChat(role) ? [{ href: '/chat', label: 'Chat', Icon: MessageCircle, blocked: isBlockedByPlan('chat') }] : [];
     const cuenta: NavItem[] = canAccessCuentaSeguridad(role)
       ? [{ href: '/cuenta/seguridad', label: 'Cuenta y seguridad', Icon: KeyRound }]
       : [];
     const cocina: NavItem[] =
       showCocinaCentral && canAccessCocinaCentral(role)
-        ? [{ href: '/cocina-central', label: 'Cocina central', Icon: ChefHat, blocked: !canAccessModule({ plan, role }, 'cocina_central') }]
+        ? [{ href: '/cocina-central', label: 'Cocina central', Icon: ChefHat, blocked: isBlockedByPlan('cocina_central') }]
         : [];
     const pedirCentral: NavItem[] = showPedidosCocina
       ? [{ href: '/pedidos-cocina', label: 'Pedir a central', Icon: Package }]
@@ -222,7 +230,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       ...cocina,
       ...pedirCentral,
     ];
-  }, [showPedidos, showPedidosCocina, showCocinaCentral, profileRole, plan]);
+  }, [showPedidos, showPedidosCocina, showCocinaCentral, profileReady, profileRole, plan]);
 
   const confirmAndLogout = () => setConfirmLogoutOpen(true);
 
@@ -470,6 +478,27 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               <p className="mt-2 truncate border-t border-zinc-200/90 pt-2 text-[11px] font-semibold text-zinc-700">
                 Local: <span className="font-bold text-zinc-900">{localLabel}</span>
               </p>
+            ) : null}
+            {isSuperadmin ? (
+              <Link
+                href="/superadmin/locales"
+                onClick={() => setOpen(false)}
+                className="mt-2 flex w-full items-center justify-center rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs font-bold uppercase tracking-wide text-zinc-800 hover:bg-zinc-100"
+              >
+                Panel global de locales
+              </Link>
+            ) : null}
+            {isSuperadmin && superadminViewingLocalId ? (
+              <button
+                type="button"
+                onClick={() => {
+                  void clearSuperadminLocal();
+                  setOpen(false);
+                }}
+                className="mt-2 flex w-full items-center justify-center rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-bold uppercase tracking-wide text-amber-900 hover:bg-amber-100"
+              >
+                Salir de simulación de local
+              </button>
             ) : null}
             <button
               type="button"

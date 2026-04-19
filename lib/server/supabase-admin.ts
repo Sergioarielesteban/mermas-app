@@ -125,6 +125,23 @@ export async function adminRestDelete(pathAndQuery: string): Promise<void> {
   }
 }
 
+/** PATCH en REST de Supabase con service role. */
+export async function adminRestPatch<T>(pathAndQuery: string, body: unknown): Promise<T> {
+  const response = await fetch(baseUrl(pathAndQuery), {
+    method: 'PATCH',
+    headers: {
+      ...getHeaders(),
+      Prefer: 'return=representation',
+    },
+    body: typeof body === 'string' ? body : JSON.stringify(body),
+  });
+  if (!response.ok) {
+    const text = await readErrorBody(response);
+    throw new Error(`Supabase admin PATCH failed: ${response.status} ${text}`);
+  }
+  return (await response.json()) as T;
+}
+
 export type AdminCreatedAuthUser = {
   id: string;
   email: string;

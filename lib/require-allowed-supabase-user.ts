@@ -13,6 +13,7 @@ import { getProfileAccessByUserId, isSupabaseAdminConfigured } from '@/lib/serve
 import { verifySupabaseBearer } from '@/lib/supabase-verify-bearer';
 import type { ProfileAppRole } from '@/lib/profile-app-role';
 import { parseProfileAppRole } from '@/lib/profile-app-role';
+import { isEmailInAllowlist } from '@/lib/superadmin-access';
 
 export type AllowedSupabaseUserResult =
   | { ok: true; userId: string; email: string; localId: string; role: ProfileAppRole }
@@ -64,6 +65,16 @@ export async function requireProfileRoles(
   if (!u.ok) return u;
   if (allowed.length > 0 && !allowed.includes(u.role)) {
     return { ok: false, message: 'Permiso insuficiente para esta operación.', status: 403 };
+  }
+  return u;
+}
+
+export async function requireSuperadminSupabaseUser(request: Request): Promise<AllowedSupabaseUserResult> {
+  const u = await requireAllowedSupabaseUser(request);
+  if (!u.ok) return u;
+  const csv = process.env.SUPERADMIN_EMAILS ?? process.env.NEXT_PUBLIC_SUPERADMIN_EMAILS ?? '';
+  if (!isEmailInAllowlist(u.email, csv)) {
+    return { ok: false, message: 'Permiso insuficiente para panel global.', status: 403 };
   }
   return u;
 }
