@@ -17,6 +17,7 @@ export default function NotificationsPanel({
   loading,
   error,
   onMarkAllRead,
+  onClearAll,
   onItemActivate,
 }: {
   open: boolean;
@@ -25,6 +26,7 @@ export default function NotificationsPanel({
   loading: boolean;
   error: string | null;
   onMarkAllRead: () => void;
+  onClearAll: () => void;
   onItemActivate: (item: NotificationWithRead) => void;
 }) {
   const [sysPerm, setSysPerm] = useState<NotificationPermission | 'unsupported'>(() =>
@@ -60,6 +62,13 @@ export default function NotificationsPanel({
               className="rounded-lg px-2 py-1 text-[10px] font-bold uppercase text-[#B91C1C] hover:bg-red-50"
             >
               Marcar todas
+            </button>
+            <button
+              type="button"
+              onClick={() => void onClearAll()}
+              className="rounded-lg px-2 py-1 text-[10px] font-bold uppercase text-zinc-700 hover:bg-zinc-100"
+            >
+              Eliminar todas
             </button>
             <button
               type="button"

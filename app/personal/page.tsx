@@ -24,7 +24,7 @@ import { todayYmd } from '@/lib/staff/attendance-logic';
 import { shiftDateTimeIso } from '@/lib/staff/staff-dates';
 
 export default function PersonalResumenPage() {
-  const { localId, localName, profileRole, profileReady } = useAuth();
+  const { localId, localName, profileRole, profileReady, userId } = useAuth();
   const [weekStart] = useState(() => ymdLocal(startOfWeekMonday(new Date())));
   const perms = useMemo(() => buildStaffPermissions(profileRole), [profileRole]);
   const { employees, shifts, timeEntries, incidents, loading, error, reload } = useStaffBundle(
@@ -80,6 +80,18 @@ export default function PersonalResumenPage() {
   }, [todayShifts, employees]);
 
   const workingList = employees.filter((e) => working.has(e.id));
+  const isStaffOnly = profileRole === 'staff';
+  const linkedEmployee = employees.find((e) => e.userId === userId) ?? null;
+  const myTodayShifts = todayShifts
+    .filter((s) => linkedEmployee && s.employeeId === linkedEmployee.id)
+    .sort((a, b) => a.startTime.localeCompare(b.startTime));
+  const myWeekShifts = shifts
+    .filter((s) => linkedEmployee && s.employeeId === linkedEmployee.id)
+    .sort((a, b) => (a.shiftDate === b.shiftDate ? a.startTime.localeCompare(b.startTime) : a.shiftDate.localeCompare(b.shiftDate)));
+  const teamToday = employees
+    .filter((e) => plannedEmps.has(e.id))
+    .map((e) => staffDisplayName(e))
+    .sort((a, b) => a.localeCompare(b, 'es'));
 
   if (!profileReady) {
     return <p className="text-sm text-zinc-500">Cargando perfil…</p>;
@@ -113,6 +125,64 @@ export default function PersonalResumenPage() {
 
       {loading ? <p className="text-sm text-zinc-500">Cargando datos…</p> : null}
 
+      {isStaffOnly ? (
+        <div className="grid gap-4 md:grid-cols-2 md:gap-5">
+          <section className="rounded-3xl bg-white p-4 ring-1 ring-zinc-200/90 md:p-5">
+            <h2 className="text-sm font-extrabold uppercase tracking-wide text-zinc-500">Tu horario de hoy</h2>
+            {!linkedEmployee ? (
+              <p className="mt-2 text-sm text-zinc-600">No tienes ficha vinculada en el local.</p>
+            ) : myTodayShifts.length === 0 ? (
+              <p className="mt-2 text-sm text-zinc-600">Hoy no tienes turno asignado.</p>
+            ) : (
+              <ul className="mt-3 space-y-2">
+                {myTodayShifts.map((s) => (
+                  <li key={s.id} className="rounded-2xl bg-zinc-50 px-3 py-2 text-sm ring-1 ring-zinc-100">
+                    <p className="font-bold text-zinc-900">
+                      {s.startTime.slice(0, 5)} - {s.endTime.slice(0, 5)}
+                    </p>
+                    {s.zone ? <p className="text-xs font-semibold text-zinc-600">{s.zone}</p> : null}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+
+          <section className="rounded-3xl bg-white p-4 ring-1 ring-zinc-200/90 md:p-5">
+            <h2 className="text-sm font-extrabold uppercase tracking-wide text-zinc-500">Planificación semanal</h2>
+            {!linkedEmployee ? (
+              <p className="mt-2 text-sm text-zinc-600">Sin planificación disponible.</p>
+            ) : myWeekShifts.length === 0 ? (
+              <p className="mt-2 text-sm text-zinc-600">No hay turnos cargados esta semana.</p>
+            ) : (
+              <ul className="mt-3 space-y-2">
+                {myWeekShifts.slice(0, 7).map((s) => (
+                  <li key={s.id} className="flex items-center justify-between rounded-2xl bg-zinc-50 px-3 py-2 text-sm ring-1 ring-zinc-100">
+                    <span className="font-semibold text-zinc-700">{s.shiftDate}</span>
+                    <span className="font-bold text-zinc-900">
+                      {s.startTime.slice(0, 5)} - {s.endTime.slice(0, 5)}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+
+          <section className="rounded-3xl bg-white p-4 ring-1 ring-zinc-200/90 md:col-span-2 md:p-5">
+            <h2 className="text-sm font-extrabold uppercase tracking-wide text-zinc-500">Equipo del día</h2>
+            {teamToday.length === 0 ? (
+              <p className="mt-2 text-sm text-zinc-600">No hay personal planificado hoy.</p>
+            ) : (
+              <ul className="mt-3 grid gap-2 sm:grid-cols-2">
+                {teamToday.map((name) => (
+                  <li key={name} className="rounded-xl bg-zinc-50 px-3 py-2 text-sm font-semibold text-zinc-800 ring-1 ring-zinc-100">
+                    {name}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+        </div>
+      ) : (
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 md:grid-cols-4">
         <StatCard label="Equipo activo" value={employees.length} Icon={Users} tone="zinc" />
         <StatCard label="Planif. hoy" value={plannedEmps.size} Icon={Clock} tone="red" />
@@ -129,6 +199,7 @@ export default function PersonalResumenPage() {
         />
         <StatCard label="Horas trab." value={formatMinutesHuman(workedMin)} sub Icon={Clock} tone="emerald" />
       </div>
+      )}
 
       {!perms.canViewTeamSummary ? (
         <p className="rounded-2xl bg-zinc-50 px-4 py-3 text-sm text-zinc-600 ring-1 ring-zinc-200">
@@ -136,6 +207,7 @@ export default function PersonalResumenPage() {
         </p>
       ) : null}
 
+      {!isStaffOnly ? (
       <div className="grid gap-4 md:grid-cols-2 md:gap-5">
       <section className="rounded-3xl bg-white p-4 ring-1 ring-zinc-200/90 md:p-5">
         <h2 className="text-sm font-extrabold uppercase tracking-wide text-zinc-500">Ahora en el local</h2>
@@ -178,8 +250,9 @@ export default function PersonalResumenPage() {
         )}
       </section>
       </div>
+      ) : null}
 
-      {openInc > 0 ? (
+      {openInc > 0 && !isStaffOnly ? (
         <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-bold text-amber-950">
           Hay {openInc} incidencia(s) abierta(s). Revisa la pestaña Incidencias.
         </div>

@@ -4,6 +4,7 @@
  */
 export {
   canAccessChat,
+  canAccessComidaPersonal,
   canAccessCocinaCentral,
   canAccessCostes,
   canAccessCostesPersonales,
@@ -11,6 +12,7 @@ export {
   canAccessEscandallos,
   canAccessFinanzas,
   canAccessInventario,
+  canAccessPedidosByRole,
   canAccessMermasExecutiveAnalytics,
   isRouteBlockedForRole,
 } from '@/lib/permissions';

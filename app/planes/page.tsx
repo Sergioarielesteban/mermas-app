@@ -20,7 +20,7 @@ const PLAN_CARDS: PlanCard[] = [
     code: 'OPERATIVO',
     name: 'Plan Operativo',
     price: '39,90 €/mes',
-    modules: ['Pedidos', 'Mermas', 'APPCC', 'Checklist'],
+    modules: ['Pedidos', 'Mermas', 'APPCC', 'Checklist', 'Chat'],
   },
   {
     code: 'CONTROL',
@@ -32,7 +32,7 @@ const PLAN_CARDS: PlanCard[] = [
     code: 'PRO',
     name: 'Plan Pro',
     price: '99 €/mes',
-    modules: ['Todos los modulos'],
+    modules: ['Todo Control', 'Cocina central', 'Finanzas', 'Personal', 'Comida personal'],
     recommended: true,
   },
 ];

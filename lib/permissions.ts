@@ -34,6 +34,14 @@ export function canAccessInventario(role: ProfileAppRole | null): boolean {
 }
 
 export function canAccessChat(role: ProfileAppRole | null): boolean {
+  return role === 'admin' || role === 'manager' || role === 'staff';
+}
+
+export function canAccessPedidosByRole(role: ProfileAppRole | null): boolean {
+  return role === 'admin' || role === 'manager';
+}
+
+export function canAccessComidaPersonal(role: ProfileAppRole | null): boolean {
   return role === 'admin' || role === 'manager';
 }
 
@@ -59,6 +67,8 @@ export function isRouteBlockedForRole(pathname: string | null, role: ProfileAppR
   if (pathname.startsWith('/finanzas')) return !canAccessFinanzas(role);
   if (pathname.startsWith('/escandallos')) return !canAccessEscandallos(role);
   if (pathname.startsWith('/cocina-central')) return !canAccessCocinaCentral(role);
+  if (pathname.startsWith('/pedidos')) return !canAccessPedidosByRole(role);
+  if (pathname.startsWith('/comida-personal')) return !canAccessComidaPersonal(role);
   if (pathname.startsWith('/inventario')) return !canAccessInventario(role);
   if (pathname.startsWith('/chat')) return !canAccessChat(role);
   if (pathname.startsWith('/cuenta/seguridad')) return !canAccessCuentaSeguridad(role);
@@ -72,6 +82,8 @@ export function isPotentiallyRoleGatedPath(pathname: string | null): boolean {
     pathname.startsWith('/finanzas') ||
     pathname.startsWith('/escandallos') ||
     pathname.startsWith('/cocina-central') ||
+    pathname.startsWith('/pedidos') ||
+    pathname.startsWith('/comida-personal') ||
     pathname.startsWith('/inventario') ||
     pathname.startsWith('/chat') ||
     pathname.startsWith('/cuenta/seguridad')

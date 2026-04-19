@@ -35,11 +35,13 @@ import DemoModeBanner from '@/components/DemoModeBanner';
 import RoleRouteGate from '@/components/RoleRouteGate';
 import {
   canAccessChat,
+  canAccessComidaPersonal,
   canAccessCocinaCentral,
   canAccessCuentaSeguridad,
   canAccessEscandallos,
   canAccessFinanzas,
   canAccessInventario,
+  canAccessPedidosByRole,
 } from '@/lib/app-role-permissions';
 import { canAccessModule } from '@/lib/canAccessModule';
 
@@ -159,7 +161,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const title = useMemo(() => titleForPath(pathname), [pathname]);
   const navItems = useMemo<NavItem[]>(() => {
     const role = profileRole ?? 'staff';
-    const core: NavItem[] = showPedidos
+    const core: NavItem[] = showPedidos && canAccessPedidosByRole(role)
       ? [...NAV_ITEMS, { href: '/pedidos', label: 'Pedidos', Icon: ShoppingCart, blocked: !canAccessModule(plan, 'pedidos') }]
       : [...NAV_ITEMS];
     const finanzas: NavItem[] =
@@ -185,7 +187,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       : [];
     /** Comida + personal justo tras producción (flujo cocina / turno). */
     const comidaYHorarios: NavItem[] = [
-      { href: '/comida-personal', label: 'Comida de personal', Icon: UtensilsCrossed, blocked: !canAccessModule(plan, 'comida_personal') },
+      ...(canAccessComidaPersonal(role)
+        ? [{ href: '/comida-personal', label: 'Comida de personal', Icon: UtensilsCrossed, blocked: !canAccessModule(plan, 'comida_personal') }]
+        : []),
       { href: '/personal', label: 'Horarios', Icon: CalendarDays, blocked: !canAccessModule(plan, 'personal') },
     ];
     const chat: NavItem[] =
@@ -390,7 +394,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               return (
                 <div
                   key={entry.label}
-                  className="flex items-center justify-between gap-3 rounded-xl px-3 py-3 text-sm font-semibold text-zinc-500 ring-1 ring-zinc-200"
+                  className="flex w-full items-center justify-between gap-3 rounded-xl px-3 py-3 text-sm font-semibold text-zinc-500 ring-1 ring-zinc-200"
                 >
                   <span className="flex items-center gap-3">
                     <Icon className="h-5 w-5" />
@@ -425,7 +429,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                 href={entry.href}
                 onClick={() => setOpen(false)}
                 className={[
-                  'flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-semibold transition-all',
+                  'flex w-full items-center gap-3 rounded-xl px-3 py-3 text-sm font-semibold transition-all',
                   entry.blocked ? 'opacity-55' : '',
                   isActive
                     ? 'bg-[#D32F2F]/10 text-[#D32F2F] shadow-sm ring-1 ring-[#D32F2F]/25'
@@ -453,13 +457,6 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             <div className="mt-2 min-w-0 space-y-0.5">
               <p className="truncate text-sm font-extrabold leading-tight text-zinc-900">{sessionLabel}</p>
               <p className="text-[11px] font-semibold uppercase tracking-wide text-zinc-500">Rol: {sessionRoleLabel}</p>
-              {email ? (
-                <p className="truncate text-xs font-medium text-zinc-600" title={email}>
-                  {email}
-                </p>
-              ) : (
-                <p className="text-xs font-medium text-zinc-500">Sin correo en sesión</p>
-              )}
             </div>
             {localId && localLabel ? (
               <p className="mt-2 truncate border-t border-zinc-200/90 pt-2 text-[11px] font-semibold text-zinc-700">

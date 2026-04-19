@@ -24,9 +24,11 @@ import MermasStyleHero from '@/components/MermasStyleHero';
 import { useAuth } from '@/components/AuthProvider';
 import {
   canAccessChat,
+  canAccessComidaPersonal,
   canAccessEscandallos,
   canAccessFinanzas,
   canAccessInventario,
+  canAccessPedidosByRole,
 } from '@/lib/app-role-permissions';
 import { canAccessCocinaCentralModule, canPlaceCentralSupplyOrder } from '@/lib/cocina-central-permissions';
 import ProductoGuiadoChecklist from '@/components/ProductoGuiadoChecklist';
@@ -106,7 +108,7 @@ export default function PanelControlPage() {
   const { localCode, localName, localId, email, profileRole, isCentralKitchen, plan } = useAuth();
   const role = profileRole ?? 'staff';
   const showCocinaCentral = canAccessCocinaCentralModule(profileRole);
-  const showPedidos = canAccessPedidos(localCode, email, localName, localId);
+  const showPedidos = canAccessPedidos(localCode, email, localName, localId) && canAccessPedidosByRole(role);
   const showPedidosCocina = canPlaceCentralSupplyOrder(isCentralKitchen, localId);
   const showFinanzas = showPedidos && canAccessFinanzas(role);
   const showEscandallos = canAccessEscandallos(role);
@@ -169,14 +171,16 @@ export default function PanelControlPage() {
           tone="red"
           blocked={!canAccessModule(plan, 'produccion')}
         />
-        <HubTile
-          href="/comida-personal"
-          label="Comida de personal"
-          sub="Registro rápido y coste interno"
-          Icon={UtensilsCrossed}
-          tone="red"
-          blocked={!canAccessModule(plan, 'comida_personal')}
-        />
+        {canAccessComidaPersonal(role) ? (
+          <HubTile
+            href="/comida-personal"
+            label="Comida de personal"
+            sub="Registro rápido y coste interno"
+            Icon={UtensilsCrossed}
+            tone="red"
+            blocked={!canAccessModule(plan, 'comida_personal')}
+          />
+        ) : null}
         <HubTile
           href="/personal"
           label="Horarios"

@@ -251,6 +251,7 @@ function MermaObjectiveSlider({
 export default function DashboardPage() {
   const { profileRole } = useAuth();
   const showExecutive = canAccessMermasExecutiveAnalytics(profileRole);
+  const isStaffOnly = profileRole === 'staff';
   const { products, mermas } = useMermasStore();
   const t = totals(mermas);
   const dataWeek = weekBars(mermas);
@@ -334,6 +335,22 @@ export default function DashboardPage() {
         notes: m.notes?.trim() ? m.notes.trim() : undefined,
       })),
     [mermas, products],
+  );
+  const todayRows = React.useMemo(
+    () =>
+      mermasWithProduct
+        .filter((m) => {
+          const today = toBusinessDate(new Date());
+          const d = toBusinessDate(m.occurredAt);
+          return (
+            d.getFullYear() === today.getFullYear() &&
+            d.getMonth() === today.getMonth() &&
+            d.getDate() === today.getDate()
+          );
+        })
+        .sort((a, b) => (a.occurredAt < b.occurredAt ? 1 : -1))
+        .slice(0, 30),
+    [mermasWithProduct],
   );
 
   const now = toBusinessDate(new Date());
@@ -428,6 +445,38 @@ export default function DashboardPage() {
 
     doc.save(`informe-ejecutivo-${monthNow.toISOString().slice(0, 7)}.pdf`);
   };
+
+  if (isStaffOnly) {
+    return (
+      <div className="space-y-4">
+        <MermasStyleHero
+          eyebrow="Mermas"
+          title="Registro operativo"
+          description="Registra merma y consulta solo la operativa del día."
+        />
+        <MermasRegistrationForm />
+        <section className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-zinc-200">
+          <h2 className="text-sm font-extrabold uppercase tracking-wide text-zinc-700">Mermas del día</h2>
+          <p className="mt-1 text-xs text-zinc-500">Total hoy: {eur(t.today)}</p>
+          {todayRows.length === 0 ? (
+            <p className="mt-3 text-sm text-zinc-500">Sin mermas registradas hoy.</p>
+          ) : (
+            <ul className="mt-3 space-y-2">
+              {todayRows.map((row) => (
+                <li key={row.id} className="rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2">
+                  <p className="text-sm font-bold text-zinc-900">{row.productName}</p>
+                  <p className="text-xs text-zinc-600">
+                    {new Date(row.occurredAt).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })} ·
+                    Cantidad: {qty(row.quantity)} · Coste: {eur(row.costEur)}
+                  </p>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4">

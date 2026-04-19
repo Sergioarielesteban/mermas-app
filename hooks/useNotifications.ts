@@ -20,6 +20,29 @@ export function useNotifications(localId: string | null, userId: string | null) 
   const refreshRef = useRef<() => Promise<void>>(async () => {});
 
   const supabaseOk = isSupabaseEnabled() && getSupabaseClient();
+  const clearBeforeKey = localId && userId ? `notifications-cleared-before:${localId}:${userId}` : null;
+
+  const readClearedBefore = useCallback((): string | null => {
+    if (typeof window === 'undefined' || !clearBeforeKey) return null;
+    try {
+      return window.localStorage.getItem(clearBeforeKey);
+    } catch {
+      return null;
+    }
+  }, [clearBeforeKey]);
+
+  const writeClearedBefore = useCallback(
+    (iso: string | null) => {
+      if (typeof window === 'undefined' || !clearBeforeKey) return;
+      try {
+        if (!iso) window.localStorage.removeItem(clearBeforeKey);
+        else window.localStorage.setItem(clearBeforeKey, iso);
+      } catch {
+        /* ignore */
+      }
+    },
+    [clearBeforeKey],
+  );
 
   const refresh = useCallback(async () => {
     if (!localId || !userId || !supabaseOk) {
@@ -35,8 +58,11 @@ export function useNotifications(localId: string | null, userId: string | null) 
         getNotifications(supabase, localId, userId, { limit: 50 }),
         getUnreadNotificationsCount(supabase, localId, userId),
       ]);
-      setItems(list);
-      setUnreadCount(count);
+      const clearedBefore = readClearedBefore();
+      const filtered = clearedBefore ? list.filter((n) => n.createdAt > clearedBefore) : list;
+      const unreadFiltered = filtered.filter((n) => !n.readAt).length;
+      setItems(filtered);
+      setUnreadCount(Math.min(count, unreadFiltered));
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Error al cargar notificaciones.';
       if (msg.toLowerCase().includes('does not exist') || msg.includes('notifications')) {
@@ -49,7 +75,7 @@ export function useNotifications(localId: string | null, userId: string | null) 
     } finally {
       setLoading(false);
     }
-  }, [localId, userId, supabaseOk]);
+  }, [localId, userId, supabaseOk, readClearedBefore]);
 
   refreshRef.current = refresh;
 
@@ -78,6 +104,8 @@ export function useNotifications(localId: string | null, userId: string | null) 
           }
           try {
             const mapped = mapNotificationRow(row);
+            const clearedBefore = readClearedBefore();
+            if (clearedBefore && mapped.createdAt <= clearedBefore) return;
             const fromSelf =
               mapped.createdBy != null && Boolean(userId) && mapped.createdBy === userId;
             if (!fromSelf) {
@@ -98,7 +126,7 @@ export function useNotifications(localId: string | null, userId: string | null) 
     return () => {
       void supabase.removeChannel(ch);
     };
-  }, [localId, userId, supabaseOk]);
+  }, [localId, userId, supabaseOk, readClearedBefore]);
 
   const markRead = useCallback(
     async (notificationId: string) => {
@@ -126,6 +154,20 @@ export function useNotifications(localId: string | null, userId: string | null) 
     await refresh();
   }, [supabaseOk, refresh]);
 
+  const clearAll = useCallback(async () => {
+    if (!supabaseOk) {
+      setItems([]);
+      setUnreadCount(0);
+      writeClearedBefore(new Date().toISOString());
+      return;
+    }
+    const supabase = getSupabaseClient()!;
+    await markAllNotificationsAsRead(supabase);
+    writeClearedBefore(new Date().toISOString());
+    setItems([]);
+    setUnreadCount(0);
+  }, [supabaseOk, writeClearedBefore]);
+
   return useMemo(
     () => ({
       items,
@@ -135,7 +177,8 @@ export function useNotifications(localId: string | null, userId: string | null) 
       refresh,
       markRead,
       markAllRead,
+      clearAll,
     }),
-    [items, unreadCount, loading, error, refresh, markRead, markAllRead],
+    [items, unreadCount, loading, error, refresh, markRead, markAllRead, clearAll],
   );
 }

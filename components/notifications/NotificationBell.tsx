@@ -13,7 +13,7 @@ export default function NotificationBell() {
   const router = useRouter();
   const { localId, userId } = useAuth();
   const [open, setOpen] = useState(false);
-  const { items, unreadCount, loading, error, markRead, markAllRead } = useNotifications(localId, userId);
+  const { items, unreadCount, loading, error, markRead, markAllRead, clearAll } = useNotifications(localId, userId);
 
   useRegisterNotificationDevice(localId, userId, Boolean(localId && userId));
 
@@ -58,6 +58,7 @@ export default function NotificationBell() {
         loading={loading}
         error={error}
         onMarkAllRead={() => void markAllRead().catch(() => {})}
+        onClearAll={() => void clearAll().catch(() => {})}
         onItemActivate={onItemActivate}
       />
     </div>
