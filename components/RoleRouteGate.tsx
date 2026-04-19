@@ -2,27 +2,8 @@
 
 import { usePathname, useRouter } from 'next/navigation';
 import React, { useEffect, useMemo } from 'react';
-import type { ProfileAppRole } from '@/components/AuthProvider';
 import { useAuth } from '@/components/AuthProvider';
-import {
-  canAccessChat,
-  canAccessCocinaCentral,
-  canAccessCuentaSeguridad,
-  canAccessEscandallos,
-  canAccessFinanzas,
-  canAccessInventario,
-} from '@/lib/app-role-permissions';
-
-function isBlockedPath(pathname: string | null, role: ProfileAppRole | null): boolean {
-  if (!pathname) return false;
-  if (pathname.startsWith('/finanzas')) return !canAccessFinanzas(role);
-  if (pathname.startsWith('/escandallos')) return !canAccessEscandallos(role);
-  if (pathname.startsWith('/cocina-central')) return !canAccessCocinaCentral(role);
-  if (pathname.startsWith('/inventario')) return !canAccessInventario(role);
-  if (pathname.startsWith('/chat')) return !canAccessChat(role);
-  if (pathname.startsWith('/cuenta/seguridad')) return !canAccessCuentaSeguridad(role);
-  return false;
-}
+import { isRouteBlockedForRole } from '@/lib/permissions';
 
 export default function RoleRouteGate({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -30,7 +11,7 @@ export default function RoleRouteGate({ children }: { children: React.ReactNode 
   const { profileReady, profileRole } = useAuth();
 
   const blocked = useMemo(
-    () => (profileReady ? isBlockedPath(pathname, profileRole) : false),
+    () => (profileReady ? isRouteBlockedForRole(pathname, profileRole) : false),
     [pathname, profileReady, profileRole],
   );
 

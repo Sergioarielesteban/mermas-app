@@ -328,7 +328,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setLocalCode('DEMO');
       setLocalName('Restaurante Demo');
       setIsCentralKitchen(false);
-      setProfileRole('admin');
+      setProfileRole('staff');
       setLoading(false);
       setProfileReady(true);
       return;

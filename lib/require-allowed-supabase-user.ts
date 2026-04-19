@@ -1,4 +1,4 @@
-import { isAllowedEmail } from '@/lib/auth-access';
+import { getProfileAccessByUserId, isSupabaseAdminConfigured } from '@/lib/server/supabase-admin';
 import { verifySupabaseBearer } from '@/lib/supabase-verify-bearer';
 
 export type AllowedSupabaseUserResult =
@@ -6,7 +6,7 @@ export type AllowedSupabaseUserResult =
   | { ok: false; message: string; status: number };
 
 /**
- * Sesión Supabase válida + email en allowlist (misma política que /api/sync).
+ * Sesión Supabase válida + perfil activo con local (sin allowlist de emails en código).
  */
 export async function requireAllowedSupabaseUser(request: Request): Promise<AllowedSupabaseUserResult> {
   const auth = await verifySupabaseBearer(request);
@@ -17,8 +17,17 @@ export async function requireAllowedSupabaseUser(request: Request): Promise<Allo
   if (!email) {
     return { ok: false, message: 'Usuario sin email.', status: 403 };
   }
-  if (!isAllowedEmail(email)) {
-    return { ok: false, message: 'Unauthorized email', status: 401 };
+  if (!isSupabaseAdminConfigured()) {
+    return { ok: false, message: 'Servidor sin configuración para validar perfil.', status: 503 };
   }
+
+  const profile = await getProfileAccessByUserId(auth.userId);
+  if (!profile || !profile.is_active) {
+    return { ok: false, message: 'Cuenta no activa o sin perfil asignado.', status: 403 };
+  }
+  if (!profile.local_id) {
+    return { ok: false, message: 'Perfil sin local asignado.', status: 403 };
+  }
+
   return { ok: true, userId: auth.userId, email };
 }

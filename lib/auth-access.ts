@@ -1,28 +1,35 @@
-/** Emails permitidos (cuentas reales en Supabase Auth; la marca de la app es Chef-One). */
-const ALLOWED_EMAILS = [
-  'sergioarielesteban@hotmail.com',
-  'xampacocina2026@gmail.com',
-  'xampapremia@gmail.com',
-] as const;
+/**
+ * Allowlist opcional vía entorno (NO hardcode en código).
+ * Si la lista está vacía, no se restringe por email en el cliente (el control real es Supabase Auth + profiles).
+ *
+ * Variables:
+ * - NEXT_PUBLIC_LOGIN_EMAIL_ALLOWLIST — separada por comas, solo para modo legacy / restricción explícita.
+ */
 
 function normalizeEmail(email: string) {
   return email.trim().toLowerCase();
 }
 
-export function getAllowedEmails() {
-  return ALLOWED_EMAILS.map(normalizeEmail);
+function parseAllowlistFromEnv(): string[] {
+  const raw =
+    (typeof process !== 'undefined' && process.env.NEXT_PUBLIC_LOGIN_EMAIL_ALLOWLIST?.trim()) || '';
+  if (!raw) return [];
+  return raw
+    .split(',')
+    .map((s) => normalizeEmail(s))
+    .filter(Boolean);
 }
 
-function isProductionBuild() {
-  return process.env.NODE_ENV === 'production';
+export function getAllowedEmails(): readonly string[] {
+  return parseAllowlistFromEnv();
 }
 
+/**
+ * Uso principal: pantalla de login cuando no hay Supabase (legacy).
+ * Con lista vacía: no bloquea por email aquí (Supabase Auth + profiles + RLS en producción).
+ */
 export function isAllowedEmail(email: string) {
-  const allowed = getAllowedEmails();
-  if (allowed.length === 0) {
-    // En producción, lista vacía = denegar todo (no abrir acceso por accidente).
-    return !isProductionBuild();
-  }
+  const allowed = parseAllowlistFromEnv();
+  if (allowed.length === 0) return true;
   return allowed.includes(normalizeEmail(email));
 }
-
