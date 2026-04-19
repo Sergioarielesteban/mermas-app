@@ -184,10 +184,10 @@ export default function PersonalEmpleadosPage() {
 
       {formOpen && perms.canManageEmployees ? (
         <>
-          <button type="button" className="fixed inset-0 z-[60] bg-black/40" aria-hidden onClick={() => setFormOpen(false)} />
-          <div className="fixed inset-x-0 bottom-0 z-[70] max-h-[90vh] overflow-y-auto rounded-t-3xl bg-white p-4 shadow-xl sm:inset-auto sm:left-1/2 sm:top-1/2 sm:w-full sm:max-w-md sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-3xl">
+          <button type="button" className="fixed inset-0 z-[80] bg-black/40" aria-hidden onClick={() => setFormOpen(false)} />
+          <div className="fixed inset-x-0 bottom-0 z-[90] max-h-[90vh] overflow-y-auto rounded-t-3xl bg-white p-4 shadow-xl sm:inset-auto sm:left-1/2 sm:top-1/2 sm:w-full sm:max-w-md sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-3xl">
             <p className="text-lg font-extrabold text-zinc-900">Alta rápida</p>
-            <form onSubmit={submit} className="mt-3 space-y-2">
+            <form onSubmit={submit} className="mt-3 space-y-2 pb-28 sm:pb-0">
               <input
                 required
                 className="w-full rounded-xl border border-zinc-200 px-3 py-2 text-sm font-semibold"
@@ -241,13 +241,15 @@ export default function PersonalEmpleadosPage() {
                 value={pin}
                 onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 4))}
               />
-              <button
-                type="submit"
-                disabled={busy || userLimitReached}
-                className="w-full rounded-2xl bg-zinc-900 py-3 text-sm font-extrabold text-white"
-              >
-                Guardar
-              </button>
+              <div className="fixed inset-x-0 bottom-0 z-[95] border-t border-zinc-200 bg-white p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:static sm:z-auto sm:border-0 sm:bg-transparent sm:p-0">
+                <button
+                  type="submit"
+                  disabled={busy || userLimitReached}
+                  className="h-14 w-full rounded-2xl bg-[#D32F2F] px-4 text-base font-extrabold text-white shadow-sm disabled:opacity-50"
+                >
+                  Guardar empleado
+                </button>
+              </div>
             </form>
           </div>
         </>
