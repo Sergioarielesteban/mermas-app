@@ -6,6 +6,7 @@ import { CalendarClock, LogIn } from 'lucide-react';
 import { useAuth } from '@/components/AuthProvider';
 import { useStaffBundle } from '@/hooks/useStaffBundle';
 import { useStaffRealtime } from '@/hooks/useStaffRealtime';
+import { canAccessTeamManagement } from '@/lib/app-role-permissions';
 import { useLinkedStaffEmployee } from '@/lib/staff/useLinkedStaffEmployee';
 import {
   findShiftForToday,
@@ -22,7 +23,7 @@ import { zoneLabel } from '@/lib/staff/staff-zone-styles';
 import { staffDisplayName } from '@/lib/staff/staff-supabase';
 
 export default function PersonalMiHomePage() {
-  const { localId, profileReady, userId, displayName } = useAuth();
+  const { localId, profileReady, userId, displayName, profileRole } = useAuth();
   const [weekStart] = useState(() => ymdLocal(startOfWeekMonday(new Date())));
   const { employees, shifts, timeEntries, loading, error, reload } = useStaffBundle(localId, weekStart);
   const linked = useLinkedStaffEmployee(employees, userId);
@@ -34,6 +35,7 @@ export default function PersonalMiHomePage() {
 
   const greeting =
     displayName?.trim() || (linked ? staffDisplayName(linked) : 'Equipo');
+  const canGoTeamManagement = canAccessTeamManagement(profileRole);
 
   const myToday = useMemo(() => {
     if (!linked) return null;
@@ -69,12 +71,18 @@ export default function PersonalMiHomePage() {
             Pide a un encargado que asocie tu cuenta en <strong>Personal → Equipo</strong> (campo usuario).
           </p>
         </div>
-        <Link
-          href="/personal/empleados"
-          className="flex min-h-[52px] items-center justify-center gap-2 rounded-2xl bg-[#D32F2F] px-4 text-sm font-extrabold text-white"
-        >
-          Ir a Equipo
-        </Link>
+        {canGoTeamManagement ? (
+          <Link
+            href="/personal/empleados"
+            className="flex min-h-[52px] items-center justify-center gap-2 rounded-2xl bg-[#D32F2F] px-4 text-sm font-extrabold text-white"
+          >
+            Ir a Equipo
+          </Link>
+        ) : (
+          <p className="rounded-2xl bg-zinc-50 px-4 py-3 text-sm font-semibold text-zinc-700 ring-1 ring-zinc-200">
+            Solicita a un encargado que vincule tu usuario.
+          </p>
+        )}
       </div>
     );
   }

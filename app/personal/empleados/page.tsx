@@ -2,6 +2,7 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Plus } from 'lucide-react';
+import Link from 'next/link';
 import MermasStyleHero from '@/components/MermasStyleHero';
 import { useAuth } from '@/components/AuthProvider';
 import { buildStaffPermissions } from '@/lib/staff/permissions';
@@ -107,6 +108,22 @@ export default function PersonalEmpleadosPage() {
 
   if (!profileReady) return <p className="text-sm text-zinc-500">Cargando…</p>;
   if (!localId) return <p className="text-sm text-amber-800">Sin local.</p>;
+  if (!perms.canManageEmployees) {
+    return (
+      <div className="space-y-4">
+        <MermasStyleHero eyebrow="Equipo" title="Empleados" compact />
+        <section className="rounded-2xl bg-white p-4 ring-1 ring-zinc-200">
+          <p className="text-sm font-semibold text-zinc-800">No tienes permiso para ver la gestión del equipo.</p>
+          <Link
+            href="/personal/mi"
+            className="mt-3 inline-flex rounded-xl border border-zinc-300 bg-white px-3 py-2 text-sm font-bold text-zinc-800"
+          >
+            Volver a Mi espacio
+          </Link>
+        </section>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4">

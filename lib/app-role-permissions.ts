@@ -13,6 +13,7 @@ export {
   canAccessFinanzas,
   canAccessInventario,
   canAccessPedidosByRole,
+  canAccessTeamManagement,
   canAccessMermasExecutiveAnalytics,
   isRouteBlockedForRole,
 } from '@/lib/permissions';

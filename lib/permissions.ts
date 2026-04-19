@@ -45,6 +45,10 @@ export function canAccessComidaPersonal(role: ProfileAppRole | null): boolean {
   return role === 'admin' || role === 'manager';
 }
 
+export function canAccessTeamManagement(role: ProfileAppRole | null): boolean {
+  return role === 'admin' || role === 'manager';
+}
+
 /** Cuenta > Seguridad y cambios sensibles de credenciales. */
 export function canAccessCuentaSeguridad(role: ProfileAppRole | null): boolean {
   return role === 'admin';
@@ -69,6 +73,7 @@ export function isRouteBlockedForRole(pathname: string | null, role: ProfileAppR
   if (pathname.startsWith('/cocina-central')) return !canAccessCocinaCentral(role);
   if (pathname.startsWith('/pedidos')) return !canAccessPedidosByRole(role);
   if (pathname.startsWith('/comida-personal')) return !canAccessComidaPersonal(role);
+  if (pathname.startsWith('/personal/empleados')) return !canAccessTeamManagement(role);
   if (pathname.startsWith('/inventario')) return !canAccessInventario(role);
   if (pathname.startsWith('/chat')) return !canAccessChat(role);
   if (pathname.startsWith('/cuenta/seguridad')) return !canAccessCuentaSeguridad(role);
@@ -84,6 +89,7 @@ export function isPotentiallyRoleGatedPath(pathname: string | null): boolean {
     pathname.startsWith('/cocina-central') ||
     pathname.startsWith('/pedidos') ||
     pathname.startsWith('/comida-personal') ||
+    pathname.startsWith('/personal/empleados') ||
     pathname.startsWith('/inventario') ||
     pathname.startsWith('/chat') ||
     pathname.startsWith('/cuenta/seguridad')
