@@ -43,6 +43,26 @@ function baseUrl(path: string) {
   return `${SUPABASE_URL}/rest/v1/${path}`;
 }
 
+function authBaseUrl(path: string) {
+  return `${SUPABASE_URL}/auth/v1/${path}`;
+}
+
+async function readErrorBody(response: Response): Promise<string> {
+  const text = await response.text().catch(() => '');
+  if (!text) return '';
+  try {
+    const parsed = JSON.parse(text) as { message?: unknown; msg?: unknown; error_description?: unknown };
+    const message =
+      (typeof parsed.message === 'string' && parsed.message) ||
+      (typeof parsed.msg === 'string' && parsed.msg) ||
+      (typeof parsed.error_description === 'string' && parsed.error_description) ||
+      text;
+    return String(message);
+  } catch {
+    return text;
+  }
+}
+
 /** GET al REST de Supabase con service role (solo servidor). */
 export async function adminRestGet<T>(pathAndQuery: string): Promise<T> {
   const response = await fetch(baseUrl(pathAndQuery), {
@@ -68,7 +88,7 @@ export async function adminRestPost(path: string, body: unknown): Promise<void> 
     body: typeof body === 'string' ? body : JSON.stringify(body),
   });
   if (!response.ok) {
-    const text = await response.text();
+    const text = await readErrorBody(response);
     throw new Error(`Supabase admin POST failed: ${response.status} ${text}`);
   }
 }
@@ -84,10 +104,65 @@ export async function adminRestPostJson<T>(path: string, body: unknown): Promise
     body: typeof body === 'string' ? body : JSON.stringify(body),
   });
   if (!response.ok) {
-    const text = await response.text();
+    const text = await readErrorBody(response);
     throw new Error(`Supabase admin POST failed: ${response.status} ${text}`);
   }
   return (await response.json()) as T;
+}
+
+/** DELETE en REST de Supabase con service role. */
+export async function adminRestDelete(pathAndQuery: string): Promise<void> {
+  const response = await fetch(baseUrl(pathAndQuery), {
+    method: 'DELETE',
+    headers: {
+      ...getHeaders(),
+      Prefer: 'return=minimal',
+    },
+  });
+  if (!response.ok) {
+    const text = await readErrorBody(response);
+    throw new Error(`Supabase admin DELETE failed: ${response.status} ${text}`);
+  }
+}
+
+export type AdminCreatedAuthUser = {
+  id: string;
+  email: string;
+};
+
+export async function adminCreateAuthUser(input: {
+  email: string;
+  password: string;
+}): Promise<AdminCreatedAuthUser> {
+  const response = await fetch(authBaseUrl('admin/users'), {
+    method: 'POST',
+    headers: getHeaders(),
+    body: JSON.stringify({
+      email: input.email.trim().toLowerCase(),
+      password: input.password,
+      email_confirm: true,
+    }),
+  });
+  if (!response.ok) {
+    const text = await readErrorBody(response);
+    throw new Error(`Supabase auth admin create failed: ${response.status} ${text}`);
+  }
+  const data = (await response.json()) as { id?: unknown; email?: unknown };
+  const id = typeof data.id === 'string' ? data.id : '';
+  const email = typeof data.email === 'string' ? data.email.trim().toLowerCase() : '';
+  if (!id || !email) throw new Error('Supabase auth admin create failed: invalid response');
+  return { id, email };
+}
+
+export async function adminDeleteAuthUser(userId: string): Promise<void> {
+  const response = await fetch(authBaseUrl(`admin/users/${encodeURIComponent(userId)}`), {
+    method: 'DELETE',
+    headers: getHeaders(),
+  });
+  if (!response.ok) {
+    const text = await readErrorBody(response);
+    throw new Error(`Supabase auth admin delete failed: ${response.status} ${text}`);
+  }
 }
 
 export async function upsertSnapshot(input: { email: string; products: Product[]; mermas: MermaRecord[] }) {

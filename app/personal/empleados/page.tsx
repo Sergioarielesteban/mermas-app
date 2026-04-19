@@ -5,6 +5,7 @@ import { Plus, Trash2 } from 'lucide-react';
 import Link from 'next/link';
 import MermasStyleHero from '@/components/MermasStyleHero';
 import { useAuth } from '@/components/AuthProvider';
+import type { ProfileAppRole } from '@/lib/profile-app-role';
 import { buildStaffPermissions } from '@/lib/staff/permissions';
 import { STAFF_ZONE_PRESETS } from '@/lib/staff/types';
 import {
@@ -33,9 +34,30 @@ export default function PersonalEmpleadosPage() {
   const [operationalRole, setOperationalRole] = useState('');
   const [color, setColor] = useState('#D32F2F');
   const [pin, setPin] = useState('');
+  const [createAccess, setCreateAccess] = useState(false);
+  const [accessEmail, setAccessEmail] = useState('');
+  const [tempPassword, setTempPassword] = useState('');
+  const [appRole, setAppRole] = useState<ProfileAppRole>('staff');
   const [busy, setBusy] = useState(false);
+  const [okMsg, setOkMsg] = useState<string | null>(null);
   const [operationalUsers, setOperationalUsers] = useState(0);
-  const userLimitReached = operationalUsers >= maxUsers;
+  const roleConsumesOperationalSlot = createAccess && (appRole === 'admin' || appRole === 'manager');
+  const userLimitReached = roleConsumesOperationalSlot && operationalUsers >= maxUsers;
+
+  const resetForm = () => {
+    setFormOpen(false);
+    setFirstName('');
+    setLastName('');
+    setAlias('');
+    setPhone('');
+    setEmail('');
+    setOperationalRole('');
+    setPin('');
+    setCreateAccess(false);
+    setAccessEmail('');
+    setTempPassword('');
+    setAppRole('staff');
+  };
 
   const reload = useCallback(async () => {
     if (!localId) return;
@@ -64,8 +86,9 @@ export default function PersonalEmpleadosPage() {
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!localId || !perms.canManageEmployees) return;
+    setOkMsg(null);
     if (userLimitReached) {
-      setErr('Has alcanzado el límite de usuarios de tu plan');
+      setErr('No hay cupo para más usuarios operativos');
       return;
     }
     const supabase = getSupabaseClient();
@@ -73,25 +96,62 @@ export default function PersonalEmpleadosPage() {
     setBusy(true);
     setErr(null);
     try {
-      await createStaffEmployee(supabase, {
-        localId,
-        firstName,
-        lastName,
-        alias: alias || null,
-        phone: phone || null,
-        email: email || null,
-        operationalRole: operationalRole || null,
-        color: color || null,
-        pinFichaje: pin || null,
-      });
-      setFormOpen(false);
-      setFirstName('');
-      setLastName('');
-      setAlias('');
-      setPhone('');
-      setEmail('');
-      setOperationalRole('');
-      setPin('');
+      if (!createAccess) {
+        await createStaffEmployee(supabase, {
+          localId,
+          firstName,
+          lastName,
+          alias: alias || null,
+          phone: phone || null,
+          email: email || null,
+          operationalRole: operationalRole || null,
+          color: color || null,
+          pinFichaje: pin || null,
+        });
+        setOkMsg('Empleado creado');
+      } else {
+        const emailForAccess = (accessEmail || email).trim().toLowerCase();
+        if (!emailForAccess) {
+          throw new Error('El email de acceso es obligatorio');
+        }
+        if (tempPassword.trim().length < 8) {
+          throw new Error('La contraseña temporal debe tener al menos 8 caracteres');
+        }
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+        const accessToken = session?.access_token;
+        if (!accessToken) {
+          throw new Error('No se pudo validar tu sesión. Vuelve a iniciar sesión.');
+        }
+        const res = await fetch('/api/personal/empleados/create-with-access', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${accessToken}`,
+          },
+          body: JSON.stringify({
+            firstName,
+            lastName,
+            alias,
+            phone,
+            email,
+            operationalRole,
+            color,
+            pinFichaje: pin,
+            createAccess: true,
+            accessEmail: emailForAccess,
+            tempPassword,
+            appRole,
+          }),
+        });
+        const payload = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string };
+        if (!res.ok || payload.ok !== true) {
+          throw new Error(payload.error || 'No se pudo crear el acceso a la app');
+        }
+        setOkMsg('Empleado y acceso a la app creados correctamente');
+      }
+      resetForm();
       await reload();
     } catch (er: unknown) {
       setErr(er instanceof Error ? er.message : 'No se pudo crear');
@@ -155,7 +215,7 @@ export default function PersonalEmpleadosPage() {
         <p className="rounded-2xl bg-zinc-50 px-4 py-3 text-sm text-zinc-600 ring-1 ring-zinc-200">
           Solo los encargados gestionan el equipo.
         </p>
-      ) : userLimitReached ? (
+      ) : roleConsumesOperationalSlot && userLimitReached ? (
         <p className="rounded-2xl bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-900 ring-1 ring-amber-200">
           Has alcanzado el límite de usuarios operativos de tu plan ({operationalUsers}/{maxUsers})
         </p>
@@ -171,6 +231,7 @@ export default function PersonalEmpleadosPage() {
       )}
 
       {err ? <p className="text-sm font-bold text-red-700">{err}</p> : null}
+      {okMsg ? <p className="text-sm font-bold text-emerald-700">{okMsg}</p> : null}
       {loading ? <p className="text-sm text-zinc-500">Cargando…</p> : null}
 
       <ul className="space-y-2">
@@ -216,7 +277,7 @@ export default function PersonalEmpleadosPage() {
 
       {formOpen && perms.canManageEmployees ? (
         <>
-          <button type="button" className="fixed inset-0 z-[80] bg-black/40" aria-hidden onClick={() => setFormOpen(false)} />
+          <button type="button" className="fixed inset-0 z-[80] bg-black/40" aria-hidden onClick={resetForm} />
           <div className="fixed inset-x-0 bottom-0 z-[90] max-h-[90vh] overflow-y-auto rounded-t-3xl bg-white p-4 shadow-xl sm:inset-auto sm:left-1/2 sm:top-1/2 sm:w-full sm:max-w-md sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-3xl">
             <p className="text-lg font-extrabold text-zinc-900">Alta rápida</p>
             <form onSubmit={submit} className="mt-3 space-y-2 pb-28 sm:pb-0">
@@ -261,7 +322,11 @@ export default function PersonalEmpleadosPage() {
                 className="w-full rounded-xl border border-zinc-200 px-3 py-2 text-sm"
                 placeholder="Email"
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                onChange={(e) => {
+                  const next = e.target.value;
+                  setEmail(next);
+                  if (!createAccess || !accessEmail.trim()) setAccessEmail(next);
+                }}
               />
               <label className="flex items-center gap-2 text-xs font-bold text-zinc-600">
                 Color
@@ -273,6 +338,62 @@ export default function PersonalEmpleadosPage() {
                 value={pin}
                 onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 4))}
               />
+              <section className="mt-2 space-y-2 rounded-2xl border border-zinc-200 bg-zinc-50 p-3">
+                <p className="text-sm font-extrabold text-zinc-900">Acceso a la aplicación</p>
+                <label className="flex items-center justify-between gap-3 rounded-xl bg-white px-3 py-2 text-sm font-semibold text-zinc-800 ring-1 ring-zinc-200">
+                  <span>Crear acceso a la app</span>
+                  <select
+                    value={createAccess ? 'si' : 'no'}
+                    onChange={(e) => {
+                      const next = e.target.value === 'si';
+                      setCreateAccess(next);
+                      if (next && !accessEmail.trim()) setAccessEmail(email);
+                    }}
+                    className="rounded-lg border border-zinc-300 px-2 py-1 text-sm font-bold"
+                  >
+                    <option value="no">No</option>
+                    <option value="si">Sí</option>
+                  </select>
+                </label>
+                {createAccess ? (
+                  <>
+                    <input
+                      required
+                      type="email"
+                      className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm"
+                      placeholder="Email de acceso"
+                      value={accessEmail}
+                      onChange={(e) => setAccessEmail(e.target.value)}
+                    />
+                    <input
+                      required
+                      type="password"
+                      className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm"
+                      placeholder="Contraseña temporal (mín. 8 caracteres)"
+                      value={tempPassword}
+                      onChange={(e) => setTempPassword(e.target.value)}
+                    />
+                    <select
+                      className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm"
+                      value={appRole}
+                      onChange={(e) => setAppRole(e.target.value as ProfileAppRole)}
+                    >
+                      <option value="admin">admin</option>
+                      <option value="manager">manager</option>
+                      <option value="staff">staff</option>
+                    </select>
+                    {roleConsumesOperationalSlot ? (
+                      <p className="text-xs font-semibold text-zinc-600">
+                        Cupo operativo: {operationalUsers}/{maxUsers}
+                      </p>
+                    ) : null}
+                  </>
+                ) : (
+                  <p className="text-xs font-semibold text-zinc-600">
+                    Se creará solo como empleado operativo (sin acceso de login).
+                  </p>
+                )}
+              </section>
               <div className="fixed inset-x-0 bottom-0 z-[95] border-t border-zinc-200 bg-white p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:static sm:z-auto sm:border-0 sm:bg-transparent sm:p-0">
                 <button
                   type="submit"
