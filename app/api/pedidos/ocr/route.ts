@@ -1,5 +1,5 @@
 /**
- * @deprecated Usar POST /api/pedidos/ocr. Alias temporal; misma implementación y límites.
+ * OCR de albaranes (genérico). Proveedor según OCR_PROVIDER (p. ej. textract).
  */
 import { handlePedidosOcrPost } from '@/lib/ocr/post-handler';
 

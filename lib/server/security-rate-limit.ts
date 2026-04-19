@@ -5,8 +5,8 @@ import { checkRateLimit } from '@/lib/server/simple-rate-limit';
 
 /** Límites por ventana de 60s (acuerdo hardening pre-producción). */
 export const RL = {
-  /** OCR / Textract */
-  textract: { limit: 10, windowMs: 60_000 },
+  /** OCR albaranes (genérico; proveedor en servidor) */
+  ocr: { limit: 10, windowMs: 60_000 },
   /** Rutas /api/ai/* (forecast, oido-chef, tts) */
   ai: { limit: 20, windowMs: 60_000 },
   /** Formulario público leads */
@@ -23,7 +23,7 @@ export type RateLimitScope = keyof typeof RL;
 export function enforceRateLimitAuth(
   request: Request,
   userId: string,
-  scope: 'textract' | 'ai',
+  scope: 'ocr' | 'ai',
 ): NextResponse | null {
   const ip = getClientIp(request);
   const spec = RL[scope];

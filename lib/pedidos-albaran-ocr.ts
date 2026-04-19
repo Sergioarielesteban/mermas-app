@@ -44,12 +44,12 @@ export async function compressImageFileToJpeg(
 }
 
 /**
- * OCR vía AWS Textract (servidor). Requiere sesión Supabase y variables AWS en el despliegue.
+ * OCR de albarán vía API neutra (`/api/pedidos/ocr`). El proveedor (Textract u otro) vive solo en el servidor.
  */
-export async function runAlbaranOcrViaTextract(blob: Blob, accessToken: string): Promise<string> {
+export async function runAlbaranOcr(blob: Blob, accessToken: string): Promise<string> {
   const form = new FormData();
   form.append('image', blob, 'albaran.jpg');
-  const res = await fetch('/api/pedidos/textract', {
+  const res = await fetch('/api/pedidos/ocr', {
     method: 'POST',
     headers: { Authorization: `Bearer ${accessToken}` },
     body: form,
@@ -60,7 +60,13 @@ export async function runAlbaranOcrViaTextract(blob: Blob, accessToken: string):
   } catch {
     body = null;
   }
-  const rec = body as { ok?: boolean; reason?: string; error?: string; text?: string } | null;
+  const rec = body as {
+    ok?: boolean;
+    reason?: string;
+    error?: string;
+    text?: string;
+    result?: { rawText?: string };
+  } | null;
   if (!res.ok || !rec?.ok) {
     const reason =
       typeof rec?.reason === 'string'
@@ -70,5 +76,12 @@ export async function runAlbaranOcrViaTextract(blob: Blob, accessToken: string):
           : `HTTP ${res.status}`;
     throw new Error(reason);
   }
-  return rec.text ?? '';
+  const t = typeof rec.text === 'string' ? rec.text : '';
+  if (t.length > 0) return t;
+  return typeof rec.result?.rawText === 'string' ? rec.result.rawText : '';
+}
+
+/** @deprecated Usar `runAlbaranOcr` (misma firma). */
+export async function runAlbaranOcrViaTextract(blob: Blob, accessToken: string): Promise<string> {
+  return runAlbaranOcr(blob, accessToken);
 }
