@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 export type CcUnit = 'kg' | 'ud' | 'bolsa' | 'racion';
+export type CcPreparationUnit = CcUnit | 'litros' | 'unidades';
 
 export type ProductionOrderEstado = 'borrador' | 'en_curso' | 'completada' | 'cancelada';
 
@@ -24,21 +25,54 @@ export type DeliveryEstado =
 
 export type DestinationLocal = { id: string; code: string; name: string };
 
+export type CentralPreparationRow = {
+  id: string;
+  local_central_id: string;
+  nombre: string;
+  descripcion: string | null;
+  categoria: string;
+  unidad_base: CcPreparationUnit;
+  activo: boolean;
+  rendimiento: number | null;
+  caducidad_dias: number | null;
+  observaciones: string | null;
+  legacy_product_id: string | null;
+  inventory_product_id: string | null;
+  catalog_product_id: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type PreparationIngredientRow = {
+  id: string;
+  preparation_id: string;
+  ingredient_preparation_id: string;
+  cantidad: number;
+  unidad: CcPreparationUnit;
+  observaciones: string | null;
+  created_at: string;
+  updated_at: string;
+  central_preparations?: { nombre: string } | { nombre: string }[] | null;
+};
+
 export type ProductionOrderRow = {
   id: string;
-  product_id: string;
+  product_id: string | null;
+  preparation_id: string | null;
   local_central_id: string;
   fecha: string;
   cantidad_objetivo: number;
   estado: ProductionOrderEstado;
   created_at: string;
+  central_preparations?: { nombre: string } | { nombre: string }[] | null;
   products?: { name: string } | { name: string }[] | null;
 };
 
 export type ProductionBatchRow = {
   id: string;
   production_order_id: string | null;
-  product_id: string;
+  product_id: string | null;
+  preparation_id: string | null;
   local_central_id: string;
   codigo_lote: string;
   fecha_elaboracion: string;
@@ -48,6 +82,7 @@ export type ProductionBatchRow = {
   estado: BatchEstado;
   qr_token: string;
   created_at: string;
+  central_preparations?: { nombre: string } | { nombre: string }[] | null;
   products?: { name: string } | { name: string }[] | null;
 };
 
@@ -77,7 +112,8 @@ export type DeliveryItemRow = {
   id: string;
   delivery_id: string;
   batch_id: string;
-  product_id: string;
+  product_id: string | null;
+  preparation_id: string | null;
   cantidad: number;
   unidad: CcUnit;
   production_batches?:
@@ -90,15 +126,18 @@ export type DeliveryItemRow = {
         'codigo_lote' | 'fecha_elaboracion' | 'fecha_caducidad' | 'id' | 'estado'
       >[]
     | null;
+  central_preparations?: { nombre: string } | { nombre: string }[] | null;
   products?: { name: string } | { name: string }[] | null;
 };
 
 export type IngredientTraceRow = {
   id: string;
   batch_id: string;
-  ingredient_product_id: string;
+  ingredient_product_id: string | null;
+  ingredient_preparation_id: string | null;
   cantidad: number;
   unidad: CcUnit;
+  central_preparations?: { nombre: string } | { nombre: string }[] | null;
   products?: { name: string } | { name: string }[] | null;
 };
 
@@ -113,12 +152,18 @@ export type BatchMovementRow = {
   delivery_id: string | null;
 };
 
+const PREP_SELECT =
+  'id,local_central_id,nombre,descripcion,categoria,unidad_base,activo,rendimiento,caducidad_dias,observaciones,legacy_product_id,inventory_product_id,catalog_product_id,created_at,updated_at';
+
 export async function ccListDestinations(supabase: SupabaseClient): Promise<DestinationLocal[]> {
   const { data, error } = await supabase.rpc('cc_list_delivery_destinations');
   if (error) throw new Error(error.message);
   return (data ?? []) as DestinationLocal[];
 }
 
+/**
+ * @deprecated Producción central ya no debe depender de `products`.
+ */
 export async function ccFetchProductsForLocal(
   supabase: SupabaseClient,
   localId: string,
@@ -133,21 +178,119 @@ export async function ccFetchProductsForLocal(
   return (data ?? []) as Array<{ id: string; name: string; unit: CcUnit }>;
 }
 
+export async function ccListPreparations(
+  supabase: SupabaseClient,
+  localCentralId: string,
+  opts?: { onlyActive?: boolean },
+): Promise<CentralPreparationRow[]> {
+  const q = supabase
+    .from('central_preparations')
+    .select(PREP_SELECT)
+    .eq('local_central_id', localCentralId)
+    .order('nombre');
+  if (opts?.onlyActive) q.eq('activo', true);
+  const { data, error } = await q;
+  if (error) throw new Error(error.message);
+  return (data ?? []) as CentralPreparationRow[];
+}
+
+export async function ccInsertPreparation(
+  supabase: SupabaseClient,
+  row: {
+    local_central_id: string;
+    nombre: string;
+    descripcion?: string | null;
+    categoria?: string;
+    unidad_base: CcPreparationUnit;
+    activo?: boolean;
+    rendimiento?: number | null;
+    caducidad_dias?: number | null;
+    observaciones?: string | null;
+    inventory_product_id?: string | null;
+    catalog_product_id?: string | null;
+  },
+): Promise<CentralPreparationRow> {
+  const { data, error } = await supabase
+    .from('central_preparations')
+    .insert({
+      local_central_id: row.local_central_id,
+      nombre: row.nombre.trim(),
+      descripcion: row.descripcion?.trim() || null,
+      categoria: row.categoria?.trim() || 'General',
+      unidad_base: row.unidad_base,
+      activo: row.activo ?? true,
+      rendimiento: row.rendimiento ?? null,
+      caducidad_dias: row.caducidad_dias ?? null,
+      observaciones: row.observaciones?.trim() || null,
+      inventory_product_id: row.inventory_product_id ?? null,
+      catalog_product_id: row.catalog_product_id ?? null,
+    })
+    .select(PREP_SELECT)
+    .single();
+  if (error) throw new Error(error.message);
+  return data as CentralPreparationRow;
+}
+
+export async function ccListPreparationIngredients(
+  supabase: SupabaseClient,
+  preparationId: string,
+): Promise<PreparationIngredientRow[]> {
+  const { data, error } = await supabase
+    .from('central_preparation_ingredients')
+    .select('*, central_preparations(nombre)')
+    .eq('preparation_id', preparationId)
+    .order('created_at');
+  if (error) throw new Error(error.message);
+  return (data ?? []) as PreparationIngredientRow[];
+}
+
+export async function ccReplacePreparationIngredients(
+  supabase: SupabaseClient,
+  preparationId: string,
+  ingredients: Array<{
+    ingredient_preparation_id: string;
+    cantidad: number;
+    unidad: CcPreparationUnit;
+    observaciones?: string | null;
+  }>,
+): Promise<void> {
+  const { error: delError } = await supabase
+    .from('central_preparation_ingredients')
+    .delete()
+    .eq('preparation_id', preparationId);
+  if (delError) throw new Error(delError.message);
+  if (ingredients.length === 0) return;
+  const payload = ingredients
+    .filter((x) => x.ingredient_preparation_id && Number.isFinite(x.cantidad) && x.cantidad > 0)
+    .map((x) => ({
+      preparation_id: preparationId,
+      ingredient_preparation_id: x.ingredient_preparation_id,
+      cantidad: x.cantidad,
+      unidad: x.unidad,
+      observaciones: x.observaciones?.trim() || null,
+    }));
+  if (payload.length === 0) return;
+  const { error } = await supabase.from('central_preparation_ingredients').insert(payload);
+  if (error) throw new Error(error.message);
+}
+
 export async function ccInsertProductionOrder(
   supabase: SupabaseClient,
   row: {
-    product_id: string;
+    preparation_id: string;
     local_central_id: string;
     fecha: string;
     cantidad_objetivo: number;
     estado?: ProductionOrderEstado;
     created_by?: string | null;
+    product_id?: string | null;
   },
 ): Promise<string> {
   const { data, error } = await supabase
     .from('production_orders')
     .insert({
-      product_id: row.product_id,
+      preparation_id: row.preparation_id,
+      product_id: row.product_id ?? null,
       local_central_id: row.local_central_id,
       fecha: row.fecha,
       cantidad_objetivo: row.cantidad_objetivo,
@@ -166,7 +309,7 @@ export async function ccFetchProductionOrders(
 ): Promise<ProductionOrderRow[]> {
   const { data, error } = await supabase
     .from('production_orders')
-    .select('*, products(name)')
+    .select('*, central_preparations(nombre), products(name)')
     .eq('local_central_id', localCentralId)
     .order('fecha', { ascending: false });
   if (error) throw new Error(error.message);
@@ -177,24 +320,24 @@ export async function ccRegisterProductionBatch(
   supabase: SupabaseClient,
   args: {
     orderId: string | null;
-    productId: string;
+    preparationId: string;
     localCentralId: string;
     fechaElaboracion: string;
     fechaCaducidad: string | null;
     cantidad: number;
     unidad: CcUnit;
-    ingredients?: Array<{ product_id: string; cantidad: number; unidad: CcUnit }>;
+    ingredients?: Array<{ preparation_id: string; cantidad: number; unidad: CcUnit }>;
   },
 ): Promise<string> {
   const ingredients =
     args.ingredients?.map((i) => ({
-      product_id: i.product_id,
+      preparation_id: i.preparation_id,
       cantidad: i.cantidad,
       unidad: i.unidad,
     })) ?? [];
-  const { data, error } = await supabase.rpc('cc_register_production_batch', {
+  const { data, error } = await supabase.rpc('cc_register_production_batch_v2', {
     p_order_id: args.orderId,
-    p_product_id: args.productId,
+    p_preparation_id: args.preparationId,
     p_local_central_id: args.localCentralId,
     p_fecha_elaboracion: args.fechaElaboracion,
     p_fecha_caducidad: args.fechaCaducidad,
@@ -213,7 +356,7 @@ export async function ccFetchBatchesCentral(
 ): Promise<Array<ProductionBatchRow & { batch_stock?: BatchStockRow[] }>> {
   const { data, error } = await supabase
     .from('production_batches')
-    .select('*, products(name), batch_stock(cantidad, local_id)')
+    .select('*, central_preparations(nombre), products(name), batch_stock(cantidad, local_id)')
     .eq('local_central_id', centralLocalId)
     .order('created_at', { ascending: false });
   if (error) throw new Error(error.message);
@@ -227,7 +370,7 @@ export async function ccFetchBatchesWithStockHere(
 ): Promise<Array<ProductionBatchRow & { batch_stock?: BatchStockRow[] }>> {
   const { data, error } = await supabase
     .from('production_batches')
-    .select('*, products(name), batch_stock!inner(cantidad, local_id)')
+    .select('*, central_preparations(nombre), products(name), batch_stock!inner(cantidad, local_id)')
     .eq('batch_stock.local_id', localId)
     .order('created_at', { ascending: false });
   if (error) throw new Error(error.message);
@@ -240,7 +383,7 @@ export async function ccFetchBatchById(
 ): Promise<ProductionBatchRow | null> {
   const { data, error } = await supabase
     .from('production_batches')
-    .select('*, products(name)')
+    .select('*, central_preparations(nombre), products(name)')
     .eq('id', batchId)
     .maybeSingle();
   if (error) throw new Error(error.message);
@@ -254,7 +397,7 @@ export async function ccFetchBatchByQrToken(
   const clean = token.trim();
   const { data, error } = await supabase
     .from('production_batches')
-    .select('*, products(name)')
+    .select('*, central_preparations(nombre), products(name)')
     .eq('qr_token', clean)
     .maybeSingle();
   if (error) throw new Error(error.message);
@@ -279,7 +422,7 @@ export async function ccFetchIngredientTrace(
 ): Promise<IngredientTraceRow[]> {
   const { data, error } = await supabase
     .from('batch_ingredient_trace')
-    .select('*, products(name)')
+    .select('*, central_preparations(nombre), products(name)')
     .eq('batch_id', batchId);
   if (error) throw new Error(error.message);
   return (data ?? []) as IngredientTraceRow[];
@@ -385,7 +528,9 @@ export async function ccFetchDeliveryDetail(
   if (dErr) throw new Error(dErr.message);
   const { data: items, error: iErr } = await supabase
     .from('delivery_items')
-    .select('*, production_batches(codigo_lote, fecha_elaboracion, fecha_caducidad), products(name)')
+    .select(
+      '*, production_batches(codigo_lote, fecha_elaboracion, fecha_caducidad, id, estado), central_preparations(nombre), products(name)',
+    )
     .eq('delivery_id', deliveryId);
   if (iErr) throw new Error(iErr.message);
   return {
@@ -427,7 +572,8 @@ export async function ccInsertDeliveryItem(
   row: {
     delivery_id: string;
     batch_id: string;
-    product_id: string;
+    product_id?: string | null;
+    preparation_id?: string | null;
     cantidad: number;
     unidad: CcUnit;
   },
@@ -500,11 +646,19 @@ export async function ccInsertIncident(
 }
 
 export function ccProductName(
-  products: { name: string } | { name: string }[] | null | undefined,
+  source:
+    | { name?: string | null; nombre?: string | null }
+    | { name?: string | null; nombre?: string | null }[]
+    | null
+    | undefined,
 ): string {
-  if (!products) return '—';
-  const p = Array.isArray(products) ? products[0] : products;
-  return p?.name ?? '—';
+  if (!source) return '—';
+  const p = Array.isArray(source) ? source[0] : source;
+  const n = p?.nombre?.trim?.();
+  if (n) return n;
+  const legacy = p?.name?.trim?.();
+  if (legacy) return legacy;
+  return '—';
 }
 
 export function ccBatchStockAt(

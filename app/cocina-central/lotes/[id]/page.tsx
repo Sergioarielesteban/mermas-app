@@ -99,7 +99,9 @@ export default function CocinaCentralLoteDetailPage() {
         <Link href="/cocina-central/lotes" className="text-sm font-bold text-[#D32F2F]">
           ← Lotes
         </Link>
-        <h1 className="mt-2 text-xl font-extrabold text-zinc-900">{ccProductName(batch.products)}</h1>
+        <h1 className="mt-2 text-xl font-extrabold text-zinc-900">
+          {ccProductName((Array.isArray(batch.central_preparations) ? batch.central_preparations[0] : batch.central_preparations) ?? batch.products)}
+        </h1>
         <p className="mt-1 text-sm font-semibold text-zinc-600">
           {batch.codigo_lote} · {batch.estado}
         </p>
@@ -149,7 +151,7 @@ export default function CocinaCentralLoteDetailPage() {
           ) : (
             ing.map((r) => (
               <li key={r.id}>
-                {ccProductName(r.products)} — {r.cantidad} {r.unidad}
+                {ccProductName((Array.isArray(r.central_preparations) ? r.central_preparations[0] : r.central_preparations) ?? r.products)} — {r.cantidad} {r.unidad}
               </li>
             ))
           )}

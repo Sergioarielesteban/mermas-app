@@ -56,7 +56,9 @@ export default function CocinaCentralEtiquetaPage() {
       </Link>
 
       <div className="mx-auto max-w-sm rounded-2xl border-2 border-zinc-900 bg-white p-6 text-center print:border-black">
-        <p className="text-lg font-extrabold leading-tight text-zinc-900">{ccProductName(batch.products)}</p>
+        <p className="text-lg font-extrabold leading-tight text-zinc-900">
+          {ccProductName((Array.isArray(batch.central_preparations) ? batch.central_preparations[0] : batch.central_preparations) ?? batch.products)}
+        </p>
         <p className="mt-3 text-sm font-bold text-zinc-700">Lote {batch.codigo_lote}</p>
         <p className="mt-2 text-xs text-zinc-600">
           Elaboración {batch.fecha_elaboracion}

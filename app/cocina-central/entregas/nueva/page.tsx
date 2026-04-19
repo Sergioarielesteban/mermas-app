@@ -110,6 +110,7 @@ export default function CocinaCentralEntregaNuevaPage() {
           delivery_id: deliveryId,
           batch_id: batchId,
           product_id: batch.product_id,
+          preparation_id: batch.preparation_id,
           cantidad,
           unidad: batch.unidad as CcUnit,
         });
@@ -199,7 +200,7 @@ export default function CocinaCentralEntregaNuevaPage() {
             >
               {batches.map((b) => (
                 <option key={b.id} value={b.id}>
-                  {b.codigo_lote} · {ccProductName(b.products)} (disp. {stockOf(b.id, localId)} {b.unidad})
+                  {b.codigo_lote} · {ccProductName((Array.isArray(b.central_preparations) ? b.central_preparations[0] : b.central_preparations) ?? b.products)} (disp. {stockOf(b.id, localId)} {b.unidad})
                 </option>
               ))}
             </select>

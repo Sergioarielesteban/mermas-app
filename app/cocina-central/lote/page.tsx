@@ -72,7 +72,9 @@ function LoteTokenBody() {
 
   return (
     <div className="space-y-5">
-      <h1 className="text-xl font-extrabold text-zinc-900">{ccProductName(batch.products)}</h1>
+      <h1 className="text-xl font-extrabold text-zinc-900">
+        {ccProductName((Array.isArray(batch.central_preparations) ? batch.central_preparations[0] : batch.central_preparations) ?? batch.products)}
+      </h1>
       <p className="text-sm font-semibold text-zinc-600">
         {batch.codigo_lote} · {batch.estado}
       </p>
@@ -96,7 +98,7 @@ function LoteTokenBody() {
           ) : (
             ing.map((r) => (
               <li key={r.id}>
-                {ccProductName(r.products)} · {r.cantidad} {r.unidad}
+                {ccProductName((Array.isArray(r.central_preparations) ? r.central_preparations[0] : r.central_preparations) ?? r.products)} · {r.cantidad} {r.unidad}
               </li>
             ))
           )}

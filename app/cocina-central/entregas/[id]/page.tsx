@@ -178,7 +178,9 @@ export default function CocinaCentralEntregaDetallePage() {
             const b = Array.isArray(it.production_batches) ? it.production_batches[0] : it.production_batches;
             return (
               <li key={it.id} className="py-2 text-sm">
-                <span className="font-bold text-zinc-900">{ccProductName(it.products)}</span>
+                <span className="font-bold text-zinc-900">
+                  {ccProductName((Array.isArray(it.central_preparations) ? it.central_preparations[0] : it.central_preparations) ?? it.products)}
+                </span>
                 <span className="text-zinc-600">
                   {' '}
                   · Lote {b?.codigo_lote ?? '—'} · {it.cantidad} {it.unidad}

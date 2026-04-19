@@ -56,7 +56,7 @@ export function buildDeliveryAlbaranPdf(opts: {
       ? it.production_batches[0]
       : it.production_batches;
     return [
-      ccProductName(it.products),
+      ccProductName((Array.isArray(it.central_preparations) ? it.central_preparations[0] : it.central_preparations) ?? it.products),
       batch?.codigo_lote ?? '—',
       String(it.cantidad),
       it.unidad,

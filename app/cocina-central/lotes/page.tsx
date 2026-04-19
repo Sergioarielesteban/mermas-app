@@ -84,7 +84,9 @@ export default function CocinaCentralLotesPage() {
             <li key={b.id} className="rounded-2xl border border-zinc-200 bg-white p-4">
               <div className="flex flex-wrap items-start justify-between gap-2">
                 <div>
-                  <p className="font-extrabold text-zinc-900">{ccProductName(b.products)}</p>
+                  <p className="font-extrabold text-zinc-900">
+                    {ccProductName((Array.isArray(b.central_preparations) ? b.central_preparations[0] : b.central_preparations) ?? b.products)}
+                  </p>
                   <p className="text-xs font-semibold text-zinc-500">
                     {b.codigo_lote} · {b.estado}
                   </p>
