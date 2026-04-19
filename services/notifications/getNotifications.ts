@@ -1,11 +1,15 @@
 import type { NotificationRow, NotificationWithRead } from './types';
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { normalizeNotificationType } from './visibility';
 
 export function mapNotificationRow(r: Record<string, unknown>): NotificationRow {
   return {
     id: String(r.id),
     localId: String(r.local_id),
-    type: String(r.type),
+    type: normalizeNotificationType(
+      r.type != null ? String(r.type) : null,
+      r.entity_type != null ? String(r.entity_type) : null,
+    ),
     severity: (r.severity as NotificationRow['severity']) ?? 'info',
     title: String(r.title),
     message: String(r.message),

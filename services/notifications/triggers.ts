@@ -63,7 +63,7 @@ export async function notifyIncidenciaRecepcion(
 ): Promise<void> {
   await safeCreateNotification(supabase, {
     localId: ctx.localId,
-    type: 'incidencia_recepcion' satisfies NotificationEventType,
+    type: 'pedido_recibido' satisfies NotificationEventType,
     title: 'Incidencia en recepción',
     message: `${ctx.actorName} ha reportado una incidencia en un pedido de ${ctx.supplierName}`,
     severity: 'warning',
@@ -131,7 +131,7 @@ export async function notifyInventarioCerrado(
 ): Promise<void> {
   await safeCreateNotification(supabase, {
     localId: ctx.localId,
-    type: 'inventario_cerrado' satisfies NotificationEventType,
+    type: 'sistema_evento' satisfies NotificationEventType,
     title: 'Inventario cerrado',
     message: `${ctx.actorName} ha cerrado el inventario del local (${ctx.yearMonth})`,
     createdBy: ctx.userId,
@@ -155,7 +155,7 @@ export async function notifyMensajeEquipo(
     ctx.preview.length > 120 ? `${ctx.preview.slice(0, 117)}…` : ctx.preview;
   await safeCreateNotification(supabase, {
     localId: ctx.localId,
-    type: 'mensaje_equipo' satisfies NotificationEventType,
+    type: 'chat_message' satisfies NotificationEventType,
     title: 'Nuevo mensaje del equipo',
     message: `${ctx.actorName} ha enviado un mensaje al equipo: ${preview}`,
     createdBy: ctx.userId,

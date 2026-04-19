@@ -14,4 +14,5 @@ export { registerDevice } from './registerDevice';
 export { preparePushDispatch, sendPushToLocalUsers } from './pushDispatch';
 export { getNotificationHref } from './navigation';
 export { defaultSeverityForType } from './constants';
+export { canUserSeeNotification, normalizeNotificationType } from './visibility';
 export * from './triggers';

@@ -11,9 +11,13 @@ import NotificationsPanel from './NotificationsPanel';
 
 export default function NotificationBell() {
   const router = useRouter();
-  const { localId, userId } = useAuth();
+  const { localId, userId, profileRole } = useAuth();
   const [open, setOpen] = useState(false);
-  const { items, unreadCount, loading, error, markRead, markAllRead, clearAll } = useNotifications(localId, userId);
+  const { items, unreadCount, loading, error, markRead, markAllRead, clearAll } = useNotifications(
+    localId,
+    userId,
+    profileRole,
+  );
 
   useRegisterNotificationDevice(localId, userId, Boolean(localId && userId));
 

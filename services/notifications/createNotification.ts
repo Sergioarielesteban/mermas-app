@@ -2,12 +2,16 @@ import type { CreateNotificationInput, NotificationRow } from './types';
 import { defaultSeverityForType } from './constants';
 import { preparePushDispatch } from './pushDispatch';
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { normalizeNotificationType } from './visibility';
 
 function mapRow(r: Record<string, unknown>): NotificationRow {
   return {
     id: String(r.id),
     localId: String(r.local_id),
-    type: String(r.type),
+    type: normalizeNotificationType(
+      r.type != null ? String(r.type) : null,
+      r.entity_type != null ? String(r.entity_type) : null,
+    ),
     severity: (r.severity as NotificationRow['severity']) ?? 'info',
     title: String(r.title),
     message: String(r.message),
@@ -29,12 +33,13 @@ export async function createNotification(
   supabase: SupabaseClient,
   input: CreateNotificationInput,
 ): Promise<NotificationRow> {
-  const severity = input.severity ?? defaultSeverityForType(input.type);
+  const normalizedType = normalizeNotificationType(input.type, input.entityType);
+  const severity = input.severity ?? defaultSeverityForType(normalizedType);
   const { data, error } = await supabase
     .from('notifications')
     .insert({
       local_id: input.localId,
-      type: input.type,
+      type: normalizedType,
       severity,
       title: input.title.trim(),
       message: input.message.trim(),

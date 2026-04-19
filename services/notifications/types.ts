@@ -1,15 +1,10 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import type { NotificationType } from './visibility';
 
 export type NotificationSeverity = 'info' | 'warning' | 'critical';
 
-/** Tipos de evento; amplía aquí y en NOTIFICATION_DEFAULTS. */
-export type NotificationEventType =
-  | 'pedido_enviado'
-  | 'pedido_recibido'
-  | 'incidencia_recepcion'
-  | 'appcc_alerta'
-  | 'inventario_cerrado'
-  | 'mensaje_equipo';
+/** Tipos de evento canónicos para visibilidad por rol. */
+export type NotificationEventType = NotificationType;
 
 export type CreateNotificationInput = {
   localId: string;

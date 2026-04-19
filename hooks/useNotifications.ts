@@ -1,18 +1,19 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { ProfileAppRole } from '@/components/AuthProvider';
 import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
 import { showSystemNotification } from '@/lib/browser-notifications';
 import {
   getNotifications,
-  getUnreadNotificationsCount,
   mapNotificationRow,
   markAllNotificationsAsRead,
   markNotificationAsRead,
   type NotificationWithRead,
 } from '@/services/notifications';
+import { canUserSeeNotification } from '@/services/notifications/visibility';
 
-export function useNotifications(localId: string | null, userId: string | null) {
+export function useNotifications(localId: string | null, userId: string | null, userRole: ProfileAppRole | null) {
   const [items, setItems] = useState<NotificationWithRead[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -54,15 +55,13 @@ export function useNotifications(localId: string | null, userId: string | null) 
     setLoading(true);
     setError(null);
     try {
-      const [list, count] = await Promise.all([
-        getNotifications(supabase, localId, userId, { limit: 50 }),
-        getUnreadNotificationsCount(supabase, localId, userId),
-      ]);
+      const list = await getNotifications(supabase, localId, userId, { limit: 50 });
       const clearedBefore = readClearedBefore();
-      const filtered = clearedBefore ? list.filter((n) => n.createdAt > clearedBefore) : list;
-      const unreadFiltered = filtered.filter((n) => !n.readAt).length;
-      setItems(filtered);
-      setUnreadCount(Math.min(count, unreadFiltered));
+      const clearedFiltered = clearedBefore ? list.filter((n) => n.createdAt > clearedBefore) : list;
+      const roleFiltered = clearedFiltered.filter((n) => canUserSeeNotification(userRole, n.type));
+      const unreadFiltered = roleFiltered.filter((n) => !n.readAt).length;
+      setItems(roleFiltered);
+      setUnreadCount(unreadFiltered);
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Error al cargar notificaciones.';
       if (msg.toLowerCase().includes('does not exist') || msg.includes('notifications')) {
@@ -75,7 +74,7 @@ export function useNotifications(localId: string | null, userId: string | null) 
     } finally {
       setLoading(false);
     }
-  }, [localId, userId, supabaseOk, readClearedBefore]);
+  }, [localId, userId, supabaseOk, readClearedBefore, userRole]);
 
   refreshRef.current = refresh;
 
@@ -106,6 +105,7 @@ export function useNotifications(localId: string | null, userId: string | null) 
             const mapped = mapNotificationRow(row);
             const clearedBefore = readClearedBefore();
             if (clearedBefore && mapped.createdAt <= clearedBefore) return;
+            if (!canUserSeeNotification(userRole, mapped.type)) return;
             const fromSelf =
               mapped.createdBy != null && Boolean(userId) && mapped.createdBy === userId;
             if (!fromSelf) {
@@ -126,25 +126,16 @@ export function useNotifications(localId: string | null, userId: string | null) 
     return () => {
       void supabase.removeChannel(ch);
     };
-  }, [localId, userId, supabaseOk, readClearedBefore]);
+  }, [localId, userId, supabaseOk, readClearedBefore, userRole]);
 
   const markRead = useCallback(
     async (notificationId: string) => {
       if (!userId || !localId || !supabaseOk) return;
       const supabase = getSupabaseClient()!;
       await markNotificationAsRead(supabase, notificationId, userId);
-      const now = new Date().toISOString();
-      setItems((prev) =>
-        prev.map((n) => (n.id === notificationId ? { ...n, readAt: n.readAt ?? now } : n)),
-      );
-      try {
-        const count = await getUnreadNotificationsCount(supabase, localId, userId);
-        setUnreadCount(count);
-      } catch {
-        setUnreadCount((c) => Math.max(0, c - 1));
-      }
+      await refresh();
     },
-    [userId, localId, supabaseOk],
+    [userId, localId, supabaseOk, refresh],
   );
 
   const markAllRead = useCallback(async () => {
