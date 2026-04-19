@@ -16,11 +16,12 @@ import {
   updateStaffEmployee,
 } from '@/lib/staff/staff-supabase';
 import { countOperationalUsersForLocal } from '@/lib/subscriptions-supabase';
+import { getModuleActionAccess, logAccessBlocked, type ModuleAction } from '@/lib/moduleAccessControl';
 import { getSupabaseClient } from '@/lib/supabase-client';
 import type { StaffEmployee } from '@/lib/staff/types';
 
 export default function PersonalEmpleadosPage() {
-  const { localId, profileRole, profileReady, maxUsers } = useAuth();
+  const { localId, profileRole, profileReady, maxUsers, userId, plan } = useAuth();
   const perms = useMemo(() => buildStaffPermissions(profileRole), [profileRole]);
   const [list, setList] = useState<StaffEmployee[]>([]);
   const [loading, setLoading] = useState(false);
@@ -59,6 +60,30 @@ export default function PersonalEmpleadosPage() {
     setAppRole('staff');
   };
 
+  const ensurePersonalActionAccess = (action: ModuleAction): boolean => {
+    const access = getModuleActionAccess(
+      { userId, role: profileRole, plan },
+      'personal',
+      action,
+    );
+    if (access.allowed) return true;
+    logAccessBlocked({
+      userId,
+      role: profileRole,
+      plan,
+      module: 'personal',
+      action,
+      cause: access.blockedBy ?? 'role',
+      path: '/personal/empleados',
+    });
+    setErr(
+      access.blockedBy === 'plan'
+        ? 'Este módulo no está incluido en tu plan'
+        : 'Esta acción no está disponible para tu rol',
+    );
+    return false;
+  };
+
   const reload = useCallback(async () => {
     if (!localId) return;
     const supabase = getSupabaseClient();
@@ -86,6 +111,7 @@ export default function PersonalEmpleadosPage() {
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!localId || !perms.canManageEmployees) return;
+    if (!ensurePersonalActionAccess('create')) return;
     setOkMsg(null);
     if (userLimitReached) {
       setErr('No hay cupo para más usuarios operativos');
@@ -162,6 +188,7 @@ export default function PersonalEmpleadosPage() {
 
   const toggleActive = async (em: StaffEmployee) => {
     if (!perms.canManageEmployees) return;
+    if (!ensurePersonalActionAccess('edit')) return;
     const supabase = getSupabaseClient();
     if (!supabase) return;
     try {
@@ -174,6 +201,7 @@ export default function PersonalEmpleadosPage() {
 
   const removeEmployee = async (em: StaffEmployee) => {
     if (!perms.canManageEmployees) return;
+    if (!ensurePersonalActionAccess('delete')) return;
     const supabase = getSupabaseClient();
     if (!supabase) return;
     const ok = window.confirm(
@@ -222,7 +250,10 @@ export default function PersonalEmpleadosPage() {
       ) : (
         <button
           type="button"
-          onClick={() => setFormOpen(true)}
+          onClick={() => {
+            if (!ensurePersonalActionAccess('open_management_modal')) return;
+            setFormOpen(true);
+          }}
           className="flex w-full items-center justify-center gap-2 rounded-2xl bg-[#D32F2F] py-3 text-sm font-extrabold text-white sm:w-auto sm:px-6"
         >
           <Plus className="h-5 w-5" />

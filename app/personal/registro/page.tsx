@@ -20,6 +20,7 @@ import {
   upsertTimeAdjustment,
 } from '@/lib/staff/staff-supabase';
 import { addDays, ymdLocal } from '@/lib/staff/staff-dates';
+import { getModuleActionAccess, logAccessBlocked } from '@/lib/moduleAccessControl';
 import { getSupabaseClient } from '@/lib/supabase-client';
 import type {
   StaffEmployee,
@@ -106,7 +107,7 @@ function fromDatetimeLocalInput(v: string): string | null {
 }
 
 export default function PersonalRegistroPage() {
-  const { localId, profileRole, profileReady, userId } = useAuth();
+  const { localId, profileRole, profileReady, userId, plan } = useAuth();
   const perms = useMemo(() => buildStaffPermissions(profileRole), [profileRole]);
   const [fromDate, setFromDate] = useState(() => toLocalDateInput(addDays(new Date(), -30)));
   const [toDate, setToDate] = useState(() => toLocalDateInput(new Date()));
@@ -288,6 +289,28 @@ export default function PersonalRegistroPage() {
   const currentRowsCount = view === 'planning' ? planningRows.length : view === 'real' ? realRows.length : adjustedRows.length;
 
   const openAdjustModal = (row: RealRow) => {
+    const access = getModuleActionAccess(
+      { userId, role: profileRole, plan },
+      'personal',
+      'adjust',
+    );
+    if (!access.allowed) {
+      logAccessBlocked({
+        userId,
+        role: profileRole,
+        plan,
+        module: 'personal',
+        action: 'adjust',
+        cause: access.blockedBy ?? 'role',
+        path: '/personal/registro',
+      });
+      setErr(
+        access.blockedBy === 'plan'
+          ? 'Este módulo no está incluido en tu plan'
+          : 'Esta acción no está disponible para tu rol',
+      );
+      return;
+    }
     setAdjustTarget(row);
     setAdjustedInInput(toDatetimeLocalInput(row.adjustment?.clockInAdjusted ?? row.firstIn));
     setAdjustedOutInput(toDatetimeLocalInput(row.adjustment?.clockOutAdjusted ?? row.lastOut));
@@ -318,6 +341,28 @@ export default function PersonalRegistroPage() {
 
   const saveAdjustment = async () => {
     if (!adjustTarget || !localId || !userId) return;
+    const access = getModuleActionAccess(
+      { userId, role: profileRole, plan },
+      'personal',
+      'adjust',
+    );
+    if (!access.allowed) {
+      logAccessBlocked({
+        userId,
+        role: profileRole,
+        plan,
+        module: 'personal',
+        action: 'adjust',
+        cause: access.blockedBy ?? 'role',
+        path: '/personal/registro',
+      });
+      setErr(
+        access.blockedBy === 'plan'
+          ? 'Este módulo no está incluido en tu plan'
+          : 'Esta acción no está disponible para tu rol',
+      );
+      return;
+    }
     const supabase = getSupabaseClient();
     if (!supabase) return;
     const reason =
@@ -357,7 +402,28 @@ export default function PersonalRegistroPage() {
   };
 
   const exportExcel = async (targetView: RegistroView) => {
-    if (!perms.canCorrectEntries) return;
+    const access = getModuleActionAccess(
+      { userId, role: profileRole, plan },
+      'personal',
+      'export',
+    );
+    if (!access.allowed) {
+      logAccessBlocked({
+        userId,
+        role: profileRole,
+        plan,
+        module: 'personal',
+        action: 'export',
+        cause: access.blockedBy ?? 'role',
+        path: '/personal/registro',
+      });
+      setErr(
+        access.blockedBy === 'plan'
+          ? 'Este módulo no está incluido en tu plan'
+          : 'Esta acción no está disponible para tu rol',
+      );
+      return;
+    }
     const XLSX = await import('xlsx');
     const rows =
       targetView === 'planning'
@@ -398,7 +464,28 @@ export default function PersonalRegistroPage() {
   };
 
   const exportPdf = async (targetView: RegistroView) => {
-    if (!perms.canCorrectEntries) return;
+    const access = getModuleActionAccess(
+      { userId, role: profileRole, plan },
+      'personal',
+      'download_report',
+    );
+    if (!access.allowed) {
+      logAccessBlocked({
+        userId,
+        role: profileRole,
+        plan,
+        module: 'personal',
+        action: 'download_report',
+        cause: access.blockedBy ?? 'role',
+        path: '/personal/registro',
+      });
+      setErr(
+        access.blockedBy === 'plan'
+          ? 'Este módulo no está incluido en tu plan'
+          : 'Esta acción no está disponible para tu rol',
+      );
+      return;
+    }
     const jsPDF = (await import('jspdf')).default;
     const autoTable = (await import('jspdf-autotable')).default;
     const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' });

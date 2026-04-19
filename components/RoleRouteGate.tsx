@@ -5,13 +5,14 @@ import React, { useEffect, useMemo } from 'react';
 import { useAuth } from '@/components/AuthProvider';
 import BlockedModule from '@/components/BlockedModule';
 import { getModuleAccess } from '@/lib/canAccessModule';
+import { logAccessBlocked } from '@/lib/moduleAccessControl';
 import { isPotentiallyPlanGatedPath, moduleForPath } from '@/lib/planPermissions';
 import { isPotentiallyRoleGatedPath, isRouteBlockedForRole } from '@/lib/permissions';
 
 export default function RoleRouteGate({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { profileReady, profileRole, plan } = useAuth();
+  const { profileReady, profileRole, plan, userId } = useAuth();
 
   const moduleAccess = useMemo(() => {
     if (!profileReady) return null;
@@ -27,8 +28,32 @@ export default function RoleRouteGate({ children }: { children: React.ReactNode 
 
   useEffect(() => {
     if (!profileReady || (!roleBlocked && moduleAccess?.blockedBy !== 'role')) return;
+    if (moduleAccess?.module) {
+      logAccessBlocked({
+        userId,
+        role: profileRole,
+        plan,
+        module: moduleAccess.module,
+        action: 'view',
+        cause: 'role',
+        path: pathname,
+      });
+    }
     router.replace('/panel');
-  }, [profileReady, roleBlocked, moduleAccess, router]);
+  }, [profileReady, roleBlocked, moduleAccess, router, userId, profileRole, plan, pathname]);
+
+  useEffect(() => {
+    if (!profileReady || moduleAccess?.blockedBy !== 'plan') return;
+    logAccessBlocked({
+      userId,
+      role: profileRole,
+      plan,
+      module: moduleAccess.module,
+      action: 'view',
+      cause: 'plan',
+      path: pathname,
+    });
+  }, [profileReady, moduleAccess, userId, profileRole, plan, pathname]);
 
   if (!profileReady && (isPotentiallyRoleGatedPath(pathname) || isPotentiallyPlanGatedPath(pathname))) {
     return (
