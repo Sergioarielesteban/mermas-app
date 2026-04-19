@@ -274,9 +274,7 @@ export default function TerminalFichajePage() {
         ) : (
           <div className="flex w-full items-center justify-between gap-3">
             <div className="flex min-w-0 flex-1 items-center gap-3 sm:gap-4">
-              <div className="shrink-0 rounded-2xl bg-white p-2 shadow-md ring-1 ring-zinc-200/80">
-                <TerminalLogo className="!max-w-[5.25rem] sm:!max-w-[6.5rem]" />
-              </div>
+              <TerminalLogo className="!max-w-[5.25rem] shrink-0 sm:!max-w-[6.5rem]" />
               <div className="min-w-0 text-left">
                 <p className="truncate font-serif text-lg font-bold text-zinc-900 sm:text-xl">
                   {localName ?? 'Local'}
@@ -395,9 +393,7 @@ export default function TerminalFichajePage() {
               </button>
             </div>
             <div className="mt-12 flex w-full flex-col items-center">
-              <div className="rounded-3xl bg-[#ffffff] p-4 shadow-md ring-1 ring-zinc-200/80">
-                <TerminalLogo className="mx-auto !max-w-[7rem] sm:!max-w-[8.5rem]" />
-              </div>
+              <TerminalLogo className="mx-auto !max-w-[7rem] sm:!max-w-[8.5rem]" />
             </div>
           </div>
         ) : null}
@@ -412,9 +408,7 @@ export default function TerminalFichajePage() {
             ].join(' ')}
           >
             <div className="flex justify-center">
-              <div className="rounded-3xl bg-white p-3 shadow-md ring-1 ring-zinc-200/80">
-                <TerminalLogo className="!max-w-[5.5rem] sm:!max-w-[6.5rem]" />
-              </div>
+              <TerminalLogo className="!max-w-[5.5rem] sm:!max-w-[6.5rem]" />
             </div>
             <div className="mt-4 text-center text-5xl leading-none">{successEmoji ?? '✨'}</div>
             <h2 className="mt-3 text-center text-2xl font-extrabold text-zinc-900 sm:text-3xl">

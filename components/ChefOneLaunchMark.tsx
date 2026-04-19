@@ -2,14 +2,14 @@ import React from 'react';
 import ChefOneGlowLine from '@/components/ChefOneGlowLine';
 
 type Props = {
-  /** Clases extra en la caja blanca (borde negro). */
+  /** Clases extra para el contenedor de marca. */
   boxClassName?: string;
   imgClassName?: string;
   lineClassName?: string;
 };
 
 /**
- * Presentación de marca: caja blanca con borde negro fino, wordmark y línea roja sólida.
+ * Presentación de marca: wordmark limpio y línea roja tapered.
  * Misma composición en login, splash y pantalla de carga de sesión.
  */
 export default function ChefOneLaunchMark({
@@ -19,9 +19,7 @@ export default function ChefOneLaunchMark({
 }: Props) {
   return (
     <div className="flex w-full flex-col items-center">
-      <div
-        className={`rounded-2xl border border-black bg-white px-5 py-4 shadow-sm sm:rounded-3xl sm:px-7 sm:py-5 ${boxClassName}`}
-      >
+      <div className={boxClassName}>
         <img
           src="/logo-chef-one-wordmark.svg"
           alt="Chef-One"
@@ -31,7 +29,7 @@ export default function ChefOneLaunchMark({
           decoding="async"
         />
       </div>
-      <ChefOneGlowLine className={lineClassName} />
+      <ChefOneGlowLine className={`scale-x-50 ${lineClassName}`} />
     </div>
   );
 }
