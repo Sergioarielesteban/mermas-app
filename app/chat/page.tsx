@@ -178,22 +178,24 @@ export default function ChatPage() {
         compact
       />
 
-      <Link
-        href="/panel"
-        className="inline-flex items-center gap-1 text-sm font-bold text-[#D32F2F] hover:underline"
-      >
-        <ChevronLeft className="h-4 w-4" aria-hidden />
-        Panel de control
-      </Link>
-      <button
-        type="button"
-        disabled={disabled || deleting || messages.length === 0}
-        onClick={() => void clearChat()}
-        className="inline-flex h-9 items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 text-xs font-bold text-red-800 disabled:opacity-45"
-      >
-        <Trash2 className="h-4 w-4" aria-hidden />
-        {deleting ? 'Eliminando…' : 'Eliminar chat'}
-      </button>
+      <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:gap-2">
+        <Link
+          href="/panel"
+          className="inline-flex items-center gap-1 text-sm font-bold text-[#D32F2F] hover:underline"
+        >
+          <ChevronLeft className="h-4 w-4" aria-hidden />
+          Panel de control
+        </Link>
+        <button
+          type="button"
+          disabled={disabled || deleting || messages.length === 0}
+          onClick={() => void clearChat()}
+          className="inline-flex h-9 items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 text-xs font-bold text-red-800 disabled:opacity-45"
+        >
+          <Trash2 className="h-4 w-4" aria-hidden />
+          {deleting ? 'Eliminando…' : 'Eliminar chat'}
+        </button>
+      </div>
 
       {banner ? (
         <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950">
