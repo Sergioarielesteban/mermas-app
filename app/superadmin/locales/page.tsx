@@ -173,9 +173,10 @@ export default function SuperadminLocalesPage() {
           prev.map((x) => (x.localId === item.localId ? { ...x, planCode: nextPlan, status: nextStatus } : x)),
         );
       } catch (error) {
+        const detail = error instanceof Error ? error.message : null;
         patchLocalState(item.localId, {
           saving: false,
-          message: error instanceof Error ? error.message : 'No se pudo guardar la suscripción del local.',
+          message: detail ? `No se pudo guardar la suscripción del local. ${detail}` : 'No se pudo guardar la suscripción del local.',
         });
       }
     },
