@@ -31,7 +31,7 @@ type NavLink = {
 
 const LINKS: NavLink[] = [
   { href: '/personal', label: 'Resumen', Icon: LayoutGrid, end: true, staffVisible: true },
-  { href: '/personal/planificacion', label: 'Cuadrante', Icon: CalendarRange, staffVisible: true },
+  { href: '/personal/planificacion', label: 'Cuadrante', Icon: CalendarRange, managerOnly: true },
   { href: '/personal/control', label: 'Control', Icon: LayoutPanelTop, managerOnly: true },
   { href: '/personal/fichaje', label: 'Fichaje', Icon: Clock, managerOnly: true },
   { href: '/personal/registro', label: 'Registro', Icon: ClipboardList, managerOnly: true },

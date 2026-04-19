@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useCallback, useMemo, useState } from 'react';
+import Link from 'next/link';
 import { ChevronLeft, ChevronRight, Copy } from 'lucide-react';
 import MermasStyleHero from '@/components/MermasStyleHero';
 import { useAuth } from '@/components/AuthProvider';
@@ -94,6 +95,22 @@ export default function PersonalPlanificacionPage() {
   if (!profileReady) return <p className="text-sm text-zinc-500">Cargando…</p>;
   if (!localId) {
     return <p className="text-sm text-amber-800">Sin local asignado.</p>;
+  }
+  if (!perms.canManageSchedules) {
+    return (
+      <div className="space-y-4">
+        <MermasStyleHero title="HORARIOS Y FICHAJES" compact />
+        <section className="rounded-2xl bg-white p-4 ring-1 ring-zinc-200">
+          <p className="text-sm font-semibold text-zinc-800">Tu planificación semanal está en la vista principal.</p>
+          <Link
+            href="/personal"
+            className="mt-3 inline-flex rounded-xl border border-zinc-300 bg-white px-3 py-2 text-sm font-bold text-zinc-800"
+          >
+            Ver horario
+          </Link>
+        </section>
+      </div>
+    );
   }
 
   return (

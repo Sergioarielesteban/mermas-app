@@ -7,7 +7,6 @@ import MermasStyleHero from '@/components/MermasStyleHero';
 import { useAuth } from '@/components/AuthProvider';
 import { useStaffBundle } from '@/hooks/useStaffBundle';
 import { useStaffRealtime } from '@/hooks/useStaffRealtime';
-import { buildStaffPermissions } from '@/lib/staff/permissions';
 import { startOfWeekMonday, ymdLocal } from '@/lib/staff/staff-dates';
 import {
   employeeIdsWorkingNow,
@@ -22,11 +21,11 @@ import { staffDisplayName } from '@/lib/staff/staff-supabase';
 import { formatMinutesHuman } from '@/lib/staff/attendance-logic';
 import { todayYmd } from '@/lib/staff/attendance-logic';
 import { shiftDateTimeIso } from '@/lib/staff/staff-dates';
+import { zoneBlockStyle, zoneLabel } from '@/lib/staff/staff-zone-styles';
 
 export default function PersonalResumenPage() {
-  const { localId, localName, profileRole, profileReady, userId } = useAuth();
+  const { localId, profileRole, profileReady, userId } = useAuth();
   const [weekStart] = useState(() => ymdLocal(startOfWeekMonday(new Date())));
-  const perms = useMemo(() => buildStaffPermissions(profileRole), [profileRole]);
   const { employees, shifts, timeEntries, incidents, loading, error, reload } = useStaffBundle(
     localId,
     weekStart,
@@ -82,16 +81,33 @@ export default function PersonalResumenPage() {
   const workingList = employees.filter((e) => working.has(e.id));
   const isStaffOnly = profileRole === 'staff';
   const linkedEmployee = employees.find((e) => e.userId === userId) ?? null;
+  const zoneChipStyle = (zone: string | null | undefined, colorHint: string | null | undefined) => {
+    if (colorHint) return { background: colorHint, color: '#fff' };
+    const z = zoneBlockStyle(zone);
+    return { background: z.bg, color: z.text };
+  };
+  const weekdayLabel = (ymdDate: string) =>
+    new Date(`${ymdDate}T12:00:00`).toLocaleDateString('es-ES', { weekday: 'long' });
+  const dayLabel = (ymdDate: string) =>
+    new Date(`${ymdDate}T12:00:00`).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit' });
   const myTodayShifts = todayShifts
     .filter((s) => linkedEmployee && s.employeeId === linkedEmployee.id)
     .sort((a, b) => a.startTime.localeCompare(b.startTime));
-  const myWeekShifts = shifts
+  const myWeekShiftsRaw = shifts
     .filter((s) => linkedEmployee && s.employeeId === linkedEmployee.id)
     .sort((a, b) => (a.shiftDate === b.shiftDate ? a.startTime.localeCompare(b.startTime) : a.shiftDate.localeCompare(b.shiftDate)));
-  const teamToday = employees
-    .filter((e) => plannedEmps.has(e.id))
-    .map((e) => staffDisplayName(e))
-    .sort((a, b) => a.localeCompare(b, 'es'));
+  const myWeekShifts = myWeekShiftsRaw.slice(0, 14);
+  const teamToday = todayShifts
+    .map((s) => {
+      const employee = employees.find((e) => e.id === s.employeeId);
+      return {
+        id: s.id,
+        name: employee ? staffDisplayName(employee) : '—',
+        startTime: s.startTime.slice(0, 5),
+        endTime: s.endTime.slice(0, 5),
+      };
+    })
+    .sort((a, b) => (a.startTime === b.startTime ? a.name.localeCompare(b.name, 'es') : a.startTime.localeCompare(b.startTime)));
 
   if (!profileReady) {
     return <p className="text-sm text-zinc-500">Cargando perfil…</p>;
@@ -107,9 +123,9 @@ export default function PersonalResumenPage() {
   return (
     <div className="space-y-5">
       <MermasStyleHero
-        eyebrow="Personal"
-        title="Horarios y fichajes"
-        tagline="Control visual para cocina y sala: turnos, fichajes e incidencias en un vistazo."
+        eyebrow={isStaffOnly ? undefined : 'Personal'}
+        title={isStaffOnly ? 'HORARIOS Y FICHAJES' : 'Horarios y fichajes'}
+        tagline={isStaffOnly ? undefined : 'Control visual para cocina y sala: turnos, fichajes e incidencias en un vistazo.'}
         compact
       />
 
@@ -140,7 +156,14 @@ export default function PersonalResumenPage() {
                     <p className="font-bold text-zinc-900">
                       {s.startTime.slice(0, 5)} - {s.endTime.slice(0, 5)}
                     </p>
-                    {s.zone ? <p className="text-xs font-semibold text-zinc-600">{s.zone}</p> : null}
+                    {s.zone ? (
+                      <span
+                        className="mt-1 inline-flex rounded-full px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wide"
+                        style={zoneChipStyle(s.zone, s.colorHint)}
+                      >
+                        {zoneLabel(s.zone)}
+                      </span>
+                    ) : null}
                   </li>
                 ))}
               </ul>
@@ -155,12 +178,24 @@ export default function PersonalResumenPage() {
               <p className="mt-2 text-sm text-zinc-600">No hay turnos cargados esta semana.</p>
             ) : (
               <ul className="mt-3 space-y-2">
-                {myWeekShifts.slice(0, 7).map((s) => (
-                  <li key={s.id} className="flex items-center justify-between rounded-2xl bg-zinc-50 px-3 py-2 text-sm ring-1 ring-zinc-100">
-                    <span className="font-semibold text-zinc-700">{s.shiftDate}</span>
-                    <span className="font-bold text-zinc-900">
-                      {s.startTime.slice(0, 5)} - {s.endTime.slice(0, 5)}
-                    </span>
+                {myWeekShifts.map((s) => (
+                  <li key={s.id} className="rounded-2xl bg-zinc-50 px-3 py-2 text-sm ring-1 ring-zinc-100">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-semibold capitalize text-zinc-700">
+                        {weekdayLabel(s.shiftDate)} ({dayLabel(s.shiftDate)})
+                      </span>
+                      <span className="font-bold text-zinc-900">
+                        {s.startTime.slice(0, 5)} - {s.endTime.slice(0, 5)}
+                      </span>
+                    </div>
+                    {s.zone ? (
+                      <span
+                        className="mt-1 inline-flex rounded-full px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wide"
+                        style={zoneChipStyle(s.zone, s.colorHint)}
+                      >
+                        {zoneLabel(s.zone)}
+                      </span>
+                    ) : null}
                   </li>
                 ))}
               </ul>
@@ -173,9 +208,12 @@ export default function PersonalResumenPage() {
               <p className="mt-2 text-sm text-zinc-600">No hay personal planificado hoy.</p>
             ) : (
               <ul className="mt-3 grid gap-2 sm:grid-cols-2">
-                {teamToday.map((name) => (
-                  <li key={name} className="rounded-xl bg-zinc-50 px-3 py-2 text-sm font-semibold text-zinc-800 ring-1 ring-zinc-100">
-                    {name}
+                {teamToday.map((member) => (
+                  <li key={member.id} className="rounded-xl bg-zinc-50 px-3 py-2 text-sm ring-1 ring-zinc-100">
+                    <p className="font-semibold text-zinc-800">{member.name}</p>
+                    <p className="text-xs font-bold text-zinc-600">
+                      {member.startTime} - {member.endTime}
+                    </p>
                   </li>
                 ))}
               </ul>
@@ -200,12 +238,6 @@ export default function PersonalResumenPage() {
         <StatCard label="Horas trab." value={formatMinutesHuman(workedMin)} sub Icon={Clock} tone="emerald" />
       </div>
       )}
-
-      {!perms.canViewTeamSummary ? (
-        <p className="rounded-2xl bg-zinc-50 px-4 py-3 text-sm text-zinc-600 ring-1 ring-zinc-200">
-          Tu rol ve el resumen básico. Los encargados ven métricas completas del equipo.
-        </p>
-      ) : null}
 
       {!isStaffOnly ? (
       <div className="grid gap-4 md:grid-cols-2 md:gap-5">
