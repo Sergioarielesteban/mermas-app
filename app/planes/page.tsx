@@ -39,13 +39,20 @@ const PLAN_CARDS: PlanCard[] = [
 
 export default function PlanesPage() {
   const router = useRouter();
-  const { plan, selectPlan } = useAuth();
+  const { plan, selectPlan, subscriptionProvider, subscriptionStatus } = useAuth();
   const [feedback, setFeedback] = React.useState<string | null>(null);
+  const [busyPlan, setBusyPlan] = React.useState<PlanCode | null>(null);
 
-  const onSelectPlan = (nextPlan: PlanCode) => {
+  const onSelectPlan = async (nextPlan: PlanCode) => {
     if (plan === nextPlan) return;
-    selectPlan(nextPlan);
-    setFeedback(`Plan ${nextPlan} seleccionado correctamente.`);
+    setBusyPlan(nextPlan);
+    const res = await selectPlan(nextPlan);
+    setBusyPlan(null);
+    if (res.ok) {
+      setFeedback(`Plan ${nextPlan} seleccionado correctamente.`);
+      return;
+    }
+    setFeedback(res.reason ?? 'No se pudo actualizar el plan en este momento.');
   };
 
   return (
@@ -62,6 +69,9 @@ export default function PlanesPage() {
           {feedback}
         </p>
       ) : null}
+      <p className="rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-xs font-semibold uppercase tracking-wide text-zinc-600">
+        Suscripción actual: {subscriptionStatus} · proveedor: {subscriptionProvider}
+      </p>
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
         {PLAN_CARDS.map((card) => {
@@ -98,18 +108,18 @@ export default function PlanesPage() {
 
               <button
                 type="button"
-                onClick={() => onSelectPlan(card.code)}
-                disabled={isCurrent}
+                onClick={() => void onSelectPlan(card.code)}
+                disabled={isCurrent || busyPlan === card.code}
                 className={[
                   'mt-5 w-full rounded-xl px-4 py-2.5 text-sm font-bold transition',
-                  isCurrent
+                  isCurrent || busyPlan === card.code
                     ? 'cursor-default border border-zinc-300 bg-zinc-100 text-zinc-600'
                     : card.recommended
                       ? 'bg-[#D32F2F] text-white hover:bg-[#B91C1C]'
                       : 'border border-zinc-300 bg-white text-zinc-900 hover:bg-zinc-50',
                 ].join(' ')}
               >
-                {isCurrent ? 'Plan actual' : 'Seleccionar plan'}
+                {isCurrent ? 'Plan actual' : busyPlan === card.code ? 'Actualizando...' : 'Seleccionar plan'}
               </button>
             </article>
           );

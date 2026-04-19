@@ -6,6 +6,12 @@ import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
 import { isAllowedEmail } from '@/lib/auth-access';
 import { parseProfileAppRole, type ProfileAppRole } from '@/lib/profile-app-role';
 import { DEFAULT_MAX_USERS, DEFAULT_PLAN, type PlanCode } from '@/lib/planPermissions';
+import {
+  fetchActiveSubscriptionByLocal,
+  upsertManualSubscriptionPlan,
+  type SubscriptionProvider,
+  type SubscriptionStatus,
+} from '@/lib/subscriptions-supabase';
 
 export type { ProfileAppRole };
 
@@ -29,8 +35,12 @@ type AuthContextValue = {
   plan: PlanCode;
   /** Limite de usuarios del plan. */
   maxUsers: number;
-  /** Simulación local de cambio de plan (sin persistir en backend). */
-  selectPlan: (plan: PlanCode) => void;
+  /** Estado de suscripción del local actual. */
+  subscriptionStatus: SubscriptionStatus;
+  /** Proveedor de suscripción del local actual. */
+  subscriptionProvider: SubscriptionProvider;
+  /** Cambio manual de plan para desarrollo/pilotos (persiste en backend si es posible). */
+  selectPlan: (plan: PlanCode) => Promise<{ ok: boolean; reason?: string }>;
   /** true cuando ya se intentó cargar el perfil (o no aplica). */
   profileReady: boolean;
   login: (identifier: string, password: string) => Promise<{ ok: boolean; reason?: string }>;
@@ -94,6 +104,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isCentralKitchen, setIsCentralKitchen] = useState(false);
   const [plan, setPlan] = useState<PlanCode>(DEFAULT_PLAN);
   const [maxUsers, setMaxUsers] = useState<number>(DEFAULT_MAX_USERS);
+  const [subscriptionStatus, setSubscriptionStatus] = useState<SubscriptionStatus>('inactive');
+  const [subscriptionProvider, setSubscriptionProvider] = useState<SubscriptionProvider>('manual');
   const [profileReady, setProfileReady] = useState(false);
 
   const clearProfile = React.useCallback(() => {
@@ -103,6 +115,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setIsCentralKitchen(false);
     setPlan(DEFAULT_PLAN);
     setMaxUsers(DEFAULT_MAX_USERS);
+    setSubscriptionStatus('inactive');
+    setSubscriptionProvider('manual');
     setDisplayName(null);
     setLoginUsername(null);
     setProfileRole(null);
@@ -116,6 +130,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       isCentralKitchen: boolean;
       plan: PlanCode;
       maxUsers: number;
+      subscriptionStatus: SubscriptionStatus;
+      subscriptionProvider: SubscriptionProvider;
       displayName: string | null;
       loginUsername: string | null;
       profileRole: ProfileAppRole | null;
@@ -138,6 +154,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         isCentralKitchen?: boolean;
         plan?: PlanCode;
         maxUsers?: number;
+        subscriptionStatus?: SubscriptionStatus;
+        subscriptionProvider?: SubscriptionProvider;
         displayName?: string | null;
         loginUsername?: string | null;
         profileRole?: ProfileAppRole | null;
@@ -149,6 +167,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setIsCentralKitchen(!!parsed.isCentralKitchen);
       setPlan(parsed.plan ?? DEFAULT_PLAN);
       setMaxUsers(typeof parsed.maxUsers === 'number' && parsed.maxUsers > 0 ? parsed.maxUsers : DEFAULT_MAX_USERS);
+      setSubscriptionStatus(parsed.subscriptionStatus ?? 'inactive');
+      setSubscriptionProvider(parsed.subscriptionProvider ?? 'manual');
       setDisplayName(parsed.displayName ?? null);
       setLoginUsername(parsed.loginUsername ?? null);
       setProfileRole(parsed.profileRole ?? null);
@@ -198,50 +218,71 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  const loadPlanForLocal = React.useCallback(async (localId: string): Promise<{ plan: PlanCode; maxUsers: number }> => {
+  const loadPlanForLocal = React.useCallback(async (
+    localId: string,
+  ): Promise<{
+    plan: PlanCode;
+    maxUsers: number;
+    subscriptionStatus: SubscriptionStatus;
+    subscriptionProvider: SubscriptionProvider;
+  }> => {
     const supabase = getSupabaseClient();
     if (!supabase || !isSupabaseEnabled()) {
-      const fallback = { plan: DEFAULT_PLAN, maxUsers: DEFAULT_MAX_USERS };
+      const fallback = {
+        plan: DEFAULT_PLAN,
+        maxUsers: DEFAULT_MAX_USERS,
+        subscriptionStatus: 'inactive' as SubscriptionStatus,
+        subscriptionProvider: 'manual' as SubscriptionProvider,
+      };
       setPlan(fallback.plan);
       setMaxUsers(fallback.maxUsers);
+      setSubscriptionStatus(fallback.subscriptionStatus);
+      setSubscriptionProvider(fallback.subscriptionProvider);
       return fallback;
     }
     try {
-      const { data, error } = await withTimeout(
-        Promise.resolve(
-          supabase
-            .from('subscriptions')
-            .select('plan, max_users, status, created_at')
-            .eq('local_id', localId)
-            .eq('status', 'active')
-            .order('created_at', { ascending: false })
-            .limit(1),
-        ),
-        PROFILE_TIMEOUT_MS,
-      );
-      if (error || !Array.isArray(data) || data.length === 0) {
-        const fallback = { plan: DEFAULT_PLAN, maxUsers: DEFAULT_MAX_USERS };
-        const overriddenPlan = readPlanOverride(localId) ?? fallback.plan;
-        setPlan(overriddenPlan);
-        setMaxUsers(fallback.maxUsers);
-        return { plan: overriddenPlan, maxUsers: fallback.maxUsers };
+      const subscription = await withTimeout(Promise.resolve(fetchActiveSubscriptionByLocal(supabase, localId)), PROFILE_TIMEOUT_MS);
+      if (!subscription) {
+        // Compatibilidad temporal para locales ya activos en desarrollo.
+        const fallbackPlan: PlanCode = 'PRO';
+        const overridePlan = readPlanOverride(localId);
+        const next = {
+          plan: overridePlan ?? fallbackPlan,
+          maxUsers: DEFAULT_MAX_USERS,
+          subscriptionStatus: 'inactive' as SubscriptionStatus,
+          subscriptionProvider: 'manual' as SubscriptionProvider,
+        };
+        setPlan(next.plan);
+        setMaxUsers(next.maxUsers);
+        setSubscriptionStatus(next.subscriptionStatus);
+        setSubscriptionProvider(next.subscriptionProvider);
+        return next;
       }
-      const row = data[0] as { plan?: string | null; max_users?: number | null };
-      const nextPlan = row.plan === 'OPERATIVO' || row.plan === 'CONTROL' || row.plan === 'PRO' ? row.plan : DEFAULT_PLAN;
-      const effectivePlan = readPlanOverride(localId) ?? nextPlan;
-      const nextMaxUsers =
-        typeof row.max_users === 'number' && Number.isFinite(row.max_users) && row.max_users > 0
-          ? Math.floor(row.max_users)
-          : DEFAULT_MAX_USERS;
-      setPlan(effectivePlan);
-      setMaxUsers(nextMaxUsers);
-      return { plan: effectivePlan, maxUsers: nextMaxUsers };
+      const next = {
+        plan: subscription.planCode,
+        maxUsers: subscription.maxUsers,
+        subscriptionStatus: subscription.status,
+        subscriptionProvider: subscription.provider,
+      };
+      setPlan(next.plan);
+      setMaxUsers(next.maxUsers);
+      setSubscriptionStatus(next.subscriptionStatus);
+      setSubscriptionProvider(next.subscriptionProvider);
+      return next;
     } catch {
-      const fallback = { plan: DEFAULT_PLAN, maxUsers: DEFAULT_MAX_USERS };
-      const overriddenPlan = readPlanOverride(localId) ?? fallback.plan;
-      setPlan(overriddenPlan);
-      setMaxUsers(fallback.maxUsers);
-      return { plan: overriddenPlan, maxUsers: fallback.maxUsers };
+      const fallbackPlan: PlanCode = 'PRO';
+      const overridePlan = readPlanOverride(localId);
+      const next = {
+        plan: overridePlan ?? fallbackPlan,
+        maxUsers: DEFAULT_MAX_USERS,
+        subscriptionStatus: 'inactive' as SubscriptionStatus,
+        subscriptionProvider: 'manual' as SubscriptionProvider,
+      };
+      setPlan(next.plan);
+      setMaxUsers(next.maxUsers);
+      setSubscriptionStatus(next.subscriptionStatus);
+      setSubscriptionProvider(next.subscriptionProvider);
+      return next;
     }
   }, [readPlanOverride]);
 
@@ -360,6 +401,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         isCentralKitchen: centralFallback,
         plan: planState.plan,
         maxUsers: planState.maxUsers,
+        subscriptionStatus: planState.subscriptionStatus,
+        subscriptionProvider: planState.subscriptionProvider,
         displayName: dn,
         loginUsername: lu,
         profileRole: pr,
@@ -403,6 +446,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       isCentralKitchen: central,
       plan: planState.plan,
       maxUsers: planState.maxUsers,
+      subscriptionStatus: planState.subscriptionStatus,
+      subscriptionProvider: planState.subscriptionProvider,
       displayName: dn,
       loginUsername: lu,
       profileRole: pr,
@@ -423,6 +468,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setIsCentralKitchen(false);
       setPlan('PRO');
       setMaxUsers(999);
+      setSubscriptionStatus('active');
+      setSubscriptionProvider('manual');
       setProfileRole('staff');
       setLoading(false);
       setProfileReady(true);
@@ -619,9 +666,40 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       isCentralKitchen,
       plan,
       maxUsers,
-      selectPlan: (nextPlan: PlanCode) => {
-        setPlan(nextPlan);
-        writePlanOverride(localId, nextPlan);
+      subscriptionStatus,
+      subscriptionProvider,
+      selectPlan: async (nextPlan: PlanCode) => {
+        const supabase = getSupabaseClient();
+        if (!localId) return { ok: false, reason: 'No se pudo resolver el local actual.' };
+        if (!supabase || !isSupabaseEnabled()) {
+          writePlanOverride(localId, nextPlan);
+          setPlan(nextPlan);
+          return { ok: true };
+        }
+        try {
+          const updated = await upsertManualSubscriptionPlan(supabase, localId, nextPlan, maxUsers);
+          setPlan(updated.planCode);
+          setMaxUsers(updated.maxUsers);
+          setSubscriptionStatus(updated.status);
+          setSubscriptionProvider(updated.provider);
+          persistProfileCache({
+            localId,
+            localCode,
+            localName,
+            isCentralKitchen,
+            plan: updated.planCode,
+            maxUsers: updated.maxUsers,
+            subscriptionStatus: updated.status,
+            subscriptionProvider: updated.provider,
+            displayName,
+            loginUsername,
+            profileRole,
+          });
+          return { ok: true };
+        } catch (e: unknown) {
+          const message = e instanceof Error ? e.message : 'No se pudo actualizar el plan.';
+          return { ok: false, reason: message };
+        }
       },
       profileReady,
       login: async (identifier: string, password: string) => {
@@ -733,6 +811,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       plan,
       profileReady,
       profileRole,
+      persistProfileCache,
+      subscriptionProvider,
+      subscriptionStatus,
       userId,
       writePlanOverride,
     ],

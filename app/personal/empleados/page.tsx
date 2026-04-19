@@ -7,6 +7,7 @@ import { useAuth } from '@/components/AuthProvider';
 import { buildStaffPermissions } from '@/lib/staff/permissions';
 import { STAFF_ZONE_PRESETS } from '@/lib/staff/types';
 import { createStaffEmployee, fetchStaffEmployees, staffDisplayName, updateStaffEmployee } from '@/lib/staff/staff-supabase';
+import { countOperationalUsersForLocal } from '@/lib/subscriptions-supabase';
 import { getSupabaseClient } from '@/lib/supabase-client';
 import type { StaffEmployee } from '@/lib/staff/types';
 
@@ -26,7 +27,8 @@ export default function PersonalEmpleadosPage() {
   const [color, setColor] = useState('#D32F2F');
   const [pin, setPin] = useState('');
   const [busy, setBusy] = useState(false);
-  const userLimitReached = list.length >= maxUsers;
+  const [operationalUsers, setOperationalUsers] = useState(0);
+  const userLimitReached = operationalUsers >= maxUsers;
 
   const reload = useCallback(async () => {
     if (!localId) return;
@@ -35,8 +37,12 @@ export default function PersonalEmpleadosPage() {
     setLoading(true);
     setErr(null);
     try {
-      const rows = await fetchStaffEmployees(supabase, localId);
+      const [rows, opCount] = await Promise.all([
+        fetchStaffEmployees(supabase, localId),
+        countOperationalUsersForLocal(supabase, localId),
+      ]);
       setList(rows);
+      setOperationalUsers(opCount);
     } catch (e: unknown) {
       setErr(e instanceof Error ? e.message : 'Error');
     } finally {
@@ -112,7 +118,7 @@ export default function PersonalEmpleadosPage() {
         </p>
       ) : userLimitReached ? (
         <p className="rounded-2xl bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-900 ring-1 ring-amber-200">
-          Has alcanzado el límite de usuarios de tu plan
+          Has alcanzado el límite de usuarios operativos de tu plan ({operationalUsers}/{maxUsers})
         </p>
       ) : (
         <button
