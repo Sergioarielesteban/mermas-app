@@ -100,7 +100,7 @@ function titleForPath(pathname: string | null) {
     return 'Cocina central';
   }
   if (pathname.startsWith('/personal/mi')) return 'Mi espacio';
-  if (pathname.startsWith('/personal')) return 'Personal';
+  if (pathname.startsWith('/personal')) return 'Horarios';
   if (pathname.startsWith('/comida-personal')) return 'Comida de personal';
   if (pathname.startsWith('/chat')) return 'Chat del local';
   if (pathname.startsWith('/cuenta')) return 'Cuenta y seguridad';
@@ -125,6 +125,12 @@ function titleForPath(pathname: string | null) {
   return 'Mermas';
 }
 
+function roleLabel(role: 'admin' | 'manager' | 'staff' | null): string {
+  if (role === 'admin') return 'Admin';
+  if (role === 'manager') return 'Manager';
+  return 'Staff';
+}
+
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -147,6 +153,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const showPedidosCocina = profileReady && canPlaceCentralSupplyOrder(isCentralKitchen, localId);
   const localLabel = formatLocalHeaderName(localName ?? localCode) ?? localName ?? localCode;
   const sessionLabel = (displayName?.trim() || loginUsername?.trim() || null) ?? 'Usuario';
+  const sessionRoleLabel = roleLabel(profileRole);
   const showPedidos = canAccessPedidos(localCode, email, localName, localId);
 
   const title = useMemo(() => titleForPath(pathname), [pathname]);
@@ -179,7 +186,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     /** Comida + personal justo tras producción (flujo cocina / turno). */
     const comidaYHorarios: NavItem[] = [
       { href: '/comida-personal', label: 'Comida de personal', Icon: UtensilsCrossed, blocked: !canAccessModule(plan, 'comida_personal') },
-      { href: '/personal', label: 'Personal', Icon: CalendarDays, blocked: !canAccessModule(plan, 'personal') },
+      { href: '/personal', label: 'Horarios', Icon: CalendarDays, blocked: !canAccessModule(plan, 'personal') },
     ];
     const chat: NavItem[] =
       canAccessChat(role) ? [{ href: '/chat', label: 'Chat', Icon: MessageCircle, blocked: !canAccessModule(plan, 'chat') }] : [];
@@ -445,6 +452,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             <div className="text-[10px] font-extrabold uppercase tracking-[0.12em] text-zinc-500">Sesión</div>
             <div className="mt-2 min-w-0 space-y-0.5">
               <p className="truncate text-sm font-extrabold leading-tight text-zinc-900">{sessionLabel}</p>
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-zinc-500">Rol: {sessionRoleLabel}</p>
               {email ? (
                 <p className="truncate text-xs font-medium text-zinc-600" title={email}>
                   {email}

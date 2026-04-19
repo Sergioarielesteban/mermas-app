@@ -29,7 +29,7 @@ const MODULE_META: Record<PlanModule, { label: string; Icon: LucideIcon }> = {
   produccion: { label: 'Produccion', Icon: Factory },
   cocina_central: { label: 'Cocina central', Icon: ChefHat },
   finanzas: { label: 'Finanzas', Icon: BarChart3 },
-  personal: { label: 'Personal', Icon: CalendarDays },
+  personal: { label: 'Horarios', Icon: CalendarDays },
   comida_personal: { label: 'Comida de personal', Icon: UtensilsCrossed },
   chat: { label: 'Chat', Icon: MessageCircle },
 };

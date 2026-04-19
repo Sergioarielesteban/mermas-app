@@ -179,7 +179,7 @@ export default function PanelControlPage() {
         />
         <HubTile
           href="/personal"
-          label="Personal"
+          label="Horarios"
           sub="Horarios, cuadrante y fichajes"
           Icon={CalendarDays}
           tone="red"
