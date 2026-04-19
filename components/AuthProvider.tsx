@@ -56,7 +56,6 @@ type AuthContextValue = {
 const AuthContext = createContext<AuthContextValue | null>(null);
 const AUTH_KEY = 'mermas_user_email';
 const PROFILE_CACHE_KEY = 'chef_one_profile_cache_v4';
-const PLAN_OVERRIDE_KEY = 'chef_one_plan_override_v1';
 const PROFILE_TIMEOUT_MS = 6000;
 /**
  * Si getSession tarda (Wi‑Fi cocina, móvil al volver de suspensión), no enviar al login:
@@ -189,33 +188,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     }
     window.localStorage.removeItem(PROFILE_CACHE_KEY);
-    window.localStorage.removeItem(PLAN_OVERRIDE_KEY);
-  }, []);
-
-  const readPlanOverride = React.useCallback((localIdArg: string | null): PlanCode | null => {
-    if (typeof window === 'undefined' || !localIdArg) return null;
-    try {
-      const raw = window.localStorage.getItem(PLAN_OVERRIDE_KEY);
-      if (!raw) return null;
-      const parsed = JSON.parse(raw) as Record<string, PlanCode>;
-      const value = parsed[localIdArg];
-      if (value === 'OPERATIVO' || value === 'CONTROL' || value === 'PRO') return value;
-      return null;
-    } catch {
-      return null;
-    }
-  }, []);
-
-  const writePlanOverride = React.useCallback((localIdArg: string | null, nextPlan: PlanCode) => {
-    if (typeof window === 'undefined' || !localIdArg) return;
-    try {
-      const raw = window.localStorage.getItem(PLAN_OVERRIDE_KEY);
-      const parsed = raw ? (JSON.parse(raw) as Record<string, PlanCode>) : {};
-      parsed[localIdArg] = nextPlan;
-      window.localStorage.setItem(PLAN_OVERRIDE_KEY, JSON.stringify(parsed));
-    } catch {
-      /* ignore localStorage quota/parse errors */
-    }
   }, []);
 
   const loadPlanForLocal = React.useCallback(async (
@@ -243,11 +215,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const subscription = await withTimeout(Promise.resolve(fetchActiveSubscriptionByLocal(supabase, localId)), PROFILE_TIMEOUT_MS);
       if (!subscription) {
-        // Compatibilidad temporal para locales ya activos en desarrollo.
-        const fallbackPlan: PlanCode = 'PRO';
-        const overridePlan = readPlanOverride(localId);
         const next = {
-          plan: overridePlan ?? fallbackPlan,
+          plan: DEFAULT_PLAN,
           maxUsers: DEFAULT_MAX_USERS,
           subscriptionStatus: 'inactive' as SubscriptionStatus,
           subscriptionProvider: 'manual' as SubscriptionProvider,
@@ -270,10 +239,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setSubscriptionProvider(next.subscriptionProvider);
       return next;
     } catch {
-      const fallbackPlan: PlanCode = 'PRO';
-      const overridePlan = readPlanOverride(localId);
       const next = {
-        plan: overridePlan ?? fallbackPlan,
+        plan: DEFAULT_PLAN,
         maxUsers: DEFAULT_MAX_USERS,
         subscriptionStatus: 'inactive' as SubscriptionStatus,
         subscriptionProvider: 'manual' as SubscriptionProvider,
@@ -284,7 +251,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setSubscriptionProvider(next.subscriptionProvider);
       return next;
     }
-  }, [readPlanOverride]);
+  }, []);
 
   const loadProfileForUser = React.useCallback(async (uid: string | undefined) => {
     if (!uid) {
@@ -672,9 +639,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const supabase = getSupabaseClient();
         if (!localId) return { ok: false, reason: 'No se pudo resolver el local actual.' };
         if (!supabase || !isSupabaseEnabled()) {
-          writePlanOverride(localId, nextPlan);
-          setPlan(nextPlan);
-          return { ok: true };
+          return { ok: false, reason: 'Supabase no está disponible para cambiar el plan.' };
         }
         try {
           const updated = await upsertManualSubscriptionPlan(supabase, localId, nextPlan, maxUsers);
@@ -815,7 +780,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       subscriptionProvider,
       subscriptionStatus,
       userId,
-      writePlanOverride,
     ],
   );
 

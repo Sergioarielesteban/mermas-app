@@ -162,7 +162,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const navItems = useMemo<NavItem[]>(() => {
     const role = profileRole ?? 'staff';
     const core: NavItem[] = showPedidos && canAccessPedidosByRole(role)
-      ? [...NAV_ITEMS, { href: '/pedidos', label: 'Pedidos', Icon: ShoppingCart, blocked: !canAccessModule(plan, 'pedidos') }]
+      ? [...NAV_ITEMS, { href: '/pedidos', label: 'Pedidos', Icon: ShoppingCart, blocked: !canAccessModule({ plan, role }, 'pedidos') }]
       : [...NAV_ITEMS];
     const finanzas: NavItem[] =
       showPedidos && canAccessFinanzas(role)
@@ -170,36 +170,36 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             href: '/finanzas',
             label: 'Finanzas',
             Icon: BarChart3,
-            blocked: !canAccessModule(plan, 'finanzas'),
+            blocked: !canAccessModule({ plan, role }, 'finanzas'),
             blockedText: 'Disponible en plan superior',
           }]
         : [];
     const mid: NavItem[] = [
-      { href: '/appcc', label: 'APPCC', Icon: ShieldCheck, blocked: !canAccessModule(plan, 'appcc') },
-      { href: '/checklist', label: 'Check list', Icon: ListChecks, blocked: !canAccessModule(plan, 'checklist') },
-      { href: '/produccion', label: 'Producción', Icon: Factory, blocked: !canAccessModule(plan, 'produccion') },
+      { href: '/appcc', label: 'APPCC', Icon: ShieldCheck, blocked: !canAccessModule({ plan, role }, 'appcc') },
+      { href: '/checklist', label: 'Check list', Icon: ListChecks, blocked: !canAccessModule({ plan, role }, 'checklist') },
+      { href: '/produccion', label: 'Producción', Icon: Factory, blocked: !canAccessModule({ plan, role }, 'produccion') },
     ];
     const inv: NavItem[] = canAccessInventario(role)
-      ? [{ href: '/inventario', label: 'Inventario', Icon: ClipboardList, blocked: !canAccessModule(plan, 'inventario') }]
+      ? [{ href: '/inventario', label: 'Inventario', Icon: ClipboardList, blocked: !canAccessModule({ plan, role }, 'inventario') }]
       : [];
     const esc: NavItem[] = canAccessEscandallos(role)
-      ? [{ href: '/escandallos', label: 'Escandallos', Icon: Calculator, blocked: !canAccessModule(plan, 'escandallos') }]
+      ? [{ href: '/escandallos', label: 'Escandallos', Icon: Calculator, blocked: !canAccessModule({ plan, role }, 'escandallos') }]
       : [];
     /** Comida + personal justo tras producción (flujo cocina / turno). */
     const comidaYHorarios: NavItem[] = [
       ...(canAccessComidaPersonal(role)
-        ? [{ href: '/comida-personal', label: 'Comida de personal', Icon: UtensilsCrossed, blocked: !canAccessModule(plan, 'comida_personal') }]
+        ? [{ href: '/comida-personal', label: 'Comida de personal', Icon: UtensilsCrossed, blocked: !canAccessModule({ plan, role }, 'comida_personal') }]
         : []),
-      { href: '/personal', label: 'Horarios', Icon: CalendarDays, blocked: !canAccessModule(plan, 'personal') },
+      { href: '/personal', label: 'Horarios', Icon: CalendarDays, blocked: !canAccessModule({ plan, role }, 'personal') },
     ];
     const chat: NavItem[] =
-      canAccessChat(role) ? [{ href: '/chat', label: 'Chat', Icon: MessageCircle, blocked: !canAccessModule(plan, 'chat') }] : [];
+      canAccessChat(role) ? [{ href: '/chat', label: 'Chat', Icon: MessageCircle, blocked: !canAccessModule({ plan, role }, 'chat') }] : [];
     const cuenta: NavItem[] = canAccessCuentaSeguridad(role)
       ? [{ href: '/cuenta/seguridad', label: 'Cuenta y seguridad', Icon: KeyRound }]
       : [];
     const cocina: NavItem[] =
       showCocinaCentral && canAccessCocinaCentral(role)
-        ? [{ href: '/cocina-central', label: 'Cocina central', Icon: ChefHat, blocked: !canAccessModule(plan, 'cocina_central') }]
+        ? [{ href: '/cocina-central', label: 'Cocina central', Icon: ChefHat, blocked: !canAccessModule({ plan, role }, 'cocina_central') }]
         : [];
     const pedirCentral: NavItem[] = showPedidosCocina
       ? [{ href: '/pedidos-cocina', label: 'Pedir a central', Icon: Package }]

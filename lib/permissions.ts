@@ -3,20 +3,21 @@
  * Reutilizar en menú, gates de ruta, acciones y comprobaciones en servidor cuando aplique.
  */
 import type { ProfileAppRole } from '@/components/AuthProvider';
+import { canRoleAccessModule } from '@/lib/canAccessModule';
 
 /** Finanzas y datos económicos agregados (solo administración). */
 export function canAccessFinanzas(role: ProfileAppRole | null): boolean {
-  return role === 'admin';
+  return canRoleAccessModule(role, 'finanzas');
 }
 
 /** Escandallos y costes de carta (solo administración). */
 export function canAccessEscandallos(role: ProfileAppRole | null): boolean {
-  return role === 'admin';
+  return canRoleAccessModule(role, 'escandallos');
 }
 
 /** Módulo cocina central (solo administración). */
 export function canAccessCocinaCentral(role: ProfileAppRole | null): boolean {
-  return role === 'admin';
+  return canRoleAccessModule(role, 'cocina_central');
 }
 
 /** Costes salariales y datos económicos de personal (solo administración). */
@@ -30,19 +31,19 @@ export function canAccessCostes(role: ProfileAppRole | null): boolean {
 }
 
 export function canAccessInventario(role: ProfileAppRole | null): boolean {
-  return role === 'admin' || role === 'manager';
+  return canRoleAccessModule(role, 'inventario');
 }
 
 export function canAccessChat(role: ProfileAppRole | null): boolean {
-  return role === 'admin' || role === 'manager' || role === 'staff';
+  return canRoleAccessModule(role, 'chat');
 }
 
 export function canAccessPedidosByRole(role: ProfileAppRole | null): boolean {
-  return role === 'admin' || role === 'manager';
+  return canRoleAccessModule(role, 'pedidos');
 }
 
 export function canAccessComidaPersonal(role: ProfileAppRole | null): boolean {
-  return role === 'admin' || role === 'manager';
+  return canRoleAccessModule(role, 'comida_personal');
 }
 
 export function canAccessTeamManagement(role: ProfileAppRole | null): boolean {

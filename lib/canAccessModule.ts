@@ -1,8 +1,63 @@
+import type { ProfileAppRole } from '@/lib/profile-app-role';
 import { PLAN_MODULES_BY_PLAN, type PlanCode, type PlanModule } from '@/lib/planPermissions';
 
-export function canAccessModule(plan: PlanCode | null | undefined, module: PlanModule): boolean {
+type ModuleAccessUser = {
+  plan: PlanCode | null | undefined;
+  role: ProfileAppRole | null | undefined;
+};
+
+type ModuleAccessResult = {
+  allowed: boolean;
+  blockedBy: 'plan' | 'role' | null;
+};
+
+const ROLE_MODULES: Record<ProfileAppRole, readonly PlanModule[]> = {
+  admin: [...PLAN_MODULES_BY_PLAN.PRO],
+  manager: [
+    'pedidos',
+    'mermas',
+    'appcc',
+    'checklist',
+    'chat',
+    'inventario',
+    'produccion',
+    'personal',
+    'comida_personal',
+  ],
+  staff: ['mermas', 'appcc', 'checklist', 'chat', 'produccion', 'personal'],
+};
+
+export function canRoleAccessModule(role: ProfileAppRole | null | undefined, module: PlanModule): boolean {
+  if (!role) return false;
+  return ROLE_MODULES[role].includes(module);
+}
+
+export function canPlanAccessModule(plan: PlanCode | null | undefined, module: PlanModule): boolean {
   if (!plan) return false;
-  const modules = PLAN_MODULES_BY_PLAN[plan];
-  if (!modules) return false;
-  return modules.includes(module);
+  return PLAN_MODULES_BY_PLAN[plan].includes(module);
+}
+
+export function getModuleAccess(user: ModuleAccessUser, module: PlanModule): ModuleAccessResult {
+  const roleOk = canRoleAccessModule(user.role, module);
+  if (!roleOk) return { allowed: false, blockedBy: 'role' };
+  const planOk = canPlanAccessModule(user.plan, module);
+  if (!planOk) return { allowed: false, blockedBy: 'plan' };
+  return { allowed: true, blockedBy: null };
+}
+
+/**
+ * Compatibilidad:
+ * - canAccessModule(plan, module) -> chequeo solo de plan.
+ * - canAccessModule({ plan, role }, module) -> chequeo combinado plan + rol.
+ */
+export function canAccessModule(plan: PlanCode | null | undefined, module: PlanModule): boolean;
+export function canAccessModule(user: ModuleAccessUser, module: PlanModule): boolean;
+export function canAccessModule(
+  planOrUser: PlanCode | null | undefined | ModuleAccessUser,
+  module: PlanModule,
+): boolean {
+  if (typeof planOrUser === 'object' && planOrUser !== null && 'plan' in planOrUser) {
+    return getModuleAccess(planOrUser, module).allowed;
+  }
+  return canPlanAccessModule(planOrUser, module);
 }

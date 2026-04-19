@@ -135,7 +135,7 @@ export default function PanelControlPage() {
             sub="Proveedores y recepción"
             Icon={ShoppingCart}
             tone="red"
-            blocked={!canAccessModule(plan, 'pedidos')}
+            blocked={!canAccessModule({ plan, role }, 'pedidos')}
           />
         ) : null}
         {showPedidosCocina ? (
@@ -153,7 +153,7 @@ export default function PanelControlPage() {
           sub="Limpieza, temperaturas, aceite y trazabilidad"
           Icon={ShieldCheck}
           tone="red"
-          blocked={!canAccessModule(plan, 'appcc')}
+          blocked={!canAccessModule({ plan, role }, 'appcc')}
         />
         <HubTile
           href="/checklist"
@@ -161,7 +161,7 @@ export default function PanelControlPage() {
           sub="Apertura, turno, cierre e higiene con tus ítems"
           Icon={ListChecks}
           tone="red"
-          blocked={!canAccessModule(plan, 'checklist')}
+          blocked={!canAccessModule({ plan, role }, 'checklist')}
         />
         <HubTile
           href="/produccion"
@@ -169,7 +169,7 @@ export default function PanelControlPage() {
           sub="Planes diarios o semanales por zonas y tareas"
           Icon={Factory}
           tone="red"
-          blocked={!canAccessModule(plan, 'produccion')}
+          blocked={!canAccessModule({ plan, role }, 'produccion')}
         />
         {canAccessComidaPersonal(role) ? (
           <HubTile
@@ -178,7 +178,7 @@ export default function PanelControlPage() {
             sub="Registro rápido y coste interno"
             Icon={UtensilsCrossed}
             tone="red"
-            blocked={!canAccessModule(plan, 'comida_personal')}
+            blocked={!canAccessModule({ plan, role }, 'comida_personal')}
           />
         ) : null}
         <HubTile
@@ -187,7 +187,7 @@ export default function PanelControlPage() {
           sub="Horarios, cuadrante y fichajes"
           Icon={CalendarDays}
           tone="red"
-          blocked={!canAccessModule(plan, 'personal')}
+          blocked={!canAccessModule({ plan, role }, 'personal')}
         />
         {showInventario ? (
           <HubTile
@@ -196,7 +196,7 @@ export default function PanelControlPage() {
             sub="Stock y valor por local"
             Icon={ClipboardList}
             tone="red"
-            blocked={!canAccessModule(plan, 'inventario')}
+            blocked={!canAccessModule({ plan, role }, 'inventario')}
           />
         ) : null}
         {showChat ? (
@@ -206,7 +206,7 @@ export default function PanelControlPage() {
             sub="Habla con tu equipo del mismo local"
             Icon={MessageCircle}
             tone="red"
-            blocked={!canAccessModule(plan, 'chat')}
+            blocked={!canAccessModule({ plan, role }, 'chat')}
           />
         ) : null}
         {showEscandallos ? (
@@ -216,7 +216,7 @@ export default function PanelControlPage() {
             sub="Recetas, food cost y centro de mando con gráficas"
             Icon={Calculator}
             tone="red"
-            blocked={!canAccessModule(plan, 'escandallos')}
+            blocked={!canAccessModule({ plan, role }, 'escandallos')}
           />
         ) : null}
         {showCocinaCentral ? (
@@ -226,7 +226,7 @@ export default function PanelControlPage() {
             sub="Producción, lotes, entregas y QR"
             Icon={ChefHat}
             tone="red"
-            blocked={!canAccessModule(plan, 'cocina_central')}
+            blocked={!canAccessModule({ plan, role }, 'cocina_central')}
           />
         ) : null}
         {showFinanzas ? (
@@ -236,7 +236,7 @@ export default function PanelControlPage() {
             sub="Gasto, salud del negocio y compras vs albaranes"
             Icon={BarChart3}
             tone="red"
-            blocked={!canAccessModule(plan, 'finanzas')}
+            blocked={!canAccessModule({ plan, role }, 'finanzas')}
           />
         ) : null}
       </div>
