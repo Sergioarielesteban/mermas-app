@@ -8,6 +8,7 @@ import type {
   StaffRequestType,
   StaffShift,
   StaffShiftStatus,
+  StaffTimeAdjustment,
   StaffTimeEntry,
   StaffTimeEventType,
 } from '@/lib/staff/types';
@@ -66,6 +67,25 @@ function mapTimeEntry(r: Record<string, unknown>): StaffTimeEntry {
     source: String(r.source ?? 'app'),
     note: r.note ? String(r.note) : null,
     createdAt: String(r.created_at ?? ''),
+  };
+}
+
+function mapTimeAdjustment(r: Record<string, unknown>): StaffTimeAdjustment {
+  return {
+    id: String(r.id),
+    localId: String(r.local_id),
+    employeeId: String(r.employee_id),
+    workDate: String(r.work_date),
+    clockInOriginal: r.clock_in_original ? String(r.clock_in_original) : null,
+    clockOutOriginal: r.clock_out_original ? String(r.clock_out_original) : null,
+    clockInAdjusted: r.clock_in_adjusted ? String(r.clock_in_adjusted) : null,
+    clockOutAdjusted: r.clock_out_adjusted ? String(r.clock_out_adjusted) : null,
+    adjustmentReason: r.adjustment_reason ? String(r.adjustment_reason) : null,
+    adjustedByUserId: r.adjusted_by_user_id ? String(r.adjusted_by_user_id) : null,
+    adjustedAt: r.adjusted_at ? String(r.adjusted_at) : null,
+    isAdjusted: Boolean(r.is_adjusted),
+    createdAt: String(r.created_at ?? ''),
+    updatedAt: String(r.updated_at ?? ''),
   };
 }
 
@@ -298,6 +318,82 @@ export async function fetchTimeEntriesRange(
     .order('occurred_at');
   if (error) throw new Error(error.message);
   return (data ?? []).map((r) => mapTimeEntry(r as Record<string, unknown>));
+}
+
+export async function fetchTimeAdjustmentsRange(
+  supabase: SupabaseClient,
+  localId: string,
+  fromYmd: string,
+  toYmd: string,
+): Promise<StaffTimeAdjustment[]> {
+  const { data, error } = await supabase
+    .from('staff_time_entry_adjustments')
+    .select(
+      'id,local_id,employee_id,work_date,clock_in_original,clock_out_original,clock_in_adjusted,clock_out_adjusted,adjustment_reason,adjusted_by_user_id,adjusted_at,is_adjusted,created_at,updated_at',
+    )
+    .eq('local_id', localId)
+    .gte('work_date', fromYmd)
+    .lte('work_date', toYmd)
+    .order('work_date', { ascending: false });
+  if (error) throw new Error(error.message);
+  return (data ?? []).map((r) => mapTimeAdjustment(r as Record<string, unknown>));
+}
+
+export async function upsertTimeAdjustment(
+  supabase: SupabaseClient,
+  input: {
+    localId: string;
+    employeeId: string;
+    workDate: string;
+    clockInOriginal: string | null;
+    clockOutOriginal: string | null;
+    clockInAdjusted: string | null;
+    clockOutAdjusted: string | null;
+    adjustmentReason: string;
+    adjustedByUserId: string | null;
+  },
+): Promise<StaffTimeAdjustment> {
+  const { data: existing, error: existingErr } = await supabase
+    .from('staff_time_entry_adjustments')
+    .select(
+      'id,clock_in_original,clock_out_original,local_id,employee_id,work_date,clock_in_adjusted,clock_out_adjusted,adjustment_reason,adjusted_by_user_id,adjusted_at,is_adjusted,created_at,updated_at',
+    )
+    .eq('local_id', input.localId)
+    .eq('employee_id', input.employeeId)
+    .eq('work_date', input.workDate)
+    .maybeSingle();
+  if (existingErr) throw new Error(existingErr.message);
+
+  const originalIn =
+    (existing as { clock_in_original?: string | null } | null)?.clock_in_original ?? input.clockInOriginal ?? null;
+  const originalOut =
+    (existing as { clock_out_original?: string | null } | null)?.clock_out_original ?? input.clockOutOriginal ?? null;
+
+  const row = {
+    local_id: input.localId,
+    employee_id: input.employeeId,
+    work_date: input.workDate,
+    clock_in_original: originalIn,
+    clock_out_original: originalOut,
+    clock_in_adjusted: input.clockInAdjusted,
+    clock_out_adjusted: input.clockOutAdjusted,
+    adjustment_reason: input.adjustmentReason.trim(),
+    adjusted_by_user_id: input.adjustedByUserId,
+    adjusted_at: new Date().toISOString(),
+    is_adjusted: true,
+  };
+
+  const query = existing
+    ? supabase.from('staff_time_entry_adjustments').update(row).eq('id', String((existing as { id: string }).id))
+    : supabase.from('staff_time_entry_adjustments').insert(row);
+
+  const { data, error } = await query
+    .select(
+      'id,local_id,employee_id,work_date,clock_in_original,clock_out_original,clock_in_adjusted,clock_out_adjusted,adjustment_reason,adjusted_by_user_id,adjusted_at,is_adjusted,created_at,updated_at',
+    )
+    .single();
+  if (error || !data) throw new Error(error?.message ?? 'No se pudo guardar el ajuste');
+  return mapTimeAdjustment(data as Record<string, unknown>);
 }
 
 export type StaffKioskResolveResult =

@@ -83,6 +83,23 @@ export type StaffTimeEntry = {
   createdAt: string;
 };
 
+export type StaffTimeAdjustment = {
+  id: string;
+  localId: string;
+  employeeId: string;
+  workDate: string;
+  clockInOriginal: string | null;
+  clockOutOriginal: string | null;
+  clockInAdjusted: string | null;
+  clockOutAdjusted: string | null;
+  adjustmentReason: string | null;
+  adjustedByUserId: string | null;
+  adjustedAt: string | null;
+  isAdjusted: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type StaffIncident = {
   id: string;
   localId: string;
