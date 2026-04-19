@@ -1,3 +1,6 @@
+/**
+ * Oído Chef: requireOidoChefAccess valida sesión, perfil, rol (OIDO_CHEF_ALLOWED_ROLES) y rate limit en servidor.
+ */
 import { NextResponse } from 'next/server';
 import { requireOidoChefAccess } from '@/lib/server/oido-chef-access';
 import type { OidoChefAiContext } from '@/lib/oido-chef-ai-context';

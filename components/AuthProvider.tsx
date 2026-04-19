@@ -4,8 +4,9 @@ import React, { createContext, useContext, useEffect, useMemo, useState } from '
 import { DEMO_LOCAL_ID, exitDemoMode, isDemoMode } from '@/lib/demo-mode';
 import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
 import { isAllowedEmail } from '@/lib/auth-access';
+import { parseProfileAppRole, type ProfileAppRole } from '@/lib/profile-app-role';
 
-export type ProfileAppRole = 'admin' | 'manager' | 'staff';
+export type { ProfileAppRole };
 
 type AuthContextValue = {
   email: string | null;
@@ -46,13 +47,6 @@ const PROFILE_TIMEOUT_MS = 6000;
 const SESSION_SOFT_UNLOCK_MS = 4000;
 /** Último recurso si getSession nunca resuelve (muy raro). */
 const SESSION_SAFETY_MS = 20000;
-
-function mapProfileRole(raw: string | null | undefined): ProfileAppRole {
-  const r = (raw ?? 'staff').trim().toLowerCase();
-  if (r === 'admin') return 'admin';
-  if (r === 'manager') return 'manager';
-  return 'staff';
-}
 
 function isInvalidRefreshTokenError(message: string | undefined) {
   const m = (message ?? '').toLowerCase();
@@ -264,7 +258,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const lu = profileOnly.login_username?.trim() ? profileOnly.login_username.trim() : null;
       setDisplayName(dn);
       setLoginUsername(lu);
-      const pr = mapProfileRole(profileOnly.role);
+      const pr = parseProfileAppRole(profileOnly.role);
       setProfileRole(pr);
       persistProfileCache({
         localId: profileOnly.local_id,
@@ -304,7 +298,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const lu = row.login_username?.trim() ? row.login_username.trim() : null;
     setDisplayName(dn);
     setLoginUsername(lu);
-    const pr = mapProfileRole(row.role);
+    const pr = parseProfileAppRole(row.role);
     setProfileRole(pr);
     persistProfileCache({
       localId: row.local_id,

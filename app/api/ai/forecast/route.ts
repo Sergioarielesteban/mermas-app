@@ -1,3 +1,7 @@
+/**
+ * IA sobre datos enviados en el body (sin lectura directa de tablas finanzas).
+ * Categoría auditoría A: sesión + perfil + local; roles staff/manager/admin según uso mermas en cliente.
+ */
 import { NextResponse } from 'next/server';
 import { buildAiForecast } from '@/lib/ai-forecast';
 import { requireAllowedSupabaseUser } from '@/lib/require-allowed-supabase-user';

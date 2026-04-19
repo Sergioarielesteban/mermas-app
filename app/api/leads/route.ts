@@ -1,3 +1,6 @@
+/**
+ * Formulario público landing: sin sesión; anti-spam vía honeypot + validación email.
+ */
 import { NextResponse } from 'next/server';
 import { sendLeadNotificationEmail } from '@/lib/server/notify-lead-email';
 import { insertMarketingLead, isSupabaseAdminConfigured } from '@/lib/server/supabase-admin';

@@ -1,3 +1,7 @@
+/**
+ * OCR albarán (coste AWS): restringido a sesión + perfil operativo (pedidos).
+ * Categoría auditoría A: no exige admin; finanzas no usan esta API.
+ */
 import { DetectDocumentTextCommand, TextractClient, type Block } from '@aws-sdk/client-textract';
 import { NextResponse } from 'next/server';
 import { requireAllowedSupabaseUser } from '@/lib/require-allowed-supabase-user';

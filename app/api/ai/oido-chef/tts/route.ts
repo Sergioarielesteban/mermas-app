@@ -1,3 +1,6 @@
+/**
+ * TTS Oído Chef: misma política que /api/ai/oido-chef (rol + límites en servidor).
+ */
 import { NextResponse } from 'next/server';
 import { requireOidoChefAccess } from '@/lib/server/oido-chef-access';
 

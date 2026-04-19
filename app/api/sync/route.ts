@@ -1,3 +1,8 @@
+/**
+ * Snapshot legacy (service role): lectura/escritura acotada al email del JWT.
+ * Categoría auditoría A: sesión + perfil + local en servidor; debe ser usable por staff (mermas).
+ * Finanzas / datos económicos no pasan por esta ruta (van a Supabase + RLS).
+ */
 import { NextResponse } from 'next/server';
 import { requireAllowedSupabaseUser } from '@/lib/require-allowed-supabase-user';
 import {

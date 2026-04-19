@@ -1,3 +1,6 @@
+/**
+ * Cron externo (Vercel u otro): solo Bearer CRON_SECRET; no sesión de usuario.
+ */
 import { NextResponse } from 'next/server';
 import { getSnapshotByEmail } from '@/lib/server/supabase-admin';
 import { buildWeeklyWhatsappMessage, shouldSendNowMadrid } from '@/lib/server/weekly-summary';

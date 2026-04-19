@@ -1,3 +1,7 @@
+/**
+ * Pre-login: no se exige Bearer de usuario (el cliente aún no tiene sesión).
+ * Protección: rate limit + validación de formato; resolución vía service role acotada en servidor.
+ */
 import { NextResponse } from 'next/server';
 import { isSupabaseAdminConfigured, resolveLoginEmailWithServiceRole } from '@/lib/server/supabase-admin';
 import { checkRateLimit } from '@/lib/server/simple-rate-limit';
