@@ -20,7 +20,7 @@ import {
   staffKioskResolveByPin,
 } from '@/lib/staff/staff-supabase';
 import { getSupabaseClient } from '@/lib/supabase-client';
-import { pickTerminalPhrase, terminalSuccessEmoji } from '@/lib/staff/terminal-fichaje-phrases';
+import { pickFichajeEmoji, pickFichajeMessage } from '@/lib/fichaje-messages';
 import type { StaffTimeEventType } from '@/lib/staff/types';
 
 function TerminalLogo({ className }: { className?: string }) {
@@ -197,8 +197,8 @@ export default function TerminalFichajePage() {
       });
       setSuccessAction(want);
       setSuccessAt(at);
-      setSuccessPhrase(pickTerminalPhrase(want));
-      setSuccessEmoji(terminalSuccessEmoji(want));
+      setSuccessPhrase(pickFichajeMessage(want));
+      setSuccessEmoji(pickFichajeEmoji(want));
       setStep('success');
       setPin('');
     } catch (e: unknown) {
