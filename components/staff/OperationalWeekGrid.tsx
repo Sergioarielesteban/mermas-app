@@ -562,19 +562,17 @@ export default function OperationalWeekGrid({
     [canEdit, onShiftPlaced, shifts],
   );
 
-  const zoneSummaryLine = (ymd: string) => {
+  /** Solo puestos con datos reales; sin “C 0·0h” ni ruido. */
+  const zoneSummaryLine = (ymd: string): string | null => {
     const st = statsByDay.get(ymd);
-    if (!st) return '—';
+    if (!st) return null;
     const parts: string[] = [];
     for (const z of COVERAGE_MAIN_ZONES) {
       const row = st.byZone.get(z);
-      if (!row || (row.people === 0 && row.minutes === 0)) {
-        parts.push(`${z[0]!.toUpperCase()} 0·0h`);
-        continue;
-      }
+      if (!row || (row.people === 0 && row.minutes === 0)) continue;
       parts.push(`${z[0]!.toUpperCase()} ${row.people}·${formatHoursSum(row.minutes)}`);
     }
-    return parts.join(' · ');
+    return parts.length > 0 ? parts.join(' · ') : null;
   };
 
   return (
@@ -642,7 +640,11 @@ export default function OperationalWeekGrid({
                     key={`tl-${ymd}`}
                     className="min-w-[21rem] border-b border-zinc-200 bg-zinc-50/90 align-top sm:min-w-[24.75rem]"
                   >
-                    <OperationalDayTimeline ymd={ymd} dayShifts={dayShifts} metrics={operationalMetrics} />
+                    {dayShifts.length > 0 ? (
+                      <OperationalDayTimeline ymd={ymd} dayShifts={dayShifts} metrics={operationalMetrics} />
+                    ) : (
+                      <div className="h-1 w-full shrink-0" aria-hidden />
+                    )}
                   </th>
                 );
               })}
@@ -728,20 +730,34 @@ export default function OperationalWeekGrid({
               {days.map((d) => {
                 const ymd = ymdLocal(d);
                 const st = statsByDay.get(ymd) ?? { people: 0, minutes: 0, byZone: new Map() };
+                const zoneLine = zoneSummaryLine(ymd);
+                const hasDay = st.people > 0 || st.minutes > 0;
                 return (
                   <td
                     key={ymd}
                     className="border-t border-zinc-200 px-0.5 py-2 text-center align-top sm:px-1"
                   >
-                    <div className="text-[10px] font-extrabold tabular-nums text-zinc-900 sm:text-xs">
-                      {st.people} pers.
-                    </div>
-                    <div className="text-[9px] font-bold tabular-nums text-zinc-600 sm:text-[10px]">
-                      {st.minutes > 0 ? formatHoursSum(st.minutes) : '—'}
-                    </div>
-                    <div className="mx-auto mt-1 max-w-[6.5rem] text-[8px] font-semibold leading-snug text-zinc-500 sm:max-w-none sm:text-[9px]">
-                      {zoneSummaryLine(ymd)}
-                    </div>
+                    {hasDay ? (
+                      <>
+                        {st.people > 0 ? (
+                          <div className="text-[10px] font-extrabold tabular-nums text-zinc-900 sm:text-xs">
+                            {st.people} pers.
+                          </div>
+                        ) : null}
+                        {st.minutes > 0 ? (
+                          <div className="text-[9px] font-bold tabular-nums text-zinc-600 sm:text-[10px]">
+                            {formatHoursSum(st.minutes)}
+                          </div>
+                        ) : null}
+                        {zoneLine ? (
+                          <div className="mx-auto mt-1 max-w-[6.5rem] text-[8px] font-semibold leading-snug text-zinc-500 sm:max-w-none sm:text-[9px]">
+                            {zoneLine}
+                          </div>
+                        ) : null}
+                      </>
+                    ) : (
+                      <span className="text-[9px] font-semibold text-zinc-400 sm:text-[10px]">—</span>
+                    )}
                   </td>
                 );
               })}

@@ -32,7 +32,7 @@ const SHIFT_CARD_ROW_H = 'h-[3.25rem]';
 const CARD_ROW_HEIGHT_REM = 3.25;
 const CARD_GAP_REM = 0.375;
 const FRANJA_STACK_GAP_REM = 0.25;
-const FRANJA_FOOTER_REM = 2.35;
+const FRANJA_FOOTER_REM = 1.95;
 
 /** Densidad baja: todas las tarjetas. Media: vista previa + resumen. Alta: solo cabecera compacta. */
 const DENSITY_LOW_MAX = 5;
@@ -102,7 +102,8 @@ function minTimelineTrackRem(
   canEdit: boolean,
   hasAddPersonSameSlot: boolean,
 ): number {
-  const BASE = 10;
+  /** Altura base más baja: el eje 00–24 es proporcional; no forzar un carril enorme por defecto. */
+  const BASE = 6.75;
   let t = BASE;
   for (const gl of groupLayout) {
     const n = gl.g.items.length;
@@ -113,7 +114,8 @@ function minTimelineTrackRem(
       (mode === 'low' && (n > 1 || (canEdit && hasAddPersonSameSlot)));
     const h = visibleFranjaHeightRem(n, mode, fatFooter);
     if (h <= 0) continue;
-    const denom = Math.max(0.18, 1 - p);
+    /** Evita inflar demasiado el carril cuando la franja cae tarde (menos “media pantalla vacía”). */
+    const denom = Math.max(0.3, 1 - p);
     t = Math.max(t, h / denom);
   }
   return t;
@@ -308,48 +310,44 @@ function OperationalSkelloCellBodyInner({
 
   if (here.length === 0) {
     return (
-      <div className="flex w-full min-w-0 flex-col gap-0.5">
-        <div className="text-center text-[8px] font-extrabold text-zinc-600 sm:text-[9px]">0 pers. · —</div>
-        <div className="flex min-h-[10rem] w-full gap-0.5 sm:min-h-[11.5rem]">
-          <TimelineRuler widthRem={1.2} />
-          <div
-            role={canEdit ? 'button' : undefined}
-            tabIndex={canEdit ? 0 : undefined}
-            data-vertical-track
-            className={[
-              'relative flex flex-1 items-center justify-center rounded-md border border-dashed px-1 transition touch-manipulation select-none',
-              canEdit
-                ? 'cursor-pointer border-zinc-300 bg-white hover:border-[#D32F2F]/40'
-                : 'cursor-default border-zinc-100 bg-zinc-50/50',
-              selectedCell?.ymd === ymd && selectedCell?.zoneKey === rowKey
-                ? 'ring-1 ring-zinc-900 ring-offset-1'
-                : '',
-              !canEdit ? 'opacity-60' : '',
-            ].join(' ')}
-            onClick={() => handleEmptyCellTap(ymd, rowKey)}
-            onKeyDown={(e) => {
-              if (!canEdit) return;
-              if (e.key === 'Enter' || e.key === ' ') {
-                e.preventDefault();
-                handleEmptyCellTap(ymd, rowKey);
-              }
-            }}
-            {...(canEdit ? bindEmptyLongPress(ymd, rowKey) : ({} as Record<string, never>))}
-          >
-            {canEdit ? (
-              <button
-                type="button"
-                className="relative z-10 flex items-center justify-center gap-1 rounded-md border border-zinc-200 bg-white px-2 py-1.5 text-[10px] font-extrabold text-[#D32F2F] shadow-sm hover:bg-[#D32F2F]/5 sm:text-[11px]"
-                onPointerDown={(e) => e.stopPropagation()}
-                onClick={(e) => quickCreateFromButton(e, ymd, rowKey)}
-              >
-                <Plus className="h-3 w-3 shrink-0" strokeWidth={2.5} />
-                Añadir
-              </button>
-            ) : (
-              <span className="text-zinc-400">—</span>
-            )}
-          </div>
+      <div className="flex w-full min-w-0 flex-col">
+        <div
+          role={canEdit ? 'button' : undefined}
+          tabIndex={canEdit ? 0 : undefined}
+          data-vertical-track
+          className={[
+            'relative flex min-h-[3.75rem] w-full items-center justify-center rounded-lg border border-dashed px-2 py-2 transition touch-manipulation select-none sm:min-h-[4rem]',
+            canEdit
+              ? 'cursor-pointer border-zinc-300 bg-zinc-50/40 hover:border-[#D32F2F]/45 hover:bg-white'
+              : 'cursor-default border-zinc-100 bg-zinc-50/30',
+            selectedCell?.ymd === ymd && selectedCell?.zoneKey === rowKey
+              ? 'ring-1 ring-zinc-900 ring-offset-1'
+              : '',
+            !canEdit ? 'opacity-60' : '',
+          ].join(' ')}
+          onClick={() => handleEmptyCellTap(ymd, rowKey)}
+          onKeyDown={(e) => {
+            if (!canEdit) return;
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              handleEmptyCellTap(ymd, rowKey);
+            }
+          }}
+          {...(canEdit ? bindEmptyLongPress(ymd, rowKey) : ({} as Record<string, never>))}
+        >
+          {canEdit ? (
+            <button
+              type="button"
+              className="relative z-10 inline-flex items-center justify-center gap-1 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-[11px] font-extrabold text-[#D32F2F] shadow-sm hover:bg-[#D32F2F]/5 sm:text-xs"
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={(e) => quickCreateFromButton(e, ymd, rowKey)}
+            >
+              <Plus className="h-3.5 w-3.5 shrink-0" strokeWidth={2.5} />
+              Añadir
+            </button>
+          ) : (
+            <span className="text-[10px] font-semibold text-zinc-400">Sin turnos</span>
+          )}
         </div>
       </div>
     );
@@ -402,14 +400,29 @@ function OperationalSkelloCellBodyInner({
       ? null
       : groupLayout.find((x) => `${ymd}|${rowKey}|${x.g.slotKey}` === densePanelKey) ?? null;
 
+  const summaryBits: React.ReactNode[] = [];
+  if (cellPeople > 0) summaryBits.push(<span key="p">{cellPeople} pers.</span>);
+  if (cellMins > 0) summaryBits.push(<span key="h">{formatHoursSum(cellMins)}</span>);
+  if (cellUnassigned > 0) {
+    summaryBits.push(
+      <span key="u" className="text-[#B91C1C]">
+        {cellUnassigned} hueco{cellUnassigned > 1 ? 's' : ''}
+      </span>,
+    );
+  }
+
   return (
     <div className="flex w-full min-w-0 flex-col gap-1">
-      <div className="text-center text-[8px] font-extrabold text-zinc-800 sm:text-[9px]">
-        {cellPeople} pers. · {cellMins > 0 ? formatHoursSum(cellMins) : '—'}
-        {cellUnassigned > 0 ? (
-          <span className="text-[#B91C1C]"> · {cellUnassigned} huecos</span>
-        ) : null}
-      </div>
+      {summaryBits.length > 0 ? (
+        <div className="flex flex-wrap items-center justify-center gap-x-1.5 gap-y-0 text-center text-[8px] font-extrabold text-zinc-800 sm:text-[9px]">
+          {summaryBits.map((node, i) => (
+            <React.Fragment key={i}>
+              {i > 0 ? <span className="text-zinc-300">·</span> : null}
+              {node}
+            </React.Fragment>
+          ))}
+        </div>
+      ) : null}
       <div className="flex w-full gap-1" style={{ minHeight: `${trackMinRem}rem` }}>
         <TimelineRuler widthRem={rulerWidthRem} />
         <div
