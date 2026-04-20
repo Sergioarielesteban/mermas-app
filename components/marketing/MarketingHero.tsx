@@ -4,7 +4,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import React from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
-import { ChevronLeft, ChevronRight, Sparkles } from 'lucide-react';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { enterDemoMode } from '@/lib/demo-mode';
 
 const BRAND = '#D32F2F';
@@ -197,20 +197,8 @@ export default function MarketingHero() {
       />
       <div className="relative mx-auto max-w-6xl">
         <div className="mx-auto max-w-3xl text-center lg:mx-0 lg:max-w-xl lg:text-left">
-          <motion.div
-            className="flex flex-wrap items-center justify-center gap-2 lg:justify-start"
-            initial={reduceMotion ? false : { opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.4 }}
-          >
-            <span className="inline-flex items-center gap-2 rounded-full border border-stone-200/90 bg-white/90 px-3 py-1.5 text-xs font-semibold text-stone-700 shadow-sm backdrop-blur-sm">
-              <Sparkles className="h-3.5 w-3.5 text-[#D32F2F]" aria-hidden />
-              Chef-One — operaciones de cocina
-            </span>
-          </motion.div>
-
           <motion.h1
-            className="mt-6 text-balance text-3xl font-extrabold leading-[1.08] tracking-tight text-stone-950 sm:text-4xl sm:leading-[1.06] lg:text-[2.65rem]"
+            className="mt-2 text-balance text-3xl font-extrabold leading-[1.08] tracking-tight text-stone-950 sm:mt-3 sm:text-4xl sm:leading-[1.06] lg:text-[2.65rem]"
             initial={reduceMotion ? false : { opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5, delay: reduceMotion ? 0 : 0.04 }}

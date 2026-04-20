@@ -78,7 +78,7 @@ export default function MarketingLanding() {
       </a>
 
       <header className="sticky top-0 z-50 border-b border-stone-200/80 bg-white/95 shadow-[0_1px_0_rgba(0,0,0,0.03)] backdrop-blur-xl supports-[backdrop-filter]:bg-white/80">
-        <div className="mx-auto grid max-w-6xl grid-cols-[1fr_auto_1fr] items-center gap-2 px-4 py-4 sm:gap-3 sm:px-6">
+        <div className="mx-auto grid max-w-6xl grid-cols-[1fr_auto_1fr] items-center gap-2 px-4 py-5 sm:gap-3 sm:px-6 sm:py-6">
           <div className="min-w-0" aria-hidden />
           <Link
             href="/"
@@ -87,9 +87,9 @@ export default function MarketingLanding() {
             <img
               src="/logo-chef-one.svg"
               alt="Chef-One"
-              width={52}
-              height={52}
-              className="h-12 w-12 shrink-0 sm:h-[52px] sm:w-[52px]"
+              width={48}
+              height={48}
+              className="h-10 w-10 min-h-[40px] min-w-[40px] shrink-0 sm:h-12 sm:w-12 sm:min-h-[48px] sm:min-w-[48px]"
               decoding="async"
             />
           </Link>
@@ -120,7 +120,7 @@ export default function MarketingLanding() {
             </Link>
             <Link
               href="/login"
-              className="rounded-full px-4 py-2.5 text-xs font-bold text-white shadow-md shadow-rose-900/15 transition hover:brightness-105 active:scale-[0.98] sm:text-sm"
+              className="inline-flex min-h-10 items-center justify-center rounded-full px-4 py-2.5 text-xs font-bold text-white shadow-md shadow-rose-900/15 transition hover:brightness-105 active:scale-[0.98] sm:min-h-11 sm:px-5 sm:text-sm"
               style={{ backgroundColor: BRAND }}
             >
               Acceder
