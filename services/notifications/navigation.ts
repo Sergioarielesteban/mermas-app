@@ -27,6 +27,13 @@ export function getNotificationHref(
       return '/personal/manual-normas/normas';
     case 'manual_procedimiento':
       return '/personal/manual-normas/operaciones';
+    case 'staff_week_schedule': {
+      const w = metadata.week_start_monday;
+      if (typeof w === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(w)) {
+        return `/personal/mi/turnos?semana=${encodeURIComponent(w)}`;
+      }
+      return '/personal/mi/turnos';
+    }
     default:
       if (entityId && entityType.startsWith('custom:')) {
         return null;

@@ -12,6 +12,7 @@ import {
   type NotificationWithRead,
 } from '@/services/notifications';
 import { canUserSeeNotification } from '@/services/notifications/visibility';
+import { notificationIsForUser } from '@/services/notifications/audience';
 
 export function useNotifications(localId: string | null, userId: string | null, userRole: ProfileAppRole | null) {
   const [items, setItems] = useState<NotificationWithRead[]>([]);
@@ -59,8 +60,9 @@ export function useNotifications(localId: string | null, userId: string | null, 
       const clearedBefore = readClearedBefore();
       const clearedFiltered = clearedBefore ? list.filter((n) => n.createdAt > clearedBefore) : list;
       const roleFiltered = clearedFiltered.filter((n) => canUserSeeNotification(userRole, n.type));
-      const unreadFiltered = roleFiltered.filter((n) => !n.readAt).length;
-      setItems(roleFiltered);
+      const audienceFiltered = roleFiltered.filter((n) => notificationIsForUser(n.metadata, userId));
+      const unreadFiltered = audienceFiltered.filter((n) => !n.readAt).length;
+      setItems(audienceFiltered);
       setUnreadCount(unreadFiltered);
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Error al cargar notificaciones.';
@@ -106,6 +108,7 @@ export function useNotifications(localId: string | null, userId: string | null, 
             const clearedBefore = readClearedBefore();
             if (clearedBefore && mapped.createdAt <= clearedBefore) return;
             if (!canUserSeeNotification(userRole, mapped.type)) return;
+            if (!notificationIsForUser(mapped.metadata, userId)) return;
             const fromSelf =
               mapped.createdBy != null && Boolean(userId) && mapped.createdBy === userId;
             if (!fromSelf) {

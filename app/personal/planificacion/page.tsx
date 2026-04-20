@@ -30,8 +30,16 @@ import {
 } from '@/lib/staff/local-operational-window';
 import { duplicateShiftsWeek, upsertStaffShift } from '@/lib/staff/staff-supabase';
 import type { StaffShift } from '@/lib/staff/types';
+import {
+  collectUserIdsWithShiftsInWeek,
+  fetchStaffWeekPublication,
+  markStaffWeekDirtyIfPublished,
+  upsertPublishStaffWeek,
+  type StaffWeekPublication,
+} from '@/lib/staff/staff-week-publication';
 import { appAlert, appConfirm, appPrompt } from '@/lib/app-dialog-bridge';
 import { getSupabaseClient } from '@/lib/supabase-client';
+import { notifyStaffWeekSchedulePublished } from '@/services/notifications';
 
 function toPgTimeHhMmSs(hhmm: string) {
   const parts = hhmm.split(':');
@@ -40,7 +48,7 @@ function toPgTimeHhMmSs(hhmm: string) {
 }
 
 export default function PersonalPlanificacionPage() {
-  const { localId, profileRole, profileReady } = useAuth();
+  const { localId, profileRole, profileReady, userId } = useAuth();
   const perms = useMemo(() => buildStaffPermissions(profileRole), [profileRole]);
   const [weekStart, setWeekStart] = useState(() => ymdLocal(startOfWeekMonday(new Date())));
   const weekStartDate = useMemo(() => parseYmd(weekStart), [weekStart]);
@@ -55,11 +63,44 @@ export default function PersonalPlanificacionPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [operationalWindow, setOperationalWindow] = useState(DEFAULT_LOCAL_OPERATIONAL_WINDOW);
   const [customOperationalZones, setCustomOperationalZones] = useState<CustomOperationalZoneRow[]>([]);
-
-  const onRt = useCallback(() => void reload(), [reload]);
-  useStaffRealtime(localId, onRt);
+  const [weekPublication, setWeekPublication] = useState<StaffWeekPublication | null>(null);
+  const [publishBusy, setPublishBusy] = useState(false);
 
   const supabase = getSupabaseClient();
+
+  const refetchWeekPublication = useCallback(async () => {
+    if (!localId || !supabase) {
+      setWeekPublication(null);
+      return;
+    }
+    try {
+      const p = await fetchStaffWeekPublication(supabase, localId, weekStart);
+      setWeekPublication(p);
+    } catch {
+      setWeekPublication(null);
+    }
+  }, [localId, supabase, weekStart]);
+
+  useEffect(() => {
+    void refetchWeekPublication();
+  }, [refetchWeekPublication]);
+
+  const afterScheduleChange = useCallback(async () => {
+    await reload();
+    if (!localId || !supabase || !perms.canManageSchedules) return;
+    try {
+      await markStaffWeekDirtyIfPublished(supabase, localId, weekStart);
+      await refetchWeekPublication();
+    } catch {
+      /* ignore */
+    }
+  }, [reload, localId, supabase, perms.canManageSchedules, weekStart, refetchWeekPublication]);
+
+  const onRt = useCallback(() => {
+    void reload();
+    void refetchWeekPublication();
+  }, [reload, refetchWeekPublication]);
+  useStaffRealtime(localId, onRt);
 
   useEffect(() => {
     if (!localId || !supabase) return;
@@ -164,7 +205,7 @@ export default function PersonalPlanificacionPage() {
         status: shift.status,
         colorHint: shift.colorHint,
       });
-      void reload();
+      void afterScheduleChange();
     } catch (e: unknown) {
       await appAlert(e instanceof Error ? e.message : 'No se pudo mover el turno');
     }
@@ -190,7 +231,7 @@ export default function PersonalPlanificacionPage() {
         status: shift.status,
         colorHint,
       });
-      void reload();
+      void afterScheduleChange();
     } catch (e: unknown) {
       await appAlert(e instanceof Error ? e.message : 'No se pudo mover el turno');
     }
@@ -215,7 +256,7 @@ export default function PersonalPlanificacionPage() {
         colorHint: zoneVal ? zoneDefaultColorHint(zoneVal) : null,
         status: 'planned',
       });
-      void reload();
+      void afterScheduleChange();
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'No se pudo crear el turno';
       if (msg.toLowerCase().includes('null') || msg.includes('employee')) {
@@ -246,7 +287,7 @@ export default function PersonalPlanificacionPage() {
         status: 'planned',
         colorHint: shift.colorHint,
       });
-      void reload();
+      void afterScheduleChange();
     } catch (e: unknown) {
       await appAlert(e instanceof Error ? e.message : 'No se pudo duplicar');
       throw new Error(PLANIFICACION_MODAL_ABORT);
@@ -276,7 +317,7 @@ export default function PersonalPlanificacionPage() {
         status: 'planned',
         colorHint: shift.colorHint,
       });
-      void reload();
+      void afterScheduleChange();
     } catch (e: unknown) {
       await appAlert(e instanceof Error ? e.message : 'No se pudo copiar');
       throw new Error(PLANIFICACION_MODAL_ABORT);
@@ -306,7 +347,7 @@ export default function PersonalPlanificacionPage() {
         status: 'planned',
         colorHint: shift.colorHint,
       });
-      void reload();
+      void afterScheduleChange();
     } catch (e: unknown) {
       await appAlert(e instanceof Error ? e.message : 'No se pudo copiar');
       throw new Error(PLANIFICACION_MODAL_ABORT);
@@ -322,8 +363,50 @@ export default function PersonalPlanificacionPage() {
       const n = await duplicateShiftsWeek(supabase, localId, weekStart, toYmd);
       await appAlert(`Copiados ${n} turnos.`);
       void reload();
+      void refetchWeekPublication();
     } catch (e: unknown) {
       await appAlert(e instanceof Error ? e.message : 'Error al duplicar');
+    }
+  };
+
+  const handlePublishWeek = async () => {
+    if (!localId || !supabase) return;
+    if (!userId) {
+      void appAlert('Vuelve a iniciar sesión para publicar el cuadrante.');
+      return;
+    }
+    const shiftsThisWeek = shifts.filter((s) => s.shiftDate >= weekStart && s.shiftDate <= weekEndYmd);
+    if (shiftsThisWeek.length === 0) {
+      void appAlert('No puedes publicar una semana sin turnos.');
+      return;
+    }
+    const republish = weekPublication?.status === 'updated_after_publish';
+    setPublishBusy(true);
+    try {
+      const pub = await upsertPublishStaffWeek(supabase, {
+        localId,
+        weekStartMondayYmd: weekStart,
+        publishedBy: userId,
+      });
+      const targetUserIds = collectUserIdsWithShiftsInWeek(shifts, employees, weekStart, weekEndYmd);
+      await notifyStaffWeekSchedulePublished(supabase, {
+        localId,
+        weekStartMondayYmd: weekStart,
+        publicationId: pub.id,
+        createdBy: userId,
+        republish,
+        targetUserIds,
+      });
+      setWeekPublication(pub);
+      if (targetUserIds.length === 0) {
+        void appAlert(
+          'Semana publicada. Ningún empleado con turno tiene usuario vinculado, así que no se ha enviado aviso en notificaciones.',
+        );
+      }
+    } catch (e: unknown) {
+      void appAlert(e instanceof Error ? e.message : 'No se pudo publicar la semana.');
+    } finally {
+      setPublishBusy(false);
     }
   };
 
@@ -379,39 +462,93 @@ export default function PersonalPlanificacionPage() {
 
       {view === 'semana' ? (
         <>
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div className="flex items-center gap-1">
-              <button
-                type="button"
-                className="rounded-xl border border-zinc-200 p-2"
-                onClick={() => setWeekStart((w) => ymdLocal(addDays(parseYmd(w), -7)))}
-                aria-label="Semana anterior"
-              >
-                <ChevronLeft className="h-5 w-5" />
-              </button>
-              <span className="text-sm font-bold text-zinc-800">
-                Semana del {weekStart}
-              </span>
-              <button
-                type="button"
-                className="rounded-xl border border-zinc-200 p-2"
-                onClick={() => setWeekStart((w) => ymdLocal(addDays(parseYmd(w), 7)))}
-                aria-label="Semana siguiente"
-              >
-                <ChevronRight className="h-5 w-5" />
-              </button>
+          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  className="rounded-xl border border-zinc-200 p-2"
+                  onClick={() => setWeekStart((w) => ymdLocal(addDays(parseYmd(w), -7)))}
+                  aria-label="Semana anterior"
+                >
+                  <ChevronLeft className="h-5 w-5" />
+                </button>
+                <span className="text-sm font-bold text-zinc-800">Semana del {weekStart}</span>
+                <button
+                  type="button"
+                  className="rounded-xl border border-zinc-200 p-2"
+                  onClick={() => setWeekStart((w) => ymdLocal(addDays(parseYmd(w), 7)))}
+                  aria-label="Semana siguiente"
+                >
+                  <ChevronRight className="h-5 w-5" />
+                </button>
+              </div>
+              {perms.canManageSchedules ? (
+                <span
+                  className={[
+                    'rounded-full px-3 py-1 text-[10px] font-extrabold uppercase tracking-wide sm:text-[11px]',
+                    !weekPublication
+                      ? 'bg-zinc-200 text-zinc-800'
+                      : weekPublication.status === 'published'
+                        ? 'bg-emerald-100 text-emerald-900'
+                        : 'bg-amber-100 text-amber-950',
+                  ].join(' ')}
+                >
+                  {!weekPublication
+                    ? 'Borrador'
+                    : weekPublication.status === 'published'
+                      ? 'Publicada'
+                      : 'Modificada tras publicación'}
+                </span>
+              ) : null}
             </div>
             {perms.canManageSchedules ? (
-              <button
-                type="button"
-                onClick={() => void duplicateNextWeek()}
-                className="flex items-center gap-2 rounded-2xl bg-zinc-900 px-4 py-2.5 text-xs font-extrabold text-white"
-              >
-                <Copy className="h-4 w-4" />
-                Duplicar semana →
-              </button>
+              <div className="flex flex-wrap items-center gap-2">
+                {!weekPublication ? (
+                  <button
+                    type="button"
+                    disabled={publishBusy || loading}
+                    onClick={() => void handlePublishWeek()}
+                    className="rounded-2xl bg-[#D32F2F] px-4 py-2.5 text-xs font-extrabold text-white disabled:opacity-50"
+                  >
+                    {publishBusy ? 'Publicando…' : 'Publicar semana'}
+                  </button>
+                ) : weekPublication.status === 'updated_after_publish' ? (
+                  <button
+                    type="button"
+                    disabled={publishBusy || loading}
+                    onClick={() => void handlePublishWeek()}
+                    className="rounded-2xl bg-amber-600 px-4 py-2.5 text-xs font-extrabold text-white disabled:opacity-50"
+                  >
+                    {publishBusy ? 'Publicando…' : 'Volver a publicar cambios'}
+                  </button>
+                ) : null}
+                <button
+                  type="button"
+                  onClick={() => void duplicateNextWeek()}
+                  className="flex items-center gap-2 rounded-2xl bg-zinc-900 px-4 py-2.5 text-xs font-extrabold text-white"
+                >
+                  <Copy className="h-4 w-4" />
+                  Duplicar semana →
+                </button>
+              </div>
             ) : null}
           </div>
+          {perms.canManageSchedules && weekPublication?.status === 'updated_after_publish' ? (
+            <p className="rounded-2xl bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-950 ring-1 ring-amber-200">
+              Has cambiado turnos tras publicar el cuadrante. El equipo no recibirá un aviso hasta que pulses
+              «Volver a publicar cambios».
+            </p>
+          ) : null}
+          {perms.canManageSchedules && weekPublication?.status === 'published' ? (
+            <p className="text-xs font-semibold text-zinc-500">
+              Publicada el{' '}
+              {new Date(weekPublication.publishedAt).toLocaleString('es-ES', {
+                dateStyle: 'short',
+                timeStyle: 'short',
+              })}
+            </p>
+          ) : null}
           <div className="flex flex-wrap items-center gap-2">
             {(['empleados', 'operativo'] as const).map((k) => (
               <button
@@ -547,7 +684,7 @@ export default function PersonalPlanificacionPage() {
           localId={localId}
           employees={employees}
           draft={draft}
-          onSaved={() => void reload()}
+          onSaved={() => void afterScheduleChange()}
           canDelete={perms.canManageSchedules}
           operationalExtraZones={customOperationalZones.map((z) => ({ value: z.key, label: z.label }))}
           onDuplicateFromModal={

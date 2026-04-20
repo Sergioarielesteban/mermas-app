@@ -13,6 +13,8 @@ export { markNotificationAsRead, markAllNotificationsAsRead } from './markAsRead
 export { registerDevice } from './registerDevice';
 export { preparePushDispatch, sendPushToLocalUsers } from './pushDispatch';
 export { getNotificationHref } from './navigation';
+export { notificationIsForUser } from './audience';
+export { notifyStaffWeekSchedulePublished } from './notifyStaffWeekSchedule';
 export { defaultSeverityForType } from './constants';
 export { canUserSeeNotification, normalizeNotificationType } from './visibility';
 export * from './triggers';

@@ -1,23 +1,36 @@
 'use client';
 
 import React, { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { useAuth } from '@/components/AuthProvider';
 import { useStaffBundle } from '@/hooks/useStaffBundle';
 import { useLinkedStaffEmployee } from '@/lib/staff/useLinkedStaffEmployee';
 import { fetchShiftsRange } from '@/lib/staff/staff-supabase';
 import { getSupabaseClient } from '@/lib/supabase-client';
-import { addDays, startOfWeekMonday, ymdLocal } from '@/lib/staff/staff-dates';
+import { addDays, parseYmd, startOfWeekMonday, ymdLocal } from '@/lib/staff/staff-dates';
+import { fetchStaffWeekPublication, type StaffWeekPublication } from '@/lib/staff/staff-week-publication';
 import { zoneLabel } from '@/lib/staff/staff-zone-styles';
 import type { StaffShift } from '@/lib/staff/types';
 import { plannedShiftMinutes } from '@/lib/staff/attendance-logic';
 
 export default function PersonalMiTurnosPage() {
   const { localId, profileReady, userId } = useAuth();
+  const searchParams = useSearchParams();
+  const semanaQuery = searchParams.get('semana');
   const [weekStart] = useState(() => ymdLocal(startOfWeekMonday(new Date())));
+  const publicationWeekMonday = useMemo(() => {
+    if (semanaQuery && /^\d{4}-\d{2}-\d{2}$/.test(semanaQuery)) return semanaQuery;
+    return weekStart;
+  }, [semanaQuery, weekStart]);
+  const publicationWeekEnd = useMemo(
+    () => ymdLocal(addDays(parseYmd(publicationWeekMonday), 6)),
+    [publicationWeekMonday],
+  );
   const { employees, loading: le, error: be } = useStaffBundle(localId, weekStart);
   const linked = useLinkedStaffEmployee(employees, userId);
   const [extra, setExtra] = useState<StaffShift[]>([]);
   const [loading2, setLoading2] = useState(false);
+  const [weekPublication, setWeekPublication] = useState<StaffWeekPublication | null>(null);
 
   useEffect(() => {
     if (!localId || !linked) return;
@@ -39,6 +52,22 @@ export default function PersonalMiTurnosPage() {
     };
   }, [localId, linked]);
 
+  useEffect(() => {
+    if (!localId || !linked) {
+      setWeekPublication(null);
+      return;
+    }
+    const supabase = getSupabaseClient();
+    if (!supabase) return;
+    let cancelled = false;
+    void fetchStaffWeekPublication(supabase, localId, publicationWeekMonday).then((p) => {
+      if (!cancelled) setWeekPublication(p);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [localId, linked, publicationWeekMonday]);
+
   const byDay = useMemo(() => {
     const m = new Map<string, StaffShift[]>();
     for (const s of extra) {
@@ -59,6 +88,26 @@ export default function PersonalMiTurnosPage() {
   return (
     <div className="space-y-4">
       <h1 className="text-xl font-extrabold text-zinc-900">Mis turnos</h1>
+      {weekPublication &&
+      (weekPublication.status === 'published' || weekPublication.status === 'updated_after_publish') ? (
+        <div
+          className={[
+            'rounded-2xl px-4 py-3 text-sm font-semibold ring-1',
+            weekPublication.status === 'updated_after_publish'
+              ? 'bg-amber-50 text-amber-950 ring-amber-200'
+              : 'bg-emerald-50 text-emerald-950 ring-emerald-200',
+          ].join(' ')}
+        >
+          <p className="font-extrabold text-zinc-900">
+            Semana del {publicationWeekMonday} al {publicationWeekEnd}
+          </p>
+          <p className="mt-1">
+            {weekPublication.status === 'updated_after_publish'
+              ? 'Este cuadrante fue actualizado después de publicarse. Revisa tus turnos.'
+              : 'Este es el horario publicado para esa semana.'}
+          </p>
+        </div>
+      ) : null}
       {be ? <p className="text-sm text-red-700">{be}</p> : null}
       {le || loading2 ? <p className="text-sm text-zinc-500">Cargando…</p> : null}
 
@@ -66,8 +115,23 @@ export default function PersonalMiTurnosPage() {
         {byDay.length === 0 ? (
           <p className="text-sm text-zinc-600">No hay turnos próximos en el calendario.</p>
         ) : (
-          byDay.map(([day, list]) => (
-            <section key={day} className="rounded-2xl border border-zinc-200 bg-white p-3 shadow-sm">
+          byDay.map(([day, list]) => {
+            const inPublishedWeek =
+              weekPublication &&
+              (weekPublication.status === 'published' ||
+                weekPublication.status === 'updated_after_publish') &&
+              day >= publicationWeekMonday &&
+              day <= publicationWeekEnd;
+            return (
+            <section
+              key={day}
+              className={[
+                'rounded-2xl border bg-white p-3 shadow-sm',
+                inPublishedWeek
+                  ? 'border-emerald-300 ring-2 ring-emerald-100'
+                  : 'border-zinc-200',
+              ].join(' ')}
+            >
               <p className="text-xs font-extrabold uppercase text-zinc-500">
                 {new Date(day + 'T12:00:00').toLocaleDateString('es-ES', {
                   weekday: 'long',
@@ -92,7 +156,8 @@ export default function PersonalMiTurnosPage() {
                 ))}
               </ul>
             </section>
-          ))
+            );
+          })
         )}
       </div>
     </div>

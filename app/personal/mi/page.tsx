@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { CalendarClock, LogIn } from 'lucide-react';
 import { useAuth } from '@/components/AuthProvider';
@@ -21,17 +21,36 @@ import { filterEntriesForLocalDay } from '@/lib/staff/staff-heuristics';
 import { shiftDateTimeIso, startOfWeekMonday, ymdLocal } from '@/lib/staff/staff-dates';
 import { zoneLabel } from '@/lib/staff/staff-zone-styles';
 import { staffDisplayName } from '@/lib/staff/staff-supabase';
+import { fetchStaffWeekPublication, type StaffWeekPublication } from '@/lib/staff/staff-week-publication';
+import { getSupabaseClient } from '@/lib/supabase-client';
 
 export default function PersonalMiHomePage() {
   const { localId, profileReady, userId, displayName, profileRole } = useAuth();
   const [weekStart] = useState(() => ymdLocal(startOfWeekMonday(new Date())));
   const { employees, shifts, timeEntries, loading, error, reload } = useStaffBundle(localId, weekStart);
   const linked = useLinkedStaffEmployee(employees, userId);
+  const [weekPublication, setWeekPublication] = useState<StaffWeekPublication | null>(null);
   const ymd = todayYmd();
   const entriesToday = useMemo(() => filterEntriesForLocalDay(timeEntries, ymd), [timeEntries, ymd]);
 
   const onRt = useCallback(() => void reload(), [reload]);
   useStaffRealtime(localId, onRt);
+
+  useEffect(() => {
+    if (!localId || !linked) {
+      setWeekPublication(null);
+      return;
+    }
+    const supabase = getSupabaseClient();
+    if (!supabase) return;
+    let cancelled = false;
+    void fetchStaffWeekPublication(supabase, localId, weekStart).then((p) => {
+      if (!cancelled) setWeekPublication(p);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [localId, linked, weekStart]);
 
   const greeting =
     displayName?.trim() || (linked ? staffDisplayName(linked) : 'Equipo');
@@ -96,6 +115,30 @@ export default function PersonalMiHomePage() {
           {new Date().toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' })}
         </p>
       </div>
+
+      {weekPublication &&
+      (weekPublication.status === 'published' || weekPublication.status === 'updated_after_publish') ? (
+        <div
+          className={[
+            'rounded-2xl px-4 py-3 text-sm font-semibold ring-1',
+            weekPublication.status === 'updated_after_publish'
+              ? 'bg-amber-50 text-amber-950 ring-amber-200'
+              : 'bg-emerald-50 text-emerald-950 ring-emerald-200',
+          ].join(' ')}
+        >
+          <p>
+            {weekPublication.status === 'updated_after_publish'
+              ? 'Tu horario de esta semana ha sido actualizado por el encargado.'
+              : 'Ya está publicado el horario oficial de esta semana.'}
+          </p>
+          <Link
+            href={`/personal/mi/turnos?semana=${encodeURIComponent(weekPublication.weekStartMonday)}`}
+            className="mt-2 inline-block text-sm font-extrabold text-[#D32F2F]"
+          >
+            Ver mi semana →
+          </Link>
+        </div>
+      ) : null}
 
       {error ? <p className="text-sm font-semibold text-red-700">{error}</p> : null}
       {loading ? <p className="text-sm text-zinc-500">Cargando…</p> : null}
