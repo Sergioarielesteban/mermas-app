@@ -6,9 +6,16 @@ import {
   fetchIncidents,
   fetchShiftsRange,
   fetchStaffEmployees,
+  fetchStaffScheduleDayMarksRange,
   fetchTimeEntriesRange,
 } from '@/lib/staff/staff-supabase';
-import type { StaffEmployee, StaffIncident, StaffShift, StaffTimeEntry } from '@/lib/staff/types';
+import type {
+  StaffEmployee,
+  StaffIncident,
+  StaffScheduleDayMark,
+  StaffShift,
+  StaffTimeEntry,
+} from '@/lib/staff/types';
 import { addDays, ymdLocal } from '@/lib/staff/staff-dates';
 
 export function useStaffBundle(localId: string | null, weekStartMondayYmd: string) {
@@ -16,6 +23,7 @@ export function useStaffBundle(localId: string | null, weekStartMondayYmd: strin
   const [shifts, setShifts] = useState<StaffShift[]>([]);
   const [timeEntries, setTimeEntries] = useState<StaffTimeEntry[]>([]);
   const [incidents, setIncidents] = useState<StaffIncident[]>([]);
+  const [scheduleDayMarks, setScheduleDayMarks] = useState<StaffScheduleDayMark[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -26,6 +34,7 @@ export function useStaffBundle(localId: string | null, weekStartMondayYmd: strin
       setShifts([]);
       setTimeEntries([]);
       setIncidents([]);
+      setScheduleDayMarks([]);
       return;
     }
     const supabase = getSupabaseClient();
@@ -43,16 +52,18 @@ export function useStaffBundle(localId: string | null, weekStartMondayYmd: strin
       const startDay = new Date(weekStartMondayYmd + 'T00:00:00');
       const endDay = addDays(startDay, 7);
       endDay.setMilliseconds(-1);
-      const [em, sh, te, inc] = await Promise.all([
+      const [em, sh, te, inc, marks] = await Promise.all([
         fetchStaffEmployees(supabase, localId),
         fetchShiftsRange(supabase, localId, fromYmd, toYmd),
         fetchTimeEntriesRange(supabase, localId, startDay.toISOString(), endDay.toISOString()),
         fetchIncidents(supabase, localId, fromYmd, toYmd),
+        fetchStaffScheduleDayMarksRange(supabase, localId, fromYmd, toYmd).catch(() => [] as StaffScheduleDayMark[]),
       ]);
       setEmployees(em.filter((e) => e.active));
       setShifts(sh);
       setTimeEntries(te);
       setIncidents(inc);
+      setScheduleDayMarks(marks);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Error al cargar datos de personal');
     } finally {
@@ -64,5 +75,5 @@ export function useStaffBundle(localId: string | null, weekStartMondayYmd: strin
     void reload();
   }, [reload]);
 
-  return { employees, shifts, timeEntries, incidents, loading, error, reload };
+  return { employees, shifts, timeEntries, incidents, scheduleDayMarks, loading, error, reload };
 }

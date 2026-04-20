@@ -7,6 +7,8 @@ import type {
   StaffRequest,
   StaffRequestStatus,
   StaffRequestType,
+  StaffScheduleDayMark,
+  StaffScheduleDayMarkKind,
   StaffShift,
   StaffShiftStatus,
   StaffTimeAdjustment,
@@ -33,6 +35,18 @@ function mapEmployee(r: Record<string, unknown>): StaffEmployee {
     color: r.color ? String(r.color) : null,
     hasPin: Boolean(r.pin_fichaje && String(r.pin_fichaje).length > 0),
     active: Boolean(r.active ?? true),
+    createdAt: String(r.created_at ?? ''),
+    updatedAt: String(r.updated_at ?? ''),
+  };
+}
+
+function mapScheduleDayMark(r: Record<string, unknown>): StaffScheduleDayMark {
+  return {
+    id: String(r.id),
+    localId: String(r.local_id),
+    employeeId: String(r.employee_id),
+    markDate: String(r.mark_date),
+    kind: r.kind as StaffScheduleDayMarkKind,
     createdAt: String(r.created_at ?? ''),
     updatedAt: String(r.updated_at ?? ''),
   };
@@ -301,6 +315,90 @@ export async function upsertStaffShift(
 
 export async function deleteStaffShift(supabase: SupabaseClient, shiftId: string): Promise<void> {
   const { error } = await supabase.from('staff_shifts').delete().eq('id', shiftId);
+  if (error) throw new Error(error.message);
+}
+
+export async function fetchStaffScheduleDayMarksRange(
+  supabase: SupabaseClient,
+  localId: string,
+  fromYmd: string,
+  toYmd: string,
+): Promise<StaffScheduleDayMark[]> {
+  const { data, error } = await supabase
+    .from('staff_schedule_day_marks')
+    .select('id,local_id,employee_id,mark_date,kind,created_at,updated_at')
+    .eq('local_id', localId)
+    .gte('mark_date', fromYmd)
+    .lte('mark_date', toYmd)
+    .order('mark_date');
+  if (error) {
+    const msg = error.message?.toLowerCase() ?? '';
+    if (msg.includes('relation') && msg.includes('does not exist')) return [];
+    throw new Error(error.message);
+  }
+  return (data ?? []).map((r) => mapScheduleDayMark(r as Record<string, unknown>));
+}
+
+export async function upsertStaffScheduleDayMark(
+  supabase: SupabaseClient,
+  input: {
+    localId: string;
+    employeeId: string;
+    markDate: string;
+    kind: StaffScheduleDayMarkKind;
+  },
+): Promise<StaffScheduleDayMark> {
+  const { data: existing, error: findErr } = await supabase
+    .from('staff_schedule_day_marks')
+    .select('id')
+    .eq('local_id', input.localId)
+    .eq('employee_id', input.employeeId)
+    .eq('mark_date', input.markDate)
+    .maybeSingle();
+  if (findErr) throw new Error(findErr.message);
+  const row = {
+    local_id: input.localId,
+    employee_id: input.employeeId,
+    mark_date: input.markDate,
+    kind: input.kind,
+  };
+  if (existing?.id) {
+    const { data, error } = await supabase
+      .from('staff_schedule_day_marks')
+      .update(row)
+      .eq('id', existing.id)
+      .select('id,local_id,employee_id,mark_date,kind,created_at,updated_at')
+      .single();
+    if (error || !data) throw new Error(error?.message ?? 'No se pudo actualizar la marca de día');
+    return mapScheduleDayMark(data as Record<string, unknown>);
+  }
+  const { data, error } = await supabase
+    .from('staff_schedule_day_marks')
+    .insert(row)
+    .select('id,local_id,employee_id,mark_date,kind,created_at,updated_at')
+    .single();
+  if (error || !data) throw new Error(error?.message ?? 'No se pudo crear la marca de día');
+  return mapScheduleDayMark(data as Record<string, unknown>);
+}
+
+export async function deleteStaffScheduleDayMark(supabase: SupabaseClient, markId: string): Promise<void> {
+  const { error } = await supabase.from('staff_schedule_day_marks').delete().eq('id', markId);
+  if (error) throw new Error(error.message);
+}
+
+/** Quita marca de día por empleado + fecha (si existe). */
+export async function deleteStaffScheduleDayMarkForCell(
+  supabase: SupabaseClient,
+  localId: string,
+  employeeId: string,
+  markDate: string,
+): Promise<void> {
+  const { error } = await supabase
+    .from('staff_schedule_day_marks')
+    .delete()
+    .eq('local_id', localId)
+    .eq('employee_id', employeeId)
+    .eq('mark_date', markDate);
   if (error) throw new Error(error.message);
 }
 

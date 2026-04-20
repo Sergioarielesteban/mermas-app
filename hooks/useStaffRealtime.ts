@@ -43,6 +43,16 @@ export function useStaffRealtime(localId: string | null, onEvent: () => void) {
         },
         schedule,
       )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'staff_schedule_day_marks',
+          filter: `local_id=eq.${localId}`,
+        },
+        schedule,
+      )
       .subscribe();
     return () => {
       if (t != null) window.clearTimeout(t);

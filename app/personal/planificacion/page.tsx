@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { ChevronLeft, ChevronRight, Copy } from 'lucide-react';
 import MermasStyleHero from '@/components/MermasStyleHero';
@@ -28,8 +28,15 @@ import {
   DEFAULT_LOCAL_OPERATIONAL_WINDOW,
   operationalWindowFromLocalsRow,
 } from '@/lib/staff/local-operational-window';
-import { deleteStaffShift, duplicateShiftsWeek, upsertStaffShift } from '@/lib/staff/staff-supabase';
-import type { StaffEmployee, StaffShift } from '@/lib/staff/types';
+import {
+  deleteStaffScheduleDayMark,
+  deleteStaffScheduleDayMarkForCell,
+  deleteStaffShift,
+  duplicateShiftsWeek,
+  upsertStaffScheduleDayMark,
+  upsertStaffShift,
+} from '@/lib/staff/staff-supabase';
+import type { StaffEmployee, StaffScheduleDayMark, StaffShift, StaffScheduleDayMarkKind } from '@/lib/staff/types';
 import {
   collectUserIdsWithShiftsInWeek,
   fetchStaffWeekPublication,
@@ -54,7 +61,7 @@ export default function PersonalPlanificacionPage() {
   const weekStartDate = useMemo(() => parseYmd(weekStart), [weekStart]);
   const weekEndYmd = useMemo(() => ymdLocal(addDays(weekStartDate, 6)), [weekStartDate]);
   /** Única fuente de turnos de la semana para cuadrante por puesto y por empleado (misma query / mismo estado). */
-  const { employees, shifts, loading, error, reload } = useStaffBundle(localId, weekStart);
+  const { employees, shifts, scheduleDayMarks, loading, error, reload } = useStaffBundle(localId, weekStart);
 
   /**
    * Empleados activos más filas sintéticas para turnos cuya `employeeId` no está en la lista activa
@@ -96,7 +103,11 @@ export default function PersonalPlanificacionPage() {
   const [monthCursor, setMonthCursor] = useState(() => new Date());
 
   const [draft, setDraft] = useState<ShiftDraft | null>(null);
+  const draftRef = useRef<ShiftDraft | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
+  useEffect(() => {
+    draftRef.current = draft;
+  }, [draft]);
   const [operationalWindow, setOperationalWindow] = useState(DEFAULT_LOCAL_OPERATIONAL_WINDOW);
   const [customOperationalZones, setCustomOperationalZones] = useState<CustomOperationalZoneRow[]>([]);
   const [weekPublication, setWeekPublication] = useState<StaffWeekPublication | null>(null);
@@ -131,6 +142,22 @@ export default function PersonalPlanificacionPage() {
       /* ignore */
     }
   }, [reload, localId, supabase, perms.canManageSchedules, weekStart, refetchWeekPublication]);
+
+  const handleShiftModalSaved = useCallback(async () => {
+    const d = draftRef.current;
+    if (supabase && localId && d) {
+      const emId = d.mode === 'edit' ? d.shift.employeeId : d.employeeId;
+      const dt = d.mode === 'edit' ? d.shift.shiftDate : d.shiftDate;
+      if (emId && dt) {
+        try {
+          await deleteStaffScheduleDayMarkForCell(supabase, localId, emId, dt);
+        } catch {
+          /* ignore */
+        }
+      }
+    }
+    await afterScheduleChange();
+  }, [supabase, localId, afterScheduleChange]);
 
   const onRt = useCallback(() => {
     void reload({ silent: true });
@@ -256,6 +283,90 @@ export default function PersonalPlanificacionPage() {
     [perms.canManageSchedules, supabase, afterScheduleChange],
   );
 
+  const peekShiftReadOnly = useCallback(
+    (s: StaffShift) => {
+      const em = s.employeeId ? employees.find((e) => e.id === s.employeeId) : null;
+      const who = em ? `${em.firstName} ${em.lastName}` : 'Sin asignar';
+      void appAlert(
+        `${who} · ${s.shiftDate}\n${s.startTime.slice(0, 5)} – ${s.endTime.slice(0, 5)}${s.zone ? ` · ${s.zone}` : ''}`,
+      );
+    },
+    [employees],
+  );
+
+  const copyShiftToDays = useCallback(
+    async (template: StaffShift, targetYmds: string[]) => {
+      if (!perms.canManageSchedules || !localId || !supabase) return;
+      const empId = template.employeeId;
+      if (!empId) {
+        await appAlert('Solo se pueden copiar turnos con empleado asignado.');
+        return;
+      }
+      for (const ymd of targetYmds) {
+        if (ymd === template.shiftDate) continue;
+        const existing = shifts.filter((s) => s.employeeId === empId && s.shiftDate === ymd);
+        const mark = scheduleDayMarks.find((m) => m.employeeId === empId && m.markDate === ymd);
+        if (existing.length > 0) {
+          const ok = await appConfirm(
+            `El ${ymd} ya tiene ${existing.length} turno(s). ¿Eliminarlos y copiar este horario?`,
+          );
+          if (!ok) continue;
+          for (const ex of existing) {
+            await deleteStaffShift(supabase, ex.id);
+          }
+        }
+        if (mark) {
+          const ok = await appConfirm(
+            `El ${ymd} está marcado como ${mark.kind === 'holiday' ? 'fiesta' : 'descanso'}. ¿Quitar la marca y crear el turno copiado?`,
+          );
+          if (!ok) continue;
+          await deleteStaffScheduleDayMark(supabase, mark.id);
+        }
+        await upsertStaffShift(supabase, {
+          localId,
+          employeeId: empId,
+          shiftDate: ymd,
+          startTime: template.startTime,
+          endTime: template.endTime,
+          endsNextDay: template.endsNextDay,
+          breakMinutes: template.breakMinutes,
+          zone: template.zone,
+          notes: template.notes,
+          status: template.status,
+          colorHint: template.colorHint,
+        });
+      }
+      await afterScheduleChange();
+    },
+    [perms.canManageSchedules, localId, supabase, shifts, scheduleDayMarks, afterScheduleChange],
+  );
+
+  const upsertDayMark = useCallback(
+    async (employeeId: string, dateYmd: string, kind: StaffScheduleDayMarkKind) => {
+      if (!perms.canManageSchedules || !localId || !supabase) return;
+      const existingShifts = shifts.filter((s) => s.employeeId === employeeId && s.shiftDate === dateYmd);
+      if (existingShifts.length > 0) {
+        const ok = await appConfirm(
+          `Este día ya tiene ${existingShifts.length} turno(s). ¿Eliminarlos y marcar ${kind === 'holiday' ? 'fiesta' : 'descanso'}?`,
+        );
+        if (!ok) return;
+        for (const ex of existingShifts) await deleteStaffShift(supabase, ex.id);
+      }
+      await upsertStaffScheduleDayMark(supabase, { localId, employeeId, markDate: dateYmd, kind });
+      await afterScheduleChange();
+    },
+    [perms.canManageSchedules, localId, supabase, shifts, afterScheduleChange],
+  );
+
+  const removeDayMark = useCallback(
+    async (mark: StaffScheduleDayMark) => {
+      if (!perms.canManageSchedules || !supabase) return;
+      await deleteStaffScheduleDayMark(supabase, mark.id);
+      await afterScheduleChange();
+    },
+    [perms.canManageSchedules, supabase, afterScheduleChange],
+  );
+
   const onOperationalShiftTimesAdjusted = useCallback(
     async (s: StaffShift, startTime: string, endTime: string, endsNextDay: boolean) => {
       if (!perms.canManageSchedules || !localId || !supabase) return;
@@ -274,33 +385,6 @@ export default function PersonalPlanificacionPage() {
         colorHint: s.colorHint,
       });
       await afterScheduleChange();
-    },
-    [perms.canManageSchedules, localId, supabase, afterScheduleChange],
-  );
-
-  const onShiftMoved = useCallback(
-    async (shift: StaffShift, newEmployeeId: string, newDateYmd: string) => {
-      if (!perms.canManageSchedules || !localId || !supabase) return;
-      const employeeId = newEmployeeId === SHIFT_GRID_UNASSIGNED_ROW_ID ? null : newEmployeeId;
-      try {
-        await upsertStaffShift(supabase, {
-          id: shift.id,
-          localId,
-          employeeId,
-          shiftDate: newDateYmd,
-          startTime: shift.startTime,
-          endTime: shift.endTime,
-          endsNextDay: shift.endsNextDay,
-          breakMinutes: shift.breakMinutes,
-          zone: shift.zone,
-          notes: shift.notes,
-          status: shift.status,
-          colorHint: shift.colorHint,
-        });
-        void afterScheduleChange();
-      } catch (e: unknown) {
-        await appAlert(e instanceof Error ? e.message : 'No se pudo mover el turno');
-      }
     },
     [perms.canManageSchedules, localId, supabase, afterScheduleChange],
   );
@@ -673,25 +757,14 @@ export default function PersonalPlanificacionPage() {
               weekStartMonday={weekStartDate}
               employees={employeesForShiftWeekGrid}
               shifts={shifts}
-              canDragShifts={perms.canManageSchedules}
-              onShiftMoved={onShiftMoved}
+              scheduleDayMarks={scheduleDayMarks}
+              canManageSchedules={perms.canManageSchedules}
+              onEditShift={perms.canManageSchedules ? openEdit : peekShiftReadOnly}
+              onNewShift={openNew}
               onRemoveShift={perms.canManageSchedules ? removeShiftFromPlan : undefined}
-              onCellActivate={(empId, ymd, here) => {
-                if (here.length === 1) openEdit(here[0]);
-                else if (here.length === 0) openNew(empId, ymd);
-                else {
-                  void (async () => {
-                    const pick = await appPrompt(
-                      `Varios turnos. Escribe 1–${here.length} para editar o 0 para nuevo`,
-                      '1',
-                    );
-                    if (pick == null) return;
-                    const n = Number(pick);
-                    if (n === 0) openNew(empId, ymd);
-                    else if (n >= 1 && n <= here.length) openEdit(here[n - 1]);
-                  })();
-                }
-              }}
+              onCopyShiftToDays={perms.canManageSchedules ? copyShiftToDays : undefined}
+              onUpsertDayMark={perms.canManageSchedules ? upsertDayMark : undefined}
+              onRemoveDayMark={perms.canManageSchedules ? removeDayMark : undefined}
             />
           ) : (
             <OperationalWeekGrid
@@ -788,7 +861,7 @@ export default function PersonalPlanificacionPage() {
           localId={localId}
           employees={employees}
           draft={draft}
-          onSaved={() => void afterScheduleChange()}
+          onSaved={() => void handleShiftModalSaved()}
           canDelete={perms.canManageSchedules}
           operationalExtraZones={customOperationalZones.map((z) => ({ value: z.key, label: z.label }))}
           onDuplicateFromModal={

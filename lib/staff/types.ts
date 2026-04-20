@@ -72,6 +72,19 @@ export type StaffShift = {
   updatedAt: string;
 };
 
+/** Descanso o fiesta en cuadrante por empleado (sin fila de turno con horario). */
+export type StaffScheduleDayMarkKind = 'rest' | 'holiday';
+
+export type StaffScheduleDayMark = {
+  id: string;
+  localId: string;
+  employeeId: string;
+  markDate: string;
+  kind: StaffScheduleDayMarkKind;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type StaffTimeEntry = {
   id: string;
   localId: string;
