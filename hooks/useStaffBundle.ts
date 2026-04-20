@@ -59,9 +59,13 @@ export function useStaffBundle(localId: string | null, weekStartMondayYmd: strin
     }
   }, [localId, weekStartMondayYmd]);
 
+  const patchShiftLocal = useCallback((shiftId: string, patch: Partial<StaffShift>) => {
+    setShifts((prev) => prev.map((s) => (s.id === shiftId ? { ...s, ...patch } : s)));
+  }, []);
+
   useEffect(() => {
     void reload();
   }, [reload]);
 
-  return { employees, shifts, timeEntries, incidents, loading, error, reload };
+  return { employees, shifts, timeEntries, incidents, loading, error, reload, patchShiftLocal };
 }
