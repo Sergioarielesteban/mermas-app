@@ -79,7 +79,6 @@ export function isRouteBlockedForRole(pathname: string | null, role: ProfileAppR
     isManager &&
     (pathname.startsWith('/personal/control') ||
       pathname.startsWith('/personal/planificacion') ||
-      pathname.startsWith('/personal/empleados') ||
       pathname.startsWith('/personal/solicitudes') ||
       pathname.startsWith('/personal/incidencias'))
   ) {

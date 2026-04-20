@@ -27,6 +27,8 @@ type NavLink = {
   end?: boolean;
   managerOnly?: boolean;
   adminOnly?: boolean;
+  /** Gestión de equipo (admin o encargado con permiso). */
+  teamManagement?: boolean;
   staffVisible?: boolean;
 };
 
@@ -36,7 +38,7 @@ const LINKS: NavLink[] = [
   { href: '/personal/control', label: 'Control', Icon: LayoutPanelTop, adminOnly: true },
   { href: '/personal/fichaje', label: 'Fichaje', Icon: Clock, staffVisible: true },
   { href: '/personal/registro', label: 'Registro', Icon: ClipboardList, staffVisible: true },
-  { href: '/personal/empleados', label: 'Equipo', Icon: Users, adminOnly: true },
+  { href: '/personal/empleados', label: 'Equipo', Icon: Users, teamManagement: true },
   { href: '/personal/solicitudes', label: 'Solicitudes', Icon: Send, adminOnly: true },
   { href: '/personal/incidencias', label: 'Incidencias', Icon: AlertTriangle, adminOnly: true },
   { href: '/personal/configuracion', label: 'Ajustes', Icon: Settings2, adminOnly: true },
@@ -59,6 +61,7 @@ export default function StaffPersonalShell({ children }: { children: React.React
           aria-label="Secciones Personal"
         >
           {LINKS.filter((l) => {
+            if (l.teamManagement) return perms.canManageEmployees;
             if (l.adminOnly) return isAdmin;
             if (l.managerOnly) return perms.canViewTeamSummary;
             if (isManager) return Boolean(l.staffVisible);

@@ -9,7 +9,7 @@ export function buildStaffPermissions(profileRole: ProfileAppRole | null): Staff
   return {
     profileRole: profileRole ?? null,
     canManageSchedules: isAdmin,
-    canManageEmployees: isAdmin,
+    canManageEmployees: isAdmin || isManager,
     canCorrectEntries: isAdmin || isManager,
     canResolveIncidents: isAdmin,
     canViewTeamSummary,

@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { requireAdminSupabaseUser } from '@/lib/require-allowed-supabase-user';
+import { requireProfileRoles } from '@/lib/require-allowed-supabase-user';
 import {
   adminCreateAuthUser,
   adminDeleteAuthUser,
@@ -63,9 +63,9 @@ async function countOperationalUsers(localId: string): Promise<number> {
 }
 
 export async function POST(request: Request) {
-  const actor = await requireAdminSupabaseUser(request);
+  const actor = await requireProfileRoles(request, ['admin', 'manager']);
   if (!actor.ok) {
-    return NextResponse.json({ ok: false, error: 'No autorizado' }, { status: actor.status });
+    return NextResponse.json({ ok: false, error: actor.message || 'No autorizado' }, { status: actor.status });
   }
   if (!isSupabaseAdminConfigured()) {
     return jsonGenericError(503);
@@ -116,7 +116,10 @@ export async function POST(request: Request) {
 
     const accessEmail = cleanEmail(body.accessEmail || email);
     const tempPassword = cleanText(body.tempPassword, 256);
-    const appRole = parseProfileAppRole(cleanText(body.appRole, 20));
+    let appRole = parseProfileAppRole(cleanText(body.appRole, 20));
+    if (actor.role !== 'admin') {
+      appRole = 'staff';
+    }
     if (!EMAIL_RE.test(accessEmail)) {
       return NextResponse.json({ ok: false, error: 'Introduce un email válido para el acceso' }, { status: 400 });
     }
