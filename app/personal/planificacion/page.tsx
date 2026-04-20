@@ -21,7 +21,7 @@ export default function PersonalPlanificacionPage() {
   const perms = useMemo(() => buildStaffPermissions(profileRole), [profileRole]);
   const [weekStart, setWeekStart] = useState(() => ymdLocal(startOfWeekMonday(new Date())));
   const weekStartDate = useMemo(() => parseYmd(weekStart), [weekStart]);
-  const { employees, shifts, loading, error, reload, patchShiftLocal } = useStaffBundle(localId, weekStart);
+  const { employees, shifts, loading, error, reload } = useStaffBundle(localId, weekStart);
   const [view, setView] = useState<'semana' | 'dia' | 'mes'>('semana');
   const [dayFocus, setDayFocus] = useState(() => ymdLocal(new Date()));
   const [monthCursor, setMonthCursor] = useState(() => new Date());
@@ -58,8 +58,6 @@ export default function PersonalPlanificacionPage() {
 
   const onShiftMoved = async (shift: StaffShift, newEmployeeId: string, newDateYmd: string) => {
     if (!perms.canManageSchedules || !localId || !supabase) return;
-    const prev = { employeeId: shift.employeeId, shiftDate: shift.shiftDate };
-    patchShiftLocal(shift.id, { employeeId: newEmployeeId, shiftDate: newDateYmd });
     try {
       await upsertStaffShift(supabase, {
         id: shift.id,
@@ -77,7 +75,6 @@ export default function PersonalPlanificacionPage() {
       });
       void reload();
     } catch (e: unknown) {
-      patchShiftLocal(shift.id, prev);
       await appAlert(e instanceof Error ? e.message : 'No se pudo mover el turno');
     }
   };
