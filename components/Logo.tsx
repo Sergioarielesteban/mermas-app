@@ -8,14 +8,15 @@ export type LogoVariant = 'header' | 'hero' | 'login' | 'banner' | 'footer' | 'i
  */
 const variantClassName: Record<LogoVariant, string> = {
   header: 'h-10 w-auto max-w-[min(240px,72vw)] object-contain object-left',
+  /** Landing hero: ~×2 lineal respecto al tamaño anterior (≈×4 área); tope dvh en landscape. */
   hero: [
-    'mx-auto block w-auto object-contain object-center',
-    'h-[min(42vw,11rem)]',
-    'sm:h-[min(38vw,10.75rem)]',
-    'md:h-[min(34vw,10.25rem)]',
-    'lg:h-[min(28vw,9.75rem)]',
-    'xl:h-[min(24vw,9.25rem)]',
-    '2xl:h-[min(20vw,8.75rem)]',
+    'mx-auto block w-auto max-h-[min(22rem,48dvh)] object-contain object-center',
+    'h-[min(88vw,22rem)]',
+    'sm:h-[min(78vw,20rem)] sm:max-h-[min(20rem,50dvh)]',
+    'md:h-[min(64vw,18rem)] md:max-h-[min(18rem,52dvh)]',
+    'lg:h-[min(52vw,16rem)] lg:max-h-[min(16rem,54dvh)]',
+    'xl:h-[min(44vw,14rem)] xl:max-h-[min(14rem,56dvh)]',
+    '2xl:h-[min(38vw,13rem)] 2xl:max-h-[min(13rem,58dvh)]',
   ].join(' '),
   login: [
     'mx-auto block w-auto object-contain object-center',
