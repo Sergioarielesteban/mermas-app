@@ -13,19 +13,19 @@ export default function manifest(): MetadataRoute.Manifest {
     orientation: 'portrait',
     icons: [
       {
-        src: '/icons/icon-app.svg',
+        src: '/logo-chef-one.svg',
         sizes: '192x192',
         type: 'image/svg+xml',
         purpose: 'any',
       },
       {
-        src: '/icons/icon-app.svg',
+        src: '/logo-chef-one.svg',
         sizes: '512x512',
         type: 'image/svg+xml',
         purpose: 'any',
       },
       {
-        src: '/icons/icon-app.svg',
+        src: '/logo-chef-one.svg',
         sizes: '512x512',
         type: 'image/svg+xml',
         purpose: 'maskable',

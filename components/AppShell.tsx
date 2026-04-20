@@ -378,12 +378,12 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           </button>
           <div className="flex flex-col items-center px-2 pb-1 pt-9 text-center">
             <img
-              src="/logo-chef-one-wordmark.svg"
+              src="/logo-chef-one.svg"
               alt=""
               role="presentation"
-              className="h-12 w-auto max-w-[min(72vw,260px)] select-none sm:h-14"
+              className="h-12 w-12 select-none object-contain sm:h-14 sm:w-14"
               width={512}
-              height={176}
+              height={512}
             />
             <ChefOneGlowLine className="mx-auto mt-4 w-[min(70vw,220px)] scale-x-50" />
             <p className="mt-3 text-xs font-medium text-zinc-600">Gestión operativa</p>

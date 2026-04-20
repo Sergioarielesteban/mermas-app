@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import React from 'react';
-import { ChefHat, ClipboardList, LineChart, Sparkles } from 'lucide-react';
+import { ChefHat, ClipboardList, LineChart } from 'lucide-react';
 
 const highlights = [
   {
@@ -32,12 +32,16 @@ export default function PrecioPage() {
       <div className="relative mx-auto w-full max-w-lg">
         <div className="rounded-[1.75rem] border border-zinc-200/80 bg-white/90 p-8 shadow-[0_24px_60px_-24px_rgba(15,23,42,0.18)] ring-1 ring-zinc-100/90 backdrop-blur-sm sm:p-10">
           <div className="flex justify-center">
-            <span className="inline-flex items-center gap-2 rounded-full border border-red-100 bg-red-50/80 px-4 py-1.5 text-xs font-bold uppercase tracking-[0.12em] text-[#B91C1C]">
-              <Sparkles className="h-3.5 w-3.5" aria-hidden />
-              Chef-One
-            </span>
+            <img
+              src="/logo-chef-one.svg"
+              alt=""
+              width={512}
+              height={512}
+              decoding="async"
+              className="h-16 w-16 object-contain sm:h-[4.5rem] sm:w-[4.5rem]"
+            />
           </div>
-          <h1 className="mt-6 text-balance text-center text-2xl font-black leading-tight tracking-tight text-zinc-900 sm:text-3xl">
+          <h1 className="mt-5 text-balance text-center text-2xl font-black leading-tight tracking-tight text-zinc-900 sm:mt-6 sm:text-3xl">
             Operaciones de cocina, claras y a tu ritmo
           </h1>
           <p className="mt-4 text-pretty text-center text-sm leading-relaxed text-zinc-600 sm:text-base">

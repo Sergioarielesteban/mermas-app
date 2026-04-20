@@ -12,8 +12,17 @@ export default function OnboardingPage() {
       <div className="mx-auto flex w-full max-w-lg flex-1 flex-col justify-center">
         {step === 0 ? (
           <div className="text-center">
-            <p className="text-xs font-bold uppercase tracking-widest text-[#D32F2F]">Chef-One</p>
-            <h1 className="mt-3 text-balance text-3xl font-black text-zinc-900 sm:text-4xl">
+            <div className="flex justify-center">
+              <img
+                src="/logo-chef-one.svg"
+                alt=""
+                width={512}
+                height={512}
+                decoding="async"
+                className="h-14 w-14 object-contain sm:h-16 sm:w-16"
+              />
+            </div>
+            <h1 className="mt-5 text-balance text-3xl font-black text-zinc-900 sm:mt-6 sm:text-4xl">
               Controla tu cocina en minutos
             </h1>
             <p className="mt-4 text-pretty text-sm text-zinc-600 sm:text-base">

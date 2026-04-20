@@ -107,7 +107,7 @@ export default function AppFrame({ children }: { children: React.ReactNode }) {
           </p>
           <div className="order-last mt-1 w-full">
             <ChefOneLaunchMark
-              imgClassName="mx-auto block w-[min(72vw,240px)] max-w-full select-none"
+              imgClassName="mx-auto block h-[min(40vw,200px)] w-auto max-w-full select-none object-contain"
               lineClassName="mt-3 w-full max-w-[min(70vw,260px)]"
             />
           </div>

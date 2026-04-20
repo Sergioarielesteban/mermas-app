@@ -227,9 +227,9 @@ export default function MarketingHero() {
               <img
                 src="/logo-chef-one.svg"
                 alt=""
-                width={160}
-                height={160}
-                className="h-28 w-28 drop-shadow-[0_8px_24px_rgba(15,23,42,0.08)] sm:h-32 sm:w-32 md:h-36 md:w-36"
+                width={512}
+                height={512}
+                className="h-32 w-32 object-contain drop-shadow-[0_8px_28px_rgba(15,23,42,0.09)] sm:h-36 sm:w-36 md:h-40 md:w-40"
                 decoding="async"
               />
             </Link>

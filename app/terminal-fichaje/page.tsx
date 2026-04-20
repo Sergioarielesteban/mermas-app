@@ -30,12 +30,7 @@ function TerminalLogo({ className }: { className?: string }) {
       alt="Chef-One"
       width={512}
       height={512}
-      className={[
-        'h-auto w-full max-w-[7.5rem] object-contain drop-shadow-sm sm:max-w-[9rem]',
-        className,
-      ]
-        .filter(Boolean)
-        .join(' ')}
+      className={['h-auto w-full object-contain drop-shadow-sm', className].filter(Boolean).join(' ')}
     />
   );
 }
@@ -273,14 +268,11 @@ export default function TerminalFichajePage() {
           </div>
         ) : (
           <div className="flex w-full items-center justify-between gap-3">
-            <div className="flex min-w-0 flex-1 items-center gap-3 sm:gap-4">
-              <TerminalLogo className="!max-w-[5.25rem] shrink-0 sm:!max-w-[6.5rem]" />
-              <div className="min-w-0 text-left">
-                <p className="truncate font-serif text-lg font-bold text-zinc-900 sm:text-xl">
-                  {localName ?? 'Local'}
-                </p>
-                <p className="text-sm font-medium capitalize text-zinc-500">{dateLabel}</p>
-              </div>
+            <div className="min-w-0 flex-1 text-left">
+              <p className="truncate font-serif text-lg font-bold text-zinc-900 sm:text-xl">
+                {localName ?? 'Local'}
+              </p>
+              <p className="text-sm font-medium capitalize text-zinc-500">{dateLabel}</p>
             </div>
             <div className="flex shrink-0 items-center gap-2">
               <button
@@ -306,6 +298,9 @@ export default function TerminalFichajePage() {
       <div className="relative z-10 flex flex-1 flex-col items-center justify-center px-4 pb-10 pt-6 sm:px-8">
         {step === 'home' ? (
           <>
+            <div className="mb-6 flex w-full justify-center sm:mb-8">
+              <TerminalLogo className="!max-w-[14rem] drop-shadow-[0_14px_44px_rgba(15,23,42,0.1)] sm:!max-w-[18rem] md:!max-w-[22rem]" />
+            </div>
             <p className="text-7xl font-black tabular-nums tracking-tight text-zinc-900 sm:text-8xl">{timeLabel}</p>
             <div className="mt-10 grid w-full max-w-lg grid-cols-2 gap-4 sm:mt-14 sm:gap-5">
               <button
@@ -331,6 +326,7 @@ export default function TerminalFichajePage() {
 
         {step === 'pin' ? (
           <div className="flex w-full max-w-md flex-col items-center text-center">
+            <TerminalLogo className="mb-5 !max-w-[7.5rem] sm:!max-w-[9rem]" />
             <button
               type="button"
               onClick={resetFlow}
@@ -339,8 +335,8 @@ export default function TerminalFichajePage() {
               ← Volver
             </button>
             <div className="relative mb-6">
-              <div className="absolute -inset-6 rounded-full border border-zinc-200/80 bg-zinc-50/80" />
-              <div className="relative grid h-24 w-24 place-items-center rounded-full bg-[#ffffff] ring-2 ring-amber-400/55 shadow-sm">
+              <div className="absolute -inset-6 rounded-full border border-zinc-200/70 bg-zinc-100/50" />
+              <div className="relative grid h-24 w-24 place-items-center rounded-full bg-zinc-50/90 ring-2 ring-amber-400/55 shadow-sm">
                 <Lock className="h-10 w-10 text-amber-600" strokeWidth={2.2} />
               </div>
             </div>
@@ -392,9 +388,6 @@ export default function TerminalFichajePage() {
                 Borrar
               </button>
             </div>
-            <div className="mt-12 flex w-full flex-col items-center">
-              <TerminalLogo className="mx-auto !max-w-[7rem] sm:!max-w-[8.5rem]" />
-            </div>
           </div>
         ) : null}
 
@@ -408,7 +401,7 @@ export default function TerminalFichajePage() {
             ].join(' ')}
           >
             <div className="flex justify-center">
-              <TerminalLogo className="!max-w-[5.5rem] sm:!max-w-[6.5rem]" />
+              <TerminalLogo className="!max-w-[6.5rem] sm:!max-w-[7.5rem]" />
             </div>
             <div className="mt-4 text-center text-5xl leading-none">{successEmoji ?? '✨'}</div>
             <h2 className="mt-3 text-center text-2xl font-extrabold text-zinc-900 sm:text-3xl">
