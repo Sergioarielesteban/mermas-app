@@ -6,23 +6,39 @@ import { ChevronLeft, ChevronRight, Copy } from 'lucide-react';
 import MermasStyleHero from '@/components/MermasStyleHero';
 import { useAuth } from '@/components/AuthProvider';
 import ShiftEditorModal, { type ShiftDraft } from '@/components/staff/ShiftEditorModal';
-import ShiftWeekGrid from '@/components/staff/ShiftWeekGrid';
+import OperationalWeekGrid, { OPERATIONAL_NONE_ZONE } from '@/components/staff/OperationalWeekGrid';
+import ShiftWeekGrid, { SHIFT_GRID_UNASSIGNED_ROW_ID } from '@/components/staff/ShiftWeekGrid';
 import { useStaffBundle } from '@/hooks/useStaffBundle';
 import { useStaffRealtime } from '@/hooks/useStaffRealtime';
 import { buildStaffPermissions } from '@/lib/staff/permissions';
 import { addDays, parseYmd, startOfWeekMonday, ymdLocal } from '@/lib/staff/staff-dates';
-import { duplicateShiftsWeek, upsertStaffShift } from '@/lib/staff/staff-supabase';
+import {
+  readLastEmployeeForZone,
+  resolveQuickPresetForZone,
+  writeLastEmployeeForZone,
+  writeStoredPresetIdForZone,
+} from '@/lib/staff/shift-quick-presets';
+import { zoneDefaultColorHint } from '@/lib/staff/staff-zone-styles';
+import { deleteStaffShift, duplicateShiftsWeek, upsertStaffShift } from '@/lib/staff/staff-supabase';
 import type { StaffShift } from '@/lib/staff/types';
 import { appAlert, appConfirm, appPrompt } from '@/lib/app-dialog-bridge';
 import { getSupabaseClient } from '@/lib/supabase-client';
+
+function toPgTimeHhMmSs(hhmm: string) {
+  const parts = hhmm.split(':');
+  if (parts.length >= 3) return hhmm;
+  return `${parts[0] ?? '09'}:${parts[1] ?? '00'}:00`;
+}
 
 export default function PersonalPlanificacionPage() {
   const { localId, profileRole, profileReady } = useAuth();
   const perms = useMemo(() => buildStaffPermissions(profileRole), [profileRole]);
   const [weekStart, setWeekStart] = useState(() => ymdLocal(startOfWeekMonday(new Date())));
   const weekStartDate = useMemo(() => parseYmd(weekStart), [weekStart]);
+  const weekEndYmd = useMemo(() => ymdLocal(addDays(weekStartDate, 6)), [weekStartDate]);
   const { employees, shifts, loading, error, reload } = useStaffBundle(localId, weekStart);
   const [view, setView] = useState<'semana' | 'dia' | 'mes'>('semana');
+  const [weekLayout, setWeekLayout] = useState<'empleados' | 'operativo'>('empleados');
   const [dayFocus, setDayFocus] = useState(() => ymdLocal(new Date()));
   const [monthCursor, setMonthCursor] = useState(() => new Date());
 
@@ -46,7 +62,22 @@ export default function PersonalPlanificacionPage() {
 
   const openNew = (employeeId: string, dateYmd: string) => {
     if (!perms.canManageSchedules) return;
-    setDraft({ mode: 'new', employeeId, shiftDate: dateYmd });
+    if (employeeId === SHIFT_GRID_UNASSIGNED_ROW_ID) {
+      setDraft({ mode: 'new', shiftDate: dateYmd });
+    } else {
+      setDraft({ mode: 'new', employeeId, shiftDate: dateYmd });
+    }
+    setModalOpen(true);
+  };
+
+  const onOperationalEmptyLongPress = (dateYmd: string, zoneRowKey: string) => {
+    if (!perms.canManageSchedules) return;
+    setDraft({
+      mode: 'new',
+      shiftDate: dateYmd,
+      defaultZone: zoneRowKey === OPERATIONAL_NONE_ZONE ? undefined : zoneRowKey,
+      employeeId: undefined,
+    });
     setModalOpen(true);
   };
 
@@ -58,11 +89,12 @@ export default function PersonalPlanificacionPage() {
 
   const onShiftMoved = async (shift: StaffShift, newEmployeeId: string, newDateYmd: string) => {
     if (!perms.canManageSchedules || !localId || !supabase) return;
+    const employeeId = newEmployeeId === SHIFT_GRID_UNASSIGNED_ROW_ID ? null : newEmployeeId;
     try {
       await upsertStaffShift(supabase, {
         id: shift.id,
         localId,
-        employeeId: newEmployeeId,
+        employeeId,
         shiftDate: newDateYmd,
         startTime: shift.startTime,
         endTime: shift.endTime,
@@ -76,6 +108,181 @@ export default function PersonalPlanificacionPage() {
       void reload();
     } catch (e: unknown) {
       await appAlert(e instanceof Error ? e.message : 'No se pudo mover el turno');
+    }
+  };
+
+  const onOperationalShiftPlaced = async (shift: StaffShift, newDateYmd: string, zoneRowKey: string) => {
+    if (!perms.canManageSchedules || !localId || !supabase) return;
+    const zone = zoneRowKey === OPERATIONAL_NONE_ZONE ? null : zoneRowKey;
+    try {
+      await upsertStaffShift(supabase, {
+        id: shift.id,
+        localId,
+        employeeId: shift.employeeId,
+        shiftDate: newDateYmd,
+        startTime: shift.startTime,
+        endTime: shift.endTime,
+        endsNextDay: shift.endsNextDay,
+        breakMinutes: shift.breakMinutes,
+        zone,
+        notes: shift.notes,
+        status: shift.status,
+        colorHint: shift.colorHint,
+      });
+      void reload();
+    } catch (e: unknown) {
+      await appAlert(e instanceof Error ? e.message : 'No se pudo mover el turno');
+    }
+  };
+
+  const onOperationalQuickCreate = async (dateYmd: string, zoneRowKey: string) => {
+    if (!perms.canManageSchedules || !localId || !supabase) return;
+    const preset = resolveQuickPresetForZone(localId, zoneRowKey);
+    writeStoredPresetIdForZone(localId, zoneRowKey, preset.id);
+    const zoneVal = zoneRowKey === OPERATIONAL_NONE_ZONE ? null : zoneRowKey;
+    const lastEmp = readLastEmployeeForZone(localId, zoneRowKey);
+    try {
+      await upsertStaffShift(supabase, {
+        localId,
+        employeeId: lastEmp && employees.some((e) => e.id === lastEmp) ? lastEmp : null,
+        shiftDate: dateYmd,
+        startTime: toPgTimeHhMmSs(preset.startTime),
+        endTime: toPgTimeHhMmSs(preset.endTime),
+        endsNextDay: preset.endsNextDay,
+        breakMinutes: preset.breakMinutes,
+        zone: zoneVal,
+        colorHint: zoneVal ? zoneDefaultColorHint(zoneVal) : null,
+        status: 'planned',
+      });
+      void reload();
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'No se pudo crear el turno';
+      if (msg.toLowerCase().includes('null') || msg.includes('employee')) {
+        await appAlert(
+          `${msg}\n\nSi acabas de activar turnos sin empleado, ejecuta en Supabase el script supabase-staff-shifts-employee-nullable.sql`,
+        );
+        return;
+      }
+      await appAlert(msg);
+    }
+  };
+
+  const onOperationalShiftPatch = async (
+    shift: StaffShift,
+    patch: Partial<
+      Pick<StaffShift, 'employeeId' | 'startTime' | 'endTime' | 'endsNextDay' | 'breakMinutes' | 'zone' | 'colorHint'>
+    >,
+  ) => {
+    if (!perms.canManageSchedules || !localId || !supabase) return;
+    try {
+      await upsertStaffShift(supabase, {
+        id: shift.id,
+        localId,
+        employeeId: patch.employeeId !== undefined ? patch.employeeId : shift.employeeId,
+        shiftDate: shift.shiftDate,
+        startTime: patch.startTime ?? shift.startTime,
+        endTime: patch.endTime ?? shift.endTime,
+        endsNextDay: patch.endsNextDay ?? shift.endsNextDay,
+        breakMinutes: patch.breakMinutes ?? shift.breakMinutes,
+        zone: patch.zone !== undefined ? patch.zone : shift.zone,
+        notes: shift.notes,
+        status: shift.status,
+        colorHint: patch.colorHint !== undefined ? patch.colorHint : shift.colorHint,
+      });
+      if (patch.employeeId) {
+        const zk = (shift.zone ?? '').trim().toLowerCase() || OPERATIONAL_NONE_ZONE;
+        writeLastEmployeeForZone(localId, zk, patch.employeeId);
+      }
+      void reload();
+    } catch (e: unknown) {
+      await appAlert(e instanceof Error ? e.message : 'No se pudo actualizar');
+    }
+  };
+
+  const onOperationalShiftDelete = async (shift: StaffShift) => {
+    if (!perms.canManageSchedules || !localId || !supabase) return;
+    if (!(await appConfirm('¿Eliminar este turno?'))) return;
+    try {
+      await deleteStaffShift(supabase, shift.id);
+      void reload();
+    } catch (e: unknown) {
+      await appAlert(e instanceof Error ? e.message : 'No se pudo eliminar');
+    }
+  };
+
+  const onOperationalDuplicateHere = async (shift: StaffShift) => {
+    if (!perms.canManageSchedules || !localId || !supabase) return;
+    try {
+      await upsertStaffShift(supabase, {
+        localId,
+        employeeId: shift.employeeId,
+        shiftDate: shift.shiftDate,
+        startTime: shift.startTime,
+        endTime: shift.endTime,
+        endsNextDay: shift.endsNextDay,
+        breakMinutes: shift.breakMinutes,
+        zone: shift.zone,
+        notes: shift.notes,
+        status: 'planned',
+        colorHint: shift.colorHint,
+      });
+      void reload();
+    } catch (e: unknown) {
+      await appAlert(e instanceof Error ? e.message : 'No se pudo duplicar');
+    }
+  };
+
+  const onOperationalCopyPrevDay = async (shift: StaffShift) => {
+    if (!perms.canManageSchedules || !localId || !supabase) return;
+    const target = ymdLocal(addDays(parseYmd(shift.shiftDate), -1));
+    if (target < weekStart || target > weekEndYmd) {
+      await appAlert('El día anterior no está en la semana que tienes abierta.');
+      return;
+    }
+    try {
+      await upsertStaffShift(supabase, {
+        localId,
+        employeeId: shift.employeeId,
+        shiftDate: target,
+        startTime: shift.startTime,
+        endTime: shift.endTime,
+        endsNextDay: shift.endsNextDay,
+        breakMinutes: shift.breakMinutes,
+        zone: shift.zone,
+        notes: shift.notes,
+        status: 'planned',
+        colorHint: shift.colorHint,
+      });
+      void reload();
+    } catch (e: unknown) {
+      await appAlert(e instanceof Error ? e.message : 'No se pudo copiar');
+    }
+  };
+
+  const onOperationalCopyPrevWeekday = async (shift: StaffShift) => {
+    if (!perms.canManageSchedules || !localId || !supabase) return;
+    const target = ymdLocal(addDays(parseYmd(shift.shiftDate), -7));
+    if (target < weekStart || target > weekEndYmd) {
+      await appAlert('La fecha −7 días no está en la semana visible. Cambia de semana o usa el modal.');
+      return;
+    }
+    try {
+      await upsertStaffShift(supabase, {
+        localId,
+        employeeId: shift.employeeId,
+        shiftDate: target,
+        startTime: shift.startTime,
+        endTime: shift.endTime,
+        endsNextDay: shift.endsNextDay,
+        breakMinutes: shift.breakMinutes,
+        zone: shift.zone,
+        notes: shift.notes,
+        status: 'planned',
+        colorHint: shift.colorHint,
+      });
+      void reload();
+    } catch (e: unknown) {
+      await appAlert(e instanceof Error ? e.message : 'No se pudo copiar');
     }
   };
 
@@ -119,7 +326,7 @@ export default function PersonalPlanificacionPage() {
       <MermasStyleHero
         eyebrow="Cuadrante"
         title="Planificación"
-        tagline="Vista semanal con colores por puesto, totales y arrastre de turnos (encargados)."
+        tagline="Semana: vista por empleado o cuadrante operativo por puesto; totales y arrastre donde aplique (encargados)."
         compact
       />
 
@@ -178,33 +385,66 @@ export default function PersonalPlanificacionPage() {
               </button>
             ) : null}
           </div>
+          <div className="flex flex-wrap items-center gap-2">
+            {(['empleados', 'operativo'] as const).map((k) => (
+              <button
+                key={k}
+                type="button"
+                onClick={() => setWeekLayout(k)}
+                className={[
+                  'rounded-full px-3 py-1.5 text-[11px] font-extrabold sm:text-xs',
+                  weekLayout === k ? 'bg-[#D32F2F] text-white' : 'bg-zinc-100 text-zinc-700 ring-1 ring-zinc-200',
+                ].join(' ')}
+              >
+                {k === 'empleados' ? 'Por empleado' : 'Cuadrante operativo'}
+              </button>
+            ))}
+          </div>
           {loading ? <p className="text-sm text-zinc-500">Cargando…</p> : null}
           {!perms.canManageSchedules ? (
             <p className="text-sm text-zinc-600">Solo lectura: pide a un encargado los cambios de cuadrante.</p>
           ) : null}
-          <ShiftWeekGrid
-            weekStartMonday={weekStartDate}
-            employees={employees}
-            shifts={shifts}
-            canDragShifts={perms.canManageSchedules}
-            onShiftMoved={onShiftMoved}
-            onCellActivate={(empId, ymd, here) => {
-              if (here.length === 1) openEdit(here[0]);
-              else if (here.length === 0) openNew(empId, ymd);
-              else {
-                void (async () => {
-                  const pick = await appPrompt(
-                    `Varios turnos. Escribe 1–${here.length} para editar o 0 para nuevo`,
-                    '1',
-                  );
-                  if (pick == null) return;
-                  const n = Number(pick);
-                  if (n === 0) openNew(empId, ymd);
-                  else if (n >= 1 && n <= here.length) openEdit(here[n - 1]);
-                })();
-              }
-            }}
-          />
+          {weekLayout === 'empleados' ? (
+            <ShiftWeekGrid
+              weekStartMonday={weekStartDate}
+              employees={employees}
+              shifts={shifts}
+              canDragShifts={perms.canManageSchedules}
+              onShiftMoved={onShiftMoved}
+              onCellActivate={(empId, ymd, here) => {
+                if (here.length === 1) openEdit(here[0]);
+                else if (here.length === 0) openNew(empId, ymd);
+                else {
+                  void (async () => {
+                    const pick = await appPrompt(
+                      `Varios turnos. Escribe 1–${here.length} para editar o 0 para nuevo`,
+                      '1',
+                    );
+                    if (pick == null) return;
+                    const n = Number(pick);
+                    if (n === 0) openNew(empId, ymd);
+                    else if (n >= 1 && n <= here.length) openEdit(here[n - 1]);
+                  })();
+                }
+              }}
+            />
+          ) : (
+            <OperationalWeekGrid
+              weekStartMonday={weekStartDate}
+              employees={employees}
+              shifts={shifts}
+              canEdit={perms.canManageSchedules}
+              onShiftPlaced={onOperationalShiftPlaced}
+              onQuickCreateShift={onOperationalQuickCreate}
+              onEmptyLongPress={onOperationalEmptyLongPress}
+              onShiftAdvancedEdit={(s) => openEdit(s)}
+              onShiftPatch={onOperationalShiftPatch}
+              onShiftDelete={onOperationalShiftDelete}
+              onShiftDuplicateHere={onOperationalDuplicateHere}
+              onShiftCopyPrevCalendarDay={onOperationalCopyPrevDay}
+              onShiftCopyPrevWeekday={onOperationalCopyPrevWeekday}
+            />
+          )}
         </>
       ) : null}
 
@@ -221,7 +461,8 @@ export default function PersonalPlanificacionPage() {
               <li className="text-sm text-zinc-500">Sin turnos este día.</li>
             ) : (
               dayShifts.map((s) => {
-                const em = employees.find((e) => e.id === s.employeeId);
+                const em = s.employeeId ? employees.find((e) => e.id === s.employeeId) : null;
+                const who = em ? `${em.firstName} ${em.lastName}` : 'Sin asignar';
                 return (
                   <li key={s.id}>
                     <button
@@ -230,8 +471,7 @@ export default function PersonalPlanificacionPage() {
                       onClick={() => openEdit(s)}
                       className="w-full rounded-2xl bg-zinc-50 px-4 py-3 text-left text-sm font-bold ring-1 ring-zinc-200 disabled:opacity-60"
                     >
-                      {em ? `${em.firstName} ${em.lastName}` : s.employeeId} · {s.startTime.slice(0, 5)} –{' '}
-                      {s.endTime.slice(0, 5)}
+                      {who} · {s.startTime.slice(0, 5)} – {s.endTime.slice(0, 5)}
                       {s.zone ? ` · ${s.zone}` : ''}
                     </button>
                   </li>

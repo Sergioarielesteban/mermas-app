@@ -42,7 +42,7 @@ function mapShift(r: Record<string, unknown>): StaffShift {
   return {
     id: String(r.id),
     localId: String(r.local_id),
-    employeeId: String(r.employee_id),
+    employeeId: r.employee_id != null && String(r.employee_id).length > 0 ? String(r.employee_id) : null,
     shiftDate: String(r.shift_date),
     startTime: String(r.start_time),
     endTime: String(r.end_time),
@@ -251,7 +251,7 @@ export async function upsertStaffShift(
   input: {
     id?: string;
     localId: string;
-    employeeId: string;
+    employeeId: string | null;
     shiftDate: string;
     startTime: string;
     endTime: string;

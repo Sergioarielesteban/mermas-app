@@ -39,7 +39,10 @@ export default function PersonalResumenPage() {
 
   const ymd = todayYmd();
   const todayShifts = useMemo(() => shifts.filter((s) => s.shiftDate === ymd), [shifts, ymd]);
-  const plannedEmps = useMemo(() => new Set(todayShifts.map((s) => s.employeeId)), [todayShifts]);
+  const plannedEmps = useMemo(
+    () => new Set(todayShifts.map((s) => s.employeeId).filter(Boolean) as string[]),
+    [todayShifts],
+  );
   const working = useMemo(() => employeeIdsWorkingNow(timeEntries, ymd), [timeEntries, ymd]);
   const dayEntries = useMemo(() => filterEntriesForLocalDay(timeEntries, ymd), [timeEntries, ymd]);
   const clockedIds = useMemo(() => new Set(dayEntries.map((e) => e.employeeId)), [dayEntries]);
@@ -104,7 +107,7 @@ export default function PersonalResumenPage() {
       const employee = employees.find((e) => e.id === s.employeeId);
       return {
         id: s.id,
-        name: employee ? staffDisplayName(employee) : '—',
+        name: employee ? staffDisplayName(employee) : 'Sin asignar',
         startTime: s.startTime.slice(0, 5),
         endTime: s.endTime.slice(0, 5),
       };
@@ -115,7 +118,7 @@ export default function PersonalResumenPage() {
       const employee = employees.find((e) => e.id === s.employeeId);
       return {
         id: s.id,
-        name: employee ? staffDisplayName(employee) : '—',
+        name: employee ? staffDisplayName(employee) : 'Sin asignar',
         startTime: s.startTime.slice(0, 5),
         endTime: s.endTime.slice(0, 5),
         zone: s.zone,
@@ -378,7 +381,7 @@ export default function PersonalResumenPage() {
                 key={s.id}
                 className="flex flex-wrap items-center justify-between gap-2 rounded-2xl bg-zinc-50 px-3 py-2 text-sm ring-1 ring-zinc-100"
               >
-                <span className="font-bold text-zinc-900">{em ? staffDisplayName(em) : '—'}</span>
+                <span className="font-bold text-zinc-900">{em ? staffDisplayName(em) : 'Sin asignar'}</span>
                 <span className="text-xs font-semibold text-zinc-600">
                   {s.startTime.slice(0, 5)} – {s.endTime.slice(0, 5)}
                   {s.zone ? ` · ${s.zone}` : ''}

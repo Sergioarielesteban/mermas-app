@@ -6,10 +6,17 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { STAFF_ZONE_PRESETS, type StaffEmployee, type StaffShift, type StaffShiftStatus } from '@/lib/staff/types';
 import { zoneDefaultColorHint } from '@/lib/staff/staff-zone-styles';
 import { appConfirm } from '@/lib/app-dialog-bridge';
+import { QUICK_SHIFT_PRESETS } from '@/lib/staff/shift-quick-presets';
 import { deleteStaffShift, staffDisplayName, upsertStaffShift } from '@/lib/staff/staff-supabase';
 
 export type ShiftDraft =
-  | { mode: 'new'; employeeId: string; shiftDate: string }
+  | {
+      mode: 'new';
+      employeeId?: string | null;
+      shiftDate: string;
+      /** Puesto sugerido (cuadrante operativo) */
+      defaultZone?: string;
+    }
   | { mode: 'edit'; shift: StaffShift };
 
 function shortTimeForInput(t: string) {
@@ -63,20 +70,21 @@ export default function ShiftEditorModal({
     setErr(null);
     if (draft.mode === 'new') {
       setShiftId(undefined);
-      setEmployeeId(draft.employeeId);
+      setEmployeeId(draft.employeeId?.trim() ? draft.employeeId.trim() : '');
       setShiftDate(draft.shiftDate);
       setStartTime('09:00');
       setEndTime('17:00');
       setEndsNextDay(false);
       setBreakMinutes(30);
-      setZone('');
+      const dz = (draft.defaultZone ?? '').trim();
+      setZone(dz);
       setNotes('');
       setStatus('planned');
-      setColorHint('');
+      setColorHint(dz ? zoneDefaultColorHint(dz) ?? '' : '');
     } else {
       const s = draft.shift;
       setShiftId(s.id);
-      setEmployeeId(s.employeeId);
+      setEmployeeId(s.employeeId ?? '');
       setShiftDate(s.shiftDate);
       setStartTime(shortTimeForInput(s.startTime));
       setEndTime(shortTimeForInput(s.endTime));
@@ -101,7 +109,7 @@ export default function ShiftEditorModal({
       await upsertStaffShift(supabase, {
         id: shiftId,
         localId,
-        employeeId,
+        employeeId: employeeId.trim() ? employeeId.trim() : null,
         shiftDate,
         startTime: toPgTime(startTime),
         endTime: toPgTime(endTime),
@@ -167,9 +175,8 @@ export default function ShiftEditorModal({
               className="mt-1 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm font-semibold text-zinc-900"
               value={employeeId}
               onChange={(e) => setEmployeeId(e.target.value)}
-              required
             >
-              <option value="">—</option>
+              <option value="">Sin asignar</option>
               {employees.map((em) => (
                 <option key={em.id} value={em.id}>
                   {staffDisplayName(em)}
@@ -209,6 +216,28 @@ export default function ShiftEditorModal({
               />
             </label>
           </div>
+          {draft.mode === 'new' ? (
+            <div className="space-y-1.5">
+              <p className="text-[11px] font-bold text-zinc-600">Turnos rápidos</p>
+              <div className="flex flex-wrap gap-1.5">
+                {QUICK_SHIFT_PRESETS.map((p) => (
+                  <button
+                    key={p.id}
+                    type="button"
+                    className="rounded-full bg-zinc-100 px-2.5 py-1 text-[11px] font-extrabold text-zinc-800 ring-1 ring-zinc-200/80 hover:bg-zinc-200/80"
+                    onClick={() => {
+                      setStartTime(p.startTime);
+                      setEndTime(p.endTime);
+                      setEndsNextDay(p.endsNextDay);
+                      setBreakMinutes(p.breakMinutes);
+                    }}
+                  >
+                    {p.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : null}
           <label className="flex items-center gap-2 text-xs font-bold text-zinc-700">
             <input
               type="checkbox"

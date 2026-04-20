@@ -57,7 +57,8 @@ export type StaffEmployee = {
 export type StaffShift = {
   id: string;
   localId: string;
-  employeeId: string;
+  /** null = hueco pendiente de asignar (requiere BD: employee_id nullable). */
+  employeeId: string | null;
   shiftDate: string;
   startTime: string;
   endTime: string;

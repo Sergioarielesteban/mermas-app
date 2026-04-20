@@ -219,7 +219,9 @@ export default function PersonalRegistroPage() {
 
   const planningRows = useMemo(() => {
     return shifts
-      .filter((s) => visibleEmployeeIds.has(s.employeeId))
+      .filter((s): s is StaffShift & { employeeId: string } =>
+        s.employeeId != null && visibleEmployeeIds.has(s.employeeId),
+      )
       .map((s) => ({
         employee: employeeById.get(s.employeeId),
         day: s.shiftDate,

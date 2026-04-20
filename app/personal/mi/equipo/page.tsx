@@ -17,7 +17,9 @@ export default function PersonalMiEquipoPage() {
   const ymd = todayYmd();
 
   const mates = useMemo(() => {
-    const ids = new Set(shifts.filter((s) => s.shiftDate === ymd).map((s) => s.employeeId));
+    const ids = new Set(
+      shifts.filter((s) => s.shiftDate === ymd && s.employeeId).map((s) => s.employeeId as string),
+    );
     return employees.filter((e) => ids.has(e.id) && e.id !== linked?.id);
   }, [employees, shifts, ymd, linked?.id]);
 

@@ -8,6 +8,9 @@ import { zoneBlockStyle, zoneLabel } from '@/lib/staff/staff-zone-styles';
 import type { StaffEmployee, StaffShift } from '@/lib/staff/types';
 import { staffDisplayName } from '@/lib/staff/staff-supabase';
 
+/** Fila especial en cuadrante por empleado: turnos sin `employee_id`. */
+export const SHIFT_GRID_UNASSIGNED_ROW_ID = '__unassigned__' as const;
+
 function shortTime(t: string) {
   const [h, m] = t.split(':');
   return `${h}:${m ?? '00'}`;
@@ -52,7 +55,8 @@ export default function ShiftWeekGrid({
   const shiftsByKey = useMemo(() => {
     const m = new Map<string, StaffShift[]>();
     for (const s of shifts) {
-      const k = `${s.employeeId}|${s.shiftDate}`;
+      const emp = s.employeeId ?? SHIFT_GRID_UNASSIGNED_ROW_ID;
+      const k = `${emp}|${s.shiftDate}`;
       const arr = m.get(k) ?? [];
       arr.push(s);
       m.set(k, arr);
@@ -60,12 +64,23 @@ export default function ShiftWeekGrid({
     return m;
   }, [shifts]);
 
+  const hasUnassignedShifts = useMemo(() => shifts.some((s) => s.employeeId == null), [shifts]);
+
   const minutesByEmployeeWeek = useMemo(() => {
     const m = new Map<string, number>();
     for (const s of shifts) {
+      if (s.employeeId == null) continue;
       m.set(s.employeeId, (m.get(s.employeeId) ?? 0) + plannedShiftMinutes(s));
     }
     return m;
+  }, [shifts]);
+
+  const minutesUnassignedWeek = useMemo(() => {
+    let t = 0;
+    for (const s of shifts) {
+      if (s.employeeId == null) t += plannedShiftMinutes(s);
+    }
+    return t;
   }, [shifts]);
 
   const minutesByDay = useMemo(() => {
@@ -94,7 +109,8 @@ export default function ShiftWeekGrid({
       if (!id) return;
       const shift = shifts.find((s) => s.id === id);
       if (!shift) return;
-      if (shift.employeeId === employeeId && shift.shiftDate === dateYmd) return;
+      if (shift.shiftDate === dateYmd && (shift.employeeId ?? SHIFT_GRID_UNASSIGNED_ROW_ID) === employeeId)
+        return;
       await onShiftMoved(shift, employeeId, dateYmd);
     },
     [canDragShifts, onShiftMoved, shifts],
@@ -247,6 +263,112 @@ export default function ShiftWeekGrid({
                 </td>
               </tr>
             ))}
+            {hasUnassignedShifts ? (
+              <tr key={SHIFT_GRID_UNASSIGNED_ROW_ID} className="bg-amber-50/40">
+                <td className="sticky left-0 z-10 border-b border-r border-amber-200/80 bg-amber-50/90 px-2 py-2 sm:px-3">
+                  <div className="min-w-0">
+                    <p className="truncate text-xs font-extrabold text-amber-950">Sin asignar</p>
+                    <p className="truncate text-[10px] font-medium text-amber-800/90">Pendiente en cuadrante</p>
+                  </div>
+                </td>
+                {days.map((d) => {
+                  const ymd = ymdLocal(d);
+                  const here = (shiftsByKey.get(`${SHIFT_GRID_UNASSIGNED_ROW_ID}|${ymd}`) ?? []).sort((a, b) =>
+                    a.startTime.localeCompare(b.startTime),
+                  );
+                  return (
+                    <td
+                      key={ymd}
+                      className={[
+                        'align-top border-b border-amber-100 p-1 sm:p-1.5',
+                        draggingId ? 'bg-amber-50/30' : '',
+                      ].join(' ')}
+                      onDragOver={
+                        canDragShifts
+                          ? (e) => {
+                              e.preventDefault();
+                              e.dataTransfer.dropEffect = 'move';
+                            }
+                          : undefined
+                      }
+                      onDrop={
+                        canDragShifts
+                          ? (e) => void onCellDrop(e, SHIFT_GRID_UNASSIGNED_ROW_ID, ymd)
+                          : undefined
+                      }
+                    >
+                      <div className="min-h-[72px] w-full rounded-xl border border-dashed border-amber-200/90 bg-white/60 p-1 text-left">
+                        {here.length === 0 ? (
+                          <button
+                            type="button"
+                            onClick={() => onCellActivate(SHIFT_GRID_UNASSIGNED_ROW_ID, ymd, here)}
+                            className="flex min-h-[56px] w-full items-center justify-center text-[10px] font-semibold text-amber-700/80"
+                          >
+                            +
+                          </button>
+                        ) : (
+                          <div className="flex flex-col gap-1">
+                            {here.map((s) => {
+                              const zStyle = s.colorHint
+                                ? { bg: s.colorHint, text: '#ffffff', subtleBg: `${s.colorHint}22` }
+                                : zoneBlockStyle(s.zone);
+                              const dur = plannedShiftMinutes(s);
+                              return (
+                                <div
+                                  key={s.id}
+                                  className="flex items-stretch gap-0 overflow-hidden rounded-lg shadow-sm ring-1 ring-black/8"
+                                  style={{ background: zStyle.subtleBg }}
+                                >
+                                  {canDragShifts ? (
+                                    <button
+                                      type="button"
+                                      draggable
+                                      title="Arrastrar turno"
+                                      onDragStart={(e) => onDragStart(e, s.id)}
+                                      onDragEnd={onDragEnd}
+                                      className="flex shrink-0 cursor-grab items-center border-r border-black/10 bg-black/5 px-0.5 text-zinc-500 active:cursor-grabbing"
+                                      aria-label="Arrastrar turno"
+                                    >
+                                      <GripVertical className="h-4 w-4" />
+                                    </button>
+                                  ) : null}
+                                  <button
+                                    type="button"
+                                    className="min-w-0 flex-1 px-2 py-1.5 text-left"
+                                    style={{ background: zStyle.bg, color: zStyle.text }}
+                                    onClick={() => onCellActivate(SHIFT_GRID_UNASSIGNED_ROW_ID, ymd, here.length === 1 ? [s] : here)}
+                                  >
+                                    <span className="block text-[10px] font-extrabold leading-tight sm:text-xs">
+                                      {shortTime(s.startTime)} – {shortTime(s.endTime)}
+                                    </span>
+                                    <span className="mt-0.5 block text-[9px] font-semibold opacity-95">
+                                      {formatDurationMin(dur)}
+                                      {s.zone ? ` · ${zoneLabel(s.zone)}` : ''}
+                                    </span>
+                                  </button>
+                                </div>
+                              );
+                            })}
+                            <button
+                              type="button"
+                              onClick={() => onCellActivate(SHIFT_GRID_UNASSIGNED_ROW_ID, ymd, [])}
+                              className="rounded-lg py-1 text-center text-[10px] font-bold text-amber-800 hover:bg-white/80"
+                            >
+                              + Añadir
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </td>
+                  );
+                })}
+                <td className="border-b border-l border-amber-100 bg-amber-50/80 px-2 py-2 text-center align-middle">
+                  <span className="text-sm font-extrabold tabular-nums text-amber-950">
+                    {formatHoursSum(minutesUnassignedWeek)}
+                  </span>
+                </td>
+              </tr>
+            ) : null}
           </tbody>
           <tfoot>
             <tr className="bg-zinc-100/90">
