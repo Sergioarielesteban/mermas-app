@@ -601,7 +601,7 @@ export default function OperationalWeekGrid({
       </div>
 
       <div className="overflow-x-auto rounded-2xl ring-1 ring-zinc-200/90">
-        <table className="w-full min-w-[1680px] border-collapse text-left text-[10px] sm:min-w-[1860px] sm:text-xs">
+        <table className="w-full min-w-[2520px] border-collapse text-left text-[10px] sm:min-w-[2790px] sm:text-xs">
           <thead>
             <tr className="bg-zinc-50">
               <th className="sticky left-0 z-20 min-w-[5.5rem] border-b border-r border-zinc-200 bg-zinc-50 px-1.5 py-2 text-[9px] font-extrabold uppercase tracking-wide text-zinc-500 sm:min-w-[6.5rem] sm:px-2">
@@ -614,7 +614,7 @@ export default function OperationalWeekGrid({
                   <th
                     key={ymd}
                     className={[
-                      'min-w-[14rem] border-b border-zinc-200 px-0.5 py-1.5 text-center font-extrabold sm:min-w-[16.5rem] sm:px-1',
+                      'min-w-[21rem] border-b border-zinc-200 px-0.5 py-1.5 text-center font-extrabold sm:min-w-[24.75rem] sm:px-1',
                       headerTone(cov),
                     ].join(' ')}
                   >
@@ -638,7 +638,7 @@ export default function OperationalWeekGrid({
                 return (
                   <th
                     key={`tl-${ymd}`}
-                    className="min-w-[14rem] border-b border-zinc-200 bg-zinc-50/90 align-top sm:min-w-[16.5rem]"
+                    className="min-w-[21rem] border-b border-zinc-200 bg-zinc-50/90 align-top sm:min-w-[24.75rem]"
                   >
                     <OperationalDayTimeline ymd={ymd} dayShifts={dayShifts} metrics={operationalMetrics} />
                   </th>

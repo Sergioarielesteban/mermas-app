@@ -43,6 +43,7 @@ function OperationalSkelloCardFace({
   endsNextDay,
   durationMins,
   showAlert,
+  variant = 'grid',
 }: {
   nameLabel: string;
   startTime: string;
@@ -50,7 +51,40 @@ function OperationalSkelloCardFace({
   endsNextDay: boolean;
   durationMins: number;
   showAlert: boolean;
+  /** Lista vertical en misma franja: nombre centrado. */
+  variant?: 'grid' | 'stackedCenter';
 }) {
+  if (variant === 'stackedCenter') {
+    return (
+      <div className="flex h-full min-h-[2.35rem] flex-col items-center justify-center gap-0.5 px-1 py-1 text-center sm:min-h-[2.55rem] sm:px-1.5">
+        <div className="flex flex-wrap items-center justify-center gap-x-1.5 gap-y-0 tabular-nums">
+          <span className="text-[9px] font-extrabold leading-tight sm:text-[10px]">
+            {shortTime(startTime)} - {shortTime(endTime)}
+            {endsNextDay ? ' +1' : ''}
+          </span>
+          <span className="text-[8px] font-bold leading-tight opacity-90 sm:text-[9px]">
+            {formatDurationSkello(durationMins)}
+          </span>
+          {showAlert ? (
+            <span
+              className="flex h-3 w-3 items-center justify-center rounded-full bg-red-600 text-[8px] font-bold leading-none text-white shadow-sm"
+              title="Requiere atención"
+              aria-label="Aviso"
+            >
+              !
+            </span>
+          ) : null}
+        </div>
+        <div className="flex w-full min-w-0 items-center justify-center gap-0.5">
+          <span className="max-w-full whitespace-normal break-words text-center text-[8px] font-semibold leading-snug sm:text-[9px]">
+            {nameLabel}
+          </span>
+          <ChevronsUpDown className="h-2.5 w-2.5 shrink-0 opacity-50 sm:h-3 sm:w-3" strokeWidth={2.5} aria-hidden />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="grid h-full min-h-[1.65rem] auto-rows-min grid-cols-[1fr_auto] content-between gap-x-1 gap-y-0.5 px-1.5 py-0.5 sm:min-h-[1.85rem] sm:px-2 sm:py-1">
       <div className="text-[9px] font-extrabold leading-none tabular-nums tracking-tight sm:text-[10px]">
@@ -251,38 +285,27 @@ export function OperationalSkelloCellBody({
   }
 
   const groups = groupShiftsByVisualSlot(here);
-  const shiftIdToSlotKey = new Map<string, string>();
-  for (const g of groups) {
-    for (const s of g.items) shiftIdToSlotKey.set(s.id, g.slotKey);
-  }
 
-  const layoutItems = here
-    .map((shift) => {
-      const iv = shiftIntervalClippedOnTimeline(shift, ymd, FULL_DAY_OPERATIONAL_METRICS);
+  /** Una entrada por franja horaria (varias personas = una columna apilada, no carriles horizontales). */
+  const groupLayout = groups
+    .map((g) => {
+      const rep = g.items[0]!;
+      const iv = shiftIntervalClippedOnTimeline(rep, ymd, FULL_DAY_OPERATIONAL_METRICS);
       const seg =
         iv != null
-          ? segmentShiftVerticalOnOperationalTimeline(shift, ymd, FULL_DAY_OPERATIONAL_METRICS)
+          ? segmentShiftVerticalOnOperationalTimeline(rep, ymd, FULL_DAY_OPERATIONAL_METRICS)
           : null;
       if (!iv || !seg) return null;
-      return {
-        shift,
-        iv,
-        seg,
-        slotKey: shiftIdToSlotKey.get(shift.id) ?? shift.id,
-      };
+      return { g, iv, seg, rep };
     })
     .filter((x): x is NonNullable<typeof x> => x != null)
     .sort((a, b) => {
       const ts = a.iv.clipStart - b.iv.clipStart;
       if (ts !== 0) return ts;
-      const te = a.iv.clipEnd - b.iv.clipEnd;
-      if (te !== 0) return te;
-      const na = a.shift.employeeId ? employeeName(a.shift.employeeId) : '\uffff';
-      const nb = b.shift.employeeId ? employeeName(b.shift.employeeId) : '\uffff';
-      return na.localeCompare(nb, 'es', { sensitivity: 'base' });
+      return a.g.slotKey.localeCompare(b.g.slotKey);
     });
 
-  const intervals = layoutItems.map((x, idx) => ({
+  const intervals = groupLayout.map((x, idx) => ({
     idx,
     startM: x.iv.clipStart,
     endM: x.iv.clipEnd,
@@ -290,21 +313,12 @@ export function OperationalSkelloCellBody({
   const laneMap = assignOverlapLanesMeta(intervals);
 
   let maxLanes = 1;
-  for (let i = 0; i < layoutItems.length; i++) {
+  for (let i = 0; i < groupLayout.length; i++) {
     maxLanes = Math.max(maxLanes, laneMap.get(i)!.laneCount);
   }
   const maxSlotTeam = Math.max(1, ...groups.map((g) => g.items.length));
   const rulerSpread = Math.min(8, Math.max(maxLanes, maxSlotTeam));
   const rulerWidthRem = Math.min(3.5, 1.05 + Math.max(0, rulerSpread - 1) * 0.34);
-
-  const slotControlIdx = new Map<string, number>();
-  for (let i = 0; i < layoutItems.length; i++) {
-    const sk = layoutItems[i]!.slotKey;
-    const lane = laneMap.get(i)!.lane;
-    const prev = slotControlIdx.get(sk);
-    if (prev === undefined) slotControlIdx.set(sk, i);
-    else if (lane < laneMap.get(prev)!.lane) slotControlIdx.set(sk, i);
-  }
 
   const cellMins = here.reduce((a, s) => a + plannedShiftMinutes(s), 0);
   const cellPeople = new Set(here.filter((s) => s.employeeId).map((s) => s.employeeId!)).size;
@@ -332,52 +346,137 @@ export function OperationalSkelloCellBody({
               style={{ top: `${(h / 24) * 100}%` }}
             />
           ))}
-          {layoutItems.map((item, idx) => {
-            const { shift: sOne, iv, seg, slotKey } = item;
+          {groupLayout.map((gl, idx) => {
+            const { g, iv, seg, rep } = gl;
+            const teamSize = g.items.length;
+            const sortedShifts = sortGroupedItems(g.items);
             const lanes = laneMap.get(idx)!;
             const laneW = 100 / Math.max(1, lanes.laneCount);
-            const gutter = 0.18;
+            const gutter = 0.1;
             const left = lanes.laneCount <= 1 ? gutter : lanes.lane * laneW + gutter;
             const width = lanes.laneCount <= 1 ? 100 - 2 * gutter : laneW - 2 * gutter;
-            const unassigned = sOne.employeeId == null;
-            const compositeKey = `${ymd}|${rowKey}|${slotKey}`;
+            const compositeKey = `${ymd}|${rowKey}|${g.slotKey}`;
             const expanded = expandedSlotKeys.has(compositeKey);
-            const teamSize = groups.find((g) => g.slotKey === slotKey)?.items.length ?? 1;
-            const isSlotChrome = slotControlIdx.get(slotKey) === idx;
-            const rep = groups.find((g) => g.slotKey === slotKey)?.items[0] ?? sOne;
-            const heightPct = Math.max(seg.heightPct * 0.5, teamSize > 1 ? 4.25 : 3.35);
+            const baseH = seg.heightPct * 0.5;
+            const singleH = Math.max(baseH, 3.35);
+            const stackH = Math.min(52, Math.max(baseH, 2.8 + teamSize * 8.2));
+            const heightPct = teamSize > 1 ? stackH : singleH;
+            const zGroup = sortedShifts.some((s) => s.id === selectedShiftId) ? 6 : expanded ? 5 : 3;
+
+            if (teamSize === 1) {
+              const sOne = g.items[0]!;
+              const unassigned = sOne.employeeId == null;
+              return (
+                <div
+                  key={g.slotKey}
+                  className="absolute overflow-x-hidden overflow-y-auto rounded-lg shadow-md ring-1 ring-black/15"
+                  style={{
+                    top: `${seg.topPct}%`,
+                    height: `${heightPct}%`,
+                    left: `${left}%`,
+                    width: `${width}%`,
+                    zIndex: selectedShiftId === sOne.id ? 6 : expanded ? 5 : 3,
+                  }}
+                >
+                  {canEdit && onAddPersonSameSlot ? (
+                    <button
+                      type="button"
+                      className="absolute bottom-0 right-0 z-20 rounded-tl bg-white/55 px-2 py-0.5 text-[8px] font-extrabold text-zinc-900 shadow-sm hover:bg-white/70 sm:text-[9px]"
+                      title="Añadir otra persona en esta misma franja y puesto"
+                      onPointerDown={(e) => e.stopPropagation()}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (Date.now() < ignoreClicksUntilRef.current) return;
+                        onAddPersonSameSlot(rep);
+                      }}
+                    >
+                      + pers.
+                    </button>
+                  ) : null}
+                  <div className="flex h-full min-h-0 w-full items-stretch">
+                    {canEdit ? (
+                      <div
+                        draggable
+                        onDragStart={(e) => onDragStart(e, sOne.id)}
+                        onDragEnd={onDragEnd}
+                        className="flex w-2.5 shrink-0 cursor-grab touch-none items-center justify-center border-r border-black/15 bg-black/20 text-zinc-900 active:cursor-grabbing sm:w-3"
+                        title="Mover a otro día o puesto"
+                        aria-label="Arrastrar turno"
+                        onPointerDown={(e) => e.stopPropagation()}
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <GripVertical className="h-2.5 w-2.5 opacity-80 sm:h-3 sm:w-3" />
+                      </div>
+                    ) : null}
+                    <div
+                      role="button"
+                      tabIndex={canEdit ? 0 : undefined}
+                      className={[
+                        'min-w-0 flex-1 touch-none text-left outline-none',
+                        canEdit && onAddPersonSameSlot ? 'pr-1 pb-5' : '',
+                      ].join(' ')}
+                      style={{ background: zStyle.bg, color: SKELLO_CARD_FG }}
+                      onPointerDown={(e) => onVerticalShiftPointerDown(e, sOne, iv)}
+                      onPointerMove={(e) => onVerticalShiftPointerMove(e, sOne)}
+                      onPointerUp={(e) => void onVerticalShiftPointerUp(e, sOne)}
+                      onPointerCancel={(e) => void onVerticalShiftPointerUp(e, sOne)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (Date.now() < ignoreClicksUntilRef.current) return;
+                        setSelectedShiftId(sOne.id);
+                        setSelectedCell(null);
+                      }}
+                      onKeyDown={(e) => {
+                        if (!canEdit) return;
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          onShiftAdvancedEdit(sOne);
+                        }
+                      }}
+                    >
+                      <OperationalSkelloCardFace
+                        nameLabel={unassigned ? 'Sin asignar' : employeeName(sOne.employeeId)}
+                        startTime={sOne.startTime}
+                        endTime={sOne.endTime}
+                        endsNextDay={sOne.endsNextDay}
+                        durationMins={plannedShiftMinutes(sOne)}
+                        showAlert={unassigned}
+                      />
+                    </div>
+                  </div>
+                </div>
+              );
+            }
 
             return (
               <div
-                key={sOne.id}
+                key={g.slotKey}
                 className="absolute overflow-x-hidden overflow-y-auto rounded-lg shadow-md ring-1 ring-black/15"
                 style={{
                   top: `${seg.topPct}%`,
                   height: `${heightPct}%`,
                   left: `${left}%`,
                   width: `${width}%`,
-                  zIndex: selectedShiftId === sOne.id ? 6 : expanded ? 5 : 3,
+                  zIndex: zGroup,
                 }}
               >
-                {teamSize > 1 && isSlotChrome ? (
-                  <button
-                    type="button"
-                    className="absolute right-0 top-0 z-20 rounded-bl bg-white/45 p-0.5 text-zinc-900 shadow-sm hover:bg-white/60"
-                    title={expanded ? 'Ocultar panel inferior' : 'Abrir panel: editar / quitar'}
-                    aria-expanded={expanded}
-                    aria-label="Detalle del equipo"
-                    onPointerDown={(e) => e.stopPropagation()}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      if (Date.now() < ignoreClicksUntilRef.current) return;
-                      setSelectedCell(null);
-                      toggleExpandedSlot(compositeKey);
-                    }}
-                  >
-                    {expanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
-                  </button>
-                ) : null}
-                {canEdit && onAddPersonSameSlot && isSlotChrome ? (
+                <button
+                  type="button"
+                  className="absolute right-0 top-0 z-20 rounded-bl bg-white/45 p-0.5 text-zinc-900 shadow-sm hover:bg-white/60"
+                  title={expanded ? 'Ocultar panel inferior' : 'Abrir panel: editar / quitar'}
+                  aria-expanded={expanded}
+                  aria-label="Detalle del equipo"
+                  onPointerDown={(e) => e.stopPropagation()}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (Date.now() < ignoreClicksUntilRef.current) return;
+                    setSelectedCell(null);
+                    toggleExpandedSlot(compositeKey);
+                  }}
+                >
+                  {expanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+                </button>
+                {canEdit && onAddPersonSameSlot ? (
                   <button
                     type="button"
                     className="absolute bottom-0 right-0 z-20 rounded-tl bg-white/55 px-2 py-0.5 text-[8px] font-extrabold text-zinc-900 shadow-sm hover:bg-white/70 sm:text-[9px]"
@@ -392,58 +491,68 @@ export function OperationalSkelloCellBody({
                     + pers.
                   </button>
                 ) : null}
-                <div className="flex h-full min-h-0 w-full items-stretch">
-                  {canEdit ? (
-                    <div
-                      draggable
-                      onDragStart={(e) => onDragStart(e, sOne.id)}
-                      onDragEnd={onDragEnd}
-                      className="flex w-2.5 shrink-0 cursor-grab touch-none items-center justify-center border-r border-black/15 bg-black/20 text-zinc-900 active:cursor-grabbing sm:w-3"
-                      title="Mover a otro día o puesto"
-                      aria-label="Arrastrar turno"
-                      onPointerDown={(e) => e.stopPropagation()}
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      <GripVertical className="h-2.5 w-2.5 opacity-80 sm:h-3 sm:w-3" />
-                    </div>
-                  ) : null}
-                  <div
-                    role="button"
-                    tabIndex={canEdit ? 0 : undefined}
-                    className={[
-                      'min-w-0 flex-1 touch-none text-left outline-none',
-                      isSlotChrome && (teamSize > 1 || (canEdit && onAddPersonSameSlot)) ? 'pr-5 pb-4' : '',
-                      teamSize > 1 && !isSlotChrome ? 'pr-0.5' : '',
-                    ].join(' ')}
-                    style={{ background: zStyle.bg, color: SKELLO_CARD_FG }}
-                    {...(canEdit && teamSize > 1 ? bindShiftLongPress(sOne) : ({} as Record<string, never>))}
-                    onPointerDown={(e) => onVerticalShiftPointerDown(e, sOne, iv)}
-                    onPointerMove={(e) => onVerticalShiftPointerMove(e, sOne)}
-                    onPointerUp={(e) => void onVerticalShiftPointerUp(e, sOne)}
-                    onPointerCancel={(e) => void onVerticalShiftPointerUp(e, sOne)}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      if (Date.now() < ignoreClicksUntilRef.current) return;
-                      setSelectedShiftId(sOne.id);
-                      setSelectedCell(null);
-                    }}
-                    onKeyDown={(e) => {
-                      if (!canEdit) return;
-                      if (e.key === 'Enter' || e.key === ' ') {
-                        e.preventDefault();
-                        onShiftAdvancedEdit(sOne);
-                      }
-                    }}
-                  >
-                    <OperationalSkelloCardFace
-                      nameLabel={unassigned ? 'Sin asignar' : employeeName(sOne.employeeId)}
-                      startTime={sOne.startTime}
-                      endTime={sOne.endTime}
-                      endsNextDay={sOne.endsNextDay}
-                      durationMins={plannedShiftMinutes(sOne)}
-                      showAlert={unassigned}
-                    />
-                  </div>
+                <div className="flex h-full min-h-0 flex-col gap-1 overflow-y-auto p-0.5 pb-6 pt-5">
+                  {sortedShifts.map((sOne) => {
+                    const unassigned = sOne.employeeId == null;
+                    return (
+                      <div
+                        key={sOne.id}
+                        className={[
+                          'flex min-h-0 shrink-0 items-stretch overflow-hidden rounded-md shadow-sm ring-1 ring-black/10',
+                          selectedShiftId === sOne.id ? 'ring-2 ring-zinc-900/35' : '',
+                        ].join(' ')}
+                        style={{ background: zStyle.bg, color: SKELLO_CARD_FG }}
+                      >
+                        {canEdit ? (
+                          <div
+                            draggable
+                            onDragStart={(e) => onDragStart(e, sOne.id)}
+                            onDragEnd={onDragEnd}
+                            className="flex w-2.5 shrink-0 cursor-grab touch-none items-center justify-center border-r border-black/15 bg-black/20 text-zinc-900 active:cursor-grabbing sm:w-3"
+                            title="Mover a otro día o puesto"
+                            aria-label="Arrastrar turno"
+                            onPointerDown={(e) => e.stopPropagation()}
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <GripVertical className="h-2.5 w-2.5 opacity-80 sm:h-3 sm:w-3" />
+                          </div>
+                        ) : null}
+                        <div
+                          role="button"
+                          tabIndex={canEdit ? 0 : undefined}
+                          className="min-w-0 flex-1 touch-none outline-none"
+                          {...(canEdit ? bindShiftLongPress(sOne) : ({} as Record<string, never>))}
+                          onPointerDown={(e) => onVerticalShiftPointerDown(e, sOne, iv)}
+                          onPointerMove={(e) => onVerticalShiftPointerMove(e, sOne)}
+                          onPointerUp={(e) => void onVerticalShiftPointerUp(e, sOne)}
+                          onPointerCancel={(e) => void onVerticalShiftPointerUp(e, sOne)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (Date.now() < ignoreClicksUntilRef.current) return;
+                            setSelectedShiftId(sOne.id);
+                            setSelectedCell(null);
+                          }}
+                          onKeyDown={(e) => {
+                            if (!canEdit) return;
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.preventDefault();
+                              onShiftAdvancedEdit(sOne);
+                            }
+                          }}
+                        >
+                          <OperationalSkelloCardFace
+                            variant="stackedCenter"
+                            nameLabel={unassigned ? 'Sin asignar' : employeeName(sOne.employeeId)}
+                            startTime={sOne.startTime}
+                            endTime={sOne.endTime}
+                            endsNextDay={sOne.endsNextDay}
+                            durationMins={plannedShiftMinutes(sOne)}
+                            showAlert={unassigned}
+                          />
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             );
