@@ -336,7 +336,7 @@ export function OperationalSkelloCellBody({
             const { shift: sOne, iv, seg, slotKey } = item;
             const lanes = laneMap.get(idx)!;
             const laneW = 100 / Math.max(1, lanes.laneCount);
-            const gutter = 0.55;
+            const gutter = 0.18;
             const left = lanes.laneCount <= 1 ? gutter : lanes.lane * laneW + gutter;
             const width = lanes.laneCount <= 1 ? 100 - 2 * gutter : laneW - 2 * gutter;
             const unassigned = sOne.employeeId == null;
@@ -377,10 +377,11 @@ export function OperationalSkelloCellBody({
                     {expanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
                   </button>
                 ) : null}
-                {canEdit && onAddPersonSameSlot && teamSize > 1 && isSlotChrome ? (
+                {canEdit && onAddPersonSameSlot && isSlotChrome ? (
                   <button
                     type="button"
-                    className="absolute bottom-0 right-0 z-20 rounded-tl bg-white/50 px-1.5 py-0.5 text-[7px] font-extrabold text-zinc-900 shadow-sm hover:bg-white/65"
+                    className="absolute bottom-0 right-0 z-20 rounded-tl bg-white/55 px-2 py-0.5 text-[8px] font-extrabold text-zinc-900 shadow-sm hover:bg-white/70 sm:text-[9px]"
+                    title="Añadir otra persona en esta misma franja y puesto"
                     onPointerDown={(e) => e.stopPropagation()}
                     onClick={(e) => {
                       e.stopPropagation();
@@ -411,7 +412,7 @@ export function OperationalSkelloCellBody({
                     tabIndex={canEdit ? 0 : undefined}
                     className={[
                       'min-w-0 flex-1 touch-none text-left outline-none',
-                      teamSize > 1 && isSlotChrome ? 'pr-5 pb-4' : '',
+                      isSlotChrome && (teamSize > 1 || (canEdit && onAddPersonSameSlot)) ? 'pr-5 pb-4' : '',
                       teamSize > 1 && !isSlotChrome ? 'pr-0.5' : '',
                     ].join(' ')}
                     style={{ background: zStyle.bg, color: SKELLO_CARD_FG }}

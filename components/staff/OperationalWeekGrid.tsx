@@ -580,8 +580,9 @@ export default function OperationalWeekGrid({
       {canEdit ? (
         <p className="text-[10px] text-zinc-500 sm:text-[11px]">
           Vista por puesto con eje vertical 00:00–24:00 · arrastra en el bloque para mover la franja (misma duración)
-          o toca sin mover para editar · asa izquierda = mover a otro día/puesto · bloques agrupados: toca para ver
-          el equipo · «Añadir» = turno rápido.
+          o toca sin mover para editar · asa izquierda = mover a otro día/puesto · «+ pers.» en la tarjeta = otra
+          persona en la misma franja y puesto · celda vacía: «Añadir» = primer turno rápido · varias personas: flecha
+          para panel de equipo.
         </p>
       ) : (
         <p className="text-[10px] text-zinc-500 sm:text-[11px]">{franjaBanner}</p>
@@ -600,7 +601,7 @@ export default function OperationalWeekGrid({
       </div>
 
       <div className="overflow-x-auto rounded-2xl ring-1 ring-zinc-200/90">
-        <table className="w-full min-w-[1120px] border-collapse text-left text-[10px] sm:min-w-[1240px] sm:text-xs">
+        <table className="w-full min-w-[1680px] border-collapse text-left text-[10px] sm:min-w-[1860px] sm:text-xs">
           <thead>
             <tr className="bg-zinc-50">
               <th className="sticky left-0 z-20 min-w-[5.5rem] border-b border-r border-zinc-200 bg-zinc-50 px-1.5 py-2 text-[9px] font-extrabold uppercase tracking-wide text-zinc-500 sm:min-w-[6.5rem] sm:px-2">
@@ -613,7 +614,7 @@ export default function OperationalWeekGrid({
                   <th
                     key={ymd}
                     className={[
-                      'min-w-[9.5rem] border-b border-zinc-200 px-0.5 py-1.5 text-center font-extrabold sm:min-w-[11rem] sm:px-1',
+                      'min-w-[14rem] border-b border-zinc-200 px-0.5 py-1.5 text-center font-extrabold sm:min-w-[16.5rem] sm:px-1',
                       headerTone(cov),
                     ].join(' ')}
                   >
@@ -637,7 +638,7 @@ export default function OperationalWeekGrid({
                 return (
                   <th
                     key={`tl-${ymd}`}
-                    className="min-w-[9.5rem] border-b border-zinc-200 bg-zinc-50/90 align-top sm:min-w-[11rem]"
+                    className="min-w-[14rem] border-b border-zinc-200 bg-zinc-50/90 align-top sm:min-w-[16.5rem]"
                   >
                     <OperationalDayTimeline ymd={ymd} dayShifts={dayShifts} metrics={operationalMetrics} />
                   </th>
