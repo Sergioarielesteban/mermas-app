@@ -13,6 +13,8 @@ const DEFAULT_STYLE: ZoneBlockStyle = {
 
 const BY_ZONE: Record<string, ZoneBlockStyle> = {
   cocina: { bg: '#ea580c', text: '#ffffff', subtleBg: '#ffedd5' },
+  /** Cocina central / producción (distinta de cocina sala). */
+  cocina_central: { bg: '#B91C1C', text: '#ffffff', subtleBg: '#fee2e2' },
   sala: { bg: '#16a34a', text: '#ffffff', subtleBg: '#dcfce7' },
   barra: { bg: '#2563eb', text: '#ffffff', subtleBg: '#dbeafe' },
   office: { bg: '#7c3aed', text: '#ffffff', subtleBg: '#ede9fe' },
@@ -38,6 +40,7 @@ export function zoneLabel(zone: string | null | undefined): string {
   const z = zone.trim().toLowerCase();
   const labels: Record<string, string> = {
     cocina: 'Cocina',
+    cocina_central: 'Cocina central',
     sala: 'Sala',
     barra: 'Barra',
     office: 'Office',

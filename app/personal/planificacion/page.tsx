@@ -55,7 +55,7 @@ export default function PersonalPlanificacionPage() {
   const weekEndYmd = useMemo(() => ymdLocal(addDays(weekStartDate, 6)), [weekStartDate]);
   const { employees, shifts, loading, error, reload } = useStaffBundle(localId, weekStart);
   const [view, setView] = useState<'semana' | 'dia' | 'mes'>('semana');
-  const [weekLayout, setWeekLayout] = useState<'empleados' | 'operativo'>('empleados');
+  const [weekLayout, setWeekLayout] = useState<'empleados' | 'operativo'>('operativo');
   const [dayFocus, setDayFocus] = useState(() => ymdLocal(new Date()));
   const [monthCursor, setMonthCursor] = useState(() => new Date());
 
@@ -202,6 +202,30 @@ export default function PersonalPlanificacionPage() {
   const removeShiftFromPlan = async (s: StaffShift) => {
     if (!perms.canManageSchedules || !supabase) return;
     await deleteStaffShift(supabase, s.id);
+    await afterScheduleChange();
+  };
+
+  const onOperationalShiftTimesAdjusted = async (
+    s: StaffShift,
+    startTime: string,
+    endTime: string,
+    endsNextDay: boolean,
+  ) => {
+    if (!perms.canManageSchedules || !localId || !supabase) return;
+    await upsertStaffShift(supabase, {
+      id: s.id,
+      localId,
+      employeeId: s.employeeId,
+      shiftDate: s.shiftDate,
+      startTime: toPgTimeHhMmSs(startTime.length >= 8 ? startTime.slice(0, 8) : startTime),
+      endTime: toPgTimeHhMmSs(endTime.length >= 8 ? endTime.slice(0, 8) : endTime),
+      endsNextDay,
+      breakMinutes: s.breakMinutes,
+      zone: s.zone,
+      notes: s.notes,
+      status: s.status,
+      colorHint: s.colorHint,
+    });
     await afterScheduleChange();
   };
 
@@ -454,7 +478,7 @@ export default function PersonalPlanificacionPage() {
       <MermasStyleHero
         eyebrow="Cuadrante"
         title="Planificación"
-        tagline="Semana: vista por empleado o cuadrante operativo por puesto; totales y arrastre donde aplique (encargados)."
+        tagline="Semana: cuadrante por puesto (vista principal) o por empleado; franja 00:00–24:00 y arrastre (encargados)."
         compact
       />
 
@@ -568,7 +592,7 @@ export default function PersonalPlanificacionPage() {
             </p>
           ) : null}
           <div className="flex flex-wrap items-center gap-2">
-            {(['empleados', 'operativo'] as const).map((k) => (
+            {(['operativo', 'empleados'] as const).map((k) => (
               <button
                 key={k}
                 type="button"
@@ -578,7 +602,7 @@ export default function PersonalPlanificacionPage() {
                   weekLayout === k ? 'bg-[#D32F2F] text-white' : 'bg-zinc-100 text-zinc-700 ring-1 ring-zinc-200',
                 ].join(' ')}
               >
-                {k === 'empleados' ? 'Por empleado' : 'Cuadrante operativo'}
+                {k === 'empleados' ? 'Por empleado' : 'Por puesto'}
               </button>
             ))}
           </div>
@@ -625,6 +649,7 @@ export default function PersonalPlanificacionPage() {
               onShiftAdvancedEdit={(s) => openEdit(s)}
               onAddPersonSameSlot={(t) => openNewPersonSameSlot(t)}
               onRemoveShift={(s) => removeShiftFromPlan(s)}
+              onShiftTimesAdjusted={(s, st, et, en) => onOperationalShiftTimesAdjusted(s, st, et, en)}
             />
           )}
         </>

@@ -103,11 +103,19 @@ function shiftClockToMinutes(timeStr: string): number {
   return (h ?? 0) * 60 + (m ?? 0);
 }
 
-export function segmentShiftOnOperationalTimeline(
+/** Eje 00:00–24:00 del día del cuadrante (posicionamiento vertical de turnos). */
+export const FULL_DAY_OPERATIONAL_METRICS: OperationalTimelineMetrics = {
+  startMin: 0,
+  serviceEndMin: 24 * 60,
+  displayEndMin: 24 * 60,
+  rangeMin: 24 * 60,
+};
+
+export function shiftIntervalClippedOnTimeline(
   s: StaffShift,
   columnYmd: string,
   m: OperationalTimelineMetrics,
-): { leftPct: number; widthPct: number } | null {
+): { clipStart: number; clipEnd: number } | null {
   if (s.shiftDate !== columnYmd) return null;
   const start = shiftClockToMinutes(s.startTime);
   let end = shiftClockToMinutes(s.endTime);
@@ -116,9 +124,30 @@ export function segmentShiftOnOperationalTimeline(
   const clipStart = Math.max(start, m.startMin);
   const clipEnd = Math.min(end, m.displayEndMin);
   if (clipEnd <= clipStart) return null;
-  const leftPct = ((clipStart - m.startMin) / m.rangeMin) * 100;
-  const widthPct = ((clipEnd - clipStart) / m.rangeMin) * 100;
+  return { clipStart, clipEnd };
+}
+
+export function segmentShiftOnOperationalTimeline(
+  s: StaffShift,
+  columnYmd: string,
+  m: OperationalTimelineMetrics,
+): { leftPct: number; widthPct: number } | null {
+  const iv = shiftIntervalClippedOnTimeline(s, columnYmd, m);
+  if (!iv) return null;
+  const leftPct = ((iv.clipStart - m.startMin) / m.rangeMin) * 100;
+  const widthPct = ((iv.clipEnd - iv.clipStart) / m.rangeMin) * 100;
   return { leftPct, widthPct: Math.max(widthPct, 0.65) };
+}
+
+/** Misma geometría que la franja horizontal, pero para columna temporal vertical (arriba = más temprano). */
+export function segmentShiftVerticalOnOperationalTimeline(
+  s: StaffShift,
+  columnYmd: string,
+  m: OperationalTimelineMetrics,
+): { topPct: number; heightPct: number } | null {
+  const seg = segmentShiftOnOperationalTimeline(s, columnYmd, m);
+  if (!seg) return null;
+  return { topPct: seg.leftPct, heightPct: Math.max(seg.widthPct, 1.1) };
 }
 
 export function tickPositionPct(minuteFromShiftMidnight: number, m: OperationalTimelineMetrics): number {

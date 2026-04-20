@@ -1,13 +1,15 @@
 'use client';
 
 import React, { useCallback, useMemo, useRef, useState } from 'react';
-import { ChevronDown, ChevronRight, GripVertical, Plus } from 'lucide-react';
+import { Plus } from 'lucide-react';
+import { OperationalSkelloCellBody } from '@/components/staff/OperationalSkelloCellBody';
 import { plannedShiftMinutes } from '@/lib/staff/attendance-logic';
 import { addDays, formatDayMonth, formatWeekdayShort, ymdLocal } from '@/lib/staff/staff-dates';
-import { zoneLabel } from '@/lib/staff/staff-zone-styles';
+import { zoneBlockStyle, zoneLabel } from '@/lib/staff/staff-zone-styles';
 import {
   buildOperationalTimelineTicks,
   computeOperationalTimelineMetrics,
+  FULL_DAY_OPERATIONAL_METRICS,
   operationalFranjaOperativaBanner,
   segmentShiftOnOperationalTimeline,
   tickPositionPct,
@@ -16,12 +18,14 @@ import {
 import type { CustomOperationalZoneRow } from '@/lib/staff/operational-custom-zones';
 import { STAFF_ZONE_PRESETS, type StaffEmployee, type StaffShift } from '@/lib/staff/types';
 import { staffDisplayName } from '@/lib/staff/staff-supabase';
-import { groupShiftsByVisualSlot } from '@/lib/staff/shift-visual-groups';
 import { appConfirm } from '@/lib/app-dialog-bridge';
 
 export const OPERATIONAL_NONE_ZONE = '__none__' as const;
 
-const MAIN_ZONES = ['cocina', 'barra', 'sala'] as const;
+/** Cobertura en cabecera (puestos que deben tener turno). */
+const COVERAGE_MAIN_ZONES = ['cocina', 'barra', 'sala'] as const;
+/** Orden fijo tipo Skello: cocina, barra, sala, cocina central. */
+const DISPLAY_ZONE_ORDER = ['cocina', 'barra', 'sala', 'cocina_central'] as const;
 
 const LONG_PRESS_MS_EMPTY = 820;
 const LONG_PRESS_MS_SHIFT = 820;
@@ -50,13 +54,46 @@ function shiftZoneKey(s: StaffShift): string {
   return z || OPERATIONAL_NONE_ZONE;
 }
 
+function snapMinutes15(m: number): number {
+  return Math.round(m / 15) * 15;
+}
+
+function toPgTimeFromMinutes(min: number): string {
+  const h = Math.floor(min / 60) % 24;
+  const mi = min % 60;
+  return `${String(h).padStart(2, '0')}:${String(mi).padStart(2, '0')}:00`;
+}
+
+function buildAdjustedTimesAfterVerticalMove(
+  iv: { clipStart: number; clipEnd: number },
+  deltaMinutes: number,
+): { startTime: string; endTime: string; endsNextDay: boolean } | null {
+  const duration = iv.clipEnd - iv.clipStart;
+  if (duration < 15) return null;
+  let newStart = snapMinutes15(iv.clipStart + deltaMinutes);
+  newStart = Math.max(0, Math.min(newStart, 24 * 60 - duration));
+  const totalEnd = newStart + duration;
+  let endsNextDay = false;
+  let endMin = totalEnd;
+  if (totalEnd > 24 * 60) {
+    endsNextDay = true;
+    endMin = totalEnd - 24 * 60;
+  }
+  if (endMin < 0 || endMin > 24 * 60) return null;
+  return {
+    startTime: toPgTimeFromMinutes(newStart),
+    endTime: toPgTimeFromMinutes(endMin),
+    endsNextDay,
+  };
+}
+
 function buildZoneRows(
   shifts: StaffShift[],
   customZones: CustomOperationalZoneRow[],
 ): { key: string; label: string }[] {
   const seen = new Set<string>();
   const rows: { key: string; label: string }[] = [];
-  for (const k of MAIN_ZONES) {
+  for (const k of DISPLAY_ZONE_ORDER) {
     rows.push({ key: k, label: zoneLabel(k) });
     seen.add(k);
   }
@@ -89,7 +126,7 @@ function dayCoverage(ymd: string, shifts: StaffShift[]): Coverage {
   const day = shifts.filter((s) => s.shiftDate === ymd);
   let bad = false;
   let warn = false;
-  for (const z of MAIN_ZONES) {
+  for (const z of COVERAGE_MAIN_ZONES) {
     const inZone = day.filter((s) => shiftZoneKey(s) === z);
     if (inZone.length === 0) {
       bad = true;
@@ -194,6 +231,13 @@ export type OperationalWeekGridProps = {
   onAddPersonSameSlot?: (template: StaffShift) => void;
   /** Eliminar un turno del cuadrante (tras confirmación en UI). */
   onRemoveShift?: (shift: StaffShift) => Promise<void>;
+  /** Ajuste de horario arrastrando el bloque en el eje vertical (00:00–24:00). */
+  onShiftTimesAdjusted?: (
+    shift: StaffShift,
+    startTime: string,
+    endTime: string,
+    endsNextDay: boolean,
+  ) => Promise<void>;
 };
 
 export default function OperationalWeekGrid({
@@ -210,6 +254,7 @@ export default function OperationalWeekGrid({
   onShiftAdvancedEdit,
   onAddPersonSameSlot,
   onRemoveShift,
+  onShiftTimesAdjusted,
 }: OperationalWeekGridProps) {
   const days = useMemo(() => Array.from({ length: 7 }, (_, i) => addDays(weekStartMonday, i)), [weekStartMonday]);
   const zoneRows = useMemo(
@@ -234,6 +279,14 @@ export default function OperationalWeekGrid({
   const emptyLongPressTimerRef = useRef<number | null>(null);
   const shiftLongPressTimerRef = useRef<number | null>(null);
   const lastEmptyTapRef = useRef<{ key: string; t: number }>({ key: '', t: 0 });
+  const verticalDragRef = useRef<{
+    shiftId: string;
+    pointerId: number;
+    lastClientY: number;
+    accPx: number;
+    iv: { clipStart: number; clipEnd: number };
+    trackHeight: number;
+  } | null>(null);
 
   const shiftsByDayFlat = useMemo(() => {
     const m = new Map<string, StaffShift[]>();
@@ -374,6 +427,57 @@ export default function OperationalWeekGrid({
     [onRemoveShift],
   );
 
+  const onVerticalShiftPointerDown = useCallback(
+    (e: React.PointerEvent, s: StaffShift, iv: { clipStart: number; clipEnd: number }) => {
+      if (!canEdit || !onShiftTimesAdjusted) return;
+      if (e.button !== 0) return;
+      e.stopPropagation();
+      const track = (e.currentTarget as HTMLElement).closest('[data-vertical-track]') as HTMLElement | null;
+      if (!track) return;
+      verticalDragRef.current = {
+        shiftId: s.id,
+        pointerId: e.pointerId,
+        lastClientY: e.clientY,
+        accPx: 0,
+        iv: { ...iv },
+        trackHeight: Math.max(track.getBoundingClientRect().height, 1),
+      };
+      (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    },
+    [canEdit, onShiftTimesAdjusted],
+  );
+
+  const onVerticalShiftPointerMove = useCallback((e: React.PointerEvent, s: StaffShift) => {
+    const d = verticalDragRef.current;
+    if (!d || d.shiftId !== s.id) return;
+    const dy = e.clientY - d.lastClientY;
+    d.lastClientY = e.clientY;
+    d.accPx += dy;
+  }, []);
+
+  const onVerticalShiftPointerUp = useCallback(
+    async (e: React.PointerEvent, s: StaffShift) => {
+      const d = verticalDragRef.current;
+      if (!d || d.shiftId !== s.id) return;
+      verticalDragRef.current = null;
+      try {
+        (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+      } catch {
+        /* ignore */
+      }
+      const deltaMin = (d.accPx / d.trackHeight) * FULL_DAY_OPERATIONAL_METRICS.rangeMin;
+      if (Math.abs(d.accPx) < 12) {
+        onShiftAdvancedEdit(s);
+        return;
+      }
+      if (!onShiftTimesAdjusted) return;
+      const adj = buildAdjustedTimesAfterVerticalMove(d.iv, deltaMin);
+      if (!adj) return;
+      await onShiftTimesAdjusted(s, adj.startTime, adj.endTime, adj.endsNextDay);
+    },
+    [onShiftTimesAdjusted, onShiftAdvancedEdit],
+  );
+
   const shiftsByDayZone = useMemo(() => {
     const m = new Map<string, StaffShift[]>();
     for (const s of shifts) {
@@ -460,7 +564,7 @@ export default function OperationalWeekGrid({
     const st = statsByDay.get(ymd);
     if (!st) return '—';
     const parts: string[] = [];
-    for (const z of MAIN_ZONES) {
+    for (const z of COVERAGE_MAIN_ZONES) {
       const row = st.byZone.get(z);
       if (!row || (row.people === 0 && row.minutes === 0)) {
         parts.push(`${z[0]!.toUpperCase()} 0·0h`);
@@ -475,9 +579,9 @@ export default function OperationalWeekGrid({
     <div className="space-y-2">
       {canEdit ? (
         <p className="text-[10px] text-zinc-500 sm:text-[11px]">
-          Misma franja y puesto se agrupa en un bloque · toque el bloque para ver el equipo · «+ persona» copia el
-          horario · doble toque o «Añadir» = turno rápido · mantener = edición · arrastrar desde el asa (vista
-          expandida).
+          Vista por puesto con eje vertical 00:00–24:00 · arrastra en el bloque para mover la franja (misma duración)
+          o toca sin mover para editar · asa izquierda = mover a otro día/puesto · bloques agrupados: toca para ver
+          el equipo · «Añadir» = turno rápido.
         </p>
       ) : (
         <p className="text-[10px] text-zinc-500 sm:text-[11px]">{franjaBanner}</p>
@@ -523,8 +627,9 @@ export default function OperationalWeekGrid({
             </tr>
             <tr className="bg-zinc-50/95">
               <th className="sticky left-0 z-20 min-w-[5.5rem] border-b border-r border-zinc-200 bg-zinc-50/95 px-1.5 py-1 text-left align-top text-[8px] font-semibold leading-snug text-zinc-600 sm:min-w-[6.5rem] sm:px-2 sm:text-[9px]">
-                <span className="block font-extrabold uppercase tracking-wide text-zinc-500">Referencia</span>
-                <span className="mt-1 block text-zinc-700">{franjaBanner}</span>
+                <span className="block font-extrabold uppercase tracking-wide text-zinc-500">Eje tiempo</span>
+                <span className="mt-1 block font-bold text-zinc-800">00:00 – 24:00</span>
+                <span className="mt-0.5 block text-[7px] font-medium text-zinc-500">{franjaBanner}</span>
               </th>
               {days.map((d) => {
                 const ymd = ymdLocal(d);
@@ -544,7 +649,14 @@ export default function OperationalWeekGrid({
             {zoneRows.map((row) => (
               <tr key={row.key} className="bg-white">
                 <td className="sticky left-0 z-10 border-b border-r border-zinc-100 bg-white px-1.5 py-1 align-top sm:px-2">
-                  <span className="font-bold text-zinc-900">{row.label}</span>
+                  <div className="flex items-center gap-2">
+                    <span
+                      className="h-2.5 w-2.5 shrink-0 rounded-full ring-1 ring-black/10"
+                      style={{ background: zoneBlockStyle(row.key).bg }}
+                      aria-hidden
+                    />
+                    <span className="font-bold text-zinc-900">{row.label}</span>
+                  </div>
                 </td>
                 {days.map((d) => {
                   const ymd = ymdLocal(d);
@@ -576,296 +688,33 @@ export default function OperationalWeekGrid({
                       }
                       onDrop={canEdit ? (e) => void onCellDrop(e, ymd, row.key) : undefined}
                     >
-                      {here.length === 0 ? (
-                        <div
-                          role={canEdit ? 'button' : undefined}
-                          tabIndex={canEdit ? 0 : undefined}
-                          className={[
-                            'relative flex min-h-[2.25rem] w-full items-center justify-center rounded-md border border-dashed px-1 transition sm:min-h-[2.4rem] touch-manipulation select-none',
-                            canEdit
-                              ? 'cursor-pointer border-zinc-300 bg-white hover:border-zinc-400'
-                              : 'cursor-default border-zinc-100 bg-zinc-50/50',
-                            selectedCell?.ymd === ymd && selectedCell?.zoneKey === row.key
-                              ? 'ring-1 ring-zinc-900 ring-offset-1'
-                              : '',
-                            !canEdit ? 'opacity-60' : '',
-                          ].join(' ')}
-                          onClick={() => handleEmptyCellTap(ymd, row.key)}
-                          onKeyDown={(e) => {
-                            if (!canEdit) return;
-                            if (e.key === 'Enter' || e.key === ' ') {
-                              e.preventDefault();
-                              handleEmptyCellTap(ymd, row.key);
-                            }
-                          }}
-                          {...(canEdit ? bindEmptyLongPress(ymd, row.key) : ({} as Record<string, never>))}
-                        >
-                          {canEdit ? (
-                            <button
-                              type="button"
-                              className="flex w-full items-center justify-center gap-1 rounded-md border border-zinc-200 bg-white py-1 text-[10px] font-bold text-zinc-800 hover:border-[#D32F2F]/50 hover:text-[#D32F2F] sm:text-[11px]"
-                              onPointerDown={(e) => e.stopPropagation()}
-                              onClick={(e) => quickCreateFromButton(e, ymd, row.key)}
-                            >
-                              <Plus className="h-3 w-3 shrink-0" strokeWidth={2.5} />
-                              Añadir
-                            </button>
-                          ) : (
-                            <span className="text-zinc-400">—</span>
-                          )}
-                        </div>
-                      ) : (
-                        <div className="flex min-h-0 w-full flex-col gap-0.5">
-                          {groupShiftsByVisualSlot(here).map((g) => {
-                            if (g.items.length === 1) {
-                              const s = g.items[0]!;
-                              const mins = plannedShiftMinutes(s);
-                              const unassigned = s.employeeId == null;
-                              return (
-                                <div
-                                  key={s.id}
-                                  className={[
-                                    'flex w-full min-w-0 items-stretch overflow-hidden rounded border bg-white',
-                                    unassigned ? 'border-[#D32F2F]/70' : 'border-zinc-200',
-                                    selectedShiftId === s.id ? 'ring-1 ring-zinc-900 ring-offset-1' : '',
-                                  ].join(' ')}
-                                >
-                                  {canEdit ? (
-                                    <div
-                                      draggable
-                                      onDragStart={(e) => onDragStart(e, s.id)}
-                                      onDragEnd={onDragEnd}
-                                      className="flex w-6 shrink-0 cursor-grab touch-none items-center justify-center border-r border-zinc-200 bg-zinc-50 text-zinc-500 active:cursor-grabbing"
-                                      title="Arrastrar"
-                                      aria-label="Arrastrar turno"
-                                      onClick={(e) => e.stopPropagation()}
-                                    >
-                                      <GripVertical className="h-3.5 w-3.5" />
-                                    </div>
-                                  ) : null}
-                                  <div
-                                    role="button"
-                                    tabIndex={canEdit ? 0 : undefined}
-                                    className="min-w-0 flex-1 cursor-pointer px-1 py-0.5 text-left outline-none sm:px-1.5 sm:py-1"
-                                    {...(canEdit ? bindShiftLongPress(s) : ({} as Record<string, never>))}
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      if (Date.now() < ignoreClicksUntilRef.current) return;
-                                      setSelectedShiftId(s.id);
-                                      setSelectedCell(null);
-                                    }}
-                                    onKeyDown={(e) => {
-                                      if (!canEdit) return;
-                                      if (e.key === 'Enter' || e.key === ' ') {
-                                        e.preventDefault();
-                                        if (Date.now() < ignoreClicksUntilRef.current) return;
-                                        setSelectedShiftId(s.id);
-                                        setSelectedCell(null);
-                                      }
-                                    }}
-                                  >
-                                    <div
-                                      className={[
-                                        'truncate text-[10px] font-bold leading-tight text-zinc-900 sm:text-[11px]',
-                                        unassigned ? 'text-[#B71C1C]' : '',
-                                      ].join(' ')}
-                                    >
-                                      {unassigned ? 'Sin asignar' : employeeName(s.employeeId)}
-                                    </div>
-                                    <div className="truncate text-[9px] font-semibold tabular-nums text-zinc-600 sm:text-[10px]">
-                                      {shortTime(s.startTime)}–{shortTime(s.endTime)}
-                                      {s.endsNextDay ? <span className="text-zinc-500"> (+1)</span> : null}
-                                    </div>
-                                    <div className="text-[9px] font-semibold tabular-nums text-zinc-500 sm:text-[10px]">
-                                      {formatShiftHoursLabel(mins)}
-                                      {Number(s.breakMinutes) > 0 ? (
-                                        <span className="font-normal text-zinc-400">
-                                          {' '}
-                                          (−{s.breakMinutes} min)
-                                        </span>
-                                      ) : null}
-                                    </div>
-                                  </div>
-                                </div>
-                              );
-                            }
-
-                            const rep = g.items[0]!;
-                            const sortedItems = sortGroupedItems(g.items);
-                            const compositeKey = `${ymd}|${row.key}|${g.slotKey}`;
-                            const expanded = expandedSlotKeys.has(compositeKey);
-                            const n = g.items.length;
-                            const nUnassigned = g.items.filter((x) => x.employeeId == null).length;
-                            const mins = plannedShiftMinutes(rep);
-                            const summaryPeople =
-                              nUnassigned > 0
-                                ? `${n} ${n === 1 ? 'persona' : 'personas'} · ${nUnassigned} sin asignar`
-                                : `${n} ${n === 1 ? 'persona' : 'personas'}`;
-
-                            return (
-                              <div
-                                key={g.slotKey}
-                                className={[
-                                  'overflow-hidden rounded border border-zinc-300 bg-white shadow-sm',
-                                  selectedShiftId != null &&
-                                  sortedItems.some((x) => x.id === selectedShiftId)
-                                    ? 'ring-1 ring-zinc-900 ring-offset-1'
-                                    : '',
-                                ].join(' ')}
-                              >
-                                <div className="flex w-full min-w-0 items-stretch">
-                                  <button
-                                    type="button"
-                                    className="flex min-w-0 flex-1 flex-col px-1.5 py-1 text-left sm:px-2 sm:py-1.5"
-                                    {...(canEdit ? bindShiftLongPress(rep) : ({} as Record<string, never>))}
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      if (Date.now() < ignoreClicksUntilRef.current) return;
-                                      setSelectedCell(null);
-                                      toggleExpandedSlot(compositeKey);
-                                    }}
-                                  >
-                                    <div className="flex items-start gap-1">
-                                      <span className="mt-0.5 shrink-0 text-zinc-500" aria-hidden>
-                                        {expanded ? (
-                                          <ChevronDown className="h-3.5 w-3.5" />
-                                        ) : (
-                                          <ChevronRight className="h-3.5 w-3.5" />
-                                        )}
-                                      </span>
-                                      <div className="min-w-0 flex-1">
-                                        <div className="truncate text-[10px] font-extrabold leading-tight text-zinc-900 sm:text-[11px]">
-                                          {shortTime(rep.startTime)}–{shortTime(rep.endTime)}
-                                          {rep.endsNextDay ? (
-                                            <span className="font-semibold text-zinc-500"> (+1)</span>
-                                          ) : null}
-                                          <span className="font-bold text-[#B91C1C]"> · {summaryPeople}</span>
-                                        </div>
-                                        <div className="text-[9px] font-semibold tabular-nums text-zinc-500 sm:text-[10px]">
-                                          {formatShiftHoursLabel(mins)}
-                                          {Number(rep.breakMinutes) > 0 ? (
-                                            <span className="font-normal text-zinc-400">
-                                              {' '}
-                                              (−{rep.breakMinutes} min)
-                                            </span>
-                                          ) : null}
-                                        </div>
-                                        <div className="text-[8px] font-semibold uppercase tracking-wide text-zinc-400">
-                                          Toca para {expanded ? 'contraer' : 'ver'} equipo
-                                        </div>
-                                      </div>
-                                    </div>
-                                  </button>
-                                  {canEdit && onAddPersonSameSlot ? (
-                                    <button
-                                      type="button"
-                                      title="Añadir persona a este horario"
-                                      className="shrink-0 border-l border-zinc-200 bg-zinc-50 px-1.5 text-[9px] font-extrabold text-[#D32F2F] hover:bg-[#D32F2F]/10 sm:px-2 sm:text-[10px]"
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        if (Date.now() < ignoreClicksUntilRef.current) return;
-                                        onAddPersonSameSlot(rep);
-                                      }}
-                                    >
-                                      + persona
-                                    </button>
-                                  ) : null}
-                                </div>
-                                {expanded ? (
-                                  <div className="border-t border-zinc-200 bg-zinc-50/80">
-                                    {sortedItems.map((s) => {
-                                      const unassigned = s.employeeId == null;
-                                      const smins = plannedShiftMinutes(s);
-                                      return (
-                                        <div
-                                          key={s.id}
-                                          className={[
-                                            'flex w-full min-w-0 items-stretch border-b border-zinc-100 last:border-b-0',
-                                            selectedShiftId === s.id ? 'bg-white' : '',
-                                          ].join(' ')}
-                                        >
-                                          {canEdit ? (
-                                            <div
-                                              draggable
-                                              onDragStart={(e) => onDragStart(e, s.id)}
-                                              onDragEnd={onDragEnd}
-                                              className="flex w-6 shrink-0 cursor-grab touch-none items-center justify-center border-r border-zinc-200 bg-white text-zinc-500 active:cursor-grabbing"
-                                              title="Arrastrar"
-                                              aria-label="Arrastrar turno"
-                                              onClick={(e) => e.stopPropagation()}
-                                            >
-                                              <GripVertical className="h-3.5 w-3.5" />
-                                            </div>
-                                          ) : null}
-                                          <div
-                                            role="button"
-                                            tabIndex={canEdit ? 0 : undefined}
-                                            className="min-w-0 flex-1 cursor-pointer px-1 py-1 text-left outline-none sm:px-1.5"
-                                            {...(canEdit ? bindShiftLongPress(s) : ({} as Record<string, never>))}
-                                            onClick={(e) => {
-                                              e.stopPropagation();
-                                              if (Date.now() < ignoreClicksUntilRef.current) return;
-                                              setSelectedShiftId(s.id);
-                                              setSelectedCell(null);
-                                            }}
-                                            onKeyDown={(e) => {
-                                              if (!canEdit) return;
-                                              if (e.key === 'Enter' || e.key === ' ') {
-                                                e.preventDefault();
-                                                if (Date.now() < ignoreClicksUntilRef.current) return;
-                                                setSelectedShiftId(s.id);
-                                                setSelectedCell(null);
-                                              }
-                                            }}
-                                          >
-                                            <div
-                                              className={[
-                                                'truncate text-[10px] font-bold text-zinc-900 sm:text-[11px]',
-                                                unassigned ? 'text-[#B71C1C]' : '',
-                                              ].join(' ')}
-                                            >
-                                              {unassigned ? 'Sin asignar' : employeeName(s.employeeId)}
-                                            </div>
-                                            <div className="text-[9px] font-semibold tabular-nums text-zinc-500">
-                                              {formatShiftHoursLabel(smins)}
-                                            </div>
-                                          </div>
-                                          {canEdit ? (
-                                            <div className="flex shrink-0 flex-col justify-center gap-0.5 border-l border-zinc-200 bg-white px-1 py-0.5">
-                                              <button
-                                                type="button"
-                                                className="whitespace-nowrap rounded px-1 py-0.5 text-[8px] font-extrabold text-zinc-700 hover:bg-zinc-100 sm:text-[9px]"
-                                                onClick={(e) => {
-                                                  e.stopPropagation();
-                                                  onShiftAdvancedEdit(s);
-                                                }}
-                                              >
-                                                Editar
-                                              </button>
-                                              {onRemoveShift ? (
-                                                <button
-                                                  type="button"
-                                                  className="whitespace-nowrap rounded px-1 py-0.5 text-[8px] font-extrabold text-red-700 hover:bg-red-50 sm:text-[9px]"
-                                                  onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    void removeShiftFromGroup(s);
-                                                  }}
-                                                >
-                                                  Quitar
-                                                </button>
-                                              ) : null}
-                                            </div>
-                                          ) : null}
-                                        </div>
-                                      );
-                                    })}
-                                  </div>
-                                ) : null}
-                              </div>
-                            );
-                          })}
-                        </div>
-                      )}
+                      <OperationalSkelloCellBody
+                        ymd={ymd}
+                        rowKey={row.key}
+                        here={here}
+                        canEdit={canEdit}
+                        employees={employees}
+                        selectedCell={selectedCell}
+                        selectedShiftId={selectedShiftId}
+                        setSelectedCell={setSelectedCell}
+                        setSelectedShiftId={setSelectedShiftId}
+                        expandedSlotKeys={expandedSlotKeys}
+                        toggleExpandedSlot={toggleExpandedSlot}
+                        ignoreClicksUntilRef={ignoreClicksUntilRef}
+                        onDragStart={onDragStart}
+                        onDragEnd={onDragEnd}
+                        handleEmptyCellTap={handleEmptyCellTap}
+                        bindEmptyLongPress={bindEmptyLongPress}
+                        quickCreateFromButton={quickCreateFromButton}
+                        onShiftAdvancedEdit={onShiftAdvancedEdit}
+                        bindShiftLongPress={bindShiftLongPress}
+                        onAddPersonSameSlot={onAddPersonSameSlot}
+                        removeShiftFromGroup={removeShiftFromGroup}
+                        sortGroupedItems={sortGroupedItems}
+                        onVerticalShiftPointerDown={onVerticalShiftPointerDown}
+                        onVerticalShiftPointerMove={onVerticalShiftPointerMove}
+                        onVerticalShiftPointerUp={onVerticalShiftPointerUp}
+                      />
                     </td>
                   );
                 })}
