@@ -334,7 +334,7 @@ export default function ProduccionPlantillasPage() {
   };
 
   return (
-    <div className="space-y-4 pb-10">
+    <div className="space-y-3 pb-8 sm:space-y-4 sm:pb-10">
       <MermasStyleHero
         eyebrow="Producción"
         title="Plantillas"
@@ -360,31 +360,33 @@ export default function ProduccionPlantillasPage() {
         <p className="text-center text-sm font-medium text-zinc-700">Cargando…</p>
       ) : (
         <>
-          <section className="rounded-2xl border border-zinc-200/90 bg-white p-4 shadow-sm ring-1 ring-zinc-100">
-            <p className="text-xs font-extrabold uppercase tracking-wide text-zinc-700">Nueva plantilla</p>
-            <p className="mt-1 text-[11px] font-medium text-zinc-700">
-              Se crean dos bloques de ejemplo (Lun–Jue y Vie–Dom). Añade productos dentro de cada uno.
+          <section className="rounded-xl border border-zinc-200/90 bg-white p-3 shadow-sm ring-1 ring-zinc-100 sm:p-4">
+            <p className="text-[10px] font-extrabold uppercase tracking-wide text-zinc-700 sm:text-xs">
+              Nueva plantilla
             </p>
-            <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-end">
+            <p className="mt-0.5 text-[10px] font-medium leading-snug text-zinc-700 sm:text-[11px]">
+              Dos bloques de ejemplo. Añade productos en cada bloque.
+            </p>
+            <div className="mt-2 flex flex-col gap-1.5 sm:flex-row sm:items-end sm:gap-2">
               <input
                 value={newName}
                 onChange={(e) => setNewName(e.target.value)}
                 placeholder="Nombre (ej. Producción cocina)"
-                className="h-11 min-w-0 flex-1 rounded-xl border border-zinc-200 bg-zinc-50/50 px-3 text-sm font-semibold text-zinc-900 outline-none focus:border-[#D32F2F]/50 focus:bg-white focus:ring-2 focus:ring-[#D32F2F]/15"
+                className="h-10 min-w-0 flex-1 rounded-lg border border-zinc-200 bg-zinc-50/50 px-2.5 text-sm font-semibold text-zinc-900 outline-none focus:border-[#D32F2F]/50 focus:bg-white focus:ring-2 focus:ring-[#D32F2F]/15 sm:h-11 sm:rounded-xl sm:px-3"
               />
               <button
                 type="button"
                 disabled={busy || !newName.trim()}
                 onClick={() => void addTemplate()}
-                className="inline-flex h-11 items-center justify-center gap-1.5 rounded-xl bg-[#D32F2F] px-4 text-sm font-black uppercase tracking-wide text-white shadow-sm disabled:opacity-50"
+                className="inline-flex h-10 shrink-0 items-center justify-center gap-1 rounded-lg bg-[#D32F2F] px-3 text-xs font-black uppercase tracking-wide text-white shadow-sm disabled:opacity-50 sm:h-11 sm:rounded-xl sm:px-4 sm:text-sm"
               >
-                <Plus className="h-4 w-4" />
+                <Plus className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                 Crear
               </button>
             </div>
           </section>
 
-          <div className="space-y-3">
+          <div className="space-y-2 sm:space-y-3">
             {templates.map((p) => {
               const open = openId === p.id;
               const blocks = [...(blocksByTpl[p.id] ?? [])].sort((a, b) => a.sortOrder - b.sortOrder);
@@ -392,23 +394,25 @@ export default function ProduccionPlantillasPage() {
               return (
                 <div
                   key={p.id}
-                  className="overflow-hidden rounded-2xl border border-zinc-200/90 bg-gradient-to-b from-white to-zinc-50/80 shadow-sm ring-1 ring-zinc-100"
+                  className="overflow-hidden rounded-xl border border-zinc-200/90 bg-gradient-to-b from-white to-zinc-50/80 shadow-sm ring-1 ring-zinc-100 sm:rounded-2xl"
                 >
                   <button
                     type="button"
                     onClick={() => setOpenId(open ? null : p.id)}
-                    className="flex w-full items-center justify-between gap-3 px-4 py-3.5 text-left"
+                    className="flex w-full items-center justify-between gap-2 px-3 py-2.5 text-left sm:px-4 sm:py-3"
                   >
                     <div className="min-w-0">
                       <p className="truncate text-sm font-black text-zinc-900">{p.name}</p>
-                      <p className="mt-0.5 text-[10px] font-bold uppercase tracking-wide text-zinc-800">
-                        {blocks.length} bloques · {productCount} productos
+                      <p className="mt-0.5 text-[9px] font-bold uppercase tracking-wide text-zinc-800 sm:text-[10px]">
+                        {blocks.length} bloq. · {productCount} prod.
                       </p>
                     </div>
-                    <span className="shrink-0 text-xs font-bold text-zinc-600">{open ? '▲' : '▼'}</span>
+                    <span className="shrink-0 text-[10px] font-bold text-zinc-600 sm:text-xs">
+                      {open ? '▲' : '▼'}
+                    </span>
                   </button>
                   {open ? (
-                    <div className="space-y-4 border-t border-zinc-100 px-4 py-3">
+                    <div className="space-y-3 border-t border-zinc-100 px-3 py-2 sm:space-y-4 sm:px-4 sm:py-3">
                       <div className="flex flex-wrap gap-2">
                         <button
                           type="button"
@@ -463,9 +467,9 @@ export default function ProduccionPlantillasPage() {
                             return (
                               <div
                                 key={b.id}
-                                className="rounded-xl border border-zinc-200/80 bg-white/90 p-3 ring-1 ring-zinc-50"
+                                className="rounded-lg border border-zinc-200/80 bg-white/90 p-2 ring-1 ring-zinc-50 sm:rounded-xl sm:p-3"
                               >
-                                <div className="flex flex-wrap items-center gap-2 border-b border-zinc-100 pb-2">
+                                <div className="flex flex-wrap items-center gap-1.5 border-b border-zinc-100 pb-1.5 sm:gap-2 sm:pb-2">
                                   <input
                                     defaultValue={b.label}
                                     disabled={busy}

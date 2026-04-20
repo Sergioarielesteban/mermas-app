@@ -322,25 +322,23 @@ export default function ProduccionCorrerPage() {
                   {sec.items.map((it, idx) => (
                     <div
                       key={`${it.label}-${idx}`}
-                      className="rounded-xl border border-zinc-200/90 bg-white px-3 py-3 shadow-sm ring-1 ring-zinc-50"
+                      className="rounded-lg border border-zinc-200/90 bg-white px-2 py-1.5 shadow-sm ring-1 ring-zinc-50"
                     >
-                      <p className="text-sm font-bold leading-snug text-zinc-900">{it.label}</p>
-                      <div className="mt-3 grid grid-cols-3 gap-2 text-center">
+                      <p className="truncate text-xs font-black text-zinc-900">{it.label}</p>
+                      <div className="mt-1 grid grid-cols-3 gap-1 text-center">
                         <div>
-                          <p className="text-[10px] font-bold uppercase text-zinc-700">Objetivo</p>
-                          <p className="mt-0.5 text-sm font-black tabular-nums text-zinc-900">{it.objective}</p>
+                          <p className="text-[8px] font-bold uppercase text-zinc-600">Obj.</p>
+                          <p className="text-xs font-black tabular-nums text-zinc-900">{it.objective}</p>
                         </div>
                         <div>
-                          <p className="text-[10px] font-bold uppercase text-zinc-700">Stock</p>
-                          <p className="mt-0.5 text-sm font-black tabular-nums text-zinc-800">
-                            {it.hecho ?? '—'}
-                          </p>
+                          <p className="text-[8px] font-bold uppercase text-zinc-600">Stock</p>
+                          <p className="text-xs font-black tabular-nums text-zinc-800">{it.hecho ?? '—'}</p>
                         </div>
                         <div>
-                          <p className="text-[10px] font-bold uppercase text-zinc-700">Faltan</p>
+                          <p className="text-[8px] font-bold uppercase text-zinc-600">Faltan</p>
                           <p
-                            className={`mt-0.5 text-sm font-black tabular-nums ${
-                              it.hacer > 0 ? 'text-[#B91C1C]' : 'text-zinc-700'
+                            className={`text-xs font-black tabular-nums ${
+                              it.hacer > 0 ? 'text-[#B91C1C]' : 'text-emerald-600'
                             }`}
                           >
                             {it.hacer}
@@ -369,33 +367,33 @@ export default function ProduccionCorrerPage() {
         </div>
       ) : (
         <>
-          <div className="rounded-2xl border border-zinc-200/90 bg-white p-4 shadow-sm ring-1 ring-zinc-100">
-            <div className="flex flex-wrap items-end justify-between gap-3">
+          <div className="rounded-xl border border-zinc-200/90 bg-white p-3 shadow-sm ring-1 ring-zinc-100 sm:p-3.5">
+            <div className="flex flex-wrap items-end justify-between gap-2">
               <div>
-                <p className="text-[10px] font-black uppercase tracking-wide text-zinc-700">Día de trabajo</p>
-                <p className="text-sm font-bold text-zinc-900">{session.workDate}</p>
+                <p className="text-[9px] font-black uppercase tracking-wide text-zinc-700">Día de trabajo</p>
+                <p className="text-xs font-bold text-zinc-900 sm:text-sm">{session.workDate}</p>
                 {session.periodLabel ? (
-                  <p className="mt-1 text-xs font-semibold text-zinc-600">{session.periodLabel}</p>
+                  <p className="mt-0.5 text-[11px] font-semibold text-zinc-600">{session.periodLabel}</p>
                 ) : null}
               </div>
             </div>
 
             {!activeBlock && blocks.length > 0 ? (
-              <p className="mt-3 rounded-xl bg-amber-50 px-3 py-2 text-center text-xs font-bold text-amber-950 ring-1 ring-amber-100">
-                Ningún bloque coincide con este día. Elige uno abajo para ver productos y objetivos.
+              <p className="mt-2 rounded-lg bg-amber-50 px-2 py-1.5 text-center text-[11px] font-bold text-amber-950 ring-1 ring-amber-100">
+                Ningún bloque coincide con este día. Elige uno abajo.
               </p>
             ) : null}
 
             {blocks.length > 0 ? (
-              <div className="mt-4">
-                <p className="text-[10px] font-black uppercase text-zinc-700">Bloque del día</p>
-                <div className="mt-2 flex flex-wrap gap-1.5">
+              <div className="mt-2">
+                <p className="text-[9px] font-black uppercase text-zinc-700">Bloque del día</p>
+                <div className="mt-1 flex flex-wrap gap-1">
                   <button
                     type="button"
                     disabled={isClosed || savingId === '_block'}
                     onClick={() => void setForcedBlock(null)}
                     className={[
-                      'rounded-lg px-3 py-2 text-[11px] font-black uppercase tracking-wide transition',
+                      'rounded-md px-2 py-1.5 text-[10px] font-black uppercase tracking-wide transition sm:px-2.5 sm:text-[11px]',
                       session.forcedBlockId == null
                         ? 'bg-[#D32F2F] text-white shadow-sm'
                         : 'border border-zinc-200 bg-zinc-50 text-zinc-700',
@@ -412,26 +410,26 @@ export default function ProduccionCorrerPage() {
                         disabled={isClosed || savingId === '_block'}
                         onClick={() => void setForcedBlock(b.id)}
                         className={[
-                          'rounded-lg px-3 py-2 text-[11px] font-black uppercase tracking-wide transition',
+                          'max-w-[11rem] truncate rounded-md px-2 py-1.5 text-[10px] font-black uppercase tracking-wide transition sm:max-w-none sm:px-2.5 sm:text-[11px]',
                           session.forcedBlockId === b.id ||
                           (session.forcedBlockId == null && activeBlock?.id === b.id)
                             ? 'bg-[#D32F2F] text-white shadow-sm'
                             : 'border border-zinc-200 bg-zinc-50 text-zinc-700',
                         ].join(' ')}
+                        title={b.label}
                       >
                         {b.label}
                       </button>
                     ))}
                 </div>
-                <p className="mt-2 text-[10px] font-semibold text-zinc-800">
-                  Activo:{' '}
+                <p className="mt-1 text-[9px] font-semibold text-zinc-800">
                   <span className="font-bold text-zinc-900">{activeBlock?.label ?? '—'}</span>
-                  {activeBlock ? ` · ${blockItems.length} producto${blockItems.length === 1 ? '' : 's'}` : ''}
+                  {activeBlock ? ` · ${blockItems.length} prod.` : ''}
                 </p>
               </div>
             ) : (
-              <p className="mt-3 text-center text-xs font-semibold text-zinc-800">
-                Esta plantilla no tiene bloques de día. Configúrala en Plantillas.
+              <p className="mt-2 text-center text-[11px] font-semibold text-zinc-800">
+                Sin bloques de día. Configúralo en Plantillas.
               </p>
             )}
 
@@ -439,13 +437,13 @@ export default function ProduccionCorrerPage() {
               type="button"
               disabled={closing}
               onClick={() => void closeSession()}
-              className="mt-4 w-full rounded-xl border border-zinc-300 bg-zinc-900 py-3 text-sm font-black uppercase tracking-wide text-white shadow-sm hover:bg-zinc-800 disabled:opacity-50"
+              className="mt-3 w-full rounded-lg border border-zinc-300 bg-zinc-900 py-2.5 text-xs font-black uppercase tracking-wide text-white shadow-sm hover:bg-zinc-800 disabled:opacity-50 sm:py-3 sm:text-sm"
             >
               {closing ? 'Guardando…' : 'Registrar cierre'}
             </button>
           </div>
 
-          <div className="space-y-3">
+          <div className="space-y-1.5 sm:space-y-2">
             {!activeBlock ? (
               <p className="rounded-2xl border border-zinc-200 bg-zinc-50/80 px-4 py-6 text-center text-sm font-medium text-zinc-800">
                 Selecciona un bloque para ver la lista de productos.
@@ -482,135 +480,130 @@ export default function ProduccionCorrerPage() {
                   return (
                     <div
                       key={it.id}
-                      className="rounded-xl border border-zinc-200/90 bg-white px-3 py-4 shadow-sm ring-1 ring-zinc-50"
+                      className="rounded-lg border border-zinc-200/90 bg-white px-2 py-2 shadow-sm ring-1 ring-zinc-50 sm:px-2.5 sm:py-2"
                     >
-                      <p className="text-base font-black leading-snug text-zinc-900">{it.label}</p>
+                      <div className="flex gap-2 sm:items-center sm:gap-3">
+                        {/* Izquierda: nombre + objetivo */}
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-black leading-tight text-zinc-900 sm:text-[15px]">
+                            {it.label}
+                          </p>
+                          <p className="mt-0.5 text-[10px] font-semibold tabular-nums text-zinc-600">
+                            Obj. <span className="text-zinc-800">{objective}</span>
+                          </p>
+                        </div>
 
-                      {/* 1) Faltan / Completo / Exceso */}
-                      <div className="mt-3 flex min-h-[4.5rem] flex-col items-center justify-center">
-                        {exceso > 0 ? (
-                          <>
-                            <span className="text-center text-sm font-black uppercase tracking-wide text-zinc-500">
-                              Exceso:{' '}
+                        {/* Centro-derecha: estado + HACER en columna compacta */}
+                        <div className="flex shrink-0 flex-col items-end gap-1">
+                          {exceso > 0 ? (
+                            <span className="text-right text-[10px] font-bold leading-none text-zinc-500">
+                              Exc.{' '}
                               <span className="tabular-nums text-amber-600">+{exceso}</span>
                             </span>
-                          </>
-                        ) : faltan > 0 ? (
-                          <>
-                            <span className="text-[10px] font-black uppercase tracking-wide text-zinc-600">
-                              Faltan
+                          ) : faltan > 0 ? (
+                            <div className="flex flex-col items-end leading-none">
+                              <span className="text-[8px] font-black uppercase text-zinc-500">Faltan</span>
+                              <span className="text-2xl font-black tabular-nums text-[#B91C1C] sm:text-[26px]">
+                                {faltan}
+                              </span>
+                            </div>
+                          ) : (
+                            <span className="text-sm font-black leading-none text-emerald-600 sm:text-base">
+                              OK
                             </span>
-                            <span className="mt-0.5 text-4xl font-black tabular-nums leading-none text-[#B91C1C]">
-                              {faltan}
-                            </span>
-                          </>
-                        ) : (
-                          <>
-                            <span className="text-4xl font-black leading-none text-emerald-600">OK</span>
-                            <span className="mt-1 text-[11px] font-black uppercase tracking-wide text-emerald-700">
-                              Completo
-                            </span>
-                          </>
-                        )}
+                          )}
+                          {faltan > 0 ? (
+                            <button
+                              type="button"
+                              disabled={controlsDisabled}
+                              onClick={() => void applyMakeAll(sl.id, objective)}
+                              className="rounded-md bg-[#D32F2F] px-2 py-1 text-[10px] font-black uppercase tracking-wide text-white shadow active:scale-[0.98] disabled:opacity-45 sm:px-2.5 sm:text-[11px]"
+                            >
+                              Hacer {faltan}
+                            </button>
+                          ) : null}
+                        </div>
                       </div>
 
-                      {/* 2) Hacer todo (solo si falta cantidad) */}
-                      {faltan > 0 ? (
-                        <button
-                          type="button"
-                          disabled={controlsDisabled}
-                          onClick={() => void applyMakeAll(sl.id, objective)}
-                          className="mt-3 w-full rounded-xl bg-[#D32F2F] py-3.5 text-sm font-black uppercase tracking-wide text-white shadow-md active:scale-[0.99] disabled:opacity-45"
-                        >
-                          HACER {faltan}
-                        </button>
-                      ) : null}
-
-                      {/* 3) Stock ± */}
-                      <p className="mt-3 text-center text-[10px] font-black uppercase tracking-wide text-zinc-600">
-                        Stock
-                      </p>
-                      <div className="mt-1 flex items-center justify-center gap-2 sm:gap-3">
-                        <button
-                          type="button"
-                          disabled={controlsDisabled}
-                          onClick={() => void bumpStock(sl.id, it.id, -1)}
-                          className="grid h-14 w-14 shrink-0 place-items-center rounded-2xl border-2 border-zinc-300 bg-white text-zinc-900 shadow-sm active:scale-[0.97] disabled:opacity-45"
-                          aria-label="Restar uno al stock"
-                        >
-                          <Minus className="h-7 w-7 stroke-[2.5]" />
-                        </button>
-                        {manualHere ? (
-                          <input
-                            ref={manualInputRef}
-                            disabled={isClosed}
-                            inputMode="decimal"
-                            aria-label={`Cantidad manual: ${it.label}`}
-                            value={manualValue}
-                            onChange={(e) => {
-                              const v = e.target.value;
-                              setManualValue(v);
-                              setStockDraft((prev) => {
-                                const next = { ...prev, [sl.id]: v };
-                                stockDraftRef.current = next;
-                                return next;
-                              });
-                              scheduleDebouncedPersist(sl.id, v);
-                            }}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') {
-                                e.preventDefault();
-                                clearDebouncePersist();
-                                const v = (e.target as HTMLInputElement).value;
-                                void persistStock(sl.id, v);
-                                setManualLineId(null);
-                              }
-                            }}
-                            onBlur={(e) => {
-                              clearDebouncePersist();
-                              void persistStock(sl.id, e.target.value);
-                              setManualLineId(null);
-                            }}
-                            className="h-16 min-w-[5.5rem] max-w-[9rem] flex-1 rounded-2xl border-2 border-[#D32F2F]/50 bg-zinc-50 px-2 text-center text-3xl font-black tabular-nums text-zinc-900 outline-none"
-                          />
-                        ) : (
-                          <span
-                            className={[
-                              'flex h-16 min-w-[5.5rem] max-w-[9rem] flex-1 select-none items-center justify-center rounded-2xl border-2 border-zinc-200 bg-zinc-50 text-3xl font-black tabular-nums text-zinc-900 touch-manipulation',
-                              controlsDisabled
-                                ? 'pointer-events-none opacity-45'
-                                : 'cursor-pointer',
-                            ].join(' ')}
-                            style={{ WebkitUserSelect: 'none', userSelect: 'none' }}
-                            title="Mantén pulsado para escribir cantidad"
-                            aria-label={`Stock ${stockDisplayStr}. Mantén pulsado para editar`}
-                            onContextMenu={(e) => e.preventDefault()}
-                            onPointerDown={() =>
-                              startStockLongPress(sl.id, stockDisplayStr, controlsDisabled)
-                            }
-                            onPointerUp={clearLongPressTimer}
-                            onPointerCancel={clearLongPressTimer}
-                            onPointerLeave={clearLongPressTimer}
+                      {/* Stock: fila compacta bajo el texto */}
+                      <div className="mt-2 flex items-center justify-between gap-2 border-t border-zinc-100 pt-2">
+                        <span className="text-[9px] font-black uppercase text-zinc-500">Stock</span>
+                        <div className="flex items-center gap-1 sm:gap-1.5">
+                          <button
+                            type="button"
+                            disabled={controlsDisabled}
+                            onClick={() => void bumpStock(sl.id, it.id, -1)}
+                            className="grid h-9 w-9 shrink-0 place-items-center rounded-lg border border-zinc-300 bg-white text-zinc-900 shadow-sm active:scale-[0.97] disabled:opacity-45 sm:h-10 sm:w-10"
+                            aria-label="Restar uno al stock"
                           >
-                            {stockDisplayStr}
-                          </span>
-                        )}
-                        <button
-                          type="button"
-                          disabled={controlsDisabled}
-                          onClick={() => void bumpStock(sl.id, it.id, 1)}
-                          className="grid h-14 w-14 shrink-0 place-items-center rounded-2xl border-2 border-zinc-300 bg-white text-zinc-900 shadow-sm active:scale-[0.97] disabled:opacity-45"
-                          aria-label="Sumar uno al stock"
-                        >
-                          <Plus className="h-7 w-7 stroke-[2.5]" />
-                        </button>
+                            <Minus className="h-4 w-4 stroke-[2.5] sm:h-[18px] sm:w-[18px]" />
+                          </button>
+                          {manualHere ? (
+                            <input
+                              ref={manualInputRef}
+                              disabled={isClosed}
+                              inputMode="decimal"
+                              aria-label={`Cantidad manual: ${it.label}`}
+                              value={manualValue}
+                              onChange={(e) => {
+                                const v = e.target.value;
+                                setManualValue(v);
+                                setStockDraft((prev) => {
+                                  const next = { ...prev, [sl.id]: v };
+                                  stockDraftRef.current = next;
+                                  return next;
+                                });
+                                scheduleDebouncedPersist(sl.id, v);
+                              }}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  e.preventDefault();
+                                  clearDebouncePersist();
+                                  const v = (e.target as HTMLInputElement).value;
+                                  void persistStock(sl.id, v);
+                                  setManualLineId(null);
+                                }
+                              }}
+                              onBlur={(e) => {
+                                clearDebouncePersist();
+                                void persistStock(sl.id, e.target.value);
+                                setManualLineId(null);
+                              }}
+                              className="h-9 w-[3.25rem] rounded-lg border-2 border-[#D32F2F]/50 bg-zinc-50 px-1 text-center text-lg font-black tabular-nums text-zinc-900 outline-none sm:h-10 sm:w-14 sm:text-xl"
+                            />
+                          ) : (
+                            <span
+                              className={[
+                                'flex h-9 w-[3.25rem] select-none items-center justify-center rounded-lg border border-zinc-200 bg-zinc-50 text-lg font-black tabular-nums text-zinc-900 touch-manipulation sm:h-10 sm:w-14 sm:text-xl',
+                                controlsDisabled
+                                  ? 'pointer-events-none opacity-45'
+                                  : 'cursor-pointer active:bg-zinc-100',
+                              ].join(' ')}
+                              style={{ WebkitUserSelect: 'none', userSelect: 'none' }}
+                              title="Mantén pulsado para escribir cantidad"
+                              aria-label={`Stock ${stockDisplayStr}. Mantén pulsado para editar`}
+                              onContextMenu={(e) => e.preventDefault()}
+                              onPointerDown={() =>
+                                startStockLongPress(sl.id, stockDisplayStr, controlsDisabled)
+                              }
+                              onPointerUp={clearLongPressTimer}
+                              onPointerCancel={clearLongPressTimer}
+                              onPointerLeave={clearLongPressTimer}
+                            >
+                              {stockDisplayStr}
+                            </span>
+                          )}
+                          <button
+                            type="button"
+                            disabled={controlsDisabled}
+                            onClick={() => void bumpStock(sl.id, it.id, 1)}
+                            className="grid h-9 w-9 shrink-0 place-items-center rounded-lg border border-zinc-300 bg-white text-zinc-900 shadow-sm active:scale-[0.97] disabled:opacity-45 sm:h-10 sm:w-10"
+                            aria-label="Sumar uno al stock"
+                          >
+                            <Plus className="h-4 w-4 stroke-[2.5] sm:h-[18px] sm:w-[18px]" />
+                          </button>
+                        </div>
                       </div>
-
-                      {/* 4) Objetivo */}
-                      <p className="mt-3 text-center text-[11px] font-semibold tabular-nums text-zinc-600">
-                        Objetivo{' '}
-                        <span className="font-bold text-zinc-800">{objective}</span>
-                      </p>
                     </div>
                   );
                 })

@@ -655,6 +655,12 @@ export async function updateChefProductionTemplateName(
 }
 
 export async function deleteChefProductionTemplate(supabase: SupabaseClient, localId: string, id: string): Promise<void> {
+  const { error: sessErr } = await supabase
+    .from('chef_production_sessions')
+    .delete()
+    .eq('template_id', id)
+    .eq('local_id', localId);
+  if (sessErr) throw new Error(sessErr.message);
   const { error } = await supabase.from('chef_production_templates').delete().eq('id', id).eq('local_id', localId);
   if (error) throw new Error(error.message);
 }

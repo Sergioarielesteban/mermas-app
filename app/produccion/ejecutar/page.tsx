@@ -118,32 +118,36 @@ export default function ProduccionEjecutarPage() {
         <p className="text-center text-sm font-medium text-zinc-700">Cargando…</p>
       ) : (
         <>
-          <section className="rounded-2xl border border-zinc-200/90 bg-white p-4 shadow-sm ring-1 ring-zinc-100">
-            <div className="mx-auto w-full max-w-sm rounded-2xl border border-zinc-200/90 bg-gradient-to-b from-zinc-50 to-white px-4 py-3 text-center shadow-sm ring-1 ring-zinc-100">
-              <p className="text-[10px] font-extrabold uppercase tracking-wide text-zinc-500">Día de trabajo</p>
-              <p className="mt-1.5 text-[11px] font-medium leading-snug text-zinc-600">
-                Se usa para saber qué bloque de la plantilla aplica (lunes, fin de semana, diario…).
+          <section className="rounded-xl border border-zinc-200/90 bg-white p-3 shadow-sm ring-1 ring-zinc-100 sm:rounded-2xl sm:p-4">
+            <div className="mx-auto w-full max-w-sm rounded-xl border border-zinc-200/90 bg-gradient-to-b from-zinc-50 to-white px-3 py-2 text-center shadow-sm ring-1 ring-zinc-100 sm:rounded-2xl sm:px-4 sm:py-3">
+              <p className="text-[9px] font-extrabold uppercase tracking-wide text-zinc-700 sm:text-[10px]">
+                Día de trabajo
+              </p>
+              <p className="mt-1 text-[10px] font-medium leading-snug text-zinc-700 sm:text-[11px]">
+                Define qué bloque de la plantilla aplica según el calendario.
               </p>
               <input
                 type="date"
                 value={workDate}
                 onChange={(e) => setWorkDate(e.target.value)}
                 aria-label="Día de trabajo"
-                className="mx-auto mt-3 box-border h-11 w-full max-w-[17.5rem] rounded-xl border border-zinc-300 bg-white px-3 text-sm font-semibold text-zinc-900 outline-none focus:border-[#D32F2F]/50 focus:ring-2 focus:ring-[#D32F2F]/15"
+                className="mx-auto mt-2 box-border h-10 w-full max-w-[17.5rem] rounded-lg border border-zinc-300 bg-white px-2 text-sm font-semibold text-zinc-900 outline-none focus:border-[#D32F2F]/50 focus:ring-2 focus:ring-[#D32F2F]/15 sm:h-11 sm:rounded-xl sm:px-3"
               />
             </div>
-            <label className="mt-4 block">
-              <span className="text-[11px] font-bold uppercase text-zinc-700">Etiqueta (opcional)</span>
+            <label className="mt-3 block sm:mt-4">
+              <span className="text-[10px] font-bold uppercase text-zinc-700 sm:text-[11px]">
+                Etiqueta (opcional)
+              </span>
               <input
                 value={periodLabel}
                 onChange={(e) => setPeriodLabel(e.target.value)}
                 placeholder="Ej. Turno mañana, Semana 16…"
-                className="mt-1 h-11 w-full rounded-xl border border-zinc-200 bg-zinc-50/50 px-3 text-sm font-semibold text-zinc-900 outline-none focus:border-[#D32F2F]/50 focus:bg-white focus:ring-2 focus:ring-[#D32F2F]/15"
+                className="mt-1 h-10 w-full rounded-lg border border-zinc-200 bg-zinc-50/50 px-2.5 text-sm font-semibold text-zinc-900 outline-none focus:border-[#D32F2F]/50 focus:bg-white focus:ring-2 focus:ring-[#D32F2F]/15 sm:h-11 sm:rounded-xl sm:px-3"
               />
             </label>
           </section>
 
-          <div className="space-y-2">
+          <div className="space-y-1.5 sm:space-y-2">
             {sorted.length === 0 ? (
               <p className="rounded-2xl border border-zinc-200 bg-zinc-50/80 px-4 py-6 text-center text-sm font-medium text-zinc-800">
                 No hay plantillas. Crea una en{' '}
@@ -159,19 +163,19 @@ export default function ProduccionEjecutarPage() {
                 return (
                   <div
                     key={t.id}
-                    className="flex items-center justify-between gap-3 rounded-2xl border border-zinc-200/90 bg-gradient-to-r from-white to-zinc-50/90 px-4 py-3.5 shadow-sm ring-1 ring-zinc-100"
+                    className="flex items-center justify-between gap-2 rounded-lg border border-zinc-200/90 bg-gradient-to-r from-white to-zinc-50/90 px-3 py-2 shadow-sm ring-1 ring-zinc-100 sm:gap-3 sm:rounded-2xl sm:px-4 sm:py-3"
                   >
                     <div className="min-w-0">
                       <p className="truncate text-sm font-black text-zinc-900">{t.name}</p>
-                      <p className="mt-0.5 text-[10px] font-bold uppercase tracking-wide text-zinc-800">
-                        {n} producto{n === 1 ? '' : 's'} en bloques
+                      <p className="mt-0.5 text-[9px] font-bold uppercase tracking-wide text-zinc-800 sm:text-[10px]">
+                        {n} prod. en bloques
                       </p>
                     </div>
                     <button
                       type="button"
                       disabled={disabled}
                       onClick={() => void openSession(t.id)}
-                      className="inline-flex shrink-0 items-center gap-1.5 rounded-xl bg-[#D32F2F] px-3 py-2 text-xs font-black uppercase tracking-wide text-white shadow-sm disabled:opacity-45"
+                      className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-[#D32F2F] px-2.5 py-1.5 text-[10px] font-black uppercase tracking-wide text-white shadow-sm disabled:opacity-45 sm:gap-1.5 sm:rounded-xl sm:px-3 sm:py-2 sm:text-xs"
                     >
                       <Play className="h-3.5 w-3.5" />
                       {startingId === t.id ? '…' : 'Abrir'}
