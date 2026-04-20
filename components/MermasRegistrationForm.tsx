@@ -230,7 +230,11 @@ export default function MermasRegistrationForm() {
         </div>
       ) : null}
 
-      <form id="merma-register-form" onSubmit={handleSave} className="pb-[calc(5.5rem+env(safe-area-inset-bottom))]">
+      <form
+        id="merma-register-form"
+        onSubmit={handleSave}
+        className="pb-[calc(8.75rem+env(safe-area-inset-bottom))]"
+      >
         <div className="space-y-6">
           <div className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-zinc-200">
             <label className="mb-2 block text-xs font-semibold text-zinc-700">
@@ -248,12 +252,12 @@ export default function MermasRegistrationForm() {
               <ChevronDown className="h-4 w-4 text-zinc-500" />
             </button>
             {quickProductIds.length > 0 ? (
-              <div className="mt-3">
-                <p className="mb-2 flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wide text-zinc-500">
-                  <Zap className="h-3 w-3 text-amber-500" aria-hidden />
+              <div className="mt-4 rounded-xl border border-zinc-200/90 bg-gradient-to-b from-zinc-50 to-white p-3 shadow-sm">
+                <p className="mb-3 flex items-center gap-1.5 text-[10px] font-extrabold uppercase tracking-[0.12em] text-zinc-500">
+                  <Zap className="h-3.5 w-3.5 shrink-0 text-amber-500" aria-hidden />
                   Productos rápidos
                 </p>
-                <div className="flex flex-wrap gap-2">
+                <div className="grid grid-cols-2 gap-2.5">
                   {quickProductIds.map((id) => {
                     const p = products.find((x) => x.id === id);
                     if (!p) return null;
@@ -264,13 +268,13 @@ export default function MermasRegistrationForm() {
                         type="button"
                         onClick={() => setProductId(id)}
                         className={[
-                          'max-w-[48%] flex-1 rounded-xl border px-2.5 py-2 text-left text-xs font-semibold leading-snug transition sm:max-w-none sm:flex-none',
+                          'flex min-h-[3.25rem] w-full items-center justify-center rounded-xl border px-2 py-2.5 text-center text-[11px] font-semibold leading-snug shadow-sm transition active:scale-[0.98]',
                           active
-                            ? 'border-[#D32F2F] bg-[#D32F2F]/10 text-zinc-900'
-                            : 'border-zinc-200 bg-zinc-50 text-zinc-800 hover:border-zinc-300',
+                            ? 'border-[#D32F2F] bg-[#D32F2F]/12 text-zinc-900 ring-1 ring-[#D32F2F]/20'
+                            : 'border-zinc-200/90 bg-white text-zinc-800 hover:border-zinc-300 hover:bg-zinc-50',
                         ].join(' ')}
                       >
-                        {p.name}
+                        <span className="line-clamp-2 break-words">{p.name}</span>
                       </button>
                     );
                   })}
@@ -520,11 +524,11 @@ export default function MermasRegistrationForm() {
         <span className={`mx-auto mt-6 mb-2 block w-24 ${CHEF_ONE_TAPER_LINE_CLASS}`} aria-hidden />
       </form>
 
-      <div className="pointer-events-none fixed inset-x-0 bottom-0 z-40 flex justify-center px-3 pb-[max(0.65rem,env(safe-area-inset-bottom))] pt-2">
+      <div className="pointer-events-none fixed inset-x-0 bottom-[calc(4.5rem+env(safe-area-inset-bottom))] z-[75] flex justify-center px-3 pt-2">
         <button
           type="submit"
           form="merma-register-form"
-          className="pointer-events-auto h-14 w-full max-w-md rounded-2xl bg-[#D32F2F] text-base font-extrabold uppercase tracking-wide text-white shadow-[0_-4px_24px_rgba(0,0,0,0.12)] ring-1 ring-black/5 hover:bg-[#c62828] active:scale-[0.99]"
+          className="pointer-events-auto h-14 w-full max-w-md rounded-2xl bg-[#D32F2F] text-base font-extrabold uppercase tracking-wide text-white shadow-[0_8px_28px_rgba(211,47,47,0.35)] ring-1 ring-black/10 hover:bg-[#c62828] active:scale-[0.99]"
         >
           Guardar
         </button>

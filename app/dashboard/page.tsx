@@ -476,44 +476,38 @@ export default function DashboardPage() {
 
   if (isStaffOnly) {
     return (
-      <div className="space-y-6">
-        <MermaDashSection
-          tier="Operativo"
-          title="Registro del día"
-          hint="Registrar mermas y consultar solo la operativa de hoy."
-        >
-          <MermasStyleHero
-            eyebrow="Mermas"
-            title="Registro operativo"
-            description="Registra merma y consulta solo la operativa del día."
-          />
-          <MermasRegistrationForm />
-          <section className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-zinc-200">
-            <h2 className="text-sm font-extrabold uppercase tracking-wide text-zinc-700">Mermas del día</h2>
-            <p className="mt-1 text-xs text-zinc-500">Total hoy: {eur(t.today)}</p>
-            {todayRows.length === 0 ? (
-              <p className="mt-3 text-sm text-zinc-500">Sin mermas registradas hoy.</p>
-            ) : (
-              <ul className="mt-3 space-y-2">
-                {todayRows.map((row) => (
-                  <li key={row.id} className="rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2">
-                    <p className="text-sm font-bold text-zinc-900">{row.productName}</p>
-                    <p className="text-xs text-zinc-600">
-                      {new Date(row.occurredAt).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })} ·
-                      Cantidad: {qty(row.quantity)} · Coste: {eur(row.costEur)}
-                    </p>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </section>
-        </MermaDashSection>
+      <div className="space-y-5">
+        <MermasStyleHero
+          eyebrow="Mermas"
+          title="Registro operativo"
+          description="Registra merma y consulta solo la operativa del día."
+        />
+        <MermasRegistrationForm />
+        <section className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-zinc-200">
+          <h2 className="text-sm font-extrabold uppercase tracking-wide text-zinc-700">Mermas del día</h2>
+          <p className="mt-1 text-xs text-zinc-500">Total hoy: {eur(t.today)}</p>
+          {todayRows.length === 0 ? (
+            <p className="mt-3 text-sm text-zinc-500">Sin mermas registradas hoy.</p>
+          ) : (
+            <ul className="mt-3 space-y-2">
+              {todayRows.map((row) => (
+                <li key={row.id} className="rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2">
+                  <p className="text-sm font-bold text-zinc-900">{row.productName}</p>
+                  <p className="text-xs text-zinc-600">
+                    {new Date(row.occurredAt).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })} ·
+                    Cantidad: {qty(row.quantity)} · Coste: {eur(row.costEur)}
+                  </p>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       {detailOpen ? (
         <div className="fixed inset-0 z-[95] overflow-y-auto bg-black/35 p-4" onClick={() => setDetailOpen(false)}>
           <div
@@ -551,20 +545,15 @@ export default function DashboardPage() {
         </div>
       ) : null}
 
-      <MermaDashSection
-        tier="Operativo"
-        title="Registro y accesos"
-        hint="Alta de mermas y enlaces rápidos al catálogo y al detalle."
-      >
-        <MermasStyleHero
-          eyebrow="Mermas"
-          title="Seguimiento en tiempo real"
-          description="Registra mermas y consulta costes, alertas y tendencias en la misma pantalla."
-        />
+      <MermasStyleHero
+        eyebrow="Mermas"
+        title="Seguimiento en tiempo real"
+        description="Registra mermas y consulta costes, alertas y tendencias en la misma pantalla."
+      />
 
-        <MermasRegistrationForm />
+      <MermasRegistrationForm />
 
-        <section className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+      <section className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <Link
           href="/productos"
           className="group flex w-full items-center gap-3 rounded-2xl border border-[#D32F2F]/25 bg-gradient-to-r from-[#D32F2F]/[0.08] via-white to-white px-3 py-3 shadow-sm ring-1 ring-zinc-200/80 transition hover:border-[#D32F2F]/40 hover:shadow-md active:scale-[0.99]"
@@ -600,8 +589,7 @@ export default function DashboardPage() {
             →
           </span>
         </Link>
-        </section>
-      </MermaDashSection>
+      </section>
 
       {!showExecutive ? (
         <section className="rounded-2xl border border-zinc-200 bg-zinc-50/90 p-4 text-sm text-zinc-700 ring-1 ring-zinc-100">
