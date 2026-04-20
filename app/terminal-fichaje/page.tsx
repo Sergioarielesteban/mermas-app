@@ -5,16 +5,10 @@ import Link from 'next/link';
 import { Lock, RefreshCw, Settings } from 'lucide-react';
 import { useAuth } from '@/components/AuthProvider';
 import { buildStaffPermissions } from '@/lib/staff/permissions';
+import { findShiftForToday, getClockSessionState, todayYmd } from '@/lib/staff/attendance-logic';
 import {
-  findShiftForToday,
-  getClockSessionState,
-  sortEntriesByTime,
-  todayYmd,
-} from '@/lib/staff/attendance-logic';
-import { entriesByEmployee } from '@/lib/staff/staff-heuristics';
-import {
+  fetchRecentStaffTimeEntriesForEmployee,
   fetchShiftsRange,
-  fetchTimeEntriesRange,
   recordStaffTimeEvent,
   staffDisplayName,
   staffKioskResolveByPin,
@@ -50,6 +44,19 @@ const PIN_ERR: Record<string, string> = {
   invalid_response: 'Error del servidor',
   unknown: 'No se pudo validar',
 };
+
+/** La RPC usa el último fichaje global del empleado; mensajes crípticos → texto claro. */
+function friendlyFichajeRpcMessage(raw: string): string {
+  const m = raw.trim();
+  if (m.includes('PIN de fichaje incorrecto')) return 'Código incorrecto';
+  if (m.includes('Secuencia de fichaje inválida')) {
+    return 'El PIN es correcto, pero esta acción no toca ahora: suele pasar si hay una entrada abierta (a veces de otro día). Prueba Salida, o pide al encargado que revise el último fichaje.';
+  }
+  if (m.includes('Primero debes fichar la entrada')) return 'Primero debes fichar la llegada.';
+  if (m.includes('Ya cerraste la jornada')) return 'La jornada ya está cerrada. Ficha llegada para empezar otra.';
+  if (m.includes('Debes finalizar la pausa')) return 'Estás en pausa: primero fin de pausa, después puedes salir.';
+  return m;
+}
 
 export default function TerminalFichajePage() {
   const { localId, localName, profileReady, profileRole } = useAuth();
@@ -140,20 +147,23 @@ export default function TerminalFichajePage() {
       }
 
       const ymd = todayYmd();
-      const start = new Date(`${ymd}T00:00:00`);
-      const end = new Date(`${ymd}T23:59:59.999`);
-      const [entries, shifts] = await Promise.all([
-        fetchTimeEntriesRange(supabase, localId, start.toISOString(), end.toISOString()),
+      const [recentEntries, shifts] = await Promise.all([
+        fetchRecentStaffTimeEntriesForEmployee(supabase, localId, r.employeeId, 48),
         fetchShiftsRange(supabase, localId, ymd, ymd),
       ]);
-      const dayEntries = sortEntriesByTime(entriesByEmployee(entries, r.employeeId, ymd));
-      const session = getClockSessionState(dayEntries);
+      const session = getClockSessionState(recentEntries);
       const want: StaffTimeEventType = pendingAction;
       if (!session.availableActions.includes(want)) {
+        const open =
+          session.lastEventType != null && session.lastEventType !== 'clock_out';
         const hint =
           want === 'clock_in'
-            ? 'No puedes fichar entrada ahora (¿ya entraste o falta cerrar jornada?).'
-            : 'No puedes fichar salida ahora (¿falta la entrada?).';
+            ? open
+              ? 'Ya tienes jornada abierta (puede ser de otro día sin salida). Ficha Salida antes de una nueva Llegada, o pide al encargado que revise fichajes.'
+              : 'No puedes fichar llegada ahora.'
+            : session.lastEventType == null
+              ? 'No hay entrada registrada: ficha Llegada primero.'
+              : 'No puedes fichar salida en este momento (¿estás en pausa?).';
         setBanner(hint);
         setPin('');
         return;
@@ -186,7 +196,8 @@ export default function TerminalFichajePage() {
       setStep('success');
       setPin('');
     } catch (e: unknown) {
-      setBanner(e instanceof Error ? e.message : 'Error al fichar');
+      const raw = e instanceof Error ? e.message : 'Error al fichar';
+      setBanner(friendlyFichajeRpcMessage(raw));
       setPin('');
     } finally {
       setBusy(false);

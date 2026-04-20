@@ -145,8 +145,8 @@ export default function ShiftEditorModal({
         className="fixed inset-0 z-[60] bg-black/40"
         onClick={() => !busy && onClose()}
       />
-      <div className="fixed inset-x-0 bottom-0 z-[70] max-h-[92vh] overflow-y-auto rounded-t-3xl bg-white p-4 shadow-2xl ring-1 ring-zinc-200 sm:inset-auto sm:left-1/2 sm:top-1/2 sm:w-full sm:max-w-lg sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-3xl">
-        <div className="mb-3 flex items-center justify-between gap-2">
+      <div className="fixed inset-x-0 bottom-0 z-[70] flex max-h-[92vh] flex-col overflow-hidden rounded-t-3xl bg-white shadow-2xl ring-1 ring-zinc-200 sm:inset-auto sm:left-1/2 sm:top-1/2 sm:w-full sm:max-h-[min(92vh,720px)] sm:max-w-lg sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-3xl">
+        <div className="flex shrink-0 items-center justify-between gap-2 border-b border-zinc-100 px-4 pb-3 pt-4">
           <p className="text-base font-extrabold text-zinc-900">
             {draft.mode === 'new' ? 'Nuevo turno' : 'Editar turno'}
           </p>
@@ -159,7 +159,8 @@ export default function ShiftEditorModal({
             <X className="h-5 w-5" />
           </button>
         </div>
-        <form onSubmit={onSubmit} className="space-y-3">
+        <form onSubmit={onSubmit} className="flex min-h-0 flex-1 flex-col">
+          <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-y-contain px-4 py-3">
           <label className="block text-xs font-bold text-zinc-600">
             Empleado
             <select
@@ -272,24 +273,27 @@ export default function ShiftEditorModal({
             />
           </label>
           {err ? <p className="text-sm font-semibold text-red-700">{err}</p> : null}
-          <div className="flex flex-wrap gap-2 pt-1">
-            <button
-              type="submit"
-              disabled={busy}
-              className="min-h-[48px] flex-1 rounded-2xl bg-[#D32F2F] px-4 text-sm font-extrabold text-white disabled:opacity-60"
-            >
-              Guardar
-            </button>
-            {shiftId && canDelete ? (
+          </div>
+          <div className="shrink-0 border-t border-zinc-200 bg-white px-4 pt-3 shadow-[0_-8px_24px_rgba(0,0,0,0.08)] pb-[max(0.75rem,env(safe-area-inset-bottom,0px))]">
+            <div className="flex flex-wrap gap-2">
               <button
-                type="button"
+                type="submit"
                 disabled={busy}
-                onClick={() => void onDelete()}
-                className="min-h-[48px] rounded-2xl border border-red-200 bg-red-50 px-4 text-sm font-bold text-red-800"
+                className="min-h-[48px] flex-1 rounded-2xl bg-[#D32F2F] px-4 text-sm font-extrabold text-white shadow-sm disabled:opacity-60"
               >
-                Eliminar
+                Guardar
               </button>
-            ) : null}
+              {shiftId && canDelete ? (
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => void onDelete()}
+                  className="min-h-[48px] rounded-2xl border border-red-200 bg-red-50 px-4 text-sm font-bold text-red-800"
+                >
+                  Eliminar
+                </button>
+              ) : null}
+            </div>
           </div>
         </form>
       </div>

@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { sortEntriesByTime } from '@/lib/staff/attendance-logic';
 import type {
   StaffEmployee,
   StaffIncident,
@@ -318,6 +319,26 @@ export async function fetchTimeEntriesRange(
     .order('occurred_at');
   if (error) throw new Error(error.message);
   return (data ?? []).map((r) => mapTimeEntry(r as Record<string, unknown>));
+}
+
+/** Últimos eventos del empleado (misma lógica que la RPC: orden global por fecha). */
+export async function fetchRecentStaffTimeEntriesForEmployee(
+  supabase: SupabaseClient,
+  localId: string,
+  employeeId: string,
+  limit = 48,
+): Promise<StaffTimeEntry[]> {
+  const { data, error } = await supabase
+    .from('staff_time_entries')
+    .select('id,local_id,employee_id,shift_id,event_type,occurred_at,source,note,created_at')
+    .eq('local_id', localId)
+    .eq('employee_id', employeeId)
+    .order('occurred_at', { ascending: false })
+    .order('created_at', { ascending: false })
+    .limit(limit);
+  if (error) throw new Error(error.message);
+  const rows = (data ?? []).map((r) => mapTimeEntry(r as Record<string, unknown>));
+  return sortEntriesByTime(rows);
 }
 
 export async function fetchTimeAdjustmentsRange(
