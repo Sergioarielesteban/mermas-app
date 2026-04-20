@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { ChevronDown, ChevronRight, ChevronsUpDown, GripVertical, Plus } from 'lucide-react';
+import { ChevronDown, ChevronRight, GripVertical, Plus } from 'lucide-react';
 import { plannedShiftMinutes } from '@/lib/staff/attendance-logic';
 import {
   FULL_DAY_OPERATIONAL_METRICS,
@@ -9,7 +9,7 @@ import {
   shiftIntervalClippedOnTimeline,
 } from '@/lib/staff/local-operational-window';
 import { groupShiftsByVisualSlot } from '@/lib/staff/shift-visual-groups';
-import { zoneBlockStyle } from '@/lib/staff/staff-zone-styles';
+import { zoneBlockStyle, zoneLabel } from '@/lib/staff/staff-zone-styles';
 import type { StaffEmployee, StaffShift } from '@/lib/staff/types';
 import { staffDisplayName } from '@/lib/staff/staff-supabase';
 
@@ -33,85 +33,54 @@ function formatDurationSkello(mins: number): string {
   return `${h.toFixed(1).replace('.', ',')}h`;
 }
 
-/** Texto oscuro sobre bloques de color (referencia Skello). */
-const SKELLO_CARD_FG = '#171717';
-
+/** Tarjeta tipo Skello: barra de color a la izquierda, hora abajo-izq en referencia móvil; aquí fila1 hora | nombre+duración, fila2 puesto. */
 function OperationalSkelloCardFace({
   nameLabel,
+  zoneTitle,
+  accentBg,
   startTime,
   endTime,
   endsNextDay,
   durationMins,
   showAlert,
-  variant = 'grid',
 }: {
   nameLabel: string;
+  /** Etiqueta del puesto (Cocina, Barra…). */
+  zoneTitle: string;
+  /** Color de la barra lateral (identidad del puesto). */
+  accentBg: string;
   startTime: string;
   endTime: string;
   endsNextDay: boolean;
   durationMins: number;
   showAlert: boolean;
-  /** Lista vertical en misma franja: nombre centrado. */
-  variant?: 'grid' | 'stackedCenter';
 }) {
-  if (variant === 'stackedCenter') {
-    return (
-      <div className="flex h-full min-h-[2.35rem] flex-col items-center justify-center gap-0.5 px-1 py-1 text-center sm:min-h-[2.55rem] sm:px-1.5">
-        <div className="flex flex-wrap items-center justify-center gap-x-1.5 gap-y-0 tabular-nums">
-          <span className="text-[9px] font-extrabold leading-tight sm:text-[10px]">
-            {shortTime(startTime)} - {shortTime(endTime)}
+  return (
+    <div className="flex h-full min-h-0 w-full min-w-0 items-stretch rounded-md bg-white">
+      <div className="w-1 shrink-0 self-stretch rounded-l-md" style={{ background: accentBg }} aria-hidden />
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col justify-center gap-0.5 px-1.5 py-1 sm:px-2 sm:py-1.5">
+        <div className="flex items-start justify-between gap-1.5">
+          <span className="shrink-0 text-[9px] font-extrabold tabular-nums tracking-tight text-zinc-900 sm:text-[10px]">
+            {shortTime(startTime)} – {shortTime(endTime)}
             {endsNextDay ? ' +1' : ''}
           </span>
-          <span className="text-[8px] font-bold leading-tight opacity-90 sm:text-[9px]">
-            {formatDurationSkello(durationMins)}
-          </span>
-          {showAlert ? (
-            <span
-              className="flex h-3 w-3 items-center justify-center rounded-full bg-red-600 text-[8px] font-bold leading-none text-white shadow-sm"
-              title="Requiere atención"
-              aria-label="Aviso"
-            >
-              !
+          <div className="min-w-0 max-w-[60%] text-right leading-tight">
+            <span className="break-words text-[8px] font-semibold text-zinc-800 sm:text-[9px]">{nameLabel}</span>
+            {showAlert ? (
+              <span
+                className="ml-1 inline-flex h-3 w-3 align-middle items-center justify-center rounded-full bg-red-600 text-[7px] font-bold text-white"
+                title="Requiere atención"
+                aria-label="Aviso"
+              >
+                !
+              </span>
+            ) : null}
+            <span className="ml-1 whitespace-nowrap text-[8px] font-bold tabular-nums text-zinc-500 sm:text-[9px]">
+              {formatDurationSkello(durationMins)}
             </span>
-          ) : null}
+          </div>
         </div>
-        <div className="flex w-full min-w-0 items-center justify-center gap-0.5">
-          <span className="max-w-full whitespace-normal break-words text-center text-[8px] font-semibold leading-snug sm:text-[9px]">
-            {nameLabel}
-          </span>
-          <ChevronsUpDown className="h-2.5 w-2.5 shrink-0 opacity-50 sm:h-3 sm:w-3" strokeWidth={2.5} aria-hidden />
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="grid h-full min-h-[1.65rem] auto-rows-min grid-cols-[1fr_auto] content-between gap-x-1 gap-y-0.5 px-1.5 py-0.5 sm:min-h-[1.85rem] sm:px-2 sm:py-1">
-      <div className="text-[9px] font-extrabold leading-none tabular-nums tracking-tight sm:text-[10px]">
-        {shortTime(startTime)} - {shortTime(endTime)}
-        {endsNextDay ? ' +1' : ''}
-      </div>
-      <div className="text-right text-[8px] font-bold leading-none tabular-nums opacity-90 sm:text-[9px]">
-        {formatDurationSkello(durationMins)}
-      </div>
-      <div className="flex min-w-0 items-start gap-0.5 self-end">
-        <span className="whitespace-normal break-words text-[8px] font-semibold leading-snug sm:text-[9px]">
-          {nameLabel}
-        </span>
-        <ChevronsUpDown className="mt-0.5 h-2.5 w-2.5 shrink-0 opacity-55 sm:h-3 sm:w-3" strokeWidth={2.5} aria-hidden />
-      </div>
-      <div className="flex items-end justify-end self-end">
-        {showAlert ? (
-          <span
-            className="flex h-3 w-3 items-center justify-center rounded-full bg-red-600 text-[8px] font-bold leading-none text-white shadow-sm sm:h-3.5 sm:w-3.5 sm:text-[9px]"
-            title="Requiere atención"
-            aria-label="Aviso"
-          >
-            !
-          </span>
-        ) : (
-          <span className="h-3 w-3 sm:h-3.5 sm:w-3.5" aria-hidden />
-        )}
+        <p className="text-[8px] font-extrabold leading-none text-zinc-900 sm:text-[9px]">{zoneTitle}</p>
       </div>
     </div>
   );
@@ -121,6 +90,11 @@ function formatHoursSum(mins: number): string {
   const h = mins / 60;
   if (h < 10) return `${h.toFixed(1).replace('.', ',')} h`;
   return `${Math.round(h)} h`;
+}
+
+function zoneTitleFromRowKey(rowKey: string) {
+  if (!rowKey || rowKey === '__none__') return 'Sin puesto';
+  return zoneLabel(rowKey) || rowKey;
 }
 
 function assignOverlapLanesMeta(
@@ -324,6 +298,7 @@ export function OperationalSkelloCellBody({
   const cellPeople = new Set(here.filter((s) => s.employeeId).map((s) => s.employeeId!)).size;
   const cellUnassigned = here.filter((s) => !s.employeeId).length;
   const zStyle = zoneBlockStyle(rowKey);
+  const rowZoneTitle = zoneTitleFromRowKey(rowKey);
 
   return (
     <div className="flex w-full min-w-0 flex-col gap-1">
@@ -357,15 +332,19 @@ export function OperationalSkelloCellBody({
             const width = lanes.laneCount <= 1 ? 100 - 2 * gutter : laneW - 2 * gutter;
             const compositeKey = `${ymd}|${rowKey}|${g.slotKey}`;
             const expanded = expandedSlotKeys.has(compositeKey);
-            const baseH = seg.heightPct * 0.5;
-            const singleH = Math.max(baseH, 3.35);
-            const stackH = Math.min(52, Math.max(baseH, 2.8 + teamSize * 8.2));
+            const slotH = Math.max(seg.heightPct, 1.15);
+            const maxBottom = 100 - seg.topPct - 0.35;
+            const singleH = Math.min(maxBottom, Math.max(slotH, 3.35));
+            const stackDesired = Math.max(slotH * 0.42, 2.4 + teamSize * 6.2);
+            const stackH = Math.min(maxBottom, slotH, stackDesired);
             const heightPct = teamSize > 1 ? stackH : singleH;
             const zGroup = sortedShifts.some((s) => s.id === selectedShiftId) ? 6 : expanded ? 5 : 3;
 
             if (teamSize === 1) {
               const sOne = g.items[0]!;
               const unassigned = sOne.employeeId == null;
+              const accentBg =
+                sOne.colorHint && sOne.colorHint.trim().length > 0 ? sOne.colorHint.trim() : zStyle.bg;
               return (
                 <div
                   key={g.slotKey}
@@ -415,7 +394,6 @@ export function OperationalSkelloCellBody({
                         'min-w-0 flex-1 touch-none text-left outline-none',
                         canEdit && onAddPersonSameSlot ? 'pr-1 pb-5' : '',
                       ].join(' ')}
-                      style={{ background: zStyle.bg, color: SKELLO_CARD_FG }}
                       onPointerDown={(e) => onVerticalShiftPointerDown(e, sOne, iv)}
                       onPointerMove={(e) => onVerticalShiftPointerMove(e, sOne)}
                       onPointerUp={(e) => void onVerticalShiftPointerUp(e, sOne)}
@@ -436,6 +414,8 @@ export function OperationalSkelloCellBody({
                     >
                       <OperationalSkelloCardFace
                         nameLabel={unassigned ? 'Sin asignar' : employeeName(sOne.employeeId)}
+                        zoneTitle={rowZoneTitle}
+                        accentBg={accentBg}
                         startTime={sOne.startTime}
                         endTime={sOne.endTime}
                         endsNextDay={sOne.endsNextDay}
@@ -494,14 +474,15 @@ export function OperationalSkelloCellBody({
                 <div className="flex h-full min-h-0 flex-col gap-1 overflow-y-auto p-0.5 pb-6 pt-5">
                   {sortedShifts.map((sOne) => {
                     const unassigned = sOne.employeeId == null;
+                    const accentBg =
+                      sOne.colorHint && sOne.colorHint.trim().length > 0 ? sOne.colorHint.trim() : zStyle.bg;
                     return (
                       <div
                         key={sOne.id}
                         className={[
-                          'flex min-h-0 shrink-0 items-stretch overflow-hidden rounded-md shadow-sm ring-1 ring-black/10',
+                          'flex min-h-0 shrink-0 items-stretch overflow-hidden rounded-md bg-white shadow-sm ring-1 ring-zinc-200/90',
                           selectedShiftId === sOne.id ? 'ring-2 ring-zinc-900/35' : '',
                         ].join(' ')}
-                        style={{ background: zStyle.bg, color: SKELLO_CARD_FG }}
                       >
                         {canEdit ? (
                           <div
@@ -541,8 +522,9 @@ export function OperationalSkelloCellBody({
                           }}
                         >
                           <OperationalSkelloCardFace
-                            variant="stackedCenter"
                             nameLabel={unassigned ? 'Sin asignar' : employeeName(sOne.employeeId)}
+                            zoneTitle={rowZoneTitle}
+                            accentBg={accentBg}
                             startTime={sOne.startTime}
                             endTime={sOne.endTime}
                             endsNextDay={sOne.endsNextDay}
