@@ -202,60 +202,72 @@ function HeroCardCarousel() {
   );
 }
 
+const ctaBase =
+  'inline-flex min-h-[3.125rem] w-full min-w-0 items-center justify-center rounded-2xl px-5 text-[0.9375rem] font-bold tracking-tight transition active:scale-[0.99] supports-[padding:max(0px)]:min-h-[max(3.125rem,44px)] sm:min-h-[3.375rem] sm:px-7 sm:text-[0.95rem] md:min-h-[3.5rem]';
+
 export default function MarketingHero() {
   const reduceMotion = useReducedMotion();
 
   return (
-    <section className="relative overflow-hidden border-b border-stone-200/50 bg-gradient-to-b from-white via-[#fafafa] to-[#f0f1f4] px-4 pb-16 pt-8 sm:px-6 sm:pb-24 sm:pt-10">
+    <section className="relative overflow-hidden border-b border-stone-200/50 bg-gradient-to-b from-white via-[#fafafa] to-[#f0f1f4]">
       <div
-        className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_90%_55%_at_50%_-25%,rgba(211,47,47,0.11),transparent),radial-gradient(ellipse_50%_40%_at_100%_0%,rgba(15,23,42,0.05),transparent)]"
+        className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_88%_52%_at_50%_-22%,rgba(211,47,47,0.1),transparent),radial-gradient(ellipse_48%_38%_at_100%_0%,rgba(15,23,42,0.045),transparent)]"
         aria-hidden
       />
-      <div className="relative mx-auto max-w-6xl">
-        <div className="mx-auto max-w-3xl text-center lg:mx-0 lg:max-w-xl lg:text-left">
+      <div className="relative mx-auto w-full max-w-[90rem] px-4 pb-9 pt-2 sm:px-6 sm:pb-11 sm:pt-3 md:pb-12 md:pt-4 lg:px-8 lg:pb-14 lg:pt-5">
+        {/* Portada SaaS: bloque único centrado, primer pantallazo denso y comercial */}
+        <div
+          className={[
+            'mx-auto flex w-full max-w-[min(100%,42rem)] flex-col items-center text-center',
+            'sm:max-w-[min(100%,48rem)] md:max-w-[min(100%,52rem)] lg:max-w-[56rem] xl:max-w-[60rem]',
+            'min-h-[min(calc(100svh-4.75rem),52rem)] justify-center gap-4 sm:gap-5 md:min-h-[min(calc(100svh-5rem),56rem)] md:gap-6 lg:gap-7',
+          ].join(' ')}
+        >
           <motion.div
-            className="flex w-full justify-center"
-            initial={reduceMotion ? false : { opacity: 0, y: 10 }}
+            className="flex w-full shrink-0 justify-center px-0.5 [-webkit-tap-highlight-color:transparent]"
+            initial={reduceMotion ? false : { opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.55, ease: SLIDE_EASE, delay: reduceMotion ? 0 : 0.02 }}
+            transition={{ duration: 0.52, ease: SLIDE_EASE, delay: reduceMotion ? 0 : 0.02 }}
           >
             <Link
               href="/"
-              className="outline-none ring-offset-4 focus-visible:ring-2 focus-visible:ring-[#D32F2F]/40"
+              className="inline-flex max-w-full outline-none ring-offset-4 focus-visible:ring-2 focus-visible:ring-[#D32F2F]/40"
               aria-label="Chef-One — inicio"
             >
-              <Logo variant="hero" />
+              <Logo variant="hero" preferRaster />
             </Link>
           </motion.div>
 
           <motion.h1
-            className="mt-7 text-balance text-3xl font-extrabold leading-[1.08] tracking-tight text-stone-950 sm:mt-8 sm:text-4xl sm:leading-[1.06] lg:text-[2.65rem]"
-            initial={reduceMotion ? false : { opacity: 0, y: 12 }}
+            className="mx-auto w-full max-w-[min(100%,20.5rem)] text-balance font-extrabold tracking-[-0.03em] text-stone-950 sm:max-w-[min(100%,30rem)] md:max-w-[min(100%,36rem)] lg:max-w-[min(100%,40rem)] xl:max-w-[42rem] text-[clamp(1.9375rem,6.8vw,4.5rem)] leading-[1.04] sm:text-[clamp(2.25rem,5.8vw,4.5rem)] md:leading-[1.03] lg:text-[clamp(2.5rem,4.6vw,4.5rem)]"
+            initial={reduceMotion ? false : { opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, delay: reduceMotion ? 0 : 0.08 }}
+            transition={{ duration: 0.5, delay: reduceMotion ? 0 : 0.06 }}
           >
             Todo lo que pasa en tu cocina,
-            <span className="mt-1 block font-extrabold text-[#D32F2F]">en un solo sitio.</span>
+            <span className="mt-2 block font-extrabold text-[#D32F2F] sm:mt-2.5 md:mt-3">
+              en un solo sitio.
+            </span>
           </motion.h1>
 
           <motion.p
-            className="mx-auto mt-4 max-w-lg text-pretty text-base leading-snug text-stone-600 sm:text-lg lg:mx-0"
-            initial={reduceMotion ? false : { opacity: 0, y: 10 }}
+            className="mx-auto w-full max-w-[min(100%,24rem)] text-pretty text-[clamp(1rem,3.2vw,1.3125rem)] font-medium leading-[1.55] text-stone-600 sm:max-w-xl sm:leading-[1.52] md:max-w-[36rem] md:text-[1.1875rem] md:leading-[1.56] lg:max-w-[40rem]"
+            initial={reduceMotion ? false : { opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.45, delay: reduceMotion ? 0 : 0.09 }}
+            transition={{ duration: 0.46, delay: reduceMotion ? 0 : 0.085 }}
           >
             Gestiona pedidos, control, equipo y cumplimiento sin cambiar de app ni depender de memoria.
           </motion.p>
 
           <motion.div
-            className="mt-8 flex flex-col items-stretch gap-3 sm:flex-row sm:flex-wrap sm:justify-center lg:justify-start"
-            initial={reduceMotion ? false : { opacity: 0, y: 10 }}
+            className="grid w-full max-w-[22.5rem] grid-cols-1 gap-3.5 sm:max-w-xl sm:grid-cols-2 sm:gap-x-4 sm:gap-y-3.5 md:max-w-2xl lg:max-w-[48rem] xl:max-w-[56rem] xl:grid-cols-4 xl:gap-x-3.5 xl:gap-y-0"
+            initial={reduceMotion ? false : { opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.45, delay: reduceMotion ? 0 : 0.14 }}
+            transition={{ duration: 0.46, delay: reduceMotion ? 0 : 0.11 }}
           >
             <Link
               href="#solicitar-info"
-              className="inline-flex h-12 items-center justify-center rounded-2xl px-8 text-sm font-bold text-white shadow-[0_10px_28px_-8px_rgba(211,47,47,0.5)] transition hover:brightness-105 active:scale-[0.99]"
+              className={`${ctaBase} text-white shadow-[0_14px_36px_-12px_rgba(211,47,47,0.55)] hover:brightness-[1.03]`}
               style={{ backgroundColor: BRAND }}
             >
               Solicitar demo
@@ -266,26 +278,23 @@ export default function MarketingHero() {
                 enterDemoMode();
                 window.location.assign('/panel');
               }}
-              className="inline-flex h-12 items-center justify-center rounded-2xl border-2 border-[#D32F2F]/40 bg-white px-8 text-sm font-bold text-[#B91C1C] shadow-sm transition hover:bg-red-50 active:scale-[0.99]"
+              className={`${ctaBase} border-2 border-[#D32F2F]/40 bg-white text-[#B91C1C] shadow-sm hover:bg-red-50`}
             >
               Ver demo
             </button>
             <Link
               href="#modulos"
-              className="inline-flex h-12 items-center justify-center rounded-2xl border-2 border-stone-200/95 bg-white/95 px-8 text-sm font-bold text-stone-800 shadow-sm backdrop-blur-sm transition hover:border-stone-300 hover:bg-white"
+              className={`${ctaBase} border-2 border-stone-200/95 bg-white/95 text-stone-800 shadow-sm backdrop-blur-sm hover:border-stone-300 hover:bg-white`}
             >
               Ver módulos
             </Link>
-            <Link
-              href="/login"
-              className="inline-flex h-12 items-center justify-center rounded-2xl px-8 text-sm font-bold text-stone-700 underline-offset-4 ring-1 ring-stone-200/90 transition hover:bg-stone-50"
-            >
+            <Link href="/login" className={`${ctaBase} text-stone-700 ring-1 ring-stone-200/90 hover:bg-stone-50`}>
               Ir a la app
             </Link>
           </motion.div>
         </div>
 
-        <div className="mt-12 lg:mt-16">
+        <div className="mx-auto mt-8 w-full max-w-6xl sm:mt-10 md:mt-12">
           <div className="rounded-[24px] bg-gradient-to-b from-white/80 to-transparent px-1 pb-1 pt-2 [box-shadow:0_20px_50px_-20px_rgba(15,23,42,0.12)]">
             <HeroCardCarousel />
           </div>
