@@ -123,7 +123,7 @@ export function OperationalSkelloCellBody({
       : '';
 
   const ruler = (
-    <div className="relative w-6 shrink-0 border-r border-zinc-200 bg-zinc-50/90 sm:w-7">
+    <div className="relative w-5 shrink-0 border-r border-zinc-200 bg-zinc-50/90 sm:w-6">
       {HOUR_MARKS.map((h) => (
         <div
           key={h}
@@ -142,7 +142,7 @@ export function OperationalSkelloCellBody({
     return (
       <div className="flex w-full min-w-0 flex-col gap-0.5">
         <div className="text-center text-[8px] font-extrabold text-zinc-600 sm:text-[9px]">0 pers. · —</div>
-        <div className="flex min-h-[13rem] w-full gap-0.5 sm:min-h-[16rem]">
+        <div className="flex min-h-[10rem] w-full gap-0.5 sm:min-h-[11.5rem]">
           {ruler}
           <div
             role={canEdit ? 'button' : undefined}
@@ -220,7 +220,7 @@ export function OperationalSkelloCellBody({
           <span className="text-[#B91C1C]"> · {cellUnassigned} huecos</span>
         ) : null}
       </div>
-      <div className="flex min-h-[13rem] w-full gap-0.5 sm:min-h-[16rem]">
+      <div className="flex min-h-[10rem] w-full gap-0.5 sm:min-h-[11.5rem]">
         {ruler}
         <div
           data-vertical-track
@@ -265,7 +265,7 @@ export function OperationalSkelloCellBody({
                         draggable
                         onDragStart={(e) => onDragStart(e, sOne.id)}
                         onDragEnd={onDragEnd}
-                        className="flex w-5 shrink-0 cursor-grab touch-none items-center justify-center border-r border-white/25 bg-black/15 text-white/90 active:cursor-grabbing"
+                        className="flex w-4 shrink-0 cursor-grab touch-none items-center justify-center border-r border-white/25 bg-black/15 text-white/90 active:cursor-grabbing sm:w-[1.125rem]"
                         title="Mover a otro día o puesto"
                         aria-label="Arrastrar turno"
                         onPointerDown={(e) => e.stopPropagation()}
@@ -277,7 +277,7 @@ export function OperationalSkelloCellBody({
                     <div
                       role="button"
                       tabIndex={canEdit ? 0 : undefined}
-                      className="min-w-0 flex-1 touch-none px-0.5 py-0.5 text-left outline-none"
+                      className="min-w-0 flex-1 touch-none px-1 py-0.5 text-left outline-none sm:px-1.5"
                       style={{ background: zStyle.bg, color: zStyle.text }}
                       onPointerDown={(e) => onVerticalShiftPointerDown(e, sOne, iv)}
                       onPointerMove={(e) => onVerticalShiftPointerMove(e, sOne)}
@@ -299,18 +299,18 @@ export function OperationalSkelloCellBody({
                     >
                       <div
                         className={[
-                          'truncate text-[8px] font-extrabold leading-tight sm:text-[9px]',
+                          'break-words text-[9px] font-extrabold leading-snug sm:text-[10px]',
                           unassigned ? 'opacity-95' : '',
                         ].join(' ')}
                       >
                         {unassigned ? 'Sin asignar' : employeeName(sOne.employeeId)}
                       </div>
-                      <div className="truncate text-[7px] font-semibold tabular-nums opacity-95 sm:text-[8px]">
+                      <div className="text-[8px] font-semibold tabular-nums leading-tight opacity-95 sm:text-[9px]">
                         {shortTime(sOne.startTime)}–{shortTime(sOne.endTime)}
                         {sOne.endsNextDay ? ' +1' : ''}
-                      </div>
-                      <div className="text-[7px] font-bold opacity-90 sm:text-[8px]">
-                        {formatShiftHoursLabel(plannedShiftMinutes(sOne))}
+                        <span className="ml-1 font-bold opacity-85">
+                          · {formatShiftHoursLabel(plannedShiftMinutes(sOne))}
+                        </span>
                       </div>
                     </div>
                   </div>
@@ -320,21 +320,29 @@ export function OperationalSkelloCellBody({
 
             const n = g.items.length;
             const nUnassigned = g.items.filter((x) => x.employeeId == null).length;
+            const sortedGroup = sortGroupedItems(g.items);
+            const minGroupPct = Math.min(28, Math.max(5.5, 3.8 + n * 3.4));
             return (
+              <div
+                key={g.slotKey}
+                className="absolute overflow-hidden rounded-md text-left shadow-md ring-1 ring-black/15"
+                style={{
+                  top: `${seg.topPct}%`,
+                  height: `${Math.max(seg.heightPct, minGroupPct)}%`,
+                  left: `${left}%`,
+                  width: `${width}%`,
+                  zIndex: expanded ? 4 : 2,
+                  background: zStyle.bg,
+                  color: zStyle.text,
+                }}
+              >
                 <button
-                  key={g.slotKey}
                   type="button"
-                  className="absolute overflow-hidden rounded-md text-left shadow-md ring-1 ring-black/15 transition hover:brightness-95"
-                  style={{
-                    top: `${seg.topPct}%`,
-                    height: `${Math.max(seg.heightPct, 4)}%`,
-                    left: `${left}%`,
-                    width: `${width}%`,
-                    zIndex: expanded ? 4 : 2,
-                    background: zStyle.bg,
-                    color: zStyle.text,
-                  }}
-                  {...(canEdit ? bindShiftLongPress(rep) : ({} as Record<string, never>))}
+                  className="absolute right-0 top-0 z-10 rounded-bl bg-black/25 p-0.5 text-white/95 hover:bg-black/35"
+                  title={expanded ? 'Ocultar panel inferior' : 'Abrir panel: editar / quitar'}
+                  aria-expanded={expanded}
+                  aria-label="Detalle del equipo"
+                  onPointerDown={(e) => e.stopPropagation()}
                   onClick={(e) => {
                     e.stopPropagation();
                     if (Date.now() < ignoreClicksUntilRef.current) return;
@@ -342,37 +350,79 @@ export function OperationalSkelloCellBody({
                     toggleExpandedSlot(compositeKey);
                   }}
                 >
-                  <div className="flex h-full flex-col justify-center px-0.5">
-                    <div className="flex items-start gap-0.5">
-                      <span className="shrink-0 opacity-80" aria-hidden>
-                        {expanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
-                      </span>
-                      <div className="min-w-0 flex-1">
-                        <div className="text-[8px] font-extrabold leading-tight sm:text-[9px]">
-                          {shortTime(rep.startTime)}–{shortTime(rep.endTime)}
-                          {rep.endsNextDay ? ' +1' : ''}
-                        </div>
-                        <div className="text-[8px] font-bold">
-                          {n} pers.{nUnassigned > 0 ? ` · ${nUnassigned} hueco` : ''}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                  {canEdit && onAddPersonSameSlot ? (
-                    <span
-                      className="absolute bottom-0 right-0 rounded-tl bg-black/25 px-1 py-0.5 text-[7px] font-extrabold text-white"
-                      onPointerDown={(e) => e.stopPropagation()}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        if (Date.now() < ignoreClicksUntilRef.current) return;
-                        onAddPersonSameSlot(rep);
-                      }}
-                      role="presentation"
-                    >
-                      + pers.
-                    </span>
-                  ) : null}
+                  {expanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
                 </button>
+                <div
+                  className={[
+                    'flex h-full min-h-0 flex-col pt-0.5',
+                    canEdit && onAddPersonSameSlot ? 'pb-5' : 'pb-0.5',
+                  ].join(' ')}
+                >
+                  <div className="shrink-0 px-1 pr-6 text-[7px] font-extrabold tabular-nums opacity-95 sm:text-[8px]">
+                    {shortTime(rep.startTime)}–{shortTime(rep.endTime)}
+                    {rep.endsNextDay ? ' +1' : ''}
+                    <span className="ml-1 font-bold opacity-90">
+                      · {n} pers.{nUnassigned > 0 ? ` · ${nUnassigned} hueco` : ''}
+                    </span>
+                  </div>
+                  <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-1">
+                    {sortedGroup.map((s) => {
+                      const unassigned = s.employeeId == null;
+                      return (
+                        <div
+                          key={s.id}
+                          role="button"
+                          tabIndex={canEdit ? 0 : undefined}
+                          className="flex gap-0.5 border-b border-white/15 py-0.5 last:border-b-0 hover:bg-black/15 sm:gap-1"
+                          {...(canEdit ? bindShiftLongPress(s) : ({} as Record<string, never>))}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (Date.now() < ignoreClicksUntilRef.current) return;
+                            setSelectedShiftId(s.id);
+                            setSelectedCell(null);
+                          }}
+                          onKeyDown={(e) => {
+                            if (!canEdit) return;
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.preventDefault();
+                              if (Date.now() < ignoreClicksUntilRef.current) return;
+                              setSelectedShiftId(s.id);
+                              setSelectedCell(null);
+                            }
+                          }}
+                        >
+                          <div
+                            className={[
+                              'min-w-0 flex-1 break-words text-[8px] font-extrabold leading-snug sm:text-[9px]',
+                              unassigned ? 'opacity-95' : '',
+                            ].join(' ')}
+                          >
+                            {unassigned ? 'Sin asignar' : employeeName(s.employeeId)}
+                          </div>
+                          <div className="shrink-0 text-right text-[7px] font-semibold tabular-nums opacity-95 sm:text-[8px]">
+                            {shortTime(s.startTime)}–{shortTime(s.endTime)}
+                            {s.endsNextDay ? ' +1' : ''}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+                {canEdit && onAddPersonSameSlot ? (
+                  <button
+                    type="button"
+                    className="absolute bottom-0 right-0 z-10 rounded-tl bg-black/30 px-1 py-0.5 text-[7px] font-extrabold text-white hover:bg-black/45"
+                    onPointerDown={(e) => e.stopPropagation()}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (Date.now() < ignoreClicksUntilRef.current) return;
+                      onAddPersonSameSlot(rep);
+                    }}
+                  >
+                    + pers.
+                  </button>
+                ) : null}
+              </div>
             );
           })}
         </div>
