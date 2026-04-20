@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { ChevronLeft, ChevronRight, Copy } from 'lucide-react';
 import MermasStyleHero from '@/components/MermasStyleHero';
@@ -19,6 +19,10 @@ import {
   writeStoredPresetIdForZone,
 } from '@/lib/staff/shift-quick-presets';
 import { zoneDefaultColorHint } from '@/lib/staff/staff-zone-styles';
+import {
+  DEFAULT_LOCAL_OPERATIONAL_WINDOW,
+  operationalWindowFromLocalsRow,
+} from '@/lib/staff/local-operational-window';
 import { deleteStaffShift, duplicateShiftsWeek, upsertStaffShift } from '@/lib/staff/staff-supabase';
 import type { StaffShift } from '@/lib/staff/types';
 import { appAlert, appConfirm, appPrompt } from '@/lib/app-dialog-bridge';
@@ -44,11 +48,33 @@ export default function PersonalPlanificacionPage() {
 
   const [draft, setDraft] = useState<ShiftDraft | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
+  const [operationalWindow, setOperationalWindow] = useState(DEFAULT_LOCAL_OPERATIONAL_WINDOW);
 
   const onRt = useCallback(() => void reload(), [reload]);
   useStaffRealtime(localId, onRt);
 
   const supabase = getSupabaseClient();
+
+  useEffect(() => {
+    if (!localId || !supabase) return;
+    let cancelled = false;
+    void (async () => {
+      const { data, error } = await supabase
+        .from('locals')
+        .select('operational_start, operational_end, operational_end_next_day, operational_extend_until')
+        .eq('id', localId)
+        .maybeSingle();
+      if (cancelled) return;
+      if (error) {
+        setOperationalWindow({ ...DEFAULT_LOCAL_OPERATIONAL_WINDOW });
+        return;
+      }
+      setOperationalWindow(operationalWindowFromLocalsRow(data));
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [localId, supabase]);
 
   const shiftsInMonth = useMemo(() => {
     const y = monthCursor.getFullYear();
@@ -433,6 +459,7 @@ export default function PersonalPlanificacionPage() {
               weekStartMonday={weekStartDate}
               employees={employees}
               shifts={shifts}
+              operationalWindow={operationalWindow}
               canEdit={perms.canManageSchedules}
               onShiftPlaced={onOperationalShiftPlaced}
               onQuickCreateShift={onOperationalQuickCreate}
