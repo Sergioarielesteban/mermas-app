@@ -11,13 +11,33 @@ comment on column public.locals.operational_end is 'Fin operativo; si operationa
 comment on column public.locals.operational_end_next_day is 'Si true, operational_end interpreta medianoche/cierre en el día siguiente.';
 comment on column public.locals.operational_extend_until is 'Opcional: hasta qué hora del día siguiente se alarga la escala visual (p. ej. 02:00).';
 
--- Ejemplos (ajustar por code o id):
--- Restaurante estándar (07:30 → 00:00 +1, escala hasta +1 02:00):
---   update public.locals set operational_start = '07:30', operational_end = '00:00',
---     operational_end_next_day = true, operational_extend_until = '02:00' where code = 'MATARO';
+-- Nombres canónicos (la app lee estos con prioridad; si faltan, usa operational_* arriba).
+alter table public.locals add column if not exists start_operating_time time;
+alter table public.locals add column if not exists end_operating_time time;
+alter table public.locals add column if not exists allow_next_day_end boolean;
+alter table public.locals add column if not exists max_extended_end_time time null;
+
+comment on column public.locals.start_operating_time is 'Inicio operativo (día del turno).';
+comment on column public.locals.end_operating_time is 'Fin operativo; si allow_next_day_end, hora del día siguiente.';
+comment on column public.locals.allow_next_day_end is 'Si true, end_operating_time es del día siguiente.';
+comment on column public.locals.max_extended_end_time is 'Hora del día siguiente hasta la que se alarga la escala visual.';
+
+-- Sincronizar desde columnas legacy la primera vez (idempotente).
+update public.locals
+set
+  start_operating_time = coalesce(start_operating_time, operational_start, '07:30:00'),
+  end_operating_time = coalesce(end_operating_time, operational_end, '00:00:00'),
+  allow_next_day_end = coalesce(allow_next_day_end, operational_end_next_day, true),
+  max_extended_end_time = coalesce(max_extended_end_time, operational_extend_until)
+where true;
+
+-- Ejemplos (ajustar por code o id) — preferir nombres nuevos:
+-- Restaurante estándar:
+--   update public.locals set start_operating_time = '07:30', end_operating_time = '00:00',
+--     allow_next_day_end = true, max_extended_end_time = '02:00' where code = 'MATARO';
 -- Obrador (mismo día):
---   update public.locals set operational_start = '05:00', operational_end = '14:00',
---     operational_end_next_day = false, operational_extend_until = null where code = 'OBRADOR';
+--   update public.locals set start_operating_time = '05:00', end_operating_time = '14:00',
+--     allow_next_day_end = false, max_extended_end_time = null where code = 'OBRADOR';
 -- Local nocturno:
---   update public.locals set operational_start = '17:00', operational_end = '03:00',
---     operational_end_next_day = true, operational_extend_until = null where code = 'NOCTURNO';
+--   update public.locals set start_operating_time = '17:00', end_operating_time = '03:00',
+--     allow_next_day_end = true, max_extended_end_time = null where code = 'NOCTURNO';

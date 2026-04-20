@@ -1,18 +1,27 @@
 import type { StaffShift } from '@/lib/staff/types';
 
-/** Ventana operativa del local (cuadrante / referencia horaria). */
+/**
+ * Ventana operativa del local (cuadrante / referencia horaria).
+ * Nombres canónicos (API / UI): equivalen en BD a start_operating_time, end_operating_time,
+ * allow_next_day_end, max_extended_end_time cuando existan; si no, a operational_* legacy.
+ */
 export type LocalOperationalWindow = {
-  /** Hora de inicio del servicio (mismo día calendario que la fecha del turno). HH:MM */
+  /** start_operating_time — inicio del servicio (día del turno). HH:MM */
   operationalStart: string;
-  /** Hora de fin operativo (interpretación según operationalEndNextDay). HH:MM */
+  /** end_operating_time — fin operativo (según allowNextDayEnd). HH:MM */
   operationalEnd: string;
-  /** Si es true, operationalEnd es del día siguiente al de la fecha del turno (medianoche, cierre tardío, etc.). */
+  /** allow_next_day_end — si true, operationalEnd es del día siguiente. */
   operationalEndNextDay: boolean;
-  /**
-   * Opcional: hasta qué hora del día siguiente se muestra la escala (p. ej. 02:00 para planificar cierres).
-   * Si es null, la escala llega hasta el fin operativo (sin extender).
-   */
+  /** max_extended_end_time — hora del día siguiente hasta la que se alarga la escala; null = sin extender. */
   operationalExtendUntil: string | null;
+};
+
+/**
+ * FUTURE: eje vertical de horas a la izquierda o vista calendario continua.
+ * Mantener `OperationalTimelineMetrics` + `segmentShiftOnOperationalTimeline` como base.
+ */
+export type FutureOperationalTimelineAxis = {
+  mode: 'none';
 };
 
 export const DEFAULT_LOCAL_OPERATIONAL_WINDOW: LocalOperationalWindow = {
@@ -73,17 +82,20 @@ export function operationalWindowSummaryHeading(w: LocalOperationalWindow): stri
   return line;
 }
 
-export function operationalWindowFooterLegend(w: LocalOperationalWindow, m: OperationalTimelineMetrics): string {
-  const parts: string[] = [normalizeTimeToHHMM(w.operationalStart)];
-  parts.push(`${normalizeTimeToHHMM(w.operationalEnd)}${w.operationalEndNextDay ? ' (+1)' : ''}`);
+/** Una sola línea para cabecera del cuadrante. */
+export function operationalFranjaOperativaBanner(w: LocalOperationalWindow, m: OperationalTimelineMetrics): string {
+  const a = normalizeTimeToHHMM(w.operationalStart);
+  const b = normalizeTimeToHHMM(w.operationalEnd);
+  const tag = w.operationalEndNextDay ? ' (+1)' : '';
+  let s = `Franja operativa: ${a} → ${b}${tag}`;
   if (
     w.operationalExtendUntil != null &&
     w.operationalExtendUntil.trim() !== '' &&
     m.displayEndMin > m.serviceEndMin + 1
   ) {
-    parts.push(`${normalizeTimeToHHMM(w.operationalExtendUntil)} (+1)`);
+    s += ` (hasta ${normalizeTimeToHHMM(w.operationalExtendUntil)} +1)`;
   }
-  return parts.join(' · ');
+  return s;
 }
 
 function shiftClockToMinutes(timeStr: string): number {
@@ -127,6 +139,10 @@ export function buildOperationalTimelineTicks(startMin: number, displayEndMin: n
 }
 
 export type LocalsOperationalRow = {
+  start_operating_time?: string | null;
+  end_operating_time?: string | null;
+  allow_next_day_end?: boolean | null;
+  max_extended_end_time?: string | null;
   operational_start?: string | null;
   operational_end?: string | null;
   operational_end_next_day?: boolean | null;
@@ -135,19 +151,24 @@ export type LocalsOperationalRow = {
 
 export function operationalWindowFromLocalsRow(row: LocalsOperationalRow | null | undefined): LocalOperationalWindow {
   if (!row) return { ...DEFAULT_LOCAL_OPERATIONAL_WINDOW };
-  const start = row.operational_start != null && String(row.operational_start).length > 0
-    ? normalizeTimeToHHMM(String(row.operational_start))
-    : DEFAULT_LOCAL_OPERATIONAL_WINDOW.operationalStart;
-  const end = row.operational_end != null && String(row.operational_end).length > 0
-    ? normalizeTimeToHHMM(String(row.operational_end))
-    : DEFAULT_LOCAL_OPERATIONAL_WINDOW.operationalEnd;
+  const startRaw = row.start_operating_time ?? row.operational_start;
+  const endRaw = row.end_operating_time ?? row.operational_end;
+  const endNextRaw = row.allow_next_day_end ?? row.operational_end_next_day;
+  const extRaw = row.max_extended_end_time ?? row.operational_extend_until;
+
+  const start =
+    startRaw != null && String(startRaw).length > 0
+      ? normalizeTimeToHHMM(String(startRaw))
+      : DEFAULT_LOCAL_OPERATIONAL_WINDOW.operationalStart;
+  const end =
+    endRaw != null && String(endRaw).length > 0
+      ? normalizeTimeToHHMM(String(endRaw))
+      : DEFAULT_LOCAL_OPERATIONAL_WINDOW.operationalEnd;
   const endNext =
-    row.operational_end_next_day != null
-      ? Boolean(row.operational_end_next_day)
-      : DEFAULT_LOCAL_OPERATIONAL_WINDOW.operationalEndNextDay;
+    endNextRaw != null ? Boolean(endNextRaw) : DEFAULT_LOCAL_OPERATIONAL_WINDOW.operationalEndNextDay;
   let ext: string | null = null;
-  if (row.operational_extend_until != null && String(row.operational_extend_until).trim().length > 0) {
-    ext = normalizeTimeToHHMM(String(row.operational_extend_until));
+  if (extRaw != null && String(extRaw).trim().length > 0) {
+    ext = normalizeTimeToHHMM(String(extRaw));
   }
   return {
     operationalStart: start,

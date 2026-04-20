@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { ChevronLeft, ChevronRight, Copy } from 'lucide-react';
 import MermasStyleHero from '@/components/MermasStyleHero';
 import { useAuth } from '@/components/AuthProvider';
-import ShiftEditorModal, { type ShiftDraft } from '@/components/staff/ShiftEditorModal';
+import ShiftEditorModal, { PLANIFICACION_MODAL_ABORT, type ShiftDraft } from '@/components/staff/ShiftEditorModal';
 import OperationalWeekGrid, { OPERATIONAL_NONE_ZONE } from '@/components/staff/OperationalWeekGrid';
 import ShiftWeekGrid, { SHIFT_GRID_UNASSIGNED_ROW_ID } from '@/components/staff/ShiftWeekGrid';
 import { useStaffBundle } from '@/hooks/useStaffBundle';
@@ -15,15 +15,20 @@ import { addDays, parseYmd, startOfWeekMonday, ymdLocal } from '@/lib/staff/staf
 import {
   readLastEmployeeForZone,
   resolveQuickPresetForZone,
-  writeLastEmployeeForZone,
   writeStoredPresetIdForZone,
 } from '@/lib/staff/shift-quick-presets';
+import {
+  readCustomOperationalZones,
+  slugifyOperationalZoneKey,
+  writeCustomOperationalZones,
+  type CustomOperationalZoneRow,
+} from '@/lib/staff/operational-custom-zones';
 import { zoneDefaultColorHint } from '@/lib/staff/staff-zone-styles';
 import {
   DEFAULT_LOCAL_OPERATIONAL_WINDOW,
   operationalWindowFromLocalsRow,
 } from '@/lib/staff/local-operational-window';
-import { deleteStaffShift, duplicateShiftsWeek, upsertStaffShift } from '@/lib/staff/staff-supabase';
+import { duplicateShiftsWeek, upsertStaffShift } from '@/lib/staff/staff-supabase';
 import type { StaffShift } from '@/lib/staff/types';
 import { appAlert, appConfirm, appPrompt } from '@/lib/app-dialog-bridge';
 import { getSupabaseClient } from '@/lib/supabase-client';
@@ -49,6 +54,7 @@ export default function PersonalPlanificacionPage() {
   const [draft, setDraft] = useState<ShiftDraft | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [operationalWindow, setOperationalWindow] = useState(DEFAULT_LOCAL_OPERATIONAL_WINDOW);
+  const [customOperationalZones, setCustomOperationalZones] = useState<CustomOperationalZoneRow[]>([]);
 
   const onRt = useCallback(() => void reload(), [reload]);
   useStaffRealtime(localId, onRt);
@@ -61,7 +67,9 @@ export default function PersonalPlanificacionPage() {
     void (async () => {
       const { data, error } = await supabase
         .from('locals')
-        .select('operational_start, operational_end, operational_end_next_day, operational_extend_until')
+        .select(
+          'start_operating_time, end_operating_time, allow_next_day_end, max_extended_end_time, operational_start, operational_end, operational_end_next_day, operational_extend_until',
+        )
         .eq('id', localId)
         .maybeSingle();
       if (cancelled) return;
@@ -75,6 +83,31 @@ export default function PersonalPlanificacionPage() {
       cancelled = true;
     };
   }, [localId, supabase]);
+
+  useEffect(() => {
+    if (!localId) {
+      setCustomOperationalZones([]);
+      return;
+    }
+    setCustomOperationalZones(readCustomOperationalZones(localId));
+  }, [localId]);
+
+  const handleAddOperationalZone = useCallback(async () => {
+    if (!localId || !perms.canManageSchedules) return;
+    const name = await appPrompt('Nombre del puesto', '');
+    if (name == null || !name.trim()) return;
+    const label = name.trim();
+    let key = slugifyOperationalZoneKey(label);
+    const reserved = new Set<string>(['cocina', 'barra', 'sala', OPERATIONAL_NONE_ZONE]);
+    let n = 2;
+    while (reserved.has(key) || customOperationalZones.some((z) => z.key === key)) {
+      key = `${slugifyOperationalZoneKey(label)}-${n}`;
+      n += 1;
+    }
+    const next = [...customOperationalZones, { key, label }];
+    setCustomOperationalZones(next);
+    writeCustomOperationalZones(localId, next);
+  }, [localId, perms.canManageSchedules, customOperationalZones]);
 
   const shiftsInMonth = useMemo(() => {
     const y = monthCursor.getFullYear();
@@ -140,6 +173,8 @@ export default function PersonalPlanificacionPage() {
   const onOperationalShiftPlaced = async (shift: StaffShift, newDateYmd: string, zoneRowKey: string) => {
     if (!perms.canManageSchedules || !localId || !supabase) return;
     const zone = zoneRowKey === OPERATIONAL_NONE_ZONE ? null : zoneRowKey;
+    const colorHint =
+      zone != null ? zoneDefaultColorHint(zone) ?? shift.colorHint : shift.colorHint;
     try {
       await upsertStaffShift(supabase, {
         id: shift.id,
@@ -153,7 +188,7 @@ export default function PersonalPlanificacionPage() {
         zone,
         notes: shift.notes,
         status: shift.status,
-        colorHint: shift.colorHint,
+        colorHint,
       });
       void reload();
     } catch (e: unknown) {
@@ -193,51 +228,10 @@ export default function PersonalPlanificacionPage() {
     }
   };
 
-  const onOperationalShiftPatch = async (
-    shift: StaffShift,
-    patch: Partial<
-      Pick<StaffShift, 'employeeId' | 'startTime' | 'endTime' | 'endsNextDay' | 'breakMinutes' | 'zone' | 'colorHint'>
-    >,
-  ) => {
-    if (!perms.canManageSchedules || !localId || !supabase) return;
-    try {
-      await upsertStaffShift(supabase, {
-        id: shift.id,
-        localId,
-        employeeId: patch.employeeId !== undefined ? patch.employeeId : shift.employeeId,
-        shiftDate: shift.shiftDate,
-        startTime: patch.startTime ?? shift.startTime,
-        endTime: patch.endTime ?? shift.endTime,
-        endsNextDay: patch.endsNextDay ?? shift.endsNextDay,
-        breakMinutes: patch.breakMinutes ?? shift.breakMinutes,
-        zone: patch.zone !== undefined ? patch.zone : shift.zone,
-        notes: shift.notes,
-        status: shift.status,
-        colorHint: patch.colorHint !== undefined ? patch.colorHint : shift.colorHint,
-      });
-      if (patch.employeeId) {
-        const zk = (shift.zone ?? '').trim().toLowerCase() || OPERATIONAL_NONE_ZONE;
-        writeLastEmployeeForZone(localId, zk, patch.employeeId);
-      }
-      void reload();
-    } catch (e: unknown) {
-      await appAlert(e instanceof Error ? e.message : 'No se pudo actualizar');
-    }
-  };
-
-  const onOperationalShiftDelete = async (shift: StaffShift) => {
-    if (!perms.canManageSchedules || !localId || !supabase) return;
-    if (!(await appConfirm('¿Eliminar este turno?'))) return;
-    try {
-      await deleteStaffShift(supabase, shift.id);
-      void reload();
-    } catch (e: unknown) {
-      await appAlert(e instanceof Error ? e.message : 'No se pudo eliminar');
-    }
-  };
-
   const onOperationalDuplicateHere = async (shift: StaffShift) => {
-    if (!perms.canManageSchedules || !localId || !supabase) return;
+    if (!perms.canManageSchedules || !localId || !supabase) {
+      throw new Error(PLANIFICACION_MODAL_ABORT);
+    }
     try {
       await upsertStaffShift(supabase, {
         localId,
@@ -255,15 +249,18 @@ export default function PersonalPlanificacionPage() {
       void reload();
     } catch (e: unknown) {
       await appAlert(e instanceof Error ? e.message : 'No se pudo duplicar');
+      throw new Error(PLANIFICACION_MODAL_ABORT);
     }
   };
 
   const onOperationalCopyPrevDay = async (shift: StaffShift) => {
-    if (!perms.canManageSchedules || !localId || !supabase) return;
+    if (!perms.canManageSchedules || !localId || !supabase) {
+      throw new Error(PLANIFICACION_MODAL_ABORT);
+    }
     const target = ymdLocal(addDays(parseYmd(shift.shiftDate), -1));
     if (target < weekStart || target > weekEndYmd) {
       await appAlert('El día anterior no está en la semana que tienes abierta.');
-      return;
+      throw new Error(PLANIFICACION_MODAL_ABORT);
     }
     try {
       await upsertStaffShift(supabase, {
@@ -282,15 +279,18 @@ export default function PersonalPlanificacionPage() {
       void reload();
     } catch (e: unknown) {
       await appAlert(e instanceof Error ? e.message : 'No se pudo copiar');
+      throw new Error(PLANIFICACION_MODAL_ABORT);
     }
   };
 
   const onOperationalCopyPrevWeekday = async (shift: StaffShift) => {
-    if (!perms.canManageSchedules || !localId || !supabase) return;
+    if (!perms.canManageSchedules || !localId || !supabase) {
+      throw new Error(PLANIFICACION_MODAL_ABORT);
+    }
     const target = ymdLocal(addDays(parseYmd(shift.shiftDate), -7));
     if (target < weekStart || target > weekEndYmd) {
       await appAlert('La fecha −7 días no está en la semana visible. Cambia de semana o usa el modal.');
-      return;
+      throw new Error(PLANIFICACION_MODAL_ABORT);
     }
     try {
       await upsertStaffShift(supabase, {
@@ -309,6 +309,7 @@ export default function PersonalPlanificacionPage() {
       void reload();
     } catch (e: unknown) {
       await appAlert(e instanceof Error ? e.message : 'No se pudo copiar');
+      throw new Error(PLANIFICACION_MODAL_ABORT);
     }
   };
 
@@ -460,16 +461,13 @@ export default function PersonalPlanificacionPage() {
               employees={employees}
               shifts={shifts}
               operationalWindow={operationalWindow}
+              customOperationalZones={customOperationalZones}
+              onAddOperationalZone={() => void handleAddOperationalZone()}
               canEdit={perms.canManageSchedules}
               onShiftPlaced={onOperationalShiftPlaced}
               onQuickCreateShift={onOperationalQuickCreate}
               onEmptyLongPress={onOperationalEmptyLongPress}
               onShiftAdvancedEdit={(s) => openEdit(s)}
-              onShiftPatch={onOperationalShiftPatch}
-              onShiftDelete={onOperationalShiftDelete}
-              onShiftDuplicateHere={onOperationalDuplicateHere}
-              onShiftCopyPrevCalendarDay={onOperationalCopyPrevDay}
-              onShiftCopyPrevWeekday={onOperationalCopyPrevWeekday}
             />
           )}
         </>
@@ -551,6 +549,16 @@ export default function PersonalPlanificacionPage() {
           draft={draft}
           onSaved={() => void reload()}
           canDelete={perms.canManageSchedules}
+          operationalExtraZones={customOperationalZones.map((z) => ({ value: z.key, label: z.label }))}
+          onDuplicateFromModal={
+            weekLayout === 'operativo' ? (s) => onOperationalDuplicateHere(s) : undefined
+          }
+          onCopyPrevCalendarDayFromModal={
+            weekLayout === 'operativo' ? (s) => onOperationalCopyPrevDay(s) : undefined
+          }
+          onCopyPrevWeekdayFromModal={
+            weekLayout === 'operativo' ? (s) => onOperationalCopyPrevWeekday(s) : undefined
+          }
         />
       ) : null}
     </div>
