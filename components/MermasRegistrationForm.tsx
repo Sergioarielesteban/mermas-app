@@ -233,9 +233,9 @@ export default function MermasRegistrationForm() {
       <form
         id="merma-register-form"
         onSubmit={handleSave}
-        className="pb-[calc(8.75rem+env(safe-area-inset-bottom))]"
+        className="pb-[calc(7rem+env(safe-area-inset-bottom))]"
       >
-        <div className="space-y-6">
+        <div className="space-y-4">
           <div className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-zinc-200">
             <label className="mb-2 block text-xs font-semibold text-zinc-700">
               Producto <span className="text-[#B91C1C]">*</span>
@@ -521,7 +521,7 @@ export default function MermasRegistrationForm() {
           </div>
         </div>
 
-        <span className={`mx-auto mt-6 mb-2 block w-24 ${CHEF_ONE_TAPER_LINE_CLASS}`} aria-hidden />
+        <span className={`mx-auto mt-2 mb-0 block w-24 ${CHEF_ONE_TAPER_LINE_CLASS}`} aria-hidden />
       </form>
 
       <div className="pointer-events-none fixed inset-x-0 bottom-[calc(4.5rem+env(safe-area-inset-bottom))] z-[75] flex justify-center px-3 pt-2">

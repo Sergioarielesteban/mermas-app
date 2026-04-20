@@ -1,6 +1,5 @@
 'use client';
 
-import Link from 'next/link';
 import React, { useState } from 'react';
 import { useAuth } from '@/components/AuthProvider';
 import Logo from '@/components/Logo';
@@ -71,21 +70,8 @@ export default function LoginPage() {
               <h1 className="text-2xl font-black tracking-tight text-zinc-900 sm:text-[1.65rem]">
                 Acceso de Usuario
               </h1>
-              <p className="pt-2 text-base leading-snug text-zinc-600 sm:text-[1.02rem]">
-                Entra con tu usuario (o email) y contraseña.
-              </p>
-              <p className="pt-3 text-sm leading-relaxed text-zinc-500">
-                ¿Primera vez?{' '}
-                <Link href="/onboarding" className="font-semibold text-[#D32F2F] underline underline-offset-2">
-                  Ver introducción
-                </Link>{' '}
-                ·{' '}
-                <Link href="/precio" className="font-semibold text-zinc-700 underline underline-offset-2">
-                  Saber más
-                </Link>
-              </p>
               {!isSupabaseEnabled() && allowedEmails.length > 0 ? (
-                <p className="pt-1 text-xs text-zinc-500">Acceso restringido a usuarios autorizados.</p>
+                <p className="pt-2 text-xs text-zinc-500">Acceso restringido a usuarios autorizados.</p>
               ) : null}
             </div>
 
@@ -98,7 +84,8 @@ export default function LoginPage() {
                   setIdentifier(e.target.value);
                   setError(null);
                 }}
-                placeholder="sergio.mataro o usuario@empresa.com"
+                placeholder="Usuario o email"
+                autoComplete="username"
                 className="mt-2 min-h-[3.25rem] w-full rounded-xl border border-zinc-300 bg-zinc-50 px-4 text-base text-zinc-900 outline-none transition placeholder:text-zinc-400 focus:border-[#D32F2F] focus:bg-white focus:ring-2 focus:ring-[#D32F2F]/20"
                 autoFocus
               />
