@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeft, Minus, Plus } from 'lucide-react';
 import MermasStyleHero from '@/components/MermasStyleHero';
 import { useAuth } from '@/components/AuthProvider';
@@ -22,7 +22,6 @@ import {
   fetchChefProductionSessionRow,
   fetchChefProductionTemplate,
   formatProductionMigrationError,
-  productionQtyToMake,
   resolveChefProductionDayBlock,
   updateChefProductionSessionForcedBlock,
   updateChefProductionSessionLineQty,
@@ -39,6 +38,17 @@ function parseQty(s: string): number | null {
 function fmtQty(n: number | null): string {
   if (n == null || Number.isNaN(n)) return '';
   return String(n);
+}
+
+function faltanCount(objective: number, stock: number | null): number {
+  const s = stock != null && !Number.isNaN(stock) ? stock : 0;
+  const d = objective - s;
+  return d > 0 ? d : 0;
+}
+
+function excesoCount(objective: number, stock: number | null): number {
+  const s = stock != null && !Number.isNaN(stock) ? stock : 0;
+  return s > objective ? s - objective : 0;
 }
 
 function isSnapshotV1(x: unknown): x is ChefProductionSnapshotV1 {
@@ -63,9 +73,45 @@ export default function ProduccionCorrerPage() {
   const [blocks, setBlocks] = useState<ChefProductionDayBlock[]>([]);
   const [blockItems, setBlockItems] = useState<ChefProductionBlockItem[]>([]);
   const [sessionLines, setSessionLines] = useState<ChefProductionSessionLine[]>([]);
-  const [hechoDraft, setHechoDraft] = useState<Record<string, string>>({});
+  const [stockDraft, setStockDraft] = useState<Record<string, string>>({});
+  const stockDraftRef = useRef<Record<string, string>>({});
+  stockDraftRef.current = stockDraft;
+  const [manualLineId, setManualLineId] = useState<string | null>(null);
+  const [manualValue, setManualValue] = useState('');
   const [savingId, setSavingId] = useState<string | null>(null);
   const [closing, setClosing] = useState(false);
+  const manualInputRef = useRef<HTMLInputElement>(null);
+  const longPressTimerRef = useRef<number | null>(null);
+  const debouncePersistRef = useRef<number | null>(null);
+
+  const clearLongPressTimer = useCallback(() => {
+    if (longPressTimerRef.current != null) {
+      window.clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+  }, []);
+
+  const clearDebouncePersist = useCallback(() => {
+    if (debouncePersistRef.current != null) {
+      window.clearTimeout(debouncePersistRef.current);
+      debouncePersistRef.current = null;
+    }
+  }, []);
+
+  useEffect(
+    () => () => {
+      clearLongPressTimer();
+      clearDebouncePersist();
+    },
+    [clearLongPressTimer, clearDebouncePersist],
+  );
+
+  useEffect(() => {
+    if (manualLineId && manualInputRef.current) {
+      manualInputRef.current.focus();
+      manualInputRef.current.select();
+    }
+  }, [manualLineId]);
 
   const load = useCallback(async () => {
     if (!sessionId || !localId || !supabaseOk) {
@@ -100,7 +146,8 @@ export default function ProduccionCorrerPage() {
       for (const x of sl) {
         h[x.id] = fmtQty(x.qtyOnHand);
       }
-      setHechoDraft(h);
+      setStockDraft(h);
+      setManualLineId(null);
     } catch (e) {
       setBanner(formatProductionMigrationError(e));
     } finally {
@@ -143,32 +190,79 @@ export default function ProduccionCorrerPage() {
     }
   };
 
-  const persistHecho = async (sessionLineId: string, displayValue: string) => {
+  const persistStock = useCallback(
+    async (sessionLineId: string, displayValue: string) => {
+      if (!supabaseOk || isClosed) return;
+      const qty = parseQty(displayValue);
+      setSavingId(sessionLineId);
+      setBanner(null);
+      try {
+        const supabase = getSupabaseClient()!;
+        await updateChefProductionSessionLineQty(supabase, sessionLineId, qty);
+        setStockDraft((prev) => ({ ...prev, [sessionLineId]: fmtQty(qty) }));
+        setSessionLines((prev) =>
+          prev.map((r) => (r.id === sessionLineId ? { ...r, qtyOnHand: qty } : r)),
+        );
+      } catch (e) {
+        setBanner(e instanceof Error ? e.message : 'No se pudo guardar.');
+      } finally {
+        setSavingId(null);
+      }
+    },
+    [supabaseOk, isClosed],
+  );
+
+  const scheduleDebouncedPersist = useCallback(
+    (sessionLineId: string, displayValue: string) => {
+      clearDebouncePersist();
+      debouncePersistRef.current = window.setTimeout(() => {
+        debouncePersistRef.current = null;
+        void persistStock(sessionLineId, displayValue);
+      }, 500);
+    },
+    [clearDebouncePersist, persistStock],
+  );
+
+  const bumpStock = async (sessionLineId: string, blockItemId: string, delta: number) => {
     if (!supabaseOk || isClosed) return;
-    const qty = parseQty(displayValue);
-    setSavingId(sessionLineId);
-    setBanner(null);
-    try {
-      const supabase = getSupabaseClient()!;
-      await updateChefProductionSessionLineQty(supabase, sessionLineId, qty);
-      setHechoDraft((prev) => ({ ...prev, [sessionLineId]: fmtQty(qty) }));
-      setSessionLines((prev) =>
-        prev.map((r) => (r.id === sessionLineId ? { ...r, qtyOnHand: qty } : r)),
-      );
-    } catch (e) {
-      setBanner(e instanceof Error ? e.message : 'No se pudo guardar.');
-    } finally {
-      setSavingId(null);
-    }
+    clearLongPressTimer();
+    clearDebouncePersist();
+    setManualLineId((cur) => (cur === sessionLineId ? null : cur));
+    const cur = byBlockItemId.get(blockItemId);
+    const draftN = parseQty(stockDraftRef.current[sessionLineId] ?? '');
+    const base =
+      draftN != null && !Number.isNaN(draftN)
+        ? draftN
+        : cur?.qtyOnHand != null && !Number.isNaN(cur.qtyOnHand)
+          ? cur.qtyOnHand
+          : 0;
+    const next = Math.max(0, base + delta);
+    const nextStr = fmtQty(next);
+    stockDraftRef.current = { ...stockDraftRef.current, [sessionLineId]: nextStr };
+    setStockDraft((prev) => ({ ...prev, [sessionLineId]: nextStr }));
+    await persistStock(sessionLineId, String(next));
   };
 
-  const bumpHecho = async (sessionLineId: string, blockItemId: string, delta: number) => {
+  /** Pone stock = objetivo (un toque: cubrir lo que falta). */
+  const applyMakeAll = async (sessionLineId: string, objectiveValue: number) => {
     if (!supabaseOk || isClosed) return;
-    const cur = byBlockItemId.get(blockItemId);
-    const base = cur?.qtyOnHand != null && !Number.isNaN(cur.qtyOnHand) ? cur.qtyOnHand : 0;
-    const next = Math.max(0, base + delta);
-    setHechoDraft((prev) => ({ ...prev, [sessionLineId]: fmtQty(next) }));
-    await persistHecho(sessionLineId, String(next));
+    clearLongPressTimer();
+    clearDebouncePersist();
+    setManualLineId((cur) => (cur === sessionLineId ? null : cur));
+    const nextStr = fmtQty(objectiveValue);
+    stockDraftRef.current = { ...stockDraftRef.current, [sessionLineId]: nextStr };
+    setStockDraft((prev) => ({ ...prev, [sessionLineId]: nextStr }));
+    await persistStock(sessionLineId, String(objectiveValue));
+  };
+
+  const startStockLongPress = (sessionLineId: string, initialDisplay: string, disabled: boolean) => {
+    if (disabled || isClosed) return;
+    clearLongPressTimer();
+    longPressTimerRef.current = window.setTimeout(() => {
+      longPressTimerRef.current = null;
+      setManualLineId(sessionLineId);
+      setManualValue(initialDisplay);
+    }, 550);
   };
 
   const closeSession = async () => {
@@ -233,18 +327,24 @@ export default function ProduccionCorrerPage() {
                       <p className="text-sm font-bold leading-snug text-zinc-900">{it.label}</p>
                       <div className="mt-3 grid grid-cols-3 gap-2 text-center">
                         <div>
-                          <p className="text-[10px] font-bold uppercase text-zinc-700">Obj.</p>
+                          <p className="text-[10px] font-bold uppercase text-zinc-700">Objetivo</p>
                           <p className="mt-0.5 text-sm font-black tabular-nums text-zinc-900">{it.objective}</p>
                         </div>
                         <div>
-                          <p className="text-[10px] font-bold uppercase text-zinc-700">Hecho</p>
+                          <p className="text-[10px] font-bold uppercase text-zinc-700">Stock</p>
                           <p className="mt-0.5 text-sm font-black tabular-nums text-zinc-800">
                             {it.hecho ?? '—'}
                           </p>
                         </div>
                         <div>
-                          <p className="text-[10px] font-bold uppercase text-zinc-700">Hacer</p>
-                          <p className="mt-0.5 text-sm font-black tabular-nums text-zinc-900">{it.hacer}</p>
+                          <p className="text-[10px] font-bold uppercase text-zinc-700">Faltan</p>
+                          <p
+                            className={`mt-0.5 text-sm font-black tabular-nums ${
+                              it.hacer > 0 ? 'text-[#B91C1C]' : 'text-zinc-700'
+                            }`}
+                          >
+                            {it.hacer}
+                          </p>
                         </div>
                       </div>
                     </div>
@@ -345,7 +445,7 @@ export default function ProduccionCorrerPage() {
             </button>
           </div>
 
-          <div className="space-y-2">
+          <div className="space-y-3">
             {!activeBlock ? (
               <p className="rounded-2xl border border-zinc-200 bg-zinc-50/80 px-4 py-6 text-center text-sm font-medium text-zinc-800">
                 Selecciona un bloque para ver la lista de productos.
@@ -361,60 +461,156 @@ export default function ProduccionCorrerPage() {
                   const sl = byBlockItemId.get(it.id);
                   if (!sl) return null;
                   const objective = it.targetQty;
-                  const onHand = parseQty(hechoDraft[sl.id] ?? '');
-                  const hechoEffective =
-                    onHand != null && !Number.isNaN(onHand) ? onHand : (sl.qtyOnHand ?? null);
-                  const hacer = productionQtyToMake(objective, hechoEffective);
+                  const parsedDraft = parseQty(stockDraft[sl.id] ?? '');
+                  const stockEffective =
+                    parsedDraft != null && !Number.isNaN(parsedDraft)
+                      ? parsedDraft
+                      : (sl.qtyOnHand ?? null);
+                  const stockNum =
+                    stockEffective != null && !Number.isNaN(stockEffective) ? stockEffective : 0;
+                  const stockDisplayStr = String(stockNum);
+                  const manualHere = manualLineId === sl.id;
+                  const parsedManual = parseQty(manualValue);
+                  const effectiveForFaltan =
+                    manualHere && parsedManual != null && !Number.isNaN(parsedManual)
+                      ? parsedManual
+                      : stockEffective;
+                  const faltan = faltanCount(objective, effectiveForFaltan);
+                  const exceso = excesoCount(objective, effectiveForFaltan);
                   const saving = savingId === sl.id;
+                  const controlsDisabled = isClosed || saving;
                   return (
                     <div
                       key={it.id}
-                      className="rounded-xl border border-zinc-200/90 bg-white px-3 py-3 shadow-sm ring-1 ring-zinc-50"
+                      className="rounded-xl border border-zinc-200/90 bg-white px-3 py-4 shadow-sm ring-1 ring-zinc-50"
                     >
-                      <div className="flex flex-wrap items-start justify-between gap-2">
-                        <p className="text-sm font-bold leading-snug text-zinc-900">{it.label}</p>
-                        <span className="shrink-0 rounded-full bg-zinc-100 px-2 py-0.5 text-[10px] font-black uppercase text-zinc-800">
-                          Obj. {objective}
-                        </span>
+                      <p className="text-base font-black leading-snug text-zinc-900">{it.label}</p>
+
+                      {/* 1) Faltan / Completo / Exceso */}
+                      <div className="mt-3 flex min-h-[4.5rem] flex-col items-center justify-center">
+                        {exceso > 0 ? (
+                          <>
+                            <span className="text-center text-sm font-black uppercase tracking-wide text-zinc-500">
+                              Exceso:{' '}
+                              <span className="tabular-nums text-amber-600">+{exceso}</span>
+                            </span>
+                          </>
+                        ) : faltan > 0 ? (
+                          <>
+                            <span className="text-[10px] font-black uppercase tracking-wide text-zinc-600">
+                              Faltan
+                            </span>
+                            <span className="mt-0.5 text-4xl font-black tabular-nums leading-none text-[#B91C1C]">
+                              {faltan}
+                            </span>
+                          </>
+                        ) : (
+                          <>
+                            <span className="text-4xl font-black leading-none text-emerald-600">OK</span>
+                            <span className="mt-1 text-[11px] font-black uppercase tracking-wide text-emerald-700">
+                              Completo
+                            </span>
+                          </>
+                        )}
                       </div>
-                      <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-                        <div className="flex flex-1 items-center gap-2">
-                          <span className="text-[10px] font-bold uppercase text-zinc-700">Hecho</span>
-                          <button
-                            type="button"
-                            disabled={isClosed || saving}
-                            onClick={() => void bumpHecho(sl.id, it.id, -1)}
-                            className="grid h-11 w-11 shrink-0 place-items-center rounded-xl border border-zinc-200 bg-zinc-50 text-zinc-800 shadow-sm active:scale-[0.98] disabled:opacity-45"
-                            aria-label="Menos uno"
-                          >
-                            <Minus className="h-5 w-5" />
-                          </button>
+
+                      {/* 2) Hacer todo (solo si falta cantidad) */}
+                      {faltan > 0 ? (
+                        <button
+                          type="button"
+                          disabled={controlsDisabled}
+                          onClick={() => void applyMakeAll(sl.id, objective)}
+                          className="mt-3 w-full rounded-xl bg-[#D32F2F] py-3.5 text-sm font-black uppercase tracking-wide text-white shadow-md active:scale-[0.99] disabled:opacity-45"
+                        >
+                          HACER {faltan}
+                        </button>
+                      ) : null}
+
+                      {/* 3) Stock ± */}
+                      <p className="mt-3 text-center text-[10px] font-black uppercase tracking-wide text-zinc-600">
+                        Stock
+                      </p>
+                      <div className="mt-1 flex items-center justify-center gap-2 sm:gap-3">
+                        <button
+                          type="button"
+                          disabled={controlsDisabled}
+                          onClick={() => void bumpStock(sl.id, it.id, -1)}
+                          className="grid h-14 w-14 shrink-0 place-items-center rounded-2xl border-2 border-zinc-300 bg-white text-zinc-900 shadow-sm active:scale-[0.97] disabled:opacity-45"
+                          aria-label="Restar uno al stock"
+                        >
+                          <Minus className="h-7 w-7 stroke-[2.5]" />
+                        </button>
+                        {manualHere ? (
                           <input
-                            disabled={isClosed || saving}
+                            ref={manualInputRef}
+                            disabled={isClosed}
                             inputMode="decimal"
-                            value={hechoDraft[sl.id] ?? ''}
-                            onChange={(e) =>
-                              setHechoDraft((prev) => ({ ...prev, [sl.id]: e.target.value }))
-                            }
-                            onBlur={(e) => void persistHecho(sl.id, e.target.value)}
-                            className="h-11 min-w-0 flex-1 rounded-xl border border-zinc-200 bg-zinc-50/80 px-3 text-center text-base font-black tabular-nums text-zinc-900 outline-none focus:border-[#D32F2F]/40 disabled:opacity-60"
-                            placeholder="0"
+                            aria-label={`Cantidad manual: ${it.label}`}
+                            value={manualValue}
+                            onChange={(e) => {
+                              const v = e.target.value;
+                              setManualValue(v);
+                              setStockDraft((prev) => {
+                                const next = { ...prev, [sl.id]: v };
+                                stockDraftRef.current = next;
+                                return next;
+                              });
+                              scheduleDebouncedPersist(sl.id, v);
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault();
+                                clearDebouncePersist();
+                                const v = (e.target as HTMLInputElement).value;
+                                void persistStock(sl.id, v);
+                                setManualLineId(null);
+                              }
+                            }}
+                            onBlur={(e) => {
+                              clearDebouncePersist();
+                              void persistStock(sl.id, e.target.value);
+                              setManualLineId(null);
+                            }}
+                            className="h-16 min-w-[5.5rem] max-w-[9rem] flex-1 rounded-2xl border-2 border-[#D32F2F]/50 bg-zinc-50 px-2 text-center text-3xl font-black tabular-nums text-zinc-900 outline-none"
                           />
-                          <button
-                            type="button"
-                            disabled={isClosed || saving}
-                            onClick={() => void bumpHecho(sl.id, it.id, 1)}
-                            className="grid h-11 w-11 shrink-0 place-items-center rounded-xl border border-zinc-200 bg-zinc-50 text-zinc-800 shadow-sm active:scale-[0.98] disabled:opacity-45"
-                            aria-label="Más uno"
+                        ) : (
+                          <span
+                            className={[
+                              'flex h-16 min-w-[5.5rem] max-w-[9rem] flex-1 select-none items-center justify-center rounded-2xl border-2 border-zinc-200 bg-zinc-50 text-3xl font-black tabular-nums text-zinc-900 touch-manipulation',
+                              controlsDisabled
+                                ? 'pointer-events-none opacity-45'
+                                : 'cursor-pointer',
+                            ].join(' ')}
+                            style={{ WebkitUserSelect: 'none', userSelect: 'none' }}
+                            title="Mantén pulsado para escribir cantidad"
+                            aria-label={`Stock ${stockDisplayStr}. Mantén pulsado para editar`}
+                            onContextMenu={(e) => e.preventDefault()}
+                            onPointerDown={() =>
+                              startStockLongPress(sl.id, stockDisplayStr, controlsDisabled)
+                            }
+                            onPointerUp={clearLongPressTimer}
+                            onPointerCancel={clearLongPressTimer}
+                            onPointerLeave={clearLongPressTimer}
                           >
-                            <Plus className="h-5 w-5" />
-                          </button>
-                        </div>
-                        <div className="rounded-xl bg-zinc-50 px-4 py-2 text-center ring-1 ring-zinc-100 sm:min-w-[6.5rem]">
-                          <p className="text-[10px] font-bold uppercase text-zinc-700">Hacer</p>
-                          <p className="text-xl font-black tabular-nums text-zinc-900">{hacer}</p>
-                        </div>
+                            {stockDisplayStr}
+                          </span>
+                        )}
+                        <button
+                          type="button"
+                          disabled={controlsDisabled}
+                          onClick={() => void bumpStock(sl.id, it.id, 1)}
+                          className="grid h-14 w-14 shrink-0 place-items-center rounded-2xl border-2 border-zinc-300 bg-white text-zinc-900 shadow-sm active:scale-[0.97] disabled:opacity-45"
+                          aria-label="Sumar uno al stock"
+                        >
+                          <Plus className="h-7 w-7 stroke-[2.5]" />
+                        </button>
                       </div>
+
+                      {/* 4) Objetivo */}
+                      <p className="mt-3 text-center text-[11px] font-semibold tabular-nums text-zinc-600">
+                        Objetivo{' '}
+                        <span className="font-bold text-zinc-800">{objective}</span>
+                      </p>
                     </div>
                   );
                 })
