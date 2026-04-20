@@ -11,6 +11,7 @@ import {
   resolveIncident,
   staffDisplayName,
 } from '@/lib/staff/staff-supabase';
+import { appAlert, appPrompt } from '@/lib/app-dialog-bridge';
 import { getSupabaseClient } from '@/lib/supabase-client';
 import type { StaffEmployee, StaffIncident, StaffIncidentStatus } from '@/lib/staff/types';
 
@@ -79,13 +80,13 @@ export default function PersonalIncidenciasPage() {
     if (!perms.canResolveIncidents) return;
     const supabase = getSupabaseClient();
     if (!supabase) return;
-    const note = window.prompt('Comentario de cierre (opcional)') ?? '';
+    const note = (await appPrompt('Comentario de cierre (opcional)')) ?? '';
     setBusyId(id);
     try {
       await resolveIncident(supabase, id, { status, resolutionNote: note.trim() || null });
       await reload();
     } catch (e: unknown) {
-      alert(e instanceof Error ? e.message : 'Error');
+      await appAlert(e instanceof Error ? e.message : 'Error');
     } finally {
       setBusyId(null);
     }
@@ -95,9 +96,13 @@ export default function PersonalIncidenciasPage() {
     if (!perms.canResolveIncidents || !localId) return;
     const supabase = getSupabaseClient();
     if (!supabase) return;
-    const empId = window.prompt('ID empleado (UUID) — mejor desde Equipo en una futura versión con selector');
+    const empId = await appPrompt(
+      'ID empleado (UUID) — mejor desde Equipo en una futura versión con selector',
+    );
     if (!empId?.trim()) return;
-    const t = window.prompt(`Tipo: ${TYPES.join(', ')}`, 'other') as StaffIncident['incidentType'];
+    const tRaw = await appPrompt(`Tipo: ${TYPES.join(', ')}`, 'other');
+    if (tRaw == null) return;
+    const t = tRaw as StaffIncident['incidentType'];
     if (!TYPES.includes(t)) return;
     const d = new Date();
     const ymd = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -111,7 +116,7 @@ export default function PersonalIncidenciasPage() {
       });
       await reload();
     } catch (e: unknown) {
-      alert(e instanceof Error ? e.message : 'Error');
+      await appAlert(e instanceof Error ? e.message : 'Error');
     }
   };
 

@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import React, { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '@/components/AuthProvider';
+import { appConfirm } from '@/lib/app-dialog-bridge';
 import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
 import { canCocinaCentralOperate } from '@/lib/cocina-central-permissions';
 import type {
@@ -89,7 +90,7 @@ export default function InventarioInternoPage() {
 
   const remove = async (r: CentralInventoryProductRow) => {
     if (!supabase || !localId) return;
-    if (!window.confirm(`¿Eliminar «${r.nombre}»? Si está vinculado en el catálogo, quita antes el vínculo.`)) return;
+    if (!(await appConfirm(`¿Eliminar «${r.nombre}»? Si está vinculado en el catálogo, quita antes el vínculo.`))) return;
     setMsg(null);
     try {
       await ccDeleteInventoryProduct(supabase, localId, r.id);

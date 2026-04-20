@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { AuthProvider } from "@/components/AuthProvider";
+import { AppDialogProvider } from "@/components/AppDialogProvider";
 import AppFrame from "@/components/AppFrame";
 import { Geist_Mono, Lora } from "next/font/google";
 import { MermasStoreProvider } from "@/components/MermasStoreProvider";
@@ -77,7 +78,9 @@ export default function RootLayout({
         <PwaRegister />
         <AuthProvider>
           <MermasStoreProvider>
-            <AppFrame>{children}</AppFrame>
+            <AppDialogProvider>
+              <AppFrame>{children}</AppFrame>
+            </AppDialogProvider>
           </MermasStoreProvider>
         </AuthProvider>
       </body>

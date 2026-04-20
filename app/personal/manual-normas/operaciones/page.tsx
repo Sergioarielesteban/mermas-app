@@ -20,6 +20,7 @@ import {
   updateManualProcedimiento,
   upsertManualLectura,
 } from '@/lib/personal-normas-manual-supabase';
+import { appConfirm } from '@/lib/app-dialog-bridge';
 import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
 import { safeCreateNotification } from '@/services/notifications';
 
@@ -202,7 +203,7 @@ export default function ManualOperacionesPage() {
 
   const onDelete = async (id: string) => {
     if (!localId || !supabaseOk || !isAdmin) return;
-    if (!window.confirm('¿Eliminar este procedimiento?')) return;
+    if (!(await appConfirm('¿Eliminar este procedimiento?'))) return;
     setBanner(null);
     try {
       const supabase = getSupabaseClient()!;

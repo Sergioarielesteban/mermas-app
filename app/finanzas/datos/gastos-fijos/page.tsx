@@ -12,6 +12,7 @@ import {
   updateFixedExpense,
 } from '@/lib/finanzas-economics-supabase';
 import type { FixedExpense, FixedExpenseCategory, FixedExpenseFrequency } from '@/lib/finanzas-economics-types';
+import { appConfirm } from '@/lib/app-dialog-bridge';
 import { getSupabaseClient } from '@/lib/supabase-client';
 
 const CATEGORIES: FixedExpenseCategory[] = [
@@ -151,7 +152,7 @@ function GastosFijosManager({ localId }: { localId: string }) {
   }
 
   async function onDelete(row: FixedExpense) {
-    if (!window.confirm(`¿Eliminar «${row.name}»?`)) return;
+    if (!(await appConfirm(`¿Eliminar «${row.name}»?`))) return;
     try {
       await deleteFixedExpense(getSupabaseClient()!, localId, row.id);
       emitFinanzasDataChanged();

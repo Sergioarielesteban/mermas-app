@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { Pencil, Plus, Search, Trash2, X } from 'lucide-react';
 import { useMermasStore } from '@/components/MermasStoreProvider';
 import { useAuth } from '@/components/AuthProvider';
+import { appConfirm } from '@/lib/app-dialog-bridge';
 import { confirmDestructiveOperation } from '@/lib/ops-role-confirm';
 import type { Unit } from '@/lib/types';
 
@@ -120,7 +121,7 @@ export default function ProductosPage() {
                 <button
                   type="button"
                   onClick={async () => {
-                    const confirmed = window.confirm(`¿Eliminar "${p.name}"?`);
+                    const confirmed = await appConfirm(`¿Eliminar "${p.name}"?`);
                     if (!confirmed) return;
                     if (!(await confirmDestructiveOperation(profileRole, '¿Confirmar eliminación de este producto?'))) {
                       return;

@@ -4,6 +4,7 @@ import Link from 'next/link';
 import React from 'react';
 import { ChevronDown } from 'lucide-react';
 import { useAuth } from '@/components/AuthProvider';
+import { appConfirm } from '@/lib/app-dialog-bridge';
 import { getSupabaseClient } from '@/lib/supabase-client';
 import PedidosPremiaLockedScreen from '@/components/PedidosPremiaLockedScreen';
 import { canAccessPedidos, canUsePedidosModule } from '@/lib/pedidos-access';
@@ -431,8 +432,9 @@ export default function ProveedoresPage() {
   };
 
   const removeSupplier = (supplierId: string, supplierName: string) => {
+    void (async () => {
     if (!localId) return setMessage('Perfil del local no cargado. Cierra sesión y vuelve a entrar.');
-    const ok = window.confirm(`¿Eliminar proveedor "${supplierName}"?`);
+    const ok = await appConfirm(`¿Eliminar proveedor "${supplierName}"?`);
     if (!ok) return;
     const supabase = getSupabaseClient();
     if (!supabase) return setMessage('Supabase no disponible en esta sesión.');
@@ -449,6 +451,7 @@ export default function ProveedoresPage() {
         dispatchPedidosDataChanged();
       })
       .catch((err: Error) => setMessage(`No se pudo eliminar proveedor: ${err.message}`));
+    })();
   };
 
   if (!hasPedidosEntry) {

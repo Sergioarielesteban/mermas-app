@@ -1,4 +1,5 @@
 import type { ProfileAppRole } from '@/components/AuthProvider';
+import { appAlert, appConfirm } from '@/lib/app-dialog-bridge';
 
 /** Sustituye la antigua clave local de 4 dígitos: admin y manager confirman; staff no. */
 export function confirmDestructiveOperation(
@@ -6,14 +7,11 @@ export function confirmDestructiveOperation(
   message = '¿Confirmar esta acción?',
 ): Promise<boolean> {
   if (role === 'staff') {
-    if (typeof window !== 'undefined') {
-      window.alert('Tu rol no permite esta acción.');
-    }
-    return Promise.resolve(false);
+    return appAlert('Tu rol no permite esta acción.').then(() => false);
   }
   if (role === 'admin' || role === 'manager') {
     if (typeof window === 'undefined') return Promise.resolve(true);
-    return Promise.resolve(window.confirm(message));
+    return appConfirm(message);
   }
   return Promise.resolve(false);
 }

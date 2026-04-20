@@ -6,6 +6,7 @@ import { ArrowLeft, ChevronDown, ChevronUp, Copy, Plus, Trash2 } from 'lucide-re
 import MermasStyleHero from '@/components/MermasStyleHero';
 import { useAuth } from '@/components/AuthProvider';
 import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
+import { appConfirm, appPrompt } from '@/lib/app-dialog-bridge';
 import {
   CHEF_PRODUCTION_WEEKDAY_SHORT,
   type ChefProductionBlockItem,
@@ -115,7 +116,7 @@ export default function ProduccionPlantillasPage() {
 
   const removeTemplate = async (id: string) => {
     if (!localId || !supabaseOk) return;
-    if (!window.confirm('¿Eliminar esta plantilla y todo su contenido?')) return;
+    if (!(await appConfirm('¿Eliminar esta plantilla y todo su contenido?'))) return;
     setBusy(true);
     try {
       const supabase = getSupabaseClient()!;
@@ -159,7 +160,7 @@ export default function ProduccionPlantillasPage() {
 
   const addBlock = async (templateId: string) => {
     if (!supabaseOk) return;
-    const label = window.prompt('Nombre del bloque (ej. Diario, Lun–Mié)');
+    const label = await appPrompt('Nombre del bloque (ej. Diario, Lun–Mié)');
     if (!label?.trim()) return;
     setBusy(true);
     try {
@@ -180,7 +181,7 @@ export default function ProduccionPlantillasPage() {
 
   const removeBlock = async (blockId: string) => {
     if (!supabaseOk) return;
-    if (!window.confirm('¿Eliminar este bloque y todos sus productos?')) return;
+    if (!(await appConfirm('¿Eliminar este bloque y todos sus productos?'))) return;
     setBusy(true);
     try {
       const supabase = getSupabaseClient()!;
@@ -258,7 +259,7 @@ export default function ProduccionPlantillasPage() {
 
   const addProductToBlock = async (blockId: string) => {
     if (!supabaseOk) return;
-    const label = window.prompt('Nombre del producto o preparación');
+    const label = await appPrompt('Nombre del producto o preparación');
     if (!label?.trim()) return;
     setBusy(true);
     try {
@@ -354,14 +355,14 @@ export default function ProduccionPlantillasPage() {
       ) : null}
 
       {!localId || !supabaseOk ? (
-        <p className="text-center text-sm text-zinc-500">Conecta Supabase y un local para editar plantillas.</p>
+        <p className="text-center text-sm font-medium text-zinc-700">Conecta Supabase y un local para editar plantillas.</p>
       ) : loading ? (
-        <p className="text-center text-sm text-zinc-500">Cargando…</p>
+        <p className="text-center text-sm font-medium text-zinc-700">Cargando…</p>
       ) : (
         <>
           <section className="rounded-2xl border border-zinc-200/90 bg-white p-4 shadow-sm ring-1 ring-zinc-100">
-            <p className="text-xs font-extrabold uppercase tracking-wide text-zinc-500">Nueva plantilla</p>
-            <p className="mt-1 text-[11px] text-zinc-500">
+            <p className="text-xs font-extrabold uppercase tracking-wide text-zinc-700">Nueva plantilla</p>
+            <p className="mt-1 text-[11px] font-medium text-zinc-700">
               Se crean dos bloques de ejemplo (Lun–Jue y Vie–Dom). Añade productos dentro de cada uno.
             </p>
             <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-end">
@@ -400,11 +401,11 @@ export default function ProduccionPlantillasPage() {
                   >
                     <div className="min-w-0">
                       <p className="truncate text-sm font-black text-zinc-900">{p.name}</p>
-                      <p className="mt-0.5 text-[10px] font-bold uppercase tracking-wide text-[#B91C1C]">
+                      <p className="mt-0.5 text-[10px] font-bold uppercase tracking-wide text-zinc-800">
                         {blocks.length} bloques · {productCount} productos
                       </p>
                     </div>
-                    <span className="shrink-0 text-xs font-bold text-zinc-400">{open ? '▲' : '▼'}</span>
+                    <span className="shrink-0 text-xs font-bold text-zinc-600">{open ? '▲' : '▼'}</span>
                   </button>
                   {open ? (
                     <div className="space-y-4 border-t border-zinc-100 px-4 py-3">
@@ -413,8 +414,10 @@ export default function ProduccionPlantillasPage() {
                           type="button"
                           disabled={busy}
                           onClick={() => {
-                            const n = window.prompt('Nuevo nombre', p.name);
-                            if (n?.trim()) void renameTemplate(p.id, n);
+                            void (async () => {
+                              const n = await appPrompt('Nuevo nombre de la plantilla', p.name);
+                              if (n?.trim()) void renameTemplate(p.id, n);
+                            })();
                           }}
                           className="rounded-lg border border-zinc-300 bg-white px-2.5 py-1.5 text-[11px] font-bold text-zinc-800"
                         >
@@ -449,9 +452,9 @@ export default function ProduccionPlantillasPage() {
                       </div>
 
                       <div className="space-y-3">
-                        <p className="text-[11px] font-black uppercase text-zinc-500">Bloques y productos</p>
+                        <p className="text-[11px] font-black uppercase text-zinc-700">Bloques y productos</p>
                         {blocks.length === 0 ? (
-                          <p className="text-xs text-zinc-500">Añade un bloque para definir días y productos.</p>
+                          <p className="text-xs font-medium text-zinc-700">Añade un bloque para definir días y productos.</p>
                         ) : (
                           blocks.map((b, bi) => {
                             const products = [...(itemsByBlock[b.id] ?? [])].sort(
@@ -508,7 +511,7 @@ export default function ProduccionPlantillasPage() {
                                   </button>
                                 </div>
 
-                                <p className="mt-2 text-[10px] font-bold uppercase text-zinc-400">Días del bloque</p>
+                                <p className="mt-2 text-[10px] font-bold uppercase text-zinc-700">Días del bloque</p>
                                 <div className="mt-1 flex flex-wrap gap-1">
                                   <button
                                     type="button"
@@ -548,7 +551,7 @@ export default function ProduccionPlantillasPage() {
                                           'h-9 min-w-[2rem] rounded-lg text-xs font-black',
                                           on
                                             ? 'bg-[#D32F2F] text-white shadow-sm'
-                                            : 'border border-zinc-200 bg-zinc-50 text-zinc-500',
+                                            : 'border border-zinc-200 bg-zinc-50 text-zinc-700',
                                         ].join(' ')}
                                       >
                                         {label}
@@ -557,12 +560,12 @@ export default function ProduccionPlantillasPage() {
                                   })}
                                 </div>
 
-                                <p className="mt-3 text-[10px] font-bold uppercase text-zinc-500">
+                                <p className="mt-3 text-[10px] font-bold uppercase text-zinc-700">
                                   Productos en este bloque
                                 </p>
                                 <div className="mt-2 space-y-2">
                                   {products.length === 0 ? (
-                                    <p className="rounded-lg bg-zinc-50/80 px-3 py-2 text-[11px] text-zinc-500">
+                                    <p className="rounded-lg bg-zinc-50/80 px-3 py-2 text-[11px] font-medium text-zinc-800">
                                       Aún no hay productos. Usa el botón de abajo.
                                     </p>
                                   ) : (
@@ -607,7 +610,7 @@ export default function ProduccionPlantillasPage() {
                                         />
                                         <div className="flex items-center gap-2">
                                           <label className="flex flex-col">
-                                            <span className="text-[9px] font-bold uppercase text-zinc-400">
+                                            <span className="text-[9px] font-bold uppercase text-zinc-700">
                                               Obj.
                                             </span>
                                             <input
@@ -624,7 +627,7 @@ export default function ProduccionPlantillasPage() {
                                                 ).value;
                                                 if (lbl.trim()) void persistProduct(it, lbl, tgt);
                                               }}
-                                              className="h-9 w-[4.5rem] rounded-lg border border-zinc-200 bg-white px-2 text-sm font-black tabular-nums outline-none focus:border-[#D32F2F]/40"
+                                              className="h-9 w-[4.5rem] rounded-lg border border-zinc-200 bg-white px-2 text-sm font-black tabular-nums text-zinc-900 outline-none focus:border-[#D32F2F]/40"
                                             />
                                           </label>
                                           <button
@@ -644,7 +647,7 @@ export default function ProduccionPlantillasPage() {
                                   type="button"
                                   disabled={busy}
                                   onClick={() => void addProductToBlock(b.id)}
-                                  className="mt-2 flex w-full items-center justify-center gap-1 rounded-lg border border-dashed border-zinc-300 py-2 text-[11px] font-bold text-zinc-700"
+                                  className="mt-2 flex w-full items-center justify-center gap-1 rounded-lg border border-dashed border-zinc-300 py-2 text-[11px] font-bold text-zinc-800"
                                 >
                                   <Plus className="h-3.5 w-3.5" />
                                   Añadir producto

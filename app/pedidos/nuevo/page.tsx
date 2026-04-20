@@ -8,6 +8,7 @@ import { usePedidosOrders } from '@/components/PedidosOrdersProvider';
 import { getDemoPedidoSuppliers } from '@/lib/demo-dataset';
 import { isDemoMode } from '@/lib/demo-mode';
 import { uid } from '@/lib/id';
+import { appConfirm } from '@/lib/app-dialog-bridge';
 import { getSupabaseClient } from '@/lib/supabase-client';
 import PedidosPremiaLockedScreen from '@/components/PedidosPremiaLockedScreen';
 import { canAccessPedidos, canUsePedidosModule } from '@/lib/pedidos-access';
@@ -695,9 +696,11 @@ export default function NuevoPedidoPage() {
           <button
             type="button"
             onClick={() => {
-              if (!window.confirm('¿Cancelar pedido y vaciar cesta?')) return;
-              resetPedidoFormAfterSuccess();
-              router.push('/pedidos');
+              void (async () => {
+                if (!(await appConfirm('¿Cancelar pedido y vaciar cesta?'))) return;
+                resetPedidoFormAfterSuccess();
+                router.push('/pedidos');
+              })();
             }}
             className="h-11 rounded-xl border border-zinc-300 bg-white text-sm font-bold text-zinc-700"
           >

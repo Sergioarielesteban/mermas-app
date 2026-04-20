@@ -11,6 +11,7 @@ import {
   updateTaxEntry,
 } from '@/lib/finanzas-economics-supabase';
 import type { TaxEntry, TaxEntryType } from '@/lib/finanzas-economics-types';
+import { appConfirm } from '@/lib/app-dialog-bridge';
 import { getSupabaseClient } from '@/lib/supabase-client';
 
 const TAX_TYPES: { id: TaxEntryType; label: string }[] = [
@@ -124,7 +125,7 @@ function ImpuestosManager({ localId }: { localId: string }) {
   }
 
   async function onDelete(row: TaxEntry) {
-    if (!window.confirm('¿Eliminar este asiento?')) return;
+    if (!(await appConfirm('¿Eliminar este asiento?'))) return;
     try {
       await deleteTaxEntry(getSupabaseClient()!, localId, row.id);
       emitFinanzasDataChanged();

@@ -17,6 +17,7 @@ import {
 } from '@/lib/staff/staff-supabase';
 import { countOperationalUsersForLocal } from '@/lib/subscriptions-supabase';
 import { getModuleActionAccess, logAccessBlocked, type ModuleAction } from '@/lib/moduleAccessControl';
+import { appAlert, appConfirm } from '@/lib/app-dialog-bridge';
 import { getSupabaseClient } from '@/lib/supabase-client';
 import type { StaffEmployee } from '@/lib/staff/types';
 
@@ -195,7 +196,7 @@ export default function PersonalEmpleadosPage() {
       await updateStaffEmployee(supabase, em.id, { active: !em.active });
       await reload();
     } catch (er: unknown) {
-      alert(er instanceof Error ? er.message : 'Error');
+      await appAlert(er instanceof Error ? er.message : 'Error');
     }
   };
 
@@ -204,7 +205,7 @@ export default function PersonalEmpleadosPage() {
     if (!ensurePersonalActionAccess('delete')) return;
     const supabase = getSupabaseClient();
     if (!supabase) return;
-    const ok = window.confirm(
+    const ok = await appConfirm(
       `Se eliminará el empleado "${staffDisplayName(em)}". Esta acción no se puede deshacer. ¿Continuar?`,
     );
     if (!ok) return;
@@ -212,7 +213,7 @@ export default function PersonalEmpleadosPage() {
       await deleteStaffEmployee(supabase, em.id);
       await reload();
     } catch (er: unknown) {
-      alert(er instanceof Error ? er.message : 'No se pudo eliminar');
+      await appAlert(er instanceof Error ? er.message : 'No se pudo eliminar');
     }
   };
 

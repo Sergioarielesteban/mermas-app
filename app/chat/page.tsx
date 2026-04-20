@@ -6,6 +6,7 @@ import { ChevronLeft, Send, Trash2 } from 'lucide-react';
 import MermasStyleHero from '@/components/MermasStyleHero';
 import { useAuth } from '@/components/AuthProvider';
 import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
+import { appConfirm } from '@/lib/app-dialog-bridge';
 import {
   deleteAllLocalChatMessages,
   fetchLocalChatMessages,
@@ -143,9 +144,9 @@ export default function ChatPage() {
   const clearChat = async () => {
     if (!localId || !supabaseOk || deleting) return;
     if (
-      !window.confirm(
+      !(await appConfirm(
         'Se eliminarán todos los mensajes del chat de este local. Esta acción no se puede deshacer. ¿Continuar?',
-      )
+      ))
     ) {
       return;
     }

@@ -6,6 +6,7 @@ import { ChevronLeft } from 'lucide-react';
 import MermasStyleHero from '@/components/MermasStyleHero';
 import { useAuth } from '@/components/AuthProvider';
 import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
+import { appConfirm } from '@/lib/app-dialog-bridge';
 import { confirmDestructiveOperation } from '@/lib/ops-role-confirm';
 import {
   type AppccFryerRow,
@@ -149,9 +150,9 @@ export default function AppccAceiteEquiposPage() {
 
   const removeFryer = async (f: AppccFryerRow) => {
     if (
-      !window.confirm(
+      !(await appConfirm(
         `¿Eliminar «${f.name}»? Se borrará también el historial de aceite de esta freidora. No se puede deshacer.`,
-      )
+      ))
     ) {
       return;
     }

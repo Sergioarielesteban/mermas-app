@@ -5,6 +5,7 @@ import { X } from 'lucide-react';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { STAFF_ZONE_PRESETS, type StaffEmployee, type StaffShift, type StaffShiftStatus } from '@/lib/staff/types';
 import { zoneDefaultColorHint } from '@/lib/staff/staff-zone-styles';
+import { appConfirm } from '@/lib/app-dialog-bridge';
 import { deleteStaffShift, staffDisplayName, upsertStaffShift } from '@/lib/staff/staff-supabase';
 
 export type ShiftDraft =
@@ -122,7 +123,7 @@ export default function ShiftEditorModal({
 
   const onDelete = async () => {
     if (!shiftId || !canDelete) return;
-    if (!window.confirm('¿Eliminar este turno?')) return;
+    if (!(await appConfirm('¿Eliminar este turno?'))) return;
     setBusy(true);
     setErr(null);
     try {

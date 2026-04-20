@@ -7,6 +7,7 @@ import { ChevronDown } from 'lucide-react';
 import { useAuth } from '@/components/AuthProvider';
 import { usePedidosOrders } from '@/components/PedidosOrdersProvider';
 import { CHEF_ONE_TAPER_LINE_CLASS } from '@/components/ChefOneGlowLine';
+import { appConfirm } from '@/lib/app-dialog-bridge';
 import { getSupabaseClient } from '@/lib/supabase-client';
 import PedidosPremiaLockedScreen from '@/components/PedidosPremiaLockedScreen';
 import { dispatchPedidosDataChanged } from '@/hooks/usePedidosDataChangedListener';
@@ -843,14 +844,14 @@ export default function RecepcionPedidosPage() {
                 <button
                   type="button"
                   onClick={() => {
+                    void (async () => {
                     if (
-                      !window.confirm(
+                      !(await appConfirm(
                         '¿Archivar este pedido de la revisión de precios? Pasará al acordeón inferior (sigue en Pedidos enviados). No marca el pedido como recibido.',
-                      )
+                      ))
                     ) {
                       return;
                     }
-                    void (async () => {
                       const latest = orders.find((o) => o.id === order.id);
                       if (!latest || !localId) return;
                       setMessage('Guardando precios…');

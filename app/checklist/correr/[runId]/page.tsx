@@ -22,6 +22,7 @@ import {
   fetchChefChecklistSections,
   setChefChecklistRunItemDone,
 } from '@/lib/chef-ops-supabase';
+import { appConfirm } from '@/lib/app-dialog-bridge';
 
 export default function ChecklistCorrerPage() {
   const params = useParams();
@@ -120,7 +121,7 @@ export default function ChecklistCorrerPage() {
   const closeRun = async () => {
     if (!supabaseOk || !run || isClosed) return;
     if (!allDone) {
-      if (!window.confirm('Aún faltan ítems. ¿Registrar cierre igualmente?')) return;
+      if (!(await appConfirm('Aún faltan ítems. ¿Registrar cierre igualmente?'))) return;
     }
     setClosing(true);
     setBanner(null);

@@ -27,6 +27,7 @@ import {
   updateChefProductionSessionForcedBlock,
   updateChefProductionSessionLineQty,
 } from '@/lib/chef-ops-supabase';
+import { appConfirm } from '@/lib/app-dialog-bridge';
 
 function parseQty(s: string): number | null {
   const t = s.trim().replace(',', '.');
@@ -172,7 +173,7 @@ export default function ProduccionCorrerPage() {
 
   const closeSession = async () => {
     if (!supabaseOk || !session || isClosed) return;
-    if (!window.confirm('¿Registrar cierre de esta lista? Quedará en el historial con la foto del momento.')) return;
+    if (!(await appConfirm('¿Registrar cierre de esta lista? Quedará en el historial con la foto del momento.'))) return;
     setClosing(true);
     setBanner(null);
     try {
@@ -203,26 +204,26 @@ export default function ProduccionCorrerPage() {
       ) : null}
 
       {!localId || !supabaseOk ? (
-        <p className="text-center text-sm text-zinc-500">Sesión o Supabase no disponibles.</p>
+        <p className="text-center text-sm font-medium text-zinc-700">Sesión o Supabase no disponibles.</p>
       ) : loading ? (
-        <p className="text-center text-sm text-zinc-500">Cargando…</p>
+        <p className="text-center text-sm font-medium text-zinc-700">Cargando…</p>
       ) : !session ? null : snapshotOk ? (
         <>
           <div className="rounded-2xl border border-zinc-200/90 bg-white p-4 shadow-sm ring-1 ring-zinc-100">
-            <p className="text-[10px] font-black uppercase tracking-wide text-zinc-500">Lista cerrada</p>
+            <p className="text-[10px] font-black uppercase tracking-wide text-zinc-700">Lista cerrada</p>
             <p className="mt-1 text-sm font-bold text-zinc-900">
               {session.workDate}
               {session.periodLabel ? ` · ${session.periodLabel}` : ''}
             </p>
             <p className="mt-1 text-xs font-semibold text-zinc-600">Bloque: {snapshotOk.blockLabel}</p>
-            <p className="mt-2 text-[11px] text-zinc-500">
+            <p className="mt-2 text-[11px] font-medium text-zinc-700">
               Cerrada {session.completedAt ? new Date(session.completedAt).toLocaleString() : ''}
             </p>
           </div>
           <div className="space-y-5">
             {snapshotOk.sections.map((sec) => (
               <div key={sec.title} className="space-y-2">
-                <p className="px-1 text-[11px] font-black uppercase tracking-wider text-zinc-500">{sec.title}</p>
+                <p className="px-1 text-[11px] font-black uppercase tracking-wider text-zinc-700">{sec.title}</p>
                 <div className="space-y-2">
                   {sec.items.map((it, idx) => (
                     <div
@@ -232,18 +233,18 @@ export default function ProduccionCorrerPage() {
                       <p className="text-sm font-bold leading-snug text-zinc-900">{it.label}</p>
                       <div className="mt-3 grid grid-cols-3 gap-2 text-center">
                         <div>
-                          <p className="text-[10px] font-bold uppercase text-zinc-400">Obj.</p>
+                          <p className="text-[10px] font-bold uppercase text-zinc-700">Obj.</p>
                           <p className="mt-0.5 text-sm font-black tabular-nums text-zinc-900">{it.objective}</p>
                         </div>
                         <div>
-                          <p className="text-[10px] font-bold uppercase text-zinc-400">Hecho</p>
+                          <p className="text-[10px] font-bold uppercase text-zinc-700">Hecho</p>
                           <p className="mt-0.5 text-sm font-black tabular-nums text-zinc-800">
                             {it.hecho ?? '—'}
                           </p>
                         </div>
                         <div>
-                          <p className="text-[10px] font-bold uppercase text-zinc-400">Hacer</p>
-                          <p className="mt-0.5 text-sm font-black tabular-nums text-[#B91C1C]">{it.hacer}</p>
+                          <p className="text-[10px] font-bold uppercase text-zinc-700">Hacer</p>
+                          <p className="mt-0.5 text-sm font-black tabular-nums text-zinc-900">{it.hacer}</p>
                         </div>
                       </div>
                     </div>
@@ -271,7 +272,7 @@ export default function ProduccionCorrerPage() {
           <div className="rounded-2xl border border-zinc-200/90 bg-white p-4 shadow-sm ring-1 ring-zinc-100">
             <div className="flex flex-wrap items-end justify-between gap-3">
               <div>
-                <p className="text-[10px] font-black uppercase tracking-wide text-zinc-500">Día de trabajo</p>
+                <p className="text-[10px] font-black uppercase tracking-wide text-zinc-700">Día de trabajo</p>
                 <p className="text-sm font-bold text-zinc-900">{session.workDate}</p>
                 {session.periodLabel ? (
                   <p className="mt-1 text-xs font-semibold text-zinc-600">{session.periodLabel}</p>
@@ -287,7 +288,7 @@ export default function ProduccionCorrerPage() {
 
             {blocks.length > 0 ? (
               <div className="mt-4">
-                <p className="text-[10px] font-black uppercase text-zinc-500">Bloque del día</p>
+                <p className="text-[10px] font-black uppercase text-zinc-700">Bloque del día</p>
                 <div className="mt-2 flex flex-wrap gap-1.5">
                   <button
                     type="button"
@@ -322,14 +323,14 @@ export default function ProduccionCorrerPage() {
                       </button>
                     ))}
                 </div>
-                <p className="mt-2 text-[10px] font-medium text-zinc-500">
+                <p className="mt-2 text-[10px] font-semibold text-zinc-800">
                   Activo:{' '}
-                  <span className="font-bold text-zinc-800">{activeBlock?.label ?? '—'}</span>
+                  <span className="font-bold text-zinc-900">{activeBlock?.label ?? '—'}</span>
                   {activeBlock ? ` · ${blockItems.length} producto${blockItems.length === 1 ? '' : 's'}` : ''}
                 </p>
               </div>
             ) : (
-              <p className="mt-3 text-center text-xs font-semibold text-zinc-500">
+              <p className="mt-3 text-center text-xs font-semibold text-zinc-800">
                 Esta plantilla no tiene bloques de día. Configúrala en Plantillas.
               </p>
             )}
@@ -346,11 +347,11 @@ export default function ProduccionCorrerPage() {
 
           <div className="space-y-2">
             {!activeBlock ? (
-              <p className="rounded-2xl border border-zinc-200 bg-zinc-50/80 px-4 py-6 text-center text-sm text-zinc-600">
+              <p className="rounded-2xl border border-zinc-200 bg-zinc-50/80 px-4 py-6 text-center text-sm font-medium text-zinc-800">
                 Selecciona un bloque para ver la lista de productos.
               </p>
             ) : blockItems.length === 0 ? (
-              <p className="rounded-2xl border border-zinc-200 bg-zinc-50/80 px-4 py-6 text-center text-sm text-zinc-600">
+              <p className="rounded-2xl border border-zinc-200 bg-zinc-50/80 px-4 py-6 text-center text-sm font-medium text-zinc-800">
                 Este bloque no tiene productos. Añádelos en Plantillas.
               </p>
             ) : (
@@ -372,13 +373,13 @@ export default function ProduccionCorrerPage() {
                     >
                       <div className="flex flex-wrap items-start justify-between gap-2">
                         <p className="text-sm font-bold leading-snug text-zinc-900">{it.label}</p>
-                        <span className="shrink-0 rounded-full bg-zinc-100 px-2 py-0.5 text-[10px] font-black uppercase text-zinc-600">
+                        <span className="shrink-0 rounded-full bg-zinc-100 px-2 py-0.5 text-[10px] font-black uppercase text-zinc-800">
                           Obj. {objective}
                         </span>
                       </div>
                       <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
                         <div className="flex flex-1 items-center gap-2">
-                          <span className="text-[10px] font-bold uppercase text-zinc-400">Hecho</span>
+                          <span className="text-[10px] font-bold uppercase text-zinc-700">Hecho</span>
                           <button
                             type="button"
                             disabled={isClosed || saving}
@@ -410,8 +411,8 @@ export default function ProduccionCorrerPage() {
                           </button>
                         </div>
                         <div className="rounded-xl bg-zinc-50 px-4 py-2 text-center ring-1 ring-zinc-100 sm:min-w-[6.5rem]">
-                          <p className="text-[10px] font-bold uppercase text-zinc-400">Hacer</p>
-                          <p className="text-xl font-black tabular-nums text-[#B91C1C]">{hacer}</p>
+                          <p className="text-[10px] font-bold uppercase text-zinc-700">Hacer</p>
+                          <p className="text-xl font-black tabular-nums text-zinc-900">{hacer}</p>
                         </div>
                       </div>
                     </div>

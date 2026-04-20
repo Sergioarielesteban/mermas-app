@@ -96,7 +96,7 @@ export default function MermasStyleHero({
       ) : null}
       {description ? (
         <p
-          className={`mx-auto max-w-sm text-center text-zinc-400 ${descMt} ${
+          className={`mx-auto max-w-sm text-center text-zinc-300 ${descMt} ${
             slim
               ? 'text-[10px] leading-snug sm:text-[11px]'
               : compact

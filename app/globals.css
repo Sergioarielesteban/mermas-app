@@ -32,6 +32,19 @@ body {
   -webkit-tap-highlight-color: transparent;
 }
 
+/* Legibilidad en móvil/tablet: texto y cantidades en gris oscuro */
+input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='color']),
+textarea,
+select {
+  color: #27272a;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: #52525b;
+  opacity: 1;
+}
+
 ::selection {
   background: #ffd0d0;
   color: #6d1616;

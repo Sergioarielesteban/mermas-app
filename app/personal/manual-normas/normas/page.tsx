@@ -15,6 +15,7 @@ import {
   updateEmpresaNorma,
   upsertNormaLectura,
 } from '@/lib/personal-normas-manual-supabase';
+import { appConfirm } from '@/lib/app-dialog-bridge';
 import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
 import { safeCreateNotification } from '@/services/notifications';
 
@@ -162,7 +163,7 @@ export default function EmpresaNormasPage() {
 
   const onDelete = async (id: string) => {
     if (!localId || !supabaseOk || !isAdmin) return;
-    if (!window.confirm('¿Eliminar esta norma?')) return;
+    if (!(await appConfirm('¿Eliminar esta norma?'))) return;
     setBanner(null);
     try {
       const supabase = getSupabaseClient()!;

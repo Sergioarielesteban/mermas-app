@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useAuth } from '@/components/AuthProvider';
+import { appConfirm } from '@/lib/app-dialog-bridge';
 import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
 import { canManageDeliveries } from '@/lib/cocina-central-permissions';
 import type {
@@ -138,7 +139,7 @@ export default function CatalogoSedesPage() {
 
   const removeOne = async (id: string) => {
     if (!supabase || !localId) return;
-    if (!window.confirm('¿Eliminar este producto del catálogo?')) return;
+    if (!(await appConfirm('¿Eliminar este producto del catálogo?'))) return;
     setSavingId(id);
     setMsg(null);
     try {

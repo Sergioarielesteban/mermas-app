@@ -6,6 +6,7 @@ import { ChevronLeft } from 'lucide-react';
 import MermasStyleHero from '@/components/MermasStyleHero';
 import { useAuth } from '@/components/AuthProvider';
 import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
+import { appConfirm } from '@/lib/app-dialog-bridge';
 import { confirmDestructiveOperation } from '@/lib/ops-role-confirm';
 import {
   APPCC_UNIT_TYPE_LABEL,
@@ -176,9 +177,9 @@ export default function AppccEquiposPage() {
 
   const removeUnit = async (u: AppccColdUnitRow) => {
     if (
-      !window.confirm(
+      !(await appConfirm(
         `¿Eliminar «${u.name}»? Se borrará también el historial de temperaturas de este equipo. No se puede deshacer.`,
-      )
+      ))
     ) {
       return;
     }

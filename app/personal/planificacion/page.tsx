@@ -13,6 +13,7 @@ import { buildStaffPermissions } from '@/lib/staff/permissions';
 import { addDays, parseYmd, startOfWeekMonday, ymdLocal } from '@/lib/staff/staff-dates';
 import { duplicateShiftsWeek, upsertStaffShift } from '@/lib/staff/staff-supabase';
 import type { StaffShift } from '@/lib/staff/types';
+import { appAlert, appConfirm, appPrompt } from '@/lib/app-dialog-bridge';
 import { getSupabaseClient } from '@/lib/supabase-client';
 
 export default function PersonalPlanificacionPage() {
@@ -74,7 +75,7 @@ export default function PersonalPlanificacionPage() {
       });
       void reload();
     } catch (e: unknown) {
-      alert(e instanceof Error ? e.message : 'No se pudo mover el turno');
+      await appAlert(e instanceof Error ? e.message : 'No se pudo mover el turno');
     }
   };
 
@@ -82,13 +83,13 @@ export default function PersonalPlanificacionPage() {
     if (!perms.canManageSchedules || !localId || !supabase) return;
     const next = addDays(weekStartDate, 7);
     const toYmd = ymdLocal(next);
-    if (!window.confirm(`¿Duplicar toda la semana al ${toYmd}?`)) return;
+    if (!(await appConfirm(`¿Duplicar toda la semana al ${toYmd}?`))) return;
     try {
       const n = await duplicateShiftsWeek(supabase, localId, weekStart, toYmd);
-      alert(`Copiados ${n} turnos.`);
+      await appAlert(`Copiados ${n} turnos.`);
       void reload();
     } catch (e: unknown) {
-      alert(e instanceof Error ? e.message : 'Error al duplicar');
+      await appAlert(e instanceof Error ? e.message : 'Error al duplicar');
     }
   };
 
@@ -191,13 +192,16 @@ export default function PersonalPlanificacionPage() {
               if (here.length === 1) openEdit(here[0]);
               else if (here.length === 0) openNew(empId, ymd);
               else {
-                const pick = window.prompt(
-                  `Varios turnos. Escribe 1–${here.length} para editar o 0 para nuevo`,
-                  '1',
-                );
-                const n = Number(pick);
-                if (n === 0) openNew(empId, ymd);
-                else if (n >= 1 && n <= here.length) openEdit(here[n - 1]);
+                void (async () => {
+                  const pick = await appPrompt(
+                    `Varios turnos. Escribe 1–${here.length} para editar o 0 para nuevo`,
+                    '1',
+                  );
+                  if (pick == null) return;
+                  const n = Number(pick);
+                  if (n === 0) openNew(empId, ymd);
+                  else if (n >= 1 && n <= here.length) openEdit(here[n - 1]);
+                })();
               }
             }}
           />

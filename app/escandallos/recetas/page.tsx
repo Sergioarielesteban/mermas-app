@@ -20,6 +20,7 @@ import RecipeTechnicalSheetPanel from '@/components/escandallos/RecipeTechnicalS
 import MermasStyleHero from '@/components/MermasStyleHero';
 import { useAuth } from '@/components/AuthProvider';
 import { fetchRecipeAllergens, type RecipeAllergenRow } from '@/lib/appcc-allergens-supabase';
+import { appConfirm } from '@/lib/app-dialog-bridge';
 import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
 import {
   deleteEscandalloLine,
@@ -670,7 +671,7 @@ export default function EscandallosRecetasPage() {
 
   const handleDeleteProcessed = async (id: string) => {
     if (!localId || !supabaseOk) return;
-    if (!window.confirm('¿Eliminar este elaborado interno?')) return;
+    if (!(await appConfirm('¿Eliminar este elaborado interno?'))) return;
     const supabase = getSupabaseClient()!;
     setBusyId(id);
     try {
@@ -800,7 +801,7 @@ export default function EscandallosRecetasPage() {
 
   const handleDeleteRecipe = async (recipeId: string) => {
     if (!localId || !supabaseOk) return;
-    if (!window.confirm('¿Eliminar esta receta y todos sus ingredientes?')) return;
+    if (!(await appConfirm('¿Eliminar esta receta y todos sus ingredientes?'))) return;
     const supabase = getSupabaseClient()!;
     setBusyId(recipeId);
     try {

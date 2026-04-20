@@ -5,6 +5,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { ArrowLeft, Plus, Trash2 } from 'lucide-react';
 import MermasStyleHero from '@/components/MermasStyleHero';
 import { useAuth } from '@/components/AuthProvider';
+import { appConfirm, appPrompt } from '@/lib/app-dialog-bridge';
 import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
 import {
   CHECKLIST_CONTEXT_LABEL,
@@ -115,9 +116,9 @@ export default function ChecklistListasPage() {
   const removeList = async (id: string) => {
     if (!localId || !supabaseOk) return;
     if (
-      !window.confirm(
+      !(await appConfirm(
         '¿Eliminar esta lista y todo su contenido? También se borrarán las ejecuciones del historial vinculadas a esta lista.',
-      )
+      ))
     )
       return;
     setBusy(true);
@@ -135,7 +136,7 @@ export default function ChecklistListasPage() {
 
   const addSection = async (checklistId: string) => {
     if (!supabaseOk) return;
-    const title = window.prompt('Nombre de la sección (ej. Cocina fría)');
+    const title = await appPrompt('Nombre de la sección (ej. Cocina fría)');
     if (!title?.trim()) return;
     setBusy(true);
     try {
@@ -152,7 +153,7 @@ export default function ChecklistListasPage() {
 
   const addItem = async (checklistId: string, sectionId: string | null) => {
     if (!supabaseOk) return;
-    const label = window.prompt('Texto del ítem');
+    const label = await appPrompt('Texto del ítem');
     if (!label?.trim()) return;
     setBusy(true);
     try {
@@ -173,7 +174,7 @@ export default function ChecklistListasPage() {
 
   const removeSection = async (id: string) => {
     if (!supabaseOk) return;
-    if (!window.confirm('¿Eliminar sección y sus ítems?')) return;
+    if (!(await appConfirm('¿Eliminar sección y sus ítems?'))) return;
     setBusy(true);
     try {
       const supabase = getSupabaseClient()!;
@@ -189,9 +190,9 @@ export default function ChecklistListasPage() {
   const removeItem = async (id: string) => {
     if (!supabaseOk) return;
     if (
-      !window.confirm(
+      !(await appConfirm(
         '¿Quitar este ítem? Las marcas de este ítem en ejecuciones antiguas también se eliminarán del historial.',
-      )
+      ))
     )
       return;
     setBusy(true);

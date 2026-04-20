@@ -30,6 +30,7 @@ import {
   updateInventoryItemLine,
   upsertInventoryMonthSnapshot,
 } from '@/lib/inventory-supabase';
+import { appConfirm } from '@/lib/app-dialog-bridge';
 import { confirmDestructiveOperation } from '@/lib/ops-role-confirm';
 import { actorLabel, notifyInventarioCerrado } from '@/services/notifications';
 
@@ -556,9 +557,9 @@ export default function InventarioPage() {
   const resetInventoryCharts = async () => {
     if (!localId || !supabaseOk || snapshots.length === 0) return;
     if (
-      !window.confirm(
+      !(await appConfirm(
         'Se borrarán todos los puntos del gráfico «Valor por mes» (cierres mensuales guardados para KPI). No se borran las líneas de inventario, el catálogo ni el historial. ¿Continuar?',
-      )
+      ))
     ) {
       return;
     }
@@ -585,9 +586,9 @@ export default function InventarioPage() {
     }
     if (!localId || !supabaseOk) return;
     if (
-      !window.confirm(
+      !(await appConfirm(
         `¿Quitar «${row.name}» del inventario? Se guardará una copia en Historial antes de borrar la línea.`,
-      )
+      ))
     ) {
       return;
     }
@@ -626,9 +627,9 @@ export default function InventarioPage() {
       return;
     }
     if (
-      !window.confirm(
+      !(await appConfirm(
         `Se guardará el cierre del mes ${closingYearMonth}: copia en historial, PDF descargado y datos en los gráficos/KPI de abajo. Las líneas en pantalla no se borran (usa «Reiniciar inventario» para empezar de cero). ¿Continuar?`,
-      )
+      ))
     ) {
       return;
     }
@@ -677,7 +678,7 @@ export default function InventarioPage() {
     }
     const hasSnap = snapshots.some((s) => s.year_month === closingYearMonth);
     if (!hasSnap) {
-      const saveFirst = window.confirm(
+      const saveFirst = await appConfirm(
         `No hay cierre mensual guardado para ${closingYearMonth} en los gráficos. Pulsa Aceptar para descargar el PDF, guardar ese cierre e historial, y vaciar las líneas. (Si el inventario es de otro mes, cambia primero «Mes del cierre» arriba.)`,
       );
       if (saveFirst) {
@@ -700,16 +701,16 @@ export default function InventarioPage() {
         return;
       }
       if (
-        !window.confirm(
+        !(await appConfirm(
           'Vas a vaciar las líneas sin guardar cierre en los informes ni PDF. ¿Continuar de todos modos?',
-        )
+        ))
       ) {
         return;
       }
     } else if (
-      !window.confirm(
+      !(await appConfirm(
         'Se borrarán todas las líneas de inventario de este local. El valor total quedará en 0. El catálogo no cambia. ¿Continuar?',
-      )
+      ))
     ) {
       return;
     }
@@ -733,10 +734,10 @@ export default function InventarioPage() {
     if (!localId || !supabaseOk) return;
     const nItems = catalogItems.filter((i) => i.catalog_category_id === cat.id).length;
     if (
-      !window.confirm(
+      !(await appConfirm(
         `¿Ocultar la categoría «${cat.name}» y sus ${nItems} artículo(s) solo en el catálogo de tu local? ` +
           'Dejarán de mostrarse aquí y se borrarán las líneas de inventario vinculadas en tu local. Otros locales no se ven afectados. Esta acción no se puede deshacer desde la app.',
-      )
+      ))
     ) {
       return;
     }
@@ -767,10 +768,10 @@ export default function InventarioPage() {
     }
     if (!localId || !supabaseOk) return;
     if (
-      !window.confirm(
+      !(await appConfirm(
         `¿Ocultar «${it.name}» solo en el catálogo de tu local? ` +
           'Dejará de mostrarse aquí y se borrará la línea de inventario vinculada en tu local, si existe. Otros locales no se ven afectados. Esta acción no se puede deshacer desde la app.',
-      )
+      ))
     ) {
       return;
     }

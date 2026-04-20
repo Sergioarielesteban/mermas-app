@@ -70,6 +70,7 @@ import {
 import { fetchAppccFryers, fetchOilEventsForDate } from '@/lib/appcc-aceite-supabase';
 import { topByValue } from '@/lib/analytics';
 import { fetchProductsAndMermas } from '@/lib/mermas-supabase';
+import { appConfirm } from '@/lib/app-dialog-bridge';
 import { confirmDestructiveOperation } from '@/lib/ops-role-confirm';
 import {
   actorLabel,
@@ -2677,7 +2678,7 @@ export default function PedidosPage() {
                       return;
                     }
                     if (!localId) return;
-                    if (!window.confirm('¿Seguro que quieres eliminar este pedido?')) return;
+                    if (!(await appConfirm('¿Seguro que quieres eliminar este pedido?'))) return;
                     const supabase = getSupabaseClient();
                     if (!supabase) return;
                     void deleteOrder(supabase, localId, order.id)
@@ -3068,8 +3069,9 @@ export default function PedidosPage() {
                 <button
                   type="button"
                   onClick={() => {
+                    void (async () => {
                     if (!localId) return;
-                    const ok = window.confirm(
+                    const ok = await appConfirm(
                       '¿Devolver este pedido a «Pendientes de entrega»? Volverá a la bandeja de revisión de precios (las líneas no se borran).',
                     );
                     if (!ok) return;
@@ -3083,6 +3085,7 @@ export default function PedidosPage() {
                         dispatchPedidosDataChanged();
                       })
                       .catch((err: Error) => setMessage(err.message));
+                    })();
                   }}
                   className="rounded-lg border border-amber-600/70 bg-amber-50 px-2 py-1.5 text-center text-xs font-semibold text-amber-900"
                 >
@@ -3095,7 +3098,7 @@ export default function PedidosPage() {
                       return;
                     }
                     if (!localId) return;
-                    if (!window.confirm('¿Seguro que quieres eliminar este pedido?')) return;
+                    if (!(await appConfirm('¿Seguro que quieres eliminar este pedido?'))) return;
                     const supabase = getSupabaseClient();
                     if (!supabase) return;
                     void deleteOrder(supabase, localId, order.id)

@@ -113,9 +113,9 @@ export default function ProduccionEjecutarPage() {
       ) : null}
 
       {!localId || !supabaseOk ? (
-        <p className="text-center text-sm text-zinc-500">Conecta Supabase y un local.</p>
+        <p className="text-center text-sm font-medium text-zinc-700">Conecta Supabase y un local.</p>
       ) : loading ? (
-        <p className="text-center text-sm text-zinc-500">Cargando…</p>
+        <p className="text-center text-sm font-medium text-zinc-700">Cargando…</p>
       ) : (
         <>
           <section className="rounded-2xl border border-zinc-200/90 bg-white p-4 shadow-sm ring-1 ring-zinc-100">
@@ -133,7 +133,7 @@ export default function ProduccionEjecutarPage() {
               />
             </div>
             <label className="mt-4 block">
-              <span className="text-[11px] font-bold uppercase text-zinc-500">Etiqueta (opcional)</span>
+              <span className="text-[11px] font-bold uppercase text-zinc-700">Etiqueta (opcional)</span>
               <input
                 value={periodLabel}
                 onChange={(e) => setPeriodLabel(e.target.value)}
@@ -145,7 +145,7 @@ export default function ProduccionEjecutarPage() {
 
           <div className="space-y-2">
             {sorted.length === 0 ? (
-              <p className="rounded-2xl border border-zinc-200 bg-zinc-50/80 px-4 py-6 text-center text-sm text-zinc-600">
+              <p className="rounded-2xl border border-zinc-200 bg-zinc-50/80 px-4 py-6 text-center text-sm font-medium text-zinc-800">
                 No hay plantillas. Crea una en{' '}
                 <Link href="/produccion/planes" className="font-bold text-[#D32F2F] underline">
                   Plantillas
@@ -163,7 +163,7 @@ export default function ProduccionEjecutarPage() {
                   >
                     <div className="min-w-0">
                       <p className="truncate text-sm font-black text-zinc-900">{t.name}</p>
-                      <p className="mt-0.5 text-[10px] font-bold uppercase tracking-wide text-[#B91C1C]">
+                      <p className="mt-0.5 text-[10px] font-bold uppercase tracking-wide text-zinc-800">
                         {n} producto{n === 1 ? '' : 's'} en bloques
                       </p>
                     </div>

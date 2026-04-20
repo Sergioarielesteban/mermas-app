@@ -18,6 +18,7 @@ import {
   type StaffMealService,
   voidStaffMealRecord,
 } from '@/lib/comida-personal-supabase';
+import { appConfirm } from '@/lib/app-dialog-bridge';
 import { confirmDestructiveOperation } from '@/lib/ops-role-confirm';
 import { downloadStaffMealReportPdf } from '@/lib/comida-personal-report-pdf';
 import { formatLocalHeaderName } from '@/lib/local-display-name';
@@ -220,7 +221,7 @@ export default function ComidaPersonalPage() {
   const removeWorker = React.useCallback(
     async (w: StaffMealWorker) => {
       if (!localId) return;
-      const okConfirm = window.confirm(
+      const okConfirm = await appConfirm(
         `¿Quitar la ficha «${w.name}» de la lista?\n\nLos consumos ya guardados no se borran; solo deja de aparecer como opción.`,
       );
       if (!okConfirm) return;
@@ -313,7 +314,7 @@ export default function ComidaPersonalPage() {
   const voidOneRecord = React.useCallback(
     async (r: StaffMealRecord) => {
       if (!localId) return;
-      if (!window.confirm('¿Anular este registro? Dejará de contar en totales e informes.')) return;
+      if (!(await appConfirm('¿Anular este registro? Dejará de contar en totales e informes.'))) return;
       const supabase = getSupabaseClient();
       if (!supabase) return;
       try {
