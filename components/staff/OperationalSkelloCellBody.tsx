@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { GripVertical, Plus } from 'lucide-react';
+import { GripVertical, Plus, X } from 'lucide-react';
 import { plannedShiftMinutes } from '@/lib/staff/attendance-logic';
 import {
   FULL_DAY_OPERATIONAL_METRICS,
@@ -34,12 +34,63 @@ const CARD_GAP_REM = 0.375;
 const FRANJA_STACK_GAP_REM = 0.25;
 const FRANJA_FOOTER_REM = 2.35;
 
-function stackBlockHeightRem(teamSize: number, showFooterRow: boolean): number {
-  if (teamSize <= 0) return 0;
-  const cards =
-    teamSize * CARD_ROW_HEIGHT_REM + Math.max(0, teamSize - 1) * CARD_GAP_REM;
-  const footer = showFooterRow ? FRANJA_FOOTER_REM : 0.35;
-  return cards + FRANJA_STACK_GAP_REM + footer;
+/** Densidad baja: todas las tarjetas. Media: vista previa + resumen. Alta: solo cabecera compacta. */
+const DENSITY_LOW_MAX = 5;
+const DENSITY_MEDIUM_MAX = 12;
+const MEDIUM_PREVIEW_CARDS = 5;
+const MEDIUM_SUMMARY_REM = 3.15;
+const HIGH_BLOCK_REM = 6.35;
+
+function franjaDensityMode(teamSize: number): 'low' | 'medium' | 'high' {
+  if (teamSize <= DENSITY_LOW_MAX) return 'low';
+  if (teamSize <= DENSITY_MEDIUM_MAX) return 'medium';
+  return 'high';
+}
+
+function stackCardsOnlyRem(count: number): number {
+  if (count <= 0) return 0;
+  return count * CARD_ROW_HEIGHT_REM + Math.max(0, count - 1) * CARD_GAP_REM;
+}
+
+function franjaFooterRem(franjaHasActions: boolean): number {
+  return franjaHasActions ? FRANJA_FOOTER_REM : 0.35;
+}
+
+function visibleFranjaHeightRem(
+  teamSize: number,
+  mode: 'low' | 'medium' | 'high',
+  franjaHasActions: boolean,
+): number {
+  const footer = franjaFooterRem(franjaHasActions);
+  if (mode === 'high') {
+    return HIGH_BLOCK_REM + FRANJA_STACK_GAP_REM + 0.35;
+  }
+  if (mode === 'medium') {
+    const k = Math.min(MEDIUM_PREVIEW_CARDS, teamSize);
+    return (
+      stackCardsOnlyRem(k) + FRANJA_STACK_GAP_REM + MEDIUM_SUMMARY_REM + FRANJA_STACK_GAP_REM + footer
+    );
+  }
+  return stackCardsOnlyRem(teamSize) + FRANJA_STACK_GAP_REM + footer;
+}
+
+function franjaStats(
+  shifts: StaffShift[],
+  rowKey: string,
+): { totalSlots: number; totalMins: number; huecos: number; breakdownStr: string } {
+  const totalSlots = shifts.length;
+  const huecos = shifts.filter((s) => !s.employeeId).length;
+  const totalMins = shifts.reduce((a, s) => a + plannedShiftMinutes(s), 0);
+  const m = new Map<string, number>();
+  for (const s of shifts) {
+    const zt = s.zone?.trim() ? zoneLabel(s.zone) || s.zone : zoneTitleFromRowKey(rowKey);
+    m.set(zt, (m.get(zt) ?? 0) + 1);
+  }
+  const breakdownStr = Array.from(m.entries())
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'es'))
+    .map(([z, c]) => `${z} ${c}`)
+    .join(' · ');
+  return { totalSlots, totalMins, huecos, breakdownStr };
 }
 
 /**
@@ -47,16 +98,20 @@ function stackBlockHeightRem(teamSize: number, showFooterRow: boolean): number {
  * quede recortada, sin usar scroll interno.
  */
 function minTimelineTrackRem(
-  groupLayout: Array<{ seg: { topPct: number }; g: { items: unknown[] } }>,
+  groupLayout: Array<{ seg: { topPct: number }; g: { items: StaffShift[] } }>,
   canEdit: boolean,
   hasAddPersonSameSlot: boolean,
 ): number {
   const BASE = 10;
   let t = BASE;
   for (const gl of groupLayout) {
+    const n = gl.g.items.length;
     const p = gl.seg.topPct / 100;
-    const franjaHasActions = gl.g.items.length > 1 || (canEdit && hasAddPersonSameSlot);
-    const h = stackBlockHeightRem(gl.g.items.length, franjaHasActions);
+    const mode = franjaDensityMode(n);
+    const fatFooter =
+      mode === 'medium' ||
+      (mode === 'low' && (n > 1 || (canEdit && hasAddPersonSameSlot)));
+    const h = visibleFranjaHeightRem(n, mode, fatFooter);
     if (h <= 0) continue;
     const denom = Math.max(0.18, 1 - p);
     t = Math.max(t, h / denom);
@@ -249,6 +304,8 @@ export function OperationalSkelloCellBody({
         )
       : '';
 
+  const [densePanelKey, setDensePanelKey] = React.useState<string | null>(null);
+
   if (here.length === 0) {
     return (
       <div className="flex w-full min-w-0 flex-col gap-0.5">
@@ -340,6 +397,10 @@ export function OperationalSkelloCellBody({
   const zStyle = zoneBlockStyle(rowKey);
   const rowZoneTitle = zoneTitleFromRowKey(rowKey);
   const trackMinRem = minTimelineTrackRem(groupLayout, canEdit, Boolean(onAddPersonSameSlot));
+  const denseDrawerGl =
+    densePanelKey == null
+      ? null
+      : groupLayout.find((x) => `${ymd}|${rowKey}|${x.g.slotKey}` === densePanelKey) ?? null;
 
   return (
     <div className="flex w-full min-w-0 flex-col gap-1">
@@ -366,6 +427,8 @@ export function OperationalSkelloCellBody({
             const { g, iv, seg, rep } = gl;
             const teamSize = g.items.length;
             const sortedShifts = sortGroupedItems(g.items);
+            const density = franjaDensityMode(teamSize);
+            const stats = franjaStats(sortedShifts, rowKey);
             const lanes = laneMap.get(idx)!;
             const laneW = 100 / Math.max(1, lanes.laneCount);
             const gutter = 0.1;
@@ -374,6 +437,95 @@ export function OperationalSkelloCellBody({
             const compositeKey = `${ymd}|${rowKey}|${g.slotKey}`;
             const expanded = expandedSlotKeys.has(compositeKey);
             const zGroup = sortedShifts.some((s) => s.id === selectedShiftId) ? 6 : expanded ? 5 : 3;
+            const previewShifts =
+              density === 'low'
+                ? sortedShifts
+                : density === 'medium'
+                  ? sortedShifts.slice(0, MEDIUM_PREVIEW_CARDS)
+                  : [];
+            const restCount = teamSize - previewShifts.length;
+            const openDetailPanel = () => {
+              setSelectedCell(null);
+              setDensePanelKey(compositeKey);
+            };
+
+            const renderShiftCardRow = (sOne: StaffShift) => {
+              const unassigned = sOne.employeeId == null;
+              const accentBg =
+                sOne.colorHint && sOne.colorHint.trim().length > 0 ? sOne.colorHint.trim() : zStyle.bg;
+              const rowShell = (
+                <div
+                  role="button"
+                  tabIndex={canEdit ? 0 : undefined}
+                  className="min-w-0 flex-1 touch-none text-left outline-none"
+                  {...(canEdit ? bindShiftLongPress(sOne) : ({} as Record<string, never>))}
+                  onPointerDown={(e) => onVerticalShiftPointerDown(e, sOne, iv)}
+                  onPointerMove={(e) => onVerticalShiftPointerMove(e, sOne)}
+                  onPointerUp={(e) => void onVerticalShiftPointerUp(e, sOne)}
+                  onPointerCancel={(e) => void onVerticalShiftPointerUp(e, sOne)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (Date.now() < ignoreClicksUntilRef.current) return;
+                    setSelectedShiftId(sOne.id);
+                    setSelectedCell(null);
+                  }}
+                  onKeyDown={(e) => {
+                    if (!canEdit) return;
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      onShiftAdvancedEdit(sOne);
+                    }
+                  }}
+                >
+                  <ShiftEmployeeRowCard
+                    nameLabel={unassigned ? 'Sin asignar' : employeeName(sOne.employeeId)}
+                    zoneTitle={rowZoneTitle}
+                    accentBg={accentBg}
+                    startTime={sOne.startTime}
+                    endTime={sOne.endTime}
+                    endsNextDay={sOne.endsNextDay}
+                    showAlert={unassigned}
+                    shellClassName={
+                      canEdit
+                        ? 'rounded-r-lg border-y border-r border-zinc-200/95 shadow-sm'
+                        : 'rounded-lg border border-zinc-200/95 shadow-sm ring-1 ring-black/[0.06]'
+                    }
+                  />
+                </div>
+              );
+
+              return (
+                <div
+                  key={sOne.id}
+                  className={[
+                    'flex min-w-0 shrink-0 items-stretch overflow-hidden',
+                    canEdit ? 'rounded-lg ring-1 ring-black/[0.08]' : '',
+                    selectedShiftId === sOne.id ? 'ring-2 ring-zinc-900/45' : '',
+                  ].join(' ')}
+                >
+                  {canEdit ? (
+                    <>
+                      <div
+                        draggable
+                        onDragStart={(e) => onDragStart(e, sOne.id)}
+                        onDragEnd={onDragEnd}
+                        className="flex w-2.5 shrink-0 cursor-grab touch-none items-center justify-center self-stretch rounded-l-lg border-y border-l border-zinc-200/90 bg-zinc-100 text-zinc-800 active:cursor-grabbing sm:w-3"
+                        title="Mover a otro día o puesto"
+                        aria-label="Arrastrar turno"
+                        onPointerDown={(e) => e.stopPropagation()}
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <GripVertical className="h-2.5 w-2.5 opacity-80 sm:h-3 sm:w-3" />
+                      </div>
+                      {rowShell}
+                    </>
+                  ) : (
+                    rowShell
+                  )}
+                </div>
+              );
+            };
+
             return (
               <div
                 key={g.slotKey}
@@ -385,125 +537,124 @@ export function OperationalSkelloCellBody({
                   zIndex: zGroup,
                 }}
               >
-                <div className="flex flex-col gap-1.5 pr-0.5">
-                {sortedShifts.map((sOne) => {
-                  const unassigned = sOne.employeeId == null;
-                  const accentBg =
-                    sOne.colorHint && sOne.colorHint.trim().length > 0 ? sOne.colorHint.trim() : zStyle.bg;
-                  const rowShell = (
-                    <div
-                      role="button"
-                      tabIndex={canEdit ? 0 : undefined}
-                      className="min-w-0 flex-1 touch-none text-left outline-none"
-                      {...(canEdit ? bindShiftLongPress(sOne) : ({} as Record<string, never>))}
-                      onPointerDown={(e) => onVerticalShiftPointerDown(e, sOne, iv)}
-                      onPointerMove={(e) => onVerticalShiftPointerMove(e, sOne)}
-                      onPointerUp={(e) => void onVerticalShiftPointerUp(e, sOne)}
-                      onPointerCancel={(e) => void onVerticalShiftPointerUp(e, sOne)}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        if (Date.now() < ignoreClicksUntilRef.current) return;
-                        setSelectedShiftId(sOne.id);
-                        setSelectedCell(null);
-                      }}
-                      onKeyDown={(e) => {
-                        if (!canEdit) return;
-                        if (e.key === 'Enter' || e.key === ' ') {
-                          e.preventDefault();
-                          onShiftAdvancedEdit(sOne);
-                        }
-                      }}
-                    >
-                      <ShiftEmployeeRowCard
-                        nameLabel={unassigned ? 'Sin asignar' : employeeName(sOne.employeeId)}
-                        zoneTitle={rowZoneTitle}
-                        accentBg={accentBg}
-                        startTime={sOne.startTime}
-                        endTime={sOne.endTime}
-                        endsNextDay={sOne.endsNextDay}
-                        showAlert={unassigned}
-                        shellClassName={
-                          canEdit
-                            ? 'rounded-r-lg border-y border-r border-zinc-200/95 shadow-sm'
-                            : 'rounded-lg border border-zinc-200/95 shadow-sm ring-1 ring-black/[0.06]'
-                        }
-                      />
-                    </div>
-                  );
-
-                  return (
-                    <div
-                      key={sOne.id}
-                      className={[
-                        'flex min-w-0 shrink-0 items-stretch overflow-hidden',
-                        canEdit ? 'rounded-lg ring-1 ring-black/[0.08]' : '',
-                        selectedShiftId === sOne.id ? 'ring-2 ring-zinc-900/45' : '',
-                      ].join(' ')}
-                    >
-                      {canEdit ? (
+                {density === 'high' ? (
+                  <div className="rounded-lg border border-zinc-200 bg-white p-2 shadow-sm ring-1 ring-black/10">
+                    <p className="text-[11px] font-extrabold tabular-nums text-zinc-900 sm:text-xs">
+                      {stats.totalSlots} personas
+                      {stats.totalMins > 0 ? (
                         <>
-                          <div
-                            draggable
-                            onDragStart={(e) => onDragStart(e, sOne.id)}
-                            onDragEnd={onDragEnd}
-                            className="flex w-2.5 shrink-0 cursor-grab touch-none items-center justify-center self-stretch rounded-l-lg border-y border-l border-zinc-200/90 bg-zinc-100 text-zinc-800 active:cursor-grabbing sm:w-3"
-                            title="Mover a otro día o puesto"
-                            aria-label="Arrastrar turno"
-                            onPointerDown={(e) => e.stopPropagation()}
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            <GripVertical className="h-2.5 w-2.5 opacity-80 sm:h-3 sm:w-3" />
-                          </div>
-                          {rowShell}
+                          {' '}
+                          · {formatHoursSum(stats.totalMins)}
                         </>
-                      ) : (
-                        rowShell
-                      )}
+                      ) : null}
+                    </p>
+                    <p className="mt-1 text-[9px] font-semibold leading-snug text-zinc-700 sm:text-[10px]">
+                      {stats.breakdownStr || rowZoneTitle}
+                    </p>
+                    {stats.huecos > 0 ? (
+                      <p className="mt-1 text-[9px] font-bold text-[#B91C1C] sm:text-[10px]">
+                        {stats.huecos} hueco{stats.huecos > 1 ? 's' : ''}
+                      </p>
+                    ) : null}
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      <button
+                        type="button"
+                        className="rounded-lg bg-zinc-900 px-2.5 py-1.5 text-[10px] font-extrabold text-white shadow-sm hover:bg-zinc-800 sm:text-[11px]"
+                        onPointerDown={(e) => e.stopPropagation()}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (Date.now() < ignoreClicksUntilRef.current) return;
+                          openDetailPanel();
+                        }}
+                      >
+                        Ver equipo
+                      </button>
+                      {canEdit && onAddPersonSameSlot ? (
+                        <button
+                          type="button"
+                          className="rounded-lg border border-zinc-300 bg-white px-2.5 py-1.5 text-[10px] font-extrabold text-zinc-900 shadow-sm hover:bg-zinc-50 sm:text-[11px]"
+                          onPointerDown={(e) => e.stopPropagation()}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (Date.now() < ignoreClicksUntilRef.current) return;
+                            onAddPersonSameSlot(rep);
+                          }}
+                        >
+                          Añadir
+                        </button>
+                      ) : null}
                     </div>
-                  );
-                })}
-                </div>
-                <div className="flex shrink-0 flex-wrap items-center justify-end gap-1 border-t border-zinc-200/80 bg-white/80 pt-1">
-                  {teamSize > 1 ? (
-                    <button
-                      type="button"
-                      className="rounded-md bg-white/90 px-1.5 py-0.5 text-[8px] font-extrabold text-zinc-700 shadow-sm ring-1 ring-zinc-200 hover:bg-zinc-50 sm:text-[9px]"
-                      title={expanded ? 'Ocultar panel inferior' : 'Abrir panel: editar / quitar'}
-                      aria-expanded={expanded}
-                      onPointerDown={(e) => e.stopPropagation()}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        if (Date.now() < ignoreClicksUntilRef.current) return;
-                        setSelectedCell(null);
-                        toggleExpandedSlot(compositeKey);
-                      }}
-                    >
-                      {expanded ? 'Ocultar equipo' : `Equipo (${teamSize})`}
-                    </button>
-                  ) : null}
-                  {canEdit && onAddPersonSameSlot ? (
-                    <button
-                      type="button"
-                      className="rounded-md bg-white/90 px-1.5 py-0.5 text-[8px] font-extrabold text-zinc-900 shadow-sm ring-1 ring-zinc-200 hover:bg-zinc-50 sm:text-[9px]"
-                      title="Añadir otra persona en esta misma franja y puesto"
-                      onPointerDown={(e) => e.stopPropagation()}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        if (Date.now() < ignoreClicksUntilRef.current) return;
-                        onAddPersonSameSlot(rep);
-                      }}
-                    >
-                      + pers.
-                    </button>
-                  ) : null}
-                </div>
+                  </div>
+                ) : (
+                  <div className="flex flex-col gap-1.5 pr-0.5">{previewShifts.map(renderShiftCardRow)}</div>
+                )}
+                {density === 'medium' && restCount > 0 ? (
+                  <div className="rounded-md bg-zinc-100/95 px-2 py-1.5 ring-1 ring-zinc-200/90">
+                    <p className="text-[10px] font-extrabold text-zinc-900 sm:text-[11px]">
+                      +{restCount} más
+                    </p>
+                    <p className="mt-0.5 text-[9px] font-semibold leading-snug text-zinc-600 sm:text-[10px]">
+                      {stats.breakdownStr}
+                    </p>
+                  </div>
+                ) : null}
+                {density !== 'high' ? (
+                  <div className="flex shrink-0 flex-wrap items-center justify-end gap-1 border-t border-zinc-200/80 bg-white/80 pt-1">
+                    {density === 'low' && teamSize > 1 ? (
+                      <button
+                        type="button"
+                        className="rounded-md bg-white/90 px-1.5 py-0.5 text-[8px] font-extrabold text-zinc-700 shadow-sm ring-1 ring-zinc-200 hover:bg-zinc-50 sm:text-[9px]"
+                        title={expanded ? 'Ocultar panel inferior' : 'Abrir panel: editar / quitar'}
+                        aria-expanded={expanded}
+                        onPointerDown={(e) => e.stopPropagation()}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (Date.now() < ignoreClicksUntilRef.current) return;
+                          setSelectedCell(null);
+                          toggleExpandedSlot(compositeKey);
+                        }}
+                      >
+                        {expanded ? 'Ocultar equipo' : `Equipo (${teamSize})`}
+                      </button>
+                    ) : null}
+                    {density === 'medium' ? (
+                      <button
+                        type="button"
+                        className="rounded-md bg-zinc-900 px-1.5 py-0.5 text-[8px] font-extrabold text-white shadow-sm hover:bg-zinc-800 sm:text-[9px]"
+                        onPointerDown={(e) => e.stopPropagation()}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (Date.now() < ignoreClicksUntilRef.current) return;
+                          openDetailPanel();
+                        }}
+                      >
+                        Ver todas
+                      </button>
+                    ) : null}
+                    {canEdit && onAddPersonSameSlot ? (
+                      <button
+                        type="button"
+                        className="rounded-md bg-white/90 px-1.5 py-0.5 text-[8px] font-extrabold text-zinc-900 shadow-sm ring-1 ring-zinc-200 hover:bg-zinc-50 sm:text-[9px]"
+                        title="Añadir otra persona en esta misma franja y puesto"
+                        onPointerDown={(e) => e.stopPropagation()}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (Date.now() < ignoreClicksUntilRef.current) return;
+                          onAddPersonSameSlot(rep);
+                        }}
+                      >
+                        + pers.
+                      </button>
+                    ) : null}
+                  </div>
+                ) : null}
               </div>
             );
           })}
         </div>
       </div>
       {groups
-        .filter((g) => g.items.length > 1)
+        .filter((g) => g.items.length > 1 && franjaDensityMode(g.items.length) === 'low')
         .map((g) => {
           const compositeKey = `${ymd}|${rowKey}|${g.slotKey}`;
           if (!expandedSlotKeys.has(compositeKey)) return null;
@@ -605,6 +756,178 @@ export function OperationalSkelloCellBody({
             </div>
           );
         })}
+      {denseDrawerGl ? (
+        <div
+          className="fixed inset-0 z-[88] bg-black/45 print:hidden"
+          role="presentation"
+          onClick={() => setDensePanelKey(null)}
+        >
+          <aside
+            className="ml-auto flex h-full w-full max-w-xl flex-col border-l border-zinc-200 bg-white shadow-2xl sm:max-w-2xl"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="franja-drawer-title"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {(() => {
+              const dgIv = denseDrawerGl.iv;
+              const dgRep = denseDrawerGl.rep;
+              const drawerSorted = sortGroupedItems(denseDrawerGl.g.items);
+              const dStats = franjaStats(drawerSorted, rowKey);
+              return (
+                <>
+                  <div className="flex items-start justify-between gap-2 border-b border-zinc-200 px-4 py-3">
+                    <div className="min-w-0">
+                      <h2 id="franja-drawer-title" className="text-sm font-extrabold text-zinc-900">
+                        {shortTime(dgRep.startTime)}–{shortTime(dgRep.endTime)}
+                        {dgRep.endsNextDay ? ' +1' : ''}
+                      </h2>
+                      <p className="mt-1 text-xs font-semibold text-zinc-600">
+                        {rowZoneTitle} · {dStats.totalSlots} personas
+                        {dStats.totalMins > 0 ? ` · ${formatHoursSum(dStats.totalMins)}` : ''}
+                      </p>
+                      {dStats.huecos > 0 ? (
+                        <p className="mt-1 text-xs font-bold text-[#B91C1C]">
+                          {dStats.huecos} hueco{dStats.huecos > 1 ? 's' : ''}
+                        </p>
+                      ) : null}
+                      <p className="mt-1 text-[11px] leading-snug text-zinc-700">{dStats.breakdownStr}</p>
+                    </div>
+                    <button
+                      type="button"
+                      className="shrink-0 rounded-lg p-2 text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900"
+                      aria-label="Cerrar"
+                      onClick={() => setDensePanelKey(null)}
+                    >
+                      <X className="h-5 w-5" strokeWidth={2.25} />
+                    </button>
+                  </div>
+                  {canEdit && onAddPersonSameSlot ? (
+                    <div className="border-b border-zinc-100 px-4 py-2">
+                      <button
+                        type="button"
+                        className="w-full rounded-xl border border-zinc-300 bg-white py-2.5 text-xs font-extrabold text-zinc-900 shadow-sm hover:bg-zinc-50"
+                        onClick={() => {
+                          if (Date.now() < ignoreClicksUntilRef.current) return;
+                          onAddPersonSameSlot(dgRep);
+                        }}
+                      >
+                        + Añadir trabajador a esta franja
+                      </button>
+                    </div>
+                  ) : null}
+                  <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
+                    <div className="flex flex-col gap-3">
+                      {drawerSorted.map((sOne) => {
+                        const unassigned = sOne.employeeId == null;
+                        const accentBg =
+                          sOne.colorHint && sOne.colorHint.trim().length > 0
+                            ? sOne.colorHint.trim()
+                            : zStyle.bg;
+                        const rowShell = (
+                          <div
+                            role="button"
+                            tabIndex={canEdit ? 0 : undefined}
+                            className="min-w-0 flex-1 touch-none text-left outline-none"
+                            {...(canEdit ? bindShiftLongPress(sOne) : ({} as Record<string, never>))}
+                            onPointerDown={(e) => onVerticalShiftPointerDown(e, sOne, dgIv)}
+                            onPointerMove={(e) => onVerticalShiftPointerMove(e, sOne)}
+                            onPointerUp={(e) => void onVerticalShiftPointerUp(e, sOne)}
+                            onPointerCancel={(e) => void onVerticalShiftPointerUp(e, sOne)}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (Date.now() < ignoreClicksUntilRef.current) return;
+                              setSelectedShiftId(sOne.id);
+                              setSelectedCell(null);
+                            }}
+                            onKeyDown={(e) => {
+                              if (!canEdit) return;
+                              if (e.key === 'Enter' || e.key === ' ') {
+                                e.preventDefault();
+                                onShiftAdvancedEdit(sOne);
+                              }
+                            }}
+                          >
+                            <ShiftEmployeeRowCard
+                              nameLabel={unassigned ? 'Sin asignar' : employeeName(sOne.employeeId)}
+                              zoneTitle={rowZoneTitle}
+                              accentBg={accentBg}
+                              startTime={sOne.startTime}
+                              endTime={sOne.endTime}
+                              endsNextDay={sOne.endsNextDay}
+                              showAlert={unassigned}
+                              shellClassName={
+                                canEdit
+                                  ? 'rounded-r-lg border-y border-r border-zinc-200/95 shadow-sm'
+                                  : 'rounded-lg border border-zinc-200/95 shadow-sm ring-1 ring-black/[0.06]'
+                              }
+                            />
+                          </div>
+                        );
+                        return (
+                          <div key={sOne.id} className="flex flex-col gap-1.5">
+                            <div
+                              className={[
+                                'flex min-w-0 items-stretch overflow-hidden',
+                                canEdit ? 'rounded-lg ring-1 ring-black/[0.08]' : '',
+                                selectedShiftId === sOne.id ? 'ring-2 ring-zinc-900/45' : '',
+                              ].join(' ')}
+                            >
+                              {canEdit ? (
+                                <>
+                                  <div
+                                    draggable
+                                    onDragStart={(e) => onDragStart(e, sOne.id)}
+                                    onDragEnd={onDragEnd}
+                                    className="flex w-3 shrink-0 cursor-grab touch-none items-center justify-center self-stretch rounded-l-lg border-y border-l border-zinc-200/90 bg-zinc-100 text-zinc-800 active:cursor-grabbing sm:w-3.5"
+                                    title="Mover a otro día o puesto"
+                                    aria-label="Arrastrar turno"
+                                    onPointerDown={(e) => e.stopPropagation()}
+                                    onClick={(e) => e.stopPropagation()}
+                                  >
+                                    <GripVertical className="h-3 w-3 opacity-80 sm:h-3.5 sm:w-3.5" />
+                                  </div>
+                                  {rowShell}
+                                </>
+                              ) : (
+                                rowShell
+                              )}
+                            </div>
+                            {canEdit ? (
+                              <div className="flex flex-wrap justify-end gap-1.5 pl-1">
+                                <button
+                                  type="button"
+                                  className="rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-[11px] font-extrabold text-zinc-800 hover:bg-zinc-50"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    onShiftAdvancedEdit(sOne);
+                                  }}
+                                >
+                                  Editar
+                                </button>
+                                <button
+                                  type="button"
+                                  className="rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-[11px] font-extrabold text-red-800 hover:bg-red-100"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    void removeShiftFromGroup(sOne);
+                                  }}
+                                >
+                                  Quitar
+                                </button>
+                              </div>
+                            ) : null}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </>
+              );
+            })()}
+          </aside>
+        </div>
+      ) : null}
     </div>
   );
 }
