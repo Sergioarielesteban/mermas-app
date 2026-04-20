@@ -76,16 +76,7 @@ import {
   notifyIncidenciaRecepcionDeduped,
   notifyPedidoRecibido,
 } from '@/services/notifications';
-
-function normalizeWhatsappNumber(raw: string | undefined) {
-  if (!raw) return null;
-  const trimmed = raw.trim();
-  if (!trimmed) return null;
-  const hasPlus = trimmed.startsWith('+');
-  const digits = trimmed.replace(/[^\d]/g, '');
-  if (!digits) return null;
-  return hasPlus ? digits : digits;
-}
+import { openWhatsApp, normalizeWhatsappPhone } from '@/lib/whatsapp';
 
 function normalizeLocalForWhatsapp(raw: string) {
   const cleaned = raw.replace(/\bCAN\b/gi, '').replace(/\s+/g, ' ').trim();
@@ -276,7 +267,7 @@ export default function PedidosPage() {
   pricePerKgInputRef.current = pricePerKgInputByItemId;
   const sendWhatsappOrder = React.useCallback(
     (order: PedidoOrder, options?: { viaAssistant?: boolean }) => {
-    const phone = normalizeWhatsappNumber(order.supplierContact);
+    const phone = normalizeWhatsappPhone(order.supplierContact);
     if (!phone) {
       const err = `El proveedor "${order.supplierName}" no tiene teléfono válido en contacto.`;
       setMessage(err);
@@ -290,11 +281,9 @@ export default function PedidosPage() {
       ? new Date(order.createdAt).toLocaleDateString('es-ES')
       : parsed.toLocaleDateString('es-ES');
     const requestedBy = (email ?? 'EQUIPO').split('@')[0] || 'EQUIPO';
-    const text = encodeURIComponent(
+    const whatsappMessage =
       buildWhatsappOrderMessage(order, deliveryDate, localName ?? 'CHEF-ONE MATARO', requestedBy),
-    );
-    const url = `https://wa.me/${phone}?text=${text}`;
-    window.open(url, '_blank', 'noopener,noreferrer');
+    openWhatsApp(phone, whatsappMessage);
   },
   [email, localName],
 );
@@ -1555,7 +1544,7 @@ export default function PedidosPage() {
           return;
         }
         const sel = candidates[0];
-        const phone = normalizeWhatsappNumber(sel.supplierContact);
+        const phone = normalizeWhatsappPhone(sel.supplierContact);
         if (!phone) {
           const msg = `El proveedor "${sel.supplierName}" no tiene teléfono válido en contacto.`;
           setAssistantReply(msg);

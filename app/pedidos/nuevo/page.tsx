@@ -36,16 +36,11 @@ import {
   type PedidoSupplier,
 } from '@/lib/pedidos-supabase';
 import { actorLabel, notifyPedidoEnviado } from '@/services/notifications';
+import { openWhatsApp, normalizeWhatsappPhone } from '@/lib/whatsapp';
 
 type QtyMap = Record<string, number>;
 
 const basketSessionKey = (localId: string) => `chefone_pedidos_basket:${localId}`;
-
-function normalizeWhatsappNumber(raw: string | undefined) {
-  if (!raw) return null;
-  const digits = raw.replace(/[^\d]/g, '');
-  return digits || null;
-}
 
 function normalizeLocalForWhatsapp(raw: string) {
   const cleaned = raw.replace(/\bCAN\b/gi, '').replace(/\s+/g, ' ').trim();
@@ -451,7 +446,7 @@ export default function NuevoPedidoPage() {
     if (!localId) return setMessage('Perfil del local aún cargando.');
     if (!deliveryDate.trim()) return setMessage('Fecha de entrega obligatoria.');
     if (!requestedBy.trim()) return setMessage('Indica quién pide.');
-    const phone = normalizeWhatsappNumber(selectedSupplier.contact);
+    const phone = normalizeWhatsappPhone(selectedSupplier.contact);
     if (!phone) return setMessage('El proveedor no tiene teléfono válido en contacto.');
     const parsed = new Date(`${deliveryDate}T00:00:00`);
     if (Number.isNaN(parsed.getTime())) return setMessage('Fecha de entrega inválida. Usa AAAA-MM-DD.');
@@ -527,18 +522,16 @@ export default function NuevoPedidoPage() {
         }
         resetPedidoFormAfterSuccess();
         void pullNewOrderIntoStore(orderId);
-        const text = encodeURIComponent(
-          buildWhatsappDraftMessage({
-            supplierName: selectedSupplier.name,
-            createdAtIso: existingCreatedAt ?? new Date().toISOString(),
-            deliveryDate: parsed.toLocaleDateString('es-ES'),
-            localName: localName ?? 'MATARO',
-            requestedBy: requestedBy.trim(),
-            notes: notes.trim(),
-            items,
-          }),
-        );
-        popup.location.href = `https://wa.me/${phone}?text=${text}`;
+        const whatsappMessage = buildWhatsappDraftMessage({
+          supplierName: selectedSupplier.name,
+          createdAtIso: existingCreatedAt ?? new Date().toISOString(),
+          deliveryDate: parsed.toLocaleDateString('es-ES'),
+          localName: localName ?? 'MATARO',
+          requestedBy: requestedBy.trim(),
+          notes: notes.trim(),
+          items,
+        });
+        openWhatsApp(phone, whatsappMessage, { popupWindow: popup });
         dispatchPedidosDataChanged();
         router.replace('/pedidos?pedido=enviado');
       })
