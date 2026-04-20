@@ -79,34 +79,51 @@ function HeroCardCarousel() {
       </p>
       <div
         ref={scrollerRef}
-        className="flex snap-x snap-mandatory gap-4 overflow-x-auto pb-4 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-        style={{ scrollPaddingInline: 'max(1rem, calc(50% - 9.5rem))' }}
+        className="flex snap-x snap-mandatory gap-2 overflow-x-auto pb-6 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        style={{
+          scrollPaddingInline: 'max(1rem, calc(50% - 12.5rem))',
+          scrollBehavior: 'smooth',
+        }}
       >
-        {HERO_SLIDES.map((slide, idx) => (
-          <article
-            key={slide.title}
-            className="w-[min(100%,19rem)] shrink-0 snap-center sm:w-[20.5rem]"
-          >
-            <div
-              className="overflow-hidden rounded-[1.35rem] border border-white/60 bg-gradient-to-b from-white via-white to-stone-50/95 shadow-[0_20px_50px_-24px_rgba(15,23,42,0.25),0_0_0_1px_rgba(15,23,42,0.04)] ring-1 ring-stone-900/[0.04]"
+        {HERO_SLIDES.map((slide, idx) => {
+          const isActive = idx === active;
+          return (
+            <article
+              key={slide.title}
+              className={[
+                'w-[min(100%,22.5rem)] shrink-0 snap-center sm:w-[24rem]',
+                idx === 0 ? '' : '-ml-3 sm:-ml-5',
+                'transition-all duration-[250ms] ease-out',
+                isActive ? 'z-20 scale-[1.06] sm:scale-[1.08]' : 'z-10 scale-100 hover:z-[15]',
+              ].join(' ')}
             >
-              <div className="relative aspect-[16/11] w-full overflow-hidden bg-stone-100">
-                <Image
-                  src={slide.src}
-                  alt={slide.alt}
-                  fill
-                  className="object-cover object-top"
-                  sizes="(max-width: 640px) 85vw, 328px"
-                  priority={idx === 0}
-                />
+              <div
+                className={[
+                  'overflow-hidden rounded-[18px] border bg-white bg-gradient-to-b from-white via-white to-stone-50/95 transition-all duration-[250ms] ease-out [box-shadow:0_20px_40px_rgba(0,0,0,0.08)]',
+                  isActive
+                    ? 'border-stone-300/90 ring-2 ring-[#D32F2F]/20'
+                    : 'border-white/70 ring-1 ring-stone-900/[0.05]',
+                  'hover:-translate-y-1.5 hover:scale-[1.02] hover:[box-shadow:0_20px_50px_rgba(0,0,0,0.1)]',
+                ].join(' ')}
+              >
+                <div className="relative aspect-[16/11] w-full overflow-hidden bg-stone-100">
+                  <Image
+                    src={slide.src}
+                    alt={slide.alt}
+                    fill
+                    className="object-cover object-top"
+                    sizes="(max-width: 640px) 90vw, 384px"
+                    priority={idx === 0}
+                  />
+                </div>
+                <div className="border-t border-stone-100/90 px-4 py-3">
+                  <p className="text-sm font-bold tracking-tight text-stone-900">{slide.title}</p>
+                  <p className="mt-0.5 text-[11px] font-medium text-stone-500">Chef-One</p>
+                </div>
               </div>
-              <div className="border-t border-stone-100/90 px-4 py-3">
-                <p className="text-sm font-bold tracking-tight text-stone-900">{slide.title}</p>
-                <p className="mt-0.5 text-[11px] font-medium text-stone-500">Chef-One</p>
-              </div>
-            </div>
-          </article>
-        ))}
+            </article>
+          );
+        })}
       </div>
 
       <div className="mt-1 flex items-center justify-center gap-3">
@@ -149,7 +166,7 @@ export default function MarketingHero() {
   const reduceMotion = useReducedMotion();
 
   return (
-    <section className="relative overflow-hidden border-b border-stone-200/50 bg-gradient-to-b from-white via-[#fafafa] to-[#f4f4f5] px-4 pb-14 pt-10 sm:px-6 sm:pb-20 sm:pt-12">
+    <section className="relative overflow-hidden border-b border-stone-200/50 bg-gradient-to-b from-white via-[#fafafa] to-[#f0f1f4] px-4 pb-16 pt-10 sm:px-6 sm:pb-24 sm:pt-14">
       <div
         className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_90%_55%_at_50%_-25%,rgba(211,47,47,0.11),transparent),radial-gradient(ellipse_50%_40%_at_100%_0%,rgba(15,23,42,0.05),transparent)]"
         aria-hidden
@@ -169,7 +186,7 @@ export default function MarketingHero() {
           </motion.div>
 
           <motion.h1
-            className="mt-6 text-balance text-3xl font-extrabold leading-[1.08] tracking-tight text-stone-900 sm:text-4xl sm:leading-[1.06] lg:text-[2.65rem]"
+            className="mt-6 text-balance text-3xl font-extrabold leading-[1.08] tracking-tight text-stone-950 sm:text-4xl sm:leading-[1.06] lg:text-[2.65rem] [text-shadow:0_1px_0_rgba(255,255,255,0.8)]"
             initial={reduceMotion ? false : { opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5, delay: reduceMotion ? 0 : 0.04 }}
@@ -224,11 +241,30 @@ export default function MarketingHero() {
             >
               Ir a la app
             </Link>
+            <a
+              href="#"
+              onClick={(e) => e.preventDefault()}
+              className="inline-flex h-12 items-center justify-center rounded-2xl border-2 border-stone-200/95 bg-white/95 px-6 text-sm font-bold text-stone-800 shadow-sm backdrop-blur-sm transition duration-[250ms] ease-out hover:-translate-y-0.5 hover:border-stone-300 hover:bg-white hover:shadow-md"
+            >
+              iPhone
+            </a>
+            <a
+              href="#"
+              onClick={(e) => e.preventDefault()}
+              className="inline-flex h-12 items-center justify-center rounded-2xl border-2 border-stone-200/95 bg-white/95 px-6 text-sm font-bold text-stone-800 shadow-sm backdrop-blur-sm transition duration-[250ms] ease-out hover:-translate-y-0.5 hover:border-stone-300 hover:bg-white hover:shadow-md"
+            >
+              Android
+            </a>
           </motion.div>
+          <p className="mt-3 text-center text-xs font-medium text-stone-500 lg:text-left">
+            Disponible en iPhone y Android
+          </p>
         </div>
 
-        <div className="mt-12 lg:mt-14">
-          <HeroCardCarousel />
+        <div className="mt-12 origin-top scale-[1.08] sm:scale-[1.12] lg:mt-16 lg:scale-[1.15]">
+          <div className="rounded-[20px] [box-shadow:0_24px_48px_-12px_rgba(15,23,42,0.12),0_12px_24px_-8px_rgba(0,0,0,0.06)]">
+            <HeroCardCarousel />
+          </div>
         </div>
       </div>
     </section>

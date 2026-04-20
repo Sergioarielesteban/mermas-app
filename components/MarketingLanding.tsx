@@ -68,7 +68,7 @@ export default function MarketingLanding() {
   const phoneContact = getMarketingContactPhone();
 
   return (
-    <div className="min-h-[100dvh] bg-[#f8f9fb] text-stone-800 antialiased">
+    <div className="min-h-[100dvh] scroll-smooth bg-[#f8f9fb] text-stone-800 antialiased">
       <a
         href="#contenido"
         className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-[200] focus:rounded-xl focus:bg-stone-900 focus:px-4 focus:py-2 focus:text-sm focus:text-white"
@@ -76,56 +76,55 @@ export default function MarketingLanding() {
         Ir al contenido
       </a>
 
-      <header className="sticky top-0 z-50 border-b border-stone-200/70 bg-white/85 backdrop-blur-xl supports-[backdrop-filter]:bg-white/70">
-        <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3.5 sm:px-6">
+      <header className="sticky top-0 z-50 border-b border-stone-200/70 bg-white/90 backdrop-blur-xl supports-[backdrop-filter]:bg-white/75">
+        <div className="mx-auto grid max-w-6xl grid-cols-[1fr_auto_1fr] items-center gap-3 px-4 py-3.5 sm:px-6">
+          <div className="min-w-0" aria-hidden />
           <Link
             href="/"
-            className="flex items-center gap-2.5 outline-none ring-offset-2 focus-visible:ring-2 focus-visible:ring-[#D32F2F]/35"
+            className="flex justify-self-center outline-none ring-offset-2 focus-visible:ring-2 focus-visible:ring-[#D32F2F]/35"
           >
-            <img src="/logo-chef-one.svg" alt="" width={36} height={36} className="h-9 w-9 shrink-0" decoding="async" />
-            <span className="text-lg font-black tracking-tight" style={{ color: BRAND }}>
-              Chef-One
-            </span>
+            <img
+              src="/logo-chef-one.svg"
+              alt="Chef-One"
+              width={40}
+              height={40}
+              className="h-10 w-10 shrink-0"
+              decoding="async"
+            />
           </Link>
-          <div className="flex items-center gap-2">
+          <nav className="flex min-w-0 flex-wrap items-center justify-end gap-1.5 sm:gap-2" aria-label="Principal">
             <Link
               href="#problema"
-              className="hidden rounded-full px-3 py-2 text-xs font-bold text-stone-600 ring-1 ring-stone-200/90 transition hover:bg-stone-50 sm:inline-flex"
+              className="hidden rounded-full px-3 py-2 text-xs font-bold text-stone-600 ring-1 ring-stone-200/90 transition hover:bg-stone-50 md:inline-flex"
             >
-              Problema
+              Por qué funciona
             </Link>
             <Link
               href="#modulos"
-              className="hidden rounded-full px-3 py-2 text-xs font-bold text-stone-600 ring-1 ring-stone-200/90 transition hover:bg-stone-50 sm:inline-flex"
-            >
-              Módulos
-            </Link>
-            <Link
-              href="#modulos"
-              className="hidden rounded-full px-3 py-2 text-xs font-bold text-stone-600 ring-1 ring-stone-200/90 transition hover:bg-stone-50 sm:inline-flex"
+              className="hidden rounded-full px-3 py-2 text-xs font-bold text-stone-600 ring-1 ring-stone-200/90 transition hover:bg-stone-50 md:inline-flex"
             >
               Módulos
             </Link>
             <Link
               href="#precio"
-              className="hidden rounded-full px-3 py-2 text-xs font-bold text-stone-600 ring-1 ring-stone-200/90 transition hover:bg-stone-50 sm:inline-flex"
+              className="hidden rounded-full px-3 py-2 text-xs font-bold text-stone-600 ring-1 ring-stone-200/90 transition hover:bg-stone-50 md:inline-flex"
             >
               Planes
             </Link>
             <Link
               href="#solicitar-info"
-              className="hidden rounded-full px-3 py-2 text-xs font-bold text-stone-600 ring-1 ring-stone-200/90 transition hover:bg-stone-50 sm:inline-flex"
+              className="hidden rounded-full px-3 py-2 text-xs font-bold text-stone-600 ring-1 ring-stone-200/90 transition hover:bg-stone-50 md:inline-flex"
             >
               Contacto
             </Link>
             <Link
               href="/login"
-              className="rounded-full px-4 py-2.5 text-sm font-bold text-white shadow-md shadow-rose-900/10 transition hover:brightness-105 active:scale-[0.98]"
+              className="rounded-full px-3 py-2 text-xs font-bold text-white shadow-md shadow-rose-900/10 transition hover:brightness-105 active:scale-[0.98] sm:px-4 sm:py-2.5 sm:text-sm"
               style={{ backgroundColor: BRAND }}
             >
               Acceder
             </Link>
-          </div>
+          </nav>
         </div>
       </header>
 
@@ -148,7 +147,7 @@ export default function MarketingLanding() {
           </div>
         </section>
 
-        <section id="problema" className="scroll-mt-[4.5rem] border-t border-stone-200/60 bg-white px-4 py-12 sm:scroll-mt-24 sm:px-6 sm:py-14">
+        <section id="problema" className="scroll-mt-[4.5rem] border-t border-stone-200/60 bg-white px-4 py-16 sm:scroll-mt-24 sm:px-6 sm:py-20">
           <div className="mx-auto max-w-4xl">
             <h2 className="text-2xl font-extrabold tracking-tight text-stone-900 sm:text-3xl">Si esto te suena, lo necesitas</h2>
             <ul className="mt-5 grid gap-3 sm:grid-cols-2">
@@ -165,7 +164,7 @@ export default function MarketingLanding() {
 
         <MarketingModulesSection />
 
-        <section className="border-t border-stone-200/60 bg-white px-4 py-12 sm:px-6 sm:py-14">
+        <section className="border-t border-stone-200/60 bg-[#f3f4f6] px-4 py-16 sm:px-6 sm:py-20">
           <div className="mx-auto max-w-4xl text-center">
             <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#D32F2F]/90">Identidad</p>
             <h2 className="mt-2 text-2xl font-extrabold tracking-tight text-stone-900 sm:text-3xl">
@@ -175,7 +174,7 @@ export default function MarketingLanding() {
           </div>
         </section>
 
-        <section className="border-t border-stone-200/60 bg-gradient-to-b from-[#fafafa] to-white px-4 py-12 sm:px-6 sm:py-16">
+        <section className="border-t border-stone-200/60 bg-gradient-to-b from-white to-[#f8f9fb] px-4 py-16 sm:px-6 sm:py-20">
           <div className="mx-auto max-w-6xl">
             <h2 className="text-center text-2xl font-extrabold tracking-tight text-stone-900 sm:text-3xl">Uso real en cocina</h2>
             <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -189,7 +188,7 @@ export default function MarketingLanding() {
         </section>
 
         {/* Beneficios */}
-        <section className="border-t border-stone-200/60 bg-white px-4 py-12 sm:px-6 sm:py-16" aria-labelledby="beneficios-heading">
+        <section className="border-t border-stone-200/60 bg-white px-4 py-16 sm:px-6 sm:py-20" aria-labelledby="beneficios-heading">
           <div className="mx-auto max-w-6xl">
             <div className="mx-auto max-w-2xl text-center">
               <h2 id="beneficios-heading" className="text-balance text-2xl font-extrabold tracking-tight text-stone-900 sm:text-3xl">
@@ -221,7 +220,7 @@ export default function MarketingLanding() {
           </div>
         </section>
 
-        <section className="border-t border-stone-200/60 bg-stone-50/60 px-4 py-12 sm:px-6 sm:py-14">
+        <section className="border-t border-stone-200/60 bg-stone-50/80 px-4 py-16 sm:px-6 sm:py-20">
           <div className="mx-auto max-w-4xl text-center">
             <h2 className="text-2xl font-extrabold tracking-tight text-stone-900 sm:text-3xl">Activación simple desde el día uno</h2>
             <p className="mt-3 text-sm text-stone-600 sm:text-base">
@@ -230,7 +229,7 @@ export default function MarketingLanding() {
           </div>
         </section>
 
-        <section className="border-t border-stone-200/60 bg-white px-4 py-12 sm:px-6 sm:py-14">
+        <section className="border-t border-stone-200/60 bg-white px-4 py-16 sm:px-6 sm:py-20">
           <div className="mx-auto max-w-4xl text-center">
             <h2 className="text-2xl font-extrabold tracking-tight text-stone-900 sm:text-3xl">Hecho para ir rápido</h2>
             <ul className="mt-5 grid gap-3 text-sm text-stone-700 sm:grid-cols-3">
@@ -247,7 +246,7 @@ export default function MarketingLanding() {
         {/* A medida + formulario */}
         <section
           id="solicitar-info"
-          className="scroll-mt-[4.5rem] border-t border-stone-200/60 bg-white px-4 py-12 sm:scroll-mt-24 sm:px-6 sm:py-16"
+          className="scroll-mt-[4.5rem] border-t border-stone-200/60 bg-[#fafbfc] px-4 py-16 sm:scroll-mt-24 sm:px-6 sm:py-20"
         >
           <div className="mx-auto max-w-5xl">
             <div className="mx-auto max-w-xl text-center">
@@ -280,7 +279,7 @@ export default function MarketingLanding() {
           </div>
         </section>
 
-        <section className="border-t border-stone-200/60 bg-gradient-to-br from-stone-50 to-white px-4 py-12 sm:px-6">
+        <section className="border-t border-stone-200/60 bg-gradient-to-br from-stone-50 to-white px-4 py-16 sm:px-6 sm:py-20">
           <div className="mx-auto max-w-2xl text-center">
             <h2 className="text-2xl font-extrabold text-stone-900 sm:text-3xl">Empieza a operar con sistema hoy</h2>
             <p className="mt-2 text-sm text-stone-600">Pide demo, activa plan y arranca sin permanencia.</p>
@@ -309,8 +308,11 @@ export default function MarketingLanding() {
           Para equipos de cocina y profesionales del sector. Sin perder el hilo.
         </p>
         <p className="mt-5 flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-[11px] text-stone-500">
-          <Link href="/login" className="font-medium underline decoration-stone-300 underline-offset-2 hover:text-stone-800">
-            Acceso clientes
+          <Link href="#problema" className="font-medium underline decoration-stone-300 underline-offset-2 hover:text-stone-800">
+            Por qué funciona
+          </Link>
+          <Link href="#modulos" className="font-medium underline decoration-stone-300 underline-offset-2 hover:text-stone-800">
+            Módulos
           </Link>
           <Link href="#precio" className="font-medium underline decoration-stone-300 underline-offset-2 hover:text-stone-800">
             Planes
@@ -318,11 +320,8 @@ export default function MarketingLanding() {
           <Link href="#solicitar-info" className="font-medium underline decoration-stone-300 underline-offset-2 hover:text-stone-800">
             Contacto
           </Link>
-          <Link href="#problema" className="font-medium underline decoration-stone-300 underline-offset-2 hover:text-stone-800">
-            Problema
-          </Link>
-          <Link href="#modulos" className="font-medium underline decoration-stone-300 underline-offset-2 hover:text-stone-800">
-            Ver módulos
+          <Link href="/login" className="font-medium underline decoration-stone-300 underline-offset-2 hover:text-stone-800">
+            Acceso clientes
           </Link>
           {phoneContact ? (
             <>

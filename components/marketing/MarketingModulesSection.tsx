@@ -42,7 +42,7 @@ export default function MarketingModulesSection() {
   return (
     <section
       id="modulos"
-      className="scroll-mt-[4.5rem] border-t border-stone-200/60 bg-gradient-to-b from-[#fafafa] via-white to-[#f8f9fb] px-4 py-14 sm:scroll-mt-24 sm:px-6 sm:py-20"
+      className="scroll-mt-[4.5rem] border-t border-stone-200/60 bg-gradient-to-b from-[#f5f6f8] via-white to-[#f8f9fb] px-4 py-16 sm:scroll-mt-24 sm:px-6 sm:py-24"
       aria-labelledby="modulos-heading"
     >
       <div className="mx-auto max-w-6xl">
@@ -56,18 +56,21 @@ export default function MarketingModulesSection() {
           </p>
         </div>
 
-        <div className="mt-10 grid gap-5 lg:grid-cols-2">
+        <div className="mt-12 grid gap-6 lg:grid-cols-2">
           {CATEGORY_BLOCKS.map((category) => (
             <article
               key={category.title}
-              className="rounded-2xl border border-stone-200/80 bg-white p-5 shadow-[0_8px_28px_-16px_rgba(15,23,42,0.12)] ring-1 ring-stone-100 sm:p-6"
+              className="rounded-[20px] border border-stone-200/70 bg-white p-5 transition-all duration-300 ease-out [box-shadow:0_10px_30px_rgba(0,0,0,0.06)] hover:-translate-y-1 hover:[box-shadow:0_20px_50px_rgba(0,0,0,0.08)] sm:p-6"
             >
               <h3 className="text-sm font-extrabold uppercase tracking-[0.12em] text-stone-800">{category.title}</h3>
               <ul className="mt-4 grid gap-3 sm:grid-cols-2">
                 {category.modules.map(({ name, desc, Icon }) => (
-                  <li key={name} className="rounded-xl border border-stone-100 bg-stone-50/70 p-3.5">
+                  <li
+                    key={name}
+                    className="group rounded-[20px] border border-stone-100 bg-white p-3.5 transition-all duration-300 ease-out [box-shadow:0_8px_24px_-8px_rgba(0,0,0,0.06)] hover:-translate-y-1 hover:[box-shadow:0_20px_50px_rgba(0,0,0,0.08)]"
+                  >
                     <div className="flex items-start gap-2.5">
-                      <span className="mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-[#D32F2F]/10 text-[#D32F2F]">
+                      <span className="mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-[#D32F2F]/10 text-[#D32F2F] transition-transform duration-300 ease-out group-hover:scale-105">
                         <Icon className="h-4 w-4" aria-hidden />
                       </span>
                       <div className="min-w-0">
