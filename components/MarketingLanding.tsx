@@ -5,6 +5,7 @@ import MarketingQuickContact, { MarketingContactLinkRow } from '@/components/mar
 import MarketingHero from '@/components/marketing/MarketingHero';
 import MarketingModulesSection from '@/components/marketing/MarketingModulesSection';
 import MarketingPricingHighlight from '@/components/marketing/MarketingPricingHighlight';
+import StoreDownloadBadges from '@/components/marketing/StoreDownloadBadges';
 import { getMarketingContactPhone } from '@/lib/marketing-contact-phone';
 
 const BRAND = '#D32F2F';
@@ -76,8 +77,8 @@ export default function MarketingLanding() {
         Ir al contenido
       </a>
 
-      <header className="sticky top-0 z-50 border-b border-stone-200/70 bg-white/90 backdrop-blur-xl supports-[backdrop-filter]:bg-white/75">
-        <div className="mx-auto grid max-w-6xl grid-cols-[1fr_auto_1fr] items-center gap-3 px-4 py-3.5 sm:px-6">
+      <header className="sticky top-0 z-50 border-b border-stone-200/80 bg-white/95 shadow-[0_1px_0_rgba(0,0,0,0.03)] backdrop-blur-xl supports-[backdrop-filter]:bg-white/80">
+        <div className="mx-auto grid max-w-6xl grid-cols-[1fr_auto_1fr] items-center gap-2 px-4 py-4 sm:gap-3 sm:px-6">
           <div className="min-w-0" aria-hidden />
           <Link
             href="/"
@@ -86,13 +87,13 @@ export default function MarketingLanding() {
             <img
               src="/logo-chef-one.svg"
               alt="Chef-One"
-              width={40}
-              height={40}
-              className="h-10 w-10 shrink-0"
+              width={52}
+              height={52}
+              className="h-12 w-12 shrink-0 sm:h-[52px] sm:w-[52px]"
               decoding="async"
             />
           </Link>
-          <nav className="flex min-w-0 flex-wrap items-center justify-end gap-1.5 sm:gap-2" aria-label="Principal">
+          <nav className="flex min-w-0 flex-wrap items-center justify-end gap-1.5 sm:gap-2.5" aria-label="Principal">
             <Link
               href="#problema"
               className="hidden rounded-full px-3 py-2 text-xs font-bold text-stone-600 ring-1 ring-stone-200/90 transition hover:bg-stone-50 md:inline-flex"
@@ -119,7 +120,7 @@ export default function MarketingLanding() {
             </Link>
             <Link
               href="/login"
-              className="rounded-full px-3 py-2 text-xs font-bold text-white shadow-md shadow-rose-900/10 transition hover:brightness-105 active:scale-[0.98] sm:px-4 sm:py-2.5 sm:text-sm"
+              className="rounded-full px-4 py-2.5 text-xs font-bold text-white shadow-md shadow-rose-900/15 transition hover:brightness-105 active:scale-[0.98] sm:text-sm"
               style={{ backgroundColor: BRAND }}
             >
               Acceder
@@ -148,29 +149,54 @@ export default function MarketingLanding() {
         </section>
 
         <section id="problema" className="scroll-mt-[4.5rem] border-t border-stone-200/60 bg-white px-4 py-16 sm:scroll-mt-24 sm:px-6 sm:py-20">
-          <div className="mx-auto max-w-4xl">
-            <h2 className="text-2xl font-extrabold tracking-tight text-stone-900 sm:text-3xl">Si esto te suena, lo necesitas</h2>
-            <ul className="mt-5 grid gap-3 sm:grid-cols-2">
+          <div className="mx-auto max-w-3xl text-center">
+            <h2 className="text-balance text-2xl font-extrabold tracking-tight text-stone-900 sm:text-3xl">
+              Si esto te suena, lo necesitas
+            </h2>
+            <ul className="mx-auto mt-8 grid max-w-2xl justify-items-center gap-3 sm:mt-10 sm:grid-cols-2 sm:justify-items-stretch sm:gap-4">
               {problemPoints.map((point) => (
-                <li key={point} className="rounded-xl border border-stone-200 bg-stone-50/80 px-4 py-3 text-sm font-medium text-stone-700">
+                <li
+                  key={point}
+                  className="w-full max-w-md rounded-xl border border-stone-200 bg-stone-50/90 px-4 py-3.5 text-center text-sm font-medium leading-snug text-stone-700 shadow-sm sm:max-w-none sm:text-left"
+                >
                   {point}
                 </li>
               ))}
             </ul>
-            <p className="mt-4 text-sm font-semibold text-stone-900">Y cuando algo falla, nadie sabe por qué.</p>
-            <p className="mt-2 text-sm font-semibold text-[#D32F2F]">Chef-One organiza todo eso en un solo sistema.</p>
+            <p className="mx-auto mt-8 max-w-xl text-pretty text-sm font-semibold text-stone-900 sm:mt-10">
+              Y cuando algo falla, nadie sabe por qué.
+            </p>
+            <p className="mx-auto mt-2 max-w-xl text-pretty text-sm font-semibold text-[#D32F2F]">
+              Chef-One organiza todo eso en un solo sistema.
+            </p>
           </div>
         </section>
 
         <MarketingModulesSection />
 
-        <section className="border-t border-stone-200/60 bg-[#f3f4f6] px-4 py-16 sm:px-6 sm:py-20">
-          <div className="mx-auto max-w-4xl text-center">
-            <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#D32F2F]/90">Identidad</p>
-            <h2 className="mt-2 text-2xl font-extrabold tracking-tight text-stone-900 sm:text-3xl">
-              Software de cocina para servicio real
-            </h2>
-            <p className="mt-3 text-sm text-stone-600 sm:text-base">Sin ruido, sin postureo, sin depender del “ya me acuerdo”.</p>
+        <section
+          id="identidad"
+          className="border-t border-stone-200/60 bg-[#f0f1f4] px-4 py-16 sm:px-6 sm:py-20"
+          aria-labelledby="identidad-heading"
+        >
+          <div className="mx-auto max-w-3xl">
+            <div className="rounded-3xl border border-stone-200/90 bg-white px-6 py-12 text-center shadow-[0_20px_50px_-24px_rgba(0,0,0,0.08)] sm:px-10 sm:py-14">
+              <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#D32F2F]/90">Identidad</p>
+              <h2
+                id="identidad-heading"
+                className="mt-4 text-balance text-2xl font-extrabold tracking-tight text-stone-900 sm:text-3xl"
+              >
+                Pensado entre servicio y servicio
+              </h2>
+              <p className="mt-6 text-balance text-lg font-bold leading-snug text-stone-900 sm:text-xl">
+                Chef-One no nace en una oficina. Nace en una cocina.
+              </p>
+              <p className="mx-auto mt-5 max-w-2xl text-pretty text-sm leading-relaxed text-stone-600 sm:text-base">
+                Nace de una necesidad operativa clara: dar orden a la información, a los procesos y a la ejecución
+                durante el servicio. Está pensado para cocina real (ritmo, claridad y criterio), no para sumar
+                burocracia al equipo.
+              </p>
+            </div>
           </div>
         </section>
 
@@ -283,7 +309,7 @@ export default function MarketingLanding() {
           <div className="mx-auto max-w-2xl text-center">
             <h2 className="text-2xl font-extrabold text-stone-900 sm:text-3xl">Empieza a operar con sistema hoy</h2>
             <p className="mt-2 text-sm text-stone-600">Pide demo, activa plan y arranca sin permanencia.</p>
-            <div className="mt-6 flex flex-col items-stretch justify-center gap-3 sm:flex-row">
+            <div className="mt-6 flex flex-col items-stretch justify-center gap-3 sm:flex-row sm:justify-center">
               <Link
                 href="#solicitar-info"
                 className="inline-flex h-12 items-center justify-center rounded-2xl px-8 text-sm font-bold text-white shadow-md transition hover:brightness-105"
@@ -298,6 +324,7 @@ export default function MarketingLanding() {
                 Abrir app
               </Link>
             </div>
+            <StoreDownloadBadges className="mt-10" />
           </div>
         </section>
       </main>

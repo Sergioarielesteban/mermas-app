@@ -69,56 +69,80 @@ function HeroCardCarousel() {
 
   return (
     <motion.div
-      className="relative w-full"
+      className="relative w-full [perspective:1400px]"
       initial={reduceMotion ? false : { opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: reduceMotion ? 0 : 0.6, ease: [0.22, 1, 0.36, 1], delay: reduceMotion ? 0 : 0.08 }}
     >
-      <p className="mb-3 text-center text-[10px] font-bold uppercase tracking-[0.2em] text-stone-400 sm:text-[11px]">
+      <p className="mb-4 text-center text-[10px] font-bold uppercase tracking-[0.2em] text-stone-400 sm:text-[11px]">
         Desliza las tarjetas
       </p>
       <div
         ref={scrollerRef}
-        className="flex snap-x snap-mandatory gap-2 overflow-x-auto pb-6 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        className="flex snap-x snap-mandatory gap-4 overflow-x-auto px-1 pb-8 pt-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
         style={{
-          scrollPaddingInline: 'max(1rem, calc(50% - 12.5rem))',
+          scrollPaddingInline: 'max(0.75rem, calc(50% - 8.75rem))',
           scrollBehavior: 'smooth',
         }}
       >
         {HERO_SLIDES.map((slide, idx) => {
           const isActive = idx === active;
+          const sideTilt = !isActive ? (idx < active ? 6 : -6) : 0;
+          const transform = reduceMotion
+            ? isActive
+              ? 'scale(1)'
+              : 'scale(0.9)'
+            : isActive
+              ? 'scale(1) translateZ(24px)'
+              : `scale(0.88) translateZ(0) rotateY(${sideTilt}deg)`;
           return (
             <article
               key={slide.title}
+              style={{
+                transform,
+                transformStyle: reduceMotion ? undefined : 'preserve-3d',
+              }}
               className={[
-                'w-[min(100%,22.5rem)] shrink-0 snap-center sm:w-[24rem]',
-                idx === 0 ? '' : '-ml-3 sm:-ml-5',
-                'transition-all duration-[250ms] ease-out',
-                isActive ? 'z-20 scale-[1.06] sm:scale-[1.08]' : 'z-10 scale-100 hover:z-[15]',
+                'w-[min(82vw,17.5rem)] shrink-0 snap-center sm:w-[18.5rem]',
+                'transition-[transform,opacity] duration-300 ease-out',
+                isActive ? 'z-20 opacity-100' : 'z-10 opacity-[0.78]',
               ].join(' ')}
             >
               <div
                 className={[
-                  'overflow-hidden rounded-[18px] border bg-white bg-gradient-to-b from-white via-white to-stone-50/95 transition-all duration-[250ms] ease-out [box-shadow:0_20px_40px_rgba(0,0,0,0.08)]',
+                  'rounded-[1.35rem] bg-gradient-to-b from-stone-700 via-stone-900 to-stone-950 p-[5px] [box-shadow:0_24px_48px_rgba(0,0,0,0.14),0_8px_16px_rgba(0,0,0,0.06)]',
                   isActive
-                    ? 'border-stone-300/90 ring-2 ring-[#D32F2F]/20'
-                    : 'border-white/70 ring-1 ring-stone-900/[0.05]',
-                  'hover:-translate-y-1.5 hover:scale-[1.02] hover:[box-shadow:0_20px_50px_rgba(0,0,0,0.1)]',
+                    ? 'ring-2 ring-[#D32F2F]/35 ring-offset-2 ring-offset-[#f0f1f4]'
+                    : 'ring-1 ring-black/20',
                 ].join(' ')}
               >
-                <div className="relative aspect-[16/11] w-full overflow-hidden bg-stone-100">
-                  <Image
-                    src={slide.src}
-                    alt={slide.alt}
-                    fill
-                    className="object-cover object-top"
-                    sizes="(max-width: 640px) 90vw, 384px"
-                    priority={idx === 0}
-                  />
-                </div>
-                <div className="border-t border-stone-100/90 px-4 py-3">
-                  <p className="text-sm font-bold tracking-tight text-stone-900">{slide.title}</p>
-                  <p className="mt-0.5 text-[11px] font-medium text-stone-500">Chef-One</p>
+                <div className="overflow-hidden rounded-[1.15rem] bg-white shadow-inner ring-1 ring-white/10">
+                  <div className="flex items-center gap-2 border-b border-stone-200/90 bg-gradient-to-b from-stone-50 to-stone-100/90 px-3 py-2">
+                    <span className="h-2 w-2 shrink-0 rounded-full bg-[#ff5f57]" aria-hidden />
+                    <span className="h-2 w-2 shrink-0 rounded-full bg-[#febc2e]" aria-hidden />
+                    <span className="h-2 w-2 shrink-0 rounded-full bg-[#28c840]" aria-hidden />
+                    <span className="min-w-0 truncate pl-1 text-[10px] font-semibold tracking-wide text-stone-500">
+                      Chef-One · {slide.title}
+                    </span>
+                  </div>
+                  <div className="relative h-[200px] w-full overflow-hidden bg-stone-200/80 sm:h-[240px]">
+                    <Image
+                      src={slide.src}
+                      alt={slide.alt}
+                      fill
+                      className="object-cover object-top"
+                      sizes="(max-width: 640px) 82vw, 296px"
+                      priority={idx === 0}
+                    />
+                    <div
+                      className="pointer-events-none absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-black/45 to-transparent"
+                      aria-hidden
+                    />
+                  </div>
+                  <div className="border-t border-stone-100 bg-white px-3 py-2.5 sm:px-4 sm:py-3">
+                    <p className="text-sm font-bold tracking-tight text-stone-900">{slide.title}</p>
+                    <p className="mt-0.5 text-[11px] font-medium text-stone-500">Chef-One</p>
+                  </div>
                 </div>
               </div>
             </article>
@@ -126,7 +150,7 @@ function HeroCardCarousel() {
         })}
       </div>
 
-      <div className="mt-1 flex items-center justify-center gap-3">
+      <div className="mt-2 flex items-center justify-center gap-3">
         <button
           type="button"
           aria-label="Anterior"
@@ -186,15 +210,13 @@ export default function MarketingHero() {
           </motion.div>
 
           <motion.h1
-            className="mt-6 text-balance text-3xl font-extrabold leading-[1.08] tracking-tight text-stone-950 sm:text-4xl sm:leading-[1.06] lg:text-[2.65rem] [text-shadow:0_1px_0_rgba(255,255,255,0.8)]"
+            className="mt-6 text-balance text-3xl font-extrabold leading-[1.08] tracking-tight text-stone-950 sm:text-4xl sm:leading-[1.06] lg:text-[2.65rem]"
             initial={reduceMotion ? false : { opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5, delay: reduceMotion ? 0 : 0.04 }}
           >
             Todo lo que pasa en tu cocina,
-            <span className="mt-1 block bg-gradient-to-r from-[#D32F2F] to-[#9a1818] bg-clip-text text-transparent">
-              en un solo sitio.
-            </span>
+            <span className="mt-1 block font-extrabold text-[#D32F2F]">en un solo sitio.</span>
           </motion.h1>
 
           <motion.p
@@ -241,28 +263,11 @@ export default function MarketingHero() {
             >
               Ir a la app
             </Link>
-            <a
-              href="#"
-              onClick={(e) => e.preventDefault()}
-              className="inline-flex h-12 items-center justify-center rounded-2xl border-2 border-stone-200/95 bg-white/95 px-6 text-sm font-bold text-stone-800 shadow-sm backdrop-blur-sm transition duration-[250ms] ease-out hover:-translate-y-0.5 hover:border-stone-300 hover:bg-white hover:shadow-md"
-            >
-              iPhone
-            </a>
-            <a
-              href="#"
-              onClick={(e) => e.preventDefault()}
-              className="inline-flex h-12 items-center justify-center rounded-2xl border-2 border-stone-200/95 bg-white/95 px-6 text-sm font-bold text-stone-800 shadow-sm backdrop-blur-sm transition duration-[250ms] ease-out hover:-translate-y-0.5 hover:border-stone-300 hover:bg-white hover:shadow-md"
-            >
-              Android
-            </a>
           </motion.div>
-          <p className="mt-3 text-center text-xs font-medium text-stone-500 lg:text-left">
-            Disponible en iPhone y Android
-          </p>
         </div>
 
-        <div className="mt-12 origin-top scale-[1.08] sm:scale-[1.12] lg:mt-16 lg:scale-[1.15]">
-          <div className="rounded-[20px] [box-shadow:0_24px_48px_-12px_rgba(15,23,42,0.12),0_12px_24px_-8px_rgba(0,0,0,0.06)]">
+        <div className="mt-12 lg:mt-16">
+          <div className="rounded-[24px] bg-gradient-to-b from-white/80 to-transparent px-1 pb-1 pt-2 [box-shadow:0_20px_50px_-20px_rgba(15,23,42,0.12)]">
             <HeroCardCarousel />
           </div>
         </div>
