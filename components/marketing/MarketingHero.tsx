@@ -223,14 +223,17 @@ export default function MarketingHero() {
           ].join(' ')}
         >
           <motion.div
-            className="flex w-full shrink-0 justify-center leading-none [-webkit-tap-highlight-color:transparent]"
+            className={[
+              'relative left-1/2 right-1/2 -ml-[50vw] -mr-[50vw] flex w-screen max-w-[100vw] shrink-0 justify-center',
+              'px-3 leading-none [-webkit-tap-highlight-color:transparent] sm:px-4',
+            ].join(' ')}
             initial={reduceMotion ? false : { opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.52, ease: SLIDE_EASE, delay: reduceMotion ? 0 : 0.02 }}
           >
             <Link
               href="/"
-              className="inline-flex max-w-full outline-none ring-offset-4 focus-visible:ring-2 focus-visible:ring-[#D32F2F]/40"
+              className="inline-flex max-w-none outline-none ring-offset-4 focus-visible:ring-2 focus-visible:ring-[#D32F2F]/40"
               aria-label="Chef-One — inicio"
             >
               <Logo variant="hero" />

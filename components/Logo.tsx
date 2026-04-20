@@ -8,15 +8,18 @@ export type LogoVariant = 'header' | 'hero' | 'login' | 'banner' | 'footer' | 'i
  */
 const variantClassName: Record<LogoVariant, string> = {
   header: 'h-10 w-auto max-w-[min(240px,72vw)] object-contain object-left',
-  /** Landing hero: ~×2 lineal respecto al tamaño anterior (≈×4 área); tope dvh en landscape. */
+  /**
+   * Landing hero: muy grande (~×3 respecto al bloque 88vw/22rem/48dvh).
+   * `90dvh` sustituye al antiguo `48dvh` para no “encoger” el cuadrado en altura.
+   */
   hero: [
-    'mx-auto block w-auto max-h-[min(22rem,48dvh)] object-contain object-center',
-    'h-[min(88vw,22rem)]',
-    'sm:h-[min(78vw,20rem)] sm:max-h-[min(20rem,50dvh)]',
-    'md:h-[min(64vw,18rem)] md:max-h-[min(18rem,52dvh)]',
-    'lg:h-[min(52vw,16rem)] lg:max-h-[min(16rem,54dvh)]',
-    'xl:h-[min(44vw,14rem)] xl:max-h-[min(14rem,56dvh)]',
-    '2xl:h-[min(38vw,13rem)] 2xl:max-h-[min(13rem,58dvh)]',
+    'mx-auto block w-auto object-contain object-center',
+    'h-[min(100vw,90dvh,68rem)]',
+    'sm:h-[min(98vw,88dvh,64rem)]',
+    'md:h-[min(92vw,85dvh,58rem)]',
+    'lg:h-[min(78vw,80dvh,52rem)]',
+    'xl:h-[min(68vw,75dvh,48rem)]',
+    '2xl:h-[min(60vw,72dvh,44rem)]',
   ].join(' '),
   login: [
     'mx-auto block w-auto object-contain object-center',
