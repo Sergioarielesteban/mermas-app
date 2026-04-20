@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { ChevronDown, ChevronUp, Plus, Trash2 } from 'lucide-react';
 import MermasStyleHero from '@/components/MermasStyleHero';
 import { useAuth } from '@/components/AuthProvider';
@@ -9,9 +9,11 @@ import {
   deleteEmpresaNorma,
   deleteNormasLecturaByNorma,
   fetchEmpresaNormas,
+  fetchNormasLecturaConfirmacionesAdmin,
   fetchNormasLecturaNormaIds,
   insertEmpresaNorma,
   type EmpresaNormaRow,
+  type NormaLecturaConfirmacionRow,
   updateEmpresaNorma,
   upsertNormaLectura,
 } from '@/lib/personal-normas-manual-supabase';
@@ -20,6 +22,20 @@ import { safeCreateNotification } from '@/services/notifications';
 
 function emptyForm(): { titulo: string; categoria: string; descripcion: string; activa: boolean } {
   return { titulo: '', categoria: '', descripcion: '', activa: true };
+}
+
+function formatConfirmDate(iso: string) {
+  try {
+    return new Date(iso).toLocaleString('es-ES', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  } catch {
+    return iso;
+  }
 }
 
 export default function EmpresaNormasPage() {
@@ -35,21 +51,38 @@ export default function EmpresaNormasPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState(emptyForm);
   const [saving, setSaving] = useState(false);
+  const [confirmaciones, setConfirmaciones] = useState<NormaLecturaConfirmacionRow[]>([]);
 
   const reload = useCallback(async () => {
     if (!localId || !supabaseOk || !userId) {
       setNormas([]);
       setReadIds(new Set());
+      setConfirmaciones([]);
       return;
     }
     const supabase = getSupabaseClient()!;
-    const [list, ids] = await Promise.all([
+    const [list, ids, conf] = await Promise.all([
       fetchEmpresaNormas(supabase, localId),
       fetchNormasLecturaNormaIds(supabase, localId, userId),
+      isAdmin ? fetchNormasLecturaConfirmacionesAdmin(supabase, localId) : Promise.resolve([]),
     ]);
     setNormas(list);
     setReadIds(ids);
-  }, [localId, supabaseOk, userId]);
+    setConfirmaciones(conf);
+  }, [localId, supabaseOk, userId, isAdmin]);
+
+  const confirmacionesPorNorma = useMemo(() => {
+    const map = new Map<string, NormaLecturaConfirmacionRow[]>();
+    for (const c of confirmaciones) {
+      const arr = map.get(c.normaId) ?? [];
+      arr.push(c);
+      map.set(c.normaId, arr);
+    }
+    for (const [, arr] of map) {
+      arr.sort((a, b) => (a.fechaLectura < b.fechaLectura ? 1 : -1));
+    }
+    return map;
+  }, [confirmaciones]);
 
   useEffect(() => {
     if (!profileReady) return;
@@ -275,6 +308,55 @@ export default function EmpresaNormasPage() {
                     Nueva norma
                   </button>
                 )}
+              </div>
+
+              <div className="rounded-xl bg-white p-3 ring-1 ring-zinc-200">
+                <h3 className="text-[11px] font-extrabold uppercase tracking-wide text-zinc-600">
+                  Quién ha aceptado cada norma
+                </h3>
+                <p className="mt-1 text-[11px] leading-relaxed text-zinc-500">
+                  Tras editar una norma se reinician las lecturas: aquí solo ves aceptaciones de la versión actual. Si no
+                  ves nombres, ejecuta en Supabase{' '}
+                  <code className="rounded bg-zinc-100 px-1 text-[10px]">supabase-profiles-admin-select-local.sql</code>.
+                </p>
+                <div className="mt-3 max-h-[min(55vh,22rem)] space-y-3 overflow-y-auto pr-1">
+                  {normas.map((n) => {
+                    const filas = confirmacionesPorNorma.get(n.id) ?? [];
+                    return (
+                      <div key={n.id} className="rounded-lg border border-zinc-100 bg-zinc-50/80 p-2.5">
+                        <p className="text-xs font-extrabold text-zinc-900">
+                          {n.titulo}
+                          {!n.activa ? (
+                            <span className="ml-2 text-[10px] font-bold uppercase text-zinc-400">inactiva</span>
+                          ) : null}
+                        </p>
+                        <p className="text-[10px] text-zinc-500">
+                          Última actualización de la norma: {formatConfirmDate(n.updated_at)}
+                        </p>
+                        {filas.length === 0 ? (
+                          <p className="mt-2 text-[11px] text-zinc-600">Nadie ha confirmado lectura todavía.</p>
+                        ) : (
+                          <ul className="mt-2 space-y-1.5">
+                            {filas.map((row) => (
+                              <li
+                                key={`${row.normaId}-${row.userId}`}
+                                className="rounded-md bg-white px-2 py-1.5 text-[11px] ring-1 ring-zinc-100"
+                              >
+                                <p className="font-bold text-zinc-900">
+                                  {row.displayName || row.email || `Usuario ${row.userId.slice(0, 8)}…`}
+                                </p>
+                                {row.email ? <p className="text-zinc-600">{row.email}</p> : null}
+                                <p className="mt-0.5 text-emerald-800">
+                                  Aceptó: <span className="font-semibold">{formatConfirmDate(row.fechaLectura)}</span>
+                                </p>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
 
               {editingId ? (

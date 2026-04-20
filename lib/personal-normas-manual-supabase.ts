@@ -90,6 +90,66 @@ export async function fetchManualProcedimientos(
   }));
 }
 
+/** Fila para informe de admin: quién aceptó cada norma (versión actual). */
+export type NormaLecturaConfirmacionRow = {
+  normaId: string;
+  userId: string;
+  fechaLectura: string;
+  displayName: string;
+  email: string;
+};
+
+/**
+ * Todas las lecturas del local con nombre/email del perfil (solo si RLS permite leer `profiles` del equipo).
+ * Ejecutar en Supabase: supabase-profiles-admin-select-local.sql
+ */
+export async function fetchNormasLecturaConfirmacionesAdmin(
+  supabase: SupabaseClient,
+  localId: string,
+): Promise<NormaLecturaConfirmacionRow[]> {
+  const { data: lecturas, error: e1 } = await supabase
+    .from('normas_lectura')
+    .select('norma_id, user_id, fecha_lectura')
+    .eq('local_id', localId)
+    .order('fecha_lectura', { ascending: false });
+  if (e1) throw new Error(e1.message);
+  const rows = lecturas ?? [];
+  if (rows.length === 0) return [];
+
+  const userIds = [...new Set(rows.map((r) => String((r as { user_id: string }).user_id)))];
+  const { data: profiles, error: e2 } = await supabase
+    .from('profiles')
+    .select('user_id, full_name, email')
+    .eq('local_id', localId)
+    .in('user_id', userIds);
+  if (e2) throw new Error(e2.message);
+
+  const profileByUser = new Map(
+    (profiles ?? []).map((p) => {
+      const row = p as { user_id: string; full_name: string | null; email: string };
+      return [
+        row.user_id,
+        {
+          displayName: row.full_name?.trim() ?? '',
+          email: row.email?.trim() ?? '',
+        },
+      ] as const;
+    }),
+  );
+
+  return rows.map((r) => {
+    const raw = r as { norma_id: string; user_id: string; fecha_lectura: string };
+    const prof = profileByUser.get(raw.user_id);
+    return {
+      normaId: raw.norma_id,
+      userId: raw.user_id,
+      fechaLectura: raw.fecha_lectura,
+      displayName: prof?.displayName ?? '',
+      email: prof?.email ?? '',
+    };
+  });
+}
+
 export async function fetchNormasLecturaNormaIds(
   supabase: SupabaseClient,
   localId: string,

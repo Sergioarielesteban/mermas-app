@@ -154,3 +154,6 @@ drop policy if exists manual_lectura_delete_admin on public.manual_lectura;
 create policy manual_lectura_delete_admin on public.manual_lectura
 for delete to authenticated
 using (local_id = public.current_local_id() and public.profile_is_admin());
+
+-- Informe admin “quién aceptó cada norma”: nombre/email del equipo requiere política extra en profiles.
+-- Ejecuta también: supabase-profiles-admin-select-local.sql
