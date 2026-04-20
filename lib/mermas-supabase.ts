@@ -19,6 +19,8 @@ export type MermaRow = {
   photo_data_url: string | null;
   cost_eur: number;
   created_at: string;
+  shift?: string | null;
+  optional_user_label?: string | null;
 };
 
 /** Filas de merma sin foto (consultas masivas / Finanzas). */
@@ -34,6 +36,11 @@ export function mapProductRow(row: ProductRow): Product {
   };
 }
 
+function mapShift(raw: string | null | undefined): MermaRecord['shift'] {
+  if (raw === 'manana' || raw === 'tarde') return raw;
+  return null;
+}
+
 export function mapMermaRow(row: MermaRow): MermaRecord {
   return {
     id: row.id,
@@ -45,6 +52,8 @@ export function mapMermaRow(row: MermaRow): MermaRecord {
     photoDataUrl: row.photo_data_url ?? undefined,
     costEur: Number(row.cost_eur),
     createdAt: row.created_at,
+    shift: mapShift(row.shift),
+    optionalUserLabel: row.optional_user_label?.trim() || undefined,
   };
 }
 
@@ -59,6 +68,8 @@ export function mapMermaRowLean(row: Omit<MermaRow, 'photo_data_url'>): MermaRec
     occurredAt: row.occurred_at,
     costEur: Number(row.cost_eur),
     createdAt: row.created_at,
+    shift: mapShift(row.shift),
+    optionalUserLabel: row.optional_user_label?.trim() || undefined,
   };
 }
 
@@ -74,7 +85,7 @@ export async function fetchProductsAndMermas(supabase: SupabaseClient, localId: 
 
   const { data: mermaRows, error: mErr } = await supabase
     .from('mermas')
-    .select('id,product_id,quantity,motive_key,notes,occurred_at,cost_eur,created_at')
+    .select('id,product_id,quantity,motive_key,notes,occurred_at,cost_eur,created_at,shift,optional_user_label')
     .eq('local_id', localId)
     .order('occurred_at', { ascending: false });
 

@@ -2,10 +2,10 @@
 
 import React, { useMemo, useState } from 'react';
 import Image from 'next/image';
-import { Camera, Check, ChevronDown, Search, Upload, X } from 'lucide-react';
+import { Camera, Check, ChevronDown, Search, Upload, X, Zap } from 'lucide-react';
 import { CHEF_ONE_TAPER_LINE_CLASS } from '@/components/ChefOneGlowLine';
 import { useMermasStore } from '@/components/MermasStoreProvider';
-import type { MermaMotiveKey } from '@/lib/types';
+import type { MermaMotiveKey, MermaShift } from '@/lib/types';
 
 type Motive = { key: MermaMotiveKey; emoji: string; label: string };
 
@@ -16,6 +16,7 @@ const MOTIVES: Motive[] = [
   { key: 'error-cocina', emoji: '❌', label: 'ERROR DEL EQUIPO' },
   { key: 'sobras-marcaje', emoji: '🗑️', label: 'SOBRAS DE MARCAJE' },
   { key: 'cancelado', emoji: '⚠️', label: 'CANCELADO' },
+  { key: 'otros-motivos', emoji: '✏️', label: 'OTROS MOTIVOS' },
 ] as const;
 
 function toNumberClamped(value: string, min: number, max: number, decimals = 2) {
@@ -35,18 +36,21 @@ function nowParts() {
 }
 
 export default function MermasRegistrationForm() {
-  const { products, addMerma } = useMermasStore();
+  const { products, mermas, addMerma } = useMermasStore();
   const motives = useMemo(() => MOTIVES, []);
   const current = nowParts();
 
-  const [productId, setProductId] = useState<string>(products[0]?.id ?? '');
+  const [productId, setProductId] = useState<string>('');
   const [quantity, setQuantity] = useState<number>(0);
   const [quantityInput, setQuantityInput] = useState<string>('0');
   const [motiveKey, setMotiveKey] = useState<MermaMotiveKey | null>(null);
+  const [otherMotivoText, setOtherMotivoText] = useState('');
   const [dateValue, setDateValue] = useState(current.date);
   const [timeValue, setTimeValue] = useState(current.time);
   const [photoDataUrl, setPhotoDataUrl] = useState<string | null>(null);
   const [notes, setNotes] = useState<string>('');
+  const [shift, setShift] = useState<MermaShift | null>(null);
+  const [optionalUserLabel, setOptionalUserLabel] = useState('');
   const [showSavedBanner, setShowSavedBanner] = useState(false);
   const [validationBanner, setValidationBanner] = useState<string | null>(null);
   const [openProductPicker, setOpenProductPicker] = useState(false);
@@ -55,8 +59,19 @@ export default function MermasRegistrationForm() {
   const savedBannerTimeoutRef = React.useRef<number | null>(null);
   const validationBannerTimeoutRef = React.useRef<number | null>(null);
 
+  const quickProductIds = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const m of mermas) {
+      counts.set(m.productId, (counts.get(m.productId) ?? 0) + 1);
+    }
+    return [...counts.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
+      .map(([id]) => id)
+      .filter((id) => products.some((p) => p.id === id));
+  }, [mermas, products]);
+
   const selectedProduct = products.find((p) => p.id === productId) ?? null;
-  /** Botones +/− siempre de 1 en 1; decimales solo escribiendo en el recuadro. */
   const quantityButtonStep = 1;
   const quantityLabel = selectedProduct?.unit === 'kg' ? 'Cantidad (kg)' : 'Cantidad';
   const quantityHint = selectedProduct?.unit === 'kg'
@@ -66,18 +81,18 @@ export default function MermasRegistrationForm() {
       : 'Botones ±1 unidad. Toca la cantidad para decimales (ej: 0,5).';
 
   React.useEffect(() => {
-    if (!productId && products[0]?.id) {
-      setProductId(products[0].id);
-    }
-  }, [productId, products]);
-
-  React.useEffect(() => {
     setQuantityInput(quantity.toFixed(2).replace('.', ','));
   }, [quantity, selectedProduct?.unit]);
 
   React.useEffect(() => {
     if (motiveKey !== 'mal-estado') {
       setPhotoDataUrl(null);
+    }
+  }, [motiveKey]);
+
+  React.useEffect(() => {
+    if (motiveKey !== 'otros-motivos') {
+      setOtherMotivoText('');
     }
   }, [motiveKey]);
 
@@ -104,18 +119,23 @@ export default function MermasRegistrationForm() {
     validationBannerTimeoutRef.current = window.setTimeout(() => {
       setValidationBanner(null);
       validationBannerTimeoutRef.current = null;
-    }, 1300);
+    }, 2200);
   };
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!productId) {
-      showValidationBanner('Te faltó elegir un producto');
+    const pid = productId.trim();
+    if (!pid || !products.some((p) => p.id === pid)) {
+      showValidationBanner('Selecciona un producto antes de guardar');
       return;
     }
     if (!motiveKey) {
       showValidationBanner('Te faltó elegir un motivo');
+      return;
+    }
+    if (motiveKey === 'otros-motivos' && !otherMotivoText.trim()) {
+      showValidationBanner('Escribe el motivo en el campo de “Otros motivos”');
       return;
     }
     if (quantity <= 0) {
@@ -134,16 +154,28 @@ export default function MermasRegistrationForm() {
       return;
     }
 
+    const notesTrim = notes.trim();
+    const otherTrim = otherMotivoText.trim();
+    const combinedNotes =
+      motiveKey === 'otros-motivos'
+        ? otherTrim + (notesTrim ? `\n${notesTrim}` : '')
+        : notesTrim;
+
     const result = await addMerma({
-      productId,
+      productId: pid,
       quantity,
       motiveKey,
-      notes,
+      notes: combinedNotes,
       occurredAt: occurredAt.toISOString(),
       photoDataUrl: motiveKey === 'mal-estado' ? (photoDataUrl ?? undefined) : undefined,
+      shift,
+      optionalUserLabel: optionalUserLabel.trim() || undefined,
     });
     if (!result.ok) {
-      showValidationBanner(result.reason ?? 'No se pudo guardar la merma');
+      const r = result.reason ?? '';
+      showValidationBanner(
+        /Selecciona un producto/i.test(r) ? 'Selecciona un producto antes de guardar' : r || 'No se pudo guardar',
+      );
       return;
     }
 
@@ -151,11 +183,14 @@ export default function MermasRegistrationForm() {
     setQuantity(0);
     setQuantityInput('0');
     setMotiveKey(null);
+    setOtherMotivoText('');
     setNotes('');
     setPhotoDataUrl(null);
     setDateValue(now.date);
     setTimeValue(now.time);
     setLastQtyAction(null);
+    setShift(null);
+    setOptionalUserLabel('');
 
     setValidationBanner(null);
     setShowSavedBanner(true);
@@ -189,26 +224,19 @@ export default function MermasRegistrationForm() {
       ) : null}
       {validationBanner ? (
         <div className="pointer-events-none fixed inset-0 z-[91] grid place-items-center bg-black/20 px-6">
-          <div className="rounded-2xl bg-zinc-900 px-7 py-5 text-center shadow-2xl ring-2 ring-white/70">
-            <p className="text-lg font-black uppercase tracking-wide text-white">{validationBanner}</p>
+          <div className="max-w-sm rounded-2xl bg-zinc-900 px-6 py-5 text-center shadow-2xl ring-2 ring-white/70">
+            <p className="text-base font-bold leading-snug text-white">{validationBanner}</p>
           </div>
         </div>
       ) : null}
 
-      <form onSubmit={handleSave} className="pb-2">
-        <div className="space-y-5">
-          <div className="rounded-2xl bg-white p-3 shadow-sm ring-1 ring-zinc-200">
+      <form id="merma-register-form" onSubmit={handleSave} className="pb-[calc(5.5rem+env(safe-area-inset-bottom))]">
+        <div className="space-y-6">
+          <div className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-zinc-200">
             <label className="mb-2 block text-xs font-semibold text-zinc-700">
               Producto <span className="text-[#B91C1C]">*</span>
             </label>
-            <input
-              type="text"
-              value={productId}
-              onChange={() => undefined}
-              tabIndex={-1}
-              aria-hidden
-              className="hidden"
-            />
+            <input type="hidden" name="productId" value={productId} readOnly />
             <button
               type="button"
               onClick={() => setOpenProductPicker(true)}
@@ -219,14 +247,44 @@ export default function MermasRegistrationForm() {
               </span>
               <ChevronDown className="h-4 w-4 text-zinc-500" />
             </button>
+            {quickProductIds.length > 0 ? (
+              <div className="mt-3">
+                <p className="mb-2 flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wide text-zinc-500">
+                  <Zap className="h-3 w-3 text-amber-500" aria-hidden />
+                  Productos rápidos
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {quickProductIds.map((id) => {
+                    const p = products.find((x) => x.id === id);
+                    if (!p) return null;
+                    const active = id === productId;
+                    return (
+                      <button
+                        key={id}
+                        type="button"
+                        onClick={() => setProductId(id)}
+                        className={[
+                          'max-w-[48%] flex-1 rounded-xl border px-2.5 py-2 text-left text-xs font-semibold leading-snug transition sm:max-w-none sm:flex-none',
+                          active
+                            ? 'border-[#D32F2F] bg-[#D32F2F]/10 text-zinc-900'
+                            : 'border-zinc-200 bg-zinc-50 text-zinc-800 hover:border-zinc-300',
+                        ].join(' ')}
+                      >
+                        {p.name}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : null}
             {selectedProduct ? (
-              <p className="pt-1 text-xs text-zinc-500">
+              <p className="pt-2 text-xs text-zinc-500">
                 Precio: {selectedProduct.pricePerUnit.toFixed(2)} EUR/{selectedProduct.unit}
               </p>
             ) : null}
           </div>
 
-          <div className="rounded-2xl bg-white p-3 shadow-sm ring-1 ring-zinc-200">
+          <div className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-zinc-200">
             <label className="mb-2 block text-xs font-semibold text-zinc-700">
               {quantityLabel} <span className="text-[#B91C1C]">*</span>
             </label>
@@ -303,26 +361,19 @@ export default function MermasRegistrationForm() {
                 +
               </button>
             </div>
-            {quantityHint ? <p className="pt-1 text-xs text-zinc-500">{quantityHint}</p> : null}
+            {quantityHint ? <p className="pt-2 text-xs text-zinc-500">{quantityHint}</p> : null}
           </div>
 
-          <div className="rounded-2xl bg-white p-3 shadow-sm ring-1 ring-zinc-200">
+          <div className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-zinc-200">
             <div className="mb-2 flex items-center justify-between">
               <label className="text-xs font-semibold text-zinc-700">
                 Motivo <span className="text-[#B91C1C]">*</span>
               </label>
               <span className="text-[11px] text-zinc-500">Selecciona uno</span>
             </div>
-            <input
-              type="text"
-              value={motiveKey ?? ''}
-              onChange={() => undefined}
-              tabIndex={-1}
-              aria-hidden
-              className="hidden"
-            />
+            <input type="hidden" name="motiveKey" value={motiveKey ?? ''} readOnly />
 
-            <div className="grid grid-cols-2 gap-1.5">
+            <div className="grid grid-cols-2 gap-2">
               {motives.map((m) => {
                 const isSelected = m.key === motiveKey;
                 return (
@@ -331,7 +382,7 @@ export default function MermasRegistrationForm() {
                     type="button"
                     onClick={() => setMotiveKey((prev) => (prev === m.key ? null : m.key))}
                     className={[
-                      'flex h-12 items-center justify-center gap-1.5 rounded-md border px-2 text-center transition-all',
+                      'flex min-h-[3rem] items-center justify-center gap-1.5 rounded-md border px-2 py-2 text-center transition-all',
                       isSelected
                         ? 'border-[#D32F2F] bg-[#D32F2F]/10 text-zinc-900 shadow-sm'
                         : 'border-zinc-300 bg-zinc-50 text-zinc-800 hover:border-zinc-400',
@@ -344,10 +395,23 @@ export default function MermasRegistrationForm() {
                 );
               })}
             </div>
+
+            {motiveKey === 'otros-motivos' ? (
+              <label className="mt-3 block">
+                <span className="text-[11px] font-semibold text-zinc-600">Describe el motivo</span>
+                <textarea
+                  value={otherMotivoText}
+                  onChange={(e) => setOtherMotivoText(e.target.value)}
+                  rows={2}
+                  placeholder="Ej.: rotura de envase, prueba de receta…"
+                  className="mt-1.5 w-full resize-none rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-900 outline-none focus:border-[#D32F2F] focus:ring-2 focus:ring-[#D32F2F]/20"
+                />
+              </label>
+            ) : null}
           </div>
 
           {motiveKey === 'mal-estado' ? (
-            <div className="rounded-2xl bg-white p-3 shadow-sm ring-1 ring-zinc-200">
+            <div className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-zinc-200">
               <label className="mb-2 block text-xs font-semibold text-zinc-700">Añadir Foto de Merma</label>
               <label className="flex h-12 cursor-pointer items-center justify-center gap-2 rounded-xl border border-zinc-300 bg-zinc-50 text-sm font-semibold text-zinc-700 hover:bg-zinc-100">
                 <Camera className="h-4 w-4" />
@@ -374,7 +438,50 @@ export default function MermasRegistrationForm() {
             </div>
           ) : null}
 
-          <div className="rounded-2xl bg-white p-3 shadow-sm ring-1 ring-zinc-200">
+          <div className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-zinc-200">
+            <p className="mb-2 text-xs font-semibold text-zinc-700">Opcional · contexto</p>
+            <p className="mb-3 text-[11px] leading-relaxed text-zinc-500">
+              Turno y quién registra son voluntarios; sirven solo si el local quiere analizarlos después.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => setShift((s) => (s === 'manana' ? null : 'manana'))}
+                className={[
+                  'rounded-xl border px-3 py-2 text-xs font-bold uppercase tracking-wide',
+                  shift === 'manana'
+                    ? 'border-[#D32F2F] bg-[#D32F2F]/10 text-zinc-900'
+                    : 'border-zinc-200 bg-zinc-50 text-zinc-700',
+                ].join(' ')}
+              >
+                Mañana
+              </button>
+              <button
+                type="button"
+                onClick={() => setShift((s) => (s === 'tarde' ? null : 'tarde'))}
+                className={[
+                  'rounded-xl border px-3 py-2 text-xs font-bold uppercase tracking-wide',
+                  shift === 'tarde'
+                    ? 'border-[#D32F2F] bg-[#D32F2F]/10 text-zinc-900'
+                    : 'border-zinc-200 bg-zinc-50 text-zinc-700',
+                ].join(' ')}
+              >
+                Tarde
+              </button>
+            </div>
+            <label className="mt-3 block text-[11px] font-semibold text-zinc-600">
+              Quién registra (opcional)
+              <input
+                type="text"
+                value={optionalUserLabel}
+                onChange={(e) => setOptionalUserLabel(e.target.value)}
+                placeholder="Nombre o iniciales"
+                className="mt-1.5 h-10 w-full rounded-xl border border-zinc-200 bg-zinc-50 px-3 text-sm text-zinc-900 outline-none focus:border-[#D32F2F] focus:ring-2 focus:ring-[#D32F2F]/20"
+              />
+            </label>
+          </div>
+
+          <div className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-zinc-200">
             <label className="mb-2 block text-xs font-semibold text-zinc-700">Campo de Notas</label>
             <textarea
               value={notes}
@@ -386,7 +493,7 @@ export default function MermasRegistrationForm() {
             />
           </div>
 
-          <div className="rounded-2xl bg-white p-3 shadow-sm ring-1 ring-zinc-200">
+          <div className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-zinc-200">
             <div className="mx-auto grid max-w-[17.5rem] grid-cols-2 gap-2">
               <label className="mb-1.5 block text-[11px] font-semibold text-zinc-700">
                 Fecha
@@ -410,19 +517,18 @@ export default function MermasRegistrationForm() {
           </div>
         </div>
 
-        <div className="pt-5 pb-6">
-          <button
-            type="submit"
-            className="h-16 w-full rounded-2xl bg-[#D32F2F] text-base font-extrabold uppercase tracking-wide text-white shadow-sm hover:bg-[#c62828] active:scale-[0.99]"
-          >
-            GUARDAR
-          </button>
-          <span
-            className={`mx-auto mt-4 w-24 ${CHEF_ONE_TAPER_LINE_CLASS}`}
-            aria-hidden
-          />
-        </div>
+        <span className={`mx-auto mt-6 mb-2 block w-24 ${CHEF_ONE_TAPER_LINE_CLASS}`} aria-hidden />
       </form>
+
+      <div className="pointer-events-none fixed inset-x-0 bottom-0 z-40 flex justify-center px-3 pb-[max(0.65rem,env(safe-area-inset-bottom))] pt-2">
+        <button
+          type="submit"
+          form="merma-register-form"
+          className="pointer-events-auto h-14 w-full max-w-md rounded-2xl bg-[#D32F2F] text-base font-extrabold uppercase tracking-wide text-white shadow-[0_-4px_24px_rgba(0,0,0,0.12)] ring-1 ring-black/5 hover:bg-[#c62828] active:scale-[0.99]"
+        >
+          Guardar
+        </button>
+      </div>
 
       {openProductPicker ? (
         <div className="fixed inset-0 z-50 bg-black/40 px-4 py-10">
@@ -497,4 +603,3 @@ export default function MermasRegistrationForm() {
     </div>
   );
 }
-

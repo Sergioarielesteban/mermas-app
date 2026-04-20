@@ -40,6 +40,7 @@ function motiveLabelPdf(key: MermaRecord['motiveKey']): string {
     'error-cocina': 'ERROR DEL EQUIPO',
     'sobras-marcaje': 'SOBRAS DE MARCAJE',
     cancelado: 'CANCELADO',
+    'otros-motivos': 'OTROS MOTIVOS',
   };
   return labels[key] ?? key;
 }

@@ -190,6 +190,7 @@ export function topMotives(mermas: MermaRecord[], top = 5) {
     'error-cocina': 'ERROR DEL EQUIPO',
     'sobras-marcaje': 'SOBRAS DE MARCAJE',
     cancelado: 'CANCELADO',
+    'otros-motivos': 'OTROS MOTIVOS',
   };
 
   const map = new Map<MermaRecord['motiveKey'], { quantity: number; total: number }>();
@@ -203,7 +204,7 @@ export function topMotives(mermas: MermaRecord[], top = 5) {
   return Array.from(map.entries())
     .map(([key, data]) => ({
       key,
-      label: labels[key],
+      label: labels[key] ?? String(key),
       quantity: Math.round(data.quantity * 100) / 100,
       totalCost: Math.round(data.total * 100) / 100,
     }))

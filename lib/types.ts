@@ -14,7 +14,10 @@ export type MermaMotiveKey =
   | 'cliente-cambio'
   | 'error-cocina'
   | 'sobras-marcaje'
-  | 'cancelado';
+  | 'cancelado'
+  | 'otros-motivos';
+
+export type MermaShift = 'manana' | 'tarde';
 
 export type MermaRecord = {
   id: string;
@@ -26,5 +29,9 @@ export type MermaRecord = {
   photoDataUrl?: string; // base64 (simulado)
   costEur: number;
   createdAt: string; // ISO
+  /** Opcional: turno declarado al registrar (no obligatorio). */
+  shift?: MermaShift | null;
+  /** Opcional: etiqueta libre (quién registra, etc.). */
+  optionalUserLabel?: string;
 };
 

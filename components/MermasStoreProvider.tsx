@@ -16,7 +16,7 @@ import { getDemoMermasStore } from '@/lib/demo-dataset';
 import { isDemoMode } from '@/lib/demo-mode';
 import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
 import { isBrowser, safeJsonParse } from '@/lib/storage';
-import type { MermaMotiveKey, MermaRecord, Product, Unit } from '@/lib/types';
+import type { MermaMotiveKey, MermaRecord, MermaShift, Product, Unit } from '@/lib/types';
 import seedMermasRaw from '@/lib/seed-mermas.json';
 
 type CreateProductInput = {
@@ -32,6 +32,8 @@ type AddMermaInput = {
   notes: string;
   occurredAt: string; // ISO
   photoDataUrl?: string;
+  shift?: MermaShift | null;
+  optionalUserLabel?: string;
 };
 
 type MermasStore = {
@@ -999,13 +1001,19 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
     };
 
     const addMerma = async (input: AddMermaInput) => {
-      const product = products.find((p) => p.id === input.productId);
+      const pid = String(input.productId ?? '').trim();
+      if (!pid || !products.some((p) => p.id === pid)) {
+        return { ok: false, reason: 'Selecciona un producto antes de guardar.' };
+      }
+      const product = products.find((p) => p.id === pid);
       const price = product?.pricePerUnit ?? 0;
       const qty = Number.isFinite(input.quantity) ? input.quantity : 0;
       const costEur = Math.round(qty * price * 100) / 100;
+      const shiftVal = input.shift === 'manana' || input.shift === 'tarde' ? input.shift : null;
+      const optUser = input.optionalUserLabel?.trim() || '';
       const record: MermaRecord = {
         id: uid('m'),
-        productId: input.productId,
+        productId: pid,
         quantity: qty,
         motiveKey: input.motiveKey,
         notes: input.notes.trim(),
@@ -1013,6 +1021,8 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
         photoDataUrl: input.photoDataUrl,
         costEur,
         createdAt: new Date().toISOString(),
+        shift: shiftVal,
+        optionalUserLabel: optUser || undefined,
       };
 
       if (useCloud) {
@@ -1029,20 +1039,29 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
           .from('mermas')
           .insert({
             local_id: localId,
-            product_id: input.productId,
+            product_id: pid,
             quantity: qty,
             motive_key: input.motiveKey,
             notes: input.notes.trim(),
             occurred_at: input.occurredAt,
             photo_data_url: input.photoDataUrl ?? null,
             cost_eur: costEur,
+            shift: shiftVal,
+            optional_user_label: optUser || null,
           })
-          .select('id,product_id,quantity,motive_key,notes,occurred_at,photo_data_url,cost_eur,created_at')
+          .select(
+            'id,product_id,quantity,motive_key,notes,occurred_at,photo_data_url,cost_eur,created_at,shift,optional_user_label',
+          )
           .single();
         if (error || !data) {
           // Revert optimistic row so the UI does not suggest it was saved.
           setMermas((prev) => prev.filter((m) => m.id !== record.id));
-          return { ok: false, reason: error?.message ?? 'No se pudo guardar en nube.' };
+          const raw = error?.message ?? '';
+          const human =
+            /uuid|22P02|invalid.*input|foreign key|violates/i.test(raw)
+              ? 'Selecciona un producto antes de guardar.'
+              : 'No se pudo guardar. Revisa los datos e inténtalo de nuevo.';
+          return { ok: false, reason: human };
         }
         const saved = mapMermaRow(data);
         protectMermaIdsRef.current.add(saved.id);
@@ -1062,6 +1081,17 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
       const qty = Number.isFinite(input.quantity) ? input.quantity : 0;
       if (qty <= 0) return { ok: false, reason: 'Cantidad inválida.' };
       const costEur = Math.round(qty * product.pricePerUnit * 100) / 100;
+      const existing = mermas.find((m) => m.id === id);
+      const shiftVal =
+        input.shift === 'manana' || input.shift === 'tarde'
+          ? input.shift
+          : input.shift === null
+            ? null
+            : existing?.shift ?? null;
+      const optUser =
+        input.optionalUserLabel !== undefined
+          ? input.optionalUserLabel.trim()
+          : existing?.optionalUserLabel ?? '';
 
       if (useCloud) {
         if (!localId) return { ok: false, reason: 'Perfil del local aún cargando. Reintenta en 2 segundos.' };
@@ -1075,6 +1105,8 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
             notes: input.notes.trim(),
             occurred_at: input.occurredAt,
             cost_eur: costEur,
+            shift: shiftVal,
+            optional_user_label: optUser || null,
           };
           if (input.photoDataUrl !== undefined) {
             patch.photo_data_url = input.photoDataUrl ?? null;
@@ -1099,6 +1131,8 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
                 occurredAt: input.occurredAt,
                 photoDataUrl: input.photoDataUrl,
                 costEur,
+                shift: shiftVal,
+                optionalUserLabel: optUser || undefined,
               }
             : m,
         ),

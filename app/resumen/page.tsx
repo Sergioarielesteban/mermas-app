@@ -18,6 +18,7 @@ const MOTIVES: Array<{ key: MermaMotiveKey; label: string }> = [
   { key: 'error-cocina', label: 'ERROR DEL EQUIPO' },
   { key: 'sobras-marcaje', label: 'SOBRAS DE MARCAJE' },
   { key: 'cancelado', label: 'CANCELADO' },
+  { key: 'otros-motivos', label: 'OTROS MOTIVOS' },
 ];
 
 function motiveLabel(key: string) {
@@ -34,6 +35,8 @@ function motiveLabel(key: string) {
       return 'SOBRAS DE MARCAJE';
     case 'cancelado':
       return 'CANCELADO';
+    case 'otros-motivos':
+      return 'OTROS MOTIVOS';
     default:
       return key;
   }

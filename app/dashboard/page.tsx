@@ -33,6 +33,8 @@ import {
   totals,
   weekBars,
 } from '@/lib/analytics';
+import { computeMermaInsights } from '@/lib/mermas-insights';
+
 const eur = (value: number) => `${Number(value).toFixed(2)} €`;
 const MONTHLY_TARGET_KEY = 'mermas_monthly_target_eur';
 const WEEKLY_TARGET_KEY = 'mermas_weekly_target_eur';
@@ -49,7 +51,31 @@ const motiveLabelMap: Record<string, string> = {
   'error-cocina': 'ERROR DEL EQUIPO',
   'sobras-marcaje': 'SOBRAS DE MARCAJE',
   cancelado: 'CANCELADO',
+  'otros-motivos': 'OTROS MOTIVOS',
 };
+
+function MermaDashSection({
+  tier,
+  title,
+  hint,
+  children,
+}: {
+  tier: string;
+  title: string;
+  hint: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="rounded-2xl border border-zinc-200/90 bg-zinc-50/40 p-4 shadow-sm sm:p-5">
+      <header className="border-b border-zinc-200/80 pb-3">
+        <p className="text-[10px] font-extrabold uppercase tracking-[0.16em] text-[#B91C1C]">{tier}</p>
+        <h2 className="mt-1 text-base font-black text-zinc-900">{title}</h2>
+        <p className="mt-1 text-xs leading-relaxed text-zinc-600">{hint}</p>
+      </header>
+      <div className="mt-4 space-y-5">{children}</div>
+    </section>
+  );
+}
 
 function Card({
   title,
@@ -322,6 +348,8 @@ export default function DashboardPage() {
     [],
   );
 
+  const insights = React.useMemo(() => computeMermaInsights(mermas, products), [mermas, products]);
+
   const mermasWithProduct = React.useMemo(
     () =>
       mermas.map((m) => ({
@@ -448,38 +476,44 @@ export default function DashboardPage() {
 
   if (isStaffOnly) {
     return (
-      <div className="space-y-4">
-        <MermasStyleHero
-          eyebrow="Mermas"
-          title="Registro operativo"
-          description="Registra merma y consulta solo la operativa del día."
-        />
-        <MermasRegistrationForm />
-        <section className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-zinc-200">
-          <h2 className="text-sm font-extrabold uppercase tracking-wide text-zinc-700">Mermas del día</h2>
-          <p className="mt-1 text-xs text-zinc-500">Total hoy: {eur(t.today)}</p>
-          {todayRows.length === 0 ? (
-            <p className="mt-3 text-sm text-zinc-500">Sin mermas registradas hoy.</p>
-          ) : (
-            <ul className="mt-3 space-y-2">
-              {todayRows.map((row) => (
-                <li key={row.id} className="rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2">
-                  <p className="text-sm font-bold text-zinc-900">{row.productName}</p>
-                  <p className="text-xs text-zinc-600">
-                    {new Date(row.occurredAt).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })} ·
-                    Cantidad: {qty(row.quantity)} · Coste: {eur(row.costEur)}
-                  </p>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
+      <div className="space-y-6">
+        <MermaDashSection
+          tier="Operativo"
+          title="Registro del día"
+          hint="Registrar mermas y consultar solo la operativa de hoy."
+        >
+          <MermasStyleHero
+            eyebrow="Mermas"
+            title="Registro operativo"
+            description="Registra merma y consulta solo la operativa del día."
+          />
+          <MermasRegistrationForm />
+          <section className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-zinc-200">
+            <h2 className="text-sm font-extrabold uppercase tracking-wide text-zinc-700">Mermas del día</h2>
+            <p className="mt-1 text-xs text-zinc-500">Total hoy: {eur(t.today)}</p>
+            {todayRows.length === 0 ? (
+              <p className="mt-3 text-sm text-zinc-500">Sin mermas registradas hoy.</p>
+            ) : (
+              <ul className="mt-3 space-y-2">
+                {todayRows.map((row) => (
+                  <li key={row.id} className="rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2">
+                    <p className="text-sm font-bold text-zinc-900">{row.productName}</p>
+                    <p className="text-xs text-zinc-600">
+                      {new Date(row.occurredAt).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })} ·
+                      Cantidad: {qty(row.quantity)} · Coste: {eur(row.costEur)}
+                    </p>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+        </MermaDashSection>
       </div>
     );
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       {detailOpen ? (
         <div className="fixed inset-0 z-[95] overflow-y-auto bg-black/35 p-4" onClick={() => setDetailOpen(false)}>
           <div
@@ -517,15 +551,20 @@ export default function DashboardPage() {
         </div>
       ) : null}
 
-      <MermasStyleHero
-        eyebrow="Mermas"
-        title="Seguimiento en tiempo real"
-        description="Registra mermas y consulta costes, alertas y tendencias en la misma pantalla."
-      />
+      <MermaDashSection
+        tier="Operativo"
+        title="Registro y accesos"
+        hint="Alta de mermas y enlaces rápidos al catálogo y al detalle."
+      >
+        <MermasStyleHero
+          eyebrow="Mermas"
+          title="Seguimiento en tiempo real"
+          description="Registra mermas y consulta costes, alertas y tendencias en la misma pantalla."
+        />
 
-      <MermasRegistrationForm />
+        <MermasRegistrationForm />
 
-      <section className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+        <section className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <Link
           href="/productos"
           className="group flex w-full items-center gap-3 rounded-2xl border border-[#D32F2F]/25 bg-gradient-to-r from-[#D32F2F]/[0.08] via-white to-white px-3 py-3 shadow-sm ring-1 ring-zinc-200/80 transition hover:border-[#D32F2F]/40 hover:shadow-md active:scale-[0.99]"
@@ -561,7 +600,8 @@ export default function DashboardPage() {
             →
           </span>
         </Link>
-      </section>
+        </section>
+      </MermaDashSection>
 
       {!showExecutive ? (
         <section className="rounded-2xl border border-zinc-200 bg-zinc-50/90 p-4 text-sm text-zinc-700 ring-1 ring-zinc-100">
@@ -574,6 +614,23 @@ export default function DashboardPage() {
 
       {showExecutive ? (
         <>
+      <MermaDashSection
+        tier="Encargado"
+        title="Revisión operativa"
+        hint="Alertas, anomalías, comparativas cortas y tops. Las sugerencias solo aparecen si hay un patrón claro en los datos."
+      >
+        {insights.length > 0 ? (
+          <div className="rounded-2xl border border-amber-200/80 bg-amber-50/80 p-3 ring-1 ring-amber-100">
+            <p className="text-[10px] font-extrabold uppercase tracking-wide text-amber-900/90">Patrones detectados</p>
+            <ul className="mt-2 space-y-2">
+              {insights.map((ins) => (
+                <li key={ins.id} className="text-xs font-medium leading-snug text-amber-950">
+                  {ins.text}
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
       <section className="rounded-2xl bg-white p-3 shadow-sm ring-1 ring-zinc-200">
         <div className="mb-2 flex items-center justify-between">
           <h2 className="text-sm font-extrabold uppercase tracking-wide text-zinc-700">
@@ -758,124 +815,6 @@ export default function DashboardPage() {
       </div>
 
       <section className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-zinc-200">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <h2 className="text-sm font-extrabold uppercase tracking-wide text-zinc-700">Objetivos de merma</h2>
-            <p className="mt-1 max-w-xl text-xs leading-relaxed text-zinc-600">
-              Desliza la barra para subir o bajar el tope (como el volumen del móvil). Se guarda en este dispositivo.
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={exportMonthlyExecutivePdf}
-            className="h-9 shrink-0 rounded-lg bg-[#D32F2F] px-3 text-xs font-bold text-white shadow-sm ring-1 ring-red-900/10"
-          >
-            PDF ejecutivo mensual
-          </button>
-        </div>
-        <div className="mt-4 space-y-4">
-          <MermaObjectiveSlider
-            label="Objetivo semanal"
-            hint="Tope de merma para la semana en curso (día laborable)."
-            value={weeklyTarget}
-            onChange={(n) => setWeeklyTarget(n)}
-            bounds={WEEKLY_TARGET_BOUNDS}
-            actual={t.week}
-            ratio={weeklyRatio}
-            severityLabel={weeklySeverity}
-            barClass={weeklyColor}
-          />
-          <MermaObjectiveSlider
-            label="Objetivo mensual"
-            hint="Tope de merma del mes natural. Puedes cruzarlo con el PDF ejecutivo para dirección."
-            value={monthlyTarget}
-            onChange={(n) => setMonthlyTarget(n)}
-            bounds={MONTHLY_TARGET_BOUNDS}
-            actual={t.month}
-            ratio={targetRatio}
-            severityLabel={targetSeverity}
-            barClass={targetColor}
-          />
-        </div>
-      </section>
-
-      <Block title="Merma de la Semana (€)">
-        <ChartBox>
-          {({ width, height }) => (
-            <BarChart width={width} height={height} data={dataWeek} margin={{ top: 18, right: 10, left: -8, bottom: 2 }}>
-              <defs>
-                <linearGradient id="barWeek" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#EF4444" />
-                  <stop offset="100%" stopColor="#B91C1C" />
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="#e4e4e7" vertical={false} />
-              <XAxis dataKey="day" tick={{ fill: '#52525b', fontSize: 12, fontWeight: 600 }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fill: '#71717a', fontSize: 11 }} axisLine={false} tickLine={false} />
-              <Tooltip
-                formatter={(value) => [eur(Number(value ?? 0)), 'Valor']}
-                contentStyle={{ borderRadius: 12, border: '1px solid #e4e4e7', boxShadow: '0 6px 20px rgba(0,0,0,0.08)' }}
-              />
-              <Bar dataKey="cost" fill="url(#barWeek)" radius={[10, 10, 0, 0]} barSize={30}>
-                <LabelList dataKey="cost" position="top" formatter={(v) => `${Number(v ?? 0).toFixed(0)}€`} className="fill-zinc-600 text-[11px] font-semibold" />
-              </Bar>
-            </BarChart>
-          )}
-        </ChartBox>
-      </Block>
-
-      <Block title="Tendencia de Merma Mensual">
-        <ChartBox>
-          {({ width, height }) => (
-            <LineChart width={width} height={height} data={dataTrend}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="day" />
-              <YAxis />
-              <Tooltip formatter={(value) => [eur(Number(value ?? 0)), 'VALOR']} />
-              <Line type="monotone" dataKey="cost" stroke="#D32F2F" strokeWidth={3} dot={false} />
-            </LineChart>
-          )}
-        </ChartBox>
-      </Block>
-
-      <section className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-zinc-200">
-        <h2 className="text-sm font-extrabold uppercase tracking-wide text-zinc-700">
-          Comparación Mensual
-        </h2>
-        <p className="pt-1 text-xs text-zinc-600">
-          Diferencia vs mes anterior:{' '}
-          <span className={monthly.diff <= 0 ? 'font-bold text-emerald-700' : 'font-bold text-red-700'}>
-            {monthly.diff >= 0 ? '+' : ''}
-            {eur(monthly.diff)} ({monthly.pct.toFixed(1)}%)
-          </span>
-        </p>
-        <div className="mt-3 h-56 min-w-0">
-          <ChartBox className="h-full w-full min-w-0">
-            {({ width, height }) => (
-              <BarChart width={width} height={height} data={monthly.chart} margin={{ top: 18, right: 10, left: -8, bottom: 2 }}>
-                <defs>
-                  <linearGradient id="barMonthComp" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#F87171" />
-                    <stop offset="100%" stopColor="#DC2626" />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e4e4e7" vertical={false} />
-                <XAxis dataKey="month" tick={{ fill: '#52525b', fontSize: 11, fontWeight: 600 }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fill: '#71717a', fontSize: 11 }} axisLine={false} tickLine={false} />
-                <Tooltip
-                  formatter={(value) => [eur(Number(value ?? 0)), 'Valor']}
-                  contentStyle={{ borderRadius: 12, border: '1px solid #e4e4e7', boxShadow: '0 6px 20px rgba(0,0,0,0.08)' }}
-                />
-                <Bar dataKey="value" fill="url(#barMonthComp)" radius={[10, 10, 0, 0]} barSize={36}>
-                  <LabelList dataKey="value" position="top" formatter={(v) => `${Number(v ?? 0).toFixed(0)}€`} className="fill-zinc-600 text-[11px] font-semibold" />
-                </Bar>
-              </BarChart>
-            )}
-          </ChartBox>
-        </div>
-      </section>
-
-      <section className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-zinc-200">
         <h2 className="text-sm font-extrabold uppercase tracking-wide text-zinc-700">Top Motivos de Merma</h2>
         {motives.length === 0 ? (
           <p className="pt-2 text-sm text-zinc-500">Sin datos de motivos.</p>
@@ -953,6 +892,131 @@ export default function DashboardPage() {
           )}
         </ChartBox>
       </Block>
+      </MermaDashSection>
+
+      <MermaDashSection
+        tier="Dirección"
+        title="Lectura global"
+        hint="Objetivos, tendencias, comparación mensual y exportación en PDF para dirección."
+      >
+        <section className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-zinc-200">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 className="text-sm font-extrabold uppercase tracking-wide text-zinc-700">Objetivos de merma</h2>
+              <p className="mt-1 max-w-xl text-xs leading-relaxed text-zinc-600">
+                Desliza la barra para subir o bajar el tope (como el volumen del móvil). Se guarda en este dispositivo.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={exportMonthlyExecutivePdf}
+              className="h-9 shrink-0 rounded-lg bg-[#D32F2F] px-3 text-xs font-bold text-white shadow-sm ring-1 ring-red-900/10"
+            >
+              PDF ejecutivo mensual
+            </button>
+          </div>
+          <div className="mt-4 space-y-4">
+            <MermaObjectiveSlider
+              label="Objetivo semanal"
+              hint="Tope de merma para la semana en curso (día laborable)."
+              value={weeklyTarget}
+              onChange={(n) => setWeeklyTarget(n)}
+              bounds={WEEKLY_TARGET_BOUNDS}
+              actual={t.week}
+              ratio={weeklyRatio}
+              severityLabel={weeklySeverity}
+              barClass={weeklyColor}
+            />
+            <MermaObjectiveSlider
+              label="Objetivo mensual"
+              hint="Tope de merma del mes natural. Puedes cruzarlo con el PDF ejecutivo para dirección."
+              value={monthlyTarget}
+              onChange={(n) => setMonthlyTarget(n)}
+              bounds={MONTHLY_TARGET_BOUNDS}
+              actual={t.month}
+              ratio={targetRatio}
+              severityLabel={targetSeverity}
+              barClass={targetColor}
+            />
+          </div>
+        </section>
+
+        <Block title="Merma de la Semana (€)">
+          <ChartBox>
+            {({ width, height }) => (
+              <BarChart width={width} height={height} data={dataWeek} margin={{ top: 18, right: 10, left: -8, bottom: 2 }}>
+                <defs>
+                  <linearGradient id="barWeek" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#EF4444" />
+                    <stop offset="100%" stopColor="#B91C1C" />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="#e4e4e7" vertical={false} />
+                <XAxis dataKey="day" tick={{ fill: '#52525b', fontSize: 12, fontWeight: 600 }} axisLine={false} tickLine={false} />
+                <YAxis tick={{ fill: '#71717a', fontSize: 11 }} axisLine={false} tickLine={false} />
+                <Tooltip
+                  formatter={(value) => [eur(Number(value ?? 0)), 'Valor']}
+                  contentStyle={{ borderRadius: 12, border: '1px solid #e4e4e7', boxShadow: '0 6px 20px rgba(0,0,0,0.08)' }}
+                />
+                <Bar dataKey="cost" fill="url(#barWeek)" radius={[10, 10, 0, 0]} barSize={30}>
+                  <LabelList dataKey="cost" position="top" formatter={(v) => `${Number(v ?? 0).toFixed(0)}€`} className="fill-zinc-600 text-[11px] font-semibold" />
+                </Bar>
+              </BarChart>
+            )}
+          </ChartBox>
+        </Block>
+
+        <Block title="Tendencia de Merma Mensual">
+          <ChartBox>
+            {({ width, height }) => (
+              <LineChart width={width} height={height} data={dataTrend}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="day" />
+                <YAxis />
+                <Tooltip formatter={(value) => [eur(Number(value ?? 0)), 'VALOR']} />
+                <Line type="monotone" dataKey="cost" stroke="#D32F2F" strokeWidth={3} dot={false} />
+              </LineChart>
+            )}
+          </ChartBox>
+        </Block>
+
+        <section className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-zinc-200">
+          <h2 className="text-sm font-extrabold uppercase tracking-wide text-zinc-700">
+            Comparación Mensual
+          </h2>
+          <p className="pt-1 text-xs text-zinc-600">
+            Diferencia vs mes anterior:{' '}
+            <span className={monthly.diff <= 0 ? 'font-bold text-emerald-700' : 'font-bold text-red-700'}>
+              {monthly.diff >= 0 ? '+' : ''}
+              {eur(monthly.diff)} ({monthly.pct.toFixed(1)}%)
+            </span>
+          </p>
+          <div className="mt-3 h-56 min-w-0">
+            <ChartBox className="h-full w-full min-w-0">
+              {({ width, height }) => (
+                <BarChart width={width} height={height} data={monthly.chart} margin={{ top: 18, right: 10, left: -8, bottom: 2 }}>
+                  <defs>
+                    <linearGradient id="barMonthComp" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#F87171" />
+                      <stop offset="100%" stopColor="#DC2626" />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e4e4e7" vertical={false} />
+                  <XAxis dataKey="month" tick={{ fill: '#52525b', fontSize: 11, fontWeight: 600 }} axisLine={false} tickLine={false} />
+                  <YAxis tick={{ fill: '#71717a', fontSize: 11 }} axisLine={false} tickLine={false} />
+                  <Tooltip
+                    formatter={(value) => [eur(Number(value ?? 0)), 'Valor']}
+                    contentStyle={{ borderRadius: 12, border: '1px solid #e4e4e7', boxShadow: '0 6px 20px rgba(0,0,0,0.08)' }}
+                  />
+                  <Bar dataKey="value" fill="url(#barMonthComp)" radius={[10, 10, 0, 0]} barSize={36}>
+                    <LabelList dataKey="value" position="top" formatter={(v) => `${Number(v ?? 0).toFixed(0)}€`} className="fill-zinc-600 text-[11px] font-semibold" />
+                  </Bar>
+                </BarChart>
+              )}
+            </ChartBox>
+          </div>
+        </section>
+      </MermaDashSection>
         </>
       ) : null}
     </div>
