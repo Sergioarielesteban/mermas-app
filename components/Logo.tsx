@@ -23,17 +23,17 @@ export type LogoProps = {
 } & Omit<React.ImgHTMLAttributes<HTMLImageElement>, 'src'>;
 
 /**
- * Logo oficial único (`/logo-chef-one.png`). Sin subrayados ni contenedores:
- * aplicar solo clases de tamaño vía `variant` o `className`.
+ * Logo oficial único (`/logo-chef-one.svg`, vectorial con transparencia).
+ * Cuando tengas un PNG exportado con canal alfa, sustituye el archivo y el `src` aquí.
  */
 export default function Logo({ variant = 'inline', className = '', alt = 'Chef-One', ...rest }: LogoProps) {
   const v = variantClassName[variant];
   return (
     <img
-      src="/logo-chef-one.png"
+      src="/logo-chef-one.svg"
       alt={alt}
-      width={800}
-      height={240}
+      width={375}
+      height={375}
       decoding="async"
       className={[v, className].filter(Boolean).join(' ')}
       {...rest}

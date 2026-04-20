@@ -31,7 +31,7 @@ export function showSystemNotification(title: string, body: string, options?: { 
     new Notification(title, {
       body: safeBody,
       tag: options?.tag ?? DEFAULT_TAG,
-      icon: '/logo-chef-one.png',
+      icon: '/logo-chef-one.svg',
     });
   } catch {
     // Algunos navegadores móviles rechazan opciones concretas; reintento mínimo.
