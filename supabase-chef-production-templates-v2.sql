@@ -1,14 +1,18 @@
--- Producción v2: plantillas con bloques de días configurables, secciones, productos y objetivos por bloque.
--- Ejecutar en Supabase SQL Editor tras backup. Sustituye el modelo anterior (planes Lun–Jue / Vie–Dom).
--- Días en weekdays: igual que JavaScript Date.getDay() → 0=domingo … 6=sábado.
+-- Producción: plantillas → bloques de días → productos con objetivo por bloque.
+-- Días en weekdays: JavaScript Date.getDay() → 0=domingo … 6=sábado.
+-- Instalación limpia: ejecutar este script (o v2 antiguo + supabase-chef-production-v3-block-items.sql).
 
--- ─── Quitar modelo antiguo ─────────────────────────────────────────────────
+-- ─── Quitar todo el stack de producción de la app (reinstalación limpia) ─
+-- No uses DROP POLICY aquí: si la tabla no existe, Postgres falla. CASCADE borra políticas al borrar la tabla.
 
-drop policy if exists chef_production_run_tasks_rw on public.chef_production_run_tasks;
-drop policy if exists chef_production_runs_rw on public.chef_production_runs;
-drop policy if exists chef_production_tasks_rw on public.chef_production_tasks;
-drop policy if exists chef_production_sections_rw on public.chef_production_sections;
-drop policy if exists chef_production_plans_rw on public.chef_production_plans;
+drop table if exists public.chef_production_session_lines cascade;
+drop table if exists public.chef_production_sessions cascade;
+drop table if exists public.chef_production_block_items cascade;
+drop table if exists public.chef_production_line_targets cascade;
+drop table if exists public.chef_production_template_lines cascade;
+drop table if exists public.chef_production_template_sections cascade;
+drop table if exists public.chef_production_day_blocks cascade;
+drop table if exists public.chef_production_templates cascade;
 
 drop table if exists public.chef_production_run_tasks cascade;
 drop table if exists public.chef_production_runs cascade;
@@ -16,7 +20,7 @@ drop table if exists public.chef_production_tasks cascade;
 drop table if exists public.chef_production_sections cascade;
 drop table if exists public.chef_production_plans cascade;
 
--- ─── Nuevo modelo ─────────────────────────────────────────────────────────
+-- ─── Tablas actuales ─────────────────────────────────────────────────────
 
 create table public.chef_production_templates (
   id uuid primary key default gen_random_uuid(),
@@ -49,33 +53,15 @@ create table public.chef_production_day_blocks (
 
 create index idx_chef_production_day_blocks_template on public.chef_production_day_blocks(template_id);
 
-create table public.chef_production_template_sections (
+create table public.chef_production_block_items (
   id uuid primary key default gen_random_uuid(),
-  template_id uuid not null references public.chef_production_templates(id) on delete cascade,
-  title text not null,
-  sort_order int not null default 0
-);
-
-create index idx_chef_production_template_sections_tpl on public.chef_production_template_sections(template_id);
-
-create table public.chef_production_template_lines (
-  id uuid primary key default gen_random_uuid(),
-  section_id uuid not null references public.chef_production_template_sections(id) on delete cascade,
-  label text not null,
-  sort_order int not null default 0
-);
-
-create index idx_chef_production_template_lines_section on public.chef_production_template_lines(section_id);
-
-create table public.chef_production_line_targets (
-  id uuid primary key default gen_random_uuid(),
-  line_id uuid not null references public.chef_production_template_lines(id) on delete cascade,
   block_id uuid not null references public.chef_production_day_blocks(id) on delete cascade,
+  label text not null,
   target_qty numeric not null default 0,
-  unique (line_id, block_id)
+  sort_order int not null default 0
 );
 
-create index idx_chef_production_line_targets_line on public.chef_production_line_targets(line_id);
+create index idx_chef_production_block_items_block on public.chef_production_block_items(block_id);
 
 create table public.chef_production_sessions (
   id uuid primary key default gen_random_uuid(),
@@ -96,9 +82,9 @@ create index idx_chef_production_sessions_local on public.chef_production_sessio
 create table public.chef_production_session_lines (
   id uuid primary key default gen_random_uuid(),
   session_id uuid not null references public.chef_production_sessions(id) on delete cascade,
-  line_id uuid not null references public.chef_production_template_lines(id) on delete restrict,
+  block_item_id uuid not null references public.chef_production_block_items(id) on delete restrict,
   qty_on_hand numeric,
-  unique (session_id, line_id)
+  unique (session_id, block_item_id)
 );
 
 create index idx_chef_production_session_lines_session on public.chef_production_session_lines(session_id);
@@ -106,9 +92,7 @@ create index idx_chef_production_session_lines_session on public.chef_production
 -- RLS
 alter table public.chef_production_templates enable row level security;
 alter table public.chef_production_day_blocks enable row level security;
-alter table public.chef_production_template_sections enable row level security;
-alter table public.chef_production_template_lines enable row level security;
-alter table public.chef_production_line_targets enable row level security;
+alter table public.chef_production_block_items enable row level security;
 alter table public.chef_production_sessions enable row level security;
 alter table public.chef_production_session_lines enable row level security;
 
@@ -131,54 +115,20 @@ create policy chef_production_day_blocks_rw on public.chef_production_day_blocks
     )
   );
 
-drop policy if exists chef_production_template_sections_rw on public.chef_production_template_sections;
-create policy chef_production_template_sections_rw on public.chef_production_template_sections for all to authenticated
+drop policy if exists chef_production_block_items_rw on public.chef_production_block_items;
+create policy chef_production_block_items_rw on public.chef_production_block_items for all to authenticated
   using (
     exists (
-      select 1 from public.chef_production_templates t
-      where t.id = template_id and t.local_id = public.current_local_id()
+      select 1 from public.chef_production_day_blocks b
+      join public.chef_production_templates t on t.id = b.template_id
+      where b.id = block_id and t.local_id = public.current_local_id()
     )
   )
   with check (
     exists (
-      select 1 from public.chef_production_templates t
-      where t.id = template_id and t.local_id = public.current_local_id()
-    )
-  );
-
-drop policy if exists chef_production_template_lines_rw on public.chef_production_template_lines;
-create policy chef_production_template_lines_rw on public.chef_production_template_lines for all to authenticated
-  using (
-    exists (
-      select 1 from public.chef_production_template_sections s
-      join public.chef_production_templates t on t.id = s.template_id
-      where s.id = section_id and t.local_id = public.current_local_id()
-    )
-  )
-  with check (
-    exists (
-      select 1 from public.chef_production_template_sections s
-      join public.chef_production_templates t on t.id = s.template_id
-      where s.id = section_id and t.local_id = public.current_local_id()
-    )
-  );
-
-drop policy if exists chef_production_line_targets_rw on public.chef_production_line_targets;
-create policy chef_production_line_targets_rw on public.chef_production_line_targets for all to authenticated
-  using (
-    exists (
-      select 1 from public.chef_production_template_lines ln
-      join public.chef_production_template_sections s on s.id = ln.section_id
-      join public.chef_production_templates t on t.id = s.template_id
-      where ln.id = line_id and t.local_id = public.current_local_id()
-    )
-  )
-  with check (
-    exists (
-      select 1 from public.chef_production_template_lines ln
-      join public.chef_production_template_sections s on s.id = ln.section_id
-      join public.chef_production_templates t on t.id = s.template_id
-      where ln.id = line_id and t.local_id = public.current_local_id()
+      select 1 from public.chef_production_day_blocks b
+      join public.chef_production_templates t on t.id = b.template_id
+      where b.id = block_id and t.local_id = public.current_local_id()
     )
   );
 

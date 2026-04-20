@@ -56,7 +56,7 @@ export type ChefChecklistRunItem = {
   note: string | null;
 };
 
-/** Plantilla de producción (bloques de días + secciones + productos). */
+/** Plantilla de producción (bloques de días con productos propios). */
 export type ChefProductionTemplate = {
   id: string;
   localId: string;
@@ -76,25 +76,13 @@ export type ChefProductionDayBlock = {
   sortOrder: number;
 };
 
-export type ChefProductionTemplateSection = {
+/** Producto / preparación dentro de un bloque, con objetivo para ese bloque. */
+export type ChefProductionBlockItem = {
   id: string;
-  templateId: string;
-  title: string;
-  sortOrder: number;
-};
-
-export type ChefProductionTemplateLine = {
-  id: string;
-  sectionId: string;
-  label: string;
-  sortOrder: number;
-};
-
-export type ChefProductionLineTarget = {
-  id: string;
-  lineId: string;
   blockId: string;
+  label: string;
   targetQty: number;
+  sortOrder: number;
 };
 
 export type ChefProductionSession = {
@@ -113,7 +101,7 @@ export type ChefProductionSession = {
 export type ChefProductionSessionLine = {
   id: string;
   sessionId: string;
-  lineId: string;
+  blockItemId: string;
   qtyOnHand: number | null;
 };
 
@@ -194,30 +182,13 @@ function mapProductionDayBlock(r: Record<string, unknown>): ChefProductionDayBlo
   };
 }
 
-function mapProductionTemplateSection(r: Record<string, unknown>): ChefProductionTemplateSection {
+function mapProductionBlockItem(r: Record<string, unknown>): ChefProductionBlockItem {
   return {
     id: String(r.id),
-    templateId: String(r.template_id),
-    title: String(r.title),
-    sortOrder: Number(r.sort_order ?? 0),
-  };
-}
-
-function mapProductionTemplateLine(r: Record<string, unknown>): ChefProductionTemplateLine {
-  return {
-    id: String(r.id),
-    sectionId: String(r.section_id),
-    label: String(r.label),
-    sortOrder: Number(r.sort_order ?? 0),
-  };
-}
-
-function mapProductionLineTarget(r: Record<string, unknown>): ChefProductionLineTarget {
-  return {
-    id: String(r.id),
-    lineId: String(r.line_id),
     blockId: String(r.block_id),
+    label: String(r.label),
     targetQty: Number(r.target_qty ?? 0),
+    sortOrder: Number(r.sort_order ?? 0),
   };
 }
 
@@ -241,7 +212,7 @@ function mapProductionSessionLine(r: Record<string, unknown>): ChefProductionSes
   return {
     id: String(r.id),
     sessionId: String(r.session_id),
-    lineId: String(r.line_id),
+    blockItemId: String(r.block_item_id),
     qtyOnHand: r.qty_on_hand != null && r.qty_on_hand !== '' ? Number(r.qty_on_hand) : null,
   };
 }
@@ -270,15 +241,15 @@ export function productionQtyToMake(target: number, hecho: number | null): numbe
   return diff > 0 ? diff : 0;
 }
 
-/** Si Supabase aún no tiene el esquema de plantillas de producción v2. */
+/** Si Supabase aún no tiene el esquema de producción (plantillas + bloques + productos por bloque). */
 export function formatProductionMigrationError(e: unknown): string {
   const raw = e instanceof Error ? e.message : String(e);
   if (
-    /chef_production_templates|chef_production_sessions|chef_production_day_blocks|chef_production_template_lines|does not exist|relation.*does not exist/i.test(
+    /chef_production_templates|chef_production_sessions|chef_production_day_blocks|chef_production_block_items|block_item_id|does not exist|relation.*does not exist/i.test(
       raw,
     )
   ) {
-    return 'Falta el esquema de Producción (plantillas v2) en Supabase. En SQL Editor ejecuta el archivo supabase-chef-production-templates-v2.sql del repo y recarga.';
+    return 'Falta o está desactualizado el esquema de Producción en Supabase. Ejecuta supabase-chef-production-v3-block-items.sql (si ya tenías v2) o supabase-chef-production-templates-v2.sql (instalación completa) y recarga.';
   }
   return raw;
 }
@@ -696,10 +667,7 @@ export async function duplicateChefProductionTemplate(
   const src = await fetchChefProductionTemplate(supabase, localId, sourceId);
   if (!src) throw new Error('Plantilla no encontrada.');
   const blocks = await fetchChefProductionDayBlocks(supabase, sourceId);
-  const sections = await fetchChefProductionTemplateSections(supabase, sourceId);
   const blockIdMap = new Map<string, string>();
-  const sectionIdMap = new Map<string, string>();
-  const lineIdMap = new Map<string, string>();
 
   const dup = await insertChefProductionTemplate(supabase, localId, { name: `${src.name} (copia)` });
 
@@ -710,40 +678,13 @@ export async function duplicateChefProductionTemplate(
       sortOrder: b.sortOrder,
     });
     blockIdMap.set(b.id, nb.id);
-  }
-
-  for (const s of [...sections].sort((a, z) => a.sortOrder - z.sortOrder)) {
-    const ns = await insertChefProductionTemplateSection(supabase, dup.id, s.title, s.sortOrder);
-    sectionIdMap.set(s.id, ns.id);
-  }
-
-  const oldLineIds: string[] = [];
-  for (const s of [...sections].sort((a, z) => a.sortOrder - z.sortOrder)) {
-    const lines = await fetchChefProductionTemplateLines(supabase, s.id);
-    const newSecId = sectionIdMap.get(s.id);
-    if (!newSecId) continue;
-    for (const ln of [...lines].sort((a, z) => a.sortOrder - z.sortOrder)) {
-      const nln = await insertChefProductionTemplateLine(supabase, newSecId, {
-        label: ln.label,
-        sortOrder: ln.sortOrder,
+    const items = await fetchChefProductionBlockItems(supabase, b.id);
+    for (const it of [...items].sort((a, z) => a.sortOrder - z.sortOrder)) {
+      await insertChefProductionBlockItem(supabase, nb.id, {
+        label: it.label,
+        targetQty: it.targetQty,
+        sortOrder: it.sortOrder,
       });
-      lineIdMap.set(ln.id, nln.id);
-      oldLineIds.push(ln.id);
-    }
-  }
-
-  if (oldLineIds.length) {
-    const { data: targets, error: tErr } = await supabase
-      .from('chef_production_line_targets')
-      .select('line_id,block_id,target_qty')
-      .in('line_id', oldLineIds);
-    if (tErr) throw new Error(tErr.message);
-    for (const t of targets ?? []) {
-      const nl = lineIdMap.get(String(t.line_id));
-      const nb = blockIdMap.get(String(t.block_id));
-      if (nl && nb) {
-        await upsertChefProductionLineTarget(supabase, nl, nb, Number(t.target_qty ?? 0));
-      }
     }
   }
 
@@ -801,166 +742,103 @@ export async function deleteChefProductionDayBlock(supabase: SupabaseClient, blo
   if (error) throw new Error(error.message);
 }
 
-export async function fetchChefProductionTemplateSections(
+export async function fetchChefProductionBlockItems(
   supabase: SupabaseClient,
-  templateId: string,
-): Promise<ChefProductionTemplateSection[]> {
+  blockId: string,
+): Promise<ChefProductionBlockItem[]> {
   const { data, error } = await supabase
-    .from('chef_production_template_sections')
-    .select('id,template_id,title,sort_order')
-    .eq('template_id', templateId)
+    .from('chef_production_block_items')
+    .select('id,block_id,label,target_qty,sort_order')
+    .eq('block_id', blockId)
     .order('sort_order', { ascending: true });
   if (error) throw new Error(error.message);
-  return (data ?? []).map((r) => mapProductionTemplateSection(r as Record<string, unknown>));
+  return (data ?? []).map((r) => mapProductionBlockItem(r as Record<string, unknown>));
 }
 
-export async function insertChefProductionTemplateSection(
+export async function insertChefProductionBlockItem(
   supabase: SupabaseClient,
-  templateId: string,
-  title: string,
-  sortOrder: number,
-): Promise<ChefProductionTemplateSection> {
+  blockId: string,
+  input: { label: string; targetQty: number; sortOrder: number },
+): Promise<ChefProductionBlockItem> {
   const { data, error } = await supabase
-    .from('chef_production_template_sections')
-    .insert({ template_id: templateId, title: title.trim(), sort_order: sortOrder })
-    .select('id,template_id,title,sort_order')
-    .single();
-  if (error) throw new Error(error.message);
-  return mapProductionTemplateSection(data as Record<string, unknown>);
-}
-
-export async function deleteChefProductionTemplateSection(supabase: SupabaseClient, id: string): Promise<void> {
-  const { error } = await supabase.from('chef_production_template_sections').delete().eq('id', id);
-  if (error) throw new Error(error.message);
-}
-
-export async function reorderChefProductionTemplateSections(
-  supabase: SupabaseClient,
-  orderedSectionIds: string[],
-): Promise<void> {
-  for (let i = 0; i < orderedSectionIds.length; i++) {
-    const { error } = await supabase
-      .from('chef_production_template_sections')
-      .update({ sort_order: i })
-      .eq('id', orderedSectionIds[i]);
-    if (error) throw new Error(error.message);
-  }
-}
-
-export async function fetchChefProductionTemplateLines(
-  supabase: SupabaseClient,
-  sectionId: string,
-): Promise<ChefProductionTemplateLine[]> {
-  const { data, error } = await supabase
-    .from('chef_production_template_lines')
-    .select('id,section_id,label,sort_order')
-    .eq('section_id', sectionId)
-    .order('sort_order', { ascending: true });
-  if (error) throw new Error(error.message);
-  return (data ?? []).map((r) => mapProductionTemplateLine(r as Record<string, unknown>));
-}
-
-export async function insertChefProductionTemplateLine(
-  supabase: SupabaseClient,
-  sectionId: string,
-  input: { label: string; sortOrder: number },
-): Promise<ChefProductionTemplateLine> {
-  const { data, error } = await supabase
-    .from('chef_production_template_lines')
+    .from('chef_production_block_items')
     .insert({
-      section_id: sectionId,
+      block_id: blockId,
       label: input.label.trim(),
+      target_qty: input.targetQty,
       sort_order: input.sortOrder,
     })
-    .select('id,section_id,label,sort_order')
+    .select('id,block_id,label,target_qty,sort_order')
     .single();
   if (error) throw new Error(error.message);
-  return mapProductionTemplateLine(data as Record<string, unknown>);
+  return mapProductionBlockItem(data as Record<string, unknown>);
 }
 
-export async function updateChefProductionTemplateLine(
+export async function updateChefProductionBlockItem(
   supabase: SupabaseClient,
-  lineId: string,
-  patch: { label?: string; sortOrder?: number },
+  itemId: string,
+  patch: { label?: string; targetQty?: number; sortOrder?: number },
 ): Promise<void> {
   const row: Record<string, unknown> = {};
   if (patch.label !== undefined) row.label = patch.label.trim();
+  if (patch.targetQty !== undefined) row.target_qty = patch.targetQty;
   if (patch.sortOrder !== undefined) row.sort_order = patch.sortOrder;
   if (Object.keys(row).length === 0) return;
-  const { error } = await supabase.from('chef_production_template_lines').update(row).eq('id', lineId);
+  const { error } = await supabase.from('chef_production_block_items').update(row).eq('id', itemId);
   if (error) throw new Error(error.message);
 }
 
-export async function deleteChefProductionTemplateLine(supabase: SupabaseClient, id: string): Promise<void> {
-  const { error } = await supabase.from('chef_production_template_lines').delete().eq('id', id);
+export async function deleteChefProductionBlockItem(supabase: SupabaseClient, itemId: string): Promise<void> {
+  const { error } = await supabase.from('chef_production_block_items').delete().eq('id', itemId);
   if (error) throw new Error(error.message);
 }
 
-export async function reorderChefProductionTemplateLines(
+export async function reorderChefProductionBlockItems(
   supabase: SupabaseClient,
-  orderedLineIds: string[],
+  orderedItemIds: string[],
 ): Promise<void> {
-  for (let i = 0; i < orderedLineIds.length; i++) {
+  for (let i = 0; i < orderedItemIds.length; i++) {
     const { error } = await supabase
-      .from('chef_production_template_lines')
+      .from('chef_production_block_items')
       .update({ sort_order: i })
-      .eq('id', orderedLineIds[i]);
+      .eq('id', orderedItemIds[i]);
     if (error) throw new Error(error.message);
   }
 }
 
-export async function fetchChefProductionLineTargetsForLines(
-  supabase: SupabaseClient,
-  lineIds: string[],
-): Promise<ChefProductionLineTarget[]> {
-  if (lineIds.length === 0) return [];
-  const { data, error } = await supabase
-    .from('chef_production_line_targets')
-    .select('id,line_id,block_id,target_qty')
-    .in('line_id', lineIds);
-  if (error) throw new Error(error.message);
-  return (data ?? []).map((r) => mapProductionLineTarget(r as Record<string, unknown>));
-}
-
-export async function upsertChefProductionLineTarget(
-  supabase: SupabaseClient,
-  lineId: string,
-  blockId: string,
-  targetQty: number,
-): Promise<void> {
-  const { error } = await supabase.from('chef_production_line_targets').upsert(
-    { line_id: lineId, block_id: blockId, target_qty: targetQty },
-    { onConflict: 'line_id,block_id' },
-  );
-  if (error) throw new Error(error.message);
-}
-
-async function collectAllTemplateLines(
+/** Todos los productos de la plantilla (todos los bloques), para abrir sesión. */
+export async function collectAllBlockItemsInTemplate(
   supabase: SupabaseClient,
   templateId: string,
-): Promise<ChefProductionTemplateLine[]> {
-  const sections = await fetchChefProductionTemplateSections(supabase, templateId);
-  const out: ChefProductionTemplateLine[] = [];
-  for (const s of sections) {
-    const lines = await fetchChefProductionTemplateLines(supabase, s.id);
-    out.push(...lines);
+): Promise<ChefProductionBlockItem[]> {
+  const blocks = await fetchChefProductionDayBlocks(supabase, templateId);
+  const out: ChefProductionBlockItem[] = [];
+  for (const b of blocks) {
+    const items = await fetchChefProductionBlockItems(supabase, b.id);
+    out.push(...items);
   }
   return out;
 }
 
-async function lineTargetsMapForTemplate(
+/** Añade filas de sesión para productos nuevos en plantilla (sesión abierta). */
+export async function ensureChefProductionSessionLinesForTemplate(
   supabase: SupabaseClient,
+  sessionId: string,
   templateId: string,
-): Promise<Map<string, number>> {
-  const lines = await collectAllTemplateLines(supabase, templateId);
-  if (lines.length === 0) return new Map();
-  const ids = lines.map((l) => l.id);
-  const targets = await fetchChefProductionLineTargetsForLines(supabase, ids);
-  const m = new Map<string, number>();
-  for (const t of targets) {
-    m.set(`${t.lineId}:${t.blockId}`, t.targetQty);
-  }
-  return m;
+): Promise<void> {
+  const items = await collectAllBlockItemsInTemplate(supabase, templateId);
+  const existing = await fetchChefProductionSessionLines(supabase, sessionId);
+  const have = new Set(existing.map((e) => e.blockItemId));
+  const missing = items.filter((it) => !have.has(it.id));
+  if (missing.length === 0) return;
+  const { error } = await supabase.from('chef_production_session_lines').insert(
+    missing.map((it) => ({
+      session_id: sessionId,
+      block_item_id: it.id,
+      qty_on_hand: null as number | null,
+    })),
+  );
+  if (error) throw new Error(error.message);
 }
 
 async function buildChefProductionSnapshotForSession(
@@ -970,30 +848,31 @@ async function buildChefProductionSnapshotForSession(
   const blocks = await fetchChefProductionDayBlocks(supabase, session.templateId);
   const block = resolveChefProductionDayBlock(blocks, session.workDate, session.forcedBlockId);
   const blockLabel = block?.label ?? '—';
-  const sections = await fetchChefProductionTemplateSections(supabase, session.templateId);
   const sessionLines = await fetchChefProductionSessionLines(supabase, session.id);
-  const byLineId = new Map(sessionLines.map((sl) => [sl.lineId, sl]));
-  const targetByKey = await lineTargetsMapForTemplate(supabase, session.templateId);
+  const byBlockItemId = new Map(sessionLines.map((sl) => [sl.blockItemId, sl]));
 
-  const snapSections: ChefProductionSnapshotV1['sections'] = [];
-  for (const sec of [...sections].sort((a, b) => a.sortOrder - b.sortOrder)) {
-    const lines = await fetchChefProductionTemplateLines(supabase, sec.id);
-    const items: ChefProductionSnapshotV1['sections'][0]['items'] = [];
-    for (const ln of [...lines].sort((a, b) => a.sortOrder - b.sortOrder)) {
-      const objective =
-        block != null ? (targetByKey.get(`${ln.id}:${block.id}`) ?? 0) : 0;
-      const sl = byLineId.get(ln.id);
+  const items: ChefProductionSnapshotV1['sections'][0]['items'] = [];
+  if (block) {
+    const blockItems = await fetchChefProductionBlockItems(supabase, block.id);
+    for (const it of [...blockItems].sort((a, b) => a.sortOrder - b.sortOrder)) {
+      const objective = it.targetQty;
+      const sl = byBlockItemId.get(it.id);
       const hecho = sl?.qtyOnHand ?? null;
       items.push({
-        label: ln.label,
+        label: it.label,
         objective,
         hecho,
         hacer: productionQtyToMake(objective, hecho),
       });
     }
-    if (items.length) snapSections.push({ title: sec.title, items });
   }
-  return { version: 1, workDate: session.workDate, blockLabel, sections: snapSections };
+
+  return {
+    version: 1,
+    workDate: session.workDate,
+    blockLabel,
+    sections: items.length ? [{ title: blockLabel, items }] : [],
+  };
 }
 
 export async function fetchChefProductionSessions(
@@ -1031,12 +910,31 @@ export async function getOrCreateChefProductionSession(
     .eq('work_date', workDate)
     .maybeSingle();
   if (exErr) throw new Error(exErr.message);
-  if (existing) return mapProductionSession(existing as Record<string, unknown>);
+  if (existing) {
+    const sess = mapProductionSession(existing as Record<string, unknown>);
+    const existingLines = await fetchChefProductionSessionLines(supabase, sess.id);
+    if (existingLines.length === 0) {
+      const blockItems = await collectAllBlockItemsInTemplate(supabase, templateId);
+      if (blockItems.length === 0) {
+        throw new Error(
+          'Esta plantilla no tiene productos en ningún bloque. Edítala en Plantillas antes de abrir el día.',
+        );
+      }
+      const slRows = blockItems.map((it) => ({
+        session_id: sess.id,
+        block_item_id: it.id,
+        qty_on_hand: null as number | null,
+      }));
+      const { error: lineErr } = await supabase.from('chef_production_session_lines').insert(slRows);
+      if (lineErr) throw new Error(lineErr.message);
+    }
+    return sess;
+  }
 
-  const lines = await collectAllTemplateLines(supabase, templateId);
-  if (lines.length === 0) {
+  const blockItems = await collectAllBlockItemsInTemplate(supabase, templateId);
+  if (blockItems.length === 0) {
     throw new Error(
-      'Esta plantilla no tiene productos. Edítala en Plantillas antes de abrir el día.',
+      'Esta plantilla no tiene productos en ningún bloque. Edítala en Plantillas antes de abrir el día.',
     );
   }
 
@@ -1071,9 +969,9 @@ export async function getOrCreateChefProductionSession(
   }
 
   const session = mapProductionSession(row as Record<string, unknown>);
-  const slRows = lines.map((l) => ({
+  const slRows = blockItems.map((it) => ({
     session_id: session.id,
-    line_id: l.id,
+    block_item_id: it.id,
     qty_on_hand: null as number | null,
   }));
   const { error: lineErr } = await supabase.from('chef_production_session_lines').insert(slRows);
@@ -1090,7 +988,7 @@ export async function fetchChefProductionSessionLines(
 ): Promise<ChefProductionSessionLine[]> {
   const { data, error } = await supabase
     .from('chef_production_session_lines')
-    .select('id,session_id,line_id,qty_on_hand')
+    .select('id,session_id,block_item_id,qty_on_hand')
     .eq('session_id', sessionId);
   if (error) throw new Error(error.message);
   return (data ?? []).map((r) => mapProductionSessionLine(r as Record<string, unknown>));

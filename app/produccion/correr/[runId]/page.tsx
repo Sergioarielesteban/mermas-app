@@ -8,22 +8,19 @@ import MermasStyleHero from '@/components/MermasStyleHero';
 import { useAuth } from '@/components/AuthProvider';
 import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
 import {
+  type ChefProductionBlockItem,
   type ChefProductionDayBlock,
-  type ChefProductionLineTarget,
   type ChefProductionSession,
   type ChefProductionSessionLine,
   type ChefProductionSnapshotV1,
   type ChefProductionTemplate,
-  type ChefProductionTemplateLine,
-  type ChefProductionTemplateSection,
   completeChefProductionSession,
+  ensureChefProductionSessionLinesForTemplate,
+  fetchChefProductionBlockItems,
   fetchChefProductionDayBlocks,
-  fetchChefProductionLineTargetsForLines,
   fetchChefProductionSessionLines,
   fetchChefProductionSessionRow,
   fetchChefProductionTemplate,
-  fetchChefProductionTemplateLines,
-  fetchChefProductionTemplateSections,
   formatProductionMigrationError,
   productionQtyToMake,
   resolveChefProductionDayBlock,
@@ -63,10 +60,8 @@ export default function ProduccionCorrerPage() {
   const [session, setSession] = useState<ChefProductionSession | null>(null);
   const [template, setTemplate] = useState<ChefProductionTemplate | null>(null);
   const [blocks, setBlocks] = useState<ChefProductionDayBlock[]>([]);
-  const [sections, setSections] = useState<ChefProductionTemplateSection[]>([]);
-  const [linesBySection, setLinesBySection] = useState<Record<string, ChefProductionTemplateLine[]>>({});
+  const [blockItems, setBlockItems] = useState<ChefProductionBlockItem[]>([]);
   const [sessionLines, setSessionLines] = useState<ChefProductionSessionLine[]>([]);
-  const [targets, setTargets] = useState<ChefProductionLineTarget[]>([]);
   const [hechoDraft, setHechoDraft] = useState<Record<string, string>>({});
   const [savingId, setSavingId] = useState<string | null>(null);
   const [closing, setClosing] = useState(false);
@@ -92,20 +87,14 @@ export default function ProduccionCorrerPage() {
       setTemplate(tpl);
       const bl = await fetchChefProductionDayBlocks(supabase, s.templateId);
       setBlocks(bl);
-      const secs = await fetchChefProductionTemplateSections(supabase, s.templateId);
-      setSections(secs);
-      const lb: Record<string, ChefProductionTemplateLine[]> = {};
-      const allLineIds: string[] = [];
-      for (const sec of secs) {
-        const lines = await fetchChefProductionTemplateLines(supabase, sec.id);
-        lb[sec.id] = lines;
-        allLineIds.push(...lines.map((l) => l.id));
+      const ab = resolveChefProductionDayBlock(bl, s.workDate, s.forcedBlockId);
+      const items = ab ? await fetchChefProductionBlockItems(supabase, ab.id) : [];
+      setBlockItems(items);
+      if (!s.completedAt) {
+        await ensureChefProductionSessionLinesForTemplate(supabase, s.id, s.templateId);
       }
-      setLinesBySection(lb);
       const sl = await fetchChefProductionSessionLines(supabase, sessionId);
       setSessionLines(sl);
-      const tt = await fetchChefProductionLineTargetsForLines(supabase, allLineIds);
-      setTargets(tt);
       const h: Record<string, string> = {};
       for (const x of sl) {
         h[x.id] = fmtQty(x.qtyOnHand);
@@ -123,17 +112,11 @@ export default function ProduccionCorrerPage() {
     void load();
   }, [profileReady, load]);
 
-  const byLineId = useMemo(() => {
+  const byBlockItemId = useMemo(() => {
     const m = new Map<string, ChefProductionSessionLine>();
-    for (const sl of sessionLines) m.set(sl.lineId, sl);
+    for (const sl of sessionLines) m.set(sl.blockItemId, sl);
     return m;
   }, [sessionLines]);
-
-  const targetByLineBlock = useMemo(() => {
-    const m = new Map<string, number>();
-    for (const t of targets) m.set(`${t.lineId}:${t.blockId}`, t.targetQty);
-    return m;
-  }, [targets]);
 
   const activeBlock = useMemo(() => {
     if (!session) return null;
@@ -178,9 +161,9 @@ export default function ProduccionCorrerPage() {
     }
   };
 
-  const bumpHecho = async (sessionLineId: string, lineId: string, delta: number) => {
+  const bumpHecho = async (sessionLineId: string, blockItemId: string, delta: number) => {
     if (!supabaseOk || isClosed) return;
-    const cur = byLineId.get(lineId);
+    const cur = byBlockItemId.get(blockItemId);
     const base = cur?.qtyOnHand != null && !Number.isNaN(cur.qtyOnHand) ? cur.qtyOnHand : 0;
     const next = Math.max(0, base + delta);
     setHechoDraft((prev) => ({ ...prev, [sessionLineId]: fmtQty(next) }));
@@ -298,13 +281,13 @@ export default function ProduccionCorrerPage() {
 
             {!activeBlock && blocks.length > 0 ? (
               <p className="mt-3 rounded-xl bg-amber-50 px-3 py-2 text-center text-xs font-bold text-amber-950 ring-1 ring-amber-100">
-                Ningún bloque coincide con este día. Elige uno abajo para ver objetivos.
+                Ningún bloque coincide con este día. Elige uno abajo para ver productos y objetivos.
               </p>
             ) : null}
 
             {blocks.length > 0 ? (
               <div className="mt-4">
-                <p className="text-[10px] font-black uppercase text-zinc-500">Bloque de objetivos</p>
+                <p className="text-[10px] font-black uppercase text-zinc-500">Bloque del día</p>
                 <div className="mt-2 flex flex-wrap gap-1.5">
                   <button
                     type="button"
@@ -342,6 +325,7 @@ export default function ProduccionCorrerPage() {
                 <p className="mt-2 text-[10px] font-medium text-zinc-500">
                   Activo:{' '}
                   <span className="font-bold text-zinc-800">{activeBlock?.label ?? '—'}</span>
+                  {activeBlock ? ` · ${blockItems.length} producto${blockItems.length === 1 ? '' : 's'}` : ''}
                 </p>
               </div>
             ) : (
@@ -350,103 +334,90 @@ export default function ProduccionCorrerPage() {
               </p>
             )}
 
-            {isClosed ? (
-              <p className="mt-3 rounded-xl bg-emerald-50 px-3 py-2 text-center text-xs font-bold text-emerald-900 ring-1 ring-emerald-100">
-                Cerrada · {session.completedAt ? new Date(session.completedAt).toLocaleString() : ''}
-              </p>
-            ) : (
-              <button
-                type="button"
-                disabled={closing}
-                onClick={() => void closeSession()}
-                className="mt-4 w-full rounded-xl border border-zinc-300 bg-zinc-900 py-3 text-sm font-black uppercase tracking-wide text-white shadow-sm hover:bg-zinc-800 disabled:opacity-50"
-              >
-                {closing ? 'Guardando…' : 'Registrar cierre'}
-              </button>
-            )}
+            <button
+              type="button"
+              disabled={closing}
+              onClick={() => void closeSession()}
+              className="mt-4 w-full rounded-xl border border-zinc-300 bg-zinc-900 py-3 text-sm font-black uppercase tracking-wide text-white shadow-sm hover:bg-zinc-800 disabled:opacity-50"
+            >
+              {closing ? 'Guardando…' : 'Registrar cierre'}
+            </button>
           </div>
 
-          <div className="space-y-5">
-            {sections
-              .slice()
-              .sort((a, b) => a.sortOrder - b.sortOrder)
-              .map((s) => {
-                const lines = (linesBySection[s.id] ?? []).slice().sort((a, b) => a.sortOrder - b.sortOrder);
-                if (lines.length === 0) return null;
-                return (
-                  <div key={s.id} className="space-y-2">
-                    <p className="px-1 text-[11px] font-black uppercase tracking-wider text-zinc-500">{s.title}</p>
-                    <div className="space-y-2">
-                      {lines.map((ln) => {
-                        const sl = byLineId.get(ln.id);
-                        if (!sl) return null;
-                        const objective =
-                          activeBlock != null
-                            ? (targetByLineBlock.get(`${ln.id}:${activeBlock.id}`) ?? 0)
-                            : 0;
-                        const onHand = parseQty(hechoDraft[sl.id] ?? '');
-                        const hechoEffective =
-                          onHand != null && !Number.isNaN(onHand)
-                            ? onHand
-                            : (sl.qtyOnHand ?? null);
-                        const hacer = productionQtyToMake(objective, hechoEffective);
-                        const saving = savingId === sl.id;
-                        return (
-                          <div
-                            key={ln.id}
-                            className="rounded-xl border border-zinc-200/90 bg-white px-3 py-3 shadow-sm ring-1 ring-zinc-50"
+          <div className="space-y-2">
+            {!activeBlock ? (
+              <p className="rounded-2xl border border-zinc-200 bg-zinc-50/80 px-4 py-6 text-center text-sm text-zinc-600">
+                Selecciona un bloque para ver la lista de productos.
+              </p>
+            ) : blockItems.length === 0 ? (
+              <p className="rounded-2xl border border-zinc-200 bg-zinc-50/80 px-4 py-6 text-center text-sm text-zinc-600">
+                Este bloque no tiene productos. Añádelos en Plantillas.
+              </p>
+            ) : (
+              [...blockItems]
+                .sort((a, b) => a.sortOrder - b.sortOrder || a.label.localeCompare(b.label))
+                .map((it) => {
+                  const sl = byBlockItemId.get(it.id);
+                  if (!sl) return null;
+                  const objective = it.targetQty;
+                  const onHand = parseQty(hechoDraft[sl.id] ?? '');
+                  const hechoEffective =
+                    onHand != null && !Number.isNaN(onHand) ? onHand : (sl.qtyOnHand ?? null);
+                  const hacer = productionQtyToMake(objective, hechoEffective);
+                  const saving = savingId === sl.id;
+                  return (
+                    <div
+                      key={it.id}
+                      className="rounded-xl border border-zinc-200/90 bg-white px-3 py-3 shadow-sm ring-1 ring-zinc-50"
+                    >
+                      <div className="flex flex-wrap items-start justify-between gap-2">
+                        <p className="text-sm font-bold leading-snug text-zinc-900">{it.label}</p>
+                        <span className="shrink-0 rounded-full bg-zinc-100 px-2 py-0.5 text-[10px] font-black uppercase text-zinc-600">
+                          Obj. {objective}
+                        </span>
+                      </div>
+                      <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+                        <div className="flex flex-1 items-center gap-2">
+                          <span className="text-[10px] font-bold uppercase text-zinc-400">Hecho</span>
+                          <button
+                            type="button"
+                            disabled={isClosed || saving}
+                            onClick={() => void bumpHecho(sl.id, it.id, -1)}
+                            className="grid h-11 w-11 shrink-0 place-items-center rounded-xl border border-zinc-200 bg-zinc-50 text-zinc-800 shadow-sm active:scale-[0.98] disabled:opacity-45"
+                            aria-label="Menos uno"
                           >
-                            <div className="flex flex-wrap items-start justify-between gap-2">
-                              <p className="text-sm font-bold leading-snug text-zinc-900">{ln.label}</p>
-                              <span className="shrink-0 rounded-full bg-zinc-100 px-2 py-0.5 text-[10px] font-black uppercase text-zinc-600">
-                                Obj. {objective}
-                              </span>
-                            </div>
-                            <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-                              <div className="flex flex-1 items-center gap-2">
-                                <span className="text-[10px] font-bold uppercase text-zinc-400">Hecho</span>
-                                <button
-                                  type="button"
-                                  disabled={isClosed || saving}
-                                  onClick={() => void bumpHecho(sl.id, ln.id, -1)}
-                                  className="grid h-11 w-11 shrink-0 place-items-center rounded-xl border border-zinc-200 bg-zinc-50 text-zinc-800 shadow-sm active:scale-[0.98] disabled:opacity-45"
-                                  aria-label="Menos uno"
-                                >
-                                  <Minus className="h-5 w-5" />
-                                </button>
-                                <input
-                                  disabled={isClosed || saving}
-                                  inputMode="decimal"
-                                  value={hechoDraft[sl.id] ?? ''}
-                                  onChange={(e) =>
-                                    setHechoDraft((prev) => ({ ...prev, [sl.id]: e.target.value }))
-                                  }
-                                  onBlur={(e) => void persistHecho(sl.id, e.target.value)}
-                                  className="h-11 min-w-0 flex-1 rounded-xl border border-zinc-200 bg-zinc-50/80 px-3 text-center text-base font-black tabular-nums text-zinc-900 outline-none focus:border-[#D32F2F]/40 disabled:opacity-60"
-                                  placeholder="0"
-                                />
-                                <button
-                                  type="button"
-                                  disabled={isClosed || saving}
-                                  onClick={() => void bumpHecho(sl.id, ln.id, 1)}
-                                  className="grid h-11 w-11 shrink-0 place-items-center rounded-xl border border-zinc-200 bg-zinc-50 text-zinc-800 shadow-sm active:scale-[0.98] disabled:opacity-45"
-                                  aria-label="Más uno"
-                                >
-                                  <Plus className="h-5 w-5" />
-                                </button>
-                              </div>
-                              <div className="rounded-xl bg-zinc-50 px-4 py-2 text-center ring-1 ring-zinc-100 sm:min-w-[6.5rem]">
-                                <p className="text-[10px] font-bold uppercase text-zinc-400">Hacer</p>
-                                <p className="text-xl font-black tabular-nums text-[#B91C1C]">{hacer}</p>
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      })}
+                            <Minus className="h-5 w-5" />
+                          </button>
+                          <input
+                            disabled={isClosed || saving}
+                            inputMode="decimal"
+                            value={hechoDraft[sl.id] ?? ''}
+                            onChange={(e) =>
+                              setHechoDraft((prev) => ({ ...prev, [sl.id]: e.target.value }))
+                            }
+                            onBlur={(e) => void persistHecho(sl.id, e.target.value)}
+                            className="h-11 min-w-0 flex-1 rounded-xl border border-zinc-200 bg-zinc-50/80 px-3 text-center text-base font-black tabular-nums text-zinc-900 outline-none focus:border-[#D32F2F]/40 disabled:opacity-60"
+                            placeholder="0"
+                          />
+                          <button
+                            type="button"
+                            disabled={isClosed || saving}
+                            onClick={() => void bumpHecho(sl.id, it.id, 1)}
+                            className="grid h-11 w-11 shrink-0 place-items-center rounded-xl border border-zinc-200 bg-zinc-50 text-zinc-800 shadow-sm active:scale-[0.98] disabled:opacity-45"
+                            aria-label="Más uno"
+                          >
+                            <Plus className="h-5 w-5" />
+                          </button>
+                        </div>
+                        <div className="rounded-xl bg-zinc-50 px-4 py-2 text-center ring-1 ring-zinc-100 sm:min-w-[6.5rem]">
+                          <p className="text-[10px] font-bold uppercase text-zinc-400">Hacer</p>
+                          <p className="text-xl font-black tabular-nums text-[#B91C1C]">{hacer}</p>
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                );
-              })}
+                  );
+                })
+            )}
           </div>
 
           <Link href="/produccion/historial" className="block text-center text-xs font-bold text-[#D32F2F] underline">

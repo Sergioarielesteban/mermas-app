@@ -10,21 +10,15 @@ import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import {
   type ChefProductionTemplate,
-  fetchChefProductionTemplateLines,
-  fetchChefProductionTemplateSections,
+  collectAllBlockItemsInTemplate,
   fetchChefProductionTemplates,
   getOrCreateChefProductionSession,
   formatProductionMigrationError,
 } from '@/lib/chef-ops-supabase';
 
-async function countLinesForTemplate(supabase: SupabaseClient, templateId: string): Promise<number> {
-  const sections = await fetchChefProductionTemplateSections(supabase, templateId);
-  let n = 0;
-  for (const s of sections) {
-    const lines = await fetchChefProductionTemplateLines(supabase, s.id);
-    n += lines.length;
-  }
-  return n;
+async function countProductsInTemplate(supabase: SupabaseClient, templateId: string): Promise<number> {
+  const items = await collectAllBlockItemsInTemplate(supabase, templateId);
+  return items.length;
 }
 
 export default function ProduccionEjecutarPage() {
@@ -53,7 +47,7 @@ export default function ProduccionEjecutarPage() {
       const ts = await fetchChefProductionTemplates(supabase, localId);
       setTemplates(ts);
       const entries = await Promise.all(
-        ts.map(async (t) => [t.id, await countLinesForTemplate(supabase, t.id)] as const),
+        ts.map(async (t) => [t.id, await countProductsInTemplate(supabase, t.id)] as const),
       );
       setCounts(Object.fromEntries(entries));
     } catch (e) {
@@ -102,7 +96,7 @@ export default function ProduccionEjecutarPage() {
       <MermasStyleHero
         eyebrow="Producción"
         title="Lista del día"
-        description="Elige plantilla y fecha. La app detecta el bloque de día que toca y el objetivo correspondiente."
+        description="Elige plantilla y fecha. La app detecta el bloque de día que toca y muestra solo los productos de ese bloque."
         slim
       />
 
@@ -170,7 +164,7 @@ export default function ProduccionEjecutarPage() {
                     <div className="min-w-0">
                       <p className="truncate text-sm font-black text-zinc-900">{t.name}</p>
                       <p className="mt-0.5 text-[10px] font-bold uppercase tracking-wide text-[#B91C1C]">
-                        {n} producto{n === 1 ? '' : 's'}
+                        {n} producto{n === 1 ? '' : 's'} en bloques
                       </p>
                     </div>
                     <button
