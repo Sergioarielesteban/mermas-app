@@ -281,8 +281,12 @@ export default function PedidosPage() {
       ? new Date(order.createdAt).toLocaleDateString('es-ES')
       : parsed.toLocaleDateString('es-ES');
     const requestedBy = (email ?? 'EQUIPO').split('@')[0] || 'EQUIPO';
-    const whatsappMessage =
-      buildWhatsappOrderMessage(order, deliveryDate, localName ?? 'CHEF-ONE MATARO', requestedBy),
+    const whatsappMessage = buildWhatsappOrderMessage(
+      order,
+      deliveryDate,
+      localName ?? 'CHEF-ONE MATARO',
+      requestedBy,
+    );
     openWhatsApp(phone, whatsappMessage);
   },
   [email, localName],

@@ -42,7 +42,9 @@ export default function MarketingPricingHighlight() {
             <article
               key={plan.name}
               className={`rounded-2xl border bg-white p-5 shadow-[0_18px_40px_-26px_rgba(15,23,42,0.2)] ring-1 sm:p-6 ${
-                plan.recommended ? 'border-[#D32F2F]/40 ring-[#D32F2F]/20' : 'border-stone-200 ring-stone-100'
+                'recommended' in plan && plan.recommended
+                  ? 'border-[#D32F2F]/40 ring-[#D32F2F]/20'
+                  : 'border-stone-200 ring-stone-100'
               }`}
             >
               <p className="text-sm font-extrabold text-stone-900">{plan.name}</p>

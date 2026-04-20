@@ -345,17 +345,6 @@ export default function MarketingLanding() {
         </p>
       </footer>
 
-      <style jsx global>{`
-        @keyframes chefone-marquee {
-          0% {
-            transform: translateX(0);
-          }
-          100% {
-            transform: translateX(-50%);
-          }
-        }
-      `}</style>
-
       <MarketingQuickContact />
     </div>
   );

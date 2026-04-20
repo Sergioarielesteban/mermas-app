@@ -48,6 +48,16 @@ body {
   }
 }
 
+/* Landing: carrusel de nombres (prueba social) */
+@keyframes chefone-marquee {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
+}
+
 .saved-banner-pop {
   animation: saved-banner-pop 220ms ease-out;
 }
