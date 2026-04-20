@@ -22,6 +22,22 @@ const BY_ZONE: Record<string, ZoneBlockStyle> = {
   almacen: { bg: '#64748b', text: '#ffffff', subtleBg: '#f1f5f9' },
 };
 
+function stableHueFromString(s: string): number {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = Math.imul(31, h) + s.charCodeAt(i);
+  return Math.abs(h) % 360;
+}
+
+/** Estilo para puestos personalizados / slugs no mapeados: color estable por nombre (no todo gris). */
+function styleForUnknownZoneKey(z: string): ZoneBlockStyle {
+  const hue = stableHueFromString(z);
+  return {
+    bg: `hsl(${hue} 46% 40%)`,
+    text: '#ffffff',
+    subtleBg: `hsl(${hue} 32% 93%)`,
+  };
+}
+
 /** Hex para guardar en `color_hint` al elegir puesto (opcional en editor). */
 export function zoneDefaultColorHint(zone: string | null | undefined): string | null {
   const z = zone?.trim().toLowerCase();
@@ -32,6 +48,7 @@ export function zoneDefaultColorHint(zone: string | null | undefined): string | 
 export function zoneBlockStyle(zone: string | null | undefined): ZoneBlockStyle {
   const z = zone?.trim().toLowerCase();
   if (z && BY_ZONE[z]) return BY_ZONE[z];
+  if (z) return styleForUnknownZoneKey(z);
   return DEFAULT_STYLE;
 }
 

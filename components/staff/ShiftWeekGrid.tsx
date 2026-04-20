@@ -1,12 +1,13 @@
 'use client';
 
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { GripVertical } from 'lucide-react';
 import { plannedShiftMinutes } from '@/lib/staff/attendance-logic';
 import { addDays, formatDayMonth, formatWeekdayShort, ymdLocal } from '@/lib/staff/staff-dates';
 import { zoneBlockStyle, zoneLabel } from '@/lib/staff/staff-zone-styles';
 import type { StaffEmployee, StaffShift } from '@/lib/staff/types';
 import { staffDisplayName } from '@/lib/staff/staff-supabase';
+import { appConfirm } from '@/lib/app-dialog-bridge';
 
 /** Fila especial en cuadrante por empleado: turnos sin `employee_id`. */
 export const SHIFT_GRID_UNASSIGNED_ROW_ID = '__unassigned__' as const;
@@ -36,9 +37,11 @@ type Props = {
   employees: StaffEmployee[];
   shifts: StaffShift[];
   onCellActivate: (employeeId: string, dateYmd: string, shiftsHere: StaffShift[]) => void;
-  /** Arrastrar bloque a otra celda (solo escritorio; managers). */
+  /** Arrastrar bloque a otra celda (solo puntero fino; en táctil usar edición para cambiar día/empleado). */
   canDragShifts?: boolean;
   onShiftMoved?: (shift: StaffShift, newEmployeeId: string, newDateYmd: string) => void | Promise<void>;
+  /** Eliminar turno (tras confirmación en esta vista). */
+  onRemoveShift?: (shift: StaffShift) => void | Promise<void>;
 };
 
 export default function ShiftWeekGrid({
@@ -48,9 +51,23 @@ export default function ShiftWeekGrid({
   onCellActivate,
   canDragShifts = false,
   onShiftMoved,
+  onRemoveShift,
 }: Props) {
   const days = Array.from({ length: 7 }, (_, i) => addDays(weekStartMonday, i));
   const [draggingId, setDraggingId] = useState<string | null>(null);
+  /** HTML5 drag en el asa compite con el tap en táctil; solo activar con puntero fino (ratón/trackpad). */
+  const [useNativeDrag, setUseNativeDrag] = useState(false);
+  useEffect(() => {
+    if (!canDragShifts || typeof window === 'undefined') {
+      setUseNativeDrag(false);
+      return;
+    }
+    const mq = window.matchMedia('(pointer: fine)');
+    const apply = () => setUseNativeDrag(mq.matches);
+    apply();
+    mq.addEventListener('change', apply);
+    return () => mq.removeEventListener('change', apply);
+  }, [canDragShifts]);
 
   const shiftsByKey = useMemo(() => {
     const m = new Map<string, StaffShift[]>();
@@ -91,12 +108,24 @@ export default function ShiftWeekGrid({
     return m;
   }, [shifts]);
 
-  const onDragStart = useCallback((e: React.DragEvent, shiftId: string) => {
-    if (!canDragShifts) return;
-    setDraggingId(shiftId);
-    e.dataTransfer.setData('text/staff-shift-id', shiftId);
-    e.dataTransfer.effectAllowed = 'move';
-  }, [canDragShifts]);
+  const onDragStart = useCallback(
+    (e: React.DragEvent, shiftId: string) => {
+      if (!canDragShifts || !useNativeDrag) return;
+      setDraggingId(shiftId);
+      e.dataTransfer.setData('text/staff-shift-id', shiftId);
+      e.dataTransfer.effectAllowed = 'move';
+    },
+    [canDragShifts, useNativeDrag],
+  );
+
+  const tryRemoveShift = useCallback(
+    async (s: StaffShift) => {
+      if (!onRemoveShift) return;
+      if (!(await appConfirm('¿Eliminar este turno?'))) return;
+      await onRemoveShift(s);
+    },
+    [onRemoveShift],
+  );
 
   const onDragEnd = useCallback(() => setDraggingId(null), []);
 
@@ -119,10 +148,16 @@ export default function ShiftWeekGrid({
   return (
     <div className="space-y-2">
       <p className="text-[11px] font-medium text-zinc-500 sm:text-xs">
-        {canDragShifts ? (
+        {canDragShifts && useNativeDrag ? (
           <>
             <span className="font-semibold text-zinc-700">Arrastra</span> un turno por el asa{' '}
             <GripVertical className="inline h-3 w-3 align-middle opacity-60" aria-hidden /> a otro día o compañero.
+          </>
+        ) : canDragShifts ? (
+          <>
+            Toca un bloque para <span className="font-semibold text-zinc-700">editar</span> o{' '}
+            <span className="font-semibold text-zinc-700">eliminar</span>; el arrastre entre celdas está disponible con
+            ratón.
           </>
         ) : (
           <>Toca una celda para crear turno o pulsa un bloque para editarlo.</>
@@ -208,38 +243,50 @@ export default function ShiftWeekGrid({
                                 : zoneBlockStyle(s.zone);
                               const dur = plannedShiftMinutes(s);
                               return (
-                                <div
-                                  key={s.id}
-                                  className="flex items-stretch gap-0 overflow-hidden rounded-lg shadow-sm ring-1 ring-black/8"
-                                  style={{ background: zStyle.subtleBg }}
-                                >
-                                  {canDragShifts ? (
+                                <div key={s.id} className="flex flex-col gap-0.5">
+                                  <div
+                                    className="flex min-h-[44px] items-stretch gap-0 overflow-hidden rounded-lg shadow-sm ring-1 ring-black/8"
+                                    style={{ background: zStyle.subtleBg }}
+                                  >
+                                    {canDragShifts && useNativeDrag ? (
+                                      <button
+                                        type="button"
+                                        draggable
+                                        title="Arrastrar turno"
+                                        onDragStart={(e) => onDragStart(e, s.id)}
+                                        onDragEnd={onDragEnd}
+                                        className="flex shrink-0 cursor-grab touch-none items-center border-r border-black/10 bg-black/5 px-0.5 text-zinc-500 active:cursor-grabbing"
+                                        aria-label="Arrastrar turno"
+                                      >
+                                        <GripVertical className="h-4 w-4" />
+                                      </button>
+                                    ) : null}
                                     <button
                                       type="button"
-                                      draggable
-                                      title="Arrastrar turno"
-                                      onDragStart={(e) => onDragStart(e, s.id)}
-                                      onDragEnd={onDragEnd}
-                                      className="flex shrink-0 cursor-grab items-center border-r border-black/10 bg-black/5 px-0.5 text-zinc-500 active:cursor-grabbing"
-                                      aria-label="Arrastrar turno"
+                                      className="min-h-[44px] min-w-0 flex-1 touch-manipulation px-2 py-1.5 text-left"
+                                      style={{ background: zStyle.bg, color: zStyle.text }}
+                                      onClick={() => onCellActivate(em.id, ymd, [s])}
                                     >
-                                      <GripVertical className="h-4 w-4" />
+                                      <span className="block text-[10px] font-extrabold leading-tight sm:text-xs">
+                                        {shortTime(s.startTime)} – {shortTime(s.endTime)}
+                                      </span>
+                                      <span className="mt-0.5 block text-[9px] font-semibold opacity-95">
+                                        {formatDurationMin(dur)}
+                                        {s.zone ? ` · ${zoneLabel(s.zone)}` : ''}
+                                      </span>
                                     </button>
+                                  </div>
+                                  {onRemoveShift ? (
+                                    <div className="flex justify-end px-0.5">
+                                      <button
+                                        type="button"
+                                        className="rounded-md py-0.5 text-[10px] font-extrabold text-red-700 hover:bg-red-50 sm:text-[11px]"
+                                        onClick={() => void tryRemoveShift(s)}
+                                      >
+                                        Eliminar
+                                      </button>
+                                    </div>
                                   ) : null}
-                                  <button
-                                    type="button"
-                                    className="min-w-0 flex-1 px-2 py-1.5 text-left"
-                                    style={{ background: zStyle.bg, color: zStyle.text }}
-                                    onClick={() => onCellActivate(em.id, ymd, here.length === 1 ? [s] : here)}
-                                  >
-                                    <span className="block text-[10px] font-extrabold leading-tight sm:text-xs">
-                                      {shortTime(s.startTime)} – {shortTime(s.endTime)}
-                                    </span>
-                                    <span className="mt-0.5 block text-[9px] font-semibold opacity-95">
-                                      {formatDurationMin(dur)}
-                                      {s.zone ? ` · ${zoneLabel(s.zone)}` : ''}
-                                    </span>
-                                  </button>
                                 </div>
                               );
                             })}
@@ -314,38 +361,50 @@ export default function ShiftWeekGrid({
                                 : zoneBlockStyle(s.zone);
                               const dur = plannedShiftMinutes(s);
                               return (
-                                <div
-                                  key={s.id}
-                                  className="flex items-stretch gap-0 overflow-hidden rounded-lg shadow-sm ring-1 ring-black/8"
-                                  style={{ background: zStyle.subtleBg }}
-                                >
-                                  {canDragShifts ? (
+                                <div key={s.id} className="flex flex-col gap-0.5">
+                                  <div
+                                    className="flex min-h-[44px] items-stretch gap-0 overflow-hidden rounded-lg shadow-sm ring-1 ring-black/8"
+                                    style={{ background: zStyle.subtleBg }}
+                                  >
+                                    {canDragShifts && useNativeDrag ? (
+                                      <button
+                                        type="button"
+                                        draggable
+                                        title="Arrastrar turno"
+                                        onDragStart={(e) => onDragStart(e, s.id)}
+                                        onDragEnd={onDragEnd}
+                                        className="flex shrink-0 cursor-grab touch-none items-center border-r border-black/10 bg-black/5 px-0.5 text-zinc-500 active:cursor-grabbing"
+                                        aria-label="Arrastrar turno"
+                                      >
+                                        <GripVertical className="h-4 w-4" />
+                                      </button>
+                                    ) : null}
                                     <button
                                       type="button"
-                                      draggable
-                                      title="Arrastrar turno"
-                                      onDragStart={(e) => onDragStart(e, s.id)}
-                                      onDragEnd={onDragEnd}
-                                      className="flex shrink-0 cursor-grab items-center border-r border-black/10 bg-black/5 px-0.5 text-zinc-500 active:cursor-grabbing"
-                                      aria-label="Arrastrar turno"
+                                      className="min-h-[44px] min-w-0 flex-1 touch-manipulation px-2 py-1.5 text-left"
+                                      style={{ background: zStyle.bg, color: zStyle.text }}
+                                      onClick={() => onCellActivate(SHIFT_GRID_UNASSIGNED_ROW_ID, ymd, [s])}
                                     >
-                                      <GripVertical className="h-4 w-4" />
+                                      <span className="block text-[10px] font-extrabold leading-tight sm:text-xs">
+                                        {shortTime(s.startTime)} – {shortTime(s.endTime)}
+                                      </span>
+                                      <span className="mt-0.5 block text-[9px] font-semibold opacity-95">
+                                        {formatDurationMin(dur)}
+                                        {s.zone ? ` · ${zoneLabel(s.zone)}` : ''}
+                                      </span>
                                     </button>
+                                  </div>
+                                  {onRemoveShift ? (
+                                    <div className="flex justify-end px-0.5">
+                                      <button
+                                        type="button"
+                                        className="rounded-md py-0.5 text-[10px] font-extrabold text-red-700 hover:bg-red-50 sm:text-[11px]"
+                                        onClick={() => void tryRemoveShift(s)}
+                                      >
+                                        Eliminar
+                                      </button>
+                                    </div>
                                   ) : null}
-                                  <button
-                                    type="button"
-                                    className="min-w-0 flex-1 px-2 py-1.5 text-left"
-                                    style={{ background: zStyle.bg, color: zStyle.text }}
-                                    onClick={() => onCellActivate(SHIFT_GRID_UNASSIGNED_ROW_ID, ymd, here.length === 1 ? [s] : here)}
-                                  >
-                                    <span className="block text-[10px] font-extrabold leading-tight sm:text-xs">
-                                      {shortTime(s.startTime)} – {shortTime(s.endTime)}
-                                    </span>
-                                    <span className="mt-0.5 block text-[9px] font-semibold opacity-95">
-                                      {formatDurationMin(dur)}
-                                      {s.zone ? ` · ${zoneLabel(s.zone)}` : ''}
-                                    </span>
-                                  </button>
                                 </div>
                               );
                             })}

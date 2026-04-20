@@ -29,7 +29,7 @@ import {
   operationalWindowFromLocalsRow,
 } from '@/lib/staff/local-operational-window';
 import { deleteStaffShift, duplicateShiftsWeek, upsertStaffShift } from '@/lib/staff/staff-supabase';
-import type { StaffShift } from '@/lib/staff/types';
+import type { StaffEmployee, StaffShift } from '@/lib/staff/types';
 import {
   collectUserIdsWithShiftsInWeek,
   fetchStaffWeekPublication,
@@ -53,7 +53,43 @@ export default function PersonalPlanificacionPage() {
   const [weekStart, setWeekStart] = useState(() => ymdLocal(startOfWeekMonday(new Date())));
   const weekStartDate = useMemo(() => parseYmd(weekStart), [weekStart]);
   const weekEndYmd = useMemo(() => ymdLocal(addDays(weekStartDate, 6)), [weekStartDate]);
+  /** Única fuente de turnos de la semana para cuadrante por puesto y por empleado (misma query / mismo estado). */
   const { employees, shifts, loading, error, reload } = useStaffBundle(localId, weekStart);
+
+  /**
+   * Empleados activos más filas sintéticas para turnos cuya `employeeId` no está en la lista activa
+   * (p. ej. dado de baja): sin esto, esos turnos solo se ven en vista operativa y parece “desincronizado”.
+   */
+  const employeesForShiftWeekGrid = useMemo(() => {
+    const inWeek = (d: string) => d >= weekStart && d <= weekEndYmd;
+    const byId = new Map(employees.map((e) => [e.id, e] as const));
+    const missing = new Set<string>();
+    for (const s of shifts) {
+      if (s.employeeId == null || !inWeek(s.shiftDate)) continue;
+      if (!byId.has(s.employeeId)) missing.add(s.employeeId);
+    }
+    if (missing.size === 0) return employees;
+    const lid = localId ?? '';
+    const synth: StaffEmployee[] = [...missing].map((id) => ({
+      id,
+      localId: lid,
+      userId: null,
+      firstName: 'Empleado',
+      lastName: 'no listado',
+      alias: `ID ${id.slice(0, 8)}…`,
+      phone: null,
+      email: null,
+      operationalRole: 'Sin ficha activa en equipo',
+      weeklyHoursTarget: null,
+      workdayType: null,
+      color: '#71717a',
+      hasPin: false,
+      active: false,
+      createdAt: '',
+      updatedAt: '',
+    }));
+    return [...employees, ...synth];
+  }, [employees, shifts, weekStart, weekEndYmd, localId]);
   const [view, setView] = useState<'semana' | 'dia' | 'mes'>('semana');
   const [weekLayout, setWeekLayout] = useState<'empleados' | 'operativo'>('operativo');
   const [dayFocus, setDayFocus] = useState(() => ymdLocal(new Date()));
@@ -635,10 +671,11 @@ export default function PersonalPlanificacionPage() {
           {weekLayout === 'empleados' ? (
             <ShiftWeekGrid
               weekStartMonday={weekStartDate}
-              employees={employees}
+              employees={employeesForShiftWeekGrid}
               shifts={shifts}
               canDragShifts={perms.canManageSchedules}
               onShiftMoved={onShiftMoved}
+              onRemoveShift={perms.canManageSchedules ? removeShiftFromPlan : undefined}
               onCellActivate={(empId, ymd, here) => {
                 if (here.length === 1) openEdit(here[0]);
                 else if (here.length === 0) openNew(empId, ymd);
