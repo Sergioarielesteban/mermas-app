@@ -77,22 +77,8 @@ export default function MarketingLanding() {
         Ir al contenido
       </a>
 
-      <header className="sticky top-0 z-50 border-b border-stone-200/80 bg-white/95 shadow-[0_1px_0_rgba(0,0,0,0.03)] backdrop-blur-xl supports-[backdrop-filter]:bg-white/80">
-        <div className="mx-auto grid max-w-6xl grid-cols-[1fr_auto_1fr] items-center gap-2 px-4 py-5 sm:gap-3 sm:px-6 sm:py-6">
-          <div className="min-w-0" aria-hidden />
-          <Link
-            href="/"
-            className="flex justify-self-center outline-none ring-offset-2 focus-visible:ring-2 focus-visible:ring-[#D32F2F]/35"
-          >
-            <img
-              src="/logo-chef-one.svg"
-              alt="Chef-One"
-              width={48}
-              height={48}
-              className="h-10 w-10 min-h-[40px] min-w-[40px] shrink-0 sm:h-12 sm:w-12 sm:min-h-[48px] sm:min-w-[48px]"
-              decoding="async"
-            />
-          </Link>
+      <header className="sticky top-0 z-50 border-b border-stone-200/60 bg-white/70 backdrop-blur-lg supports-[backdrop-filter]:bg-white/65">
+        <div className="mx-auto flex max-w-6xl items-center justify-end gap-2 px-4 py-4 sm:gap-3 sm:px-6 sm:py-5">
           <nav className="flex min-w-0 flex-wrap items-center justify-end gap-1.5 sm:gap-2.5" aria-label="Principal">
             <Link
               href="#problema"

@@ -9,6 +9,9 @@ import { enterDemoMode } from '@/lib/demo-mode';
 
 const BRAND = '#D32F2F';
 
+/** Curva tipo deslizamiento premium (suave, sin brusquedad) */
+const SLIDE_EASE = [0.22, 1, 0.36, 1] as const;
+
 type HeroSlide = { title: string; src: string; alt: string };
 
 const HERO_SLIDES: HeroSlide[] = [
@@ -29,12 +32,22 @@ function HeroCardCarousel() {
   const scrollerRef = React.useRef<HTMLDivElement>(null);
   const [active, setActive] = React.useState(0);
 
-  const scrollToIndex = React.useCallback((idx: number) => {
-    const el = scrollerRef.current;
-    if (!el) return;
-    const card = el.children[idx] as HTMLElement | undefined;
-    card?.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', inline: 'center', block: 'nearest' });
-  }, [reduceMotion]);
+  const scrollToIndex = React.useCallback(
+    (idx: number) => {
+      const el = scrollerRef.current;
+      if (!el) return;
+      const card = el.children[idx] as HTMLElement | undefined;
+      if (!card) return;
+      if (reduceMotion) {
+        card.scrollIntoView({ behavior: 'auto', inline: 'center', block: 'nearest' });
+        return;
+      }
+      const target =
+        card.offsetLeft - (el.clientWidth - card.offsetWidth) / 2;
+      el.scrollTo({ left: Math.max(0, target), behavior: 'smooth' });
+    },
+    [reduceMotion],
+  );
 
   const go = React.useCallback(
     (delta: number) => {
@@ -74,50 +87,53 @@ function HeroCardCarousel() {
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: reduceMotion ? 0 : 0.6, ease: [0.22, 1, 0.36, 1], delay: reduceMotion ? 0 : 0.08 }}
     >
-      <p className="mb-4 text-center text-[10px] font-bold uppercase tracking-[0.2em] text-stone-400 sm:text-[11px]">
+      <p className="mb-5 text-center text-[10px] font-bold uppercase tracking-[0.2em] text-stone-400 sm:mb-6 sm:text-[11px]">
         Desliza las tarjetas
       </p>
       <div
         ref={scrollerRef}
-        className="flex snap-x snap-mandatory gap-4 overflow-x-auto px-1 pb-8 pt-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        className="flex snap-x snap-mandatory gap-6 overflow-x-auto overscroll-x-contain px-2 pb-10 pt-3 [-ms-overflow-style:none] [scrollbar-width:none] [-webkit-overflow-scrolling:touch] [&::-webkit-scrollbar]:hidden"
         style={{
-          scrollPaddingInline: 'max(0.75rem, calc(50% - 8.75rem))',
+          scrollPaddingInline: 'max(1rem, calc(50% - 9.25rem))',
           scrollBehavior: 'smooth',
         }}
       >
         {HERO_SLIDES.map((slide, idx) => {
           const isActive = idx === active;
-          const sideTilt = !isActive ? (idx < active ? 6 : -6) : 0;
+          const sideTilt = !isActive ? (idx < active ? 4 : -4) : 0;
           const transform = reduceMotion
             ? isActive
               ? 'scale(1)'
-              : 'scale(0.9)'
+              : 'scale(0.92)'
             : isActive
-              ? 'scale(1) translateZ(24px)'
-              : `scale(0.88) translateZ(0) rotateY(${sideTilt}deg)`;
+              ? 'scale(1.02) translateZ(32px)'
+              : `scale(0.86) translateZ(0) rotateY(${sideTilt}deg)`;
           return (
             <article
               key={slide.title}
               style={{
                 transform,
                 transformStyle: reduceMotion ? undefined : 'preserve-3d',
+                transitionTimingFunction: `cubic-bezier(${SLIDE_EASE.join(',')})`,
               }}
               className={[
-                'w-[min(82vw,17.5rem)] shrink-0 snap-center sm:w-[18.5rem]',
-                'transition-[transform,opacity] duration-300 ease-out',
-                isActive ? 'z-20 opacity-100' : 'z-10 opacity-[0.78]',
+                'w-[min(78vw,18rem)] shrink-0 snap-center snap-always sm:w-[19.5rem]',
+                'transition-[transform,opacity,filter] duration-500 will-change-transform',
+                isActive
+                  ? 'z-20 opacity-100 [filter:brightness(1)_saturate(1)]'
+                  : 'z-10 opacity-[0.72] [filter:brightness(0.97)_saturate(0.96)]',
               ].join(' ')}
             >
               <div
                 className={[
-                  'rounded-[1.35rem] bg-gradient-to-b from-stone-700 via-stone-900 to-stone-950 p-[5px] [box-shadow:0_24px_48px_rgba(0,0,0,0.14),0_8px_16px_rgba(0,0,0,0.06)]',
+                  'rounded-[1.5rem] bg-gradient-to-b from-stone-600 via-stone-900 to-stone-950 p-[6px]',
                   isActive
-                    ? 'ring-2 ring-[#D32F2F]/35 ring-offset-2 ring-offset-[#f0f1f4]'
-                    : 'ring-1 ring-black/20',
+                    ? '[box-shadow:0_36px_72px_-20px_rgba(0,0,0,0.18),0_12px_28px_-8px_rgba(211,47,47,0.12),0_0_0_1px_rgba(255,255,255,0.06)_inset] ring-2 ring-[#D32F2F]/30 ring-offset-[10px] ring-offset-[#f3f4f6]'
+                    : '[box-shadow:0_20px_40px_-16px_rgba(0,0,0,0.12)] ring-1 ring-black/25',
                 ].join(' ')}
               >
-                <div className="overflow-hidden rounded-[1.15rem] bg-white shadow-inner ring-1 ring-white/10">
-                  <div className="flex items-center gap-2 border-b border-stone-200/90 bg-gradient-to-b from-stone-50 to-stone-100/90 px-3 py-2">
+                <div className="overflow-hidden rounded-[1.2rem] bg-white shadow-[inset_0_1px_0_rgba(255,255,255,0.9)] ring-1 ring-white/15">
+                  <div className="flex items-center gap-2 border-b border-stone-200/90 bg-gradient-to-b from-stone-50 to-stone-100/95 px-3 py-2.5">
                     <span className="h-2 w-2 shrink-0 rounded-full bg-[#ff5f57]" aria-hidden />
                     <span className="h-2 w-2 shrink-0 rounded-full bg-[#febc2e]" aria-hidden />
                     <span className="h-2 w-2 shrink-0 rounded-full bg-[#28c840]" aria-hidden />
@@ -125,17 +141,17 @@ function HeroCardCarousel() {
                       Chef-One · {slide.title}
                     </span>
                   </div>
-                  <div className="relative h-[200px] w-full overflow-hidden bg-stone-200/80 sm:h-[240px]">
+                  <div className="relative h-[212px] w-full overflow-hidden bg-gradient-to-b from-stone-100 to-stone-200/90 sm:h-[252px]">
                     <Image
                       src={slide.src}
                       alt={slide.alt}
                       fill
                       className="object-cover object-top"
-                      sizes="(max-width: 640px) 82vw, 296px"
+                      sizes="(max-width: 640px) 78vw, 312px"
                       priority={idx === 0}
                     />
                     <div
-                      className="pointer-events-none absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-black/45 to-transparent"
+                      className="pointer-events-none absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-black/50 via-black/15 to-transparent"
                       aria-hidden
                     />
                   </div>
@@ -169,7 +185,7 @@ function HeroCardCarousel() {
                 setActive(idx);
                 scrollToIndex(idx);
               }}
-              className={`h-1.5 rounded-full transition-all ${idx === active ? 'w-6 bg-[#D32F2F]' : 'w-2 bg-stone-300'}`}
+              className={`h-1.5 rounded-full transition-[width,background-color] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] ${idx === active ? 'w-7 bg-[#D32F2F]' : 'w-2 bg-stone-300/90'}`}
             />
           ))}
         </div>
@@ -190,18 +206,40 @@ export default function MarketingHero() {
   const reduceMotion = useReducedMotion();
 
   return (
-    <section className="relative overflow-hidden border-b border-stone-200/50 bg-gradient-to-b from-white via-[#fafafa] to-[#f0f1f4] px-4 pb-16 pt-10 sm:px-6 sm:pb-24 sm:pt-14">
+    <section className="relative overflow-hidden border-b border-stone-200/50 bg-gradient-to-b from-white via-[#fafafa] to-[#f0f1f4] px-4 pb-16 pt-8 sm:px-6 sm:pb-24 sm:pt-10">
       <div
         className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_90%_55%_at_50%_-25%,rgba(211,47,47,0.11),transparent),radial-gradient(ellipse_50%_40%_at_100%_0%,rgba(15,23,42,0.05),transparent)]"
         aria-hidden
       />
       <div className="relative mx-auto max-w-6xl">
         <div className="mx-auto max-w-3xl text-center lg:mx-0 lg:max-w-xl lg:text-left">
+          <motion.div
+            className="flex w-full justify-center"
+            initial={reduceMotion ? false : { opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.55, ease: SLIDE_EASE, delay: reduceMotion ? 0 : 0.02 }}
+          >
+            <Link
+              href="/"
+              className="outline-none ring-offset-4 focus-visible:ring-2 focus-visible:ring-[#D32F2F]/40"
+              aria-label="Chef-One — inicio"
+            >
+              <img
+                src="/logo-chef-one.svg"
+                alt=""
+                width={160}
+                height={160}
+                className="h-28 w-28 drop-shadow-[0_8px_24px_rgba(15,23,42,0.08)] sm:h-32 sm:w-32 md:h-36 md:w-36"
+                decoding="async"
+              />
+            </Link>
+          </motion.div>
+
           <motion.h1
-            className="mt-2 text-balance text-3xl font-extrabold leading-[1.08] tracking-tight text-stone-950 sm:mt-3 sm:text-4xl sm:leading-[1.06] lg:text-[2.65rem]"
+            className="mt-7 text-balance text-3xl font-extrabold leading-[1.08] tracking-tight text-stone-950 sm:mt-8 sm:text-4xl sm:leading-[1.06] lg:text-[2.65rem]"
             initial={reduceMotion ? false : { opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, delay: reduceMotion ? 0 : 0.04 }}
+            transition={{ duration: 0.5, delay: reduceMotion ? 0 : 0.08 }}
           >
             Todo lo que pasa en tu cocina,
             <span className="mt-1 block font-extrabold text-[#D32F2F]">en un solo sitio.</span>
