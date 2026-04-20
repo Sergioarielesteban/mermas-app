@@ -8,18 +8,15 @@ export type LogoVariant = 'header' | 'hero' | 'login' | 'banner' | 'footer' | 'i
  */
 const variantClassName: Record<LogoVariant, string> = {
   header: 'h-10 w-auto max-w-[min(240px,72vw)] object-contain object-left',
-  /**
-   * Landing hero: muy grande (~×3 respecto al bloque 88vw/22rem/48dvh).
-   * `90dvh` sustituye al antiguo `48dvh` para no “encoger” el cuadrado en altura.
-   */
+  /** Hero: legible en móvil, moderado en escritorio; ancho máximo (SVG cuadrado ⇒ h auto). */
   hero: [
-    'mx-auto block w-auto object-contain object-center',
-    'h-[min(100vw,90dvh,68rem)]',
-    'sm:h-[min(98vw,88dvh,64rem)]',
-    'md:h-[min(92vw,85dvh,58rem)]',
-    'lg:h-[min(78vw,80dvh,52rem)]',
-    'xl:h-[min(68vw,75dvh,48rem)]',
-    '2xl:h-[min(60vw,72dvh,44rem)]',
+    'mx-auto block h-auto w-auto border-0 bg-transparent object-contain object-center outline-none ring-0',
+    'max-w-[min(90vw,17rem)]',
+    'sm:max-w-[min(86vw,18rem)]',
+    'md:max-w-[min(52vw,12rem)]',
+    'lg:max-w-[11rem]',
+    'xl:max-w-[11.5rem]',
+    '2xl:max-w-[12rem]',
   ].join(' '),
   login: [
     'mx-auto block w-auto object-contain object-center',
@@ -53,7 +50,7 @@ export default function Logo({ variant = 'inline', className = '', alt = 'Chef-O
       width={375}
       height={375}
       decoding="async"
-      className={[v, className].filter(Boolean).join(' ')}
+      className={[v, 'select-none', className].filter(Boolean).join(' ')}
       {...rest}
     />
   );
