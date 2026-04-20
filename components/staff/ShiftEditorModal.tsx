@@ -19,6 +19,8 @@ export type ShiftDraft =
       shiftDate: string;
       /** Puesto sugerido (cuadrante operativo) */
       defaultZone?: string;
+      /** Copia horario, pausa, puesto y estado desde un turno (añadir persona al mismo bloque). */
+      cloneSlotFrom?: StaffShift;
     }
   | { mode: 'edit'; shift: StaffShift };
 
@@ -84,15 +86,28 @@ export default function ShiftEditorModal({
       setShiftId(undefined);
       setEmployeeId(draft.employeeId?.trim() ? draft.employeeId.trim() : '');
       setShiftDate(draft.shiftDate);
-      setStartTime('09:00');
-      setEndTime('17:00');
-      setEndsNextDay(false);
-      setBreakMinutes(30);
-      const dz = (draft.defaultZone ?? '').trim();
-      setZone(dz);
-      setNotes('');
-      setStatus('planned');
-      setColorHint(dz ? zoneDefaultColorHint(dz) ?? '' : '');
+      const tpl = draft.cloneSlotFrom;
+      if (tpl) {
+        setStartTime(shortTimeForInput(tpl.startTime));
+        setEndTime(shortTimeForInput(tpl.endTime));
+        setEndsNextDay(tpl.endsNextDay);
+        setBreakMinutes(tpl.breakMinutes);
+        const z = (tpl.zone ?? draft.defaultZone ?? '').trim();
+        setZone(z);
+        setNotes('');
+        setStatus(tpl.status);
+        setColorHint(tpl.colorHint?.trim() ? tpl.colorHint : z ? zoneDefaultColorHint(z) ?? '' : '');
+      } else {
+        setStartTime('09:00');
+        setEndTime('17:00');
+        setEndsNextDay(false);
+        setBreakMinutes(30);
+        const dz = (draft.defaultZone ?? '').trim();
+        setZone(dz);
+        setNotes('');
+        setStatus('planned');
+        setColorHint(dz ? zoneDefaultColorHint(dz) ?? '' : '');
+      }
     } else {
       const s = draft.shift;
       setShiftId(s.id);

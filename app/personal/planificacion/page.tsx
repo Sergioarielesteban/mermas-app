@@ -28,7 +28,7 @@ import {
   DEFAULT_LOCAL_OPERATIONAL_WINDOW,
   operationalWindowFromLocalsRow,
 } from '@/lib/staff/local-operational-window';
-import { duplicateShiftsWeek, upsertStaffShift } from '@/lib/staff/staff-supabase';
+import { deleteStaffShift, duplicateShiftsWeek, upsertStaffShift } from '@/lib/staff/staff-supabase';
 import type { StaffShift } from '@/lib/staff/types';
 import {
   collectUserIdsWithShiftsInWeek,
@@ -185,6 +185,24 @@ export default function PersonalPlanificacionPage() {
     if (!perms.canManageSchedules) return;
     setDraft({ mode: 'edit', shift: s });
     setModalOpen(true);
+  };
+
+  const openNewPersonSameSlot = (template: StaffShift) => {
+    if (!perms.canManageSchedules) return;
+    setDraft({
+      mode: 'new',
+      shiftDate: template.shiftDate,
+      defaultZone: template.zone ?? undefined,
+      cloneSlotFrom: template,
+      employeeId: undefined,
+    });
+    setModalOpen(true);
+  };
+
+  const removeShiftFromPlan = async (s: StaffShift) => {
+    if (!perms.canManageSchedules || !supabase) return;
+    await deleteStaffShift(supabase, s.id);
+    await afterScheduleChange();
   };
 
   const onShiftMoved = async (shift: StaffShift, newEmployeeId: string, newDateYmd: string) => {
@@ -605,6 +623,8 @@ export default function PersonalPlanificacionPage() {
               onQuickCreateShift={onOperationalQuickCreate}
               onEmptyLongPress={onOperationalEmptyLongPress}
               onShiftAdvancedEdit={(s) => openEdit(s)}
+              onAddPersonSameSlot={(t) => openNewPersonSameSlot(t)}
+              onRemoveShift={(s) => removeShiftFromPlan(s)}
             />
           )}
         </>
