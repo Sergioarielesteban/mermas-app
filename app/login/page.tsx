@@ -54,15 +54,17 @@ export default function LoginPage() {
 
   return (
     <div className="flex min-h-[100dvh] w-full flex-col bg-white">
-      <div className="flex min-h-[100dvh] flex-1 flex-col items-center justify-center px-5 py-10 sm:px-6">
-        <div className="flex w-full max-w-md flex-col items-center">
-          <Logo variant="login" />
+      <div className="flex min-h-[100dvh] flex-1 flex-col items-center px-5 pb-12 pt-8 sm:px-6 sm:pb-14 sm:pt-10">
+        <div className="flex w-full max-w-md flex-col items-center text-center">
+          <Logo variant="login" className="shrink-0" fetchPriority="high" />
 
-          <form onSubmit={handleSubmit} className="mt-10 w-full space-y-4">
-            <div>
-              <h1 className="text-lg font-black text-zinc-900">Acceso de Usuario</h1>
-              <p className="pt-1 text-sm text-zinc-600">Entra con tu usuario (o email) y contraseña.</p>
-              <p className="pt-2 text-xs text-zinc-500">
+          <form onSubmit={handleSubmit} className="mt-8 w-full space-y-4 text-left sm:mt-10">
+            <div className="text-center sm:text-left">
+              <h1 className="text-xl font-black tracking-tight text-zinc-900 sm:text-2xl">Acceso de Usuario</h1>
+              <p className="pt-2 text-sm leading-snug text-zinc-600 sm:text-[0.9375rem]">
+                Entra con tu usuario (o email) y contraseña.
+              </p>
+              <p className="pt-3 text-xs leading-relaxed text-zinc-500 sm:text-sm">
                 ¿Primera vez?{' '}
                 <Link href="/onboarding" className="font-semibold text-[#D32F2F] underline underline-offset-2">
                   Ver introducción

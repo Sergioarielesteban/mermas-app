@@ -376,9 +376,14 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           >
             <X className="h-5 w-5" />
           </button>
-          <div className="flex flex-col items-center px-2 pb-1 pt-9 text-center">
-            <Logo variant="inline" className="select-none" alt="" role="presentation" />
-            <p className="mt-5 text-xs font-medium text-zinc-600">Gestión operativa</p>
+          <div className="flex flex-col items-center px-2 pb-1 pt-8 text-center">
+            <Logo
+              variant="inline"
+              className="!w-[min(88%,280px)] max-w-[280px] select-none sm:!w-[min(85%,300px)]"
+              alt=""
+              role="presentation"
+            />
+            <p className="mt-4 text-xs font-medium text-zinc-600 sm:mt-5">Gestión operativa</p>
           </div>
         </div>
 

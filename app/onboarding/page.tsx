@@ -14,7 +14,7 @@ export default function OnboardingPage() {
         {step === 0 ? (
           <div className="text-center">
             <div className="flex justify-center">
-              <Logo variant="login" className="!h-16 sm:!h-20" />
+              <Logo variant="login" className="shrink-0" />
             </div>
             <h1 className="mt-5 text-balance text-3xl font-black text-zinc-900 sm:mt-6 sm:text-4xl">
               Controla tu cocina en minutos

@@ -214,13 +214,13 @@ export default function MarketingHero() {
         className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_88%_52%_at_50%_-22%,rgba(211,47,47,0.1),transparent),radial-gradient(ellipse_48%_38%_at_100%_0%,rgba(15,23,42,0.045),transparent)]"
         aria-hidden
       />
-      <div className="relative mx-auto w-full max-w-[90rem] px-4 pb-9 pt-2 sm:px-6 sm:pb-11 sm:pt-3 md:pb-12 md:pt-4 lg:px-8 lg:pb-14 lg:pt-5">
-        {/* Portada SaaS: bloque único centrado, primer pantallazo denso y comercial */}
+      <div className="relative mx-auto w-full max-w-[90rem] px-4 pb-[7.5rem] pt-4 sm:px-6 sm:pb-11 sm:pt-6 md:pb-12 md:pt-7 lg:px-8 lg:pb-14 lg:pt-8">
+        {/* Portada: contenido arriba, centrado horizontal; sin “medio vacío” por min-h + justify-center */}
         <div
           className={[
-            'mx-auto flex w-full max-w-[min(100%,42rem)] flex-col items-center text-center',
-            'sm:max-w-[min(100%,48rem)] md:max-w-[min(100%,52rem)] lg:max-w-[56rem] xl:max-w-[60rem]',
-            'min-h-[min(calc(100svh-4.75rem),52rem)] justify-center gap-4 sm:gap-5 md:min-h-[min(calc(100svh-5rem),56rem)] md:gap-6 lg:gap-7',
+            'mx-auto flex w-full max-w-[min(100%,44rem)] flex-col items-center text-center',
+            'sm:max-w-[min(100%,50rem)] md:max-w-[min(100%,54rem)] lg:max-w-[58rem] xl:max-w-[62rem]',
+            'gap-5 sm:gap-6 md:gap-7',
           ].join(' ')}
         >
           <motion.div
@@ -239,7 +239,7 @@ export default function MarketingHero() {
           </motion.div>
 
           <motion.h1
-            className="mx-auto w-full max-w-[min(100%,20.5rem)] text-balance font-extrabold tracking-[-0.03em] text-stone-950 sm:max-w-[min(100%,30rem)] md:max-w-[min(100%,36rem)] lg:max-w-[min(100%,40rem)] xl:max-w-[42rem] text-[clamp(1.9375rem,6.8vw,4.5rem)] leading-[1.04] sm:text-[clamp(2.25rem,5.8vw,4.5rem)] md:leading-[1.03] lg:text-[clamp(2.5rem,4.6vw,4.5rem)]"
+            className="mx-auto w-full max-w-[min(100%,22rem)] text-balance font-extrabold tracking-[-0.03em] text-stone-950 sm:max-w-[min(100%,32rem)] md:max-w-[min(100%,38rem)] lg:max-w-[min(100%,42rem)] xl:max-w-[44rem] text-[clamp(2rem,7.2vw,4.75rem)] leading-[1.04] sm:text-[clamp(2.35rem,6vw,4.75rem)] md:leading-[1.03] lg:text-[clamp(2.6rem,5vw,4.75rem)]"
             initial={reduceMotion ? false : { opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5, delay: reduceMotion ? 0 : 0.06 }}
@@ -251,7 +251,7 @@ export default function MarketingHero() {
           </motion.h1>
 
           <motion.p
-            className="mx-auto w-full max-w-[min(100%,24rem)] text-pretty text-[clamp(1rem,3.2vw,1.3125rem)] font-medium leading-[1.55] text-stone-600 sm:max-w-xl sm:leading-[1.52] md:max-w-[36rem] md:text-[1.1875rem] md:leading-[1.56] lg:max-w-[40rem]"
+            className="mx-auto w-full max-w-[min(100%,26rem)] text-pretty text-[clamp(1.0625rem,3.4vw,1.375rem)] font-medium leading-[1.55] text-stone-600 sm:max-w-xl sm:leading-[1.52] md:max-w-[38rem] md:text-[1.2rem] md:leading-[1.58] lg:max-w-[42rem]"
             initial={reduceMotion ? false : { opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.46, delay: reduceMotion ? 0 : 0.085 }}
