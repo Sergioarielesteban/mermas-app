@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import React, { useState } from 'react';
 import { useAuth } from '@/components/AuthProvider';
-import ChefOneLaunchMark from '@/components/ChefOneLaunchMark';
+import Logo from '@/components/Logo';
 import { getAllowedEmails, isAllowedEmail } from '@/lib/auth-access';
 import { isSupabaseEnabled } from '@/lib/supabase-client';
 
@@ -56,7 +56,7 @@ export default function LoginPage() {
     <div className="flex min-h-[100dvh] w-full flex-col bg-white">
       <div className="flex min-h-[100dvh] flex-1 flex-col items-center justify-center px-5 py-10 sm:px-6">
         <div className="flex w-full max-w-md flex-col items-center">
-          <ChefOneLaunchMark />
+          <Logo variant="login" />
 
           <form onSubmit={handleSubmit} className="mt-10 w-full space-y-4">
             <div>

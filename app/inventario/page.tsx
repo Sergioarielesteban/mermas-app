@@ -812,7 +812,7 @@ export default function InventarioPage() {
       </Link>
 
       <MermasStyleHero
-        eyebrow="Chef-One"
+        brandLogo
         title="Inventario"
         slim
         description="Stock y valor por artículo de tu local."

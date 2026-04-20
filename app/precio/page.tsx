@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import React from 'react';
 import { ChefHat, ClipboardList, LineChart } from 'lucide-react';
+import Logo from '@/components/Logo';
 
 const highlights = [
   {
@@ -32,14 +33,7 @@ export default function PrecioPage() {
       <div className="relative mx-auto w-full max-w-lg">
         <div className="rounded-[1.75rem] border border-zinc-200/80 bg-white/90 p-8 shadow-[0_24px_60px_-24px_rgba(15,23,42,0.18)] ring-1 ring-zinc-100/90 backdrop-blur-sm sm:p-10">
           <div className="flex justify-center">
-            <img
-              src="/logo-chef-one.svg"
-              alt=""
-              width={512}
-              height={512}
-              decoding="async"
-              className="h-16 w-16 object-contain sm:h-[4.5rem] sm:w-[4.5rem]"
-            />
+            <Logo variant="login" className="!h-16 sm:!h-[4.5rem]" />
           </div>
           <h1 className="mt-5 text-balance text-center text-2xl font-black leading-tight tracking-tight text-zinc-900 sm:mt-6 sm:text-3xl">
             Operaciones de cocina, claras y a tu ritmo

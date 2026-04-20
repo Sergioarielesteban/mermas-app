@@ -6,6 +6,7 @@ import MarketingHero from '@/components/marketing/MarketingHero';
 import MarketingModulesSection from '@/components/marketing/MarketingModulesSection';
 import MarketingPricingHighlight from '@/components/marketing/MarketingPricingHighlight';
 import StoreDownloadBadges from '@/components/marketing/StoreDownloadBadges';
+import Logo from '@/components/Logo';
 import { getMarketingContactPhone } from '@/lib/marketing-contact-phone';
 
 const BRAND = '#D32F2F';
@@ -78,22 +79,8 @@ export default function MarketingLanding() {
       </a>
 
       <header className="sticky top-0 z-50 border-b border-stone-200/60 bg-white/70 backdrop-blur-lg supports-[backdrop-filter]:bg-white/65">
-        <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-4 sm:gap-4 sm:px-6 sm:py-5">
-          <Link
-            href="/"
-            className="shrink-0 outline-none ring-offset-2 focus-visible:rounded-xl focus-visible:ring-2 focus-visible:ring-[#D32F2F]/35"
-            aria-label="Chef-One — inicio"
-          >
-            <img
-              src="/logo-chef-one.svg"
-              alt=""
-              width={512}
-              height={512}
-              className="h-9 w-9 object-contain sm:h-10 sm:w-10"
-              decoding="async"
-            />
-          </Link>
-          <nav className="flex min-w-0 flex-1 flex-wrap items-center justify-end gap-1.5 sm:gap-2.5" aria-label="Principal">
+        <div className="mx-auto flex max-w-6xl items-center justify-end gap-2 px-4 py-4 sm:gap-3 sm:px-6 sm:py-5">
+          <nav className="flex min-w-0 flex-wrap items-center justify-end gap-1.5 sm:gap-2.5" aria-label="Principal">
             <Link
               href="#problema"
               className="hidden rounded-full px-3 py-2 text-xs font-bold text-stone-600 ring-1 ring-stone-200/90 transition hover:bg-stone-50 md:inline-flex"
@@ -330,7 +317,9 @@ export default function MarketingLanding() {
       </main>
 
       <footer className="border-t border-stone-200 bg-[#f4f4f5] px-4 py-10 text-center sm:px-6">
-        <p className="text-sm font-bold text-stone-900">Chef-One</p>
+        <div className="flex justify-center">
+          <Logo variant="footer" />
+        </div>
         <p className="mt-1 text-xs text-stone-500">
           Para equipos de cocina y profesionales del sector. Sin perder el hilo.
         </p>

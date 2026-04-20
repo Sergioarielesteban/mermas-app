@@ -22,18 +22,7 @@ import {
 import { getSupabaseClient } from '@/lib/supabase-client';
 import { pickFichajeEmoji, pickFichajeMessage } from '@/lib/fichaje-messages';
 import type { StaffTimeEventType } from '@/lib/staff/types';
-
-function TerminalLogo({ className }: { className?: string }) {
-  return (
-    <img
-      src="/logo-chef-one.svg"
-      alt="Chef-One"
-      width={512}
-      height={512}
-      className={['h-auto w-full object-contain drop-shadow-sm', className].filter(Boolean).join(' ')}
-    />
-  );
-}
+import Logo from '@/components/Logo';
 
 type Step = 'home' | 'pin' | 'success';
 
@@ -299,7 +288,10 @@ export default function TerminalFichajePage() {
         {step === 'home' ? (
           <>
             <div className="mb-6 flex w-full justify-center sm:mb-8">
-              <TerminalLogo className="!max-w-[14rem] drop-shadow-[0_14px_44px_rgba(15,23,42,0.1)] sm:!max-w-[18rem] md:!max-w-[22rem]" />
+              <Logo
+                variant="inline"
+                className="mx-auto !h-[7rem] w-auto !max-w-[min(92vw,28rem)] object-contain sm:!h-[9rem] md:!h-[11rem]"
+              />
             </div>
             <p className="text-7xl font-black tabular-nums tracking-tight text-zinc-900 sm:text-8xl">{timeLabel}</p>
             <div className="mt-10 grid w-full max-w-lg grid-cols-2 gap-4 sm:mt-14 sm:gap-5">
@@ -326,7 +318,7 @@ export default function TerminalFichajePage() {
 
         {step === 'pin' ? (
           <div className="flex w-full max-w-md flex-col items-center text-center">
-            <TerminalLogo className="mb-5 !max-w-[7.5rem] sm:!max-w-[9rem]" />
+            <Logo variant="inline" className="mb-5 !h-[5rem] w-auto sm:!h-[6rem]" />
             <button
               type="button"
               onClick={resetFlow}
@@ -401,7 +393,7 @@ export default function TerminalFichajePage() {
             ].join(' ')}
           >
             <div className="flex justify-center">
-              <TerminalLogo className="!max-w-[6.5rem] sm:!max-w-[7.5rem]" />
+              <Logo variant="inline" className="!h-[5.5rem] w-auto sm:!h-[6.5rem]" />
             </div>
             <div className="mt-4 text-center text-5xl leading-none">{successEmoji ?? '✨'}</div>
             <h2 className="mt-3 text-center text-2xl font-extrabold text-zinc-900 sm:text-3xl">

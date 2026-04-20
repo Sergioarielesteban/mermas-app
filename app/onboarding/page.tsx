@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import React, { useState } from 'react';
+import Logo from '@/components/Logo';
 import { enterDemoMode } from '@/lib/demo-mode';
 
 export default function OnboardingPage() {
@@ -13,14 +14,7 @@ export default function OnboardingPage() {
         {step === 0 ? (
           <div className="text-center">
             <div className="flex justify-center">
-              <img
-                src="/logo-chef-one.svg"
-                alt=""
-                width={512}
-                height={512}
-                decoding="async"
-                className="h-14 w-14 object-contain sm:h-16 sm:w-16"
-              />
+              <Logo variant="login" className="!h-16 sm:!h-20" />
             </div>
             <h1 className="mt-5 text-balance text-3xl font-black text-zinc-900 sm:mt-6 sm:text-4xl">
               Controla tu cocina en minutos

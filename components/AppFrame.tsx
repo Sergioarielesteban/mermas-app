@@ -5,7 +5,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import AppShell from '@/components/AppShell';
 import BottomNav from '@/components/BottomNav';
 import { useAuth } from '@/components/AuthProvider';
-import ChefOneLaunchMark from '@/components/ChefOneLaunchMark';
+import Logo from '@/components/Logo';
 
 export default function AppFrame({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -106,9 +106,9 @@ export default function AppFrame({ children }: { children: React.ReactNode }) {
             en Chrome o Safari.
           </p>
           <div className="order-last mt-1 w-full">
-            <ChefOneLaunchMark
-              imgClassName="mx-auto block h-[min(40vw,200px)] w-auto max-w-full select-none object-contain"
-              lineClassName="mt-3 w-full max-w-[min(70vw,260px)]"
+            <Logo
+              variant="login"
+              className="mx-auto !h-[min(40vw,200px)] !max-w-full sm:!h-[200px]"
             />
           </div>
         </div>

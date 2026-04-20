@@ -29,7 +29,7 @@ import { canAccessCocinaCentralModule, canPlaceCentralSupplyOrder } from '@/lib/
 import PullToRefreshPedidos from '@/components/PullToRefreshPedidos';
 import { canAccessPedidos } from '@/lib/pedidos-access';
 import { formatLocalHeaderName } from '@/lib/local-display-name';
-import ChefOneGlowLine from '@/components/ChefOneGlowLine';
+import Logo from '@/components/Logo';
 import NotificationBell from '@/components/notifications/NotificationBell';
 import DemoModeBanner from '@/components/DemoModeBanner';
 import RoleRouteGate from '@/components/RoleRouteGate';
@@ -377,16 +377,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             <X className="h-5 w-5" />
           </button>
           <div className="flex flex-col items-center px-2 pb-1 pt-9 text-center">
-            <img
-              src="/logo-chef-one.svg"
-              alt=""
-              role="presentation"
-              className="h-12 w-12 select-none object-contain sm:h-14 sm:w-14"
-              width={512}
-              height={512}
-            />
-            <ChefOneGlowLine className="mx-auto mt-4 w-[min(70vw,220px)] scale-x-50" />
-            <p className="mt-3 text-xs font-medium text-zinc-600">Gestión operativa</p>
+            <Logo variant="inline" className="select-none" alt="" role="presentation" />
+            <p className="mt-5 text-xs font-medium text-zinc-600">Gestión operativa</p>
           </div>
         </div>
 

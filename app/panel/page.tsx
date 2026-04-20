@@ -127,7 +127,7 @@ export default function PanelControlPage() {
   return (
     <div className="space-y-6">
       <MermasStyleHero
-        eyebrow="CHEF-ONE"
+        brandLogo
         title="Panel de control"
         tagline="Toda tu cocina en la palma de tu mano."
         compact

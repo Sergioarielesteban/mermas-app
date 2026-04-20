@@ -6,6 +6,7 @@ import React from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { enterDemoMode } from '@/lib/demo-mode';
+import Logo from '@/components/Logo';
 
 const BRAND = '#D32F2F';
 
@@ -138,7 +139,7 @@ function HeroCardCarousel() {
                     <span className="h-2 w-2 shrink-0 rounded-full bg-[#febc2e]" aria-hidden />
                     <span className="h-2 w-2 shrink-0 rounded-full bg-[#28c840]" aria-hidden />
                     <span className="min-w-0 truncate pl-1 text-[10px] font-semibold tracking-wide text-stone-500">
-                      Chef-One · {slide.title}
+                      {slide.title}
                     </span>
                   </div>
                   <div className="relative h-[212px] w-full overflow-hidden bg-gradient-to-b from-stone-100 to-stone-200/90 sm:h-[252px]">
@@ -157,7 +158,6 @@ function HeroCardCarousel() {
                   </div>
                   <div className="border-t border-stone-100 bg-white px-3 py-2.5 sm:px-4 sm:py-3">
                     <p className="text-sm font-bold tracking-tight text-stone-900">{slide.title}</p>
-                    <p className="mt-0.5 text-[11px] font-medium text-stone-500">Chef-One</p>
                   </div>
                 </div>
               </div>
@@ -224,14 +224,7 @@ export default function MarketingHero() {
               className="outline-none ring-offset-4 focus-visible:ring-2 focus-visible:ring-[#D32F2F]/40"
               aria-label="Chef-One — inicio"
             >
-              <img
-                src="/logo-chef-one.svg"
-                alt=""
-                width={512}
-                height={512}
-                className="h-32 w-32 object-contain drop-shadow-[0_8px_28px_rgba(15,23,42,0.09)] sm:h-36 sm:w-36 md:h-40 md:w-40"
-                decoding="async"
-              />
+              <Logo variant="hero" />
             </Link>
           </motion.div>
 
