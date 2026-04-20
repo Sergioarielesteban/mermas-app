@@ -54,11 +54,11 @@ export default function LoginPage() {
 
   return (
     <div className="flex min-h-[100dvh] w-full flex-col bg-white">
-      <div className="flex min-h-[100dvh] flex-1 flex-col items-center px-5 pb-12 pt-8 sm:px-6 sm:pb-14 sm:pt-10">
+      <div className="flex min-h-[100dvh] flex-1 flex-col items-center px-5 pb-12 pt-4 sm:px-6 sm:pb-14 sm:pt-6">
         <div className="flex w-full max-w-md flex-col items-center text-center">
           <Logo variant="login" className="shrink-0" fetchPriority="high" />
 
-          <form onSubmit={handleSubmit} className="mt-8 w-full space-y-4 text-left sm:mt-10">
+          <form onSubmit={handleSubmit} className="mt-5 w-full space-y-4 text-left sm:mt-6">
             <div className="text-center sm:text-left">
               <h1 className="text-xl font-black tracking-tight text-zinc-900 sm:text-2xl">Acceso de Usuario</h1>
               <p className="pt-2 text-sm leading-snug text-zinc-600 sm:text-[0.9375rem]">

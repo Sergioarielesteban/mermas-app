@@ -106,10 +106,7 @@ export default function AppFrame({ children }: { children: React.ReactNode }) {
             en Chrome o Safari.
           </p>
           <div className="order-last mt-1 w-full">
-            <Logo
-              variant="login"
-              className="mx-auto !h-[min(40vw,200px)] !max-w-full sm:!h-[200px]"
-            />
+            <Logo variant="login" className="mx-auto !max-h-24 sm:!max-h-28" />
           </div>
         </div>
       </main>

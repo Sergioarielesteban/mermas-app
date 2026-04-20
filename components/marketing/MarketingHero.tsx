@@ -214,17 +214,17 @@ export default function MarketingHero() {
         className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_88%_52%_at_50%_-22%,rgba(211,47,47,0.1),transparent),radial-gradient(ellipse_48%_38%_at_100%_0%,rgba(15,23,42,0.045),transparent)]"
         aria-hidden
       />
-      <div className="relative mx-auto w-full max-w-[90rem] px-4 pb-[7.5rem] pt-4 sm:px-6 sm:pb-11 sm:pt-6 md:pb-12 md:pt-7 lg:px-8 lg:pb-14 lg:pt-8">
-        {/* Portada: contenido arriba, centrado horizontal; sin “medio vacío” por min-h + justify-center */}
+      <div className="relative mx-auto w-full max-w-[90rem] px-4 pb-[7.5rem] pt-2 sm:px-6 sm:pb-11 sm:pt-3 md:pb-12 md:pt-4 lg:px-8 lg:pb-14 lg:pt-5">
+        {/* Logo SVG ~cuadrado: ritmo compacto (poco hueco bajo header) */}
         <div
           className={[
             'mx-auto flex w-full max-w-[min(100%,44rem)] flex-col items-center text-center',
             'sm:max-w-[min(100%,50rem)] md:max-w-[min(100%,54rem)] lg:max-w-[58rem] xl:max-w-[62rem]',
-            'gap-5 sm:gap-6 md:gap-7',
+            'gap-3 sm:gap-4 md:gap-5',
           ].join(' ')}
         >
           <motion.div
-            className="flex w-full shrink-0 justify-center px-0.5 [-webkit-tap-highlight-color:transparent]"
+            className="flex w-full shrink-0 justify-center leading-none [-webkit-tap-highlight-color:transparent]"
             initial={reduceMotion ? false : { opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.52, ease: SLIDE_EASE, delay: reduceMotion ? 0 : 0.02 }}
@@ -234,7 +234,7 @@ export default function MarketingHero() {
               className="inline-flex max-w-full outline-none ring-offset-4 focus-visible:ring-2 focus-visible:ring-[#D32F2F]/40"
               aria-label="Chef-One — inicio"
             >
-              <Logo variant="hero" preferRaster />
+              <Logo variant="hero" />
             </Link>
           </motion.div>
 

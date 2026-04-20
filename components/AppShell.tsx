@@ -367,7 +367,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         ].join(' ')}
         aria-label="Menú lateral"
       >
-        <div className="relative shrink-0 border-b border-zinc-200 bg-white px-3 pb-5 pt-4">
+        <div className="relative shrink-0 border-b border-zinc-200 bg-white px-3 pb-3 pt-3">
           <button
             type="button"
             onClick={() => setOpen(false)}
@@ -376,14 +376,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           >
             <X className="h-5 w-5" />
           </button>
-          <div className="flex flex-col items-center px-2 pb-1 pt-8 text-center">
-            <Logo
-              variant="inline"
-              className="!w-[min(88%,280px)] max-w-[280px] select-none sm:!w-[min(85%,300px)]"
-              alt=""
-              role="presentation"
-            />
-            <p className="mt-4 text-xs font-medium text-zinc-600 sm:mt-5">Gestión operativa</p>
+          <div className="flex flex-col items-center px-2 pb-0 pt-10 text-center leading-none">
+            <Logo variant="inline" className="select-none" alt="" role="presentation" />
+            <p className="mt-2 text-xs font-medium text-zinc-600">Gestión operativa</p>
           </div>
         </div>
 

@@ -287,11 +287,8 @@ export default function TerminalFichajePage() {
       <div className="relative z-10 flex flex-1 flex-col items-center justify-center px-4 pb-10 pt-6 sm:px-8">
         {step === 'home' ? (
           <>
-            <div className="mb-5 flex w-full justify-center px-2 sm:mb-7">
-              <Logo
-                variant="inline"
-                className="mx-auto !w-[min(92vw,36rem)] max-w-full object-contain sm:!w-[min(90vw,42rem)] md:!w-[min(88vw,48rem)]"
-              />
+            <div className="mb-4 flex w-full justify-center px-2 sm:mb-6">
+              <Logo variant="inline" className="mx-auto !max-h-20 sm:!max-h-24 md:!max-h-28" />
             </div>
             <p className="text-7xl font-black tabular-nums tracking-tight text-zinc-900 sm:text-8xl">{timeLabel}</p>
             <div className="mt-10 grid w-full max-w-lg grid-cols-2 gap-4 sm:mt-14 sm:gap-5">
@@ -318,7 +315,7 @@ export default function TerminalFichajePage() {
 
         {step === 'pin' ? (
           <div className="flex w-full max-w-md flex-col items-center text-center">
-            <Logo variant="inline" className="mb-5 !w-[min(88vw,20rem)] object-contain sm:!w-[24rem]" />
+            <Logo variant="inline" className="mb-5 !max-h-20 sm:!max-h-24" />
             <button
               type="button"
               onClick={resetFlow}
@@ -393,7 +390,7 @@ export default function TerminalFichajePage() {
             ].join(' ')}
           >
             <div className="flex justify-center">
-              <Logo variant="inline" className="!w-[min(88vw,20rem)] object-contain sm:!w-[24rem]" />
+              <Logo variant="inline" className="!max-h-20 sm:!max-h-24" />
             </div>
             <div className="mt-4 text-center text-5xl leading-none">{successEmoji ?? '✨'}</div>
             <h2 className="mt-3 text-center text-2xl font-extrabold text-zinc-900 sm:text-3xl">
