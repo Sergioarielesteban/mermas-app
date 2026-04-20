@@ -4,6 +4,9 @@
 -- Requiere: public.profile_is_admin(), public.current_local_id()
 --           (p. ej. supabase-security-finanzas-admin-rls.sql).
 -- Coexiste con la política “solo mi perfil”: las políticas SELECT se combinan con OR.
+--
+-- IMPORTANTE: si al aplicar esto aparece "stack depth limit exceeded", ejecuta antes:
+--   supabase-fix-profile-helpers-rls-recursion.sql
 -- =============================================================================
 
 drop policy if exists "profiles select same local admin" on public.profiles;

@@ -157,3 +157,4 @@ using (local_id = public.current_local_id() and public.profile_is_admin());
 
 -- Informe admin “quién aceptó cada norma”: nombre/email del equipo requiere política extra en profiles.
 -- Ejecuta también: supabase-profiles-admin-select-local.sql
+-- Si Postgres devuelve "stack depth limit exceeded", ejecuta: supabase-fix-profile-helpers-rls-recursion.sql
