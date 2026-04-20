@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { ChevronDown, ChevronRight, GripVertical, Plus } from 'lucide-react';
+import { ChevronDown, ChevronRight, ChevronsUpDown, GripVertical, Plus } from 'lucide-react';
 import { plannedShiftMinutes } from '@/lib/staff/attendance-logic';
 import {
   FULL_DAY_OPERATIONAL_METRICS,
@@ -23,6 +23,62 @@ function formatShiftHoursLabel(mins: number): string {
   const h = mins / 60;
   if (Math.abs(h - Math.round(h)) < 0.05) return `${Math.round(h)} h`;
   return `${h.toFixed(1).replace('.', ',')} h`;
+}
+
+/** Duración tipo Skello: `8,5h` (compacto, sin espacio). */
+function formatDurationSkello(mins: number): string {
+  if (mins <= 0) return '0h';
+  const h = mins / 60;
+  if (Math.abs(h - Math.round(h)) < 0.05) return `${Math.round(h)}h`;
+  return `${h.toFixed(1).replace('.', ',')}h`;
+}
+
+/** Texto oscuro sobre bloques de color (referencia Skello). */
+const SKELLO_CARD_FG = '#171717';
+
+function OperationalSkelloCardFace({
+  nameLabel,
+  startTime,
+  endTime,
+  endsNextDay,
+  durationMins,
+  showAlert,
+}: {
+  nameLabel: string;
+  startTime: string;
+  endTime: string;
+  endsNextDay: boolean;
+  durationMins: number;
+  showAlert: boolean;
+}) {
+  return (
+    <div className="grid h-full min-h-[2.5rem] auto-rows-min grid-cols-[1fr_auto] content-between gap-x-1 gap-y-0.5 px-1.5 py-1 sm:min-h-[2.75rem] sm:gap-y-1 sm:px-2 sm:py-1.5">
+      <div className="text-[10px] font-extrabold leading-none tabular-nums tracking-tight sm:text-[11px]">
+        {shortTime(startTime)} - {shortTime(endTime)}
+        {endsNextDay ? ' +1' : ''}
+      </div>
+      <div className="text-right text-[9px] font-bold leading-none tabular-nums opacity-90 sm:text-[10px]">
+        {formatDurationSkello(durationMins)}
+      </div>
+      <div className="flex min-w-0 items-center gap-0.5 self-end">
+        <span className="truncate text-[9px] font-semibold leading-none sm:text-[10px]">{nameLabel}</span>
+        <ChevronsUpDown className="h-2.5 w-2.5 shrink-0 opacity-55 sm:h-3 sm:w-3" strokeWidth={2.5} aria-hidden />
+      </div>
+      <div className="flex items-end justify-end self-end">
+        {showAlert ? (
+          <span
+            className="flex h-3.5 w-3.5 items-center justify-center rounded-full bg-red-600 text-[9px] font-bold leading-none text-white shadow-sm sm:h-4 sm:w-4 sm:text-[10px]"
+            title="Requiere atención"
+            aria-label="Aviso"
+          >
+            !
+          </span>
+        ) : (
+          <span className="h-3.5 w-3.5 sm:h-4 sm:w-4" aria-hidden />
+        )}
+      </div>
+    </div>
+  );
 }
 
 function formatHoursSum(mins: number): string {
@@ -247,13 +303,14 @@ export function OperationalSkelloCellBody({
 
             if (isSingle && sOne) {
               const unassigned = sOne.employeeId == null;
+              const skelloMinPct = Math.max(seg.heightPct, 7);
               return (
                 <div
                   key={g.slotKey}
-                  className="absolute overflow-hidden rounded-md shadow-md ring-1 ring-black/10"
+                  className="absolute overflow-hidden rounded-lg shadow-md ring-1 ring-black/15"
                   style={{
                     top: `${seg.topPct}%`,
-                    height: `${Math.max(seg.heightPct, 4)}%`,
+                    height: `${skelloMinPct}%`,
                     left: `${left}%`,
                     width: `${width}%`,
                     zIndex: selectedShiftId === sOne.id ? 5 : 3,
@@ -265,20 +322,20 @@ export function OperationalSkelloCellBody({
                         draggable
                         onDragStart={(e) => onDragStart(e, sOne.id)}
                         onDragEnd={onDragEnd}
-                        className="flex w-4 shrink-0 cursor-grab touch-none items-center justify-center border-r border-white/25 bg-black/15 text-white/90 active:cursor-grabbing sm:w-[1.125rem]"
+                        className="flex w-3 shrink-0 cursor-grab touch-none items-center justify-center border-r border-black/15 bg-black/20 text-zinc-900 active:cursor-grabbing sm:w-3.5"
                         title="Mover a otro día o puesto"
                         aria-label="Arrastrar turno"
                         onPointerDown={(e) => e.stopPropagation()}
                         onClick={(e) => e.stopPropagation()}
                       >
-                        <GripVertical className="h-3 w-3" />
+                        <GripVertical className="h-3 w-3 opacity-80" />
                       </div>
                     ) : null}
                     <div
                       role="button"
                       tabIndex={canEdit ? 0 : undefined}
-                      className="min-w-0 flex-1 touch-none px-1 py-0.5 text-left outline-none sm:px-1.5"
-                      style={{ background: zStyle.bg, color: zStyle.text }}
+                      className="min-w-0 flex-1 touch-none text-left outline-none"
+                      style={{ background: zStyle.bg, color: SKELLO_CARD_FG }}
                       onPointerDown={(e) => onVerticalShiftPointerDown(e, sOne, iv)}
                       onPointerMove={(e) => onVerticalShiftPointerMove(e, sOne)}
                       onPointerUp={(e) => void onVerticalShiftPointerUp(e, sOne)}
@@ -297,21 +354,14 @@ export function OperationalSkelloCellBody({
                         }
                       }}
                     >
-                      <div
-                        className={[
-                          'break-words text-[9px] font-extrabold leading-snug sm:text-[10px]',
-                          unassigned ? 'opacity-95' : '',
-                        ].join(' ')}
-                      >
-                        {unassigned ? 'Sin asignar' : employeeName(sOne.employeeId)}
-                      </div>
-                      <div className="text-[8px] font-semibold tabular-nums leading-tight opacity-95 sm:text-[9px]">
-                        {shortTime(sOne.startTime)}–{shortTime(sOne.endTime)}
-                        {sOne.endsNextDay ? ' +1' : ''}
-                        <span className="ml-1 font-bold opacity-85">
-                          · {formatShiftHoursLabel(plannedShiftMinutes(sOne))}
-                        </span>
-                      </div>
+                      <OperationalSkelloCardFace
+                        nameLabel={unassigned ? 'Sin asignar' : employeeName(sOne.employeeId)}
+                        startTime={sOne.startTime}
+                        endTime={sOne.endTime}
+                        endsNextDay={sOne.endsNextDay}
+                        durationMins={plannedShiftMinutes(sOne)}
+                        showAlert={unassigned}
+                      />
                     </div>
                   </div>
                 </div>
@@ -325,7 +375,7 @@ export function OperationalSkelloCellBody({
             return (
               <div
                 key={g.slotKey}
-                className="absolute overflow-hidden rounded-md text-left shadow-md ring-1 ring-black/15"
+                className="absolute overflow-hidden rounded-lg text-left shadow-md ring-1 ring-black/15"
                 style={{
                   top: `${seg.topPct}%`,
                   height: `${Math.max(seg.heightPct, minGroupPct)}%`,
@@ -333,12 +383,12 @@ export function OperationalSkelloCellBody({
                   width: `${width}%`,
                   zIndex: expanded ? 4 : 2,
                   background: zStyle.bg,
-                  color: zStyle.text,
+                  color: SKELLO_CARD_FG,
                 }}
               >
                 <button
                   type="button"
-                  className="absolute right-0 top-0 z-10 rounded-bl bg-black/25 p-0.5 text-white/95 hover:bg-black/35"
+                  className="absolute right-0 top-0 z-10 rounded-bl bg-white/35 p-0.5 text-zinc-900 shadow-sm hover:bg-white/50"
                   title={expanded ? 'Ocultar panel inferior' : 'Abrir panel: editar / quitar'}
                   aria-expanded={expanded}
                   aria-label="Detalle del equipo"
@@ -358,14 +408,14 @@ export function OperationalSkelloCellBody({
                     canEdit && onAddPersonSameSlot ? 'pb-5' : 'pb-0.5',
                   ].join(' ')}
                 >
-                  <div className="shrink-0 px-1 pr-6 text-[7px] font-extrabold tabular-nums opacity-95 sm:text-[8px]">
-                    {shortTime(rep.startTime)}–{shortTime(rep.endTime)}
+                  <div className="shrink-0 px-1 pr-6 text-[7px] font-extrabold tabular-nums opacity-90 sm:text-[8px]">
+                    {shortTime(rep.startTime)} - {shortTime(rep.endTime)}
                     {rep.endsNextDay ? ' +1' : ''}
-                    <span className="ml-1 font-bold opacity-90">
+                    <span className="ml-1 font-bold">
                       · {n} pers.{nUnassigned > 0 ? ` · ${nUnassigned} hueco` : ''}
                     </span>
                   </div>
-                  <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-1">
+                  <div className="min-h-0 flex-1 space-y-1 overflow-y-auto overscroll-contain px-1">
                     {sortedGroup.map((s) => {
                       const unassigned = s.employeeId == null;
                       return (
@@ -373,7 +423,7 @@ export function OperationalSkelloCellBody({
                           key={s.id}
                           role="button"
                           tabIndex={canEdit ? 0 : undefined}
-                          className="flex gap-0.5 border-b border-white/15 py-0.5 last:border-b-0 hover:bg-black/15 sm:gap-1"
+                          className="rounded-md bg-black/10 py-0.5 shadow-sm ring-1 ring-black/10 hover:bg-black/15"
                           {...(canEdit ? bindShiftLongPress(s) : ({} as Record<string, never>))}
                           onClick={(e) => {
                             e.stopPropagation();
@@ -391,18 +441,14 @@ export function OperationalSkelloCellBody({
                             }
                           }}
                         >
-                          <div
-                            className={[
-                              'min-w-0 flex-1 break-words text-[8px] font-extrabold leading-snug sm:text-[9px]',
-                              unassigned ? 'opacity-95' : '',
-                            ].join(' ')}
-                          >
-                            {unassigned ? 'Sin asignar' : employeeName(s.employeeId)}
-                          </div>
-                          <div className="shrink-0 text-right text-[7px] font-semibold tabular-nums opacity-95 sm:text-[8px]">
-                            {shortTime(s.startTime)}–{shortTime(s.endTime)}
-                            {s.endsNextDay ? ' +1' : ''}
-                          </div>
+                          <OperationalSkelloCardFace
+                            nameLabel={unassigned ? 'Sin asignar' : employeeName(s.employeeId)}
+                            startTime={s.startTime}
+                            endTime={s.endTime}
+                            endsNextDay={s.endsNextDay}
+                            durationMins={plannedShiftMinutes(s)}
+                            showAlert={unassigned}
+                          />
                         </div>
                       );
                     })}
@@ -411,7 +457,7 @@ export function OperationalSkelloCellBody({
                 {canEdit && onAddPersonSameSlot ? (
                   <button
                     type="button"
-                    className="absolute bottom-0 right-0 z-10 rounded-tl bg-black/30 px-1 py-0.5 text-[7px] font-extrabold text-white hover:bg-black/45"
+                    className="absolute bottom-0 right-0 z-10 rounded-tl bg-white/40 px-1.5 py-0.5 text-[7px] font-extrabold text-zinc-900 shadow-sm hover:bg-white/55"
                     onPointerDown={(e) => e.stopPropagation()}
                     onClick={(e) => {
                       e.stopPropagation();
