@@ -75,6 +75,11 @@ textarea::placeholder {
   animation: saved-banner-pop 220ms ease-out;
 }
 
+/* Cuadrante (vista operativa): resalte de celdas durante HTML5 DnD sin setState en toda la tabla */
+.operational-week-grid--drop-target tbody tr td.align-top {
+  background-color: rgb(244 244 245 / 0.9);
+}
+
 @media print {
   body {
     background: #fff !important;

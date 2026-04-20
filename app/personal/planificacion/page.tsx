@@ -86,7 +86,7 @@ export default function PersonalPlanificacionPage() {
   }, [refetchWeekPublication]);
 
   const afterScheduleChange = useCallback(async () => {
-    await reload();
+    await reload({ silent: true });
     if (!localId || !supabase || !perms.canManageSchedules) return;
     try {
       await markStaffWeekDirtyIfPublished(supabase, localId, weekStart);
@@ -97,7 +97,7 @@ export default function PersonalPlanificacionPage() {
   }, [reload, localId, supabase, perms.canManageSchedules, weekStart, refetchWeekPublication]);
 
   const onRt = useCallback(() => {
-    void reload();
+    void reload({ silent: true });
     void refetchWeekPublication();
   }, [reload, refetchWeekPublication]);
   useStaffRealtime(localId, onRt);
@@ -160,156 +160,178 @@ export default function PersonalPlanificacionPage() {
 
   const dayShifts = useMemo(() => shifts.filter((s) => s.shiftDate === dayFocus), [shifts, dayFocus]);
 
-  const openNew = (employeeId: string, dateYmd: string) => {
-    if (!perms.canManageSchedules) return;
-    if (employeeId === SHIFT_GRID_UNASSIGNED_ROW_ID) {
-      setDraft({ mode: 'new', shiftDate: dateYmd });
-    } else {
-      setDraft({ mode: 'new', employeeId, shiftDate: dateYmd });
-    }
-    setModalOpen(true);
-  };
-
-  const onOperationalEmptyLongPress = (dateYmd: string, zoneRowKey: string) => {
-    if (!perms.canManageSchedules) return;
-    setDraft({
-      mode: 'new',
-      shiftDate: dateYmd,
-      defaultZone: zoneRowKey === OPERATIONAL_NONE_ZONE ? undefined : zoneRowKey,
-      employeeId: undefined,
-    });
-    setModalOpen(true);
-  };
-
-  const openEdit = (s: StaffShift) => {
-    if (!perms.canManageSchedules) return;
-    setDraft({ mode: 'edit', shift: s });
-    setModalOpen(true);
-  };
-
-  const openNewPersonSameSlot = (template: StaffShift) => {
-    if (!perms.canManageSchedules) return;
-    setDraft({
-      mode: 'new',
-      shiftDate: template.shiftDate,
-      defaultZone: template.zone ?? undefined,
-      cloneSlotFrom: template,
-      employeeId: undefined,
-    });
-    setModalOpen(true);
-  };
-
-  const removeShiftFromPlan = async (s: StaffShift) => {
-    if (!perms.canManageSchedules || !supabase) return;
-    await deleteStaffShift(supabase, s.id);
-    await afterScheduleChange();
-  };
-
-  const onOperationalShiftTimesAdjusted = async (
-    s: StaffShift,
-    startTime: string,
-    endTime: string,
-    endsNextDay: boolean,
-  ) => {
-    if (!perms.canManageSchedules || !localId || !supabase) return;
-    await upsertStaffShift(supabase, {
-      id: s.id,
-      localId,
-      employeeId: s.employeeId,
-      shiftDate: s.shiftDate,
-      startTime: toPgTimeHhMmSs(startTime.length >= 8 ? startTime.slice(0, 8) : startTime),
-      endTime: toPgTimeHhMmSs(endTime.length >= 8 ? endTime.slice(0, 8) : endTime),
-      endsNextDay,
-      breakMinutes: s.breakMinutes,
-      zone: s.zone,
-      notes: s.notes,
-      status: s.status,
-      colorHint: s.colorHint,
-    });
-    await afterScheduleChange();
-  };
-
-  const onShiftMoved = async (shift: StaffShift, newEmployeeId: string, newDateYmd: string) => {
-    if (!perms.canManageSchedules || !localId || !supabase) return;
-    const employeeId = newEmployeeId === SHIFT_GRID_UNASSIGNED_ROW_ID ? null : newEmployeeId;
-    try {
-      await upsertStaffShift(supabase, {
-        id: shift.id,
-        localId,
-        employeeId,
-        shiftDate: newDateYmd,
-        startTime: shift.startTime,
-        endTime: shift.endTime,
-        endsNextDay: shift.endsNextDay,
-        breakMinutes: shift.breakMinutes,
-        zone: shift.zone,
-        notes: shift.notes,
-        status: shift.status,
-        colorHint: shift.colorHint,
-      });
-      void afterScheduleChange();
-    } catch (e: unknown) {
-      await appAlert(e instanceof Error ? e.message : 'No se pudo mover el turno');
-    }
-  };
-
-  const onOperationalShiftPlaced = async (shift: StaffShift, newDateYmd: string, zoneRowKey: string) => {
-    if (!perms.canManageSchedules || !localId || !supabase) return;
-    const zone = zoneRowKey === OPERATIONAL_NONE_ZONE ? null : zoneRowKey;
-    const colorHint =
-      zone != null ? zoneDefaultColorHint(zone) ?? shift.colorHint : shift.colorHint;
-    try {
-      await upsertStaffShift(supabase, {
-        id: shift.id,
-        localId,
-        employeeId: shift.employeeId,
-        shiftDate: newDateYmd,
-        startTime: shift.startTime,
-        endTime: shift.endTime,
-        endsNextDay: shift.endsNextDay,
-        breakMinutes: shift.breakMinutes,
-        zone,
-        notes: shift.notes,
-        status: shift.status,
-        colorHint,
-      });
-      void afterScheduleChange();
-    } catch (e: unknown) {
-      await appAlert(e instanceof Error ? e.message : 'No se pudo mover el turno');
-    }
-  };
-
-  const onOperationalQuickCreate = async (dateYmd: string, zoneRowKey: string) => {
-    if (!perms.canManageSchedules || !localId || !supabase) return;
-    const preset = resolveQuickPresetForZone(localId, zoneRowKey);
-    writeStoredPresetIdForZone(localId, zoneRowKey, preset.id);
-    const zoneVal = zoneRowKey === OPERATIONAL_NONE_ZONE ? null : zoneRowKey;
-    const lastEmp = readLastEmployeeForZone(localId, zoneRowKey);
-    try {
-      await upsertStaffShift(supabase, {
-        localId,
-        employeeId: lastEmp && employees.some((e) => e.id === lastEmp) ? lastEmp : null,
-        shiftDate: dateYmd,
-        startTime: toPgTimeHhMmSs(preset.startTime),
-        endTime: toPgTimeHhMmSs(preset.endTime),
-        endsNextDay: preset.endsNextDay,
-        breakMinutes: preset.breakMinutes,
-        zone: zoneVal,
-        colorHint: zoneVal ? zoneDefaultColorHint(zoneVal) : null,
-        status: 'planned',
-      });
-      void afterScheduleChange();
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : 'No se pudo crear el turno';
-      if (msg.toLowerCase().includes('null') || msg.includes('employee')) {
-        await appAlert(
-          `${msg}\n\nSi acabas de activar turnos sin empleado, ejecuta en Supabase el script supabase-staff-shifts-employee-nullable.sql`,
-        );
-        return;
+  const openNew = useCallback(
+    (employeeId: string, dateYmd: string) => {
+      if (!perms.canManageSchedules) return;
+      if (employeeId === SHIFT_GRID_UNASSIGNED_ROW_ID) {
+        setDraft({ mode: 'new', shiftDate: dateYmd });
+      } else {
+        setDraft({ mode: 'new', employeeId, shiftDate: dateYmd });
       }
-      await appAlert(msg);
-    }
-  };
+      setModalOpen(true);
+    },
+    [perms.canManageSchedules],
+  );
+
+  const onOperationalEmptyLongPress = useCallback(
+    (dateYmd: string, zoneRowKey: string) => {
+      if (!perms.canManageSchedules) return;
+      setDraft({
+        mode: 'new',
+        shiftDate: dateYmd,
+        defaultZone: zoneRowKey === OPERATIONAL_NONE_ZONE ? undefined : zoneRowKey,
+        employeeId: undefined,
+      });
+      setModalOpen(true);
+    },
+    [perms.canManageSchedules],
+  );
+
+  const openEdit = useCallback(
+    (s: StaffShift) => {
+      if (!perms.canManageSchedules) return;
+      setDraft({ mode: 'edit', shift: s });
+      setModalOpen(true);
+    },
+    [perms.canManageSchedules],
+  );
+
+  const openNewPersonSameSlot = useCallback(
+    (template: StaffShift) => {
+      if (!perms.canManageSchedules) return;
+      setDraft({
+        mode: 'new',
+        shiftDate: template.shiftDate,
+        defaultZone: template.zone ?? undefined,
+        cloneSlotFrom: template,
+        employeeId: undefined,
+      });
+      setModalOpen(true);
+    },
+    [perms.canManageSchedules],
+  );
+
+  const removeShiftFromPlan = useCallback(
+    async (s: StaffShift) => {
+      if (!perms.canManageSchedules || !supabase) return;
+      await deleteStaffShift(supabase, s.id);
+      await afterScheduleChange();
+    },
+    [perms.canManageSchedules, supabase, afterScheduleChange],
+  );
+
+  const onOperationalShiftTimesAdjusted = useCallback(
+    async (s: StaffShift, startTime: string, endTime: string, endsNextDay: boolean) => {
+      if (!perms.canManageSchedules || !localId || !supabase) return;
+      await upsertStaffShift(supabase, {
+        id: s.id,
+        localId,
+        employeeId: s.employeeId,
+        shiftDate: s.shiftDate,
+        startTime: toPgTimeHhMmSs(startTime.length >= 8 ? startTime.slice(0, 8) : startTime),
+        endTime: toPgTimeHhMmSs(endTime.length >= 8 ? endTime.slice(0, 8) : endTime),
+        endsNextDay,
+        breakMinutes: s.breakMinutes,
+        zone: s.zone,
+        notes: s.notes,
+        status: s.status,
+        colorHint: s.colorHint,
+      });
+      await afterScheduleChange();
+    },
+    [perms.canManageSchedules, localId, supabase, afterScheduleChange],
+  );
+
+  const onShiftMoved = useCallback(
+    async (shift: StaffShift, newEmployeeId: string, newDateYmd: string) => {
+      if (!perms.canManageSchedules || !localId || !supabase) return;
+      const employeeId = newEmployeeId === SHIFT_GRID_UNASSIGNED_ROW_ID ? null : newEmployeeId;
+      try {
+        await upsertStaffShift(supabase, {
+          id: shift.id,
+          localId,
+          employeeId,
+          shiftDate: newDateYmd,
+          startTime: shift.startTime,
+          endTime: shift.endTime,
+          endsNextDay: shift.endsNextDay,
+          breakMinutes: shift.breakMinutes,
+          zone: shift.zone,
+          notes: shift.notes,
+          status: shift.status,
+          colorHint: shift.colorHint,
+        });
+        void afterScheduleChange();
+      } catch (e: unknown) {
+        await appAlert(e instanceof Error ? e.message : 'No se pudo mover el turno');
+      }
+    },
+    [perms.canManageSchedules, localId, supabase, afterScheduleChange],
+  );
+
+  const onOperationalShiftPlaced = useCallback(
+    async (shift: StaffShift, newDateYmd: string, zoneRowKey: string) => {
+      if (!perms.canManageSchedules || !localId || !supabase) return;
+      const zone = zoneRowKey === OPERATIONAL_NONE_ZONE ? null : zoneRowKey;
+      const colorHint =
+        zone != null ? zoneDefaultColorHint(zone) ?? shift.colorHint : shift.colorHint;
+      try {
+        await upsertStaffShift(supabase, {
+          id: shift.id,
+          localId,
+          employeeId: shift.employeeId,
+          shiftDate: newDateYmd,
+          startTime: shift.startTime,
+          endTime: shift.endTime,
+          endsNextDay: shift.endsNextDay,
+          breakMinutes: shift.breakMinutes,
+          zone,
+          notes: shift.notes,
+          status: shift.status,
+          colorHint,
+        });
+        void afterScheduleChange();
+      } catch (e: unknown) {
+        await appAlert(e instanceof Error ? e.message : 'No se pudo mover el turno');
+      }
+    },
+    [perms.canManageSchedules, localId, supabase, afterScheduleChange],
+  );
+
+  const onOperationalQuickCreate = useCallback(
+    async (dateYmd: string, zoneRowKey: string) => {
+      if (!perms.canManageSchedules || !localId || !supabase) return;
+      const preset = resolveQuickPresetForZone(localId, zoneRowKey);
+      writeStoredPresetIdForZone(localId, zoneRowKey, preset.id);
+      const zoneVal = zoneRowKey === OPERATIONAL_NONE_ZONE ? null : zoneRowKey;
+      const lastEmp = readLastEmployeeForZone(localId, zoneRowKey);
+      try {
+        await upsertStaffShift(supabase, {
+          localId,
+          employeeId: lastEmp && employees.some((e) => e.id === lastEmp) ? lastEmp : null,
+          shiftDate: dateYmd,
+          startTime: toPgTimeHhMmSs(preset.startTime),
+          endTime: toPgTimeHhMmSs(preset.endTime),
+          endsNextDay: preset.endsNextDay,
+          breakMinutes: preset.breakMinutes,
+          zone: zoneVal,
+          colorHint: zoneVal ? zoneDefaultColorHint(zoneVal) : null,
+          status: 'planned',
+        });
+        void afterScheduleChange();
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : 'No se pudo crear el turno';
+        if (msg.toLowerCase().includes('null') || msg.includes('employee')) {
+          await appAlert(
+            `${msg}\n\nSi acabas de activar turnos sin empleado, ejecuta en Supabase el script supabase-staff-shifts-employee-nullable.sql`,
+          );
+          return;
+        }
+        await appAlert(msg);
+      }
+    },
+    [perms.canManageSchedules, localId, supabase, employees, afterScheduleChange],
+  );
 
   const onOperationalDuplicateHere = async (shift: StaffShift) => {
     if (!perms.canManageSchedules || !localId || !supabase) {
@@ -404,7 +426,7 @@ export default function PersonalPlanificacionPage() {
     try {
       const n = await duplicateShiftsWeek(supabase, localId, weekStart, toYmd);
       await appAlert(`Copiados ${n} turnos.`);
-      void reload();
+      void reload({ silent: true });
       void refetchWeekPublication();
     } catch (e: unknown) {
       await appAlert(e instanceof Error ? e.message : 'Error al duplicar');
@@ -641,12 +663,12 @@ export default function PersonalPlanificacionPage() {
               shifts={shifts}
               operationalWindow={operationalWindow}
               customOperationalZones={customOperationalZones}
-              onAddOperationalZone={() => void handleAddOperationalZone()}
+              onAddOperationalZone={handleAddOperationalZone}
               canEdit={perms.canManageSchedules}
               onShiftPlaced={onOperationalShiftPlaced}
               onQuickCreateShift={onOperationalQuickCreate}
               onEmptyLongPress={onOperationalEmptyLongPress}
-              onShiftAdvancedEdit={(s) => openEdit(s)}
+              onShiftAdvancedEdit={openEdit}
               onAddPersonSameSlot={(t) => openNewPersonSameSlot(t)}
               onRemoveShift={(s) => removeShiftFromPlan(s)}
               onShiftTimesAdjusted={(s, st, et, en) => onOperationalShiftTimesAdjusted(s, st, et, en)}

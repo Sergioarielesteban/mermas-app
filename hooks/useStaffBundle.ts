@@ -19,7 +19,8 @@ export function useStaffBundle(localId: string | null, weekStartMondayYmd: strin
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const reload = useCallback(async () => {
+  const reload = useCallback(async (opts?: { silent?: boolean }) => {
+    const silent = opts?.silent === true;
     if (!localId) {
       setEmployees([]);
       setShifts([]);
@@ -32,7 +33,7 @@ export function useStaffBundle(localId: string | null, weekStartMondayYmd: strin
       setError('Supabase no disponible');
       return;
     }
-    setLoading(true);
+    if (!silent) setLoading(true);
     setError(null);
     try {
       const ws = new Date(weekStartMondayYmd + 'T12:00:00');
@@ -55,7 +56,7 @@ export function useStaffBundle(localId: string | null, weekStartMondayYmd: strin
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Error al cargar datos de personal');
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, [localId, weekStartMondayYmd]);
 

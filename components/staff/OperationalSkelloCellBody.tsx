@@ -122,7 +122,7 @@ function minTimelineTrackRem(
 /**
  * Una tarjeta = un empleado. Formato lista: horario | nombre | puesto (sin compartir tarjeta).
  */
-function ShiftEmployeeRowCard({
+const ShiftEmployeeRowCard = React.memo(function ShiftEmployeeRowCard({
   nameLabel,
   zoneTitle,
   accentBg,
@@ -179,7 +179,7 @@ function ShiftEmployeeRowCard({
       </div>
     </div>
   );
-}
+});
 
 function formatHoursSum(mins: number): string {
   const h = mins / 60;
@@ -270,7 +270,7 @@ export type OperationalSkelloCellBodyProps = {
   onVerticalShiftPointerUp: (e: React.PointerEvent, s: StaffShift) => void | Promise<void>;
 };
 
-export function OperationalSkelloCellBody({
+function OperationalSkelloCellBodyInner({
   ymd,
   rowKey,
   here,
@@ -933,3 +933,5 @@ export function OperationalSkelloCellBody({
     </div>
   );
 }
+
+export const OperationalSkelloCellBody = React.memo(OperationalSkelloCellBodyInner);

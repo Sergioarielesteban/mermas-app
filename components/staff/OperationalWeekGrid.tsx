@@ -269,7 +269,7 @@ export default function OperationalWeekGrid({
     () => operationalFranjaOperativaBanner(operationalWindow, operationalMetrics),
     [operationalWindow, operationalMetrics],
   );
-  const [draggingId, setDraggingId] = useState<string | null>(null);
+  const gridWrapRef = useRef<HTMLDivElement | null>(null);
   const [selectedCell, setSelectedCell] = useState<{ ymd: string; zoneKey: string } | null>(null);
   const [selectedShiftId, setSelectedShiftId] = useState<string | null>(null);
   /** Claves `${ymd}|${zoneKey}|${slotKey}` para bloques horarios agrupados expandidos. */
@@ -533,7 +533,7 @@ export default function OperationalWeekGrid({
   const onDragStart = useCallback(
     (e: React.DragEvent, shiftId: string) => {
       if (!canEdit) return;
-      setDraggingId(shiftId);
+      gridWrapRef.current?.classList.add('operational-week-grid--drop-target');
       e.dataTransfer.setData('text/staff-shift-id', shiftId);
       e.dataTransfer.setData('text/plain', shiftId);
       e.dataTransfer.effectAllowed = 'move';
@@ -541,15 +541,17 @@ export default function OperationalWeekGrid({
     [canEdit],
   );
 
-  const onDragEnd = useCallback(() => setDraggingId(null), []);
+  const onDragEnd = useCallback(() => {
+    gridWrapRef.current?.classList.remove('operational-week-grid--drop-target');
+  }, []);
 
   const onCellDrop = useCallback(
     async (e: React.DragEvent, dateYmd: string, zoneRowKey: string) => {
       if (!canEdit) return;
       e.preventDefault();
+      gridWrapRef.current?.classList.remove('operational-week-grid--drop-target');
       const id =
         e.dataTransfer.getData('text/staff-shift-id') || e.dataTransfer.getData('text/plain');
-      setDraggingId(null);
       if (!id) return;
       const shift = shifts.find((s) => s.id === id);
       if (!shift) return;
@@ -600,7 +602,7 @@ export default function OperationalWeekGrid({
         ) : null}
       </div>
 
-      <div className="overflow-x-auto rounded-2xl ring-1 ring-zinc-200/90">
+      <div ref={gridWrapRef} className="overflow-x-auto rounded-2xl ring-1 ring-zinc-200/90">
         <table className="w-full min-w-[2520px] border-collapse text-left text-[10px] sm:min-w-[2790px] sm:text-xs">
           <thead>
             <tr className="bg-zinc-50">
@@ -662,14 +664,10 @@ export default function OperationalWeekGrid({
                 {days.map((d) => {
                   const ymd = ymdLocal(d);
                   const here = shiftsByDayZone.get(`${ymd}|${row.key}`) ?? [];
-                  const dropHighlight = Boolean(draggingId && canEdit);
                   return (
                     <td
                       key={ymd}
-                      className={[
-                        'align-top border-b border-zinc-100 p-0.5 sm:p-1',
-                        dropHighlight ? 'bg-zinc-100/90' : '',
-                      ].join(' ')}
+                      className="align-top border-b border-zinc-100 p-0.5 sm:p-1"
                       onDragOver={
                         canEdit
                           ? (e) => {
