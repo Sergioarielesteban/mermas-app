@@ -104,7 +104,7 @@ function titleForPath(pathname: string | null) {
   if (pathname.startsWith('/personal/mi')) return 'Mi espacio';
   if (pathname.startsWith('/personal/manual-normas')) return 'Manual y normas';
   if (pathname.startsWith('/personal')) return 'Horarios';
-  if (pathname.startsWith('/comida-personal')) return 'Comida de personal';
+  if (pathname.startsWith('/comida-personal')) return 'Consumo interno';
   if (pathname.startsWith('/chat')) return 'Chat del local';
   if (pathname.startsWith('/superadmin/locales')) return 'Panel global de locales';
   if (pathname.startsWith('/cuenta')) return 'Cuenta y seguridad';
@@ -203,7 +203,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     /** Comida + personal justo tras producción (flujo cocina / turno). */
     const comidaYHorarios: NavItem[] = [
       ...(canAccessComidaPersonal(role)
-        ? [{ href: '/comida-personal', label: 'Comida de personal', Icon: UtensilsCrossed, blocked: isBlockedByPlan('comida_personal') }]
+        ? [{ href: '/comida-personal', label: 'Consumo interno', Icon: UtensilsCrossed, blocked: isBlockedByPlan('comida_personal') }]
         : []),
       { href: '/personal', label: 'Horarios', Icon: CalendarDays, blocked: isBlockedByPlan('personal') },
     ];

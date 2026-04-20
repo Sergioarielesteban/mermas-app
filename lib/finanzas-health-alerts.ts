@@ -180,7 +180,7 @@ export function evaluateBusinessHealth(
     chips.push(`Coste personal ${fmtPctSigned(perD)} vs ant.`);
   }
   if (comD != null && Math.abs(comD) >= 5) {
-    chips.push(`Comida personal ${fmtPctSigned(comD)} vs ant.`);
+    chips.push(`Consumo interno ${fmtPctSigned(comD)} vs ant.`);
   }
 
   const v = s.ingresos.ventas_c;
@@ -341,8 +341,8 @@ export function generateFinanceAlerts(
       id: 'fin-comida-alta',
       tipo: 'comida_alta',
       severidad: 'baja',
-      titulo: 'Comida de personal relevante',
-      descripcion: `Comida personal ${ratio.toFixed(1)}% de ventas (umbral ${th.comidaPersonalVentasPct}%).`,
+      titulo: 'Consumo interno relevante',
+      descripcion: `Consumo interno ${ratio.toFixed(1)}% de ventas (umbral ${th.comidaPersonalVentasPct}%).`,
       impacto_estimado: `${s.costes_operativos.comida_personal_c.toFixed(2)} € en el periodo.`,
       accion_sugerida: 'Revisar registros y política de comida de personal.',
       modulo_destino: '/comida-personal',

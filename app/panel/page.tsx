@@ -183,7 +183,7 @@ export default function PanelControlPage() {
         {canAccessComidaPersonal(role) ? (
           <HubTile
             href="/comida-personal"
-            label="Comida de personal"
+            label="Consumo interno"
             sub="Registro rápido y coste interno"
             Icon={UtensilsCrossed}
             tone="red"

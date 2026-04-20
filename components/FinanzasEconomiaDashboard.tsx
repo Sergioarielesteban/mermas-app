@@ -463,7 +463,7 @@ function FinanzasEconomiaBody() {
             Ventas: {eur(cockpit.v)} | Costes: {eur(cockpit.costesTotales)}
           </p>
           <p className="mt-1 text-center text-xs text-zinc-600 sm:text-left">
-            Costes = compras + mermas + comida personal + personal + gastos fijos (periodo)
+            Costes = compras + mermas + consumo interno + personal + gastos fijos (periodo)
           </p>
         </section>
       ) : null}
@@ -529,7 +529,7 @@ function FinanzasEconomiaBody() {
                   summary.costes_operativos.coste_personal_c,
               )}
             </p>
-            <p className="mt-1 text-xs text-zinc-600">Compras + mermas + comida personal + personal</p>
+            <p className="mt-1 text-xs text-zinc-600">Compras + mermas + consumo interno + personal</p>
             {dataHints?.sinCostesOperativos ? (
               <p className="mt-2 text-xs font-bold text-amber-800">Faltan datos de costes operativos en este periodo.</p>
             ) : null}
@@ -605,7 +605,7 @@ function FinanzasEconomiaBody() {
                   <span className="tabular-nums font-semibold">{eur(summary.costes_operativos.mermas_c)}</span>
                 </li>
                 <li className="flex justify-between gap-2">
-                  <span>Comida personal</span>
+                  <span>Consumo interno</span>
                   <span className="tabular-nums font-semibold">{eur(summary.costes_operativos.comida_personal_c)}</span>
                 </li>
                 <li className="flex justify-between gap-2">
@@ -655,7 +655,7 @@ function FinanzasEconomiaBody() {
                 Mermas
               </Link>
               <Link href="/comida-personal" className="text-[#D32F2F] underline underline-offset-2">
-                Comida personal
+                Consumo interno
               </Link>
             </div>
           </div>

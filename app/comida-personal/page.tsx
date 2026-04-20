@@ -473,7 +473,7 @@ export default function ComidaPersonalPage() {
         </div>
       ) : null}
       <MermasStyleHero
-        eyebrow="Comida de personal"
+        eyebrow="Consumo interno"
         title="Registro de consumo"
         description="Aquí solo ves el artículo y la cantidad. Importes e informes están en Estadísticas (clave de gestión)."
       />

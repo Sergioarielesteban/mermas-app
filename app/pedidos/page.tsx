@@ -184,8 +184,8 @@ function matchAssistantSingleTopicNav(normalized: string): { href: string; messa
     articulos: { href: '/pedidos/articulos', message: 'Abriendo Artículos…' },
     artículos: { href: '/pedidos/articulos', message: 'Abriendo Artículos…' },
     calendario: { href: '/pedidos/calendario', message: 'Abriendo Calendario de entregas…' },
-    comida: { href: '/comida-personal', message: 'Abriendo Comida personal…' },
-    personal: { href: '/comida-personal', message: 'Abriendo Comida personal…' },
+    comida: { href: '/comida-personal', message: 'Abriendo Consumo interno…' },
+    personal: { href: '/comida-personal', message: 'Abriendo Consumo interno…' },
     equipos: { href: '/appcc/equipos', message: 'Abriendo Equipos (frío)…' },
     checklist: { href: '/checklist', message: 'Abriendo Checklist…' },
     produccion: { href: '/produccion', message: 'Abriendo Producción…' },
@@ -194,8 +194,8 @@ function matchAssistantSingleTopicNav(normalized: string): { href: string; messa
     escandallos: { href: '/escandallos', message: 'Abriendo Escandallos…' },
   };
   if (exact[n]) return exact[n];
-  if (n === 'comida personal' || n === 'comida del personal') {
-    return { href: '/comida-personal', message: 'Abriendo Comida personal…' };
+  if (n === 'comida personal' || n === 'comida del personal' || n === 'consumo interno') {
+    return { href: '/comida-personal', message: 'Abriendo Consumo interno…' };
   }
   if (n === 'nuevo pedido' || n === 'pedido nuevo') {
     return { href: '/pedidos/nuevo', message: 'Abriendo Nuevo pedido…' };
@@ -1027,7 +1027,7 @@ export default function PedidosPage() {
           '· Pedidos: «resumen», «pendientes», enviados/recibidos, recepción, proveedores, precios.',
           '· Limpieza: «limpieza» o «qué toca limpiar hoy».',
           '· APPCC: «appcc», «estado APPCC hoy», temperaturas, aceite.',
-          '· Comida del personal: «comida», registros y anulaciones (ver ejemplos al fallar un comando).',
+          '· Consumo interno: «comida», registros y anulaciones (ver ejemplos al fallar un comando).',
           '',
           'Tip: una sola palabra suele bastar (ej. «limpieza», «recepción», «appcc»).',
           '',
@@ -1136,7 +1136,9 @@ export default function PedidosPage() {
           return '/pedidos/precios';
         }
         if (
-          (n.includes('comida personal') || n.includes('comida de personal')) &&
+          (n.includes('comida personal') ||
+            n.includes('comida de personal') ||
+            n.includes('consumo interno')) &&
           !n.includes('registra') &&
           !n.includes('anula') &&
           !n.includes('cuantas') &&
@@ -1170,7 +1172,7 @@ export default function PedidosPage() {
         const today = new Date().toISOString().slice(0, 10);
         const nSent = sentOrders.length;
         const nRec = orders.filter((o) => o.status === 'received').length;
-        let mealsPart = 'Comida personal hoy: (sin sesión o datos).';
+        let mealsPart = 'Consumo interno hoy: (sin sesión o datos).';
         let cleanPart = 'Limpieza hoy: (sin sesión o datos).';
         const supabase = localId ? getSupabaseClient() : null;
         if (localId && supabase) {
@@ -1192,7 +1194,7 @@ export default function PedidosPage() {
             (acc, r) => acc + Number((r as { total_cost_eur: number | null }).total_cost_eur ?? 0),
             0,
           );
-          mealsPart = `Comida personal hoy: ${mrows.length} líneas, ${unitsMeal.toFixed(0)} uds, ${costEur.toFixed(2)} €.`;
+          mealsPart = `Consumo interno hoy: ${mrows.length} líneas, ${unitsMeal.toFixed(0)} uds, ${costEur.toFixed(2)} €.`;
           const wd = new Date().getDay();
           const srows = schedule.filter((s) => s.weekday === wd);
           if (srows.length === 0) {
@@ -1613,12 +1615,12 @@ export default function PedidosPage() {
         if (!supabase) return;
         const workers = await fetchStaffMealWorkers(supabase, localId);
         if (workers.length === 0) {
-          const msg = 'No hay trabajadores activos en comida personal (o aún no está configurada la lista).';
+          const msg = 'No hay trabajadores activos en consumo interno (o aún no está configurada la lista).';
           setAssistantReply(msg);
           pushAssistantHistory(raw, msg);
           return;
         }
-        const msg = `Trabajadores (comida personal): ${workers.map((w) => w.name).join(', ')}.`;
+        const msg = `Trabajadores (consumo interno): ${workers.map((w) => w.name).join(', ')}.`;
         setAssistantReply(msg);
         pushAssistantHistory(raw, msg);
         return;
@@ -1656,7 +1658,7 @@ export default function PedidosPage() {
           (acc, r) => acc + Number((r as { total_cost_eur: number | null }).total_cost_eur ?? 0),
           0,
         );
-        const msg = `Hoy lleváis ${records} líneas de comida personal (${units.toFixed(0)} uds), coste acumulado ${costEur.toFixed(2)} €.`;
+        const msg = `Hoy lleváis ${records} líneas de consumo interno (${units.toFixed(0)} uds), coste acumulado ${costEur.toFixed(2)} €.`;
         setAssistantReply(msg);
         pushAssistantHistory(raw, msg);
         return;
@@ -1766,7 +1768,7 @@ export default function PedidosPage() {
         if (error) throw new Error(error.message);
         const row = (data ?? [])[0] as { id: string; worker_name_snapshot: string | null; source_product_name: string | null } | undefined;
         if (!row) {
-          const msg = 'No hay registros de comida personal de hoy para anular.';
+          const msg = 'No hay registros de consumo interno de hoy para anular.';
           setAssistantReply(msg);
           pushAssistantHistory(raw, msg);
           return;

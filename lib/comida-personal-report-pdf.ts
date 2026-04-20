@@ -620,7 +620,7 @@ export function downloadStaffMealReportPdf(input: {
   doc.setTextColor(...PDF_WHITE);
   doc.text('CHEF-ONE', margin, 10);
   doc.setFont('helvetica', 'normal');
-  doc.text('Comida de personal · Coste interno', pageW - margin, 10, { align: 'right' });
+  doc.text('Consumo interno', pageW - margin, 10, { align: 'right' });
   doc.setTextColor(...PDF_ZINC_900);
 
   doc.setFont('helvetica', 'bold');

@@ -147,7 +147,7 @@ export const MARKETING_MODULES: MarketingModuleDefinition[] = [
   },
   {
     id: 'comida-personal',
-    title: 'Comida de personal',
+    title: 'Consumo interno',
     summary: 'Registro de consumo del equipo: trabajador, servicio y coste interno.',
     Icon: UtensilsCrossed,
     detailIntro:

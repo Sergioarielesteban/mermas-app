@@ -35,7 +35,7 @@ const PLAN_CARDS: PlanCard[] = [
     code: 'PRO',
     name: 'Plan Pro',
     price: '99 €/mes',
-    modules: ['Todo Control', 'Cocina central', 'Finanzas', 'Personal', 'Comida personal'],
+    modules: ['Todo Control', 'Cocina central', 'Finanzas', 'Personal', 'Consumo interno'],
     recommended: true,
   },
 ];
