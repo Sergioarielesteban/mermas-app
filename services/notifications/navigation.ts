@@ -23,6 +23,10 @@ export function getNotificationHref(
       }
       return '/appcc/temperaturas';
     }
+    case 'empresa_norma':
+      return '/personal/manual-normas/normas';
+    case 'manual_procedimiento':
+      return '/personal/manual-normas/operaciones';
     default:
       if (entityId && entityType.startsWith('custom:')) {
         return null;

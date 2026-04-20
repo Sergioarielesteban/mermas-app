@@ -158,6 +158,19 @@ export default function PersonalResumenPage() {
         compact
       />
 
+      <section className="rounded-3xl bg-white p-4 ring-1 ring-zinc-200/90 md:p-5">
+        <h2 className="text-sm font-extrabold uppercase tracking-wide text-zinc-500">Manual y normas</h2>
+        <p className="mt-1 text-xs leading-relaxed text-zinc-600">
+          Manual de operaciones, normas de empresa y matriz de alérgenos (datos de escandallos, solo lectura).
+        </p>
+        <Link
+          href="/personal/manual-normas"
+          className="mt-3 inline-flex items-center gap-2 rounded-xl bg-[#D32F2F] px-4 py-2.5 text-xs font-extrabold uppercase tracking-wide text-white shadow-sm hover:bg-[#c62828] active:scale-[0.99]"
+        >
+          Abrir sección
+        </Link>
+      </section>
+
       {error ? (
         <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-900">
           {error}

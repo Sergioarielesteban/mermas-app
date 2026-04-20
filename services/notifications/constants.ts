@@ -13,6 +13,8 @@ export const DEFAULT_SEVERITY_BY_TYPE: Partial<Record<NotificationEventType, Not
   comida_personal_registrada: 'info',
   horario_actualizado: 'info',
   planificacion_publicada: 'info',
+  normas_empresa_actualizada: 'warning',
+  manual_operaciones_actualizado: 'warning',
   sistema_evento: 'warning',
 };
 

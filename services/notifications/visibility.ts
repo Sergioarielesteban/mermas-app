@@ -12,6 +12,8 @@ export type NotificationType =
   | 'comida_personal_registrada'
   | 'horario_actualizado'
   | 'planificacion_publicada'
+  | 'normas_empresa_actualizada'
+  | 'manual_operaciones_actualizado'
   | 'sistema_evento';
 
 const STAFF_VISIBLE_TYPES: ReadonlySet<NotificationType> = new Set([
@@ -19,6 +21,8 @@ const STAFF_VISIBLE_TYPES: ReadonlySet<NotificationType> = new Set([
   'checklist_evento',
   'horario_actualizado',
   'planificacion_publicada',
+  'normas_empresa_actualizada',
+  'manual_operaciones_actualizado',
 ]);
 
 const MANAGER_VISIBLE_TYPES: ReadonlySet<NotificationType> = new Set([
@@ -33,6 +37,8 @@ const MANAGER_VISIBLE_TYPES: ReadonlySet<NotificationType> = new Set([
   'comida_personal_registrada',
   'horario_actualizado',
   'planificacion_publicada',
+  'normas_empresa_actualizada',
+  'manual_operaciones_actualizado',
 ]);
 
 export function normalizeNotificationType(
@@ -51,6 +57,8 @@ export function normalizeNotificationType(
   if (t === 'comida_personal_registrada') return 'comida_personal_registrada';
   if (t === 'horario_actualizado') return 'horario_actualizado';
   if (t === 'planificacion_publicada') return 'planificacion_publicada';
+  if (t === 'normas_empresa_actualizada') return 'normas_empresa_actualizada';
+  if (t === 'manual_operaciones_actualizado') return 'manual_operaciones_actualizado';
   if (t === 'sistema_evento' || t === 'inventario_cerrado') return 'sistema_evento';
 
   const e = (entityType ?? '').trim().toLowerCase();

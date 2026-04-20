@@ -102,6 +102,7 @@ function titleForPath(pathname: string | null) {
     return 'Cocina central';
   }
   if (pathname.startsWith('/personal/mi')) return 'Mi espacio';
+  if (pathname.startsWith('/personal/manual-normas')) return 'Manual y normas';
   if (pathname.startsWith('/personal')) return 'Horarios';
   if (pathname.startsWith('/comida-personal')) return 'Comida de personal';
   if (pathname.startsWith('/chat')) return 'Chat del local';
