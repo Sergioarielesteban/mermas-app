@@ -367,7 +367,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         ].join(' ')}
         aria-label="Menú lateral"
       >
-        <div className="relative shrink-0 border-b border-zinc-200 bg-white px-3 pb-3 pt-3">
+        <div className="relative shrink-0 border-b border-zinc-200 bg-gradient-to-b from-zinc-50/90 to-white px-3 pb-4 pt-3">
           <button
             type="button"
             onClick={() => setOpen(false)}
@@ -376,13 +376,13 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           >
             <X className="h-5 w-5" />
           </button>
-          <div className="flex flex-col items-center px-2 pb-0 pt-10 text-center leading-none">
-            <Logo variant="inline" className="select-none" alt="" role="presentation" />
-            <p className="mt-2 text-xs font-medium text-zinc-600">Gestión operativa</p>
+          <div className="flex flex-col items-center px-2 pb-0 pt-11 text-center leading-none">
+            <Logo variant="inline" className="select-none drop-shadow-sm" alt="" role="presentation" />
+            <p className="mt-3 text-[0.8125rem] font-semibold tracking-wide text-zinc-600">Gestión operativa</p>
           </div>
         </div>
 
-        <nav className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-2 py-3">
+        <nav className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-2 py-2">
           {navItems.map((item) => {
             if ('kind' in item && item.kind === 'note') {
               return (
@@ -436,14 +436,14 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                 href={targetHref}
                 onClick={() => setOpen(false)}
                 className={[
-                  'flex w-full items-center gap-3 rounded-xl px-3 py-3 text-sm font-semibold transition-all',
+                  'flex w-full items-center gap-3 rounded-xl px-3 py-[0.85rem] text-[0.9375rem] font-semibold leading-snug transition-all',
                   entry.blocked ? 'opacity-55' : '',
                   isActive
                     ? 'bg-[#D32F2F]/10 text-[#D32F2F] shadow-sm ring-1 ring-[#D32F2F]/25'
                     : 'text-zinc-800 hover:bg-zinc-100',
                 ].join(' ')}
               >
-                <Icon className="h-5 w-5 shrink-0" />
+                <Icon className="h-[1.35rem] w-[1.35rem] shrink-0" />
                 <span className="min-w-0 flex-1">
                   <span className="block truncate">{entry.label}</span>
                   {entry.blocked ? (
@@ -458,11 +458,11 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           })}
         </nav>
 
-        <div className="shrink-0 px-3 py-4">
+        <div className="shrink-0 px-3 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3">
           <div className="rounded-2xl bg-zinc-50 p-3 ring-1 ring-zinc-200">
             <div className="text-[10px] font-extrabold uppercase tracking-[0.12em] text-zinc-500">Sesión</div>
             <div className="mt-2 min-w-0 space-y-0.5">
-              <p className="truncate text-sm font-extrabold leading-tight text-zinc-900">{sessionLabel}</p>
+              <p className="truncate text-base font-extrabold leading-tight text-zinc-900">{sessionLabel}</p>
               <p className="text-[11px] font-semibold uppercase tracking-wide text-zinc-500">Rol: {sessionRoleLabel}</p>
               <p className="text-[11px] font-semibold uppercase tracking-wide text-zinc-500">Plan: {planLabel(plan)}</p>
             </div>

@@ -107,7 +107,7 @@ export default function MarketingLanding() {
             </Link>
             <Link
               href="/login"
-              className="inline-flex min-h-10 items-center justify-center rounded-full px-4 py-2.5 text-xs font-bold text-white shadow-md shadow-rose-900/15 transition hover:brightness-105 active:scale-[0.98] sm:min-h-11 sm:px-5 sm:text-sm"
+              className="inline-flex min-h-11 items-center justify-center rounded-full px-5 py-3 text-sm font-bold text-white shadow-md shadow-rose-900/15 transition hover:brightness-105 active:scale-[0.98] sm:min-h-12 sm:px-6"
               style={{ backgroundColor: BRAND }}
             >
               Acceder

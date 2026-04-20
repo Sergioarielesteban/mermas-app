@@ -203,7 +203,7 @@ function HeroCardCarousel() {
 }
 
 const ctaBase =
-  'inline-flex min-h-[3.125rem] w-full min-w-0 items-center justify-center rounded-2xl px-5 text-[0.9375rem] font-bold tracking-tight transition active:scale-[0.99] supports-[padding:max(0px)]:min-h-[max(3.125rem,44px)] sm:min-h-[3.375rem] sm:px-7 sm:text-[0.95rem] md:min-h-[3.5rem]';
+  'inline-flex min-h-[3.375rem] w-full min-w-0 items-center justify-center rounded-2xl px-5 text-[0.96875rem] font-bold tracking-tight transition active:scale-[0.99] supports-[padding:max(0px)]:min-h-[max(3.375rem,48px)] sm:min-h-[3.5rem] sm:px-7 sm:text-[1rem] md:min-h-[3.625rem]';
 
 export default function MarketingHero() {
   const reduceMotion = useReducedMotion();
@@ -214,13 +214,12 @@ export default function MarketingHero() {
         className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_88%_52%_at_50%_-22%,rgba(211,47,47,0.1),transparent),radial-gradient(ellipse_48%_38%_at_100%_0%,rgba(15,23,42,0.045),transparent)]"
         aria-hidden
       />
-      <div className="relative mx-auto w-full max-w-[90rem] px-4 pb-[7.5rem] pt-2 sm:px-6 sm:pb-11 sm:pt-3 md:pb-12 md:pt-4 lg:px-8 lg:pb-14 lg:pt-5">
-        {/* Logo SVG ~cuadrado: ritmo compacto (poco hueco bajo header) */}
+      <div className="relative mx-auto w-full max-w-[90rem] px-4 pb-[7.5rem] pt-3 sm:px-6 sm:pb-11 sm:pt-4 md:pb-12 md:pt-5 lg:px-8 lg:pb-14 lg:pt-6">
         <div
           className={[
             'mx-auto flex w-full max-w-[min(100%,44rem)] flex-col items-center text-center',
             'sm:max-w-[min(100%,50rem)] md:max-w-[min(100%,54rem)] lg:max-w-[58rem] xl:max-w-[62rem]',
-            'gap-3 sm:gap-4 md:gap-5',
+            'gap-4 sm:gap-5 md:gap-6',
           ].join(' ')}
         >
           <motion.div
@@ -239,7 +238,7 @@ export default function MarketingHero() {
           </motion.div>
 
           <motion.h1
-            className="mx-auto w-full max-w-[min(100%,22rem)] text-balance font-extrabold tracking-[-0.03em] text-stone-950 sm:max-w-[min(100%,32rem)] md:max-w-[min(100%,38rem)] lg:max-w-[min(100%,42rem)] xl:max-w-[44rem] text-[clamp(2rem,7.2vw,4.75rem)] leading-[1.04] sm:text-[clamp(2.35rem,6vw,4.75rem)] md:leading-[1.03] lg:text-[clamp(2.6rem,5vw,4.75rem)]"
+            className="mx-auto w-full max-w-[min(100%,22rem)] text-balance font-extrabold tracking-[-0.03em] text-stone-950 sm:max-w-[min(100%,32rem)] md:max-w-[min(100%,38rem)] lg:max-w-[min(100%,42rem)] xl:max-w-[44rem] text-[clamp(2.125rem,7.5vw,4.75rem)] leading-[1.04] sm:text-[clamp(2.4rem,6.2vw,4.75rem)] md:leading-[1.03] lg:text-[clamp(2.65rem,5.1vw,4.75rem)]"
             initial={reduceMotion ? false : { opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5, delay: reduceMotion ? 0 : 0.06 }}
@@ -251,7 +250,7 @@ export default function MarketingHero() {
           </motion.h1>
 
           <motion.p
-            className="mx-auto w-full max-w-[min(100%,26rem)] text-pretty text-[clamp(1.0625rem,3.4vw,1.375rem)] font-medium leading-[1.55] text-stone-600 sm:max-w-xl sm:leading-[1.52] md:max-w-[38rem] md:text-[1.2rem] md:leading-[1.58] lg:max-w-[42rem]"
+            className="mx-auto w-full max-w-[min(100%,26rem)] text-pretty text-[clamp(1.09375rem,3.5vw,1.4rem)] font-medium leading-[1.55] text-stone-600 sm:max-w-xl sm:leading-[1.52] md:max-w-[38rem] md:text-[1.21875rem] md:leading-[1.58] lg:max-w-[42rem]"
             initial={reduceMotion ? false : { opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.46, delay: reduceMotion ? 0 : 0.085 }}

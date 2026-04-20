@@ -53,18 +53,28 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="flex min-h-[100dvh] w-full flex-col bg-white">
-      <div className="flex min-h-[100dvh] flex-1 flex-col items-center px-5 pb-12 pt-4 sm:px-6 sm:pb-14 sm:pt-6">
+    <div className="flex min-h-[100dvh] w-full flex-col bg-[#fafafa]">
+      <div
+        className={[
+          'flex min-h-[100dvh] flex-1 flex-col items-center px-5 pb-10',
+          'pt-[max(1rem,env(safe-area-inset-top))] sm:px-6 sm:pb-12',
+        ].join(' ')}
+      >
         <div className="flex w-full max-w-md flex-col items-center text-center">
-          <Logo variant="login" className="shrink-0" fetchPriority="high" />
+          <Logo variant="login" className="shrink-0 drop-shadow-sm" fetchPriority="high" />
 
-          <form onSubmit={handleSubmit} className="mt-5 w-full space-y-4 text-left sm:mt-6">
+          <form
+            onSubmit={handleSubmit}
+            className="mt-7 w-full space-y-5 rounded-2xl border border-zinc-200/90 bg-white px-4 py-6 text-left shadow-[0_20px_50px_-28px_rgba(15,23,42,0.2)] sm:mt-8 sm:space-y-5 sm:px-5 sm:py-7"
+          >
             <div className="text-center sm:text-left">
-              <h1 className="text-xl font-black tracking-tight text-zinc-900 sm:text-2xl">Acceso de Usuario</h1>
-              <p className="pt-2 text-sm leading-snug text-zinc-600 sm:text-[0.9375rem]">
+              <h1 className="text-2xl font-black tracking-tight text-zinc-900 sm:text-[1.65rem]">
+                Acceso de Usuario
+              </h1>
+              <p className="pt-2 text-base leading-snug text-zinc-600 sm:text-[1.02rem]">
                 Entra con tu usuario (o email) y contraseña.
               </p>
-              <p className="pt-3 text-xs leading-relaxed text-zinc-500 sm:text-sm">
+              <p className="pt-3 text-sm leading-relaxed text-zinc-500">
                 ¿Primera vez?{' '}
                 <Link href="/onboarding" className="font-semibold text-[#D32F2F] underline underline-offset-2">
                   Ver introducción
@@ -79,7 +89,7 @@ export default function LoginPage() {
               ) : null}
             </div>
 
-            <label className="block text-xs font-semibold uppercase tracking-wide text-zinc-600">
+            <label className="block text-[0.8125rem] font-bold uppercase tracking-[0.08em] text-zinc-600 sm:text-sm">
               Usuario o email
               <input
                 type="text"
@@ -89,12 +99,12 @@ export default function LoginPage() {
                   setError(null);
                 }}
                 placeholder="sergio.mataro o usuario@empresa.com"
-                className="mt-2 h-12 w-full rounded-xl border border-zinc-300 bg-zinc-50 px-3 text-sm text-zinc-900 outline-none focus:border-[#D32F2F] focus:ring-2 focus:ring-[#D32F2F]/20"
+                className="mt-2 min-h-[3.25rem] w-full rounded-xl border border-zinc-300 bg-zinc-50 px-4 text-base text-zinc-900 outline-none transition placeholder:text-zinc-400 focus:border-[#D32F2F] focus:bg-white focus:ring-2 focus:ring-[#D32F2F]/20"
                 autoFocus
               />
             </label>
 
-            <label className="block text-xs font-semibold uppercase tracking-wide text-zinc-600">
+            <label className="block text-[0.8125rem] font-bold uppercase tracking-[0.08em] text-zinc-600 sm:text-sm">
               Contraseña
               <input
                 type="password"
@@ -104,26 +114,26 @@ export default function LoginPage() {
                   setError(null);
                 }}
                 placeholder="********"
-                className="mt-2 h-12 w-full rounded-xl border border-zinc-300 bg-zinc-50 px-3 text-sm text-zinc-900 outline-none focus:border-[#D32F2F] focus:ring-2 focus:ring-[#D32F2F]/20"
+                className="mt-2 min-h-[3.25rem] w-full rounded-xl border border-zinc-300 bg-zinc-50 px-4 text-base text-zinc-900 outline-none transition placeholder:text-zinc-400 focus:border-[#D32F2F] focus:bg-white focus:ring-2 focus:ring-[#D32F2F]/20"
               />
             </label>
 
-            <label className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-zinc-600">
+            <label className="flex cursor-pointer items-start gap-3 text-sm font-semibold text-zinc-600">
               <input
                 type="checkbox"
                 checked={rememberIdentifier}
                 onChange={(e) => setRememberIdentifier(e.target.checked)}
-                className="h-4 w-4 rounded border-zinc-300 text-[#D32F2F] focus:ring-[#D32F2F]/30"
+                className="mt-0.5 h-5 w-5 shrink-0 rounded border-zinc-300 text-[#D32F2F] focus:ring-[#D32F2F]/30"
               />
-              Recordar usuario en este dispositivo
+              <span className="text-left leading-snug">Recordar usuario en este dispositivo</span>
             </label>
 
-            {error ? <p className="text-sm text-[#B91C1C]">{error}</p> : null}
+            {error ? <p className="text-sm font-medium text-[#B91C1C]">{error}</p> : null}
 
             <button
               type="submit"
               disabled={submitting}
-              className="h-12 w-full rounded-xl bg-[#D32F2F] text-sm font-black uppercase tracking-wide text-white shadow-md shadow-[#D32F2F]/35 hover:bg-[#c62828]"
+              className="min-h-[3.35rem] w-full rounded-xl bg-[#D32F2F] text-base font-black uppercase tracking-wide text-white shadow-lg shadow-[#D32F2F]/30 transition hover:bg-[#c62828] disabled:opacity-70"
             >
               {submitting ? 'Entrando...' : 'Entrar'}
             </button>
