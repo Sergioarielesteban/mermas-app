@@ -40,7 +40,7 @@ export default function ProduccionHubPage() {
       <MermasStyleHero
         eyebrow="Operaciones"
         title="Producción cocina"
-        description="Lista de elaborados con stock Lun–Jue y Vie–Dom. Cada día anotas lo que hay (Hecho) y ajustas lo que falta por hacer (Hacer), con sugerencia automática si quieres."
+        description="Plantillas con bloques de días a tu medida. Cada día ves objetivo, lo hecho y lo que falta por hacer, con el cálculo al momento."
         slim
       />
 
@@ -56,13 +56,13 @@ export default function ProduccionHubPage() {
         <HubCard
           href="/produccion/ejecutar"
           label="Lista del día"
-          sub="Abrir la hoja con fecha y Hecho / Hacer"
+          sub="Elegir plantilla, fecha y rellenar hecho / hacer"
           Icon={Play}
         />
         <HubCard
           href="/produccion/planes"
-          label="Artículos y stocks"
-          sub="Categorías, artículos y objetivos por tramo"
+          label="Plantillas"
+          sub="Bloques de días, secciones y objetivos por producto"
           Icon={ListTree}
         />
         <HubCard href="/produccion/historial" label="Historial" sub="Listas cerradas por fecha" Icon={History} />

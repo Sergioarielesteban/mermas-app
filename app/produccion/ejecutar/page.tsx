@@ -9,20 +9,20 @@ import { useAuth } from '@/components/AuthProvider';
 import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import {
-  type ChefProductionPlan,
-  fetchChefProductionPlans,
-  fetchChefProductionSections,
-  fetchChefProductionTasks,
-  startChefProductionRun,
+  type ChefProductionTemplate,
+  fetchChefProductionTemplateLines,
+  fetchChefProductionTemplateSections,
+  fetchChefProductionTemplates,
+  getOrCreateChefProductionSession,
   formatProductionMigrationError,
 } from '@/lib/chef-ops-supabase';
 
-async function countTasksForPlan(supabase: SupabaseClient, planId: string): Promise<number> {
-  const sections = await fetchChefProductionSections(supabase, planId);
+async function countLinesForTemplate(supabase: SupabaseClient, templateId: string): Promise<number> {
+  const sections = await fetchChefProductionTemplateSections(supabase, templateId);
   let n = 0;
   for (const s of sections) {
-    const ts = await fetchChefProductionTasks(supabase, s.id);
-    n += ts.length;
+    const lines = await fetchChefProductionTemplateLines(supabase, s.id);
+    n += lines.length;
   }
   return n;
 }
@@ -31,9 +31,9 @@ export default function ProduccionEjecutarPage() {
   const router = useRouter();
   const { localId, profileReady, userId } = useAuth();
   const supabaseOk = isSupabaseEnabled() && getSupabaseClient();
-  const [plans, setPlans] = useState<ChefProductionPlan[]>([]);
+  const [templates, setTemplates] = useState<ChefProductionTemplate[]>([]);
   const [counts, setCounts] = useState<Record<string, number>>({});
-  const [periodStart, setPeriodStart] = useState(() => new Date().toISOString().slice(0, 10));
+  const [workDate, setWorkDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [periodLabel, setPeriodLabel] = useState('');
   const [banner, setBanner] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -41,7 +41,7 @@ export default function ProduccionEjecutarPage() {
 
   const load = useCallback(async () => {
     if (!localId || !supabaseOk) {
-      setPlans([]);
+      setTemplates([]);
       setCounts({});
       setLoading(false);
       return;
@@ -50,13 +50,15 @@ export default function ProduccionEjecutarPage() {
     setLoading(true);
     setBanner(null);
     try {
-      const ps = await fetchChefProductionPlans(supabase, localId);
-      setPlans(ps);
-      const entries = await Promise.all(ps.map(async (p) => [p.id, await countTasksForPlan(supabase, p.id)] as const));
+      const ts = await fetchChefProductionTemplates(supabase, localId);
+      setTemplates(ts);
+      const entries = await Promise.all(
+        ts.map(async (t) => [t.id, await countLinesForTemplate(supabase, t.id)] as const),
+      );
       setCounts(Object.fromEntries(entries));
     } catch (e) {
       setBanner(formatProductionMigrationError(e));
-      setPlans([]);
+      setTemplates([]);
       setCounts({});
     } finally {
       setLoading(false);
@@ -68,31 +70,31 @@ export default function ProduccionEjecutarPage() {
     void load();
   }, [profileReady, load]);
 
-  const start = async (planId: string) => {
+  const openSession = async (templateId: string) => {
     if (!localId || !supabaseOk) return;
-    setStartingId(planId);
+    setStartingId(templateId);
     setBanner(null);
     try {
       const supabase = getSupabaseClient()!;
-      const { run } = await startChefProductionRun(
+      const session = await getOrCreateChefProductionSession(
         supabase,
         localId,
-        planId,
-        periodStart,
+        templateId,
+        workDate,
         periodLabel.trim() || null,
         userId,
       );
-      router.push(`/produccion/correr/${run.id}`);
+      router.push(`/produccion/correr/${session.id}`);
     } catch (e) {
-      setBanner(e instanceof Error ? e.message : 'No se pudo iniciar.');
+      setBanner(e instanceof Error ? e.message : 'No se pudo abrir la lista.');
     } finally {
       setStartingId(null);
     }
   };
 
   const sorted = useMemo(
-    () => [...plans].sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name)),
-    [plans],
+    () => [...templates].sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name)),
+    [templates],
   );
 
   return (
@@ -100,7 +102,7 @@ export default function ProduccionEjecutarPage() {
       <MermasStyleHero
         eyebrow="Producción"
         title="Lista del día"
-        description="Elige la lista, la fecha de referencia y abre la hoja para rellenar Hecho y Hacer."
+        description="Elige plantilla y fecha. La app detecta el bloque de día que toca y el objetivo correspondiente."
         slim
       />
 
@@ -124,15 +126,15 @@ export default function ProduccionEjecutarPage() {
         <>
           <section className="rounded-2xl border border-zinc-200/90 bg-white p-4 shadow-sm ring-1 ring-zinc-100">
             <div className="mx-auto w-full max-w-sm rounded-2xl border border-zinc-200/90 bg-gradient-to-b from-zinc-50 to-white px-4 py-3 text-center shadow-sm ring-1 ring-zinc-100">
-              <p className="text-[10px] font-extrabold uppercase tracking-wide text-zinc-500">Fecha de referencia</p>
+              <p className="text-[10px] font-extrabold uppercase tracking-wide text-zinc-500">Día de trabajo</p>
               <p className="mt-1.5 text-[11px] font-medium leading-snug text-zinc-600">
-                La app usa esta fecha para proponer objetivos Lun–Jue o Vie–Dom al abrir la hoja (luego puedes cambiar el tramo a mano).
+                Se usa para saber qué bloque de la plantilla aplica (lunes, fin de semana, diario…).
               </p>
               <input
                 type="date"
-                value={periodStart}
-                onChange={(e) => setPeriodStart(e.target.value)}
-                aria-label="Fecha de referencia de la lista"
+                value={workDate}
+                onChange={(e) => setWorkDate(e.target.value)}
+                aria-label="Día de trabajo"
                 className="mx-auto mt-3 box-border h-11 w-full max-w-[17.5rem] rounded-xl border border-zinc-300 bg-white px-3 text-sm font-semibold text-zinc-900 outline-none focus:border-[#D32F2F]/50 focus:ring-2 focus:ring-[#D32F2F]/15"
               />
             </div>
@@ -141,7 +143,7 @@ export default function ProduccionEjecutarPage() {
               <input
                 value={periodLabel}
                 onChange={(e) => setPeriodLabel(e.target.value)}
-                placeholder="Ej. Semana 16, Turno noche…"
+                placeholder="Ej. Turno mañana, Semana 16…"
                 className="mt-1 h-11 w-full rounded-xl border border-zinc-200 bg-zinc-50/50 px-3 text-sm font-semibold text-zinc-900 outline-none focus:border-[#D32F2F]/50 focus:bg-white focus:ring-2 focus:ring-[#D32F2F]/15"
               />
             </label>
@@ -150,35 +152,35 @@ export default function ProduccionEjecutarPage() {
           <div className="space-y-2">
             {sorted.length === 0 ? (
               <p className="rounded-2xl border border-zinc-200 bg-zinc-50/80 px-4 py-6 text-center text-sm text-zinc-600">
-                No hay listas. Crea una y añade artículos en{' '}
+                No hay plantillas. Crea una en{' '}
                 <Link href="/produccion/planes" className="font-bold text-[#D32F2F] underline">
-                  Artículos y stocks
+                  Plantillas
                 </Link>
                 .
               </p>
             ) : (
-              sorted.map((p) => {
-                const n = counts[p.id] ?? 0;
+              sorted.map((t) => {
+                const n = counts[t.id] ?? 0;
                 const disabled = n === 0 || startingId !== null;
                 return (
                   <div
-                    key={p.id}
+                    key={t.id}
                     className="flex items-center justify-between gap-3 rounded-2xl border border-zinc-200/90 bg-gradient-to-r from-white to-zinc-50/90 px-4 py-3.5 shadow-sm ring-1 ring-zinc-100"
                   >
                     <div className="min-w-0">
-                      <p className="truncate text-sm font-black text-zinc-900">{p.name}</p>
+                      <p className="truncate text-sm font-black text-zinc-900">{t.name}</p>
                       <p className="mt-0.5 text-[10px] font-bold uppercase tracking-wide text-[#B91C1C]">
-                        {n} artículo{n === 1 ? '' : 's'}
+                        {n} producto{n === 1 ? '' : 's'}
                       </p>
                     </div>
                     <button
                       type="button"
                       disabled={disabled}
-                      onClick={() => void start(p.id)}
+                      onClick={() => void openSession(t.id)}
                       className="inline-flex shrink-0 items-center gap-1.5 rounded-xl bg-[#D32F2F] px-3 py-2 text-xs font-black uppercase tracking-wide text-white shadow-sm disabled:opacity-45"
                     >
                       <Play className="h-3.5 w-3.5" />
-                      {startingId === p.id ? '…' : 'Empezar'}
+                      {startingId === t.id ? '…' : 'Abrir'}
                     </button>
                   </div>
                 );

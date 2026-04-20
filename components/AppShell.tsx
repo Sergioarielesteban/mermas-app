@@ -79,7 +79,7 @@ function titleForPath(pathname: string | null) {
   if (pathname.startsWith('/produccion')) {
     if (pathname === '/produccion') return 'Producción';
     if (pathname.startsWith('/produccion/ejecutar')) return 'Lista del día';
-    if (pathname.startsWith('/produccion/planes')) return 'Artículos y stocks';
+    if (pathname.startsWith('/produccion/planes')) return 'Plantillas';
     if (pathname.startsWith('/produccion/historial')) return 'Historial producción';
     if (pathname.startsWith('/produccion/correr')) return 'Lista en curso';
     return 'Producción';

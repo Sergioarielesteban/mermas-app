@@ -56,66 +56,87 @@ export type ChefChecklistRunItem = {
   note: string | null;
 };
 
-export type ProductionCadence = 'daily' | 'weekly' | 'monthly' | 'custom';
-
-export const PRODUCTION_CADENCE_LABEL: Record<ProductionCadence, string> = {
-  daily: 'Diaria',
-  weekly: 'Semanal',
-  monthly: 'Mensual',
-  custom: 'A medida',
-};
-
-export type ChefProductionPlan = {
+/** Plantilla de producción (bloques de días + secciones + productos). */
+export type ChefProductionTemplate = {
   id: string;
   localId: string;
   name: string;
-  cadence: ProductionCadence;
   sortOrder: number;
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
 };
 
-export type ChefProductionSection = {
+/** Bloque de días (ej. Lun–Jue): `weekdays` como Date.getDay() → 0=dom … 6=sáb. */
+export type ChefProductionDayBlock = {
   id: string;
-  planId: string;
+  templateId: string;
+  label: string;
+  weekdays: number[];
+  sortOrder: number;
+};
+
+export type ChefProductionTemplateSection = {
+  id: string;
+  templateId: string;
   title: string;
   sortOrder: number;
 };
 
-export type ChefProductionTask = {
+export type ChefProductionTemplateLine = {
   id: string;
   sectionId: string;
   label: string;
   sortOrder: number;
-  hint: string | null;
-  /** Objetivo lunes–jueves (plantilla). */
-  stockLunJue: number | null;
-  /** Objetivo viernes–domingo (plantilla). */
-  stockVieDom: number | null;
 };
 
-export type ChefProductionRun = {
+export type ChefProductionLineTarget = {
+  id: string;
+  lineId: string;
+  blockId: string;
+  targetQty: number;
+};
+
+export type ChefProductionSession = {
   id: string;
   localId: string;
-  planId: string;
-  periodStart: string;
+  templateId: string;
+  workDate: string;
+  forcedBlockId: string | null;
   periodLabel: string | null;
+  linesSnapshot: ChefProductionSnapshotV1 | null;
   startedAt: string;
   completedAt: string | null;
   createdBy: string | null;
 };
 
-export type ChefProductionRunTask = {
+export type ChefProductionSessionLine = {
   id: string;
-  runId: string;
-  taskId: string;
-  isDone: boolean;
-  doneAt: string | null;
-  qtyNote: string | null;
+  sessionId: string;
+  lineId: string;
   qtyOnHand: number | null;
-  qtyToMake: number | null;
 };
+
+/** Foto al cerrar la sesión (lectura en historial / lista cerrada). */
+export type ChefProductionSnapshotV1 = {
+  version: 1;
+  workDate: string;
+  blockLabel: string;
+  sections: {
+    title: string;
+    items: { label: string; objective: number; hecho: number | null; hacer: number }[];
+  }[];
+};
+
+export const CHEF_PRODUCTION_WEEKDAY_SHORT: { dow: number; label: string }[] = [
+  { dow: 1, label: 'L' },
+  { dow: 2, label: 'M' },
+  { dow: 3, label: 'X' },
+  { dow: 4, label: 'J' },
+  { dow: 5, label: 'V' },
+  { dow: 6, label: 'S' },
+  { dow: 0, label: 'D' },
+];
 
 function mapChecklist(r: Record<string, unknown>): ChefChecklist {
   return {
@@ -149,12 +170,11 @@ function mapItem(r: Record<string, unknown>): ChefChecklistItem {
   };
 }
 
-function mapPlan(r: Record<string, unknown>): ChefProductionPlan {
+function mapProductionTemplate(r: Record<string, unknown>): ChefProductionTemplate {
   return {
     id: String(r.id),
     localId: String(r.local_id),
     name: String(r.name),
-    cadence: r.cadence as ProductionCadence,
     sortOrder: Number(r.sort_order ?? 0),
     isActive: Boolean(r.is_active),
     createdAt: String(r.created_at),
@@ -162,61 +182,103 @@ function mapPlan(r: Record<string, unknown>): ChefProductionPlan {
   };
 }
 
-function mapProdSection(r: Record<string, unknown>): ChefProductionSection {
+function mapProductionDayBlock(r: Record<string, unknown>): ChefProductionDayBlock {
+  const wd = r.weekdays;
+  const weekdays = Array.isArray(wd) ? wd.map((x) => Number(x)) : [];
   return {
     id: String(r.id),
-    planId: String(r.plan_id),
+    templateId: String(r.template_id),
+    label: String(r.label),
+    weekdays,
+    sortOrder: Number(r.sort_order ?? 0),
+  };
+}
+
+function mapProductionTemplateSection(r: Record<string, unknown>): ChefProductionTemplateSection {
+  return {
+    id: String(r.id),
+    templateId: String(r.template_id),
     title: String(r.title),
     sortOrder: Number(r.sort_order ?? 0),
   };
 }
 
-function mapTask(r: Record<string, unknown>): ChefProductionTask {
+function mapProductionTemplateLine(r: Record<string, unknown>): ChefProductionTemplateLine {
   return {
     id: String(r.id),
     sectionId: String(r.section_id),
     label: String(r.label),
     sortOrder: Number(r.sort_order ?? 0),
-    hint: r.hint != null ? String(r.hint) : null,
-    stockLunJue: r.stock_lun_jue != null && r.stock_lun_jue !== '' ? Number(r.stock_lun_jue) : null,
-    stockVieDom: r.stock_vie_dom != null && r.stock_vie_dom !== '' ? Number(r.stock_vie_dom) : null,
   };
 }
 
-/** Viernes–domingo vs lunes–jueves según la fecha (hora local). */
-export function productionStockBandForDate(isoDate: string): 'weekday' | 'weekend' {
-  const [y, m, d] = isoDate.slice(0, 10).split('-').map(Number);
-  const dt = new Date(y, m - 1, d);
-  const dow = dt.getDay();
-  if (dow === 0 || dow === 5 || dow === 6) return 'weekend';
-  return 'weekday';
+function mapProductionLineTarget(r: Record<string, unknown>): ChefProductionLineTarget {
+  return {
+    id: String(r.id),
+    lineId: String(r.line_id),
+    blockId: String(r.block_id),
+    targetQty: Number(r.target_qty ?? 0),
+  };
 }
 
-export const PRODUCTION_STOCK_BAND_LABEL: Record<'weekday' | 'weekend', string> = {
-  weekday: 'Lun–Jue',
-  weekend: 'Vie–Dom',
-};
-
-export function targetForProductionBand(task: ChefProductionTask, band: 'weekday' | 'weekend'): number {
-  const v = band === 'weekend' ? task.stockVieDom : task.stockLunJue;
-  return v != null && !Number.isNaN(v) ? v : 0;
+function mapProductionSession(r: Record<string, unknown>): ChefProductionSession {
+  const snap = r.lines_snapshot;
+  return {
+    id: String(r.id),
+    localId: String(r.local_id),
+    templateId: String(r.template_id),
+    workDate: String(r.work_date),
+    forcedBlockId: r.forced_block_id != null ? String(r.forced_block_id) : null,
+    periodLabel: r.period_label != null ? String(r.period_label) : null,
+    linesSnapshot: snap != null && typeof snap === 'object' ? (snap as ChefProductionSnapshotV1) : null,
+    startedAt: String(r.started_at),
+    completedAt: r.completed_at != null ? String(r.completed_at) : null,
+    createdBy: r.created_by != null ? String(r.created_by) : null,
+  };
 }
 
-export function suggestQtyToMake(target: number, onHand: number | null): number {
-  const h = onHand != null && !Number.isNaN(onHand) ? onHand : 0;
+function mapProductionSessionLine(r: Record<string, unknown>): ChefProductionSessionLine {
+  return {
+    id: String(r.id),
+    sessionId: String(r.session_id),
+    lineId: String(r.line_id),
+    qtyOnHand: r.qty_on_hand != null && r.qty_on_hand !== '' ? Number(r.qty_on_hand) : null,
+  };
+}
+
+/** Bloque activo: `forcedBlockId` o el primero por `sort_order` cuyo `weekdays` contenga el día. */
+export function resolveChefProductionDayBlock(
+  blocks: ChefProductionDayBlock[],
+  workDateIso: string,
+  forcedBlockId: string | null,
+): ChefProductionDayBlock | null {
+  if (forcedBlockId) {
+    return blocks.find((b) => b.id === forcedBlockId) ?? null;
+  }
+  const [y, m, d] = workDateIso.slice(0, 10).split('-').map(Number);
+  const dow = new Date(y, m - 1, d).getDay();
+  const sorted = [...blocks].sort((a, b) => a.sortOrder - b.sortOrder || a.label.localeCompare(b.label));
+  for (const b of sorted) {
+    if (b.weekdays.includes(dow)) return b;
+  }
+  return null;
+}
+
+export function productionQtyToMake(target: number, hecho: number | null): number {
+  const h = hecho != null && !Number.isNaN(hecho) ? hecho : 0;
   const diff = target - h;
   return diff > 0 ? diff : 0;
 }
 
-/** Si Supabase aún no tiene las columnas de stocks / Hecho-Hacer de producción. */
+/** Si Supabase aún no tiene el esquema de plantillas de producción v2. */
 export function formatProductionMigrationError(e: unknown): string {
   const raw = e instanceof Error ? e.message : String(e);
   if (
-    /stock_lun_jue|stock_vie_dom|qty_on_hand|qty_to_make|chef_production_tasks|chef_production_run_tasks|does not exist/i.test(
+    /chef_production_templates|chef_production_sessions|chef_production_day_blocks|chef_production_template_lines|does not exist|relation.*does not exist/i.test(
       raw,
     )
   ) {
-    return 'Faltan columnas de Producción en Supabase. Abre SQL Editor y ejecuta de nuevo supabase-chef-ops-checklist-production.sql del repo (trae los ALTER con add column if not exists), o el archivo supabase-chef-ops-production-stock-columns.sql. Después recarga.';
+    return 'Falta el esquema de Producción (plantillas v2) en Supabase. En SQL Editor ejecuta el archivo supabase-chef-production-templates-v2.sql del repo y recarga.';
   }
   return raw;
 }
@@ -260,43 +322,36 @@ export async function fetchChefChecklistRunRow(
   };
 }
 
-export async function fetchChefProductionPlan(
+export async function fetchChefProductionTemplate(
   supabase: SupabaseClient,
   localId: string,
   id: string,
-): Promise<ChefProductionPlan | null> {
+): Promise<ChefProductionTemplate | null> {
   const { data, error } = await supabase
-    .from('chef_production_plans')
-    .select('id,local_id,name,cadence,sort_order,is_active,created_at,updated_at')
+    .from('chef_production_templates')
+    .select('id,local_id,name,sort_order,is_active,created_at,updated_at')
     .eq('local_id', localId)
     .eq('id', id)
     .maybeSingle();
   if (error) throw new Error(error.message);
   if (!data) return null;
-  return mapPlan(data as Record<string, unknown>);
+  return mapProductionTemplate(data as Record<string, unknown>);
 }
 
-export async function fetchChefProductionRunRow(
+export async function fetchChefProductionSessionRow(
   supabase: SupabaseClient,
-  runId: string,
-): Promise<ChefProductionRun | null> {
+  sessionId: string,
+): Promise<ChefProductionSession | null> {
   const { data, error } = await supabase
-    .from('chef_production_runs')
-    .select('id,local_id,plan_id,period_start,period_label,started_at,completed_at,created_by')
-    .eq('id', runId)
+    .from('chef_production_sessions')
+    .select(
+      'id,local_id,template_id,work_date,forced_block_id,period_label,lines_snapshot,started_at,completed_at,created_by',
+    )
+    .eq('id', sessionId)
     .maybeSingle();
   if (error) throw new Error(error.message);
   if (!data) return null;
-  return {
-    id: String(data.id),
-    localId: String(data.local_id),
-    planId: String(data.plan_id),
-    periodStart: String(data.period_start),
-    periodLabel: data.period_label != null ? String(data.period_label) : null,
-    startedAt: String(data.started_at),
-    completedAt: data.completed_at != null ? String(data.completed_at) : null,
-    createdBy: data.created_by != null ? String(data.created_by) : null,
-  };
+  return mapProductionSession(data as Record<string, unknown>);
 }
 
 export async function fetchChefChecklists(supabase: SupabaseClient, localId: string): Promise<ChefChecklist[]> {
@@ -557,289 +612,522 @@ export async function completeChefChecklistRun(supabase: SupabaseClient, runId: 
   if (error) throw new Error(error.message);
 }
 
-export async function fetchChefProductionPlans(supabase: SupabaseClient, localId: string): Promise<ChefProductionPlan[]> {
+export async function fetchChefProductionTemplates(
+  supabase: SupabaseClient,
+  localId: string,
+): Promise<ChefProductionTemplate[]> {
   const { data, error } = await supabase
-    .from('chef_production_plans')
-    .select('id,local_id,name,cadence,sort_order,is_active,created_at,updated_at')
+    .from('chef_production_templates')
+    .select('id,local_id,name,sort_order,is_active,created_at,updated_at')
     .eq('local_id', localId)
     .eq('is_active', true)
     .order('sort_order', { ascending: true });
   if (error) throw new Error(error.message);
-  return (data ?? []).map((r) => mapPlan(r as Record<string, unknown>));
+  return (data ?? []).map((r) => mapProductionTemplate(r as Record<string, unknown>));
 }
 
-export async function fetchChefProductionPlansByIds(
+export async function fetchChefProductionTemplatesByIds(
   supabase: SupabaseClient,
   localId: string,
   ids: string[],
-): Promise<ChefProductionPlan[]> {
+): Promise<ChefProductionTemplate[]> {
   const uniq = [...new Set(ids)].filter(Boolean);
   if (uniq.length === 0) return [];
   const { data, error } = await supabase
-    .from('chef_production_plans')
-    .select('id,local_id,name,cadence,sort_order,is_active,created_at,updated_at')
+    .from('chef_production_templates')
+    .select('id,local_id,name,sort_order,is_active,created_at,updated_at')
     .eq('local_id', localId)
     .in('id', uniq);
   if (error) throw new Error(error.message);
-  return (data ?? []).map((r) => mapPlan(r as Record<string, unknown>));
+  return (data ?? []).map((r) => mapProductionTemplate(r as Record<string, unknown>));
 }
 
-export async function insertChefProductionPlan(
+export async function insertChefProductionTemplate(
   supabase: SupabaseClient,
   localId: string,
-  input: { name: string; cadence?: ProductionCadence },
-): Promise<ChefProductionPlan> {
+  input: { name: string },
+): Promise<ChefProductionTemplate> {
+  const { data: last } = await supabase
+    .from('chef_production_templates')
+    .select('sort_order')
+    .eq('local_id', localId)
+    .order('sort_order', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const sortOrder = last?.sort_order != null ? Number(last.sort_order) + 1 : 0;
   const { data, error } = await supabase
-    .from('chef_production_plans')
+    .from('chef_production_templates')
     .insert({
       local_id: localId,
       name: input.name.trim(),
-      cadence: input.cadence ?? 'daily',
-      sort_order: 0,
+      sort_order: sortOrder,
       is_active: true,
     })
-    .select('id,local_id,name,cadence,sort_order,is_active,created_at,updated_at')
+    .select('id,local_id,name,sort_order,is_active,created_at,updated_at')
     .single();
   if (error) throw new Error(error.message);
-  return mapPlan(data as Record<string, unknown>);
+  return mapProductionTemplate(data as Record<string, unknown>);
 }
 
-export async function deleteChefProductionPlan(supabase: SupabaseClient, localId: string, id: string): Promise<void> {
-  const { error } = await supabase.from('chef_production_plans').delete().eq('id', id).eq('local_id', localId);
+export async function updateChefProductionTemplateName(
+  supabase: SupabaseClient,
+  localId: string,
+  templateId: string,
+  name: string,
+): Promise<void> {
+  const { error } = await supabase
+    .from('chef_production_templates')
+    .update({ name: name.trim() })
+    .eq('id', templateId)
+    .eq('local_id', localId);
   if (error) throw new Error(error.message);
 }
 
-export async function fetchChefProductionSections(
+export async function deleteChefProductionTemplate(supabase: SupabaseClient, localId: string, id: string): Promise<void> {
+  const { error } = await supabase.from('chef_production_templates').delete().eq('id', id).eq('local_id', localId);
+  if (error) throw new Error(error.message);
+}
+
+export async function duplicateChefProductionTemplate(
   supabase: SupabaseClient,
-  planId: string,
-): Promise<ChefProductionSection[]> {
+  localId: string,
+  sourceId: string,
+): Promise<ChefProductionTemplate> {
+  const src = await fetchChefProductionTemplate(supabase, localId, sourceId);
+  if (!src) throw new Error('Plantilla no encontrada.');
+  const blocks = await fetchChefProductionDayBlocks(supabase, sourceId);
+  const sections = await fetchChefProductionTemplateSections(supabase, sourceId);
+  const blockIdMap = new Map<string, string>();
+  const sectionIdMap = new Map<string, string>();
+  const lineIdMap = new Map<string, string>();
+
+  const dup = await insertChefProductionTemplate(supabase, localId, { name: `${src.name} (copia)` });
+
+  for (const b of [...blocks].sort((a, z) => a.sortOrder - z.sortOrder || a.label.localeCompare(z.label))) {
+    const nb = await insertChefProductionDayBlock(supabase, dup.id, {
+      label: b.label,
+      weekdays: [...b.weekdays],
+      sortOrder: b.sortOrder,
+    });
+    blockIdMap.set(b.id, nb.id);
+  }
+
+  for (const s of [...sections].sort((a, z) => a.sortOrder - z.sortOrder)) {
+    const ns = await insertChefProductionTemplateSection(supabase, dup.id, s.title, s.sortOrder);
+    sectionIdMap.set(s.id, ns.id);
+  }
+
+  const oldLineIds: string[] = [];
+  for (const s of [...sections].sort((a, z) => a.sortOrder - z.sortOrder)) {
+    const lines = await fetchChefProductionTemplateLines(supabase, s.id);
+    const newSecId = sectionIdMap.get(s.id);
+    if (!newSecId) continue;
+    for (const ln of [...lines].sort((a, z) => a.sortOrder - z.sortOrder)) {
+      const nln = await insertChefProductionTemplateLine(supabase, newSecId, {
+        label: ln.label,
+        sortOrder: ln.sortOrder,
+      });
+      lineIdMap.set(ln.id, nln.id);
+      oldLineIds.push(ln.id);
+    }
+  }
+
+  if (oldLineIds.length) {
+    const { data: targets, error: tErr } = await supabase
+      .from('chef_production_line_targets')
+      .select('line_id,block_id,target_qty')
+      .in('line_id', oldLineIds);
+    if (tErr) throw new Error(tErr.message);
+    for (const t of targets ?? []) {
+      const nl = lineIdMap.get(String(t.line_id));
+      const nb = blockIdMap.get(String(t.block_id));
+      if (nl && nb) {
+        await upsertChefProductionLineTarget(supabase, nl, nb, Number(t.target_qty ?? 0));
+      }
+    }
+  }
+
+  return dup;
+}
+
+export async function fetchChefProductionDayBlocks(
+  supabase: SupabaseClient,
+  templateId: string,
+): Promise<ChefProductionDayBlock[]> {
   const { data, error } = await supabase
-    .from('chef_production_sections')
-    .select('id,plan_id,title,sort_order')
-    .eq('plan_id', planId)
+    .from('chef_production_day_blocks')
+    .select('id,template_id,label,weekdays,sort_order')
+    .eq('template_id', templateId)
     .order('sort_order', { ascending: true });
   if (error) throw new Error(error.message);
-  return (data ?? []).map((r) => mapProdSection(r as Record<string, unknown>));
+  return (data ?? []).map((r) => mapProductionDayBlock(r as Record<string, unknown>));
 }
 
-export async function insertChefProductionSection(
+export async function insertChefProductionDayBlock(
   supabase: SupabaseClient,
-  planId: string,
-  title: string,
-  sortOrder: number,
-): Promise<ChefProductionSection> {
+  templateId: string,
+  input: { label: string; weekdays: number[]; sortOrder: number },
+): Promise<ChefProductionDayBlock> {
   const { data, error } = await supabase
-    .from('chef_production_sections')
-    .insert({ plan_id: planId, title: title.trim(), sort_order: sortOrder })
-    .select('id,plan_id,title,sort_order')
-    .single();
-  if (error) throw new Error(error.message);
-  return mapProdSection(data as Record<string, unknown>);
-}
-
-export async function deleteChefProductionSection(supabase: SupabaseClient, id: string): Promise<void> {
-  const { error } = await supabase.from('chef_production_sections').delete().eq('id', id);
-  if (error) throw new Error(error.message);
-}
-
-export async function fetchChefProductionTasks(supabase: SupabaseClient, sectionId: string): Promise<ChefProductionTask[]> {
-  const { data, error } = await supabase
-    .from('chef_production_tasks')
-    .select('id,section_id,label,sort_order,hint,stock_lun_jue,stock_vie_dom')
-    .eq('section_id', sectionId)
-    .order('sort_order', { ascending: true });
-  if (error) throw new Error(error.message);
-  return (data ?? []).map((r) => mapTask(r as Record<string, unknown>));
-}
-
-export async function insertChefProductionTask(
-  supabase: SupabaseClient,
-  sectionId: string,
-  input: {
-    label: string;
-    hint?: string | null;
-    sortOrder: number;
-    stockLunJue?: number | null;
-    stockVieDom?: number | null;
-  },
-): Promise<ChefProductionTask> {
-  const { data, error } = await supabase
-    .from('chef_production_tasks')
+    .from('chef_production_day_blocks')
     .insert({
-      section_id: sectionId,
+      template_id: templateId,
       label: input.label.trim(),
-      hint: input.hint?.trim() || null,
+      weekdays: input.weekdays,
       sort_order: input.sortOrder,
-      stock_lun_jue: input.stockLunJue ?? null,
-      stock_vie_dom: input.stockVieDom ?? null,
     })
-    .select('id,section_id,label,sort_order,hint,stock_lun_jue,stock_vie_dom')
+    .select('id,template_id,label,weekdays,sort_order')
     .single();
   if (error) throw new Error(error.message);
-  return mapTask(data as Record<string, unknown>);
+  return mapProductionDayBlock(data as Record<string, unknown>);
 }
 
-export async function updateChefProductionTask(
+export async function updateChefProductionDayBlock(
   supabase: SupabaseClient,
-  taskId: string,
-  patch: {
-    label?: string;
-    hint?: string | null;
-    stockLunJue?: number | null;
-    stockVieDom?: number | null;
-  },
+  blockId: string,
+  patch: { label?: string; weekdays?: number[]; sortOrder?: number },
 ): Promise<void> {
   const row: Record<string, unknown> = {};
   if (patch.label !== undefined) row.label = patch.label.trim();
-  if (patch.hint !== undefined) row.hint = patch.hint?.trim() || null;
-  if (patch.stockLunJue !== undefined) row.stock_lun_jue = patch.stockLunJue;
-  if (patch.stockVieDom !== undefined) row.stock_vie_dom = patch.stockVieDom;
+  if (patch.weekdays !== undefined) row.weekdays = patch.weekdays;
+  if (patch.sortOrder !== undefined) row.sort_order = patch.sortOrder;
   if (Object.keys(row).length === 0) return;
-  const { error } = await supabase.from('chef_production_tasks').update(row).eq('id', taskId);
+  const { error } = await supabase.from('chef_production_day_blocks').update(row).eq('id', blockId);
   if (error) throw new Error(error.message);
 }
 
-export async function deleteChefProductionTask(supabase: SupabaseClient, id: string): Promise<void> {
-  const { error } = await supabase.from('chef_production_tasks').delete().eq('id', id);
+export async function deleteChefProductionDayBlock(supabase: SupabaseClient, blockId: string): Promise<void> {
+  const { error } = await supabase.from('chef_production_day_blocks').delete().eq('id', blockId);
   if (error) throw new Error(error.message);
 }
 
-export async function fetchChefProductionRuns(supabase: SupabaseClient, localId: string, limit = 40) {
-  const { data, error } = await supabase
-    .from('chef_production_runs')
-    .select('id,local_id,plan_id,period_start,period_label,started_at,completed_at,created_by')
-    .eq('local_id', localId)
-    .order('started_at', { ascending: false })
-    .limit(limit);
-  if (error) throw new Error(error.message);
-  return (data ?? []).map((r) => ({
-    id: String(r.id),
-    localId: String(r.local_id),
-    planId: String(r.plan_id),
-    periodStart: String(r.period_start),
-    periodLabel: r.period_label != null ? String(r.period_label) : null,
-    startedAt: String(r.started_at),
-    completedAt: r.completed_at != null ? String(r.completed_at) : null,
-    createdBy: r.created_by != null ? String(r.created_by) : null,
-  })) as ChefProductionRun[];
-}
-
-async function collectAllTasksForPlan(
+export async function fetchChefProductionTemplateSections(
   supabase: SupabaseClient,
-  planId: string,
-): Promise<ChefProductionTask[]> {
-  const sections = await fetchChefProductionSections(supabase, planId);
-  const out: ChefProductionTask[] = [];
+  templateId: string,
+): Promise<ChefProductionTemplateSection[]> {
+  const { data, error } = await supabase
+    .from('chef_production_template_sections')
+    .select('id,template_id,title,sort_order')
+    .eq('template_id', templateId)
+    .order('sort_order', { ascending: true });
+  if (error) throw new Error(error.message);
+  return (data ?? []).map((r) => mapProductionTemplateSection(r as Record<string, unknown>));
+}
+
+export async function insertChefProductionTemplateSection(
+  supabase: SupabaseClient,
+  templateId: string,
+  title: string,
+  sortOrder: number,
+): Promise<ChefProductionTemplateSection> {
+  const { data, error } = await supabase
+    .from('chef_production_template_sections')
+    .insert({ template_id: templateId, title: title.trim(), sort_order: sortOrder })
+    .select('id,template_id,title,sort_order')
+    .single();
+  if (error) throw new Error(error.message);
+  return mapProductionTemplateSection(data as Record<string, unknown>);
+}
+
+export async function deleteChefProductionTemplateSection(supabase: SupabaseClient, id: string): Promise<void> {
+  const { error } = await supabase.from('chef_production_template_sections').delete().eq('id', id);
+  if (error) throw new Error(error.message);
+}
+
+export async function reorderChefProductionTemplateSections(
+  supabase: SupabaseClient,
+  orderedSectionIds: string[],
+): Promise<void> {
+  for (let i = 0; i < orderedSectionIds.length; i++) {
+    const { error } = await supabase
+      .from('chef_production_template_sections')
+      .update({ sort_order: i })
+      .eq('id', orderedSectionIds[i]);
+    if (error) throw new Error(error.message);
+  }
+}
+
+export async function fetchChefProductionTemplateLines(
+  supabase: SupabaseClient,
+  sectionId: string,
+): Promise<ChefProductionTemplateLine[]> {
+  const { data, error } = await supabase
+    .from('chef_production_template_lines')
+    .select('id,section_id,label,sort_order')
+    .eq('section_id', sectionId)
+    .order('sort_order', { ascending: true });
+  if (error) throw new Error(error.message);
+  return (data ?? []).map((r) => mapProductionTemplateLine(r as Record<string, unknown>));
+}
+
+export async function insertChefProductionTemplateLine(
+  supabase: SupabaseClient,
+  sectionId: string,
+  input: { label: string; sortOrder: number },
+): Promise<ChefProductionTemplateLine> {
+  const { data, error } = await supabase
+    .from('chef_production_template_lines')
+    .insert({
+      section_id: sectionId,
+      label: input.label.trim(),
+      sort_order: input.sortOrder,
+    })
+    .select('id,section_id,label,sort_order')
+    .single();
+  if (error) throw new Error(error.message);
+  return mapProductionTemplateLine(data as Record<string, unknown>);
+}
+
+export async function updateChefProductionTemplateLine(
+  supabase: SupabaseClient,
+  lineId: string,
+  patch: { label?: string; sortOrder?: number },
+): Promise<void> {
+  const row: Record<string, unknown> = {};
+  if (patch.label !== undefined) row.label = patch.label.trim();
+  if (patch.sortOrder !== undefined) row.sort_order = patch.sortOrder;
+  if (Object.keys(row).length === 0) return;
+  const { error } = await supabase.from('chef_production_template_lines').update(row).eq('id', lineId);
+  if (error) throw new Error(error.message);
+}
+
+export async function deleteChefProductionTemplateLine(supabase: SupabaseClient, id: string): Promise<void> {
+  const { error } = await supabase.from('chef_production_template_lines').delete().eq('id', id);
+  if (error) throw new Error(error.message);
+}
+
+export async function reorderChefProductionTemplateLines(
+  supabase: SupabaseClient,
+  orderedLineIds: string[],
+): Promise<void> {
+  for (let i = 0; i < orderedLineIds.length; i++) {
+    const { error } = await supabase
+      .from('chef_production_template_lines')
+      .update({ sort_order: i })
+      .eq('id', orderedLineIds[i]);
+    if (error) throw new Error(error.message);
+  }
+}
+
+export async function fetchChefProductionLineTargetsForLines(
+  supabase: SupabaseClient,
+  lineIds: string[],
+): Promise<ChefProductionLineTarget[]> {
+  if (lineIds.length === 0) return [];
+  const { data, error } = await supabase
+    .from('chef_production_line_targets')
+    .select('id,line_id,block_id,target_qty')
+    .in('line_id', lineIds);
+  if (error) throw new Error(error.message);
+  return (data ?? []).map((r) => mapProductionLineTarget(r as Record<string, unknown>));
+}
+
+export async function upsertChefProductionLineTarget(
+  supabase: SupabaseClient,
+  lineId: string,
+  blockId: string,
+  targetQty: number,
+): Promise<void> {
+  const { error } = await supabase.from('chef_production_line_targets').upsert(
+    { line_id: lineId, block_id: blockId, target_qty: targetQty },
+    { onConflict: 'line_id,block_id' },
+  );
+  if (error) throw new Error(error.message);
+}
+
+async function collectAllTemplateLines(
+  supabase: SupabaseClient,
+  templateId: string,
+): Promise<ChefProductionTemplateLine[]> {
+  const sections = await fetchChefProductionTemplateSections(supabase, templateId);
+  const out: ChefProductionTemplateLine[] = [];
   for (const s of sections) {
-    const tasks = await fetchChefProductionTasks(supabase, s.id);
-    out.push(...tasks);
+    const lines = await fetchChefProductionTemplateLines(supabase, s.id);
+    out.push(...lines);
   }
   return out;
 }
 
-export async function startChefProductionRun(
+async function lineTargetsMapForTemplate(
+  supabase: SupabaseClient,
+  templateId: string,
+): Promise<Map<string, number>> {
+  const lines = await collectAllTemplateLines(supabase, templateId);
+  if (lines.length === 0) return new Map();
+  const ids = lines.map((l) => l.id);
+  const targets = await fetchChefProductionLineTargetsForLines(supabase, ids);
+  const m = new Map<string, number>();
+  for (const t of targets) {
+    m.set(`${t.lineId}:${t.blockId}`, t.targetQty);
+  }
+  return m;
+}
+
+async function buildChefProductionSnapshotForSession(
+  supabase: SupabaseClient,
+  session: ChefProductionSession,
+): Promise<ChefProductionSnapshotV1> {
+  const blocks = await fetchChefProductionDayBlocks(supabase, session.templateId);
+  const block = resolveChefProductionDayBlock(blocks, session.workDate, session.forcedBlockId);
+  const blockLabel = block?.label ?? '—';
+  const sections = await fetchChefProductionTemplateSections(supabase, session.templateId);
+  const sessionLines = await fetchChefProductionSessionLines(supabase, session.id);
+  const byLineId = new Map(sessionLines.map((sl) => [sl.lineId, sl]));
+  const targetByKey = await lineTargetsMapForTemplate(supabase, session.templateId);
+
+  const snapSections: ChefProductionSnapshotV1['sections'] = [];
+  for (const sec of [...sections].sort((a, b) => a.sortOrder - b.sortOrder)) {
+    const lines = await fetchChefProductionTemplateLines(supabase, sec.id);
+    const items: ChefProductionSnapshotV1['sections'][0]['items'] = [];
+    for (const ln of [...lines].sort((a, b) => a.sortOrder - b.sortOrder)) {
+      const objective =
+        block != null ? (targetByKey.get(`${ln.id}:${block.id}`) ?? 0) : 0;
+      const sl = byLineId.get(ln.id);
+      const hecho = sl?.qtyOnHand ?? null;
+      items.push({
+        label: ln.label,
+        objective,
+        hecho,
+        hacer: productionQtyToMake(objective, hecho),
+      });
+    }
+    if (items.length) snapSections.push({ title: sec.title, items });
+  }
+  return { version: 1, workDate: session.workDate, blockLabel, sections: snapSections };
+}
+
+export async function fetchChefProductionSessions(
   supabase: SupabaseClient,
   localId: string,
-  planId: string,
-  periodStart: string,
+  limit = 40,
+): Promise<ChefProductionSession[]> {
+  const { data, error } = await supabase
+    .from('chef_production_sessions')
+    .select(
+      'id,local_id,template_id,work_date,forced_block_id,period_label,lines_snapshot,started_at,completed_at,created_by',
+    )
+    .eq('local_id', localId)
+    .order('started_at', { ascending: false })
+    .limit(limit);
+  if (error) throw new Error(error.message);
+  return (data ?? []).map((r) => mapProductionSession(r as Record<string, unknown>));
+}
+
+export async function getOrCreateChefProductionSession(
+  supabase: SupabaseClient,
+  localId: string,
+  templateId: string,
+  workDate: string,
   periodLabel: string | null,
   userId: string | null,
-): Promise<{ run: ChefProductionRun; tasks: ChefProductionTask[] }> {
-  const tasks = await collectAllTasksForPlan(supabase, planId);
-  if (tasks.length === 0)
-    throw new Error('Esta lista no tiene artículos. Añade categorías y artículos en Artículos y stocks antes de abrir el día.');
+): Promise<ChefProductionSession> {
+  const { data: existing, error: exErr } = await supabase
+    .from('chef_production_sessions')
+    .select(
+      'id,local_id,template_id,work_date,forced_block_id,period_label,lines_snapshot,started_at,completed_at,created_by',
+    )
+    .eq('local_id', localId)
+    .eq('template_id', templateId)
+    .eq('work_date', workDate)
+    .maybeSingle();
+  if (exErr) throw new Error(exErr.message);
+  if (existing) return mapProductionSession(existing as Record<string, unknown>);
 
-  const { data: runRow, error: runErr } = await supabase
-    .from('chef_production_runs')
+  const lines = await collectAllTemplateLines(supabase, templateId);
+  if (lines.length === 0) {
+    throw new Error(
+      'Esta plantilla no tiene productos. Edítala en Plantillas antes de abrir el día.',
+    );
+  }
+
+  const { data: row, error: insErr } = await supabase
+    .from('chef_production_sessions')
     .insert({
       local_id: localId,
-      plan_id: planId,
-      period_start: periodStart,
+      template_id: templateId,
+      work_date: workDate,
       period_label: periodLabel?.trim() || null,
       created_by: userId,
     })
-    .select('id,local_id,plan_id,period_start,period_label,started_at,completed_at,created_by')
+    .select(
+      'id,local_id,template_id,work_date,forced_block_id,period_label,lines_snapshot,started_at,completed_at,created_by',
+    )
     .single();
-  if (runErr) throw new Error(runErr.message);
 
-  const run = {
-    id: String(runRow.id),
-    localId: String(runRow.local_id),
-    planId: String(runRow.plan_id),
-    periodStart: String(runRow.period_start),
-    periodLabel: runRow.period_label != null ? String(runRow.period_label) : null,
-    startedAt: String(runRow.started_at),
-    completedAt: runRow.completed_at != null ? String(runRow.completed_at) : null,
-    createdBy: runRow.created_by != null ? String(runRow.created_by) : null,
-  } as ChefProductionRun;
-
-  const rows = tasks.map((t) => ({ run_id: run.id, task_id: t.id, is_done: false }));
-  const { error: insErr } = await supabase.from('chef_production_run_tasks').insert(rows);
   if (insErr) {
-    // Compensación: evitar runs huérfanos si falla el insert de tareas.
-    const { error: rollbackErr } = await supabase.from('chef_production_runs').delete().eq('id', run.id);
-    if (rollbackErr) {
-      throw new Error(`Falló al iniciar producción (${insErr.message}) y no se pudo revertir (${rollbackErr.message}).`);
+    if (insErr.code === '23505') {
+      const { data: again } = await supabase
+        .from('chef_production_sessions')
+        .select(
+          'id,local_id,template_id,work_date,forced_block_id,period_label,lines_snapshot,started_at,completed_at,created_by',
+        )
+        .eq('local_id', localId)
+        .eq('template_id', templateId)
+        .eq('work_date', workDate)
+        .maybeSingle();
+      if (again) return mapProductionSession(again as Record<string, unknown>);
     }
-    throw new Error(`No se pudo iniciar la producción. Se revirtió la apertura: ${insErr.message}`);
+    throw new Error(insErr.message);
   }
 
-  return { run, tasks };
-}
-
-export async function fetchChefProductionRunTasks(
-  supabase: SupabaseClient,
-  runId: string,
-): Promise<ChefProductionRunTask[]> {
-  const { data, error } = await supabase
-    .from('chef_production_run_tasks')
-    .select('id,run_id,task_id,is_done,done_at,qty_note,qty_on_hand,qty_to_make')
-    .eq('run_id', runId);
-  if (error) throw new Error(error.message);
-  return (data ?? []).map((r) => ({
-    id: String(r.id),
-    runId: String(r.run_id),
-    taskId: String(r.task_id),
-    isDone: Boolean(r.is_done),
-    doneAt: r.done_at != null ? String(r.done_at) : null,
-    qtyNote: r.qty_note != null ? String(r.qty_note) : null,
-    qtyOnHand: r.qty_on_hand != null && r.qty_on_hand !== '' ? Number(r.qty_on_hand) : null,
-    qtyToMake: r.qty_to_make != null && r.qty_to_make !== '' ? Number(r.qty_to_make) : null,
+  const session = mapProductionSession(row as Record<string, unknown>);
+  const slRows = lines.map((l) => ({
+    session_id: session.id,
+    line_id: l.id,
+    qty_on_hand: null as number | null,
   }));
+  const { error: lineErr } = await supabase.from('chef_production_session_lines').insert(slRows);
+  if (lineErr) {
+    await supabase.from('chef_production_sessions').delete().eq('id', session.id);
+    throw new Error(lineErr.message);
+  }
+  return session;
 }
 
-export async function setChefProductionRunTaskDone(
+export async function fetchChefProductionSessionLines(
   supabase: SupabaseClient,
-  runTaskId: string,
-  isDone: boolean,
-  qtyNote?: string | null,
-): Promise<void> {
-  const patch: Record<string, unknown> = {
-    is_done: isDone,
-    done_at: isDone ? new Date().toISOString() : null,
-  };
-  if (qtyNote !== undefined) patch.qty_note = qtyNote?.trim() || null;
-  const { error } = await supabase.from('chef_production_run_tasks').update(patch).eq('id', runTaskId);
+  sessionId: string,
+): Promise<ChefProductionSessionLine[]> {
+  const { data, error } = await supabase
+    .from('chef_production_session_lines')
+    .select('id,session_id,line_id,qty_on_hand')
+    .eq('session_id', sessionId);
   if (error) throw new Error(error.message);
+  return (data ?? []).map((r) => mapProductionSessionLine(r as Record<string, unknown>));
 }
 
-export async function updateChefProductionRunTaskQty(
+export async function updateChefProductionSessionForcedBlock(
   supabase: SupabaseClient,
-  runTaskId: string,
-  patch: { qtyOnHand?: number | null; qtyToMake?: number | null },
+  sessionId: string,
+  forcedBlockId: string | null,
 ): Promise<void> {
-  const row: Record<string, unknown> = {};
-  if (patch.qtyOnHand !== undefined) row.qty_on_hand = patch.qtyOnHand;
-  if (patch.qtyToMake !== undefined) row.qty_to_make = patch.qtyToMake;
-  if (Object.keys(row).length === 0) return;
-  const { error } = await supabase.from('chef_production_run_tasks').update(row).eq('id', runTaskId);
-  if (error) throw new Error(error.message);
-}
-
-export async function completeChefProductionRun(supabase: SupabaseClient, runId: string): Promise<void> {
   const { error } = await supabase
-    .from('chef_production_runs')
-    .update({ completed_at: new Date().toISOString() })
-    .eq('id', runId);
+    .from('chef_production_sessions')
+    .update({ forced_block_id: forcedBlockId })
+    .eq('id', sessionId);
+  if (error) throw new Error(error.message);
+}
+
+export async function updateChefProductionSessionLineQty(
+  supabase: SupabaseClient,
+  sessionLineId: string,
+  qtyOnHand: number | null,
+): Promise<void> {
+  const { error } = await supabase
+    .from('chef_production_session_lines')
+    .update({ qty_on_hand: qtyOnHand })
+    .eq('id', sessionLineId);
+  if (error) throw new Error(error.message);
+}
+
+export async function completeChefProductionSession(supabase: SupabaseClient, sessionId: string): Promise<void> {
+  const session = await fetchChefProductionSessionRow(supabase, sessionId);
+  if (!session) throw new Error('Sesión no encontrada.');
+  if (session.completedAt) return;
+  const snapshot = await buildChefProductionSnapshotForSession(supabase, session);
+  const { error } = await supabase
+    .from('chef_production_sessions')
+    .update({ completed_at: new Date().toISOString(), lines_snapshot: snapshot })
+    .eq('id', sessionId);
   if (error) throw new Error(error.message);
 }
