@@ -498,7 +498,7 @@ export function OperationalSkelloCellBody({
                 <div
                   key={sOne.id}
                   className={[
-                    'flex min-w-0 shrink-0 items-stretch overflow-hidden',
+                    'flex w-full max-w-full min-w-0 shrink-0 flex-row items-stretch overflow-hidden',
                     canEdit ? 'rounded-lg ring-1 ring-black/[0.08]' : '',
                     selectedShiftId === sOne.id ? 'ring-2 ring-zinc-900/45' : '',
                   ].join(' ')}
@@ -529,7 +529,7 @@ export function OperationalSkelloCellBody({
             return (
               <div
                 key={g.slotKey}
-                className="absolute flex flex-col gap-1 overflow-x-hidden overflow-y-visible bg-transparent"
+                className="absolute flex w-full min-w-0 flex-col items-stretch gap-1 overflow-x-hidden overflow-y-visible bg-transparent"
                 style={{
                   top: `${seg.topPct}%`,
                   left: `${left}%`,
@@ -556,10 +556,10 @@ export function OperationalSkelloCellBody({
                         {stats.huecos} hueco{stats.huecos > 1 ? 's' : ''}
                       </p>
                     ) : null}
-                    <div className="mt-2 flex flex-wrap gap-1.5">
+                    <div className="mt-2 flex w-full flex-col gap-1.5">
                       <button
                         type="button"
-                        className="rounded-lg bg-zinc-900 px-2.5 py-1.5 text-[10px] font-extrabold text-white shadow-sm hover:bg-zinc-800 sm:text-[11px]"
+                        className="w-full rounded-lg bg-zinc-900 px-2.5 py-1.5 text-[10px] font-extrabold text-white shadow-sm hover:bg-zinc-800 sm:text-[11px]"
                         onPointerDown={(e) => e.stopPropagation()}
                         onClick={(e) => {
                           e.stopPropagation();
@@ -572,7 +572,7 @@ export function OperationalSkelloCellBody({
                       {canEdit && onAddPersonSameSlot ? (
                         <button
                           type="button"
-                          className="rounded-lg border border-zinc-300 bg-white px-2.5 py-1.5 text-[10px] font-extrabold text-zinc-900 shadow-sm hover:bg-zinc-50 sm:text-[11px]"
+                          className="w-full rounded-lg border border-zinc-300 bg-white px-2.5 py-1.5 text-[10px] font-extrabold text-zinc-900 shadow-sm hover:bg-zinc-50 sm:text-[11px]"
                           onPointerDown={(e) => e.stopPropagation()}
                           onClick={(e) => {
                             e.stopPropagation();
@@ -586,7 +586,9 @@ export function OperationalSkelloCellBody({
                     </div>
                   </div>
                 ) : (
-                  <div className="flex flex-col gap-1.5 pr-0.5">{previewShifts.map(renderShiftCardRow)}</div>
+                  <div className="flex w-full min-w-0 flex-col items-stretch gap-1.5 pr-0.5">
+                    {previewShifts.map(renderShiftCardRow)}
+                  </div>
                 )}
                 {density === 'medium' && restCount > 0 ? (
                   <div className="rounded-md bg-zinc-100/95 px-2 py-1.5 ring-1 ring-zinc-200/90">
@@ -599,7 +601,7 @@ export function OperationalSkelloCellBody({
                   </div>
                 ) : null}
                 {density !== 'high' ? (
-                  <div className="flex shrink-0 flex-wrap items-center justify-end gap-1 border-t border-zinc-200/80 bg-white/80 pt-1">
+                  <div className="flex w-full shrink-0 flex-col gap-1 border-t border-zinc-200/80 bg-white/80 pt-1">
                     {density === 'low' && teamSize > 1 ? (
                       <button
                         type="button"
@@ -868,7 +870,7 @@ export function OperationalSkelloCellBody({
                           <div key={sOne.id} className="flex flex-col gap-1.5">
                             <div
                               className={[
-                                'flex min-w-0 items-stretch overflow-hidden',
+                                'flex w-full max-w-full min-w-0 flex-row items-stretch overflow-hidden',
                                 canEdit ? 'rounded-lg ring-1 ring-black/[0.08]' : '',
                                 selectedShiftId === sOne.id ? 'ring-2 ring-zinc-900/45' : '',
                               ].join(' ')}
@@ -894,10 +896,10 @@ export function OperationalSkelloCellBody({
                               )}
                             </div>
                             {canEdit ? (
-                              <div className="flex flex-wrap justify-end gap-1.5 pl-1">
+                              <div className="flex w-full flex-col gap-1.5 pl-1">
                                 <button
                                   type="button"
-                                  className="rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-[11px] font-extrabold text-zinc-800 hover:bg-zinc-50"
+                                  className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-[11px] font-extrabold text-zinc-800 hover:bg-zinc-50"
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     onShiftAdvancedEdit(sOne);
@@ -907,7 +909,7 @@ export function OperationalSkelloCellBody({
                                 </button>
                                 <button
                                   type="button"
-                                  className="rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-[11px] font-extrabold text-red-800 hover:bg-red-100"
+                                  className="w-full rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-[11px] font-extrabold text-red-800 hover:bg-red-100"
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     void removeShiftFromGroup(sOne);
