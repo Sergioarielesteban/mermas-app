@@ -1,39 +1,65 @@
 import Link from 'next/link';
-import { ShieldCheck, TrendingUp, Eye, Layers } from 'lucide-react';
+import { GaugeCircle, Layers, ShieldCheck, Workflow } from 'lucide-react';
 import MarketingLeadForm from '@/components/MarketingLeadForm';
 import MarketingQuickContact, { MarketingContactLinkRow } from '@/components/marketing/MarketingQuickContact';
 import MarketingHero from '@/components/marketing/MarketingHero';
-import MarketingOriginStory from '@/components/marketing/MarketingOriginStory';
-import MarketingCocinerosSection from '@/components/marketing/MarketingCocinerosSection';
 import MarketingModulesSection from '@/components/marketing/MarketingModulesSection';
 import MarketingPricingHighlight from '@/components/marketing/MarketingPricingHighlight';
 import { getMarketingContactPhone } from '@/lib/marketing-contact-phone';
 
 const BRAND = '#D32F2F';
 
+const socialProofClients = [
+  'La Barra Norte',
+  'Fuego y Sal',
+  'Casa Mercado',
+  'Bistró Central',
+  'Taberna 23',
+  'Costa Brasa',
+  'La Sartén Roja',
+  'Punto y Fondo',
+] as const;
+
+const problemPoints = [
+  'No sabes exactamente qué se ha pedido.',
+  'Los precios cambian y nadie lo detecta.',
+  'Cada turno trabaja distinto.',
+  'Se pierde información entre cocina y sala.',
+  'No tienes una visión clara del negocio.',
+] as const;
+
+const realUseCards = [
+  'Turno de mañana publica checklist y deja todo trazado para noche.',
+  'Recepción detecta subida de coste al validar albarán.',
+  'Encargado revisa mermas del día antes de volver a pedir.',
+  'Auditoría APPCC con registros listos en minutos.',
+  'Cambio de personal sin perder procesos ni contexto.',
+  'Cierre semanal con datos de coste y consumo interno claros.',
+] as const;
+
 const benefitBlocks = [
   {
-    title: 'Menos errores',
-    body: 'Pedidos y recepción con hilo claro.',
+    title: 'Sistema único',
+    body: 'Operación, control y cumplimiento en el mismo flujo.',
     Icon: ShieldCheck,
     accent: 'from-rose-50 to-white ring-rose-100/80',
   },
   {
-    title: 'Todo en un sitio',
-    body: 'OCR, asistente Oído Chef, APPCC, checklists y producción donde toque.',
+    title: 'Decisión con datos',
+    body: 'Métricas operativas para decidir en servicio y en cierre.',
     Icon: Layers,
     accent: 'from-sky-50/80 to-white ring-sky-100/70',
   },
   {
-    title: 'Control visible',
-    body: 'Datos que el turno ve al instante.',
-    Icon: Eye,
+    title: 'Flujo replicable',
+    body: 'Cada turno trabaja igual, con menos dependencia de memoria.',
+    Icon: Workflow,
     accent: 'from-violet-50/70 to-white ring-violet-100/70',
   },
   {
-    title: 'Mejores decisiones',
-    body: 'Mermas, stock y escandallos con base real.',
-    Icon: TrendingUp,
+    title: 'Velocidad real',
+    body: 'Uso rápido en móvil para que se use durante el servicio.',
+    Icon: GaugeCircle,
     accent: 'from-emerald-50/90 to-white ring-emerald-100/80',
   },
 ] as const;
@@ -63,16 +89,16 @@ export default function MarketingLanding() {
           </Link>
           <div className="flex items-center gap-2">
             <Link
-              href="#origen"
+              href="#problema"
               className="hidden rounded-full px-3 py-2 text-xs font-bold text-stone-600 ring-1 ring-stone-200/90 transition hover:bg-stone-50 sm:inline-flex"
             >
-              Por qué Chef-One
+              Problema
             </Link>
             <Link
-              href="#cocineros"
+              href="#modulos"
               className="hidden rounded-full px-3 py-2 text-xs font-bold text-stone-600 ring-1 ring-stone-200/90 transition hover:bg-stone-50 sm:inline-flex"
             >
-              Cocineros
+              Módulos
             </Link>
             <Link
               href="#modulos"
@@ -84,7 +110,7 @@ export default function MarketingLanding() {
               href="#precio"
               className="hidden rounded-full px-3 py-2 text-xs font-bold text-stone-600 ring-1 ring-stone-200/90 transition hover:bg-stone-50 sm:inline-flex"
             >
-              Precio
+              Planes
             </Link>
             <Link
               href="#solicitar-info"
@@ -105,20 +131,72 @@ export default function MarketingLanding() {
 
       <main id="contenido">
         <MarketingHero />
+        <section className="overflow-hidden border-b border-stone-200/60 bg-white py-4">
+          <div className="mx-auto max-w-6xl">
+            <div className="relative overflow-hidden">
+              <div className="flex min-w-max animate-[chefone-marquee_28s_linear_infinite] gap-3 px-4 sm:px-6">
+                {[...socialProofClients, ...socialProofClients].map((name, idx) => (
+                  <span
+                    key={`${name}-${idx}`}
+                    className="inline-flex rounded-full border border-stone-200 bg-stone-50 px-3 py-1.5 text-xs font-semibold text-stone-700"
+                  >
+                    {name}
+                  </span>
+                ))}
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section id="problema" className="scroll-mt-[4.5rem] border-t border-stone-200/60 bg-white px-4 py-12 sm:scroll-mt-24 sm:px-6 sm:py-14">
+          <div className="mx-auto max-w-4xl">
+            <h2 className="text-2xl font-extrabold tracking-tight text-stone-900 sm:text-3xl">Si esto te suena, lo necesitas</h2>
+            <ul className="mt-5 grid gap-3 sm:grid-cols-2">
+              {problemPoints.map((point) => (
+                <li key={point} className="rounded-xl border border-stone-200 bg-stone-50/80 px-4 py-3 text-sm font-medium text-stone-700">
+                  {point}
+                </li>
+              ))}
+            </ul>
+            <p className="mt-4 text-sm font-semibold text-stone-900">Y cuando algo falla, nadie sabe por qué.</p>
+            <p className="mt-2 text-sm font-semibold text-[#D32F2F]">Chef-One organiza todo eso en un solo sistema.</p>
+          </div>
+        </section>
+
         <MarketingModulesSection />
-        <MarketingPricingHighlight />
-        <MarketingOriginStory />
-        <MarketingCocinerosSection />
+
+        <section className="border-t border-stone-200/60 bg-white px-4 py-12 sm:px-6 sm:py-14">
+          <div className="mx-auto max-w-4xl text-center">
+            <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#D32F2F]/90">Identidad</p>
+            <h2 className="mt-2 text-2xl font-extrabold tracking-tight text-stone-900 sm:text-3xl">
+              Software de cocina para servicio real
+            </h2>
+            <p className="mt-3 text-sm text-stone-600 sm:text-base">Sin ruido, sin postureo, sin depender del “ya me acuerdo”.</p>
+          </div>
+        </section>
+
+        <section className="border-t border-stone-200/60 bg-gradient-to-b from-[#fafafa] to-white px-4 py-12 sm:px-6 sm:py-16">
+          <div className="mx-auto max-w-6xl">
+            <h2 className="text-center text-2xl font-extrabold tracking-tight text-stone-900 sm:text-3xl">Uso real en cocina</h2>
+            <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {realUseCards.map((item) => (
+                <article key={item} className="rounded-2xl border border-stone-200 bg-white p-4 text-sm text-stone-700 shadow-sm">
+                  {item}
+                </article>
+              ))}
+            </div>
+          </div>
+        </section>
 
         {/* Beneficios */}
         <section className="border-t border-stone-200/60 bg-white px-4 py-12 sm:px-6 sm:py-16" aria-labelledby="beneficios-heading">
           <div className="mx-auto max-w-6xl">
             <div className="mx-auto max-w-2xl text-center">
               <h2 id="beneficios-heading" className="text-balance text-2xl font-extrabold tracking-tight text-stone-900 sm:text-3xl">
-                Por qué mola
+                Beneficios del sistema
               </h2>
               <p className="mt-2 text-pretty text-sm text-stone-600 sm:text-base">
-                Cuatro ideas. Sin sermón.
+                Menos fricción operativa, más consistencia.
               </p>
             </div>
             <ul className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4 lg:gap-5">
@@ -143,6 +221,29 @@ export default function MarketingLanding() {
           </div>
         </section>
 
+        <section className="border-t border-stone-200/60 bg-stone-50/60 px-4 py-12 sm:px-6 sm:py-14">
+          <div className="mx-auto max-w-4xl text-center">
+            <h2 className="text-2xl font-extrabold tracking-tight text-stone-900 sm:text-3xl">Activación simple desde el día uno</h2>
+            <p className="mt-3 text-sm text-stone-600 sm:text-base">
+              Empiezas en móvil, activas lo necesario y gestionas el local sin depender de soporte continuo.
+            </p>
+          </div>
+        </section>
+
+        <section className="border-t border-stone-200/60 bg-white px-4 py-12 sm:px-6 sm:py-14">
+          <div className="mx-auto max-w-4xl text-center">
+            <h2 className="text-2xl font-extrabold tracking-tight text-stone-900 sm:text-3xl">Hecho para ir rápido</h2>
+            <ul className="mt-5 grid gap-3 text-sm text-stone-700 sm:grid-cols-3">
+              <li className="rounded-xl border border-stone-200 bg-stone-50 px-3 py-3">Registrar en segundos.</li>
+              <li className="rounded-xl border border-stone-200 bg-stone-50 px-3 py-3">Usable en pleno servicio.</li>
+              <li className="rounded-xl border border-stone-200 bg-stone-50 px-3 py-3">Sin formación compleja.</li>
+            </ul>
+            <p className="mt-3 text-sm font-semibold text-stone-900">Si no es rápido, no se usa.</p>
+          </div>
+        </section>
+
+        <MarketingPricingHighlight />
+
         {/* A medida + formulario */}
         <section
           id="solicitar-info"
@@ -152,7 +253,7 @@ export default function MarketingLanding() {
             <div className="mx-auto max-w-xl text-center">
               <h2 className="text-2xl font-extrabold tracking-tight text-stone-900 sm:text-3xl">¿Hablamos?</h2>
               <p className="mt-2 text-pretty text-sm leading-snug text-stone-600 sm:text-base">
-                Dinos local y qué te urge ordenar. Te respondemos de verdad.
+                Cuéntanos tu cocina y te enseñamos cómo activarla sin fricción.
               </p>
             </div>
 
@@ -179,17 +280,25 @@ export default function MarketingLanding() {
           </div>
         </section>
 
-        <section className="border-t border-stone-200/60 bg-gradient-to-br from-stone-50 to-white px-4 py-10 sm:px-6">
+        <section className="border-t border-stone-200/60 bg-gradient-to-br from-stone-50 to-white px-4 py-12 sm:px-6">
           <div className="mx-auto max-w-2xl text-center">
-            <h2 className="text-lg font-extrabold text-stone-900 sm:text-xl">¿Ya eres cliente?</h2>
-            <p className="mt-2 text-sm text-stone-600">Entra con tu usuario.</p>
-            <Link
-              href="/login"
-              className="mt-6 inline-flex h-12 items-center justify-center rounded-2xl px-10 text-sm font-bold text-white shadow-md transition hover:brightness-105"
-              style={{ backgroundColor: BRAND }}
-            >
-              Ir al acceso
-            </Link>
+            <h2 className="text-2xl font-extrabold text-stone-900 sm:text-3xl">Empieza a operar con sistema hoy</h2>
+            <p className="mt-2 text-sm text-stone-600">Pide demo, activa plan y arranca sin permanencia.</p>
+            <div className="mt-6 flex flex-col items-stretch justify-center gap-3 sm:flex-row">
+              <Link
+                href="#solicitar-info"
+                className="inline-flex h-12 items-center justify-center rounded-2xl px-8 text-sm font-bold text-white shadow-md transition hover:brightness-105"
+                style={{ backgroundColor: BRAND }}
+              >
+                Solicitar demo
+              </Link>
+              <Link
+                href="/login"
+                className="inline-flex h-12 items-center justify-center rounded-2xl border border-stone-300 px-8 text-sm font-bold text-stone-800 transition hover:bg-stone-100"
+              >
+                Abrir app
+              </Link>
+            </div>
           </div>
         </section>
       </main>
@@ -204,16 +313,13 @@ export default function MarketingLanding() {
             Acceso clientes
           </Link>
           <Link href="#precio" className="font-medium underline decoration-stone-300 underline-offset-2 hover:text-stone-800">
-            Precio
+            Planes
           </Link>
           <Link href="#solicitar-info" className="font-medium underline decoration-stone-300 underline-offset-2 hover:text-stone-800">
             Contacto
           </Link>
-          <Link href="#origen" className="font-medium underline decoration-stone-300 underline-offset-2 hover:text-stone-800">
-            Por qué Chef-One
-          </Link>
-          <Link href="#cocineros" className="font-medium underline decoration-stone-300 underline-offset-2 hover:text-stone-800">
-            Cocineros
+          <Link href="#problema" className="font-medium underline decoration-stone-300 underline-offset-2 hover:text-stone-800">
+            Problema
           </Link>
           <Link href="#modulos" className="font-medium underline decoration-stone-300 underline-offset-2 hover:text-stone-800">
             Ver módulos
@@ -238,6 +344,17 @@ export default function MarketingLanding() {
           ) : null}
         </p>
       </footer>
+
+      <style jsx global>{`
+        @keyframes chefone-marquee {
+          0% {
+            transform: translateX(0);
+          }
+          100% {
+            transform: translateX(-50%);
+          }
+        }
+      `}</style>
 
       <MarketingQuickContact />
     </div>

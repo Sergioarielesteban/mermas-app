@@ -174,9 +174,9 @@ export default function MarketingHero() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5, delay: reduceMotion ? 0 : 0.04 }}
           >
-            Menos caos en servicio.
+            Todo lo que pasa en tu cocina,
             <span className="mt-1 block bg-gradient-to-r from-[#D32F2F] to-[#9a1818] bg-clip-text text-transparent">
-              Más control, sin complicarte.
+              en un solo sitio.
             </span>
           </motion.h1>
 
@@ -186,10 +186,7 @@ export default function MarketingHero() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.45, delay: reduceMotion ? 0 : 0.09 }}
           >
-            Pedidos con OCR de albarán, asistente <strong className="font-semibold text-stone-800">Oído Chef</strong>{' '}
-            (voz y <abbr title="Inteligencia artificial opcional con tu propia API">IA</abbr> opcional), APPCC, checklists,
-            producción, escandallos, inventario, comida de personal y chat del local. Activa solo lo que necesites: app
-            pensada para móvil y tablet, al ritmo del servicio.
+            Gestiona pedidos, control, equipo y cumplimiento sin cambiar de app ni depender de memoria.
           </motion.p>
 
           <motion.div
@@ -203,7 +200,7 @@ export default function MarketingHero() {
               className="inline-flex h-12 items-center justify-center rounded-2xl px-8 text-sm font-bold text-white shadow-[0_10px_28px_-8px_rgba(211,47,47,0.5)] transition hover:brightness-105 active:scale-[0.99]"
               style={{ backgroundColor: BRAND }}
             >
-              Hablar con nosotros
+              Solicitar demo
             </Link>
             <button
               type="button"
@@ -222,10 +219,10 @@ export default function MarketingHero() {
               Ver módulos
             </Link>
             <Link
-              href="/onboarding"
+              href="/login"
               className="inline-flex h-12 items-center justify-center rounded-2xl px-8 text-sm font-bold text-stone-700 underline-offset-4 ring-1 ring-stone-200/90 transition hover:bg-stone-50"
             >
-              Cómo empezar
+              Ir a la app
             </Link>
           </motion.div>
         </div>
