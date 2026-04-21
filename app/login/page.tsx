@@ -60,7 +60,7 @@ export default function LoginPage() {
     <div className="flex min-h-[100dvh] w-full flex-col bg-[#fafafa]">
       <div
         className={[
-          'flex min-h-[100dvh] flex-1 flex-col items-center px-5 pb-10',
+          'flex min-h-[100dvh] flex-1 flex-col items-center justify-center px-5 pb-10',
           'pt-[max(1rem,env(safe-area-inset-top))] sm:px-6 sm:pb-12',
         ].join(' ')}
       >
