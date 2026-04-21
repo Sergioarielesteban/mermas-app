@@ -198,13 +198,13 @@ export default function ShiftWeekGrid({
 
     const borderCls =
       rowVariant === 'unassigned'
-        ? 'min-h-[72px] w-full rounded-xl border border-dashed border-amber-200/90 bg-white/60 p-1 text-left'
-        : 'min-h-[72px] w-full rounded-xl border border-dashed border-zinc-200/90 bg-zinc-50/50 p-1 text-left transition hover:border-[#D32F2F]/40 hover:bg-[#D32F2F]/5';
+        ? 'min-h-[54px] w-full rounded-xl border border-dashed border-amber-200/90 bg-white/60 p-1 text-left'
+        : 'min-h-[54px] w-full rounded-xl border border-dashed border-zinc-200/90 bg-zinc-50/50 p-1 text-left transition hover:border-[#D32F2F]/40 hover:bg-[#D32F2F]/5';
 
     if (here.length > 0) {
       return (
         <div className={borderCls}>
-          <div className="flex flex-col gap-1">
+          <div className="flex flex-col gap-0.5">
             {here.map((s) => {
               const zStyle = s.colorHint
                 ? { bg: s.colorHint, text: '#ffffff', subtleBg: `${s.colorHint}22` }
@@ -212,10 +212,10 @@ export default function ShiftWeekGrid({
               const dur = plannedShiftMinutes(s);
               const rowBorder = `color-mix(in srgb, ${zStyle.bg} 38%, ${zStyle.subtleBg})`;
               return (
-                <div key={s.id} className="flex flex-col gap-0.5">
+                <div key={s.id} className="flex w-[60%] max-w-[60%] flex-col gap-0.5 self-start">
                   <button
                     type="button"
-                    className="flex min-h-[44px] w-full touch-manipulation flex-col items-stretch overflow-hidden rounded-lg border border-solid px-2 py-1.5 text-left shadow-sm"
+                    className="flex min-h-[33px] w-full touch-manipulation flex-col items-stretch overflow-hidden rounded-lg border border-solid px-1.5 py-1 text-left shadow-sm"
                     style={{
                       backgroundColor: zStyle.subtleBg,
                       borderColor: rowBorder,
@@ -228,10 +228,10 @@ export default function ShiftWeekGrid({
                       setShiftSheet({ shift: s, employeeId: em.id, ymd });
                     }}
                   >
-                    <span className="block text-[10px] font-extrabold leading-tight text-zinc-900 sm:text-xs">
+                    <span className="block text-[9px] font-extrabold leading-tight text-zinc-900 sm:text-[11px]">
                       {shortTime(s.startTime)} – {shortTime(s.endTime)}
                     </span>
-                    <span className="mt-0.5 block text-[9px] font-semibold text-zinc-700">
+                    <span className="mt-0.5 block text-[8px] font-semibold text-zinc-700 sm:text-[9px]">
                       {formatDurationMin(dur)}
                       {s.zone ? ` · ${zoneLabel(s.zone)}` : ''}
                     </span>

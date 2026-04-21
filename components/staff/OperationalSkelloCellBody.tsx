@@ -25,8 +25,9 @@ function formatHoursSum(mins: number): string {
   return `${Math.round(h)} h`;
 }
 
-/** Altura fija por turno (~68–72px). Padding horizontal ligeramente reducido solo dentro de la tarjeta. */
-const SHIFT_CARD_ROW_H = 'h-[4.25rem] sm:h-[4.5rem]';
+/** Altura fija por turno (−25% vs ~68–72px). Ancho tarjeta al 60% de la celda, alineada a la izquierda. */
+const SHIFT_CARD_ROW_H = 'h-[3.1875rem] sm:h-[3.375rem]';
+const SHIFT_CARD_ROW_W = 'w-[60%] max-w-[60%]';
 
 /**
  * Tarjeta compacta: horario | persona | horas totales.
@@ -67,19 +68,19 @@ const ShiftEmployeeRowCard = React.memo(function ShiftEmployeeRowCard({
       className={`flex h-full min-h-0 w-full min-w-0 items-stretch overflow-hidden border-white/20 ${shellClassName}`}
       style={{ backgroundColor: zoneAccent, color: zoneText }}
     >
-      <div className="grid min-w-0 flex-1 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-1.5 gap-y-0 px-1 py-0 sm:gap-x-2 sm:px-1.5">
-        <span className="shrink-0 text-[10px] font-extrabold tabular-nums tracking-tight sm:text-[11px]">
+      <div className="grid min-w-0 flex-1 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-1 gap-y-0 px-0.5 py-0 sm:gap-x-1.5 sm:px-1">
+        <span className="shrink-0 text-[9px] font-extrabold tabular-nums tracking-tight sm:text-[10px]">
           {timeRng}
         </span>
         <span
-          className="line-clamp-2 min-w-0 text-[11px] font-bold leading-snug sm:text-xs"
+          className="line-clamp-2 min-w-0 text-[10px] font-bold leading-tight sm:text-[11px]"
           style={showAlert ? { color: '#fecaca' } : undefined}
           title={nameLabel}
         >
           {nameLabel}
           {showAlert ? (
             <span
-              className="ml-1 inline-flex h-3.5 w-3.5 align-middle items-center justify-center rounded-full bg-red-600 text-[8px] font-bold text-white"
+              className="ml-1 inline-flex h-3 w-3 align-middle items-center justify-center rounded-full bg-red-600 text-[7px] font-bold text-white"
               title="Requiere atención"
               aria-label="Aviso"
             >
@@ -87,7 +88,7 @@ const ShiftEmployeeRowCard = React.memo(function ShiftEmployeeRowCard({
             </span>
           ) : null}
         </span>
-        <span className="shrink-0 text-right text-[10px] font-extrabold opacity-95 sm:text-[11px]">{hoursLabel}</span>
+        <span className="shrink-0 text-right text-[9px] font-extrabold opacity-95 sm:text-[10px]">{hoursLabel}</span>
       </div>
     </div>
   );
@@ -157,7 +158,7 @@ function OperationalSkelloCellBodyInner({
           role={canEdit ? 'button' : undefined}
           tabIndex={canEdit ? 0 : undefined}
           className={[
-            'relative flex min-h-[3.75rem] w-full items-center justify-center rounded-lg border border-dashed px-2 py-2 transition touch-manipulation select-none sm:min-h-[4rem]',
+            'relative flex min-h-[2.8125rem] w-full items-center justify-center rounded-lg border border-dashed px-2 py-1.5 transition touch-manipulation select-none sm:min-h-[3rem]',
             canEdit
               ? 'cursor-pointer border-zinc-300 bg-zinc-50/40 hover:border-[#D32F2F]/45 hover:bg-white'
               : 'cursor-default border-zinc-100 bg-zinc-50/30',
@@ -245,7 +246,7 @@ function OperationalSkelloCellBodyInner({
     );
 
     return (
-      <div key={sOne.id} className="flex min-w-0 w-full max-w-full flex-col gap-0.5">
+      <div key={sOne.id} className={`flex min-w-0 flex-col gap-0.5 ${SHIFT_CARD_ROW_W} self-start`}>
         <div
           className={[
             `flex w-full max-w-full min-w-0 shrink-0 flex-row items-stretch overflow-hidden rounded-lg ${SHIFT_CARD_ROW_H}`,
@@ -254,7 +255,7 @@ function OperationalSkelloCellBodyInner({
         >
           {canEdit ? (
             <>
-              <div className="flex h-full min-h-0 w-10 shrink-0 flex-col items-center justify-between rounded-l-lg border-y border-l border-zinc-200/90 bg-zinc-100 px-0.5 py-1">
+              <div className="flex h-full min-h-0 w-9 shrink-0 flex-col items-center justify-between rounded-l-lg border-y border-l border-zinc-200/90 bg-zinc-100 px-0.5 py-0.5 sm:w-10 sm:py-1">
                 <button
                   type="button"
                   className="shrink-0 rounded px-0.5 py-px text-[7px] font-extrabold leading-tight text-red-700 hover:bg-red-100/90 sm:text-[8px]"
