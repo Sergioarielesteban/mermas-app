@@ -11,9 +11,15 @@ import {
   operationalFranjaOperativaBanner,
   type LocalOperationalWindow,
 } from '@/lib/staff/local-operational-window';
-import type { CustomOperationalZoneRow } from '@/lib/staff/operational-custom-zones';
+import {
+  OPERATIONAL_NONE_ZONE,
+  operationalGridRowKey,
+  type CustomOperationalZoneRow,
+} from '@/lib/staff/operational-custom-zones';
 import type { StaffEmployee, StaffShift } from '@/lib/staff/types';
-export const OPERATIONAL_NONE_ZONE = '__none__' as const;
+
+/** @deprecated usar OPERATIONAL_NONE_ZONE desde operational-custom-zones */
+export { OPERATIONAL_NONE_ZONE };
 
 /** Cobertura en cabecera (puestos que deben tener turno). */
 const COVERAGE_MAIN_ZONES = ['cocina', 'barra', 'sala'] as const;
@@ -25,11 +31,6 @@ function formatHoursSum(mins: number): string {
   const h = mins / 60;
   if (h < 10) return `${h.toFixed(1).replace('.', ',')} h`;
   return `${Math.round(h)} h`;
-}
-
-function shiftZoneKey(s: StaffShift): string {
-  const z = (s.zone ?? '').trim().toLowerCase();
-  return z || OPERATIONAL_NONE_ZONE;
 }
 
 function buildZoneRows(
@@ -51,18 +52,21 @@ function buildZoneRows(
       seen.add(z);
     }
   }
-  rows.push({ key: OPERATIONAL_NONE_ZONE, label: 'Sin puesto' });
   return rows;
 }
 
 type Coverage = 'ok' | 'warn' | 'bad';
 
-function dayCoverage(ymd: string, shifts: StaffShift[]): Coverage {
+function dayCoverage(
+  ymd: string,
+  shifts: StaffShift[],
+  registry: CustomOperationalZoneRow[],
+): Coverage {
   const day = shifts.filter((s) => s.shiftDate === ymd);
   let bad = false;
   let warn = false;
   for (const z of COVERAGE_MAIN_ZONES) {
-    const inZone = day.filter((s) => shiftZoneKey(s) === z);
+    const inZone = day.filter((s) => operationalGridRowKey(s, registry) === z);
     if (inZone.length === 0) {
       bad = true;
       continue;
@@ -242,7 +246,7 @@ export default function OperationalWeekGrid({
   const shiftsByDayZone = useMemo(() => {
     const m = new Map<string, StaffShift[]>();
     for (const s of shifts) {
-      const k = `${s.shiftDate}|${shiftZoneKey(s)}`;
+      const k = `${s.shiftDate}|${operationalGridRowKey(s, operationalZoneRegistry)}`;
       const arr = m.get(k) ?? [];
       arr.push(s);
       m.set(k, arr);
@@ -251,7 +255,7 @@ export default function OperationalWeekGrid({
       arr.sort((a, b) => a.startTime.localeCompare(b.startTime));
     }
     return m;
-  }, [shifts]);
+  }, [shifts, operationalZoneRegistry]);
 
   const statsByDay = useMemo(() => {
     const m = new Map<
@@ -265,7 +269,7 @@ export default function OperationalWeekGrid({
       const minutes = dayShifts.reduce((acc, s) => acc + plannedShiftMinutes(s), 0);
       const byZone = new Map<string, { people: number; minutes: number }>();
       for (const s of dayShifts) {
-        const zk = shiftZoneKey(s);
+        const zk = operationalGridRowKey(s, operationalZoneRegistry);
         const cur = byZone.get(zk) ?? { people: 0, minutes: 0 };
         cur.minutes += plannedShiftMinutes(s);
         byZone.set(zk, cur);
@@ -273,23 +277,25 @@ export default function OperationalWeekGrid({
       for (const zk of byZone.keys()) {
         const cur = byZone.get(zk)!;
         const ids = new Set(
-          dayShifts.filter((x) => shiftZoneKey(x) === zk && x.employeeId).map((x) => x.employeeId!),
+          dayShifts.filter(
+            (x) => operationalGridRowKey(x, operationalZoneRegistry) === zk && x.employeeId,
+          ).map((x) => x.employeeId!),
         );
         cur.people = ids.size;
       }
       m.set(ymd, { people, minutes, byZone });
     }
     return m;
-  }, [days, shifts]);
+  }, [days, shifts, operationalZoneRegistry]);
 
   const coverageByDay = useMemo(() => {
     const m = new Map<string, Coverage>();
     for (const d of days) {
       const ymd = ymdLocal(d);
-      m.set(ymd, dayCoverage(ymd, shifts));
+      m.set(ymd, dayCoverage(ymd, shifts, operationalZoneRegistry));
     }
     return m;
-  }, [days, shifts]);
+  }, [days, shifts, operationalZoneRegistry]);
 
   const onDragStart = useCallback(
     (e: React.DragEvent, shiftId: string) => {
@@ -316,11 +322,11 @@ export default function OperationalWeekGrid({
       if (!id) return;
       const shift = shifts.find((s) => s.id === id);
       if (!shift) return;
-      const currentKey = shiftZoneKey(shift);
+      const currentKey = operationalGridRowKey(shift, operationalZoneRegistry);
       if (shift.shiftDate === dateYmd && currentKey === zoneRowKey) return;
       await onShiftPlaced(shift, dateYmd, zoneRowKey);
     },
-    [canEdit, onShiftPlaced, shifts],
+    [canEdit, onShiftPlaced, shifts, operationalZoneRegistry],
   );
 
   /** Solo puestos con datos reales; sin “C 0·0h” ni ruido. */

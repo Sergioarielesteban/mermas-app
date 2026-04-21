@@ -20,6 +20,7 @@ import {
   writeStoredPresetIdForZone,
 } from '@/lib/staff/shift-quick-presets';
 import {
+  defaultOperationalZoneKey,
   readOperationalZoneRegistry,
   writeOperationalZoneRegistry,
   type CustomOperationalZoneRow,
@@ -32,7 +33,7 @@ import {
 import {
   deleteStaffScheduleDayMark,
   deleteStaffScheduleDayMarkForCell,
-  clearStaffShiftsZoneForLocalZone,
+  reassignStaffShiftsZoneForLocalZone,
   deleteStaffShift,
   duplicateShiftsWeek,
   upsertStaffScheduleDayMark,
@@ -193,6 +194,51 @@ export default function PersonalPlanificacionPage() {
     setOperationalZoneRegistry(readOperationalZoneRegistry(localId));
   }, [localId]);
 
+  /** Turnos con zona vacía en BD → primer puesto del registro (persistido). Solo gestores. */
+  useEffect(() => {
+    if (!perms.canManageSchedules || !supabase || !localId || loading) return;
+    if (operationalZoneRegistry.length === 0) return;
+    const fallback = defaultOperationalZoneKey(operationalZoneRegistry);
+    const needs = shifts.filter((s) => !(s.zone ?? '').trim());
+    if (needs.length === 0) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        for (const s of needs) {
+          if (cancelled) return;
+          await upsertStaffShift(supabase, {
+            id: s.id,
+            localId,
+            employeeId: s.employeeId,
+            shiftDate: s.shiftDate,
+            startTime: s.startTime,
+            endTime: s.endTime,
+            endsNextDay: s.endsNextDay,
+            breakMinutes: s.breakMinutes,
+            zone: fallback,
+            notes: s.notes,
+            status: s.status,
+            colorHint: zoneDefaultColorHint(fallback) ?? s.colorHint,
+          });
+        }
+        await afterScheduleChange();
+      } catch {
+        /* evitar bucle ruidoso; el usuario puede volver a cargar */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    shifts,
+    operationalZoneRegistry,
+    loading,
+    perms.canManageSchedules,
+    supabase,
+    localId,
+    afterScheduleChange,
+  ]);
+
   const applyOperationalZoneRegistry = useCallback(
     (next: CustomOperationalZoneRow[]) => {
       if (!perms.canManageSchedules) return;
@@ -205,11 +251,12 @@ export default function PersonalPlanificacionPage() {
   const migrateZoneShiftsToUnassigned = useCallback(
     async (zoneKey: string): Promise<number> => {
       if (!localId || !supabase || !perms.canManageSchedules) return 0;
-      const n = await clearStaffShiftsZoneForLocalZone(supabase, localId, zoneKey);
+      const fallback = defaultOperationalZoneKey(operationalZoneRegistry);
+      const n = await reassignStaffShiftsZoneForLocalZone(supabase, localId, zoneKey, fallback);
       await afterScheduleChange();
       return n;
     },
-    [afterScheduleChange, localId, perms.canManageSchedules, supabase],
+    [afterScheduleChange, localId, operationalZoneRegistry, perms.canManageSchedules, supabase],
   );
 
   const shiftsInMonth = useMemo(() => {
@@ -354,9 +401,9 @@ export default function PersonalPlanificacionPage() {
   const onOperationalShiftPlaced = useCallback(
     async (shift: StaffShift, newDateYmd: string, zoneRowKey: string) => {
       if (!perms.canManageSchedules || !localId || !supabase) return;
-      const zone = zoneRowKey === OPERATIONAL_NONE_ZONE ? null : zoneRowKey;
-      const colorHint =
-        zone != null ? zoneDefaultColorHint(zone) ?? shift.colorHint : shift.colorHint;
+      const fallback = defaultOperationalZoneKey(operationalZoneRegistry);
+      const zone = zoneRowKey === OPERATIONAL_NONE_ZONE ? fallback : zoneRowKey;
+      const colorHint = zoneDefaultColorHint(zone) ?? shift.colorHint;
       try {
         await upsertStaffShift(supabase, {
           id: shift.id,
@@ -377,7 +424,7 @@ export default function PersonalPlanificacionPage() {
         await appAlert(e instanceof Error ? e.message : 'No se pudo mover el turno');
       }
     },
-    [perms.canManageSchedules, localId, supabase, afterScheduleChange],
+    [perms.canManageSchedules, localId, supabase, afterScheduleChange, operationalZoneRegistry],
   );
 
   const onOperationalQuickCreate = useCallback(

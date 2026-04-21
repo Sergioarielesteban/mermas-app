@@ -330,29 +330,31 @@ export async function deleteStaffShift(supabase: SupabaseClient, shiftId: string
 }
 
 /**
- * Pone `zone` a null en todos los turnos del local cuya zona (trim + lower) coincide con `zoneKey`.
- * Usado al eliminar un puesto del cuadrante (turnos pasan a «Sin puesto»).
+ * Traslada todos los turnos del local con zona `fromZoneKey` a `toZoneKey` (normalizadas).
+ * Usado al eliminar un puesto del cuadrante (reasignación al puesto por defecto del local).
  */
-export async function clearStaffShiftsZoneForLocalZone(
+export async function reassignStaffShiftsZoneForLocalZone(
   supabase: SupabaseClient,
   localId: string,
-  zoneKey: string,
+  fromZoneKey: string,
+  toZoneKey: string,
 ): Promise<number> {
-  const z = zoneKey.trim().toLowerCase();
-  if (!z || z === '__none__') return 0;
+  const from = fromZoneKey.trim().toLowerCase();
+  const to = toZoneKey.trim().toLowerCase();
+  if (!from || from === '__none__' || !to || from === to) return 0;
   const { data, error } = await supabase
     .from('staff_shifts')
     .select('id, zone')
     .eq('local_id', localId);
   if (error) throw new Error(error.message);
   const ids = (data ?? [])
-    .filter((row: { id: string; zone: string | null }) => (row.zone ?? '').trim().toLowerCase() === z)
+    .filter((row: { id: string; zone: string | null }) => (row.zone ?? '').trim().toLowerCase() === from)
     .map((row: { id: string }) => row.id);
   const chunk = 200;
   for (let i = 0; i < ids.length; i += chunk) {
     const slice = ids.slice(i, i + chunk);
     if (slice.length === 0) continue;
-    const { error: uerr } = await supabase.from('staff_shifts').update({ zone: null }).in('id', slice);
+    const { error: uerr } = await supabase.from('staff_shifts').update({ zone: to }).in('id', slice);
     if (uerr) throw new Error(uerr.message);
   }
   return ids.length;

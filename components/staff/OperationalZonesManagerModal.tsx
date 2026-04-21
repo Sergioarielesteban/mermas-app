@@ -2,13 +2,12 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
+  OPERATIONAL_NONE_ZONE,
   slugifyOperationalZoneKey,
   type CustomOperationalZoneRow,
 } from '@/lib/staff/operational-custom-zones';
 import type { StaffShift } from '@/lib/staff/types';
 import { appAlert, appConfirm } from '@/lib/app-dialog-bridge';
-
-const OPERATIONAL_NONE_ZONE = '__none__' as const;
 
 function shiftZoneKey(s: StaffShift): string {
   const z = (s.zone ?? '').trim().toLowerCase();
@@ -21,7 +20,7 @@ export type OperationalZonesManagerModalProps = {
   zones: CustomOperationalZoneRow[];
   shifts: StaffShift[];
   onApply: (next: CustomOperationalZoneRow[]) => void;
-  /** Mueve turnos del puesto a sin puesto en BD; devuelve cuántos se actualizaron. */
+  /** Reasigna turnos del puesto al puesto por defecto del cuadrante; devuelve cuántos se actualizaron. */
   onMigrateZoneShiftsToUnassigned: (zoneKey: string) => Promise<number>;
   canEdit: boolean;
 };
@@ -59,12 +58,12 @@ export default function OperationalZonesManagerModal({
       const n = shiftCountForZone(key);
       if (n > 0) {
         const ok = await appConfirm(
-          `Este puesto tiene ${n} turno(s) en el cuadrante (todas las fechas). Se pasarán a «Sin puesto». ¿Continuar?`,
+          `Este puesto tiene ${n} turno(s) en el cuadrante (todas las fechas). Se reasignarán al puesto principal del listado. ¿Continuar?`,
         );
         if (!ok) return;
         try {
           const moved = await onMigrateZoneShiftsToUnassigned(key);
-          await appAlert(`Listo: ${moved} turno(s) quedan sin puesto.`);
+          await appAlert(`Listo: ${moved} turno(s) reasignados al puesto principal del listado.`);
         } catch (e) {
           await appAlert(e instanceof Error ? e.message : 'No se pudieron actualizar los turnos.');
           return;
@@ -149,7 +148,7 @@ export default function OperationalZonesManagerModal({
         <div className="max-h-[min(60vh,420px)] overflow-y-auto px-4 py-3">
           <p className="mb-3 text-xs text-zinc-600">
             Todos los puestos del cuadrante. El nombre es el que ves en filas; la clave interna no cambia al renombrar.
-            Al eliminar un puesto con turnos, esos turnos pasan a «Sin puesto».
+            Al eliminar un puesto con turnos, esos turnos se reasignan al primer puesto del listado (puesto principal).
           </p>
           <ul className="space-y-2">
             {list.length === 0 ? (
@@ -195,7 +194,7 @@ export default function OperationalZonesManagerModal({
                           <p className="truncate text-sm font-bold text-zinc-900">{z.label}</p>
                           {busy > 0 ? (
                             <p className="text-[10px] font-semibold text-amber-800">
-                              {busy} turno{busy !== 1 ? 's' : ''} — al eliminar pasan a «Sin puesto»
+                              {busy} turno{busy !== 1 ? 's' : ''} — al eliminar se reasignan al puesto principal
                             </p>
                           ) : (
                             <p className="text-[10px] text-zinc-500">Sin turnos en este local</p>

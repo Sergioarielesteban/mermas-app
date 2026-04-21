@@ -1,7 +1,10 @@
-import { STAFF_ZONE_PRESETS } from '@/lib/staff/types';
+import { STAFF_ZONE_PRESETS, type StaffShift } from '@/lib/staff/types';
 import { zoneLabel } from '@/lib/staff/staff-zone-styles';
 
 export type CustomOperationalZoneRow = { key: string; label: string };
+
+/** Clave interna para turno sin zona en BD; no debe mostrarse como puesto en la UI. */
+export const OPERATIONAL_NONE_ZONE = '__none__' as const;
 
 /** Orden base de filas del cuadrante (claves canónicas en BD). */
 export const OPERATIONAL_REGISTRY_BASE_ORDER = ['cocina', 'barra', 'sala', 'cocina_central'] as const;
@@ -35,6 +38,23 @@ export function defaultOperationalZoneRegistry(): CustomOperationalZoneRow[] {
     seen.add(k);
   }
   return rows;
+}
+
+/** Primer puesto operativo del registro; turnos sin zona se reasignan aquí en la práctica. */
+export function defaultOperationalZoneKey(registry: CustomOperationalZoneRow[]): string {
+  const first = registry.find((r) => {
+    const k = r.key.trim().toLowerCase();
+    return k.length > 0 && k !== OPERATIONAL_NONE_ZONE;
+  });
+  if (first) return first.key.trim().toLowerCase();
+  return OPERATIONAL_REGISTRY_BASE_ORDER[0] ?? 'cocina';
+}
+
+/** Clave de fila del cuadrante: sin zona → puesto por defecto (nunca «Sin puesto» visible). */
+export function operationalGridRowKey(s: StaffShift, registry: CustomOperationalZoneRow[]): string {
+  const z = (s.zone ?? '').trim().toLowerCase();
+  if (!z || z === OPERATIONAL_NONE_ZONE) return defaultOperationalZoneKey(registry);
+  return z;
 }
 
 function parseRows(raw: unknown): CustomOperationalZoneRow[] {
