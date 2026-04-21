@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useCallback, useMemo, useRef, useState } from 'react';
+import { Trash2 } from 'lucide-react';
 import { OperationalSkelloCellBody } from '@/components/staff/OperationalSkelloCellBody';
 import { plannedShiftMinutes } from '@/lib/staff/attendance-logic';
 import { addDays, formatDayMonth, formatWeekdayShort, ymdLocal } from '@/lib/staff/staff-dates';
@@ -100,13 +101,13 @@ export type OperationalWeekGridProps = {
   operationalWindow: LocalOperationalWindow;
   customOperationalZones: CustomOperationalZoneRow[];
   onAddOperationalZone: () => void;
+  /** Quitar un puesto añadido con «+ Puesto» (solo filas personalizadas). */
+  onRemoveOperationalZone?: (zoneKey: string) => void | Promise<void>;
   canEdit: boolean;
   onShiftPlaced: (shift: StaffShift, newDateYmd: string, zoneRowKey: string) => Promise<void>;
   onQuickCreateShift: (dateYmd: string, zoneRowKey: string) => Promise<void>;
   onEmptyLongPress: (dateYmd: string, zoneRowKey: string) => void;
   onShiftAdvancedEdit: (shift: StaffShift) => void;
-  /** Nuevo turno con la misma franja y puesto (bloque agrupado). */
-  onAddPersonSameSlot?: (template: StaffShift) => void;
   /** Eliminar un turno del cuadrante (tras confirmación en UI). */
   onRemoveShift?: (shift: StaffShift) => Promise<void>;
 };
@@ -118,18 +119,22 @@ export default function OperationalWeekGrid({
   operationalWindow,
   customOperationalZones,
   onAddOperationalZone,
+  onRemoveOperationalZone,
   canEdit,
   onShiftPlaced,
   onQuickCreateShift,
   onEmptyLongPress,
   onShiftAdvancedEdit,
-  onAddPersonSameSlot,
   onRemoveShift,
 }: OperationalWeekGridProps) {
   const days = useMemo(() => Array.from({ length: 7 }, (_, i) => addDays(weekStartMonday, i)), [weekStartMonday]);
   const zoneRows = useMemo(
     () => buildZoneRows(shifts, customOperationalZones),
     [shifts, customOperationalZones],
+  );
+  const customZoneKeySet = useMemo(
+    () => new Set(customOperationalZones.map((z) => z.key)),
+    [customOperationalZones],
   );
   const operationalMetrics = useMemo(
     () => computeOperationalTimelineMetrics(operationalWindow),
@@ -347,8 +352,8 @@ export default function OperationalWeekGrid({
       {canEdit ? (
         <p className="text-[10px] text-zinc-500 sm:text-[11px]">
           Vista por puesto: turnos en lista vertical por día (sin solapamiento). Asa izquierda = arrastrar a otro día o
-          puesto · toque largo = edición avanzada · «+ pers.» = misma franja · «Añadir» / doble toque en vacío = turno
-          rápido. {franjaBanner}
+          puesto · toque largo en la tarjeta = edición avanzada · «Añadir» / doble toque en vacío = turno rápido.{' '}
+          {franjaBanner}
         </p>
       ) : (
         <p className="text-[10px] text-zinc-500 sm:text-[11px]">{franjaBanner}</p>
@@ -397,13 +402,24 @@ export default function OperationalWeekGrid({
             {zoneRows.map((row) => (
               <tr key={row.key} className="bg-white">
                 <td className="sticky left-0 z-10 border-b border-r border-zinc-100 bg-white px-1.5 py-1 align-top sm:px-2">
-                  <div className="flex items-center gap-2">
+                  <div className="flex min-w-0 items-center gap-1.5">
                     <span
                       className="h-2.5 w-2.5 shrink-0 rounded-full ring-1 ring-black/10"
                       style={{ background: zoneBlockStyle(row.key).bg }}
                       aria-hidden
                     />
-                    <span className="font-bold text-zinc-900">{row.label}</span>
+                    <span className="min-w-0 flex-1 truncate font-bold text-zinc-900">{row.label}</span>
+                    {canEdit && onRemoveOperationalZone && customZoneKeySet.has(row.key) ? (
+                      <button
+                        type="button"
+                        className="grid h-7 w-7 shrink-0 place-items-center rounded-lg border border-zinc-200 text-zinc-500 hover:border-red-200 hover:bg-red-50 hover:text-red-700"
+                        title="Eliminar puesto"
+                        aria-label={`Eliminar puesto ${row.label}`}
+                        onClick={() => void onRemoveOperationalZone(row.key)}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" strokeWidth={2} />
+                      </button>
+                    ) : null}
                   </div>
                 </td>
                 {days.map((d) => {
@@ -450,7 +466,6 @@ export default function OperationalWeekGrid({
                         quickCreateFromButton={quickCreateFromButton}
                         onShiftAdvancedEdit={onShiftAdvancedEdit}
                         bindShiftLongPress={bindShiftLongPress}
-                        onAddPersonSameSlot={onAddPersonSameSlot}
                         removeShiftFromGroup={removeShiftFromGroup}
                       />
                     </td>

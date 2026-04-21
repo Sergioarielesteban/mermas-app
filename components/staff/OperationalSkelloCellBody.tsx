@@ -30,13 +30,13 @@ const SHIFT_CARD_ROW_H = 'h-[4.25rem] sm:h-[4.5rem]';
 
 /**
  * Tarjeta compacta: horario | persona | horas totales.
- * Un solo fondo (tono claro del puesto) y borde un poco más intenso; texto oscuro.
+ * Relleno uniforme con el color del puesto (mismo tono que la leyenda); texto legible vía zoneText.
  */
 const ShiftEmployeeRowCard = React.memo(function ShiftEmployeeRowCard({
   nameLabel,
   hoursLabel,
-  zoneSubtleBg,
   zoneAccent,
+  zoneText,
   startTime,
   endTime,
   endsNextDay,
@@ -45,10 +45,10 @@ const ShiftEmployeeRowCard = React.memo(function ShiftEmployeeRowCard({
 }: {
   nameLabel: string;
   hoursLabel: string;
-  /** Fondo uniforme del bloque (tono claro del puesto). */
-  zoneSubtleBg: string;
-  /** Color base del puesto (punto leyenda) para reforzar el borde. */
+  /** Color sólido del puesto (fondo completo de la tarjeta). */
   zoneAccent: string;
+  /** Color de texto sobre el fondo del puesto. */
+  zoneText: string;
   startTime: string;
   endTime: string;
   endsNextDay: boolean;
@@ -61,22 +61,19 @@ const ShiftEmployeeRowCard = React.memo(function ShiftEmployeeRowCard({
       {endsNextDay ? ' +1' : ''}
     </>
   );
-  const cardBorder = `color-mix(in srgb, ${zoneAccent} 38%, ${zoneSubtleBg})`;
 
   return (
     <div
-      className={`flex w-full min-w-0 shrink-0 items-stretch overflow-hidden ${SHIFT_CARD_ROW_H} ${shellClassName}`}
-      style={{ backgroundColor: zoneSubtleBg, borderColor: cardBorder }}
+      className={`flex w-full min-w-0 shrink-0 items-stretch overflow-hidden border-white/20 ${SHIFT_CARD_ROW_H} ${shellClassName}`}
+      style={{ backgroundColor: zoneAccent, color: zoneText }}
     >
-      <div className="grid min-w-0 flex-1 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-2 gap-y-0 px-1.5 py-0 sm:gap-x-2.5 sm:px-2.5">
-        <span className="shrink-0 text-[10px] font-extrabold tabular-nums tracking-tight text-zinc-900 sm:text-[11px]">
+      <div className="grid min-w-0 flex-1 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-1.5 gap-y-0 px-1 py-0 sm:gap-x-2 sm:px-1.5">
+        <span className="shrink-0 text-[10px] font-extrabold tabular-nums tracking-tight sm:text-[11px]">
           {timeRng}
         </span>
         <span
-          className={[
-            'line-clamp-2 min-w-0 text-[11px] font-bold leading-snug text-zinc-900 sm:text-xs',
-            showAlert ? 'text-[#B91C1C]' : '',
-          ].join(' ')}
+          className="line-clamp-2 min-w-0 text-[11px] font-bold leading-snug sm:text-xs"
+          style={showAlert ? { color: '#fecaca' } : undefined}
           title={nameLabel}
         >
           {nameLabel}
@@ -90,7 +87,7 @@ const ShiftEmployeeRowCard = React.memo(function ShiftEmployeeRowCard({
             </span>
           ) : null}
         </span>
-        <span className="shrink-0 text-right text-[10px] font-extrabold text-zinc-800 sm:text-[11px]">{hoursLabel}</span>
+        <span className="shrink-0 text-right text-[10px] font-extrabold opacity-95 sm:text-[11px]">{hoursLabel}</span>
       </div>
     </div>
   );
@@ -114,7 +111,6 @@ export type OperationalSkelloCellBodyProps = {
   quickCreateFromButton: (e: React.MouseEvent, ymd: string, zk: string) => void;
   onShiftAdvancedEdit: (shift: StaffShift) => void;
   bindShiftLongPress: (shift: StaffShift) => Record<string, unknown>;
-  onAddPersonSameSlot?: (template: StaffShift) => void;
   removeShiftFromGroup: (shift: StaffShift) => Promise<void>;
 };
 
@@ -136,7 +132,6 @@ function OperationalSkelloCellBodyInner({
   quickCreateFromButton,
   onShiftAdvancedEdit,
   bindShiftLongPress,
-  onAddPersonSameSlot,
   removeShiftFromGroup,
 }: OperationalSkelloCellBodyProps) {
   const employeeName = (id: string | null) =>
@@ -244,8 +239,8 @@ function OperationalSkelloCellBodyInner({
         <ShiftEmployeeRowCard
           nameLabel={unassigned ? 'Sin asignar' : employeeName(sOne.employeeId)}
           hoursLabel={formatShiftHoursLabel(smins)}
-          zoneSubtleBg={zStyle.subtleBg}
           zoneAccent={zStyle.bg}
+          zoneText={zStyle.text}
           startTime={sOne.startTime}
           endTime={sOne.endTime}
           endsNextDay={sOne.endsNextDay}
@@ -253,14 +248,14 @@ function OperationalSkelloCellBodyInner({
           shellClassName={
             canEdit
               ? 'rounded-r-lg border-y border-r shadow-sm'
-              : 'rounded-lg border shadow-sm ring-1 ring-black/[0.04]'
+              : 'rounded-lg border border-white/20 shadow-sm ring-1 ring-black/[0.06]'
           }
         />
       </div>
     );
 
     return (
-      <div key={sOne.id} className="flex min-w-0 w-full flex-col gap-1">
+      <div key={sOne.id} className="mx-auto flex min-w-0 w-[85%] max-w-full flex-col gap-1">
         <div
           className={[
             'flex w-full max-w-full min-w-0 shrink-0 flex-row items-stretch overflow-hidden',
@@ -271,16 +266,44 @@ function OperationalSkelloCellBodyInner({
           {canEdit ? (
             <>
               <div
-                draggable
-                onDragStart={(e) => onDragStart(e, sOne.id)}
-                onDragEnd={onDragEnd}
-                className="flex w-2.5 shrink-0 cursor-grab touch-none items-center justify-center self-stretch rounded-l-lg border-y border-l border-zinc-200/90 bg-zinc-100 text-zinc-800 active:cursor-grabbing sm:w-3"
-                title="Mover a otro día o puesto"
-                aria-label="Arrastrar turno"
+                className="flex w-10 shrink-0 flex-col items-stretch justify-between self-stretch rounded-l-lg border-y border-l border-zinc-200/90 bg-zinc-100 px-0.5 py-1"
                 onPointerDown={(e) => e.stopPropagation()}
                 onClick={(e) => e.stopPropagation()}
               >
-                <GripVertical className="h-2.5 w-2.5 opacity-80 sm:h-3 sm:w-3" />
+                <div
+                  draggable
+                  onDragStart={(e) => onDragStart(e, sOne.id)}
+                  onDragEnd={onDragEnd}
+                  className="flex min-h-[1.1rem] flex-1 cursor-grab touch-none items-center justify-center text-zinc-800 active:cursor-grabbing"
+                  title="Mover a otro día o puesto"
+                  aria-label="Arrastrar turno"
+                  onPointerDown={(e) => e.stopPropagation()}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <GripVertical className="h-2.5 w-2.5 opacity-80 sm:h-3 sm:w-3" />
+                </div>
+                <div className="flex flex-col items-center gap-0.5 pb-0.5">
+                  <button
+                    type="button"
+                    className="rounded px-0.5 py-px text-[7px] font-extrabold leading-none text-zinc-700 underline decoration-zinc-300/90 hover:bg-zinc-200/80 sm:text-[8px]"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onShiftAdvancedEdit(sOne);
+                    }}
+                  >
+                    Editar
+                  </button>
+                  <button
+                    type="button"
+                    className="rounded px-0.5 py-px text-[7px] font-extrabold leading-none text-red-700 hover:bg-red-100/90 sm:text-[8px]"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      void removeShiftFromGroup(sOne);
+                    }}
+                  >
+                    Quitar
+                  </button>
+                </div>
               </div>
               {rowShell}
             </>
@@ -288,44 +311,6 @@ function OperationalSkelloCellBodyInner({
             rowShell
           )}
         </div>
-        {canEdit ? (
-          <div className="flex flex-wrap items-center gap-1.5 pl-0.5">
-            <button
-              type="button"
-              className="rounded-md px-1.5 py-0.5 text-[8px] font-extrabold text-zinc-700 underline decoration-zinc-300 hover:bg-zinc-100 sm:text-[9px]"
-              onClick={(e) => {
-                e.stopPropagation();
-                onShiftAdvancedEdit(sOne);
-              }}
-            >
-              Editar
-            </button>
-            <button
-              type="button"
-              className="rounded-md px-1.5 py-0.5 text-[8px] font-extrabold text-red-700 hover:bg-red-50 sm:text-[9px]"
-              onClick={(e) => {
-                e.stopPropagation();
-                void removeShiftFromGroup(sOne);
-              }}
-            >
-              Quitar
-            </button>
-            {onAddPersonSameSlot ? (
-              <button
-                type="button"
-                className="rounded-md px-1.5 py-0.5 text-[8px] font-extrabold text-zinc-900 hover:bg-zinc-100 sm:text-[9px]"
-                title="Otra persona en la misma franja y puesto"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  if (Date.now() < ignoreClicksUntilRef.current) return;
-                  onAddPersonSameSlot(sOne);
-                }}
-              >
-                + pers.
-              </button>
-            ) : null}
-          </div>
-        ) : null}
       </div>
     );
   };

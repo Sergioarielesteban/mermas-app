@@ -208,6 +208,27 @@ export default function PersonalPlanificacionPage() {
     writeCustomOperationalZones(localId, next);
   }, [localId, perms.canManageSchedules, customOperationalZones]);
 
+  const handleRemoveOperationalZone = useCallback(
+    async (zoneKey: string) => {
+      if (!localId || !perms.canManageSchedules) return;
+      if (zoneKey === OPERATIONAL_NONE_ZONE) return;
+      const using = shifts.filter((s) => {
+        const z = (s.zone ?? '').trim().toLowerCase();
+        return (z || OPERATIONAL_NONE_ZONE) === zoneKey;
+      });
+      if (using.length > 0) {
+        await appAlert(
+          `Este puesto tiene ${using.length} turno(s) en el cuadrante. Mueve o elimina esos turnos antes de borrar el puesto.`,
+        );
+        return;
+      }
+      const next = customOperationalZones.filter((z) => z.key !== zoneKey);
+      setCustomOperationalZones(next);
+      writeCustomOperationalZones(localId, next);
+    },
+    [localId, perms.canManageSchedules, shifts, customOperationalZones],
+  );
+
   const shiftsInMonth = useMemo(() => {
     const y = monthCursor.getFullYear();
     const m = monthCursor.getMonth();
@@ -249,21 +270,6 @@ export default function PersonalPlanificacionPage() {
     (s: StaffShift) => {
       if (!perms.canManageSchedules) return;
       setDraft({ mode: 'edit', shift: s });
-      setModalOpen(true);
-    },
-    [perms.canManageSchedules],
-  );
-
-  const openNewPersonSameSlot = useCallback(
-    (template: StaffShift) => {
-      if (!perms.canManageSchedules) return;
-      setDraft({
-        mode: 'new',
-        shiftDate: template.shiftDate,
-        defaultZone: template.zone ?? undefined,
-        cloneSlotFrom: template,
-        employeeId: undefined,
-      });
       setModalOpen(true);
     },
     [perms.canManageSchedules],
@@ -734,12 +740,12 @@ export default function PersonalPlanificacionPage() {
               operationalWindow={operationalWindow}
               customOperationalZones={customOperationalZones}
               onAddOperationalZone={handleAddOperationalZone}
+              onRemoveOperationalZone={handleRemoveOperationalZone}
               canEdit={perms.canManageSchedules}
               onShiftPlaced={onOperationalShiftPlaced}
               onQuickCreateShift={onOperationalQuickCreate}
               onEmptyLongPress={onOperationalEmptyLongPress}
               onShiftAdvancedEdit={openEdit}
-              onAddPersonSameSlot={(t) => openNewPersonSameSlot(t)}
               onRemoveShift={(s) => removeShiftFromPlan(s)}
             />
           )}
