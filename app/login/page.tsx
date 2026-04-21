@@ -7,6 +7,7 @@ import { getAllowedEmails, isAllowedEmail } from '@/lib/auth-access';
 import { isSupabaseEnabled } from '@/lib/supabase-client';
 
 const REMEMBERED_USER_KEY = 'mermas_remembered_user';
+const SESSION_EMAIL_KEY = 'mermas_user_email';
 
 export default function LoginPage() {
   const { login } = useAuth();
@@ -19,8 +20,12 @@ export default function LoginPage() {
 
   React.useEffect(() => {
     if (typeof window === 'undefined') return;
-    const remembered = window.localStorage.getItem(REMEMBERED_USER_KEY);
-    if (remembered) setIdentifier(remembered);
+    const remembered =
+      window.localStorage.getItem(REMEMBERED_USER_KEY) ?? window.localStorage.getItem(SESSION_EMAIL_KEY);
+    if (remembered?.trim()) {
+      setIdentifier(remembered.trim());
+      setRememberIdentifier(true);
+    }
   }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -38,16 +43,16 @@ export default function LoginPage() {
       setError('Introduce tu contraseña.');
       return;
     }
+    if (typeof window !== 'undefined') {
+      if (rememberIdentifier) window.localStorage.setItem(REMEMBERED_USER_KEY, clean);
+      else window.localStorage.removeItem(REMEMBERED_USER_KEY);
+    }
     setSubmitting(true);
     const result = await login(clean, password);
     setSubmitting(false);
     if (!result.ok) {
       setError(result.reason ?? 'No se pudo iniciar sesión.');
       return;
-    }
-    if (typeof window !== 'undefined') {
-      if (rememberIdentifier) window.localStorage.setItem(REMEMBERED_USER_KEY, clean);
-      else window.localStorage.removeItem(REMEMBERED_USER_KEY);
     }
   };
 
