@@ -329,6 +329,35 @@ export async function deleteStaffShift(supabase: SupabaseClient, shiftId: string
   if (error) throw new Error(error.message);
 }
 
+/**
+ * Pone `zone` a null en todos los turnos del local cuya zona (trim + lower) coincide con `zoneKey`.
+ * Usado al eliminar un puesto del cuadrante (turnos pasan a «Sin puesto»).
+ */
+export async function clearStaffShiftsZoneForLocalZone(
+  supabase: SupabaseClient,
+  localId: string,
+  zoneKey: string,
+): Promise<number> {
+  const z = zoneKey.trim().toLowerCase();
+  if (!z || z === '__none__') return 0;
+  const { data, error } = await supabase
+    .from('staff_shifts')
+    .select('id, zone')
+    .eq('local_id', localId);
+  if (error) throw new Error(error.message);
+  const ids = (data ?? [])
+    .filter((row: { id: string; zone: string | null }) => (row.zone ?? '').trim().toLowerCase() === z)
+    .map((row: { id: string }) => row.id);
+  const chunk = 200;
+  for (let i = 0; i < ids.length; i += chunk) {
+    const slice = ids.slice(i, i + chunk);
+    if (slice.length === 0) continue;
+    const { error: uerr } = await supabase.from('staff_shifts').update({ zone: null }).in('id', slice);
+    if (uerr) throw new Error(uerr.message);
+  }
+  return ids.length;
+}
+
 export async function fetchStaffScheduleDayMarksRange(
   supabase: SupabaseClient,
   localId: string,

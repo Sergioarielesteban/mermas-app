@@ -12,14 +12,11 @@ import {
   type LocalOperationalWindow,
 } from '@/lib/staff/local-operational-window';
 import type { CustomOperationalZoneRow } from '@/lib/staff/operational-custom-zones';
-import { STAFF_ZONE_PRESETS, type StaffEmployee, type StaffShift } from '@/lib/staff/types';
+import type { StaffEmployee, StaffShift } from '@/lib/staff/types';
 export const OPERATIONAL_NONE_ZONE = '__none__' as const;
 
 /** Cobertura en cabecera (puestos que deben tener turno). */
 const COVERAGE_MAIN_ZONES = ['cocina', 'barra', 'sala'] as const;
-/** Orden fijo tipo Skello: cocina, barra, sala, cocina central. */
-const DISPLAY_ZONE_ORDER = ['cocina', 'barra', 'sala', 'cocina_central'] as const;
-
 const LONG_PRESS_MS_EMPTY = 820;
 const LONG_PRESS_MS_SHIFT = 820;
 const DOUBLE_TAP_MS = 500;
@@ -37,25 +34,15 @@ function shiftZoneKey(s: StaffShift): string {
 
 function buildZoneRows(
   shifts: StaffShift[],
-  customZones: CustomOperationalZoneRow[],
+  registry: CustomOperationalZoneRow[],
 ): { key: string; label: string }[] {
   const seen = new Set<string>();
   const rows: { key: string; label: string }[] = [];
-  for (const k of DISPLAY_ZONE_ORDER) {
-    rows.push({ key: k, label: zoneLabel(k) });
+  for (const r of registry) {
+    const k = r.key.trim().toLowerCase();
+    if (!k || k === OPERATIONAL_NONE_ZONE) continue;
+    rows.push({ key: k, label: r.label });
     seen.add(k);
-  }
-  for (const cz of customZones) {
-    const k = cz.key.trim().toLowerCase();
-    if (!k || seen.has(k)) continue;
-    rows.push({ key: k, label: cz.label });
-    seen.add(k);
-  }
-  for (const p of STAFF_ZONE_PRESETS) {
-    if (!seen.has(p.value)) {
-      rows.push({ key: p.value, label: p.label });
-      seen.add(p.value);
-    }
   }
   for (const s of shifts) {
     const z = (s.zone ?? '').trim().toLowerCase();
@@ -99,7 +86,7 @@ export type OperationalWeekGridProps = {
   employees: StaffEmployee[];
   shifts: StaffShift[];
   operationalWindow: LocalOperationalWindow;
-  customOperationalZones: CustomOperationalZoneRow[];
+  operationalZoneRegistry: CustomOperationalZoneRow[];
   /** Abre el gestor de puestos (lista, editar, eliminar, añadir). */
   onOpenOperationalZonesManager: () => void;
   canEdit: boolean;
@@ -116,7 +103,7 @@ export default function OperationalWeekGrid({
   employees,
   shifts,
   operationalWindow,
-  customOperationalZones,
+  operationalZoneRegistry,
   onOpenOperationalZonesManager,
   canEdit,
   onShiftPlaced,
@@ -127,8 +114,8 @@ export default function OperationalWeekGrid({
 }: OperationalWeekGridProps) {
   const days = useMemo(() => Array.from({ length: 7 }, (_, i) => addDays(weekStartMonday, i)), [weekStartMonday]);
   const zoneRows = useMemo(
-    () => buildZoneRows(shifts, customOperationalZones),
-    [shifts, customOperationalZones],
+    () => buildZoneRows(shifts, operationalZoneRegistry),
+    [shifts, operationalZoneRegistry],
   );
   const operationalMetrics = useMemo(
     () => computeOperationalTimelineMetrics(operationalWindow),

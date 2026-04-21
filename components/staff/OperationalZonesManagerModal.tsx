@@ -5,23 +5,14 @@ import {
   slugifyOperationalZoneKey,
   type CustomOperationalZoneRow,
 } from '@/lib/staff/operational-custom-zones';
-import { STAFF_ZONE_PRESETS, type StaffShift } from '@/lib/staff/types';
-import { appAlert } from '@/lib/app-dialog-bridge';
+import type { StaffShift } from '@/lib/staff/types';
+import { appAlert, appConfirm } from '@/lib/app-dialog-bridge';
 
-/** Misma constante que en OperationalWeekGrid (puestos fijos del cuadrante). */
-const DISPLAY_ZONE_ORDER = ['cocina', 'barra', 'sala', 'cocina_central'] as const;
 const OPERATIONAL_NONE_ZONE = '__none__' as const;
 
 function shiftZoneKey(s: StaffShift): string {
   const z = (s.zone ?? '').trim().toLowerCase();
   return z || OPERATIONAL_NONE_ZONE;
-}
-
-/** Slugs que no pueden usarse para puestos personalizados (colisionan con filas del sistema). */
-function systemReservedZoneSlugs(): Set<string> {
-  const s = new Set<string>([...DISPLAY_ZONE_ORDER, OPERATIONAL_NONE_ZONE]);
-  for (const p of STAFF_ZONE_PRESETS) s.add(p.value);
-  return s;
 }
 
 export type OperationalZonesManagerModalProps = {
@@ -30,6 +21,8 @@ export type OperationalZonesManagerModalProps = {
   zones: CustomOperationalZoneRow[];
   shifts: StaffShift[];
   onApply: (next: CustomOperationalZoneRow[]) => void;
+  /** Mueve turnos del puesto a sin puesto en BD; devuelve cuántos se actualizaron. */
+  onMigrateZoneShiftsToUnassigned: (zoneKey: string) => Promise<number>;
   canEdit: boolean;
 };
 
@@ -39,6 +32,7 @@ export default function OperationalZonesManagerModal({
   zones,
   shifts,
   onApply,
+  onMigrateZoneShiftsToUnassigned,
   canEdit,
 }: OperationalZonesManagerModalProps) {
   const [newLabel, setNewLabel] = useState('');
@@ -61,16 +55,24 @@ export default function OperationalZonesManagerModal({
   const tryDelete = useCallback(
     async (key: string) => {
       if (!canEdit) return;
+      if (key === OPERATIONAL_NONE_ZONE) return;
       const n = shiftCountForZone(key);
       if (n > 0) {
-        await appAlert(
-          `No se puede eliminar este puesto: tiene ${n} turno(s) en el cuadrante. Mueve o elimina esos turnos antes.`,
+        const ok = await appConfirm(
+          `Este puesto tiene ${n} turno(s) en el cuadrante (todas las fechas). Se pasarán a «Sin puesto». ¿Continuar?`,
         );
-        return;
+        if (!ok) return;
+        try {
+          const moved = await onMigrateZoneShiftsToUnassigned(key);
+          await appAlert(`Listo: ${moved} turno(s) quedan sin puesto.`);
+        } catch (e) {
+          await appAlert(e instanceof Error ? e.message : 'No se pudieron actualizar los turnos.');
+          return;
+        }
       }
       onApply(zones.filter((z) => z.key !== key));
     },
-    [canEdit, onApply, shiftCountForZone, zones],
+    [canEdit, onApply, onMigrateZoneShiftsToUnassigned, shiftCountForZone, zones],
   );
 
   const tryAdd = useCallback(async () => {
@@ -81,11 +83,8 @@ export default function OperationalZonesManagerModal({
       return;
     }
     let key = slugifyOperationalZoneKey(label);
-    const reserved = systemReservedZoneSlugs();
-    if (reserved.has(key)) {
-      await appAlert(
-        'Ese nombre coincide con un puesto del sistema (Cocina, Barra, etc.). Elige otro nombre distinto.',
-      );
+    if (key === OPERATIONAL_NONE_ZONE) {
+      await appAlert('Ese nombre no es válido para un puesto.');
       return;
     }
     let n = 2;
@@ -118,7 +117,7 @@ export default function OperationalZonesManagerModal({
     cancelEdit();
   }, [canEdit, cancelEdit, editDraft, editingKey, onApply, zones]);
 
-  const list = useMemo(() => [...zones].sort((a, b) => a.label.localeCompare(b.label, 'es')), [zones]);
+  const list = useMemo(() => [...zones], [zones]);
 
   if (!open) return null;
 
@@ -149,20 +148,21 @@ export default function OperationalZonesManagerModal({
         </div>
         <div className="max-h-[min(60vh,420px)] overflow-y-auto px-4 py-3">
           <p className="mb-3 text-xs text-zinc-600">
-            Puestos personalizados del cuadrante. Los puestos fijos (Cocina, Barra, Sala…) no se pueden editar aquí.
+            Todos los puestos del cuadrante. El nombre es el que ves en filas; la clave interna no cambia al renombrar.
+            Al eliminar un puesto con turnos, esos turnos pasan a «Sin puesto».
           </p>
           <ul className="space-y-2">
             {list.length === 0 ? (
-              <li className="rounded-lg bg-zinc-50 px-3 py-2 text-xs text-zinc-500">Aún no hay puestos extra.</li>
+              <li className="rounded-lg bg-zinc-50 px-3 py-2 text-xs text-zinc-500">Sin puestos en el registro.</li>
             ) : (
               list.map((z) => {
                 const busy = shiftCountForZone(z.key);
                 const isEditing = editingKey === z.key;
                 return (
-                  <li
-                    key={z.key}
-                    className="rounded-xl border border-zinc-200 bg-zinc-50/80 px-3 py-2"
-                  >
+                  <li key={z.key} className="rounded-xl border border-zinc-200 bg-zinc-50/80 px-3 py-2">
+                    <p className="mb-1 truncate text-[10px] font-semibold text-zinc-500" title={z.key}>
+                      Clave: {z.key}
+                    </p>
                     {isEditing ? (
                       <div className="flex flex-col gap-2">
                         <input
@@ -195,10 +195,10 @@ export default function OperationalZonesManagerModal({
                           <p className="truncate text-sm font-bold text-zinc-900">{z.label}</p>
                           {busy > 0 ? (
                             <p className="text-[10px] font-semibold text-amber-800">
-                              {busy} turno{busy !== 1 ? 's' : ''} — no se puede eliminar hasta vaciar
+                              {busy} turno{busy !== 1 ? 's' : ''} — al eliminar pasan a «Sin puesto»
                             </p>
                           ) : (
-                            <p className="text-[10px] text-zinc-500">Sin turnos · se puede eliminar</p>
+                            <p className="text-[10px] text-zinc-500">Sin turnos en este local</p>
                           )}
                         </div>
                         <div className="flex shrink-0 gap-1.5">

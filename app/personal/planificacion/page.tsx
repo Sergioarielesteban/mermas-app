@@ -20,8 +20,8 @@ import {
   writeStoredPresetIdForZone,
 } from '@/lib/staff/shift-quick-presets';
 import {
-  readCustomOperationalZones,
-  writeCustomOperationalZones,
+  readOperationalZoneRegistry,
+  writeOperationalZoneRegistry,
   type CustomOperationalZoneRow,
 } from '@/lib/staff/operational-custom-zones';
 import { zoneDefaultColorHint } from '@/lib/staff/staff-zone-styles';
@@ -32,6 +32,7 @@ import {
 import {
   deleteStaffScheduleDayMark,
   deleteStaffScheduleDayMarkForCell,
+  clearStaffShiftsZoneForLocalZone,
   deleteStaffShift,
   duplicateShiftsWeek,
   upsertStaffScheduleDayMark,
@@ -104,7 +105,7 @@ export default function PersonalPlanificacionPage() {
     draftRef.current = draft;
   }, [draft]);
   const [operationalWindow, setOperationalWindow] = useState(DEFAULT_LOCAL_OPERATIONAL_WINDOW);
-  const [customOperationalZones, setCustomOperationalZones] = useState<CustomOperationalZoneRow[]>([]);
+  const [operationalZoneRegistry, setOperationalZoneRegistry] = useState<CustomOperationalZoneRow[]>([]);
   const [operationalZonesManagerOpen, setOperationalZonesManagerOpen] = useState(false);
   const [weekPublication, setWeekPublication] = useState<StaffWeekPublication | null>(null);
   const [publishBusy, setPublishBusy] = useState(false);
@@ -186,19 +187,29 @@ export default function PersonalPlanificacionPage() {
 
   useEffect(() => {
     if (!localId) {
-      setCustomOperationalZones([]);
+      setOperationalZoneRegistry([]);
       return;
     }
-    setCustomOperationalZones(readCustomOperationalZones(localId));
+    setOperationalZoneRegistry(readOperationalZoneRegistry(localId));
   }, [localId]);
 
-  const applyCustomOperationalZones = useCallback(
+  const applyOperationalZoneRegistry = useCallback(
     (next: CustomOperationalZoneRow[]) => {
       if (!perms.canManageSchedules) return;
-      setCustomOperationalZones(next);
-      if (localId) writeCustomOperationalZones(localId, next);
+      setOperationalZoneRegistry(next);
+      if (localId) writeOperationalZoneRegistry(localId, next);
     },
     [localId, perms.canManageSchedules],
+  );
+
+  const migrateZoneShiftsToUnassigned = useCallback(
+    async (zoneKey: string): Promise<number> => {
+      if (!localId || !supabase || !perms.canManageSchedules) return 0;
+      const n = await clearStaffShiftsZoneForLocalZone(supabase, localId, zoneKey);
+      await afterScheduleChange();
+      return n;
+    },
+    [afterScheduleChange, localId, perms.canManageSchedules, supabase],
   );
 
   const shiftsInMonth = useMemo(() => {
@@ -711,7 +722,7 @@ export default function PersonalPlanificacionPage() {
                 employees={employees}
                 shifts={shifts}
                 operationalWindow={operationalWindow}
-                customOperationalZones={customOperationalZones}
+                operationalZoneRegistry={operationalZoneRegistry}
                 onOpenOperationalZonesManager={() => setOperationalZonesManagerOpen(true)}
                 canEdit={perms.canManageSchedules}
                 onShiftPlaced={onOperationalShiftPlaced}
@@ -723,9 +734,10 @@ export default function PersonalPlanificacionPage() {
               <OperationalZonesManagerModal
                 open={operationalZonesManagerOpen}
                 onClose={() => setOperationalZonesManagerOpen(false)}
-                zones={customOperationalZones}
+                zones={operationalZoneRegistry}
                 shifts={shifts}
-                onApply={applyCustomOperationalZones}
+                onApply={applyOperationalZoneRegistry}
+                onMigrateZoneShiftsToUnassigned={migrateZoneShiftsToUnassigned}
                 canEdit={perms.canManageSchedules}
               />
             </>
@@ -809,7 +821,7 @@ export default function PersonalPlanificacionPage() {
           draft={draft}
           onSaved={() => void handleShiftModalSaved()}
           canDelete={perms.canManageSchedules}
-          operationalExtraZones={customOperationalZones.map((z) => ({ value: z.key, label: z.label }))}
+          operationalExtraZones={operationalZoneRegistry.map((z) => ({ value: z.key, label: z.label }))}
           onDuplicateFromModal={
             weekLayout === 'operativo' ? (s) => onOperationalDuplicateHere(s) : undefined
           }
