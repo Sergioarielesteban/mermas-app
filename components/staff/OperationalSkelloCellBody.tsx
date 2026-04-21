@@ -270,7 +270,7 @@ function OperationalSkelloCellBodyInner({
                   draggable
                   onDragStart={(e) => onDragStart(e, sOne.id)}
                   onDragEnd={onDragEnd}
-                  className="flex min-h-0 w-full flex-1 cursor-grab touch-none items-center justify-center text-zinc-800 active:cursor-grabbing"
+                  className="flex min-h-0 w-full flex-1 cursor-grab touch-pan-y items-center justify-center text-zinc-800 active:cursor-grabbing"
                   title="Mover a otro día o puesto"
                   aria-label="Arrastrar turno"
                   onPointerDown={(e) => e.stopPropagation()}

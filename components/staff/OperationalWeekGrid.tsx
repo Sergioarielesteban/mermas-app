@@ -369,7 +369,7 @@ export default function OperationalWeekGrid({
 
       <div
         ref={gridWrapRef}
-        className="overflow-x-auto overflow-y-visible overscroll-x-contain rounded-2xl ring-1 ring-zinc-200/90 [-webkit-overflow-scrolling:touch] [touch-action:pan-x]"
+        className="overflow-x-auto overflow-y-visible overscroll-x-contain rounded-2xl ring-1 ring-zinc-200/90 [-webkit-overflow-scrolling:touch]"
       >
         <table className="w-full min-w-[1420px] border-collapse text-left text-[10px] sm:min-w-[1620px] sm:text-xs">
           <thead>
