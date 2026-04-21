@@ -178,7 +178,8 @@ export default function NuevoPedidoPage() {
     reloadSuppliers();
   }, [canUse, localId, reloadSuppliers]);
 
-  React.useEffect(() => {
+  /** Restaurar antes del paint para no pisar la cesta con el guardado/reconciliación del primer commit. */
+  React.useLayoutEffect(() => {
     if (!canUse || !localId || editingId) return;
     try {
       const raw = sessionStorage.getItem(basketSessionKey(localId));
@@ -317,6 +318,8 @@ export default function NuevoPedidoPage() {
   React.useEffect(() => {
     setSearch('');
     if (editingId && !isLoadedEdit) return;
+    /** Mientras el catálogo del proveedor no está cargado, no reconciliar: si no, prev queda {} y borra la cesta restaurada desde sessionStorage. */
+    if (supplierProducts.length === 0) return;
     setQtyByProductId((prev) => {
       const next: QtyMap = {};
       for (const product of supplierProducts) {
