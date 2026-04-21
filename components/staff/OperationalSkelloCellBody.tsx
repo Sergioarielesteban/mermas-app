@@ -28,22 +28,30 @@ function formatHoursSum(mins: number): string {
 /** Altura fija por turno (~68–72px); no depende de la duración. */
 const SHIFT_CARD_ROW_H = 'h-[4.25rem] sm:h-[4.5rem]';
 
+/** Borde base neutro (zinc-300) para mezclar con el acento del puesto sin saturar. */
+const CARD_BORDER_NEUTRAL = 'rgb(212 212 216)';
+
 /**
  * Tarjeta compacta: horario | persona | horas totales (lista vertical, sin timeline).
+ * Fondo completo tintado muy suave por puesto; borde y rayita como refuerzo, texto oscuro.
  */
 const ShiftEmployeeRowCard = React.memo(function ShiftEmployeeRowCard({
   nameLabel,
   hoursLabel,
-  accentBg,
+  zoneSubtleBg,
+  zoneAccent,
   startTime,
   endTime,
   endsNextDay,
   showAlert,
-  shellClassName = 'rounded-lg border border-zinc-200/95 shadow-sm',
+  shellClassName = 'rounded-lg border border-solid shadow-sm',
 }: {
   nameLabel: string;
   hoursLabel: string;
-  accentBg: string;
+  /** Tono pastel del puesto (`subtleBg` de zona). */
+  zoneSubtleBg: string;
+  /** Acento del puesto para borde y rayita (`bg` de zona). */
+  zoneAccent: string;
   startTime: string;
   endTime: string;
   endsNextDay: boolean;
@@ -56,11 +64,20 @@ const ShiftEmployeeRowCard = React.memo(function ShiftEmployeeRowCard({
       {endsNextDay ? ' +1' : ''}
     </>
   );
+  const cardSurface = `color-mix(in srgb, ${zoneSubtleBg} 72%, white)`;
+  const cardBorder = `color-mix(in srgb, ${zoneAccent} 14%, ${CARD_BORDER_NEUTRAL})`;
+  const stripeFill = `color-mix(in srgb, ${zoneAccent} 32%, ${zoneSubtleBg})`;
+
   return (
     <div
-      className={`flex w-full min-w-0 shrink-0 items-stretch overflow-hidden bg-white ${SHIFT_CARD_ROW_H} ${shellClassName}`}
+      className={`flex w-full min-w-0 shrink-0 items-stretch overflow-hidden ${SHIFT_CARD_ROW_H} ${shellClassName}`}
+      style={{ backgroundColor: cardSurface, borderColor: cardBorder }}
     >
-      <div className="w-1 shrink-0 self-stretch" style={{ background: accentBg }} aria-hidden />
+      <div
+        className="w-1 shrink-0 self-stretch opacity-95"
+        style={{ backgroundColor: stripeFill }}
+        aria-hidden
+      />
       <div className="grid min-w-0 flex-1 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-2 gap-y-0 px-2 py-0 sm:gap-x-2.5 sm:px-2.5">
         <span className="shrink-0 text-[10px] font-extrabold tabular-nums tracking-tight text-zinc-900 sm:text-[11px]">
           {timeRng}
@@ -83,7 +100,7 @@ const ShiftEmployeeRowCard = React.memo(function ShiftEmployeeRowCard({
             </span>
           ) : null}
         </span>
-        <span className="shrink-0 text-right text-[10px] font-extrabold text-zinc-700 sm:text-[11px]">{hoursLabel}</span>
+        <span className="shrink-0 text-right text-[10px] font-extrabold text-zinc-800 sm:text-[11px]">{hoursLabel}</span>
       </div>
     </div>
   );
@@ -213,8 +230,6 @@ function OperationalSkelloCellBodyInner({
   const renderShiftRow = (sOne: StaffShift) => {
     const unassigned = sOne.employeeId == null;
     const smins = plannedShiftMinutes(sOne);
-    const accentBg =
-      sOne.colorHint && sOne.colorHint.trim().length > 0 ? sOne.colorHint.trim() : zStyle.bg;
 
     const rowShell = (
       <div
@@ -239,15 +254,16 @@ function OperationalSkelloCellBodyInner({
         <ShiftEmployeeRowCard
           nameLabel={unassigned ? 'Sin asignar' : employeeName(sOne.employeeId)}
           hoursLabel={formatShiftHoursLabel(smins)}
-          accentBg={accentBg}
+          zoneSubtleBg={zStyle.subtleBg}
+          zoneAccent={zStyle.bg}
           startTime={sOne.startTime}
           endTime={sOne.endTime}
           endsNextDay={sOne.endsNextDay}
           showAlert={unassigned}
           shellClassName={
             canEdit
-              ? 'rounded-r-lg border-y border-r border-zinc-200/95 shadow-sm'
-              : 'rounded-lg border border-zinc-200/95 shadow-sm ring-1 ring-black/[0.06]'
+              ? 'rounded-r-lg border-y border-r shadow-sm'
+              : 'rounded-lg border shadow-sm ring-1 ring-black/[0.04]'
           }
         />
       </div>
