@@ -44,7 +44,15 @@ const LINKS: NavLink[] = [
   { href: '/personal/configuracion', label: 'Ajustes', Icon: Settings2, adminOnly: true },
 ];
 
-export default function StaffPersonalShell({ children }: { children: React.ReactNode }) {
+const pillBase =
+  'inline-flex h-10 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-3 text-xs font-bold transition-colors sm:px-4 sm:text-sm';
+const pillActive = 'bg-[#D32F2F] text-white';
+const pillInactive = 'bg-[#ebebeb] text-zinc-800 hover:bg-[#e0e0e0]';
+
+/**
+ * Pills de sección Personal. Colocar justo debajo del `MermasStyleHero` en cada página (no en `/personal/mi/*`).
+ */
+export function PersonalSectionNav() {
   const pathname = usePathname();
   const { profileRole } = useAuth();
   const perms = React.useMemo(() => buildStaffPermissions(profileRole), [profileRole]);
@@ -53,47 +61,47 @@ export default function StaffPersonalShell({ children }: { children: React.React
   const isAdmin = role === 'admin';
   const isManager = role === 'manager';
 
-  const pillBase =
-    'inline-flex h-10 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-3 text-xs font-bold transition-colors sm:px-4 sm:text-sm';
-  const pillActive = 'bg-[#D32F2F] text-white';
-  const pillInactive = 'bg-[#ebebeb] text-zinc-800 hover:bg-[#e0e0e0]';
+  if (isMiApp) return null;
+
+  return (
+    <div className="rounded-xl bg-[#f5f5f5] p-2 sm:p-3">
+      <nav
+        className="flex flex-nowrap items-stretch gap-2 overflow-x-auto overscroll-x-contain scrollbar-thin"
+        aria-label="Secciones Personal"
+      >
+        {LINKS.filter((l) => {
+          if (l.teamManagement) return perms.canManageEmployees;
+          if (l.adminOnly) return isAdmin;
+          if (l.managerOnly) return perms.canViewTeamSummary;
+          if (isManager) return Boolean(l.staffVisible);
+          return true;
+        }).map((link) => {
+          if (!perms.canViewTeamSummary && !link.staffVisible) return null;
+          const { href, label, Icon, end } = link;
+          const active = end ? pathname === href : pathname === href || pathname.startsWith(`${href}/`);
+          return (
+            <Link key={href} href={href} className={[pillBase, active ? pillActive : pillInactive].join(' ')}>
+              <Icon className="h-4 w-4 shrink-0 opacity-90" strokeWidth={2.2} />
+              {label}
+            </Link>
+          );
+        })}
+        <Link href="/personal/mi" className={[pillBase, pillInactive].join(' ')}>
+          <Smartphone className="h-4 w-4 shrink-0 opacity-90" strokeWidth={2.2} />
+          Mi espacio
+        </Link>
+      </nav>
+    </div>
+  );
+}
+
+export default function StaffPersonalShell({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
+  const isMiApp = pathname.startsWith('/personal/mi');
 
   return (
     <div className={isMiApp ? 'space-y-4 pb-24 sm:pb-24 md:space-y-5' : 'space-y-4 pb-24 sm:pb-8 md:space-y-5'}>
-      {!isMiApp ? (
-        <div className="mt-3 rounded-xl bg-[#f5f5f5] p-2 sm:mt-4 sm:p-3">
-          <nav
-            className="flex flex-nowrap items-stretch gap-2 overflow-x-auto overscroll-x-contain scrollbar-thin"
-            aria-label="Secciones Personal"
-          >
-            {LINKS.filter((l) => {
-              if (l.teamManagement) return perms.canManageEmployees;
-              if (l.adminOnly) return isAdmin;
-              if (l.managerOnly) return perms.canViewTeamSummary;
-              if (isManager) return Boolean(l.staffVisible);
-              return true;
-            }).map((link) => {
-              if (!perms.canViewTeamSummary && !link.staffVisible) return null;
-              const { href, label, Icon, end } = link;
-              const active = end ? pathname === href : pathname === href || pathname.startsWith(`${href}/`);
-              return (
-                <Link
-                  key={href}
-                  href={href}
-                  className={[pillBase, active ? pillActive : pillInactive].join(' ')}
-                >
-                  <Icon className="h-4 w-4 shrink-0 opacity-90" strokeWidth={2.2} />
-                  {label}
-                </Link>
-              );
-            })}
-            <Link href="/personal/mi" className={[pillBase, pillInactive].join(' ')}>
-              <Smartphone className="h-4 w-4 shrink-0 opacity-90" strokeWidth={2.2} />
-              Mi espacio
-            </Link>
-          </nav>
-        </div>
-      ) : (
+      {isMiApp ? (
         <div className="flex items-center justify-between gap-2 rounded-2xl bg-zinc-900 px-3 py-2 text-white shadow-sm ring-1 ring-zinc-700/50">
           <p className="text-xs font-extrabold uppercase tracking-wide text-white/80">Vista empleado</p>
           <Link
@@ -103,7 +111,7 @@ export default function StaffPersonalShell({ children }: { children: React.React
             Salir al panel
           </Link>
         </div>
-      )}
+      ) : null}
       {children}
       {isMiApp ? <StaffMiBottomNav /> : null}
     </div>

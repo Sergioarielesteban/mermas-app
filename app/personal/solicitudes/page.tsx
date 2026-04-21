@@ -2,6 +2,7 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import MermasStyleHero from '@/components/MermasStyleHero';
+import { PersonalSectionNav } from '@/components/staff/StaffPersonalShell';
 import { useAuth } from '@/components/AuthProvider';
 import { buildStaffPermissions } from '@/lib/staff/permissions';
 import {
@@ -83,6 +84,7 @@ export default function PersonalSolicitudesManagerPage() {
         tagline="Días libres y otras peticiones. Responde en un toque."
         compact
       />
+      <PersonalSectionNav />
       {err ? <p className="text-sm font-semibold text-red-700">{err}</p> : null}
       {loading ? <p className="text-sm text-zinc-500">Cargando…</p> : null}
 

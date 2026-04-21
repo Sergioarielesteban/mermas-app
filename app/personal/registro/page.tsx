@@ -2,6 +2,7 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import MermasStyleHero from '@/components/MermasStyleHero';
+import { PersonalSectionNav } from '@/components/staff/StaffPersonalShell';
 import { useAuth } from '@/components/AuthProvider';
 import { buildStaffPermissions } from '@/lib/staff/permissions';
 import {
@@ -557,6 +558,7 @@ export default function PersonalRegistroPage() {
   return (
     <div className="space-y-4">
       <MermasStyleHero eyebrow="Control horario" title="Registro diario" compact />
+      <PersonalSectionNav />
 
       <div className="grid gap-2 rounded-2xl bg-white p-3 ring-1 ring-zinc-200 sm:grid-cols-2 lg:grid-cols-5">
         <label className="text-xs font-bold text-zinc-600">

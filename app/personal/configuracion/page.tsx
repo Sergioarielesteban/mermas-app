@@ -1,11 +1,13 @@
 'use client';
 
 import MermasStyleHero from '@/components/MermasStyleHero';
+import { PersonalSectionNav } from '@/components/staff/StaffPersonalShell';
 
 export default function PersonalConfigPage() {
   return (
     <div className="space-y-4">
       <MermasStyleHero eyebrow="Ajustes" title="Configuración básica" compact />
+      <PersonalSectionNav />
       <div className="space-y-3 rounded-3xl bg-zinc-50 p-4 text-sm leading-relaxed text-zinc-700 ring-1 ring-zinc-200">
         <p>
           <strong className="text-zinc-900">Migración:</strong> ejecuta{' '}

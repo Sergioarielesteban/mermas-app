@@ -4,6 +4,7 @@ import Link from 'next/link';
 import React, { useEffect, useMemo, useState } from 'react';
 import { Search } from 'lucide-react';
 import MermasStyleHero from '@/components/MermasStyleHero';
+import { PersonalSectionNav } from '@/components/staff/StaffPersonalShell';
 import { useAuth } from '@/components/AuthProvider';
 import {
   fetchAllergensMaster,
@@ -91,6 +92,7 @@ export default function PersonalMatrizAlergenosPage() {
   return (
     <div className="space-y-4 pb-8">
       <MermasStyleHero eyebrow="Solo lectura" title="Matriz de alérgenos" compact />
+      <PersonalSectionNav />
       <div className="flex flex-wrap gap-2">
         <Link href="/personal/manual-normas" className="text-sm font-bold text-zinc-600 hover:text-[#D32F2F]">
           ← Manual y normas

@@ -4,6 +4,7 @@ import Link from 'next/link';
 import React, { useCallback, useEffect, useState } from 'react';
 import { ChevronDown, ChevronUp, Plus, Trash2 } from 'lucide-react';
 import MermasStyleHero from '@/components/MermasStyleHero';
+import { PersonalSectionNav } from '@/components/staff/StaffPersonalShell';
 import { useAuth } from '@/components/AuthProvider';
 import {
   deleteManualLecturaByManual,
@@ -228,6 +229,7 @@ export default function ManualOperacionesPage() {
   return (
     <div className="space-y-5 pb-10">
       <MermasStyleHero eyebrow="Procedimientos" title="Manual de operaciones" compact />
+      <PersonalSectionNav />
       <Link href="/personal/manual-normas" className="text-sm font-bold text-zinc-600 hover:text-[#D32F2F]">
         ← Manual y normas
       </Link>

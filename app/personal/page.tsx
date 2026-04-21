@@ -5,6 +5,7 @@ import React, { useCallback, useMemo, useState } from 'react';
 import type { LucideIcon } from 'lucide-react';
 import { AlertTriangle, Clock, Users } from 'lucide-react';
 import MermasStyleHero from '@/components/MermasStyleHero';
+import { PersonalSectionNav } from '@/components/staff/StaffPersonalShell';
 import { useAuth } from '@/components/AuthProvider';
 import { useStaffBundle } from '@/hooks/useStaffBundle';
 import { useStaffRealtime } from '@/hooks/useStaffRealtime';
@@ -161,17 +162,21 @@ export default function PersonalResumenPage() {
         compact
       />
 
-      <section className="rounded-3xl bg-white p-4 ring-1 ring-zinc-200/90 md:p-5">
-        <h2 className="text-sm font-extrabold uppercase tracking-wide text-zinc-500">Manual y normas</h2>
-        <p className="mt-1 text-xs leading-relaxed text-zinc-600">
-          Manual de operaciones, normas de empresa y matriz de alérgenos (datos de escandallos, solo lectura).
+      <PersonalSectionNav />
+
+      <section className="rounded-3xl bg-white p-4 text-center ring-1 ring-zinc-200/90 md:p-5">
+        <h2 className="text-sm font-extrabold uppercase tracking-wide text-zinc-500">Mi espacio</h2>
+        <p className="mx-auto mt-1 max-w-md text-xs leading-relaxed text-zinc-600">
+          Tu área personal: turnos, solicitudes y datos de cuenta.
         </p>
-        <Link
-          href="/personal/manual-normas"
-          className="mt-3 inline-flex items-center gap-2 rounded-xl bg-[#D32F2F] px-4 py-2.5 text-xs font-extrabold uppercase tracking-wide text-white shadow-sm hover:bg-[#c62828] active:scale-[0.99]"
-        >
-          Abrir sección
-        </Link>
+        <div className="mt-3 flex justify-center">
+          <Link
+            href="/personal/mi"
+            className="inline-flex items-center gap-2 rounded-xl bg-[#D32F2F] px-4 py-2.5 text-xs font-extrabold uppercase tracking-wide text-white shadow-sm hover:bg-[#c62828] active:scale-[0.99]"
+          >
+            Abrir sección
+          </Link>
+        </div>
       </section>
 
       {error ? (

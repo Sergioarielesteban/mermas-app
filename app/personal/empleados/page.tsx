@@ -4,6 +4,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Pencil, Plus, Trash2 } from 'lucide-react';
 import Link from 'next/link';
 import MermasStyleHero from '@/components/MermasStyleHero';
+import { PersonalSectionNav } from '@/components/staff/StaffPersonalShell';
 import { useAuth } from '@/components/AuthProvider';
 import { parseProfileAppRole, type ProfileAppRole } from '@/lib/profile-app-role';
 import { buildStaffPermissions } from '@/lib/staff/permissions';
@@ -352,6 +353,7 @@ export default function PersonalEmpleadosPage() {
     return (
       <div className="space-y-4">
         <MermasStyleHero eyebrow="Equipo" title="Empleados" compact />
+        <PersonalSectionNav />
         <section className="rounded-2xl bg-white p-4 ring-1 ring-zinc-200">
           <p className="text-sm font-semibold text-zinc-800">No tienes permiso para ver la gestión del equipo.</p>
           <Link
@@ -368,6 +370,7 @@ export default function PersonalEmpleadosPage() {
   return (
     <div className="space-y-4">
       <MermasStyleHero eyebrow="Equipo" title="Empleados" tagline="Ficha rápida, color en cuadrante y PIN opcional." compact />
+      <PersonalSectionNav />
 
       {!perms.canManageEmployees ? (
         <p className="rounded-2xl bg-zinc-50 px-4 py-3 text-sm text-zinc-600 ring-1 ring-zinc-200">

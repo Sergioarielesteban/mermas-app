@@ -2,6 +2,7 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import MermasStyleHero from '@/components/MermasStyleHero';
+import { PersonalSectionNav } from '@/components/staff/StaffPersonalShell';
 import { useAuth } from '@/components/AuthProvider';
 import { buildStaffPermissions } from '@/lib/staff/permissions';
 import {
@@ -126,6 +127,7 @@ export default function PersonalIncidenciasPage() {
   return (
     <div className="space-y-4">
       <MermasStyleHero eyebrow="Incidencias" title="Alertas de asistencia" compact />
+      <PersonalSectionNav />
       <div className="flex flex-wrap gap-2">
         <button
           type="button"

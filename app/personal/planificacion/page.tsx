@@ -6,6 +6,7 @@ import { ChevronLeft, ChevronRight, Copy } from 'lucide-react';
 import MermasStyleHero from '@/components/MermasStyleHero';
 import { useAuth } from '@/components/AuthProvider';
 import ShiftEditorModal, { PLANIFICACION_MODAL_ABORT, type ShiftDraft } from '@/components/staff/ShiftEditorModal';
+import { PersonalSectionNav } from '@/components/staff/StaffPersonalShell';
 import OperationalWeekGrid, { OPERATIONAL_NONE_ZONE } from '@/components/staff/OperationalWeekGrid';
 import ShiftWeekGrid, { SHIFT_GRID_UNASSIGNED_ROW_ID } from '@/components/staff/ShiftWeekGrid';
 import { useStaffBundle } from '@/hooks/useStaffBundle';
@@ -559,6 +560,7 @@ export default function PersonalPlanificacionPage() {
     return (
       <div className="space-y-4">
         <MermasStyleHero title="HORARIOS Y FICHAJES" compact />
+        <PersonalSectionNav />
         <section className="rounded-2xl bg-white p-4 ring-1 ring-zinc-200">
           <p className="text-sm font-semibold text-zinc-800">Tu planificación semanal está en la vista principal.</p>
           <Link
@@ -580,6 +582,7 @@ export default function PersonalPlanificacionPage() {
         tagline="Semana: cuadrante por puesto (vista principal) o por empleado; franja 00:00–24:00 y arrastre (encargados)."
         compact
       />
+      <PersonalSectionNav />
 
       {error ? (
         <p className="rounded-2xl bg-red-50 px-4 py-3 text-sm font-semibold text-red-900">{error}</p>

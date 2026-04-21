@@ -4,6 +4,7 @@ import Link from 'next/link';
 import React from 'react';
 import { BookOpen, ClipboardList, Table2 } from 'lucide-react';
 import MermasStyleHero from '@/components/MermasStyleHero';
+import { PersonalSectionNav } from '@/components/staff/StaffPersonalShell';
 
 const cards = [
   {
@@ -35,6 +36,7 @@ export default function ManualNormasHubPage() {
         tagline="Documentación del local en un solo sitio: operaciones, normas y alérgenos."
         compact
       />
+      <PersonalSectionNav />
       <Link
         href="/personal"
         className="inline-flex text-sm font-bold text-zinc-600 hover:text-[#D32F2F]"

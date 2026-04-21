@@ -4,6 +4,7 @@ import Link from 'next/link';
 import React, { Suspense, useCallback, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import MermasStyleHero from '@/components/MermasStyleHero';
+import { PersonalSectionNav } from '@/components/staff/StaffPersonalShell';
 import { useAuth } from '@/components/AuthProvider';
 import { useStaffBundle } from '@/hooks/useStaffBundle';
 import { useStaffRealtime } from '@/hooks/useStaffRealtime';
@@ -193,6 +194,7 @@ function PersonalControlInner() {
         tagline={heroTagline}
         compact
       />
+      <PersonalSectionNav />
 
       {filterKey ? (
         <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-zinc-100 px-3 py-2.5 text-sm ring-1 ring-zinc-200/80">

@@ -3,6 +3,7 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import Link from 'next/link';
 import MermasStyleHero from '@/components/MermasStyleHero';
+import { PersonalSectionNav } from '@/components/staff/StaffPersonalShell';
 import ClockPanel from '@/components/staff/ClockPanel';
 import { useAuth } from '@/components/AuthProvider';
 import { useStaffBundle } from '@/hooks/useStaffBundle';
@@ -39,6 +40,7 @@ export default function PersonalFichajePage() {
         tagline="Botones grandes, secuencia guiada y PIN opcional."
         compact
       />
+      <PersonalSectionNav />
       {error ? <p className="rounded-2xl bg-red-50 px-4 py-3 text-sm font-semibold text-red-900">{error}</p> : null}
       {loading ? <p className="text-sm text-zinc-500">Cargando…</p> : null}
       {perms.canManageSchedules ? (
