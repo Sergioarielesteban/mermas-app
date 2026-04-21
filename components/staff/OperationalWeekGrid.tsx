@@ -371,7 +371,7 @@ export default function OperationalWeekGrid({
         ref={gridWrapRef}
         className="overflow-x-auto overflow-y-visible overscroll-x-contain rounded-2xl ring-1 ring-zinc-200/90 [-webkit-overflow-scrolling:touch] [touch-action:pan-x]"
       >
-        <table className="w-full min-w-[2520px] border-collapse text-left text-[10px] sm:min-w-[2790px] sm:text-xs">
+        <table className="w-full min-w-[1640px] border-collapse text-left text-[10px] sm:min-w-[1870px] sm:text-xs">
           <thead>
             <tr className="bg-zinc-50">
               <th
@@ -387,7 +387,7 @@ export default function OperationalWeekGrid({
                   <th
                     key={ymd}
                     className={[
-                      'min-w-[21rem] border-b border-zinc-200 px-0.5 py-1.5 text-center font-extrabold sm:min-w-[24.75rem] sm:px-1',
+                      'min-w-[14rem] border-b border-zinc-200 px-0 py-1.5 text-center font-extrabold sm:min-w-[16rem] sm:px-0.5',
                       headerTone(cov),
                     ].join(' ')}
                   >
@@ -434,7 +434,7 @@ export default function OperationalWeekGrid({
                   return (
                     <td
                       key={ymd}
-                      className="align-top border-b border-zinc-100 p-0.5 sm:p-1"
+                      className="align-top border-b border-zinc-100 p-0"
                       onDragOver={
                         canEdit
                           ? (e) => {
@@ -495,7 +495,7 @@ export default function OperationalWeekGrid({
                 return (
                   <td
                     key={ymd}
-                    className="border-t border-zinc-200 px-0.5 py-2 text-center align-top sm:px-1"
+                    className="border-t border-zinc-200 px-0 py-2 text-center align-top"
                   >
                     {hasDay ? (
                       <>

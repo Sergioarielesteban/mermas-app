@@ -25,9 +25,9 @@ function formatHoursSum(mins: number): string {
   return `${Math.round(h)} h`;
 }
 
-/** Altura fija por turno (−25% vs ~68–72px). Bloques visuales al 60% y alineados a la izquierda. */
+/** Altura fija por turno (−25% vs ~68–72px). Bloques visuales compactos y alineados a la izquierda. */
 const SHIFT_CARD_ROW_H = 'h-[3.1875rem] sm:h-[3.375rem]';
-const SHIFT_CARD_ROW_W = 'w-[60%] max-w-[60%]';
+const SHIFT_CARD_ROW_W = 'w-[90%] max-w-[90%]';
 
 /**
  * Tarjeta compacta: horario | persona | horas totales.
