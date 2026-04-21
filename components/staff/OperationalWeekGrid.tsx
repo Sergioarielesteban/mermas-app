@@ -1,7 +1,6 @@
 'use client';
 
 import React, { useCallback, useMemo, useRef, useState } from 'react';
-import { Trash2 } from 'lucide-react';
 import { OperationalSkelloCellBody } from '@/components/staff/OperationalSkelloCellBody';
 import { plannedShiftMinutes } from '@/lib/staff/attendance-logic';
 import { addDays, formatDayMonth, formatWeekdayShort, ymdLocal } from '@/lib/staff/staff-dates';
@@ -100,9 +99,8 @@ export type OperationalWeekGridProps = {
   shifts: StaffShift[];
   operationalWindow: LocalOperationalWindow;
   customOperationalZones: CustomOperationalZoneRow[];
-  onAddOperationalZone: () => void;
-  /** Quitar un puesto añadido con «+ Puesto» (solo filas personalizadas). */
-  onRemoveOperationalZone?: (zoneKey: string) => void | Promise<void>;
+  /** Abre el gestor de puestos (lista, editar, eliminar, añadir). */
+  onOpenOperationalZonesManager: () => void;
   canEdit: boolean;
   onShiftPlaced: (shift: StaffShift, newDateYmd: string, zoneRowKey: string) => Promise<void>;
   onQuickCreateShift: (dateYmd: string, zoneRowKey: string) => Promise<void>;
@@ -118,8 +116,7 @@ export default function OperationalWeekGrid({
   shifts,
   operationalWindow,
   customOperationalZones,
-  onAddOperationalZone,
-  onRemoveOperationalZone,
+  onOpenOperationalZonesManager,
   canEdit,
   onShiftPlaced,
   onQuickCreateShift,
@@ -131,10 +128,6 @@ export default function OperationalWeekGrid({
   const zoneRows = useMemo(
     () => buildZoneRows(shifts, customOperationalZones),
     [shifts, customOperationalZones],
-  );
-  const customZoneKeySet = useMemo(
-    () => new Set(customOperationalZones.map((z) => z.key)),
-    [customOperationalZones],
   );
   const operationalMetrics = useMemo(
     () => computeOperationalTimelineMetrics(operationalWindow),
@@ -363,7 +356,7 @@ export default function OperationalWeekGrid({
         {canEdit ? (
           <button
             type="button"
-            onClick={() => onAddOperationalZone()}
+            onClick={() => onOpenOperationalZonesManager()}
             className="rounded-lg border border-zinc-300 bg-white px-2.5 py-1 text-[10px] font-bold text-zinc-800 shadow-sm hover:border-[#D32F2F]/40 hover:bg-zinc-50 sm:text-xs"
           >
             + Puesto
@@ -371,11 +364,14 @@ export default function OperationalWeekGrid({
         ) : null}
       </div>
 
-      <div ref={gridWrapRef} className="overflow-x-auto rounded-2xl ring-1 ring-zinc-200/90">
+      <div
+        ref={gridWrapRef}
+        className="overflow-x-auto rounded-2xl ring-1 ring-zinc-200/90 [-webkit-overflow-scrolling:touch] [touch-action:pan-x_pan-y]"
+      >
         <table className="w-full min-w-[2520px] border-collapse text-left text-[10px] sm:min-w-[2790px] sm:text-xs">
           <thead>
             <tr className="bg-zinc-50">
-              <th className="sticky left-0 z-20 min-w-[4rem] border-b border-r border-zinc-200 bg-zinc-50 px-1 py-2 text-[9px] font-extrabold uppercase tracking-wide text-zinc-500 sm:min-w-[4.75rem] sm:px-1.5">
+              <th className="sticky left-0 z-20 min-w-[4rem] touch-pan-y border-b border-r border-zinc-200 bg-zinc-50 px-1 py-2 text-[9px] font-extrabold uppercase tracking-wide text-zinc-500 sm:min-w-[4.75rem] sm:px-1.5">
                 Puesto
               </th>
               {days.map((d) => {
@@ -401,7 +397,7 @@ export default function OperationalWeekGrid({
           <tbody>
             {zoneRows.map((row) => (
               <tr key={row.key} className="bg-white">
-                <td className="sticky left-0 z-10 border-b border-r border-zinc-100 bg-white px-1 py-1 align-top sm:px-1.5">
+                <td className="sticky left-0 z-10 touch-pan-y border-b border-r border-zinc-100 bg-white px-1 py-1 align-top sm:px-1.5">
                   <div className="flex min-w-0 items-center gap-1">
                     <span
                       className="h-2.5 w-2.5 shrink-0 rounded-full ring-1 ring-black/10"
@@ -409,17 +405,6 @@ export default function OperationalWeekGrid({
                       aria-hidden
                     />
                     <span className="min-w-0 flex-1 truncate font-bold text-zinc-900">{row.label}</span>
-                    {canEdit && onRemoveOperationalZone && customZoneKeySet.has(row.key) ? (
-                      <button
-                        type="button"
-                        className="grid h-7 w-7 shrink-0 place-items-center rounded-lg border border-zinc-200 text-zinc-500 hover:border-red-200 hover:bg-red-50 hover:text-red-700"
-                        title="Eliminar puesto"
-                        aria-label={`Eliminar puesto ${row.label}`}
-                        onClick={() => void onRemoveOperationalZone(row.key)}
-                      >
-                        <Trash2 className="h-3.5 w-3.5" strokeWidth={2} />
-                      </button>
-                    ) : null}
                   </div>
                 </td>
                 {days.map((d) => {
@@ -476,7 +461,7 @@ export default function OperationalWeekGrid({
           </tbody>
           <tfoot>
             <tr className="bg-zinc-50/90">
-              <td className="sticky left-0 z-10 border-t border-r border-zinc-200 px-1 py-2 text-[9px] font-extrabold uppercase text-zinc-600 sm:px-1.5 sm:text-[10px]">
+              <td className="sticky left-0 z-10 touch-pan-y border-t border-r border-zinc-200 px-1 py-2 text-[9px] font-extrabold uppercase text-zinc-600 sm:px-1.5 sm:text-[10px]">
                 Resumen
               </td>
               {days.map((d) => {

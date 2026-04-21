@@ -8,6 +8,7 @@ import { useAuth } from '@/components/AuthProvider';
 import ShiftEditorModal, { PLANIFICACION_MODAL_ABORT, type ShiftDraft } from '@/components/staff/ShiftEditorModal';
 import { PersonalSectionNav } from '@/components/staff/StaffPersonalShell';
 import OperationalWeekGrid, { OPERATIONAL_NONE_ZONE } from '@/components/staff/OperationalWeekGrid';
+import OperationalZonesManagerModal from '@/components/staff/OperationalZonesManagerModal';
 import ShiftWeekGrid, { SHIFT_GRID_UNASSIGNED_ROW_ID } from '@/components/staff/ShiftWeekGrid';
 import { useStaffBundle } from '@/hooks/useStaffBundle';
 import { useStaffRealtime } from '@/hooks/useStaffRealtime';
@@ -20,7 +21,6 @@ import {
 } from '@/lib/staff/shift-quick-presets';
 import {
   readCustomOperationalZones,
-  slugifyOperationalZoneKey,
   writeCustomOperationalZones,
   type CustomOperationalZoneRow,
 } from '@/lib/staff/operational-custom-zones';
@@ -105,6 +105,7 @@ export default function PersonalPlanificacionPage() {
   }, [draft]);
   const [operationalWindow, setOperationalWindow] = useState(DEFAULT_LOCAL_OPERATIONAL_WINDOW);
   const [customOperationalZones, setCustomOperationalZones] = useState<CustomOperationalZoneRow[]>([]);
+  const [operationalZonesManagerOpen, setOperationalZonesManagerOpen] = useState(false);
   const [weekPublication, setWeekPublication] = useState<StaffWeekPublication | null>(null);
   const [publishBusy, setPublishBusy] = useState(false);
 
@@ -191,42 +192,13 @@ export default function PersonalPlanificacionPage() {
     setCustomOperationalZones(readCustomOperationalZones(localId));
   }, [localId]);
 
-  const handleAddOperationalZone = useCallback(async () => {
-    if (!localId || !perms.canManageSchedules) return;
-    const name = await appPrompt('Nombre del puesto', '');
-    if (name == null || !name.trim()) return;
-    const label = name.trim();
-    let key = slugifyOperationalZoneKey(label);
-    const reserved = new Set<string>(['cocina', 'barra', 'sala', OPERATIONAL_NONE_ZONE]);
-    let n = 2;
-    while (reserved.has(key) || customOperationalZones.some((z) => z.key === key)) {
-      key = `${slugifyOperationalZoneKey(label)}-${n}`;
-      n += 1;
-    }
-    const next = [...customOperationalZones, { key, label }];
-    setCustomOperationalZones(next);
-    writeCustomOperationalZones(localId, next);
-  }, [localId, perms.canManageSchedules, customOperationalZones]);
-
-  const handleRemoveOperationalZone = useCallback(
-    async (zoneKey: string) => {
-      if (!localId || !perms.canManageSchedules) return;
-      if (zoneKey === OPERATIONAL_NONE_ZONE) return;
-      const using = shifts.filter((s) => {
-        const z = (s.zone ?? '').trim().toLowerCase();
-        return (z || OPERATIONAL_NONE_ZONE) === zoneKey;
-      });
-      if (using.length > 0) {
-        await appAlert(
-          `Este puesto tiene ${using.length} turno(s) en el cuadrante. Mueve o elimina esos turnos antes de borrar el puesto.`,
-        );
-        return;
-      }
-      const next = customOperationalZones.filter((z) => z.key !== zoneKey);
+  const applyCustomOperationalZones = useCallback(
+    (next: CustomOperationalZoneRow[]) => {
+      if (!perms.canManageSchedules) return;
       setCustomOperationalZones(next);
-      writeCustomOperationalZones(localId, next);
+      if (localId) writeCustomOperationalZones(localId, next);
     },
-    [localId, perms.canManageSchedules, shifts, customOperationalZones],
+    [localId, perms.canManageSchedules],
   );
 
   const shiftsInMonth = useMemo(() => {
@@ -733,21 +705,30 @@ export default function PersonalPlanificacionPage() {
               onRemoveDayMark={perms.canManageSchedules ? removeDayMark : undefined}
             />
           ) : (
-            <OperationalWeekGrid
-              weekStartMonday={weekStartDate}
-              employees={employees}
-              shifts={shifts}
-              operationalWindow={operationalWindow}
-              customOperationalZones={customOperationalZones}
-              onAddOperationalZone={handleAddOperationalZone}
-              onRemoveOperationalZone={handleRemoveOperationalZone}
-              canEdit={perms.canManageSchedules}
-              onShiftPlaced={onOperationalShiftPlaced}
-              onQuickCreateShift={onOperationalQuickCreate}
-              onEmptyLongPress={onOperationalEmptyLongPress}
-              onShiftAdvancedEdit={openEdit}
-              onRemoveShift={(s) => removeShiftFromPlan(s)}
-            />
+            <>
+              <OperationalWeekGrid
+                weekStartMonday={weekStartDate}
+                employees={employees}
+                shifts={shifts}
+                operationalWindow={operationalWindow}
+                customOperationalZones={customOperationalZones}
+                onOpenOperationalZonesManager={() => setOperationalZonesManagerOpen(true)}
+                canEdit={perms.canManageSchedules}
+                onShiftPlaced={onOperationalShiftPlaced}
+                onQuickCreateShift={onOperationalQuickCreate}
+                onEmptyLongPress={onOperationalEmptyLongPress}
+                onShiftAdvancedEdit={openEdit}
+                onRemoveShift={(s) => removeShiftFromPlan(s)}
+              />
+              <OperationalZonesManagerModal
+                open={operationalZonesManagerOpen}
+                onClose={() => setOperationalZonesManagerOpen(false)}
+                zones={customOperationalZones}
+                shifts={shifts}
+                onApply={applyCustomOperationalZones}
+                canEdit={perms.canManageSchedules}
+              />
+            </>
           )}
         </>
       ) : null}
