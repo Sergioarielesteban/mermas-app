@@ -254,11 +254,7 @@ function OperationalSkelloCellBodyInner({
         >
           {canEdit ? (
             <>
-              <div
-                className="flex h-full min-h-0 w-10 shrink-0 flex-col items-center justify-between rounded-l-lg border-y border-l border-zinc-200/90 bg-zinc-100 px-0.5 py-1"
-                onPointerDown={(e) => e.stopPropagation()}
-                onClick={(e) => e.stopPropagation()}
-              >
+              <div className="flex h-full min-h-0 w-10 shrink-0 flex-col items-center justify-between rounded-l-lg border-y border-l border-zinc-200/90 bg-zinc-100 px-0.5 py-1">
                 <button
                   type="button"
                   className="shrink-0 rounded px-0.5 py-px text-[7px] font-extrabold leading-tight text-red-700 hover:bg-red-100/90 sm:text-[8px]"
@@ -314,8 +310,8 @@ function OperationalSkelloCellBodyInner({
           ))}
         </div>
       ) : null}
-      <div className="max-h-[min(40vh,20rem)] overflow-y-auto overflow-x-hidden">
-        <div className="flex flex-col gap-1">{sortedShifts.map(renderShiftRow)}</div>
+      <div className="flex w-full min-w-0 flex-col gap-1 overflow-visible">
+        {sortedShifts.map(renderShiftRow)}
       </div>
     </div>
   );

@@ -376,12 +376,15 @@ export default function OperationalWeekGrid({
 
       <div
         ref={gridWrapRef}
-        className="overflow-x-auto rounded-2xl ring-1 ring-zinc-200/90 [-webkit-overflow-scrolling:touch] [touch-action:pan-x_pan-y]"
+        className="overflow-x-auto overflow-y-visible overscroll-x-contain rounded-2xl ring-1 ring-zinc-200/90 [-webkit-overflow-scrolling:touch] [touch-action:pan-x]"
       >
         <table className="w-full min-w-[2520px] border-collapse text-left text-[10px] sm:min-w-[2790px] sm:text-xs">
           <thead>
             <tr className="bg-zinc-50">
-              <th className="sticky left-0 z-20 min-w-[4rem] touch-pan-y border-b border-r border-zinc-200 bg-zinc-50 px-1 py-2 text-[9px] font-extrabold uppercase tracking-wide text-zinc-500 sm:min-w-[4.75rem] sm:px-1.5">
+              <th
+                className="sticky left-0 z-20 min-w-[4rem] border-b border-r border-zinc-200 bg-zinc-50 px-1 py-2 text-[9px] font-extrabold uppercase tracking-wide text-zinc-500 sm:min-w-[4.75rem] sm:px-1.5"
+                style={{ touchAction: 'pan-y' }}
+              >
                 Puesto
               </th>
               {days.map((d) => {
@@ -407,7 +410,10 @@ export default function OperationalWeekGrid({
           <tbody>
             {zoneRows.map((row) => (
               <tr key={row.key} className="bg-white">
-                <td className="sticky left-0 z-10 touch-pan-y border-b border-r border-zinc-100 bg-white px-1 py-1 align-top sm:px-1.5">
+                <td
+                  className="sticky left-0 z-10 border-b border-r border-zinc-100 bg-white px-1 py-1 align-top sm:px-1.5"
+                  style={{ touchAction: 'pan-y' }}
+                >
                   <div className="flex min-w-0 flex-col items-stretch">
                     <div className="flex min-w-0 items-center gap-1">
                       <span
@@ -482,7 +488,10 @@ export default function OperationalWeekGrid({
           </tbody>
           <tfoot>
             <tr className="bg-zinc-50/90">
-              <td className="sticky left-0 z-10 touch-pan-y border-t border-r border-zinc-200 px-1 py-2 text-[9px] font-extrabold uppercase text-zinc-600 sm:px-1.5 sm:text-[10px]">
+              <td
+                className="sticky left-0 z-10 border-t border-r border-zinc-200 px-1 py-2 text-[9px] font-extrabold uppercase text-zinc-600 sm:px-1.5 sm:text-[10px]"
+                style={{ touchAction: 'pan-y' }}
+              >
                 Resumen
               </td>
               {days.map((d) => {
