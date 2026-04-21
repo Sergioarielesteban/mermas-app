@@ -189,6 +189,22 @@ export default function ShiftEditorModal({
     }
   };
 
+  const handleRepeatDayTap = (ymd: string) => {
+    const anchor = ymd === shiftDate;
+    if (anchor) return;
+    if (repeatDayYmds.size === 1 && repeatDayYmds.has(shiftDate)) {
+      setShiftDate(ymd);
+      setRepeatDayYmds(new Set([ymd]));
+      return;
+    }
+    setRepeatDayYmds((prev) => {
+      const next = new Set(prev);
+      if (next.has(ymd)) next.delete(ymd);
+      else next.add(ymd);
+      return next;
+    });
+  };
+
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setBusy(true);
@@ -307,7 +323,7 @@ export default function ShiftEditorModal({
           </button>
         </div>
         <form onSubmit={onSubmit} className="flex min-h-0 flex-1 flex-col">
-          <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-y-contain px-4 py-3 pb-28 sm:pb-3">
+          <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-y-contain px-4 py-3 pb-[calc(8rem+env(safe-area-inset-bottom,0px))] sm:pb-3">
           <label className="block text-xs font-bold text-zinc-600">
             Empleado
             <select
@@ -347,8 +363,15 @@ export default function ShiftEditorModal({
                     <button
                       key={ymd}
                       type="button"
-                      disabled={anchor}
-                      title={anchor ? 'Día base (ajusta arriba en «Día»)' : on ? 'Quitar este día' : 'Añadir este día'}
+                      title={
+                        anchor
+                          ? 'Día base'
+                          : repeatDayYmds.size === 1 && repeatDayYmds.has(shiftDate)
+                            ? 'Cambiar a este día'
+                            : on
+                              ? 'Quitar este día'
+                              : 'Añadir este día'
+                      }
                       className={[
                         'min-w-[2.25rem] rounded-lg px-2 py-1.5 text-xs font-extrabold ring-1 transition-colors',
                         anchor
@@ -357,15 +380,7 @@ export default function ShiftEditorModal({
                             ? 'bg-emerald-600 text-white ring-emerald-700 hover:bg-emerald-700'
                             : 'bg-white text-zinc-700 ring-zinc-200 hover:bg-zinc-100',
                       ].join(' ')}
-                      onClick={() => {
-                        if (anchor) return;
-                        setRepeatDayYmds((prev) => {
-                          const next = new Set(prev);
-                          if (next.has(ymd)) next.delete(ymd);
-                          else next.add(ymd);
-                          return next;
-                        });
-                      }}
+                      onClick={() => handleRepeatDayTap(ymd)}
                     >
                       {label}
                     </button>
@@ -531,7 +546,7 @@ export default function ShiftEditorModal({
           ) : null}
           {err ? <p className="text-sm font-semibold text-red-700">{err}</p> : null}
           </div>
-          <div className="fixed inset-x-0 bottom-0 z-[80] shrink-0 border-t border-zinc-200 bg-white/95 px-4 pt-3 shadow-[0_-8px_24px_rgba(0,0,0,0.12)] backdrop-blur sm:static sm:bg-white sm:shadow-[0_-8px_24px_rgba(0,0,0,0.08)] sm:backdrop-blur-0 pb-[max(0.75rem,env(safe-area-inset-bottom,0px))]">
+          <div className="fixed inset-x-0 bottom-[calc(4.5rem+env(safe-area-inset-bottom,0px))] z-[80] shrink-0 border-t border-zinc-200 bg-white/95 px-4 pt-3 shadow-[0_-8px_24px_rgba(0,0,0,0.12)] backdrop-blur sm:static sm:bg-white sm:shadow-[0_-8px_24px_rgba(0,0,0,0.08)] sm:backdrop-blur-0 pb-[max(0.75rem,env(safe-area-inset-bottom,0px))]">
             <div className="flex flex-wrap gap-2">
               <button
                 type="submit"
