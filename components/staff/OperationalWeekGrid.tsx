@@ -371,11 +371,11 @@ export default function OperationalWeekGrid({
         ref={gridWrapRef}
         className="overflow-x-auto overflow-y-visible overscroll-x-contain rounded-2xl ring-1 ring-zinc-200/90 [-webkit-overflow-scrolling:touch] [touch-action:pan-x]"
       >
-        <table className="w-full min-w-[1640px] border-collapse text-left text-[10px] sm:min-w-[1870px] sm:text-xs">
+        <table className="w-full min-w-[1420px] border-collapse text-left text-[10px] sm:min-w-[1620px] sm:text-xs">
           <thead>
             <tr className="bg-zinc-50">
               <th
-                className="sticky left-0 z-20 min-w-[4rem] border-b border-r border-zinc-200 bg-zinc-50 px-1 py-2 text-[9px] font-extrabold uppercase tracking-wide text-zinc-500 sm:min-w-[4.75rem] sm:px-1.5"
+                className="sticky left-0 z-20 min-w-[3.5rem] border-b border-r border-zinc-200 bg-zinc-50 px-1 py-2 text-[9px] font-extrabold uppercase tracking-wide text-zinc-500 sm:min-w-[4.25rem] sm:px-1"
                 style={{ touchAction: 'pan-y' }}
               >
                 Puesto
@@ -387,7 +387,7 @@ export default function OperationalWeekGrid({
                   <th
                     key={ymd}
                     className={[
-                      'min-w-[14rem] border-b border-zinc-200 px-0 py-1.5 text-center font-extrabold sm:min-w-[16rem] sm:px-0.5',
+                      'min-w-[12rem] border-b border-zinc-200 px-0 py-1.5 text-center font-extrabold sm:min-w-[13.25rem] sm:px-0',
                       headerTone(cov),
                     ].join(' ')}
                   >

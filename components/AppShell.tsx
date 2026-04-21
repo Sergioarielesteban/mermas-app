@@ -527,7 +527,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         className={[
           'min-h-0 w-full flex-1 overflow-y-auto overscroll-contain py-5 md:py-6',
           isPlanningFullBleed
-            ? 'px-2 sm:px-3 md:px-4 lg:px-5'
+            ? 'px-1 sm:px-2 md:px-2 lg:px-2'
             : 'mx-auto max-w-full px-4 sm:max-w-2xl sm:px-5 md:max-w-4xl md:px-6 lg:max-w-5xl lg:px-8',
         ].join(' ')}
       >
