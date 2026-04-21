@@ -98,6 +98,7 @@ export type OperationalSkelloCellBodyProps = {
   ymd: string;
   rowKey: string;
   here: StaffShift[];
+  employeeLineOrder: Map<string, number> | null;
   canEdit: boolean;
   employees: StaffEmployee[];
   selectedCell: { ymd: string; zoneKey: string } | null;
@@ -118,6 +119,7 @@ function OperationalSkelloCellBodyInner({
   ymd,
   rowKey,
   here,
+  employeeLineOrder,
   canEdit,
   employees,
   selectedCell,
@@ -144,11 +146,16 @@ function OperationalSkelloCellBodyInner({
     () =>
       [...here].sort(
         (a, b) =>
+          (employeeLineOrder?.get(a.employeeId ?? '') ?? Number.MAX_SAFE_INTEGER) -
+            (employeeLineOrder?.get(b.employeeId ?? '') ?? Number.MAX_SAFE_INTEGER) ||
           a.startTime.localeCompare(b.startTime) ||
           a.endTime.localeCompare(b.endTime) ||
+          employeeName(a.employeeId).localeCompare(employeeName(b.employeeId), 'es', {
+            sensitivity: 'base',
+          }) ||
           a.id.localeCompare(b.id),
       ),
-    [here],
+    [employeeLineOrder, here],
   );
 
   if (here.length === 0) {

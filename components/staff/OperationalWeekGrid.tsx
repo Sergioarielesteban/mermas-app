@@ -17,6 +17,7 @@ import {
   type CustomOperationalZoneRow,
 } from '@/lib/staff/operational-custom-zones';
 import type { StaffEmployee, StaffShift } from '@/lib/staff/types';
+import { staffDisplayName } from '@/lib/staff/staff-supabase';
 
 /** @deprecated usar OPERATIONAL_NONE_ZONE desde operational-custom-zones */
 export { OPERATIONAL_NONE_ZONE };
@@ -257,6 +258,33 @@ export default function OperationalWeekGrid({
     return m;
   }, [shifts, operationalZoneRegistry]);
 
+  const employeeLineOrderByZone = useMemo(() => {
+    const employeeNameById = new Map(
+      employees.map((e) => [e.id, staffDisplayName(e)] as const),
+    );
+    const byZone = new Map<string, Set<string>>();
+    for (const s of shifts) {
+      if (!s.employeeId) continue;
+      const zoneKey = operationalGridRowKey(s, operationalZoneRegistry);
+      const current = byZone.get(zoneKey) ?? new Set<string>();
+      current.add(s.employeeId);
+      byZone.set(zoneKey, current);
+    }
+    const ordered = new Map<string, Map<string, number>>();
+    for (const [zoneKey, ids] of byZone.entries()) {
+      const sortedIds = [...ids].sort((a, b) => {
+        const aName = employeeNameById.get(a) ?? a;
+        const bName = employeeNameById.get(b) ?? b;
+        return aName.localeCompare(bName, 'es', { sensitivity: 'base' });
+      });
+      ordered.set(
+        zoneKey,
+        new Map(sortedIds.map((id, idx) => [id, idx] as const)),
+      );
+    }
+    return ordered;
+  }, [employees, shifts, operationalZoneRegistry]);
+
   const statsByDay = useMemo(() => {
     const m = new Map<
       string,
@@ -458,6 +486,7 @@ export default function OperationalWeekGrid({
                         ymd={ymd}
                         rowKey={row.key}
                         here={here}
+                        employeeLineOrder={employeeLineOrderByZone.get(row.key) ?? null}
                         canEdit={canEdit}
                         employees={employees}
                         selectedCell={selectedCell}
