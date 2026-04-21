@@ -850,6 +850,7 @@ export default function PersonalPlanificacionPage() {
           onCopyPrevWeekdayFromModal={
             weekLayout === 'operativo' ? (s) => onOperationalCopyPrevWeekday(s) : undefined
           }
+          existingShifts={shifts}
         />
       ) : null}
     </div>

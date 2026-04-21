@@ -6,7 +6,7 @@ import { addDays, formatDayMonth, formatWeekdayShort, ymdLocal } from '@/lib/sta
 import { zoneBlockStyle, zoneLabel } from '@/lib/staff/staff-zone-styles';
 import type { StaffEmployee, StaffScheduleDayMark, StaffScheduleDayMarkKind, StaffShift } from '@/lib/staff/types';
 import { staffDisplayName } from '@/lib/staff/staff-supabase';
-import { appConfirm } from '@/lib/app-dialog-bridge';
+import { appAlert, appConfirm } from '@/lib/app-dialog-bridge';
 
 /** Fila especial en cuadrante por empleado: turnos sin `employee_id`. */
 export const SHIFT_GRID_UNASSIGNED_ROW_ID = '__unassigned__' as const;
@@ -32,7 +32,20 @@ function formatHoursSum(mins: number): string {
 }
 
 function markLabel(kind: StaffScheduleDayMarkKind): string {
-  return kind === 'holiday' ? 'Fiesta' : 'Descanso';
+  return kind === 'holiday' ? 'Día libre' : 'Descanso';
+}
+
+function markBlockClasses(kind: StaffScheduleDayMarkKind): { box: string; sub: string } {
+  if (kind === 'holiday') {
+    return {
+      box: 'rounded-lg border border-zinc-200/95 bg-zinc-100/95 text-zinc-700 ring-1 ring-zinc-200/80',
+      sub: 'text-zinc-500',
+    };
+  }
+  return {
+    box: 'rounded-lg border border-violet-200 bg-violet-50/90 text-violet-900 ring-1 ring-violet-200/80',
+    sub: 'text-violet-700',
+  };
 }
 
 type Props = {
@@ -257,20 +270,21 @@ export default function ShiftWeekGrid({
 
     if (dayMark) {
       const ml = markLabel(dayMark.kind);
+      const mc = markBlockClasses(dayMark.kind);
       return (
         <div className={borderCls}>
           {markInteractive ? (
             <button
               type="button"
               onClick={() => setMarkSheet({ mark: dayMark, employeeId: em.id, ymd })}
-              className="flex min-h-[56px] w-full flex-col items-center justify-center rounded-lg border border-violet-200 bg-violet-50/90 px-2 py-2 text-center touch-manipulation ring-1 ring-violet-200/80"
+              className={`flex min-h-[56px] w-full flex-col items-center justify-center px-2 py-2 text-center touch-manipulation ${mc.box}`}
             >
-              <span className="text-[11px] font-extrabold text-violet-900 sm:text-xs">{ml}</span>
-              <span className="mt-0.5 text-[9px] font-semibold text-violet-700">Toca para quitar o cambiar</span>
+              <span className="text-[11px] font-extrabold sm:text-xs">{ml}</span>
+              <span className={`mt-0.5 text-[9px] font-semibold ${mc.sub}`}>Toca para quitar o cambiar</span>
             </button>
           ) : (
-            <div className="flex min-h-[56px] w-full flex-col items-center justify-center rounded-lg border border-violet-200 bg-violet-50/90 px-2 py-2 text-center ring-1 ring-violet-200/80">
-              <span className="text-[11px] font-extrabold text-violet-900 sm:text-xs">{ml}</span>
+            <div className={`flex min-h-[56px] w-full flex-col items-center justify-center px-2 py-2 text-center ${mc.box}`}>
+              <span className="text-[11px] font-extrabold sm:text-xs">{ml}</span>
             </div>
           )}
         </div>
@@ -313,7 +327,7 @@ export default function ShiftWeekGrid({
         Toca un turno para <span className="font-semibold text-zinc-700">editar</span>,{' '}
         <span className="font-semibold text-zinc-700">eliminar</span> o{' '}
         <span className="font-semibold text-zinc-700">copiar a otros días</span>. En celda vacía: turno, descanso o
-        fiesta. Sin arrastre: la rejilla no se descuadra al deslizar.
+        día libre. Sin arrastre: la rejilla no se descuadra al deslizar.
       </p>
       <div className="touch-pan-x overflow-x-auto rounded-2xl ring-1 ring-zinc-200/90">
         <table className="min-w-[800px] w-full border-collapse text-left text-xs sm:text-sm">
@@ -520,21 +534,33 @@ export default function ShiftWeekGrid({
                     type="button"
                     className="rounded-xl border border-violet-200 bg-violet-50 py-3 text-sm font-extrabold text-violet-900"
                     onClick={() => {
-                      void onUpsertDayMark(emptySheet.employeeId, emptySheet.ymd, 'rest');
-                      setEmptySheet(null);
+                      void (async () => {
+                        try {
+                          await onUpsertDayMark(emptySheet.employeeId, emptySheet.ymd, 'rest');
+                          setEmptySheet(null);
+                        } catch (e) {
+                          void appAlert(e instanceof Error ? e.message : 'No se pudo marcar descanso');
+                        }
+                      })();
                     }}
                   >
                     Marcar descanso
                   </button>
                   <button
                     type="button"
-                    className="rounded-xl border border-violet-200 bg-violet-50 py-3 text-sm font-extrabold text-violet-900"
+                    className="rounded-xl border border-zinc-200 bg-zinc-100 py-3 text-sm font-extrabold text-zinc-800"
                     onClick={() => {
-                      void onUpsertDayMark(emptySheet.employeeId, emptySheet.ymd, 'holiday');
-                      setEmptySheet(null);
+                      void (async () => {
+                        try {
+                          await onUpsertDayMark(emptySheet.employeeId, emptySheet.ymd, 'holiday');
+                          setEmptySheet(null);
+                        } catch (e) {
+                          void appAlert(e instanceof Error ? e.message : 'No se pudo marcar día libre');
+                        }
+                      })();
                     }}
                   >
-                    Marcar fiesta
+                    Marcar día libre
                   </button>
                 </>
               ) : null}
@@ -554,7 +580,14 @@ export default function ShiftWeekGrid({
       {markSheet && canManageSchedules && onRemoveDayMark && onUpsertDayMark ? (
         <div className="fixed inset-0 z-[80] flex items-end justify-center bg-black/40 p-3 sm:items-center" role="presentation">
           <div className="w-full max-w-sm rounded-2xl bg-white p-4 shadow-xl ring-1 ring-zinc-200" role="dialog" aria-modal="true">
-            <p className="text-center text-sm font-extrabold text-violet-900">{markLabel(markSheet.mark.kind)}</p>
+            <p
+              className={[
+                'text-center text-sm font-extrabold',
+                markSheet.mark.kind === 'holiday' ? 'text-zinc-800' : 'text-violet-900',
+              ].join(' ')}
+            >
+              {markLabel(markSheet.mark.kind)}
+            </p>
             <div className="mt-3 flex flex-col gap-2">
               <button
                 type="button"
@@ -570,20 +603,32 @@ export default function ShiftWeekGrid({
                 type="button"
                 className="rounded-xl border border-zinc-200 py-3 text-sm font-extrabold text-zinc-900"
                 onClick={() => {
-                  const other: StaffScheduleDayMarkKind =
-                    markSheet.mark.kind === 'rest' ? 'holiday' : 'rest';
-                  void onUpsertDayMark(markSheet.employeeId, markSheet.ymd, other);
-                  setMarkSheet(null);
+                  void (async () => {
+                    try {
+                      const other: StaffScheduleDayMarkKind =
+                        markSheet.mark.kind === 'rest' ? 'holiday' : 'rest';
+                      await onUpsertDayMark(markSheet.employeeId, markSheet.ymd, other);
+                      setMarkSheet(null);
+                    } catch (e) {
+                      void appAlert(e instanceof Error ? e.message : 'No se pudo cambiar la marca');
+                    }
+                  })();
                 }}
               >
-                Cambiar a {markSheet.mark.kind === 'rest' ? 'fiesta' : 'descanso'}
+                Cambiar a {markSheet.mark.kind === 'rest' ? 'día libre' : 'descanso'}
               </button>
               <button
                 type="button"
                 className="rounded-xl border border-red-200 bg-red-50 py-3 text-sm font-extrabold text-red-800"
                 onClick={() => {
-                  void onRemoveDayMark(markSheet.mark);
-                  setMarkSheet(null);
+                  void (async () => {
+                    try {
+                      await onRemoveDayMark(markSheet.mark);
+                      setMarkSheet(null);
+                    } catch (e) {
+                      void appAlert(e instanceof Error ? e.message : 'No se pudo quitar la marca');
+                    }
+                  })();
                 }}
               >
                 Quitar marca
@@ -647,7 +692,11 @@ export default function ShiftWeekGrid({
       <div className="flex flex-wrap gap-3 text-[10px] font-semibold text-zinc-600 sm:text-xs">
         <span className="inline-flex items-center gap-1.5">
           <span className="h-3 w-3 rounded-sm bg-violet-200 ring-1 ring-violet-400" />
-          Descanso / fiesta
+          Descanso
+        </span>
+        <span className="inline-flex items-center gap-1.5">
+          <span className="h-3 w-3 rounded-sm bg-zinc-200 ring-1 ring-zinc-400" />
+          Día libre
         </span>
         <span className="inline-flex items-center gap-1.5">
           <span className="h-3 w-3 rounded-sm" style={{ background: zoneBlockStyle('cocina').bg }} />

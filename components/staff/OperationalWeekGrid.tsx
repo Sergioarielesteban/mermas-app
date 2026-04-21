@@ -346,7 +346,7 @@ export default function OperationalWeekGrid({
   };
 
   return (
-    <div className="min-w-0 space-y-2">
+    <div className="space-y-2">
       {canEdit ? (
         <p className="text-[10px] text-zinc-500 sm:text-[11px]">
           Vista por puesto: turnos en lista vertical por día (sin solapamiento). Asa izquierda = arrastrar a otro día o
@@ -369,20 +369,11 @@ export default function OperationalWeekGrid({
         ) : null}
       </div>
 
-      <div
-        ref={gridWrapRef}
-        className="w-full max-w-none min-w-0 touch-pan-x overflow-x-auto rounded-2xl ring-1 ring-zinc-200/90"
-      >
-        <table className="w-full min-w-[52rem] table-fixed border-collapse text-left text-[10px] sm:text-xs md:min-w-0">
-          <colgroup>
-            <col style={{ width: '7.5rem' }} />
-            {days.map((d) => (
-              <col key={ymdLocal(d)} />
-            ))}
-          </colgroup>
+      <div ref={gridWrapRef} className="overflow-x-auto rounded-2xl ring-1 ring-zinc-200/90">
+        <table className="w-full min-w-[2520px] border-collapse text-left text-[10px] sm:min-w-[2790px] sm:text-xs">
           <thead>
             <tr className="bg-zinc-50">
-              <th className="sticky left-0 z-20 w-[7.5rem] min-w-[7.5rem] max-w-[7.5rem] border-b border-r border-zinc-200 bg-zinc-50 px-1 py-2 text-[9px] font-extrabold uppercase tracking-wide text-zinc-500 sm:px-2">
+              <th className="sticky left-0 z-20 min-w-[5.5rem] border-b border-r border-zinc-200 bg-zinc-50 px-1.5 py-2 text-[9px] font-extrabold uppercase tracking-wide text-zinc-500 sm:min-w-[6.5rem] sm:px-2">
                 Puesto
               </th>
               {days.map((d) => {
@@ -392,7 +383,7 @@ export default function OperationalWeekGrid({
                   <th
                     key={ymd}
                     className={[
-                      'min-w-0 border-b border-zinc-200 px-0.5 py-1.5 text-center font-extrabold sm:px-1',
+                      'min-w-[21rem] border-b border-zinc-200 px-0.5 py-1.5 text-center font-extrabold sm:min-w-[24.75rem] sm:px-1',
                       headerTone(cov),
                     ].join(' ')}
                   >
@@ -408,16 +399,14 @@ export default function OperationalWeekGrid({
           <tbody>
             {zoneRows.map((row) => (
               <tr key={row.key} className="bg-white">
-                <td className="sticky left-0 z-10 w-[7.5rem] min-w-[7.5rem] max-w-[7.5rem] border-b border-r border-zinc-100 bg-white px-1 py-1 align-top sm:px-2">
-                  <div className="flex min-w-0 items-center gap-1.5 sm:gap-2">
+                <td className="sticky left-0 z-10 border-b border-r border-zinc-100 bg-white px-1.5 py-1 align-top sm:px-2">
+                  <div className="flex items-center gap-2">
                     <span
                       className="h-2.5 w-2.5 shrink-0 rounded-full ring-1 ring-black/10"
                       style={{ background: zoneBlockStyle(row.key).bg }}
                       aria-hidden
                     />
-                    <span className="min-w-0 truncate text-[11px] font-bold leading-tight text-zinc-900 sm:text-xs">
-                      {row.label}
-                    </span>
+                    <span className="font-bold text-zinc-900">{row.label}</span>
                   </div>
                 </td>
                 {days.map((d) => {
@@ -426,7 +415,7 @@ export default function OperationalWeekGrid({
                   return (
                     <td
                       key={ymd}
-                      className="min-w-0 align-top border-b border-zinc-100 p-0.5 sm:p-1"
+                      className="align-top border-b border-zinc-100 p-0.5 sm:p-1"
                       onDragOver={
                         canEdit
                           ? (e) => {
@@ -475,7 +464,7 @@ export default function OperationalWeekGrid({
           </tbody>
           <tfoot>
             <tr className="bg-zinc-50/90">
-              <td className="sticky left-0 z-10 w-[7.5rem] min-w-[7.5rem] max-w-[7.5rem] border-t border-r border-zinc-200 bg-zinc-50/90 px-1 py-2 text-[9px] font-extrabold uppercase text-zinc-600 sm:px-2 sm:text-[10px]">
+              <td className="sticky left-0 z-10 border-t border-r border-zinc-200 px-1.5 py-2 text-[9px] font-extrabold uppercase text-zinc-600 sm:px-2 sm:text-[10px]">
                 Resumen
               </td>
               {days.map((d) => {
@@ -486,7 +475,7 @@ export default function OperationalWeekGrid({
                 return (
                   <td
                     key={ymd}
-                    className="min-w-0 border-t border-zinc-200 px-0.5 py-2 text-center align-top sm:px-1"
+                    className="border-t border-zinc-200 px-0.5 py-2 text-center align-top sm:px-1"
                   >
                     {hasDay ? (
                       <>
@@ -501,7 +490,7 @@ export default function OperationalWeekGrid({
                           </div>
                         ) : null}
                         {zoneLine ? (
-                          <div className="mx-auto mt-1 min-w-0 text-[8px] font-semibold leading-snug text-zinc-500 sm:text-[9px]">
+                          <div className="mx-auto mt-1 max-w-[6.5rem] text-[8px] font-semibold leading-snug text-zinc-500 sm:max-w-none sm:text-[9px]">
                             {zoneLine}
                           </div>
                         ) : null}

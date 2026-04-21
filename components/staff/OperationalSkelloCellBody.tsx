@@ -25,8 +25,8 @@ function formatHoursSum(mins: number): string {
   return `${Math.round(h)} h`;
 }
 
-/** Altura fija por turno; móvil algo más bajo para compactar. */
-const SHIFT_CARD_ROW_H = 'h-[3.75rem] sm:h-[4.25rem] md:h-[4.5rem]';
+/** Altura fija por turno (~68–72px). Padding horizontal ligeramente reducido solo dentro de la tarjeta. */
+const SHIFT_CARD_ROW_H = 'h-[4.25rem] sm:h-[4.5rem]';
 
 /** Borde base neutro (zinc-300) para mezclar con el acento del puesto sin saturar. */
 const CARD_BORDER_NEUTRAL = 'rgb(212 212 216)';
@@ -74,17 +74,17 @@ const ShiftEmployeeRowCard = React.memo(function ShiftEmployeeRowCard({
       style={{ backgroundColor: cardSurface, borderColor: cardBorder }}
     >
       <div
-        className="w-0.5 shrink-0 self-stretch opacity-95 sm:w-1"
+        className="w-1 shrink-0 self-stretch opacity-95"
         style={{ backgroundColor: stripeFill }}
         aria-hidden
       />
-      <div className="grid min-w-0 flex-1 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-1 gap-y-0 px-1 py-0 sm:gap-x-2 sm:px-2.5">
-        <span className="shrink-0 text-[9px] font-extrabold tabular-nums tracking-tight text-zinc-900 sm:text-[11px]">
+      <div className="grid min-w-0 flex-1 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-2 gap-y-0 px-1.5 py-0 sm:gap-x-2.5 sm:px-2.5">
+        <span className="shrink-0 text-[10px] font-extrabold tabular-nums tracking-tight text-zinc-900 sm:text-[11px]">
           {timeRng}
         </span>
         <span
           className={[
-            'line-clamp-2 min-w-0 text-[10px] font-bold leading-snug text-zinc-900 sm:text-xs',
+            'line-clamp-2 min-w-0 text-[11px] font-bold leading-snug text-zinc-900 sm:text-xs',
             showAlert ? 'text-[#B91C1C]' : '',
           ].join(' ')}
           title={nameLabel}
@@ -100,7 +100,7 @@ const ShiftEmployeeRowCard = React.memo(function ShiftEmployeeRowCard({
             </span>
           ) : null}
         </span>
-        <span className="shrink-0 text-right text-[9px] font-extrabold text-zinc-800 sm:text-[11px]">{hoursLabel}</span>
+        <span className="shrink-0 text-right text-[10px] font-extrabold text-zinc-800 sm:text-[11px]">{hoursLabel}</span>
       </div>
     </div>
   );
@@ -270,7 +270,7 @@ function OperationalSkelloCellBodyInner({
     );
 
     return (
-      <div key={sOne.id} className="flex min-w-0 w-full max-md:mx-auto max-md:w-[92%] flex-col gap-1">
+      <div key={sOne.id} className="flex min-w-0 w-full flex-col gap-1">
         <div
           className={[
             'flex w-full max-w-full min-w-0 shrink-0 flex-row items-stretch overflow-hidden',
@@ -284,13 +284,13 @@ function OperationalSkelloCellBodyInner({
                 draggable
                 onDragStart={(e) => onDragStart(e, sOne.id)}
                 onDragEnd={onDragEnd}
-                className="flex w-2 shrink-0 cursor-grab touch-none items-center justify-center self-stretch rounded-l-lg border-y border-l border-zinc-200/90 bg-zinc-100 text-zinc-800 active:cursor-grabbing sm:w-2.5 md:w-3"
+                className="flex w-2.5 shrink-0 cursor-grab touch-none items-center justify-center self-stretch rounded-l-lg border-y border-l border-zinc-200/90 bg-zinc-100 text-zinc-800 active:cursor-grabbing sm:w-3"
                 title="Mover a otro día o puesto"
                 aria-label="Arrastrar turno"
                 onPointerDown={(e) => e.stopPropagation()}
                 onClick={(e) => e.stopPropagation()}
               >
-                <GripVertical className="h-2 w-2 opacity-80 sm:h-2.5 sm:w-2.5 md:h-3 md:w-3" />
+                <GripVertical className="h-2.5 w-2.5 opacity-80 sm:h-3 sm:w-3" />
               </div>
               {rowShell}
             </>
@@ -343,7 +343,7 @@ function OperationalSkelloCellBodyInner({
   return (
     <div className="flex w-full min-w-0 flex-col gap-1">
       {summaryBits.length > 0 ? (
-        <div className="flex flex-wrap items-center justify-center gap-x-1 gap-y-0 text-center text-[7px] font-extrabold text-zinc-800 sm:gap-x-1.5 sm:text-[9px]">
+        <div className="flex flex-wrap items-center justify-center gap-x-1.5 gap-y-0 text-center text-[8px] font-extrabold text-zinc-800 sm:text-[9px]">
           {summaryBits.map((node, i) => (
             <React.Fragment key={i}>
               {i > 0 ? <span className="text-zinc-300">·</span> : null}
@@ -352,7 +352,7 @@ function OperationalSkelloCellBodyInner({
           ))}
         </div>
       ) : null}
-      <div className="max-h-[min(40vh,20rem)] overflow-y-auto overflow-x-hidden rounded-md border border-zinc-200 bg-gradient-to-b from-white to-zinc-50/90 p-0.5 shadow-sm ring-1 ring-zinc-200/80 sm:p-1">
+      <div className="max-h-[min(40vh,20rem)] overflow-y-auto overflow-x-hidden rounded-md border border-zinc-200 bg-gradient-to-b from-white to-zinc-50/90 p-1 shadow-sm ring-1 ring-zinc-200/80">
         <div className="flex flex-col gap-2">{sortedShifts.map(renderShiftRow)}</div>
       </div>
       {canEdit ? (

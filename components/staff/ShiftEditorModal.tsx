@@ -7,7 +7,13 @@ import { STAFF_ZONE_PRESETS, type StaffEmployee, type StaffShift, type StaffShif
 import { zoneDefaultColorHint } from '@/lib/staff/staff-zone-styles';
 import { appConfirm } from '@/lib/app-dialog-bridge';
 import { QUICK_SHIFT_PRESETS } from '@/lib/staff/shift-quick-presets';
-import { deleteStaffShift, staffDisplayName, upsertStaffShift } from '@/lib/staff/staff-supabase';
+import { addDays, parseYmd, startOfWeekMonday, ymdLocal } from '@/lib/staff/staff-dates';
+import {
+  deleteStaffScheduleDayMarkForCell,
+  deleteStaffShift,
+  staffDisplayName,
+  upsertStaffShift,
+} from '@/lib/staff/staff-supabase';
 
 /** Señal interna: la acción se canceló tras avisar al usuario (no cerrar modal). */
 export const PLANIFICACION_MODAL_ABORT = 'PLANIFICACION_MODAL_ABORT';
@@ -49,6 +55,8 @@ type Props = {
   onDuplicateFromModal?: (shift: StaffShift) => void | Promise<void>;
   onCopyPrevCalendarDayFromModal?: (shift: StaffShift) => void | Promise<void>;
   onCopyPrevWeekdayFromModal?: (shift: StaffShift) => void | Promise<void>;
+  /** Para comprobar solapes al crear el mismo turno en varios días de la semana. */
+  existingShifts?: StaffShift[];
 };
 
 export default function ShiftEditorModal({
@@ -64,6 +72,7 @@ export default function ShiftEditorModal({
   onDuplicateFromModal,
   onCopyPrevCalendarDayFromModal,
   onCopyPrevWeekdayFromModal,
+  existingShifts = [],
 }: Props) {
   const [employeeId, setEmployeeId] = useState('');
   const [shiftDate, setShiftDate] = useState('');
@@ -78,6 +87,17 @@ export default function ShiftEditorModal({
   const [shiftId, setShiftId] = useState<string | undefined>();
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  /** Modo nuevo: días adicionales de la misma semana con el mismo turno (incluye siempre `shiftDate`). */
+  const [repeatDayYmds, setRepeatDayYmds] = useState<Set<string>>(() => new Set());
+
+  const weekDayPickMeta = React.useMemo(() => {
+    const ws = startOfWeekMonday(parseYmd(shiftDate || new Date().toISOString().slice(0, 10)));
+    const labels = ['L', 'M', 'X', 'J', 'V', 'S', 'D'] as const;
+    return Array.from({ length: 7 }, (_, i) => ({
+      ymd: ymdLocal(addDays(ws, i)),
+      label: labels[i] ?? '',
+    }));
+  }, [shiftDate]);
 
   useEffect(() => {
     if (!open || !draft) return;
@@ -121,8 +141,22 @@ export default function ShiftEditorModal({
       setNotes(s.notes ?? '');
       setStatus(s.status);
       setColorHint(s.colorHint ?? '');
+      setRepeatDayYmds(new Set([s.shiftDate]));
     }
   }, [open, draft]);
+
+  useEffect(() => {
+    if (!open || !draft || draft.mode !== 'new' || !shiftDate) return;
+    const week = new Set(weekDayPickMeta.map((x) => x.ymd));
+    setRepeatDayYmds((prev) => {
+      const next = new Set<string>();
+      next.add(shiftDate);
+      for (const y of prev) {
+        if (week.has(y)) next.add(y);
+      }
+      return next;
+    });
+  }, [open, draft, shiftDate, weekDayPickMeta]);
 
   if (!open || !draft) return null;
 
@@ -149,20 +183,69 @@ export default function ShiftEditorModal({
     try {
       const hint =
         colorHint.trim() || zoneDefaultColorHint(zone.trim() || null) || null;
-      await upsertStaffShift(supabase, {
-        id: shiftId,
-        localId,
-        employeeId: employeeId.trim() ? employeeId.trim() : null,
-        shiftDate,
-        startTime: toPgTime(startTime),
-        endTime: toPgTime(endTime),
-        endsNextDay,
-        breakMinutes,
-        zone: zone.trim() || null,
-        notes: notes.trim() || null,
-        status,
-        colorHint: hint,
-      });
+      const emp = employeeId.trim() ? employeeId.trim() : null;
+
+      if (draft.mode === 'edit') {
+        await upsertStaffShift(supabase, {
+          id: shiftId,
+          localId,
+          employeeId: emp,
+          shiftDate,
+          startTime: toPgTime(startTime),
+          endTime: toPgTime(endTime),
+          endsNextDay,
+          breakMinutes,
+          zone: zone.trim() || null,
+          notes: notes.trim() || null,
+          status,
+          colorHint: hint,
+        });
+        onSaved();
+        onClose();
+        return;
+      }
+
+      const targets = [...repeatDayYmds].filter((y) => weekDayPickMeta.some((m) => m.ymd === y)).sort();
+      if (targets.length === 0) {
+        setErr('Selecciona al menos un día.');
+        return;
+      }
+
+      for (const ymd of targets) {
+        const existing = existingShifts.filter(
+          (s) =>
+            s.shiftDate === ymd && (emp ? s.employeeId === emp : s.employeeId == null),
+        );
+        if (existing.length > 0) {
+          const ok = await appConfirm(
+            `El ${ymd} ya tiene ${existing.length} turno(s). ¿Eliminarlos y poner este horario?`,
+          );
+          if (!ok) return;
+          for (const ex of existing) {
+            await deleteStaffShift(supabase, ex.id);
+          }
+        }
+        if (emp) {
+          try {
+            await deleteStaffScheduleDayMarkForCell(supabase, localId, emp, ymd);
+          } catch {
+            /* ignore */
+          }
+        }
+        await upsertStaffShift(supabase, {
+          localId,
+          employeeId: emp,
+          shiftDate: ymd,
+          startTime: toPgTime(startTime),
+          endTime: toPgTime(endTime),
+          endsNextDay,
+          breakMinutes,
+          zone: zone.trim() || null,
+          notes: notes.trim() || null,
+          status,
+          colorHint: hint,
+        });
+      }
       onSaved();
       onClose();
     } catch (er: unknown) {
@@ -237,6 +320,47 @@ export default function ShiftEditorModal({
               required
             />
           </label>
+          {draft.mode === 'new' ? (
+            <div className="rounded-xl bg-zinc-50 px-2 py-2 ring-1 ring-zinc-100">
+              <p className="text-[11px] font-bold text-zinc-600">Misma semana: repetir en</p>
+              <p className="mt-0.5 text-[10px] text-zinc-500">
+                Al guardar se crea el mismo horario y puesto en cada día marcado.
+              </p>
+              <div className="mt-2 flex flex-wrap justify-center gap-1.5">
+                {weekDayPickMeta.map(({ ymd, label }) => {
+                  const on = repeatDayYmds.has(ymd);
+                  const anchor = ymd === shiftDate;
+                  return (
+                    <button
+                      key={ymd}
+                      type="button"
+                      disabled={anchor}
+                      title={anchor ? 'Día base (ajusta arriba en «Día»)' : on ? 'Quitar este día' : 'Añadir este día'}
+                      className={[
+                        'min-w-[2.25rem] rounded-lg px-2 py-1.5 text-xs font-extrabold ring-1 transition-colors',
+                        anchor
+                          ? 'cursor-default bg-zinc-900 text-white ring-zinc-900'
+                          : on
+                            ? 'bg-emerald-600 text-white ring-emerald-700 hover:bg-emerald-700'
+                            : 'bg-white text-zinc-700 ring-zinc-200 hover:bg-zinc-100',
+                      ].join(' ')}
+                      onClick={() => {
+                        if (anchor) return;
+                        setRepeatDayYmds((prev) => {
+                          const next = new Set(prev);
+                          if (next.has(ymd)) next.delete(ymd);
+                          else next.add(ymd);
+                          return next;
+                        });
+                      }}
+                    >
+                      {label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ) : null}
           <div>
             <p className="text-xs font-extrabold text-zinc-800">Horario</p>
             <p className="mt-0.5 text-[11px] text-zinc-500">
