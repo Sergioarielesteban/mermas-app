@@ -60,22 +60,22 @@ export default function LoginPage() {
     <div className="flex min-h-[100dvh] w-full flex-col bg-[#fafafa]">
       <div
         className={[
-          'flex min-h-[100dvh] flex-1 flex-col items-center justify-center px-5 pb-10',
-          'pt-[max(1rem,env(safe-area-inset-top))] sm:px-6 sm:pb-12',
+          'flex min-h-[100dvh] flex-1 flex-col items-center justify-center px-5 pb-10 md:justify-start',
+          'pt-[max(1rem,env(safe-area-inset-top))] sm:px-6 sm:pb-12 md:pt-10 lg:pt-12',
         ].join(' ')}
       >
         <div className="flex w-full max-w-md flex-col items-center text-center">
-          <div className="w-full overflow-hidden -mb-12 sm:-mb-14">
+          <div className="w-full overflow-hidden -mb-12 sm:-mb-14 md:mb-0">
             <Logo
               variant="login"
-              className="-mt-[24%] -mb-[26%] shrink-0 drop-shadow-sm"
+              className="-mt-[24%] -mb-[26%] shrink-0 drop-shadow-sm md:mb-0 md:mt-0 md:h-[10rem] lg:h-[11rem]"
               fetchPriority="high"
             />
           </div>
 
           <form
             onSubmit={handleSubmit}
-            className="mt-1 w-full space-y-5 rounded-2xl border border-zinc-200/90 bg-white px-4 py-6 text-left shadow-[0_20px_50px_-28px_rgba(15,23,42,0.2)] sm:mt-2 sm:space-y-5 sm:px-5 sm:py-7"
+            className="mt-1 w-full space-y-5 rounded-2xl border border-zinc-200/90 bg-white px-4 py-6 text-left shadow-[0_20px_50px_-28px_rgba(15,23,42,0.2)] sm:mt-2 sm:space-y-5 sm:px-5 sm:py-7 md:mt-3"
           >
             <div className="text-center sm:text-left">
               <h1 className="text-2xl font-black tracking-tight text-zinc-900 sm:text-[1.65rem]">
