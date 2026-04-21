@@ -69,6 +69,7 @@ type AuthContextValue = {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 const AUTH_KEY = 'mermas_user_email';
+const LOGIN_ALIAS_CACHE_KEY = 'chef_one_login_alias_cache_v1';
 const PROFILE_CACHE_KEY = 'chef_one_profile_cache_v4';
 const SUPERADMIN_LOCAL_OVERRIDE_KEY = 'chef_one_superadmin_local_override_v1';
 const PROFILE_TIMEOUT_MS = 6000;
@@ -205,6 +206,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const clearLocalAuthCache = React.useCallback(() => {
     if (typeof window === 'undefined') return;
     window.localStorage.removeItem(AUTH_KEY);
+    window.localStorage.removeItem(LOGIN_ALIAS_CACHE_KEY);
     // Remove stale Supabase session tokens that can cause refresh-loop errors.
     const keys = Object.keys(window.localStorage);
     for (const key of keys) {
@@ -805,30 +807,51 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         let emailForAuth = clean;
         // Soporta login por alias (profiles.login_username) además de email.
         if (!clean.includes('@')) {
-          const res = await fetch('/api/auth/resolve-login-email', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ identifier: clean }),
-          });
-          const payload = (await res.json().catch(() => ({}))) as {
-            ok?: boolean;
-            email?: string | null;
-            reason?: string;
-            error?: string;
-          };
-          if (!res.ok || payload.ok !== true) {
-            if (res.status === 429) {
-              return { ok: false, reason: 'Demasiados intentos. Espera un minuto y vuelve a probar.' };
-            }
-            return {
-              ok: false,
-              reason:
-                (typeof payload.reason === 'string' ? payload.reason : undefined) ??
-                (typeof payload.error === 'string' ? payload.error : undefined) ??
-                'No se pudo validar el usuario en este momento.',
+          let resolved = '';
+          try {
+            const res = await fetch('/api/auth/resolve-login-email', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ identifier: clean }),
+            });
+            const payload = (await res.json().catch(() => ({}))) as {
+              ok?: boolean;
+              email?: string | null;
+              reason?: string;
+              error?: string;
             };
+            if (!res.ok || payload.ok !== true) {
+              if (res.status === 429) {
+                return { ok: false, reason: 'Demasiados intentos. Espera un minuto y vuelve a probar.' };
+              }
+            } else {
+              resolved = typeof payload.email === 'string' ? payload.email.trim().toLowerCase() : '';
+            }
+          } catch {
+            /* fallback local abajo */
           }
-          const resolved = typeof payload.email === 'string' ? payload.email.trim().toLowerCase() : '';
+          if (!resolved && typeof window !== 'undefined') {
+            try {
+              const rememberedEmail = window.localStorage.getItem(AUTH_KEY)?.trim().toLowerCase() ?? '';
+              const rawCache = window.localStorage.getItem(LOGIN_ALIAS_CACHE_KEY);
+              const aliasCache = rawCache
+                ? (JSON.parse(rawCache) as { identifier?: string | null; email?: string | null })
+                : null;
+              if (
+                aliasCache?.identifier?.trim().toLowerCase() === clean &&
+                aliasCache.email?.trim()
+              ) {
+                resolved = aliasCache.email.trim().toLowerCase();
+              } else if (
+                rememberedEmail &&
+                loginUsername?.trim().toLowerCase() === clean
+              ) {
+                resolved = rememberedEmail;
+              }
+            } catch {
+              /* ignore local fallback parse errors */
+            }
+          }
           if (!resolved) return { ok: false, reason: 'Usuario/email o contraseña incorrectos.' };
           emailForAuth = resolved;
         }
@@ -839,7 +862,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         });
         if (error) return { ok: false, reason: mapSupabaseAuthError(error.message) };
         setEmail(emailForAuth);
-        if (typeof window !== 'undefined') window.localStorage.setItem(AUTH_KEY, emailForAuth);
+        if (typeof window !== 'undefined') {
+          window.localStorage.setItem(AUTH_KEY, emailForAuth);
+          if (!clean.includes('@')) {
+            window.localStorage.setItem(
+              LOGIN_ALIAS_CACHE_KEY,
+              JSON.stringify({ identifier: clean, email: emailForAuth }),
+            );
+          }
+        }
         return { ok: true };
       },
       changePassword: async (currentPassword: string, newPassword: string) => {
