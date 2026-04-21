@@ -45,6 +45,7 @@ export default function PersonalEmpleadosPage() {
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
   const [operationalRole, setOperationalRole] = useState('');
+  const [weeklyHoursTarget, setWeeklyHoursTarget] = useState('');
   const [color, setColor] = useState('#D32F2F');
   const [pin, setPin] = useState('');
   const [createAccess, setCreateAccess] = useState(false);
@@ -80,6 +81,7 @@ export default function PersonalEmpleadosPage() {
     setPhone('');
     setEmail('');
     setOperationalRole('');
+    setWeeklyHoursTarget('');
     setColor('#D32F2F');
     setPin('');
     setCreateAccess(false);
@@ -106,6 +108,9 @@ export default function PersonalEmpleadosPage() {
     setPhone(em.phone ?? '');
     setEmail(em.email ?? '');
     setOperationalRole(operationalRoleSelectValue(em.operationalRole));
+    setWeeklyHoursTarget(
+      em.weeklyHoursTarget != null && Number.isFinite(em.weeklyHoursTarget) ? String(em.weeklyHoursTarget) : '',
+    );
     setColor(em.color ?? '#D32F2F');
     setPin('');
     setClearPin(false);
@@ -208,6 +213,7 @@ export default function PersonalEmpleadosPage() {
     try {
       if (formMode === 'edit' && editingId) {
         if (!ensurePersonalActionAccess('edit')) return;
+        const weeklyTargetValue = weeklyHoursTarget.trim();
         const patch: Parameters<typeof updateStaffEmployee>[2] = {
           firstName,
           lastName,
@@ -215,6 +221,7 @@ export default function PersonalEmpleadosPage() {
           phone: phone.trim() ? phone.trim() : null,
           email: email.trim() ? email.trim().toLowerCase() : null,
           operationalRole: operationalRole.trim() ? operationalRole.trim() : null,
+          weeklyHoursTarget: weeklyTargetValue ? Number(weeklyTargetValue) : null,
           color: color.trim() ? color.trim() : null,
         };
         if (clearPin) patch.pinFichaje = null;
@@ -261,6 +268,7 @@ export default function PersonalEmpleadosPage() {
           phone: phone || null,
           email: email || null,
           operationalRole: operationalRole || null,
+          weeklyHoursTarget: weeklyHoursTarget.trim() ? Number(weeklyHoursTarget.trim()) : null,
           color: color || null,
           pinFichaje: pin || null,
         });
@@ -294,6 +302,7 @@ export default function PersonalEmpleadosPage() {
             phone,
             email,
             operationalRole,
+            weeklyHoursTarget: weeklyHoursTarget.trim() ? Number(weeklyHoursTarget.trim()) : null,
             color,
             pinFichaje: pin,
             createAccess: true,
@@ -409,7 +418,14 @@ export default function PersonalEmpleadosPage() {
               <div>
                 <p className="font-extrabold text-zinc-900">{staffDisplayName(em)}</p>
                 <p className="text-xs font-medium text-zinc-500">
-                  {[em.operationalRole, em.phone, em.email].filter(Boolean).join(' · ') || '—'}
+                  {[
+                    em.operationalRole,
+                    em.weeklyHoursTarget != null ? `${em.weeklyHoursTarget} h/sem` : null,
+                    em.phone,
+                    em.email,
+                  ]
+                    .filter(Boolean)
+                    .join(' · ') || '—'}
                 </p>
               </div>
             </div>
@@ -494,6 +510,15 @@ export default function PersonalEmpleadosPage() {
                 placeholder="Teléfono"
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
+              />
+              <input
+                type="number"
+                min="0"
+                step="0.5"
+                className="w-full rounded-xl border border-zinc-200 px-3 py-2 text-sm"
+                placeholder="Horas objetivo por semana (ej. 40)"
+                value={weeklyHoursTarget}
+                onChange={(e) => setWeeklyHoursTarget(e.target.value)}
               />
               <input
                 className="w-full rounded-xl border border-zinc-200 px-3 py-2 text-sm"

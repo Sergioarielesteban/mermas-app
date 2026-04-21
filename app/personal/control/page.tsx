@@ -48,6 +48,12 @@ function hintStyles(hint: string): string {
   return 'bg-amber-100 text-amber-950 ring-amber-300';
 }
 
+function formatWeeklyTargetHours(hours: number | null): string {
+  if (hours == null || !Number.isFinite(hours)) return '—';
+  const rounded = Math.round(hours * 10) / 10;
+  return Number.isInteger(rounded) ? `${rounded} h/sem` : `${String(rounded).replace('.', ',')} h/sem`;
+}
+
 const CONTROL_FILTERS = new Set([
   'equipo',
   'planif_hoy',
@@ -99,6 +105,26 @@ function PersonalControlInner() {
   }, [incidents]);
 
   const rows = useMemo(() => {
+    const weekWorkedByEmp = new Map<string, number>();
+    const entriesByEmpDay = new Map<string, typeof timeEntries>();
+    for (const e of timeEntries) {
+      const d = new Date(e.occurredAt);
+      const ymd = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      const key = `${e.employeeId}|${ymd}`;
+      const list = entriesByEmpDay.get(key) ?? [];
+      list.push(e);
+      entriesByEmpDay.set(key, list);
+    }
+    for (const [key, list] of entriesByEmpDay.entries()) {
+      const employeeId = key.split('|')[0] ?? '';
+      weekWorkedByEmp.set(employeeId, (weekWorkedByEmp.get(employeeId) ?? 0) + workedMinutesForDay(sortEntriesByTime(list)));
+    }
+    const weekPlannedByEmp = new Map<string, number>();
+    for (const s of shifts) {
+      if (!s.employeeId) continue;
+      weekPlannedByEmp.set(s.employeeId, (weekPlannedByEmp.get(s.employeeId) ?? 0) + plannedShiftMinutes(s));
+    }
+
     const dayEntriesByEmp = new Map<string, typeof timeEntries>();
     for (const e of timeEntries) {
       const y = new Date(e.occurredAt);
@@ -129,6 +155,8 @@ function PersonalControlInner() {
         worked,
         br,
         plannedM,
+        weekWorked: weekWorkedByEmp.get(e.id) ?? 0,
+        weekPlanned: weekPlannedByEmp.get(e.id) ?? 0,
         hint,
         firstIn,
         lastOut,
@@ -258,7 +286,7 @@ function PersonalControlInner() {
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {displayedRows.map(
-          ({ e, planned, worked, br, plannedM, hint, firstIn, lastOut, delta, entryDelayMin }) => (
+          ({ e, planned, worked, br, plannedM, weekWorked, weekPlanned, hint, firstIn, lastOut, delta, entryDelayMin }) => (
             <article
               key={e.id}
               className="rounded-3xl border border-zinc-200/90 bg-white p-4 shadow-sm ring-1 ring-zinc-100"
@@ -319,6 +347,21 @@ function PersonalControlInner() {
                   <span className="ml-1.5 text-amber-800">(sin entrada fichada)</span>
                 ) : null}
               </p>
+
+              <div className="mt-2 rounded-2xl bg-[#fff8e8] px-3 py-2 text-[11px] font-semibold text-zinc-700 ring-1 ring-amber-200/80">
+                <div className="flex items-center justify-between gap-2">
+                  <span>Objetivo semanal</span>
+                  <span className="font-extrabold text-zinc-900">{formatWeeklyTargetHours(e.weeklyHoursTarget)}</span>
+                </div>
+                <div className="mt-1 flex items-center justify-between gap-2">
+                  <span>Planificado semana</span>
+                  <span className="font-bold text-zinc-900">{formatMinutesHuman(weekPlanned)}</span>
+                </div>
+                <div className="mt-1 flex items-center justify-between gap-2">
+                  <span>Trabajado semana</span>
+                  <span className="font-bold text-zinc-900">{formatMinutesHuman(weekWorked)}</span>
+                </div>
+              </div>
 
               <div className="mt-3 space-y-2 rounded-2xl bg-zinc-50 px-3 py-2.5 text-sm">
                 <div className="flex justify-between gap-2">
