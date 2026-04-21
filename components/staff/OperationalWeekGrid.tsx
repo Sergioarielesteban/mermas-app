@@ -1,23 +1,17 @@
 'use client';
 
 import React, { useCallback, useMemo, useRef, useState } from 'react';
-import { Plus } from 'lucide-react';
 import { OperationalSkelloCellBody } from '@/components/staff/OperationalSkelloCellBody';
 import { plannedShiftMinutes } from '@/lib/staff/attendance-logic';
 import { addDays, formatDayMonth, formatWeekdayShort, ymdLocal } from '@/lib/staff/staff-dates';
 import { zoneBlockStyle, zoneLabel } from '@/lib/staff/staff-zone-styles';
 import {
-  buildOperationalTimelineTicks,
   computeOperationalTimelineMetrics,
-  FULL_DAY_OPERATIONAL_METRICS,
   operationalFranjaOperativaBanner,
-  segmentShiftOnOperationalTimeline,
-  tickPositionPct,
   type LocalOperationalWindow,
 } from '@/lib/staff/local-operational-window';
 import type { CustomOperationalZoneRow } from '@/lib/staff/operational-custom-zones';
 import { STAFF_ZONE_PRESETS, type StaffEmployee, type StaffShift } from '@/lib/staff/types';
-import { staffDisplayName } from '@/lib/staff/staff-supabase';
 import { appConfirm } from '@/lib/app-dialog-bridge';
 
 export const OPERATIONAL_NONE_ZONE = '__none__' as const;
@@ -31,18 +25,6 @@ const LONG_PRESS_MS_EMPTY = 820;
 const LONG_PRESS_MS_SHIFT = 820;
 const DOUBLE_TAP_MS = 500;
 
-function shortTime(t: string) {
-  const [h, m] = t.split(':');
-  return `${h}:${m ?? '00'}`;
-}
-
-function formatShiftHoursLabel(mins: number): string {
-  if (mins <= 0) return '0 h';
-  const h = mins / 60;
-  if (Math.abs(h - Math.round(h)) < 0.05) return `${Math.round(h)} h`;
-  return `${h.toFixed(1).replace('.', ',')} h`;
-}
-
 function formatHoursSum(mins: number): string {
   const h = mins / 60;
   if (h < 10) return `${h.toFixed(1).replace('.', ',')} h`;
@@ -52,39 +34,6 @@ function formatHoursSum(mins: number): string {
 function shiftZoneKey(s: StaffShift): string {
   const z = (s.zone ?? '').trim().toLowerCase();
   return z || OPERATIONAL_NONE_ZONE;
-}
-
-function snapMinutes15(m: number): number {
-  return Math.round(m / 15) * 15;
-}
-
-function toPgTimeFromMinutes(min: number): string {
-  const h = Math.floor(min / 60) % 24;
-  const mi = min % 60;
-  return `${String(h).padStart(2, '0')}:${String(mi).padStart(2, '0')}:00`;
-}
-
-function buildAdjustedTimesAfterVerticalMove(
-  iv: { clipStart: number; clipEnd: number },
-  deltaMinutes: number,
-): { startTime: string; endTime: string; endsNextDay: boolean } | null {
-  const duration = iv.clipEnd - iv.clipStart;
-  if (duration < 15) return null;
-  let newStart = snapMinutes15(iv.clipStart + deltaMinutes);
-  newStart = Math.max(0, Math.min(newStart, 24 * 60 - duration));
-  const totalEnd = newStart + duration;
-  let endsNextDay = false;
-  let endMin = totalEnd;
-  if (totalEnd > 24 * 60) {
-    endsNextDay = true;
-    endMin = totalEnd - 24 * 60;
-  }
-  if (endMin < 0 || endMin > 24 * 60) return null;
-  return {
-    startTime: toPgTimeFromMinutes(newStart),
-    endTime: toPgTimeFromMinutes(endMin),
-    endsNextDay,
-  };
 }
 
 function buildZoneRows(
@@ -146,75 +95,6 @@ function headerTone(c: Coverage): string {
   return 'bg-red-50 text-red-950 ring-1 ring-red-200/90';
 }
 
-function OperationalDayTimeline({
-  ymd,
-  dayShifts,
-  metrics,
-}: {
-  ymd: string;
-  dayShifts: StaffShift[];
-  metrics: ReturnType<typeof computeOperationalTimelineMetrics>;
-}) {
-  const showMidnight = metrics.startMin < 24 * 60 && metrics.displayEndMin > 24 * 60;
-  const midnightLeftPct = Math.max(0, Math.min(100, tickPositionPct(24 * 60, metrics)));
-  const dayBandEndMin = Math.min(24 * 60, metrics.displayEndMin);
-  const dayBandWidthPct = Math.max(
-    0,
-    Math.min(100, ((dayBandEndMin - metrics.startMin) / metrics.rangeMin) * 100),
-  );
-  const afterMidnightWidthPct = showMidnight ? Math.max(0, 100 - midnightLeftPct) : 0;
-  const timelineTicks = useMemo(
-    () => buildOperationalTimelineTicks(metrics.startMin, metrics.displayEndMin),
-    [metrics.startMin, metrics.displayEndMin],
-  );
-
-  return (
-    <div className="px-0.5 pb-0.5 pt-0.5">
-      <div className="relative mx-auto h-4 w-full max-w-[5.5rem] overflow-hidden rounded bg-zinc-100 ring-1 ring-zinc-200/80 sm:max-w-none sm:h-5">
-        <div
-          className="pointer-events-none absolute inset-y-0 bg-zinc-200/70"
-          style={{ left: 0, width: `${dayBandWidthPct}%` }}
-        />
-        {showMidnight ? (
-          <div
-            className="pointer-events-none absolute inset-y-0 bg-zinc-300/50"
-            style={{ left: `${midnightLeftPct}%`, width: `${afterMidnightWidthPct}%` }}
-          />
-        ) : null}
-        {timelineTicks.map((tm) => {
-          const left = tickPositionPct(tm, metrics);
-          if (left < 0 || left > 100) return null;
-          return (
-            <div
-              key={tm}
-              className="pointer-events-none absolute bottom-0 top-0 w-px bg-zinc-400/40"
-              style={{ left: `${left}%` }}
-            />
-          );
-        })}
-        {showMidnight ? (
-          <div
-            className="pointer-events-none absolute bottom-0 top-0 w-px bg-zinc-600/50"
-            style={{ left: `${midnightLeftPct}%` }}
-          />
-        ) : null}
-        {dayShifts.map((s) => {
-          const seg = segmentShiftOnOperationalTimeline(s, ymd, metrics);
-          if (!seg) return null;
-          return (
-            <div
-              key={s.id}
-              className="pointer-events-none absolute bottom-0.5 top-0.5 rounded-sm bg-[#D32F2F]/85"
-              style={{ left: `${seg.leftPct}%`, width: `${seg.widthPct}%` }}
-              title={`${shortTime(s.startTime)}–${shortTime(s.endTime)}${s.endsNextDay ? ' (+1)' : ''}`}
-            />
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
 export type OperationalWeekGridProps = {
   weekStartMonday: Date;
   employees: StaffEmployee[];
@@ -231,13 +111,6 @@ export type OperationalWeekGridProps = {
   onAddPersonSameSlot?: (template: StaffShift) => void;
   /** Eliminar un turno del cuadrante (tras confirmación en UI). */
   onRemoveShift?: (shift: StaffShift) => Promise<void>;
-  /** Ajuste de horario arrastrando el bloque en el eje vertical (00:00–24:00). */
-  onShiftTimesAdjusted?: (
-    shift: StaffShift,
-    startTime: string,
-    endTime: string,
-    endsNextDay: boolean,
-  ) => Promise<void>;
 };
 
 export default function OperationalWeekGrid({
@@ -254,7 +127,6 @@ export default function OperationalWeekGrid({
   onShiftAdvancedEdit,
   onAddPersonSameSlot,
   onRemoveShift,
-  onShiftTimesAdjusted,
 }: OperationalWeekGridProps) {
   const days = useMemo(() => Array.from({ length: 7 }, (_, i) => addDays(weekStartMonday, i)), [weekStartMonday]);
   const zoneRows = useMemo(
@@ -272,31 +144,11 @@ export default function OperationalWeekGrid({
   const gridWrapRef = useRef<HTMLDivElement | null>(null);
   const [selectedCell, setSelectedCell] = useState<{ ymd: string; zoneKey: string } | null>(null);
   const [selectedShiftId, setSelectedShiftId] = useState<string | null>(null);
-  /** Claves `${ymd}|${zoneKey}|${slotKey}` para bloques horarios agrupados expandidos. */
-  const [expandedSlotKeys, setExpandedSlotKeys] = useState<Set<string>>(() => new Set());
 
   const ignoreClicksUntilRef = useRef(0);
   const emptyLongPressTimerRef = useRef<number | null>(null);
   const shiftLongPressTimerRef = useRef<number | null>(null);
   const lastEmptyTapRef = useRef<{ key: string; t: number }>({ key: '', t: 0 });
-  const verticalDragRef = useRef<{
-    shiftId: string;
-    pointerId: number;
-    lastClientY: number;
-    accPx: number;
-    iv: { clipStart: number; clipEnd: number };
-    trackHeight: number;
-  } | null>(null);
-
-  const shiftsByDayFlat = useMemo(() => {
-    const m = new Map<string, StaffShift[]>();
-    for (const s of shifts) {
-      const arr = m.get(s.shiftDate) ?? [];
-      arr.push(s);
-      m.set(s.shiftDate, arr);
-    }
-    return m;
-  }, [shifts]);
 
   const clearEmptyLongPressTimer = useCallback(() => {
     if (emptyLongPressTimerRef.current != null) {
@@ -387,37 +239,6 @@ export default function OperationalWeekGrid({
     [canEdit, onQuickCreateShift],
   );
 
-  const employeeName = useCallback(
-    (id: string | null) =>
-      id
-        ? staffDisplayName(
-            employees.find((e) => e.id === id) ?? { firstName: '', lastName: '', alias: null },
-          )
-        : '',
-    [employees],
-  );
-
-  const toggleExpandedSlot = useCallback((compositeKey: string) => {
-    setExpandedSlotKeys((prev) => {
-      const next = new Set(prev);
-      if (next.has(compositeKey)) next.delete(compositeKey);
-      else next.add(compositeKey);
-      return next;
-    });
-  }, []);
-
-  const sortGroupedItems = useCallback(
-    (items: StaffShift[]) =>
-      [...items].sort((a, b) => {
-        const na = a.employeeId ? employeeName(a.employeeId) : '';
-        const nb = b.employeeId ? employeeName(b.employeeId) : '';
-        if (!a.employeeId && b.employeeId) return 1;
-        if (a.employeeId && !b.employeeId) return -1;
-        return na.localeCompare(nb, 'es', { sensitivity: 'base' });
-      }),
-    [employeeName],
-  );
-
   const removeShiftFromGroup = useCallback(
     async (s: StaffShift) => {
       if (!onRemoveShift) return;
@@ -425,57 +246,6 @@ export default function OperationalWeekGrid({
       await onRemoveShift(s);
     },
     [onRemoveShift],
-  );
-
-  const onVerticalShiftPointerDown = useCallback(
-    (e: React.PointerEvent, s: StaffShift, iv: { clipStart: number; clipEnd: number }) => {
-      if (!canEdit || !onShiftTimesAdjusted) return;
-      if (e.button !== 0) return;
-      e.stopPropagation();
-      const track = (e.currentTarget as HTMLElement).closest('[data-vertical-track]') as HTMLElement | null;
-      if (!track) return;
-      verticalDragRef.current = {
-        shiftId: s.id,
-        pointerId: e.pointerId,
-        lastClientY: e.clientY,
-        accPx: 0,
-        iv: { ...iv },
-        trackHeight: Math.max(track.getBoundingClientRect().height, 1),
-      };
-      (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-    },
-    [canEdit, onShiftTimesAdjusted],
-  );
-
-  const onVerticalShiftPointerMove = useCallback((e: React.PointerEvent, s: StaffShift) => {
-    const d = verticalDragRef.current;
-    if (!d || d.shiftId !== s.id) return;
-    const dy = e.clientY - d.lastClientY;
-    d.lastClientY = e.clientY;
-    d.accPx += dy;
-  }, []);
-
-  const onVerticalShiftPointerUp = useCallback(
-    async (e: React.PointerEvent, s: StaffShift) => {
-      const d = verticalDragRef.current;
-      if (!d || d.shiftId !== s.id) return;
-      verticalDragRef.current = null;
-      try {
-        (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
-      } catch {
-        /* ignore */
-      }
-      const deltaMin = (d.accPx / d.trackHeight) * FULL_DAY_OPERATIONAL_METRICS.rangeMin;
-      if (Math.abs(d.accPx) < 12) {
-        onShiftAdvancedEdit(s);
-        return;
-      }
-      if (!onShiftTimesAdjusted) return;
-      const adj = buildAdjustedTimesAfterVerticalMove(d.iv, deltaMin);
-      if (!adj) return;
-      await onShiftTimesAdjusted(s, adj.startTime, adj.endTime, adj.endsNextDay);
-    },
-    [onShiftTimesAdjusted, onShiftAdvancedEdit],
   );
 
   const shiftsByDayZone = useMemo(() => {
@@ -579,10 +349,9 @@ export default function OperationalWeekGrid({
     <div className="space-y-2">
       {canEdit ? (
         <p className="text-[10px] text-zinc-500 sm:text-[11px]">
-          Vista por puesto con eje vertical 00:00–24:00 · arrastra en el bloque para mover la franja (misma duración)
-          o toca sin mover para editar · asa izquierda = mover a otro día/puesto · «+ pers.» en la tarjeta = otra
-          persona en la misma franja y puesto · celda vacía: «Añadir» = primer turno rápido · varias personas: flecha
-          para panel de equipo.
+          Vista por puesto: turnos en lista vertical por día (sin solapamiento). Asa izquierda = arrastrar a otro día o
+          puesto · toque largo = edición avanzada · «+ pers.» = misma franja · «Añadir» / doble toque en vacío = turno
+          rápido. {franjaBanner}
         </p>
       ) : (
         <p className="text-[10px] text-zinc-500 sm:text-[11px]">{franjaBanner}</p>
@@ -622,29 +391,6 @@ export default function OperationalWeekGrid({
                       {formatWeekdayShort(d)}
                     </span>
                     <span className="block text-[11px] leading-tight sm:text-xs">{formatDayMonth(d)}</span>
-                  </th>
-                );
-              })}
-            </tr>
-            <tr className="bg-zinc-50/95">
-              <th className="sticky left-0 z-20 min-w-[5.5rem] border-b border-r border-zinc-200 bg-zinc-50/95 px-1.5 py-1 text-left align-top text-[8px] font-semibold leading-snug text-zinc-600 sm:min-w-[6.5rem] sm:px-2 sm:text-[9px]">
-                <span className="block font-extrabold uppercase tracking-wide text-zinc-500">Eje tiempo</span>
-                <span className="mt-1 block font-bold text-zinc-800">00:00 – 24:00</span>
-                <span className="mt-0.5 block text-[7px] font-medium text-zinc-500">{franjaBanner}</span>
-              </th>
-              {days.map((d) => {
-                const ymd = ymdLocal(d);
-                const dayShifts = shiftsByDayFlat.get(ymd) ?? [];
-                return (
-                  <th
-                    key={`tl-${ymd}`}
-                    className="min-w-[21rem] border-b border-zinc-200 bg-zinc-50/90 align-top sm:min-w-[24.75rem]"
-                  >
-                    {dayShifts.length > 0 ? (
-                      <OperationalDayTimeline ymd={ymd} dayShifts={dayShifts} metrics={operationalMetrics} />
-                    ) : (
-                      <div className="h-1 w-full shrink-0" aria-hidden />
-                    )}
                   </th>
                 );
               })}
@@ -699,8 +445,6 @@ export default function OperationalWeekGrid({
                         selectedShiftId={selectedShiftId}
                         setSelectedCell={setSelectedCell}
                         setSelectedShiftId={setSelectedShiftId}
-                        expandedSlotKeys={expandedSlotKeys}
-                        toggleExpandedSlot={toggleExpandedSlot}
                         ignoreClicksUntilRef={ignoreClicksUntilRef}
                         onDragStart={onDragStart}
                         onDragEnd={onDragEnd}
@@ -711,10 +455,6 @@ export default function OperationalWeekGrid({
                         bindShiftLongPress={bindShiftLongPress}
                         onAddPersonSameSlot={onAddPersonSameSlot}
                         removeShiftFromGroup={removeShiftFromGroup}
-                        sortGroupedItems={sortGroupedItems}
-                        onVerticalShiftPointerDown={onVerticalShiftPointerDown}
-                        onVerticalShiftPointerMove={onVerticalShiftPointerMove}
-                        onVerticalShiftPointerUp={onVerticalShiftPointerUp}
                       />
                     </td>
                   );

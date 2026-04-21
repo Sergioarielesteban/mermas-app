@@ -367,28 +367,6 @@ export default function PersonalPlanificacionPage() {
     [perms.canManageSchedules, supabase, afterScheduleChange],
   );
 
-  const onOperationalShiftTimesAdjusted = useCallback(
-    async (s: StaffShift, startTime: string, endTime: string, endsNextDay: boolean) => {
-      if (!perms.canManageSchedules || !localId || !supabase) return;
-      await upsertStaffShift(supabase, {
-        id: s.id,
-        localId,
-        employeeId: s.employeeId,
-        shiftDate: s.shiftDate,
-        startTime: toPgTimeHhMmSs(startTime.length >= 8 ? startTime.slice(0, 8) : startTime),
-        endTime: toPgTimeHhMmSs(endTime.length >= 8 ? endTime.slice(0, 8) : endTime),
-        endsNextDay,
-        breakMinutes: s.breakMinutes,
-        zone: s.zone,
-        notes: s.notes,
-        status: s.status,
-        colorHint: s.colorHint,
-      });
-      await afterScheduleChange();
-    },
-    [perms.canManageSchedules, localId, supabase, afterScheduleChange],
-  );
-
   const onOperationalShiftPlaced = useCallback(
     async (shift: StaffShift, newDateYmd: string, zoneRowKey: string) => {
       if (!perms.canManageSchedules || !localId || !supabase) return;
@@ -781,7 +759,6 @@ export default function PersonalPlanificacionPage() {
               onShiftAdvancedEdit={openEdit}
               onAddPersonSameSlot={(t) => openNewPersonSameSlot(t)}
               onRemoveShift={(s) => removeShiftFromPlan(s)}
-              onShiftTimesAdjusted={(s, st, et, en) => onOperationalShiftTimesAdjusted(s, st, et, en)}
             />
           )}
         </>
