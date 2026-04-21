@@ -142,13 +142,35 @@ export default function PersonalRegistroPage() {
     setErr(null);
     setOkMsg(null);
     try {
-      const [em, sh, te, adj] = await Promise.all([
-        fetchStaffEmployees(supabase, localId),
-        fetchShiftsRange(supabase, localId, fromDate, toDate),
-        fetchTimeEntriesRange(supabase, localId, start.toISOString(), end.toISOString()),
-        fetchTimeAdjustmentsRange(supabase, localId, fromDate, toDate),
-      ]);
-      setEmployees(em.filter((e) => e.active));
+      const teamView = perms.canViewTeamSummary;
+      const emRaw = teamView
+        ? await fetchStaffEmployees(supabase, localId)
+        : userId
+          ? await fetchStaffEmployees(supabase, localId, { onlyLinkedAuthUserId: userId })
+          : [];
+      const activeEm = emRaw.filter((e) => e.active);
+      let scopeEmpId: string | null = null;
+      if (!teamView && activeEm.length === 1) scopeEmpId = activeEm[0].id;
+
+      let sh: StaffShift[];
+      let te: StaffTimeEntry[];
+      let adj: StaffTimeAdjustment[];
+      if (!teamView && !scopeEmpId) {
+        sh = [];
+        te = [];
+        adj = [];
+      } else {
+        const res = await Promise.all([
+          fetchShiftsRange(supabase, localId, fromDate, toDate, scopeEmpId),
+          fetchTimeEntriesRange(supabase, localId, start.toISOString(), end.toISOString(), scopeEmpId),
+          fetchTimeAdjustmentsRange(supabase, localId, fromDate, toDate, scopeEmpId),
+        ]);
+        sh = res[0];
+        te = res[1];
+        adj = res[2];
+      }
+
+      setEmployees(activeEm);
       setShifts(sh);
       setEntries(te);
       setAdjustments(adj);
@@ -185,22 +207,20 @@ export default function PersonalRegistroPage() {
     } finally {
       setLoading(false);
     }
-  }, [localId, fromDate, toDate]);
+  }, [localId, fromDate, toDate, perms.canViewTeamSummary, userId]);
 
   useEffect(() => {
     void load();
   }, [load]);
 
   const visibleEmployees = useMemo(() => {
-    const linked = employees.find((e) => e.userId === userId);
     let list = employees;
-    if (!perms.canViewTeamSummary && linked) list = [linked];
-    if (empFilter.trim()) {
+    if (perms.canViewTeamSummary && empFilter.trim()) {
       const q = empFilter.trim().toLowerCase();
       list = list.filter((e) => staffDisplayName(e).toLowerCase().includes(q));
     }
     return list;
-  }, [employees, empFilter, perms.canViewTeamSummary, userId]);
+  }, [employees, empFilter, perms.canViewTeamSummary]);
 
   const employeeById = useMemo(() => {
     const map = new Map<string, StaffEmployee>();
@@ -555,12 +575,30 @@ export default function PersonalRegistroPage() {
   if (!profileReady) return <p className="text-sm text-zinc-500">Cargando…</p>;
   if (!localId) return <p className="text-sm text-amber-800">Sin local.</p>;
 
+  const staffSelfOnly = !perms.canViewTeamSummary;
+
   return (
     <div className="space-y-4">
-      <MermasStyleHero eyebrow="Control horario" title="Registro diario" compact />
+      <MermasStyleHero
+        eyebrow="Control horario"
+        title={staffSelfOnly ? 'Mi registro' : 'Registro diario'}
+        compact
+      />
       <PersonalSectionNav />
 
-      <div className="grid gap-2 rounded-2xl bg-white p-3 ring-1 ring-zinc-200 sm:grid-cols-2 lg:grid-cols-5">
+      {staffSelfOnly && !loading && employees.length === 0 ? (
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-950">
+          Tu usuario no está vinculado a ninguna ficha de empleado en este local. No podemos mostrar tu historial de
+          fichajes hasta que un encargado vincule tu cuenta en Equipo.
+        </div>
+      ) : null}
+
+      <div
+        className={[
+          'grid gap-2 rounded-2xl bg-white p-3 ring-1 ring-zinc-200 sm:grid-cols-2',
+          perms.canViewTeamSummary ? 'lg:grid-cols-5' : 'lg:grid-cols-3',
+        ].join(' ')}
+      >
         <label className="text-xs font-bold text-zinc-600">
           Desde
           <input
@@ -593,15 +631,17 @@ export default function PersonalRegistroPage() {
             <option value="adjusted">Registro ajustado</option>
           </select>
         </label>
-        <label className="text-xs font-bold text-zinc-600 lg:col-span-2">
-          Empleado
-          <input
-            className="mt-1 w-full rounded-xl border border-zinc-200 px-3 py-2 text-sm"
-            placeholder="Filtrar por nombre…"
-            value={empFilter}
-            onChange={(e) => setEmpFilter(e.target.value)}
-          />
-        </label>
+        {perms.canViewTeamSummary ? (
+          <label className="text-xs font-bold text-zinc-600 lg:col-span-2">
+            Empleado
+            <input
+              className="mt-1 w-full rounded-xl border border-zinc-200 px-3 py-2 text-sm"
+              placeholder="Filtrar por nombre…"
+              value={empFilter}
+              onChange={(e) => setEmpFilter(e.target.value)}
+            />
+          </label>
+        ) : null}
       </div>
 
       {perms.canCorrectEntries ? (

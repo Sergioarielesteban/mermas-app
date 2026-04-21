@@ -146,14 +146,21 @@ export function staffDisplayName(e: Pick<StaffEmployee, 'firstName' | 'lastName'
   return n || 'Sin nombre';
 }
 
-export async function fetchStaffEmployees(supabase: SupabaseClient, localId: string): Promise<StaffEmployee[]> {
-  const { data, error } = await supabase
+export async function fetchStaffEmployees(
+  supabase: SupabaseClient,
+  localId: string,
+  opts?: { onlyLinkedAuthUserId?: string | null },
+): Promise<StaffEmployee[]> {
+  let q = supabase
     .from('staff_employees')
     .select(
       'id,local_id,user_id,first_name,last_name,alias,phone,email,operational_role,weekly_hours_target,workday_type,color,pin_fichaje,active,created_at,updated_at',
     )
-    .eq('local_id', localId)
-    .order('first_name');
+    .eq('local_id', localId);
+  if (opts?.onlyLinkedAuthUserId) {
+    q = q.eq('user_id', opts.onlyLinkedAuthUserId);
+  }
+  const { data, error } = await q.order('first_name');
   if (error) throw new Error(error.message);
   return (data ?? []).map((r) => mapEmployee(r as Record<string, unknown>));
 }
@@ -245,17 +252,21 @@ export async function fetchShiftsRange(
   localId: string,
   fromYmd: string,
   toYmd: string,
+  /** Si se indica, solo turnos de ese empleado (vista staff / registro personal). */
+  employeeId?: string | null,
 ): Promise<StaffShift[]> {
-  const { data, error } = await supabase
+  let q = supabase
     .from('staff_shifts')
     .select(
       'id,local_id,employee_id,shift_date,start_time,end_time,ends_next_day,break_minutes,zone,notes,status,color_hint,created_at,updated_at',
     )
     .eq('local_id', localId)
     .gte('shift_date', fromYmd)
-    .lte('shift_date', toYmd)
-    .order('shift_date')
-    .order('start_time');
+    .lte('shift_date', toYmd);
+  if (employeeId) {
+    q = q.eq('employee_id', employeeId);
+  }
+  const { data, error } = await q.order('shift_date').order('start_time');
   if (error) throw new Error(error.message);
   return (data ?? []).map((r) => mapShift(r as Record<string, unknown>));
 }
@@ -407,14 +418,18 @@ export async function fetchTimeEntriesRange(
   localId: string,
   fromIso: string,
   toIso: string,
+  employeeId?: string | null,
 ): Promise<StaffTimeEntry[]> {
-  const { data, error } = await supabase
+  let q = supabase
     .from('staff_time_entries')
     .select('id,local_id,employee_id,shift_id,event_type,occurred_at,source,note,created_at')
     .eq('local_id', localId)
     .gte('occurred_at', fromIso)
-    .lte('occurred_at', toIso)
-    .order('occurred_at');
+    .lte('occurred_at', toIso);
+  if (employeeId) {
+    q = q.eq('employee_id', employeeId);
+  }
+  const { data, error } = await q.order('occurred_at');
   if (error) throw new Error(error.message);
   return (data ?? []).map((r) => mapTimeEntry(r as Record<string, unknown>));
 }
@@ -444,16 +459,20 @@ export async function fetchTimeAdjustmentsRange(
   localId: string,
   fromYmd: string,
   toYmd: string,
+  employeeId?: string | null,
 ): Promise<StaffTimeAdjustment[]> {
-  const { data, error } = await supabase
+  let q = supabase
     .from('staff_time_entry_adjustments')
     .select(
       'id,local_id,employee_id,work_date,clock_in_original,clock_out_original,clock_in_adjusted,clock_out_adjusted,adjustment_reason,adjusted_by_user_id,adjusted_at,is_adjusted,created_at,updated_at',
     )
     .eq('local_id', localId)
     .gte('work_date', fromYmd)
-    .lte('work_date', toYmd)
-    .order('work_date', { ascending: false });
+    .lte('work_date', toYmd);
+  if (employeeId) {
+    q = q.eq('employee_id', employeeId);
+  }
+  const { data, error } = await q.order('work_date', { ascending: false });
   if (error) throw new Error(error.message);
   return (data ?? []).map((r) => mapTimeAdjustment(r as Record<string, unknown>));
 }
