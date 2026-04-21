@@ -307,7 +307,7 @@ export default function ShiftEditorModal({
           </button>
         </div>
         <form onSubmit={onSubmit} className="flex min-h-0 flex-1 flex-col">
-          <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-y-contain px-4 py-3">
+          <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-y-contain px-4 py-3 pb-28 sm:pb-3">
           <label className="block text-xs font-bold text-zinc-600">
             Empleado
             <select
@@ -531,7 +531,7 @@ export default function ShiftEditorModal({
           ) : null}
           {err ? <p className="text-sm font-semibold text-red-700">{err}</p> : null}
           </div>
-          <div className="shrink-0 border-t border-zinc-200 bg-white px-4 pt-3 shadow-[0_-8px_24px_rgba(0,0,0,0.08)] pb-[max(0.75rem,env(safe-area-inset-bottom,0px))]">
+          <div className="fixed inset-x-0 bottom-0 z-[80] shrink-0 border-t border-zinc-200 bg-white/95 px-4 pt-3 shadow-[0_-8px_24px_rgba(0,0,0,0.12)] backdrop-blur sm:static sm:bg-white sm:shadow-[0_-8px_24px_rgba(0,0,0,0.08)] sm:backdrop-blur-0 pb-[max(0.75rem,env(safe-area-inset-bottom,0px))]">
             <div className="flex flex-wrap gap-2">
               <button
                 type="submit"
