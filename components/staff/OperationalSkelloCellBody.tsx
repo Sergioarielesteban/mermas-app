@@ -28,12 +28,9 @@ function formatHoursSum(mins: number): string {
 /** Altura fija por turno (~68–72px). Padding horizontal ligeramente reducido solo dentro de la tarjeta. */
 const SHIFT_CARD_ROW_H = 'h-[4.25rem] sm:h-[4.5rem]';
 
-/** Borde base neutro (zinc-300) para mezclar con el acento del puesto sin saturar. */
-const CARD_BORDER_NEUTRAL = 'rgb(212 212 216)';
-
 /**
- * Tarjeta compacta: horario | persona | horas totales (lista vertical, sin timeline).
- * Fondo completo tintado muy suave por puesto; borde y rayita como refuerzo, texto oscuro.
+ * Tarjeta compacta: horario | persona | horas totales.
+ * Un solo fondo (tono claro del puesto) y borde un poco más intenso; texto oscuro.
  */
 const ShiftEmployeeRowCard = React.memo(function ShiftEmployeeRowCard({
   nameLabel,
@@ -48,9 +45,9 @@ const ShiftEmployeeRowCard = React.memo(function ShiftEmployeeRowCard({
 }: {
   nameLabel: string;
   hoursLabel: string;
-  /** Tono pastel del puesto (`subtleBg` de zona). */
+  /** Fondo uniforme del bloque (tono claro del puesto). */
   zoneSubtleBg: string;
-  /** Acento del puesto para borde y rayita (`bg` de zona). */
+  /** Color base del puesto (punto leyenda) para reforzar el borde. */
   zoneAccent: string;
   startTime: string;
   endTime: string;
@@ -64,20 +61,13 @@ const ShiftEmployeeRowCard = React.memo(function ShiftEmployeeRowCard({
       {endsNextDay ? ' +1' : ''}
     </>
   );
-  const cardSurface = `color-mix(in srgb, ${zoneSubtleBg} 72%, white)`;
-  const cardBorder = `color-mix(in srgb, ${zoneAccent} 14%, ${CARD_BORDER_NEUTRAL})`;
-  const stripeFill = `color-mix(in srgb, ${zoneAccent} 32%, ${zoneSubtleBg})`;
+  const cardBorder = `color-mix(in srgb, ${zoneAccent} 38%, ${zoneSubtleBg})`;
 
   return (
     <div
       className={`flex w-full min-w-0 shrink-0 items-stretch overflow-hidden ${SHIFT_CARD_ROW_H} ${shellClassName}`}
-      style={{ backgroundColor: cardSurface, borderColor: cardBorder }}
+      style={{ backgroundColor: zoneSubtleBg, borderColor: cardBorder }}
     >
-      <div
-        className="w-1 shrink-0 self-stretch opacity-95"
-        style={{ backgroundColor: stripeFill }}
-        aria-hidden
-      />
       <div className="grid min-w-0 flex-1 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-2 gap-y-0 px-1.5 py-0 sm:gap-x-2.5 sm:px-2.5">
         <span className="shrink-0 text-[10px] font-extrabold tabular-nums tracking-tight text-zinc-900 sm:text-[11px]">
           {timeRng}
@@ -352,7 +342,7 @@ function OperationalSkelloCellBodyInner({
           ))}
         </div>
       ) : null}
-      <div className="max-h-[min(40vh,20rem)] overflow-y-auto overflow-x-hidden rounded-md border border-zinc-200 bg-gradient-to-b from-white to-zinc-50/90 p-1 shadow-sm ring-1 ring-zinc-200/80">
+      <div className="max-h-[min(40vh,20rem)] overflow-y-auto overflow-x-hidden rounded-md border border-zinc-200 bg-zinc-50 p-1 shadow-sm">
         <div className="flex flex-col gap-2">{sortedShifts.map(renderShiftRow)}</div>
       </div>
       {canEdit ? (

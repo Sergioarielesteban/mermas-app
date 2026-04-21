@@ -210,12 +210,16 @@ export default function ShiftWeekGrid({
                 ? { bg: s.colorHint, text: '#ffffff', subtleBg: `${s.colorHint}22` }
                 : zoneBlockStyle(s.zone);
               const dur = plannedShiftMinutes(s);
+              const rowBorder = `color-mix(in srgb, ${zStyle.bg} 38%, ${zStyle.subtleBg})`;
               return (
                 <div key={s.id} className="flex flex-col gap-0.5">
                   <button
                     type="button"
-                    className="flex min-h-[44px] w-full touch-manipulation items-stretch overflow-hidden rounded-lg shadow-sm ring-1 ring-black/8"
-                    style={{ background: zStyle.subtleBg }}
+                    className="flex min-h-[44px] w-full touch-manipulation flex-col items-stretch overflow-hidden rounded-lg border border-solid px-2 py-1.5 text-left shadow-sm"
+                    style={{
+                      backgroundColor: zStyle.subtleBg,
+                      borderColor: rowBorder,
+                    }}
                     onClick={() => {
                       if (!canManageSchedules) {
                         onEditShift(s);
@@ -224,18 +228,13 @@ export default function ShiftWeekGrid({
                       setShiftSheet({ shift: s, employeeId: em.id, ymd });
                     }}
                   >
-                    <div
-                      className="min-w-0 flex-1 px-2 py-1.5 text-left"
-                      style={{ background: zStyle.bg, color: zStyle.text }}
-                    >
-                      <span className="block text-[10px] font-extrabold leading-tight sm:text-xs">
-                        {shortTime(s.startTime)} – {shortTime(s.endTime)}
-                      </span>
-                      <span className="mt-0.5 block text-[9px] font-semibold opacity-95">
-                        {formatDurationMin(dur)}
-                        {s.zone ? ` · ${zoneLabel(s.zone)}` : ''}
-                      </span>
-                    </div>
+                    <span className="block text-[10px] font-extrabold leading-tight text-zinc-900 sm:text-xs">
+                      {shortTime(s.startTime)} – {shortTime(s.endTime)}
+                    </span>
+                    <span className="mt-0.5 block text-[9px] font-semibold text-zinc-700">
+                      {formatDurationMin(dur)}
+                      {s.zone ? ` · ${zoneLabel(s.zone)}` : ''}
+                    </span>
                   </button>
                   {canManageSchedules && onRemoveShift ? (
                     <div className="flex justify-end px-0.5">
