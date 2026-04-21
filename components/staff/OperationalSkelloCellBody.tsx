@@ -25,7 +25,7 @@ function formatHoursSum(mins: number): string {
   return `${Math.round(h)} h`;
 }
 
-/** Altura fija por turno (−25% vs ~68–72px). Ancho tarjeta al 60% de la celda, alineada a la izquierda. */
+/** Altura fija por turno (−25% vs ~68–72px). Bloques visuales al 60% y alineados a la izquierda. */
 const SHIFT_CARD_ROW_H = 'h-[3.1875rem] sm:h-[3.375rem]';
 const SHIFT_CARD_ROW_W = 'w-[60%] max-w-[60%]';
 
@@ -158,7 +158,7 @@ function OperationalSkelloCellBodyInner({
           role={canEdit ? 'button' : undefined}
           tabIndex={canEdit ? 0 : undefined}
           className={[
-            'relative flex min-h-[2.8125rem] w-full items-center justify-center rounded-lg border border-dashed px-2 py-1.5 transition touch-manipulation select-none sm:min-h-[3rem]',
+            `relative flex min-h-[2.8125rem] ${SHIFT_CARD_ROW_W} self-start items-center justify-center rounded-lg border border-dashed px-2 py-1.5 transition touch-manipulation select-none sm:min-h-[3rem]`,
             canEdit
               ? 'cursor-pointer border-zinc-300 bg-zinc-50/40 hover:border-[#D32F2F]/45 hover:bg-white'
               : 'cursor-default border-zinc-100 bg-zinc-50/30',
@@ -302,7 +302,9 @@ function OperationalSkelloCellBodyInner({
   return (
     <div className="flex w-full min-w-0 flex-col gap-1">
       {summaryBits.length > 0 ? (
-        <div className="flex flex-wrap items-center justify-center gap-x-1.5 gap-y-0 text-center text-[8px] font-extrabold text-zinc-800 sm:text-[9px]">
+        <div
+          className={`flex ${SHIFT_CARD_ROW_W} self-start flex-wrap items-center justify-start gap-x-1.5 gap-y-0 text-left text-[8px] font-extrabold text-zinc-800 sm:text-[9px]`}
+        >
           {summaryBits.map((node, i) => (
             <React.Fragment key={i}>
               {i > 0 ? <span className="text-zinc-300">·</span> : null}
