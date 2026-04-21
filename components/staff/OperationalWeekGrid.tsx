@@ -371,157 +371,159 @@ export default function OperationalWeekGrid({
         ref={gridWrapRef}
         className="overflow-x-auto overflow-y-visible overscroll-x-contain rounded-2xl ring-1 ring-zinc-200/90 [-webkit-overflow-scrolling:touch] [touch-action:pan-x]"
       >
-        {/* Columnas del día: repeat(7, 1fr) + columna de puesto; gap 8px entre columnas */}
-        <div
-          className="grid w-full min-w-[720px] gap-x-2 gap-y-0 text-left text-[10px] sm:text-xs"
-          style={{
-            gridTemplateColumns: 'minmax(4.75rem, auto) repeat(7, minmax(0, 1fr))',
-          }}
-        >
-          <div
-            className="sticky left-0 z-20 border-b border-r border-zinc-200 bg-zinc-50 px-1 py-2 text-[9px] font-extrabold uppercase tracking-wide text-zinc-500 sm:px-1.5"
-            style={{ touchAction: 'pan-y' }}
-          >
-            Puesto
-          </div>
-          {days.map((d) => {
-            const ymd = ymdLocal(d);
-            const cov = coverageByDay.get(ymd) ?? 'bad';
-            return (
-              <div
-                key={`h-${ymd}`}
-                className={[
-                  'min-w-0 border-b border-zinc-200 px-0 py-1.5 text-center font-extrabold',
-                  headerTone(cov),
-                ].join(' ')}
-              >
-                <span className="block text-[9px] uppercase leading-tight opacity-90">
-                  {formatWeekdayShort(d)}
-                </span>
-                <span className="block text-[11px] leading-tight sm:text-xs">{formatDayMonth(d)}</span>
-              </div>
-            );
-          })}
-
-          {zoneRows.map((row) => (
-            <React.Fragment key={row.key}>
-              <div
-                className="sticky left-0 z-10 border-b border-r border-zinc-100 bg-white px-1 py-1 align-top sm:px-1.5"
+        <table className="w-full min-w-[2520px] border-collapse text-left text-[10px] sm:min-w-[2790px] sm:text-xs">
+          <thead>
+            <tr className="bg-zinc-50">
+              <th
+                className="sticky left-0 z-20 min-w-[4rem] border-b border-r border-zinc-200 bg-zinc-50 px-1 py-2 text-[9px] font-extrabold uppercase tracking-wide text-zinc-500 sm:min-w-[4.75rem] sm:px-1.5"
                 style={{ touchAction: 'pan-y' }}
               >
-                <div className="flex min-w-0 flex-col items-stretch">
-                  <div className="flex min-w-0 items-center gap-1">
-                    <span
-                      className="h-2.5 w-2.5 shrink-0 rounded-full ring-1 ring-black/10"
-                      style={{ background: zoneBlockStyle(row.key).bg }}
-                      aria-hidden
-                    />
-                    <span className="min-w-0 flex-1 truncate font-bold text-zinc-900">{row.label}</span>
-                  </div>
-                  {canEdit ? (
-                    <button
-                      type="button"
-                      className="mt-1.5 flex w-full touch-manipulation items-center justify-center gap-1 rounded-lg border border-dashed border-zinc-300 bg-zinc-50/50 py-2 text-[10px] font-extrabold text-[#D32F2F] hover:border-[#D32F2F]/40 hover:bg-white sm:text-[11px]"
-                      onClick={(e) => quickCreateForZoneRow(e, row.key)}
-                    >
-                      <Plus className="h-3.5 w-3.5 shrink-0" strokeWidth={2.5} />
-                      Añadir en {row.label}
-                    </button>
-                  ) : null}
-                </div>
-              </div>
+                Puesto
+              </th>
               {days.map((d) => {
                 const ymd = ymdLocal(d);
-                const here = shiftsByDayZone.get(`${ymd}|${row.key}`) ?? [];
+                const cov = coverageByDay.get(ymd) ?? 'bad';
                 return (
-                  <div
-                    key={`${row.key}-${ymd}`}
-                    className="min-w-0 w-full border-b border-zinc-100 px-0 py-0 align-top"
-                    onDragOver={
-                      canEdit
-                        ? (e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            e.dataTransfer.dropEffect = 'move';
-                          }
-                        : undefined
-                    }
-                    onDragEnter={
-                      canEdit
-                        ? (e) => {
-                            e.preventDefault();
-                            e.dataTransfer.dropEffect = 'move';
-                          }
-                        : undefined
-                    }
-                    onDrop={canEdit ? (e) => void onCellDrop(e, ymd, row.key) : undefined}
+                  <th
+                    key={ymd}
+                    className={[
+                      'min-w-[21rem] border-b border-zinc-200 px-0.5 py-1.5 text-center font-extrabold sm:min-w-[24.75rem] sm:px-1',
+                      headerTone(cov),
+                    ].join(' ')}
                   >
-                    <OperationalSkelloCellBody
-                      ymd={ymd}
-                      rowKey={row.key}
-                      here={here}
-                      canEdit={canEdit}
-                      employees={employees}
-                      selectedCell={selectedCell}
-                      selectedShiftId={selectedShiftId}
-                      setSelectedCell={setSelectedCell}
-                      setSelectedShiftId={setSelectedShiftId}
-                      ignoreClicksUntilRef={ignoreClicksUntilRef}
-                      onDragStart={onDragStart}
-                      onDragEnd={onDragEnd}
-                      handleEmptyCellTap={handleEmptyCellTap}
-                      bindEmptyLongPress={bindEmptyLongPress}
-                      onShiftAdvancedEdit={onShiftAdvancedEdit}
-                      bindShiftLongPress={bindShiftLongPress}
-                      removeShiftFromGroup={removeShiftFromGroup}
-                    />
-                  </div>
+                    <span className="block text-[9px] uppercase leading-tight opacity-90">
+                      {formatWeekdayShort(d)}
+                    </span>
+                    <span className="block text-[11px] leading-tight sm:text-xs">{formatDayMonth(d)}</span>
+                  </th>
                 );
               })}
-            </React.Fragment>
-          ))}
-
-          <div
-            className="sticky left-0 z-10 border-t border-r border-zinc-200 bg-zinc-50/90 px-1 py-2 text-[9px] font-extrabold uppercase text-zinc-600 sm:px-1.5 sm:text-[10px]"
-            style={{ touchAction: 'pan-y' }}
-          >
-            Resumen
-          </div>
-          {days.map((d) => {
-            const ymd = ymdLocal(d);
-            const st = statsByDay.get(ymd) ?? { people: 0, minutes: 0, byZone: new Map() };
-            const zoneLine = zoneSummaryLine(ymd);
-            const hasDay = st.people > 0 || st.minutes > 0;
-            return (
-              <div
-                key={`f-${ymd}`}
-                className="min-w-0 border-t border-zinc-200 bg-zinc-50/90 px-0 py-2 text-center align-top"
+            </tr>
+          </thead>
+          <tbody>
+            {zoneRows.map((row) => (
+              <tr key={row.key} className="bg-white">
+                <td
+                  className="sticky left-0 z-10 border-b border-r border-zinc-100 bg-white px-1 py-1 align-top sm:px-1.5"
+                  style={{ touchAction: 'pan-y' }}
+                >
+                  <div className="flex min-w-0 flex-col items-stretch">
+                    <div className="flex min-w-0 items-center gap-1">
+                      <span
+                        className="h-2.5 w-2.5 shrink-0 rounded-full ring-1 ring-black/10"
+                        style={{ background: zoneBlockStyle(row.key).bg }}
+                        aria-hidden
+                      />
+                      <span className="min-w-0 flex-1 truncate font-bold text-zinc-900">{row.label}</span>
+                    </div>
+                    {canEdit ? (
+                      <button
+                        type="button"
+                        className="mt-1.5 flex w-full touch-manipulation items-center justify-center gap-1 rounded-lg border border-dashed border-zinc-300 bg-zinc-50/50 py-2 text-[10px] font-extrabold text-[#D32F2F] hover:border-[#D32F2F]/40 hover:bg-white sm:text-[11px]"
+                        onClick={(e) => quickCreateForZoneRow(e, row.key)}
+                      >
+                        <Plus className="h-3.5 w-3.5 shrink-0" strokeWidth={2.5} />
+                        Añadir en {row.label}
+                      </button>
+                    ) : null}
+                  </div>
+                </td>
+                {days.map((d) => {
+                  const ymd = ymdLocal(d);
+                  const here = shiftsByDayZone.get(`${ymd}|${row.key}`) ?? [];
+                  return (
+                    <td
+                      key={ymd}
+                      className="align-top border-b border-zinc-100 p-0.5 sm:p-1"
+                      onDragOver={
+                        canEdit
+                          ? (e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              e.dataTransfer.dropEffect = 'move';
+                            }
+                          : undefined
+                      }
+                      onDragEnter={
+                        canEdit
+                          ? (e) => {
+                              e.preventDefault();
+                              e.dataTransfer.dropEffect = 'move';
+                            }
+                          : undefined
+                      }
+                      onDrop={canEdit ? (e) => void onCellDrop(e, ymd, row.key) : undefined}
+                    >
+                      <OperationalSkelloCellBody
+                        ymd={ymd}
+                        rowKey={row.key}
+                        here={here}
+                        canEdit={canEdit}
+                        employees={employees}
+                        selectedCell={selectedCell}
+                        selectedShiftId={selectedShiftId}
+                        setSelectedCell={setSelectedCell}
+                        setSelectedShiftId={setSelectedShiftId}
+                        ignoreClicksUntilRef={ignoreClicksUntilRef}
+                        onDragStart={onDragStart}
+                        onDragEnd={onDragEnd}
+                        handleEmptyCellTap={handleEmptyCellTap}
+                        bindEmptyLongPress={bindEmptyLongPress}
+                        onShiftAdvancedEdit={onShiftAdvancedEdit}
+                        bindShiftLongPress={bindShiftLongPress}
+                        removeShiftFromGroup={removeShiftFromGroup}
+                      />
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+          <tfoot>
+            <tr className="bg-zinc-50/90">
+              <td
+                className="sticky left-0 z-10 border-t border-r border-zinc-200 px-1 py-2 text-[9px] font-extrabold uppercase text-zinc-600 sm:px-1.5 sm:text-[10px]"
+                style={{ touchAction: 'pan-y' }}
               >
-                {hasDay ? (
-                  <>
-                    {st.people > 0 ? (
-                      <div className="text-[10px] font-extrabold tabular-nums text-zinc-900 sm:text-xs">
-                        {st.people} pers.
-                      </div>
-                    ) : null}
-                    {st.minutes > 0 ? (
-                      <div className="text-[9px] font-bold tabular-nums text-zinc-600 sm:text-[10px]">
-                        {formatHoursSum(st.minutes)}
-                      </div>
-                    ) : null}
-                    {zoneLine ? (
-                      <div className="mt-1 text-[8px] font-semibold leading-snug text-zinc-500 sm:text-[9px]">
-                        {zoneLine}
-                      </div>
-                    ) : null}
-                  </>
-                ) : (
-                  <span className="text-[9px] font-semibold text-zinc-400 sm:text-[10px]">—</span>
-                )}
-              </div>
-            );
-          })}
-        </div>
+                Resumen
+              </td>
+              {days.map((d) => {
+                const ymd = ymdLocal(d);
+                const st = statsByDay.get(ymd) ?? { people: 0, minutes: 0, byZone: new Map() };
+                const zoneLine = zoneSummaryLine(ymd);
+                const hasDay = st.people > 0 || st.minutes > 0;
+                return (
+                  <td
+                    key={ymd}
+                    className="border-t border-zinc-200 px-0.5 py-2 text-center align-top sm:px-1"
+                  >
+                    {hasDay ? (
+                      <>
+                        {st.people > 0 ? (
+                          <div className="text-[10px] font-extrabold tabular-nums text-zinc-900 sm:text-xs">
+                            {st.people} pers.
+                          </div>
+                        ) : null}
+                        {st.minutes > 0 ? (
+                          <div className="text-[9px] font-bold tabular-nums text-zinc-600 sm:text-[10px]">
+                            {formatHoursSum(st.minutes)}
+                          </div>
+                        ) : null}
+                        {zoneLine ? (
+                          <div className="mx-auto mt-1 max-w-[6.5rem] text-[8px] font-semibold leading-snug text-zinc-500 sm:max-w-none sm:text-[9px]">
+                            {zoneLine}
+                          </div>
+                        ) : null}
+                      </>
+                    ) : (
+                      <span className="text-[9px] font-semibold text-zinc-400 sm:text-[10px]">—</span>
+                    )}
+                  </td>
+                );
+              })}
+            </tr>
+          </tfoot>
+        </table>
       </div>
       <p className="text-[9px] text-zinc-500 sm:text-[10px]">
         Cobertura: gris = ok · gris más marcado = turno sin asignar en algún puesto principal · rojo = falta puesto

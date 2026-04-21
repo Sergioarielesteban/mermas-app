@@ -25,8 +25,9 @@ function formatHoursSum(mins: number): string {
   return `${Math.round(h)} h`;
 }
 
-/** Altura fija por turno (−25% vs ~68–72px). Ancho completo de la celda del día. */
+/** Altura fija por turno (−25% vs ~68–72px). Ancho tarjeta al 60% de la celda, alineada a la izquierda. */
 const SHIFT_CARD_ROW_H = 'h-[3.1875rem] sm:h-[3.375rem]';
+const SHIFT_CARD_ROW_W = 'w-[60%] max-w-[60%]';
 
 /**
  * Tarjeta compacta: horario | persona | horas totales.
@@ -245,7 +246,7 @@ function OperationalSkelloCellBodyInner({
     );
 
     return (
-      <div key={sOne.id} className="flex w-full min-w-0 flex-col gap-0.5">
+      <div key={sOne.id} className={`flex min-w-0 flex-col gap-0.5 ${SHIFT_CARD_ROW_W} self-start`}>
         <div
           className={[
             `flex w-full max-w-full min-w-0 shrink-0 flex-row items-stretch overflow-hidden rounded-lg ${SHIFT_CARD_ROW_H}`,
