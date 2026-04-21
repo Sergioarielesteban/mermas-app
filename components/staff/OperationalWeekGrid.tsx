@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useCallback, useMemo, useRef, useState } from 'react';
+import { Plus } from 'lucide-react';
 import { OperationalSkelloCellBody } from '@/components/staff/OperationalSkelloCellBody';
 import { plannedShiftMinutes } from '@/lib/staff/attendance-logic';
 import { addDays, formatDayMonth, formatWeekdayShort, ymdLocal } from '@/lib/staff/staff-dates';
@@ -235,6 +236,14 @@ export default function OperationalWeekGrid({
     [canEdit, onQuickCreateShift],
   );
 
+  /** Añadir turno para este puesto: día de la celda seleccionada o lunes de la semana. */
+  const quickCreateForZoneRow = useCallback(
+    (e: React.MouseEvent, zoneRowKey: string) => {
+      quickCreateFromButton(e, selectedCell?.ymd ?? ymdLocal(days[0]), zoneRowKey);
+    },
+    [quickCreateFromButton, selectedCell?.ymd, days],
+  );
+
   const removeShiftFromGroup = useCallback(
     async (s: StaffShift) => {
       if (!onRemoveShift) return;
@@ -345,7 +354,8 @@ export default function OperationalWeekGrid({
       {canEdit ? (
         <p className="text-[10px] text-zinc-500 sm:text-[11px]">
           Vista por puesto: turnos en lista vertical por día (sin solapamiento). Asa izquierda = arrastrar a otro día o
-          puesto · toque largo en la tarjeta = edición avanzada · «Añadir» / doble toque en vacío = turno rápido.{' '}
+          puesto · toque largo en la tarjeta = edición avanzada · «Añadir en [puesto]» bajo el nombre del puesto · doble
+          toque en celda vacía = turno rápido.{' '}
           {franjaBanner}
         </p>
       ) : (
@@ -398,13 +408,25 @@ export default function OperationalWeekGrid({
             {zoneRows.map((row) => (
               <tr key={row.key} className="bg-white">
                 <td className="sticky left-0 z-10 touch-pan-y border-b border-r border-zinc-100 bg-white px-1 py-1 align-top sm:px-1.5">
-                  <div className="flex min-w-0 items-center gap-1">
-                    <span
-                      className="h-2.5 w-2.5 shrink-0 rounded-full ring-1 ring-black/10"
-                      style={{ background: zoneBlockStyle(row.key).bg }}
-                      aria-hidden
-                    />
-                    <span className="min-w-0 flex-1 truncate font-bold text-zinc-900">{row.label}</span>
+                  <div className="flex min-w-0 flex-col items-stretch">
+                    <div className="flex min-w-0 items-center gap-1">
+                      <span
+                        className="h-2.5 w-2.5 shrink-0 rounded-full ring-1 ring-black/10"
+                        style={{ background: zoneBlockStyle(row.key).bg }}
+                        aria-hidden
+                      />
+                      <span className="min-w-0 flex-1 truncate font-bold text-zinc-900">{row.label}</span>
+                    </div>
+                    {canEdit ? (
+                      <button
+                        type="button"
+                        className="mt-1.5 flex w-full touch-manipulation items-center justify-center gap-1 rounded-lg border border-dashed border-zinc-300 bg-zinc-50/50 py-2 text-[10px] font-extrabold text-[#D32F2F] hover:border-[#D32F2F]/40 hover:bg-white sm:text-[11px]"
+                        onClick={(e) => quickCreateForZoneRow(e, row.key)}
+                      >
+                        <Plus className="h-3.5 w-3.5 shrink-0" strokeWidth={2.5} />
+                        Añadir en {row.label}
+                      </button>
+                    ) : null}
                   </div>
                 </td>
                 {days.map((d) => {
@@ -448,7 +470,6 @@ export default function OperationalWeekGrid({
                         onDragEnd={onDragEnd}
                         handleEmptyCellTap={handleEmptyCellTap}
                         bindEmptyLongPress={bindEmptyLongPress}
-                        quickCreateFromButton={quickCreateFromButton}
                         onShiftAdvancedEdit={onShiftAdvancedEdit}
                         bindShiftLongPress={bindShiftLongPress}
                         removeShiftFromGroup={removeShiftFromGroup}

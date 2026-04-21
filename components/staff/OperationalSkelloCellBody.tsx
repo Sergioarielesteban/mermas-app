@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { GripVertical, Plus } from 'lucide-react';
+import { GripVertical } from 'lucide-react';
 import { plannedShiftMinutes } from '@/lib/staff/attendance-logic';
 import { zoneBlockStyle } from '@/lib/staff/staff-zone-styles';
 import type { StaffEmployee, StaffShift } from '@/lib/staff/types';
@@ -108,7 +108,6 @@ export type OperationalSkelloCellBodyProps = {
   onDragEnd: () => void;
   handleEmptyCellTap: (ymd: string, zk: string) => void;
   bindEmptyLongPress: (ymd: string, zk: string) => Record<string, unknown>;
-  quickCreateFromButton: (e: React.MouseEvent, ymd: string, zk: string) => void;
   onShiftAdvancedEdit: (shift: StaffShift) => void;
   bindShiftLongPress: (shift: StaffShift) => Record<string, unknown>;
   removeShiftFromGroup: (shift: StaffShift) => Promise<void>;
@@ -129,7 +128,6 @@ function OperationalSkelloCellBodyInner({
   onDragEnd,
   handleEmptyCellTap,
   bindEmptyLongPress,
-  quickCreateFromButton,
   onShiftAdvancedEdit,
   bindShiftLongPress,
   removeShiftFromGroup,
@@ -179,15 +177,7 @@ function OperationalSkelloCellBodyInner({
           {...(canEdit ? bindEmptyLongPress(ymd, rowKey) : ({} as Record<string, never>))}
         >
           {canEdit ? (
-            <button
-              type="button"
-              className="relative z-10 inline-flex items-center justify-center gap-1 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-[11px] font-extrabold text-[#D32F2F] shadow-sm hover:bg-[#D32F2F]/5 sm:text-xs"
-              onPointerDown={(e) => e.stopPropagation()}
-              onClick={(e) => quickCreateFromButton(e, ymd, rowKey)}
-            >
-              <Plus className="h-3.5 w-3.5 shrink-0" strokeWidth={2.5} />
-              Añadir
-            </button>
+            <span className="text-center text-[10px] font-semibold text-zinc-400">Vacío</span>
           ) : (
             <span className="text-[10px] font-semibold text-zinc-400">Sin turnos</span>
           )}
@@ -327,17 +317,6 @@ function OperationalSkelloCellBodyInner({
       <div className="max-h-[min(40vh,20rem)] overflow-y-auto overflow-x-hidden">
         <div className="flex flex-col gap-1">{sortedShifts.map(renderShiftRow)}</div>
       </div>
-      {canEdit ? (
-        <button
-          type="button"
-          className="flex w-full touch-manipulation items-center justify-center gap-1 rounded-lg border border-dashed border-zinc-300 bg-zinc-50/50 py-2 text-[10px] font-extrabold text-[#D32F2F] hover:border-[#D32F2F]/40 hover:bg-white sm:text-[11px]"
-          onPointerDown={(e) => e.stopPropagation()}
-          onClick={(e) => quickCreateFromButton(e, ymd, rowKey)}
-        >
-          <Plus className="h-3.5 w-3.5 shrink-0" strokeWidth={2.5} />
-          Añadir turno
-        </button>
-      ) : null}
     </div>
   );
 }
