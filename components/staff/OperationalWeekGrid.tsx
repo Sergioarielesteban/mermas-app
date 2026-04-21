@@ -12,8 +12,6 @@ import {
 } from '@/lib/staff/local-operational-window';
 import type { CustomOperationalZoneRow } from '@/lib/staff/operational-custom-zones';
 import { STAFF_ZONE_PRESETS, type StaffEmployee, type StaffShift } from '@/lib/staff/types';
-import { appConfirm } from '@/lib/app-dialog-bridge';
-
 export const OPERATIONAL_NONE_ZONE = '__none__' as const;
 
 /** Cobertura en cabecera (puestos que deben tener turno). */
@@ -242,7 +240,6 @@ export default function OperationalWeekGrid({
   const removeShiftFromGroup = useCallback(
     async (s: StaffShift) => {
       if (!onRemoveShift) return;
-      if (!(await appConfirm('¿Eliminar este turno del cuadrante?'))) return;
       await onRemoveShift(s);
     },
     [onRemoveShift],

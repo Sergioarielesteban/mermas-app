@@ -48,12 +48,6 @@ import { appAlert, appConfirm, appPrompt } from '@/lib/app-dialog-bridge';
 import { getSupabaseClient } from '@/lib/supabase-client';
 import { notifyStaffWeekSchedulePublished } from '@/services/notifications';
 
-function toPgTimeHhMmSs(hhmm: string) {
-  const parts = hhmm.split(':');
-  if (parts.length >= 3) return hhmm;
-  return `${parts[0] ?? '09'}:${parts[1] ?? '00'}:00`;
-}
-
 export default function PersonalPlanificacionPage() {
   const { localId, profileRole, profileReady, userId } = useAuth();
   const perms = useMemo(() => buildStaffPermissions(profileRole), [profileRole]);
@@ -398,37 +392,22 @@ export default function PersonalPlanificacionPage() {
 
   const onOperationalQuickCreate = useCallback(
     async (dateYmd: string, zoneRowKey: string) => {
-      if (!perms.canManageSchedules || !localId || !supabase) return;
+      if (!perms.canManageSchedules || !localId) return;
       const preset = resolveQuickPresetForZone(localId, zoneRowKey);
       writeStoredPresetIdForZone(localId, zoneRowKey, preset.id);
-      const zoneVal = zoneRowKey === OPERATIONAL_NONE_ZONE ? null : zoneRowKey;
       const lastEmp = readLastEmployeeForZone(localId, zoneRowKey);
-      try {
-        await upsertStaffShift(supabase, {
-          localId,
-          employeeId: lastEmp && employees.some((e) => e.id === lastEmp) ? lastEmp : null,
-          shiftDate: dateYmd,
-          startTime: toPgTimeHhMmSs(preset.startTime),
-          endTime: toPgTimeHhMmSs(preset.endTime),
-          endsNextDay: preset.endsNextDay,
-          breakMinutes: preset.breakMinutes,
-          zone: zoneVal,
-          colorHint: zoneVal ? zoneDefaultColorHint(zoneVal) : null,
-          status: 'planned',
-        });
-        void afterScheduleChange();
-      } catch (e: unknown) {
-        const msg = e instanceof Error ? e.message : 'No se pudo crear el turno';
-        if (msg.toLowerCase().includes('null') || msg.includes('employee')) {
-          await appAlert(
-            `${msg}\n\nSi acabas de activar turnos sin empleado, ejecuta en Supabase el script supabase-staff-shifts-employee-nullable.sql`,
-          );
-          return;
-        }
-        await appAlert(msg);
-      }
+      const emp =
+        lastEmp && employees.some((e) => e.id === lastEmp) ? lastEmp : undefined;
+      setDraft({
+        mode: 'new',
+        shiftDate: dateYmd,
+        defaultZone: zoneRowKey === OPERATIONAL_NONE_ZONE ? undefined : zoneRowKey,
+        employeeId: emp,
+        quickPreset: preset,
+      });
+      setModalOpen(true);
     },
-    [perms.canManageSchedules, localId, supabase, employees, afterScheduleChange],
+    [perms.canManageSchedules, localId, employees],
   );
 
   const onOperationalDuplicateHere = async (shift: StaffShift) => {

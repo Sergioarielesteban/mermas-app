@@ -6,7 +6,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { STAFF_ZONE_PRESETS, type StaffEmployee, type StaffShift, type StaffShiftStatus } from '@/lib/staff/types';
 import { zoneDefaultColorHint } from '@/lib/staff/staff-zone-styles';
 import { appConfirm } from '@/lib/app-dialog-bridge';
-import { QUICK_SHIFT_PRESETS } from '@/lib/staff/shift-quick-presets';
+import { QUICK_SHIFT_PRESETS, type QuickShiftPreset } from '@/lib/staff/shift-quick-presets';
 import { addDays, parseYmd, startOfWeekMonday, ymdLocal } from '@/lib/staff/staff-dates';
 import {
   deleteStaffScheduleDayMarkForCell,
@@ -27,6 +27,8 @@ export type ShiftDraft =
       defaultZone?: string;
       /** Copia horario, pausa, puesto y estado desde un turno (añadir persona al mismo bloque). */
       cloneSlotFrom?: StaffShift;
+      /** Horario inicial al abrir desde doble toque / «Añadir turno» en cuadrante operativo. */
+      quickPreset?: QuickShiftPreset;
     }
   | { mode: 'edit'; shift: StaffShift };
 
@@ -117,6 +119,17 @@ export default function ShiftEditorModal({
         setNotes('');
         setStatus(tpl.status);
         setColorHint(tpl.colorHint?.trim() ? tpl.colorHint : z ? zoneDefaultColorHint(z) ?? '' : '');
+      } else if (draft.quickPreset) {
+        const qp = draft.quickPreset;
+        setStartTime(shortTimeForInput(qp.startTime));
+        setEndTime(shortTimeForInput(qp.endTime));
+        setEndsNextDay(qp.endsNextDay);
+        setBreakMinutes(qp.breakMinutes);
+        const dz = (draft.defaultZone ?? '').trim();
+        setZone(dz);
+        setNotes('');
+        setStatus('planned');
+        setColorHint(dz ? zoneDefaultColorHint(dz) ?? '' : '');
       } else {
         setStartTime('09:00');
         setEndTime('17:00');
