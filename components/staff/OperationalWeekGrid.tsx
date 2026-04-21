@@ -375,7 +375,7 @@ export default function OperationalWeekGrid({
         <table className="w-full min-w-[2520px] border-collapse text-left text-[10px] sm:min-w-[2790px] sm:text-xs">
           <thead>
             <tr className="bg-zinc-50">
-              <th className="sticky left-0 z-20 min-w-[5.5rem] border-b border-r border-zinc-200 bg-zinc-50 px-1.5 py-2 text-[9px] font-extrabold uppercase tracking-wide text-zinc-500 sm:min-w-[6.5rem] sm:px-2">
+              <th className="sticky left-0 z-20 min-w-[4rem] border-b border-r border-zinc-200 bg-zinc-50 px-1 py-2 text-[9px] font-extrabold uppercase tracking-wide text-zinc-500 sm:min-w-[4.75rem] sm:px-1.5">
                 Puesto
               </th>
               {days.map((d) => {
@@ -401,8 +401,8 @@ export default function OperationalWeekGrid({
           <tbody>
             {zoneRows.map((row) => (
               <tr key={row.key} className="bg-white">
-                <td className="sticky left-0 z-10 border-b border-r border-zinc-100 bg-white px-1.5 py-1 align-top sm:px-2">
-                  <div className="flex min-w-0 items-center gap-1.5">
+                <td className="sticky left-0 z-10 border-b border-r border-zinc-100 bg-white px-1 py-1 align-top sm:px-1.5">
+                  <div className="flex min-w-0 items-center gap-1">
                     <span
                       className="h-2.5 w-2.5 shrink-0 rounded-full ring-1 ring-black/10"
                       style={{ background: zoneBlockStyle(row.key).bg }}
@@ -476,7 +476,7 @@ export default function OperationalWeekGrid({
           </tbody>
           <tfoot>
             <tr className="bg-zinc-50/90">
-              <td className="sticky left-0 z-10 border-t border-r border-zinc-200 px-1.5 py-2 text-[9px] font-extrabold uppercase text-zinc-600 sm:px-2 sm:text-[10px]">
+              <td className="sticky left-0 z-10 border-t border-r border-zinc-200 px-1 py-2 text-[9px] font-extrabold uppercase text-zinc-600 sm:px-1.5 sm:text-[10px]">
                 Resumen
               </td>
               {days.map((d) => {

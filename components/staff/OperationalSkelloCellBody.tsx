@@ -255,26 +255,35 @@ function OperationalSkelloCellBodyInner({
     );
 
     return (
-      <div key={sOne.id} className="mx-auto flex min-w-0 w-[85%] max-w-full flex-col gap-1">
+      <div key={sOne.id} className="flex min-w-0 w-full max-w-full flex-col gap-1">
         <div
           className={[
-            'flex w-full max-w-full min-w-0 shrink-0 flex-row items-stretch overflow-hidden',
-            canEdit ? 'rounded-lg ring-1 ring-black/[0.08]' : '',
-            selectedShiftId === sOne.id ? 'ring-2 ring-zinc-900/45' : '',
+            'flex w-full max-w-full min-w-0 shrink-0 flex-row items-stretch overflow-hidden rounded-lg',
+            selectedShiftId === sOne.id ? 'ring-2 ring-zinc-900/45 ring-offset-0' : '',
           ].join(' ')}
         >
           {canEdit ? (
             <>
               <div
-                className="flex w-10 shrink-0 flex-col items-stretch justify-between self-stretch rounded-l-lg border-y border-l border-zinc-200/90 bg-zinc-100 px-0.5 py-1"
+                className="flex w-10 shrink-0 flex-col items-center self-stretch rounded-l-lg border-y border-l border-zinc-200/90 bg-zinc-100 px-0.5 py-1.5"
                 onPointerDown={(e) => e.stopPropagation()}
                 onClick={(e) => e.stopPropagation()}
               >
+                <button
+                  type="button"
+                  className="mb-2 shrink-0 rounded px-0.5 py-0.5 text-[7px] font-extrabold leading-tight text-red-700 hover:bg-red-100/90 sm:text-[8px]"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    void removeShiftFromGroup(sOne);
+                  }}
+                >
+                  Quitar
+                </button>
                 <div
                   draggable
                   onDragStart={(e) => onDragStart(e, sOne.id)}
                   onDragEnd={onDragEnd}
-                  className="flex min-h-[1.1rem] flex-1 cursor-grab touch-none items-center justify-center text-zinc-800 active:cursor-grabbing"
+                  className="flex min-h-[1.35rem] flex-1 w-full cursor-grab touch-none items-center justify-center text-zinc-800 active:cursor-grabbing"
                   title="Mover a otro día o puesto"
                   aria-label="Arrastrar turno"
                   onPointerDown={(e) => e.stopPropagation()}
@@ -282,28 +291,16 @@ function OperationalSkelloCellBodyInner({
                 >
                   <GripVertical className="h-2.5 w-2.5 opacity-80 sm:h-3 sm:w-3" />
                 </div>
-                <div className="flex flex-col items-center gap-0.5 pb-0.5">
-                  <button
-                    type="button"
-                    className="rounded px-0.5 py-px text-[7px] font-extrabold leading-none text-zinc-700 underline decoration-zinc-300/90 hover:bg-zinc-200/80 sm:text-[8px]"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onShiftAdvancedEdit(sOne);
-                    }}
-                  >
-                    Editar
-                  </button>
-                  <button
-                    type="button"
-                    className="rounded px-0.5 py-px text-[7px] font-extrabold leading-none text-red-700 hover:bg-red-100/90 sm:text-[8px]"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      void removeShiftFromGroup(sOne);
-                    }}
-                  >
-                    Quitar
-                  </button>
-                </div>
+                <button
+                  type="button"
+                  className="mt-2 shrink-0 rounded px-0.5 py-0.5 text-[7px] font-extrabold leading-tight text-zinc-700 underline decoration-zinc-300/90 hover:bg-zinc-200/80 sm:text-[8px]"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onShiftAdvancedEdit(sOne);
+                  }}
+                >
+                  Editar
+                </button>
               </div>
               {rowShell}
             </>
@@ -327,7 +324,7 @@ function OperationalSkelloCellBodyInner({
           ))}
         </div>
       ) : null}
-      <div className="max-h-[min(40vh,20rem)] overflow-y-auto overflow-x-hidden rounded-md border border-zinc-200 bg-zinc-50 p-1 shadow-sm">
+      <div className="max-h-[min(40vh,20rem)] overflow-y-auto overflow-x-hidden">
         <div className="flex flex-col gap-2">{sortedShifts.map(renderShiftRow)}</div>
       </div>
       {canEdit ? (
