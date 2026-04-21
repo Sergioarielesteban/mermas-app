@@ -144,6 +144,8 @@ function planLabel(plan: 'OPERATIVO' | 'CONTROL' | 'PRO'): string {
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
+  const isPlanningFullBleed =
+    pathname === '/personal/planificacion' || pathname?.startsWith('/personal/planificacion/');
   const [open, setOpen] = useState(false);
   const [confirmLogoutOpen, setConfirmLogoutOpen] = useState(false);
   const {
@@ -521,7 +523,14 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         </div>
       </aside>
 
-      <main className="mx-auto min-h-0 w-full max-w-full flex-1 overflow-y-auto overscroll-contain px-4 py-5 sm:max-w-2xl sm:px-5 md:max-w-4xl md:px-6 md:py-6 lg:max-w-5xl lg:px-8">
+      <main
+        className={[
+          'min-h-0 w-full flex-1 overflow-y-auto overscroll-contain py-5 md:py-6',
+          isPlanningFullBleed
+            ? 'px-2 sm:px-3 md:px-4 lg:px-5'
+            : 'mx-auto max-w-full px-4 sm:max-w-2xl sm:px-5 md:max-w-4xl md:px-6 lg:max-w-5xl lg:px-8',
+        ].join(' ')}
+      >
         {pathname !== '/panel' && !pathname?.startsWith('/panel/') ? (
           <div className="mb-4 space-y-1.5 print:hidden">
             <button
