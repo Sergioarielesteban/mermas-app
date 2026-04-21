@@ -65,7 +65,13 @@ export default function LoginPage() {
         ].join(' ')}
       >
         <div className="flex w-full max-w-md flex-col items-center text-center">
-          <Logo variant="login" className="shrink-0 drop-shadow-sm" fetchPriority="high" />
+          <div className="w-full overflow-hidden -mb-12 sm:-mb-14">
+            <Logo
+              variant="login"
+              className="-mt-[24%] -mb-[26%] shrink-0 drop-shadow-sm"
+              fetchPriority="high"
+            />
+          </div>
 
           <form
             onSubmit={handleSubmit}
