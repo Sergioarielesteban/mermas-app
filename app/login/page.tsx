@@ -69,7 +69,7 @@ export default function LoginPage() {
 
           <form
             onSubmit={handleSubmit}
-            className="mt-3 w-full space-y-5 rounded-2xl border border-zinc-200/90 bg-white px-4 py-6 text-left shadow-[0_20px_50px_-28px_rgba(15,23,42,0.2)] sm:mt-4 sm:space-y-5 sm:px-5 sm:py-7"
+            className="mt-1 w-full space-y-5 rounded-2xl border border-zinc-200/90 bg-white px-4 py-6 text-left shadow-[0_20px_50px_-28px_rgba(15,23,42,0.2)] sm:mt-2 sm:space-y-5 sm:px-5 sm:py-7"
           >
             <div className="text-center sm:text-left">
               <h1 className="text-2xl font-black tracking-tight text-zinc-900 sm:text-[1.65rem]">
