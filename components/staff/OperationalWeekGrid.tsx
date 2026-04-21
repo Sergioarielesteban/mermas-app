@@ -372,16 +372,7 @@ export default function OperationalWeekGrid({
 
   return (
     <div className="space-y-2">
-      {canEdit ? (
-        <p className="text-[10px] text-zinc-500 sm:text-[11px]">
-          Vista por puesto: turnos en lista vertical por día (sin solapamiento). Asa izquierda = arrastrar a otro día o
-          puesto · toque largo en la tarjeta = edición avanzada · «Añadir en [puesto]» bajo el nombre del puesto · doble
-          toque en celda vacía = turno rápido.{' '}
-          {franjaBanner}
-        </p>
-      ) : (
-        <p className="text-[10px] text-zinc-500 sm:text-[11px]">{franjaBanner}</p>
-      )}
+      <p className="text-[10px] text-zinc-500 sm:text-[11px]">{franjaBanner}</p>
 
       <div className="flex flex-wrap items-center gap-2">
         {canEdit ? (

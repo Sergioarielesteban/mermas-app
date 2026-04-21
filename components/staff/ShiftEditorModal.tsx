@@ -112,7 +112,7 @@ export default function ShiftEditorModal({
       if (tpl) {
         setStartTime(shortTimeForInput(tpl.startTime));
         setEndTime(shortTimeForInput(tpl.endTime));
-        setEndsNextDay(tpl.endsNextDay);
+        setEndsNextDay(false);
         setBreakMinutes(tpl.breakMinutes);
         const z = (tpl.zone ?? draft.defaultZone ?? '').trim();
         setZone(z);
@@ -123,7 +123,7 @@ export default function ShiftEditorModal({
         const qp = draft.quickPreset;
         setStartTime(shortTimeForInput(qp.startTime));
         setEndTime(shortTimeForInput(qp.endTime));
-        setEndsNextDay(qp.endsNextDay);
+        setEndsNextDay(false);
         setBreakMinutes(qp.breakMinutes);
         const dz = (draft.defaultZone ?? '').trim();
         setZone(dz);
@@ -163,10 +163,10 @@ export default function ShiftEditorModal({
     const week = new Set(weekDayPickMeta.map((x) => x.ymd));
     setRepeatDayYmds((prev) => {
       const next = new Set<string>();
-      next.add(shiftDate);
       for (const y of prev) {
         if (week.has(y)) next.add(y);
       }
+      if (next.size === 0) next.add(shiftDate);
       return next;
     });
   }, [open, draft, shiftDate, weekDayPickMeta]);
@@ -190,13 +190,6 @@ export default function ShiftEditorModal({
   };
 
   const handleRepeatDayTap = (ymd: string) => {
-    const anchor = ymd === shiftDate;
-    if (anchor) return;
-    if (repeatDayYmds.size === 1 && repeatDayYmds.has(shiftDate)) {
-      setShiftDate(ymd);
-      setRepeatDayYmds(new Set([ymd]));
-      return;
-    }
     setRepeatDayYmds((prev) => {
       const next = new Set(prev);
       if (next.has(ymd)) next.delete(ymd);
@@ -308,7 +301,7 @@ export default function ShiftEditorModal({
         className="fixed inset-0 z-[60] bg-black/40"
         onClick={() => !busy && onClose()}
       />
-      <div className="fixed inset-x-0 bottom-0 z-[70] flex max-h-[92vh] flex-col overflow-hidden rounded-t-3xl bg-white shadow-2xl ring-1 ring-zinc-200 sm:inset-auto sm:left-1/2 sm:top-1/2 sm:w-full sm:max-h-[min(92vh,720px)] sm:max-w-lg sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-3xl">
+      <div className="fixed inset-x-0 bottom-0 z-[70] flex max-h-[92vh] flex-col overflow-x-hidden overflow-y-hidden rounded-t-3xl bg-white shadow-2xl ring-1 ring-zinc-200 sm:inset-auto sm:left-1/2 sm:top-1/2 sm:w-full sm:max-h-[min(92vh,720px)] sm:max-w-lg sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-3xl">
         <div className="flex shrink-0 items-center justify-between gap-2 border-b border-zinc-100 px-4 pb-3 pt-4">
           <p className="text-base font-extrabold text-zinc-900">
             {draft.mode === 'new' ? 'Nuevo turno' : 'Editar turno'}
@@ -323,7 +316,7 @@ export default function ShiftEditorModal({
           </button>
         </div>
         <form onSubmit={onSubmit} className="flex min-h-0 flex-1 flex-col">
-          <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-y-contain px-4 py-3 pb-[calc(8rem+env(safe-area-inset-bottom,0px))] sm:pb-3">
+          <div className="min-h-0 flex-1 space-y-3 overflow-x-hidden overflow-y-auto overscroll-y-contain touch-pan-y px-4 py-3 pb-[calc(8rem+env(safe-area-inset-bottom,0px))] sm:pb-3">
           <label className="block text-xs font-bold text-zinc-600">
             Empleado
             <select
@@ -358,27 +351,16 @@ export default function ShiftEditorModal({
               <div className="mt-2 flex flex-wrap justify-center gap-1.5">
                 {weekDayPickMeta.map(({ ymd, label }) => {
                   const on = repeatDayYmds.has(ymd);
-                  const anchor = ymd === shiftDate;
                   return (
                     <button
                       key={ymd}
                       type="button"
-                      title={
-                        anchor
-                          ? 'Día base'
-                          : repeatDayYmds.size === 1 && repeatDayYmds.has(shiftDate)
-                            ? 'Cambiar a este día'
-                            : on
-                              ? 'Quitar este día'
-                              : 'Añadir este día'
-                      }
+                      title={on ? 'Quitar este día' : 'Añadir este día'}
                       className={[
                         'min-w-[2.25rem] rounded-lg px-2 py-1.5 text-xs font-extrabold ring-1 transition-colors',
-                        anchor
-                          ? 'cursor-default bg-zinc-900 text-white ring-zinc-900'
-                          : on
-                            ? 'bg-emerald-600 text-white ring-emerald-700 hover:bg-emerald-700'
-                            : 'bg-white text-zinc-700 ring-zinc-200 hover:bg-zinc-100',
+                        on
+                          ? 'bg-zinc-900 text-white ring-zinc-900'
+                          : 'bg-white text-zinc-700 ring-zinc-200 hover:bg-zinc-100',
                       ].join(' ')}
                       onClick={() => handleRepeatDayTap(ymd)}
                     >
@@ -436,7 +418,7 @@ export default function ShiftEditorModal({
                   onClick={() => {
                     setStartTime(p.startTime);
                     setEndTime(p.endTime);
-                    setEndsNextDay(p.endsNextDay);
+                    setEndsNextDay(false);
                     setBreakMinutes(p.breakMinutes);
                   }}
                 >
