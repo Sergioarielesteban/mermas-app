@@ -332,20 +332,64 @@ export default function PersonalResumenPage() {
         </div>
       ) : (
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 md:grid-cols-4">
-        <StatCard label="Equipo activo" value={employees.length} Icon={Users} tone="zinc" />
-        <StatCard label="Planif. hoy" value={plannedEmps.size} Icon={Clock} tone="red" />
-        <StatCard label="Ficharon" value={clockedIds.size} Icon={Clock} tone="emerald" />
-        <StatCard label="Pend. entrada" value={pendingClock.length} Icon={AlertTriangle} tone="amber" />
-        <StatCard label="Retrasos / sin fichar" value={lateHints} Icon={AlertTriangle} tone="amber" />
-        <StatCard label="Incidencias" value={openInc} Icon={AlertTriangle} tone="red" />
+        <StatCard
+          label="Equipo activo"
+          value={employees.length}
+          Icon={Users}
+          tone="zinc"
+          href="/personal/control?filter=equipo"
+        />
+        <StatCard
+          label="Planif. hoy"
+          value={plannedEmps.size}
+          Icon={Clock}
+          tone="red"
+          href="/personal/control?filter=planif_hoy"
+        />
+        <StatCard
+          label="Ficharon"
+          value={clockedIds.size}
+          Icon={Clock}
+          tone="emerald"
+          href="/personal/control?filter=ficharon"
+        />
+        <StatCard
+          label="Pend. entrada"
+          value={pendingClock.length}
+          Icon={AlertTriangle}
+          tone="amber"
+          href="/personal/control?filter=pendientes"
+        />
+        <StatCard
+          label="Retrasos / sin fichar"
+          value={lateHints}
+          Icon={AlertTriangle}
+          tone="amber"
+          href="/personal/control?filter=retrasos"
+        />
+        <StatCard
+          label="Incidencias"
+          value={openInc}
+          Icon={AlertTriangle}
+          tone="red"
+          href="/personal/control?filter=incidencias"
+        />
         <StatCard
           label="Horas plan."
           value={formatMinutesHuman(plannedMin)}
           sub
           Icon={Clock}
           tone="zinc"
+          href="/personal/control?filter=horas_plan"
         />
-        <StatCard label="Horas trab." value={formatMinutesHuman(workedMin)} sub Icon={Clock} tone="emerald" />
+        <StatCard
+          label="Horas trab."
+          value={formatMinutesHuman(workedMin)}
+          sub
+          Icon={Clock}
+          tone="emerald"
+          href="/personal/control?filter=horas_trabajadas"
+        />
       </div>
       )}
 
@@ -409,12 +453,14 @@ function StatCard({
   sub,
   Icon,
   tone,
+  href,
 }: {
   label: string;
   value: string | number;
   sub?: boolean;
   Icon: LucideIcon;
   tone: 'zinc' | 'red' | 'emerald' | 'amber';
+  href?: string;
 }) {
   const ring =
     tone === 'red'
@@ -432,8 +478,9 @@ function StatCard({
         : tone === 'amber'
           ? 'text-amber-800'
           : 'text-zinc-600';
-  return (
-    <div className={`rounded-2xl p-3 ring-1 md:p-4 ${ring}`}>
+  const shell = `rounded-2xl p-3 ring-1 md:p-4 ${ring}`;
+  const inner = (
+    <>
       <Icon className={`h-4 w-4 md:h-5 md:w-5 ${icon}`} strokeWidth={2.2} />
       <p className="mt-2 text-[10px] font-extrabold uppercase leading-tight text-zinc-500 md:text-[11px]">{label}</p>
       <p
@@ -441,6 +488,17 @@ function StatCard({
       >
         {value}
       </p>
-    </div>
+    </>
   );
+  if (href) {
+    return (
+      <Link
+        href={href}
+        className={`${shell} block cursor-pointer transition hover:ring-2 hover:ring-[#D32F2F]/20 focus-visible:outline focus-visible:ring-2 focus-visible:ring-[#D32F2F]/35 active:scale-[0.99]`}
+      >
+        {inner}
+      </Link>
+    );
+  }
+  return <div className={shell}>{inner}</div>;
 }
