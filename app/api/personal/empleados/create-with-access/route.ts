@@ -46,6 +46,11 @@ function cleanEmail(v: unknown): string {
   return cleanText(v, 220).toLowerCase();
 }
 
+function cleanPin(v: unknown): string | null {
+  const digits = cleanText(v, 16).replace(/\D/g, '').slice(0, 4);
+  return digits || null;
+}
+
 function isRoleOperational(role: ProfileAppRole): boolean {
   return role === 'admin' || role === 'manager';
 }
@@ -60,6 +65,13 @@ async function countOperationalUsers(localId: string): Promise<number> {
     `profiles?local_id=eq.${encodeURIComponent(localId)}&is_active=eq.true&role=in.(admin,manager)&select=user_id`,
   );
   return rows.length;
+}
+
+async function pinAlreadyInUse(localId: string, pin: string): Promise<boolean> {
+  const rows = await adminRestGet<Array<{ id?: string }>>(
+    `staff_employees?local_id=eq.${encodeURIComponent(localId)}&pin_fichaje=eq.${encodeURIComponent(pin)}&select=id&limit=1`,
+  );
+  return rows.length > 0;
 }
 
 export async function POST(request: Request) {
@@ -92,7 +104,11 @@ export async function POST(request: Request) {
     const email = cleanEmail(body.email) || null;
     const operationalRole = cleanNullable(body.operationalRole, 120);
     const color = cleanNullable(body.color, 20);
-    const pinFichaje = cleanText(body.pinFichaje, 4) || null;
+    const pinFichaje = cleanPin(body.pinFichaje);
+    if (pinFichaje && (await pinAlreadyInUse(actor.localId, pinFichaje))) {
+      return NextResponse.json({ ok: false, error: 'Este PIN ya está asignado a otro trabajador' }, { status: 409 });
+    }
+
     const createAccess = body.createAccess === true;
 
     if (!createAccess) {
@@ -185,9 +201,13 @@ export async function POST(request: Request) {
           active: true,
         },
       ]);
-    } catch {
+    } catch (e) {
       await adminRestDelete(`profiles?user_id=eq.${encodeURIComponent(createdAuthUserId)}`).catch(() => {});
       await adminDeleteAuthUser(createdAuthUserId).catch(() => {});
+      const msg = e instanceof Error ? e.message.toLowerCase() : '';
+      if (msg.includes('duplicate key') || msg.includes('unique') || msg.includes('pin')) {
+        return NextResponse.json({ ok: false, error: 'Este PIN ya está asignado a otro trabajador' }, { status: 409 });
+      }
       return NextResponse.json({ ok: false, error: 'No se pudo crear el empleado' }, { status: 502 });
     }
 

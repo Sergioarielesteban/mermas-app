@@ -16,6 +16,34 @@ import type {
   StaffTimeEventType,
 } from '@/lib/staff/types';
 
+function normalizeStaffPin(pin: string | null | undefined): string | null {
+  const cleaned = String(pin ?? '')
+    .replace(/\D/g, '')
+    .slice(0, 4)
+    .trim();
+  return cleaned || null;
+}
+
+export async function isStaffPinAvailable(
+  supabase: SupabaseClient,
+  input: { localId: string; pin: string; excludeEmployeeId?: string | null },
+): Promise<boolean> {
+  const normalizedPin = normalizeStaffPin(input.pin);
+  if (!normalizedPin) return true;
+  let q = supabase
+    .from('staff_employees')
+    .select('id')
+    .eq('local_id', input.localId)
+    .eq('pin_fichaje', normalizedPin)
+    .limit(1);
+  if (input.excludeEmployeeId) {
+    q = q.neq('id', input.excludeEmployeeId);
+  }
+  const { data, error } = await q;
+  if (error) throw new Error(error.message);
+  return (data ?? []).length === 0;
+}
+
 function mapEmployee(r: Record<string, unknown>): StaffEmployee {
   return {
     id: String(r.id),
@@ -182,6 +210,14 @@ export async function createStaffEmployee(
     userId?: string | null;
   },
 ): Promise<StaffEmployee> {
+  const normalizedPin = normalizeStaffPin(input.pinFichaje);
+  if (normalizedPin) {
+    const available = await isStaffPinAvailable(supabase, {
+      localId: input.localId,
+      pin: normalizedPin,
+    });
+    if (!available) throw new Error('Este PIN ya está asignado a otro trabajador');
+  }
   const { data, error } = await supabase
     .from('staff_employees')
     .insert({
@@ -195,7 +231,7 @@ export async function createStaffEmployee(
       weekly_hours_target: input.weeklyHoursTarget ?? null,
       workday_type: input.workdayType?.trim() || null,
       color: input.color?.trim() || null,
-      pin_fichaje: input.pinFichaje?.trim() || null,
+      pin_fichaje: normalizedPin,
       user_id: input.userId ?? null,
       active: true,
     })
@@ -203,7 +239,11 @@ export async function createStaffEmployee(
       'id,local_id,user_id,first_name,last_name,alias,phone,email,operational_role,weekly_hours_target,workday_type,color,pin_fichaje,active,created_at,updated_at',
     )
     .single();
-  if (error || !data) throw new Error(error?.message ?? 'No se pudo crear el empleado');
+  if (error || !data) {
+    const code = (error as { code?: string } | null)?.code ?? '';
+    if (code === '23505') throw new Error('Este PIN ya está asignado a otro trabajador');
+    throw new Error(error?.message ?? 'No se pudo crear el empleado');
+  }
   return mapEmployee(data as Record<string, unknown>);
 }
 
@@ -235,11 +275,34 @@ export async function updateStaffEmployee(
   if (patch.weeklyHoursTarget !== undefined) row.weekly_hours_target = patch.weeklyHoursTarget;
   if (patch.workdayType !== undefined) row.workday_type = patch.workdayType?.trim() || null;
   if (patch.color !== undefined) row.color = patch.color?.trim() || null;
-  if (patch.pinFichaje !== undefined) row.pin_fichaje = patch.pinFichaje?.trim() || null;
+  if (patch.pinFichaje !== undefined) row.pin_fichaje = normalizeStaffPin(patch.pinFichaje);
   if (patch.userId !== undefined) row.user_id = patch.userId;
   if (patch.active !== undefined) row.active = patch.active;
+  if (patch.pinFichaje !== undefined) {
+    const normalizedPin = normalizeStaffPin(patch.pinFichaje);
+    if (normalizedPin) {
+      const { data: currentRow, error: currentErr } = await supabase
+        .from('staff_employees')
+        .select('local_id')
+        .eq('id', id)
+        .maybeSingle();
+      if (currentErr) throw new Error(currentErr.message);
+      const localId = currentRow?.local_id ? String(currentRow.local_id) : null;
+      if (!localId) throw new Error('No se pudo validar el local del empleado');
+      const available = await isStaffPinAvailable(supabase, {
+        localId,
+        pin: normalizedPin,
+        excludeEmployeeId: id,
+      });
+      if (!available) throw new Error('Este PIN ya está asignado a otro trabajador');
+    }
+  }
   const { error } = await supabase.from('staff_employees').update(row).eq('id', id);
-  if (error) throw new Error(error.message);
+  if (error) {
+    const code = (error as { code?: string } | null)?.code ?? '';
+    if (code === '23505') throw new Error('Este PIN ya está asignado a otro trabajador');
+    throw new Error(error.message);
+  }
 }
 
 export async function deleteStaffEmployee(supabase: SupabaseClient, id: string): Promise<void> {

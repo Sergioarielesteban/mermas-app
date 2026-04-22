@@ -13,6 +13,7 @@ import {
   createStaffEmployee,
   deleteStaffEmployee,
   fetchStaffEmployees,
+  isStaffPinAvailable,
   staffDisplayName,
   updateStaffEmployee,
 } from '@/lib/staff/staff-supabase';
@@ -61,6 +62,8 @@ export default function PersonalEmpleadosPage() {
   const [clearPin, setClearPin] = useState(false);
   const [linkedAppRole, setLinkedAppRole] = useState<ProfileAppRole>('staff');
   const [linkedProfileEmail, setLinkedProfileEmail] = useState<string | null>(null);
+  const [pinDuplicateError, setPinDuplicateError] = useState<string | null>(null);
+  const [pinChecking, setPinChecking] = useState(false);
   const isAdminActor = profileRole === 'admin';
   const roleConsumesOperationalSlot =
     createAccess && (appRole === 'admin' || appRole === 'manager') && isAdminActor;
@@ -88,6 +91,8 @@ export default function PersonalEmpleadosPage() {
     setAccessEmail('');
     setTempPassword('');
     setAppRole('staff');
+    setPinDuplicateError(null);
+    setPinChecking(false);
   };
 
   const openCreateModal = () => {
@@ -202,12 +207,61 @@ export default function PersonalEmpleadosPage() {
     };
   }, [formMode, editingUserId, localId]);
 
+  useEffect(() => {
+    if (!formOpen || !localId) {
+      setPinDuplicateError(null);
+      setPinChecking(false);
+      return;
+    }
+    const pinValue = pin.trim();
+    if (clearPin || pinValue.length === 0) {
+      setPinDuplicateError(null);
+      setPinChecking(false);
+      return;
+    }
+    if (pinValue.length < 4) {
+      setPinDuplicateError(null);
+      setPinChecking(false);
+      return;
+    }
+    const supabase = getSupabaseClient();
+    if (!supabase) return;
+    let cancelled = false;
+    setPinChecking(true);
+    const timer = window.setTimeout(() => {
+      void (async () => {
+        try {
+          const available = await isStaffPinAvailable(supabase, {
+            localId,
+            pin: pinValue,
+            excludeEmployeeId: formMode === 'edit' ? editingId : null,
+          });
+          if (cancelled) return;
+          setPinDuplicateError(available ? null : 'Este PIN ya está asignado a otro trabajador');
+        } catch {
+          if (cancelled) return;
+          setPinDuplicateError(null);
+        } finally {
+          if (!cancelled) setPinChecking(false);
+        }
+      })();
+    }, 220);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [formOpen, localId, pin, formMode, editingId, clearPin]);
+
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!localId || !perms.canManageEmployees) return;
     setOkMsg(null);
     const supabase = getSupabaseClient();
     if (!supabase) return;
+    if (pinDuplicateError) {
+      setErr(pinDuplicateError);
+      return;
+    }
     setBusy(true);
     setErr(null);
     try {
@@ -544,6 +598,11 @@ export default function PersonalEmpleadosPage() {
                 value={pin}
                 onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 4))}
               />
+              {pinDuplicateError ? (
+                <p className="text-xs font-bold text-red-700">{pinDuplicateError}</p>
+              ) : pinChecking ? (
+                <p className="text-xs font-semibold text-zinc-500">Comprobando PIN…</p>
+              ) : null}
               {formMode === 'edit' ? (
                 <label className="flex items-center gap-2 text-xs font-bold text-zinc-700">
                   <input
@@ -651,7 +710,7 @@ export default function PersonalEmpleadosPage() {
               <div className="fixed inset-x-0 bottom-0 z-[95] border-t border-zinc-200 bg-white p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:static sm:z-auto sm:border-0 sm:bg-transparent sm:p-0">
                 <button
                   type="submit"
-                  disabled={busy || (formMode === 'create' && userLimitReached)}
+                  disabled={busy || (formMode === 'create' && userLimitReached) || !!pinDuplicateError || pinChecking}
                   className="h-14 w-full rounded-2xl bg-[#D32F2F] px-4 text-base font-extrabold text-white shadow-sm disabled:opacity-50"
                 >
                   {formMode === 'edit' ? 'Guardar cambios' : 'Guardar empleado'}
