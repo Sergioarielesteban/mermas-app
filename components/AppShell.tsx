@@ -23,6 +23,7 @@ import {
   ShoppingCart,
   Package,
   Lock,
+  Soup,
 } from 'lucide-react';
 import { useAuth } from '@/components/AuthProvider';
 import { canAccessCocinaCentralModule, canPlaceCentralSupplyOrder } from '@/lib/cocina-central-permissions';
@@ -75,6 +76,11 @@ function titleForPath(pathname: string | null) {
     if (pathname.startsWith('/checklist/historial')) return 'Historial checklist';
     if (pathname.startsWith('/checklist/correr')) return 'Check list en curso';
     return 'Check list';
+  }
+  if (pathname.startsWith('/servicio')) {
+    if (pathname.startsWith('/servicio/produccion')) return 'Producción (servicio)';
+    if (pathname.startsWith('/servicio/plato')) return 'Plato';
+    return 'Servicio';
   }
   if (pathname.startsWith('/produccion')) {
     if (pathname === '/produccion') return 'Producción';
@@ -194,6 +200,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     const mid: NavItem[] = [
       { href: '/appcc', label: 'APPCC', Icon: ShieldCheck, blocked: isBlockedByPlan('appcc') },
       { href: '/checklist', label: 'Check list', Icon: ListChecks, blocked: isBlockedByPlan('checklist') },
+      { href: '/servicio', label: 'Servicio', Icon: Soup, blocked: isBlockedByPlan('servicio') },
       { href: '/produccion', label: 'Producción', Icon: Factory, blocked: isBlockedByPlan('produccion') },
     ];
     const inv: NavItem[] = canAccessInventario(role)

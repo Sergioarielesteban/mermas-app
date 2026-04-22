@@ -1,12 +1,23 @@
 export const PLAN_MODULES = {
-  OPERATIVO: ['pedidos', 'mermas', 'appcc', 'checklist', 'chat'],
-  CONTROL: ['pedidos', 'mermas', 'appcc', 'checklist', 'chat', 'inventario', 'escandallos', 'produccion'],
+  OPERATIVO: ['pedidos', 'mermas', 'appcc', 'checklist', 'chat', 'servicio'],
+  CONTROL: [
+    'pedidos',
+    'mermas',
+    'appcc',
+    'checklist',
+    'chat',
+    'servicio',
+    'inventario',
+    'escandallos',
+    'produccion',
+  ],
   PRO: [
     'pedidos',
     'mermas',
     'appcc',
     'checklist',
     'chat',
+    'servicio',
     'inventario',
     'escandallos',
     'produccion',
@@ -37,6 +48,7 @@ export function moduleForPath(pathname: string | null): PlanModule | null {
   if (pathname.startsWith('/pedidos')) return 'pedidos';
   if (pathname.startsWith('/appcc')) return 'appcc';
   if (pathname.startsWith('/checklist')) return 'checklist';
+  if (pathname.startsWith('/servicio')) return 'servicio';
   if (pathname.startsWith('/produccion')) return 'produccion';
   if (pathname.startsWith('/inventario')) return 'inventario';
   if (pathname.startsWith('/escandallos')) return 'escandallos';

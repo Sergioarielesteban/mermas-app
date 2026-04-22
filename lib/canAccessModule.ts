@@ -19,12 +19,13 @@ const ROLE_MODULES: Record<ProfileAppRole, readonly PlanModule[]> = {
     'appcc',
     'checklist',
     'chat',
+    'servicio',
     'inventario',
     'produccion',
     'personal',
     'comida_personal',
   ],
-  staff: ['mermas', 'appcc', 'checklist', 'chat', 'produccion', 'personal'],
+  staff: ['mermas', 'appcc', 'checklist', 'chat', 'servicio', 'produccion', 'personal'],
 };
 
 function isAdminRole(role: ProfileAppRole | null | undefined): boolean {

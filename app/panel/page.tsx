@@ -18,6 +18,7 @@ import {
   Package,
   UtensilsCrossed,
   Lock,
+  Soup,
 } from 'lucide-react';
 import { CHEF_ONE_TAPER_LINE_CLASS } from '@/components/ChefOneGlowLine';
 import MermasStyleHero from '@/components/MermasStyleHero';
@@ -179,6 +180,14 @@ export default function PanelControlPage() {
           Icon={Factory}
           tone="red"
           blocked={isBlockedByPlan('produccion')}
+        />
+        <HubTile
+          href="/servicio"
+          label="Servicio"
+          sub="Platos del día, pasos y mise en place"
+          Icon={Soup}
+          tone="red"
+          blocked={isBlockedByPlan('servicio')}
         />
         {canAccessComidaPersonal(role) ? (
           <HubTile
