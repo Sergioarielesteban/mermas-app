@@ -23,6 +23,7 @@ import {
   ChevronRight,
   FileSpreadsheet,
   LayoutDashboard,
+  Layers,
   PieChart as PieChartIcon,
   Receipt,
   RefreshCw,
@@ -509,40 +510,49 @@ export default function EscandallosPage() {
       <MermasStyleHero
         eyebrow="Inteligencia de carta"
         title="Escandallos"
-        description={`Centro de mando: costes, food cost por plato y cierre mensual con ventas reales (teórico vs mix del mes). Crudos: precio medio ponderado de compras (últimos ${ESCANDALLOS_WEIGHTED_PRICE_WINDOW_DAYS} días) cuando hay albaranes con ese producto; si no, precio de ficha en pedidos.`}
+        description={`Panel de control: KPIs, food cost, cierre mensual e importación. La edición de recetas está en el libro y el editor dedicados. PMP crudos: últimos ${ESCANDALLOS_WEIGHTED_PRICE_WINDOW_DAYS} días de compras.`}
         compact
       />
 
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-stretch sm:justify-between sm:gap-4">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <Link
           href="/escandallos/recetas"
-          className="group relative flex min-h-[5.75rem] flex-1 items-center gap-4 overflow-hidden rounded-2xl bg-gradient-to-br from-[#B91C1C] via-[#C62828] to-[#7F1D1D] px-5 py-4 text-white shadow-lg shadow-red-900/25 ring-2 ring-white/20 transition hover:shadow-xl hover:ring-white/35 active:scale-[0.99] sm:min-w-[min(100%,22rem)] sm:max-w-xl"
+          className="group relative flex min-h-[4.75rem] items-center gap-3 overflow-hidden rounded-2xl bg-gradient-to-br from-[#B91C1C] via-[#C62828] to-[#7F1D1D] px-4 py-3 text-white shadow-lg shadow-red-900/25 ring-2 ring-white/20 transition hover:shadow-xl active:scale-[0.99]"
         >
-          <span
-            className="pointer-events-none absolute -right-6 -top-8 h-28 w-28 rounded-full bg-white/10 blur-2xl"
-            aria-hidden
-          />
-          <span className="relative grid h-14 w-14 shrink-0 place-items-center rounded-2xl bg-white/15 ring-2 ring-white/25 backdrop-blur-sm">
-            <BookOpen className="h-7 w-7 text-white" strokeWidth={2.25} aria-hidden />
+          <BookOpen className="relative h-8 w-8 shrink-0 text-white" strokeWidth={2.25} aria-hidden />
+          <span className="relative min-w-0 text-left">
+            <span className="block text-[10px] font-bold uppercase tracking-[0.14em] text-white/80">Libro</span>
+            <span className="block text-sm font-black leading-tight">Recetas de carta</span>
           </span>
-          <span className="relative min-w-0 flex-1 text-left">
-            <span className="block text-[11px] font-bold uppercase tracking-[0.16em] text-white/80">Libro de recetas</span>
-            <span className="mt-0.5 block text-lg font-black leading-tight tracking-tight">Crear y editar recetas</span>
-            <span className="mt-1 block text-xs font-medium leading-snug text-white/85">
-              Platos de carta, ingredientes, PVP y food cost.
-            </span>
+          <ChevronRight className="relative ml-auto h-5 w-5 shrink-0 text-white/90" strokeWidth={2.5} aria-hidden />
+        </Link>
+        <Link
+          href="/escandallos/recetas/bases"
+          className="flex min-h-[4.75rem] items-center gap-3 rounded-2xl border border-violet-200 bg-violet-50/90 px-4 py-3 text-violet-950 shadow-sm ring-1 ring-violet-100 transition hover:bg-violet-100"
+        >
+          <Layers className="h-8 w-8 shrink-0 text-violet-700" aria-hidden />
+          <span className="min-w-0 text-left">
+            <span className="block text-[10px] font-bold uppercase tracking-wide text-violet-800/90">Auxiliar</span>
+            <span className="block text-sm font-black leading-tight">Bases y elaborados</span>
           </span>
-          <ChevronRight
-            className="relative h-6 w-6 shrink-0 text-white/90 transition group-hover:translate-x-0.5"
-            strokeWidth={2.5}
-            aria-hidden
-          />
+          <ChevronRight className="ml-auto h-5 w-5 shrink-0 opacity-70" aria-hidden />
+        </Link>
+        <Link
+          href="/escandallos#cierre-mensual"
+          className="flex min-h-[4.75rem] items-center gap-3 rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-zinc-900 shadow-sm ring-1 ring-zinc-100 transition hover:bg-zinc-50"
+        >
+          <Receipt className="h-8 w-8 shrink-0 text-zinc-500" aria-hidden />
+          <span className="min-w-0 text-left">
+            <span className="block text-[10px] font-bold uppercase tracking-wide text-zinc-500">Mes</span>
+            <span className="block text-sm font-black leading-tight">Cierre ventas</span>
+          </span>
+          <ChevronRight className="ml-auto h-5 w-5 shrink-0 text-zinc-400" aria-hidden />
         </Link>
         <button
           type="button"
           onClick={() => void load()}
           disabled={loading}
-          className="inline-flex min-h-[3.25rem] items-center justify-center gap-2 self-stretch rounded-2xl bg-zinc-950 px-5 text-sm font-semibold text-white shadow-md ring-1 ring-zinc-800/80 transition hover:bg-zinc-900 disabled:opacity-50 sm:min-w-[11rem] sm:self-auto"
+          className="flex min-h-[4.75rem] items-center justify-center gap-2 rounded-2xl bg-zinc-950 px-4 text-sm font-semibold text-white shadow-md ring-1 ring-zinc-800/80 transition hover:bg-zinc-900 disabled:opacity-50"
         >
           <RefreshCw className={`h-4 w-4 shrink-0 ${loading ? 'animate-spin' : ''}`} />
           Actualizar datos
@@ -567,11 +577,11 @@ export default function EscandallosPage() {
             Abre el libro de recetas para dar de alta platos de carta y sus ingredientes.
           </p>
           <Link
-            href="/escandallos/recetas"
+            href="/escandallos/recetas/nuevo"
             className="mt-6 inline-flex items-center gap-2 rounded-xl bg-[#D32F2F] px-5 py-3 text-sm font-bold text-white shadow-md ring-1 ring-red-900/20 transition hover:bg-[#B91C1C]"
           >
             <BookOpen className="h-4 w-4" aria-hidden />
-            Ir al libro de recetas
+            Nueva receta
             <ChevronRight className="h-4 w-4 opacity-90" aria-hidden />
           </Link>
         </div>
@@ -623,6 +633,7 @@ export default function EscandallosPage() {
             </div>
           )}
 
+          <div id="cierre-mensual" className="scroll-mt-24">
           <Section
             title="Cierre mensual · ventas por plato"
             subtitle="Ventas del mes por receta."
@@ -885,6 +896,7 @@ export default function EscandallosPage() {
               </div>
             ) : null}
           </Section>
+          </div>
 
           <div className="grid gap-5 lg:grid-cols-2">
             <Section
@@ -1024,10 +1036,15 @@ export default function EscandallosPage() {
                     return (
                       <tr key={r.id} className="border-b border-zinc-100 hover:bg-zinc-50/80">
                         <td className="px-3 py-2.5 font-semibold text-zinc-900">
-                          {r.name}
-                          <span className="ml-1 text-[10px] font-normal text-zinc-500">
-                            ({r.yieldQty} {r.yieldLabel})
-                          </span>
+                          <Link
+                            href={`/escandallos/recetas/${r.id}/editar`}
+                            className="text-[#B91C1C] underline-offset-2 hover:underline"
+                          >
+                            {r.name}
+                            <span className="ml-1 text-[10px] font-normal text-zinc-500">
+                              ({r.yieldQty} {r.yieldLabel})
+                            </span>
+                          </Link>
                         </td>
                         <td className="px-3 py-2.5 tabular-nums text-zinc-800">{r.costPerYieldEur.toFixed(2)} €</td>
                         <td className="px-3 py-2.5 tabular-nums text-zinc-800">
