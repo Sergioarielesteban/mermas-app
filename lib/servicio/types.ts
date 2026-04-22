@@ -15,7 +15,10 @@ export type ServicioStep = {
 export type ServicioIngredient = { name: string; qty: string };
 
 export type ServicioDish = {
+  /** Id de línea de plan (home) o id de plato en vistas sin plan. */
   id: string;
+  platoId: string;
+  planLineId?: string;
   name: string;
   shortDesc: string;
   course: ServicioCourse;
@@ -24,11 +27,13 @@ export type ServicioDish = {
   status: DishStatus;
   imageUrl: string;
   totalTimeMin: number;
-  difficulty: 'facil' | 'media';
+  difficulty: 'facil' | 'media' | 'alta';
   costeRacionEuro?: number;
   pvpEuro?: number;
   steps: ServicioStep[];
   ingredients: ServicioIngredient[];
+  /** Solo catálogo / editor. */
+  activo?: boolean;
 };
 
 export type MiseItem = {

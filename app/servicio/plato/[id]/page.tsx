@@ -2,26 +2,43 @@
 
 import Image from 'next/image';
 import Link from 'next/link';
-import { useParams, useSearchParams } from 'next/navigation';
-import React, { Suspense, useCallback, useMemo, useRef, useState } from 'react';
-import { ArrowLeft, ChevronDown } from 'lucide-react';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
+import React, { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ArrowLeft, ChevronDown, Pencil } from 'lucide-react';
 import ServicioAllergenChips from '@/components/servicio/ServicioAllergenChips';
 import { getDishById } from '@/lib/servicio/mock-data';
 import { dateKeyLocal, parseDateKeyLocal } from '@/lib/servicio/date-key';
+import { getSupabaseClient } from '@/lib/supabase-client';
+import { useAuth } from '@/components/AuthProvider';
+import { fetchPlatoDetail } from '@/lib/servicio/servicio-supabase';
+import { canManageServicioOperaciones } from '@/lib/servicio/permissions';
+import type { ServicioDish } from '@/lib/servicio/types';
+import type { ServicioPlanEstado } from '@/lib/servicio/constants';
 
 type TabId = 'pasos' | 'ingredientes' | 'alergenos';
 
+function mapPlanEstadoToStatus(estado: ServicioPlanEstado): ServicioDish['status'] {
+  if (estado === 'listo') return 'listo';
+  return 'preparacion';
+}
+
 function PlatoDetailInner() {
   const params = useParams();
+  const router = useRouter();
   const sp = useSearchParams();
   const id = typeof params?.id === 'string' ? params.id : '';
-  const dish = useMemo(() => getDishById(id), [id]);
+  const { localId, profileReady, profileRole } = useAuth();
+  const canManage = canManageServicioOperaciones(profileRole);
+  const supabase = useMemo(() => getSupabaseClient(), []);
+
   const q = sp.get('fecha');
+  const planLineId = sp.get('planLine') ?? '';
   const dateKey = useMemo(() => {
     const p = q ? parseDateKeyLocal(q) : null;
     return p ? dateKeyLocal(p) : dateKeyLocal(new Date());
   }, [q]);
 
+  const [dish, setDish] = useState<ServicioDish | null>(null);
   const [tab, setTab] = useState<TabId>('pasos');
   const [stepDone, setStepDone] = useState<Record<number, boolean>>({});
   const stepsRef = useRef<HTMLDivElement | null>(null);
@@ -32,6 +49,39 @@ function PlatoDetailInner() {
       stepsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     });
   }, []);
+
+  useEffect(() => {
+    if (!id || !profileReady) return;
+    let cancelled = false;
+    void (async () => {
+      let next: ServicioDish | null = null;
+      if (supabase && localId) {
+        next = await fetchPlatoDetail(supabase, localId, id);
+        if (planLineId) {
+          const { data: line } = await supabase
+            .from('servicio_plan_dia')
+            .select('raciones_previstas, estado')
+            .eq('id', planLineId)
+            .eq('local_id', localId)
+            .maybeSingle();
+          if (line && next) {
+            next = {
+              ...next,
+              portions: Number(line.raciones_previstas) || next.portions,
+              status: mapPlanEstadoToStatus(line.estado as ServicioPlanEstado),
+            };
+          }
+        }
+      }
+      if (!next) next = getDishById(id) ?? null;
+      if (!cancelled) setDish(next);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [id, localId, supabase, profileReady, planLineId]);
+
+  const imgUnopt = dish?.imageUrl?.startsWith('/') || dish?.imageUrl?.includes('supabase.co');
 
   if (!dish) {
     return (
@@ -44,7 +94,7 @@ function PlatoDetailInner() {
     );
   }
 
-  const diffLabel = dish.difficulty === 'facil' ? 'Fácil' : 'Media';
+  const diffLabel = dish.difficulty === 'facil' ? 'Fácil' : dish.difficulty === 'media' ? 'Media' : 'Alta';
 
   return (
     <div className="mx-auto max-w-lg space-y-4 px-3 pb-28 pt-2 sm:px-4">
@@ -56,9 +106,17 @@ function PlatoDetailInner() {
         >
           <ArrowLeft className="h-5 w-5" />
         </Link>
-        <h2 className="line-clamp-2 min-w-0 flex-1 text-base font-extrabold leading-tight text-zinc-900">
-          {dish.name}
-        </h2>
+        <h2 className="line-clamp-2 min-w-0 flex-1 text-base font-extrabold leading-tight text-zinc-900">{dish.name}</h2>
+        {canManage ? (
+          <button
+            type="button"
+            onClick={() => router.push(`/servicio/platos/${dish.platoId}/editar`)}
+            className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-zinc-900 text-white"
+            aria-label="Editar plato"
+          >
+            <Pencil className="h-5 w-5" />
+          </button>
+        ) : null}
       </div>
 
       <div className="relative aspect-[16/10] w-full overflow-hidden rounded-2xl bg-zinc-100 ring-1 ring-zinc-200">
@@ -70,6 +128,7 @@ function PlatoDetailInner() {
           sizes="(max-width: 512px) 100vw, 512px"
           priority
           decoding="async"
+          unoptimized={!!imgUnopt}
         />
       </div>
 
@@ -136,11 +195,8 @@ function PlatoDetailInner() {
       <div ref={stepsRef}>
         {tab === 'pasos' ? (
           <ul className="space-y-2">
-            {dish.steps.map((s) => (
-              <li
-                key={s.n}
-                className="flex gap-3 rounded-2xl bg-white p-3 ring-1 ring-zinc-200"
-              >
+            {dish.steps.map((s, idx) => (
+              <li key={`${s.n}-${idx}`} className="flex gap-3 rounded-2xl bg-white p-3 ring-1 ring-zinc-200">
                 <input
                   type="checkbox"
                   checked={!!stepDone[s.n]}
@@ -150,7 +206,7 @@ function PlatoDetailInner() {
                 />
                 <div className="min-w-0 flex-1">
                   <p className="text-[11px] font-extrabold uppercase text-zinc-500">Paso {s.n}</p>
-                  <p className="mt-0.5 text-sm font-semibold leading-snug text-zinc-900 line-clamp-2">{s.text}</p>
+                  <p className="mt-0.5 line-clamp-2 text-sm font-semibold leading-snug text-zinc-900">{s.text}</p>
                   {s.imageUrl ? (
                     <div className="relative mt-2 h-20 w-28 overflow-hidden rounded-xl bg-zinc-100">
                       <Image
@@ -161,6 +217,7 @@ function PlatoDetailInner() {
                         sizes="112px"
                         loading="lazy"
                         decoding="async"
+                        unoptimized={s.imageUrl.includes('supabase.co')}
                       />
                     </div>
                   ) : null}
@@ -172,9 +229,9 @@ function PlatoDetailInner() {
 
         {tab === 'ingredientes' ? (
           <ul className="space-y-2">
-            {dish.ingredients.map((ing) => (
+            {dish.ingredients.map((ing, idx) => (
               <li
-                key={ing.name}
+                key={`${ing.name}-${idx}`}
                 className="flex items-baseline justify-between gap-3 rounded-2xl bg-white px-4 py-3 ring-1 ring-zinc-200"
               >
                 <span className="text-sm font-bold text-zinc-900">{ing.name}</span>
@@ -193,9 +250,7 @@ function PlatoDetailInner() {
             {!dish.allergens.length ? (
               <p className="mt-2 text-sm font-semibold text-zinc-700">Sin alérgenos de los 14 declarados.</p>
             ) : (
-              <p className="mt-2 text-sm font-semibold text-zinc-700">
-                Revisar carta completa si hay dudas con el cliente.
-              </p>
+              <p className="mt-2 text-sm font-semibold text-zinc-700">Revisar carta completa si hay dudas con el cliente.</p>
             )}
           </div>
         ) : null}

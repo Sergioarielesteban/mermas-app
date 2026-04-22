@@ -79,6 +79,8 @@ function titleForPath(pathname: string | null) {
   }
   if (pathname.startsWith('/servicio')) {
     if (pathname.startsWith('/servicio/produccion')) return 'Producción (servicio)';
+    if (pathname.includes('/platos/nuevo')) return 'Nuevo plato';
+    if (pathname.includes('/platos/') && pathname.includes('/editar')) return 'Editar plato';
     if (pathname.startsWith('/servicio/plato')) return 'Plato';
     return 'Servicio';
   }

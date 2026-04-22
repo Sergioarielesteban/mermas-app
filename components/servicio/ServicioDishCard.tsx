@@ -9,8 +9,14 @@ import ServicioAllergenChips from '@/components/servicio/ServicioAllergenChips';
 type Props = { dish: ServicioDish; priority?: boolean; fecha?: string };
 
 function ServicioDishCardInner({ dish, priority = false, fecha }: Props) {
-  const href =
-    fecha && fecha.length ? `/servicio/plato/${dish.id}?fecha=${encodeURIComponent(fecha)}` : `/servicio/plato/${dish.id}`;
+  const pid = dish.platoId ?? dish.id;
+  const href = (() => {
+    if (!fecha?.length) return `/servicio/plato/${pid}`;
+    const qs = new URLSearchParams({ fecha });
+    if (dish.planLineId) qs.set('planLine', dish.planLineId);
+    return `/servicio/plato/${pid}?${qs.toString()}`;
+  })();
+  const imgUnopt = dish.imageUrl.startsWith('/') || dish.imageUrl.includes('supabase.co');
   const statusLabel = dish.status === 'listo' ? 'Listo' : 'En preparación';
   const statusClass =
     dish.status === 'listo'
@@ -32,6 +38,7 @@ function ServicioDishCardInner({ dish, priority = false, fecha }: Props) {
           loading={priority ? 'eager' : 'lazy'}
           priority={priority}
           decoding="async"
+          unoptimized={imgUnopt}
         />
       </div>
       <div className="min-w-0 flex-1">

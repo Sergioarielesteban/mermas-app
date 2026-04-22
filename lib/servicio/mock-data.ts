@@ -8,6 +8,7 @@ function img(id: string, w = 640): string {
 const DISHES: ServicioDish[] = [
   {
     id: 'ens-verde',
+    platoId: 'ens-verde',
     name: 'Ensalada verde',
     shortDesc: 'Brotes, tomate cherry y vinagreta suave.',
     course: 'entrantes',
@@ -32,6 +33,7 @@ const DISHES: ServicioDish[] = [
   },
   {
     id: 'tartar-salmon',
+    platoId: 'tartar-salmon',
     name: 'Tartar de salmón',
     shortDesc: 'Corte fino, limón y eneldo; servir frío.',
     course: 'entrantes',
@@ -56,6 +58,7 @@ const DISHES: ServicioDish[] = [
   },
   {
     id: 'crema-calabaza',
+    platoId: 'crema-calabaza',
     name: 'Crema de calabaza',
     shortDesc: 'Textura fina, toque de nata montada.',
     course: 'principales',
@@ -81,6 +84,7 @@ const DISHES: ServicioDish[] = [
   },
   {
     id: 'bacalao-horno',
+    platoId: 'bacalao-horno',
     name: 'Bacalao al horno',
     shortDesc: 'Con pisto de verduras y aceite de oliva.',
     course: 'principales',
@@ -106,6 +110,7 @@ const DISHES: ServicioDish[] = [
   },
   {
     id: 'pollo-ajillo',
+    platoId: 'pollo-ajillo',
     name: 'Pollo al ajillo',
     shortDesc: 'Muslo deshuesado, ajo laminado y vino blanco.',
     course: 'principales',
@@ -130,6 +135,7 @@ const DISHES: ServicioDish[] = [
   },
   {
     id: 'tarta-queso',
+    platoId: 'tarta-queso',
     name: 'Tarta de queso',
     shortDesc: 'Cremosa, base galleta y frutos rojos.',
     course: 'postres',
