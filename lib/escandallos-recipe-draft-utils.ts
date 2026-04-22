@@ -1,3 +1,4 @@
+import { ESCANDALLO_USAGE_UNIT_PRESETS } from '@/lib/escandallo-ingredient-units';
 import {
   escandalloRecipeUnitForRawProduct,
   lineUnitPriceEur,
@@ -7,13 +8,11 @@ import {
   type EscandalloRawProduct,
   type EscandalloRecipe,
 } from '@/lib/escandallos-supabase';
-import type { Unit } from '@/lib/types';
 
-export const ESCANDALLO_DRAFT_UNITS: { value: Unit; label: string }[] = [
-  { value: 'kg', label: 'kg' },
-  { value: 'ud', label: 'ud' },
-  { value: 'bolsa', label: 'bolsa' },
-  { value: 'racion', label: 'ración' },
+/** Opciones compactas para selects legacy; en UI preferir datalist con presets + texto libre. */
+export const ESCANDALLO_DRAFT_UNITS: { value: string; label: string }[] = [
+  ...ESCANDALLO_USAGE_UNIT_PRESETS.map((u) => ({ value: u, label: u })),
+  { value: 'racion', label: 'racion' },
 ];
 
 export function parseDecimal(raw: string): number | null {
@@ -38,7 +37,7 @@ export type IngredientDraftRow = {
   manualLabel: string;
   manualPrice: string;
   qty: string;
-  unit: Unit;
+  unit: string;
 };
 
 export function emptyIngredientDraft(): IngredientDraftRow {

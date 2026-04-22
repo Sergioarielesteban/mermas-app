@@ -3,6 +3,8 @@
 --
 -- Artículos base (purchase_articles) y vínculo article_id: ejecutar además
 -- supabase-pedidos-migration-purchase-articles.sql cuando quieras esa capa.
+-- Coste por unidad de uso + propagación desde catálogo: opcionalmente
+-- supabase-pedidos-migration-master-article-usage-cost.sql
 
 create table if not exists public.pedido_suppliers (
   id uuid primary key default gen_random_uuid(),

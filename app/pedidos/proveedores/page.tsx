@@ -484,7 +484,14 @@ export default function ProveedoresPage() {
       </section>
 
       <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-zinc-200">
-        <h1 className="text-center text-lg font-black text-zinc-900">PROVEEDORES Y PRODUCTOS</h1>
+        <h1 className="text-center text-lg font-black text-zinc-900">CATÁLOGO DE COMPRA</h1>
+        <p className="mt-2 text-center text-sm text-zinc-600">
+          Proveedores y productos de pedido: precios de ficha, IVA y formatos de envase. El coste interno unificado vive en{' '}
+          <Link href="/pedidos/articulos" className="font-bold text-[#B91C1C] underline">
+            Artículos base
+          </Link>
+          .
+        </p>
       </section>
 
       {message ? (

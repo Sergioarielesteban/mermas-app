@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { ESCANDALLO_USAGE_UNIT_PRESETS, validateEscandalloUsageUnitInput } from '@/lib/escandallo-ingredient-units';
 import {
   AlertTriangle,
   ArrowLeft,
@@ -16,6 +17,7 @@ import {
 } from 'lucide-react';
 import MermasStyleHero from '@/components/MermasStyleHero';
 import { useAuth } from '@/components/AuthProvider';
+import { computeCosteUnitarioUsoEur } from '@/lib/purchase-article-internal-cost';
 import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
 import PedidosPremiaLockedScreen from '@/components/PedidosPremiaLockedScreen';
 import { canAccessPedidos, canUsePedidosModule } from '@/lib/pedidos-access';
@@ -25,6 +27,7 @@ import {
   fetchSupplierCatalogRowsForArticleIds,
   isMissingPurchaseArticlesError,
   labelMetodoCosteMaster,
+  updatePurchaseArticleMasterCostFields,
   type PurchaseArticle,
   type PurchaseArticleDuplicateCandidate,
   type SupplierCatalogRow,
@@ -158,8 +161,8 @@ export default function PedidosArticulosPage() {
       <MermasStyleHero
         slim
         eyebrow="Pedidos"
-        title="Artículos base"
-        description="Referencia interna de compras frente al catálogo por proveedor. Pedidos y recepción siguen usando el producto de proveedor."
+        title="Artículos base (master)"
+        description="Coste interno por unidad de uso; escandallo hereda unidad y coste cuando el crudo enlaza al artículo."
       />
 
       <div className="flex flex-wrap items-center gap-2">
@@ -292,6 +295,7 @@ export default function PedidosArticulosPage() {
               catalogRows={catalogByArticle.get(a.id) ?? []}
               priceHistory={priceHistory}
               priceSamples={priceSamples}
+              onReload={() => void load()}
             />
           ))}
         </ul>
@@ -305,12 +309,52 @@ function ArticleCard({
   catalogRows,
   priceHistory,
   priceSamples,
+  onReload,
 }: {
   article: PurchaseArticle;
   catalogRows: SupplierCatalogRow[];
   priceHistory: Map<string, SupplierProductPriceHistory>;
   priceSamples: Map<string, SupplierProductPriceSample[]>;
+  onReload: () => void;
 }) {
+  const { localId } = useAuth();
+  const supabaseOk = isSupabaseEnabled() && getSupabaseClient();
+  const [masterBusy, setMasterBusy] = useState(false);
+  const [masterMsg, setMasterMsg] = useState<string | null>(null);
+  const [refProdId, setRefProdId] = useState(
+    () => a.referenciaPrincipalSupplierProductId ?? a.createdFromSupplierProductId ?? '',
+  );
+  const [unidadUso, setUnidadUso] = useState(() => {
+    const u = (a.unidadUso ?? a.unidadBase ?? 'kg').trim();
+    return u || 'kg';
+  });
+  const [factorUso, setFactorUso] = useState(() =>
+    a.unidadesUsoPorUnidadCompra != null && a.unidadesUsoPorUnidadCompra > 0 ? String(a.unidadesUsoPorUnidadCompra) : '1',
+  );
+  const [rendPct, setRendPct] = useState(() =>
+    a.rendimientoPct != null && a.rendimientoPct > 0 ? String(a.rendimientoPct) : '100',
+  );
+
+  useEffect(() => {
+    setRefProdId(a.referenciaPrincipalSupplierProductId ?? a.createdFromSupplierProductId ?? '');
+    setUnidadUso((() => {
+      const u = (a.unidadUso ?? a.unidadBase ?? 'kg').trim();
+      return u || 'kg';
+    })());
+    setFactorUso(
+      a.unidadesUsoPorUnidadCompra != null && a.unidadesUsoPorUnidadCompra > 0 ? String(a.unidadesUsoPorUnidadCompra) : '1',
+    );
+    setRendPct(a.rendimientoPct != null && a.rendimientoPct > 0 ? String(a.rendimientoPct) : '100');
+  }, [
+    a.id,
+    a.referenciaPrincipalSupplierProductId,
+    a.createdFromSupplierProductId,
+    a.unidadUso,
+    a.unidadBase,
+    a.unidadesUsoPorUnidadCompra,
+    a.rendimientoPct,
+  ]);
+
   const originId = a.createdFromSupplierProductId;
   const preferredId = a.proveedorPreferidoId;
   const activeRows = catalogRows.filter((r) => r.isActive);
@@ -329,6 +373,64 @@ function ArticleCard({
   const originRow = originId
     ? catalogRows.find((r) => r.id === originId) ?? compareRows[0]
     : compareRows[0];
+
+  const principalRefRow =
+    (refProdId ? compareRows.find((r) => r.id === refProdId) : null) ?? originRow ?? compareRows[0];
+  const compraUnitEur =
+    principalRefRow != null
+      ? principalRefRow.pricePerUnit
+      : a.costeCompraActual ?? master ?? null;
+  const factorNum = Number(String(factorUso).replace(/\s/g, '').replace(',', '.'));
+  const rendNum = Number(String(rendPct).replace(/\s/g, '').replace(',', '.'));
+  const previewCosteUso =
+    compraUnitEur != null && Number.isFinite(factorNum) && factorNum > 0 && Number.isFinite(rendNum)
+      ? computeCosteUnitarioUsoEur(compraUnitEur, factorNum, rendNum > 0 ? rendNum : 100)
+      : null;
+
+  const saveMasterEconomics = async () => {
+    if (!localId || !supabaseOk) return;
+    if (!refProdId) {
+      setMasterMsg('Elige la fila de catálogo de referencia para la compra.');
+      return;
+    }
+    if (!Number.isFinite(factorNum) || factorNum <= 0) {
+      setMasterMsg('Unidades de uso por unidad de compra debe ser mayor que 0.');
+      return;
+    }
+    const usoErr = validateEscandalloUsageUnitInput(unidadUso);
+    if (usoErr) {
+      setMasterMsg(usoErr);
+      return;
+    }
+    if (!Number.isFinite(rendNum) || rendNum <= 0 || rendNum > 100) {
+      setMasterMsg('Rendimiento útil debe ser mayor que 0 y como máximo 100.');
+      return;
+    }
+    setMasterBusy(true);
+    setMasterMsg(null);
+    try {
+      const supabase = getSupabaseClient()!;
+      const cat = compareRows.find((r) => r.id === refProdId);
+      await updatePurchaseArticleMasterCostFields(supabase, localId, a.id, {
+        referenciaPrincipalSupplierProductId: refProdId,
+        unidadCompra: cat?.unit ?? a.unidadCompra,
+        costeCompraActual: cat?.pricePerUnit ?? compraUnitEur ?? undefined,
+        unidadUso: unidadUso.trim(),
+        unidadesUsoPorUnidadCompra: factorNum,
+        rendimientoPct: rendNum,
+        origenCoste: 'app_config',
+      });
+      onReload();
+    } catch (e: unknown) {
+      setMasterMsg(
+        e instanceof Error
+          ? e.message
+          : 'No se pudo guardar. ¿Ejecutaste supabase-pedidos-migration-master-article-usage-cost.sql?',
+      );
+    } finally {
+      setMasterBusy(false);
+    }
+  };
 
   return (
     <li className="overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm ring-1 ring-zinc-100">
@@ -373,15 +475,144 @@ function ArticleCard({
           <ChevronDown className="h-5 w-5 shrink-0 text-zinc-400 transition group-open:rotate-180" aria-hidden />
         </summary>
         <div className="space-y-4 px-4 pb-4 pt-1 sm:px-5 sm:pb-5">
+          <section className="rounded-xl border border-indigo-200/80 bg-indigo-50/40 p-3 ring-1 ring-indigo-100 sm:p-4">
+            <h3 className="text-xs font-black uppercase text-indigo-900">Compra → uso cocina</h3>
+            {masterMsg ? (
+              <p className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-2 py-1.5 text-xs text-amber-950">
+                {masterMsg}
+              </p>
+            ) : null}
+            <div className="mt-3 space-y-3">
+              <div>
+                <p className="text-[10px] font-black uppercase text-indigo-900/80">A) Compra</p>
+                <dl className="mt-1 grid gap-1 text-xs text-zinc-800 sm:grid-cols-2">
+                  <div>
+                    <dt className="font-semibold text-zinc-500">Proveedor habitual</dt>
+                    <dd>{principalRefRow?.supplierName ?? '—'}</dd>
+                  </div>
+                  <div>
+                    <dt className="font-semibold text-zinc-500">Referencia principal</dt>
+                    <dd className="truncate" title={principalRefRow?.name}>
+                      {principalRefRow?.name ?? '—'}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="font-semibold text-zinc-500">Unidad de compra</dt>
+                    <dd>{principalRefRow?.unit ?? a.unidadCompra ?? '—'}</dd>
+                  </div>
+                  <div>
+                    <dt className="font-semibold text-zinc-500">IVA compra</dt>
+                    <dd>{a.ivaCompraPct != null ? `${a.ivaCompraPct} %` : '—'}</dd>
+                  </div>
+                </dl>
+              </div>
+              <div>
+                <p className="text-[10px] font-black uppercase text-indigo-900/80">B) Uso interno</p>
+                <div className="mt-2 grid gap-3 sm:grid-cols-2">
+                  <label className="block text-xs font-semibold text-zinc-700">
+                    Referencia principal (catálogo)
+                    <select
+                      value={refProdId}
+                      disabled={masterBusy || compareRows.length === 0}
+                      onChange={(e) => setRefProdId(e.target.value)}
+                      className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-2 py-2 text-sm"
+                    >
+                      <option value="">—</option>
+                      {compareRows.map((r) => (
+                        <option key={r.id} value={r.id}>
+                          {r.supplierName} · {r.name} ({formatMoney(r.pricePerUnit, 2)}/{r.unit})
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <div className="rounded-lg bg-white/90 px-3 py-2 text-xs ring-1 ring-indigo-100">
+                    <p className="font-bold uppercase text-zinc-500">Coste compra actual</p>
+                    <p className="mt-1 text-lg font-black tabular-nums text-zinc-900">
+                      {compraUnitEur != null ? formatMoney(compraUnitEur, 4) : '—'}
+                    </p>
+                    <p className="text-[10px] text-zinc-500">Sincronizado con la referencia (SQL).</p>
+                  </div>
+                  <label className="block text-xs font-semibold text-zinc-700">
+                    Unidad de uso
+                    <input
+                      list={`pa-usage-${a.id}`}
+                      value={unidadUso}
+                      disabled={masterBusy}
+                      onChange={(e) => setUnidadUso(e.target.value)}
+                      className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-2 py-2 text-sm"
+                      placeholder="loncha, g, ración…"
+                    />
+                    <datalist id={`pa-usage-${a.id}`}>
+                      {ESCANDALLO_USAGE_UNIT_PRESETS.map((u) => (
+                        <option key={u} value={u} />
+                      ))}
+                    </datalist>
+                  </label>
+                  <label className="block text-xs font-semibold text-zinc-700">
+                    Unidades de uso por unidad de compra
+                    <input
+                      value={factorUso}
+                      disabled={masterBusy}
+                      onChange={(e) => setFactorUso(e.target.value)}
+                      className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-2 py-2 text-sm tabular-nums"
+                      inputMode="decimal"
+                      placeholder="Ej. 50 lonchas / 1 kg → 50"
+                    />
+                  </label>
+                  <label className="block text-xs font-semibold text-zinc-700 sm:col-span-1">
+                    Rendimiento útil (%)
+                    <input
+                      value={rendPct}
+                      disabled={masterBusy}
+                      onChange={(e) => setRendPct(e.target.value)}
+                      className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-2 py-2 text-sm tabular-nums"
+                      inputMode="decimal"
+                    />
+                  </label>
+                  <div className="flex flex-col justify-end rounded-lg bg-white/90 px-3 py-2 ring-1 ring-indigo-100 sm:col-span-1">
+                    <p className="text-[10px] font-bold uppercase text-zinc-500">Coste unitario de uso (vista)</p>
+                    <p className="text-lg font-black tabular-nums text-emerald-800">
+                      {previewCosteUso != null ? formatMoney(previewCosteUso, 6) : '—'}
+                    </p>
+                    <p className="text-[10px] text-zinc-500">
+                      En BD: {a.costeUnitarioUso != null ? formatMoney(a.costeUnitarioUso, 6) : '—'}
+                    </p>
+                  </div>
+                </div>
+              </div>
+              <div className="rounded-lg border border-indigo-100 bg-white/60 px-3 py-2 text-xs text-zinc-700">
+                <p className="text-[10px] font-black uppercase text-indigo-900/80">C) Impacto</p>
+                <ul className="mt-1 list-inside list-disc space-y-0.5">
+                  <li>
+                    <strong>Escandallos:</strong> sí (unidad + coste del máster).
+                  </li>
+                  <li>
+                    <strong>Mermas:</strong> no conectado.
+                  </li>
+                  <li>
+                    <strong>Comida personal:</strong> pendiente.
+                  </li>
+                </ul>
+              </div>
+            </div>
+            <button
+              type="button"
+              disabled={masterBusy || !localId || !supabaseOk}
+              onClick={() => void saveMasterEconomics()}
+              className="mt-3 w-full rounded-xl bg-indigo-900 py-2.5 text-sm font-bold text-white disabled:opacity-50 sm:w-auto sm:px-6"
+            >
+              {masterBusy ? 'Guardando…' : 'Guardar conversión y referencia'}
+            </button>
+          </section>
+
           {/* Coste máster */}
           <section className="rounded-xl bg-white p-3 ring-1 ring-zinc-200 sm:p-4">
             <h3 className="flex items-center gap-2 text-xs font-black uppercase text-zinc-600">
               <LineChart className="h-3.5 w-3.5" aria-hidden />
               Coste máster (referencia)
             </h3>
-            <p className="mt-2 text-sm text-zinc-700">
-              Valor almacenado en el artículo para costes e informes. Hoy se rellena al <strong>migrar</strong> o al{' '}
-              <strong>dar de alta</strong> el producto de proveedor; no se recalcula solo al cambiar el precio del catálogo.
+            <p className="mt-2 text-xs text-zinc-600">
+              Histórico / compatibilidad. Coste cocina: <strong>coste_unitario_uso</strong> (bloque B arriba).
             </p>
             <dl className="mt-3 grid gap-2 text-sm sm:grid-cols-2">
               <div>
@@ -484,6 +715,10 @@ function ArticleCard({
                       const isMin =
                         minCatalog != null && row.pricePerUnit === minCatalog && compareRows.length > 1;
                       const isOrigin = originId === row.id;
+                      const isPrincipal =
+                        (a.referenciaPrincipalSupplierProductId != null &&
+                          a.referenciaPrincipalSupplierProductId === row.id) ||
+                        (a.referenciaPrincipalSupplierProductId == null && originId === row.id);
                       const isPref = preferredId === row.supplierId;
                       const deltaM = master != null ? row.pricePerUnit - master : null;
                       return (
@@ -506,6 +741,9 @@ function ArticleCard({
                               ) : null}
                               {isOrigin ? (
                                 <span className="rounded bg-indigo-100 px-1 text-[9px] font-black text-indigo-900">Origen</span>
+                              ) : null}
+                              {isPrincipal ? (
+                                <span className="rounded bg-sky-100 px-1 text-[9px] font-black text-sky-900">Principal</span>
                               ) : null}
                               {isMin ? (
                                 <span className="rounded bg-emerald-200 px-1 text-[9px] font-black text-emerald-900">Mejor</span>

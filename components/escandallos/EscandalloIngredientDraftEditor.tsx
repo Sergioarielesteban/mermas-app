@@ -2,9 +2,9 @@
 
 import React from 'react';
 import { ChevronDown, Plus, Search, Trash2 } from 'lucide-react';
+import { ESCANDALLO_USAGE_UNIT_PRESETS } from '@/lib/escandallo-ingredient-units';
 import {
   emptyIngredientDraft,
-  ESCANDALLO_DRAFT_UNITS,
   estimateDraftRowCostEur,
   type IngredientDraftRow,
 } from '@/lib/escandallos-recipe-draft-utils';
@@ -16,7 +16,6 @@ import {
   type EscandalloRawProduct,
   type EscandalloRecipe,
 } from '@/lib/escandallos-supabase';
-import type { Unit } from '@/lib/types';
 
 export type EscandalloIngredientDraftEditorProps = {
   drafts: IngredientDraftRow[];
@@ -102,6 +101,7 @@ export default function EscandalloIngredientDraftEditor({
                       subRecipeId: '',
                       rawSearch: '',
                       rawDropdownOpen: false,
+                      unit: 'kg',
                     })
                   }
                   className="shrink-0 rounded-lg border border-zinc-200 bg-zinc-50/90 px-2 py-1.5 text-[11px] font-bold uppercase tracking-wide text-zinc-800 outline-none focus:border-[#D32F2F]/40 focus:ring-1 focus:ring-[#D32F2F]/20"
@@ -119,19 +119,41 @@ export default function EscandalloIngredientDraftEditor({
                   inputMode="decimal"
                   placeholder="Cant."
                 />
+                {row.sourceType === 'raw' && row.rawId ? (
+                  <div className="flex w-[5.5rem] shrink-0 flex-col justify-center rounded-lg border border-indigo-100 bg-indigo-50/80 px-1.5 py-1">
+                    <span className="text-[8px] font-bold uppercase text-indigo-800/80">Unidad</span>
+                    <span className="truncate text-xs font-semibold text-indigo-950" title="Viene del artículo máster o del catálogo">
+                      {(() => {
+                        const rp = sortedRaw.find((x) => x.id === row.rawId);
+                        return rp ? escandalloRecipeUnitForRawProduct(rp) : row.unit;
+                      })()}
+                    </span>
+                  </div>
+                ) : null}
+                {row.sourceType === 'processed' && row.processedId ? (
+                  <div className="flex w-[5.5rem] shrink-0 flex-col justify-center rounded-lg border border-zinc-200 bg-zinc-50 px-1.5 py-1">
+                    <span className="text-[8px] font-bold uppercase text-zinc-500">Unidad</span>
+                    <span className="truncate text-xs font-semibold text-zinc-900">
+                      {processedProducts.find((x) => x.id === row.processedId)?.outputUnit ?? row.unit}
+                    </span>
+                  </div>
+                ) : null}
                 {row.sourceType === 'subrecipe' || row.sourceType === 'manual' ? (
-                  <select
-                    value={row.unit}
-                    disabled={disabled}
-                    onChange={(e) => updateRow(row.key, { unit: e.target.value as Unit })}
-                    className="shrink-0 rounded-lg border border-zinc-200 bg-white px-2 py-1.5 text-xs outline-none focus:border-[#D32F2F]/40"
-                  >
-                    {ESCANDALLO_DRAFT_UNITS.map((u) => (
-                      <option key={u.value} value={u.value}>
-                        {u.label}
-                      </option>
-                    ))}
-                  </select>
+                  <>
+                    <input
+                      list={`esc-draft-units-${row.key}`}
+                      value={row.unit}
+                      disabled={disabled}
+                      onChange={(e) => updateRow(row.key, { unit: e.target.value })}
+                      className="w-[6.5rem] shrink-0 rounded-lg border border-zinc-200 bg-white px-2 py-1.5 text-xs outline-none focus:border-[#D32F2F]/40"
+                      placeholder="Ud."
+                    />
+                    <datalist id={`esc-draft-units-${row.key}`}>
+                      {ESCANDALLO_USAGE_UNIT_PRESETS.map((u) => (
+                        <option key={u} value={u} />
+                      ))}
+                    </datalist>
+                  </>
                 ) : null}
                 <div className="min-w-0 flex-1">
                   {row.sourceType === 'raw' ? (

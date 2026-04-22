@@ -3,6 +3,12 @@ import {
   computeWeightedAvgBySupplierProductId,
   ESCANDALLOS_WEIGHTED_PRICE_WINDOW_DAYS,
 } from '@/lib/escandallos-weighted-purchase-prices';
+import {
+  sanitizeEscandalloIngredientUnit,
+  unitsMatchForIngredientCost,
+  type EscandalloIngredientUnit,
+} from '@/lib/escandallo-ingredient-units';
+import { fetchPurchaseArticleCostHintsByIds } from '@/lib/purchase-articles-supabase';
 import { fetchOrders } from '@/lib/pedidos-supabase';
 import type { Unit } from '@/lib/types';
 
@@ -35,7 +41,7 @@ export type EscandalloLine = {
   subRecipeId: string | null;
   label: string;
   qty: number;
-  unit: Unit;
+  unit: EscandalloIngredientUnit;
   manualPricePerUnit: number | null;
   sortOrder: number;
   createdAt: string;
@@ -70,6 +76,15 @@ export type EscandalloRawProduct = {
   unitsPerPack: number;
   /** Unidad en escandallo cuando unitsPerPack > 1. */
   recipeUnit: Unit | null;
+  /** `purchase_articles.id` cuando el catálogo está enlazado. */
+  articleId?: string | null;
+  /**
+   * Coste € por unidad de uso cocina (Artículo Master), si existe y coincide la unidad de la línea.
+   * Tiene prioridad sobre PMP/catálogo en `rawSupplierLineUnitPriceEur`.
+   */
+  internalCostPerUsageUnitEur?: number | null;
+  /** Texto de `purchase_articles.unidad_uso` (debe coincidir con la unidad de la línea para aplicar coste interno). */
+  internalUsageUnitLabel?: string | null;
 };
 
 export type EscandalloProcessedProduct = {
@@ -79,7 +94,7 @@ export type EscandalloProcessedProduct = {
   sourceSupplierProductId: string;
   inputQty: number;
   outputQty: number;
-  outputUnit: Unit;
+  outputUnit: EscandalloIngredientUnit;
   extraCostEur: number;
   notes: string;
   createdAt: string;
@@ -125,6 +140,7 @@ type RawProductRow = {
   price_per_unit: number;
   units_per_pack?: number | null;
   recipe_unit?: string | null;
+  article_id?: string | null;
   pedido_suppliers: { name: string } | { name: string }[] | null;
 };
 
@@ -182,7 +198,7 @@ function mapLine(row: LineRow): EscandalloLine {
     subRecipeId: row.sub_recipe_id ?? null,
     label: row.label,
     qty: Number(row.qty),
-    unit: row.unit as Unit,
+    unit: sanitizeEscandalloIngredientUnit(String(row.unit)),
     manualPricePerUnit:
       row.manual_price_per_unit != null && Number.isFinite(Number(row.manual_price_per_unit))
         ? Number(row.manual_price_per_unit)
@@ -200,7 +216,7 @@ function mapProcessed(row: ProcessedRow): EscandalloProcessedProduct {
     sourceSupplierProductId: row.source_supplier_product_id,
     inputQty: Number(row.input_qty),
     outputQty: Number(row.output_qty),
-    outputUnit: row.output_unit as Unit,
+    outputUnit: sanitizeEscandalloIngredientUnit(String(row.output_unit)),
     extraCostEur: Number(row.extra_cost_eur ?? 0),
     notes: row.notes ?? '',
     createdAt: row.created_at,
@@ -244,7 +260,7 @@ export async function fetchProductsForEscandallo(
 ): Promise<EscandalloRawProduct[]> {
   const { data, error } = await supabase
     .from('pedido_supplier_products')
-    .select('id,supplier_id,name,unit,price_per_unit,units_per_pack,recipe_unit,pedido_suppliers(name)')
+    .select('id,supplier_id,name,unit,price_per_unit,units_per_pack,recipe_unit,article_id,pedido_suppliers(name)')
     .eq('local_id', localId)
     .eq('is_active', true)
     .order('name');
@@ -265,6 +281,7 @@ export async function fetchProductsForEscandallo(
       pricePerUnit: Number(r.price_per_unit),
       unitsPerPack,
       recipeUnit,
+      articleId: r.article_id != null ? String(r.article_id) : null,
     };
   });
 }
@@ -286,30 +303,53 @@ export async function fetchEscandalloRawProductsWithWeightedPurchasePrices(
     orders.filter((o) => o.status !== 'draft'),
     ESCANDALLOS_WEIGHTED_PRICE_WINDOW_DAYS,
   );
-  return products.map((p) => {
+  const withPmp = products.map((p) => {
     const w = weighted.get(p.id);
     if (w != null && w.weightedQty > 0) {
       return { ...p, pricePerUnit: w.weightedAvg };
     }
     return p;
   });
+  const articleIds = withPmp.map((p) => p.articleId).filter((x): x is string => Boolean(x));
+  const hints = await fetchPurchaseArticleCostHintsByIds(supabase, localId, articleIds);
+  return withPmp.map((p) => {
+    if (!p.articleId) return p;
+    const h = hints.get(p.articleId);
+    if (!h) return p;
+    const label = h.unidadUso?.trim().replace(/\s+/g, ' ') ?? '';
+    if (!label) return p;
+    const next: EscandalloRawProduct = { ...p, internalUsageUnitLabel: label };
+    if (h.costeUnitarioUso != null && Number.isFinite(h.costeUnitarioUso)) {
+      return { ...next, internalCostPerUsageUnitEur: h.costeUnitarioUso };
+    }
+    return next;
+  });
 }
 
 /** Unidad en la que se expresa la cantidad del ingrediente en escandallo (p. ej. ud sueltas si la compra es por caja). */
-export function escandalloRecipeUnitForRawProduct(p: EscandalloRawProduct): Unit {
+export function escandalloRecipeUnitForRawProduct(p: EscandalloRawProduct): EscandalloIngredientUnit {
+  const master = p.internalUsageUnitLabel?.trim();
+  if (master) return sanitizeEscandalloIngredientUnit(master);
   const n = p.unitsPerPack > 0 ? p.unitsPerPack : 1;
-  if (n > 1) return p.recipeUnit ?? 'ud';
-  return p.unit;
+  if (n > 1) return sanitizeEscandalloIngredientUnit(String(p.recipeUnit ?? 'ud'));
+  return sanitizeEscandalloIngredientUnit(String(p.unit));
 }
 
 /** € por unidad de receta (o € por unidad de compra si la línea va en envases). */
 export function rawSupplierLineUnitPriceEur(line: EscandalloLine, p: EscandalloRawProduct): number {
+  if (
+    p.internalCostPerUsageUnitEur != null &&
+    p.internalUsageUnitLabel &&
+    unitsMatchForIngredientCost(line.unit, p.internalUsageUnitLabel)
+  ) {
+    return p.internalCostPerUsageUnitEur;
+  }
   const packSize = p.unitsPerPack > 0 ? p.unitsPerPack : 1;
   const recipeU = escandalloRecipeUnitForRawProduct(p);
-  if (line.unit === p.unit) {
+  if (unitsMatchForIngredientCost(line.unit, String(p.unit))) {
     return p.pricePerUnit;
   }
-  if (line.unit === recipeU) {
+  if (unitsMatchForIngredientCost(line.unit, recipeU)) {
     return Math.round((p.pricePerUnit / packSize) * 10000) / 10000;
   }
   if (packSize > 1) {
@@ -352,7 +392,7 @@ export async function insertProcessedProductForEscandallo(
     sourceSupplierProductId: string;
     inputQty: number;
     outputQty: number;
-    outputUnit: Unit;
+    outputUnit: EscandalloIngredientUnit;
     extraCostEur?: number;
     notes?: string;
   },
@@ -365,7 +405,7 @@ export async function insertProcessedProductForEscandallo(
       source_supplier_product_id: payload.sourceSupplierProductId,
       input_qty: Math.round(payload.inputQty * 10000) / 10000,
       output_qty: Math.round(payload.outputQty * 10000) / 10000,
-      output_unit: payload.outputUnit,
+      output_unit: sanitizeEscandalloIngredientUnit(payload.outputUnit),
       extra_cost_eur: Math.max(0, Math.round((payload.extraCostEur ?? 0) * 10000) / 10000),
       notes: (payload.notes ?? '').trim(),
     })
@@ -497,7 +537,7 @@ export async function insertEscandalloLine(
     sourceType: 'raw' | 'processed' | 'manual' | 'subrecipe';
     label: string;
     qty: number;
-    unit: Unit;
+    unit: EscandalloIngredientUnit;
     rawSupplierProductId?: string | null;
     processedProductId?: string | null;
     subRecipeId?: string | null;
@@ -521,7 +561,7 @@ export async function insertEscandalloLine(
       sub_recipe_id: payload.sourceType === 'subrecipe' ? (payload.subRecipeId ?? null) : null,
       label: payload.label.trim(),
       qty: Math.max(0.0001, Math.round(payload.qty * 10000) / 10000),
-      unit: payload.unit,
+      unit: sanitizeEscandalloIngredientUnit(payload.unit),
       manual_price_per_unit:
         payload.sourceType === 'manual' &&
         payload.manualPricePerUnit != null &&
@@ -542,7 +582,7 @@ export type EscandalloLineInsertPayload = {
   sourceType: 'raw' | 'processed' | 'manual' | 'subrecipe';
   label: string;
   qty: number;
-  unit: Unit;
+  unit: EscandalloIngredientUnit;
   rawSupplierProductId?: string | null;
   processedProductId?: string | null;
   subRecipeId?: string | null;
@@ -572,7 +612,7 @@ export async function insertEscandalloLinesBatch(
       sub_recipe_id: payload.sourceType === 'subrecipe' ? (payload.subRecipeId ?? null) : null,
       label: payload.label.trim(),
       qty: Math.max(0.0001, Math.round(payload.qty * 10000) / 10000),
-      unit: payload.unit,
+      unit: sanitizeEscandalloIngredientUnit(payload.unit),
       manual_price_per_unit:
         payload.sourceType === 'manual' &&
         payload.manualPricePerUnit != null &&
@@ -599,7 +639,7 @@ export async function updateEscandalloLine(
   patch: Partial<{
     label: string;
     qty: number;
-    unit: Unit;
+    unit: EscandalloIngredientUnit;
     sourceType: 'raw' | 'processed' | 'manual' | 'subrecipe';
     rawSupplierProductId: string | null;
     processedProductId: string | null;
@@ -611,7 +651,7 @@ export async function updateEscandalloLine(
   const row: Record<string, unknown> = {};
   if (patch.label !== undefined) row.label = patch.label.trim();
   if (patch.qty !== undefined && patch.qty > 0) row.qty = Math.round(patch.qty * 10000) / 10000;
-  if (patch.unit !== undefined) row.unit = patch.unit;
+  if (patch.unit !== undefined) row.unit = sanitizeEscandalloIngredientUnit(patch.unit);
   if (patch.sourceType !== undefined) row.source_type = patch.sourceType;
   if (patch.rawSupplierProductId !== undefined) row.raw_supplier_product_id = patch.rawSupplierProductId;
   if (patch.processedProductId !== undefined) row.processed_product_id = patch.processedProductId;

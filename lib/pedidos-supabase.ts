@@ -688,7 +688,8 @@ export async function updateSupplierProduct(
     )
     .single();
   if (error) throw new Error(error.message);
-  return data as SupplierProductRow;
+  const row = data as SupplierProductRow;
+  return row;
 }
 
 export async function fetchSupplierProductRow(

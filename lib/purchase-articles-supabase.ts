@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { validateEscandalloUsageUnitInput } from '@/lib/escandallo-ingredient-units';
 
 export type PurchaseArticle = {
   id: string;
@@ -18,6 +19,18 @@ export type PurchaseArticle = {
   createdFromSupplierProductId: string | null;
   createdAt: string;
   updatedAt: string;
+  /** Catálogo proveedor de referencia para coste de compra (ejecutar migración SQL v2). */
+  referenciaPrincipalSupplierProductId: string | null;
+  unidadCompra: string | null;
+  costeCompraActual: number | null;
+  ivaCompraPct: number | null;
+  /** Unidad de uso cocina (misma nomenclatura que escandallos: kg, ud, racion…). */
+  unidadUso: string | null;
+  unidadesUsoPorUnidadCompra: number | null;
+  rendimientoPct: number | null;
+  /** € por `unidad_uso`; recalculado en BD al cambiar compra o conversión. */
+  costeUnitarioUso: number | null;
+  origenCoste: string | null;
 };
 
 export type PurchaseArticleDuplicateCandidate = {
@@ -119,11 +132,24 @@ function mapArticleRow(row: ArticleRow): PurchaseArticle {
       row.created_from_supplier_product_id != null ? String(row.created_from_supplier_product_id) : null,
     createdAt: String(row.created_at ?? ''),
     updatedAt: String(row.updated_at ?? ''),
+    referenciaPrincipalSupplierProductId:
+      row.referencia_principal_supplier_product_id != null
+        ? String(row.referencia_principal_supplier_product_id)
+        : null,
+    unidadCompra: row.unidad_compra != null ? String(row.unidad_compra) : null,
+    costeCompraActual: row.coste_compra_actual != null ? Number(row.coste_compra_actual) : null,
+    ivaCompraPct: row.iva_compra_pct != null ? Number(row.iva_compra_pct) : null,
+    unidadUso: row.unidad_uso != null ? String(row.unidad_uso) : null,
+    unidadesUsoPorUnidadCompra:
+      row.unidades_uso_por_unidad_compra != null ? Number(row.unidades_uso_por_unidad_compra) : null,
+    rendimientoPct: row.rendimiento_pct != null ? Number(row.rendimiento_pct) : null,
+    costeUnitarioUso: row.coste_unitario_uso != null ? Number(row.coste_unitario_uso) : null,
+    origenCoste: row.origen_coste != null ? String(row.origen_coste) : null,
   };
 }
 
 const ARTICLE_SEL =
-  'id,local_id,nombre,nombre_corto,categoria,subcategoria,descripcion,unidad_base,activo,coste_master,metodo_coste_master,coste_master_fijado_en,proveedor_preferido_id,observaciones,created_from_supplier_product_id,created_at,updated_at';
+  'id,local_id,nombre,nombre_corto,categoria,subcategoria,descripcion,unidad_base,activo,coste_master,metodo_coste_master,coste_master_fijado_en,proveedor_preferido_id,observaciones,created_from_supplier_product_id,referencia_principal_supplier_product_id,unidad_compra,coste_compra_actual,iva_compra_pct,unidad_uso,unidades_uso_por_unidad_compra,rendimiento_pct,coste_unitario_uso,origen_coste,created_at,updated_at';
 
 export function isMissingPurchaseArticlesError(message: string): boolean {
   const m = message.toLowerCase();
@@ -141,6 +167,159 @@ export async function fetchPurchaseArticles(supabase: SupabaseClient, localId: s
     .order('nombre', { ascending: true });
   if (error) throw new Error(error.message);
   return ((data ?? []) as ArticleRow[]).map(mapArticleRow);
+}
+
+/** Coste de uso cocina por artículo (para escandallos). Silencia error si aún no existe la migración v2. */
+export async function fetchPurchaseArticleCostHintsByIds(
+  supabase: SupabaseClient,
+  localId: string,
+  articleIds: string[],
+): Promise<Map<string, { costeUnitarioUso: number | null; unidadUso: string | null }>> {
+  const map = new Map<string, { costeUnitarioUso: number | null; unidadUso: string | null }>();
+  const uniq = [...new Set(articleIds)].filter(Boolean);
+  if (!uniq.length) return map;
+  try {
+    const { data, error } = await supabase
+      .from('purchase_articles')
+      .select('id,unidad_uso,coste_unitario_uso')
+      .eq('local_id', localId)
+      .in('id', uniq);
+    if (error) return map;
+    for (const row of (data ?? []) as Record<string, unknown>[]) {
+      map.set(String(row.id), {
+        unidadUso: row.unidad_uso != null ? String(row.unidad_uso) : null,
+        costeUnitarioUso: row.coste_unitario_uso != null ? Number(row.coste_unitario_uso) : null,
+      });
+    }
+  } catch {
+    /* sin columnas o sin tabla */
+  }
+  return map;
+}
+
+export type PurchaseArticleMasterCostPatch = {
+  referenciaPrincipalSupplierProductId?: string | null;
+  unidadCompra?: string | null;
+  costeCompraActual?: number | null;
+  ivaCompraPct?: number | null;
+  unidadUso?: string | null;
+  unidadesUsoPorUnidadCompra?: number | null;
+  rendimientoPct?: number | null;
+  origenCoste?: string | null;
+};
+
+export async function updatePurchaseArticleMasterCostFields(
+  supabase: SupabaseClient,
+  localId: string,
+  articleId: string,
+  patch: PurchaseArticleMasterCostPatch,
+): Promise<void> {
+  const touchesUsage =
+    patch.unidadUso !== undefined ||
+    patch.unidadesUsoPorUnidadCompra !== undefined ||
+    patch.rendimientoPct !== undefined;
+
+  if (touchesUsage) {
+    let principal: string | null = null;
+    if (patch.referenciaPrincipalSupplierProductId !== undefined) {
+      principal =
+        patch.referenciaPrincipalSupplierProductId === '' ? null : patch.referenciaPrincipalSupplierProductId;
+    } else {
+      const { data } = await supabase
+        .from('purchase_articles')
+        .select('referencia_principal_supplier_product_id')
+        .eq('id', articleId)
+        .eq('local_id', localId)
+        .maybeSingle();
+      principal = (data as { referencia_principal_supplier_product_id?: string | null } | null)
+        ?.referencia_principal_supplier_product_id ?? null;
+    }
+    if (!principal) {
+      throw new Error('Asigna la referencia principal de compra antes de guardar unidad de uso o conversión.');
+    }
+  }
+
+  if (patch.unidadUso !== undefined) {
+    const err = validateEscandalloUsageUnitInput(patch.unidadUso ?? '');
+    if (err) throw new Error(err);
+  }
+  if (patch.unidadesUsoPorUnidadCompra !== undefined) {
+    const u = patch.unidadesUsoPorUnidadCompra;
+    if (u == null || !Number.isFinite(u) || u <= 0) {
+      throw new Error('Unidades de uso por unidad de compra debe ser mayor que 0.');
+    }
+  }
+  if (patch.rendimientoPct !== undefined) {
+    const r = patch.rendimientoPct;
+    if (r == null || !Number.isFinite(r)) throw new Error('Rendimiento útil no válido.');
+    if (r <= 0 || r > 100) throw new Error('Rendimiento útil debe ser mayor que 0 y como máximo 100.');
+  }
+
+  const row: Record<string, unknown> = {};
+  if (patch.referenciaPrincipalSupplierProductId !== undefined) {
+    row.referencia_principal_supplier_product_id =
+      patch.referenciaPrincipalSupplierProductId === '' ? null : patch.referenciaPrincipalSupplierProductId;
+  }
+  if (patch.unidadCompra !== undefined) row.unidad_compra = patch.unidadCompra;
+  if (patch.costeCompraActual !== undefined && patch.costeCompraActual != null && Number.isFinite(patch.costeCompraActual)) {
+    row.coste_compra_actual = Math.round(patch.costeCompraActual * 1000000) / 1000000;
+  }
+  if (patch.ivaCompraPct !== undefined && patch.ivaCompraPct != null && Number.isFinite(patch.ivaCompraPct)) {
+    row.iva_compra_pct = Math.round(patch.ivaCompraPct * 10000) / 10000;
+  }
+  if (patch.unidadUso !== undefined) {
+    row.unidad_uso = String(patch.unidadUso ?? '')
+      .trim()
+      .replace(/\s+/g, ' ');
+  }
+  if (patch.unidadesUsoPorUnidadCompra !== undefined && patch.unidadesUsoPorUnidadCompra != null) {
+    row.unidades_uso_por_unidad_compra = Math.round(patch.unidadesUsoPorUnidadCompra * 1e8) / 1e8;
+  }
+  if (patch.rendimientoPct !== undefined && patch.rendimientoPct != null) {
+    row.rendimiento_pct = Math.round(patch.rendimientoPct * 100) / 100;
+  }
+  if (patch.origenCoste !== undefined) row.origen_coste = patch.origenCoste?.trim() || null;
+  if (Object.keys(row).length === 0) return;
+  const { error } = await supabase.from('purchase_articles').update(row).eq('id', articleId).eq('local_id', localId);
+  if (error) throw new Error(error.message);
+}
+
+/**
+ * Sincroniza coste de compra del artículo desde el catálogo proveedor (fallback si el trigger SQL no está desplegado).
+ */
+export async function syncPurchaseArticlesFromSupplierCatalogPrice(
+  supabase: SupabaseClient,
+  localId: string,
+  supplierProductId: string,
+  pricePerUnit: number,
+  unit: string,
+  vatRate: number,
+): Promise<void> {
+  const price = Math.round(pricePerUnit * 100) / 100;
+  const q1 = supabase
+    .from('purchase_articles')
+    .update({
+      coste_compra_actual: price,
+      unidad_compra: unit,
+      iva_compra_pct: Math.round(vatRate * 10000) / 10000,
+      origen_coste: 'proveedor_catalogo',
+    })
+    .eq('local_id', localId)
+    .eq('referencia_principal_supplier_product_id', supplierProductId);
+  const q2 = supabase
+    .from('purchase_articles')
+    .update({
+      coste_compra_actual: price,
+      unidad_compra: unit,
+      iva_compra_pct: Math.round(vatRate * 10000) / 10000,
+      origen_coste: 'proveedor_catalogo',
+    })
+    .eq('local_id', localId)
+    .is('referencia_principal_supplier_product_id', null)
+    .eq('created_from_supplier_product_id', supplierProductId);
+  const [r1, r2] = await Promise.all([q1, q2]);
+  if (r1.error && !r1.error.message.includes('column')) throw new Error(r1.error.message);
+  if (r2.error && !r2.error.message.includes('column')) throw new Error(r2.error.message);
 }
 
 export async function fetchPurchaseArticleDuplicateCandidates(
@@ -194,6 +373,13 @@ export async function linkPurchaseArticleToNewSupplierProduct(
       proveedor_preferido_id: supplierId,
       observaciones: 'Artículo base creado al dar de alta el producto en el catálogo del proveedor.',
       created_from_supplier_product_id: supplierProductId,
+      referencia_principal_supplier_product_id: supplierProductId,
+      unidad_compra: input.unidadBase,
+      coste_compra_actual: Math.round(input.costeMaster * 10000) / 10000,
+      unidad_uso: input.unidadBase,
+      unidades_uso_por_unidad_compra: 1,
+      rendimiento_pct: 100,
+      origen_coste: 'alta_proveedor',
     })
     .select('id')
     .single();
