@@ -110,8 +110,27 @@ export default function PersonalPlanificacionPage() {
   const [operationalZonesManagerOpen, setOperationalZonesManagerOpen] = useState(false);
   const [weekPublication, setWeekPublication] = useState<StaffWeekPublication | null>(null);
   const [publishBusy, setPublishBusy] = useState(false);
+  const [optimisticHiddenShiftIds, setOptimisticHiddenShiftIds] = useState<Set<string>>(() => new Set());
 
   const supabase = getSupabaseClient();
+
+  useEffect(() => {
+    setOptimisticHiddenShiftIds((prev) => {
+      if (prev.size === 0) return prev;
+      const next = new Set(prev);
+      for (const id of prev) {
+        if (!shifts.some((shift) => shift.id === id)) {
+          next.delete(id);
+        }
+      }
+      return next.size === prev.size ? prev : next;
+    });
+  }, [shifts]);
+
+  const visibleShifts = useMemo(
+    () => shifts.filter((shift) => !optimisticHiddenShiftIds.has(shift.id)),
+    [shifts, optimisticHiddenShiftIds],
+  );
 
   const refetchWeekPublication = useCallback(async () => {
     if (!localId || !supabase) {
@@ -264,10 +283,13 @@ export default function PersonalPlanificacionPage() {
     const m = monthCursor.getMonth();
     const from = ymdLocal(new Date(y, m, 1));
     const to = ymdLocal(new Date(y, m + 1, 0));
-    return shifts.filter((s) => s.shiftDate >= from && s.shiftDate <= to);
-  }, [shifts, monthCursor]);
+    return visibleShifts.filter((s) => s.shiftDate >= from && s.shiftDate <= to);
+  }, [visibleShifts, monthCursor]);
 
-  const dayShifts = useMemo(() => shifts.filter((s) => s.shiftDate === dayFocus), [shifts, dayFocus]);
+  const dayShifts = useMemo(
+    () => visibleShifts.filter((s) => s.shiftDate === dayFocus),
+    [visibleShifts, dayFocus],
+  );
 
   const openNew = useCallback(
     (employeeId: string, dateYmd: string) => {
@@ -308,8 +330,18 @@ export default function PersonalPlanificacionPage() {
   const removeShiftFromPlan = useCallback(
     async (s: StaffShift) => {
       if (!perms.canManageSchedules || !supabase) return;
-      await deleteStaffShift(supabase, s.id);
-      await afterScheduleChange();
+      setOptimisticHiddenShiftIds((prev) => new Set(prev).add(s.id));
+      try {
+        await deleteStaffShift(supabase, s.id);
+        await afterScheduleChange();
+      } catch (e: unknown) {
+        setOptimisticHiddenShiftIds((prev) => {
+          const next = new Set(prev);
+          next.delete(s.id);
+          return next;
+        });
+        await appAlert(e instanceof Error ? e.message : 'No se pudo eliminar el turno');
+      }
     },
     [perms.canManageSchedules, supabase, afterScheduleChange],
   );
@@ -553,7 +585,7 @@ export default function PersonalPlanificacionPage() {
       void appAlert('Vuelve a iniciar sesión para publicar el cuadrante.');
       return;
     }
-    const shiftsThisWeek = shifts.filter((s) => s.shiftDate >= weekStart && s.shiftDate <= weekEndYmd);
+    const shiftsThisWeek = visibleShifts.filter((s) => s.shiftDate >= weekStart && s.shiftDate <= weekEndYmd);
     if (shiftsThisWeek.length === 0) {
       void appAlert('No puedes publicar una semana sin turnos.');
       return;
@@ -566,7 +598,7 @@ export default function PersonalPlanificacionPage() {
         weekStartMondayYmd: weekStart,
         publishedBy: userId,
       });
-      const targetUserIds = collectUserIdsWithShiftsInWeek(shifts, employees, weekStart, weekEndYmd);
+      const targetUserIds = collectUserIdsWithShiftsInWeek(visibleShifts, employees, weekStart, weekEndYmd);
       await notifyStaffWeekSchedulePublished(supabase, {
         localId,
         weekStartMondayYmd: weekStart,
@@ -752,7 +784,7 @@ export default function PersonalPlanificacionPage() {
             <ShiftWeekGrid
               weekStartMonday={weekStartDate}
               employees={employeesForShiftWeekGrid}
-              shifts={shifts}
+              shifts={visibleShifts}
               scheduleDayMarks={scheduleDayMarks}
               canManageSchedules={perms.canManageSchedules}
               onEditShift={perms.canManageSchedules ? openEdit : peekShiftReadOnly}
@@ -767,7 +799,7 @@ export default function PersonalPlanificacionPage() {
               <OperationalWeekGrid
                 weekStartMonday={weekStartDate}
                 employees={employees}
-                shifts={shifts}
+                shifts={visibleShifts}
                 operationalWindow={operationalWindow}
                 operationalZoneRegistry={operationalZoneRegistry}
                 onOpenOperationalZonesManager={() => setOperationalZonesManagerOpen(true)}
