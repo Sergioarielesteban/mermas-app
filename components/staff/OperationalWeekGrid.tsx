@@ -2,6 +2,17 @@
 
 import React, { useCallback, useMemo, useRef, useState } from 'react';
 import { Plus } from 'lucide-react';
+import {
+  DndContext,
+  DragOverlay,
+  PointerSensor,
+  TouchSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+  type DragStartEvent,
+} from '@dnd-kit/core';
 import { OperationalSkelloCellBody } from '@/components/staff/OperationalSkelloCellBody';
 import { plannedShiftMinutes } from '@/lib/staff/attendance-logic';
 import { addDays, formatDayMonth, formatWeekdayShort, ymdLocal } from '@/lib/staff/staff-dates';
@@ -27,6 +38,28 @@ const COVERAGE_MAIN_ZONES = ['cocina', 'barra', 'sala'] as const;
 const LONG_PRESS_MS_EMPTY = 820;
 const LONG_PRESS_MS_SHIFT = 820;
 const DOUBLE_TAP_MS = 500;
+const DROP_CELL_ID_PREFIX = 'drop';
+const DRAG_SHIFT_ID_PREFIX = 'shift';
+
+function makeDropCellId(ymd: string, zoneKey: string): string {
+  return `${DROP_CELL_ID_PREFIX}|${ymd}|${zoneKey}`;
+}
+
+function parseDropCellId(id: string): { ymd: string; zoneKey: string } | null {
+  const [prefix, ymd, zoneKey] = id.split('|');
+  if (prefix !== DROP_CELL_ID_PREFIX || !ymd || !zoneKey) return null;
+  return { ymd, zoneKey };
+}
+
+function makeDraggableShiftId(shiftId: string): string {
+  return `${DRAG_SHIFT_ID_PREFIX}|${shiftId}`;
+}
+
+function parseDraggableShiftId(id: string): string | null {
+  const [prefix, shiftId] = id.split('|');
+  if (prefix !== DRAG_SHIFT_ID_PREFIX || !shiftId) return null;
+  return shiftId;
+}
 
 function formatHoursSum(mins: number): string {
   const h = mins / 60;
@@ -133,6 +166,7 @@ export default function OperationalWeekGrid({
   const gridWrapRef = useRef<HTMLDivElement | null>(null);
   const [selectedCell, setSelectedCell] = useState<{ ymd: string; zoneKey: string } | null>(null);
   const [selectedShiftId, setSelectedShiftId] = useState<string | null>(null);
+  const [activeDragShiftId, setActiveDragShiftId] = useState<string | null>(null);
 
   const ignoreClicksUntilRef = useRef(0);
   const emptyLongPressTimerRef = useRef<number | null>(null);
@@ -325,36 +359,50 @@ export default function OperationalWeekGrid({
     return m;
   }, [days, shifts, operationalZoneRegistry]);
 
-  const onDragStart = useCallback(
-    (e: React.DragEvent, shiftId: string) => {
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: { distance: 5 },
+    }),
+    useSensor(TouchSensor, {
+      activationConstraint: {
+        delay: 90,
+        tolerance: 12,
+      },
+    }),
+  );
+
+  const shiftsById = useMemo(
+    () => new Map(shifts.map((shift) => [shift.id, shift] as const)),
+    [shifts],
+  );
+
+  const activeDragShift = activeDragShiftId ? shiftsById.get(activeDragShiftId) ?? null : null;
+
+  const onDndStart = useCallback(
+    (event: DragStartEvent) => {
       if (!canEdit) return;
+      const shiftId = parseDraggableShiftId(String(event.active.id));
+      if (!shiftId) return;
+      setActiveDragShiftId(shiftId);
       gridWrapRef.current?.classList.add('operational-week-grid--drop-target');
-      e.dataTransfer.setData('text/staff-shift-id', shiftId);
-      e.dataTransfer.setData('text/plain', shiftId);
-      e.dataTransfer.effectAllowed = 'move';
     },
     [canEdit],
   );
 
-  const onDragEnd = useCallback(() => {
-    gridWrapRef.current?.classList.remove('operational-week-grid--drop-target');
-  }, []);
-
-  const onCellDrop = useCallback(
-    async (e: React.DragEvent, dateYmd: string, zoneRowKey: string) => {
-      if (!canEdit) return;
-      e.preventDefault();
+  const onDndEnd = useCallback(
+    async (event: DragEndEvent) => {
       gridWrapRef.current?.classList.remove('operational-week-grid--drop-target');
-      const id =
-        e.dataTransfer.getData('text/staff-shift-id') || e.dataTransfer.getData('text/plain');
-      if (!id) return;
-      const shift = shifts.find((s) => s.id === id);
+      const shiftId = parseDraggableShiftId(String(event.active.id));
+      const dropCell = event.over ? parseDropCellId(String(event.over.id)) : null;
+      setActiveDragShiftId(null);
+      if (!canEdit || !shiftId || !dropCell) return;
+      const shift = shiftsById.get(shiftId);
       if (!shift) return;
       const currentKey = operationalGridRowKey(shift, operationalZoneRegistry);
-      if (shift.shiftDate === dateYmd && currentKey === zoneRowKey) return;
-      await onShiftPlaced(shift, dateYmd, zoneRowKey);
+      if (shift.shiftDate === dropCell.ymd && currentKey === dropCell.zoneKey) return;
+      await onShiftPlaced(shift, dropCell.ymd, dropCell.zoneKey);
     },
-    [canEdit, onShiftPlaced, shifts, operationalZoneRegistry],
+    [canEdit, onShiftPlaced, shiftsById, operationalZoneRegistry],
   );
 
   /** Solo puestos con datos reales; sin “C 0·0h” ni ruido. */
@@ -386,11 +434,21 @@ export default function OperationalWeekGrid({
         ) : null}
       </div>
 
-      <div
-        ref={gridWrapRef}
-        className="overflow-x-auto overflow-y-visible overscroll-x-contain rounded-2xl ring-1 ring-zinc-200/90 [-webkit-overflow-scrolling:touch]"
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCenter}
+        onDragStart={onDndStart}
+        onDragEnd={(event) => void onDndEnd(event)}
+        onDragCancel={() => {
+          setActiveDragShiftId(null);
+          gridWrapRef.current?.classList.remove('operational-week-grid--drop-target');
+        }}
       >
-        <table className="w-full min-w-[1420px] border-collapse text-left text-[10px] sm:min-w-[1620px] sm:text-xs">
+        <div
+          ref={gridWrapRef}
+          className="overflow-x-auto overflow-y-visible overscroll-x-contain rounded-2xl ring-1 ring-zinc-200/90 [-webkit-overflow-scrolling:touch]"
+        >
+          <table className="w-full min-w-[1420px] border-collapse text-left text-[10px] sm:min-w-[1620px] sm:text-xs">
           <thead>
             <tr className="bg-zinc-50">
               <th
@@ -451,31 +509,11 @@ export default function OperationalWeekGrid({
                   const ymd = ymdLocal(d);
                   const here = shiftsByDayZone.get(`${ymd}|${row.key}`) ?? [];
                   return (
-                    <td
-                      key={ymd}
-                      className="align-top border-b border-zinc-100 p-0"
-                      onDragOver={
-                        canEdit
-                          ? (e) => {
-                              e.preventDefault();
-                              e.stopPropagation();
-                              e.dataTransfer.dropEffect = 'move';
-                            }
-                          : undefined
-                      }
-                      onDragEnter={
-                        canEdit
-                          ? (e) => {
-                              e.preventDefault();
-                              e.dataTransfer.dropEffect = 'move';
-                            }
-                          : undefined
-                      }
-                      onDrop={canEdit ? (e) => void onCellDrop(e, ymd, row.key) : undefined}
-                    >
+                    <td key={ymd} className="align-top border-b border-zinc-100 p-0">
                       <OperationalSkelloCellBody
                         ymd={ymd}
                         rowKey={row.key}
+                        dropCellId={makeDropCellId(ymd, row.key)}
                         here={here}
                         employeeLineOrder={employeeLineOrderByZone.get(row.key) ?? null}
                         canEdit={canEdit}
@@ -485,8 +523,7 @@ export default function OperationalWeekGrid({
                         setSelectedCell={setSelectedCell}
                         setSelectedShiftId={setSelectedShiftId}
                         ignoreClicksUntilRef={ignoreClicksUntilRef}
-                        onDragStart={onDragStart}
-                        onDragEnd={onDragEnd}
+                        makeDraggableShiftId={makeDraggableShiftId}
                         handleEmptyCellTap={handleEmptyCellTap}
                         bindEmptyLongPress={bindEmptyLongPress}
                         onShiftAdvancedEdit={onShiftAdvancedEdit}
@@ -543,8 +580,27 @@ export default function OperationalWeekGrid({
               })}
             </tr>
           </tfoot>
-        </table>
-      </div>
+          </table>
+        </div>
+        <DragOverlay zIndex={1000} dropAnimation={{ duration: 220, easing: 'cubic-bezier(0.22, 1, 0.36, 1)' }}>
+          {activeDragShift ? (
+            <div className="w-[10.75rem] rounded-lg border border-zinc-300/80 bg-white/95 p-1.5 shadow-2xl ring-1 ring-zinc-900/10 backdrop-blur-sm">
+              <div className="text-[10px] font-extrabold text-zinc-900">
+                {activeDragShift.startTime} - {activeDragShift.endTime}
+              </div>
+              <div className="truncate text-[10px] font-bold text-zinc-700">
+                {staffDisplayName(
+                  employees.find((employee) => employee.id === activeDragShift.employeeId) ?? {
+                    firstName: '',
+                    lastName: '',
+                    alias: null,
+                  },
+                ) || 'Sin asignar'}
+              </div>
+            </div>
+          ) : null}
+        </DragOverlay>
+      </DndContext>
       <p className="text-[9px] text-zinc-500 sm:text-[10px]">
         Cobertura: gris = ok · gris más marcado = turno sin asignar en algún puesto principal · rojo = falta puesto
         principal.

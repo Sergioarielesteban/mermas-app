@@ -1,7 +1,8 @@
 'use client';
 
 import React from 'react';
-import { GripVertical } from 'lucide-react';
+import { useDraggable, useDroppable } from '@dnd-kit/core';
+import { CSS } from '@dnd-kit/utilities';
 import { plannedShiftMinutes } from '@/lib/staff/attendance-logic';
 import { zoneBlockStyle } from '@/lib/staff/staff-zone-styles';
 import type { StaffEmployee, StaffShift } from '@/lib/staff/types';
@@ -106,8 +107,8 @@ export type OperationalSkelloCellBodyProps = {
   setSelectedCell: (v: { ymd: string; zoneKey: string } | null) => void;
   setSelectedShiftId: (v: string | null) => void;
   ignoreClicksUntilRef: React.MutableRefObject<number>;
-  onDragStart: (e: React.DragEvent, shiftId: string) => void;
-  onDragEnd: () => void;
+  dropCellId: string;
+  makeDraggableShiftId: (shiftId: string) => string;
   handleEmptyCellTap: (ymd: string, zk: string) => void;
   bindEmptyLongPress: (ymd: string, zk: string) => Record<string, unknown>;
   onShiftAdvancedEdit: (shift: StaffShift) => void;
@@ -127,14 +128,20 @@ function OperationalSkelloCellBodyInner({
   setSelectedCell,
   setSelectedShiftId,
   ignoreClicksUntilRef,
-  onDragStart,
-  onDragEnd,
+  dropCellId,
+  makeDraggableShiftId,
   handleEmptyCellTap,
   bindEmptyLongPress,
   onShiftAdvancedEdit,
   bindShiftLongPress,
   removeShiftFromGroup,
 }: OperationalSkelloCellBodyProps) {
+  const { setNodeRef: setDropNodeRef, isOver } = useDroppable({
+    id: dropCellId,
+    data: { ymd, rowKey },
+    disabled: !canEdit,
+  });
+
   const employeeName = (id: string | null) =>
     id
       ? staffDisplayName(
@@ -210,7 +217,53 @@ function OperationalSkelloCellBodyInner({
     );
   }
 
-  const renderShiftRow = (sOne: StaffShift) => {
+  const DraggableShiftRow = ({ shift }: { shift: StaffShift }) => {
+    const {
+      attributes,
+      listeners,
+      setNodeRef,
+      transform,
+      isDragging,
+    } = useDraggable({
+      id: makeDraggableShiftId(shift.id),
+      data: {
+        shiftId: shift.id,
+        dateYmd: ymd,
+        zoneKey: rowKey,
+      },
+      disabled: !canEdit,
+    });
+
+    const dragStyle: React.CSSProperties = {
+      transform: CSS.Translate.toString(transform),
+      transition: isDragging
+        ? 'none'
+        : 'transform 180ms cubic-bezier(0.22, 1, 0.36, 1), box-shadow 180ms cubic-bezier(0.22, 1, 0.36, 1), opacity 180ms cubic-bezier(0.22, 1, 0.36, 1)',
+      zIndex: isDragging ? 60 : 1,
+      opacity: isDragging ? 0.9 : 1,
+      boxShadow: isDragging ? '0 18px 36px rgba(15, 23, 42, 0.28)' : undefined,
+      willChange: isDragging ? 'transform' : undefined,
+    };
+
+    return renderShiftRow(shift, {
+      setNodeRef,
+      listeners,
+      attributes,
+      isDragging,
+      dragStyle,
+    });
+  };
+
+  const renderShiftRow = (
+    sOne: StaffShift,
+    dragBindings: {
+      setNodeRef: (element: HTMLElement | null) => void;
+      listeners: React.HTMLAttributes<HTMLElement> | undefined;
+      attributes: React.HTMLAttributes<HTMLElement>;
+      isDragging: boolean;
+      dragStyle: React.CSSProperties;
+    },
+  ) => {
     const unassigned = sOne.employeeId == null;
     const smins = plannedShiftMinutes(sOne);
 
@@ -218,8 +271,13 @@ function OperationalSkelloCellBodyInner({
       <div
         role="button"
         tabIndex={canEdit ? 0 : undefined}
-        className="flex h-full min-h-0 min-w-0 flex-1 touch-manipulation text-left outline-none"
+        className={[
+          'flex h-full min-h-0 min-w-0 flex-1 touch-pan-y touch-manipulation text-left outline-none',
+          canEdit ? 'cursor-grab active:cursor-grabbing' : '',
+        ].join(' ')}
         {...(canEdit ? bindShiftLongPress(sOne) : ({} as Record<string, never>))}
+        {...(canEdit ? dragBindings.listeners : {})}
+        {...(canEdit ? dragBindings.attributes : {})}
         onClick={(e) => {
           e.stopPropagation();
           if (Date.now() < ignoreClicksUntilRef.current) return;
@@ -255,8 +313,11 @@ function OperationalSkelloCellBodyInner({
     return (
       <div key={sOne.id} className={`flex min-w-0 flex-col gap-0.5 ${SHIFT_CARD_ROW_W} self-start`}>
         <div
+          ref={dragBindings.setNodeRef}
+          style={dragBindings.dragStyle}
           className={[
             `flex w-full max-w-full min-w-0 shrink-0 flex-row items-stretch overflow-hidden rounded-lg ${SHIFT_CARD_ROW_H}`,
+            dragBindings.isDragging ? 'scale-[1.03]' : '',
             selectedShiftId === sOne.id ? 'ring-2 ring-zinc-900/45 ring-offset-0' : '',
           ].join(' ')}
         >
@@ -273,17 +334,8 @@ function OperationalSkelloCellBodyInner({
                 >
                   Quitar
                 </button>
-                <div
-                  draggable
-                  onDragStart={(e) => onDragStart(e, sOne.id)}
-                  onDragEnd={onDragEnd}
-                  className="flex min-h-0 w-full flex-1 cursor-grab touch-pan-y items-center justify-center text-zinc-800 active:cursor-grabbing"
-                  title="Mover a otro día o puesto"
-                  aria-label="Arrastrar turno"
-                  onPointerDown={(e) => e.stopPropagation()}
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  <GripVertical className="h-2.5 w-2.5 shrink-0 opacity-80 sm:h-3 sm:w-3" />
+                <div className="flex min-h-0 w-full flex-1 items-center justify-center text-zinc-700">
+                  <span className="text-[7px] font-black uppercase tracking-tight sm:text-[8px]">Mover</span>
                 </div>
                 <button
                   type="button"
@@ -307,7 +359,13 @@ function OperationalSkelloCellBodyInner({
   };
 
   return (
-    <div className="flex w-full min-w-0 flex-col gap-1">
+    <div
+      ref={setDropNodeRef}
+      className={[
+        'flex w-full min-w-0 flex-col gap-1 transition-colors duration-150',
+        isOver && canEdit ? 'bg-zinc-100/55' : '',
+      ].join(' ')}
+    >
       {summaryBits.length > 0 ? (
         <div
           className={`flex ${SHIFT_CARD_ROW_W} self-start flex-wrap items-center justify-start gap-x-1.5 gap-y-0 text-left text-[8px] font-extrabold text-zinc-800 sm:text-[9px]`}
@@ -321,7 +379,9 @@ function OperationalSkelloCellBodyInner({
         </div>
       ) : null}
       <div className="flex w-full min-w-0 flex-col gap-1 overflow-visible">
-        {sortedShifts.map(renderShiftRow)}
+        {sortedShifts.map((shift) => (
+          <DraggableShiftRow key={shift.id} shift={shift} />
+        ))}
       </div>
     </div>
   );
