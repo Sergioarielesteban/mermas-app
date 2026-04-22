@@ -3,6 +3,7 @@
 import React from 'react';
 import { useDraggable, useDroppable } from '@dnd-kit/core';
 import { CSS } from '@dnd-kit/utilities';
+import { Pencil, Trash2 } from 'lucide-react';
 import { plannedShiftMinutes } from '@/lib/staff/attendance-logic';
 import { zoneBlockStyle } from '@/lib/staff/staff-zone-styles';
 import type { StaffEmployee, StaffShift } from '@/lib/staff/types';
@@ -66,15 +67,12 @@ const ShiftEmployeeRowCard = React.memo(function ShiftEmployeeRowCard({
 
   return (
     <div
-      className={`flex h-full min-h-0 w-full min-w-0 items-stretch overflow-hidden border-white/20 ${shellClassName}`}
+      className={`flex h-full min-h-0 w-full min-w-0 items-stretch overflow-hidden border-white/15 ${shellClassName}`}
       style={{ backgroundColor: zoneAccent, color: zoneText }}
     >
-      <div className="grid min-w-0 flex-1 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-1 gap-y-0 px-0.5 py-0 sm:gap-x-1.5 sm:px-1">
-        <span className="shrink-0 text-[9px] font-extrabold tabular-nums tracking-tight sm:text-[10px]">
-          {timeRng}
-        </span>
+      <div className="grid min-w-0 flex-1 grid-cols-[minmax(0,1fr)_auto] grid-rows-[auto_auto] items-start gap-x-1.5 gap-y-0 px-1.5 py-1 sm:px-2 sm:py-1.5">
         <span
-          className="line-clamp-2 min-w-0 text-[10px] font-bold leading-tight sm:text-[11px]"
+          className="line-clamp-2 min-w-0 text-[10px] font-extrabold uppercase leading-tight tracking-tight sm:text-[11px]"
           style={showAlert ? { color: '#fecaca' } : undefined}
           title={nameLabel}
         >
@@ -89,7 +87,12 @@ const ShiftEmployeeRowCard = React.memo(function ShiftEmployeeRowCard({
             </span>
           ) : null}
         </span>
-        <span className="shrink-0 text-right text-[9px] font-extrabold opacity-95 sm:text-[10px]">{hoursLabel}</span>
+        <span className="row-span-2 self-center text-right text-[9px] font-black tabular-nums sm:text-[10px]">
+          {hoursLabel}
+        </span>
+        <span className="min-w-0 text-[9px] font-bold tabular-nums opacity-95 sm:text-[10px]">
+          {timeRng}
+        </span>
       </div>
     </div>
   );
@@ -272,7 +275,7 @@ function OperationalSkelloCellBodyInner({
         role="button"
         tabIndex={canEdit ? 0 : undefined}
         className={[
-          'flex h-full min-h-0 min-w-0 flex-1 touch-pan-y touch-manipulation text-left outline-none',
+          'relative flex h-full min-h-0 min-w-0 flex-1 touch-pan-y touch-manipulation text-left outline-none',
           canEdit ? 'cursor-grab active:cursor-grabbing' : '',
         ].join(' ')}
         {...(canEdit ? bindShiftLongPress(sOne) : ({} as Record<string, never>))}
@@ -292,6 +295,40 @@ function OperationalSkelloCellBodyInner({
           }
         }}
       >
+        {canEdit ? (
+          <div className="absolute right-1 top-1 z-20 flex items-center gap-0.5">
+            <button
+              type="button"
+              className="inline-flex h-5 w-5 items-center justify-center rounded-md bg-black/18 text-white/90 transition hover:bg-black/28"
+              onPointerDown={(e) => {
+                e.stopPropagation();
+              }}
+              onClick={(e) => {
+                e.stopPropagation();
+                onShiftAdvancedEdit(sOne);
+              }}
+              aria-label="Editar turno"
+              title="Editar"
+            >
+              <Pencil className="h-3 w-3" />
+            </button>
+            <button
+              type="button"
+              className="inline-flex h-5 w-5 items-center justify-center rounded-md bg-black/18 text-white/90 transition hover:bg-red-700/80"
+              onPointerDown={(e) => {
+                e.stopPropagation();
+              }}
+              onClick={(e) => {
+                e.stopPropagation();
+                void removeShiftFromGroup(sOne);
+              }}
+              aria-label="Eliminar turno"
+              title="Eliminar"
+            >
+              <Trash2 className="h-3 w-3" />
+            </button>
+          </div>
+        ) : null}
         <ShiftEmployeeRowCard
           nameLabel={unassigned ? 'Sin asignar' : employeeName(sOne.employeeId)}
           hoursLabel={formatShiftHoursLabel(smins)}
@@ -303,7 +340,7 @@ function OperationalSkelloCellBodyInner({
           showAlert={unassigned}
           shellClassName={
             canEdit
-              ? 'rounded-r-lg border-y border-r shadow-sm'
+              ? 'rounded-lg border shadow-sm ring-1 ring-black/10'
               : 'rounded-lg border border-white/20 shadow-sm ring-1 ring-black/[0.06]'
           }
         />
@@ -321,38 +358,7 @@ function OperationalSkelloCellBodyInner({
             selectedShiftId === sOne.id ? 'ring-2 ring-zinc-900/45 ring-offset-0' : '',
           ].join(' ')}
         >
-          {canEdit ? (
-            <>
-              <div className="flex h-full min-h-0 w-9 shrink-0 flex-col items-center justify-between rounded-l-lg border-y border-l border-zinc-200/90 bg-zinc-100 px-0.5 py-0.5 sm:w-10 sm:py-1">
-                <button
-                  type="button"
-                  className="shrink-0 rounded px-0.5 py-px text-[7px] font-extrabold leading-tight text-red-700 hover:bg-red-100/90 sm:text-[8px]"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    void removeShiftFromGroup(sOne);
-                  }}
-                >
-                  Quitar
-                </button>
-                <div className="flex min-h-0 w-full flex-1 items-center justify-center text-zinc-700">
-                  <span className="text-[7px] font-black uppercase tracking-tight sm:text-[8px]">Mover</span>
-                </div>
-                <button
-                  type="button"
-                  className="shrink-0 rounded px-0.5 py-px text-[7px] font-extrabold leading-tight text-zinc-700 underline decoration-zinc-300/90 hover:bg-zinc-200/80 sm:text-[8px]"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onShiftAdvancedEdit(sOne);
-                  }}
-                >
-                  Editar
-                </button>
-              </div>
-              {rowShell}
-            </>
-          ) : (
-            <div className={`flex w-full min-w-0 ${SHIFT_CARD_ROW_H}`}>{rowShell}</div>
-          )}
+          <div className={`flex w-full min-w-0 ${SHIFT_CARD_ROW_H}`}>{rowShell}</div>
         </div>
       </div>
     );
