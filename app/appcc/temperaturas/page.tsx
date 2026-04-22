@@ -31,18 +31,34 @@ import { notifyAppccAlerta } from '@/services/notifications';
 
 const PDF_MAX_DAYS = 120;
 
-function parseTempInput(raw: string): number | null {
-  const s = String(raw).trim().replace(',', '.').replace(/\u2212/g, '-');
-  // Number('') === 0 en JS: vacío o signo suelto no es una temperatura válida.
-  if (s === '' || s === '-' || s === '+' || s === '.' || s === '-.' || s === '+.') return null;
+function sanitizeTempInput(raw: string): string {
+  const plain = String(raw).replace(/\s+/g, '').replace(',', '.').replace(/[^0-9.]/g, '');
+  const firstDot = plain.indexOf('.');
+  const compact =
+    firstDot < 0 ? plain : `${plain.slice(0, firstDot + 1)}${plain.slice(firstDot + 1).replace(/\./g, '')}`;
+  const [intPartRaw = '', decPartRaw = ''] = compact.split('.');
+  const intPart = intPartRaw.replace(/^0+(?=\d)/, '');
+  if (!compact.includes('.')) return intPart;
+  return `${intPart || '0'}.${decPartRaw.slice(0, 1)}`;
+}
+
+function parseTempInput(raw: string, unitType: AppccColdUnitRow['unit_type']): number | null {
+  const s = sanitizeTempInput(raw);
+  if (s === '' || s === '.') return null;
   const n = Number(s);
   if (!Number.isFinite(n)) return null;
-  return Math.round(n * 100) / 100;
+  const abs = Math.round(Math.abs(n) * 10) / 10;
+  return unitType === 'congelador' ? -abs : abs;
 }
 
 function initialTempFieldValue(unit: AppccColdUnitRow, reading: AppccReadingRow | undefined): string {
-  if (reading != null) return String(reading.temperature_c);
-  return unit.unit_type === 'congelador' ? '-' : '';
+  if (reading != null) return sanitizeTempInput(String(Math.abs(reading.temperature_c)));
+  return '';
+}
+
+function formatSignedTempLabel(temp: number): string {
+  const fixed = Number.isInteger(temp) ? String(temp) : temp.toFixed(1).replace('.', ',');
+  return `${fixed} °C`;
 }
 
 /** Solo dos turnos al día (mañana y noche); «tarde» queda en BD por lecturas antiguas. */
@@ -85,7 +101,7 @@ function SlotEditor({
     setJustSaved(false);
   }, [reading, unit]);
 
-  const tInput = parseTempInput(value);
+  const tInput = parseTempInput(value, unit.unit_type);
   const hasLimits = unit.temp_min_c != null || unit.temp_max_c != null;
   const effectiveTemp = tInput !== null ? tInput : (reading?.temperature_c ?? null);
   const out =
@@ -130,7 +146,7 @@ function SlotEditor({
       setErr('Sesión o Supabase no disponible.');
       return;
     }
-    const t = parseTempInput(value);
+    const t = parseTempInput(value, unit.unit_type);
     if (t === null) {
       setErr('Introduce temperatura en °C.');
       return;
@@ -177,7 +193,7 @@ function SlotEditor({
     if (disabled || saving) return;
     setErr(null);
 
-    const t = parseTempInput(value);
+    const t = parseTempInput(value, unit.unit_type);
     const hasReading = Boolean(reading?.id);
     const sameAsServer =
       reading != null &&
@@ -221,7 +237,10 @@ function SlotEditor({
             value={value}
             onChange={(e) => {
               setJustSaved(false);
-              setValue(e.target.value);
+              setValue(sanitizeTempInput(e.target.value));
+            }}
+            onKeyDown={(e) => {
+              if (e.key === '-' || e.key === '+' || e.key.toLowerCase() === 'e') e.preventDefault();
             }}
             onBlur={() => {
               void flushSlot();
@@ -230,7 +249,7 @@ function SlotEditor({
             placeholder={unit.unit_type === 'congelador' ? 'Ej. 16' : 'Ej. 4,5'}
             title={
               unit.unit_type === 'congelador'
-                ? 'Ya hay un «-»; número y opcional coma o punto decimal (ej. 16,3 → -16,3 °C)'
+                ? 'Congelador: escribe solo números; el signo negativo se aplica automáticamente.'
                 : 'Número con coma o punto decimal (ej. 4,5 °C)'
             }
             className={[
@@ -238,7 +257,9 @@ function SlotEditor({
             ].join(' ')}
             aria-label={`Temperatura ${SLOT_DISPLAY[slot]}`}
           />
-          <span className="text-xs font-semibold text-zinc-500">°C</span>
+          <span className="text-xs font-semibold text-zinc-500">
+            {effectiveTemp == null ? '°C' : formatSignedTempLabel(effectiveTemp)}
+          </span>
         </div>
       </div>
       <input
