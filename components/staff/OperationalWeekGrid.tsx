@@ -5,7 +5,7 @@ import { Plus } from 'lucide-react';
 import {
   DndContext,
   DragOverlay,
-  PointerSensor,
+  MouseSensor,
   TouchSensor,
   closestCenter,
   useSensor,
@@ -360,13 +360,14 @@ export default function OperationalWeekGrid({
   }, [days, shifts, operationalZoneRegistry]);
 
   const sensors = useSensors(
-    useSensor(PointerSensor, {
+    useSensor(MouseSensor, {
       activationConstraint: { distance: 5 },
     }),
     useSensor(TouchSensor, {
       activationConstraint: {
-        delay: 90,
-        tolerance: 12,
+        // Mobile/tablet: require intentional long-press before drag starts.
+        delay: 360,
+        tolerance: 8,
       },
     }),
   );
