@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useMemo, useState } from 'react';
-import type { StaffEmployee, StaffShift, StaffTimeEntry } from '@/lib/staff/types';
+import type { StaffEmployee, StaffShift, StaffTimeEntry, StaffTimeEventType } from '@/lib/staff/types';
 import {
   findShiftForToday,
   formatMinutesHuman,
@@ -67,6 +67,16 @@ export default function ClockPanel({
   const [note, setNote] = useState('');
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
+  const [pendingClockOutChoice, setPendingClockOutChoice] = useState(false);
+
+  const pushSuccessMessage = (eventType: StaffTimeEventType) => {
+    if (!selected) return;
+    const firstName = selected.alias?.trim() || selected.firstName.trim() || 'compañero';
+    if (eventType === 'clock_in') setMsg(`Hola, ${firstName}`);
+    else if (eventType === 'break_start') setMsg(`Buen descanso, ${firstName}`);
+    else if (eventType === 'break_end') setMsg(`Bienvenido de nuevo, ${firstName}`);
+    else if (eventType === 'clock_out') setMsg(`Adiós, ${firstName}`);
+  };
 
   const canPickOther = permissions.canManageSchedules;
   const showPicker = canPickOther;
@@ -87,6 +97,7 @@ export default function ClockPanel({
       });
       setPin('');
       setNote('');
+      pushSuccessMessage(eventType);
       onRecorded();
     } catch (e: unknown) {
       setMsg(e instanceof Error ? e.message : 'No se pudo registrar');
@@ -187,7 +198,17 @@ export default function ClockPanel({
                 key={act}
                 type="button"
                 disabled={busy}
-                onClick={() => void fire(act)}
+                onClick={() => {
+                  if (
+                    act === 'clock_out' &&
+                    session.availableActions.includes('break_start') &&
+                    !session.availableActions.includes('break_end')
+                  ) {
+                    setPendingClockOutChoice(true);
+                    return;
+                  }
+                  void fire(act);
+                }}
                 className={[
                   'min-h-[56px] w-full rounded-2xl px-4 text-base font-extrabold shadow-md transition active:scale-[0.99]',
                   act === 'clock_in'
@@ -203,6 +224,44 @@ export default function ClockPanel({
               </button>
             ))}
           </div>
+
+          {pendingClockOutChoice ? (
+            <>
+              <button
+                type="button"
+                className="fixed inset-0 z-[85] bg-black/40"
+                aria-hidden
+                onClick={() => setPendingClockOutChoice(false)}
+              />
+              <div className="fixed inset-x-0 bottom-0 z-[90] rounded-t-3xl bg-white p-4 shadow-xl sm:inset-auto sm:left-1/2 sm:top-1/2 sm:w-full sm:max-w-sm sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-3xl">
+                <p className="text-center text-sm font-extrabold text-zinc-900">¿Te vas al descanso o acabaste turno?</p>
+                <div className="mt-3 grid grid-cols-1 gap-2">
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => {
+                      setPendingClockOutChoice(false);
+                      void fire('break_start');
+                    }}
+                    className="min-h-[54px] rounded-2xl bg-amber-500 text-sm font-extrabold text-white"
+                  >
+                    Me voy al descanso
+                  </button>
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => {
+                      setPendingClockOutChoice(false);
+                      void fire('clock_out');
+                    }}
+                    className="min-h-[54px] rounded-2xl bg-[#D32F2F] text-sm font-extrabold text-white"
+                  >
+                    He acabado mi turno
+                  </button>
+                </div>
+              </div>
+            </>
+          ) : null}
 
           {dayEntries.length > 0 ? (
             <div className="rounded-2xl border border-zinc-200 bg-zinc-50/80 p-3">
@@ -223,7 +282,11 @@ export default function ClockPanel({
             </div>
           ) : null}
 
-          {msg ? <p className="text-center text-sm font-bold text-red-700">{msg}</p> : null}
+          {msg ? (
+            <p className={['text-center text-sm font-bold', msg.includes(',') ? 'text-emerald-700' : 'text-red-700'].join(' ')}>
+              {msg}
+            </p>
+          ) : null}
         </>
       )}
     </div>

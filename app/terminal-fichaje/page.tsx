@@ -14,11 +14,10 @@ import {
   staffKioskResolveByPin,
 } from '@/lib/staff/staff-supabase';
 import { getSupabaseClient } from '@/lib/supabase-client';
-import { pickFichajeEmoji, pickFichajeMessage } from '@/lib/fichaje-messages';
 import type { StaffTimeEventType } from '@/lib/staff/types';
 import Logo from '@/components/Logo';
 
-type Step = 'home' | 'pin' | 'success';
+type Step = 'home' | 'pin' | 'choose_out' | 'success';
 
 function initials(first: string, last: string, alias: string | null): string {
   const a = alias?.trim();
@@ -66,12 +65,20 @@ export default function TerminalFichajePage() {
   const [now, setNow] = useState(() => new Date());
   const [step, setStep] = useState<Step>('home');
   const [pendingAction, setPendingAction] = useState<'clock_in' | 'clock_out' | null>(null);
+  const [pendingResolved, setPendingResolved] = useState<{
+    employeeId: string;
+    firstName: string;
+    lastName: string;
+    alias: string | null;
+    fullPin: string;
+    shiftId: string | null;
+  } | null>(null);
   const [pin, setPin] = useState('');
   const [busy, setBusy] = useState(false);
   const [banner, setBanner] = useState<string | null>(null);
 
   const [successAt, setSuccessAt] = useState<string | null>(null);
-  const [successAction, setSuccessAction] = useState<'clock_in' | 'clock_out' | null>(null);
+  const [successAction, setSuccessAction] = useState<StaffTimeEventType | null>(null);
   const [successPhrase, setSuccessPhrase] = useState<string | null>(null);
   const [successEmoji, setSuccessEmoji] = useState<string | null>(null);
   const [resolved, setResolved] = useState<{
@@ -109,6 +116,7 @@ export default function TerminalFichajePage() {
   const resetFlow = useCallback(() => {
     setStep('home');
     setPendingAction(null);
+    setPendingResolved(null);
     setPin('');
     setBanner(null);
     setResolved(null);
@@ -121,6 +129,7 @@ export default function TerminalFichajePage() {
   const goPin = (action: 'clock_in' | 'clock_out') => {
     setBanner(null);
     setPendingAction(action);
+    setPendingResolved(null);
     setPin('');
     setStep('pin');
   };
@@ -170,10 +179,54 @@ export default function TerminalFichajePage() {
       }
 
       const planned = findShiftForToday(shifts, r.employeeId, ymd);
+      const shiftId = planned?.id ?? null;
+
+      if (want === 'clock_out' && session.lastEventType === 'break_start') {
+        await recordStaffTimeEvent(supabase, {
+          employeeId: r.employeeId,
+          eventType: 'break_end',
+          shiftId,
+          pin: fullPin,
+          origin: 'device',
+        });
+        const at = new Date().toLocaleTimeString('es-ES', {
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: false,
+        });
+        setResolved({
+          employeeId: r.employeeId,
+          firstName: r.firstName,
+          lastName: r.lastName,
+          alias: r.alias,
+        });
+        setSuccessAction('break_end');
+        setSuccessAt(at);
+        setSuccessPhrase('Bienvenido de nuevo');
+        setSuccessEmoji('👋');
+        setStep('success');
+        setPin('');
+        return;
+      }
+
+      if (want === 'clock_out' && session.availableActions.includes('break_start')) {
+        setPendingResolved({
+          employeeId: r.employeeId,
+          firstName: r.firstName,
+          lastName: r.lastName,
+          alias: r.alias,
+          fullPin,
+          shiftId,
+        });
+        setStep('choose_out');
+        setPin('');
+        return;
+      }
+
       await recordStaffTimeEvent(supabase, {
         employeeId: r.employeeId,
         eventType: want,
-        shiftId: planned?.id ?? null,
+        shiftId,
         pin: fullPin,
         origin: 'device',
       });
@@ -191,14 +244,61 @@ export default function TerminalFichajePage() {
       });
       setSuccessAction(want);
       setSuccessAt(at);
-      setSuccessPhrase(pickFichajeMessage(want));
-      setSuccessEmoji(pickFichajeEmoji(want));
+      if (want === 'clock_in') {
+        setSuccessPhrase(`Hola, ${displayFirstName(r.firstName, r.alias)}`);
+        setSuccessEmoji('👋');
+      } else {
+        setSuccessPhrase('Adiós');
+        setSuccessEmoji('🫡');
+      }
       setStep('success');
       setPin('');
     } catch (e: unknown) {
       const raw = e instanceof Error ? e.message : 'Error al fichar';
       setBanner(friendlyFichajeRpcMessage(raw));
       setPin('');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const recordOutChoice = async (eventType: 'break_start' | 'clock_out') => {
+    if (!supabase || !pendingResolved) return;
+    setBusy(true);
+    setBanner(null);
+    try {
+      await recordStaffTimeEvent(supabase, {
+        employeeId: pendingResolved.employeeId,
+        eventType,
+        shiftId: pendingResolved.shiftId,
+        pin: pendingResolved.fullPin,
+        origin: 'device',
+      });
+      const at = new Date().toLocaleTimeString('es-ES', {
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+      });
+      setResolved({
+        employeeId: pendingResolved.employeeId,
+        firstName: pendingResolved.firstName,
+        lastName: pendingResolved.lastName,
+        alias: pendingResolved.alias,
+      });
+      setSuccessAction(eventType);
+      setSuccessAt(at);
+      if (eventType === 'break_start') {
+        setSuccessPhrase('Buen descanso');
+        setSuccessEmoji('☕');
+      } else {
+        setSuccessPhrase('Adiós');
+        setSuccessEmoji('🫡');
+      }
+      setStep('success');
+      setPendingResolved(null);
+    } catch (e: unknown) {
+      setBanner(friendlyFichajeRpcMessage(e instanceof Error ? e.message : 'Error al fichar'));
+      setStep('pin');
     } finally {
       setBusy(false);
     }
@@ -391,6 +491,49 @@ export default function TerminalFichajePage() {
           </div>
         ) : null}
 
+        {step === 'choose_out' && pendingResolved ? (
+          <div className="flex w-full max-w-md flex-col items-center text-center">
+            <Logo variant="inline" className="mb-5 !h-[min(36vmin,8rem)] sm:!h-[min(34vmin,7.75rem)]" />
+            <p className="text-xl font-extrabold text-zinc-900">¿Te vas al descanso o acabaste turno?</p>
+            <p className="mt-2 text-sm font-medium text-zinc-600">
+              {staffDisplayName({
+                firstName: pendingResolved.firstName,
+                lastName: pendingResolved.lastName,
+                alias: pendingResolved.alias,
+              })}
+            </p>
+            <div className="mt-6 grid w-full grid-cols-1 gap-3">
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => void recordOutChoice('break_start')}
+                className="min-h-[64px] rounded-2xl bg-amber-500 text-lg font-extrabold text-white shadow-lg"
+              >
+                Me voy al descanso
+              </button>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => void recordOutChoice('clock_out')}
+                className="min-h-[64px] rounded-2xl bg-sky-600 text-lg font-extrabold text-white shadow-lg"
+              >
+                He acabado mi turno
+              </button>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => {
+                  setStep('pin');
+                  setPendingResolved(null);
+                }}
+                className="mt-1 text-sm font-bold text-zinc-500"
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        ) : null}
+
         {step === 'success' && resolved && successAt && successAction ? (
           <div
             className={[
@@ -405,12 +548,22 @@ export default function TerminalFichajePage() {
             </div>
             <div className="mt-4 text-center text-5xl leading-none">{successEmoji ?? '✨'}</div>
             <h2 className="mt-3 text-center text-2xl font-extrabold text-zinc-900 sm:text-3xl">
-              ¡Hola {displayFirstName(resolved.firstName, resolved.alias)}!
+              {successAction === 'clock_out'
+                ? `¡Adiós ${displayFirstName(resolved.firstName, resolved.alias)}!`
+                : successAction === 'break_start'
+                  ? `Buen descanso, ${displayFirstName(resolved.firstName, resolved.alias)}`
+                  : successAction === 'break_end'
+                    ? `Bienvenido de nuevo, ${displayFirstName(resolved.firstName, resolved.alias)}`
+                    : `¡Hola ${displayFirstName(resolved.firstName, resolved.alias)}!`}
             </h2>
             <p className="mt-3 text-center text-sm font-medium text-zinc-600">
               {successAction === 'clock_in'
                 ? 'Hemos registrado tu llegada a las'
-                : 'Hemos registrado tu salida a las'}
+                : successAction === 'break_start'
+                  ? 'Hemos registrado tu salida a descanso a las'
+                  : successAction === 'break_end'
+                    ? 'Hemos registrado tu vuelta de descanso a las'
+                    : 'Hemos registrado tu salida final a las'}
             </p>
             <div className="mt-5 rounded-2xl bg-zinc-50 px-4 py-5 text-center ring-1 ring-zinc-200/90">
               <span className="text-5xl font-black tabular-nums text-zinc-900 sm:text-6xl">{successAt}</span>
@@ -432,8 +585,10 @@ export default function TerminalFichajePage() {
               onClick={resetFlow}
               className={[
                 'mt-8 min-h-[56px] w-full rounded-2xl text-lg font-extrabold text-white shadow-lg transition active:scale-[0.99]',
-                successAction === 'clock_in'
-                  ? 'bg-emerald-500 shadow-emerald-900/30 hover:bg-emerald-400'
+              successAction === 'clock_in'
+                ? 'bg-emerald-500 shadow-emerald-900/30 hover:bg-emerald-400'
+                : successAction === 'break_end'
+                  ? 'bg-indigo-500 shadow-indigo-900/30 hover:bg-indigo-400'
                   : 'bg-amber-500 shadow-amber-900/35 hover:bg-amber-400',
               ].join(' ')}
             >
