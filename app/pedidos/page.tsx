@@ -396,7 +396,6 @@ export default function PedidosPage() {
       .then(() => {
         setMessage('Incidencias guardadas.');
         setIncidentOpenBySentOrderId((prev) => ({ ...prev, [order.id]: false }));
-        void reloadOrders();
         dispatchPedidosDataChanged();
         const supa = getSupabaseClient();
         if (supa && localId) {
@@ -455,7 +454,6 @@ export default function PedidosPage() {
         }
         await updateOrderItemPrice(supabase, localId, itemId, line.pricePerUnit, 0);
       })
-      .then(() => reloadOrders())
       .then(() => dispatchPedidosDataChanged())
       .catch((err: Error) => {
         void reloadOrders();
@@ -775,8 +773,6 @@ export default function PedidosPage() {
               });
             }
           }
-          void reloadOrders();
-          window.setTimeout(() => void reloadOrders(), 500);
           dispatchPedidosDataChanged();
         })
         .catch((err: Error) => {
@@ -817,7 +813,6 @@ export default function PedidosPage() {
               ? 'Revisión de precios marcada como completada.'
               : 'Revisión de precios reabierta.',
           );
-          void reloadOrders();
           dispatchPedidosDataChanged();
         })
         .catch((err: Error) => {
@@ -2009,7 +2004,6 @@ export default function PedidosPage() {
             msg,
           );
           setAssistantPendingAction(null);
-          void reloadOrders();
           dispatchPedidosDataChanged();
         })
         .catch((err: Error) => {
@@ -2695,7 +2689,6 @@ export default function PedidosPage() {
                           setShowDeletedBanner(false);
                           deletedBannerTimeoutRef.current = null;
                         }, 1000);
-                        void reloadOrders();
                         dispatchPedidosDataChanged();
                       })
                       .catch((err: Error) => setMessage(err.message));
@@ -3083,7 +3076,6 @@ export default function PedidosPage() {
                       .then(() => {
                         clearPendingReceivedOrder(order.id);
                         setMessage('Pedido devuelto a enviados.');
-                        void reloadOrders();
                         dispatchPedidosDataChanged();
                       })
                       .catch((err: Error) => setMessage(err.message));
@@ -3115,7 +3107,6 @@ export default function PedidosPage() {
                           setShowDeletedBanner(false);
                           deletedBannerTimeoutRef.current = null;
                         }, 1000);
-                        void reloadOrders();
                         dispatchPedidosDataChanged();
                       })
                       .catch((err: Error) => setMessage(err.message));
@@ -3255,7 +3246,6 @@ export default function PedidosPage() {
         open={ocrOrder != null}
         onClose={() => setOcrOrder(null)}
         onApplied={() => {
-          reloadOrders();
           dispatchPedidosDataChanged();
           setMessage('Albarán OCR guardado. Revisa cantidades y precios en el pedido.');
         }}

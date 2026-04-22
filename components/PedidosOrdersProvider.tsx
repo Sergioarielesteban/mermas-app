@@ -26,6 +26,7 @@ import { isDemoMode } from '@/lib/demo-mode';
 import { getSupabaseClient } from '@/lib/supabase-client';
 
 const ordersSessionKey = (localId: string) => `chefone_pedidos_orders:${localId}`;
+const RELOAD_DEBOUNCE_MS = 120;
 
 const ORDER_TOMBSTONE_TTL_MS = 8 * 60 * 1000;
 
@@ -131,6 +132,7 @@ export function PedidosOrdersProvider({ children }: { children: React.ReactNode 
     new Map<string, { markedAt: number; receivedAtIso: string; priceReviewArchivedAt?: string }>(),
   );
   const reloadAbortRef = useRef<AbortController | null>(null);
+  const reloadDebounceTimerRef = useRef<number | null>(null);
   const orderRefreshTimersRef = useRef<Map<string, number>>(new Map());
 
   const registerDeletedOrderId = useCallback((id: string) => {
@@ -171,7 +173,7 @@ export function PedidosOrdersProvider({ children }: { children: React.ReactNode 
     });
   }, []);
 
-  const reloadOrders = useCallback(() => {
+  const reloadOrdersNow = useCallback(() => {
     if (!canUse || !localId) return;
     if (isDemoMode()) return;
     const targetId = localId;
@@ -205,6 +207,16 @@ export function PedidosOrdersProvider({ children }: { children: React.ReactNode 
         setReloadError(msg);
       });
   }, [canUse, localId]);
+
+  const reloadOrders = useCallback(() => {
+    if (reloadDebounceTimerRef.current != null) {
+      window.clearTimeout(reloadDebounceTimerRef.current);
+    }
+    reloadDebounceTimerRef.current = window.setTimeout(() => {
+      reloadDebounceTimerRef.current = null;
+      reloadOrdersNow();
+    }, RELOAD_DEBOUNCE_MS);
+  }, [reloadOrdersNow]);
 
   /**
    * Realtime incremental: un solo pedido vía `fetchOrderById`.
@@ -248,6 +260,10 @@ export function PedidosOrdersProvider({ children }: { children: React.ReactNode 
   useEffect(() => {
     return () => {
       reloadAbortRef.current?.abort();
+      if (reloadDebounceTimerRef.current != null) {
+        window.clearTimeout(reloadDebounceTimerRef.current);
+        reloadDebounceTimerRef.current = null;
+      }
       for (const t of orderRefreshTimersRef.current.values()) {
         window.clearTimeout(t);
       }

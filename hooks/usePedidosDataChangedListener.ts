@@ -3,11 +3,26 @@
 import { useEffect, useRef } from 'react';
 
 const EVENT = 'pedidos:data-changed';
+const DISPATCH_COALESCE_MS = 180;
+let lastDispatchAt = 0;
+let pendingDispatchTimer: number | null = null;
 
 /** Aviso tras guardar en Supabase (misma pestaña). El layout de pedidos escucha y llama a `reloadOrders`. */
 export function dispatchPedidosDataChanged() {
   if (typeof window === 'undefined') return;
-  window.dispatchEvent(new CustomEvent(EVENT));
+  const now = Date.now();
+  const elapsed = now - lastDispatchAt;
+  if (elapsed >= DISPATCH_COALESCE_MS) {
+    lastDispatchAt = now;
+    window.dispatchEvent(new CustomEvent(EVENT));
+    return;
+  }
+  if (pendingDispatchTimer != null) return;
+  pendingDispatchTimer = window.setTimeout(() => {
+    pendingDispatchTimer = null;
+    lastDispatchAt = Date.now();
+    window.dispatchEvent(new CustomEvent(EVENT));
+  }, DISPATCH_COALESCE_MS - elapsed);
 }
 
 export function usePedidosDataChangedListener(onRefresh: () => void, active: boolean) {

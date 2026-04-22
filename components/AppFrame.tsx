@@ -20,6 +20,7 @@ export default function AppFrame({ children }: { children: React.ReactNode }) {
   const isTerminalFichaje =
     pathname === '/terminal-fichaje' || pathname.startsWith('/terminal-fichaje/');
   const [forceUnlock, setForceUnlock] = React.useState(false);
+  const loginFallbackTimerRef = React.useRef<number | null>(null);
 
   useEffect(() => {
     if (!loading) {
@@ -35,6 +36,10 @@ export default function AppFrame({ children }: { children: React.ReactNode }) {
   const effectiveLoading = loading && !forceUnlock;
 
   useEffect(() => {
+    if (loginFallbackTimerRef.current != null) {
+      window.clearTimeout(loginFallbackTimerRef.current);
+      loginFallbackTimerRef.current = null;
+    }
     if (effectiveLoading) return;
     if (email && isPublicHome) {
       router.replace('/panel');
@@ -43,15 +48,22 @@ export default function AppFrame({ children }: { children: React.ReactNode }) {
     if (!email && !isLogin && !isPublicHome && !isOnboarding && !isPrecio) {
       router.replace('/login');
       // Fallback in case client router transition gets stuck.
-      window.setTimeout(() => {
+      loginFallbackTimerRef.current = window.setTimeout(() => {
         if (window.location.pathname !== '/login') {
           window.location.replace('/login');
         }
       }, 400);
+      return;
     }
     if (email && isLogin) {
       router.replace('/panel');
     }
+    return () => {
+      if (loginFallbackTimerRef.current != null) {
+        window.clearTimeout(loginFallbackTimerRef.current);
+        loginFallbackTimerRef.current = null;
+      }
+    };
   }, [effectiveLoading, email, isLogin, isPublicHome, isOnboarding, isPrecio, router]);
 
   // /login y la landing en / no usan el shell de la app ni el bloqueo de "Cargando sesión".

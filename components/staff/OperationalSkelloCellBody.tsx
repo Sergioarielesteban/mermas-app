@@ -145,12 +145,18 @@ function OperationalSkelloCellBodyInner({
     disabled: !canEdit,
   });
 
-  const employeeName = (id: string | null) =>
-    id
-      ? staffDisplayName(
-          employees.find((e) => e.id === id) ?? { firstName: '', lastName: '', alias: null },
-        )
-      : '';
+  const employeeNameById = React.useMemo(
+    () =>
+      new Map(
+        employees.map((employee) => [employee.id, staffDisplayName(employee)] as const),
+      ),
+    [employees],
+  );
+
+  const employeeName = React.useCallback(
+    (id: string | null) => (id ? employeeNameById.get(id) ?? '' : ''),
+    [employeeNameById],
+  );
 
   const sortedShifts = React.useMemo(
     () =>
@@ -165,7 +171,7 @@ function OperationalSkelloCellBodyInner({
           }) ||
           a.id.localeCompare(b.id),
       ),
-    [employeeLineOrder, here],
+    [employeeLineOrder, here, employeeName],
   );
 
   if (here.length === 0) {

@@ -590,7 +590,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const sessionEmail = session?.user?.email?.toLowerCase() ?? null;
       setEmail(sessionEmail);
       persistEmail(sessionEmail);
-      if (session?.user?.id) void loadProfileForUser(session.user.id);
+      if (session?.user?.id) {
+        void loadProfileForUser(session.user.id);
+        return;
+      }
+      setUserId(null);
+      clearProfile();
+      setProfileReady(true);
     };
 
     void sessionPromise
@@ -611,7 +617,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setEmail(sessionEmail);
         persistEmail(sessionEmail);
         setLoading(false);
-        setProfileReady(true);
+        setProfileReady(!data.session?.user?.id);
         void loadProfileForUser(data.session?.user?.id);
       })
       .catch(() => {

@@ -915,7 +915,6 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
           protectProductIdsRef.current.add(p.id);
           setProducts((prev) => sortProductsByName([p, ...prev]));
           markLocalEdit();
-          await refetchCloud();
         })();
         return;
       }
@@ -954,8 +953,21 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
             })
             .eq('id', id);
           if (error) return;
+          setProducts((prev) =>
+            sortProductsByName(
+              prev.map((p) =>
+                p.id === id
+                  ? {
+                      ...p,
+                      name: trimmed,
+                      unit: input.unit,
+                      pricePerUnit: Math.round(input.pricePerUnit * 100) / 100,
+                    }
+                  : p,
+              ),
+            ),
+          );
           markLocalEdit();
-          await refetchCloud();
         })();
         return;
       }
@@ -990,8 +1002,8 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
           const { error } = await supabase.from('products').update({ is_active: false }).eq('id', id);
           if (error) return;
           protectProductIdsRef.current.delete(id);
+          setProducts((prev) => prev.filter((p) => p.id !== id));
           markLocalEdit();
-          await refetchCloud();
         })();
         return { ok: true };
       }
@@ -1113,8 +1125,25 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
           }
           const { error } = await supabase.from('mermas').update(patch).eq('id', id);
           if (error) return;
+          setMermas((prev) =>
+            prev.map((m) =>
+              m.id === id
+                ? {
+                    ...m,
+                    productId: input.productId,
+                    quantity: qty,
+                    motiveKey: input.motiveKey,
+                    notes: input.notes.trim(),
+                    occurredAt: input.occurredAt,
+                    ...(input.photoDataUrl !== undefined ? { photoDataUrl: input.photoDataUrl } : {}),
+                    costEur,
+                    shift: shiftVal,
+                    optionalUserLabel: optUser || undefined,
+                  }
+                : m,
+            ),
+          );
           markLocalEdit();
-          await refetchCloud();
         })();
         return { ok: true };
       }
@@ -1194,7 +1223,6 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
         locallyDeletedMermaIdsRef.current.set(id, Date.now() + MERMA_TOMBSTONE_TTL_MS);
         saveMermaTombstones(localId, locallyDeletedMermaIdsRef.current);
         markLocalEdit();
-        await refetchCloud();
         return { ok: true };
       }
       markLocalEdit();
@@ -1229,7 +1257,7 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
       exportData,
       importData,
     };
-  }, [localId, markLocalEdit, mermas, products, refetchCloud, supabaseEnabled]);
+  }, [localId, markLocalEdit, mermas, products, supabaseEnabled]);
 
   return <StoreContext.Provider value={store}>{children}</StoreContext.Provider>;
 }
