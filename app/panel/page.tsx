@@ -40,6 +40,8 @@ type PanelTile = {
   id: string;
   href: string;
   label: string;
+  /** Subtítulo bajo el título (referencia visual). */
+  sub: string;
   Icon: LucideIcon;
   blocked: boolean;
 };
@@ -48,85 +50,38 @@ function panelHref(tile: PanelTile) {
   return tile.blocked ? '/planes' : tile.href;
 }
 
-function PanelGridEmpty() {
-  return <div className="min-h-[5.5rem] rounded-[18px] bg-transparent" aria-hidden />;
+function PanelCellEmpty() {
+  return <div className="min-h-[4.75rem] rounded-[18px] bg-transparent" aria-hidden />;
 }
 
-function PanelGridCard({ tile }: { tile: PanelTile }) {
+/** Tarjeta oscura unificada (referencia): icono, título, subtítulo, flecha, línea roja. */
+function PanelDarkModuleCard({ tile, wide }: { tile: PanelTile; wide?: boolean }) {
   const Icon = tile.Icon;
   return (
     <Link
       href={panelHref(tile)}
       className={[
-        'panel-ref-card-white flex min-h-[5.5rem] flex-col justify-between rounded-[18px] bg-white p-3 text-left antialiased outline-none select-none touch-manipulation',
-        tile.blocked ? 'panel-ref-card--blocked' : '',
-        'focus-visible:ring-2 focus-visible:ring-[#D32F2F]/35 focus-visible:ring-offset-2 focus-visible:ring-offset-[#f5f5f7]',
-      ].join(' ')}
-    >
-      <div className="flex items-start gap-3">
-        <div className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-[#D32F2F]/15 text-[#D32F2F]">
-          <Icon className="h-5 w-5" strokeWidth={2} />
-        </div>
-        <div className="min-w-0 flex-1 pt-0.5">
-          <p className="text-sm font-semibold leading-tight tracking-tight text-zinc-900">{tile.label}</p>
-        </div>
-        <ChevronRight className="mt-0.5 h-5 w-5 shrink-0 text-[#D32F2F]" strokeWidth={2.25} aria-hidden />
-      </div>
-      <div className="mt-3 flex justify-center">
-        <ChefOneGlowLine className="w-14 sm:w-16" />
-      </div>
-    </Link>
-  );
-}
-
-function PanelFeaturedPedidos({ blocked }: { blocked: boolean }) {
-  return (
-    <Link
-      href={blocked ? '/planes' : '/pedidos'}
-      className={[
-        'panel-ref-card-dark flex flex-col rounded-[18px] bg-gradient-to-br from-zinc-900 via-zinc-950 to-black px-4 py-4 text-left text-white antialiased outline-none select-none touch-manipulation',
-        blocked ? 'panel-ref-card--blocked' : '',
+        'panel-ref-card-dark flex flex-col rounded-[18px] bg-gradient-to-br from-zinc-900 via-zinc-950 to-black text-left text-white antialiased outline-none select-none touch-manipulation',
+        wide ? 'px-3.5 py-3 sm:px-4 sm:py-3.5' : 'px-3.5 py-3 sm:px-3.5',
+        tile.blocked ? 'panel-ref-card--blocked opacity-[0.58]' : '',
         'focus-visible:ring-2 focus-visible:ring-white/40 focus-visible:ring-offset-2 focus-visible:ring-offset-[#f5f5f7]',
       ].join(' ')}
     >
-      <div className="flex items-center gap-4">
+      <div className={`flex items-center ${wide ? 'gap-3.5' : 'gap-3'}`}>
         <div className="grid h-14 w-14 shrink-0 place-items-center rounded-2xl bg-white/10 ring-1 ring-white/10">
-          <ShoppingCart className="h-7 w-7 text-[#D32F2F]" strokeWidth={2} />
+          <Icon className="h-7 w-7 text-[#D32F2F]" strokeWidth={2} />
         </div>
         <div className="min-w-0 flex-1">
-          <p className="text-[1.05rem] font-semibold leading-tight tracking-tight">Pedidos</p>
-          <p className="mt-0.5 text-sm font-normal leading-snug text-zinc-400">Proveedores y recepción</p>
+          <p className="text-[1.02rem] font-semibold leading-[1.2] tracking-tight">{tile.label}</p>
+          <p className="mt-0.5 text-sm font-normal leading-snug text-zinc-400">{tile.sub}</p>
         </div>
-        <ChevronRight className="h-6 w-6 shrink-0 text-[#D32F2F]" strokeWidth={2.25} aria-hidden />
+        <ChevronRight
+          className={`shrink-0 text-[#D32F2F] ${wide ? 'h-5 w-5 sm:h-6 sm:w-6' : 'h-5 w-5'}`}
+          strokeWidth={2.25}
+          aria-hidden
+        />
       </div>
-      <div className="mt-4 flex justify-center">
-        <ChefOneGlowLine className="w-16 sm:w-20" />
-      </div>
-    </Link>
-  );
-}
-
-function PanelFinanzasWide({ blocked }: { blocked: boolean }) {
-  return (
-    <Link
-      href={blocked ? '/planes' : '/finanzas'}
-      className={[
-        'panel-ref-card-white flex flex-col rounded-[18px] bg-white px-4 py-4 text-left antialiased outline-none select-none touch-manipulation',
-        blocked ? 'panel-ref-card--blocked' : '',
-        'focus-visible:ring-2 focus-visible:ring-[#D32F2F]/35 focus-visible:ring-offset-2 focus-visible:ring-offset-[#f5f5f7]',
-      ].join(' ')}
-    >
-      <div className="flex items-center gap-4">
-        <div className="grid h-12 w-12 shrink-0 place-items-center rounded-full bg-[#D32F2F]/15 text-[#D32F2F]">
-          <BarChart3 className="h-6 w-6" strokeWidth={2} />
-        </div>
-        <div className="min-w-0 flex-1">
-          <p className="text-base font-semibold leading-tight tracking-tight text-zinc-900">Finanzas</p>
-          <p className="mt-0.5 text-sm font-normal leading-snug text-zinc-500">Ventas, márgenes y análisis por local</p>
-        </div>
-        <ChevronRight className="h-6 w-6 shrink-0 text-[#D32F2F]" strokeWidth={2.25} aria-hidden />
-      </div>
-      <div className="mt-4 flex justify-center">
+      <div className="mt-3 flex justify-center">
         <ChefOneGlowLine className="w-16 sm:w-20" />
       </div>
     </Link>
@@ -151,10 +106,22 @@ export default function PanelControlPage() {
   const showInventario = canAccessInventario(role);
   const showChat = canAccessChat(role);
 
+  const pedidosBlocked = !showPedidos || isBlockedByPlan('pedidos');
+  const finanzasBlocked = !showFinanzas || isBlockedByPlan('finanzas');
+
+  const pedidosTile: PanelTile = {
+    id: 'pedidos',
+    href: '/pedidos',
+    label: 'Pedidos',
+    sub: 'Proveedores y recepción',
+    Icon: ShoppingCart,
+    blocked: pedidosBlocked,
+  };
   const mermas: PanelTile = {
     id: 'mermas',
     href: '/dashboard',
     label: 'Mermas',
+    sub: 'Registro y seguimiento en tiempo real',
     Icon: BookOpen,
     blocked: false,
   };
@@ -162,6 +129,7 @@ export default function PanelControlPage() {
     id: 'appcc',
     href: '/appcc',
     label: 'APPCC',
+    sub: 'Limpieza, temperaturas, aceite y trazabilidad',
     Icon: ShieldCheck,
     blocked: isBlockedByPlan('appcc'),
   };
@@ -169,6 +137,7 @@ export default function PanelControlPage() {
     id: 'checklist',
     href: '/checklist',
     label: 'Check list',
+    sub: 'Apertura, turno, cierre e higiene con tus ítems',
     Icon: ListChecks,
     blocked: isBlockedByPlan('checklist'),
   };
@@ -176,6 +145,7 @@ export default function PanelControlPage() {
     id: 'produccion',
     href: '/produccion',
     label: 'Producción',
+    sub: 'Planes diarios o semanales por zonas y tareas',
     Icon: Factory,
     blocked: isBlockedByPlan('produccion'),
   };
@@ -183,6 +153,7 @@ export default function PanelControlPage() {
     id: 'servicio',
     href: '/servicio',
     label: 'Servicio',
+    sub: 'Platos del día, pasos y mise en place',
     Icon: Soup,
     blocked: isBlockedByPlan('servicio'),
   };
@@ -190,6 +161,7 @@ export default function PanelControlPage() {
     id: 'comida-personal',
     href: '/comida-personal',
     label: 'Consumo interno',
+    sub: 'Registro rápido y coste interno',
     Icon: UtensilsCrossed,
     blocked: isBlockedByPlan('comida_personal'),
   };
@@ -197,6 +169,7 @@ export default function PanelControlPage() {
     id: 'pedidos-cocina',
     href: '/pedidos-cocina',
     label: 'Pedir a central',
+    sub: 'Catálogo con precios y fecha de entrega',
     Icon: Package,
     blocked: false,
   };
@@ -204,6 +177,7 @@ export default function PanelControlPage() {
     id: 'cocina-central',
     href: '/cocina-central',
     label: 'Cocina central',
+    sub: 'Producción, lotes, entregas y QR',
     Icon: ChefHat,
     blocked: isBlockedByPlan('cocina_central'),
   };
@@ -211,6 +185,7 @@ export default function PanelControlPage() {
     id: 'personal',
     href: '/personal',
     label: 'Horarios',
+    sub: 'Horarios, cuadrante y fichajes',
     Icon: CalendarDays,
     blocked: isBlockedByPlan('personal'),
   };
@@ -218,6 +193,7 @@ export default function PanelControlPage() {
     id: 'inventario',
     href: '/inventario',
     label: 'Inventario',
+    sub: 'Stock y valor por local',
     Icon: ClipboardList,
     blocked: !showInventario || isBlockedByPlan('inventario'),
   };
@@ -225,6 +201,7 @@ export default function PanelControlPage() {
     id: 'chat',
     href: '/chat',
     label: 'Chat',
+    sub: 'Habla con tu equipo del mismo local',
     Icon: MessageCircle,
     blocked: !showChat || isBlockedByPlan('chat'),
   };
@@ -232,81 +209,108 @@ export default function PanelControlPage() {
     id: 'escandallos',
     href: '/escandallos',
     label: 'Escandallos',
+    sub: 'Recetas, food cost y centro de mando con gráficas',
     Icon: Calculator,
     blocked: !showEscandallos || isBlockedByPlan('escandallos'),
   };
+  const finanzasTile: PanelTile = {
+    id: 'finanzas',
+    href: '/finanzas',
+    label: 'Finanzas',
+    sub: 'Ventas, márgenes y análisis por local',
+    Icon: BarChart3,
+    blocked: finanzasBlocked,
+  };
 
-  let row3Right: PanelTile | null = null;
+  let row4Left: PanelTile | null = null;
   if (canAccessComidaPersonal(role)) {
-    row3Right = consumoInterno;
+    row4Left = consumoInterno;
   } else if (showPedidosCocina) {
-    row3Right = pedirCentral;
+    row4Left = pedirCentral;
   } else if (showCocinaCentral) {
-    row3Right = cocinaCentral;
+    row4Left = cocinaCentral;
   }
 
-  const row3UsesCocina = row3Right?.id === 'cocina-central';
-  const row3UsesPedCocina = row3Right?.id === 'pedidos-cocina';
+  const row4UsesPedir = row4Left?.id === 'pedidos-cocina';
+  const row4UsesCocina = row4Left?.id === 'cocina-central';
 
-  let row4Right: PanelTile = inventarioTile;
-  if (!showInventario) {
-    if (showCocinaCentral && !row3UsesCocina) {
-      row4Right = cocinaCentral;
-    } else if (showPedidosCocina && !row3UsesPedCocina) {
-      row4Right = pedirCentral;
-    }
+  let row6Right: PanelTile | null = null;
+  if (showCocinaCentral && !row4UsesCocina) {
+    row6Right = cocinaCentral;
+  } else if (showPedidosCocina && !row4UsesPedir) {
+    row6Right = pedirCentral;
   }
 
-  const gridRows: [PanelTile, PanelTile | null][] = [
-    [mermas, appcc],
-    [checklist, produccion],
-    [servicio, row3Right],
-    [horarios, row4Right],
-    [chat, escandallos],
+  /** Orden referencia (con Pedidos): 6 filas × 2 columnas + Finanzas ancha. */
+  const gridRowsWithPedidos: [PanelTile | null, PanelTile | null][] = [
+    [pedidosTile, mermas],
+    [appcc, checklist],
+    [produccion, servicio],
+    [row4Left, horarios],
+    [inventarioTile, chat],
+    [escandallos, row6Right],
   ];
 
-  const cocinaInGrid = row3UsesCocina || row4Right.id === 'cocina-central';
-  const pedirCentralInGrid = row3UsesPedCocina || row4Right.id === 'pedidos-cocina';
+  /** Sin módulo Pedidos en cabecera: mismas filas sustituyendo la primera. */
+  const gridRowsNoPedidos = ((): [PanelTile | null, PanelTile | null][] => {
+    const r3Right: PanelTile | null = canAccessComidaPersonal(role)
+      ? consumoInterno
+      : showPedidosCocina
+        ? pedirCentral
+        : showCocinaCentral
+          ? cocinaCentral
+          : null;
+    const r3UsesCocina = r3Right?.id === 'cocina-central';
+    const r3UsesPed = r3Right?.id === 'pedidos-cocina';
 
-  /** Fila extra: Cocina central si el rol la tiene y aún no salía en la rejilla (p. ej. fila 3 = Consumo interno). */
-  const cocinaCentralRow: [PanelTile, PanelTile | null] | null =
-    showCocinaCentral && !cocinaInGrid
-      ? [
-          cocinaCentral,
-          showPedidosCocina && !pedirCentralInGrid ? pedirCentral : null,
-        ]
-      : null;
+    let r4Right: PanelTile = inventarioTile;
+    if (!showInventario) {
+      if (showCocinaCentral && !r3UsesCocina) {
+        r4Right = cocinaCentral;
+      } else if (showPedidosCocina && !r3UsesPed) {
+        r4Right = pedirCentral;
+      }
+    }
 
-  const pedidosBlocked = !showPedidos || isBlockedByPlan('pedidos');
-  const finanzasBlocked = !showFinanzas || isBlockedByPlan('finanzas');
+    const cocinaIn = r3UsesCocina || r4Right.id === 'cocina-central';
+    const pedirIn = r3UsesPed || r4Right.id === 'pedidos-cocina';
+
+    let r6R: PanelTile | null = null;
+    if (showCocinaCentral && !cocinaIn) {
+      r6R = cocinaCentral;
+    } else if (showPedidosCocina && !pedirIn) {
+      r6R = pedirCentral;
+    }
+
+    return [
+      [mermas, appcc],
+      [checklist, produccion],
+      [servicio, r3Right],
+      [horarios, r4Right],
+      [chat, escandallos],
+      [r6R, null],
+    ];
+  })();
+
+  const rows = showPedidos ? gridRowsWithPedidos : gridRowsNoPedidos;
 
   return (
     <div className="-mx-4 bg-[#f5f5f7] px-4 pb-10 pt-2 sm:-mx-5 sm:px-5 md:-mx-6 md:px-6 lg:-mx-8 lg:px-8">
-      <div className="mx-auto max-w-full space-y-3.5 sm:max-w-2xl md:max-w-4xl lg:max-w-5xl">
+      <div className="mx-auto max-w-full space-y-3 sm:max-w-2xl md:max-w-4xl lg:max-w-5xl">
         <ProductoGuiadoChecklist />
 
-        {showPedidos ? (
-          <PanelFeaturedPedidos blocked={pedidosBlocked} />
-        ) : null}
-
-        <div className="flex flex-col gap-y-3.5">
-          {gridRows.map(([left, right], idx) => (
-            <div key={idx} className="grid grid-cols-2 gap-3">
-              <PanelGridCard tile={left} />
-              {right ? <PanelGridCard tile={right} /> : <PanelGridEmpty />}
+        <div className="flex flex-col gap-y-3">
+          {rows.map(([left, right], idx) => (
+            <div key={idx} className="grid grid-cols-2 gap-x-2.5 gap-y-2.5 sm:gap-x-3 sm:gap-y-3">
+              {left ? <PanelDarkModuleCard tile={left} /> : <PanelCellEmpty />}
+              {right ? <PanelDarkModuleCard tile={right} /> : <PanelCellEmpty />}
             </div>
           ))}
-          {cocinaCentralRow ? (
-            <div className="grid grid-cols-2 gap-3">
-              <PanelGridCard tile={cocinaCentralRow[0]} />
-              {cocinaCentralRow[1] ? <PanelGridCard tile={cocinaCentralRow[1]} /> : <PanelGridEmpty />}
-            </div>
-          ) : null}
         </div>
 
         {showFinanzas ? (
           <div className="pt-0.5">
-            <PanelFinanzasWide blocked={finanzasBlocked} />
+            <PanelDarkModuleCard tile={finanzasTile} wide />
           </div>
         ) : null}
       </div>
