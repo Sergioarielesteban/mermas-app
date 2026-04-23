@@ -1,5 +1,12 @@
 -- Cobro en unidad distinta a la de pedido (ej. pedir en bandeja, cobrar por kg).
 -- Ejecutar en Supabase tras desplegar el código que envía/recibe estos campos.
+--
+-- La función save_purchase_order_with_items actualiza content_revised_after_sent_at;
+-- si tu BD es anterior a supabase-pedidos-migration-order-content-revised-after-sent.sql,
+-- esta línea crea la columna de forma idempotente.
+
+alter table public.purchase_orders
+  add column if not exists content_revised_after_sent_at timestamptz;
 
 alter table public.pedido_supplier_products
   add column if not exists billing_unit text;
