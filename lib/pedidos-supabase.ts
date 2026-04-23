@@ -21,6 +21,20 @@ export function unitSupportsReceivedWeightKg(unit: Unit): boolean {
   );
 }
 
+/** Catálogo: unidad de cobro distinta a la de pedido (ej. bandeja → kg). */
+export function supplierProductHasDistinctBilling(
+  p: Pick<PedidoSupplierProduct, 'unit' | 'billingUnit'>,
+): boolean {
+  return p.billingUnit != null && p.billingUnit !== p.unit;
+}
+
+/** Línea guardada: misma regla que catálogo (snapshot en el pedido). */
+export function orderItemHasDistinctBilling(
+  item: Pick<PedidoOrderItem, 'unit' | 'billingUnit'>,
+): boolean {
+  return item.billingUnit != null && item.billingUnit !== item.unit;
+}
+
 /** Líneas donde se puede anotar peso en báscula al recibir (kg: el peso actualiza subtotal e IVA del albarán). */
 export function unitCanDeclareScaleKgOnReception(unit: Unit): boolean {
   return unit === 'kg' || unitSupportsReceivedWeightKg(unit);
@@ -108,6 +122,12 @@ export type PedidoSupplierProduct = {
   isActive: boolean;
   /** Bandeja/caja: kg estimados por envase (referencia). */
   estimatedKgPerUnit?: number;
+  /** Unidad de cobro en factura/albarán si difiere de `unit` (p. ej. kg con pedido en bandeja). */
+  billingUnit?: Unit | null;
+  /** Cantidad de `billingUnit` por cada unidad de pedido (p. ej. kg por bandeja). */
+  billingQtyPerOrderUnit?: number | null;
+  /** Precio habitual en `billingUnit` (p. ej. €/kg). */
+  pricePerBillingUnit?: number | null;
 };
 
 export type PedidoSupplier = {
@@ -141,6 +161,10 @@ export type PedidoOrderItem = {
   incidentNotes?: string;
   /** Precio unitario del pedido al enviar (no se sobrescribe al revisar albarán). */
   basePricePerUnit?: number;
+  /** Snapshot al guardar: unidad de cobro si difiere de `unit`. */
+  billingUnit?: Unit | null;
+  billingQtyPerOrderUnit?: number | null;
+  pricePerBillingUnit?: number | null;
 };
 
 export type PedidoOrder = {
@@ -203,6 +227,9 @@ type SupplierProductRow = {
   par_stock: number;
   is_active: boolean;
   estimated_kg_per_unit: number | null;
+  billing_unit?: string | null;
+  billing_qty_per_order_unit?: number | null;
+  price_per_billing_unit?: number | null;
 };
 type OrderRow = {
   id: string;
@@ -235,11 +262,22 @@ type OrderItemRow = {
   received_price_per_kg?: number | null;
   incident_type: 'missing' | 'damaged' | 'wrong-item' | null;
   incident_notes: string | null;
+  billing_unit?: string | null;
+  billing_qty_per_order_unit?: number | null;
+  price_per_billing_unit?: number | null;
 };
 
 function isMissingReceivedPricePerKgColumnError(message: string): boolean {
   const m = message.toLowerCase();
   return m.includes('received_price_per_kg') && (m.includes('column') || m.includes('schema cache'));
+}
+
+function isMissingOrderItemBillingColumnsError(message: string): boolean {
+  const m = message.toLowerCase();
+  return (
+    (m.includes('billing_unit') || m.includes('billing_qty_per_order_unit') || m.includes('price_per_billing_unit')) &&
+    (m.includes('column') || m.includes('schema cache'))
+  );
 }
 
 function normalizeLabelUpper(value: string) {
@@ -320,15 +358,21 @@ async function fetchPurchaseOrderItemRows(
 ): Promise<OrderItemRow[]> {
   const signal = options?.signal;
   const ids = orderIds.length ? orderIds : ['00000000-0000-0000-0000-000000000000'];
-  let q = supabase
-    .from('purchase_order_items')
-    .select(
-      'id,order_id,supplier_product_id,product_name,unit,quantity,received_quantity,price_per_unit,base_price_per_unit,vat_rate,line_total,estimated_kg_per_unit,received_weight_kg,received_price_per_kg,incident_type,incident_notes',
-    )
-    .in('order_id', ids);
+  const selFull =
+    'id,order_id,supplier_product_id,product_name,unit,quantity,received_quantity,price_per_unit,base_price_per_unit,vat_rate,line_total,estimated_kg_per_unit,received_weight_kg,received_price_per_kg,incident_type,incident_notes,billing_unit,billing_qty_per_order_unit,price_per_billing_unit';
+  let q = supabase.from('purchase_order_items').select(selFull).in('order_id', ids);
   if (signal) q = q.abortSignal(signal);
   const withPricePerKg = await q;
   if (withPricePerKg.error) {
+    if (isMissingOrderItemBillingColumnsError(withPricePerKg.error.message)) {
+      const selNoBill =
+        'id,order_id,supplier_product_id,product_name,unit,quantity,received_quantity,price_per_unit,base_price_per_unit,vat_rate,line_total,estimated_kg_per_unit,received_weight_kg,received_price_per_kg,incident_type,incident_notes';
+      let q2 = supabase.from('purchase_order_items').select(selNoBill).in('order_id', ids);
+      if (signal) q2 = q2.abortSignal(signal);
+      const r2 = await q2;
+      if (r2.error) throw new Error(r2.error.message);
+      return (r2.data ?? []) as OrderItemRow[];
+    }
     if (!isMissingReceivedPricePerKgColumnError(withPricePerKg.error.message)) {
       throw new Error(withPricePerKg.error.message);
     }
@@ -372,6 +416,15 @@ function buildPedidoOrdersFromRows(orderRows: OrderRow[], itemRows: OrderItemRow
         : {}),
       incidentType: row.incident_type,
       incidentNotes: row.incident_notes ?? undefined,
+      ...(row.billing_unit != null && String(row.billing_unit).trim() !== ''
+        ? { billingUnit: row.billing_unit as Unit }
+        : {}),
+      ...(row.billing_qty_per_order_unit != null && Number.isFinite(Number(row.billing_qty_per_order_unit))
+        ? { billingQtyPerOrderUnit: Number(row.billing_qty_per_order_unit) }
+        : {}),
+      ...(row.price_per_billing_unit != null && Number.isFinite(Number(row.price_per_billing_unit))
+        ? { pricePerBillingUnit: Number(row.price_per_billing_unit) }
+        : {}),
     });
     byOrder.set(row.order_id, list);
   }
@@ -420,15 +473,33 @@ export async function fetchSuppliersWithProducts(supabase: SupabaseClient, local
     .order('name');
   if (sErr) throw new Error(sErr.message);
 
-  const { data: productRows, error: pErr } = await supabase
-    .from('pedido_supplier_products')
-    .select(
-      'id,supplier_id,article_id,name,unit,price_per_unit,units_per_pack,recipe_unit,vat_rate,par_stock,is_active,estimated_kg_per_unit',
-    )
-    .eq('local_id', localId)
-    .eq('is_active', true)
-    .order('name');
-  if (pErr) throw new Error(pErr.message);
+  let productRows: unknown[] | null = null;
+  {
+    const full = await supabase
+      .from('pedido_supplier_products')
+      .select(
+        'id,supplier_id,article_id,name,unit,price_per_unit,units_per_pack,recipe_unit,vat_rate,par_stock,is_active,estimated_kg_per_unit,billing_unit,billing_qty_per_order_unit,price_per_billing_unit',
+      )
+      .eq('local_id', localId)
+      .eq('is_active', true)
+      .order('name');
+    if (full.error && isMissingOrderItemBillingColumnsError(full.error.message)) {
+      const legacy = await supabase
+        .from('pedido_supplier_products')
+        .select(
+          'id,supplier_id,article_id,name,unit,price_per_unit,units_per_pack,recipe_unit,vat_rate,par_stock,is_active,estimated_kg_per_unit',
+        )
+        .eq('local_id', localId)
+        .eq('is_active', true)
+        .order('name');
+      if (legacy.error) throw new Error(legacy.error.message);
+      productRows = legacy.data ?? [];
+    } else if (full.error) {
+      throw new Error(full.error.message);
+    } else {
+      productRows = full.data ?? [];
+    }
+  }
 
   let exceptionRows: SupplierDeliveryExceptionRow[] = [];
   {
@@ -468,6 +539,15 @@ export async function fetchSuppliersWithProducts(supabase: SupabaseClient, local
       isActive: Boolean(row.is_active),
       ...(row.estimated_kg_per_unit != null
         ? { estimatedKgPerUnit: Number(row.estimated_kg_per_unit) }
+        : {}),
+      ...(row.billing_unit != null && String(row.billing_unit).trim() !== ''
+        ? { billingUnit: row.billing_unit as Unit }
+        : {}),
+      ...(row.billing_qty_per_order_unit != null && Number.isFinite(Number(row.billing_qty_per_order_unit))
+        ? { billingQtyPerOrderUnit: Number(row.billing_qty_per_order_unit) }
+        : {}),
+      ...(row.price_per_billing_unit != null && Number.isFinite(Number(row.price_per_billing_unit))
+        ? { pricePerBillingUnit: Number(row.price_per_billing_unit) }
         : {}),
     });
     bySupplier.set(row.supplier_id, list);
@@ -579,6 +659,81 @@ function normalizePackRecipeFields(input: { unitsPerPack?: number; recipeUnit?: 
   return { unitsPerPack, recipeUnit };
 }
 
+type SupplierProductBillingResolved = {
+  pricePerUnit: number;
+  billingUnit: Unit | null;
+  billingQtyPerOrderUnit: number | null;
+  pricePerBillingUnit: number | null;
+  estimatedKgPerUnit: number | null;
+};
+
+function resolveSupplierProductBilling(input: {
+  unit: Unit;
+  pricePerUnit: number;
+  billingUnit?: Unit | null;
+  billingQtyPerOrderUnit?: number | null;
+  pricePerBillingUnit?: number | null;
+  estimatedKgPerUnit?: number | null;
+}): SupplierProductBillingResolved {
+  const bUnit = input.billingUnit ?? null;
+  const bQty =
+    input.billingQtyPerOrderUnit != null && Number.isFinite(input.billingQtyPerOrderUnit)
+      ? Number(input.billingQtyPerOrderUnit)
+      : null;
+  const pBill =
+    input.pricePerBillingUnit != null && Number.isFinite(input.pricePerBillingUnit)
+      ? Number(input.pricePerBillingUnit)
+      : null;
+
+  const dual =
+    bUnit != null &&
+    bUnit !== input.unit &&
+    bQty != null &&
+    bQty > 0 &&
+    pBill != null &&
+    pBill >= 0;
+
+  if (dual) {
+    const pricePerUnit = Math.round(bQty * pBill * 100) / 100;
+    const pricePerBillingUnit = Math.round(pBill * 10000) / 10000;
+    const billingQtyPerOrderUnit = Math.round(bQty * 10000) / 10000;
+    let estimatedKgPerUnit: number | null = null;
+    if (bUnit === 'kg') {
+      estimatedKgPerUnit = Math.round(bQty * 1000) / 1000;
+    } else if (unitSupportsReceivedWeightKg(input.unit)) {
+      const est = input.estimatedKgPerUnit;
+      if (est != null && Number.isFinite(est) && est > 0) estimatedKgPerUnit = Math.round(est * 1000) / 1000;
+    }
+    return {
+      pricePerUnit,
+      billingUnit: bUnit,
+      billingQtyPerOrderUnit,
+      pricePerBillingUnit,
+      estimatedKgPerUnit,
+    };
+  }
+
+  const estSimple =
+    unitSupportsReceivedWeightKg(input.unit) &&
+    input.estimatedKgPerUnit != null &&
+    Number.isFinite(input.estimatedKgPerUnit) &&
+    input.estimatedKgPerUnit > 0
+      ? Math.round(input.estimatedKgPerUnit * 1000) / 1000
+      : null;
+  return {
+    pricePerUnit: Math.round(input.pricePerUnit * 100) / 100,
+    billingUnit: null,
+    billingQtyPerOrderUnit: null,
+    pricePerBillingUnit: null,
+    estimatedKgPerUnit: estSimple,
+  };
+}
+
+const SUPPLIER_PRODUCT_SELECT_FULL =
+  'id,supplier_id,article_id,name,unit,price_per_unit,units_per_pack,recipe_unit,vat_rate,par_stock,is_active,estimated_kg_per_unit,billing_unit,billing_qty_per_order_unit,price_per_billing_unit';
+const SUPPLIER_PRODUCT_SELECT_LEGACY =
+  'id,supplier_id,article_id,name,unit,price_per_unit,units_per_pack,recipe_unit,vat_rate,par_stock,is_active,estimated_kg_per_unit';
+
 export async function createSupplierProduct(
   supabase: SupabaseClient,
   localId: string,
@@ -592,40 +747,59 @@ export async function createSupplierProduct(
     estimatedKgPerUnit?: number | null;
     unitsPerPack?: number;
     recipeUnit?: Unit | null;
+    billingUnit?: Unit | null;
+    billingQtyPerOrderUnit?: number | null;
+    pricePerBillingUnit?: number | null;
   },
 ) {
-  const est =
-    unitSupportsReceivedWeightKg(input.unit) &&
-    input.estimatedKgPerUnit != null &&
-    Number.isFinite(input.estimatedKgPerUnit) &&
-    input.estimatedKgPerUnit > 0
-      ? Math.round(input.estimatedKgPerUnit * 1000) / 1000
-      : null;
+  const bill = resolveSupplierProductBilling({
+    unit: input.unit,
+    pricePerUnit: input.pricePerUnit,
+    billingUnit: input.billingUnit,
+    billingQtyPerOrderUnit: input.billingQtyPerOrderUnit,
+    pricePerBillingUnit: input.pricePerBillingUnit,
+    estimatedKgPerUnit: input.estimatedKgPerUnit,
+  });
   const { unitsPerPack, recipeUnit } = normalizePackRecipeFields({
     unitsPerPack: input.unitsPerPack,
     recipeUnit: input.recipeUnit,
   });
-  const { data, error } = await supabase
-    .from('pedido_supplier_products')
-    .insert({
-      local_id: localId,
-      supplier_id: supplierId,
-      name: normalizeLabelUpper(input.name),
-      unit: input.unit,
-      price_per_unit: Math.round(input.pricePerUnit * 100) / 100,
-      units_per_pack: unitsPerPack,
-      recipe_unit: recipeUnit,
-      vat_rate: Math.max(0, Math.round((input.vatRate ?? 0) * 10000) / 10000),
-      par_stock: Math.max(0, Math.round((input.parStock ?? 0) * 100) / 100),
-      is_active: true,
-      estimated_kg_per_unit: est,
-    })
-    .select(
-      'id,supplier_id,article_id,name,unit,price_per_unit,units_per_pack,recipe_unit,vat_rate,par_stock,is_active,estimated_kg_per_unit',
-    )
-    .single();
-  if (error) throw new Error(error.message);
-  const row = data as SupplierProductRow;
+  const insertRow: Record<string, unknown> = {
+    local_id: localId,
+    supplier_id: supplierId,
+    name: normalizeLabelUpper(input.name),
+    unit: input.unit,
+    price_per_unit: bill.pricePerUnit,
+    units_per_pack: unitsPerPack,
+    recipe_unit: recipeUnit,
+    vat_rate: Math.max(0, Math.round((input.vatRate ?? 0) * 10000) / 10000),
+    par_stock: Math.max(0, Math.round((input.parStock ?? 0) * 100) / 100),
+    is_active: true,
+    estimated_kg_per_unit: bill.estimatedKgPerUnit,
+    billing_unit: bill.billingUnit,
+    billing_qty_per_order_unit: bill.billingQtyPerOrderUnit,
+    price_per_billing_unit: bill.pricePerBillingUnit,
+  };
+  let data: SupplierProductRow | null = null;
+  {
+    const ins = await supabase.from('pedido_supplier_products').insert(insertRow).select(SUPPLIER_PRODUCT_SELECT_FULL).single();
+    if (ins.error && isMissingOrderItemBillingColumnsError(ins.error.message)) {
+      const { billing_unit: _b, billing_qty_per_order_unit: _q, price_per_billing_unit: _p, ...legacyInsert } = insertRow;
+      const ins2 = await supabase
+        .from('pedido_supplier_products')
+        .insert(legacyInsert)
+        .select(SUPPLIER_PRODUCT_SELECT_LEGACY)
+        .single();
+      if (ins2.error) throw new Error(ins2.error.message);
+      data = ins2.data as SupplierProductRow;
+    } else if (ins.error) {
+      throw new Error(ins.error.message);
+    } else {
+      data = ins.data as SupplierProductRow;
+    }
+  }
+  if (!data) throw new Error('No se pudo crear el producto.');
+  const row = data;
   try {
     const linked = await linkPurchaseArticleToNewSupplierProduct(supabase, localId, row.id, row.supplier_id, {
       nombre: row.name,
@@ -636,13 +810,18 @@ export async function createSupplierProduct(
     if (linked) {
       const refetch = await supabase
         .from('pedido_supplier_products')
-        .select(
-          'id,supplier_id,article_id,name,unit,price_per_unit,units_per_pack,recipe_unit,vat_rate,par_stock,is_active,estimated_kg_per_unit',
-        )
+        .select(SUPPLIER_PRODUCT_SELECT_FULL)
         .eq('id', row.id)
         .eq('local_id', localId)
         .single();
       if (!refetch.error && refetch.data) return refetch.data as SupplierProductRow;
+      const refLegacy = await supabase
+        .from('pedido_supplier_products')
+        .select(SUPPLIER_PRODUCT_SELECT_LEGACY)
+        .eq('id', row.id)
+        .eq('local_id', localId)
+        .single();
+      if (!refLegacy.error && refLegacy.data) return refLegacy.data as SupplierProductRow;
     }
   } catch (e: unknown) {
     if (e instanceof Error && isMissingPurchaseArticlesError(e.message)) {
@@ -668,44 +847,80 @@ export async function updateSupplierProduct(
     recipeUnit?: Unit | null;
     /** Si true, escribe `last_price_update` (requiere migración SQL fase 10). */
     lastPriceUpdatedAt?: boolean;
+    billingUnit?: Unit | null;
+    billingQtyPerOrderUnit?: number | null;
+    pricePerBillingUnit?: number | null;
+    /** Si viene de histórico de precios: actualizar solo €/ud y, si aplica, €/kg derivado. */
+    priceUpdateOnly?: boolean;
   },
 ) {
-  const est =
-    unitSupportsReceivedWeightKg(input.unit) &&
-    input.estimatedKgPerUnit != null &&
-    Number.isFinite(input.estimatedKgPerUnit) &&
-    input.estimatedKgPerUnit > 0
-      ? Math.round(input.estimatedKgPerUnit * 1000) / 1000
-      : null;
+  const bill = input.priceUpdateOnly
+    ? null
+    : resolveSupplierProductBilling({
+        unit: input.unit,
+        pricePerUnit: input.pricePerUnit,
+        billingUnit: input.billingUnit,
+        billingQtyPerOrderUnit: input.billingQtyPerOrderUnit,
+        pricePerBillingUnit: input.pricePerBillingUnit,
+        estimatedKgPerUnit: input.estimatedKgPerUnit,
+      });
   const { unitsPerPack, recipeUnit } = normalizePackRecipeFields({
     unitsPerPack: input.unitsPerPack,
     recipeUnit: input.recipeUnit,
   });
-  const patch: Record<string, unknown> = {
-    name: normalizeLabelUpper(input.name),
-    unit: input.unit,
-    price_per_unit: Math.round(input.pricePerUnit * 100) / 100,
-    units_per_pack: unitsPerPack,
-    recipe_unit: recipeUnit,
-    vat_rate: Math.max(0, Math.round((input.vatRate ?? 0) * 10000) / 10000),
-    par_stock: Math.max(0, Math.round((input.parStock ?? 0) * 100) / 100),
-    estimated_kg_per_unit: unitSupportsReceivedWeightKg(input.unit) ? est : null,
-  };
+  const patch: Record<string, unknown> = input.priceUpdateOnly
+    ? {
+        price_per_unit: Math.round(input.pricePerUnit * 100) / 100,
+        ...(input.pricePerBillingUnit != null && Number.isFinite(input.pricePerBillingUnit)
+          ? { price_per_billing_unit: Math.round(input.pricePerBillingUnit * 10000) / 10000 }
+          : {}),
+      }
+    : {
+        name: normalizeLabelUpper(input.name),
+        unit: input.unit,
+        price_per_unit: bill!.pricePerUnit,
+        units_per_pack: unitsPerPack,
+        recipe_unit: recipeUnit,
+        vat_rate: Math.max(0, Math.round((input.vatRate ?? 0) * 10000) / 10000),
+        par_stock: Math.max(0, Math.round((input.parStock ?? 0) * 100) / 100),
+        estimated_kg_per_unit: bill!.estimatedKgPerUnit,
+        billing_unit: bill!.billingUnit,
+        billing_qty_per_order_unit: bill!.billingQtyPerOrderUnit,
+        price_per_billing_unit: bill!.pricePerBillingUnit,
+      };
   if (input.lastPriceUpdatedAt) {
     patch.last_price_update = new Date().toISOString();
   }
-  const { data, error } = await supabase
-    .from('pedido_supplier_products')
-    .update(patch)
-    .eq('id', supplierProductId)
-    .eq('local_id', localId)
-    .select(
-      'id,supplier_id,article_id,name,unit,price_per_unit,units_per_pack,recipe_unit,vat_rate,par_stock,is_active,estimated_kg_per_unit',
-    )
-    .single();
-  if (error) throw new Error(error.message);
-  const row = data as SupplierProductRow;
-  return row;
+  let data: SupplierProductRow | null = null;
+  {
+    const res = await supabase
+      .from('pedido_supplier_products')
+      .update(patch)
+      .eq('id', supplierProductId)
+      .eq('local_id', localId)
+      .select(SUPPLIER_PRODUCT_SELECT_FULL)
+      .single();
+    if (res.error && isMissingOrderItemBillingColumnsError(res.error.message)) {
+      const legacyPatch = { ...patch };
+      delete legacyPatch.billing_unit;
+      delete legacyPatch.billing_qty_per_order_unit;
+      delete legacyPatch.price_per_billing_unit;
+      const res2 = await supabase
+        .from('pedido_supplier_products')
+        .update(legacyPatch)
+        .eq('id', supplierProductId)
+        .eq('local_id', localId)
+        .select(SUPPLIER_PRODUCT_SELECT_LEGACY)
+        .single();
+      if (res2.error) throw new Error(res2.error.message);
+      data = res2.data as SupplierProductRow;
+    } else if (res.error) {
+      throw new Error(res.error.message);
+    } else {
+      data = res.data as SupplierProductRow;
+    }
+  }
+  return data as SupplierProductRow;
 }
 
 export async function fetchSupplierProductRow(
@@ -713,16 +928,24 @@ export async function fetchSupplierProductRow(
   localId: string,
   supplierProductId: string,
 ): Promise<SupplierProductRow | null> {
-  const { data, error } = await supabase
+  const full = await supabase
     .from('pedido_supplier_products')
-    .select(
-      'id,supplier_id,article_id,name,unit,price_per_unit,units_per_pack,recipe_unit,vat_rate,par_stock,is_active,estimated_kg_per_unit',
-    )
+    .select(SUPPLIER_PRODUCT_SELECT_FULL)
     .eq('local_id', localId)
     .eq('id', supplierProductId)
     .maybeSingle();
-  if (error) throw new Error(error.message);
-  return data ? (data as SupplierProductRow) : null;
+  if (full.error && isMissingOrderItemBillingColumnsError(full.error.message)) {
+    const leg = await supabase
+      .from('pedido_supplier_products')
+      .select(SUPPLIER_PRODUCT_SELECT_LEGACY)
+      .eq('local_id', localId)
+      .eq('id', supplierProductId)
+      .maybeSingle();
+    if (leg.error) throw new Error(leg.error.message);
+    return leg.data ? (leg.data as SupplierProductRow) : null;
+  }
+  if (full.error) throw new Error(full.error.message);
+  return full.data ? (full.data as SupplierProductRow) : null;
 }
 
 export type SupplierProductPriceChangeSource = 'delivery_note_validated' | 'quick_input';
@@ -778,6 +1001,15 @@ export async function updateSupplierProductPriceWithHistory(
       ? (String(row.recipe_unit) as Unit)
       : null;
 
+  let derivedPricePerBilling: number | undefined;
+  if (
+    row.billing_unit === 'kg' &&
+    row.billing_qty_per_order_unit != null &&
+    Number(row.billing_qty_per_order_unit) > 0
+  ) {
+    derivedPricePerBilling = Math.round((newP / Number(row.billing_qty_per_order_unit)) * 10000) / 10000;
+  }
+
   await updateSupplierProduct(supabase, localId, supplierProductId, {
     name: row.name,
     unit: row.unit as Unit,
@@ -788,6 +1020,8 @@ export async function updateSupplierProductPriceWithHistory(
     unitsPerPack,
     recipeUnit,
     lastPriceUpdatedAt: true,
+    priceUpdateOnly: true,
+    ...(derivedPricePerBilling != null ? { pricePerBillingUnit: derivedPricePerBilling } : {}),
   });
 
   return { changed: true };
@@ -1156,6 +1390,9 @@ export async function saveOrder(
       incidentType?: 'missing' | 'damaged' | 'wrong-item' | null;
       incidentNotes?: string | null;
       receivedPricePerKg?: number | null;
+      billingUnit?: Unit | null;
+      billingQtyPerOrderUnit?: number | null;
+      pricePerBillingUnit?: number | null;
     }>;
   },
 ) {
@@ -1197,6 +1434,15 @@ export async function saveOrder(
     received_price_per_kg:
       item.receivedPricePerKg != null && Number.isFinite(item.receivedPricePerKg)
         ? Math.round(item.receivedPricePerKg * 10000) / 10000
+        : null,
+    billing_unit: item.billingUnit ?? null,
+    billing_qty_per_order_unit:
+      item.billingQtyPerOrderUnit != null && Number.isFinite(item.billingQtyPerOrderUnit) && item.billingQtyPerOrderUnit > 0
+        ? Math.round(item.billingQtyPerOrderUnit * 10000) / 10000
+        : null,
+    price_per_billing_unit:
+      item.pricePerBillingUnit != null && Number.isFinite(item.pricePerBillingUnit) && item.pricePerBillingUnit >= 0
+        ? Math.round(item.pricePerBillingUnit * 10000) / 10000
         : null,
   }));
 

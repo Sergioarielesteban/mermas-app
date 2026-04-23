@@ -3,7 +3,7 @@
 import React from 'react';
 import { useRepeatPress } from '@/hooks/useRepeatPress';
 import { formatQuantityWithUnit, unitPriceCatalogSuffix } from '@/lib/pedidos-format';
-import type { PedidoSupplierProduct } from '@/lib/pedidos-supabase';
+import { supplierProductHasDistinctBilling, type PedidoSupplierProduct } from '@/lib/pedidos-supabase';
 
 function shortUnitChip(unit: string): string {
   const u = unit.toLowerCase();
@@ -27,6 +27,11 @@ export default function PedidosNuevoCatalogLine({ product: p, qty, lineTotal, su
   const u = unitPriceCatalogSuffix[p.unit];
   const repeatUp = useRepeatPress(() => onDelta(1));
   const repeatDown = useRepeatPress(() => onDelta(-1));
+  const dual = supplierProductHasDistinctBilling(p) && p.billingUnit === 'kg';
+  const eq = p.billingQtyPerOrderUnit ?? p.estimatedKgPerUnit;
+  const estKg =
+    dual && qty > 0 && eq != null && eq > 0 ? Math.round(qty * eq * 1000) / 1000 : null;
+  const ppk = dual && p.pricePerBillingUnit != null ? p.pricePerBillingUnit : null;
 
   return (
     <div className="rounded-xl bg-zinc-50 p-3 ring-1 ring-zinc-200">
@@ -34,8 +39,21 @@ export default function PedidosNuevoCatalogLine({ product: p, qty, lineTotal, su
         <div>
           <p className="text-sm font-semibold text-zinc-800">{p.name}</p>
           <p className="text-xs text-zinc-500">
-            {p.pricePerUnit.toFixed(2)} €/{u}
+            {dual && ppk != null ? (
+              <>
+                {ppk.toFixed(2)} €/kg habitual · {eq != null ? `${eq} kg/${u} ref.` : ''}
+              </>
+            ) : (
+              <>
+                {p.pricePerUnit.toFixed(2)} €/{u}
+              </>
+            )}
           </p>
+          {dual && estKg != null && ppk != null ? (
+            <p className="mt-1 text-[11px] text-zinc-600">
+              Estimado: {estKg} kg · total estimado {lineTotal.toFixed(2)} €
+            </p>
+          ) : null}
           {suggestedQty != null ? (
             <p className="mt-1 text-[11px] font-semibold text-zinc-700">
               Cant. tramo: {formatQuantityWithUnit(suggestedQty, p.unit)}

@@ -1,5 +1,6 @@
 import {
   billingQuantityForLine,
+  orderItemHasDistinctBilling,
   receptionLineTotals,
   unitSupportsReceivedWeightKg,
   type PedidoOrder,
@@ -166,4 +167,23 @@ export function totalsWithVatForOrderListDisplay(order: PedidoOrder): {
     0,
   );
   return { base, vat, total: base + vat };
+}
+
+/** Subtotal previsto al enviar el pedido (precio base × cantidad pedida). */
+export function estimatedOrderLineSubtotal(item: PedidoOrder['items'][number]): number {
+  const u =
+    item.basePricePerUnit != null && Number.isFinite(item.basePricePerUnit)
+      ? item.basePricePerUnit
+      : item.pricePerUnit;
+  return Math.round(Math.max(0, item.quantity) * u * 100) / 100;
+}
+
+/** Kg previstos si la línea lleva equivalencia (doble unidad kg o envase con kg estimado). */
+export function estimatedKgForOrderLine(item: PedidoOrder['items'][number]): number | null {
+  const eq = item.billingQtyPerOrderUnit ?? item.estimatedKgPerUnit;
+  if (eq == null || eq <= 0) return null;
+  const byDualKg = orderItemHasDistinctBilling(item) && item.billingUnit === 'kg';
+  const byPackEstimate = !orderItemHasDistinctBilling(item) && unitSupportsReceivedWeightKg(item.unit);
+  if (!byDualKg && !byPackEstimate) return null;
+  return Math.round(item.quantity * eq * 1000) / 1000;
 }

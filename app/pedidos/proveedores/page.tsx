@@ -26,6 +26,7 @@ import {
   setSupplierProductActive,
   updateSupplier,
   updateSupplierProduct,
+  supplierProductHasDistinctBilling,
   unitSupportsReceivedWeightKg,
   type PedidoSupplier,
 } from '@/lib/pedidos-supabase';
@@ -67,6 +68,14 @@ function parseDecimal(raw: string) {
   const value = Number(normalized);
   if (!Number.isFinite(value)) return null;
   return Math.round(value * 100) / 100;
+}
+
+/** €/kg o €/unidad de cobro (hasta 4 decimales). */
+function parsePricePerBilling(raw: string) {
+  const normalized = raw.trim().replace(/\./g, '').replace(',', '.');
+  const value = Number(normalized);
+  if (!Number.isFinite(value) || value < 0) return null;
+  return Math.round(value * 10000) / 10000;
 }
 
 /** Kg estimado por bandeja/caja (3 decimales). Vacío = sin estimación. */
@@ -116,6 +125,24 @@ type ProductDraft = {
   unitsPerPack: string;
   recipeUnit: Unit;
   parWeekly: string;
+  /** Pedido en envase, cobro al peso (€/kg). */
+  dualKgBilling?: boolean;
+  equivKg?: string;
+  pricePerKg?: string;
+};
+
+const EMPTY_PRODUCT_DRAFT: ProductDraft = {
+  name: '',
+  unit: 'ud',
+  price: '',
+  vatRate: '0',
+  estimatedKg: '',
+  unitsPerPack: '1',
+  recipeUnit: 'ud',
+  parWeekly: '',
+  dualKgBilling: false,
+  equivKg: '',
+  pricePerKg: '',
 };
 
 export default function ProveedoresPage() {
@@ -137,6 +164,9 @@ export default function ProveedoresPage() {
   const [productUnitsPerPack, setProductUnitsPerPack] = React.useState('1');
   const [productRecipeUnit, setProductRecipeUnit] = React.useState<Unit>('ud');
   const [productParWeekly, setProductParWeekly] = React.useState('');
+  const [productDualKgBilling, setProductDualKgBilling] = React.useState(false);
+  const [productEquivKg, setProductEquivKg] = React.useState('');
+  const [productPricePerKg, setProductPricePerKg] = React.useState('');
   const [editingSupplierId, setEditingSupplierId] = React.useState<string | null>(null);
   const [editingProductId, setEditingProductId] = React.useState<string | null>(null);
   const [expandedSupplierId, setExpandedSupplierId] = React.useState<string | null>(null);
@@ -175,12 +205,24 @@ export default function ProveedoresPage() {
             price: String(p.pricePerUnit),
             vatRate: String(p.vatRate ?? 0),
             estimatedKg:
-              unitSupportsReceivedWeightKg(p.unit) && p.estimatedKgPerUnit != null && p.estimatedKgPerUnit > 0
+              !supplierProductHasDistinctBilling(p) &&
+              unitSupportsReceivedWeightKg(p.unit) &&
+              p.estimatedKgPerUnit != null &&
+              p.estimatedKgPerUnit > 0
                 ? String(p.estimatedKgPerUnit)
                 : '',
             unitsPerPack: String((p.unitsPerPack ?? 1) >= 1 ? (p.unitsPerPack ?? 1) : 1),
             recipeUnit: (p.recipeUnit ?? 'ud') as Unit,
             parWeekly: String((p.parStock ?? 0) > 0 ? p.parStock : ''),
+            dualKgBilling: supplierProductHasDistinctBilling(p) && p.billingUnit === 'kg',
+            equivKg:
+              supplierProductHasDistinctBilling(p) && p.billingQtyPerOrderUnit != null
+                ? String(p.billingQtyPerOrderUnit)
+                : '',
+            pricePerKg:
+              supplierProductHasDistinctBilling(p) && p.pricePerBillingUnit != null
+                ? String(p.pricePerBillingUnit)
+                : '',
           };
         }
       }
@@ -213,6 +255,14 @@ export default function ProveedoresPage() {
   }, [applySupplierRows, canUse, localId, reload]);
 
   usePedidosDataChangedListener(reload, Boolean(hasPedidosEntry && canUse));
+
+  const dualNewProductDerivedPrice = React.useMemo(() => {
+    if (!productDualKgBilling || productUnit === 'kg' || !unitSupportsReceivedWeightKg(productUnit)) return null;
+    const eq = parseKgEstimate(productEquivKg);
+    const ppk = parsePricePerBilling(productPricePerKg);
+    if (eq == null || eq === undefined || ppk == null) return null;
+    return Math.round(eq * ppk * 100) / 100;
+  }, [productDualKgBilling, productUnit, productEquivKg, productPricePerKg]);
 
   React.useEffect(
     () => () => {
@@ -313,30 +363,53 @@ export default function ProveedoresPage() {
     if (!localId) return setMessage('Perfil del local no cargado. Cierra sesión y vuelve a entrar.');
     if (!productSupplierId) return setMessage('Selecciona proveedor.');
     const name = normalizeUpper(productName);
-    const price = Number(productPrice.replace(',', '.'));
     const vatRate = Number(productVat.replace(',', '.'));
-    if (!name || !Number.isFinite(price) || price <= 0) return setMessage('Producto y precio válidos son obligatorios.');
+    if (!name) return setMessage('Nombre de producto obligatorio.');
     if (!Number.isFinite(vatRate) || vatRate < 0 || vatRate > 1) return setMessage('IVA inválido. Usa 0,21 o 0,10.');
     const pack = parseUnitsPerPack(productUnitsPerPack);
     if (pack == null) return setMessage('«Piezas por envase» debe ser un número mayor que 0 (ej. 40).');
     const supabase = getSupabaseClient();
     if (!supabase) return setMessage('Supabase no disponible en esta sesión.');
+    const dualOk =
+      productDualKgBilling && unitSupportsReceivedWeightKg(productUnit) && productUnit !== 'kg';
+    let pricePerUnit = Number(productPrice.replace(',', '.'));
     let estimatedKgPerUnit: number | null = null;
-    if (unitSupportsReceivedWeightKg(productUnit)) {
-      const parsedKg = parseKgEstimate(productEstimatedKg);
-      if (parsedKg === undefined) return setMessage('Kg estimado por envase inválido (usa un número > 0 o déjalo vacío).');
-      estimatedKgPerUnit = parsedKg;
+    let billingUnit: Unit | null = null;
+    let billingQtyPerOrderUnit: number | null = null;
+    let pricePerBillingUnit: number | null = null;
+    if (dualOk) {
+      const eq = parseKgEstimate(productEquivKg);
+      const ppk = parsePricePerBilling(productPricePerKg);
+      if (eq === undefined) return setMessage('Indica kg por unidad de pedido (equivalencia) o desactiva «cobro por kg».');
+      if (eq === null) return setMessage('Indica kg por unidad de pedido (equivalencia) o desactiva «cobro por kg».');
+      if (ppk == null) return setMessage('Indica €/kg habitual o desactiva «cobro por kg».');
+      billingUnit = 'kg';
+      billingQtyPerOrderUnit = eq;
+      pricePerBillingUnit = ppk;
+      pricePerUnit = Math.round(eq * ppk * 100) / 100;
+    } else {
+      if (!Number.isFinite(pricePerUnit) || pricePerUnit <= 0) {
+        return setMessage('Producto y precio válidos son obligatorios.');
+      }
+      if (unitSupportsReceivedWeightKg(productUnit)) {
+        const parsedKg = parseKgEstimate(productEstimatedKg);
+        if (parsedKg === undefined) return setMessage('Kg estimado por envase inválido (usa un número > 0 o déjalo vacío).');
+        estimatedKgPerUnit = parsedKg;
+      }
     }
     const parW = parseParWeekly(productParWeekly);
     void createSupplierProduct(supabase, localId, productSupplierId, {
       name,
       unit: productUnit,
-      pricePerUnit: price,
+      pricePerUnit,
       vatRate,
       parStock: parW,
       estimatedKgPerUnit,
       unitsPerPack: pack,
       recipeUnit: pack > 1 ? productRecipeUnit : null,
+      billingUnit,
+      billingQtyPerOrderUnit,
+      pricePerBillingUnit,
     })
       .then(() => {
         setProductName('');
@@ -346,6 +419,9 @@ export default function ProveedoresPage() {
         setProductUnitsPerPack('1');
         setProductRecipeUnit('ud');
         setProductParWeekly('');
+        setProductDualKgBilling(false);
+        setProductEquivKg('');
+        setProductPricePerKg('');
         setMessage('Producto de proveedor guardado.');
         reload();
         dispatchPedidosDataChanged();
@@ -380,21 +456,42 @@ export default function ProveedoresPage() {
     if (!localId) return setMessage('Perfil del local no cargado. Cierra sesión y vuelve a entrar.');
     const draft = productDrafts[productId];
     const name = draft?.name?.trim() ?? '';
-    const price = Number((draft?.price ?? '').replace(',', '.'));
+    const priceRaw = Number((draft?.price ?? '').replace(',', '.'));
     const vatRate = Number((draft?.vatRate ?? '').replace(',', '.'));
-    if (!name || !Number.isFinite(price) || price <= 0) {
-      return setMessage('Producto, unidad y precio válido son obligatorios.');
+    if (!name) {
+      return setMessage('El nombre del producto es obligatorio.');
     }
     if (!Number.isFinite(vatRate) || vatRate < 0 || vatRate > 1) {
       return setMessage('IVA inválido. Usa 0,21 o 0,10.');
     }
     const pack = parseUnitsPerPack(draft.unitsPerPack ?? '1');
     if (pack == null) return setMessage('«Piezas por envase» debe ser un número mayor que 0.');
+    const dualOk =
+      draft.dualKgBilling === true && unitSupportsReceivedWeightKg(draft.unit) && draft.unit !== 'kg';
+    if (!dualOk && (!Number.isFinite(priceRaw) || priceRaw <= 0)) {
+      return setMessage('Producto, unidad y precio válido son obligatorios.');
+    }
+    let pricePerUnit = priceRaw;
     let estimatedKgPerUnit: number | null = null;
-    if (unitSupportsReceivedWeightKg(draft.unit)) {
-      const parsedKg = parseKgEstimate(draft.estimatedKg ?? '');
-      if (parsedKg === undefined) return setMessage('Kg estimado por envase inválido (usa un número > 0 o déjalo vacío).');
-      estimatedKgPerUnit = parsedKg;
+    let billingUnit: Unit | null = null;
+    let billingQtyPerOrderUnit: number | null = null;
+    let pricePerBillingUnit: number | null = null;
+    if (dualOk) {
+      const eq = parseKgEstimate(draft.equivKg ?? '');
+      const ppk = parsePricePerBilling(draft.pricePerKg ?? '');
+      if (eq === undefined) return setMessage('Equiv. kg por unidad de pedido inválida o desactiva «cobro por kg».');
+      if (eq === null) return setMessage('Equiv. kg por unidad de pedido obligatoria o desactiva «cobro por kg».');
+      if (ppk == null) return setMessage('€/kg habitual inválido o desactiva «cobro por kg».');
+      billingUnit = 'kg';
+      billingQtyPerOrderUnit = eq;
+      pricePerBillingUnit = ppk;
+      pricePerUnit = Math.round(eq * ppk * 100) / 100;
+    } else {
+      if (unitSupportsReceivedWeightKg(draft.unit)) {
+        const parsedKg = parseKgEstimate(draft.estimatedKg ?? '');
+        if (parsedKg === undefined) return setMessage('Kg estimado por envase inválido (usa un número > 0 o déjalo vacío).');
+        estimatedKgPerUnit = parsedKg;
+      }
     }
     const supabase = getSupabaseClient();
     if (!supabase) return setMessage('Supabase no disponible en esta sesión.');
@@ -402,12 +499,15 @@ export default function ProveedoresPage() {
     void updateSupplierProduct(supabase, localId, productId, {
       name: normalizeUpper(name),
       unit: draft.unit,
-      pricePerUnit: price,
+      pricePerUnit,
       vatRate,
       parStock: parW,
       estimatedKgPerUnit,
       unitsPerPack: pack,
       recipeUnit: pack > 1 ? draft.recipeUnit : null,
+      billingUnit,
+      billingQtyPerOrderUnit,
+      pricePerBillingUnit,
     })
       .then(() => {
         setEditingProductId(null);
@@ -554,7 +654,15 @@ export default function ProveedoresPage() {
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
             <select
               value={productUnit}
-              onChange={(e) => setProductUnit(e.target.value as Unit)}
+              onChange={(e) => {
+                const u = e.target.value as Unit;
+                setProductUnit(u);
+                if (u === 'kg' || !unitSupportsReceivedWeightKg(u)) {
+                  setProductDualKgBilling(false);
+                  setProductEquivKg('');
+                  setProductPricePerKg('');
+                }
+              }}
               className="h-10 rounded-xl border border-zinc-300 bg-white px-3 text-sm text-zinc-900 outline-none"
             >
               <option value="ud">ud</option>
@@ -565,12 +673,20 @@ export default function ProveedoresPage() {
               <option value="bolsa">bolsa</option>
               <option value="racion">racion</option>
             </select>
-            <input
-              value={productPrice}
-              onChange={(e) => setProductPrice(e.target.value)}
-              placeholder="Precio por unidad de pedido"
-              className="h-10 rounded-xl border border-zinc-300 bg-white px-3 text-sm text-zinc-900 placeholder:text-zinc-500 outline-none"
-            />
+            {productDualKgBilling && unitSupportsReceivedWeightKg(productUnit) && productUnit !== 'kg' ? (
+              <div className="flex h-10 items-center rounded-xl border border-zinc-200 bg-zinc-50 px-3 text-sm font-semibold text-zinc-800">
+                {dualNewProductDerivedPrice != null
+                  ? `${dualNewProductDerivedPrice.toFixed(2)} €/${unitPriceCatalogSuffix[productUnit]} (derivado)`
+                  : '— (equiv. × €/kg)'}
+              </div>
+            ) : (
+              <input
+                value={productPrice}
+                onChange={(e) => setProductPrice(e.target.value)}
+                placeholder="Precio por unidad de pedido"
+                className="h-10 rounded-xl border border-zinc-300 bg-white px-3 text-sm text-zinc-900 placeholder:text-zinc-500 outline-none"
+              />
+            )}
             <input
               value={productVat}
               onChange={(e) => setProductVat(e.target.value)}
@@ -578,6 +694,36 @@ export default function ProveedoresPage() {
               className="h-10 rounded-xl border border-zinc-300 bg-white px-3 text-sm text-zinc-900 placeholder:text-zinc-500 outline-none"
             />
           </div>
+          {unitSupportsReceivedWeightKg(productUnit) && productUnit !== 'kg' ? (
+            <label className="flex cursor-pointer items-center gap-2 text-sm text-zinc-800">
+              <input
+                type="checkbox"
+                checked={productDualKgBilling}
+                onChange={(e) => {
+                  setProductDualKgBilling(e.target.checked);
+                  if (e.target.checked) setProductPrice('');
+                }}
+                className="h-4 w-4 rounded border-zinc-400"
+              />
+              Cobro por kg (pedido en {unitPriceCatalogSuffix[productUnit]}, factura por peso)
+            </label>
+          ) : null}
+          {productDualKgBilling && unitSupportsReceivedWeightKg(productUnit) && productUnit !== 'kg' ? (
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              <input
+                value={productEquivKg}
+                onChange={(e) => setProductEquivKg(e.target.value)}
+                placeholder={`Kg por ${unitPriceCatalogSuffix[productUnit]} (estimado)`}
+                className="h-10 rounded-xl border border-zinc-300 bg-white px-3 text-sm text-zinc-900 placeholder:text-zinc-500 outline-none"
+              />
+              <input
+                value={productPricePerKg}
+                onChange={(e) => setProductPricePerKg(e.target.value)}
+                placeholder="€/kg habitual"
+                className="h-10 rounded-xl border border-zinc-300 bg-white px-3 text-sm text-zinc-900 placeholder:text-zinc-500 outline-none"
+              />
+            </div>
+          ) : null}
           <input
             value={productUnitsPerPack}
             onChange={(e) => setProductUnitsPerPack(e.target.value)}
@@ -604,8 +750,8 @@ export default function ProveedoresPage() {
             </div>
           ) : null}
           <p className="text-xs text-zinc-500">
-            El precio es por la unidad de pedido (caja, kg…). Si un envase trae varias piezas, indica cuántas: el
-            escandallo usará el precio por pieza automáticamente.
+            El precio es por la unidad de pedido salvo «cobro por kg»: entonces se calcula como kg por envase × €/kg. Si un
+            envase trae varias piezas en receta, indica cuántas piezas.
           </p>
           <input
             value={productParWeekly}
@@ -614,7 +760,7 @@ export default function ProveedoresPage() {
             title="Para sugerencias en Nuevo pedido: necesidad aproximada en 7 días; el sistema la reparte según días hasta el siguiente reparto."
             className="h-10 rounded-xl border border-zinc-300 bg-white px-3 text-sm text-zinc-900 placeholder:text-zinc-500 outline-none"
           />
-          {unitSupportsReceivedWeightKg(productUnit) ? (
+          {unitSupportsReceivedWeightKg(productUnit) && !productDualKgBilling ? (
             <input
               value={productEstimatedKg}
               onChange={(e) => setProductEstimatedKg(e.target.value)}
@@ -861,7 +1007,18 @@ export default function ProveedoresPage() {
               <div className="mt-3 space-y-2">
             {[...supplier.products]
               .sort((a, b) => a.name.localeCompare(b.name, 'es'))
-              .map((p) => (
+              .map((p) => {
+                const d = productDrafts[p.id];
+                const u = (d?.unit ?? p.unit) as Unit;
+                const editDual = d?.dualKgBilling === true && unitSupportsReceivedWeightKg(u) && u !== 'kg';
+                const editDerived = (() => {
+                  if (!editDual) return null;
+                  const eq = parseKgEstimate(d?.equivKg ?? '');
+                  const ppk = parsePricePerBilling(d?.pricePerKg ?? '');
+                  if (eq == null || eq === undefined || ppk == null) return null;
+                  return Math.round(eq * ppk * 100) / 100;
+                })();
+                return (
               <div key={p.id} className="rounded-lg bg-zinc-50 px-3 py-2">
                 <div className="flex items-center justify-between gap-2">
                   <p className="text-sm text-zinc-800">{p.name}</p>
@@ -879,7 +1036,10 @@ export default function ProveedoresPage() {
                             vatRate: prev[p.id]?.vatRate ?? String(p.vatRate ?? 0),
                             estimatedKg:
                               prev[p.id]?.estimatedKg ??
-                              (unitSupportsReceivedWeightKg(p.unit) && p.estimatedKgPerUnit != null && p.estimatedKgPerUnit > 0
+                              (!supplierProductHasDistinctBilling(p) &&
+                              unitSupportsReceivedWeightKg(p.unit) &&
+                              p.estimatedKgPerUnit != null &&
+                              p.estimatedKgPerUnit > 0
                                 ? String(p.estimatedKgPerUnit)
                                 : ''),
                             unitsPerPack:
@@ -888,6 +1048,19 @@ export default function ProveedoresPage() {
                             parWeekly:
                               prev[p.id]?.parWeekly ??
                               ((p.parStock ?? 0) > 0 ? String(p.parStock) : ''),
+                            dualKgBilling:
+                              prev[p.id]?.dualKgBilling ??
+                              (supplierProductHasDistinctBilling(p) && p.billingUnit === 'kg'),
+                            equivKg:
+                              prev[p.id]?.equivKg ??
+                              (supplierProductHasDistinctBilling(p) && p.billingQtyPerOrderUnit != null
+                                ? String(p.billingQtyPerOrderUnit)
+                                : ''),
+                            pricePerKg:
+                              prev[p.id]?.pricePerKg ??
+                              (supplierProductHasDistinctBilling(p) && p.pricePerBillingUnit != null
+                                ? String(p.pricePerBillingUnit)
+                                : ''),
                           },
                         }));
                       }}
@@ -913,7 +1086,13 @@ export default function ProveedoresPage() {
                       {unitPriceCatalogSuffix[p.recipeUnit ?? 'ud']} (×{p.unitsPerPack ?? 1})
                     </>
                   ) : null}
-                  {unitSupportsReceivedWeightKg(p.unit) && p.estimatedKgPerUnit != null && p.estimatedKgPerUnit > 0
+                  {supplierProductHasDistinctBilling(p) && p.billingUnit === 'kg' && p.pricePerBillingUnit != null
+                    ? ` · cobro ~${p.pricePerBillingUnit} €/kg (~${p.billingQtyPerOrderUnit ?? '—'} kg/${unitPriceCatalogSuffix[p.unit]})`
+                    : ''}
+                  {!supplierProductHasDistinctBilling(p) &&
+                  unitSupportsReceivedWeightKg(p.unit) &&
+                  p.estimatedKgPerUnit != null &&
+                  p.estimatedKgPerUnit > 0
                     ? ` · ~${p.estimatedKgPerUnit} kg/${p.unit}`
                     : ''}
                   {(p.parStock ?? 0) > 0 ? ` · ref. sem. ${p.parStock} ${unitPriceCatalogSuffix[p.unit]}` : ''}
@@ -946,24 +1125,19 @@ export default function ProveedoresPage() {
                     <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
                       <select
                         value={productDrafts[p.id]?.unit ?? 'ud'}
-                        onChange={(e) =>
+                        onChange={(e) => {
+                          const nextU = e.target.value as Unit;
                           setProductDrafts((prev) => ({
                             ...prev,
                             [p.id]: {
-                              ...(prev[p.id] ?? {
-                                name: '',
-                                unit: 'ud',
-                                price: '',
-                                vatRate: '0',
-                                estimatedKg: '',
-                                unitsPerPack: '1',
-                                recipeUnit: 'ud' as Unit,
-                                parWeekly: '',
-                              }),
-                              unit: e.target.value as Unit,
+                              ...(prev[p.id] ?? { ...EMPTY_PRODUCT_DRAFT }),
+                              unit: nextU,
+                              ...(nextU === 'kg' || !unitSupportsReceivedWeightKg(nextU)
+                                ? { dualKgBilling: false, equivKg: '', pricePerKg: '' }
+                                : {}),
                             },
-                          }))
-                        }
+                          }));
+                        }}
                         className="h-9 rounded-lg border border-zinc-300 bg-white px-3 text-sm text-zinc-900 outline-none"
                       >
                         <option value="ud">ud</option>
@@ -974,29 +1148,28 @@ export default function ProveedoresPage() {
                         <option value="bolsa">bolsa</option>
                         <option value="racion">racion</option>
                       </select>
-                      <input
-                        value={productDrafts[p.id]?.price ?? ''}
-                        onChange={(e) =>
-                          setProductDrafts((prev) => ({
-                            ...prev,
-                            [p.id]: {
-                              ...(prev[p.id] ?? {
-                                name: '',
-                                unit: 'ud',
-                                price: '',
-                                vatRate: '0',
-                                estimatedKg: '',
-                                unitsPerPack: '1',
-                                recipeUnit: 'ud' as Unit,
-                                parWeekly: '',
-                              }),
-                              price: e.target.value,
-                            },
-                          }))
-                        }
-                        placeholder="Precio unidad"
-                        className="h-9 rounded-lg border border-zinc-300 bg-white px-3 text-sm text-zinc-900 placeholder:text-zinc-500 outline-none"
-                      />
+                      {editDual ? (
+                        <div className="flex h-9 items-center rounded-lg border border-zinc-200 bg-zinc-50 px-3 text-xs font-semibold text-zinc-800">
+                          {editDerived != null
+                            ? `${editDerived.toFixed(2)} €/${unitPriceCatalogSuffix[u]} (derivado)`
+                            : '— (equiv. × €/kg)'}
+                        </div>
+                      ) : (
+                        <input
+                          value={productDrafts[p.id]?.price ?? ''}
+                          onChange={(e) =>
+                            setProductDrafts((prev) => ({
+                              ...prev,
+                              [p.id]: {
+                                ...(prev[p.id] ?? { ...EMPTY_PRODUCT_DRAFT }),
+                                price: e.target.value,
+                              },
+                            }))
+                          }
+                          placeholder="Precio unidad"
+                          className="h-9 rounded-lg border border-zinc-300 bg-white px-3 text-sm text-zinc-900 placeholder:text-zinc-500 outline-none"
+                        />
+                      )}
                       <input
                         value={productDrafts[p.id]?.vatRate ?? ''}
                         onChange={(e) =>
@@ -1021,6 +1194,58 @@ export default function ProveedoresPage() {
                         className="h-9 rounded-lg border border-zinc-300 bg-white px-3 text-sm text-zinc-900 placeholder:text-zinc-500 outline-none"
                       />
                     </div>
+                    {unitSupportsReceivedWeightKg(u) && u !== 'kg' ? (
+                      <label className="flex cursor-pointer items-center gap-2 text-xs text-zinc-800">
+                        <input
+                          type="checkbox"
+                          checked={productDrafts[p.id]?.dualKgBilling === true}
+                          onChange={(e) =>
+                            setProductDrafts((prev) => ({
+                              ...prev,
+                              [p.id]: {
+                                ...(prev[p.id] ?? { ...EMPTY_PRODUCT_DRAFT }),
+                                dualKgBilling: e.target.checked,
+                                ...(e.target.checked ? { price: '' } : { equivKg: '', pricePerKg: '' }),
+                              },
+                            }))
+                          }
+                          className="h-4 w-4 rounded border-zinc-400"
+                        />
+                        Cobro por kg
+                      </label>
+                    ) : null}
+                    {editDual ? (
+                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                        <input
+                          value={productDrafts[p.id]?.equivKg ?? ''}
+                          onChange={(e) =>
+                            setProductDrafts((prev) => ({
+                              ...prev,
+                              [p.id]: {
+                                ...(prev[p.id] ?? { ...EMPTY_PRODUCT_DRAFT }),
+                                equivKg: e.target.value,
+                              },
+                            }))
+                          }
+                          placeholder={`Kg por ${unitPriceCatalogSuffix[u]} (estimado)`}
+                          className="h-9 rounded-lg border border-zinc-300 bg-white px-3 text-sm text-zinc-900 placeholder:text-zinc-500 outline-none"
+                        />
+                        <input
+                          value={productDrafts[p.id]?.pricePerKg ?? ''}
+                          onChange={(e) =>
+                            setProductDrafts((prev) => ({
+                              ...prev,
+                              [p.id]: {
+                                ...(prev[p.id] ?? { ...EMPTY_PRODUCT_DRAFT }),
+                                pricePerKg: e.target.value,
+                              },
+                            }))
+                          }
+                          placeholder="€/kg habitual"
+                          className="h-9 rounded-lg border border-zinc-300 bg-white px-3 text-sm text-zinc-900 placeholder:text-zinc-500 outline-none"
+                        />
+                      </div>
+                    ) : null}
                     <input
                       value={productDrafts[p.id]?.parWeekly ?? ''}
                       onChange={(e) =>
@@ -1100,23 +1325,14 @@ export default function ProveedoresPage() {
                         <option value="bandeja">bandeja</option>
                       </select>
                     ) : null}
-                    {unitSupportsReceivedWeightKg(productDrafts[p.id]?.unit ?? p.unit) ? (
+                    {!editDual && unitSupportsReceivedWeightKg(productDrafts[p.id]?.unit ?? p.unit) ? (
                       <input
                         value={productDrafts[p.id]?.estimatedKg ?? ''}
                         onChange={(e) =>
                           setProductDrafts((prev) => ({
                             ...prev,
                             [p.id]: {
-                              ...(prev[p.id] ?? {
-                                name: '',
-                                unit: 'ud',
-                                price: '',
-                                vatRate: '0',
-                                estimatedKg: '',
-                                unitsPerPack: '1',
-                                recipeUnit: 'ud' as Unit,
-                                parWeekly: '',
-                              }),
+                              ...(prev[p.id] ?? { ...EMPTY_PRODUCT_DRAFT }),
                               estimatedKg: e.target.value,
                             },
                           }))
@@ -1135,7 +1351,7 @@ export default function ProveedoresPage() {
                   </div>
                 ) : null}
               </div>
-              ))}
+              );})}
               </div>
             </div>
           ) : null}

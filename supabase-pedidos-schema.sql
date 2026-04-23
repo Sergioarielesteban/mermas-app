@@ -252,12 +252,53 @@ alter table public.pedido_supplier_products
     or recipe_unit in ('kg', 'ud', 'bolsa', 'racion', 'caja', 'paquete', 'bandeja')
   );
 
+-- Cobro en unidad distinta a la de pedido (ej. bandeja → €/kg).
+alter table public.pedido_supplier_products
+  add column if not exists billing_unit text;
+alter table public.pedido_supplier_products
+  drop constraint if exists pedido_supplier_products_billing_unit_check;
+alter table public.pedido_supplier_products
+  add constraint pedido_supplier_products_billing_unit_check
+  check (
+    billing_unit is null
+    or billing_unit in ('kg', 'ud', 'bolsa', 'racion', 'caja', 'paquete', 'bandeja')
+  );
+alter table public.pedido_supplier_products
+  add column if not exists billing_qty_per_order_unit numeric(12,4);
+alter table public.pedido_supplier_products
+  add column if not exists price_per_billing_unit numeric(12,4);
+alter table public.pedido_supplier_products
+  drop constraint if exists pedido_supplier_products_billing_qty_chk;
+alter table public.pedido_supplier_products
+  add constraint pedido_supplier_products_billing_qty_chk
+  check (billing_qty_per_order_unit is null or billing_qty_per_order_unit > 0);
+alter table public.pedido_supplier_products
+  drop constraint if exists pedido_supplier_products_price_billing_chk;
+alter table public.pedido_supplier_products
+  add constraint pedido_supplier_products_price_billing_chk
+  check (price_per_billing_unit is null or price_per_billing_unit >= 0);
+
 alter table public.purchase_order_items
   add column if not exists estimated_kg_per_unit numeric(10,3);
 alter table public.purchase_order_items
   add column if not exists received_weight_kg numeric(10,3);
 alter table public.purchase_order_items
   add column if not exists received_price_per_kg numeric(10,4);
+
+alter table public.purchase_order_items
+  add column if not exists billing_unit text;
+alter table public.purchase_order_items
+  drop constraint if exists purchase_order_items_billing_unit_check;
+alter table public.purchase_order_items
+  add constraint purchase_order_items_billing_unit_check
+  check (
+    billing_unit is null
+    or billing_unit in ('kg', 'ud', 'bolsa', 'racion', 'caja', 'paquete', 'bandeja')
+  );
+alter table public.purchase_order_items
+  add column if not exists billing_qty_per_order_unit numeric(12,4);
+alter table public.purchase_order_items
+  add column if not exists price_per_billing_unit numeric(12,4);
 
 -- Concurrencia optimista (última actualización) en cabecera y líneas.
 alter table public.purchase_orders
@@ -376,7 +417,10 @@ begin
     received_weight_kg,
     received_price_per_kg,
     incident_type,
-    incident_notes
+    incident_notes,
+    billing_unit,
+    billing_qty_per_order_unit,
+    price_per_billing_unit
   )
   select
     p_local_id,
@@ -394,7 +438,10 @@ begin
     i.received_weight_kg,
     i.received_price_per_kg,
     i.incident_type,
-    i.incident_notes
+    i.incident_notes,
+    i.billing_unit,
+    i.billing_qty_per_order_unit,
+    i.price_per_billing_unit
   from jsonb_to_recordset(coalesce(p_items, '[]'::jsonb)) as i(
     supplier_product_id uuid,
     product_name text,
@@ -409,7 +456,10 @@ begin
     received_weight_kg numeric,
     received_price_per_kg numeric,
     incident_type text,
-    incident_notes text
+    incident_notes text,
+    billing_unit text,
+    billing_qty_per_order_unit numeric,
+    price_per_billing_unit numeric
   );
 
   select updated_at into v_order_updated_at

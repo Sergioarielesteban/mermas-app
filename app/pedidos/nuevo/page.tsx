@@ -31,6 +31,7 @@ import {
   fetchOrderById,
   fetchSuppliersWithProducts,
   saveOrder,
+  supplierProductHasDistinctBilling,
   unitSupportsReceivedWeightKg,
   type PedidoOrderItem,
   type PedidoOrder,
@@ -394,6 +395,25 @@ export default function NuevoPedidoPage() {
       const receivedRaw = prev?.receivedQuantity ?? 0;
       const receivedQuantity =
         quantity <= 0 ? 0 : receivedRaw > 0 ? Math.min(receivedRaw, quantity) : 0;
+      const billingSnap =
+        prev != null &&
+        (prev.billingUnit != null ||
+          prev.billingQtyPerOrderUnit != null ||
+          prev.pricePerBillingUnit != null)
+          ? {
+              ...(prev.billingUnit != null ? { billingUnit: prev.billingUnit } : {}),
+              ...(prev.billingQtyPerOrderUnit != null
+                ? { billingQtyPerOrderUnit: prev.billingQtyPerOrderUnit }
+                : {}),
+              ...(prev.pricePerBillingUnit != null ? { pricePerBillingUnit: prev.pricePerBillingUnit } : {}),
+            }
+          : supplierProductHasDistinctBilling(p)
+            ? {
+                billingUnit: p.billingUnit!,
+                ...(p.billingQtyPerOrderUnit != null ? { billingQtyPerOrderUnit: p.billingQtyPerOrderUnit } : {}),
+                ...(p.pricePerBillingUnit != null ? { pricePerBillingUnit: p.pricePerBillingUnit } : {}),
+              }
+            : {};
       return {
         id: p.id,
         supplierProductId: p.id,
@@ -404,6 +424,7 @@ export default function NuevoPedidoPage() {
         pricePerUnit: p.pricePerUnit,
         vatRate: p.vatRate ?? 0,
         lineTotal,
+        ...billingSnap,
         ...(unitSupportsReceivedWeightKg(p.unit) && p.estimatedKgPerUnit != null && p.estimatedKgPerUnit > 0
           ? { estimatedKgPerUnit: p.estimatedKgPerUnit }
           : {}),
@@ -497,6 +518,9 @@ export default function NuevoPedidoPage() {
         incidentType: item.incidentType ?? null,
         incidentNotes: item.incidentNotes?.trim() ? item.incidentNotes.trim() : null,
         receivedPricePerKg: item.receivedPricePerKg ?? null,
+        billingUnit: item.billingUnit ?? null,
+        billingQtyPerOrderUnit: item.billingQtyPerOrderUnit ?? null,
+        pricePerBillingUnit: item.pricePerBillingUnit ?? null,
       })),
     })
       .then((orderId) => {
@@ -585,6 +609,9 @@ export default function NuevoPedidoPage() {
         incidentType: item.incidentType ?? null,
         incidentNotes: item.incidentNotes?.trim() ? item.incidentNotes.trim() : null,
         receivedPricePerKg: item.receivedPricePerKg ?? null,
+        billingUnit: item.billingUnit ?? null,
+        billingQtyPerOrderUnit: item.billingQtyPerOrderUnit ?? null,
+        pricePerBillingUnit: item.pricePerBillingUnit ?? null,
       })),
     })
       .then((orderId) => {

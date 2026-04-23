@@ -16,6 +16,8 @@ import { dispatchPedidosDataChanged, usePedidosDataChangedListener } from '@/hoo
 import { canAccessFinanzas } from '@/lib/app-role-permissions';
 import { canAccessPedidos, canUsePedidosModule } from '@/lib/pedidos-access';
 import {
+  estimatedKgForOrderLine,
+  estimatedOrderLineSubtotal,
   formatIncidentLine,
   formatQuantityWithUnit,
   lineSubtotalForOrderListDisplay,
@@ -40,6 +42,7 @@ import {
   setOrderPriceReviewArchived,
   unitCanDeclareScaleKgOnReception,
   unitSupportsReceivedWeightKg,
+  orderItemHasDistinctBilling,
   updateOrderItemIncident,
   updateOrderItemReceived,
   updateOrderItemReceivedWeightKg,
@@ -445,6 +448,7 @@ export default function PedidosPage() {
         };
       }),
     );
+    const resetPrice = line.basePricePerUnit ?? line.pricePerUnit;
     void Promise.all([
       updateOrderItemReceived(supabase, localId, itemId, 0),
       updateOrderItemIncident(supabase, localId, itemId, { type: null, notes: '' }),
@@ -452,8 +456,10 @@ export default function PedidosPage() {
       .then(async () => {
         if (line.unit === 'kg') {
           await updateOrderItemReceivedWeightKg(supabase, localId, itemId, null);
+        } else if (unitSupportsReceivedWeightKg(line.unit)) {
+          await updateOrderItemReceivedWeightKg(supabase, localId, itemId, null);
         }
-        await updateOrderItemPrice(supabase, localId, itemId, line.pricePerUnit, 0);
+        await updateOrderItemPrice(supabase, localId, itemId, resetPrice, 0);
       })
       .then(() => dispatchPedidosDataChanged())
       .catch((err: Error) => {
@@ -472,7 +478,7 @@ export default function PedidosPage() {
     const nextIncidentType: PedidoOrder['items'][number]['incidentType'] = markOk ? null : 'missing';
     const nextIncidentNotes = markOk ? undefined : 'No recibido';
 
-    const merged = markOk
+    let merged: PedidoOrder['items'][number] = markOk
       ? line.unit === 'kg'
         ? { ...line, receivedQuantity: nextReceived, receivedWeightKg: null as number | null }
         : { ...line, receivedQuantity: nextReceived }
@@ -481,8 +487,33 @@ export default function PedidosPage() {
           receivedQuantity: 0,
           receivedWeightKg: line.unit === 'kg' ? null : line.receivedWeightKg,
         };
+
+    if (markOk && line.unit !== 'kg' && unitSupportsReceivedWeightKg(line.unit)) {
+      const eq = line.billingQtyPerOrderUnit ?? line.estimatedKgPerUnit;
+      if (eq != null && eq > 0 && nextReceived > 0) {
+        merged = {
+          ...merged,
+          receivedWeightKg: Math.round(nextReceived * eq * 1000) / 1000,
+        };
+      }
+      if (line.billingUnit === 'kg') {
+        const ppk =
+          line.pricePerBillingUnit ??
+          (eq != null &&
+          eq > 0 &&
+          line.basePricePerUnit != null &&
+          Number.isFinite(line.basePricePerUnit) &&
+          line.basePricePerUnit > 0
+            ? line.basePricePerUnit / eq
+            : null);
+        if (ppk != null && ppk > 0) {
+          merged = { ...merged, receivedPricePerKg: Math.round(ppk * 10000) / 10000 };
+        }
+      }
+    }
+
+    const { lineTotal, effectivePricePerUnit } = receptionLineTotals(merged);
     const billingQty = markOk ? billingQuantityForLine(merged) : 0;
-    const lineTotal = Math.round(line.pricePerUnit * billingQty * 100) / 100;
 
     setQuickLineMarks((prev) => ({ ...prev, [itemId]: markOk ? 'ok' : 'bad' }));
 
@@ -495,9 +526,11 @@ export default function PedidosPage() {
             ...item,
             receivedQuantity: nextReceived,
             receivedWeightKg: merged.receivedWeightKg,
+            receivedPricePerKg: merged.receivedPricePerKg,
             incidentType: nextIncidentType,
             incidentNotes: nextIncidentNotes,
-            lineTotal,
+            lineTotal: markOk ? lineTotal : 0,
+            pricePerUnit: markOk ? effectivePricePerUnit : item.pricePerUnit,
           };
         });
         return { ...order, items: nextItems };
@@ -507,8 +540,31 @@ export default function PedidosPage() {
     const afterReceive = async () => {
       if (line.unit === 'kg') {
         await updateOrderItemReceivedWeightKg(supabase, localId, itemId, null);
+        await updateOrderItemPrice(supabase, localId, itemId, line.pricePerUnit, billingQty);
+        return;
       }
-      await updateOrderItemPrice(supabase, localId, itemId, line.pricePerUnit, billingQty);
+      if (unitCanDeclareScaleKgOnReception(line.unit)) {
+        await updateOrderItemReceivedWeightKg(
+          supabase,
+          localId,
+          itemId,
+          merged.receivedWeightKg != null && merged.receivedWeightKg > 0 ? merged.receivedWeightKg : null,
+        );
+      }
+      const usePersist =
+        markOk &&
+        unitCanDeclareScaleKgOnReception(line.unit) &&
+        merged.receivedWeightKg != null &&
+        merged.receivedWeightKg > 0 &&
+        (merged.unit === 'kg' ||
+          (merged.receivedPricePerKg != null && merged.receivedPricePerKg > 0));
+      if (usePersist) {
+        await persistReceptionItemTotals(supabase, localId, merged);
+      } else if (markOk) {
+        await updateOrderItemPrice(supabase, localId, itemId, line.pricePerUnit, billingQty);
+      } else {
+        await updateOrderItemPrice(supabase, localId, itemId, line.basePricePerUnit ?? line.pricePerUnit, 0);
+      }
     };
 
     void Promise.all([
@@ -2761,6 +2817,15 @@ export default function PedidosPage() {
                         !item.incidentType);
                     const isBad = mark === 'bad' || (mark === undefined && Boolean(item.incidentType));
                     const lineSummary = receptionBillingSummary(item);
+                    const estSub = estimatedOrderLineSubtotal(item);
+                    const estKg = estimatedKgForOrderLine(item);
+                    const showDualCompare =
+                      orderItemHasDistinctBilling(item) &&
+                      item.billingUnit === 'kg' &&
+                      estKg != null &&
+                      item.incidentType !== 'missing';
+                    const realKg =
+                      item.receivedWeightKg != null && item.receivedWeightKg > 0 ? item.receivedWeightKg : null;
                     return (
                       <div key={item.id} className="space-y-1 rounded-lg bg-white p-2 ring-1 ring-zinc-200">
                         <div className="flex items-start justify-between gap-2">
@@ -2817,27 +2882,62 @@ export default function PedidosPage() {
                             </button>
                           </div>
                         </div>
-                        <div className="rounded-lg border border-zinc-200/90 bg-zinc-50 px-2 py-1.5 text-[11px] leading-snug text-zinc-700">
-                          <p>
-                            <span className="font-semibold text-zinc-500">Resumen albarán</span>
-                          </p>
-                          <p className="mt-0.5">
-                            <span className="font-semibold text-zinc-500">Pedido</span> {lineSummary.pedido}
-                          </p>
-                          <p>
-                            <span className="font-semibold text-zinc-500">Recibido</span> {lineSummary.recibido}
-                          </p>
-                          <p>
-                            <span className="font-semibold text-zinc-500">Precio aplicado</span>{' '}
-                            {lineSummary.precioAplicado}
-                          </p>
-                          {lineSummary.precioEquivCatalogo ? (
-                            <p className="text-[10px] text-zinc-600">{lineSummary.precioEquivCatalogo}</p>
+                        <div className="space-y-1.5 text-[11px] leading-snug text-zinc-700">
+                          <div className="rounded-lg border border-zinc-200/90 bg-zinc-50/80 px-2 py-1.5">
+                            <p className="font-semibold text-zinc-500">A) Pedido (estimación)</p>
+                            <p className="mt-0.5">
+                              {lineSummary.pedido}
+                              {estKg != null ? (
+                                <span className="text-zinc-600"> · ~{estKg} kg previstos</span>
+                              ) : null}
+                            </p>
+                            <p>
+                              Total estimado{' '}
+                              <span className="font-bold tabular-nums text-zinc-900">{estSub.toFixed(2)} €</span>
+                              {item.pricePerBillingUnit != null && item.billingUnit === 'kg' ? (
+                                <span className="text-zinc-500">
+                                  {' '}
+                                  · {item.pricePerBillingUnit.toFixed(2)} €/kg ref.
+                                </span>
+                              ) : null}
+                            </p>
+                          </div>
+                          <div className="rounded-lg border border-emerald-200/80 bg-emerald-50/50 px-2 py-1.5">
+                            <p className="font-semibold text-emerald-900/80">B) Recepción real</p>
+                            <p className="mt-0.5">
+                              <span className="font-semibold text-zinc-500">Recibido</span> {lineSummary.recibido}
+                            </p>
+                            <p>
+                              <span className="font-semibold text-zinc-500">Precio aplicado</span>{' '}
+                              {lineSummary.precioAplicado}
+                            </p>
+                            {lineSummary.precioEquivCatalogo ? (
+                              <p className="text-[10px] text-zinc-600">{lineSummary.precioEquivCatalogo}</p>
+                            ) : null}
+                            <p>
+                              <span className="font-semibold text-zinc-500">Subtotal real</span>{' '}
+                              <span className="font-bold tabular-nums text-zinc-900">{lineSummary.totalLinea}</span>
+                            </p>
+                          </div>
+                          {showDualCompare && realKg != null ? (
+                            <div className="rounded-lg border border-amber-200/90 bg-amber-50/60 px-2 py-1.5">
+                              <p className="font-semibold text-amber-950/80">C) vs estimado</p>
+                              <p className="mt-0.5">
+                                Δ kg:{' '}
+                                <span className="font-bold tabular-nums">
+                                  {realKg >= estKg! ? '+' : ''}
+                                  {(realKg - estKg!).toFixed(3)} kg
+                                </span>
+                              </p>
+                              <p>
+                                Δ importe:{' '}
+                                <span className="font-bold tabular-nums">
+                                  {lineSubtotalForOrderListDisplay(item) >= estSub ? '+' : ''}
+                                  {(lineSubtotalForOrderListDisplay(item) - estSub).toFixed(2)} €
+                                </span>
+                              </p>
+                            </div>
                           ) : null}
-                          <p>
-                            <span className="font-semibold text-zinc-500">Total línea</span>{' '}
-                            <span className="font-bold tabular-nums text-zinc-900">{lineSummary.totalLinea}</span>
-                          </p>
                         </div>
                         <p className="text-[11px] leading-tight text-zinc-600">
                           {item.basePricePerUnit != null && Number.isFinite(item.basePricePerUnit) ? (
