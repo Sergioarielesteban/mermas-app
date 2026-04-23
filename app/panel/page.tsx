@@ -37,7 +37,7 @@ import { canAccessPedidos } from '@/lib/pedidos-access';
 import { getModuleAccess } from '@/lib/canAccessModule';
 import type { PlanModule } from '@/lib/planPermissions';
 
-const LINE = `mx-auto mt-1.5 w-16 ${CHEF_ONE_TAPER_LINE_CLASS}`;
+const LINE = `mx-auto mt-1 w-16 ${CHEF_ONE_TAPER_LINE_CLASS}`;
 
 type TileProps = {
   href?: string;
@@ -53,23 +53,23 @@ function HubTile({ href, onClick, label, Icon, tone = 'zinc', blocked = false }:
     <>
       <div
         className={[
-          'mb-1 grid h-8 w-8 place-items-center rounded-xl shadow-inner sm:h-9 sm:w-9',
+          'mb-0.5 grid h-7 w-7 place-items-center rounded-xl shadow-inner sm:h-7 sm:w-7',
           tone === 'red' ? 'bg-[#D32F2F]/15 text-[#D32F2F]' : 'bg-zinc-200/80 text-zinc-700',
         ].join(' ')}
       >
-        <Icon className="h-[0.95rem] w-[0.95rem] sm:h-4 sm:w-4" strokeWidth={2.1} />
+        <Icon className="h-3 w-3 sm:h-3.5 sm:w-3.5" strokeWidth={2.1} />
       </div>
-      <span className="block max-w-full truncate whitespace-nowrap px-0.5 text-center text-sm font-semibold leading-none tracking-tight text-zinc-900 sm:text-[0.9375rem]">
+      <span className="block max-w-full truncate whitespace-nowrap px-0.5 text-center text-[11px] font-semibold leading-none tracking-tight text-zinc-900 sm:text-xs">
         {label}
       </span>
       {blocked ? (
-        <span className="mt-0.5 inline-flex items-center gap-1 rounded-full bg-zinc-100 px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wide text-zinc-600">
-          <Lock className="h-3 w-3" />
+        <span className="mt-0.5 inline-flex max-w-full items-center gap-0.5 truncate rounded-full bg-zinc-100 px-1.5 py-px text-[9px] font-extrabold uppercase tracking-wide text-zinc-600">
+          <Lock className="h-2.5 w-2.5 shrink-0" />
           Bloqueado
         </span>
       ) : null}
       {blocked ? (
-        <span className="mt-0.5 block max-w-[16.5rem] truncate px-1 text-center text-[10px] font-semibold leading-snug text-zinc-500 sm:max-w-none sm:text-[11px]">
+        <span className="mt-0.5 block max-w-full truncate px-0.5 text-center text-[9px] font-semibold leading-snug text-zinc-500 sm:text-[10px]">
           Disponible en plan superior
         </span>
       ) : null}
@@ -78,7 +78,7 @@ function HubTile({ href, onClick, label, Icon, tone = 'zinc', blocked = false }:
   );
 
   const className = [
-    'flex w-full flex-col items-center rounded-2xl px-2.5 py-3 text-center outline-none transition-all duration-300 ease-out sm:px-3 sm:py-3.5',
+    'flex w-full flex-col items-center rounded-2xl px-1.5 py-2 text-center outline-none transition-all duration-300 ease-out sm:px-2 sm:py-2.5',
     'bg-zinc-50/80 ring-1 ring-zinc-200/90 hover:bg-white hover:ring-zinc-300',
     blocked ? 'opacity-55' : '',
     'focus-visible:ring-2 focus-visible:ring-[#D32F2F]/40 focus-visible:ring-offset-2',
@@ -125,7 +125,7 @@ export default function PanelControlPage() {
 
       <ProductoGuiadoChecklist />
 
-      <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4 sm:gap-2">
+      <div className="grid grid-cols-3 gap-x-2 gap-y-1 sm:gap-x-2.5 sm:gap-y-1.5">
         <HubTile href="/dashboard" label="Mermas" Icon={BookOpen} tone="red" />
         {showPedidos ? (
           <HubTile
