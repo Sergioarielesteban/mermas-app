@@ -47,8 +47,13 @@ function formatShortDate(iso: string) {
   }
 }
 
-function formatMoney(n: number, decimals = 4) {
-  return `${n.toFixed(decimals)} €`;
+function formatMoney(n: number, decimals = 4, trimTrailingZeros = false) {
+  const s = n.toFixed(decimals);
+  if (!trimTrailingZeros) return `${s} €`;
+  const [intPart, decPart] = s.split('.');
+  if (!decPart) return `${intPart} €`;
+  const trimmedDec = decPart.replace(/0+$/, '');
+  return trimmedDec ? `${intPart}.${trimmedDec} €` : `${intPart} €`;
 }
 
 export default function PedidosArticulosPage() {
@@ -460,7 +465,7 @@ function ArticleCard({
         <div className="w-full text-left sm:w-auto sm:text-right">
           <p className="text-[10px] font-bold uppercase text-zinc-500">Coste máster</p>
           <p className="text-xl font-black tabular-nums text-zinc-900 sm:text-2xl">
-            {master != null ? formatMoney(master, 4) : '—'}
+            {master != null ? formatMoney(master, 4, true) : '—'}
           </p>
           <p className="text-[11px] text-zinc-500">{labelMetodoCosteMaster(a.metodoCosteMaster)}</p>
         </div>
@@ -528,7 +533,7 @@ function ArticleCard({
                   <div className="rounded-lg bg-white/90 px-3 py-2 text-xs ring-1 ring-indigo-100">
                     <p className="font-bold uppercase text-zinc-500">Coste compra actual</p>
                     <p className="mt-1 text-lg font-black tabular-nums text-zinc-900">
-                      {compraUnitEur != null ? formatMoney(compraUnitEur, 4) : '—'}
+                      {compraUnitEur != null ? formatMoney(compraUnitEur, 4, true) : '—'}
                     </p>
                     <p className="text-[10px] text-zinc-500">Sincronizado con la referencia (SQL).</p>
                   </div>
@@ -618,7 +623,7 @@ function ArticleCard({
               <div>
                 <dt className="text-[10px] font-bold uppercase text-zinc-500">Importe</dt>
                 <dd className="font-mono font-semibold tabular-nums text-zinc-900">
-                  {master != null ? formatMoney(master, 4) : '—'}
+                  {master != null ? formatMoney(master, 4, true) : '—'}
                 </dd>
               </div>
               <div>
@@ -635,7 +640,7 @@ function ArticleCard({
             {masterStale ? (
               <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-950">
                 El precio de catálogo más bajo ahora es <strong>{formatMoney(minCatalog!, 2)}</strong> y el máster es{' '}
-                <strong>{formatMoney(master!, 4)}</strong>. Revisa si quieres alinear el máster manualmente en base de datos
+                <strong>{formatMoney(master!, 4, true)}</strong>. Revisa si quieres alinear el máster manualmente en base de datos
                 o en una futura edición en app.
               </p>
             ) : null}
