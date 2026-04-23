@@ -71,7 +71,7 @@ function PanelGridCard({ tile }: { tile: PanelTile }) {
         </div>
         <div className="min-w-0 flex-1">
           <p className="text-sm font-semibold leading-[1.2] tracking-tight text-zinc-900">{tile.label}</p>
-          <p className="mt-0.5 text-xs font-normal leading-snug text-zinc-500 sm:text-[13px]">{tile.sub}</p>
+          <p className="mt-0.5 text-xs font-normal leading-tight text-zinc-500 sm:text-[13px]">{tile.sub}</p>
         </div>
         <ChevronRight className="h-5 w-5 shrink-0 text-[#D32F2F]" strokeWidth={2.25} aria-hidden />
       </div>
@@ -103,38 +103,9 @@ function PanelFeaturedPedidosDark({
         </div>
         <div className="min-w-0 flex-1">
           <p className="text-[1.02rem] font-semibold leading-[1.2] tracking-tight">{tile.label}</p>
-          <p className="mt-0.5 text-sm font-normal leading-snug text-zinc-400">{tile.sub}</p>
+          <p className="mt-0.5 text-sm font-normal leading-tight text-zinc-400">{tile.sub}</p>
         </div>
         <ChevronRight className="h-5 w-5 shrink-0 text-[#D32F2F]" strokeWidth={2.25} aria-hidden />
-      </div>
-      <div className="mt-2.5 flex justify-center">
-        <ChefOneGlowLine className="w-16 sm:w-20" />
-      </div>
-    </Link>
-  );
-}
-
-/** Finanzas a ancho completo: misma estética que las blancas de la rejilla. */
-function PanelFinanzasWide({ tile }: { tile: PanelTile }) {
-  const Icon = tile.Icon;
-  return (
-    <Link
-      href={panelHref(tile)}
-      className={[
-        'panel-ref-card-white flex flex-col justify-between rounded-[18px] bg-white px-3.5 py-3 text-left antialiased outline-none select-none touch-manipulation sm:px-4 sm:py-3',
-        tile.blocked ? 'panel-ref-card--blocked opacity-[0.58]' : '',
-        'focus-visible:ring-2 focus-visible:ring-[#D32F2F]/35 focus-visible:ring-offset-2 focus-visible:ring-offset-[#f5f5f7]',
-      ].join(' ')}
-    >
-      <div className="flex items-center gap-3 sm:gap-3.5">
-        <div className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-[#D32F2F]/12 text-[#D32F2F] ring-1 ring-[#D32F2F]/10 sm:h-[3.25rem] sm:w-[3.25rem]">
-          <Icon className="h-6 w-6" strokeWidth={2} />
-        </div>
-        <div className="min-w-0 flex-1">
-          <p className="text-base font-semibold leading-[1.2] tracking-tight text-zinc-900">{tile.label}</p>
-          <p className="mt-0.5 text-sm font-normal leading-snug text-zinc-500">{tile.sub}</p>
-        </div>
-        <ChevronRight className="h-5 w-5 shrink-0 text-[#D32F2F] sm:h-6 sm:w-6" strokeWidth={2.25} aria-hidden />
       </div>
       <div className="mt-2.5 flex justify-center">
         <ChefOneGlowLine className="w-16 sm:w-20" />
@@ -263,7 +234,7 @@ export default function PanelControlPage() {
     label: 'Finanzas',
     sub: 'Ventas, márgenes y análisis por local',
     Icon: BarChart3,
-    blocked: !showFinanzas || isBlockedByPlan('finanzas'),
+    blocked: isBlockedByPlan('finanzas'),
   };
 
   let row3Right: PanelTile | null = null;
@@ -290,13 +261,34 @@ export default function PanelControlPage() {
   const cocinaInGrid = row3UsesCocina || row4Right.id === 'cocina-central';
   const pedirInGrid = row3UsesPedCocina || row4Right.id === 'pedidos-cocina';
 
+  const needCocina = showCocinaCentral && !cocinaInGrid;
+  const needPedir = showPedidosCocina && !pedirInGrid;
+  const needFinanzas = showFinanzas;
+
   let row6Left: PanelTile | null = null;
   let row6Right: PanelTile | null = null;
-  if (showCocinaCentral && !cocinaInGrid) {
+  /** Fila 6: hasta 2 módulos; Finanzas usa la misma tarjeta que el resto (mitad de ancho). */
+  if (needCocina && needFinanzas) {
     row6Left = cocinaCentral;
-  }
-  if (showPedidosCocina && !pedirInGrid) {
+    row6Right = finanzasTile;
+  } else if (needCocina && needPedir) {
+    row6Left = cocinaCentral;
     row6Right = pedirCentral;
+  } else if (needPedir && needFinanzas) {
+    row6Left = pedirCentral;
+    row6Right = finanzasTile;
+  } else if (needCocina) {
+    row6Left = cocinaCentral;
+    if (needPedir) {
+      row6Right = pedirCentral;
+    }
+  } else if (needPedir) {
+    row6Left = pedirCentral;
+    if (needFinanzas) {
+      row6Right = finanzasTile;
+    }
+  } else if (needFinanzas) {
+    row6Left = finanzasTile;
   }
 
   const gridRows: [PanelTile | null, PanelTile | null][] = [
@@ -333,11 +325,6 @@ export default function PanelControlPage() {
           ))}
         </div>
 
-        {showFinanzas ? (
-          <div className="pt-0.5">
-            <PanelFinanzasWide tile={finanzasTile} />
-          </div>
-        ) : null}
       </div>
     </div>
   );
