@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Bot, ChevronDown } from 'lucide-react';
+import { Bot, ChevronDown, MessageCircle, Pencil, Trash2 } from 'lucide-react';
 import React from 'react';
 import { OIDO_CHEF_START_VOICE_EVENT, OIDO_CHEF_VOICE_NAV_FLAG } from '@/components/BottomNav';
 import { useAuth } from '@/components/AuthProvider';
@@ -2436,7 +2436,7 @@ export default function PedidosPage() {
     const reviewed = Boolean(order.priceReviewArchivedAt);
     const showExpandHint = opts?.showExpandHint ?? false;
     return (
-      <div className="mt-2 space-y-2 border-t border-amber-200/70 pt-2 text-left">
+      <div className="mt-1.5 space-y-1.5 border-t border-zinc-200/70 pt-1.5 text-left">
         {showExpandHint ? (
           <p className="text-center text-[11px] leading-snug text-zinc-600">
             Toca el recuadro del proveedor para desplegar líneas, marcar ✓/✗ y rellenar kg/precio recibido aquí mismo.
@@ -2901,83 +2901,165 @@ export default function PedidosPage() {
             />
           </span>
         </summary>
-        <div className="space-y-1.5 border-t border-zinc-100 bg-gradient-to-b from-amber-50/95 via-amber-50/80 to-amber-100/50 px-3 pb-3 pt-2.5 sm:px-4">
+        <div className="space-y-1.5 border-t border-zinc-100 bg-gradient-to-b from-zinc-50/90 to-white px-2 pb-2 pt-2 sm:px-3">
           {sentOrders.length === 0 ? (
-            <p className="py-6 text-center text-sm text-zinc-600">No hay pedidos enviados.</p>
+            <p className="py-4 text-center text-xs text-zinc-500">No hay pedidos enviados.</p>
           ) : null}
-          {sentOrders.map((order) => (
-            <div
-              key={order.id}
-              className="rounded-xl bg-amber-100 p-2.5 text-center ring-2 ring-amber-300/90 shadow-sm"
-            >
+          {sentOrders.map((order) => {
+            const totals = totalsWithVatForOrderListDisplay(order);
+            const hasAnyBad = order.items.some((item) => {
+              const m = quickLineMarks[item.id];
+              return m === 'bad' || (m === undefined && Boolean(item.incidentType));
+            });
+            const allLinesOk =
+              order.items.length > 0 &&
+              order.items.every((item) => {
+                const m = quickLineMarks[item.id];
+                const serverOk =
+                  item.receivedQuantity >= item.quantity && item.quantity > 0 && !item.incidentType;
+                return m === 'ok' || (m === undefined && serverOk);
+              });
+            const sentBadge: 'pendiente' | 'incidencia' | 'correcto' = hasAnyBad
+              ? 'incidencia'
+              : allLinesOk
+                ? 'correcto'
+                : 'pendiente';
+            const detailOpen = expandedSentId === order.id;
+            const cardShell = [
+              'overflow-hidden rounded-lg transition-colors',
+              sentBadge === 'incidencia'
+                ? detailOpen
+                  ? 'bg-red-50 ring-1 ring-red-400/90'
+                  : 'bg-red-50/90 ring-1 ring-red-400/70 hover:bg-red-50'
+                : sentBadge === 'correcto'
+                  ? detailOpen
+                    ? 'bg-emerald-50 ring-1 ring-emerald-600/75'
+                    : 'bg-emerald-50/90 ring-1 ring-emerald-500/65 hover:bg-emerald-50'
+                  : detailOpen
+                    ? 'bg-amber-50 ring-1 ring-amber-500/80'
+                    : 'bg-amber-50/90 ring-1 ring-amber-400/75 hover:bg-amber-50',
+            ].join(' ');
+            const badgeClass =
+              sentBadge === 'incidencia'
+                ? 'bg-red-600'
+                : sentBadge === 'correcto'
+                  ? 'bg-emerald-600'
+                  : 'bg-amber-500';
+            const badgeLabel =
+              sentBadge === 'incidencia' ? 'Incidencia' : sentBadge === 'correcto' ? 'Correcto' : 'Pendiente';
+            return (
+            <div key={order.id} className={cardShell}>
               <button
                 type="button"
                 onClick={() => setExpandedSentId((prev) => (prev === order.id ? null : order.id))}
-                className="w-full rounded-lg py-0.5 text-center outline-none focus-visible:ring-2 focus-visible:ring-amber-600/40 active:bg-amber-200/60"
-                aria-expanded={expandedSentId === order.id}
+                className={[
+                  'w-full px-2.5 py-1.5 text-left outline-none transition focus-visible:ring-2 focus-visible:ring-[#D32F2F]/35 focus-visible:ring-offset-1',
+                  sentBadge === 'incidencia' ? 'active:bg-red-100/40' : sentBadge === 'correcto' ? 'active:bg-emerald-100/40' : 'active:bg-amber-100/40',
+                ].join(' ')}
+                aria-expanded={detailOpen}
               >
-                {(() => {
-                  const totals = totalsWithVatForOrderListDisplay(order);
-                  return (
-                    <>
-                      <p className="text-sm font-semibold text-zinc-900">{order.supplierName}</p>
-                      <p className="text-xs text-zinc-500">
-                        enviado {order.sentAt ? new Date(order.sentAt).toLocaleDateString('es-ES') : '-'}
-                      </p>
-                      {order.contentRevisedAfterSentAt ? (
-                        <p className="text-[10px] font-bold uppercase text-amber-900">Modificado tras envío</p>
-                      ) : null}
-                      {order.deliveryDate ? (
-                        <p className="text-xs text-zinc-500">
-                          Entrega: {new Date(`${order.deliveryDate}T00:00:00`).toLocaleDateString('es-ES')}
-                        </p>
-                      ) : null}
-                      <div
-                        className="mx-auto mt-1.5 max-w-[16.5rem] rounded-lg bg-white/70 px-2 py-1.5 text-left ring-1 ring-amber-300/40"
-                        aria-label="Importes del pedido"
+                <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                      <span className="truncate text-sm font-bold text-zinc-900">{order.supplierName}</span>
+                      <span
+                        className={[
+                          'shrink-0 rounded px-1.5 py-0 text-[9px] font-black uppercase tracking-wide text-white',
+                          badgeClass,
+                        ].join(' ')}
                       >
-                        <div className="flex items-baseline justify-between gap-2 text-[11px] leading-tight text-zinc-600">
-                          <span className="shrink-0 font-medium">
-                            Subt. <abbr title="sin IVA">s/IVA</abbr>
+                        {badgeLabel}
+                      </span>
+                    </div>
+                    <p className="text-[10px] text-zinc-500">
+                      Enviado{' '}
+                      <span className="font-medium text-zinc-700">
+                        {order.sentAt ? new Date(order.sentAt).toLocaleDateString('es-ES') : '—'}
+                      </span>
+                      {order.deliveryDate ? (
+                        <>
+                          <span className="text-zinc-400"> · </span>
+                          Entrega{' '}
+                          <span className="font-medium text-zinc-700">
+                            {new Date(`${order.deliveryDate}T00:00:00`).toLocaleDateString('es-ES')}
                           </span>
-                          <span className="tabular-nums font-semibold text-zinc-900">{totals.base.toFixed(2)} €</span>
-                        </div>
-                        <div className="mt-0.5 flex items-baseline justify-between gap-2 text-[11px] leading-tight text-zinc-600">
-                          <span className="shrink-0 font-medium">
-                            <abbr title="Impuesto sobre el valor añadido">IVA</abbr>
-                          </span>
-                          <span className="tabular-nums font-semibold text-zinc-900">{totals.vat.toFixed(2)} €</span>
-                        </div>
-                        <div className="mt-1 flex items-baseline justify-between gap-2 border-t border-amber-200/90 pt-1 text-xs font-bold leading-tight text-zinc-900">
-                          <span className="shrink-0">
-                            Tot. <abbr title="con IVA incluido">c/IVA</abbr>
-                          </span>
-                          <span className="tabular-nums font-black text-zinc-950">{totals.total.toFixed(2)} €</span>
-                        </div>
-                      </div>
-                      <p className="pt-0.5 text-[10px] font-semibold uppercase tracking-wide text-zinc-500">
-                        Revisión precios:{' '}
-                        <span className={order.priceReviewArchivedAt ? 'text-emerald-700' : 'text-zinc-700'}>
-                          {order.priceReviewArchivedAt ? 'completada' : 'pendiente'}
-                        </span>
-                      </p>
-                    </>
-                  );
-                })()}
+                        </>
+                      ) : null}
+                      {order.contentRevisedAfterSentAt ? (
+                        <span className="ml-1 text-[9px] font-bold uppercase text-amber-800"> · Modif. tras envío</span>
+                      ) : null}
+                    </p>
+                    <p className="mt-0.5 text-[9px] font-semibold uppercase tracking-wide text-zinc-500">
+                      Revisión precios:{' '}
+                      <span className={order.priceReviewArchivedAt ? 'text-emerald-700' : 'text-zinc-700'}>
+                        {order.priceReviewArchivedAt ? 'completada' : 'pendiente'}
+                      </span>
+                    </p>
+                  </div>
+                  <div
+                    className="shrink-0 text-right text-[10px] leading-tight tabular-nums text-zinc-600 sm:min-w-[7.5rem]"
+                    aria-label="Importes del pedido"
+                  >
+                    <div className="flex justify-end gap-x-2">
+                      <span className="text-zinc-400">s/IVA</span>
+                      <span className="font-semibold text-zinc-900">{totals.base.toFixed(2)} €</span>
+                    </div>
+                    <div className="flex justify-end gap-x-2">
+                      <span className="text-zinc-400">IVA</span>
+                      <span className="font-semibold text-zinc-900">{totals.vat.toFixed(2)} €</span>
+                    </div>
+                    <div className="flex justify-end gap-x-2 border-t border-zinc-200/80 pt-0.5 font-black text-zinc-950">
+                      <span className="text-zinc-500">Total c/IVA</span>
+                      <span>{totals.total.toFixed(2)} €</span>
+                    </div>
+                  </div>
+                </div>
+                <div
+                  className={[
+                    'mt-1 flex items-center justify-center gap-1 border-t pt-1 text-[9px] font-semibold uppercase tracking-wide text-[#B91C1C]',
+                    sentBadge === 'incidencia'
+                      ? 'border-red-200/40'
+                      : sentBadge === 'correcto'
+                        ? 'border-emerald-200/40'
+                        : 'border-amber-200/50',
+                  ].join(' ')}
+                >
+                  {detailOpen ? 'Ocultar líneas' : 'Ver líneas'}
+                  <ChevronDown
+                    className={['h-3 w-3 transition-transform', detailOpen ? 'rotate-180' : ''].join(' ')}
+                    aria-hidden
+                  />
+                </div>
               </button>
-              <div className="mt-2 grid grid-cols-2 gap-1.5 sm:grid-cols-3">
+              <div
+                className={[
+                  'flex flex-wrap items-center justify-end gap-0.5 border-t px-1.5 py-1',
+                  sentBadge === 'incidencia'
+                    ? 'border-red-200/70 bg-white/60'
+                    : sentBadge === 'correcto'
+                      ? 'border-emerald-200/70 bg-white/60'
+                      : 'border-amber-200/70 bg-white/60',
+                ].join(' ')}
+              >
                 <Link
                   href={`/pedidos/nuevo?id=${encodeURIComponent(order.id)}`}
-                  className="flex items-center justify-center rounded-lg border border-zinc-300 bg-white px-2 py-1 text-center text-xs font-semibold text-zinc-800"
+                  onClick={(e) => e.stopPropagation()}
+                  className="inline-flex h-8 items-center gap-0.5 rounded-md border border-zinc-200 bg-white px-1.5 text-[10px] font-semibold text-zinc-800 shadow-sm hover:bg-zinc-50"
+                  title="Editar pedido"
+                  aria-label="Editar pedido"
                 >
-                  Editar pedido
+                  <Pencil className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                  <span className="hidden sm:inline">Editar</span>
                 </Link>
                 <button
                   type="button"
                   onClick={() => sendWhatsappOrder(order)}
-                  className="rounded-lg border border-zinc-300 bg-white px-2 py-1 text-center text-xs font-semibold text-[#166534]"
+                  className="inline-flex h-8 items-center gap-0.5 rounded-md border border-zinc-200 bg-white px-1.5 text-[10px] font-semibold text-[#166534] shadow-sm hover:bg-zinc-50"
+                  title="WhatsApp"
+                  aria-label="Enviar pedido por WhatsApp"
                 >
-                  Enviar WhatsApp
+                  <MessageCircle className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                  <span className="hidden sm:inline">WA</span>
                 </button>
                 <button
                   type="button"
@@ -3005,19 +3087,21 @@ export default function PedidosPage() {
                       })
                       .catch((err: Error) => setMessage(err.message));
                   }}
-                  className="rounded-lg border border-zinc-300 bg-white px-2 py-1 text-center text-xs font-semibold text-[#B91C1C]"
+                  className="inline-flex h-8 items-center gap-0.5 rounded-md border border-zinc-200 bg-white px-1.5 text-[10px] font-semibold text-[#B91C1C] shadow-sm hover:bg-zinc-50"
+                  title="Eliminar pedido"
+                  aria-label="Eliminar pedido"
                 >
-                  Eliminar
+                  <Trash2 className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                  <span className="hidden sm:inline">Borrar</span>
                 </button>
               </div>
-              {expandedSentId !== order.id ? renderSentOrderReceiveAndIncident(order, { showExpandHint: true }) : null}
               {expandedSentId === order.id ? (
-                <div className="mt-2 space-y-2 text-left">
-                  <div className="rounded-lg border border-[#D32F2F]/30 bg-white px-2 py-1.5 ring-1 ring-[#D32F2F]/12 shadow-sm">
+                <div className="mt-1 space-y-1.5 px-1 pb-1 pt-1 text-left">
+                  <div className="rounded-lg border border-[#D32F2F]/30 bg-white px-2 py-1 ring-1 ring-[#D32F2F]/12 shadow-sm">
                     <button
                       type="button"
                       onClick={() => setOcrOrder(order)}
-                      className="w-full rounded-lg border border-[#D32F2F]/45 bg-[#D32F2F]/10 py-2 text-center text-[11px] font-black uppercase tracking-wide text-[#B91C1C] transition active:scale-[0.99]"
+                      className="w-full rounded-md border border-[#D32F2F]/45 bg-[#D32F2F]/10 py-1.5 text-center text-[10px] font-black uppercase tracking-wide text-[#B91C1C] transition active:scale-[0.99]"
                     >
                       Escanear albarán
                     </button>
@@ -3328,9 +3412,9 @@ export default function PedidosPage() {
                   {renderSentOrderReceiveAndIncident(order, { showExpandHint: false })}
                 </div>
               ) : null}
-
             </div>
-          ))}
+            );
+          })}
         </div>
       </details>
 
