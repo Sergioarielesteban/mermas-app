@@ -7,7 +7,6 @@ import { useAuth } from '@/components/AuthProvider';
 import { getSupabaseClient } from '@/lib/supabase-client';
 import type { PlanCode } from '@/lib/planPermissions';
 import type { SubscriptionStatus } from '@/lib/subscriptions-supabase';
-import { goBackOrToPanel } from '@/lib/navigate-back-or-fallback';
 
 type LocalDashboardItem = {
   localId: string;
@@ -547,16 +546,6 @@ export default function SuperadminLocalesPage() {
             </article>
           );
         })}
-      </div>
-
-      <div className="flex justify-end">
-        <button
-          type="button"
-          onClick={() => goBackOrToPanel(router)}
-          className="rounded-xl border border-zinc-300 bg-white px-4 py-2 text-sm font-bold text-zinc-800 hover:bg-zinc-50"
-        >
-          Volver
-        </button>
       </div>
     </div>
   );

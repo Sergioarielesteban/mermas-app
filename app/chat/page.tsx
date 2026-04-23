@@ -1,9 +1,7 @@
 'use client';
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { ChevronLeft, Send, Trash2 } from 'lucide-react';
-import { goBackOrToPanel } from '@/lib/navigate-back-or-fallback';
+import { Send, Trash2 } from 'lucide-react';
 import MermasStyleHero from '@/components/MermasStyleHero';
 import { useAuth } from '@/components/AuthProvider';
 import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
@@ -25,7 +23,6 @@ function formatTime(iso: string) {
 }
 
 export default function ChatPage() {
-  const router = useRouter();
   const { localId, userId, profileReady, displayName, loginUsername } = useAuth();
   /** Respaldo si el contexto aún no tiene userId (evita tratar todos los mensajes como “ajenos” o “propios” mal). */
   const [sessionUserId, setSessionUserId] = useState<string | null>(null);
@@ -181,15 +178,7 @@ export default function ChatPage() {
         compact
       />
 
-      <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:gap-2">
-        <button
-          type="button"
-          onClick={() => goBackOrToPanel(router)}
-          className="inline-flex items-center gap-1 text-sm font-bold text-[#D32F2F] hover:underline"
-        >
-          <ChevronLeft className="h-4 w-4" aria-hidden />
-          Volver
-        </button>
+      <div className="flex flex-wrap justify-end gap-2">
         <button
           type="button"
           disabled={disabled || deleting || messages.length === 0}

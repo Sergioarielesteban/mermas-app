@@ -7,7 +7,6 @@ import MermasStyleHero from '@/components/MermasStyleHero';
 import { useAuth } from '@/components/AuthProvider';
 import { enterDemoMode } from '@/lib/demo-mode';
 import type { PlanCode } from '@/lib/planPermissions';
-import { goBackOrToPanel } from '@/lib/navigate-back-or-fallback';
 
 const COMING_SOON_COPY = 'Muy pronto disponible. Puedes probar la demo.';
 
@@ -307,16 +306,6 @@ export default function PlanesPage() {
           </div>
         </div>
       ) : null}
-
-      <div className="flex justify-end">
-        <button
-          type="button"
-          onClick={() => goBackOrToPanel(router)}
-          className="rounded-xl border border-zinc-300 bg-white px-4 py-2 text-sm font-bold text-zinc-800 hover:bg-zinc-50"
-        >
-          Volver
-        </button>
-      </div>
     </div>
   );
 }

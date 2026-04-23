@@ -1,13 +1,10 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
 import React from 'react';
 import { useAuth } from '@/components/AuthProvider';
-import { goBackOrToPanel } from '@/lib/navigate-back-or-fallback';
 import { isSupabaseEnabled } from '@/lib/supabase-client';
 
 export default function CuentaSeguridadPage() {
-  const router = useRouter();
   const { email, plan, changePassword } = useAuth();
   const supabaseOk = isSupabaseEnabled();
 
@@ -43,16 +40,7 @@ export default function CuentaSeguridadPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-3">
-        <button
-          type="button"
-          onClick={() => goBackOrToPanel(router)}
-          className="inline-flex h-9 shrink-0 items-center rounded-lg border border-zinc-300 bg-white px-3 text-sm font-semibold text-zinc-700"
-        >
-          ← Volver
-        </button>
-        <h1 className="text-base font-black uppercase tracking-wide text-zinc-900">Cuenta y seguridad</h1>
-      </div>
+      <h1 className="text-base font-black uppercase tracking-wide text-zinc-900">Cuenta y seguridad</h1>
 
       {supabaseOk ? (
         <section className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm ring-1 ring-zinc-100">

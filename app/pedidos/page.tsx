@@ -420,17 +420,20 @@ export default function PedidosPage() {
     try {
       const ctx = parsePedidosPageUi(window.localStorage.getItem(pedidosPageUiStorageKey(localId)));
       if (ctx) {
+        // Acordeones siempre cerrados al entrar/volver: el usuario los abre con un toque.
+        setPendientesEntregaAccordionOpen(false);
+        setHistoricoRecibidosAccordionOpen(false);
         if (ctx.section === 'enviados') {
-          setHistoricoRecibidosAccordionOpen(true);
-          setPendientesEntregaAccordionOpen(false);
+          setExpandedSentId(null);
           if (ctx.pedido_id) setExpandedHistoricoId(ctx.pedido_id);
+          else setExpandedHistoricoId(null);
           if (ctx.historico_month_key) {
             setHistoricoMonthOpen((p) => ({ ...p, [ctx.historico_month_key!]: true }));
           }
         } else {
-          setPendientesEntregaAccordionOpen(true);
-          setHistoricoRecibidosAccordionOpen(false);
+          setExpandedHistoricoId(null);
           if (ctx.pedido_id) setExpandedSentId(ctx.pedido_id);
+          else setExpandedSentId(null);
         }
         if (ctx.scroll_y != null && ctx.scroll_y > 0) {
           scrollRestorePendingRef.current = ctx.scroll_y;
@@ -2866,16 +2869,16 @@ export default function PedidosPage() {
         open={pendientesEntregaAccordionOpen}
         onToggle={(e) => setPendientesEntregaAccordionOpen(e.currentTarget.open)}
       >
-        <summary className="flex w-full cursor-pointer list-none flex-col items-center px-5 py-3 text-center outline-none transition active:bg-zinc-50/50 focus-visible:ring-2 focus-visible:ring-[#D32F2F]/40 focus-visible:ring-offset-2 sm:px-6 [&::-webkit-details-marker]:hidden">
-          <span className="text-[11px] font-semibold uppercase tracking-[0.2em] text-zinc-400">Entrega</span>
-          <span className="mt-0.5 text-center text-lg font-semibold leading-tight tracking-tight text-zinc-900 sm:text-xl sm:leading-tight">
+        <summary className="flex w-full cursor-pointer list-none flex-col items-center px-4 py-2 text-center outline-none transition active:bg-zinc-50/50 focus-visible:ring-2 focus-visible:ring-[#D32F2F]/40 focus-visible:ring-offset-2 sm:px-5 [&::-webkit-details-marker]:hidden">
+          <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-zinc-400">Entrega</span>
+          <span className="mt-0.5 text-center text-base font-semibold leading-tight tracking-tight text-zinc-900 sm:text-lg">
             Pendientes de entrega
           </span>
-          <span className={`mx-auto mt-1.5 w-20 ${CHEF_ONE_TAPER_LINE_CLASS}`} aria-hidden />
-          <span className="mt-1.5 text-xl font-black tabular-nums text-zinc-900 sm:text-2xl">
+          <span className={`mx-auto mt-1 w-16 ${CHEF_ONE_TAPER_LINE_CLASS}`} aria-hidden />
+          <span className="mt-1 text-lg font-black tabular-nums text-zinc-900 sm:text-xl">
             {sentOrders.length}
           </span>
-          <span className="mt-1.5 flex flex-wrap items-center justify-center gap-x-1.5 text-xs text-zinc-500">
+          <span className="mt-1 flex flex-wrap items-center justify-center gap-x-1.5 text-[11px] text-zinc-500">
             {sentOrders.length === 0 ? (
               <span>Nada pendiente ahora</span>
             ) : (
@@ -2890,11 +2893,11 @@ export default function PedidosPage() {
               </>
             )}
           </span>
-          <span className="mt-2 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider text-[#D32F2F]">
-            {pendientesEntregaAccordionOpen ? 'Ocultar pedidos' : 'Ver pedidos pendientes'}
+          <span className="mt-1.5 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-[#D32F2F]">
+            {pendientesEntregaAccordionOpen ? 'Ocultar' : 'Ver pedidos'}
             <ChevronDown
               className={[
-                'h-4 w-4 transition-transform duration-300',
+                'h-3.5 w-3.5 transition-transform duration-300',
                 pendientesEntregaAccordionOpen ? 'rotate-180' : '',
               ].join(' ')}
               aria-hidden

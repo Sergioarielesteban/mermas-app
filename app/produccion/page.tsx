@@ -1,10 +1,8 @@
 'use client';
 
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import type { LucideIcon } from 'lucide-react';
-import { ChevronLeft, History, ListTree, Play } from 'lucide-react';
-import { goBackOrToPanel } from '@/lib/navigate-back-or-fallback';
+import { History, ListTree, Play } from 'lucide-react';
 import { CHEF_ONE_TAPER_LINE_CLASS } from '@/components/ChefOneGlowLine';
 import MermasStyleHero from '@/components/MermasStyleHero';
 
@@ -37,7 +35,6 @@ function HubCard({
 }
 
 export default function ProduccionHubPage() {
-  const router = useRouter();
   return (
     <div className="space-y-5 pb-10">
       <MermasStyleHero
@@ -46,15 +43,6 @@ export default function ProduccionHubPage() {
         description="Plantillas con bloques de días a tu medida. Cada día ves objetivo, lo hecho y lo que falta por hacer, con el cálculo al momento."
         slim
       />
-
-      <button
-        type="button"
-        onClick={() => goBackOrToPanel(router)}
-        className="inline-flex items-center gap-1 text-sm font-semibold text-zinc-600 hover:text-[#D32F2F]"
-      >
-        <ChevronLeft className="h-4 w-4" />
-        Volver
-      </button>
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <HubCard
