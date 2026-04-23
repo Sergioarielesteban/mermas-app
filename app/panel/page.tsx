@@ -265,6 +265,18 @@ export default function PanelControlPage() {
     [chat, escandallos],
   ];
 
+  const cocinaInGrid = row3UsesCocina || row4Right.id === 'cocina-central';
+  const pedirCentralInGrid = row3UsesPedCocina || row4Right.id === 'pedidos-cocina';
+
+  /** Fila extra: Cocina central si el rol la tiene y aún no salía en la rejilla (p. ej. fila 3 = Consumo interno). */
+  const cocinaCentralRow: [PanelTile, PanelTile | null] | null =
+    showCocinaCentral && !cocinaInGrid
+      ? [
+          cocinaCentral,
+          showPedidosCocina && !pedirCentralInGrid ? pedirCentral : null,
+        ]
+      : null;
+
   const pedidosBlocked = !showPedidos || isBlockedByPlan('pedidos');
   const finanzasBlocked = !showFinanzas || isBlockedByPlan('finanzas');
 
@@ -284,6 +296,12 @@ export default function PanelControlPage() {
               {right ? <PanelGridCard tile={right} /> : <PanelGridEmpty />}
             </div>
           ))}
+          {cocinaCentralRow ? (
+            <div className="grid grid-cols-2 gap-3">
+              <PanelGridCard tile={cocinaCentralRow[0]} />
+              {cocinaCentralRow[1] ? <PanelGridCard tile={cocinaCentralRow[1]} /> : <PanelGridEmpty />}
+            </div>
+          ) : null}
         </div>
 
         {showFinanzas ? (
