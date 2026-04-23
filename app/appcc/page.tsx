@@ -1,6 +1,8 @@
 'use client';
 
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { goBackOrToPanel } from '@/lib/navigate-back-or-fallback';
 import {
   BrushCleaning,
   CalendarDays,
@@ -102,6 +104,7 @@ function ExpandableControlGroup({
 }
 
 export default function AppccHubPage() {
+  const router = useRouter();
   return (
     <div className="space-y-4">
       <MermasStyleHero
@@ -111,13 +114,14 @@ export default function AppccHubPage() {
         description="Temperaturas, aceite y programa de limpieza con trazabilidad para el equipo y para inspecciones."
       />
 
-      <Link
-        href="/panel"
+      <button
+        type="button"
+        onClick={() => goBackOrToPanel(router)}
         className="inline-flex items-center gap-1 text-sm font-semibold text-zinc-600 hover:text-[#D32F2F]"
       >
         <ChevronLeft className="h-4 w-4" />
-        Panel
-      </Link>
+        Volver
+      </button>
 
       <ExpandableControlGroup
         title="Control de temperaturas"

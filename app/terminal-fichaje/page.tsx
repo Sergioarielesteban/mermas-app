@@ -2,6 +2,7 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { Lock, RefreshCw, Settings } from 'lucide-react';
 import { useAuth } from '@/components/AuthProvider';
 import { buildStaffPermissions } from '@/lib/staff/permissions';
@@ -16,6 +17,7 @@ import {
 import { getSupabaseClient } from '@/lib/supabase-client';
 import type { StaffTimeEventType } from '@/lib/staff/types';
 import Logo from '@/components/Logo';
+import { goBackOrToPanel } from '@/lib/navigate-back-or-fallback';
 
 type Step = 'home' | 'pin' | 'choose_out' | 'success';
 
@@ -58,6 +60,7 @@ function friendlyFichajeRpcMessage(raw: string): string {
 }
 
 export default function TerminalFichajePage() {
+  const router = useRouter();
   const { localId, localName, profileReady, profileRole } = useAuth();
   const perms = useMemo(() => buildStaffPermissions(profileRole), [profileRole]);
   const supabase = getSupabaseClient();
@@ -331,12 +334,13 @@ export default function TerminalFichajePage() {
           Inicia sesión con un perfil <strong className="text-zinc-900">admin</strong> o{' '}
           <strong className="text-zinc-900">manager</strong> en esta tablet.
         </p>
-        <Link
-          href="/panel"
+        <button
+          type="button"
+          onClick={() => goBackOrToPanel(router)}
           className="rounded-2xl bg-zinc-900 px-6 py-3 text-sm font-extrabold text-white"
         >
           Volver
-        </Link>
+        </button>
       </div>
     );
   }

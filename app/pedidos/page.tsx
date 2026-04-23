@@ -13,7 +13,6 @@ import MermasStyleHero from '@/components/MermasStyleHero';
 import PedidosAlbaranOcrModal from '@/components/PedidosAlbaranOcrModal';
 import PedidosPremiaLockedScreen from '@/components/PedidosPremiaLockedScreen';
 import { dispatchPedidosDataChanged, usePedidosDataChangedListener } from '@/hooks/usePedidosDataChangedListener';
-import { canAccessFinanzas } from '@/lib/app-role-permissions';
 import { canAccessPedidos, canUsePedidosModule } from '@/lib/pedidos-access';
 import {
   estimatedKgForOrderLine,
@@ -2829,14 +2828,6 @@ export default function PedidosPage() {
             Albaranes
           </Link>
         </div>
-        {canAccessFinanzas(profileRole) ? (
-          <Link
-            href="/finanzas"
-            className="mt-2 flex h-9 w-full items-center justify-center rounded-lg border border-zinc-900/20 bg-zinc-900 px-2 text-center text-xs font-bold text-white sm:text-sm"
-          >
-            Finanzas — gasto y salud
-          </Link>
-        ) : null}
       </section>
 
       {reloadError ? (

@@ -1,10 +1,12 @@
 'use client';
 
-import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useAuth } from '@/components/AuthProvider';
+import { goBackOrToPanel } from '@/lib/navigate-back-or-fallback';
 import { canAccessCocinaCentralModule } from '@/lib/cocina-central-permissions';
 
 export default function CocinaCentralLayout({ children }: { children: React.ReactNode }) {
+  const router = useRouter();
   const { profileReady, profileRole } = useAuth();
 
   if (!profileReady) {
@@ -26,12 +28,13 @@ export default function CocinaCentralLayout({ children }: { children: React.Reac
             <code className="text-xs">role</code>.
           </p>
         </div>
-        <Link
-          href="/panel"
-          className="flex h-12 items-center justify-center rounded-2xl bg-[#D32F2F] text-sm font-extrabold text-white"
+        <button
+          type="button"
+          onClick={() => goBackOrToPanel(router)}
+          className="flex h-12 w-full items-center justify-center rounded-2xl bg-[#D32F2F] text-sm font-extrabold text-white"
         >
-          Volver al panel
-        </Link>
+          Volver
+        </button>
       </div>
     );
   }

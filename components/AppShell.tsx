@@ -45,6 +45,7 @@ import {
   canAccessPedidosByRole,
 } from '@/lib/app-role-permissions';
 import { getModuleAccess } from '@/lib/canAccessModule';
+import { goBackOrToPanel } from '@/lib/navigate-back-or-fallback';
 
 type NavItemNote = { kind: 'note'; text: string };
 type NavItemLink = {
@@ -249,8 +250,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
   const confirmAndLogout = () => setConfirmLogoutOpen(true);
 
-  const goToControlPanel = useCallback(() => {
-    router.push('/panel');
+  const goBackInApp = useCallback(() => {
+    goBackOrToPanel(router);
   }, [router]);
 
   /**
@@ -547,11 +548,11 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           <div className="mb-4 space-y-1.5 print:hidden">
             <button
               type="button"
-              onClick={goToControlPanel}
+              onClick={goBackInApp}
               className="flex w-full items-center justify-center gap-2 rounded-xl border border-zinc-300 bg-white py-2.5 text-sm font-bold text-zinc-800 shadow-sm ring-1 ring-zinc-200/80 hover:bg-zinc-50 active:scale-[0.99]"
             >
               <span aria-hidden>←</span>
-              Panel de control
+              Volver
             </button>
           </div>
         ) : null}

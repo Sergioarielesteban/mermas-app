@@ -1,6 +1,5 @@
 'use client';
 
-import Link from 'next/link';
 import React from 'react';
 import { useRouter } from 'next/navigation';
 import MermasStyleHero from '@/components/MermasStyleHero';
@@ -8,6 +7,7 @@ import { useAuth } from '@/components/AuthProvider';
 import { getSupabaseClient } from '@/lib/supabase-client';
 import type { PlanCode } from '@/lib/planPermissions';
 import type { SubscriptionStatus } from '@/lib/subscriptions-supabase';
+import { goBackOrToPanel } from '@/lib/navigate-back-or-fallback';
 
 type LocalDashboardItem = {
   localId: string;
@@ -445,7 +445,7 @@ export default function SuperadminLocalesPage() {
               }}
               className="rounded-xl border border-zinc-300 bg-white px-4 py-2 text-xs font-bold uppercase tracking-wide text-zinc-800"
             >
-              Volver al panel
+              Volver al listado
             </button>
           </div>
         </section>
@@ -550,12 +550,13 @@ export default function SuperadminLocalesPage() {
       </div>
 
       <div className="flex justify-end">
-        <Link
-          href="/panel"
+        <button
+          type="button"
+          onClick={() => goBackOrToPanel(router)}
           className="rounded-xl border border-zinc-300 bg-white px-4 py-2 text-sm font-bold text-zinc-800 hover:bg-zinc-50"
         >
-          Volver al panel
-        </Link>
+          Volver
+        </button>
       </div>
     </div>
   );

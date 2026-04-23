@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronDown, ChevronLeft, CheckCircle2, Package, Plus, RotateCcw, Trash2 } from 'lucide-react';
 import MermasStyleHero from '@/components/MermasStyleHero';
@@ -33,6 +34,7 @@ import {
 import { appConfirm } from '@/lib/app-dialog-bridge';
 import { confirmDestructiveOperation } from '@/lib/ops-role-confirm';
 import { actorLabel, notifyInventarioCerrado } from '@/services/notifications';
+import { goBackOrToPanel } from '@/lib/navigate-back-or-fallback';
 
 function parseDecimal(raw: string): number | null {
   const t = String(raw).trim().replace(/\s/g, '').replace(',', '.');
@@ -76,6 +78,7 @@ type LineDraft = {
 };
 
 export default function InventarioPage() {
+  const router = useRouter();
   const { localId, profileReady, localName, localCode, userId, displayName, loginUsername, profileRole } =
     useAuth();
   const [categories, setCategories] = useState<InventoryCatalogCategory[]>([]);
@@ -804,13 +807,14 @@ export default function InventarioPage() {
 
   return (
     <div className="space-y-5">
-      <Link
-        href="/panel"
+      <button
+        type="button"
+        onClick={() => goBackOrToPanel(router)}
         className="inline-flex items-center gap-1 text-sm font-semibold text-zinc-600 hover:text-[#D32F2F]"
       >
         <ChevronLeft className="h-4 w-4" />
-        Panel
-      </Link>
+        Volver
+      </button>
 
       <MermasStyleHero
         brandLogo
