@@ -56,6 +56,7 @@ function buildWhatsappDraftMessage(input: {
   requestedBy: string;
   notes: string;
   items: PedidoOrderItem[];
+  contentRevisedAfterSent?: boolean;
 }) {
   const fechaPedido = new Date(input.createdAtIso).toLocaleDateString('es-ES');
   return [
@@ -64,6 +65,7 @@ function buildWhatsappDraftMessage(input: {
     `Fecha entrega: ${input.deliveryDate}`,
     `Local: ${normalizeLocalForWhatsapp(input.localName || 'CHEF-ONE MATARO')}`,
     `Pedido por: ${input.requestedBy}`,
+    input.contentRevisedAfterSent ? '— Pedido actualizado (líneas revisadas tras el envío anterior). —' : '',
     '------------------------------',
     'PEDIDO:',
     '------------------------------',
@@ -119,6 +121,9 @@ export default function NuevoPedidoPage() {
   const [existingSentAt, setExistingSentAt] = React.useState<string | null>(null);
   const [existingOrderId, setExistingOrderId] = React.useState<string | null>(null);
   const [existingOrderUpdatedAt, setExistingOrderUpdatedAt] = React.useState<string | null>(null);
+  const [editSourceItems, setEditSourceItems] = React.useState<PedidoOrderItem[] | null>(null);
+  const [editBlockedReason, setEditBlockedReason] = React.useState<string | null>(null);
+  const [hadContentRevisionFlag, setHadContentRevisionFlag] = React.useState(false);
 
   const clearBasketDraft = React.useCallback(() => {
     if (!localId) return;
@@ -141,6 +146,9 @@ export default function NuevoPedidoPage() {
     setExistingCreatedAt(null);
     setExistingSentAt(null);
     setExistingOrderUpdatedAt(null);
+    setEditSourceItems(null);
+    setEditBlockedReason(null);
+    setHadContentRevisionFlag(false);
     setIsLoadedEdit(false);
     setSupplierId((sid) => suppliers[0]?.id ?? sid);
   }, [clearBasketDraft, suppliers]);
@@ -259,9 +267,16 @@ export default function NuevoPedidoPage() {
     .sort((a, b) => a.name.localeCompare(b.name, 'es'));
 
   React.useEffect(() => {
-    if (!editingId) return;
+    if (!editingId) {
+      setEditSourceItems(null);
+      setEditBlockedReason(null);
+      setHadContentRevisionFlag(false);
+      setIsLoadedEdit(false);
+      return;
+    }
     if (!localId) return;
     setExistingOrderUpdatedAt(null);
+    setEditBlockedReason(null);
     if (isDemoMode()) {
       const draft = orders.find((o) => o.id === editingId) ?? null;
       if (!draft) {
@@ -269,6 +284,16 @@ export default function NuevoPedidoPage() {
         setIsLoadedEdit(true);
         return;
       }
+      if (draft.status === 'received') {
+        setEditBlockedReason(
+          'Este pedido está marcado como recibido. Para ajustarlo usa Recepción o vuelve a «enviado» desde el histórico.',
+        );
+        setEditSourceItems(null);
+        setIsLoadedEdit(true);
+        return;
+      }
+      setEditSourceItems(draft.items);
+      setHadContentRevisionFlag(Boolean(draft.contentRevisedAfterSentAt));
       setExistingOrderId(draft.id);
       setSupplierId(draft.supplierId);
       setNotes(draft.notes);
@@ -294,6 +319,16 @@ export default function NuevoPedidoPage() {
           setIsLoadedEdit(true);
           return;
         }
+        if (draft.status === 'received') {
+          setEditBlockedReason(
+            'Este pedido está marcado como recibido. Para ajustarlo usa Recepción o vuelve a «enviado» desde el histórico.',
+          );
+          setEditSourceItems(null);
+          setIsLoadedEdit(true);
+          return;
+        }
+        setEditSourceItems(draft.items);
+        setHadContentRevisionFlag(Boolean(draft.contentRevisedAfterSentAt));
         setExistingOrderId(draft.id);
         setSupplierId(draft.supplierId);
         setNotes(draft.notes);
@@ -343,23 +378,42 @@ export default function NuevoPedidoPage() {
     });
   }, []);
 
+  const existingByProductId = React.useMemo(() => {
+    const map = new Map<string, PedidoOrderItem>();
+    for (const item of editSourceItems ?? []) {
+      if (item.supplierProductId) map.set(item.supplierProductId, item);
+    }
+    return map;
+  }, [editSourceItems]);
+
   const items: PedidoOrderItem[] = supplierProducts
     .map((p) => {
       const quantity = qtyByProductId[p.id] ?? 0;
+      const prev = existingByProductId.get(p.id);
       const lineTotal = Math.round(quantity * p.pricePerUnit * 100) / 100;
+      const receivedRaw = prev?.receivedQuantity ?? 0;
+      const receivedQuantity =
+        quantity <= 0 ? 0 : receivedRaw > 0 ? Math.min(receivedRaw, quantity) : 0;
       return {
         id: p.id,
         supplierProductId: p.id,
         productName: p.name,
         unit: p.unit,
         quantity,
-        receivedQuantity: 0,
+        receivedQuantity,
         pricePerUnit: p.pricePerUnit,
         vatRate: p.vatRate ?? 0,
         lineTotal,
         ...(unitSupportsReceivedWeightKg(p.unit) && p.estimatedKgPerUnit != null && p.estimatedKgPerUnit > 0
           ? { estimatedKgPerUnit: p.estimatedKgPerUnit }
           : {}),
+        ...(prev?.basePricePerUnit != null && Number.isFinite(prev.basePricePerUnit)
+          ? { basePricePerUnit: prev.basePricePerUnit }
+          : {}),
+        receivedWeightKg: prev?.receivedWeightKg ?? null,
+        receivedPricePerKg: prev?.receivedPricePerKg ?? null,
+        incidentType: prev?.incidentType ?? null,
+        incidentNotes: prev?.incidentNotes,
       };
     })
     .filter((row) => row.quantity > 0);
@@ -381,6 +435,10 @@ export default function NuevoPedidoPage() {
       setMessage('Perfil del local aún cargando.');
       return;
     }
+    const editingSent = Boolean(existingSentAt && existingOrderId);
+    const effectiveStatus: 'draft' | 'sent' = editingSent ? 'sent' : nextStatus;
+    const markContentRevisedAfterSent = editingSent && effectiveStatus === 'sent';
+
     if (isDemoMode()) {
       const orderId = existingOrderId ?? `demo-order-${uid('o')}`;
       const created = existingCreatedAt ?? new Date().toISOString();
@@ -390,12 +448,13 @@ export default function NuevoPedidoPage() {
         supplierId: selectedSupplier.id,
         supplierName: selectedSupplier.name,
         supplierContact: selectedSupplier.contact,
-        status: nextStatus,
+        status: effectiveStatus,
         notes: notes.trim(),
         createdAt: created,
-        ...(nextStatus === 'sent' ? { sentAt: existingSentAt ?? new Date().toISOString() } : {}),
+        ...(effectiveStatus === 'sent' ? { sentAt: existingSentAt ?? new Date().toISOString() } : {}),
         deliveryDate: deliveryDate || undefined,
         updatedAt: new Date().toISOString(),
+        ...(markContentRevisedAfterSent ? { contentRevisedAfterSentAt: new Date().toISOString() } : {}),
         items: items.map((item) => ({
           ...item,
           id: item.id || `demo-li-${uid('i')}`,
@@ -405,7 +464,7 @@ export default function NuevoPedidoPage() {
       resetPedidoFormAfterSuccess();
       upsertOrder(order);
       dispatchPedidosDataChanged();
-      router.replace('/pedidos?pedido=borrador');
+      router.replace(`/pedidos?${markContentRevisedAfterSent ? 'pedido=actualizado' : 'pedido=borrador'}`);
       return;
     }
     const supabase = getSupabaseClient();
@@ -416,12 +475,13 @@ export default function NuevoPedidoPage() {
     void saveOrder(supabase, localId, {
       orderId: existingOrderId ?? undefined,
       supplierId: selectedSupplier.id,
-      status: nextStatus,
+      status: effectiveStatus,
       notes: notes.trim(),
       createdAt: existingCreatedAt ?? new Date().toISOString(),
-      sentAt: nextStatus === 'sent' ? existingSentAt ?? new Date().toISOString() : undefined,
+      sentAt: effectiveStatus === 'sent' ? existingSentAt ?? new Date().toISOString() : undefined,
       deliveryDate: deliveryDate || undefined,
       expectedOrderUpdatedAt: existingOrderUpdatedAt ?? undefined,
+      markContentRevisedAfterSent,
       items: items.map((item) => ({
         supplierProductId: item.supplierProductId,
         productName: item.productName,
@@ -433,13 +493,18 @@ export default function NuevoPedidoPage() {
         lineTotal: item.lineTotal,
         estimatedKgPerUnit: item.estimatedKgPerUnit ?? null,
         receivedWeightKg: item.receivedWeightKg ?? null,
+        basePricePerUnit: item.basePricePerUnit ?? item.pricePerUnit,
+        incidentType: item.incidentType ?? null,
+        incidentNotes: item.incidentNotes?.trim() ? item.incidentNotes.trim() : null,
+        receivedPricePerKg: item.receivedPricePerKg ?? null,
       })),
     })
       .then((orderId) => {
+        const qp = markContentRevisedAfterSent ? 'pedido=actualizado' : 'pedido=borrador';
         resetPedidoFormAfterSuccess();
         void pullNewOrderIntoStore(orderId);
         dispatchPedidosDataChanged();
-        router.replace('/pedidos?pedido=borrador');
+        router.replace(`/pedidos?${qp}`);
       })
       .catch((err: Error) => setMessage(err.message));
   };
@@ -454,6 +519,9 @@ export default function NuevoPedidoPage() {
     if (!phone) return setMessage('El proveedor no tiene teléfono válido en contacto.');
     const parsed = new Date(`${deliveryDate}T00:00:00`);
     if (Number.isNaN(parsed.getTime())) return setMessage('Fecha de entrega inválida. Usa AAAA-MM-DD.');
+    const editingSentWhatsapp = Boolean(existingSentAt && existingOrderId);
+    const markRevWhatsapp = editingSentWhatsapp;
+
     if (isDemoMode()) {
       const orderId = existingOrderId ?? `demo-order-${uid('o')}`;
       const created = existingCreatedAt ?? new Date().toISOString();
@@ -469,6 +537,7 @@ export default function NuevoPedidoPage() {
         sentAt: existingSentAt ?? new Date().toISOString(),
         deliveryDate,
         updatedAt: new Date().toISOString(),
+        ...(markRevWhatsapp ? { contentRevisedAfterSentAt: new Date().toISOString() } : {}),
         items: items.map((item) => ({
           ...item,
           id: item.id || `demo-li-${uid('i')}`,
@@ -500,6 +569,7 @@ export default function NuevoPedidoPage() {
       sentAt: existingSentAt ?? new Date().toISOString(),
       deliveryDate,
       expectedOrderUpdatedAt: existingOrderUpdatedAt ?? undefined,
+      markContentRevisedAfterSent: markRevWhatsapp,
       items: items.map((item) => ({
         supplierProductId: item.supplierProductId,
         productName: item.productName,
@@ -511,6 +581,10 @@ export default function NuevoPedidoPage() {
         lineTotal: item.lineTotal,
         estimatedKgPerUnit: item.estimatedKgPerUnit ?? null,
         receivedWeightKg: item.receivedWeightKg ?? null,
+        basePricePerUnit: item.basePricePerUnit ?? item.pricePerUnit,
+        incidentType: item.incidentType ?? null,
+        incidentNotes: item.incidentNotes?.trim() ? item.incidentNotes.trim() : null,
+        receivedPricePerKg: item.receivedPricePerKg ?? null,
       })),
     })
       .then((orderId) => {
@@ -534,6 +608,7 @@ export default function NuevoPedidoPage() {
           requestedBy: requestedBy.trim(),
           notes: notes.trim(),
           items,
+          contentRevisedAfterSent: markRevWhatsapp || Boolean(hadContentRevisionFlag),
         });
         openWhatsApp(phone, whatsappMessage, { popupWindow: popup });
         dispatchPedidosDataChanged();
@@ -557,6 +632,40 @@ export default function NuevoPedidoPage() {
     return <PedidosPremiaLockedScreen />;
   }
 
+  if (editingId && editBlockedReason) {
+    return (
+      <div className="space-y-4">
+        <section>
+          <Link
+            href="/pedidos"
+            className="inline-flex h-9 items-center rounded-lg border border-zinc-300 bg-white px-3 text-sm font-semibold text-zinc-700"
+          >
+            ← Atras
+          </Link>
+        </section>
+        <section className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950 ring-1 ring-amber-100">
+          {editBlockedReason}
+        </section>
+      </div>
+    );
+  }
+
+  if (editingId && !isLoadedEdit) {
+    return (
+      <div className="space-y-4">
+        <section>
+          <Link
+            href="/pedidos"
+            className="inline-flex h-9 items-center rounded-lg border border-zinc-300 bg-white px-3 text-sm font-semibold text-zinc-700"
+          >
+            ← Atras
+          </Link>
+        </section>
+        <p className="text-sm text-zinc-600">Cargando pedido…</p>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-4">
       <section>
@@ -568,13 +677,26 @@ export default function NuevoPedidoPage() {
         </Link>
       </section>
 
+      {existingSentAt && editingId ? (
+        <section
+          className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs font-medium text-amber-950 shadow-sm ring-1 ring-amber-100"
+          role="status"
+        >
+          <p>Este pedido ya fue enviado. Puedes modificarlo y volver a enviarlo.</p>
+          {hadContentRevisionFlag ? (
+            <p className="mt-1.5 font-bold uppercase tracking-wide text-amber-900">Modificado tras envío</p>
+          ) : null}
+        </section>
+      ) : null}
+
       <section className="rounded-2xl bg-white p-4 ring-1 ring-zinc-200">
         <label className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Proveedor</label>
         {loadingSuppliers ? <p className="mt-2 text-xs font-semibold text-zinc-500">Cargando catálogo de proveedores...</p> : null}
         <select
           value={supplierId}
+          disabled={Boolean(existingSentAt && existingOrderId)}
           onChange={(e) => setSupplierId(e.target.value)}
-          className="mt-2 h-11 w-full rounded-xl border border-zinc-300 bg-white px-3 text-sm font-medium text-zinc-900 outline-none"
+          className="mt-2 h-11 w-full rounded-xl border border-zinc-300 bg-white px-3 text-sm font-medium text-zinc-900 outline-none disabled:cursor-not-allowed disabled:bg-zinc-100 disabled:text-zinc-500"
         >
           {suppliers.map((s) => (
             <option key={s.id} value={s.id}>

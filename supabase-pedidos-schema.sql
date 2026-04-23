@@ -275,6 +275,9 @@ create trigger trg_purchase_order_items_updated_at
 before update on public.purchase_order_items
 for each row execute procedure public.set_updated_at();
 
+alter table public.purchase_orders
+  add column if not exists content_revised_after_sent_at timestamptz;
+
 -- Guardado atómico de pedido + líneas (evita cabecera sin líneas en fallos intermedios).
 create or replace function public.save_purchase_order_with_items(
   p_order_id uuid,
@@ -285,7 +288,8 @@ create or replace function public.save_purchase_order_with_items(
   p_sent_at timestamptz,
   p_delivery_date date,
   p_items jsonb,
-  p_expected_order_updated_at timestamptz default null
+  p_expected_order_updated_at timestamptz default null,
+  p_mark_content_revised_after_sent boolean default false
 )
 returns table(order_id uuid, order_updated_at timestamptz)
 language plpgsql
@@ -324,7 +328,12 @@ begin
       status = p_status,
       notes = btrim(coalesce(p_notes, '')),
       sent_at = case when p_status = 'sent' then coalesce(p_sent_at, now()) else null end,
-      delivery_date = p_delivery_date
+      delivery_date = p_delivery_date,
+      content_revised_after_sent_at = case
+        when coalesce(p_mark_content_revised_after_sent, false) then now()
+        when p_status = 'draft' then null
+        else content_revised_after_sent_at
+      end
     where id = p_order_id
       and local_id = p_local_id
       and (p_expected_order_updated_at is null or updated_at = p_expected_order_updated_at)

@@ -158,6 +158,8 @@ export type PedidoOrder = {
   priceReviewArchivedAt?: string;
   /** Marca de concurrencia para evitar pisar cambios entre dispositivos. */
   updatedAt?: string;
+  /** Última vez que se guardaron cambios de líneas en un pedido ya enviado (requiere migración SQL). */
+  contentRevisedAfterSentAt?: string;
   items: PedidoOrderItem[];
   total: number;
 };
@@ -213,6 +215,7 @@ type OrderRow = {
   delivery_date: string | null;
   price_review_archived_at?: string | null;
   updated_at?: string | null;
+  content_revised_after_sent_at?: string | null;
   pedido_suppliers: { name: string; contact: string | null } | { name: string; contact: string | null }[] | null;
 };
 type OrderItemRow = {
@@ -273,6 +276,16 @@ function isOrderConcurrencyConflictMessage(message: string): boolean {
   return m.includes('updated by another user') || m.includes('concurrency');
 }
 
+function isMissingContentRevisedAfterSentColumnError(message: string): boolean {
+  const m = message.toLowerCase();
+  return (
+    m.includes('content_revised_after_sent_at') &&
+    (m.includes('column') || m.includes('schema cache') || m.includes('does not exist'))
+  );
+}
+
+const PURCHASE_ORDER_HEADER_SEL_WITH_REVISION =
+  'id,supplier_id,status,notes,created_at,sent_at,received_at,delivery_date,price_review_archived_at,updated_at,content_revised_after_sent_at,pedido_suppliers(name,contact)';
 const PURCHASE_ORDER_HEADER_SEL_WITH_UPDATED =
   'id,supplier_id,status,notes,created_at,sent_at,received_at,delivery_date,price_review_archived_at,updated_at,pedido_suppliers(name,contact)';
 const PURCHASE_ORDER_HEADER_SEL_LEGACY =
@@ -289,11 +302,11 @@ async function runPurchaseOrderHeaderQuery(
     q = apply(q);
     return q.order('created_at', { ascending: false });
   };
-  let res = await runSel(PURCHASE_ORDER_HEADER_SEL_WITH_UPDATED);
-  if (res.error) {
-    if (!isMissingPurchaseOrdersUpdatedAtColumnError(res.error.message)) {
-      throw new Error(res.error.message);
-    }
+  let res = await runSel(PURCHASE_ORDER_HEADER_SEL_WITH_REVISION);
+  if (res.error && isMissingContentRevisedAfterSentColumnError(res.error.message)) {
+    res = await runSel(PURCHASE_ORDER_HEADER_SEL_WITH_UPDATED);
+  }
+  if (res.error && isMissingPurchaseOrdersUpdatedAtColumnError(res.error.message)) {
     res = await runSel(PURCHASE_ORDER_HEADER_SEL_LEGACY);
   }
   if (res.error) throw new Error(res.error.message);
@@ -381,6 +394,9 @@ function buildPedidoOrdersFromRows(orderRows: OrderRow[], itemRows: OrderItemRow
         ? { priceReviewArchivedAt: row.price_review_archived_at }
         : {}),
       ...(row.updated_at != null && row.updated_at !== '' ? { updatedAt: row.updated_at } : {}),
+      ...(row.content_revised_after_sent_at != null && row.content_revised_after_sent_at !== ''
+        ? { contentRevisedAfterSentAt: row.content_revised_after_sent_at }
+        : {}),
       items,
       total: items.reduce((acc, item) => acc + item.lineTotal, 0),
     };
@@ -876,30 +892,57 @@ export async function fetchOrderById(
 ): Promise<PedidoOrder | null> {
   let row: OrderRow | null = null;
   {
-    const withUpdated = await supabase
+    const withRevision = await supabase
       .from('purchase_orders')
       .select(
-        'id,supplier_id,status,notes,created_at,sent_at,received_at,delivery_date,price_review_archived_at,updated_at,pedido_suppliers(name,contact)',
+        'id,supplier_id,status,notes,created_at,sent_at,received_at,delivery_date,price_review_archived_at,updated_at,content_revised_after_sent_at,pedido_suppliers(name,contact)',
       )
       .eq('local_id', localId)
       .eq('id', orderId)
       .maybeSingle();
-    if (withUpdated.error) {
-      if (!isMissingPurchaseOrdersUpdatedAtColumnError(withUpdated.error.message)) {
-        throw new Error(withUpdated.error.message);
+    if (withRevision.error) {
+      if (isMissingContentRevisedAfterSentColumnError(withRevision.error.message)) {
+        const withUpdated = await supabase
+          .from('purchase_orders')
+          .select(
+            'id,supplier_id,status,notes,created_at,sent_at,received_at,delivery_date,price_review_archived_at,updated_at,pedido_suppliers(name,contact)',
+          )
+          .eq('local_id', localId)
+          .eq('id', orderId)
+          .maybeSingle();
+        if (withUpdated.error) {
+          if (!isMissingPurchaseOrdersUpdatedAtColumnError(withUpdated.error.message)) {
+            throw new Error(withUpdated.error.message);
+          }
+          const legacy = await supabase
+            .from('purchase_orders')
+            .select(
+              'id,supplier_id,status,notes,created_at,sent_at,received_at,delivery_date,price_review_archived_at,pedido_suppliers(name,contact)',
+            )
+            .eq('local_id', localId)
+            .eq('id', orderId)
+            .maybeSingle();
+          if (legacy.error) throw new Error(legacy.error.message);
+          row = (legacy.data as OrderRow | null) ?? null;
+        } else {
+          row = (withUpdated.data as OrderRow | null) ?? null;
+        }
+      } else if (isMissingPurchaseOrdersUpdatedAtColumnError(withRevision.error.message)) {
+        const legacy = await supabase
+          .from('purchase_orders')
+          .select(
+            'id,supplier_id,status,notes,created_at,sent_at,received_at,delivery_date,price_review_archived_at,pedido_suppliers(name,contact)',
+          )
+          .eq('local_id', localId)
+          .eq('id', orderId)
+          .maybeSingle();
+        if (legacy.error) throw new Error(legacy.error.message);
+        row = (legacy.data as OrderRow | null) ?? null;
+      } else {
+        throw new Error(withRevision.error.message);
       }
-      const legacy = await supabase
-        .from('purchase_orders')
-        .select(
-          'id,supplier_id,status,notes,created_at,sent_at,received_at,delivery_date,price_review_archived_at,pedido_suppliers(name,contact)',
-        )
-        .eq('local_id', localId)
-        .eq('id', orderId)
-        .maybeSingle();
-      if (legacy.error) throw new Error(legacy.error.message);
-      row = (legacy.data as OrderRow | null) ?? null;
     } else {
-      row = (withUpdated.data as OrderRow | null) ?? null;
+      row = (withRevision.data as OrderRow | null) ?? null;
     }
   }
   if (!row) return null;
@@ -969,6 +1012,9 @@ export async function fetchOrderById(
       ? { priceReviewArchivedAt: row.price_review_archived_at }
       : {}),
     ...(row.updated_at != null && row.updated_at !== '' ? { updatedAt: row.updated_at } : {}),
+    ...(row.content_revised_after_sent_at != null && row.content_revised_after_sent_at !== ''
+      ? { contentRevisedAfterSentAt: row.content_revised_after_sent_at }
+      : {}),
     items,
     total: items.reduce((acc, item) => acc + item.lineTotal, 0),
   };
@@ -1093,6 +1139,8 @@ export async function saveOrder(
     createdAt?: string;
     deliveryDate?: string;
     expectedOrderUpdatedAt?: string;
+    /** Pedido ya enviado: marcar columna content_revised_after_sent_at en BD (requiere RPC migrado). */
+    markContentRevisedAfterSent?: boolean;
     items: Array<{
       supplierProductId: string | null;
       productName: string;
@@ -1104,6 +1152,10 @@ export async function saveOrder(
       lineTotal: number;
       estimatedKgPerUnit?: number | null;
       receivedWeightKg?: number | null;
+      basePricePerUnit?: number | null;
+      incidentType?: 'missing' | 'damaged' | 'wrong-item' | null;
+      incidentNotes?: string | null;
+      receivedPricePerKg?: number | null;
     }>;
   },
 ) {
@@ -1114,7 +1166,10 @@ export async function saveOrder(
     quantity: item.quantity,
     received_quantity: item.receivedQuantity,
     price_per_unit: Math.round(item.pricePerUnit * 100) / 100,
-    base_price_per_unit: Math.round(item.pricePerUnit * 100) / 100,
+    base_price_per_unit:
+      item.basePricePerUnit != null && Number.isFinite(item.basePricePerUnit)
+        ? Math.round(item.basePricePerUnit * 100) / 100
+        : Math.round(item.pricePerUnit * 100) / 100,
     vat_rate: Math.max(0, Math.round((item.vatRate ?? 0) * 10000) / 10000),
     line_total: Math.round(item.lineTotal * 100) / 100,
     estimated_kg_per_unit:
@@ -1137,9 +1192,12 @@ export async function saveOrder(
             item.receivedWeightKg > 0
           ? Math.round(item.receivedWeightKg * 1000) / 1000
           : null,
-    incident_type: null,
-    incident_notes: null,
-    received_price_per_kg: null,
+    incident_type: item.incidentType ?? null,
+    incident_notes: item.incidentNotes?.trim() ? item.incidentNotes.trim() : null,
+    received_price_per_kg:
+      item.receivedPricePerKg != null && Number.isFinite(item.receivedPricePerKg)
+        ? Math.round(item.receivedPricePerKg * 10000) / 10000
+        : null,
   }));
 
   const { data, error } = await supabase.rpc('save_purchase_order_with_items', {
@@ -1152,6 +1210,7 @@ export async function saveOrder(
     p_delivery_date: payload.deliveryDate ?? null,
     p_items: rpcItems,
     p_expected_order_updated_at: payload.expectedOrderUpdatedAt ?? null,
+    p_mark_content_revised_after_sent: Boolean(payload.markContentRevisedAfterSent),
   });
 
   if (error) {

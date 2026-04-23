@@ -95,6 +95,7 @@ function buildWhatsappOrderMessage(order: PedidoOrder, deliveryDate: string, loc
     `Fecha entrega: ${deliveryDate}`,
     `Local: ${normalizeLocalForWhatsapp(localName || 'CHEF-ONE MATARO')}`,
     `Pedido por: ${requestedBy}`,
+    order.contentRevisedAfterSentAt ? '— Pedido actualizado (líneas revisadas tras el envío anterior). —' : '',
     '------------------------------',
     'PEDIDO:',
     '------------------------------',
@@ -2498,6 +2499,25 @@ export default function PedidosPage() {
           </div>
         </div>
       ) : null}
+      {avisoPedido === 'actualizado' ? (
+        <div
+          className="rounded-2xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm font-semibold text-sky-950 shadow-sm ring-1 ring-sky-100"
+          role="status"
+        >
+          <div className="flex items-start justify-between gap-3">
+            <p className="min-w-0 leading-snug">
+              Pedido enviado actualizado. Si hubo cambios de líneas, queda marcado como modificado tras envío.
+            </p>
+            <button
+              type="button"
+              onClick={() => router.replace('/pedidos', { scroll: false })}
+              className="shrink-0 rounded-lg border border-sky-300 bg-white px-2.5 py-1 text-xs font-bold text-sky-900"
+            >
+              OK
+            </button>
+          </div>
+        </div>
+      ) : null}
 
       <section className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-zinc-200">
         <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4">
@@ -2621,6 +2641,9 @@ export default function PedidosPage() {
                       <p className="text-xs text-zinc-500">
                         enviado {order.sentAt ? new Date(order.sentAt).toLocaleDateString('es-ES') : '-'}
                       </p>
+                      {order.contentRevisedAfterSentAt ? (
+                        <p className="text-[10px] font-bold uppercase text-amber-900">Modificado tras envío</p>
+                      ) : null}
                       {order.deliveryDate ? (
                         <p className="text-xs text-zinc-500">
                           Entrega: {new Date(`${order.deliveryDate}T00:00:00`).toLocaleDateString('es-ES')}
@@ -2659,7 +2682,13 @@ export default function PedidosPage() {
                   );
                 })()}
               </button>
-              <div className="mt-2 grid grid-cols-2 gap-1.5">
+              <div className="mt-2 grid grid-cols-2 gap-1.5 sm:grid-cols-3">
+                <Link
+                  href={`/pedidos/nuevo?id=${encodeURIComponent(order.id)}`}
+                  className="flex items-center justify-center rounded-lg border border-zinc-300 bg-white px-2 py-1 text-center text-xs font-semibold text-zinc-800"
+                >
+                  Editar pedido
+                </Link>
                 <button
                   type="button"
                   onClick={() => sendWhatsappOrder(order)}
