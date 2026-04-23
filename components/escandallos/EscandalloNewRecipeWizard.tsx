@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeft, Check, ChevronRight } from 'lucide-react';
 import EscandalloIngredientDraftEditor from '@/components/escandallos/EscandalloIngredientDraftEditor';
 import MermasStyleHero from '@/components/MermasStyleHero';
@@ -31,6 +31,11 @@ import {
   type EscandalloRawProduct,
   type EscandalloRecipe,
 } from '@/lib/escandallos-supabase';
+import {
+  clearEscandalloWizardDraft,
+  readEscandalloWizardDraft,
+  writeEscandalloWizardDraft,
+} from '@/lib/escandallo-session-persist';
 
 const STEPS = ['Datos', 'Ingredientes', 'Revisión', 'Guardar'] as const;
 
@@ -63,6 +68,50 @@ export default function EscandalloNewRecipeWizard() {
     [rawProducts],
   );
 
+  /** Evita pantalla "Cargando catálogo" en refetch cuando ya hay datos (vuelta al foco / refresco de sesión). */
+  const catalogHydratedRef = useRef(false);
+  useEffect(() => {
+    catalogHydratedRef.current = false;
+  }, [localId]);
+
+  /** Evita escribir sessionStorage antes de haber leído el borrador (misma vuelta de foco / montaje). */
+  const [wizardSessionReady, setWizardSessionReady] = useState(false);
+
+  useEffect(() => {
+    if (!profileReady) return;
+    if (!localId) {
+      setWizardSessionReady(false);
+      return;
+    }
+    const d = readEscandalloWizardDraft(localId);
+    if (d) {
+      setStep(Math.min(3, Math.max(0, d.step)));
+      setName(d.name);
+      setYieldQty(d.yieldQty);
+      setYieldLabel(d.yieldLabel);
+      setSaleGross(d.saleGross);
+      setSaleVat(d.saleVat);
+      setIngredientDrafts(d.ingredientDrafts);
+    }
+    setWizardSessionReady(true);
+  }, [profileReady, localId]);
+
+  useEffect(() => {
+    if (!profileReady || !localId || !wizardSessionReady) return;
+    writeEscandalloWizardDraft({
+      v: 1,
+      localId,
+      step,
+      name,
+      yieldQty,
+      yieldLabel,
+      saleGross,
+      saleVat,
+      ingredientDrafts,
+      updatedAt: Date.now(),
+    });
+  }, [profileReady, localId, wizardSessionReady, step, name, yieldQty, yieldLabel, saleGross, saleVat, ingredientDrafts]);
+
   const load = useCallback(async () => {
     if (!localId || !supabaseOk) {
       setRecipes([]);
@@ -73,7 +122,9 @@ export default function EscandalloNewRecipeWizard() {
       return;
     }
     const supabase = getSupabaseClient()!;
-    setLoading(true);
+    if (!catalogHydratedRef.current) {
+      setLoading(true);
+    }
     try {
       const [r, raw, processed] = await Promise.all([
         fetchEscandalloRecipes(supabase, localId),
@@ -90,6 +141,7 @@ export default function EscandalloNewRecipeWizard() {
         }),
       );
       setLinesByRecipe(Object.fromEntries(entries));
+      catalogHydratedRef.current = true;
     } catch (e: unknown) {
       setBanner(e instanceof Error ? e.message : 'Error al cargar.');
     } finally {
@@ -154,6 +206,7 @@ export default function EscandalloNewRecipeWizard() {
       if (previewPayloads.length > 0) {
         await insertEscandalloLinesBatch(supabase, localId, recipe.id, previewPayloads, 0);
       }
+      clearEscandalloWizardDraft();
       router.push(`/escandallos/recetas/${recipe.id}/editar`);
     } catch (e: unknown) {
       setBanner(e instanceof Error ? e.message : 'No se pudo guardar.');

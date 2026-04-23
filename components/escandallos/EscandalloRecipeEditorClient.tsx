@@ -38,6 +38,11 @@ import {
 } from '@/lib/escandallos-technical-sheet-supabase';
 import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
 import {
+  clearEscandalloRecipeEditorDraft,
+  readEscandalloRecipeEditorDraft,
+  writeEscandalloRecipeEditorDraft,
+} from '@/lib/escandallo-session-persist';
+import {
   deleteEscandalloLine,
   deleteEscandalloRecipe,
   fetchEscandalloLines,
@@ -118,6 +123,12 @@ export default function EscandalloRecipeEditorClient({ recipeId }: { recipeId: s
     setIngredientDrafts([emptyIngredientDraft()]);
   }, []);
 
+  /** Refetch de catálogo sin bloquear la pantalla con "Cargando…" si ya había datos. */
+  const catalogHydratedRef = useRef(false);
+  useEffect(() => {
+    catalogHydratedRef.current = false;
+  }, [localId]);
+
   const load = useCallback(async () => {
     if (!localId) {
       setRecipes([]);
@@ -136,6 +147,7 @@ export default function EscandalloRecipeEditorClient({ recipeId }: { recipeId: s
       setRawProducts(pack.rawProducts);
       setProcessedProducts(pack.processed);
       setLoading(false);
+      catalogHydratedRef.current = true;
       return;
     }
     if (!supabaseOk) {
@@ -147,7 +159,9 @@ export default function EscandalloRecipeEditorClient({ recipeId }: { recipeId: s
       return;
     }
     const supabase = getSupabaseClient()!;
-    setLoading(true);
+    if (!catalogHydratedRef.current) {
+      setLoading(true);
+    }
     setBanner(null);
     try {
       const [r, raw, processed] = await Promise.all([
@@ -165,6 +179,7 @@ export default function EscandalloRecipeEditorClient({ recipeId }: { recipeId: s
         }),
       );
       setLinesByRecipe(Object.fromEntries(linesEntries));
+      catalogHydratedRef.current = true;
     } catch (e: unknown) {
       setBanner(e instanceof Error ? e.message : 'No se pudieron cargar los datos.');
       setRecipes([]);
@@ -187,8 +202,51 @@ export default function EscandalloRecipeEditorClient({ recipeId }: { recipeId: s
     if (!recipe || loading) return;
     if (hydratedRecipeId.current === recipe.id) return;
     hydratedRecipeId.current = recipe.id;
-    hydrateDraftFromRecipe(recipe);
-  }, [recipe, loading, hydrateDraftFromRecipe]);
+    const stored = localId ? readEscandalloRecipeEditorDraft(localId, recipeId) : null;
+    if (stored) {
+      setDraftRecipeName(stored.draftRecipeName);
+      setDraftRecipeNotes(stored.draftRecipeNotes);
+      setDraftYieldQty(stored.draftYieldQty);
+      setDraftYieldLabel(stored.draftYieldLabel);
+      setDraftSaleGross(stored.draftSaleGross);
+      setDraftSaleVat(stored.draftSaleVat);
+      setDraftPosArticleCode(stored.draftPosArticleCode);
+      setIngredientDrafts(stored.ingredientDrafts);
+    } else {
+      hydrateDraftFromRecipe(recipe);
+    }
+  }, [recipe, loading, hydrateDraftFromRecipe, localId, recipeId]);
+
+  const canPersistEditorDraft = Boolean(localId && recipe && !loading && !demoReadonly);
+  useEffect(() => {
+    if (!canPersistEditorDraft) return;
+    writeEscandalloRecipeEditorDraft({
+      v: 1,
+      localId: localId!,
+      recipeId,
+      draftRecipeName,
+      draftRecipeNotes,
+      draftYieldQty,
+      draftYieldLabel,
+      draftSaleGross,
+      draftSaleVat,
+      draftPosArticleCode,
+      ingredientDrafts,
+      updatedAt: Date.now(),
+    });
+  }, [
+    canPersistEditorDraft,
+    localId,
+    recipeId,
+    draftRecipeName,
+    draftRecipeNotes,
+    draftYieldQty,
+    draftYieldLabel,
+    draftSaleGross,
+    draftSaleVat,
+    draftPosArticleCode,
+    ingredientDrafts,
+  ]);
 
   const refreshRecipeLines = async (rid: string) => {
     if (!localId || !supabaseOk || demoReadonly) return;
@@ -422,6 +480,7 @@ export default function EscandalloRecipeEditorClient({ recipeId }: { recipeId: s
     setBusyId(recipe.id);
     try {
       await deleteEscandalloRecipe(supabase, localId, recipe.id);
+      clearEscandalloRecipeEditorDraft(localId, recipe.id);
       setRecipes((prev) => prev.filter((r) => r.id !== recipe.id));
       router.push(recipe.isSubRecipe ? '/escandallos/recetas/bases' : '/escandallos/recetas');
     } catch (e: unknown) {
