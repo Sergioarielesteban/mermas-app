@@ -577,10 +577,10 @@ function ArticleCard({
                   <div className="flex flex-col justify-end rounded-lg bg-white/90 px-3 py-2 ring-1 ring-indigo-100 sm:col-span-1">
                     <p className="text-[10px] font-bold uppercase text-zinc-500">Coste unitario de uso (vista)</p>
                     <p className="text-lg font-black tabular-nums text-emerald-800">
-                      {previewCosteUso != null ? formatMoney(previewCosteUso, 6) : '—'}
+                      {previewCosteUso != null ? formatMoney(previewCosteUso, 6, true) : '—'}
                     </p>
                     <p className="text-[10px] text-zinc-500">
-                      En BD: {a.costeUnitarioUso != null ? formatMoney(a.costeUnitarioUso, 6) : '—'}
+                      En BD: {a.costeUnitarioUso != null ? formatMoney(a.costeUnitarioUso, 6, true) : '—'}
                     </p>
                   </div>
                 </div>
