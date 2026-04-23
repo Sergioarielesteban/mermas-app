@@ -1,9 +1,7 @@
 'use client';
 
-import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import React, { useEffect, useMemo } from 'react';
-import { ArrowLeft } from 'lucide-react';
 import PlatoEditorForm from '@/components/servicio/PlatoEditorForm';
 import { useAuth } from '@/components/AuthProvider';
 import { getSupabaseClient } from '@/lib/supabase-client';
@@ -42,9 +40,6 @@ export default function ServicioPlatoNuevoPage() {
     return (
       <div className="mx-auto max-w-lg px-4 py-10 text-center text-sm text-zinc-600">
         Supabase no disponible. No se puede crear platos.
-        <Link href="/servicio" className="mt-4 block font-extrabold text-[#B91C1C]">
-          Volver
-        </Link>
       </div>
     );
   }
@@ -52,13 +47,6 @@ export default function ServicioPlatoNuevoPage() {
   return (
     <div>
       <div className="mx-auto flex max-w-lg items-center gap-2 px-3 pt-2 sm:px-4">
-        <Link
-          href="/servicio"
-          className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-zinc-100 text-zinc-800 ring-1 ring-zinc-200"
-          aria-label="Volver"
-        >
-          <ArrowLeft className="h-5 w-5" />
-        </Link>
         <h1 className="text-lg font-extrabold text-zinc-900">Nuevo plato</h1>
       </div>
       <PlatoEditorForm

@@ -115,10 +115,7 @@ export default function InventarioInternoPage() {
   if (!isCentralKitchen || !ok || !localId) {
     return (
       <div className="rounded-2xl border border-zinc-200 bg-zinc-50 px-4 py-4 text-sm">
-        <Link href="/cocina-central" className="font-bold text-[#D32F2F]">
-          Volver
-        </Link>
-        <p className="mt-2 text-zinc-700">Solo personal de cocina central con permiso de operación.</p>
+        <p className="text-zinc-700">Solo personal de cocina central con permiso de operación.</p>
       </div>
     );
   }
@@ -134,9 +131,6 @@ export default function InventarioInternoPage() {
             en <strong>lotes</strong>; las sedes no ven esta lista.
           </p>
         </div>
-        <Link href="/cocina-central" className="text-sm font-bold text-[#D32F2F]">
-          ← Hub
-        </Link>
       </div>
 
       {msg ? (

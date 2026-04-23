@@ -902,7 +902,8 @@ export default function RecepcionPedidosPage() {
               </summary>
               <div className="mt-3 space-y-2">
                 <p className="text-center text-[11px] text-zinc-500">
-                  Toca el proveedor o la fecha para ver líneas del pedido. «Volver a pendientes» reabre arriba.
+                  Toca el proveedor o la fecha para ver líneas del pedido. «Reabrir en pendientes» mueve el pedido otra vez
+                  arriba.
                 </p>
                 {archivedPriceReviewOrders.map((order) => {
                   const expanded = expandedArchivedOrderId === order.id;
@@ -927,7 +928,7 @@ export default function RecepcionPedidosPage() {
                           onClick={() => void markPriceReviewArchived(order.id, false)}
                           className="shrink-0 self-center rounded-lg border border-zinc-400 bg-white px-3 py-1.5 text-xs font-semibold text-zinc-800"
                         >
-                          Volver a pendientes
+                          Reabrir en pendientes
                         </button>
                       </div>
                       {expanded ? (

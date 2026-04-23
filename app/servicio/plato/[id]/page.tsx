@@ -4,7 +4,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import React, { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowLeft, ChevronDown, Pencil } from 'lucide-react';
+import { ChevronDown, Pencil } from 'lucide-react';
 import ServicioAllergenChips from '@/components/servicio/ServicioAllergenChips';
 import { getDishById } from '@/lib/servicio/mock-data';
 import { dateKeyLocal, parseDateKeyLocal } from '@/lib/servicio/date-key';
@@ -87,9 +87,6 @@ function PlatoDetailInner() {
     return (
       <div className="mx-auto max-w-lg px-4 py-12 text-center">
         <p className="text-sm font-semibold text-zinc-600">Plato no encontrado.</p>
-        <Link href="/servicio" className="mt-4 inline-block text-sm font-extrabold text-[#B91C1C]">
-          Volver a Servicio
-        </Link>
       </div>
     );
   }
@@ -99,13 +96,6 @@ function PlatoDetailInner() {
   return (
     <div className="mx-auto max-w-lg space-y-4 px-3 pb-28 pt-2 sm:px-4">
       <div className="flex items-center gap-2">
-        <Link
-          href={`/servicio?fecha=${dateKey}`}
-          className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-zinc-100 text-zinc-800 ring-1 ring-zinc-200 active:scale-[0.98]"
-          aria-label="Volver"
-        >
-          <ArrowLeft className="h-5 w-5" />
-        </Link>
         <h2 className="line-clamp-2 min-w-0 flex-1 text-base font-extrabold leading-tight text-zinc-900">{dish.name}</h2>
         {canManage ? (
           <button

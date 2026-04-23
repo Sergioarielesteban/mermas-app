@@ -444,7 +444,7 @@ export default function SuperadminLocalesPage() {
               }}
               className="rounded-xl border border-zinc-300 bg-white px-4 py-2 text-xs font-bold uppercase tracking-wide text-zinc-800"
             >
-              Volver al listado
+              Listo
             </button>
           </div>
         </section>

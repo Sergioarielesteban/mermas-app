@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import React, { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
-import { ArrowDown, ArrowLeft, ArrowUp, Minus, RefreshCw } from 'lucide-react';
+import { ArrowDown, ArrowUp, Minus, RefreshCw } from 'lucide-react';
 import MermasStyleHero from '@/components/MermasStyleHero';
 import { useAuth } from '@/components/AuthProvider';
 import {
@@ -388,13 +388,6 @@ function FinanzasEconomiaBody() {
 
       <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
         <div className="flex flex-wrap items-center gap-2">
-          <Link
-            href="/pedidos"
-            className="inline-flex min-h-[44px] items-center gap-2 rounded-xl border border-zinc-200 bg-white px-3 text-sm font-semibold text-zinc-800"
-          >
-            <ArrowLeft className="h-4 w-4" aria-hidden />
-            Pedidos
-          </Link>
           <div className="flex flex-wrap gap-1">
             {FINANZAS_PERIOD_PRESET_OPTIONS.map((pr) => (
               <button

@@ -339,7 +339,7 @@ export default function TerminalFichajePage() {
           onClick={() => goBackOrToPanel(router)}
           className="rounded-2xl bg-zinc-900 px-6 py-3 text-sm font-extrabold text-white"
         >
-          Volver
+          Ir al panel
         </button>
       </div>
     );
@@ -436,7 +436,7 @@ export default function TerminalFichajePage() {
               onClick={resetFlow}
               className="mb-6 text-sm font-bold text-zinc-500 hover:text-zinc-900"
             >
-              ← Volver
+              Cancelar
             </button>
             <div className="relative mb-6">
               <div className="absolute -inset-6 rounded-full border border-zinc-200/70 bg-zinc-100/50" />

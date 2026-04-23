@@ -5,7 +5,6 @@ import { useParams } from 'next/navigation';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   AlertTriangle,
-  ArrowLeft,
   Calculator,
   CheckCircle2,
   ChevronDown,
@@ -618,9 +617,6 @@ export default function AlbaranDetallePage() {
     return (
       <div className="space-y-4">
         <p className="text-sm text-zinc-600">Albarán no encontrado.</p>
-        <Link href="/pedidos/albaranes" className="font-semibold text-[#D32F2F] underline">
-          Volver a la bandeja
-        </Link>
       </div>
     );
   }
@@ -687,13 +683,6 @@ export default function AlbaranDetallePage() {
       </div>
 
       <div className="hidden flex-wrap gap-2 sm:flex">
-        <Link
-          href="/pedidos/albaranes"
-          className="inline-flex h-10 items-center gap-2 rounded-xl border border-zinc-200 bg-white px-3 text-sm font-semibold"
-        >
-          <ArrowLeft className="h-4 w-4" aria-hidden />
-          Bandeja
-        </Link>
         <button
           type="button"
           disabled={busy}
@@ -1390,13 +1379,6 @@ export default function AlbaranDetallePage() {
 
       {/* Barra fija móvil */}
       <div className="fixed bottom-0 left-0 right-0 z-40 flex gap-2 border-t border-zinc-200 bg-white/95 px-3 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-[0_-4px_24px_rgba(0,0,0,0.08)] backdrop-blur sm:hidden">
-        <Link
-          href="/pedidos/albaranes"
-          className="inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-zinc-200 bg-white"
-          aria-label="Volver a bandeja"
-        >
-          <ArrowLeft className="h-5 w-5" />
-        </Link>
         <button
           type="button"
           disabled={busy}

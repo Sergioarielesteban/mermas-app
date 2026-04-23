@@ -36,8 +36,6 @@ export default function FinanzasDatosHubPage() {
     <FinanzasDatosEntryShell
       title="Entrada de datos"
       description="Registra ventas, personal, gastos fijos e impuestos en pocos clics. Los datos alimentan el resumen y los agregadores existentes."
-      backHref="/finanzas"
-      backLabel="Resumen Finanzas"
     >
       {() => (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">

@@ -1,6 +1,5 @@
 'use client';
 
-import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '@/components/AuthProvider';
@@ -132,18 +131,12 @@ export default function CocinaCentralEntregaNuevaPage() {
     return (
       <div className="space-y-3 rounded-2xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm text-zinc-700">
         <p>Solo <strong>admin</strong> o <strong>manager</strong> pueden crear entregas salientes.</p>
-        <Link href="/cocina-central" className="inline-block text-sm font-bold text-[#D32F2F]">
-          ← Hub
-        </Link>
       </div>
     );
   }
 
   return (
     <div className="space-y-6">
-      <Link href="/cocina-central/entregas" className="text-sm font-bold text-[#D32F2F]">
-        ← Entregas
-      </Link>
       <h1 className="text-xl font-extrabold text-zinc-900">Nueva entrega</h1>
       <p className="text-sm text-zinc-600">
         No se descuenta stock hasta confirmar la salida en el detalle. Aquí solo queda en borrador.

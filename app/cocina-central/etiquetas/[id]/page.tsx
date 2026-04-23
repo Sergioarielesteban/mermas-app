@@ -1,6 +1,5 @@
 'use client';
 
-import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import QRCode from 'qrcode';
@@ -51,10 +50,6 @@ export default function CocinaCentralEtiquetaPage() {
 
   return (
     <div className="space-y-6 print:max-w-[320px]">
-      <Link href={`/cocina-central/lotes/${batch.id}`} className="text-sm font-bold text-[#D32F2F] print:hidden">
-        ← Ficha lote
-      </Link>
-
       <div className="mx-auto max-w-sm rounded-2xl border-2 border-zinc-900 bg-white p-6 text-center print:border-black">
         <p className="text-lg font-extrabold leading-tight text-zinc-900">
           {ccProductName((Array.isArray(batch.central_preparations) ? batch.central_preparations[0] : batch.central_preparations) ?? batch.products)}

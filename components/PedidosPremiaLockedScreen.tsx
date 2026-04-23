@@ -19,7 +19,7 @@ export default function PedidosPremiaLockedScreen() {
           href="/dashboard"
           className="inline-flex h-10 items-center rounded-xl border border-zinc-300 bg-white px-4 text-sm font-semibold text-zinc-700"
         >
-          Volver al inicio
+          Ir al panel
         </Link>
       </p>
     </section>

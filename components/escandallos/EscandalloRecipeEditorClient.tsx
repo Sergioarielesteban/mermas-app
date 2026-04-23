@@ -4,7 +4,6 @@ import { useRouter } from 'next/navigation';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowDown,
-  ArrowLeft,
   ArrowUp,
   ChefHat,
   ChevronDown,
@@ -41,7 +40,6 @@ import {
   readEscandalloRecipeEditorDraft,
   writeEscandalloRecipeEditorDraft,
 } from '@/lib/escandallo-session-persist';
-import { goBackOrFallback } from '@/lib/navigate-back-or-fallback';
 import {
   deleteEscandalloLine,
   deleteEscandalloRecipe,
@@ -540,20 +538,11 @@ export default function EscandalloRecipeEditorClient({ recipeId }: { recipeId: s
   if (!loading && !recipe) {
     return (
       <div className="space-y-4">
-        <button
-          type="button"
-          onClick={() => goBackOrFallback(router, '/escandallos/recetas')}
-          className="inline-flex items-center gap-2 text-sm font-semibold text-zinc-700 hover:text-zinc-900"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          Volver
-        </button>
         <p className="text-sm text-zinc-600">No se encontró la receta.</p>
       </div>
     );
   }
 
-  const backHref = recipe?.isSubRecipe ? '/escandallos/recetas/bases' : '/escandallos/recetas';
   const alerts: string[] = [];
   if (recipe && !recipe.isSubRecipe) {
     if (lines.length === 0) alerts.push('Sin ingredientes');
@@ -566,19 +555,11 @@ export default function EscandalloRecipeEditorClient({ recipeId }: { recipeId: s
 
   return (
     <div className="space-y-5 pb-32 max-lg:pb-[calc(9rem+env(safe-area-inset-bottom,0px))] lg:pb-8">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <button
-          type="button"
-          onClick={() => goBackOrFallback(router, recipe ? backHref : '/escandallos/recetas')}
-          className="inline-flex items-center gap-2 rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm font-semibold text-zinc-800 shadow-sm ring-1 ring-zinc-100 transition hover:bg-zinc-50"
-        >
-          <ArrowLeft className="h-4 w-4 shrink-0" />
-          {recipe?.isSubRecipe ? 'Bases y elaborados' : 'Libro de recetas'}
-        </button>
-        {demoReadonly ? (
+      {demoReadonly ? (
+        <div className="flex justify-end">
           <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-bold text-amber-900">Demo · solo lectura</span>
-        ) : null}
-      </div>
+        </div>
+      ) : null}
 
       {banner ? (
         <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950">{banner}</div>

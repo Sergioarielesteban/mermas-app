@@ -1,9 +1,8 @@
 'use client';
 
-import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowLeft, Minus, Plus } from 'lucide-react';
+import { Minus, Plus } from 'lucide-react';
 import MermasStyleHero from '@/components/MermasStyleHero';
 import { useAuth } from '@/components/AuthProvider';
 import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
@@ -285,14 +284,6 @@ export default function ProduccionCorrerPage() {
     <div className="space-y-4 pb-10">
       <MermasStyleHero eyebrow="Producción" title={template?.name ?? 'Lista del día'} slim />
 
-      <Link
-        href="/produccion/ejecutar"
-        className="inline-flex items-center gap-2 text-sm font-bold text-zinc-700 hover:text-[#D32F2F]"
-      >
-        <ArrowLeft className="h-4 w-4" />
-        Otras listas
-      </Link>
-
       {banner ? (
         <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900">{banner}</div>
       ) : null}
@@ -358,12 +349,6 @@ export default function ProduccionCorrerPage() {
           <p className="mt-2 text-xs text-zinc-600">
             No hay resumen guardado para esta entrada. Las listas nuevas guardan el detalle al cerrar.
           </p>
-          <Link
-            href="/produccion/historial"
-            className="mt-4 inline-block text-xs font-bold text-[#D32F2F] underline"
-          >
-            Volver al historial
-          </Link>
         </div>
       ) : (
         <>
@@ -609,10 +594,6 @@ export default function ProduccionCorrerPage() {
                 })
             )}
           </div>
-
-          <Link href="/produccion/historial" className="block text-center text-xs font-bold text-[#D32F2F] underline">
-            Ver historial
-          </Link>
         </>
       )}
     </div>

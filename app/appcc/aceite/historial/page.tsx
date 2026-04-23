@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronLeft, ChevronRight, Download } from 'lucide-react';
+import { ChevronRight, Download } from 'lucide-react';
 import MermasStyleHero from '@/components/MermasStyleHero';
 import { useAuth } from '@/components/AuthProvider';
 import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
@@ -158,16 +158,6 @@ export default function AppccAceiteHistorialPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center gap-3">
-        <Link
-          href="/appcc/aceite"
-          className="inline-flex items-center gap-1 text-sm font-semibold text-zinc-600 hover:text-[#D32F2F]"
-        >
-          <ChevronLeft className="h-4 w-4" />
-          Aceite
-        </Link>
-      </div>
-
       <MermasStyleHero
         eyebrow="APPCC"
         title="Historial de aceite"

@@ -1,6 +1,5 @@
 'use client';
 
-import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import React, { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '@/components/AuthProvider';
@@ -101,9 +100,7 @@ export default function CocinaCentralPedidoSedeDetallePage() {
   if (!isCentralKitchen || !canDeliver) {
     return (
       <div className="rounded-2xl border border-zinc-200 bg-zinc-50 px-4 py-4 text-sm">
-        <Link href="/cocina-central/pedidos-sedes" className="font-bold text-[#D32F2F]">
-          Volver
-        </Link>
+        <p className="text-zinc-700">Sin permiso para gestionar pedidos de sede.</p>
       </div>
     );
   }
@@ -116,9 +113,6 @@ export default function CocinaCentralPedidoSedeDetallePage() {
     return (
       <div className="space-y-3">
         <p className="text-sm text-red-700">{err}</p>
-        <Link href="/cocina-central/pedidos-sedes" className="text-sm font-bold text-[#D32F2F]">
-          Volver al listado
-        </Link>
       </div>
     );
   }
@@ -139,12 +133,6 @@ export default function CocinaCentralPedidoSedeDetallePage() {
             Entrega <strong>{fmtDate(order.fecha_entrega_deseada)}</strong> · {formatEur(Number(order.total_eur))}
           </p>
         </div>
-        <Link
-          href="/cocina-central/pedidos-sedes"
-          className="text-xs font-bold text-[#D32F2F] underline-offset-2 hover:underline"
-        >
-          Listado
-        </Link>
       </div>
 
       <div className="rounded-2xl border border-zinc-200 bg-white p-4 ring-1 ring-zinc-100">

@@ -1,8 +1,6 @@
 'use client';
 
-import Link from 'next/link';
 import type { ReactNode } from 'react';
-import { ArrowLeft } from 'lucide-react';
 import MermasStyleHero from '@/components/MermasStyleHero';
 import { useAuth } from '@/components/AuthProvider';
 import { isSupabaseEnabled, getSupabaseClient } from '@/lib/supabase-client';
@@ -12,16 +10,12 @@ import { canAccessPedidos, canUsePedidosModule } from '@/lib/pedidos-access';
 type Props = {
   title: string;
   description: string;
-  backHref?: string;
-  backLabel?: string;
   children: (ctx: { localId: string }) => ReactNode;
 };
 
 export default function FinanzasDatosEntryShell({
   title,
   description,
-  backHref = '/finanzas/datos',
-  backLabel = 'Entrada de datos',
   children,
 }: Props) {
   const { localCode, localName, localId, email, profileReady } = useAuth();
@@ -50,14 +44,6 @@ export default function FinanzasDatosEntryShell({
   return (
     <div className="space-y-4 pb-10">
       <MermasStyleHero slim eyebrow="Finanzas · Datos" title={title} description={description} />
-
-      <Link
-        href={backHref}
-        className="inline-flex min-h-[44px] items-center gap-2 rounded-xl border border-zinc-200 bg-white px-3 text-sm font-semibold text-zinc-800"
-      >
-        <ArrowLeft className="h-4 w-4" aria-hidden />
-        {backLabel}
-      </Link>
 
       {children({ localId })}
     </div>

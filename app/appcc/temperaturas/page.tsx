@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import React, { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { ChevronLeft, Download, Thermometer } from 'lucide-react';
+import { Download, Thermometer } from 'lucide-react';
 import AppccCompactHero from '@/components/AppccCompactHero';
 import { useAuth } from '@/components/AuthProvider';
 import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
@@ -552,14 +552,6 @@ function AppccTemperaturasInner() {
 
   return (
     <div className="space-y-4">
-      <Link
-        href="/appcc"
-        className="inline-flex items-center gap-1 text-sm font-semibold text-zinc-600 hover:text-[#D32F2F]"
-      >
-        <ChevronLeft className="h-4 w-4" />
-        APPCC
-      </Link>
-
       <AppccCompactHero title="Registros de temperatura" />
 
       {!isSupabaseEnabled() || !getSupabaseClient() ? (

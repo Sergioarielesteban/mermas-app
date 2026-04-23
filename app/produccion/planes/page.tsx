@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import React, { useCallback, useEffect, useState } from 'react';
-import { ArrowLeft, ChevronDown, ChevronUp, Copy, Plus, Trash2 } from 'lucide-react';
+import { ChevronDown, ChevronUp, Copy, Plus, Trash2 } from 'lucide-react';
 import MermasStyleHero from '@/components/MermasStyleHero';
 import { useAuth } from '@/components/AuthProvider';
 import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
@@ -341,14 +341,6 @@ export default function ProduccionPlantillasPage() {
         description="Cada bloque son solo días. Dentro de cada bloque añades productos y la cantidad objetivo para ese periodo."
         slim
       />
-
-      <Link
-        href="/produccion"
-        className="inline-flex items-center gap-2 text-sm font-bold text-zinc-700 hover:text-[#D32F2F]"
-      >
-        <ArrowLeft className="h-4 w-4" />
-        Volver
-      </Link>
 
       {banner ? (
         <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900">{banner}</div>

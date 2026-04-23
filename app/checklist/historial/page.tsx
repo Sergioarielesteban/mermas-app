@@ -2,7 +2,6 @@
 
 import Link from 'next/link';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { ArrowLeft } from 'lucide-react';
 import MermasStyleHero from '@/components/MermasStyleHero';
 import { useAuth } from '@/components/AuthProvider';
 import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
@@ -60,14 +59,6 @@ export default function ChecklistHistorialPage() {
   return (
     <div className="space-y-4 pb-10">
       <MermasStyleHero eyebrow="Check list" title="Historial" compact />
-
-      <Link
-        href="/checklist"
-        className="inline-flex items-center gap-2 text-sm font-bold text-zinc-700 hover:text-[#D32F2F]"
-      >
-        <ArrowLeft className="h-4 w-4" />
-        Volver
-      </Link>
 
       {banner ? (
         <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900">{banner}</div>

@@ -45,9 +45,6 @@ export default function CocinaCentralEntregasPage() {
           Si eres <strong>operario</strong> (<code>staff</code>), usa Producción y Lotes en el hub. Para cambiar tu
           rol: tabla <code>profiles</code> en Supabase → columna <code>role</code>.
         </p>
-        <Link href="/cocina-central" className="inline-block text-sm font-bold text-[#D32F2F]">
-          ← Volver al hub
-        </Link>
       </div>
     );
   }

@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import React, { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, ArrowLeft, Grid3X3, Search, ShieldAlert, Table2, Tags } from 'lucide-react';
+import { AlertTriangle, Grid3X3, Search, ShieldAlert, Table2, Tags } from 'lucide-react';
 import MermasStyleHero from '@/components/MermasStyleHero';
 import { useAuth } from '@/components/AuthProvider';
 import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
@@ -168,11 +168,6 @@ export default function AppccCartaAlergenosPage() {
         description="Control híbrido: herencia automática desde ingredientes y revisión profesional por plato."
         compact
       />
-
-      <Link href="/appcc" className="inline-flex items-center gap-1 text-sm font-semibold text-zinc-600 hover:text-[#D32F2F]">
-        <ArrowLeft className="h-4 w-4" />
-        APPCC
-      </Link>
 
       {banner ? (
         <div className="rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950 ring-1 ring-amber-100">

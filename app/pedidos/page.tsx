@@ -2724,13 +2724,6 @@ export default function PedidosPage() {
           </div>
         ) : null}
 
-        <Link
-          href="/pedidos"
-          className="inline-flex items-center gap-1.5 text-sm font-semibold text-zinc-700 underline-offset-4 hover:text-zinc-900 hover:underline"
-        >
-          ← Volver a pedidos
-        </Link>
-
         <MermasStyleHero
           eyebrow="Asistente"
           title="Oído Chef"

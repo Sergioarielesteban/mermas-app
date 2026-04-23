@@ -5,7 +5,6 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { ESCANDALLO_USAGE_UNIT_PRESETS, validateEscandalloUsageUnitInput } from '@/lib/escandallo-ingredient-units';
 import {
   AlertTriangle,
-  ArrowLeft,
   BookOpen,
   ChevronDown,
   GitCompare,
@@ -171,13 +170,6 @@ export default function PedidosArticulosPage() {
       />
 
       <div className="flex flex-wrap items-center gap-2">
-        <Link
-          href="/pedidos"
-          className="inline-flex min-h-[44px] items-center gap-2 rounded-xl border border-zinc-200 bg-white px-3 text-sm font-semibold text-zinc-800 shadow-sm"
-        >
-          <ArrowLeft className="h-4 w-4" aria-hidden />
-          Pedidos
-        </Link>
         <Link
           href="/pedidos/proveedores"
           className="inline-flex min-h-[44px] items-center gap-2 rounded-xl border border-zinc-200 bg-white px-3 text-sm font-semibold text-zinc-700"

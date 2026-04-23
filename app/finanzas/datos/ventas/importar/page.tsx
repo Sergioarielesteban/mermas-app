@@ -1,6 +1,5 @@
 'use client';
 
-import Link from 'next/link';
 import React, { useState } from 'react';
 import FinanzasDatosEntryShell from '@/components/FinanzasDatosEntryShell';
 import { emitFinanzasDataChanged } from '@/lib/finanzas-data-changed';
@@ -18,8 +17,6 @@ export default function FinanzasDatosVentasImportarPage() {
     <FinanzasDatosEntryShell
       title="Importar ventas"
       description="Pega un CSV (fecha, ventas netas €, tickets opcional) o usa el formulario rápido. Si el día ya existe en tu local, se actualiza."
-      backHref="/finanzas/datos/ventas"
-      backLabel="Ventas del día"
     >
       {({ localId }) => <VentasImportForm localId={localId} />}
     </FinanzasDatosEntryShell>
@@ -182,12 +179,6 @@ function VentasImportForm({ localId }: { localId: string }) {
           </button>
         </form>
       </div>
-
-      <p className="text-center text-sm">
-        <Link href="/finanzas/datos/ventas" className="font-bold text-[#D32F2F] underline">
-          Volver a ventas del día
-        </Link>
-      </p>
     </div>
   );
 }

@@ -2,7 +2,6 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Pencil, Plus, Trash2 } from 'lucide-react';
-import Link from 'next/link';
 import MermasStyleHero from '@/components/MermasStyleHero';
 import { PersonalSectionNav } from '@/components/staff/StaffPersonalShell';
 import { useAuth } from '@/components/AuthProvider';
@@ -419,12 +418,6 @@ export default function PersonalEmpleadosPage() {
         <PersonalSectionNav />
         <section className="rounded-2xl bg-white p-4 ring-1 ring-zinc-200">
           <p className="text-sm font-semibold text-zinc-800">No tienes permiso para ver la gestión del equipo.</p>
-          <Link
-            href="/personal/mi"
-            className="mt-3 inline-flex rounded-xl border border-zinc-300 bg-white px-3 py-2 text-sm font-bold text-zinc-800"
-          >
-            Volver a Mi espacio
-          </Link>
         </section>
       </div>
     );

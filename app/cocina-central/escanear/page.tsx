@@ -1,6 +1,5 @@
 'use client';
 
-import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import { useAuth } from '@/components/AuthProvider';
@@ -63,9 +62,6 @@ export default function CocinaCentralEscanearPage() {
   if (!isCentralKitchen) {
     return (
       <div className="space-y-4">
-        <Link href="/cocina-central" className="text-sm font-bold text-[#D32F2F]">
-          ← Hub
-        </Link>
         <h1 className="text-xl font-extrabold text-zinc-900">Escanear QR</h1>
         <p className="rounded-2xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm text-zinc-700">
           El escáner de códigos de lote solo está disponible en usuarios de{' '}
@@ -78,9 +74,6 @@ export default function CocinaCentralEscanearPage() {
 
   return (
     <div className="space-y-4">
-      <Link href="/cocina-central" className="text-sm font-bold text-[#D32F2F]">
-        ← Hub
-      </Link>
       <h1 className="text-xl font-extrabold text-zinc-900">Escanear QR</h1>
       <p className="text-sm text-zinc-600">Apunta al código de la etiqueta de lote.</p>
       <div

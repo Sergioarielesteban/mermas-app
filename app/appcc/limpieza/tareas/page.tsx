@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronLeft, Plus, Trash2 } from 'lucide-react';
+import { Plus, Trash2 } from 'lucide-react';
 import MermasStyleHero from '@/components/MermasStyleHero';
 import { useAuth } from '@/components/AuthProvider';
 import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
@@ -206,13 +206,6 @@ export default function AppccLimpiezaTareasPage() {
         description="Agrupa por tipo (neveras, suelos, cubos…) y describe el método en cada punto."
         compact
       />
-      <Link
-        href="/appcc/limpieza"
-        className="inline-flex items-center gap-1 text-sm font-semibold text-zinc-600 hover:text-[#D32F2F]"
-      >
-        <ChevronLeft className="h-4 w-4" />
-        Limpieza APPCC
-      </Link>
 
       {banner ? (
         <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950">{banner}</div>

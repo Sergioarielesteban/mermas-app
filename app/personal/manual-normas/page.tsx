@@ -37,12 +37,6 @@ export default function ManualNormasHubPage() {
         compact
       />
       <PersonalSectionNav />
-      <Link
-        href="/personal"
-        className="inline-flex text-sm font-bold text-zinc-600 hover:text-[#D32F2F]"
-      >
-        ← Volver a Horarios
-      </Link>
       <div className="grid gap-3 sm:grid-cols-3">
         {cards.map(({ href, title, sub, Icon }) => (
           <Link

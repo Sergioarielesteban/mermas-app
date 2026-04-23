@@ -1,9 +1,8 @@
 'use client';
 
-import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import React, { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, Trash2 } from 'lucide-react';
+import { Trash2 } from 'lucide-react';
 import ServicioProductionOrder from '@/components/servicio/ServicioProductionOrder';
 import { estimateServiceMinutes, getServicioBundle } from '@/lib/servicio/mock-data';
 import { dateKeyLocal, parseDateKeyLocal } from '@/lib/servicio/date-key';
@@ -152,13 +151,6 @@ function ProduccionInner() {
   return (
     <div className="mx-auto max-w-lg space-y-4 px-3 pb-28 pt-2 sm:px-4">
       <div className="flex items-center gap-2">
-        <Link
-          href={`/servicio?fecha=${dateKey}`}
-          className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-zinc-100 text-zinc-800 ring-1 ring-zinc-200 active:scale-[0.98]"
-          aria-label="Volver a servicio"
-        >
-          <ArrowLeft className="h-5 w-5" />
-        </Link>
         <h2 className="text-lg font-extrabold text-zinc-900">Producción</h2>
       </div>
 

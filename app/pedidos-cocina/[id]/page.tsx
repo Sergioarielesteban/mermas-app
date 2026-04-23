@@ -87,9 +87,6 @@ export default function PedidoCocinaDetallePage() {
     return (
       <div className="space-y-3">
         <p className="text-sm text-red-700">{err ?? 'Pedido no encontrado.'}</p>
-        <Link href="/pedidos-cocina/historial" className="text-sm font-bold text-[#D32F2F]">
-          Volver al historial
-        </Link>
       </div>
     );
   }
@@ -104,12 +101,6 @@ export default function PedidoCocinaDetallePage() {
             Entrega deseada: <strong>{fmtDate(order.fecha_entrega_deseada)}</strong>
           </p>
         </div>
-        <Link
-          href="/pedidos-cocina/historial"
-          className="text-xs font-bold text-[#D32F2F] underline-offset-2 hover:underline"
-        >
-          Historial
-        </Link>
       </div>
 
       <div className="rounded-2xl border border-zinc-200 bg-zinc-50 p-4 ring-1 ring-zinc-100">

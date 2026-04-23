@@ -1,10 +1,9 @@
 'use client';
 
-import { Bot, LayoutDashboard } from 'lucide-react';
+import { Bot } from 'lucide-react';
 import { usePathname, useRouter } from 'next/navigation';
 import { useAuth } from '@/components/AuthProvider';
 import { canUsePedidosModule } from '@/lib/pedidos-access';
-import { goBackOrToPanel } from '@/lib/navigate-back-or-fallback';
 
 /** Pedidos escucha esto y arranca el micrófono (mismo flujo que 🎙 Voz). */
 export const OIDO_CHEF_START_VOICE_EVENT = 'oido-chef-start-voice';
@@ -41,39 +40,30 @@ export default function BottomNav() {
     router.push(useQueryFallback ? '/pedidos?voz=1&oido=1#oido-chef' : '/pedidos?oido=1#oido-chef');
   };
 
-  const goBackInApp = () => {
-    goBackOrToPanel(router);
-  };
-
   const onPedidosAssistant = pathname === '/pedidos';
+
+  /** Sin duplicar el «Volver» del AppShell: solo acceso rápido a Oído Chef cuando aplica. */
+  if (!showOidoChef) return null;
 
   return (
     <nav
       className="fixed inset-x-0 bottom-0 z-[70] border-t border-zinc-200/80 bg-white/95 pb-[max(0.5rem,env(safe-area-inset-bottom,0px))] backdrop-blur-md print:hidden"
-      aria-label={showOidoChef ? 'Oído Chef: ir a Pedidos y activar el micrófono' : 'Volver a la pantalla anterior'}
+      aria-label="Oído Chef: ir a Pedidos y activar el micrófono"
     >
       <div className="mx-auto flex min-h-16 w-full max-w-full items-center justify-center px-4 py-2 sm:max-w-2xl md:max-w-4xl lg:max-w-5xl">
         <button
           type="button"
-          onClick={showOidoChef ? goOidoChef : goBackInApp}
-          aria-current={showOidoChef ? (onPedidosAssistant ? 'page' : undefined) : undefined}
+          onClick={goOidoChef}
+          aria-current={onPedidosAssistant ? 'page' : undefined}
           className={[
             'flex min-w-[12rem] flex-col items-center justify-center gap-0.5 rounded-2xl px-6 py-2 transition-all',
-            showOidoChef
-              ? onPedidosAssistant
-                ? 'bg-[#D32F2F]/12 text-[#D32F2F] shadow-sm ring-1 ring-[#D32F2F]/25'
-                : 'text-zinc-700 hover:bg-red-50'
-              : 'text-zinc-600 hover:bg-zinc-100',
+            onPedidosAssistant
+              ? 'bg-[#D32F2F]/12 text-[#D32F2F] shadow-sm ring-1 ring-[#D32F2F]/25'
+              : 'text-zinc-700 hover:bg-red-50',
           ].join(' ')}
         >
-          {showOidoChef ? (
-            <Bot className="h-6 w-6" strokeWidth={2.25} />
-          ) : (
-            <LayoutDashboard className="h-6 w-6" strokeWidth={2.25} />
-          )}
-          <span className="text-[11px] font-bold leading-none tracking-wide">
-            {showOidoChef ? 'Oído Chef' : 'Volver'}
-          </span>
+          <Bot className="h-6 w-6" strokeWidth={2.25} />
+          <span className="text-[11px] font-bold leading-none tracking-wide">Oído Chef</span>
         </button>
       </div>
     </nav>

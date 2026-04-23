@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { CalendarDays, ChevronLeft } from 'lucide-react';
+import { CalendarDays } from 'lucide-react';
 import MermasStyleHero from '@/components/MermasStyleHero';
 import { useAuth } from '@/components/AuthProvider';
 import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
@@ -229,14 +229,6 @@ export default function AppccLimpiezaCronogramaPage() {
         title="Cronograma semanal"
         description="Asigna tareas de limpieza y equipos frío a cada día. El equipo ve al llegar qué toca hoy."
       />
-
-      <Link
-        href="/appcc/limpieza"
-        className="inline-flex items-center gap-1 text-sm font-semibold text-zinc-600 hover:text-[#D32F2F]"
-      >
-        <ChevronLeft className="h-4 w-4" />
-        Limpieza y mantenimiento
-      </Link>
 
       {loading ? <p className="text-sm text-zinc-500">Cargando…</p> : null}
       {banner ? (

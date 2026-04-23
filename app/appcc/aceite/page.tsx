@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { ChevronLeft, Droplet, History, Wrench } from 'lucide-react';
+import { Droplet, History, Wrench } from 'lucide-react';
 import { CHEF_ONE_TAPER_LINE_CLASS } from '@/components/ChefOneGlowLine';
 
 const LINE_SM = `mx-auto mt-2 w-14 ${CHEF_ONE_TAPER_LINE_CLASS}`;
@@ -9,14 +9,6 @@ const LINE_SM = `mx-auto mt-2 w-14 ${CHEF_ONE_TAPER_LINE_CLASS}`;
 export default function AppccAceiteHubPage() {
   return (
     <div className="space-y-4">
-      <Link
-        href="/appcc"
-        className="inline-flex items-center gap-1 text-sm font-semibold text-zinc-600 hover:text-[#D32F2F]"
-      >
-        <ChevronLeft className="h-4 w-4" />
-        APPCC
-      </Link>
-
       <section className="rounded-2xl border border-zinc-200/90 bg-white px-3 py-4 shadow-sm ring-1 ring-zinc-100 sm:px-4 sm:py-5">
         <h2 className="mb-3 text-center text-base font-bold tracking-tight text-zinc-900 sm:text-lg">
           Cambios de aceite

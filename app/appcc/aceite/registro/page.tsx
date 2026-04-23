@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import React, { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { ChevronLeft, Download, Droplet, Filter, RefreshCw } from 'lucide-react';
+import { Download, Droplet, Filter, RefreshCw } from 'lucide-react';
 import AppccCompactHero from '@/components/AppccCompactHero';
 import { useAuth } from '@/components/AuthProvider';
 import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
@@ -509,16 +509,6 @@ function AppccAceiteRegistroInner() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-2">
-        <Link
-          href="/appcc/aceite"
-          className="inline-flex items-center gap-1 text-sm font-semibold text-zinc-600 hover:text-[#D32F2F]"
-        >
-          <ChevronLeft className="h-4 w-4" />
-          Aceite
-        </Link>
-      </div>
-
       <AppccCompactHero title="Aceite en freidoras" />
 
       {!isSupabaseEnabled() || !getSupabaseClient() ? (

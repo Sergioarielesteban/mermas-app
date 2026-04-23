@@ -1,9 +1,8 @@
 'use client';
 
-import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowLeft, Check, ChevronRight } from 'lucide-react';
+import { Check, ChevronRight } from 'lucide-react';
 import EscandalloIngredientDraftEditor from '@/components/escandallos/EscandalloIngredientDraftEditor';
 import MermasStyleHero from '@/components/MermasStyleHero';
 import { useAuth } from '@/components/AuthProvider';
@@ -230,14 +229,6 @@ export default function EscandalloNewRecipeWizard() {
   return (
     <div className="space-y-5 pb-28 max-sm:pb-[calc(7rem+env(safe-area-inset-bottom,0px))]">
       <MermasStyleHero eyebrow="Escandallos" title="Nueva receta" description="Cuatro pasos. Sin mezclar con el dashboard." compact />
-
-      <Link
-        href="/escandallos/recetas"
-        className="inline-flex h-11 items-center gap-2 rounded-2xl border border-zinc-200 bg-white px-4 text-sm font-bold text-zinc-800 shadow-sm ring-1 ring-zinc-100 transition hover:bg-zinc-50"
-      >
-        <ArrowLeft className="h-4 w-4 shrink-0" />
-        Libro de recetas
-      </Link>
 
       {banner ? (
         <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950">{banner}</div>

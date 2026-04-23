@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, CheckCircle2, Circle } from 'lucide-react';
+import { CheckCircle2, Circle } from 'lucide-react';
 import MermasStyleHero from '@/components/MermasStyleHero';
 import { useAuth } from '@/components/AuthProvider';
 import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
@@ -166,14 +166,6 @@ export default function ChecklistCorrerPage() {
   return (
     <div className="space-y-4 pb-10">
       <MermasStyleHero eyebrow="Check list" title={checklist?.title ?? 'Ejecución'} compact />
-
-      <Link
-        href="/checklist/ejecutar"
-        className="inline-flex items-center gap-2 text-sm font-bold text-zinc-700 hover:text-[#D32F2F]"
-      >
-        <ArrowLeft className="h-4 w-4" />
-        Otras listas
-      </Link>
 
       {banner ? (
         <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900">{banner}</div>

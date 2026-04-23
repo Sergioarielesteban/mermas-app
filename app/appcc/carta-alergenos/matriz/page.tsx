@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import React, { useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, Search } from 'lucide-react';
+import { Search } from 'lucide-react';
 import AppccCompactHero from '@/components/AppccCompactHero';
 import { useAuth } from '@/components/AuthProvider';
 import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
@@ -85,10 +85,6 @@ export default function AppccCartaAlergenosMatrizPage() {
   return (
     <div className="space-y-4 pb-8">
       <AppccCompactHero title="Matriz carta y alérgenos" />
-      <Link href="/appcc/carta-alergenos" className="inline-flex items-center gap-1 text-sm font-semibold text-zinc-600 hover:text-[#D32F2F]">
-        <ArrowLeft className="h-4 w-4" />
-        Volver
-      </Link>
       {banner ? (
         <div className="rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950 ring-1 ring-amber-100">
           {banner}

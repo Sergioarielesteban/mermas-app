@@ -96,10 +96,7 @@ export default function CocinaCentralLoteDetailPage() {
   return (
     <div className="space-y-6">
       <div>
-        <Link href="/cocina-central/lotes" className="text-sm font-bold text-[#D32F2F]">
-          ← Lotes
-        </Link>
-        <h1 className="mt-2 text-xl font-extrabold text-zinc-900">
+        <h1 className="text-xl font-extrabold text-zinc-900">
           {ccProductName((Array.isArray(batch.central_preparations) ? batch.central_preparations[0] : batch.central_preparations) ?? batch.products)}
         </h1>
         <p className="mt-1 text-sm font-semibold text-zinc-600">

@@ -73,7 +73,7 @@ export default function PrecioPage() {
             Ver introducción
           </Link>
           <Link href="/" className="mt-2 block text-center text-sm text-zinc-500 underline underline-offset-2 hover:text-zinc-700">
-            Volver al inicio
+            Portada
           </Link>
         </div>
       </div>

@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, Play } from 'lucide-react';
+import { Play } from 'lucide-react';
 import MermasStyleHero from '@/components/MermasStyleHero';
 import { useAuth } from '@/components/AuthProvider';
 import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
@@ -99,14 +99,6 @@ export default function ProduccionEjecutarPage() {
         description="Elige plantilla y fecha. La app detecta el bloque de día que toca y muestra solo los productos de ese bloque."
         slim
       />
-
-      <Link
-        href="/produccion"
-        className="inline-flex items-center gap-2 text-sm font-bold text-zinc-700 hover:text-[#D32F2F]"
-      >
-        <ArrowLeft className="h-4 w-4" />
-        Volver
-      </Link>
 
       {banner ? (
         <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900">{banner}</div>

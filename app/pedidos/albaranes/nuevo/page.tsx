@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import React, { useEffect, useState } from 'react';
-import { ArrowLeft, Loader2, ScanLine, Upload } from 'lucide-react';
+import { Loader2, ScanLine, Upload } from 'lucide-react';
 import MermasStyleHero from '@/components/MermasStyleHero';
 import { useAuth } from '@/components/AuthProvider';
 import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
@@ -184,13 +184,6 @@ export default function NuevoAlbaranPage() {
         title="Importar albarán"
         description="Sube imagen (OCR con Textract) o PDF (solo archivo; revisión manual). Independiente del OCR dentro de cada pedido enviado."
       />
-      <Link
-        href="/pedidos/albaranes"
-        className="inline-flex items-center gap-2 text-sm font-semibold text-zinc-700 hover:text-zinc-900"
-      >
-        <ArrowLeft className="h-4 w-4" aria-hidden />
-        Bandeja
-      </Link>
 
       <section className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-zinc-200 sm:p-5">
         <label className="text-[10px] font-bold uppercase text-zinc-500">Proveedor</label>

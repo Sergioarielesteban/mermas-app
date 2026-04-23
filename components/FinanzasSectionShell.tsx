@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import React, { useCallback, useEffect, useState } from 'react';
-import { ArrowLeft, RefreshCw } from 'lucide-react';
+import { RefreshCw } from 'lucide-react';
 import MermasStyleHero from '@/components/MermasStyleHero';
 import { useAuth } from '@/components/AuthProvider';
 import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
@@ -29,8 +29,6 @@ type Props = {
   title: string;
   description: string;
   periodBasePath: string;
-  backHref?: string;
-  backLabel?: string;
   /** Query adicional al cambiar periodo (debe empezar por `&`), p.ej. `&proveedor=X`. */
   periodExtraQuery?: string;
   children: (ctx: FinanzasSectionShellRenderContext) => React.ReactNode;
@@ -40,8 +38,6 @@ export default function FinanzasSectionShell({
   title,
   description,
   periodBasePath,
-  backHref = '/finanzas',
-  backLabel = 'Resumen',
   periodExtraQuery = '',
   children,
 }: Props) {
@@ -106,13 +102,6 @@ export default function FinanzasSectionShell({
       <MermasStyleHero slim eyebrow="Finanzas" title={title} description={description} />
 
       <div className="flex flex-wrap items-center gap-2">
-        <Link
-          href={backHref}
-          className="inline-flex min-h-[44px] items-center gap-2 rounded-xl border border-zinc-200 bg-white px-3 text-sm font-semibold text-zinc-800"
-        >
-          <ArrowLeft className="h-4 w-4" aria-hidden />
-          {backLabel}
-        </Link>
         <div className="flex flex-wrap gap-1">
           {FINANZAS_PERIOD_PRESET_OPTIONS.map((pr) => (
             <Link

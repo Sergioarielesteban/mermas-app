@@ -2,7 +2,6 @@
 
 import Link from 'next/link';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronLeft } from 'lucide-react';
 import MermasStyleHero from '@/components/MermasStyleHero';
 import { useAuth } from '@/components/AuthProvider';
 import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
@@ -124,13 +123,6 @@ export default function AppccLimpiezaHistorialPage() {
         description={`Últimos ${RANGE_DAYS} días · marcas por tarea y turno.`}
         compact
       />
-      <Link
-        href="/appcc/limpieza"
-        className="inline-flex items-center gap-1 text-sm font-semibold text-zinc-600 hover:text-[#D32F2F]"
-      >
-        <ChevronLeft className="h-4 w-4" />
-        Limpieza APPCC
-      </Link>
 
       {err ? (
         <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-900">{err}</div>

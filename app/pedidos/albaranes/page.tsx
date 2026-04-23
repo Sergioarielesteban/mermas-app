@@ -4,7 +4,6 @@ import Link from 'next/link';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   AlertTriangle,
-  ArrowLeft,
   FileText,
   Paperclip,
   Plus,
@@ -142,13 +141,6 @@ export default function PedidosAlbaranesPage() {
       />
 
       <div className="flex flex-wrap items-center gap-2">
-        <Link
-          href="/pedidos"
-          className="inline-flex h-10 items-center gap-2 rounded-xl border border-zinc-200 bg-white px-3 text-sm font-semibold text-zinc-800 shadow-sm"
-        >
-          <ArrowLeft className="h-4 w-4" aria-hidden />
-          Pedidos
-        </Link>
         <Link
           href="/pedidos/albaranes/nuevo"
           className="inline-flex h-10 flex-1 items-center justify-center gap-2 rounded-xl bg-[#D32F2F] px-4 text-sm font-black text-white shadow-md sm:flex-none"

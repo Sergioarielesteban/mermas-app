@@ -1,6 +1,5 @@
 'use client';
 
-import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '@/components/AuthProvider';
@@ -143,19 +142,8 @@ export default function CocinaCentralEntregaDetallePage() {
     );
   }
 
-  const backHref =
-    isOrigin && canDeliveries
-      ? '/cocina-central/entregas'
-      : isOrigin
-        ? '/cocina-central'
-        : '/cocina-central/recepciones';
-
   return (
     <div className="space-y-6">
-      <Link href={backHref} className="text-sm font-bold text-[#D32F2F]">
-        ← Volver
-      </Link>
-
       <div>
         <h1 className="text-xl font-extrabold text-zinc-900">Entrega</h1>
         <p className="mt-1 text-xs font-mono text-zinc-500">{delivery.id}</p>
