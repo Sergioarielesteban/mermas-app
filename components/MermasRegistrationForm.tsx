@@ -5,7 +5,62 @@ import Image from 'next/image';
 import { Camera, Check, ChevronDown, Search, Upload, X, Zap } from 'lucide-react';
 import { CHEF_ONE_TAPER_LINE_CLASS } from '@/components/ChefOneGlowLine';
 import { useMermasStore } from '@/components/MermasStoreProvider';
-import type { MermaMotiveKey, MermaShift } from '@/lib/types';
+import type { MermaMotiveKey, MermaShift, Product } from '@/lib/types';
+
+/** Fila 1 de productos rápidos (orden fijo; se resuelve por nombre exacto normalizado). */
+const QUICK_ROW1_PINNED_NAMES = ['PAN RUSTICO', 'PAN BRIOCHE', 'HUEVOS', 'MORROS'] as const;
+
+function normalizeProductLabel(s: string) {
+  return s
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function buildQuickProductIds(products: Product[], mermas: { productId: string }[]) {
+  const byNorm = new Map<string, Product>();
+  for (const p of products) {
+    byNorm.set(normalizeProductLabel(p.name), p);
+  }
+
+  const row1: string[] = [];
+  for (const label of QUICK_ROW1_PINNED_NAMES) {
+    const hit = byNorm.get(normalizeProductLabel(label));
+    if (hit) row1.push(hit.id);
+  }
+
+  const counts = new Map<string, number>();
+  for (const m of mermas) {
+    counts.set(m.productId, (counts.get(m.productId) ?? 0) + 1);
+  }
+
+  const used = new Set(row1);
+  const scored = [...products]
+    .map((p) => ({ id: p.id, c: counts.get(p.id) ?? 0 }))
+    .sort((a, b) => b.c - a.c || a.id.localeCompare(b.id));
+
+  const row2: string[] = [];
+  for (const { id } of scored) {
+    if (used.has(id)) continue;
+    row2.push(id);
+    if (row2.length === 4) break;
+  }
+
+  if (row2.length < 4) {
+    const rest = [...products]
+      .filter((p) => !used.has(p.id))
+      .sort((a, b) => a.name.localeCompare(b.name, 'es'));
+    for (const p of rest) {
+      row2.push(p.id);
+      used.add(p.id);
+      if (row2.length === 4) break;
+    }
+  }
+
+  return [...row1, ...row2].slice(0, 8);
+}
 
 type Motive = { key: MermaMotiveKey; emoji: string; label: string };
 
@@ -59,17 +114,7 @@ export default function MermasRegistrationForm() {
   const savedBannerTimeoutRef = React.useRef<number | null>(null);
   const validationBannerTimeoutRef = React.useRef<number | null>(null);
 
-  const quickProductIds = useMemo(() => {
-    const counts = new Map<string, number>();
-    for (const m of mermas) {
-      counts.set(m.productId, (counts.get(m.productId) ?? 0) + 1);
-    }
-    return [...counts.entries()]
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 5)
-      .map(([id]) => id)
-      .filter((id) => products.some((p) => p.id === id));
-  }, [mermas, products]);
+  const quickProductIds = useMemo(() => buildQuickProductIds(products, mermas), [mermas, products]);
 
   const selectedProduct = products.find((p) => p.id === productId) ?? null;
   const quantityButtonStep = 1;
@@ -235,16 +280,16 @@ export default function MermasRegistrationForm() {
         onSubmit={handleSave}
         className="pb-[calc(7rem+env(safe-area-inset-bottom))]"
       >
-        <div className="space-y-4">
-          <div className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-zinc-200">
-            <label className="mb-2 block text-xs font-semibold text-zinc-700">
+        <div className="space-y-2.5">
+          <div className="rounded-2xl bg-white p-3 shadow-sm ring-1 ring-zinc-200">
+            <label className="mb-1 block text-xs font-semibold text-zinc-700">
               Producto <span className="text-[#B91C1C]">*</span>
             </label>
             <input type="hidden" name="productId" value={productId} readOnly />
             <button
               type="button"
               onClick={() => setOpenProductPicker(true)}
-              className="flex h-12 w-full items-center justify-between rounded-xl border border-zinc-200 bg-zinc-50 px-4 text-left text-sm text-zinc-900 shadow-sm outline-none focus:border-[#D32F2F] focus:ring-2 focus:ring-[#D32F2F]/20"
+              className="flex h-11 w-full items-center justify-between rounded-xl border border-zinc-200 bg-zinc-50 px-3 text-left text-sm text-zinc-900 shadow-sm outline-none focus:border-[#D32F2F] focus:ring-2 focus:ring-[#D32F2F]/20"
             >
               <span className={selectedProduct ? 'text-zinc-900' : 'text-zinc-400'}>
                 {selectedProduct?.name ?? 'Selecciona producto'}
@@ -252,12 +297,12 @@ export default function MermasRegistrationForm() {
               <ChevronDown className="h-4 w-4 text-zinc-500" />
             </button>
             {quickProductIds.length > 0 ? (
-              <div className="mt-4 rounded-xl border border-zinc-200/90 bg-gradient-to-b from-zinc-50 to-white p-3 shadow-sm">
-                <p className="mb-3 flex items-center gap-1.5 text-[10px] font-extrabold uppercase tracking-[0.12em] text-zinc-500">
+              <div className="mt-2 rounded-xl border border-zinc-200/90 bg-gradient-to-b from-zinc-50 to-white p-2 shadow-sm">
+                <p className="mb-1.5 flex items-center gap-1.5 text-[10px] font-extrabold uppercase tracking-[0.12em] text-zinc-500">
                   <Zap className="h-3.5 w-3.5 shrink-0 text-amber-500" aria-hidden />
                   Productos rápidos
                 </p>
-                <div className="grid grid-cols-2 gap-2.5">
+                <div className="grid grid-cols-4 gap-1.5">
                   {quickProductIds.map((id) => {
                     const p = products.find((x) => x.id === id);
                     if (!p) return null;
@@ -268,13 +313,13 @@ export default function MermasRegistrationForm() {
                         type="button"
                         onClick={() => setProductId(id)}
                         className={[
-                          'flex min-h-[3.25rem] w-full items-center justify-center rounded-xl border px-2 py-2.5 text-center text-[11px] font-semibold leading-snug shadow-sm transition active:scale-[0.98]',
+                          'flex min-h-[2rem] w-full items-center justify-center rounded-xl border px-1 py-1.5 text-center text-[10px] font-semibold leading-none shadow-sm transition active:scale-[0.98]',
                           active
                             ? 'border-[#D32F2F] bg-[#D32F2F]/12 text-zinc-900 ring-1 ring-[#D32F2F]/20'
                             : 'border-zinc-200/90 bg-white text-zinc-800 hover:border-zinc-300 hover:bg-zinc-50',
                         ].join(' ')}
                       >
-                        <span className="line-clamp-2 break-words">{p.name}</span>
+                        <span className="block max-w-full truncate">{p.name}</span>
                       </button>
                     );
                   })}
@@ -282,17 +327,17 @@ export default function MermasRegistrationForm() {
               </div>
             ) : null}
             {selectedProduct ? (
-              <p className="pt-2 text-xs text-zinc-500">
+              <p className="pt-1.5 text-xs text-zinc-500">
                 Precio: {selectedProduct.pricePerUnit.toFixed(2)} EUR/{selectedProduct.unit}
               </p>
             ) : null}
           </div>
 
-          <div className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-zinc-200">
-            <label className="mb-2 block text-xs font-semibold text-zinc-700">
+          <div className="rounded-2xl bg-white p-3 shadow-sm ring-1 ring-zinc-200">
+            <label className="mb-1 block text-xs font-semibold text-zinc-700">
               {quantityLabel} <span className="text-[#B91C1C]">*</span>
             </label>
-            <div className="grid grid-cols-3 items-center gap-2">
+            <div className="grid grid-cols-3 items-center gap-1.5">
               <button
                 type="button"
                 onClick={() => {
@@ -305,7 +350,7 @@ export default function MermasRegistrationForm() {
                 }}
                 disabled={quantity <= 0}
                 className={[
-                  'h-14 rounded-xl border border-zinc-300 text-2xl font-bold',
+                  'h-11 min-h-[44px] rounded-xl border border-zinc-300 text-xl font-bold',
                   quantity <= 0
                     ? 'cursor-not-allowed bg-zinc-100 text-zinc-400'
                     : lastQtyAction === 'dec'
@@ -340,7 +385,7 @@ export default function MermasRegistrationForm() {
                   setQuantity(safe);
                   setQuantityInput(safe.toFixed(2).replace('.', ','));
                 }}
-                className="h-14 rounded-xl border border-zinc-300 bg-white text-center text-xl font-bold text-zinc-900 shadow-sm outline-none focus:border-[#D32F2F] focus:ring-2 focus:ring-[#D32F2F]/20"
+                className="h-11 min-h-[44px] rounded-xl border border-zinc-300 bg-white text-center text-lg font-bold text-zinc-900 shadow-sm outline-none focus:border-[#D32F2F] focus:ring-2 focus:ring-[#D32F2F]/20"
                 aria-label="Cantidad"
               />
 
@@ -355,7 +400,7 @@ export default function MermasRegistrationForm() {
                   setLastQtyAction('inc');
                 }}
                 className={[
-                  'h-14 rounded-xl border border-zinc-300 text-2xl font-bold',
+                  'h-11 min-h-[44px] rounded-xl border border-zinc-300 text-xl font-bold',
                   lastQtyAction === 'inc'
                     ? 'bg-[#D32F2F] text-white hover:bg-[#c62828]'
                     : 'bg-zinc-100 text-zinc-900 hover:bg-zinc-200',
@@ -365,11 +410,11 @@ export default function MermasRegistrationForm() {
                 +
               </button>
             </div>
-            {quantityHint ? <p className="pt-2 text-xs text-zinc-500">{quantityHint}</p> : null}
+            {quantityHint ? <p className="pt-1 text-xs leading-snug text-zinc-500">{quantityHint}</p> : null}
           </div>
 
-          <div className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-zinc-200">
-            <div className="mb-2 flex items-center justify-between">
+          <div className="rounded-2xl bg-white p-3 shadow-sm ring-1 ring-zinc-200">
+            <div className="mb-1 flex items-center justify-between">
               <label className="text-xs font-semibold text-zinc-700">
                 Motivo <span className="text-[#B91C1C]">*</span>
               </label>
@@ -377,7 +422,7 @@ export default function MermasRegistrationForm() {
             </div>
             <input type="hidden" name="motiveKey" value={motiveKey ?? ''} readOnly />
 
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-3 gap-1.5">
               {motives.map((m) => {
                 const isSelected = m.key === motiveKey;
                 return (
@@ -386,22 +431,24 @@ export default function MermasRegistrationForm() {
                     type="button"
                     onClick={() => setMotiveKey((prev) => (prev === m.key ? null : m.key))}
                     className={[
-                      'flex min-h-[3rem] items-center justify-center gap-1.5 rounded-md border px-2 py-2 text-center transition-all',
+                      'flex min-h-[2.35rem] flex-col items-center justify-center gap-0.5 rounded-xl border px-0.5 py-1 text-center transition-all',
                       isSelected
                         ? 'border-[#D32F2F] bg-[#D32F2F]/10 text-zinc-900 shadow-sm'
                         : 'border-zinc-300 bg-zinc-50 text-zinc-800 hover:border-zinc-400',
                     ].join(' ')}
                     aria-pressed={isSelected}
                   >
-                    <span className="text-base leading-none">{m.emoji}</span>
-                    <span className="text-[10px] font-semibold leading-tight">{m.label}</span>
+                    <span className="shrink-0 text-sm leading-none">{m.emoji}</span>
+                    <span className="max-w-full truncate px-0.5 text-[9px] font-semibold leading-tight sm:text-[10px]">
+                      {m.label}
+                    </span>
                   </button>
                 );
               })}
             </div>
 
             {motiveKey === 'otros-motivos' ? (
-              <label className="mt-3 block">
+              <label className="mt-2 block">
                 <span className="text-[11px] font-semibold text-zinc-600">Describe el motivo</span>
                 <textarea
                   value={otherMotivoText}
@@ -415,8 +462,8 @@ export default function MermasRegistrationForm() {
           </div>
 
           {motiveKey === 'mal-estado' ? (
-            <div className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-zinc-200">
-              <label className="mb-2 block text-xs font-semibold text-zinc-700">Añadir Foto de Merma</label>
+            <div className="rounded-2xl bg-white p-3 shadow-sm ring-1 ring-zinc-200">
+              <label className="mb-1 block text-xs font-semibold text-zinc-700">Añadir Foto de Merma</label>
               <label className="flex h-12 cursor-pointer items-center justify-center gap-2 rounded-xl border border-zinc-300 bg-zinc-50 text-sm font-semibold text-zinc-700 hover:bg-zinc-100">
                 <Camera className="h-4 w-4" />
                 <Upload className="h-4 w-4" />
@@ -442,9 +489,9 @@ export default function MermasRegistrationForm() {
             </div>
           ) : null}
 
-          <div className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-zinc-200">
-            <p className="mb-2 text-xs font-semibold text-zinc-700">Opcional · contexto</p>
-            <p className="mb-3 text-[11px] leading-relaxed text-zinc-500">
+          <div className="rounded-2xl bg-white p-3 shadow-sm ring-1 ring-zinc-200">
+            <p className="mb-1 text-xs font-semibold text-zinc-700">Opcional · contexto</p>
+            <p className="mb-2 text-[11px] leading-relaxed text-zinc-500">
               Turno y quién registra son voluntarios; sirven solo si el local quiere analizarlos después.
             </p>
             <div className="flex flex-wrap gap-2">
@@ -485,8 +532,8 @@ export default function MermasRegistrationForm() {
             </label>
           </div>
 
-          <div className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-zinc-200">
-            <label className="mb-2 block text-xs font-semibold text-zinc-700">Campo de Notas</label>
+          <div className="rounded-2xl bg-white p-3 shadow-sm ring-1 ring-zinc-200">
+            <label className="mb-1 block text-xs font-semibold text-zinc-700">Campo de Notas</label>
             <textarea
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
@@ -497,9 +544,9 @@ export default function MermasRegistrationForm() {
             />
           </div>
 
-          <div className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-zinc-200">
+          <div className="rounded-2xl bg-white p-3 shadow-sm ring-1 ring-zinc-200">
             <div className="mx-auto grid max-w-[17.5rem] grid-cols-2 gap-2">
-              <label className="mb-1.5 block text-[11px] font-semibold text-zinc-700">
+              <label className="mb-1 block text-[11px] font-semibold text-zinc-700">
                 Fecha
                 <input
                   type="date"
@@ -508,7 +555,7 @@ export default function MermasRegistrationForm() {
                   className="mt-1.5 h-8 w-full min-w-0 rounded-lg border border-zinc-200 bg-zinc-50 px-2 text-[11px] font-sans leading-none text-zinc-900 outline-none focus:border-[#D32F2F] focus:ring-2 focus:ring-[#D32F2F]/20"
                 />
               </label>
-              <label className="mb-1.5 block text-[11px] font-semibold text-zinc-700">
+              <label className="mb-1 block text-[11px] font-semibold text-zinc-700">
                 Hora
                 <input
                   type="time"
