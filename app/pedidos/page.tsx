@@ -243,6 +243,68 @@ type AssistantHistoryRow = {
 
 const ASSISTANT_HISTORY_LS_KEY = 'oido-chef-history-v1';
 
+/** Persistencia al salir de la app (PWA / multitarea): sección + pedido abierto. Scoped por local. */
+function pedidosPageUiStorageKey(localId: string) {
+  return `chefone_pedidos_page_ui_v1:${localId}`;
+}
+
+type PedidosPageUiV1 = {
+  v: 1;
+  section: 'pendientes' | 'enviados';
+  proveedor_id: string | null;
+  pedido_id: string | null;
+  historico_month_key?: string | null;
+  scroll_y?: number;
+};
+
+function parsePedidosPageUi(raw: string | null): PedidosPageUiV1 | null {
+  if (!raw) return null;
+  try {
+    const o = JSON.parse(raw) as Partial<PedidosPageUiV1>;
+    if (o.v !== 1) return null;
+    if (o.section !== 'pendientes' && o.section !== 'enviados') return null;
+    const proveedor_id =
+      typeof o.proveedor_id === 'string' ? o.proveedor_id : o.proveedor_id === null ? null : null;
+    const pedido_id = typeof o.pedido_id === 'string' ? o.pedido_id : o.pedido_id === null ? null : null;
+    const historico_month_key =
+      typeof o.historico_month_key === 'string'
+        ? o.historico_month_key
+        : o.historico_month_key === null
+          ? null
+          : undefined;
+    const scroll_y =
+      typeof o.scroll_y === 'number' && Number.isFinite(o.scroll_y) && o.scroll_y >= 0 ? o.scroll_y : undefined;
+    return {
+      v: 1,
+      section: o.section,
+      proveedor_id,
+      pedido_id,
+      ...(historico_month_key !== undefined ? { historico_month_key } : {}),
+      ...(scroll_y !== undefined ? { scroll_y } : {}),
+    };
+  } catch {
+    return null;
+  }
+}
+
+/** `pendientes` = bloque «Pendientes de entrega»; `enviados` = «Histórico recibidos». */
+function derivePedidosPageUiSection(
+  pendientesOpen: boolean,
+  historicoOpen: boolean,
+  expandedSentId: string | null,
+  expandedHistoricoId: string | null,
+): 'pendientes' | 'enviados' {
+  if (expandedHistoricoId) return 'enviados';
+  if (expandedSentId) return 'pendientes';
+  if (historicoOpen && !pendientesOpen) return 'enviados';
+  return 'pendientes';
+}
+
+function historicoMonthKeyFromOrder(order: PedidoOrder): string {
+  const d = order.receivedAt ? new Date(order.receivedAt) : new Date(order.createdAt);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+
 export default function PedidosPage() {
   const { localCode, localName, localId, email, userId, displayName, loginUsername, profileRole } = useAuth();
   const hasPedidosEntry = canAccessPedidos(localCode, email, localName, localId);
@@ -327,6 +389,9 @@ export default function PedidosPage() {
   const searchParams = useSearchParams();
   const oidoStandalone = searchParams.get('oido') === '1';
   const avisoPedido = searchParams.get('pedido');
+  const [uiHydrated, setUiHydrated] = React.useState(false);
+  const pedidosPageUiRestoreAttemptedRef = React.useRef<string | null>(null);
+  const scrollRestorePendingRef = React.useRef<number | null>(null);
 
   React.useEffect(() => {
     if (!avisoPedido) return;
@@ -335,6 +400,48 @@ export default function PedidosPage() {
     }, 6000);
     return () => window.clearTimeout(t);
   }, [avisoPedido, router]);
+
+  React.useLayoutEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (!localId || !canUse) {
+      pedidosPageUiRestoreAttemptedRef.current = null;
+      setUiHydrated(false);
+      return;
+    }
+    if (avisoPedido) {
+      pedidosPageUiRestoreAttemptedRef.current = localId;
+      setUiHydrated(true);
+      return;
+    }
+    if (pedidosPageUiRestoreAttemptedRef.current === localId) {
+      setUiHydrated(true);
+      return;
+    }
+    pedidosPageUiRestoreAttemptedRef.current = localId;
+    try {
+      const ctx = parsePedidosPageUi(window.localStorage.getItem(pedidosPageUiStorageKey(localId)));
+      if (ctx) {
+        if (ctx.section === 'enviados') {
+          setHistoricoRecibidosAccordionOpen(true);
+          setPendientesEntregaAccordionOpen(false);
+          if (ctx.pedido_id) setExpandedHistoricoId(ctx.pedido_id);
+          if (ctx.historico_month_key) {
+            setHistoricoMonthOpen((p) => ({ ...p, [ctx.historico_month_key!]: true }));
+          }
+        } else {
+          setPendientesEntregaAccordionOpen(true);
+          setHistoricoRecibidosAccordionOpen(false);
+          if (ctx.pedido_id) setExpandedSentId(ctx.pedido_id);
+        }
+        if (ctx.scroll_y != null && ctx.scroll_y > 0) {
+          scrollRestorePendingRef.current = ctx.scroll_y;
+        }
+      }
+    } catch {
+      /* ignore */
+    }
+    setUiHydrated(true);
+  }, [localId, canUse, avisoPedido]);
 
   const scheduleIncidenciaRecepcionNotifyDebounced = React.useCallback(
     (order: PedidoOrder) => {
@@ -984,6 +1091,103 @@ export default function PedidosPage() {
       return { key, label, orders: byKey.get(key)! };
     });
   }, [receivedOrders]);
+
+  const persistPedidosPageUi = React.useCallback(() => {
+    if (!localId || !canUse || !uiHydrated) return;
+    try {
+      const section = derivePedidosPageUiSection(
+        pendientesEntregaAccordionOpen,
+        historicoRecibidosAccordionOpen,
+        expandedSentId,
+        expandedHistoricoId,
+      );
+      const pedidoId = section === 'pendientes' ? expandedSentId : expandedHistoricoId;
+      const order = pedidoId ? orders.find((o) => o.id === pedidoId) : undefined;
+      const proveedor_id = order?.supplierId ?? null;
+      let historico_month_key: string | undefined;
+      if (section === 'enviados' && expandedHistoricoId) {
+        const ho = orders.find((o) => o.id === expandedHistoricoId);
+        if (ho) historico_month_key = historicoMonthKeyFromOrder(ho);
+      }
+      const scroll_y =
+        typeof window !== 'undefined' && window.scrollY > 0 ? Math.round(window.scrollY) : undefined;
+      const payload: PedidosPageUiV1 = {
+        v: 1,
+        section,
+        proveedor_id,
+        pedido_id: pedidoId,
+        ...(historico_month_key ? { historico_month_key } : {}),
+        ...(scroll_y !== undefined ? { scroll_y } : {}),
+      };
+      window.localStorage.setItem(pedidosPageUiStorageKey(localId), JSON.stringify(payload));
+    } catch {
+      /* ignore */
+    }
+  }, [
+    localId,
+    canUse,
+    uiHydrated,
+    pendientesEntregaAccordionOpen,
+    historicoRecibidosAccordionOpen,
+    expandedSentId,
+    expandedHistoricoId,
+    orders,
+  ]);
+
+  React.useEffect(() => {
+    if (!uiHydrated || !localId || !canUse) return;
+    persistPedidosPageUi();
+  }, [uiHydrated, localId, canUse, persistPedidosPageUi]);
+
+  React.useEffect(() => {
+    if (!localId || !canUse) return;
+    const flush = () => {
+      if (document.visibilityState !== 'hidden') return;
+      persistPedidosPageUi();
+    };
+    document.addEventListener('visibilitychange', flush);
+    window.addEventListener('pagehide', flush);
+    return () => {
+      document.removeEventListener('visibilitychange', flush);
+      window.removeEventListener('pagehide', flush);
+    };
+  }, [localId, canUse, persistPedidosPageUi]);
+
+  React.useEffect(() => {
+    if (!uiHydrated) return;
+    const y = scrollRestorePendingRef.current;
+    if (y == null || y <= 0) return;
+    scrollRestorePendingRef.current = null;
+    const t = window.setTimeout(() => {
+      window.scrollTo({ top: y, behavior: 'auto' });
+    }, 120);
+    return () => window.clearTimeout(t);
+  }, [
+    uiHydrated,
+    pendientesEntregaAccordionOpen,
+    historicoRecibidosAccordionOpen,
+    expandedSentId,
+    expandedHistoricoId,
+    historicoMonthOpen,
+  ]);
+
+  const ordersEverNonEmptyRef = React.useRef(false);
+  React.useEffect(() => {
+    ordersEverNonEmptyRef.current = false;
+  }, [localId]);
+  React.useEffect(() => {
+    if (orders.length > 0) ordersEverNonEmptyRef.current = true;
+  }, [orders.length, localId]);
+
+  React.useEffect(() => {
+    if (!uiHydrated || !ordersEverNonEmptyRef.current) return;
+    if (expandedSentId && !orders.some((o) => o.id === expandedSentId && o.status === 'sent')) {
+      setExpandedSentId(null);
+    }
+    if (expandedHistoricoId && !orders.some((o) => o.id === expandedHistoricoId && o.status === 'received')) {
+      setExpandedHistoricoId(null);
+    }
+  }, [uiHydrated, orders, expandedSentId, expandedHistoricoId]);
 
   const OIDO_CHEF_TTS_LS_KEY = 'oido-chef-tts-v1';
   const OIDO_CHEF_TTS_NATURAL_LS_KEY = 'oido-chef-tts-natural-v1';
