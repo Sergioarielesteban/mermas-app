@@ -507,12 +507,7 @@ export default function EscandallosPage() {
 
   return (
     <div className="space-y-5 pb-10">
-      <MermasStyleHero
-        eyebrow="Inteligencia de carta"
-        title="Escandallos"
-        description={`Panel de control: KPIs, food cost, cierre mensual e importación. La edición de recetas está en el libro y el editor dedicados. PMP crudos: últimos ${ESCANDALLOS_WEIGHTED_PRICE_WINDOW_DAYS} días de compras.`}
-        compact
-      />
+      <MermasStyleHero slim compactTitle eyebrow="Inteligencia de carta" title="Escandallos" />
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <Link

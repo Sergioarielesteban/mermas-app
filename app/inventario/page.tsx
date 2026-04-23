@@ -804,12 +804,7 @@ export default function InventarioPage() {
 
   return (
     <div className="space-y-5">
-      <MermasStyleHero
-        brandLogo
-        title="Inventario"
-        slim
-        description="Stock y valor por artículo de tu local."
-      />
+      <MermasStyleHero slim compactTitle title="Inventario" />
 
       {!isSupabaseEnabled() || !getSupabaseClient() ? (
         <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">

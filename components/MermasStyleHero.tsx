@@ -100,7 +100,7 @@ export default function MermasStyleHero({
       ) : eyebrow ? (
         <h1
           className={`text-center font-semibold uppercase tracking-[0.22em] text-zinc-400 ${
-            slim ? 'text-[9px] sm:text-[10px]' : 'text-[10px] sm:text-[11px]'
+            micro ? 'text-[8px] sm:text-[9px]' : slim ? 'text-[9px] sm:text-[10px]' : 'text-[10px] sm:text-[11px]'
           }`}
         >
           {eyebrow}

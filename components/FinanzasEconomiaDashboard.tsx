@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import React, { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import { ArrowDown, ArrowUp, Minus, RefreshCw } from 'lucide-react';
 import MermasStyleHero from '@/components/MermasStyleHero';
+import FinanzasSubnav from '@/components/FinanzasSubnav';
 import { useAuth } from '@/components/AuthProvider';
 import {
   buildDemoFinanzasEconomicSummary,
@@ -363,12 +364,8 @@ function FinanzasEconomiaBody() {
 
   return (
     <div className="space-y-4 pb-10">
-      <MermasStyleHero
-        slim
-        eyebrow="Finanzas"
-        title="Cockpit diario"
-        description="Ganas o pierdes, dónde duele y qué revisar. Sin IVA en magnitudes principales."
-      />
+      <MermasStyleHero slim compactTitle eyebrow="Finanzas" title="Cockpit diario" />
+      <FinanzasSubnav className="mt-2" />
 
       {demoValueLines.length > 0 ? (
         <section

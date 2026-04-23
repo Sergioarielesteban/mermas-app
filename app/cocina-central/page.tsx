@@ -3,7 +3,6 @@
 import Link from 'next/link';
 import type { LucideIcon } from 'lucide-react';
 import {
-  ChefHat,
   Package,
   Truck,
   QrCode,
@@ -31,11 +30,11 @@ function Tile({
   return (
     <Link
       href={href}
-      className="flex min-h-[112px] flex-col justify-center rounded-2xl bg-zinc-50 px-4 py-4 ring-1 ring-zinc-200 transition hover:bg-white hover:ring-zinc-300 active:scale-[0.99]"
+      className="flex min-h-[72px] flex-col justify-center rounded-2xl bg-zinc-50 px-3 py-3 ring-1 ring-zinc-200 transition hover:bg-white hover:ring-zinc-300 active:scale-[0.99]"
     >
-      <Icon className="mb-2 h-8 w-8 text-[#D32F2F]" strokeWidth={2} />
-      <span className="text-base font-extrabold text-zinc-900">{label}</span>
-      <span className="mt-1 text-xs font-medium leading-snug text-zinc-600">{sub}</span>
+      <Icon className="mb-1.5 h-6 w-6 text-[#D32F2F]" strokeWidth={2} />
+      <span className="text-sm font-extrabold uppercase tracking-wide text-zinc-900">{label}</span>
+      <span className="mt-0.5 text-[10px] font-medium leading-snug text-zinc-600">{sub}</span>
     </Link>
   );
 }
@@ -59,15 +58,7 @@ export default function CocinaCentralHubPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-xl font-extrabold text-zinc-900">Cocina central</h1>
-        <p className="mt-1 text-sm text-zinc-600">
-          Producción, lotes, entregas entre sedes y trazabilidad. Los datos están acotados a tu local en
-          Supabase.
-        </p>
-      </div>
-
+    <div className="space-y-4">
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         {operate ? (
           <>
@@ -123,18 +114,6 @@ export default function CocinaCentralHubPage() {
         {operate ? (
           <Tile href="/cocina-central/recepciones" label="Mis recepciones" sub="Si también recibes stock" icon={Inbox} />
         ) : null}
-      </div>
-
-      <div className="rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-xs text-zinc-600">
-        <div className="flex items-center gap-2 font-bold text-zinc-800">
-          <ChefHat className="h-4 w-4 text-[#D32F2F]" />
-          Modo actual
-        </div>
-        <p className="mt-1">
-          {isCentralKitchen
-            ? 'Tu local está marcado como cocina central: puedes producir y gestionar entregas salientes (según tu rol).'
-            : 'Local satélite: aquí solo gestionas recepciones entrantes y la firma de entregas.'}
-        </p>
       </div>
     </div>
   );

@@ -189,19 +189,19 @@ function ServicioHomeInner() {
       </div>
 
       {canManage ? (
-        <div className="flex flex-col gap-2 sm:flex-row">
+        <div className="flex flex-col gap-3 sm:flex-row">
           <Link
             href="/servicio/platos/nuevo"
-            className="flex h-12 flex-1 items-center justify-center gap-2 rounded-2xl border-2 border-zinc-900 bg-white text-sm font-extrabold text-zinc-900"
+            className="flex min-h-[52px] flex-1 items-center justify-center gap-2.5 rounded-2xl border-2 border-zinc-900 bg-white px-4 text-base font-extrabold uppercase tracking-wide text-zinc-900 shadow-md shadow-zinc-900/10 ring-1 ring-zinc-200/80 transition hover:bg-zinc-50 active:scale-[0.99]"
           >
-            <Plus className="h-5 w-5" />
+            <Plus className="h-6 w-6 shrink-0 text-[#D32F2F]" strokeWidth={2.5} />
             Nuevo plato
           </Link>
           <Link
             href={`/servicio/produccion?fecha=${dateKey}`}
-            className="flex h-12 flex-1 items-center justify-center gap-2 rounded-2xl bg-zinc-900 text-sm font-extrabold text-white"
+            className="flex min-h-[52px] flex-1 items-center justify-center gap-2.5 rounded-2xl bg-[#D32F2F] px-4 text-base font-extrabold uppercase tracking-wide text-white shadow-lg shadow-[#D32F2F]/35 ring-2 ring-[#D32F2F]/40 transition hover:brightness-105 active:scale-[0.99]"
           >
-            <Settings2 className="h-5 w-5" />
+            <Settings2 className="h-6 w-6 shrink-0 opacity-95" strokeWidth={2.5} />
             Producción
           </Link>
         </div>

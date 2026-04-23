@@ -171,12 +171,7 @@ export default function ChatPage() {
 
   return (
     <div className="space-y-4">
-      <MermasStyleHero
-        eyebrow="EQUIPO"
-        title="Chat del local"
-        tagline="Mensajes solo para quienes comparten este local. Nada de grupos externos: todo queda aquí."
-        compact
-      />
+      <MermasStyleHero slim compactTitle eyebrow="Equipo" title="Chat del local" />
 
       <div className="flex flex-wrap justify-end gap-2">
         <button

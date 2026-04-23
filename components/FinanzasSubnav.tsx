@@ -15,10 +15,15 @@ const LINKS: { href: string; label: string }[] = [
   { href: '/finanzas/albaranes', label: 'Albaranes' },
 ];
 
-export default function FinanzasSubnav() {
+type FinanzasSubnavProps = { className?: string };
+
+export default function FinanzasSubnav({ className = '' }: FinanzasSubnavProps) {
   const pathname = usePathname();
   return (
-    <nav className="mb-4 flex gap-1 overflow-x-auto pb-1 sm:flex-wrap" aria-label="Secciones Finanzas">
+    <nav
+      className={`flex gap-1 overflow-x-auto pb-1 sm:flex-wrap ${className}`.trim()}
+      aria-label="Secciones Finanzas"
+    >
       {LINKS.map(({ href, label }) => {
         const active = pathname === href || (href !== '/finanzas' && pathname.startsWith(href));
         return (

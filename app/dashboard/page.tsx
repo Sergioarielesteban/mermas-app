@@ -477,11 +477,7 @@ export default function DashboardPage() {
   if (isStaffOnly) {
     return (
       <div className="space-y-3">
-        <MermasStyleHero
-          eyebrow="Mermas"
-          title="Registro operativo"
-          description="Registra merma y consulta solo la operativa del día."
-        />
+        <MermasStyleHero slim compactTitle eyebrow="Mermas" title="Registro operativo" />
         <MermasRegistrationForm />
         <section className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-zinc-200">
           <h2 className="text-sm font-extrabold uppercase tracking-wide text-zinc-700">Mermas del día</h2>
@@ -545,11 +541,7 @@ export default function DashboardPage() {
         </div>
       ) : null}
 
-      <MermasStyleHero
-        eyebrow="Mermas"
-        title="Seguimiento en tiempo real"
-        description="Registra mermas y consulta costes, alertas y tendencias en la misma pantalla."
-      />
+      <MermasStyleHero slim compactTitle eyebrow="Mermas" title="Seguimiento en tiempo real" />
 
       <MermasRegistrationForm />
 
