@@ -2736,7 +2736,7 @@ export default function PedidosPage() {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-2 sm:space-y-3">
       {showDeletedBanner ? (
         <div className="pointer-events-none fixed inset-0 z-[90] grid place-items-center bg-black/25 px-6">
           <div className="rounded-2xl bg-[#D32F2F] px-7 py-5 text-center shadow-2xl ring-2 ring-white/75">
@@ -2745,12 +2745,7 @@ export default function PedidosPage() {
         </div>
       ) : null}
 
-      <MermasStyleHero
-        slim
-        eyebrow="Pedidos"
-        title="Proveedores y recepción"
-        description="Crea pedidos, envía por WhatsApp y controla envíos y recepción en el local."
-      />
+      <MermasStyleHero micro title="Pedidos y recepción" />
 
       {avisoPedido === 'enviado' ? (
         <div

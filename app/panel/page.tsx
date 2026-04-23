@@ -37,7 +37,7 @@ import { canAccessPedidos } from '@/lib/pedidos-access';
 import { getModuleAccess } from '@/lib/canAccessModule';
 import type { PlanModule } from '@/lib/planPermissions';
 
-const LINE = `mx-auto mt-4 w-24 ${CHEF_ONE_TAPER_LINE_CLASS}`;
+const LINE = `mx-auto mt-2 w-16 ${CHEF_ONE_TAPER_LINE_CLASS}`;
 
 type TileProps = {
   href?: string;
@@ -54,13 +54,13 @@ function HubTile({ href, onClick, label, sub, Icon, tone = 'zinc', blocked = fal
     <>
       <div
         className={[
-          'mb-4 grid h-14 w-14 place-items-center rounded-2xl shadow-inner md:h-16 md:w-16',
+          'mb-2 grid h-9 w-9 place-items-center rounded-xl shadow-inner sm:h-10 sm:w-10',
           tone === 'red' ? 'bg-[#D32F2F]/15 text-[#D32F2F]' : 'bg-zinc-200/80 text-zinc-700',
         ].join(' ')}
       >
-        <Icon className="h-7 w-7 md:h-8 md:w-8" strokeWidth={2.1} />
+        <Icon className="h-4 w-4 sm:h-[1.125rem] sm:w-[1.125rem]" strokeWidth={2.1} />
       </div>
-      <span className="text-center text-xl font-semibold leading-tight tracking-tight text-zinc-900 sm:text-[1.35rem]">
+      <span className="text-center text-sm font-semibold leading-tight tracking-tight text-zinc-900 sm:text-[0.9375rem]">
         {label}
       </span>
       {blocked ? (
@@ -70,7 +70,7 @@ function HubTile({ href, onClick, label, sub, Icon, tone = 'zinc', blocked = fal
         </span>
       ) : null}
       {sub ? (
-        <span className="mt-2 block max-w-[16.5rem] px-1 text-center text-xs font-medium leading-snug text-zinc-500 sm:max-w-none">
+        <span className="mt-1 block max-w-[16.5rem] px-0.5 text-center text-[10px] font-medium leading-snug text-zinc-500 sm:max-w-none sm:text-[11px]">
           {sub}
         </span>
       ) : null}
@@ -79,12 +79,12 @@ function HubTile({ href, onClick, label, sub, Icon, tone = 'zinc', blocked = fal
           Disponible en plan superior
         </span>
       ) : null}
-      <span className={`mt-4 ${LINE}`} aria-hidden />
+      <span className={`mt-2 ${LINE}`} aria-hidden />
     </>
   );
 
   const className = [
-    'flex w-full flex-col items-center rounded-3xl px-6 py-8 text-center outline-none transition-all duration-300 ease-out md:px-5 md:py-7',
+    'flex w-full flex-col items-center rounded-2xl px-3 py-4 text-center outline-none transition-all duration-300 ease-out sm:px-4 sm:py-5',
     'bg-zinc-50/80 ring-1 ring-zinc-200/90 hover:bg-white hover:ring-zinc-300',
     blocked ? 'opacity-55' : '',
     'focus-visible:ring-2 focus-visible:ring-[#D32F2F]/40 focus-visible:ring-offset-2',
@@ -126,17 +126,12 @@ export default function PanelControlPage() {
   const showChat = canAccessChat(role);
 
   return (
-    <div className="space-y-6">
-      <MermasStyleHero
-        brandLogo
-        title="Panel de control"
-        tagline="Toda tu cocina en la palma de tu mano."
-        compact
-      />
+    <div className="space-y-3 sm:space-y-4">
+      <MermasStyleHero title="Panel de control" slim compactTitle />
 
       <ProductoGuiadoChecklist />
 
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:gap-5 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-2.5">
         <HubTile href="/dashboard" label="Mermas" sub="Registro y seguimiento" Icon={BookOpen} tone="red" />
         {showPedidos ? (
           <HubTile

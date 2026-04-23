@@ -16,6 +16,10 @@ type Props = {
   compact?: boolean;
   /** ~Mitad de altura que el banner estándar (hub pedidos). */
   slim?: boolean;
+  /** Título principal más bajo (~mitad del tamaño habitual), p. ej. panel de control. */
+  compactTitle?: boolean;
+  /** Banner mínimo: menos padding que `slim`, título pequeño (p. ej. cabecera Pedidos). */
+  micro?: boolean;
   className?: string;
 };
 
@@ -30,31 +34,56 @@ export default function MermasStyleHero({
   description,
   compact = false,
   slim = false,
+  compactTitle = false,
+  micro = false,
   className = '',
 }: Props) {
-  const pad = slim
-    ? 'px-3 py-2 sm:px-4 sm:py-2.5'
-    : compact
-      ? 'px-4 py-2 sm:px-5 sm:py-2.5'
-      : 'px-4 py-3.5 sm:px-5 sm:py-4';
+  const pad = micro
+    ? 'px-3 py-1.5 sm:px-4 sm:py-2'
+    : slim
+      ? 'px-3 py-2 sm:px-4 sm:py-2.5'
+      : compact
+        ? 'px-4 py-2 sm:px-5 sm:py-2.5'
+        : 'px-4 py-3.5 sm:px-5 sm:py-4';
   const titleMt =
-    eyebrow || brandLogo ? (slim ? 'mt-0.5' : compact ? 'mt-0.5' : 'mt-1 sm:mt-1.5') : '';
-  const lineMt = slim ? 'mt-1' : compact ? 'mt-1 sm:mt-1.5' : 'mt-2 sm:mt-2.5';
-  const taglineMt = slim ? 'mt-1.5 sm:mt-2' : compact ? 'mt-2 sm:mt-2.5' : 'mt-3 sm:mt-3.5';
-  const descMt = tagline
-    ? slim
+    eyebrow || brandLogo ? (micro ? 'mt-0.5' : slim ? 'mt-0.5' : compact ? 'mt-0.5' : 'mt-1 sm:mt-1.5') : '';
+  const lineMt = micro ? 'mt-0.5' : slim ? 'mt-1' : compact ? 'mt-1 sm:mt-1.5' : 'mt-2 sm:mt-2.5';
+  const lineW = micro ? 'w-16' : slim ? 'w-20' : compactTitle ? 'w-20' : 'w-28';
+  const taglineMt = micro
+    ? 'mt-1'
+    : slim
       ? 'mt-1.5 sm:mt-2'
       : compact
         ? 'mt-2 sm:mt-2.5'
-        : 'mt-3 sm:mt-3.5'
-    : slim
+        : 'mt-3 sm:mt-3.5';
+  const descMt = tagline
+    ? micro
       ? 'mt-1'
-      : compact
-        ? 'mt-1 sm:mt-1.5'
-        : 'mt-2 sm:mt-2.5';
+      : slim
+        ? 'mt-1.5 sm:mt-2'
+        : compact
+          ? 'mt-2 sm:mt-2.5'
+          : 'mt-3 sm:mt-3.5'
+    : micro
+      ? 'mt-0.5'
+      : slim
+        ? 'mt-1'
+        : compact
+          ? 'mt-1 sm:mt-1.5'
+          : 'mt-2 sm:mt-2.5';
+
+  const titleClass = micro
+    ? 'text-[10px] sm:text-[11px] font-extrabold uppercase tracking-[0.16em]'
+    : compactTitle
+      ? 'text-xs sm:text-sm font-bold uppercase tracking-[0.14em]'
+      : slim
+        ? 'text-sm sm:text-base font-semibold uppercase tracking-[0.14em]'
+        : 'text-base sm:text-lg font-semibold uppercase tracking-[0.14em]';
 
   return (
-    <section className={`rounded-3xl bg-zinc-950 text-white shadow-xl shadow-zinc-900/20 ${pad} ${className}`}>
+    <section
+      className={`${micro ? 'rounded-2xl' : 'rounded-3xl'} bg-zinc-950 text-white shadow-xl shadow-zinc-900/20 ${pad} ${className}`}
+    >
       {brandLogo ? (
         <div className="flex justify-center">
           <Logo
@@ -77,15 +106,9 @@ export default function MermasStyleHero({
           {eyebrow}
         </h1>
       ) : null}
-      <p
-        className={`text-center font-semibold uppercase tracking-[0.14em] text-white ${titleMt} ${
-          slim ? 'text-sm sm:text-base' : 'text-base sm:text-lg'
-        }`}
-      >
-        {title}
-      </p>
+      <p className={`text-center text-white ${titleClass} ${titleMt}`}>{title}</p>
       {brandLogo ? null : (
-        <ChefOneGlowLine className={`mx-auto ${slim ? 'w-20' : 'w-28'} ${lineMt}`} />
+        <ChefOneGlowLine className={`mx-auto ${lineW} ${lineMt}`} />
       )}
       {tagline ? (
         <p

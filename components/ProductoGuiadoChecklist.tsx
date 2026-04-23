@@ -46,7 +46,7 @@ export default function ProductoGuiadoChecklist() {
 
   return (
     <section
-      className="rounded-2xl border border-sky-200/90 bg-sky-50/90 p-4 shadow-sm ring-1 ring-sky-100"
+      className="rounded-2xl border border-sky-200/90 bg-sky-50/90 p-3 shadow-sm ring-1 ring-sky-100"
       aria-label="Guía primer uso"
     >
       <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
@@ -69,12 +69,12 @@ export default function ProductoGuiadoChecklist() {
           Cerrar guía
         </button>
       </div>
-      <ol className="mt-4 space-y-3">
+      <ol className="mt-2 space-y-2">
         {STEPS.map((s) => (
           <li key={s.id}>
             <Link
               href={s.href}
-              className="flex gap-3 rounded-xl border border-sky-100 bg-white/90 p-3 ring-1 ring-sky-100/80 transition hover:bg-white"
+              className="flex gap-2 rounded-xl border border-sky-100 bg-white/90 p-2.5 ring-1 ring-sky-100/80 transition hover:bg-white"
             >
               <span className="grid h-10 w-10 shrink-0 place-items-center text-sky-600" aria-hidden>
                 <ListChecks className="h-6 w-6" strokeWidth={2} />
