@@ -308,7 +308,7 @@ export default function MermasRegistrationForm() {
                   <Zap className="h-3.5 w-3.5 shrink-0 text-amber-500" aria-hidden />
                   Productos rápidos
                 </p>
-                <div className="grid grid-cols-4 gap-1.5">
+                <div className="grid grid-cols-3 gap-2">
                   {quickProductIds.map((id) => {
                     const p = products.find((x) => x.id === id);
                     if (!p) return null;
@@ -319,13 +319,13 @@ export default function MermasRegistrationForm() {
                         type="button"
                         onClick={() => setProductId(id)}
                         className={[
-                          'flex min-h-[2rem] w-full items-center justify-center rounded-xl border px-1 py-1.5 text-center text-[10px] font-semibold leading-none shadow-sm transition active:scale-[0.98]',
+                          'flex min-h-[3.25rem] w-full items-center justify-center rounded-xl border px-1.5 py-2 text-center text-xs font-semibold leading-snug shadow-sm transition active:scale-[0.98]',
                           active
                             ? 'border-[#D32F2F] bg-[#D32F2F]/12 text-zinc-900 ring-1 ring-[#D32F2F]/20'
                             : 'border-zinc-200/90 bg-white text-zinc-800 hover:border-zinc-300 hover:bg-zinc-50',
                         ].join(' ')}
                       >
-                        <span className="block max-w-full truncate">{p.name}</span>
+                        <span className="line-clamp-2 max-w-full break-words text-center">{p.name}</span>
                       </button>
                     );
                   })}
