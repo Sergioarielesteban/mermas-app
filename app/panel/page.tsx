@@ -37,54 +37,48 @@ import { canAccessPedidos } from '@/lib/pedidos-access';
 import { getModuleAccess } from '@/lib/canAccessModule';
 import type { PlanModule } from '@/lib/planPermissions';
 
-const LINE = `mx-auto mt-2 w-16 ${CHEF_ONE_TAPER_LINE_CLASS}`;
+const LINE = `mx-auto mt-1.5 w-16 ${CHEF_ONE_TAPER_LINE_CLASS}`;
 
 type TileProps = {
   href?: string;
   onClick?: () => void;
   label: string;
-  sub?: string;
   Icon: LucideIcon;
   tone?: 'red' | 'zinc';
   blocked?: boolean;
 };
 
-function HubTile({ href, onClick, label, sub, Icon, tone = 'zinc', blocked = false }: TileProps) {
+function HubTile({ href, onClick, label, Icon, tone = 'zinc', blocked = false }: TileProps) {
   const inner = (
     <>
       <div
         className={[
-          'mb-2 grid h-9 w-9 place-items-center rounded-xl shadow-inner sm:h-10 sm:w-10',
+          'mb-1 grid h-8 w-8 place-items-center rounded-xl shadow-inner sm:h-9 sm:w-9',
           tone === 'red' ? 'bg-[#D32F2F]/15 text-[#D32F2F]' : 'bg-zinc-200/80 text-zinc-700',
         ].join(' ')}
       >
-        <Icon className="h-4 w-4 sm:h-[1.125rem] sm:w-[1.125rem]" strokeWidth={2.1} />
+        <Icon className="h-[0.95rem] w-[0.95rem] sm:h-4 sm:w-4" strokeWidth={2.1} />
       </div>
-      <span className="text-center text-sm font-semibold leading-tight tracking-tight text-zinc-900 sm:text-[0.9375rem]">
+      <span className="block max-w-full truncate whitespace-nowrap px-0.5 text-center text-sm font-semibold leading-none tracking-tight text-zinc-900 sm:text-[0.9375rem]">
         {label}
       </span>
       {blocked ? (
-        <span className="mt-1 inline-flex items-center gap-1 rounded-full bg-zinc-100 px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wide text-zinc-600">
+        <span className="mt-0.5 inline-flex items-center gap-1 rounded-full bg-zinc-100 px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wide text-zinc-600">
           <Lock className="h-3 w-3" />
           Bloqueado
         </span>
       ) : null}
-      {sub ? (
-        <span className="mt-1 block max-w-[16.5rem] px-0.5 text-center text-[10px] font-medium leading-snug text-zinc-500 sm:max-w-none sm:text-[11px]">
-          {sub}
-        </span>
-      ) : null}
       {blocked ? (
-        <span className="mt-1 block max-w-[16.5rem] px-1 text-center text-[11px] font-semibold leading-snug text-zinc-500 sm:max-w-none">
+        <span className="mt-0.5 block max-w-[16.5rem] truncate px-1 text-center text-[10px] font-semibold leading-snug text-zinc-500 sm:max-w-none sm:text-[11px]">
           Disponible en plan superior
         </span>
       ) : null}
-      <span className={`mt-2 ${LINE}`} aria-hidden />
+      <span className={LINE} aria-hidden />
     </>
   );
 
   const className = [
-    'flex w-full flex-col items-center rounded-2xl px-3 py-4 text-center outline-none transition-all duration-300 ease-out sm:px-4 sm:py-5',
+    'flex w-full flex-col items-center rounded-2xl px-2.5 py-3 text-center outline-none transition-all duration-300 ease-out sm:px-3 sm:py-3.5',
     'bg-zinc-50/80 ring-1 ring-zinc-200/90 hover:bg-white hover:ring-zinc-300',
     blocked ? 'opacity-55' : '',
     'focus-visible:ring-2 focus-visible:ring-[#D32F2F]/40 focus-visible:ring-offset-2',
@@ -126,18 +120,17 @@ export default function PanelControlPage() {
   const showChat = canAccessChat(role);
 
   return (
-    <div className="space-y-3 sm:space-y-4">
+    <div className="space-y-2.5 sm:space-y-3">
       <MermasStyleHero title="Panel de control" slim compactTitle />
 
       <ProductoGuiadoChecklist />
 
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-2.5">
-        <HubTile href="/dashboard" label="Mermas" sub="Registro y seguimiento" Icon={BookOpen} tone="red" />
+      <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4 sm:gap-2">
+        <HubTile href="/dashboard" label="Mermas" Icon={BookOpen} tone="red" />
         {showPedidos ? (
           <HubTile
             href="/pedidos"
             label="Pedidos"
-            sub="Proveedores y recepción"
             Icon={ShoppingCart}
             tone="red"
             blocked={isBlockedByPlan('pedidos')}
@@ -147,7 +140,6 @@ export default function PanelControlPage() {
           <HubTile
             href="/pedidos-cocina"
             label="Pedir a central"
-            sub="Catálogo con precios y fecha de entrega"
             Icon={Package}
             tone="red"
           />
@@ -155,7 +147,6 @@ export default function PanelControlPage() {
         <HubTile
           href="/appcc"
           label="APPCC"
-          sub="Limpieza, temperaturas, aceite y trazabilidad"
           Icon={ShieldCheck}
           tone="red"
           blocked={isBlockedByPlan('appcc')}
@@ -163,7 +154,6 @@ export default function PanelControlPage() {
         <HubTile
           href="/checklist"
           label="Check list"
-          sub="Apertura, turno, cierre e higiene con tus ítems"
           Icon={ListChecks}
           tone="red"
           blocked={isBlockedByPlan('checklist')}
@@ -171,7 +161,6 @@ export default function PanelControlPage() {
         <HubTile
           href="/produccion"
           label="Producción"
-          sub="Planes diarios o semanales por zonas y tareas"
           Icon={Factory}
           tone="red"
           blocked={isBlockedByPlan('produccion')}
@@ -179,7 +168,6 @@ export default function PanelControlPage() {
         <HubTile
           href="/servicio"
           label="Servicio"
-          sub="Platos del día, pasos y mise en place"
           Icon={Soup}
           tone="red"
           blocked={isBlockedByPlan('servicio')}
@@ -188,7 +176,6 @@ export default function PanelControlPage() {
           <HubTile
             href="/comida-personal"
             label="Consumo interno"
-            sub="Registro rápido y coste interno"
             Icon={UtensilsCrossed}
             tone="red"
             blocked={isBlockedByPlan('comida_personal')}
@@ -197,7 +184,6 @@ export default function PanelControlPage() {
         <HubTile
           href="/personal"
           label="Horarios"
-          sub="Horarios, cuadrante y fichajes"
           Icon={CalendarDays}
           tone="red"
           blocked={isBlockedByPlan('personal')}
@@ -206,7 +192,6 @@ export default function PanelControlPage() {
           <HubTile
             href="/inventario"
             label="Inventario"
-            sub="Stock y valor por local"
             Icon={ClipboardList}
             tone="red"
             blocked={isBlockedByPlan('inventario')}
@@ -216,7 +201,6 @@ export default function PanelControlPage() {
           <HubTile
             href="/chat"
             label="Chat"
-            sub="Habla con tu equipo del mismo local"
             Icon={MessageCircle}
             tone="red"
             blocked={isBlockedByPlan('chat')}
@@ -226,7 +210,6 @@ export default function PanelControlPage() {
           <HubTile
             href="/escandallos"
             label="Escandallos"
-            sub="Recetas, food cost y centro de mando con gráficas"
             Icon={Calculator}
             tone="red"
             blocked={isBlockedByPlan('escandallos')}
@@ -236,7 +219,6 @@ export default function PanelControlPage() {
           <HubTile
             href="/cocina-central"
             label="Cocina central"
-            sub="Producción, lotes, entregas y QR"
             Icon={ChefHat}
             tone="red"
             blocked={isBlockedByPlan('cocina_central')}
@@ -246,7 +228,6 @@ export default function PanelControlPage() {
           <HubTile
             href="/finanzas"
             label="Finanzas"
-            sub="Gasto, salud del negocio y compras vs albaranes"
             Icon={BarChart3}
             tone="red"
             blocked={isBlockedByPlan('finanzas')}
