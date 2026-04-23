@@ -175,7 +175,7 @@ export default function EscandalloNewRecipeWizard() {
   }
 
   return (
-    <div className="space-y-5 pb-10">
+    <div className="space-y-5 pb-28 max-sm:pb-[calc(7rem+env(safe-area-inset-bottom,0px))]">
       <MermasStyleHero eyebrow="Escandallos" title="Nueva receta" description="Cuatro pasos. Sin mezclar con el dashboard." compact />
 
       <Link
@@ -263,7 +263,9 @@ export default function EscandalloNewRecipeWizard() {
 
           {step === 1 ? (
             <div>
-              <p className="text-sm text-zinc-600">Busca crudos, elaborados o bases. Puedes dejar filas vacías.</p>
+              <p className="text-base leading-snug text-zinc-700 sm:text-sm">
+                Busca crudos, elaborados o bases. Puedes dejar filas vacías.
+              </p>
               <div className="mt-4">
                 <EscandalloIngredientDraftEditor
                   drafts={ingredientDrafts}

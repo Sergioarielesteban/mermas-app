@@ -75,6 +75,7 @@ export default function EscandalloRecipeEditorClient({ recipeId }: { recipeId: s
   const [processedProducts, setProcessedProducts] = useState<EscandalloProcessedProduct[]>([]);
   const [loading, setLoading] = useState(true);
   const [banner, setBanner] = useState<string | null>(null);
+  const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
 
   const [draftRecipeName, setDraftRecipeName] = useState('');
@@ -263,13 +264,29 @@ export default function EscandalloRecipeEditorClient({ recipeId }: { recipeId: s
   }, [recipe, lines.length, grossLive, fcPct]);
 
   const handleSaveRecipeMeta = async () => {
-    if (!localId || !recipe || demoReadonly) return;
-    const supabase = getSupabaseClient()!;
+    if (!recipe) {
+      setBanner('La receta no está cargada. Espera un momento o vuelve al libro.');
+      return;
+    }
+    if (!localId) {
+      setBanner('No hay local en sesión. Cierra sesión y entra de nuevo.');
+      return;
+    }
+    if (demoReadonly) {
+      setBanner('Modo demo: la cabecera no se puede guardar.');
+      return;
+    }
+    const supabase = getSupabaseClient();
+    if (!supabase) {
+      setBanner('Conexión a datos no disponible en este dispositivo.');
+      return;
+    }
     const y = parseDecimal(draftYieldQty);
     const gross = parseDecimal(draftSaleGross);
     const vat = parseDecimal(draftSaleVat);
     setBusyId(recipe.id);
     setBanner(null);
+    setSuccessMsg(null);
     try {
       const patch: Parameters<typeof updateEscandalloRecipe>[3] = {
         name: draftRecipeName,
@@ -288,6 +305,8 @@ export default function EscandalloRecipeEditorClient({ recipeId }: { recipeId: s
         }
       }
       await updateEscandalloRecipe(supabase, localId, recipe.id, patch);
+      setSuccessMsg('Cabecera guardada.');
+      window.setTimeout(() => setSuccessMsg(null), 3200);
       setRecipes((prev) =>
         prev
           .map((r) =>
@@ -486,7 +505,7 @@ export default function EscandalloRecipeEditorClient({ recipeId }: { recipeId: s
   }
 
   return (
-    <div className="space-y-5 pb-24 lg:pb-8">
+    <div className="space-y-5 pb-32 max-lg:pb-[calc(9rem+env(safe-area-inset-bottom,0px))] lg:pb-8">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <Link
           href={recipe ? backHref : '/escandallos/recetas'}
@@ -502,6 +521,11 @@ export default function EscandalloRecipeEditorClient({ recipeId }: { recipeId: s
 
       {banner ? (
         <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950">{banner}</div>
+      ) : null}
+      {successMsg ? (
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-950">
+          {successMsg}
+        </div>
       ) : null}
 
       {loading || !recipe ? (
@@ -610,14 +634,22 @@ export default function EscandalloRecipeEditorClient({ recipeId }: { recipeId: s
               </div>
             ) : null}
 
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
               <button
                 type="button"
                 disabled={busyId === recipe.id || demoReadonly}
                 onClick={() => void handleSaveRecipeMeta()}
-                className="rounded-xl bg-zinc-900 px-4 py-2 text-sm font-bold text-white shadow-sm disabled:opacity-50"
+                className="min-h-[48px] w-full rounded-xl bg-zinc-900 px-4 py-3 text-sm font-bold text-white shadow-sm disabled:opacity-50 sm:w-auto sm:py-2"
               >
-                Guardar cabecera
+                {busyId === recipe.id ? 'Guardando…' : 'Guardar cabecera'}
+              </button>
+              <button
+                type="button"
+                disabled={busyId === recipe.id || demoReadonly}
+                onClick={() => void handleDeleteRecipe()}
+                className="min-h-[44px] w-full rounded-xl border border-red-200 bg-red-50 py-2.5 text-sm font-semibold text-red-800 disabled:opacity-50 sm:w-auto"
+              >
+                Eliminar receta
               </button>
             </div>
           </header>
@@ -785,8 +817,8 @@ export default function EscandalloRecipeEditorClient({ recipeId }: { recipeId: s
           ) : null}
 
           {/* Bloque D — resumen fijo móvil */}
-          <div className="fixed inset-x-0 bottom-0 z-30 border-t border-zinc-200 bg-white/95 px-4 py-3 shadow-[0_-8px_30px_rgba(0,0,0,0.08)] backdrop-blur-md lg:static lg:z-0 lg:rounded-2xl lg:border lg:shadow-sm">
-            <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-3 text-xs sm:text-sm">
+          <div className="fixed inset-x-0 bottom-0 z-30 border-t border-zinc-200 bg-white/95 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 shadow-[0_-8px_30px_rgba(0,0,0,0.08)] backdrop-blur-md lg:static lg:z-0 lg:rounded-2xl lg:border lg:pb-3 lg:shadow-sm">
+            <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-3 text-sm text-zinc-800 sm:text-sm">
               <div className="flex flex-wrap gap-x-4 gap-y-1 tabular-nums text-zinc-700">
                 <span>
                   <span className="text-zinc-500">Coste total</span>{' '}
@@ -818,14 +850,6 @@ export default function EscandalloRecipeEditorClient({ recipeId }: { recipeId: s
             </div>
           </div>
 
-          <button
-            type="button"
-            disabled={busyId === recipe.id || demoReadonly}
-            onClick={() => void handleDeleteRecipe()}
-            className="w-full rounded-xl border border-red-200 bg-red-50 py-2.5 text-sm font-semibold text-red-800 disabled:opacity-50"
-          >
-            Eliminar receta
-          </button>
         </>
       )}
     </div>
