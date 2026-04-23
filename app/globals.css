@@ -75,45 +75,40 @@ textarea::placeholder {
   animation: saved-banner-pop 220ms ease-out;
 }
 
-/* Panel de control (referencia visual): tarjetas blancas y destacada oscura */
-.panel-ref-card-white {
-  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.08);
+@keyframes panel-hub-tile-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.panel-hub-tile--enter {
+  animation: panel-hub-tile-in 200ms ease-out both;
+}
+
+/* Panel de control: tarjetas elevadas (sombra + relieve suave) */
+.panel-hub-tile {
+  box-shadow:
+    0 8px 20px rgba(0, 0, 0, 0.08),
+    inset 0 -2px 6px rgba(255, 255, 255, 0.6);
   transition:
     transform 120ms ease-out,
     box-shadow 120ms ease-out;
 }
 
-.panel-ref-card-white:not(.panel-ref-card--blocked):hover {
-  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.1);
+.panel-hub-tile:not(.panel-hub-tile--blocked):hover {
+  box-shadow:
+    0 10px 24px rgba(0, 0, 0, 0.1),
+    inset 0 -2px 6px rgba(255, 255, 255, 0.6);
 }
 
-.panel-ref-card-white:active {
+.panel-hub-tile:active {
   transform: scale(0.96);
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.06);
-}
-
-.panel-ref-card-white.panel-ref-card--blocked:hover {
-  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.08);
-}
-
-.panel-ref-card-dark {
-  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.25);
-  transition:
-    transform 120ms ease-out,
-    box-shadow 120ms ease-out;
-}
-
-.panel-ref-card-dark:hover {
-  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.3);
-}
-
-.panel-ref-card-dark:active {
-  transform: scale(0.96);
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.18);
-}
-
-.panel-ref-card-dark.panel-ref-card--blocked:hover {
-  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.25);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.06);
 }
 
 /* Cuadrante (vista operativa): resalte de celdas durante HTML5 DnD sin setState en toda la tabla */
