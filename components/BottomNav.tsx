@@ -49,10 +49,10 @@ export default function BottomNav() {
 
   return (
     <nav
-      className="fixed inset-x-0 bottom-0 z-[70] border-t border-zinc-200/80 bg-white/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-md print:hidden"
+      className="fixed inset-x-0 bottom-0 z-[70] border-t border-zinc-200/80 bg-white/95 pb-[max(0.5rem,env(safe-area-inset-bottom,0px))] backdrop-blur-md print:hidden"
       aria-label={showOidoChef ? 'Oído Chef: ir a Pedidos y activar el micrófono' : 'Volver al panel de control'}
     >
-      <div className="mx-auto flex h-16 w-full max-w-full items-center justify-center px-4 sm:max-w-2xl md:max-w-4xl lg:max-w-5xl">
+      <div className="mx-auto flex min-h-16 w-full max-w-full items-center justify-center px-4 py-2 sm:max-w-2xl md:max-w-4xl lg:max-w-5xl">
         <button
           type="button"
           onClick={showOidoChef ? goOidoChef : goToControlPanel}

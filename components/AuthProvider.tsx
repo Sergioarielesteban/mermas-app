@@ -131,6 +131,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [superadminViewingLocalId, setSuperadminViewingLocalId] = useState<string | null>(null);
   const [profileReady, setProfileReady] = useState(false);
 
+  const profileReadyRef = React.useRef(false);
+  const userIdRef = React.useRef<string | null>(null);
+  React.useEffect(() => {
+    profileReadyRef.current = profileReady;
+    userIdRef.current = userId;
+  }, [profileReady, userId]);
+
   const clearProfile = React.useCallback(() => {
     setLocalId(null);
     setLocalCode(null);
@@ -298,7 +305,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  const loadProfileForUser = React.useCallback(async (uid: string | undefined) => {
+  const loadProfileForUser = React.useCallback(async (uid: string | undefined, opts?: { soft?: boolean }) => {
     if (!uid) {
       setUserId(null);
       clearProfile();
@@ -310,6 +317,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!supabase || !isSupabaseEnabled()) {
       clearProfile();
       setProfileReady(true);
+      return;
+    }
+    if (opts?.soft) {
       return;
     }
     setProfileReady(false);
@@ -591,7 +601,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setEmail(sessionEmail);
       persistEmail(sessionEmail);
       if (session?.user?.id) {
-        void loadProfileForUser(session.user.id);
+        const sameUser =
+          profileReadyRef.current &&
+          userIdRef.current != null &&
+          session.user.id === userIdRef.current;
+        void loadProfileForUser(session.user.id, { soft: sameUser });
         return;
       }
       setUserId(null);

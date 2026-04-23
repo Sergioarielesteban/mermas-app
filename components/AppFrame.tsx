@@ -137,7 +137,7 @@ export default function AppFrame({ children }: { children: React.ReactNode }) {
 
   return (
     <>
-      <div className="flex min-h-0 flex-1 flex-col overflow-hidden pb-[calc(4.5rem+env(safe-area-inset-bottom))]">
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden pb-[calc(4.5rem+max(0.5rem,env(safe-area-inset-bottom,0px)))]">
         <AppShell>{children}</AppShell>
       </div>
       <BottomNav />
