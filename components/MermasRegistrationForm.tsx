@@ -3,12 +3,11 @@
 import React, { useMemo, useState } from 'react';
 import Image from 'next/image';
 import { Camera, Check, ChevronDown, Search, Upload, X, Zap } from 'lucide-react';
-import { CHEF_ONE_TAPER_LINE_CLASS } from '@/components/ChefOneGlowLine';
 import { useMermasStore } from '@/components/MermasStoreProvider';
 import type { MermaMotiveKey, MermaShift, Product } from '@/lib/types';
 
-/** Fila 1 de productos rápidos (orden fijo; se resuelve por nombre exacto normalizado). */
-const QUICK_ROW1_PINNED_NAMES = ['PAN RUSTICO', 'PAN BRIOCHE', 'HUEVOS', 'MORROS'] as const;
+/** Fila 1 de productos rápidos (3 ítems; orden fijo por nombre normalizado). */
+const QUICK_ROW1_PINNED_NAMES = ['PAN RUSTICO', 'PAN BRIOCHE', 'HUEVOS'] as const;
 
 function normalizeProductLabel(s: string) {
   return s
@@ -42,24 +41,31 @@ function buildQuickProductIds(products: Product[], mermas: { productId: string }
     .sort((a, b) => b.c - a.c || a.id.localeCompare(b.id));
 
   const row2: string[] = [];
+  const morros = byNorm.get(normalizeProductLabel('MORROS'));
+  if (morros && !used.has(morros.id)) {
+    row2.push(morros.id);
+    used.add(morros.id);
+  }
+
   for (const { id } of scored) {
     if (used.has(id)) continue;
     row2.push(id);
-    if (row2.length === 4) break;
+    used.add(id);
+    if (row2.length >= 3) break;
   }
 
-  if (row2.length < 4) {
+  if (row2.length < 3) {
     const rest = [...products]
       .filter((p) => !used.has(p.id))
       .sort((a, b) => a.name.localeCompare(b.name, 'es'));
     for (const p of rest) {
       row2.push(p.id);
       used.add(p.id);
-      if (row2.length === 4) break;
+      if (row2.length >= 3) break;
     }
   }
 
-  return [...row1, ...row2].slice(0, 8);
+  return [...row1, ...row2].slice(0, 6);
 }
 
 type Motive = { key: MermaMotiveKey; emoji: string; label: string };
@@ -278,7 +284,7 @@ export default function MermasRegistrationForm() {
       <form
         id="merma-register-form"
         onSubmit={handleSave}
-        className="pb-[calc(7rem+env(safe-area-inset-bottom))]"
+        className="pb-[calc(5.25rem+env(safe-area-inset-bottom))]"
       >
         <div className="space-y-2.5">
           <div className="rounded-2xl bg-white p-3 shadow-sm ring-1 ring-zinc-200">
@@ -567,8 +573,6 @@ export default function MermasRegistrationForm() {
             </div>
           </div>
         </div>
-
-        <span className={`mx-auto mt-2 mb-0 block w-24 ${CHEF_ONE_TAPER_LINE_CLASS}`} aria-hidden />
       </form>
 
       <div className="pointer-events-none fixed inset-x-0 bottom-[calc(4.5rem+env(safe-area-inset-bottom))] z-[75] flex justify-center px-3 pt-2">

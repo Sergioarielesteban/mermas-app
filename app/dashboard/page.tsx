@@ -17,7 +17,6 @@ import {
   YAxis,
 } from 'recharts';
 import MermasRegistrationForm from '@/components/MermasRegistrationForm';
-import MermasStyleHero from '@/components/MermasStyleHero';
 import { useAuth } from '@/components/AuthProvider';
 import { useMermasStore } from '@/components/MermasStoreProvider';
 import { canAccessMermasExecutiveAnalytics } from '@/lib/app-role-permissions';
@@ -477,7 +476,6 @@ export default function DashboardPage() {
   if (isStaffOnly) {
     return (
       <div className="space-y-3">
-        <MermasStyleHero slim compactTitle eyebrow="Mermas" title="Registro operativo" />
         <MermasRegistrationForm />
         <section className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-zinc-200">
           <h2 className="text-sm font-extrabold uppercase tracking-wide text-zinc-700">Mermas del día</h2>
@@ -503,7 +501,7 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-3">
       {detailOpen ? (
         <div className="fixed inset-0 z-[95] overflow-y-auto bg-black/35 p-4" onClick={() => setDetailOpen(false)}>
           <div
@@ -540,8 +538,6 @@ export default function DashboardPage() {
           </div>
         </div>
       ) : null}
-
-      <MermasStyleHero slim compactTitle eyebrow="Mermas" title="Seguimiento en tiempo real" />
 
       <MermasRegistrationForm />
 
