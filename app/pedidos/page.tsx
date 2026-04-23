@@ -300,6 +300,8 @@ export default function PedidosPage() {
   const [expandedSentId, setExpandedSentId] = React.useState<string | null>(null);
   const [ocrOrder, setOcrOrder] = React.useState<PedidoOrder | null>(null);
   const [expandedHistoricoId, setExpandedHistoricoId] = React.useState<string | null>(null);
+  /** Plegado por mes (YYYY-MM) en histórico recibidos; sin entrada = mes actual según índice. */
+  const [historicoMonthOpen, setHistoricoMonthOpen] = React.useState<Record<string, boolean>>({});
   const [pendientesEntregaAccordionOpen, setPendientesEntregaAccordionOpen] = React.useState(false);
   const [historicoRecibidosAccordionOpen, setHistoricoRecibidosAccordionOpen] = React.useState(false);
   /** Feedback visual al marcar recibido (el merge con réplica ya no revierte el estado). */
@@ -951,7 +953,37 @@ export default function PedidosPage() {
       return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
     });
   }, [orders]);
-  const receivedOrders = orders.filter((row) => row.status === 'received');
+  const receivedOrders = React.useMemo(
+    () => orders.filter((row) => row.status === 'received'),
+    [orders],
+  );
+
+  /** Histórico recibidos: mes (YYYY-MM) → pedidos, orden global por recepción descendente. */
+  const historicoReceivedByMonth = React.useMemo(() => {
+    const sorted = [...receivedOrders].sort((a, b) => {
+      const at = a.receivedAt ? new Date(a.receivedAt).getTime() : new Date(a.createdAt).getTime();
+      const bt = b.receivedAt ? new Date(b.receivedAt).getTime() : new Date(b.createdAt).getTime();
+      return bt - at;
+    });
+    const byKey = new Map<string, PedidoOrder[]>();
+    for (const o of sorted) {
+      const d = o.receivedAt ? new Date(o.receivedAt) : new Date(o.createdAt);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      const list = byKey.get(key);
+      if (list) list.push(o);
+      else byKey.set(key, [o]);
+    }
+    const keys = [...byKey.keys()].sort((a, b) => b.localeCompare(a));
+    return keys.map((key) => {
+      const [y, mon] = key.split('-').map(Number);
+      const labelRaw = new Date(y, mon - 1, 1).toLocaleDateString('es-ES', {
+        month: 'long',
+        year: 'numeric',
+      });
+      const label = labelRaw.charAt(0).toUpperCase() + labelRaw.slice(1);
+      return { key, label, orders: byKey.get(key)! };
+    });
+  }, [receivedOrders]);
 
   const OIDO_CHEF_TTS_LS_KEY = 'oido-chef-tts-v1';
   const OIDO_CHEF_TTS_NATURAL_LS_KEY = 'oido-chef-tts-natural-v1';
@@ -3118,16 +3150,16 @@ export default function PedidosPage() {
         open={historicoRecibidosAccordionOpen}
         onToggle={(e) => setHistoricoRecibidosAccordionOpen(e.currentTarget.open)}
       >
-        <summary className="flex w-full cursor-pointer list-none flex-col items-center px-5 py-3 text-center outline-none transition active:bg-zinc-50/50 focus-visible:ring-2 focus-visible:ring-[#D32F2F]/40 focus-visible:ring-offset-2 sm:px-6 [&::-webkit-details-marker]:hidden">
-          <span className="text-[11px] font-semibold uppercase tracking-[0.2em] text-zinc-400">Almacén</span>
-          <span className="mt-0.5 text-center text-lg font-semibold leading-tight tracking-tight text-zinc-900 sm:text-xl sm:leading-tight">
+        <summary className="flex w-full cursor-pointer list-none flex-col items-center px-4 py-2 text-center outline-none transition active:bg-zinc-50/50 focus-visible:ring-2 focus-visible:ring-[#D32F2F]/40 focus-visible:ring-offset-2 sm:px-5 [&::-webkit-details-marker]:hidden">
+          <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-zinc-400">Almacén</span>
+          <span className="mt-0.5 text-center text-base font-semibold leading-tight tracking-tight text-zinc-900 sm:text-lg">
             Histórico recibidos
           </span>
-          <span className={`mx-auto mt-1.5 w-20 ${CHEF_ONE_TAPER_LINE_CLASS}`} aria-hidden />
-          <span className="mt-1.5 text-xl font-black tabular-nums text-zinc-900 sm:text-2xl">
+          <span className={`mx-auto mt-1 w-16 ${CHEF_ONE_TAPER_LINE_CLASS}`} aria-hidden />
+          <span className="mt-1 text-lg font-black tabular-nums text-zinc-900 sm:text-xl">
             {receivedOrders.length}
           </span>
-          <span className="mt-1.5 flex flex-wrap items-center justify-center gap-x-1.5 text-xs text-zinc-500">
+          <span className="mt-1 flex flex-wrap items-center justify-center gap-x-1.5 text-[11px] text-zinc-500">
             {receivedOrders.length === 0 ? (
               <span>Sin pedidos recibidos</span>
             ) : (
@@ -3136,294 +3168,279 @@ export default function PedidosPage() {
                   {receivedOrders.length} pedido{receivedOrders.length === 1 ? '' : 's'}
                 </span>
                 <span className="text-zinc-400">·</span>
-                <span>Verde sin incidencia · rojo con incidencia</span>
+                <span>Agrupado por mes · verde OK · rojo incidencia</span>
               </>
             )}
           </span>
-          <span className="mt-2 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider text-[#D32F2F]">
-            {historicoRecibidosAccordionOpen ? 'Ocultar pedidos' : 'Ver pedidos recibidos'}
+          <span className="mt-1.5 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-[#D32F2F]">
+            {historicoRecibidosAccordionOpen ? 'Ocultar' : 'Ver pedidos'}
             <ChevronDown
               className={[
-                'h-4 w-4 transition-transform duration-300',
+                'h-3.5 w-3.5 transition-transform duration-300',
                 historicoRecibidosAccordionOpen ? 'rotate-180' : '',
               ].join(' ')}
               aria-hidden
             />
           </span>
         </summary>
-        <div className="space-y-3 border-t border-zinc-100 bg-gradient-to-b from-zinc-50/90 to-white px-3 pb-3 pt-3 sm:px-4">
+        <div className="space-y-2 border-t border-zinc-100 bg-gradient-to-b from-zinc-50/90 to-white px-2 pb-2 pt-2 sm:px-3">
           {receivedOrders.length === 0 ? (
-            <p className="py-6 text-center text-sm text-zinc-500">No hay pedidos recibidos.</p>
+            <p className="py-4 text-center text-xs text-zinc-500">No hay pedidos recibidos.</p>
           ) : null}
-          {receivedOrders.map((order) => {
-            const needsAttention = receivedOrderHasAttention(order);
-            const incidentFooterText = historicoIncidentFooterText(order);
-            const detailOpen = expandedHistoricoId === order.id;
-            const totals = totalsWithVatForOrderListDisplay(order);
-            return (
-            <div
-              key={order.id}
-              className={[
-                'overflow-hidden rounded-3xl transition-all duration-300 ease-out',
-                needsAttention
-                  ? detailOpen
-                    ? 'bg-red-50 shadow-lg shadow-red-200/35 ring-2 ring-red-400/90'
-                    : 'bg-red-50/95 ring-2 ring-red-400/80 shadow-sm hover:bg-red-50'
-                  : detailOpen
-                    ? 'bg-emerald-50 shadow-lg shadow-emerald-200/35 ring-2 ring-emerald-600/80'
-                    : 'bg-emerald-50/95 ring-2 ring-emerald-500/75 shadow-sm hover:bg-emerald-50',
-              ].join(' ')}
+          {historicoReceivedByMonth.map(({ key: monthKey, label: monthLabel, orders: monthOrders }, monthIdx) => (
+            <details
+              key={monthKey}
+              open={historicoMonthOpen[monthKey] ?? monthIdx === 0}
+              onToggle={(e) => {
+                const el = e.currentTarget;
+                setHistoricoMonthOpen((p) => ({ ...p, [monthKey]: el.open }));
+              }}
+              className="group/month overflow-hidden rounded-xl border border-zinc-200/90 bg-white/70 ring-1 ring-zinc-100/80"
             >
-              <button
-                type="button"
-                onClick={() => setExpandedHistoricoId((prev) => (prev === order.id ? null : order.id))}
-                className={[
-                  'flex w-full flex-col items-center px-4 py-3 text-center outline-none transition focus-visible:ring-2 focus-visible:ring-[#D32F2F]/40 focus-visible:ring-offset-2',
-                  needsAttention ? 'active:bg-red-100/50' : 'active:bg-emerald-100/50',
-                ].join(' ')}
-                aria-expanded={detailOpen}
-              >
-                <span className="text-center text-xl font-semibold leading-[1.15] tracking-tight text-zinc-900 sm:text-[1.65rem] sm:leading-tight">
-                  {order.supplierName}
-                </span>
-                <span className={`mx-auto mt-3 w-24 ${CHEF_ONE_TAPER_LINE_CLASS}`} aria-hidden />
-                <p className="mt-3 text-xs text-zinc-500">
-                  Recibido{' '}
-                  <span className="font-medium text-zinc-700">
-                    {order.receivedAt ? new Date(order.receivedAt).toLocaleDateString('es-ES') : '—'}
-                  </span>
-                </p>
-                <div
-                  className={[
-                    'mx-auto mt-1.5 max-w-[16.5rem] rounded-lg bg-white/70 px-2 py-1.5 text-left ring-1',
-                    needsAttention ? 'ring-red-300/50' : 'ring-emerald-300/50',
-                  ].join(' ')}
-                  aria-label="Importes del pedido"
-                >
-                  <div className="flex items-baseline justify-between gap-2 text-[11px] leading-tight text-zinc-600">
-                    <span className="shrink-0 font-medium">
-                      Subt. <abbr title="sin IVA">s/IVA</abbr>
-                    </span>
-                    <span className="tabular-nums font-semibold text-zinc-900">{totals.base.toFixed(2)} €</span>
-                  </div>
-                  <div className="mt-0.5 flex items-baseline justify-between gap-2 text-[11px] leading-tight text-zinc-600">
-                    <span className="shrink-0 font-medium">
-                      <abbr title="Impuesto sobre el valor añadido">IVA</abbr>
-                    </span>
-                    <span className="tabular-nums font-semibold text-zinc-900">{totals.vat.toFixed(2)} €</span>
-                  </div>
-                  <div
-                    className={[
-                      'mt-1 flex items-baseline justify-between gap-2 border-t pt-1 text-xs font-bold leading-tight text-zinc-900',
-                      needsAttention ? 'border-red-200/90' : 'border-emerald-200/90',
-                    ].join(' ')}
-                  >
-                    <span className="shrink-0">
-                      Tot. <abbr title="con IVA incluido">c/IVA</abbr>
-                    </span>
-                    <span className="tabular-nums font-black text-zinc-950">{totals.total.toFixed(2)} €</span>
-                  </div>
-                </div>
-                {needsAttention ? (
-                  <span className="mt-2 rounded-full bg-white/90 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-red-800 ring-1 ring-red-200">
-                    Incidencia
-                  </span>
-                ) : null}
-                <span className="mt-4 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider text-[#D32F2F]">
-                  {detailOpen ? 'Ocultar lineas del pedido' : 'Ver lineas del pedido'}
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-2.5 py-1.5 text-left outline-none transition hover:bg-zinc-50/80 [&::-webkit-details-marker]:hidden">
+                <span className="text-xs font-bold capitalize text-zinc-900">{monthLabel}</span>
+                <span className="flex items-center gap-1.5 text-[10px] font-semibold tabular-nums text-zinc-500">
+                  {monthOrders.length}
                   <ChevronDown
-                    className={['h-4 w-4 transition-transform duration-300', detailOpen ? 'rotate-180' : ''].join(
-                      ' ',
-                    )}
+                    className="h-3.5 w-3.5 shrink-0 text-zinc-400 transition-transform group-open/month:rotate-180"
                     aria-hidden
                   />
                 </span>
-              </button>
-              <div
-                className={[
-                  'flex flex-wrap justify-center gap-2 border-t px-3 py-2',
-                  needsAttention
-                    ? 'border-red-200/80 bg-white/75'
-                    : 'border-emerald-200/80 bg-white/75',
-                ].join(' ')}
-              >
-                <button
-                  type="button"
-                  onClick={() => {
-                    void (async () => {
-                    if (!localId) return;
-                    const ok = await appConfirm(
-                      '¿Devolver este pedido a «Pendientes de entrega»? Volverá a la bandeja de revisión de precios (las líneas no se borran).',
-                    );
-                    if (!ok) return;
-                    const supabase = getSupabaseClient();
-                    if (!supabase) return;
-                    void reopenReceivedOrderToSent(supabase, localId, order.id)
-                      .then(() => {
-                        clearPendingReceivedOrder(order.id);
-                        setMessage('Pedido devuelto a enviados.');
-                        dispatchPedidosDataChanged();
-                      })
-                      .catch((err: Error) => setMessage(err.message));
-                    })();
-                  }}
-                  className="rounded-lg border border-amber-600/70 bg-amber-50 px-2 py-1.5 text-center text-xs font-semibold text-amber-900"
-                >
-                  Volver a enviados
-                </button>
-                <button
-                  type="button"
-                  onClick={async () => {
-                    if (!(await confirmDestructiveOperation(profileRole, '¿Confirmar eliminación de este pedido?'))) {
-                      return;
-                    }
-                    if (!localId) return;
-                    if (!(await appConfirm('¿Seguro que quieres eliminar este pedido?'))) return;
-                    const supabase = getSupabaseClient();
-                    if (!supabase) return;
-                    void deleteOrder(supabase, localId, order.id)
-                      .then(() => {
-                        registerDeletedOrderId(order.id);
-                        releasePinOrderId(order.id);
-                        setOrders((prev) => prev.filter((o) => o.id !== order.id));
-                        setMessage('Pedido histórico eliminado.');
-                        setShowDeletedBanner(true);
-                        if (deletedBannerTimeoutRef.current) window.clearTimeout(deletedBannerTimeoutRef.current);
-                        deletedBannerTimeoutRef.current = window.setTimeout(() => {
-                          setShowDeletedBanner(false);
-                          deletedBannerTimeoutRef.current = null;
-                        }, 1000);
-                        dispatchPedidosDataChanged();
-                      })
-                      .catch((err: Error) => setMessage(err.message));
-                  }}
-                  className="rounded-lg border border-zinc-300 bg-white px-2 py-1.5 text-center text-xs font-semibold text-[#B91C1C]"
-                >
-                  Eliminar
-                </button>
-              </div>
-              {expandedHistoricoId === order.id ? (
-                <div
-                  className={[
-                    'space-y-2 border-t bg-gradient-to-b px-3 pb-3 pt-2 text-left sm:px-4',
-                    needsAttention
-                      ? 'border-red-200/70 from-red-50/80 to-red-100/30'
-                      : 'border-emerald-200/70 from-emerald-50/80 to-emerald-100/30',
-                  ].join(' ')}
-                >
-                  <p className="text-center text-[10px] font-semibold uppercase tracking-[0.18em] text-zinc-400">
-                    Lineas del pedido
-                  </p>
-                  {order.notes?.trim() ? (
-                    <div className="rounded-lg border border-zinc-100 bg-white px-2.5 py-2 shadow-sm ring-1 ring-zinc-100">
-                      <p className="text-[10px] font-bold uppercase tracking-wide text-zinc-600">Notas del pedido</p>
-                      <p className="mt-1 text-sm leading-relaxed text-zinc-900">{order.notes.trim()}</p>
-                    </div>
-                  ) : null}
-                  {order.items.map((item) => {
-                    const inc = Boolean(item.incidentType) || Boolean(item.incidentNotes?.trim());
-                    const isBad = inc;
-                    const isOk = !inc && item.receivedQuantity >= item.quantity && item.quantity > 0;
-                    const histSummary = receptionBillingSummary(item);
-                    return (
-                      <div
-                        key={item.id}
-                        className="rounded-lg border border-zinc-100 bg-white p-2 shadow-sm"
+              </summary>
+              <div className="space-y-1.5 border-t border-zinc-100 bg-zinc-50/40 px-1.5 pb-1.5 pt-1.5">
+                {monthOrders.map((order) => {
+                  const needsAttention = receivedOrderHasAttention(order);
+                  const incidentFooterText = historicoIncidentFooterText(order);
+                  const detailOpen = expandedHistoricoId === order.id;
+                  const totals = totalsWithVatForOrderListDisplay(order);
+                  return (
+                    <div
+                      key={order.id}
+                      className={[
+                        'overflow-hidden rounded-lg transition-colors',
+                        needsAttention
+                          ? detailOpen
+                            ? 'bg-red-50 ring-1 ring-red-400/90'
+                            : 'bg-red-50/90 ring-1 ring-red-400/70 hover:bg-red-50'
+                          : detailOpen
+                            ? 'bg-emerald-50 ring-1 ring-emerald-600/75'
+                            : 'bg-emerald-50/90 ring-1 ring-emerald-500/65 hover:bg-emerald-50',
+                      ].join(' ')}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => setExpandedHistoricoId((prev) => (prev === order.id ? null : order.id))}
+                        className={[
+                          'w-full px-2.5 py-1.5 text-left outline-none transition focus-visible:ring-2 focus-visible:ring-[#D32F2F]/35 focus-visible:ring-offset-1',
+                          needsAttention ? 'active:bg-red-100/40' : 'active:bg-emerald-100/40',
+                        ].join(' ')}
+                        aria-expanded={detailOpen}
                       >
-                        <div className="flex items-start justify-between gap-2">
-                          <p className="text-sm font-semibold leading-tight text-zinc-900">{item.productName}</p>
-                          <div className="flex shrink-0 items-center gap-1.5">
-                            <span
-                              className={[
-                                'grid h-7 w-7 place-items-center rounded-full border text-sm font-black',
-                                isOk
-                                  ? 'border-[#16A34A] bg-[#16A34A] text-white'
-                                  : isBad
-                                    ? 'border-amber-600 bg-amber-500 text-white'
-                                    : 'border-zinc-300 bg-white text-zinc-400',
-                              ].join(' ')}
-                              title={isOk ? 'Recibido OK' : isBad ? 'Incidencia registrada' : 'Parcial'}
-                              aria-hidden
-                            >
-                              {isOk ? '\u2713' : isBad ? '\u2715' : '\u00B7'}
-                            </span>
-                            <span className="w-16 text-right text-xs font-semibold tabular-nums text-zinc-900">
-                              {item.pricePerUnit.toFixed(2)} €
-                            </span>
+                        <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
+                          <div className="min-w-0 flex-1">
+                            <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                              <span className="truncate text-sm font-bold text-zinc-900">{order.supplierName}</span>
+                              <span
+                                className={[
+                                  'shrink-0 rounded px-1.5 py-0 text-[9px] font-black uppercase tracking-wide text-white',
+                                  needsAttention ? 'bg-red-600' : 'bg-emerald-600',
+                                ].join(' ')}
+                              >
+                                {needsAttention ? 'Incidencia' : 'Correcto'}
+                              </span>
+                            </div>
+                            <p className="text-[10px] text-zinc-500">
+                              Recibido{' '}
+                              <span className="font-medium text-zinc-700">
+                                {order.receivedAt ? new Date(order.receivedAt).toLocaleDateString('es-ES') : '—'}
+                              </span>
+                            </p>
+                          </div>
+                          <div
+                            className="shrink-0 text-right text-[10px] leading-tight tabular-nums text-zinc-600 sm:min-w-[7.5rem]"
+                            aria-label="Importes del pedido"
+                          >
+                            <div className="flex justify-end gap-x-2">
+                              <span className="text-zinc-400">s/IVA</span>
+                              <span className="font-semibold text-zinc-900">{totals.base.toFixed(2)} €</span>
+                            </div>
+                            <div className="flex justify-end gap-x-2">
+                              <span className="text-zinc-400">IVA</span>
+                              <span className="font-semibold text-zinc-900">{totals.vat.toFixed(2)} €</span>
+                            </div>
+                            <div className="flex justify-end gap-x-2 border-t border-zinc-200/80 pt-0.5 font-black text-zinc-950">
+                              <span className="text-zinc-500">Total c/IVA</span>
+                              <span>{totals.total.toFixed(2)} €</span>
+                            </div>
                           </div>
                         </div>
-                        <p className="mt-1 text-xs text-zinc-600">
-                          Pedido:{' '}
-                          <span className="text-base font-bold not-italic tabular-nums text-zinc-900">
-                            {formatQuantityWithUnit(item.quantity, item.unit)}
-                          </span>
-                        </p>
-                        <div className="mt-1 rounded-lg border border-zinc-200/90 bg-zinc-50 px-2 py-1.5 text-[11px] leading-snug text-zinc-700">
-                          <p className="font-semibold text-zinc-500">Resumen albarán</p>
-                          <p className="mt-0.5">
-                            <span className="font-semibold text-zinc-500">Recibido</span> {histSummary.recibido}
-                          </p>
-                          <p>
-                            <span className="font-semibold text-zinc-500">Precio aplicado</span>{' '}
-                            {histSummary.precioAplicado}
-                          </p>
-                          {histSummary.precioEquivCatalogo ? (
-                            <p className="text-[10px] text-zinc-600">{histSummary.precioEquivCatalogo}</p>
-                          ) : null}
-                          <p>
-                            <span className="font-semibold text-zinc-500">Total línea</span>{' '}
-                            <span className="font-bold tabular-nums text-zinc-900">{histSummary.totalLinea}</span>
-                          </p>
+                        <div className="mt-1 flex items-center justify-center gap-1 border-t border-zinc-200/40 pt-1 text-[9px] font-semibold uppercase tracking-wide text-[#B91C1C]">
+                          {detailOpen ? 'Ocultar líneas' : 'Ver líneas'}
+                          <ChevronDown
+                            className={['h-3 w-3 transition-transform', detailOpen ? 'rotate-180' : ''].join(' ')}
+                            aria-hidden
+                          />
                         </div>
-                        <div className="mt-0.5 flex flex-wrap items-baseline justify-between gap-x-2 gap-y-0.5 text-[11px] text-zinc-700">
-                          <span className="min-w-0 leading-tight">
-                            {item.basePricePerUnit != null && Number.isFinite(item.basePricePerUnit) ? (
-                              <>
-                                <span className="font-semibold text-zinc-500">p/base</span>{' '}
-                                <span className="font-semibold text-zinc-900">
-                                  {item.basePricePerUnit.toFixed(2)} €/{unitPriceCatalogSuffix[item.unit]}
-                                </span>
-                                <span className="mx-1 text-zinc-300">·</span>
-                              </>
-                            ) : null}
-                            <span className="font-semibold text-zinc-500">p/alb</span>{' '}
-                            <span className="font-semibold text-zinc-900">
-                              {item.pricePerUnit.toFixed(2)} €/{unitPriceCatalogSuffix[item.unit]}
-                            </span>
-                          </span>
-                          <span className="shrink-0">
-                            Subt:{' '}
-                            <span className="font-bold not-italic tabular-nums text-zinc-900">
-                              {lineSubtotalForOrderListDisplay(item).toFixed(2)} €
-                            </span>
-                          </span>
-                        </div>
-                        {unitCanDeclareScaleKgOnReception(item.unit) &&
-                        item.receivedWeightKg != null &&
-                        item.receivedWeightKg > 0 ? (
-                          <p className="mt-1 text-xs text-zinc-800">
-                            Peso báscula:{' '}
-                            <span className="font-semibold">{item.receivedWeightKg.toFixed(3)} kg</span>
-                          </p>
-                        ) : null}
+                      </button>
+                      <div
+                        className={[
+                          'flex flex-wrap items-center justify-end gap-1 border-t px-2 py-1',
+                          needsAttention ? 'border-red-200/70 bg-white/60' : 'border-emerald-200/70 bg-white/60',
+                        ].join(' ')}
+                      >
+                        <button
+                          type="button"
+                          onClick={() => {
+                            void (async () => {
+                              if (!localId) return;
+                              const ok = await appConfirm(
+                                '¿Devolver este pedido a «Pendientes de entrega»? Volverá a la bandeja de revisión de precios (las líneas no se borran).',
+                              );
+                              if (!ok) return;
+                              const supabase = getSupabaseClient();
+                              if (!supabase) return;
+                              void reopenReceivedOrderToSent(supabase, localId, order.id)
+                                .then(() => {
+                                  clearPendingReceivedOrder(order.id);
+                                  setMessage('Pedido devuelto a enviados.');
+                                  dispatchPedidosDataChanged();
+                                })
+                                .catch((err: Error) => setMessage(err.message));
+                            })();
+                          }}
+                          className="rounded border border-zinc-300 bg-white px-1.5 py-0.5 text-center text-[10px] font-semibold text-zinc-800"
+                        >
+                          A enviados
+                        </button>
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            if (
+                              !(await confirmDestructiveOperation(profileRole, '¿Confirmar eliminación de este pedido?'))
+                            ) {
+                              return;
+                            }
+                            if (!localId) return;
+                            if (!(await appConfirm('¿Seguro que quieres eliminar este pedido?'))) return;
+                            const supabase = getSupabaseClient();
+                            if (!supabase) return;
+                            void deleteOrder(supabase, localId, order.id)
+                              .then(() => {
+                                registerDeletedOrderId(order.id);
+                                releasePinOrderId(order.id);
+                                setOrders((prev) => prev.filter((o) => o.id !== order.id));
+                                setMessage('Pedido histórico eliminado.');
+                                setShowDeletedBanner(true);
+                                if (deletedBannerTimeoutRef.current) window.clearTimeout(deletedBannerTimeoutRef.current);
+                                deletedBannerTimeoutRef.current = window.setTimeout(() => {
+                                  setShowDeletedBanner(false);
+                                  deletedBannerTimeoutRef.current = null;
+                                }, 1000);
+                                dispatchPedidosDataChanged();
+                              })
+                              .catch((err: Error) => setMessage(err.message));
+                          }}
+                          className="rounded border border-zinc-300 bg-white px-1.5 py-0.5 text-center text-[10px] font-semibold text-[#B91C1C]"
+                        >
+                          Eliminar
+                        </button>
                       </div>
-                    );
-                  })}
-                  {needsAttention && incidentFooterText ? (
-                    <div className="rounded-xl border border-red-200 bg-red-50/50 px-3 py-2.5 text-left shadow-sm ring-1 ring-red-100">
-                      <p className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wide text-red-800">
-                        <span aria-hidden>{'\u{1F6A8}'}</span> Incidencia
-                      </p>
-                      <p className="mt-1.5 text-xs leading-relaxed text-zinc-800 whitespace-pre-wrap">
-                        {incidentFooterText}
-                      </p>
+                      {expandedHistoricoId === order.id ? (
+                        <div
+                          className={[
+                            'space-y-1.5 border-t px-2 pb-2 pt-1.5 text-left',
+                            needsAttention
+                              ? 'border-red-200/60 bg-red-50/40'
+                              : 'border-emerald-200/60 bg-emerald-50/35',
+                          ].join(' ')}
+                        >
+                          <p className="text-center text-[9px] font-semibold uppercase tracking-[0.14em] text-zinc-400">
+                            Líneas
+                          </p>
+                          {order.notes?.trim() ? (
+                            <div className="rounded border border-zinc-200/90 bg-white px-2 py-1">
+                              <p className="text-[9px] font-bold uppercase tracking-wide text-zinc-500">Notas</p>
+                              <p className="mt-0.5 text-[11px] leading-snug text-zinc-800">{order.notes.trim()}</p>
+                            </div>
+                          ) : null}
+                          {order.items.map((item) => {
+                            const inc = Boolean(item.incidentType) || Boolean(item.incidentNotes?.trim());
+                            const isBad = inc;
+                            const isOk = !inc && item.receivedQuantity >= item.quantity && item.quantity > 0;
+                            const histSummary = receptionBillingSummary(item);
+                            const lineSub = lineSubtotalForOrderListDisplay(item);
+                            return (
+                              <div
+                                key={item.id}
+                                className="rounded-md border border-zinc-200/90 bg-white px-2 py-1 shadow-sm"
+                              >
+                                <div className="flex items-start justify-between gap-2">
+                                  <p className="min-w-0 flex-1 text-[11px] font-bold leading-tight text-zinc-900">
+                                    {item.productName}
+                                  </p>
+                                  <span
+                                    className={[
+                                      'grid h-5 w-5 shrink-0 place-items-center rounded-full border text-[10px] font-black leading-none',
+                                      isOk
+                                        ? 'border-emerald-600 bg-emerald-600 text-white'
+                                        : isBad
+                                          ? 'border-red-600 bg-red-600 text-white'
+                                          : 'border-zinc-300 bg-white text-zinc-400',
+                                    ].join(' ')}
+                                    title={isOk ? 'Recibido OK' : isBad ? 'Incidencia' : 'Parcial'}
+                                    aria-hidden
+                                  >
+                                    {isOk ? '\u2713' : isBad ? '\u2715' : '\u00B7'}
+                                  </span>
+                                </div>
+                                <div className="mt-1 grid grid-cols-1 gap-x-2 gap-y-0.5 text-[10px] leading-snug text-zinc-600 sm:grid-cols-2">
+                                  <p>
+                                    <span className="font-semibold text-zinc-500">Pedido</span>{' '}
+                                    {formatQuantityWithUnit(item.quantity, item.unit)}
+                                  </p>
+                                  <p>
+                                    <span className="font-semibold text-zinc-500">Recibido</span> {histSummary.recibido}
+                                  </p>
+                                  <p className="sm:col-span-2">
+                                    <span className="font-semibold text-zinc-500">Precio</span> {histSummary.precioAplicado}
+                                    {histSummary.precioEquivCatalogo ? (
+                                      <span className="text-zinc-500"> · {histSummary.precioEquivCatalogo}</span>
+                                    ) : null}
+                                  </p>
+                                  <p className="sm:col-span-2 flex flex-wrap items-baseline justify-between gap-1 border-t border-zinc-100 pt-0.5">
+                                    <span className="font-semibold text-zinc-500">Subtotal línea</span>
+                                    <span className="font-bold tabular-nums text-zinc-900">{lineSub.toFixed(2)} €</span>
+                                  </p>
+                                </div>
+                                {unitCanDeclareScaleKgOnReception(item.unit) &&
+                                item.receivedWeightKg != null &&
+                                item.receivedWeightKg > 0 ? (
+                                  <p className="mt-0.5 text-[10px] text-zinc-600">
+                                    Báscula:{' '}
+                                    <span className="font-semibold text-zinc-800">
+                                      {item.receivedWeightKg.toFixed(3)} kg
+                                    </span>
+                                  </p>
+                                ) : null}
+                              </div>
+                            );
+                          })}
+                          {needsAttention && incidentFooterText ? (
+                            <div className="rounded-md border border-red-200 bg-red-50/70 px-2 py-1.5 text-left ring-1 ring-red-100/80">
+                              <p className="text-[9px] font-bold uppercase tracking-wide text-red-800">Incidencia</p>
+                              <p className="mt-0.5 text-[10px] leading-snug text-zinc-800 whitespace-pre-wrap">
+                                {incidentFooterText}
+                              </p>
+                            </div>
+                          ) : null}
+                        </div>
+                      ) : null}
                     </div>
-                  ) : null}
-                </div>
-              ) : null}
-            </div>
-            );
-          })}
+                  );
+                })}
+              </div>
+            </details>
+          ))}
         </div>
       </details>
 
