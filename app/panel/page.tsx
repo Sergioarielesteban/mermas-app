@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import React from 'react';
+import React, { useMemo } from 'react';
 import type { LucideIcon } from 'lucide-react';
 import {
   BarChart3,
@@ -37,65 +37,71 @@ import { canAccessPedidos } from '@/lib/pedidos-access';
 import { getModuleAccess } from '@/lib/canAccessModule';
 import type { PlanModule } from '@/lib/planPermissions';
 
-const LINE = `mx-auto mt-1 w-16 ${CHEF_ONE_TAPER_LINE_CLASS}`;
+const LINE = `mx-auto mt-1.5 w-16 ${CHEF_ONE_TAPER_LINE_CLASS}`;
 
-type TileProps = {
-  href?: string;
-  onClick?: () => void;
+type HubEntry = {
+  id: string;
+  href: string;
   label: string;
   Icon: LucideIcon;
-  tone?: 'red' | 'zinc';
-  blocked?: boolean;
+  blocked: boolean;
 };
 
-function HubTile({ href, onClick, label, Icon, tone = 'zinc', blocked = false }: TileProps) {
+type HubTileProps = HubEntry & {
+  index: number;
+  onClick?: () => void;
+};
+
+function HubTile({ id: _tileId, href, onClick, label, Icon, blocked, index }: HubTileProps) {
   const inner = (
-    <>
-      <div
-        className={[
-          'mb-0.5 grid h-7 w-7 place-items-center rounded-xl shadow-inner sm:h-7 sm:w-7',
-          tone === 'red' ? 'bg-[#D32F2F]/15 text-[#D32F2F]' : 'bg-zinc-200/80 text-zinc-700',
-        ].join(' ')}
-      >
-        <Icon className="h-3 w-3 sm:h-3.5 sm:w-3.5" strokeWidth={2.1} />
+    <div className="flex min-h-[5.25rem] w-full flex-col items-center justify-between gap-1.5 py-0.5">
+      <div className="flex flex-col items-center gap-1">
+        <div
+          className={[
+            'grid h-11 w-11 shrink-0 place-items-center rounded-full shadow-inner',
+            'bg-[#D32F2F]/15 text-[#D32F2F]',
+          ].join(' ')}
+        >
+          <Icon className="h-4 w-4 sm:h-[1.125rem] sm:w-[1.125rem]" strokeWidth={2} />
+        </div>
+        <span className="max-w-full truncate whitespace-nowrap px-0.5 text-center text-[10px] font-medium leading-tight tracking-tight text-zinc-800 sm:text-[11px]">
+          {label}
+        </span>
+        {blocked ? (
+          <span className="inline-flex max-w-full items-center gap-0.5 truncate rounded-full bg-zinc-100 px-1.5 py-px text-[8px] font-semibold uppercase tracking-wide text-zinc-600">
+            <Lock className="h-2.5 w-2.5 shrink-0" />
+            Bloqueado
+          </span>
+        ) : null}
+        {blocked ? (
+          <span className="max-w-full truncate px-0.5 text-center text-[8px] font-medium leading-snug text-zinc-500 sm:text-[9px]">
+            Plan superior
+          </span>
+        ) : null}
       </div>
-      <span className="block max-w-full truncate whitespace-nowrap px-0.5 text-center text-[11px] font-semibold leading-none tracking-tight text-zinc-900 sm:text-xs">
-        {label}
-      </span>
-      {blocked ? (
-        <span className="mt-0.5 inline-flex max-w-full items-center gap-0.5 truncate rounded-full bg-zinc-100 px-1.5 py-px text-[9px] font-extrabold uppercase tracking-wide text-zinc-600">
-          <Lock className="h-2.5 w-2.5 shrink-0" />
-          Bloqueado
-        </span>
-      ) : null}
-      {blocked ? (
-        <span className="mt-0.5 block max-w-full truncate px-0.5 text-center text-[9px] font-semibold leading-snug text-zinc-500 sm:text-[10px]">
-          Disponible en plan superior
-        </span>
-      ) : null}
       <span className={LINE} aria-hidden />
-    </>
+    </div>
   );
 
-  const className = [
-    'flex w-full flex-col items-center rounded-2xl px-1.5 py-2 text-center outline-none transition-all duration-300 ease-out sm:px-2 sm:py-2.5',
-    'bg-zinc-50/80 ring-1 ring-zinc-200/90 hover:bg-white hover:ring-zinc-300',
-    blocked ? 'opacity-55' : '',
-    'focus-visible:ring-2 focus-visible:ring-[#D32F2F]/40 focus-visible:ring-offset-2',
-    'active:scale-[0.99]',
+  const interactive = [
+    'panel-hub-tile panel-hub-tile--enter flex w-full flex-col items-center rounded-[18px] bg-white text-center antialiased outline-none select-none touch-manipulation',
+    blocked ? 'panel-hub-tile--blocked' : '',
+    'focus-visible:ring-2 focus-visible:ring-[#D32F2F]/35 focus-visible:ring-offset-2 focus-visible:ring-offset-[#f5f5f7]',
   ].join(' ');
+
+  const style = { animationDelay: `${index * 32}ms` } as React.CSSProperties;
 
   if (href) {
     const targetHref = blocked ? '/planes' : href;
     return (
-      <Link href={targetHref} className={className}>
+      <Link href={targetHref} className={interactive} style={style}>
         {inner}
       </Link>
     );
   }
 
   return (
-    <button type="button" onClick={onClick} className={className}>
+    <button type="button" onClick={onClick} className={interactive} style={style}>
       {inner}
     </button>
   );
@@ -119,120 +125,108 @@ export default function PanelControlPage() {
   const showInventario = canAccessInventario(role);
   const showChat = canAccessChat(role);
 
+  const hubEntries = useMemo(() => {
+    const out: HubEntry[] = [
+      { id: 'mermas', href: '/dashboard', label: 'Mermas', Icon: BookOpen, blocked: false },
+    ];
+    if (showPedidos) {
+      out.push({
+        id: 'pedidos',
+        href: '/pedidos',
+        label: 'Pedidos',
+        Icon: ShoppingCart,
+        blocked: isBlockedByPlan('pedidos'),
+      });
+    }
+    if (showPedidosCocina) {
+      out.push({ id: 'pedidos-cocina', href: '/pedidos-cocina', label: 'Pedir a central', Icon: Package, blocked: false });
+    }
+    out.push(
+      { id: 'appcc', href: '/appcc', label: 'APPCC', Icon: ShieldCheck, blocked: isBlockedByPlan('appcc') },
+      { id: 'checklist', href: '/checklist', label: 'Check list', Icon: ListChecks, blocked: isBlockedByPlan('checklist') },
+      { id: 'produccion', href: '/produccion', label: 'Producción', Icon: Factory, blocked: isBlockedByPlan('produccion') },
+      { id: 'servicio', href: '/servicio', label: 'Servicio', Icon: Soup, blocked: isBlockedByPlan('servicio') },
+    );
+    if (canAccessComidaPersonal(role)) {
+      out.push({
+        id: 'comida-personal',
+        href: '/comida-personal',
+        label: 'Consumo interno',
+        Icon: UtensilsCrossed,
+        blocked: isBlockedByPlan('comida_personal'),
+      });
+    }
+    out.push({
+      id: 'personal',
+      href: '/personal',
+      label: 'Horarios',
+      Icon: CalendarDays,
+      blocked: isBlockedByPlan('personal'),
+    });
+    if (showInventario) {
+      out.push({
+        id: 'inventario',
+        href: '/inventario',
+        label: 'Inventario',
+        Icon: ClipboardList,
+        blocked: isBlockedByPlan('inventario'),
+      });
+    }
+    if (showChat) {
+      out.push({ id: 'chat', href: '/chat', label: 'Chat', Icon: MessageCircle, blocked: isBlockedByPlan('chat') });
+    }
+    if (showEscandallos) {
+      out.push({
+        id: 'escandallos',
+        href: '/escandallos',
+        label: 'Escandallos',
+        Icon: Calculator,
+        blocked: isBlockedByPlan('escandallos'),
+      });
+    }
+    if (showCocinaCentral) {
+      out.push({
+        id: 'cocina-central',
+        href: '/cocina-central',
+        label: 'Cocina central',
+        Icon: ChefHat,
+        blocked: isBlockedByPlan('cocina_central'),
+      });
+    }
+    if (showFinanzas) {
+      out.push({
+        id: 'finanzas',
+        href: '/finanzas',
+        label: 'Finanzas',
+        Icon: BarChart3,
+        blocked: isBlockedByPlan('finanzas'),
+      });
+    }
+    return out;
+  }, [
+    isBlockedByPlan,
+    role,
+    showCocinaCentral,
+    showChat,
+    showEscandallos,
+    showFinanzas,
+    showInventario,
+    showPedidos,
+    showPedidosCocina,
+  ]);
+
   return (
-    <div className="space-y-2.5 sm:space-y-3">
-      <MermasStyleHero title="Panel de control" slim compactTitle />
+    <div className="-mx-4 bg-[#f5f5f7] px-4 pb-10 pt-1 sm:-mx-5 sm:px-5 md:-mx-6 md:px-6 lg:-mx-8 lg:px-8">
+      <div className="mx-auto max-w-full space-y-3 sm:max-w-2xl sm:space-y-3.5 md:max-w-4xl lg:max-w-5xl">
+        <MermasStyleHero title="Panel de control" slim compactTitle condensed />
 
-      <ProductoGuiadoChecklist />
+        <ProductoGuiadoChecklist />
 
-      <div className="grid grid-cols-3 gap-x-2 gap-y-1 sm:gap-x-2.5 sm:gap-y-1.5">
-        <HubTile href="/dashboard" label="Mermas" Icon={BookOpen} tone="red" />
-        {showPedidos ? (
-          <HubTile
-            href="/pedidos"
-            label="Pedidos"
-            Icon={ShoppingCart}
-            tone="red"
-            blocked={isBlockedByPlan('pedidos')}
-          />
-        ) : null}
-        {showPedidosCocina ? (
-          <HubTile
-            href="/pedidos-cocina"
-            label="Pedir a central"
-            Icon={Package}
-            tone="red"
-          />
-        ) : null}
-        <HubTile
-          href="/appcc"
-          label="APPCC"
-          Icon={ShieldCheck}
-          tone="red"
-          blocked={isBlockedByPlan('appcc')}
-        />
-        <HubTile
-          href="/checklist"
-          label="Check list"
-          Icon={ListChecks}
-          tone="red"
-          blocked={isBlockedByPlan('checklist')}
-        />
-        <HubTile
-          href="/produccion"
-          label="Producción"
-          Icon={Factory}
-          tone="red"
-          blocked={isBlockedByPlan('produccion')}
-        />
-        <HubTile
-          href="/servicio"
-          label="Servicio"
-          Icon={Soup}
-          tone="red"
-          blocked={isBlockedByPlan('servicio')}
-        />
-        {canAccessComidaPersonal(role) ? (
-          <HubTile
-            href="/comida-personal"
-            label="Consumo interno"
-            Icon={UtensilsCrossed}
-            tone="red"
-            blocked={isBlockedByPlan('comida_personal')}
-          />
-        ) : null}
-        <HubTile
-          href="/personal"
-          label="Horarios"
-          Icon={CalendarDays}
-          tone="red"
-          blocked={isBlockedByPlan('personal')}
-        />
-        {showInventario ? (
-          <HubTile
-            href="/inventario"
-            label="Inventario"
-            Icon={ClipboardList}
-            tone="red"
-            blocked={isBlockedByPlan('inventario')}
-          />
-        ) : null}
-        {showChat ? (
-          <HubTile
-            href="/chat"
-            label="Chat"
-            Icon={MessageCircle}
-            tone="red"
-            blocked={isBlockedByPlan('chat')}
-          />
-        ) : null}
-        {showEscandallos ? (
-          <HubTile
-            href="/escandallos"
-            label="Escandallos"
-            Icon={Calculator}
-            tone="red"
-            blocked={isBlockedByPlan('escandallos')}
-          />
-        ) : null}
-        {showCocinaCentral ? (
-          <HubTile
-            href="/cocina-central"
-            label="Cocina central"
-            Icon={ChefHat}
-            tone="red"
-            blocked={isBlockedByPlan('cocina_central')}
-          />
-        ) : null}
-        {showFinanzas ? (
-          <HubTile
-            href="/finanzas"
-            label="Finanzas"
-            Icon={BarChart3}
-            tone="red"
-            blocked={isBlockedByPlan('finanzas')}
-          />
-        ) : null}
+        <div className="grid grid-cols-3 gap-x-[11px] gap-y-[13px] pb-1 sm:gap-x-3 sm:gap-y-3.5">
+          {hubEntries.map((entry, index) => (
+            <HubTile key={entry.id} {...entry} index={index} />
+          ))}
+        </div>
       </div>
     </div>
   );

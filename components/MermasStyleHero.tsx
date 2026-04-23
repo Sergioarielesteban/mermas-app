@@ -20,6 +20,8 @@ type Props = {
   compactTitle?: boolean;
   /** Banner mínimo: menos padding que `slim`, título pequeño (p. ej. cabecera Pedidos). */
   micro?: boolean;
+  /** Panel u otras vistas: ~30–40 % menos altura (padding y título más compactos). */
+  condensed?: boolean;
   className?: string;
 };
 
@@ -36,19 +38,30 @@ export default function MermasStyleHero({
   slim = false,
   compactTitle = false,
   micro = false,
+  condensed = false,
   className = '',
 }: Props) {
-  const pad = micro
+  const pad = condensed
     ? 'px-3 py-1.5 sm:px-4 sm:py-2'
-    : slim
-      ? 'px-3 py-2 sm:px-4 sm:py-2.5'
-      : compact
-        ? 'px-4 py-2 sm:px-5 sm:py-2.5'
-        : 'px-4 py-3.5 sm:px-5 sm:py-4';
+    : micro
+      ? 'px-3 py-1.5 sm:px-4 sm:py-2'
+      : slim
+        ? 'px-3 py-2 sm:px-4 sm:py-2.5'
+        : compact
+          ? 'px-4 py-2 sm:px-5 sm:py-2.5'
+          : 'px-4 py-3.5 sm:px-5 sm:py-4';
   const titleMt =
     eyebrow || brandLogo ? (micro ? 'mt-0.5' : slim ? 'mt-0.5' : compact ? 'mt-0.5' : 'mt-1 sm:mt-1.5') : '';
-  const lineMt = micro ? 'mt-0.5' : slim ? 'mt-1' : compact ? 'mt-1 sm:mt-1.5' : 'mt-2 sm:mt-2.5';
-  const lineW = micro ? 'w-16' : slim ? 'w-20' : compactTitle ? 'w-20' : 'w-28';
+  const lineMt = condensed
+    ? 'mt-0.5'
+    : micro
+      ? 'mt-0.5'
+      : slim
+        ? 'mt-1'
+        : compact
+          ? 'mt-1 sm:mt-1.5'
+          : 'mt-2 sm:mt-2.5';
+  const lineW = condensed ? 'w-16' : micro ? 'w-16' : slim ? 'w-20' : compactTitle ? 'w-20' : 'w-28';
   const taglineMt = micro
     ? 'mt-1'
     : slim
@@ -72,17 +85,19 @@ export default function MermasStyleHero({
           ? 'mt-1 sm:mt-1.5'
           : 'mt-2 sm:mt-2.5';
 
-  const titleClass = micro
-    ? 'text-[10px] sm:text-[11px] font-extrabold uppercase tracking-[0.16em]'
-    : compactTitle
-      ? 'text-xs sm:text-sm font-bold uppercase tracking-[0.14em]'
-      : slim
-        ? 'text-sm sm:text-base font-semibold uppercase tracking-[0.14em]'
-        : 'text-base sm:text-lg font-semibold uppercase tracking-[0.14em]';
+  const titleClass = condensed && compactTitle
+    ? 'text-[10px] sm:text-[11px] font-medium uppercase tracking-[0.12em]'
+    : micro
+      ? 'text-[10px] sm:text-[11px] font-extrabold uppercase tracking-[0.16em]'
+      : compactTitle
+        ? 'text-xs sm:text-sm font-bold uppercase tracking-[0.14em]'
+        : slim
+          ? 'text-sm sm:text-base font-semibold uppercase tracking-[0.14em]'
+          : 'text-base sm:text-lg font-semibold uppercase tracking-[0.14em]';
 
   return (
     <section
-      className={`${micro ? 'rounded-2xl' : 'rounded-3xl'} bg-zinc-950 text-white shadow-xl shadow-zinc-900/20 ${pad} ${className}`}
+      className={`${micro || condensed ? 'rounded-2xl' : 'rounded-3xl'} bg-zinc-950 text-white shadow-xl shadow-zinc-900/20 ${pad} ${className}`}
     >
       {brandLogo ? (
         <div className="flex justify-center">
