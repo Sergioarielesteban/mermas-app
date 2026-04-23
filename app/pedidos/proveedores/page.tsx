@@ -2,7 +2,8 @@
 
 import Link from 'next/link';
 import React from 'react';
-import { ChevronDown } from 'lucide-react';
+import { ChevronRight, ListTree, Plus, Upload } from 'lucide-react';
+import { ProveedoresModalShell } from '@/components/pedidos/ProveedoresModalShell';
 import { useAuth } from '@/components/AuthProvider';
 import { appConfirm } from '@/lib/app-dialog-bridge';
 import { getSupabaseClient } from '@/lib/supabase-client';
@@ -29,6 +30,7 @@ import {
   supplierProductHasDistinctBilling,
   unitSupportsReceivedWeightKg,
   type PedidoSupplier,
+  type PedidoSupplierProduct,
 } from '@/lib/pedidos-supabase';
 import { PEDIDOS_SUPPLIERS_FROM_INVENTORY } from '@/lib/pedidos-inventory-import';
 import type { Unit } from '@/lib/types';
@@ -116,6 +118,17 @@ const DELIVERY_DAY_CHIPS: { day: number; label: string }[] = [
   { day: 0, label: 'D' },
 ];
 
+function findProductContext(
+  list: PedidoSupplier[],
+  productId: string,
+): { supplier: PedidoSupplier; p: PedidoSupplierProduct } | null {
+  for (const supplier of list) {
+    const p = supplier.products.find((x) => x.id === productId);
+    if (p) return { supplier, p };
+  }
+  return null;
+}
+
 type ProductDraft = {
   name: string;
   unit: Unit;
@@ -153,8 +166,15 @@ export default function ProveedoresPage() {
   const [message, setMessage] = React.useState<string | null>(null);
   const [showDeletedBanner, setShowDeletedBanner] = React.useState(false);
   const deletedBannerTimeoutRef = React.useRef<number | null>(null);
-  const [supplierName, setSupplierName] = React.useState('');
-  const [supplierContact, setSupplierContact] = React.useState('');
+  const [newSupplierOpen, setNewSupplierOpen] = React.useState(false);
+  const [newSupplierName, setNewSupplierName] = React.useState('');
+  const [newSupplierContact, setNewSupplierContact] = React.useState('');
+  const [addProductOpen, setAddProductOpen] = React.useState(false);
+  React.useEffect(() => {
+    if (!newSupplierOpen) return;
+    setNewSupplierName('');
+    setNewSupplierContact('');
+  }, [newSupplierOpen]);
   const [productSupplierId, setProductSupplierId] = React.useState('');
   const [productName, setProductName] = React.useState('');
   const [productUnit, setProductUnit] = React.useState<Unit>('ud');
@@ -271,17 +291,16 @@ export default function ProveedoresPage() {
     [],
   );
 
-  const saveSupplier = () => {
+  const createNewSupplier = () => {
     if (!localId) return setMessage('Perfil del local no cargado. Cierra sesión y vuelve a entrar.');
-    const name = normalizeUpper(supplierName);
+    const name = normalizeUpper(newSupplierName);
     if (!name) return setMessage('Nombre de proveedor obligatorio.');
     const supabase = getSupabaseClient();
     if (!supabase) return setMessage('Supabase no disponible en esta sesión.');
-    void createSupplier(supabase, localId, name, supplierContact.trim() || DEFAULT_SUPPLIER_CONTACT)
+    return createSupplier(supabase, localId, name, newSupplierContact.trim() || DEFAULT_SUPPLIER_CONTACT)
       .then(() => {
-        setSupplierName('');
-        setSupplierContact('');
         setMessage('Proveedor guardado.');
+        setNewSupplierOpen(false);
         reload();
         dispatchPedidosDataChanged();
       })
@@ -422,6 +441,7 @@ export default function ProveedoresPage() {
         setProductDualKgBilling(false);
         setProductEquivKg('');
         setProductPricePerKg('');
+        setAddProductOpen(false);
         setMessage('Producto de proveedor guardado.');
         reload();
         dispatchPedidosDataChanged();
@@ -565,8 +585,15 @@ export default function ProveedoresPage() {
   if (!canUse) {
     return <PedidosPremiaLockedScreen />;
   }
+  const editSup =
+    editingSupplierId != null
+      ? (suppliers.find((s) => s.id === editingSupplierId) ?? null)
+      : null;
+  const editProductTarget = editingProductId
+    ? findProductContext(suppliers, editingProductId)
+    : null;
   return (
-    <div className="space-y-4">
+    <div className="mx-auto w-full max-w-2xl space-y-4">
       {showDeletedBanner ? (
         <div className="pointer-events-none fixed inset-0 z-[90] grid place-items-center bg-black/25 px-6">
           <div className="rounded-2xl bg-[#D32F2F] px-7 py-5 text-center shadow-2xl ring-2 ring-white/75">
@@ -574,65 +601,288 @@ export default function ProveedoresPage() {
           </div>
         </div>
       ) : null}
-      <section>
+      <div className="mb-0.5">
         <Link
           href="/pedidos"
-          className="inline-flex h-9 items-center rounded-lg border border-zinc-300 bg-white px-3 text-sm font-semibold text-zinc-700"
+          className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-zinc-200 bg-white px-3 text-sm font-medium text-zinc-800 shadow-sm"
         >
-          ← Atras
+          ← Atrás
         </Link>
-      </section>
-
-      <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-zinc-200">
-        <h1 className="text-center text-lg font-black text-zinc-900">CATÁLOGO DE COMPRA</h1>
-        <p className="mt-2 text-center text-sm text-zinc-600">
-          Proveedores y productos de pedido: precios de ficha, IVA y formatos de envase. El coste interno unificado vive en{' '}
-          <Link href="/pedidos/articulos" className="font-bold text-[#B91C1C] underline">
-            Artículos base
-          </Link>
-          .
-        </p>
-      </section>
+      </div>
 
       {message ? (
-        <section className="rounded-2xl bg-white p-4 text-sm text-zinc-700 ring-1 ring-zinc-200">{message}</section>
+        <div className="rounded-2xl border border-amber-200/80 bg-amber-50/90 px-4 py-2.5 text-sm text-amber-950 shadow-sm">
+          {message}
+        </div>
       ) : null}
 
-      <section className="rounded-2xl bg-white p-4 ring-1 ring-zinc-200">
-        <p className="text-sm font-bold text-zinc-800">Nuevo proveedor</p>
-        <div className="mt-2 grid grid-cols-1 gap-2">
-          <input
-            value={supplierName}
-            onChange={(e) => setSupplierName(e.target.value)}
-            placeholder="Nombre proveedor"
-            className="h-10 rounded-xl border border-zinc-300 bg-white px-3 text-sm text-zinc-900 placeholder:text-zinc-500 outline-none"
-          />
-          <input
-            value={supplierContact}
-            onChange={(e) => setSupplierContact(e.target.value)}
-            placeholder="Contacto (email/teléfono)"
-            className="h-10 rounded-xl border border-zinc-300 bg-white px-3 text-sm text-zinc-900 placeholder:text-zinc-500 outline-none"
-          />
+      <section className="rounded-2xl border border-zinc-200/80 bg-white p-4 shadow-sm sm:p-5" style={{ borderRadius: 16 }}>
+        <h1 className="text-lg font-bold tracking-tight text-zinc-900">Proveedores</h1>
+        <p className="mt-0.5 text-xs leading-relaxed text-zinc-500">
+          Catálogo de compra (ficha, IVA, envase). El coste unificado en la cocina:{' '}
+          <Link className="font-semibold text-[#B91C1C] underline underline-offset-2" href="/pedidos/articulos">
+            Artículos base
+          </Link>
+        </p>
+        <div className="mt-4 flex flex-col gap-2.5 sm:flex-row sm:items-stretch sm:justify-start">
           <button
+            className="inline-flex h-10 w-full min-w-0 items-center justify-center gap-2 rounded-2xl bg-[#D32F2F] px-4 text-sm font-semibold text-white shadow-sm transition hover:bg-[#B91C1C] sm:max-w-[16rem] sm:shrink-0"
             type="button"
-            onClick={saveSupplier}
-            className="h-10 rounded-xl bg-[#2563EB] px-3 text-sm font-bold text-white"
+            onClick={() => {
+              setMessage(null);
+              setNewSupplierOpen(true);
+            }}
           >
-            Guardar proveedor
+            <Plus className="h-4 w-4 shrink-0" />
+            <span>+ Nuevo proveedor</span>
           </button>
           <button
+            className="inline-flex h-10 w-full min-w-0 items-center justify-center gap-2 rounded-2xl border border-zinc-200 bg-white px-4 text-sm font-medium text-zinc-800 shadow-sm transition hover:bg-zinc-50 disabled:opacity-50 sm:max-w-[16rem] sm:shrink-0"
+            disabled={bulkImportBusy}
             type="button"
             onClick={importMissingSuppliersFromInventory}
-            disabled={bulkImportBusy}
-            className="h-10 rounded-xl border border-[#D32F2F] bg-white px-3 text-sm font-bold text-[#D32F2F] disabled:opacity-50"
           >
-            {bulkImportBusy ? 'Importando…' : 'Importar proveedores y artículos (inventario)'}
+            <Upload className="h-4 w-4 shrink-0" />
+            {bulkImportBusy ? 'Importando…' : 'Importar proveedores'}
           </button>
         </div>
       </section>
 
-      <section className="rounded-2xl bg-white p-4 ring-1 ring-zinc-200">
-        <p className="text-sm font-bold text-zinc-800">Añadir producto a proveedor</p>
+      <section className="rounded-2xl border border-zinc-200/80 bg-white p-4 shadow-sm sm:p-5" style={{ borderRadius: 16 }}>
+        <h2 className="text-sm font-bold text-zinc-900">Productos</h2>
+        <p className="mt-0.5 text-xs text-zinc-500">Selector de proveedor y añadir líneas al catálogo (el formulario se abre al continuar).</p>
+        <div className="mt-3 flex flex-col gap-2.5 sm:flex-row sm:items-stretch">
+          <select
+            className="h-10 min-h-0 w-full min-w-0 flex-1 rounded-2xl border border-zinc-200 bg-zinc-50/50 px-3 text-sm font-medium text-zinc-900 outline-none focus:border-zinc-400"
+            value={productSupplierId}
+            onChange={(e) => setProductSupplierId(e.target.value)}
+          >
+            {suppliers.length === 0 ? <option value="">Aún no hay proveedores</option> : null}
+            {suppliers.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name}
+              </option>
+            ))}
+          </select>
+          <button
+            className="inline-flex h-10 shrink-0 items-center justify-center gap-1.5 rounded-2xl border border-dashed border-[#D32F2F] bg-white px-4 text-sm font-semibold text-[#B91C1C] transition hover:bg-red-50/80 disabled:cursor-not-allowed disabled:opacity-50 sm:px-5"
+            disabled={!suppliers.length}
+            type="button"
+            onClick={() => {
+              setMessage(null);
+              setAddProductOpen(true);
+            }}
+          >
+            <Plus className="h-4 w-4" />
+            + Añadir producto
+          </button>
+        </div>
+      </section>
+
+      {[...suppliers]
+        .sort((a, b) => a.name.localeCompare(b.name, 'es'))
+        .map((supplier) => (
+        <section key={supplier.id} className="overflow-hidden rounded-2xl border border-zinc-200/80 bg-white shadow-sm">
+          <button
+            type="button"
+            onClick={() => setExpandedSupplierId((id) => (id === supplier.id ? null : supplier.id))}
+            className="flex w-full items-center justify-between gap-3 px-3 py-2.5 text-left sm:px-3.5 sm:py-2.5"
+            aria-expanded={expandedSupplierId === supplier.id}
+          >
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-bold leading-tight text-zinc-900">{supplier.name}</p>
+              <p className="mt-0.5 text-[11px] leading-tight text-zinc-500">Contacto: {supplier.contact || '—'}</p>
+              <p className="mt-0.5 text-[10px] leading-tight text-zinc-500">
+                Reparto: {formatDeliveryCycleSummary(supplier.deliveryCycleWeekdays ?? [])}
+              </p>
+            </div>
+            <span
+              className={[
+                'inline-flex shrink-0 items-center gap-1.5 rounded-lg px-2 py-1.5 text-[10px] font-bold uppercase tracking-wide',
+                expandedSupplierId === supplier.id
+                  ? 'bg-zinc-200/80 text-zinc-800'
+                  : 'bg-[#D32F2F]/10 text-[#B91C1C] ring-1 ring-[#D32F2F]/25',
+              ].join(' ')}
+            >
+              <ListTree className="h-3.5 w-3.5" strokeWidth={2.25} />
+              {expandedSupplierId === supplier.id ? 'Ocultar' : 'Ver artículos'}
+              <ChevronRight
+                className={['h-3.5 w-3.5 transition-transform', expandedSupplierId === supplier.id ? 'rotate-90' : ''].join(' ')}
+                strokeWidth={2.25}
+                aria-hidden
+              />
+            </span>
+          </button>
+
+          {expandedSupplierId === supplier.id ? (
+            <div className="border-t border-zinc-100 px-4 pb-4 pt-3">
+              <div className="mb-2 flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (editingSupplierId === supplier.id) {
+                      setEditingSupplierId(null);
+                      return;
+                    }
+                    setSupplierDrafts((prev) => ({
+                      ...prev,
+                      [supplier.id]: {
+                        name: prev[supplier.id]?.name ?? supplier.name,
+                        contact: prev[supplier.id]?.contact ?? supplier.contact ?? '',
+                        deliveryCycleWeekdays:
+                          prev[supplier.id]?.deliveryCycleWeekdays ?? [...(supplier.deliveryCycleWeekdays ?? [])],
+                        deliveryExceptionDates:
+                          prev[supplier.id]?.deliveryExceptionDates ?? [...(supplier.deliveryExceptionDates ?? [])],
+                      },
+                    }));
+                    setEditingSupplierId(supplier.id);
+                  }}
+                  className="rounded-lg border border-zinc-300 bg-white px-2 py-1 text-xs font-semibold text-zinc-700"
+                >
+                  {editingSupplierId === supplier.id ? 'Cerrar' : 'Editar proveedor'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => removeSupplier(supplier.id, supplier.name)}
+                  className="rounded-lg border border-[#B91C1C] bg-white px-2 py-1 text-xs font-semibold text-[#B91C1C]"
+                >
+                  Eliminar proveedor
+                </button>
+              </div>
+
+              <div className="mt-3 space-y-2">
+            {[...supplier.products]
+              .sort((a, b) => a.name.localeCompare(b.name, 'es'))
+              .map((p) => (
+              <div key={p.id} className="rounded-lg border border-zinc-100/80 bg-zinc-50/80 px-2.5 py-1.5">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-sm font-medium leading-tight text-zinc-800">{p.name}</p>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (editingProductId === p.id) {
+                          setEditingProductId(null);
+                          return;
+                        }
+                        setProductDrafts((prev) => ({
+                          ...prev,
+                          [p.id]: {
+                            name: prev[p.id]?.name ?? p.name,
+                            unit: prev[p.id]?.unit ?? p.unit,
+                            price: prev[p.id]?.price ?? String(p.pricePerUnit),
+                            vatRate: prev[p.id]?.vatRate ?? String(p.vatRate ?? 0),
+                            estimatedKg:
+                              prev[p.id]?.estimatedKg ??
+                              (!supplierProductHasDistinctBilling(p) &&
+                              unitSupportsReceivedWeightKg(p.unit) &&
+                              p.estimatedKgPerUnit != null &&
+                              p.estimatedKgPerUnit > 0
+                                ? String(p.estimatedKgPerUnit)
+                                : ''),
+                            unitsPerPack:
+                              prev[p.id]?.unitsPerPack ?? String((p.unitsPerPack ?? 1) >= 1 ? (p.unitsPerPack ?? 1) : 1),
+                            recipeUnit: prev[p.id]?.recipeUnit ?? (p.recipeUnit ?? 'ud'),
+                            parWeekly:
+                              prev[p.id]?.parWeekly ??
+                              ((p.parStock ?? 0) > 0 ? String(p.parStock) : ''),
+                            dualKgBilling:
+                              prev[p.id]?.dualKgBilling ??
+                              (supplierProductHasDistinctBilling(p) && p.billingUnit === 'kg'),
+                            equivKg:
+                              prev[p.id]?.equivKg ??
+                              (supplierProductHasDistinctBilling(p) && p.billingQtyPerOrderUnit != null
+                                ? String(p.billingQtyPerOrderUnit)
+                                : ''),
+                            pricePerKg:
+                              prev[p.id]?.pricePerKg ??
+                              (supplierProductHasDistinctBilling(p) && p.pricePerBillingUnit != null
+                                ? String(p.pricePerBillingUnit)
+                                : ''),
+                          },
+                        }));
+                        setEditingProductId(p.id);
+                      }}
+                      className="rounded-lg border border-zinc-300 bg-white px-2 py-1 text-xs font-semibold text-zinc-700"
+                    >
+                      {editingProductId === p.id ? 'Cerrar' : 'Editar'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => disableProduct(p.id)}
+                      className="rounded-lg border border-[#B91C1C] bg-white px-2 py-1 text-xs font-semibold text-[#B91C1C]"
+                    >
+                      Desactivar
+                    </button>
+                  </div>
+                </div>
+                <p className="pt-1 text-xs font-semibold text-zinc-600">
+                  {p.pricePerUnit.toFixed(2)} €/{unitPriceCatalogSuffix[p.unit]} · IVA {(p.vatRate * 100).toFixed(0)}%
+                  {(p.unitsPerPack ?? 1) > 1 ? (
+                    <>
+                      {' '}
+                      · escandallo ~{(p.pricePerUnit / (p.unitsPerPack ?? 1)).toFixed(4)} €/
+                      {unitPriceCatalogSuffix[p.recipeUnit ?? 'ud']} (×{p.unitsPerPack ?? 1})
+                    </>
+                  ) : null}
+                  {supplierProductHasDistinctBilling(p) && p.billingUnit === 'kg' && p.pricePerBillingUnit != null
+                    ? ` · cobro ~${p.pricePerBillingUnit} €/kg (~${p.billingQtyPerOrderUnit ?? '—'} kg/${unitPriceCatalogSuffix[p.unit]})`
+                    : ''}
+                  {!supplierProductHasDistinctBilling(p) &&
+                  unitSupportsReceivedWeightKg(p.unit) &&
+                  p.estimatedKgPerUnit != null &&
+                  p.estimatedKgPerUnit > 0
+                    ? ` · ~${p.estimatedKgPerUnit} kg/${p.unit}`
+                    : ''}
+                  {(p.parStock ?? 0) > 0 ? ` · ref. sem. ${p.parStock} ${unitPriceCatalogSuffix[p.unit]}` : ''}
+                </p>
+              </div>
+              ))}
+              </div>
+            </div>
+          ) : null}
+        </section>
+      ))}
+
+      <ProveedoresModalShell
+        open={newSupplierOpen}
+        title="Nuevo proveedor"
+        onClose={() => setNewSupplierOpen(false)}
+      >
+        <div className="grid grid-cols-1 gap-2">
+          <div>
+            <label className="text-xs font-semibold text-zinc-600">Nombre comercial</label>
+            <input
+              value={newSupplierName}
+              onChange={(e) => setNewSupplierName(e.target.value)}
+              placeholder="Ej. MAKRO"
+              className="mt-1 h-10 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm text-zinc-900 placeholder:text-zinc-400"
+            />
+          </div>
+          <div>
+            <label className="text-xs font-semibold text-zinc-600">Contacto (tel. o email)</label>
+            <input
+              value={newSupplierContact}
+              onChange={(e) => setNewSupplierContact(e.target.value)}
+              placeholder="Opcional"
+              className="mt-1 h-10 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm text-zinc-900 placeholder:text-zinc-400"
+            />
+          </div>
+          <button
+            type="button"
+            onClick={createNewSupplier}
+            className="h-10 w-full rounded-xl bg-[#D32F2F] text-sm font-bold text-white"
+          >
+            Guardar proveedor
+          </button>
+        </div>
+      </ProveedoresModalShell>
+
+      <ProveedoresModalShell
+        open={addProductOpen}
+        title="Añadir producto"
+        onClose={() => setAddProductOpen(false)}
+      >
         <div className="mt-2 grid grid-cols-1 gap-2">
           <select
             value={productSupplierId}
@@ -776,79 +1026,27 @@ export default function ProveedoresPage() {
             Guardar producto
           </button>
         </div>
-      </section>
 
-      {[...suppliers]
-        .sort((a, b) => a.name.localeCompare(b.name, 'es'))
-        .map((supplier) => (
-        <section key={supplier.id} className="overflow-hidden rounded-2xl bg-white ring-1 ring-zinc-200">
-          <button
-            type="button"
-            onClick={() => setExpandedSupplierId((id) => (id === supplier.id ? null : supplier.id))}
-            className="flex w-full items-center justify-between gap-2 px-4 py-3 text-left"
-            aria-expanded={expandedSupplierId === supplier.id}
-          >
-            <div className="min-w-0">
-              <p className="truncate text-sm font-black text-zinc-900">{supplier.name}</p>
-              <p className="pt-1 text-xs text-zinc-500">Contacto: {supplier.contact || '-'}</p>
-              <p className="pt-0.5 text-[11px] text-zinc-500">
-                Reparto: {formatDeliveryCycleSummary(supplier.deliveryCycleWeekdays ?? [])}
-              </p>
-            </div>
-            <span className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-[#D32F2F]">
-              {expandedSupplierId === supplier.id ? 'Ocultar' : 'Ver artículos'}
-              <ChevronDown
-                className={['h-4 w-4 transition-transform', expandedSupplierId === supplier.id ? 'rotate-180' : ''].join(' ')}
-                aria-hidden
-              />
-            </span>
-          </button>
+      </ProveedoresModalShell>
 
-          {expandedSupplierId === supplier.id ? (
-            <div className="border-t border-zinc-100 px-4 pb-4 pt-3">
-              <div className="mb-2 flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setEditingSupplierId((prev) => (prev === supplier.id ? null : supplier.id));
-                    setSupplierDrafts((prev) => ({
-                      ...prev,
-                      [supplier.id]: {
-                        name: prev[supplier.id]?.name ?? supplier.name,
-                        contact: prev[supplier.id]?.contact ?? supplier.contact ?? '',
-                        deliveryCycleWeekdays:
-                          prev[supplier.id]?.deliveryCycleWeekdays ?? [...(supplier.deliveryCycleWeekdays ?? [])],
-                        deliveryExceptionDates:
-                          prev[supplier.id]?.deliveryExceptionDates ?? [...(supplier.deliveryExceptionDates ?? [])],
-                      },
-                    }));
-                  }}
-                  className="rounded-lg border border-zinc-300 bg-white px-2 py-1 text-xs font-semibold text-zinc-700"
-                >
-                  {editingSupplierId === supplier.id ? 'Cerrar' : 'Editar proveedor'}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => removeSupplier(supplier.id, supplier.name)}
-                  className="rounded-lg border border-[#B91C1C] bg-white px-2 py-1 text-xs font-semibold text-[#B91C1C]"
-                >
-                  Eliminar proveedor
-                </button>
-              </div>
-
-              {editingSupplierId === supplier.id ? (
-            <div className="mt-3 grid grid-cols-1 gap-2 rounded-xl border border-zinc-200 bg-zinc-50 p-3">
+      {editSup && editingSupplierId ? (
+        <ProveedoresModalShell
+          open
+          title="Editar proveedor"
+          onClose={() => setEditingSupplierId(null)}
+        >
+<div className="mt-3 grid grid-cols-1 gap-2 rounded-xl border border-zinc-200 bg-zinc-50 p-3">
               <input
-                value={supplierDrafts[supplier.id]?.name ?? ''}
+                value={supplierDrafts[editSup.id]?.name ?? ''}
                 onChange={(e) =>
                   setSupplierDrafts((prev) => ({
                     ...prev,
-                    [supplier.id]: {
-                      ...(prev[supplier.id] ?? {
-                        name: supplier.name,
-                        contact: supplier.contact ?? '',
-                        deliveryCycleWeekdays: [...(supplier.deliveryCycleWeekdays ?? [])],
-                        deliveryExceptionDates: [...(supplier.deliveryExceptionDates ?? [])],
+                    [editSup.id]: {
+                      ...(prev[editSup.id] ?? {
+                        name: editSup.name,
+                        contact: editSup.contact ?? '',
+                        deliveryCycleWeekdays: [...(editSup.deliveryCycleWeekdays ?? [])],
+                        deliveryExceptionDates: [...(editSup.deliveryExceptionDates ?? [])],
                       }),
                       name: e.target.value,
                     },
@@ -858,16 +1056,16 @@ export default function ProveedoresPage() {
                 className="h-10 rounded-xl border border-zinc-300 bg-white px-3 text-sm text-zinc-900 placeholder:text-zinc-500 outline-none"
               />
               <input
-                value={supplierDrafts[supplier.id]?.contact ?? ''}
+                value={supplierDrafts[editSup.id]?.contact ?? ''}
                 onChange={(e) =>
                   setSupplierDrafts((prev) => ({
                     ...prev,
-                    [supplier.id]: {
-                      ...(prev[supplier.id] ?? {
-                        name: supplier.name,
-                        contact: supplier.contact ?? '',
-                        deliveryCycleWeekdays: [...(supplier.deliveryCycleWeekdays ?? [])],
-                        deliveryExceptionDates: [...(supplier.deliveryExceptionDates ?? [])],
+                    [editSup.id]: {
+                      ...(prev[editSup.id] ?? {
+                        name: editSup.name,
+                        contact: editSup.contact ?? '',
+                        deliveryCycleWeekdays: [...(editSup.deliveryCycleWeekdays ?? [])],
+                        deliveryExceptionDates: [...(editSup.deliveryExceptionDates ?? [])],
                       }),
                       contact: e.target.value,
                     },
@@ -884,7 +1082,7 @@ export default function ProveedoresPage() {
                 </p>
                 <div className="mt-2 flex flex-wrap gap-1.5">
                   {DELIVERY_DAY_CHIPS.map(({ day, label }) => {
-                    const days = supplierDrafts[supplier.id]?.deliveryCycleWeekdays ?? [];
+                    const days = supplierDrafts[editSup.id]?.deliveryCycleWeekdays ?? [];
                     const sel = days.includes(day);
                     return (
                       <button
@@ -892,18 +1090,18 @@ export default function ProveedoresPage() {
                         type="button"
                         onClick={() =>
                           setSupplierDrafts((prev) => {
-                            const cur = prev[supplier.id] ?? {
-                              name: supplier.name,
-                              contact: supplier.contact ?? '',
-                              deliveryCycleWeekdays: [...(supplier.deliveryCycleWeekdays ?? [])],
-                              deliveryExceptionDates: [...(supplier.deliveryExceptionDates ?? [])],
+                            const cur = prev[editSup.id] ?? {
+                              name: editSup.name,
+                              contact: editSup.contact ?? '',
+                              deliveryCycleWeekdays: [...(editSup.deliveryCycleWeekdays ?? [])],
+                              deliveryExceptionDates: [...(editSup.deliveryExceptionDates ?? [])],
                             };
                             const set = new Set(cur.deliveryCycleWeekdays);
                             if (set.has(day)) set.delete(day);
                             else set.add(day);
                             return {
                               ...prev,
-                              [supplier.id]: {
+                              [editSup.id]: {
                                 ...cur,
                                 deliveryCycleWeekdays: [...set].sort((a, b) => a - b),
                               },
@@ -931,53 +1129,53 @@ export default function ProveedoresPage() {
                 <div className="mt-2 flex items-center gap-2">
                   <input
                     type="date"
-                    value={exceptionInputBySupplier[supplier.id] ?? ''}
+                    value={exceptionInputBySupplier[editSup.id] ?? ''}
                     onChange={(e) =>
-                      setExceptionInputBySupplier((prev) => ({ ...prev, [supplier.id]: e.target.value }))
+                      setExceptionInputBySupplier((prev) => ({ ...prev, [editSup.id]: e.target.value }))
                     }
                     className="h-9 flex-1 rounded-lg border border-zinc-300 bg-white px-2 text-sm text-zinc-900 outline-none"
                   />
                   <button
                     type="button"
                     onClick={() => {
-                      const v = (exceptionInputBySupplier[supplier.id] ?? '').trim();
+                      const v = (exceptionInputBySupplier[editSup.id] ?? '').trim();
                       if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) return;
                       setSupplierDrafts((prev) => {
-                        const cur = prev[supplier.id] ?? {
-                          name: supplier.name,
-                          contact: supplier.contact ?? '',
-                          deliveryCycleWeekdays: [...(supplier.deliveryCycleWeekdays ?? [])],
-                          deliveryExceptionDates: [...(supplier.deliveryExceptionDates ?? [])],
+                        const cur = prev[editSup.id] ?? {
+                          name: editSup.name,
+                          contact: editSup.contact ?? '',
+                          deliveryCycleWeekdays: [...(editSup.deliveryCycleWeekdays ?? [])],
+                          deliveryExceptionDates: [...(editSup.deliveryExceptionDates ?? [])],
                         };
                         if (cur.deliveryExceptionDates.includes(v)) return prev;
                         return {
                           ...prev,
-                          [supplier.id]: {
+                          [editSup.id]: {
                             ...cur,
                             deliveryExceptionDates: [...cur.deliveryExceptionDates, v].sort(),
                           },
                         };
                       });
-                      setExceptionInputBySupplier((prev) => ({ ...prev, [supplier.id]: '' }));
+                      setExceptionInputBySupplier((prev) => ({ ...prev, [editSup.id]: '' }));
                     }}
                     className="h-9 rounded-lg border border-zinc-300 bg-white px-3 text-xs font-semibold text-zinc-700"
                   >
                     Añadir
                   </button>
                 </div>
-                {(supplierDrafts[supplier.id]?.deliveryExceptionDates ?? []).length > 0 ? (
+                {(supplierDrafts[editSup.id]?.deliveryExceptionDates ?? []).length > 0 ? (
                   <div className="mt-2 flex flex-wrap gap-1.5">
-                    {(supplierDrafts[supplier.id]?.deliveryExceptionDates ?? []).map((d) => (
+                    {(supplierDrafts[editSup.id]?.deliveryExceptionDates ?? []).map((d) => (
                       <button
                         key={d}
                         type="button"
                         onClick={() =>
                           setSupplierDrafts((prev) => {
-                            const cur = prev[supplier.id];
+                            const cur = prev[editSup.id];
                             if (!cur) return prev;
                             return {
                               ...prev,
-                              [supplier.id]: {
+                              [editSup.id]: {
                                 ...cur,
                                 deliveryExceptionDates: cur.deliveryExceptionDates.filter((x) => x !== d),
                               },
@@ -997,115 +1195,43 @@ export default function ProveedoresPage() {
               </div>
               <button
                 type="button"
-                onClick={() => saveSupplierChanges(supplier.id)}
+                onClick={() => saveSupplierChanges(editSup.id)}
                 className="h-10 rounded-xl bg-[#2563EB] px-3 text-sm font-bold text-white"
               >
                 Guardar cambios proveedor
               </button>
             </div>
-              ) : null}
-              <div className="mt-3 space-y-2">
-            {[...supplier.products]
-              .sort((a, b) => a.name.localeCompare(b.name, 'es'))
-              .map((p) => {
-                const d = productDrafts[p.id];
-                const u = (d?.unit ?? p.unit) as Unit;
-                const editDual = d?.dualKgBilling === true && unitSupportsReceivedWeightKg(u) && u !== 'kg';
-                const editDerived = (() => {
-                  if (!editDual) return null;
-                  const eq = parseKgEstimate(d?.equivKg ?? '');
-                  const ppk = parsePricePerBilling(d?.pricePerKg ?? '');
-                  if (eq == null || eq === undefined || ppk == null) return null;
-                  return Math.round(eq * ppk * 100) / 100;
-                })();
-                return (
-              <div key={p.id} className="rounded-lg bg-zinc-50 px-3 py-2">
-                <div className="flex items-center justify-between gap-2">
-                  <p className="text-sm text-zinc-800">{p.name}</p>
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setEditingProductId((prev) => (prev === p.id ? null : p.id));
-                        setProductDrafts((prev) => ({
-                          ...prev,
-                          [p.id]: {
-                            name: prev[p.id]?.name ?? p.name,
-                            unit: prev[p.id]?.unit ?? p.unit,
-                            price: prev[p.id]?.price ?? String(p.pricePerUnit),
-                            vatRate: prev[p.id]?.vatRate ?? String(p.vatRate ?? 0),
-                            estimatedKg:
-                              prev[p.id]?.estimatedKg ??
-                              (!supplierProductHasDistinctBilling(p) &&
-                              unitSupportsReceivedWeightKg(p.unit) &&
-                              p.estimatedKgPerUnit != null &&
-                              p.estimatedKgPerUnit > 0
-                                ? String(p.estimatedKgPerUnit)
-                                : ''),
-                            unitsPerPack:
-                              prev[p.id]?.unitsPerPack ?? String((p.unitsPerPack ?? 1) >= 1 ? (p.unitsPerPack ?? 1) : 1),
-                            recipeUnit: prev[p.id]?.recipeUnit ?? (p.recipeUnit ?? 'ud'),
-                            parWeekly:
-                              prev[p.id]?.parWeekly ??
-                              ((p.parStock ?? 0) > 0 ? String(p.parStock) : ''),
-                            dualKgBilling:
-                              prev[p.id]?.dualKgBilling ??
-                              (supplierProductHasDistinctBilling(p) && p.billingUnit === 'kg'),
-                            equivKg:
-                              prev[p.id]?.equivKg ??
-                              (supplierProductHasDistinctBilling(p) && p.billingQtyPerOrderUnit != null
-                                ? String(p.billingQtyPerOrderUnit)
-                                : ''),
-                            pricePerKg:
-                              prev[p.id]?.pricePerKg ??
-                              (supplierProductHasDistinctBilling(p) && p.pricePerBillingUnit != null
-                                ? String(p.pricePerBillingUnit)
-                                : ''),
-                          },
-                        }));
-                      }}
-                      className="rounded-lg border border-zinc-300 bg-white px-2 py-1 text-xs font-semibold text-zinc-700"
-                    >
-                      {editingProductId === p.id ? 'Cerrar' : 'Editar'}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => disableProduct(p.id)}
-                      className="rounded-lg border border-[#B91C1C] bg-white px-2 py-1 text-xs font-semibold text-[#B91C1C]"
-                    >
-                      Desactivar
-                    </button>
-                  </div>
-                </div>
-                <p className="pt-1 text-xs font-semibold text-zinc-600">
-                  {p.pricePerUnit.toFixed(2)} €/{unitPriceCatalogSuffix[p.unit]} · IVA {(p.vatRate * 100).toFixed(0)}%
-                  {(p.unitsPerPack ?? 1) > 1 ? (
-                    <>
-                      {' '}
-                      · escandallo ~{(p.pricePerUnit / (p.unitsPerPack ?? 1)).toFixed(4)} €/
-                      {unitPriceCatalogSuffix[p.recipeUnit ?? 'ud']} (×{p.unitsPerPack ?? 1})
-                    </>
-                  ) : null}
-                  {supplierProductHasDistinctBilling(p) && p.billingUnit === 'kg' && p.pricePerBillingUnit != null
-                    ? ` · cobro ~${p.pricePerBillingUnit} €/kg (~${p.billingQtyPerOrderUnit ?? '—'} kg/${unitPriceCatalogSuffix[p.unit]})`
-                    : ''}
-                  {!supplierProductHasDistinctBilling(p) &&
-                  unitSupportsReceivedWeightKg(p.unit) &&
-                  p.estimatedKgPerUnit != null &&
-                  p.estimatedKgPerUnit > 0
-                    ? ` · ~${p.estimatedKgPerUnit} kg/${p.unit}`
-                    : ''}
-                  {(p.parStock ?? 0) > 0 ? ` · ref. sem. ${p.parStock} ${unitPriceCatalogSuffix[p.unit]}` : ''}
-                </p>
-                {editingProductId === p.id ? (
+
+        </ProveedoresModalShell>
+      ) : null}
+
+      {editingProductId && editProductTarget
+        ? (() => {
+            const editP = editProductTarget.p;
+            const d = productDrafts[editP.id];
+            const u = (d?.unit ?? editP.unit) as Unit;
+            const editDual = d?.dualKgBilling === true && unitSupportsReceivedWeightKg(u) && u !== 'kg';
+            const editDerived = (() => {
+              if (!editDual) return null;
+              const eq = parseKgEstimate(d?.equivKg ?? '');
+              const ppk = parsePricePerBilling(d?.pricePerKg ?? '');
+              if (eq == null || eq === undefined || ppk == null) return null;
+              return Math.round(eq * ppk * 100) / 100;
+            })();
+            return (
+              <ProveedoresModalShell
+                open
+                title="Editar producto"
+                onClose={() => setEditingProductId(null)}
+              >
                   <div className="mt-2 grid grid-cols-1 gap-2 rounded-lg border border-zinc-200 bg-white p-2">
                     <input
-                      value={productDrafts[p.id]?.name ?? ''}
+                      value={productDrafts[editP.id]?.name ?? ''}
                       onChange={(e) =>
                         setProductDrafts((prev) => ({
                           ...prev,
-                          [p.id]: {
-                            ...(prev[p.id] ?? {
+                          [editP.id]: {
+                            ...(prev[editP.id] ?? {
                               name: '',
                               unit: 'ud',
                               price: '',
@@ -1124,13 +1250,13 @@ export default function ProveedoresPage() {
                     />
                     <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
                       <select
-                        value={productDrafts[p.id]?.unit ?? 'ud'}
+                        value={productDrafts[editP.id]?.unit ?? 'ud'}
                         onChange={(e) => {
                           const nextU = e.target.value as Unit;
                           setProductDrafts((prev) => ({
                             ...prev,
-                            [p.id]: {
-                              ...(prev[p.id] ?? { ...EMPTY_PRODUCT_DRAFT }),
+                            [editP.id]: {
+                              ...(prev[editP.id] ?? { ...EMPTY_PRODUCT_DRAFT }),
                               unit: nextU,
                               ...(nextU === 'kg' || !unitSupportsReceivedWeightKg(nextU)
                                 ? { dualKgBilling: false, equivKg: '', pricePerKg: '' }
@@ -1156,12 +1282,12 @@ export default function ProveedoresPage() {
                         </div>
                       ) : (
                         <input
-                          value={productDrafts[p.id]?.price ?? ''}
+                          value={productDrafts[editP.id]?.price ?? ''}
                           onChange={(e) =>
                             setProductDrafts((prev) => ({
                               ...prev,
-                              [p.id]: {
-                                ...(prev[p.id] ?? { ...EMPTY_PRODUCT_DRAFT }),
+                              [editP.id]: {
+                                ...(prev[editP.id] ?? { ...EMPTY_PRODUCT_DRAFT }),
                                 price: e.target.value,
                               },
                             }))
@@ -1171,12 +1297,12 @@ export default function ProveedoresPage() {
                         />
                       )}
                       <input
-                        value={productDrafts[p.id]?.vatRate ?? ''}
+                        value={productDrafts[editP.id]?.vatRate ?? ''}
                         onChange={(e) =>
                           setProductDrafts((prev) => ({
                             ...prev,
-                            [p.id]: {
-                              ...(prev[p.id] ?? {
+                            [editP.id]: {
+                              ...(prev[editP.id] ?? {
                                 name: '',
                                 unit: 'ud',
                                 price: '',
@@ -1198,12 +1324,12 @@ export default function ProveedoresPage() {
                       <label className="flex cursor-pointer items-center gap-2 text-xs text-zinc-800">
                         <input
                           type="checkbox"
-                          checked={productDrafts[p.id]?.dualKgBilling === true}
+                          checked={productDrafts[editP.id]?.dualKgBilling === true}
                           onChange={(e) =>
                             setProductDrafts((prev) => ({
                               ...prev,
-                              [p.id]: {
-                                ...(prev[p.id] ?? { ...EMPTY_PRODUCT_DRAFT }),
+                              [editP.id]: {
+                                ...(prev[editP.id] ?? { ...EMPTY_PRODUCT_DRAFT }),
                                 dualKgBilling: e.target.checked,
                                 ...(e.target.checked ? { price: '' } : { equivKg: '', pricePerKg: '' }),
                               },
@@ -1217,12 +1343,12 @@ export default function ProveedoresPage() {
                     {editDual ? (
                       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                         <input
-                          value={productDrafts[p.id]?.equivKg ?? ''}
+                          value={productDrafts[editP.id]?.equivKg ?? ''}
                           onChange={(e) =>
                             setProductDrafts((prev) => ({
                               ...prev,
-                              [p.id]: {
-                                ...(prev[p.id] ?? { ...EMPTY_PRODUCT_DRAFT }),
+                              [editP.id]: {
+                                ...(prev[editP.id] ?? { ...EMPTY_PRODUCT_DRAFT }),
                                 equivKg: e.target.value,
                               },
                             }))
@@ -1231,12 +1357,12 @@ export default function ProveedoresPage() {
                           className="h-9 rounded-lg border border-zinc-300 bg-white px-3 text-sm text-zinc-900 placeholder:text-zinc-500 outline-none"
                         />
                         <input
-                          value={productDrafts[p.id]?.pricePerKg ?? ''}
+                          value={productDrafts[editP.id]?.pricePerKg ?? ''}
                           onChange={(e) =>
                             setProductDrafts((prev) => ({
                               ...prev,
-                              [p.id]: {
-                                ...(prev[p.id] ?? { ...EMPTY_PRODUCT_DRAFT }),
+                              [editP.id]: {
+                                ...(prev[editP.id] ?? { ...EMPTY_PRODUCT_DRAFT }),
                                 pricePerKg: e.target.value,
                               },
                             }))
@@ -1247,12 +1373,12 @@ export default function ProveedoresPage() {
                       </div>
                     ) : null}
                     <input
-                      value={productDrafts[p.id]?.parWeekly ?? ''}
+                      value={productDrafts[editP.id]?.parWeekly ?? ''}
                       onChange={(e) =>
                         setProductDrafts((prev) => ({
                           ...prev,
-                          [p.id]: {
-                            ...(prev[p.id] ?? {
+                          [editP.id]: {
+                            ...(prev[editP.id] ?? {
                               name: '',
                               unit: 'ud',
                               price: '',
@@ -1270,12 +1396,12 @@ export default function ProveedoresPage() {
                       className="h-9 rounded-lg border border-zinc-300 bg-white px-3 text-sm text-zinc-900 placeholder:text-zinc-500 outline-none"
                     />
                     <input
-                      value={productDrafts[p.id]?.unitsPerPack ?? '1'}
+                      value={productDrafts[editP.id]?.unitsPerPack ?? '1'}
                       onChange={(e) =>
                         setProductDrafts((prev) => ({
                           ...prev,
-                          [p.id]: {
-                            ...(prev[p.id] ?? {
+                          [editP.id]: {
+                            ...(prev[editP.id] ?? {
                               name: '',
                               unit: 'ud',
                               price: '',
@@ -1292,15 +1418,15 @@ export default function ProveedoresPage() {
                       placeholder="Piezas por envase (receta)"
                       className="h-9 rounded-lg border border-zinc-300 bg-white px-3 text-sm text-zinc-900 placeholder:text-zinc-500 outline-none"
                     />
-                    {parseUnitsPerPack(productDrafts[p.id]?.unitsPerPack ?? '1') != null &&
-                    parseUnitsPerPack(productDrafts[p.id]?.unitsPerPack ?? '1')! > 1 ? (
+                    {parseUnitsPerPack(productDrafts[editP.id]?.unitsPerPack ?? '1') != null &&
+                    parseUnitsPerPack(productDrafts[editP.id]?.unitsPerPack ?? '1')! > 1 ? (
                       <select
-                        value={productDrafts[p.id]?.recipeUnit ?? 'ud'}
+                        value={productDrafts[editP.id]?.recipeUnit ?? 'ud'}
                         onChange={(e) =>
                           setProductDrafts((prev) => ({
                             ...prev,
-                            [p.id]: {
-                              ...(prev[p.id] ?? {
+                            [editP.id]: {
+                              ...(prev[editP.id] ?? {
                                 name: '',
                                 unit: 'ud',
                                 price: '',
@@ -1325,14 +1451,14 @@ export default function ProveedoresPage() {
                         <option value="bandeja">bandeja</option>
                       </select>
                     ) : null}
-                    {!editDual && unitSupportsReceivedWeightKg(productDrafts[p.id]?.unit ?? p.unit) ? (
+                    {!editDual && unitSupportsReceivedWeightKg(productDrafts[editP.id]?.unit ?? editP.unit) ? (
                       <input
-                        value={productDrafts[p.id]?.estimatedKg ?? ''}
+                        value={productDrafts[editP.id]?.estimatedKg ?? ''}
                         onChange={(e) =>
                           setProductDrafts((prev) => ({
                             ...prev,
-                            [p.id]: {
-                              ...(prev[p.id] ?? { ...EMPTY_PRODUCT_DRAFT }),
+                            [editP.id]: {
+                              ...(prev[editP.id] ?? { ...EMPTY_PRODUCT_DRAFT }),
                               estimatedKg: e.target.value,
                             },
                           }))
@@ -1343,20 +1469,18 @@ export default function ProveedoresPage() {
                     ) : null}
                     <button
                       type="button"
-                      onClick={() => saveProductChanges(p.id)}
+                      onClick={() => saveProductChanges(editP.id)}
                       className="h-9 rounded-lg bg-[#2563EB] px-3 text-sm font-bold text-white"
                     >
                       Guardar cambios producto
                     </button>
                   </div>
-                ) : null}
-              </div>
-              );})}
-              </div>
-            </div>
-          ) : null}
-        </section>
-      ))}
+
+              </ProveedoresModalShell>
+            );
+          })()
+        : null}
+
     </div>
   );
 }
