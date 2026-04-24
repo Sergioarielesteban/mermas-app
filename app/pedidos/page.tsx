@@ -63,6 +63,13 @@ import {
 } from '@/lib/comida-personal-supabase';
 import { getPedidoDrafts } from '@/lib/pedidos-storage';
 import {
+  PEDIDOS_VIEW_STATE_KEY,
+  parsePedidosViewState,
+  serializePedidosViewState,
+  type PedidosOpenedSection,
+  type PedidosViewStateStored,
+} from '@/lib/pedidos-view-state';
+import {
   fetchCleaningTasks,
   fetchCleaningWeekdayItems,
 } from '@/lib/appcc-limpieza-supabase';
@@ -349,19 +356,6 @@ function parsePedidosPageUi(raw: string | null): PedidosPageUiV1 | null {
   }
 }
 
-/** `pendientes` = bloque «Pendientes de entrega»; `enviados` = «Histórico recibidos». */
-function derivePedidosPageUiSection(
-  pendientesOpen: boolean,
-  historicoOpen: boolean,
-  expandedSentId: string | null,
-  expandedHistoricoId: string | null,
-): 'pendientes' | 'enviados' {
-  if (expandedHistoricoId) return 'enviados';
-  if (expandedSentId) return 'pendientes';
-  if (historicoOpen && !pendientesOpen) return 'enviados';
-  return 'pendientes';
-}
-
 function historicoMonthKeyFromOrder(order: PedidoOrder): string {
   const d = order.receivedAt ? new Date(order.receivedAt) : new Date(order.createdAt);
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
@@ -455,6 +449,9 @@ export default function PedidosPage() {
   const [uiHydrated, setUiHydrated] = React.useState(false);
   const pedidosPageUiRestoreAttemptedRef = React.useRef<string | null>(null);
   const scrollRestorePendingRef = React.useRef<number | null>(null);
+  /** Evita escribir en localStorage (y machacar un estado bueno) antes de restaurar. */
+  const hasRestoredViewStateRef = React.useRef(false);
+  const scrollPersistTimeoutRef = React.useRef<number | null>(null);
 
   React.useEffect(() => {
     if (!avisoPedido) return;
@@ -468,11 +465,13 @@ export default function PedidosPage() {
     if (typeof window === 'undefined') return;
     if (!localId || !canUse) {
       pedidosPageUiRestoreAttemptedRef.current = null;
+      hasRestoredViewStateRef.current = false;
       setUiHydrated(false);
       return;
     }
     if (avisoPedido) {
       pedidosPageUiRestoreAttemptedRef.current = localId;
+      hasRestoredViewStateRef.current = true;
       setUiHydrated(true);
       return;
     }
@@ -482,32 +481,81 @@ export default function PedidosPage() {
     }
     pedidosPageUiRestoreAttemptedRef.current = localId;
     try {
-      const ctx = parsePedidosPageUi(window.localStorage.getItem(pedidosPageUiStorageKey(localId)));
-      if (ctx) {
-        // Acordeones siempre cerrados al entrar/volver: el usuario los abre con un toque.
-        setPendientesEntregaAccordionOpen(false);
-        setHistoricoRecibidosAccordionOpen(false);
-        if (ctx.section === 'enviados') {
-          setExpandedSentId(null);
-          if (ctx.pedido_id) setExpandedHistoricoId(ctx.pedido_id);
-          else setExpandedHistoricoId(null);
-          if (ctx.historico_month_key) {
-            setHistoricoMonthOpen((p) => ({ ...p, [ctx.historico_month_key!]: true }));
-          }
-        } else {
-          setExpandedHistoricoId(null);
-          if (ctx.pedido_id) setExpandedSentId(ctx.pedido_id);
-          else setExpandedSentId(null);
+      const st = parsePedidosViewState(window.localStorage.getItem(PEDIDOS_VIEW_STATE_KEY), localId);
+      if (st) {
+        const r = st.route;
+        if (r && r.startsWith('/pedidos') && r !== window.location.pathname + window.location.search) {
+          router.replace(r, { scroll: false });
         }
-        if (ctx.scroll_y != null && ctx.scroll_y > 0) {
-          scrollRestorePendingRef.current = ctx.scroll_y;
+        if (st.receptionInputs) {
+          const { priceInputByItemId: pi, weightInputByItemId: wi, pricePerKgInputByItemId: ppi } = st.receptionInputs;
+          setPriceInputByItemId((prev) => ({ ...prev, ...pi }));
+          setWeightInputByItemId((prev) => ({ ...prev, ...wi }));
+          setPricePerKgInputByItemId((prev) => ({ ...prev, ...ppi }));
+        }
+        if (st.historicoMonthKey) {
+          setHistoricoMonthOpen((p) => ({ ...p, [st.historicoMonthKey!]: true }));
+        }
+        if (st.openedSection === 'received') {
+          setHistoricoRecibidosAccordionOpen(true);
+          setPendientesEntregaAccordionOpen(false);
+        } else if (st.openedSection === 'pending' || st.openedSection === 'sent') {
+          setPendientesEntregaAccordionOpen(true);
+          setHistoricoRecibidosAccordionOpen(false);
+        } else {
+          setPendientesEntregaAccordionOpen(false);
+          setHistoricoRecibidosAccordionOpen(false);
+        }
+        const primary = st.activeOrderId ?? st.expandedOrderIds[0] ?? null;
+        if (st.openedSection === 'received') {
+          setExpandedSentId(null);
+          setExpandedHistoricoId(primary);
+        } else if (st.openedSection === 'pending' || st.openedSection === 'sent') {
+          setExpandedHistoricoId(null);
+          setExpandedSentId(primary);
+        } else {
+          setExpandedSentId(null);
+          setExpandedHistoricoId(null);
+          if (primary) {
+            setPendientesEntregaAccordionOpen(true);
+            setHistoricoRecibidosAccordionOpen(false);
+            setExpandedSentId(primary);
+          }
+        }
+        if (st.scrollY > 0) {
+          scrollRestorePendingRef.current = st.scrollY;
+        }
+      } else {
+        const ctx = parsePedidosPageUi(window.localStorage.getItem(pedidosPageUiStorageKey(localId)));
+        if (ctx) {
+          if (ctx.section === 'enviados') {
+            setHistoricoRecibidosAccordionOpen(true);
+            setPendientesEntregaAccordionOpen(false);
+            setExpandedSentId(null);
+            if (ctx.pedido_id) setExpandedHistoricoId(ctx.pedido_id);
+            else setExpandedHistoricoId(null);
+            if (ctx.historico_month_key) {
+              setHistoricoMonthOpen((p) => ({ ...p, [ctx.historico_month_key!]: true }));
+            }
+          } else {
+            setPendientesEntregaAccordionOpen(true);
+            setHistoricoRecibidosAccordionOpen(false);
+            setExpandedHistoricoId(null);
+            if (ctx.pedido_id) setExpandedSentId(ctx.pedido_id);
+            else setExpandedSentId(null);
+          }
+          if (ctx.scroll_y != null && ctx.scroll_y > 0) {
+            scrollRestorePendingRef.current = ctx.scroll_y;
+          }
         }
       }
     } catch {
       /* ignore */
+    } finally {
+      hasRestoredViewStateRef.current = true;
+      setUiHydrated(true);
     }
-    setUiHydrated(true);
-  }, [localId, canUse, avisoPedido]);
+  }, [localId, canUse, avisoPedido, router]);
 
   const scheduleIncidenciaRecepcionNotifyDebounced = React.useCallback(
     (order: PedidoOrder) => {
@@ -1346,34 +1394,49 @@ export default function PedidosPage() {
     });
   }, [receivedOrders]);
 
-  const persistPedidosPageUi = React.useCallback(() => {
-    if (!localId || !canUse || !uiHydrated) return;
+  const persistPedidosViewState = React.useCallback(() => {
+    if (!hasRestoredViewStateRef.current || !localId || !canUse || !uiHydrated) return;
+    if (typeof window === 'undefined') return;
     try {
-      const section = derivePedidosPageUiSection(
-        pendientesEntregaAccordionOpen,
-        historicoRecibidosAccordionOpen,
-        expandedSentId,
-        expandedHistoricoId,
-      );
-      const pedidoId = section === 'pendientes' ? expandedSentId : expandedHistoricoId;
-      const order = pedidoId ? orders.find((o) => o.id === pedidoId) : undefined;
-      const proveedor_id = order?.supplierId ?? null;
-      let historico_month_key: string | undefined;
-      if (section === 'enviados' && expandedHistoricoId) {
-        const ho = orders.find((o) => o.id === expandedHistoricoId);
-        if (ho) historico_month_key = historicoMonthKeyFromOrder(ho);
+      const route = window.location.pathname + window.location.search;
+      const activeOrderId = expandedSentId ?? expandedHistoricoId ?? null;
+      const expandedOrderIds = [expandedSentId, expandedHistoricoId].filter((x): x is string => Boolean(x));
+      let openedSection: PedidosOpenedSection = null;
+      if (pendientesEntregaAccordionOpen && !historicoRecibidosAccordionOpen) openedSection = 'pending';
+      else if (!pendientesEntregaAccordionOpen && historicoRecibidosAccordionOpen) openedSection = 'received';
+      else if (pendientesEntregaAccordionOpen && historicoRecibidosAccordionOpen) {
+        if (expandedHistoricoId) openedSection = 'received';
+        else if (expandedSentId) openedSection = 'pending';
+        else openedSection = 'pending';
+      }       else {
+        openedSection = null;
       }
-      const scroll_y =
-        typeof window !== 'undefined' && window.scrollY > 0 ? Math.round(window.scrollY) : undefined;
-      const payload: PedidosPageUiV1 = {
-        v: 1,
-        section,
-        proveedor_id,
-        pedido_id: pedidoId,
-        ...(historico_month_key ? { historico_month_key } : {}),
-        ...(scroll_y !== undefined ? { scroll_y } : {}),
+      if (activeOrderId && openedSection == null) {
+        const o = orders.find((x) => x.id === activeOrderId);
+        if (o?.status === 'sent') openedSection = 'pending';
+        else if (o?.status === 'received') openedSection = 'received';
+      }
+      const scrollY = Math.max(0, Math.round(window.scrollY));
+      let historicoMonthKey: string | null = null;
+      if (expandedHistoricoId) {
+        const ho = orders.find((o) => o.id === expandedHistoricoId);
+        if (ho) historicoMonthKey = historicoMonthKeyFromOrder(ho);
+      }
+      const payload: Omit<PedidosViewStateStored, 'updatedAt'> = {
+        route,
+        activeOrderId,
+        expandedOrderIds,
+        openedSection,
+        scrollY,
+        localId,
+        ...(historicoMonthKey != null ? { historicoMonthKey } : {}),
+        receptionInputs: {
+          priceInputByItemId: { ...priceInputByItemId },
+          weightInputByItemId: { ...weightInputByItemId },
+          pricePerKgInputByItemId: { ...pricePerKgInputByItemId },
+        },
       };
-      window.localStorage.setItem(pedidosPageUiStorageKey(localId), JSON.stringify(payload));
+      window.localStorage.setItem(PEDIDOS_VIEW_STATE_KEY, serializePedidosViewState(payload));
     } catch {
       /* ignore */
     }
@@ -1386,36 +1449,68 @@ export default function PedidosPage() {
     expandedSentId,
     expandedHistoricoId,
     orders,
+    priceInputByItemId,
+    weightInputByItemId,
+    pricePerKgInputByItemId,
   ]);
 
   React.useEffect(() => {
     if (!uiHydrated || !localId || !canUse) return;
-    persistPedidosPageUi();
-  }, [uiHydrated, localId, canUse, persistPedidosPageUi]);
+    persistPedidosViewState();
+  }, [uiHydrated, localId, canUse, persistPedidosViewState]);
 
   React.useEffect(() => {
     if (!localId || !canUse) return;
-    const flush = () => {
-      if (document.visibilityState !== 'hidden') return;
-      persistPedidosPageUi();
+    const onVisibility = () => {
+      if (document.visibilityState === 'hidden') persistPedidosViewState();
     };
-    document.addEventListener('visibilitychange', flush);
-    window.addEventListener('pagehide', flush);
+    const onPageHide = () => {
+      persistPedidosViewState();
+    };
+    const onBeforeUnload = () => {
+      persistPedidosViewState();
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+    window.addEventListener('pagehide', onPageHide);
+    window.addEventListener('beforeunload', onBeforeUnload);
     return () => {
-      document.removeEventListener('visibilitychange', flush);
-      window.removeEventListener('pagehide', flush);
+      document.removeEventListener('visibilitychange', onVisibility);
+      window.removeEventListener('pagehide', onPageHide);
+      window.removeEventListener('beforeunload', onBeforeUnload);
     };
-  }, [localId, canUse, persistPedidosPageUi]);
+  }, [localId, canUse, persistPedidosViewState]);
+
+  React.useEffect(() => {
+    if (typeof window === 'undefined' || !localId || !canUse) return;
+    const onScroll = () => {
+      if (scrollPersistTimeoutRef.current != null) window.clearTimeout(scrollPersistTimeoutRef.current);
+      scrollPersistTimeoutRef.current = window.setTimeout(() => {
+        scrollPersistTimeoutRef.current = null;
+        persistPedidosViewState();
+      }, 200);
+    };
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => {
+      if (scrollPersistTimeoutRef.current != null) window.clearTimeout(scrollPersistTimeoutRef.current);
+      window.removeEventListener('scroll', onScroll);
+    };
+  }, [localId, canUse, persistPedidosViewState]);
 
   React.useEffect(() => {
     if (!uiHydrated) return;
     const y = scrollRestorePendingRef.current;
     if (y == null || y <= 0) return;
     scrollRestorePendingRef.current = null;
-    const t = window.setTimeout(() => {
-      window.scrollTo({ top: y, behavior: 'auto' });
-    }, 120);
-    return () => window.clearTimeout(t);
+    let inner = 0;
+    const outer = requestAnimationFrame(() => {
+      inner = requestAnimationFrame(() => {
+        window.scrollTo({ top: y, behavior: 'auto' });
+      });
+    });
+    return () => {
+      cancelAnimationFrame(outer);
+      if (inner) cancelAnimationFrame(inner);
+    };
   }, [
     uiHydrated,
     pendientesEntregaAccordionOpen,
