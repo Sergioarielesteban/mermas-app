@@ -185,6 +185,8 @@ export type PedidoOrder = {
   updatedAt?: string;
   /** Última vez que se guardaron cambios de líneas en un pedido ya enviado (requiere migración SQL). */
   contentRevisedAfterSentAt?: string;
+  /** Quién creó o envió el pedido (columna usuario_nombre). */
+  usuarioNombre?: string;
   items: PedidoOrderItem[];
   total: number;
 };
@@ -244,6 +246,7 @@ type OrderRow = {
   price_review_archived_at?: string | null;
   updated_at?: string | null;
   content_revised_after_sent_at?: string | null;
+  usuario_nombre?: string | null;
   pedido_suppliers: { name: string; contact: string | null } | { name: string; contact: string | null }[] | null;
 };
 type OrderItemRow = {
@@ -324,11 +327,11 @@ function isMissingContentRevisedAfterSentColumnError(message: string): boolean {
 }
 
 const PURCHASE_ORDER_HEADER_SEL_WITH_REVISION =
-  'id,supplier_id,status,notes,created_at,sent_at,received_at,delivery_date,price_review_archived_at,updated_at,content_revised_after_sent_at,pedido_suppliers(name,contact)';
+  'id,supplier_id,status,notes,created_at,sent_at,received_at,delivery_date,price_review_archived_at,updated_at,content_revised_after_sent_at,usuario_nombre,pedido_suppliers(name,contact)';
 const PURCHASE_ORDER_HEADER_SEL_WITH_UPDATED =
-  'id,supplier_id,status,notes,created_at,sent_at,received_at,delivery_date,price_review_archived_at,updated_at,pedido_suppliers(name,contact)';
+  'id,supplier_id,status,notes,created_at,sent_at,received_at,delivery_date,price_review_archived_at,updated_at,usuario_nombre,pedido_suppliers(name,contact)';
 const PURCHASE_ORDER_HEADER_SEL_LEGACY =
-  'id,supplier_id,status,notes,created_at,sent_at,received_at,delivery_date,price_review_archived_at,pedido_suppliers(name,contact)';
+  'id,supplier_id,status,notes,created_at,sent_at,received_at,delivery_date,price_review_archived_at,usuario_nombre,pedido_suppliers(name,contact)';
 
 async function runPurchaseOrderHeaderQuery(
   supabase: SupabaseClient,
@@ -450,6 +453,9 @@ function buildPedidoOrdersFromRows(orderRows: OrderRow[], itemRows: OrderItemRow
       ...(row.updated_at != null && row.updated_at !== '' ? { updatedAt: row.updated_at } : {}),
       ...(row.content_revised_after_sent_at != null && row.content_revised_after_sent_at !== ''
         ? { contentRevisedAfterSentAt: row.content_revised_after_sent_at }
+        : {}),
+      ...(row.usuario_nombre != null && String(row.usuario_nombre).trim() !== ''
+        ? { usuarioNombre: String(row.usuario_nombre).trim() }
         : {}),
       items,
       total: items.reduce((acc, item) => acc + item.lineTotal, 0),
@@ -1130,7 +1136,7 @@ export async function fetchOrderById(
     const withRevision = await supabase
       .from('purchase_orders')
       .select(
-        'id,supplier_id,status,notes,created_at,sent_at,received_at,delivery_date,price_review_archived_at,updated_at,content_revised_after_sent_at,pedido_suppliers(name,contact)',
+        'id,supplier_id,status,notes,created_at,sent_at,received_at,delivery_date,price_review_archived_at,updated_at,content_revised_after_sent_at,usuario_nombre,pedido_suppliers(name,contact)',
       )
       .eq('local_id', localId)
       .eq('id', orderId)
@@ -1140,7 +1146,7 @@ export async function fetchOrderById(
         const withUpdated = await supabase
           .from('purchase_orders')
           .select(
-            'id,supplier_id,status,notes,created_at,sent_at,received_at,delivery_date,price_review_archived_at,updated_at,pedido_suppliers(name,contact)',
+            'id,supplier_id,status,notes,created_at,sent_at,received_at,delivery_date,price_review_archived_at,updated_at,usuario_nombre,pedido_suppliers(name,contact)',
           )
           .eq('local_id', localId)
           .eq('id', orderId)
@@ -1152,7 +1158,7 @@ export async function fetchOrderById(
           const legacy = await supabase
             .from('purchase_orders')
             .select(
-              'id,supplier_id,status,notes,created_at,sent_at,received_at,delivery_date,price_review_archived_at,pedido_suppliers(name,contact)',
+              'id,supplier_id,status,notes,created_at,sent_at,received_at,delivery_date,price_review_archived_at,usuario_nombre,pedido_suppliers(name,contact)',
             )
             .eq('local_id', localId)
             .eq('id', orderId)
@@ -1166,7 +1172,7 @@ export async function fetchOrderById(
         const legacy = await supabase
           .from('purchase_orders')
           .select(
-            'id,supplier_id,status,notes,created_at,sent_at,received_at,delivery_date,price_review_archived_at,pedido_suppliers(name,contact)',
+            'id,supplier_id,status,notes,created_at,sent_at,received_at,delivery_date,price_review_archived_at,usuario_nombre,pedido_suppliers(name,contact)',
           )
           .eq('local_id', localId)
           .eq('id', orderId)
@@ -1376,6 +1382,8 @@ export async function saveOrder(
     expectedOrderUpdatedAt?: string;
     /** Pedido ya enviado: marcar columna content_revised_after_sent_at en BD (requiere RPC migrado). */
     markContentRevisedAfterSent?: boolean;
+    /** Nombre del responsable del pedido (se guarda en usuario_nombre). */
+    usuarioNombre?: string;
     items: Array<{
       supplierProductId: string | null;
       productName: string;
@@ -1458,6 +1466,7 @@ export async function saveOrder(
     p_items: rpcItems,
     p_expected_order_updated_at: payload.expectedOrderUpdatedAt ?? null,
     p_mark_content_revised_after_sent: Boolean(payload.markContentRevisedAfterSent),
+    p_usuario_nombre: payload.usuarioNombre?.trim() ? payload.usuarioNombre.trim() : null,
   });
 
   if (error) {

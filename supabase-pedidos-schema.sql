@@ -319,6 +319,9 @@ for each row execute procedure public.set_updated_at();
 alter table public.purchase_orders
   add column if not exists content_revised_after_sent_at timestamptz;
 
+alter table public.purchase_orders
+  add column if not exists usuario_nombre text;
+
 -- Guardado atómico de pedido + líneas (evita cabecera sin líneas en fallos intermedios).
 create or replace function public.save_purchase_order_with_items(
   p_order_id uuid,
@@ -330,7 +333,8 @@ create or replace function public.save_purchase_order_with_items(
   p_delivery_date date,
   p_items jsonb,
   p_expected_order_updated_at timestamptz default null,
-  p_mark_content_revised_after_sent boolean default false
+  p_mark_content_revised_after_sent boolean default false,
+  p_usuario_nombre text default null
 )
 returns table(order_id uuid, order_updated_at timestamptz)
 language plpgsql
@@ -340,7 +344,10 @@ as $$
 declare
   v_order_id uuid;
   v_order_updated_at timestamptz;
+  v_nombre text;
 begin
+  v_nombre := nullif(btrim(coalesce(p_usuario_nombre, '')), '');
+
   if p_status not in ('draft', 'sent', 'received') then
     raise exception 'Estado de pedido inválido';
   end if;
@@ -352,14 +359,16 @@ begin
       status,
       notes,
       sent_at,
-      delivery_date
+      delivery_date,
+      usuario_nombre
     ) values (
       p_local_id,
       p_supplier_id,
       p_status,
       btrim(coalesce(p_notes, '')),
       case when p_status = 'sent' then coalesce(p_sent_at, now()) else null end,
-      p_delivery_date
+      p_delivery_date,
+      v_nombre
     )
     returning id, updated_at into v_order_id, v_order_updated_at;
   else
@@ -374,7 +383,8 @@ begin
         when coalesce(p_mark_content_revised_after_sent, false) then now()
         when p_status = 'draft' then null
         else content_revised_after_sent_at
-      end
+      end,
+      usuario_nombre = coalesce(v_nombre, usuario_nombre)
     where id = p_order_id
       and local_id = p_local_id
       and (p_expected_order_updated_at is null or updated_at = p_expected_order_updated_at)

@@ -3202,17 +3202,7 @@ export default function PedidosPage() {
               >
                 <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
                   <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-                      <span className="truncate text-sm font-bold text-zinc-900">{order.supplierName}</span>
-                      <span
-                        className={[
-                          'shrink-0 rounded px-1.5 py-0 text-[9px] font-black uppercase tracking-wide text-white',
-                          badgeClass,
-                        ].join(' ')}
-                      >
-                        {badgeLabel}
-                      </span>
-                    </div>
+                    <p className="truncate text-sm font-bold text-zinc-900">{order.supplierName}</p>
                     <p className="text-[10px] text-zinc-500">
                       Enviado{' '}
                       <span className="font-medium text-zinc-700">
@@ -3242,6 +3232,22 @@ export default function PedidosPage() {
                     className="shrink-0 text-right text-[10px] leading-tight tabular-nums text-zinc-600 sm:min-w-[7.5rem]"
                     aria-label="Importes del pedido"
                   >
+                    <div className="mb-1 flex flex-col items-end gap-1">
+                      <span
+                        className={[
+                          'shrink-0 rounded px-1.5 py-0 text-[9px] font-black uppercase tracking-wide text-white',
+                          badgeClass,
+                        ].join(' ')}
+                      >
+                        {badgeLabel}
+                      </span>
+                      {order.usuarioNombre?.trim() ? (
+                        <p className="max-w-[11rem] truncate text-right text-[11px] font-medium leading-tight text-[#666666] sm:text-xs">
+                          <span aria-hidden>👤 </span>
+                          {order.usuarioNombre.trim()}
+                        </p>
+                      ) : null}
+                    </div>
                     <div className="flex justify-end gap-x-2">
                       <span className="text-zinc-400">s/IVA</span>
                       <span className="font-semibold text-zinc-900">{totals.base.toFixed(2)} €</span>

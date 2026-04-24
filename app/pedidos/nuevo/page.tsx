@@ -481,6 +481,9 @@ export default function NuevoPedidoPage() {
           id: item.id || `demo-li-${uid('i')}`,
         })),
         total: lineTotalSum,
+        ...(actorLabel(displayName, loginUsername).trim()
+          ? { usuarioNombre: actorLabel(displayName, loginUsername).trim() }
+          : {}),
       };
       resetPedidoFormAfterSuccess();
       upsertOrder(order);
@@ -493,6 +496,7 @@ export default function NuevoPedidoPage() {
       setMessage('Sin conexión con Supabase.');
       return;
     }
+    const usuarioNombrePedido = actorLabel(displayName, loginUsername).trim();
     void saveOrder(supabase, localId, {
       orderId: existingOrderId ?? undefined,
       supplierId: selectedSupplier.id,
@@ -503,6 +507,7 @@ export default function NuevoPedidoPage() {
       deliveryDate: deliveryDate || undefined,
       expectedOrderUpdatedAt: existingOrderUpdatedAt ?? undefined,
       markContentRevisedAfterSent,
+      ...(usuarioNombrePedido ? { usuarioNombre: usuarioNombrePedido } : {}),
       items: items.map((item) => ({
         supplierProductId: item.supplierProductId,
         productName: item.productName,
@@ -567,6 +572,9 @@ export default function NuevoPedidoPage() {
           id: item.id || `demo-li-${uid('i')}`,
         })),
         total: lineTotalSum,
+        ...(actorLabel(displayName, loginUsername).trim()
+          ? { usuarioNombre: actorLabel(displayName, loginUsername).trim() }
+          : {}),
       };
       resetPedidoFormAfterSuccess();
       upsertOrder(order);
@@ -584,6 +592,7 @@ export default function NuevoPedidoPage() {
       return;
     }
 
+    const usuarioNombreWhatsapp = actorLabel(displayName, loginUsername).trim();
     void saveOrder(supabase, localId, {
       orderId: existingOrderId ?? undefined,
       supplierId: selectedSupplier.id,
@@ -594,6 +603,7 @@ export default function NuevoPedidoPage() {
       deliveryDate,
       expectedOrderUpdatedAt: existingOrderUpdatedAt ?? undefined,
       markContentRevisedAfterSent: markRevWhatsapp,
+      ...(usuarioNombreWhatsapp ? { usuarioNombre: usuarioNombreWhatsapp } : {}),
       items: items.map((item) => ({
         supplierProductId: item.supplierProductId,
         productName: item.productName,
