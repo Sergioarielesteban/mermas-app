@@ -49,9 +49,9 @@ function panelHref(tile: PanelTile) {
   return tile.blocked ? '/planes' : tile.href;
 }
 
-/** Misma altura en todas las filas (referencia Chat / Escandallos). */
+/** Misma altura en todas las filas; ~30 % menos que la base anterior (Pedidos no usa esto). */
 const PANEL_GRID_CARD_H =
-  'h-[8.5rem] min-h-[8.5rem] max-h-[8.5rem] sm:h-[8.75rem] sm:min-h-[8.75rem] sm:max-h-[8.75rem]';
+  'h-[5.95rem] min-h-[5.95rem] max-h-[5.95rem] sm:h-[6.125rem] sm:min-h-[6.125rem] sm:max-h-[6.125rem]';
 
 function PanelGridEmpty() {
   return <div className={['rounded-[18px] bg-transparent', PANEL_GRID_CARD_H].join(' ')} aria-hidden />;
