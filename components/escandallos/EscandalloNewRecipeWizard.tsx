@@ -1,6 +1,7 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
+import Link from 'next/link';
+import { useRouter, useSearchParams } from 'next/navigation';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Check, ChevronRight } from 'lucide-react';
 import EscandalloIngredientDraftEditor from '@/components/escandallos/EscandalloIngredientDraftEditor';
@@ -30,6 +31,7 @@ import {
   type EscandalloRawProduct,
   type EscandalloRecipe,
 } from '@/lib/escandallos-supabase';
+import { writeEscandalloWizardBeforeArticulosNav } from '@/lib/escandallo-articulos-nav';
 import {
   clearEscandalloWizardDraft,
   readEscandalloWizardDraft,
@@ -41,6 +43,7 @@ const STEPS = ['Datos', 'Ingredientes', 'Revisión', 'Guardar'] as const;
 
 export default function EscandalloNewRecipeWizard() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { localId, profileReady } = useAuth();
   const supabaseOk = isSupabaseEnabled() && getSupabaseClient();
 
@@ -76,6 +79,7 @@ export default function EscandalloNewRecipeWizard() {
 
   /** Evita escribir sessionStorage antes de haber leído el borrador (misma vuelta de foco / montaje). */
   const [wizardSessionReady, setWizardSessionReady] = useState(false);
+  const pasoIngredientesOnceRef = useRef(false);
 
   useEffect(() => {
     if (!profileReady) return;
@@ -95,6 +99,20 @@ export default function EscandalloNewRecipeWizard() {
     }
     setWizardSessionReady(true);
   }, [profileReady, localId]);
+
+  /** Desde Artículos máster: abrir directamente el paso Ingredientes (sin perder borrador). */
+  useEffect(() => {
+    if (!wizardSessionReady || !localId) return;
+    const paso = searchParams.get('paso');
+    if (paso !== 'ingredientes') {
+      pasoIngredientesOnceRef.current = false;
+      return;
+    }
+    if (pasoIngredientesOnceRef.current) return;
+    pasoIngredientesOnceRef.current = true;
+    setStep(1);
+    router.replace('/escandallos/recetas/nuevo', { scroll: false });
+  }, [wizardSessionReady, localId, searchParams, router]);
 
   useEffect(() => {
     if (!profileReady || !localId || !wizardSessionReady) return;
@@ -311,6 +329,17 @@ export default function EscandalloNewRecipeWizard() {
               <p className="text-base leading-snug text-zinc-700 sm:text-sm">
                 Busca crudos, elaborados o bases. Puedes dejar filas vacías.
               </p>
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <Link
+                  href="/pedidos/articulos"
+                  onClick={() => {
+                    if (localId) writeEscandalloWizardBeforeArticulosNav(localId, step);
+                  }}
+                  className="inline-flex min-h-[40px] items-center justify-center rounded-xl border border-indigo-200 bg-indigo-50/90 px-3 text-sm font-semibold text-indigo-950 ring-1 ring-indigo-100/80 hover:bg-indigo-100/90"
+                >
+                  Consultar Artículos Máster
+                </Link>
+              </div>
               <div className="mt-4">
                 <EscandalloIngredientDraftEditor
                   drafts={ingredientDrafts}

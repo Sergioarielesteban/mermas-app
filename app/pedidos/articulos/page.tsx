@@ -6,6 +6,7 @@ import { ESCANDALLO_USAGE_UNIT_PRESETS, validateEscandalloUsageUnitInput } from 
 import {
   AlertTriangle,
   BookOpen,
+  ChefHat,
   ChevronDown,
   GitCompare,
   History,
@@ -38,6 +39,10 @@ import {
   type SupplierProductPriceSample,
 } from '@/lib/pedidos-supabase';
 import { formatMoneyEur, formatUnitPriceEur, roundMoney } from '@/lib/money-format';
+import {
+  clearEscandalloWizardArticulosReturn,
+  readEscandalloWizardArticulosReturn,
+} from '@/lib/escandallo-articulos-nav';
 
 function formatShortDate(iso: string) {
   try {
@@ -62,6 +67,7 @@ export default function PedidosArticulosPage() {
   const [banner, setBanner] = useState<string | null>(null);
   const [q, setQ] = useState('');
   const [showDup, setShowDup] = useState(false);
+  const [hasArticulosReturn, setHasArticulosReturn] = useState(false);
 
   const load = useCallback(async () => {
     if (!localId || !supabaseOk) {
@@ -123,6 +129,14 @@ export default function PedidosArticulosPage() {
     void load();
   }, [profileReady, load]);
 
+  useEffect(() => {
+    if (!localId) {
+      setHasArticulosReturn(false);
+      return;
+    }
+    setHasArticulosReturn(readEscandalloWizardArticulosReturn(localId) !== null);
+  }, [localId]);
+
   const filtered = useMemo(() => {
     const t = q.trim().toLowerCase();
     if (!t) return articles;
@@ -175,6 +189,25 @@ export default function PedidosArticulosPage() {
           <LineChart className="h-4 w-4" aria-hidden />
           Precios
         </Link>
+        <Link
+          href="/escandallos/recetas/nuevo?paso=ingredientes"
+          className="inline-flex min-h-[44px] items-center gap-2 rounded-xl border border-violet-200 bg-violet-50 px-3 text-sm font-semibold text-violet-900"
+        >
+          <ChefHat className="h-4 w-4 shrink-0" aria-hidden />
+          Ir a ingredientes de receta
+        </Link>
+        {hasArticulosReturn ? (
+          <Link
+            href="/escandallos/recetas/nuevo"
+            onClick={() => {
+              clearEscandalloWizardArticulosReturn();
+              setHasArticulosReturn(false);
+            }}
+            className="inline-flex min-h-[44px] items-center gap-2 rounded-xl border border-zinc-200 bg-white px-3 text-sm font-semibold text-zinc-700"
+          >
+            Volver al asistente
+          </Link>
+        ) : null}
       </div>
 
       {banner ? (
