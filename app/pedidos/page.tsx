@@ -234,6 +234,35 @@ function previewSentItemSubtotal(
   return lineSubtotalForOrderListDisplay(withTotals);
 }
 
+/** IVA y base alineados con el subtotal en vivo de cada línea (kg/€/kg, precio caja, recepción). */
+function liveSentOrderTotals(
+  order: PedidoOrder,
+  weightInputByItemId: Record<string, string>,
+  pricePerKgInputByItemId: Record<string, string>,
+  sentOrderPpkSuggestionByItemId: Map<string, number | null>,
+): { base: number; vat: number; total: number } {
+  let base = 0;
+  let vat = 0;
+  for (const item of order.items) {
+    const isDualKgReception = orderItemHasDistinctBilling(item) && item.billingUnit === 'kg';
+    const ppkSug = sentOrderPpkSuggestionByItemId.get(item.id) ?? null;
+    const hasKgPpkRow =
+      isDualKgReception ||
+      unitCanDeclareScaleKgOnReception(item.unit) ||
+      unitSupportsReceivedWeightKg(item.unit);
+    const sub = hasKgPpkRow
+      ? previewSentItemSubtotal(item, {
+          weightDraft: weightInputByItemId[item.id],
+          ppkDraft: pricePerKgInputByItemId[item.id],
+          ppkSuggestion: ppkSug,
+        })
+      : lineSubtotalForOrderListDisplay(item);
+    base += sub;
+    vat += sub * (item.vatRate ?? 0);
+  }
+  return { base, vat, total: base + vat };
+}
+
 function normalizeText(input: string): string {
   return input
     .toLowerCase()
@@ -3743,6 +3772,38 @@ export default function PedidosPage() {
                       </div>
                     );
                   })}
+                  {(() => {
+                    const tLive = liveSentOrderTotals(
+                      order,
+                      weightInputByItemId,
+                      pricePerKgInputByItemId,
+                      sentOrderPpkSuggestionByItemId,
+                    );
+                    return (
+                      <div className="mt-1.5 border-t border-zinc-200/90 bg-white px-1.5 py-2 sm:px-2">
+                        <p className="mb-1.5 text-center text-[9px] font-bold uppercase tracking-wide text-zinc-500">
+                          Resumen final
+                        </p>
+                        <div
+                          className="shrink-0 text-right text-[10px] leading-tight tabular-nums text-zinc-600 sm:min-w-[7.5rem]"
+                          aria-label="Resumen económico actual del pedido"
+                        >
+                          <div className="flex justify-end gap-x-2">
+                            <span className="text-zinc-400">s/IVA</span>
+                            <span className="font-semibold text-zinc-900">{tLive.base.toFixed(2)} €</span>
+                          </div>
+                          <div className="flex justify-end gap-x-2">
+                            <span className="text-zinc-400">IVA</span>
+                            <span className="font-semibold text-zinc-900">{tLive.vat.toFixed(2)} €</span>
+                          </div>
+                          <div className="flex justify-end gap-x-2 border-t border-zinc-200/80 pt-0.5 font-black text-zinc-950">
+                            <span className="text-zinc-500">Total c/IVA</span>
+                            <span>{tLive.total.toFixed(2)} €</span>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })()}
                   {renderSentOrderReceiveAndIncident(order, { showExpandHint: false })}
                 </div>
               ) : null}
