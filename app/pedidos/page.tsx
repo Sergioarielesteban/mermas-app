@@ -3314,6 +3314,7 @@ export default function PedidosPage() {
                   : 'bg-amber-500';
             const badgeLabel =
               sentBadge === 'incidencia' ? 'Incidencia' : sentBadge === 'correcto' ? 'Correcto' : 'Pendiente';
+            const requesterName = getPedidoRequesterDisplayName(order);
             return (
             <div key={order.id} className={cardShell}>
               <button
@@ -3327,7 +3328,17 @@ export default function PedidosPage() {
               >
                 <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-bold text-zinc-900">{order.supplierName}</p>
+                    <div className="flex min-w-0 items-start justify-between gap-2">
+                      <p className="min-w-0 flex-1 truncate text-sm font-bold text-zinc-900">{order.supplierName}</p>
+                      {requesterName ? (
+                        <p
+                          className="shrink-0 max-w-[46%] truncate text-right text-[10px] font-medium leading-snug text-zinc-600 sm:max-w-[12rem] sm:text-[11px]"
+                          title={requesterName}
+                        >
+                          {requesterName}
+                        </p>
+                      ) : null}
+                    </div>
                     <p className="text-[10px] text-zinc-500">
                       Enviado{' '}
                       <span className="font-medium text-zinc-700">
@@ -3366,16 +3377,6 @@ export default function PedidosPage() {
                       >
                         {badgeLabel}
                       </span>
-                      {(() => {
-                        const requesterName = getPedidoRequesterDisplayName(order);
-                        if (!requesterName) return null;
-                        return (
-                          <p className="max-w-[11rem] truncate text-right text-[11px] font-medium leading-tight text-[#666666] sm:text-xs">
-                            <span aria-hidden>👤 </span>
-                            {requesterName}
-                          </p>
-                        );
-                      })()}
                     </div>
                     <div className="flex justify-end gap-x-2">
                       <span className="text-zinc-400">s/IVA</span>
@@ -3887,6 +3888,7 @@ export default function PedidosPage() {
                   const incidentFooterText = historicoIncidentFooterText(order);
                   const detailOpen = expandedHistoricoId === order.id;
                   const totals = totalsWithVatForOrderListDisplay(order);
+                  const requesterName = getPedidoRequesterDisplayName(order);
                   return (
                     <div
                       key={order.id}
@@ -3912,16 +3914,26 @@ export default function PedidosPage() {
                       >
                         <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
                           <div className="min-w-0 flex-1">
-                            <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-                              <span className="truncate text-sm font-bold text-zinc-900">{order.supplierName}</span>
-                              <span
-                                className={[
-                                  'shrink-0 rounded px-1.5 py-0 text-[9px] font-black uppercase tracking-wide text-white',
-                                  needsAttention ? 'bg-red-600' : 'bg-emerald-600',
-                                ].join(' ')}
-                              >
-                                {needsAttention ? 'Incidencia' : 'Correcto'}
-                              </span>
+                            <div className="flex min-w-0 items-start justify-between gap-2">
+                              <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-0.5">
+                                <span className="truncate text-sm font-bold text-zinc-900">{order.supplierName}</span>
+                                <span
+                                  className={[
+                                    'shrink-0 rounded px-1.5 py-0 text-[9px] font-black uppercase tracking-wide text-white',
+                                    needsAttention ? 'bg-red-600' : 'bg-emerald-600',
+                                  ].join(' ')}
+                                >
+                                  {needsAttention ? 'Incidencia' : 'Correcto'}
+                                </span>
+                              </div>
+                              {requesterName ? (
+                                <p
+                                  className="shrink-0 max-w-[46%] truncate text-right text-[10px] font-medium leading-snug text-zinc-600 sm:max-w-[12rem] sm:text-[11px]"
+                                  title={requesterName}
+                                >
+                                  {requesterName}
+                                </p>
+                              ) : null}
                             </div>
                             <p className="text-[10px] text-zinc-500">
                               Recibido{' '}
