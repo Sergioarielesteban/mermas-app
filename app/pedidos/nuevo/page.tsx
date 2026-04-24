@@ -717,14 +717,14 @@ export default function NuevoPedidoPage() {
         </select>
         <div className="mt-2">
           <p className="text-[10px] font-extrabold uppercase tracking-wide text-zinc-500">Fecha de entrega</p>
-          <div className="relative mt-0.5 w-full max-w-md">
+          <div className="relative mt-1 w-full min-w-0">
             <input
               type="date"
               value={deliveryDate}
               onChange={(e) => setDeliveryDate(e.target.value)}
               aria-label="Fecha de entrega del pedido"
               className={[
-                'box-border h-9 w-full rounded-lg border border-zinc-300 bg-white px-2.5 text-sm font-semibold outline-none focus:border-[#D32F2F] focus:ring-2 focus:ring-[#D32F2F]/25',
+                'box-border h-9 w-full min-w-0 rounded-lg border border-zinc-300 bg-white px-2.5 text-sm font-medium text-zinc-900 outline-none focus:border-[#D32F2F] focus:ring-2 focus:ring-[#D32F2F]/25',
                 deliveryDate ? 'text-zinc-900' : 'text-transparent',
               ].join(' ')}
             />
