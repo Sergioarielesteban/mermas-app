@@ -545,7 +545,14 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         ].join(' ')}
       >
         {pathname !== '/panel' && !pathname?.startsWith('/panel/') ? (
-          <div className="mb-4 space-y-1.5 print:hidden">
+          <div
+            className={[
+              'back-button-wrapper mb-4 border-b border-zinc-100/90 shadow-sm print:hidden',
+              isPlanningFullBleed
+                ? '-mx-1 sm:-mx-2 md:-mx-2 lg:-mx-2'
+                : '-mx-4 sm:-mx-5 md:-mx-6 lg:-mx-8',
+            ].join(' ')}
+          >
             <button
               type="button"
               onClick={goBackInApp}
