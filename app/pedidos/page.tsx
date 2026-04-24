@@ -15,7 +15,6 @@ import PedidosPremiaLockedScreen from '@/components/PedidosPremiaLockedScreen';
 import { dispatchPedidosDataChanged, usePedidosDataChangedListener } from '@/hooks/usePedidosDataChangedListener';
 import { canAccessPedidos, canUsePedidosModule } from '@/lib/pedidos-access';
 import {
-  estimatedKgForOrderLine,
   estimatedOrderLineSubtotal,
   formatIncidentLine,
   formatQuantityWithUnit,
@@ -3315,15 +3314,7 @@ export default function PedidosPage() {
                     const isBad = mark === 'bad' || (mark === undefined && Boolean(item.incidentType));
                     const isDualKgReception = orderItemHasDistinctBilling(item) && item.billingUnit === 'kg';
                     const estSub = estimatedOrderLineSubtotal(item);
-                    const estKg = estimatedKgForOrderLine(item);
                     const realSub = lineSubtotalForOrderListDisplay(item);
-                    const showDualCompare =
-                      orderItemHasDistinctBilling(item) &&
-                      item.billingUnit === 'kg' &&
-                      estKg != null &&
-                      item.incidentType !== 'missing';
-                    const realKg =
-                      item.receivedWeightKg != null && item.receivedWeightKg > 0 ? item.receivedWeightKg : null;
                     return (
                       <div key={item.id} className="space-y-1 rounded-lg bg-white p-2 ring-1 ring-zinc-200">
                         <div className="flex items-start justify-between gap-2">
@@ -3381,42 +3372,10 @@ export default function PedidosPage() {
                           </div>
                         </div>
                         <div className="space-y-2 text-[11px] leading-snug text-zinc-700">
-                          <div className="rounded-lg border border-zinc-200/90 bg-zinc-50/80 px-2 py-1.5">
-                            <p className="text-[10px] font-bold uppercase tracking-wide text-zinc-500">
-                              A · Pedido (informativo)
-                            </p>
-                            <p className="mt-1 font-medium text-zinc-800">
-                              {formatQuantityWithUnit(item.quantity, item.unit)}
-                              {estKg != null ? (
-                                <span className="text-zinc-600"> · estimado ~{estKg} kg</span>
-                              ) : null}
-                            </p>
-                            <p className="mt-0.5 text-zinc-600">
-                              Total estimado{' '}
-                              <span className="font-semibold tabular-nums text-zinc-800">{estSub.toFixed(2)} €</span>
-                              {isDualKgReception && item.pricePerBillingUnit != null ? (
-                                <span className="text-zinc-500">
-                                  {' '}
-                                  · ref. pedido {item.pricePerBillingUnit.toFixed(4)} €/kg
-                                </span>
-                              ) : null}
-                            </p>
-                            {isDualKgReception && item.basePricePerUnit != null ? (
-                              <p className="mt-1 text-[10px] text-zinc-500">
-                                Referencia ~{item.basePricePerUnit.toFixed(2)} €/{unitPriceCatalogSuffix[item.unit]} al
-                                enviar el pedido (no usar como precio final: el coste lo marcan kg y €/kg abajo).
-                              </p>
-                            ) : null}
-                          </div>
-
                           {isDualKgReception ? (
                             <div className="rounded-lg border-2 border-emerald-500/40 bg-emerald-50/50 px-2 py-2">
                               <p className="text-[10px] font-bold uppercase tracking-wide text-emerald-900/90">
                                 B · Recepción real (editable)
-                              </p>
-                              <p className="mt-1 text-[10px] leading-snug text-emerald-950/85">
-                                <strong>Coste final = kg reales × €/kg.</strong> La caja/bandeja es unidad operativa del
-                                pedido, no la base del importe.
                               </p>
                               <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
                                 <div>
@@ -3469,26 +3428,20 @@ export default function PedidosPage() {
                                   />
                                 </div>
                               </div>
-                              {item.receivedQuantity > 0 ? (
-                                <p className="mt-2 text-[10px] text-zinc-600">
-                                  Recibido en unidad de pedido:{' '}
-                                  <span className="font-semibold text-zinc-800">
-                                    {formatQuantityWithUnit(item.receivedQuantity, item.unit)}
-                                  </span>
-                                </p>
-                              ) : null}
                             </div>
                           ) : (
                             <>
                               {unitCanDeclareScaleKgOnReception(item.unit) || unitSupportsReceivedWeightKg(item.unit) ? (
                                 <div className="rounded-lg border border-emerald-200/85 bg-emerald-50/45 px-2 py-2">
                                   <p className="text-[10px] font-bold uppercase tracking-wide text-emerald-900/85">
-                                    B · Recepción real
+                                    B · Recepción real (editable)
                                   </p>
                                   <div className="mt-2 flex flex-wrap items-end gap-x-4 gap-y-2">
                                     {unitCanDeclareScaleKgOnReception(item.unit) ? (
                                       <div className="flex min-w-0 flex-col gap-0.5">
-                                        <label className="text-[10px] font-semibold text-zinc-700">Kg reales</label>
+                                        <label className="text-[10px] font-semibold text-zinc-700">
+                                          Cantidad real (kg)
+                                        </label>
                                         <input
                                           type="text"
                                           inputMode="decimal"
@@ -3510,7 +3463,9 @@ export default function PedidosPage() {
                                     ) : null}
                                     {unitSupportsReceivedWeightKg(item.unit) ? (
                                       <div className="flex min-w-0 flex-col gap-0.5">
-                                        <label className="text-[10px] font-semibold text-zinc-700">€/kg real</label>
+                                        <label className="text-[10px] font-semibold text-zinc-700">
+                                          Precio real (€/kg)
+                                        </label>
                                         <input
                                           type="text"
                                           inputMode="decimal"
@@ -3570,34 +3525,6 @@ export default function PedidosPage() {
                             {isDualKgReception && item.incidentType !== 'missing' ? (
                               <p className="mt-0.5 text-[10px] text-zinc-600">
                                 Estimado {estSub.toFixed(2)} € → Real {realSub.toFixed(2)} €
-                              </p>
-                            ) : null}
-                            {showDualCompare && realKg != null ? (
-                              <p className="mt-1 text-[10px] font-semibold text-amber-900/90">
-                                Diferencia: Δ kg {realKg >= estKg! ? '+' : ''}
-                                {(realKg - estKg!).toFixed(3)} · Δ € {realSub >= estSub ? '+' : ''}
-                                {(realSub - estSub).toFixed(2)}
-                              </p>
-                            ) : null}
-                            {!isDualKgReception &&
-                            item.basePricePerUnit != null &&
-                            Number.isFinite(item.basePricePerUnit) &&
-                            Math.abs(item.pricePerUnit - item.basePricePerUnit) > 0.005 ? (
-                              <p className="mt-1 text-[10px] text-zinc-600">
-                                vs precio pedido:{' '}
-                                {item.pricePerUnit >= item.basePricePerUnit ? '+' : ''}
-                                {(item.pricePerUnit - item.basePricePerUnit).toFixed(2)} €/
-                                {unitPriceCatalogSuffix[item.unit]}
-                              </p>
-                            ) : null}
-                            {isDualKgReception &&
-                            item.receivedWeightKg != null &&
-                            item.receivedWeightKg > 0 &&
-                            item.receivedPricePerKg != null &&
-                            item.receivedPricePerKg > 0 ? (
-                              <p className="mt-1 text-[10px] text-zinc-500">
-                                Comprobación: {item.receivedWeightKg.toFixed(3)} kg × {item.receivedPricePerKg.toFixed(4)}{' '}
-                                €/kg
                               </p>
                             ) : null}
                           </div>

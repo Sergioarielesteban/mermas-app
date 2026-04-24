@@ -1,4 +1,8 @@
-import { unitSupportsReceivedWeightKg, type PedidoOrderItem } from '@/lib/pedidos-supabase';
+import {
+  unitCanDeclareScaleKgOnReception,
+  unitSupportsReceivedWeightKg,
+  type PedidoOrderItem,
+} from '@/lib/pedidos-supabase';
 
 export type EuroPerKgSuggestionSource =
   | 'article_master'
@@ -81,6 +85,33 @@ export function euroPerKgSuggestionHint(source: EuroPerKgSuggestionSource | null
 
 export function formatPpkInputDisplay(n: number): string {
   return n.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 4 });
+}
+
+/** Texto del input de kg en recepción (locale es-ES). */
+export function formatKgInputDisplay(n: number): string {
+  return n.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 3 });
+}
+
+/**
+ * Kg a mostrar/precargar en recepción: peso guardado, o estimado total (cantidad × kg/unidad), o kg pedidos si la línea es en kg.
+ */
+export function getDefaultReceivedKgNumeric(item: PedidoOrderItem): number | null {
+  if (!unitCanDeclareScaleKgOnReception(item.unit)) return null;
+  if (item.receivedWeightKg != null && item.receivedWeightKg > 0) {
+    return Math.round(item.receivedWeightKg * 1000) / 1000;
+  }
+  if (
+    unitSupportsReceivedWeightKg(item.unit) &&
+    item.estimatedKgPerUnit != null &&
+    item.estimatedKgPerUnit > 0 &&
+    item.quantity > 0
+  ) {
+    return Math.round(item.quantity * item.estimatedKgPerUnit * 1000) / 1000;
+  }
+  if (item.unit === 'kg' && item.quantity > 0) {
+    return Math.round(item.quantity * 1000) / 1000;
+  }
+  return null;
 }
 
 export function parseReceivedKg(raw: string): number | null | 'invalid' {

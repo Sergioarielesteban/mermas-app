@@ -14,7 +14,12 @@ import { dispatchPedidosDataChanged } from '@/hooks/usePedidosDataChangedListene
 import { canAccessPedidos, canUsePedidosModule } from '@/lib/pedidos-access';
 import RecepcionLineRow from '@/components/pedidos/recepcion/RecepcionLineRow';
 import { formatQuantityWithUnit, unitPriceCatalogSuffix } from '@/lib/pedidos-format';
-import { parsePricePerKg, parseReceivedKg, resolveEuroPerKgSuggestion } from '@/lib/pedidos-recepcion-inputs';
+import {
+  getDefaultReceivedKgNumeric,
+  parsePricePerKg,
+  parseReceivedKg,
+  resolveEuroPerKgSuggestion,
+} from '@/lib/pedidos-recepcion-inputs';
 import {
   billingQuantityForReceptionPrice,
   fetchAvgReceivedPricePerKgBySupplierProductIds,
@@ -349,17 +354,25 @@ export default function RecepcionPedidosPage() {
       parsed = p;
     }
 
+    const defaultKg = getDefaultReceivedKgNumeric(itemSnap);
+    const itemForPpk =
+      itemSnap.receivedWeightKg != null && itemSnap.receivedWeightKg > 0
+        ? itemSnap
+        : defaultKg != null && defaultKg > 0
+          ? { ...itemSnap, receivedWeightKg: defaultKg }
+          : itemSnap;
+
     if (
       parsed != null &&
       parsed > 0 &&
-      (itemSnap.receivedWeightKg == null || itemSnap.receivedWeightKg <= 0)
+      (itemForPpk.receivedWeightKg == null || itemForPpk.receivedWeightKg <= 0)
     ) {
       setMessage('Indica primero los kg reales para aplicar €/kg.');
       return;
     }
 
     const merged = {
-      ...itemSnap,
+      ...itemForPpk,
       receivedPricePerKg: parsed,
     };
 

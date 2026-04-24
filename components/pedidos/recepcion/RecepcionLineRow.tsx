@@ -8,7 +8,9 @@ import {
 } from '@/lib/pedidos-format';
 import {
   euroPerKgSuggestionHint,
+  formatKgInputDisplay,
   formatPpkInputDisplay,
+  getDefaultReceivedKgNumeric,
   parsePricePerKg,
   parseReceivedKg,
   tryParseReceivedKgPreview,
@@ -108,7 +110,13 @@ function RecepcionLineRowInner({
 }: RecepcionLineRowProps) {
   const defaultPpk = suggestedEuroPerKg;
 
-  const [kgText, setKgText] = React.useState('');
+  const commitWeightRef = React.useRef(commitWeightInput);
+  commitWeightRef.current = commitWeightInput;
+
+  const [kgText, setKgText] = React.useState(() => {
+    const n = getDefaultReceivedKgNumeric(item);
+    return n != null ? formatKgInputDisplay(n) : '';
+  });
   const [ppkText, setPpkText] = React.useState(() => {
     if (item.receivedPricePerKg != null && item.receivedPricePerKg > 0) {
       return formatPpkInputDisplay(item.receivedPricePerKg);
@@ -120,11 +128,47 @@ function RecepcionLineRowInner({
 
   const priceFocusedRef = React.useRef(false);
   const ppkFocusedRef = React.useRef(false);
+  const kgFocusedRef = React.useRef(false);
+  const autoDefaultKgPersistedRef = React.useRef(false);
+
+  React.useEffect(() => {
+    autoDefaultKgPersistedRef.current = false;
+  }, [item.id]);
+
+  /**
+   * Si aún no hay kg en BD, persistir una vez el total estimado (cantidad × kg/unidad)
+   * para que €/kg y totales usen la misma base sin obligar a blur manual.
+   */
+  React.useEffect(() => {
+    if (!unitCanDeclareScaleKgOnReception(item.unit)) return;
+    if (item.receivedWeightKg != null && item.receivedWeightKg > 0) return;
+    if (autoDefaultKgPersistedRef.current) return;
+    let n: number | null = null;
+    if (
+      unitSupportsReceivedWeightKg(item.unit) &&
+      item.estimatedKgPerUnit != null &&
+      item.estimatedKgPerUnit > 0 &&
+      item.quantity > 0
+    ) {
+      n = Math.round(item.quantity * item.estimatedKgPerUnit * 1000) / 1000;
+    } else if (item.unit === 'kg' && item.quantity > 0) {
+      n = Math.round(item.quantity * 1000) / 1000;
+    }
+    if (n == null) return;
+    autoDefaultKgPersistedRef.current = true;
+    commitWeightRef.current(orderId, item.id, formatKgInputDisplay(n), item.pricePerUnit.toFixed(2));
+  }, [orderId, item.id, item.unit, item.quantity, item.estimatedKgPerUnit, item.receivedWeightKg, item.pricePerUnit]);
 
   React.useEffect(() => {
     if (priceFocusedRef.current) return;
     setPriceText(item.pricePerUnit.toFixed(2));
   }, [item.pricePerUnit, item.id]);
+
+  React.useEffect(() => {
+    if (kgFocusedRef.current) return;
+    const n = getDefaultReceivedKgNumeric(item);
+    setKgText(n != null ? formatKgInputDisplay(n) : '');
+  }, [item.id, item.receivedWeightKg, item.quantity, item.estimatedKgPerUnit, item.unit]);
 
   React.useEffect(() => {
     if (ppkFocusedRef.current) return;
@@ -212,18 +256,24 @@ function RecepcionLineRowInner({
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
             {unitCanDeclareScaleKgOnReception(item.unit) ? (
               <div className="flex items-center gap-1">
-                <label className="shrink-0 text-[11px] font-semibold text-zinc-600">Kg</label>
+                <label className="shrink-0 text-[11px] font-semibold text-zinc-600">Cantidad real (kg)</label>
                 <input
                   type="text"
                   inputMode="decimal"
                   autoComplete="off"
                   autoCorrect="off"
                   placeholder="0,00"
-                  title="Kg reales"
+                  title="Cantidad real (kg) en báscula; por defecto el peso estimado del pedido"
                   value={kgText}
+                  onFocus={() => {
+                    kgFocusedRef.current = true;
+                  }}
                   onChange={(e) => setKgText(e.target.value)}
-                  onBlur={() => commitWeightInput(orderId, item.id, kgText, priceText)}
-                  className="h-7 w-[3.25rem] max-w-[3.25rem] shrink-0 rounded-md border border-zinc-300 bg-white px-1 py-0.5 text-xs font-semibold text-zinc-900 outline-none sm:w-[4rem] sm:max-w-[4rem]"
+                  onBlur={() => {
+                    kgFocusedRef.current = false;
+                    commitWeightInput(orderId, item.id, kgText, priceText);
+                  }}
+                  className="h-7 w-[4.25rem] max-w-[5.25rem] shrink-0 rounded-md border border-zinc-300 bg-white px-1 py-0.5 text-xs font-semibold text-zinc-900 outline-none sm:w-[5.25rem] sm:max-w-[5.5rem]"
                 />
               </div>
             ) : null}
