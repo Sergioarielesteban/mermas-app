@@ -3,7 +3,7 @@
 import React, { useEffect } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import AppShell from '@/components/AppShell';
-import BottomNav from '@/components/BottomNav';
+import BottomNav, { BOTTOM_QUICK_ACTIONS_SCROLL_PADDING } from '@/components/BottomNav';
 import { useAuth } from '@/components/AuthProvider';
 import Logo from '@/components/Logo';
 
@@ -137,7 +137,12 @@ export default function AppFrame({ children }: { children: React.ReactNode }) {
 
   return (
     <>
-      <div className="flex min-h-0 flex-1 flex-col overflow-hidden pb-[calc(4.5rem+max(0.5rem,env(safe-area-inset-bottom,0px)))]">
+      <div
+        className="flex min-h-0 flex-1 flex-col overflow-hidden"
+        style={{
+          paddingBottom: `calc(${BOTTOM_QUICK_ACTIONS_SCROLL_PADDING} + max(0.5rem, env(safe-area-inset-bottom, 0px)))`,
+        }}
+      >
         <AppShell>{children}</AppShell>
       </div>
       <BottomNav />

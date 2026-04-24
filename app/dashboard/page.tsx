@@ -312,6 +312,22 @@ export default function DashboardPage() {
     }
   }, [weeklyTarget]);
 
+  /** Acceso rápido desde la barra inferior: `/dashboard#merma-register-form`. */
+  React.useEffect(() => {
+    const scrollToForm = () => {
+      if (typeof window === 'undefined') return;
+      if (window.location.hash !== '#merma-register-form') return;
+      const el = document.getElementById('merma-register-form');
+      if (!el) return;
+      window.requestAnimationFrame(() => {
+        el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
+    };
+    scrollToForm();
+    window.addEventListener('hashchange', scrollToForm);
+    return () => window.removeEventListener('hashchange', scrollToForm);
+  }, []);
+
   const monthNow = toBusinessDate(new Date());
   const monthlyMermas = mermas.filter((m) => {
     const d = toBusinessDate(m.occurredAt);
