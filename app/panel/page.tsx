@@ -49,33 +49,47 @@ function panelHref(tile: PanelTile) {
   return tile.blocked ? '/planes' : tile.href;
 }
 
+/** Misma altura en todas las filas (referencia Chat / Escandallos). */
+const PANEL_GRID_CARD_H =
+  'h-[8.5rem] min-h-[8.5rem] max-h-[8.5rem] sm:h-[8.75rem] sm:min-h-[8.75rem] sm:max-h-[8.75rem]';
+
 function PanelGridEmpty() {
-  return <div className="min-h-[4.95rem] rounded-[18px] bg-transparent" aria-hidden />;
+  return <div className={['rounded-[18px] bg-transparent', PANEL_GRID_CARD_H].join(' ')} aria-hidden />;
 }
 
-/** Tarjeta blanca compacta (~10% menos alto que la referencia base). */
+/**
+ * Tarjeta blanca del grid: medidas unificadas (icono, título, descripción, flecha, línea roja).
+ * La descripción no puede crecer: 2 líneas fijas.
+ */
 function PanelGridCard({ tile }: { tile: PanelTile }) {
   const Icon = tile.Icon;
   return (
     <Link
       href={panelHref(tile)}
       className={[
-        'panel-ref-card-white flex flex-col justify-between rounded-[18px] bg-white px-3 py-2.5 text-left antialiased outline-none select-none touch-manipulation sm:px-3.5 sm:py-2.5',
+        'panel-ref-card-white flex flex-col rounded-[18px] bg-white px-3 py-2.5 text-left antialiased outline-none select-none touch-manipulation sm:px-3.5 sm:py-2.5',
+        PANEL_GRID_CARD_H,
         tile.blocked ? 'panel-ref-card--blocked opacity-[0.58]' : '',
         'focus-visible:ring-2 focus-visible:ring-[#D32F2F]/35 focus-visible:ring-offset-2 focus-visible:ring-offset-[#f5f5f7]',
       ].join(' ')}
     >
-      <div className="flex items-center gap-2.5 sm:gap-3">
+      <div className="flex min-h-0 flex-1 items-center gap-2.5 sm:gap-3">
         <div className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-[#D32F2F]/12 text-[#D32F2F] ring-1 ring-[#D32F2F]/10">
           <Icon className="h-6 w-6" strokeWidth={2} />
         </div>
-        <div className="min-w-0 flex-1">
-          <p className="text-sm font-semibold leading-[1.2] tracking-tight text-zinc-900">{tile.label}</p>
-          <p className="mt-0.5 text-xs font-normal leading-tight text-zinc-500 sm:text-[13px]">{tile.sub}</p>
+        <div className="min-w-0 flex-1 self-center">
+          <p className="line-clamp-1 text-sm font-semibold leading-tight tracking-tight text-zinc-900">{tile.label}</p>
+          <p className="mt-0.5 h-[2.4em] max-h-[2.4em] min-h-[2.4em] line-clamp-2 overflow-hidden text-xs font-normal leading-[1.2] text-zinc-500">
+            {tile.sub}
+          </p>
         </div>
-        <ChevronRight className="h-5 w-5 shrink-0 text-[#D32F2F]" strokeWidth={2.25} aria-hidden />
+        <ChevronRight
+          className="h-5 w-5 shrink-0 self-center text-[#D32F2F]"
+          strokeWidth={2.25}
+          aria-hidden
+        />
       </div>
-      <div className="mt-2.5 flex justify-center">
+      <div className="mt-2.5 flex shrink-0 justify-center">
         <ChefOneGlowLine className="w-14 sm:w-16" />
       </div>
     </Link>
