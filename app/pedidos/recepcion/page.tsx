@@ -14,9 +14,11 @@ import { dispatchPedidosDataChanged } from '@/hooks/usePedidosDataChangedListene
 import { canAccessPedidos, canUsePedidosModule } from '@/lib/pedidos-access';
 import RecepcionLineRow from '@/components/pedidos/recepcion/RecepcionLineRow';
 import { formatQuantityWithUnit, unitPriceCatalogSuffix } from '@/lib/pedidos-format';
-import { parsePricePerKg, parseReceivedKg, supplierDefaultPricePerKg } from '@/lib/pedidos-recepcion-inputs';
+import { parsePricePerKg, parseReceivedKg, resolveEuroPerKgSuggestion } from '@/lib/pedidos-recepcion-inputs';
 import {
   billingQuantityForReceptionPrice,
+  fetchLastReceivedPricePerKgBySupplierProductIds,
+  fetchSupplierProductPriceHistory,
   persistReceptionItemTotals,
   receptionLineTotals,
   setOrderPriceReviewArchived,
@@ -27,6 +29,7 @@ import {
   updateOrderItemReceived,
   updateOrderItemReceivedWeightKg,
   type PedidoOrder,
+  type PedidoOrderItem,
 } from '@/lib/pedidos-supabase';
 import { actorLabel, notifyIncidenciaRecepcionDeduped } from '@/services/notifications';
 
@@ -108,6 +111,83 @@ export default function RecepcionPedidosPage() {
       ),
     [orders],
   );
+
+  const receptionEuroByProductRef = React.useRef<Record<string, number>>({});
+  const lastOrderUnitByProductRef = React.useRef<Record<string, number>>({});
+  const [priceHintsTick, setPriceHintsTick] = React.useState(0);
+
+  const supplierProductIdsForHints = React.useMemo(() => {
+    const ids = new Set<string>();
+    for (const o of pendingPriceReviewOrders) {
+      for (const it of o.items) {
+        if (unitSupportsReceivedWeightKg(it.unit) && it.supplierProductId) ids.add(it.supplierProductId);
+      }
+    }
+    return [...ids];
+  }, [pendingPriceReviewOrders]);
+
+  const hintIdsKey = supplierProductIdsForHints.join(',');
+
+  React.useEffect(() => {
+    if (!localId) return;
+    if (supplierProductIdsForHints.length === 0) {
+      receptionEuroByProductRef.current = {};
+      lastOrderUnitByProductRef.current = {};
+      setPriceHintsTick((t) => t + 1);
+      return;
+    }
+    const supabase = getSupabaseClient();
+    if (!supabase) return;
+    let cancelled = false;
+    const ids = supplierProductIdsForHints;
+    void Promise.all([
+      fetchLastReceivedPricePerKgBySupplierProductIds(supabase, localId, ids),
+      fetchSupplierProductPriceHistory(supabase, localId, ids),
+    ])
+      .then(([recvMap, histMap]) => {
+        if (cancelled) return;
+        receptionEuroByProductRef.current = Object.fromEntries(recvMap);
+        lastOrderUnitByProductRef.current = Object.fromEntries(
+          [...histMap.entries()].map(([id, h]) => [id, h.lastPrice]),
+        );
+        setPriceHintsTick((t) => t + 1);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        receptionEuroByProductRef.current = {};
+        lastOrderUnitByProductRef.current = {};
+        setPriceHintsTick((t) => t + 1);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [localId, hintIdsKey]);
+
+  const recepcionLineSuggestionByItemId = React.useMemo(() => {
+    const m = new Map<string, ReturnType<typeof resolveEuroPerKgSuggestion>>();
+    const recv = receptionEuroByProductRef.current;
+    const unitP = lastOrderUnitByProductRef.current;
+    for (const o of pendingPriceReviewOrders) {
+      for (const it of o.items) {
+        if (!unitSupportsReceivedWeightKg(it.unit)) continue;
+        const sid = it.supplierProductId;
+        m.set(
+          it.id,
+          resolveEuroPerKgSuggestion(it, sid ? recv[sid] : undefined, sid ? unitP[sid] : undefined),
+        );
+      }
+    }
+    return m;
+  }, [pendingPriceReviewOrders, priceHintsTick]);
+
+  const resolvePpkForItemSnap = React.useCallback((item: PedidoOrderItem) => {
+    const sid = item.supplierProductId;
+    return resolveEuroPerKgSuggestion(
+      item,
+      sid ? receptionEuroByProductRef.current[sid] : undefined,
+      sid ? lastOrderUnitByProductRef.current[sid] : undefined,
+    ).value;
+  }, []);
 
   const flushOrderPricesToDatabase = async (order: PedidoOrder) => {
     if (!localId) throw new Error('Sin local.');
@@ -245,7 +325,7 @@ export default function RecepcionPedidosPage() {
     const trimmed = raw.trim();
     let parsed: number | null;
     if (trimmed === '') {
-      parsed = supplierDefaultPricePerKg(itemSnap);
+      parsed = resolvePpkForItemSnap(itemSnap);
     } else {
       const p = parsePricePerKg(raw);
       if (p === 'invalid') {
@@ -371,7 +451,7 @@ export default function RecepcionPedidosPage() {
         const nextPpk =
           nextWeight == null
             ? null
-            : itemSnap.receivedPricePerKg ?? supplierDefaultPricePerKg(itemSnap) ?? null;
+            : itemSnap.receivedPricePerKg ?? resolvePpkForItemSnap(itemSnap) ?? null;
         const merged = {
           ...itemSnap,
           receivedWeightKg: nextWeight,
@@ -545,16 +625,24 @@ export default function RecepcionPedidosPage() {
               {expanded ? (
               <>
               <div className="mt-2 space-y-1.5">
-                {order.items.map((item) => (
-                  <RecepcionLineRow
-                    key={item.id}
-                    orderId={order.id}
-                    item={item}
-                    commitWeightInput={commitWeightInput}
-                    commitPricePerKgInput={commitPricePerKgInput}
-                    commitPriceInput={commitPriceInput}
-                  />
-                ))}
+                {order.items.map((item) => {
+                  const sug = recepcionLineSuggestionByItemId.get(item.id) ?? {
+                    value: null,
+                    source: null,
+                  };
+                  return (
+                    <RecepcionLineRow
+                      key={item.id}
+                      orderId={order.id}
+                      item={item}
+                      suggestedEuroPerKg={sug.value}
+                      suggestionSource={sug.source}
+                      commitWeightInput={commitWeightInput}
+                      commitPricePerKgInput={commitPricePerKgInput}
+                      commitPriceInput={commitPriceInput}
+                    />
+                  );
+                })}
               </div>
               <div className="mt-3 border-t border-red-200/70 pt-3">
                 <button

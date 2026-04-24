@@ -1532,6 +1532,41 @@ export async function fetchSupplierProductPriceHistory(
 }
 
 /**
+ * Último €/kg guardado en recepción por producto de proveedor (líneas con `received_price_per_kg` > 0).
+ */
+export async function fetchLastReceivedPricePerKgBySupplierProductIds(
+  supabase: SupabaseClient,
+  localId: string,
+  supplierProductIds: string[],
+): Promise<Map<string, number>> {
+  const out = new Map<string, number>();
+  if (!supplierProductIds.length) return out;
+
+  const { data, error } = await supabase
+    .from('purchase_order_items')
+    .select('supplier_product_id, received_price_per_kg, created_at')
+    .eq('local_id', localId)
+    .in('supplier_product_id', supplierProductIds)
+    .not('received_price_per_kg', 'is', null)
+    .gt('received_price_per_kg', 0)
+    .order('created_at', { ascending: false });
+
+  if (error) throw new Error(error.message);
+
+  for (const row of (data ?? []) as Array<{
+    supplier_product_id: string | null;
+    received_price_per_kg: number | string | null;
+  }>) {
+    const sid = row.supplier_product_id;
+    if (!sid || out.has(sid)) continue;
+    const v = Number(row.received_price_per_kg);
+    if (!Number.isFinite(v) || v <= 0) continue;
+    out.set(sid, Math.round(v * 10000) / 10000);
+  }
+  return out;
+}
+
+/**
  * Precios efectivos en pedidos recientes por producto de proveedor (más recientes primero).
  * Agrupa en memoria y recorta a `maxPerProduct` filas por id.
  */

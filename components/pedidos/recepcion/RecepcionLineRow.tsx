@@ -7,10 +7,11 @@ import {
   unitPriceCatalogSuffix,
 } from '@/lib/pedidos-format';
 import {
+  euroPerKgSuggestionHint,
   parsePricePerKg,
   parseReceivedKg,
-  supplierDefaultPricePerKg,
   tryParseReceivedKgPreview,
+  type EuroPerKgSuggestionSource,
 } from '@/lib/pedidos-recepcion-inputs';
 import {
   receptionLineTotals,
@@ -69,6 +70,8 @@ function buildPreviewItem(
 export type RecepcionLineRowProps = {
   orderId: string;
   item: PedidoOrderItem;
+  suggestedEuroPerKg: number | null;
+  suggestionSource: EuroPerKgSuggestionSource | null;
   commitWeightInput: (orderId: string, itemId: string, rawKg: string, priceDraft?: string) => void;
   commitPricePerKgInput: (orderId: string, itemId: string, raw: string) => void;
   commitPriceInput: (orderId: string, itemId: string, raw: string) => void;
@@ -91,26 +94,29 @@ function recepcionLineRowPropsEqual(a: RecepcionLineRowProps, b: RecepcionLineRo
     x.estimatedKgPerUnit === y.estimatedKgPerUnit &&
     x.incidentType === y.incidentType &&
     x.incidentNotes === y.incidentNotes &&
-    x.billingUnit === y.billingUnit
+    x.billingUnit === y.billingUnit &&
+    a.suggestedEuroPerKg === b.suggestedEuroPerKg &&
+    a.suggestionSource === b.suggestionSource
   );
 }
 
 function RecepcionLineRowInner({
   orderId,
   item,
+  suggestedEuroPerKg,
+  suggestionSource,
   commitWeightInput,
   commitPricePerKgInput,
   commitPriceInput,
 }: RecepcionLineRowProps) {
-  const supplierPpk = React.useMemo(() => supplierDefaultPricePerKg(item), [item]);
+  const defaultPpk = suggestedEuroPerKg;
 
   const [kgText, setKgText] = React.useState('');
   const [ppkText, setPpkText] = React.useState(() => {
     if (item.receivedPricePerKg != null && item.receivedPricePerKg > 0) {
       return formatPpkForInput(item.receivedPricePerKg);
     }
-    const sup0 = supplierDefaultPricePerKg(item);
-    if (sup0 != null) return formatPpkForInput(sup0);
+    if (suggestedEuroPerKg != null) return formatPpkForInput(suggestedEuroPerKg);
     return '';
   });
   const [priceText, setPriceText] = React.useState(() => item.pricePerUnit.toFixed(2));
@@ -129,13 +135,12 @@ function RecepcionLineRowInner({
       setPpkText(formatPpkForInput(item.receivedPricePerKg));
       return;
     }
-    const sup = supplierDefaultPricePerKg(item);
-    setPpkText(sup != null ? formatPpkForInput(sup) : '');
-  }, [item.receivedPricePerKg, item.pricePerUnit, item.estimatedKgPerUnit, item.unit, item.id]);
+    setPpkText(defaultPpk != null ? formatPpkForInput(defaultPpk) : '');
+  }, [item.receivedPricePerKg, item.id, defaultPpk]);
 
   const previewItem = React.useMemo(
-    () => buildPreviewItem(item, kgText, ppkText, priceText, supplierPpk),
-    [item, kgText, ppkText, priceText, supplierPpk],
+    () => buildPreviewItem(item, kgText, ppkText, priceText, defaultPpk),
+    [item, kgText, ppkText, priceText, defaultPpk],
   );
 
   const lineSummary = React.useMemo(() => receptionBillingSummary(previewItem), [previewItem]);
@@ -250,14 +255,19 @@ function RecepcionLineRowInner({
             ) : null}
           </div>
           {unitSupportsReceivedWeightKg(item.unit) ? (
-            <p className="text-[10px] leading-tight text-zinc-500">
-              {previewItem.receivedPricePerKg != null &&
-              previewItem.receivedPricePerKg > 0 &&
-              previewItem.receivedWeightKg != null &&
-              previewItem.receivedWeightKg > 0
-                ? `≈ ${previewItem.pricePerUnit.toFixed(2)} €/${unitPriceCatalogSuffix[item.unit]}`
-                : '€/kg opcional si hay kg reales.'}
-            </p>
+            <div className="space-y-0.5 text-[10px] leading-tight text-zinc-500">
+              {suggestionSource ? (
+                <p className="text-zinc-600">{euroPerKgSuggestionHint(suggestionSource)}</p>
+              ) : null}
+              <p>
+                {previewItem.receivedPricePerKg != null &&
+                previewItem.receivedPricePerKg > 0 &&
+                previewItem.receivedWeightKg != null &&
+                previewItem.receivedWeightKg > 0
+                  ? `≈ ${previewItem.pricePerUnit.toFixed(2)} €/${unitPriceCatalogSuffix[item.unit]}`
+                  : 'Introduce kg reales; el subtotal se calcula con el €/kg mostrado.'}
+              </p>
+            </div>
           ) : null}
         </div>
       ) : null}
