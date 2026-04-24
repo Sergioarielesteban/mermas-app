@@ -37,6 +37,7 @@ import {
   type SupplierProductPriceHistory,
   type SupplierProductPriceSample,
 } from '@/lib/pedidos-supabase';
+import { formatMoneyEur, formatUnitPriceEur, roundMoney } from '@/lib/money-format';
 
 function formatShortDate(iso: string) {
   try {
@@ -44,15 +45,6 @@ function formatShortDate(iso: string) {
   } catch {
     return iso;
   }
-}
-
-function formatMoney(n: number, decimals = 4, trimTrailingZeros = false) {
-  const s = n.toFixed(decimals);
-  if (!trimTrailingZeros) return `${s} €`;
-  const [intPart, decPart] = s.split('.');
-  if (!decPart) return `${intPart} €`;
-  const trimmedDec = decPart.replace(/0+$/, '');
-  return trimmedDec ? `${intPart}.${trimmedDec} €` : `${intPart} €`;
 }
 
 export default function PedidosArticulosPage() {
@@ -457,7 +449,7 @@ function ArticleCard({
         <div className="w-full text-left sm:w-auto sm:text-right">
           <p className="text-[10px] font-bold uppercase text-zinc-500">Coste máster</p>
           <p className="text-xl font-black tabular-nums text-zinc-900 sm:text-2xl">
-            {master != null ? formatMoney(master, 4, true) : '—'}
+            {master != null ? formatMoneyEur(roundMoney(master)) : '—'}
           </p>
           <p className="text-[11px] text-zinc-500">{labelMetodoCosteMaster(a.metodoCosteMaster)}</p>
         </div>
@@ -517,7 +509,7 @@ function ArticleCard({
                       <option value="">—</option>
                       {compareRows.map((r) => (
                         <option key={r.id} value={r.id}>
-                          {r.supplierName} · {r.name} ({formatMoney(r.pricePerUnit, 2)}/{r.unit})
+                          {r.supplierName} · {r.name} ({formatUnitPriceEur(r.pricePerUnit, r.unit)})
                         </option>
                       ))}
                     </select>
@@ -525,7 +517,7 @@ function ArticleCard({
                   <div className="rounded-lg bg-white/90 px-3 py-2 text-xs ring-1 ring-indigo-100">
                     <p className="font-bold uppercase text-zinc-500">Coste compra actual</p>
                     <p className="mt-1 text-lg font-black tabular-nums text-zinc-900">
-                      {compraUnitEur != null ? formatMoney(compraUnitEur, 4, true) : '—'}
+                      {compraUnitEur != null ? formatMoneyEur(roundMoney(compraUnitEur)) : '—'}
                     </p>
                     <p className="text-[10px] text-zinc-500">Sincronizado con la referencia (SQL).</p>
                   </div>
@@ -569,10 +561,10 @@ function ArticleCard({
                   <div className="flex flex-col justify-end rounded-lg bg-white/90 px-3 py-2 ring-1 ring-indigo-100 sm:col-span-1">
                     <p className="text-[10px] font-bold uppercase text-zinc-500">Coste unitario de uso (vista)</p>
                     <p className="text-lg font-black tabular-nums text-emerald-800">
-                      {previewCosteUso != null ? formatMoney(previewCosteUso, 6, true) : '—'}
+                      {previewCosteUso != null ? formatMoneyEur(roundMoney(previewCosteUso)) : '—'}
                     </p>
                     <p className="text-[10px] text-zinc-500">
-                      En BD: {a.costeUnitarioUso != null ? formatMoney(a.costeUnitarioUso, 6, true) : '—'}
+                      En BD: {a.costeUnitarioUso != null ? formatMoneyEur(roundMoney(a.costeUnitarioUso)) : '—'}
                     </p>
                   </div>
                 </div>
@@ -615,7 +607,7 @@ function ArticleCard({
               <div>
                 <dt className="text-[10px] font-bold uppercase text-zinc-500">Importe</dt>
                 <dd className="font-mono font-semibold tabular-nums text-zinc-900">
-                  {master != null ? formatMoney(master, 4, true) : '—'}
+                  {master != null ? formatMoneyEur(roundMoney(master)) : '—'}
                 </dd>
               </div>
               <div>
@@ -631,8 +623,8 @@ function ArticleCard({
             </dl>
             {masterStale ? (
               <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-950">
-                El precio de catálogo más bajo ahora es <strong>{formatMoney(minCatalog!, 2)}</strong> y el máster es{' '}
-                <strong>{formatMoney(master!, 4, true)}</strong>. Revisa si quieres alinear el máster manualmente en base de datos
+                El precio de catálogo más bajo ahora es <strong>{formatMoneyEur(roundMoney(minCatalog!))}</strong> y el máster es{' '}
+                <strong>{formatMoneyEur(roundMoney(master!))}</strong>. Revisa si quieres alinear el máster manualmente en base de datos
                 o en una futura edición en app.
               </p>
             ) : null}
@@ -657,7 +649,7 @@ function ArticleCard({
                 </div>
                 <div className="text-left sm:text-right">
                   <p className="text-[10px] font-bold uppercase text-zinc-500">Precio catálogo</p>
-                  <p className="text-lg font-black tabular-nums text-zinc-900">{formatMoney(originRow.pricePerUnit, 2)}</p>
+                  <p className="text-lg font-black tabular-nums text-zinc-900">{formatUnitPriceEur(originRow.pricePerUnit, originRow.unit)}</p>
                   {master != null ? (
                     <p className="text-[11px] text-zinc-500">
                       Δ vs máster:{' '}
@@ -668,8 +660,7 @@ function ArticleCard({
                             : 'font-semibold text-amber-800'
                         }
                       >
-                        {(originRow.pricePerUnit - master) >= 0 ? '+' : ''}
-                        {(originRow.pricePerUnit - master).toFixed(4)} €
+                        {formatMoneyEur(roundMoney(originRow.pricePerUnit - master))}
                       </span>
                     </p>
                   ) : null}
@@ -752,13 +743,12 @@ function ArticleCard({
                           </td>
                           <td className="px-2 py-2 text-zinc-600">{row.unit}</td>
                           <td className="px-2 py-2 text-right tabular-nums font-semibold text-zinc-900">
-                            {formatMoney(row.pricePerUnit, 2)}
+                            {formatUnitPriceEur(row.pricePerUnit, row.unit)}
                           </td>
                           <td className="px-2 py-2 text-right tabular-nums text-zinc-700">
                             {deltaM != null ? (
                               <span className={Math.abs(deltaM) < 0.01 ? 'text-emerald-700' : 'text-amber-800'}>
-                                {deltaM >= 0 ? '+' : ''}
-                                {deltaM.toFixed(2)}
+                                {formatMoneyEur(roundMoney(deltaM))}
                               </span>
                             ) : (
                               '—'
@@ -773,7 +763,7 @@ function ArticleCard({
             )}
             {compareRows.length > 1 && minCatalog != null && maxCatalog != null ? (
               <p className="mt-2 text-[11px] text-zinc-500">
-                Rango catálogo activo: {formatMoney(minCatalog, 2)} – {formatMoney(maxCatalog, 2)} ({compareRows.length}{' '}
+                Rango catálogo activo: {formatMoneyEur(roundMoney(minCatalog))} – {formatMoneyEur(roundMoney(maxCatalog))} ({compareRows.length}{' '}
                 filas)
               </p>
             ) : null}
@@ -800,8 +790,9 @@ function ArticleCard({
                     </p>
                     {h && h.samples > 0 ? (
                       <p className="mt-1 text-[11px] text-zinc-600">
-                        Último {formatMoney(h.lastPrice, 2)} · Media {formatMoney(h.avgPrice, 2)} · Min {formatMoney(h.minPrice, 2)}{' '}
-                        · Max {formatMoney(h.maxPrice, 2)} · {h.samples} línea{h.samples === 1 ? '' : 's'}
+                        Último {formatMoneyEur(roundMoney(h.lastPrice))} · Media {formatMoneyEur(roundMoney(h.avgPrice))} · Min{' '}
+                        {formatMoneyEur(roundMoney(h.minPrice))} · Max {formatMoneyEur(roundMoney(h.maxPrice))} · {h.samples}{' '}
+                        línea{h.samples === 1 ? '' : 's'}
                       </p>
                     ) : (
                       <p className="mt-1 text-[11px] text-zinc-500">Sin compras registradas con este producto.</p>
@@ -813,7 +804,7 @@ function ArticleCard({
                             key={`${s.at}-${i}`}
                             className="rounded border border-zinc-200 bg-white px-2 py-1 tabular-nums text-zinc-800"
                           >
-                            {formatMoney(s.pricePerUnit, 2)}{' '}
+                            {formatMoneyEur(roundMoney(s.pricePerUnit))}{' '}
                             <span className="text-zinc-400">{formatShortDate(s.at)}</span>
                           </li>
                         ))}

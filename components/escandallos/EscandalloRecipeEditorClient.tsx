@@ -59,6 +59,7 @@ import {
   type EscandalloRawProduct,
   type EscandalloRecipe,
 } from '@/lib/escandallos-supabase';
+import { formatMoneyEur, formatUnitPriceEur } from '@/lib/money-format';
 
 type RecipeTechBundle = {
   sheet: EscandalloTechnicalSheet | null;
@@ -644,8 +645,8 @@ export default function EscandalloRecipeEditorClient({ recipeId }: { recipeId: s
               ) : null}
               <div className="rounded-xl bg-gradient-to-br from-[#B91C1C]/12 via-white to-white px-3 py-2 ring-1 ring-[#D32F2F]/15">
                 <span className="text-[10px] font-bold uppercase text-zinc-500">Coste / {draftYieldLabel || recipe.yieldLabel}</span>
-                <p className="mt-1 text-xl font-black tabular-nums text-zinc-900">{costPerYield.toFixed(2)} €</p>
-                <p className="text-[11px] text-zinc-500">Total batch {totalCostLive.toFixed(2)} €</p>
+                <p className="mt-1 text-xl font-black tabular-nums text-zinc-900">{formatMoneyEur(costPerYield)}</p>
+                <p className="text-[11px] text-zinc-500">Total batch {formatMoneyEur(totalCostLive)}</p>
               </div>
             </div>
 
@@ -731,9 +732,9 @@ export default function EscandalloRecipeEditorClient({ recipeId }: { recipeId: s
                         </span>
                         <span className="min-w-0 flex-1 font-semibold text-zinc-900">{line.label}</span>
                         <span className="shrink-0 tabular-nums text-zinc-600">
-                          {line.qty} {line.unit} × {unitEur.toFixed(2)} €
+                          {line.qty} {line.unit} × {formatUnitPriceEur(unitEur, line.unit)}
                         </span>
-                        <span className="shrink-0 font-bold tabular-nums text-zinc-900">{lineCost.toFixed(2)} €</span>
+                        <span className="shrink-0 font-bold tabular-nums text-zinc-900">{formatMoneyEur(lineCost)}</span>
                         <div className="flex shrink-0 gap-0.5">
                           <button
                             type="button"
@@ -864,11 +865,11 @@ export default function EscandalloRecipeEditorClient({ recipeId }: { recipeId: s
               <div className="flex flex-wrap gap-x-4 gap-y-1 tabular-nums text-zinc-700">
                 <span>
                   <span className="text-zinc-500">Coste total</span>{' '}
-                  <strong className="text-zinc-900">{totalCostLive.toFixed(2)} €</strong>
+                  <strong className="text-zinc-900">{formatMoneyEur(totalCostLive)}</strong>
                 </span>
                 <span>
                   <span className="text-zinc-500">/ {draftYieldLabel || recipe.yieldLabel}</span>{' '}
-                  <strong className="text-zinc-900">{costPerYield.toFixed(2)} €</strong>
+                  <strong className="text-zinc-900">{formatMoneyEur(costPerYield)}</strong>
                 </span>
                 {!recipe.isSubRecipe ? (
                   <>

@@ -16,6 +16,7 @@ import {
   type EscandalloRawProduct,
   type EscandalloRecipe,
 } from '@/lib/escandallos-supabase';
+import { formatMoneyEur, formatUnitPriceEur, roundMoney } from '@/lib/money-format';
 
 export type EscandalloIngredientDraftEditorProps = {
   drafts: IngredientDraftRow[];
@@ -173,7 +174,7 @@ export default function EscandalloIngredientDraftEditor({
                 ) : null}
                 <div className="ml-auto flex shrink-0 items-center gap-2 border-t border-zinc-100 pt-2 sm:border-t-0 sm:pt-0">
                   <span className="text-xs tabular-nums text-zinc-600">
-                    {est != null ? <span className="font-semibold text-zinc-900">~{est.toFixed(2)} €</span> : '—'}
+                    {est != null ? <span className="font-semibold text-zinc-900">~{formatMoneyEur(est)}</span> : '—'}
                   </span>
                   <button
                     type="button"
@@ -219,10 +220,11 @@ export default function EscandalloIngredientDraftEditor({
                         ) : (
                           filteredRaw(row.rawSearch).map((p) => {
                             const pack = p.unitsPerPack > 0 ? p.unitsPerPack : 1;
+                            const ru = p.recipeUnit ?? 'ud';
                             const sub =
                               pack > 1
-                                ? `${p.pricePerUnit.toFixed(2)} €/${p.unit} → ${(p.pricePerUnit / pack).toFixed(2)} €/${p.recipeUnit ?? 'ud'}`
-                                : `${p.pricePerUnit.toFixed(2)} €/${p.unit}`;
+                                ? `Compra ${formatUnitPriceEur(p.pricePerUnit, p.unit)} · Coste uso ${formatUnitPriceEur(roundMoney(p.pricePerUnit / pack), ru)}`
+                                : formatUnitPriceEur(p.pricePerUnit, p.unit);
                             return (
                               <button
                                 key={p.id}

@@ -63,6 +63,7 @@ import {
   type EscandalloRawProduct,
   type EscandalloRecipe,
 } from '@/lib/escandallos-supabase';
+import { formatMoneyEur } from '@/lib/money-format';
 import { ESCANDALLOS_WEIGHTED_PRICE_WINDOW_DAYS } from '@/lib/escandallos-weighted-purchase-prices';
 
 const TAPER = `mx-auto w-20 ${CHEF_ONE_TAPER_LINE_CLASS}`;
@@ -603,7 +604,7 @@ export default function EscandallosPage() {
             />
             <KpiCard
               title="Coste medio / ración"
-              value={kpis.avgCost != null ? `${kpis.avgCost.toFixed(2)} €` : '—'}
+              value={kpis.avgCost != null ? formatMoneyEur(kpis.avgCost) : '—'}
               hint="Platos con al menos un ingrediente"
               Icon={Calculator}
               accent="zinc"
@@ -863,14 +864,14 @@ export default function EscandallosPage() {
                               />
                             </td>
                             <td className="px-3 py-2 tabular-nums text-zinc-700">
-                              {r.costPerYieldEur.toFixed(2)} €
+                              {formatMoneyEur(r.costPerYieldEur)}
                             </td>
                             <td className="px-3 py-2 tabular-nums text-zinc-700">
-                              {r.saleNetEur != null ? `${r.saleNetEur.toFixed(2)} €` : '—'}
+                              {r.saleNetEur != null ? formatMoneyEur(r.saleNetEur) : '—'}
                             </td>
-                            <td className="px-3 py-2 tabular-nums text-zinc-800">{extCost.toFixed(2)} €</td>
+                            <td className="px-3 py-2 tabular-nums text-zinc-800">{formatMoneyEur(extCost)}</td>
                             <td className="px-3 py-2 tabular-nums text-zinc-800">
-                              {extNet != null ? `${extNet.toFixed(2)} €` : '—'}
+                              {extNet != null ? formatMoneyEur(extNet) : '—'}
                             </td>
                           </tr>
                         );
@@ -881,9 +882,9 @@ export default function EscandallosPage() {
                       <td className="px-3 py-2" colSpan={4}>
                         Totales mix (según cantidades)
                       </td>
-                      <td className="px-3 py-2 tabular-nums">{mixMetrics.totalCostEur.toFixed(2)} €</td>
+                      <td className="px-3 py-2 tabular-nums">{formatMoneyEur(mixMetrics.totalCostEur)}</td>
                       <td className="px-3 py-2 tabular-nums">
-                        {mixMetrics.totalNetRevenueEur > 0 ? `${mixMetrics.totalNetRevenueEur.toFixed(2)} €` : '—'}
+                        {mixMetrics.totalNetRevenueEur > 0 ? formatMoneyEur(mixMetrics.totalNetRevenueEur) : '—'}
                       </td>
                     </tr>
                   </tfoot>
@@ -1041,12 +1042,12 @@ export default function EscandallosPage() {
                             </span>
                           </Link>
                         </td>
-                        <td className="px-3 py-2.5 tabular-nums text-zinc-800">{r.costPerYieldEur.toFixed(2)} €</td>
+                        <td className="px-3 py-2.5 tabular-nums text-zinc-800">{formatMoneyEur(r.costPerYieldEur)}</td>
                         <td className="px-3 py-2.5 tabular-nums text-zinc-800">
-                          {r.saleGrossEur != null ? `${r.saleGrossEur.toFixed(2)} €` : '—'}
+                          {r.saleGrossEur != null ? formatMoneyEur(r.saleGrossEur) : '—'}
                         </td>
                         <td className="px-3 py-2.5 tabular-nums text-zinc-800">
-                          {r.saleNetEur != null ? `${r.saleNetEur.toFixed(2)} €` : '—'}
+                          {r.saleNetEur != null ? formatMoneyEur(r.saleNetEur) : '—'}
                         </td>
                         <td className="px-3 py-2.5 tabular-nums font-semibold">
                           {r.foodCostPct != null ? (
@@ -1115,9 +1116,9 @@ export default function EscandallosPage() {
                             {r.yieldQty} {r.yieldLabel}
                           </td>
                           <td className="px-3 py-2.5 tabular-nums text-zinc-700">{r.lineCount}</td>
-                          <td className="px-3 py-2.5 tabular-nums text-zinc-800">{r.totalCostEur.toFixed(2)} €</td>
+                          <td className="px-3 py-2.5 tabular-nums text-zinc-800">{formatMoneyEur(r.totalCostEur)}</td>
                           <td className="px-3 py-2.5 tabular-nums font-semibold text-zinc-900">
-                            {r.costPerYieldEur.toFixed(2)} €
+                            {formatMoneyEur(r.costPerYieldEur)}
                           </td>
                         </tr>
                       ))}

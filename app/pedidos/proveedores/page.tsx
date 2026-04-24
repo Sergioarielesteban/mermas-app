@@ -16,6 +16,12 @@ import {
 } from '@/lib/pedidos-coverage';
 import { unitPriceCatalogSuffix } from '@/lib/pedidos-format';
 import {
+  formatDecimalInputEs,
+  formatMoneyEur,
+  formatUnitPriceEur,
+  parsePriceInput,
+} from '@/lib/money-format';
+import {
   readSuppliersSessionCache,
   writeSuppliersSessionCache,
 } from '@/lib/pedidos-session-cache';
@@ -65,36 +71,28 @@ function normalizeUnit(raw: string): Unit {
   return 'ud';
 }
 
-function parseDecimal(raw: string) {
-  const normalized = raw.trim().replace(/\./g, '').replace(',', '.');
-  const value = Number(normalized);
-  if (!Number.isFinite(value)) return null;
-  return Math.round(value * 100) / 100;
-}
-
-/** €/kg o €/unidad de cobro (hasta 4 decimales). */
+/** €/kg o €/unidad de cobro (hasta 4 decimales internos). */
 function parsePricePerBilling(raw: string) {
-  const normalized = raw.trim().replace(/\./g, '').replace(',', '.');
-  const value = Number(normalized);
-  if (!Number.isFinite(value) || value < 0) return null;
+  const value = parsePriceInput(raw);
+  if (value == null || value < 0) return null;
   return Math.round(value * 10000) / 10000;
 }
 
 /** Kg estimado por bandeja/caja (3 decimales). Vacío = sin estimación. */
 function parseKgEstimate(raw: string) {
-  const normalized = raw.trim().replace(/\s/g, '').replace(',', '.');
-  if (normalized === '') return null;
-  const value = Number(normalized);
-  if (!Number.isFinite(value) || value <= 0) return undefined;
+  const t = String(raw).trim();
+  if (t === '') return null;
+  const value = parsePriceInput(t);
+  if (value == null || value <= 0) return undefined;
   return Math.round(value * 1000) / 1000;
 }
 
 /** Piezas usables en receta por envase; mínimo 1. */
 function parseUnitsPerPack(raw: string): number | null {
-  const normalized = raw.trim().replace(/\s/g, '').replace(',', '.');
-  if (normalized === '' || normalized === '0') return 1;
-  const value = Number(normalized);
-  if (!Number.isFinite(value) || value <= 0) return null;
+  const t = String(raw).trim();
+  if (t === '' || t === '0') return 1;
+  const value = parsePriceInput(t);
+  if (value == null || value <= 0) return null;
   return Math.round(value * 10000) / 10000;
 }
 
@@ -222,14 +220,14 @@ export default function ProveedoresPage() {
           next[p.id] = next[p.id] ?? {
             name: p.name,
             unit: p.unit,
-            price: String(p.pricePerUnit),
-            vatRate: String(p.vatRate ?? 0),
+            price: formatDecimalInputEs(p.pricePerUnit, 2),
+            vatRate: formatDecimalInputEs(p.vatRate ?? 0, 2),
             estimatedKg:
               !supplierProductHasDistinctBilling(p) &&
               unitSupportsReceivedWeightKg(p.unit) &&
               p.estimatedKgPerUnit != null &&
               p.estimatedKgPerUnit > 0
-                ? String(p.estimatedKgPerUnit)
+                ? formatDecimalInputEs(p.estimatedKgPerUnit, 4)
                 : '',
             unitsPerPack: String((p.unitsPerPack ?? 1) >= 1 ? (p.unitsPerPack ?? 1) : 1),
             recipeUnit: (p.recipeUnit ?? 'ud') as Unit,
@@ -237,11 +235,11 @@ export default function ProveedoresPage() {
             dualKgBilling: supplierProductHasDistinctBilling(p) && p.billingUnit === 'kg',
             equivKg:
               supplierProductHasDistinctBilling(p) && p.billingQtyPerOrderUnit != null
-                ? String(p.billingQtyPerOrderUnit)
+                ? formatDecimalInputEs(p.billingQtyPerOrderUnit, 4)
                 : '',
             pricePerKg:
               supplierProductHasDistinctBilling(p) && p.pricePerBillingUnit != null
-                ? String(p.pricePerBillingUnit)
+                ? formatDecimalInputEs(p.pricePerBillingUnit, 4)
                 : '',
           };
         }
@@ -382,16 +380,17 @@ export default function ProveedoresPage() {
     if (!localId) return setMessage('Perfil del local no cargado. Cierra sesión y vuelve a entrar.');
     if (!productSupplierId) return setMessage('Selecciona proveedor.');
     const name = normalizeUpper(productName);
-    const vatRate = Number(productVat.replace(',', '.'));
+    const vatRate = parsePriceInput(productVat);
     if (!name) return setMessage('Nombre de producto obligatorio.');
-    if (!Number.isFinite(vatRate) || vatRate < 0 || vatRate > 1) return setMessage('IVA inválido. Usa 0,21 o 0,10.');
+    if (vatRate == null || vatRate < 0 || vatRate > 1) return setMessage('IVA inválido. Usa 0,21 o 0,10.');
     const pack = parseUnitsPerPack(productUnitsPerPack);
     if (pack == null) return setMessage('«Piezas por envase» debe ser un número mayor que 0 (ej. 40).');
     const supabase = getSupabaseClient();
     if (!supabase) return setMessage('Supabase no disponible en esta sesión.');
     const dualOk =
       productDualKgBilling && unitSupportsReceivedWeightKg(productUnit) && productUnit !== 'kg';
-    let pricePerUnit = Number(productPrice.replace(',', '.'));
+    const parsedPrice = parsePriceInput(productPrice);
+    let pricePerUnit = parsedPrice ?? NaN;
     let estimatedKgPerUnit: number | null = null;
     let billingUnit: Unit | null = null;
     let billingQtyPerOrderUnit: number | null = null;
@@ -476,22 +475,22 @@ export default function ProveedoresPage() {
     if (!localId) return setMessage('Perfil del local no cargado. Cierra sesión y vuelve a entrar.');
     const draft = productDrafts[productId];
     const name = draft?.name?.trim() ?? '';
-    const priceRaw = Number((draft?.price ?? '').replace(',', '.'));
-    const vatRate = Number((draft?.vatRate ?? '').replace(',', '.'));
+    const priceRaw = parsePriceInput(draft?.price ?? '');
+    const vatRate = parsePriceInput(draft?.vatRate ?? '');
     if (!name) {
       return setMessage('El nombre del producto es obligatorio.');
     }
-    if (!Number.isFinite(vatRate) || vatRate < 0 || vatRate > 1) {
+    if (vatRate == null || vatRate < 0 || vatRate > 1) {
       return setMessage('IVA inválido. Usa 0,21 o 0,10.');
     }
     const pack = parseUnitsPerPack(draft.unitsPerPack ?? '1');
     if (pack == null) return setMessage('«Piezas por envase» debe ser un número mayor que 0.');
     const dualOk =
       draft.dualKgBilling === true && unitSupportsReceivedWeightKg(draft.unit) && draft.unit !== 'kg';
-    if (!dualOk && (!Number.isFinite(priceRaw) || priceRaw <= 0)) {
+    if (!dualOk && (priceRaw == null || priceRaw <= 0)) {
       return setMessage('Producto, unidad y precio válido son obligatorios.');
     }
-    let pricePerUnit = priceRaw;
+    let pricePerUnit = priceRaw ?? NaN;
     let estimatedKgPerUnit: number | null = null;
     let billingUnit: Unit | null = null;
     let billingQtyPerOrderUnit: number | null = null;
@@ -770,15 +769,15 @@ export default function ProveedoresPage() {
                           [p.id]: {
                             name: prev[p.id]?.name ?? p.name,
                             unit: prev[p.id]?.unit ?? p.unit,
-                            price: prev[p.id]?.price ?? String(p.pricePerUnit),
-                            vatRate: prev[p.id]?.vatRate ?? String(p.vatRate ?? 0),
+                            price: prev[p.id]?.price ?? formatDecimalInputEs(p.pricePerUnit, 2),
+                            vatRate: prev[p.id]?.vatRate ?? formatDecimalInputEs(p.vatRate ?? 0, 2),
                             estimatedKg:
                               prev[p.id]?.estimatedKg ??
                               (!supplierProductHasDistinctBilling(p) &&
                               unitSupportsReceivedWeightKg(p.unit) &&
                               p.estimatedKgPerUnit != null &&
                               p.estimatedKgPerUnit > 0
-                                ? String(p.estimatedKgPerUnit)
+                                ? formatDecimalInputEs(p.estimatedKgPerUnit, 4)
                                 : ''),
                             unitsPerPack:
                               prev[p.id]?.unitsPerPack ?? String((p.unitsPerPack ?? 1) >= 1 ? (p.unitsPerPack ?? 1) : 1),
@@ -792,12 +791,12 @@ export default function ProveedoresPage() {
                             equivKg:
                               prev[p.id]?.equivKg ??
                               (supplierProductHasDistinctBilling(p) && p.billingQtyPerOrderUnit != null
-                                ? String(p.billingQtyPerOrderUnit)
+                                ? formatDecimalInputEs(p.billingQtyPerOrderUnit, 4)
                                 : ''),
                             pricePerKg:
                               prev[p.id]?.pricePerKg ??
                               (supplierProductHasDistinctBilling(p) && p.pricePerBillingUnit != null
-                                ? String(p.pricePerBillingUnit)
+                                ? formatDecimalInputEs(p.pricePerBillingUnit, 4)
                                 : ''),
                           },
                         }));
@@ -817,16 +816,22 @@ export default function ProveedoresPage() {
                   </div>
                 </div>
                 <p className="pt-1 text-xs font-semibold text-zinc-600">
-                  {p.pricePerUnit.toFixed(2)} €/{unitPriceCatalogSuffix[p.unit]} · IVA {(p.vatRate * 100).toFixed(0)}%
+                  Compra: {formatUnitPriceEur(p.pricePerUnit, unitPriceCatalogSuffix[p.unit])} · IVA{' '}
+                  {(p.vatRate * 100).toFixed(0)}%
                   {(p.unitsPerPack ?? 1) > 1 ? (
                     <>
                       {' '}
-                      · escandallo ~{(p.pricePerUnit / (p.unitsPerPack ?? 1)).toFixed(4)} €/
-                      {unitPriceCatalogSuffix[p.recipeUnit ?? 'ud']} (×{p.unitsPerPack ?? 1})
+                      · Coste uso:{' '}
+                      {formatUnitPriceEur(
+                        p.pricePerUnit / (p.unitsPerPack ?? 1),
+                        unitPriceCatalogSuffix[p.recipeUnit ?? 'ud'],
+                      )}{' '}
+                      (×{p.unitsPerPack ?? 1} {unitPriceCatalogSuffix[p.recipeUnit ?? 'ud']}/
+                      {unitPriceCatalogSuffix[p.unit]})
                     </>
                   ) : null}
                   {supplierProductHasDistinctBilling(p) && p.billingUnit === 'kg' && p.pricePerBillingUnit != null
-                    ? ` · cobro ~${p.pricePerBillingUnit} €/kg (~${p.billingQtyPerOrderUnit ?? '—'} kg/${unitPriceCatalogSuffix[p.unit]})`
+                    ? ` · cobro ${formatUnitPriceEur(p.pricePerBillingUnit, 'kg')} (~${p.billingQtyPerOrderUnit ?? '—'} kg/${unitPriceCatalogSuffix[p.unit]})`
                     : ''}
                   {!supplierProductHasDistinctBilling(p) &&
                   unitSupportsReceivedWeightKg(p.unit) &&
@@ -926,7 +931,7 @@ export default function ProveedoresPage() {
             {productDualKgBilling && unitSupportsReceivedWeightKg(productUnit) && productUnit !== 'kg' ? (
               <div className="flex h-10 items-center rounded-xl border border-zinc-200 bg-zinc-50 px-3 text-sm font-semibold text-zinc-800">
                 {dualNewProductDerivedPrice != null
-                  ? `${dualNewProductDerivedPrice.toFixed(2)} €/${unitPriceCatalogSuffix[productUnit]} (derivado)`
+                  ? `${formatUnitPriceEur(dualNewProductDerivedPrice, unitPriceCatalogSuffix[productUnit])} (derivado)`
                   : '— (equiv. × €/kg)'}
               </div>
             ) : (
@@ -1277,7 +1282,7 @@ export default function ProveedoresPage() {
                       {editDual ? (
                         <div className="flex h-9 items-center rounded-lg border border-zinc-200 bg-zinc-50 px-3 text-xs font-semibold text-zinc-800">
                           {editDerived != null
-                            ? `${editDerived.toFixed(2)} €/${unitPriceCatalogSuffix[u]} (derivado)`
+                            ? `${formatUnitPriceEur(editDerived, unitPriceCatalogSuffix[u])} (derivado)`
                             : '— (equiv. × €/kg)'}
                         </div>
                       ) : (

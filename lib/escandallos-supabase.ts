@@ -8,6 +8,7 @@ import {
   unitsMatchForIngredientCost,
   type EscandalloIngredientUnit,
 } from '@/lib/escandallo-ingredient-units';
+import { formatUnitPriceEur, roundMoney } from '@/lib/money-format';
 import { fetchPurchaseArticleCostHintsByIds } from '@/lib/purchase-articles-supabase';
 import { fetchOrders } from '@/lib/pedidos-supabase';
 import type { Unit } from '@/lib/types';
@@ -337,25 +338,30 @@ export function escandalloRecipeUnitForRawProduct(p: EscandalloRawProduct): Esca
 
 /** € por unidad de receta (o € por unidad de compra si la línea va en envases). */
 export function rawSupplierLineUnitPriceEur(line: EscandalloLine, p: EscandalloRawProduct): number {
-  if (
-    p.internalCostPerUsageUnitEur != null &&
-    p.internalUsageUnitLabel &&
-    unitsMatchForIngredientCost(line.unit, p.internalUsageUnitLabel)
-  ) {
-    return p.internalCostPerUsageUnitEur;
-  }
   const packSize = p.unitsPerPack > 0 ? p.unitsPerPack : 1;
-  const recipeU = escandalloRecipeUnitForRawProduct(p);
-  if (unitsMatchForIngredientCost(line.unit, String(p.unit))) {
-    return p.pricePerUnit;
+  const purchaseUnit = String(p.unit);
+  const perUsageFromPack = packSize > 0 ? p.pricePerUnit / packSize : p.pricePerUnit;
+
+  const internalLooksValid =
+    p.internalCostPerUsageUnitEur != null &&
+    Number.isFinite(p.internalCostPerUsageUnitEur) &&
+    p.internalUsageUnitLabel &&
+    unitsMatchForIngredientCost(line.unit, p.internalUsageUnitLabel) &&
+    !(packSize > 1 && p.internalCostPerUsageUnitEur > p.pricePerUnit + 1e-6);
+
+  if (internalLooksValid && p.internalCostPerUsageUnitEur != null) {
+    return roundMoney(p.internalCostPerUsageUnitEur);
   }
-  if (unitsMatchForIngredientCost(line.unit, recipeU)) {
-    return Math.round((p.pricePerUnit / packSize) * 10000) / 10000;
+
+  if (unitsMatchForIngredientCost(line.unit, purchaseUnit)) {
+    return roundMoney(p.pricePerUnit);
   }
+
   if (packSize > 1) {
-    return Math.round((p.pricePerUnit / packSize) * 10000) / 10000;
+    return roundMoney(perUsageFromPack);
   }
-  return p.pricePerUnit;
+
+  return roundMoney(p.pricePerUnit);
 }
 
 export function rawProductPickerSummaryLine(p: EscandalloRawProduct): string {
@@ -363,10 +369,10 @@ export function rawProductPickerSummaryLine(p: EscandalloRawProduct): string {
   const base = `${p.supplierName} · ${p.name}`;
   if (pack > 1) {
     const ru = p.recipeUnit ?? 'ud';
-    const each = p.pricePerUnit / pack;
-    return `${base} (${p.pricePerUnit.toFixed(2)} €/${p.unit} → ${each.toFixed(4)} €/${ru})`;
+    const each = roundMoney(p.pricePerUnit / pack);
+    return `${base} (compra ${formatUnitPriceEur(p.pricePerUnit, p.unit)} · coste uso ${formatUnitPriceEur(each, ru)} · ×${pack})`;
   }
-  return `${base} (${p.pricePerUnit.toFixed(2)} €/${p.unit})`;
+  return `${base} (${formatUnitPriceEur(p.pricePerUnit, p.unit)})`;
 }
 
 export async function fetchProcessedProductsForEscandallo(
@@ -717,7 +723,7 @@ export function lineUnitPriceEur(
       processedById,
       innerCtx.expanding,
     );
-    return Math.round((total / sub.yieldQty) * 10000) / 10000;
+    return roundMoney(total / sub.yieldQty);
   }
   if (line.sourceType === 'raw' && line.rawSupplierProductId) {
     const p = rawProductById.get(line.rawSupplierProductId);
@@ -728,8 +734,18 @@ export function lineUnitPriceEur(
     if (p) {
       const raw = rawProductById.get(p.sourceSupplierProductId);
       if (!raw || p.outputQty <= 0) return 0;
-      const totalInput = raw.pricePerUnit * p.inputQty + p.extraCostEur;
-      return Math.round((totalInput / p.outputQty) * 10000) / 10000;
+      const unitRaw = rawSupplierLineUnitPriceEur(
+        {
+          ...line,
+          sourceType: 'raw',
+          rawSupplierProductId: raw.id,
+          unit: raw.unit as string,
+          qty: p.inputQty,
+        },
+        raw,
+      );
+      const totalInput = unitRaw * p.inputQty + p.extraCostEur;
+      return roundMoney(totalInput / p.outputQty);
     }
   }
   if (line.sourceType === 'manual' && line.manualPricePerUnit != null && Number.isFinite(line.manualPricePerUnit)) {

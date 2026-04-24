@@ -35,6 +35,7 @@ import {
   readEscandalloWizardDraft,
   writeEscandalloWizardDraft,
 } from '@/lib/escandallo-session-persist';
+import { formatMoneyEur } from '@/lib/money-format';
 
 const STEPS = ['Datos', 'Ingredientes', 'Revisión', 'Guardar'] as const;
 
@@ -336,11 +337,11 @@ export default function EscandalloNewRecipeWizard() {
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                 <div className="rounded-xl bg-zinc-50 px-3 py-2 ring-1 ring-zinc-100">
                   <p className="text-[10px] font-bold uppercase text-zinc-500">Coste total (preview)</p>
-                  <p className="text-xl font-black tabular-nums">{totalCost.toFixed(2)} €</p>
+                  <p className="text-xl font-black tabular-nums">{formatMoneyEur(totalCost)}</p>
                 </div>
                 <div className="rounded-xl bg-zinc-50 px-3 py-2 ring-1 ring-zinc-100">
                   <p className="text-[10px] font-bold uppercase text-zinc-500">Coste / {yieldLabel || 'ud.'}</p>
-                  <p className="text-xl font-black tabular-nums">{perYield.toFixed(2)} €</p>
+                  <p className="text-xl font-black tabular-nums">{formatMoneyEur(perYield)}</p>
                 </div>
                 <div className="rounded-xl bg-zinc-50 px-3 py-2 ring-1 ring-zinc-100">
                   <p className="text-[10px] font-bold uppercase text-zinc-500">Food cost</p>

@@ -8,6 +8,7 @@ import {
   type EscandalloRawProduct,
   type EscandalloRecipe,
 } from '@/lib/escandallos-supabase';
+import { parsePriceInput } from '@/lib/money-format';
 
 /** Opciones compactas para selects legacy; en UI preferir datalist con presets + texto libre. */
 export const ESCANDALLO_DRAFT_UNITS: { value: string; label: string }[] = [
@@ -16,10 +17,7 @@ export const ESCANDALLO_DRAFT_UNITS: { value: string; label: string }[] = [
 ];
 
 export function parseDecimal(raw: string): number | null {
-  const t = String(raw).trim().replace(/\s/g, '').replace(',', '.');
-  if (t === '') return null;
-  const n = Number(t);
-  return Number.isFinite(n) ? n : null;
+  return parsePriceInput(raw);
 }
 
 export function newDraftKey() {

@@ -19,6 +19,7 @@ import {
   type EscandalloRawProduct,
   type EscandalloRecipe,
 } from '@/lib/escandallos-supabase';
+import { formatMoneyEur } from '@/lib/money-format';
 
 type CatFilter = string;
 type PvpFilter = 'all' | 'with' | 'without';
@@ -296,12 +297,12 @@ export default function EscandallosRecetasLibroClient() {
                 <dl className="mt-4 grid grid-cols-2 gap-2 text-xs">
                   <div className="rounded-lg bg-zinc-50 px-2 py-1.5">
                     <dt className="font-semibold text-zinc-500">Coste / ud.</dt>
-                    <dd className="font-bold tabular-nums text-zinc-900">{r.costPerYieldEur.toFixed(2)} €</dd>
+                    <dd className="font-bold tabular-nums text-zinc-900">{formatMoneyEur(r.costPerYieldEur)}</dd>
                   </div>
                   <div className="rounded-lg bg-zinc-50 px-2 py-1.5">
                     <dt className="font-semibold text-zinc-500">PVP</dt>
                     <dd className="font-bold tabular-nums text-zinc-900">
-                      {r.saleGrossEur != null ? `${r.saleGrossEur.toFixed(2)} €` : '—'}
+                      {r.saleGrossEur != null ? formatMoneyEur(r.saleGrossEur) : '—'}
                     </dd>
                   </div>
                   <div className="rounded-lg bg-zinc-50 px-2 py-1.5">

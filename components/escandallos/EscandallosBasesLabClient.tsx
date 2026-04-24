@@ -32,6 +32,7 @@ import {
   type EscandalloRawProduct,
   type EscandalloRecipe,
 } from '@/lib/escandallos-supabase';
+import { formatMoneyEur, formatUnitPriceEur, roundMoney } from '@/lib/money-format';
 import type { Unit } from '@/lib/types';
 
 export default function EscandallosBasesLabClient() {
@@ -401,10 +402,10 @@ export default function EscandallosBasesLabClient() {
           <ul className="mt-4 space-y-1.5">
             {processedProducts.map((p) => {
               const raw = rawById.get(p.sourceSupplierProductId);
-              const cost =
+              const perOut =
                 raw && p.outputQty > 0
-                  ? ((raw.pricePerUnit * p.inputQty + p.extraCostEur) / p.outputQty).toFixed(2)
-                  : '0.00';
+                  ? roundMoney((raw.pricePerUnit * p.inputQty + p.extraCostEur) / p.outputQty)
+                  : 0;
               return (
                 <li
                   key={p.id}
@@ -413,7 +414,7 @@ export default function EscandallosBasesLabClient() {
                   <p className="min-w-0 truncate text-xs text-zinc-700">
                     <span className="font-semibold text-zinc-900">{p.name}</span>{' '}
                     <span className="text-zinc-500">
-                      {p.inputQty}→{p.outputQty} {p.outputUnit} · {cost} €/{p.outputUnit}
+                      {p.inputQty}→{p.outputQty} {p.outputUnit} · {formatUnitPriceEur(perOut, p.outputUnit)}
                     </span>
                   </p>
                   <button
@@ -459,8 +460,8 @@ export default function EscandallosBasesLabClient() {
                     <div className="min-w-0">
                       <p className="font-semibold text-zinc-900">{r.name}</p>
                       <p className="text-xs text-zinc-600">
-                        {r.yieldQty} {r.yieldLabel} · {ls.length} líneas · {total.toFixed(2)} € batch · {per.toFixed(2)}{' '}
-                        € / ud.
+                        {r.yieldQty} {r.yieldLabel} · {ls.length} líneas · {formatMoneyEur(total)} batch ·{' '}
+                        {formatUnitPriceEur(per, r.yieldLabel)}
                       </p>
                     </div>
                     <Link
