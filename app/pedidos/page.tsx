@@ -33,6 +33,9 @@ import {
   billingQuantityForReceptionPrice,
   billingQuantityForLine,
   deleteOrder,
+  fetchAvgReceivedPricePerKgBySupplierProductIds,
+  fetchLastReceivedPricePerKgBySupplierProductIds,
+  fetchReceptionEuroPerKgHintsBySupplierProductIds,
   fetchSuppliersWithProducts,
   persistReceptionItemTotals,
   receptionLineTotals,
@@ -47,8 +50,11 @@ import {
   updateOrderItemReceivedWeightKg,
   updateOrderItemPrice,
   type PedidoOrder,
+  type PedidoOrderItem,
   type PedidoSupplier,
+  type ReceptionEuroPerKgHints,
 } from '@/lib/pedidos-supabase';
+import { resolveEuroPerKgSuggestion, formatPpkInputDisplay } from '@/lib/pedidos-recepcion-inputs';
 import {
   createStaffMealRecord,
   fetchStaffMealWorkers,
@@ -331,6 +337,7 @@ export default function PedidosPage() {
   weightInputRef.current = weightInputByItemId;
   const pricePerKgInputRef = React.useRef<Record<string, string>>({});
   pricePerKgInputRef.current = pricePerKgInputByItemId;
+  const resolvePpkRef = React.useRef<(item: PedidoOrderItem) => number | null>(() => null);
   const sendWhatsappOrder = React.useCallback(
     (order: PedidoOrder, options?: { viaAssistant?: boolean }) => {
     const phone = normalizeWhatsappPhone(order.supplierContact);
@@ -609,14 +616,14 @@ export default function PedidosPage() {
       }
       if (line.billingUnit === 'kg') {
         const ppk =
-          line.pricePerBillingUnit ??
-          (eq != null &&
-          eq > 0 &&
-          line.basePricePerUnit != null &&
-          Number.isFinite(line.basePricePerUnit) &&
-          line.basePricePerUnit > 0
-            ? line.basePricePerUnit / eq
-            : null);
+          line.pricePerBillingUnit != null && line.pricePerBillingUnit > 0
+            ? line.pricePerBillingUnit
+            : resolvePpkRef.current(line);
+        if (ppk != null && ppk > 0) {
+          merged = { ...merged, receivedPricePerKg: Math.round(Number(ppk) * 10000) / 10000 };
+        }
+      } else if (merged.receivedWeightKg != null && merged.receivedWeightKg > 0) {
+        const ppk = resolvePpkRef.current(line);
         if (ppk != null && ppk > 0) {
           merged = { ...merged, receivedPricePerKg: Math.round(ppk * 10000) / 10000 };
         }
@@ -702,6 +709,97 @@ export default function PedidosPage() {
     return Number.isNaN(parsed) || parsed < 0 ? item.pricePerUnit : Math.round(parsed * 100) / 100;
   }, []);
 
+  const supplierProductIdsForSentReceptionHints = React.useMemo(() => {
+    const ids = new Set<string>();
+    for (const o of orders) {
+      if (o.status !== 'sent') continue;
+      for (const it of o.items) {
+        if (unitSupportsReceivedWeightKg(it.unit) && it.supplierProductId) ids.add(it.supplierProductId);
+      }
+    }
+    return [...ids];
+  }, [orders]);
+  const sentReceptionHintIdsKey = supplierProductIdsForSentReceptionHints.join(',');
+
+  const receptionEuroByProductRef = React.useRef<Record<string, number>>({});
+  const avgRecvEuroByProductRef = React.useRef<Record<string, number>>({});
+  const receptionHintsByProductRef = React.useRef<Map<string, ReceptionEuroPerKgHints>>(new Map());
+  const [sentReceptionHintsTick, setSentReceptionHintsTick] = React.useState(0);
+
+  React.useEffect(() => {
+    if (!localId) return;
+    if (supplierProductIdsForSentReceptionHints.length === 0) {
+      receptionEuroByProductRef.current = {};
+      avgRecvEuroByProductRef.current = {};
+      receptionHintsByProductRef.current = new Map();
+      setSentReceptionHintsTick((t) => t + 1);
+      return;
+    }
+    const supabase = getSupabaseClient();
+    if (!supabase) return;
+    let cancelled = false;
+    const ids = supplierProductIdsForSentReceptionHints;
+    void Promise.all([
+      fetchLastReceivedPricePerKgBySupplierProductIds(supabase, localId, ids),
+      fetchAvgReceivedPricePerKgBySupplierProductIds(supabase, localId, ids),
+      fetchReceptionEuroPerKgHintsBySupplierProductIds(supabase, localId, ids),
+    ])
+      .then(([recvMap, avgMap, hintsMap]) => {
+        if (cancelled) return;
+        receptionEuroByProductRef.current = Object.fromEntries(recvMap);
+        avgRecvEuroByProductRef.current = Object.fromEntries(avgMap);
+        receptionHintsByProductRef.current = hintsMap;
+        setSentReceptionHintsTick((t) => t + 1);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        receptionEuroByProductRef.current = {};
+        avgRecvEuroByProductRef.current = {};
+        receptionHintsByProductRef.current = new Map();
+        setSentReceptionHintsTick((t) => t + 1);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [localId, sentReceptionHintIdsKey]);
+
+  const resolvePpkForItemSnap = React.useCallback((item: PedidoOrderItem) => {
+    const sid = item.supplierProductId;
+    const h = sid ? receptionHintsByProductRef.current.get(sid) : undefined;
+    return resolveEuroPerKgSuggestion(item, {
+      articleEuroPerKg: h?.articleEuroPerKg ?? null,
+      lastReceptionEuroPerKg: sid ? receptionEuroByProductRef.current[sid] : undefined,
+      avgReceivedEuroPerKg: sid ? avgRecvEuroByProductRef.current[sid] : undefined,
+      liveCatalogBillingEuroPerKg: h?.catalogBillingEuroPerKg ?? null,
+    }).value;
+  }, []);
+  resolvePpkRef.current = resolvePpkForItemSnap;
+
+  const sentOrderPpkSuggestionByItemId = React.useMemo(() => {
+    const m = new Map<string, number | null>();
+    const recv = receptionEuroByProductRef.current;
+    const avgR = avgRecvEuroByProductRef.current;
+    const hints = receptionHintsByProductRef.current;
+    for (const o of orders) {
+      if (o.status !== 'sent') continue;
+      for (const it of o.items) {
+        if (!unitSupportsReceivedWeightKg(it.unit)) continue;
+        const sid = it.supplierProductId;
+        const h = sid ? hints.get(sid) : undefined;
+        m.set(
+          it.id,
+          resolveEuroPerKgSuggestion(it, {
+            articleEuroPerKg: h?.articleEuroPerKg ?? null,
+            lastReceptionEuroPerKg: sid ? recv[sid] : undefined,
+            avgReceivedEuroPerKg: sid ? avgR[sid] : undefined,
+            liveCatalogBillingEuroPerKg: h?.catalogBillingEuroPerKg ?? null,
+          }).value,
+        );
+      }
+    }
+    return m;
+  }, [orders, sentReceptionHintsTick]);
+
   const setLocalUnitPrice = React.useCallback(
     (orderId: string, itemId: string, rawValue: string) => {
       const parsed = Number(rawValue.replace(',', '.'));
@@ -785,12 +883,16 @@ export default function PedidosPage() {
       const itemSnap = orderSnap?.items.find((i) => i.id === itemId);
       if (!itemSnap) return;
       const price = getLinePrice(itemSnap);
-      const merged = {
+      let merged: PedidoOrderItem = {
         ...itemSnap,
         pricePerUnit: price,
         receivedWeightKg: parsed,
         ...(itemSnap.unit === 'kg' && parsed != null ? { receivedQuantity: parsed } : {}),
       };
+      if (unitSupportsReceivedWeightKg(itemSnap.unit) && parsed != null && parsed > 0) {
+        const ppk = itemSnap.receivedPricePerKg ?? resolvePpkForItemSnap(itemSnap) ?? null;
+        merged = { ...merged, receivedPricePerKg: ppk };
+      }
       void (async () => {
         try {
           await updateOrderItemReceivedWeightKg(supabase, localId, itemId, parsed);
@@ -798,6 +900,27 @@ export default function PedidosPage() {
             await updateOrderItemReceived(supabase, localId, itemId, parsed ?? itemSnap.receivedQuantity);
           }
           await persistReceptionItemTotals(supabase, localId, merged);
+          const { lineTotal, effectivePricePerUnit } = receptionLineTotals(merged);
+          setOrders((prev) =>
+            prev.map((order) => {
+              if (order.id !== orderId) return order;
+              return {
+                ...order,
+                items: order.items.map((item) =>
+                  item.id === itemId
+                    ? { ...merged, pricePerUnit: effectivePricePerUnit, lineTotal }
+                    : item,
+                ),
+              };
+            }),
+          );
+          if (merged.receivedPricePerKg != null && merged.receivedPricePerKg > 0) {
+            setPricePerKgInputByItemId((prev) => ({
+              ...prev,
+              [itemId]: formatPpkInputDisplay(merged.receivedPricePerKg!),
+            }));
+          }
+          setMessage(null);
           dispatchPedidosDataChanged();
         } catch (err: unknown) {
           void reloadOrders();
@@ -811,37 +934,103 @@ export default function PedidosPage() {
         return next;
       });
     },
-    [getLinePrice, localId, orders, reloadOrders, weightInputByItemId],
+    [getLinePrice, localId, orders, reloadOrders, resolvePpkForItemSnap, setOrders, weightInputByItemId],
   );
 
   const commitPricePerKgInput = React.useCallback(
-    (orderId: string, itemId: string) => {
+    (orderId: string, itemId: string, rawOverride?: string) => {
       if (!localId) return;
       const supabase = getSupabaseClient();
       if (!supabase) return;
-      const raw = pricePerKgInputByItemId[itemId];
+      const raw = rawOverride ?? pricePerKgInputByItemId[itemId];
       if (raw === undefined) return;
-      const parsed = parsePricePerKg(raw);
-      if (parsed === 'invalid') {
-        setMessage('€/kg inválido.');
-        return;
-      }
+
       const orderSnap = orders.find((o) => o.id === orderId);
       const itemSnap = orderSnap?.items.find((i) => i.id === itemId);
       if (!itemSnap || !unitSupportsReceivedWeightKg(itemSnap.unit)) return;
-      if (parsed != null && (itemSnap.receivedWeightKg == null || itemSnap.receivedWeightKg <= 0)) {
+
+      const trimmed = raw.trim();
+      let parsed: number | null;
+      if (trimmed === '') {
+        parsed = resolvePpkForItemSnap(itemSnap);
+      } else {
+        const p = parsePricePerKg(raw);
+        if (p === 'invalid') {
+          setMessage('€/kg inválido.');
+          return;
+        }
+        parsed = p;
+      }
+
+      if (
+        parsed != null &&
+        parsed > 0 &&
+        (itemSnap.receivedWeightKg == null || itemSnap.receivedWeightKg <= 0)
+      ) {
         setMessage('Indica primero los kg reales para aplicar €/kg.');
         return;
       }
+
       const merged = { ...itemSnap, receivedPricePerKg: parsed };
-      void persistReceptionItemTotals(supabase, localId, merged)
-        .then(() => dispatchPedidosDataChanged())
-        .catch((err: Error) => {
+
+      void (async () => {
+        try {
+          await persistReceptionItemTotals(supabase, localId, merged);
+          const { lineTotal, effectivePricePerUnit } = receptionLineTotals(merged);
+          setOrders((prev) =>
+            prev.map((order) => {
+              if (order.id !== orderId) return order;
+              return {
+                ...order,
+                items: order.items.map((item) =>
+                  item.id === itemId
+                    ? { ...merged, pricePerUnit: effectivePricePerUnit, lineTotal }
+                    : item,
+                ),
+              };
+            }),
+          );
+          setPricePerKgInputByItemId((prev) => ({
+            ...prev,
+            [itemId]:
+              parsed != null && parsed > 0
+                ? formatPpkInputDisplay(parsed)
+                : '',
+          }));
+          setMessage(null);
+          dispatchPedidosDataChanged();
+        } catch (err: unknown) {
           void reloadOrders();
-          setMessage(err.message);
-        });
+          setMessage(err instanceof Error ? err.message : 'No se pudo guardar €/kg.');
+        }
+      })();
     },
-    [localId, orders, pricePerKgInputByItemId, reloadOrders],
+    [localId, orders, pricePerKgInputByItemId, reloadOrders, resolvePpkForItemSnap, setOrders],
+  );
+
+  const commitPricePerKgBlur = React.useCallback(
+    (orderId: string, item: PedidoOrderItem) => {
+      const draft = pricePerKgInputByItemId[item.id];
+      if (draft !== undefined) {
+        commitPricePerKgInput(orderId, item.id);
+        return;
+      }
+      const fromDb =
+        item.receivedPricePerKg != null && item.receivedPricePerKg > 0
+          ? formatPpkInputDisplay(item.receivedPricePerKg)
+          : null;
+      const sug = sentOrderPpkSuggestionByItemId.get(item.id);
+      const fromSug = sug != null && sug > 0 ? formatPpkInputDisplay(sug) : null;
+      const toCommit = fromDb ?? fromSug;
+      if (toCommit != null) {
+        commitPricePerKgInput(orderId, item.id, toCommit);
+      }
+    },
+    [
+      commitPricePerKgInput,
+      pricePerKgInputByItemId,
+      sentOrderPpkSuggestionByItemId,
+    ],
   );
 
   const flushOrderReceptionDrafts = React.useCallback(
@@ -865,6 +1054,12 @@ export default function PedidosPage() {
             const p = parsePricePerKg(rawPpk);
             if (p === 'invalid') throw new Error(`€/kg inválido en ${item.productName}.`);
             parsedPpk = p;
+          } else if (
+            unitSupportsReceivedWeightKg(item.unit) &&
+            parsedWeight != null &&
+            parsedWeight > 0
+          ) {
+            parsedPpk = item.receivedPricePerKg ?? resolvePpkForItemSnap(item) ?? null;
           }
           if (parsedPpk != null && (parsedWeight == null || parsedWeight <= 0)) {
             throw new Error(`Faltan kg reales en ${item.productName} para usar €/kg.`);
@@ -892,7 +1087,7 @@ export default function PedidosPage() {
         }),
       );
     },
-    [getLinePrice, localId],
+    [getLinePrice, localId, resolvePpkForItemSnap],
   );
 
   const commitSentOrderAsReceived = React.useCallback(
@@ -3255,16 +3450,21 @@ export default function PedidosPage() {
                                     inputMode="decimal"
                                     autoComplete="off"
                                     autoCorrect="off"
-                                    placeholder="8,15"
-                                    title="Euros por kilo reales"
+                                    placeholder=""
+                                    title="Euros por kilo reales (precarga desde máster / histórico / catálogo)"
                                     value={
                                       pricePerKgInputByItemId[item.id] ??
-                                      (item.receivedPricePerKg != null ? String(item.receivedPricePerKg) : '')
+                                      (item.receivedPricePerKg != null && item.receivedPricePerKg > 0
+                                        ? formatPpkInputDisplay(item.receivedPricePerKg)
+                                        : (() => {
+                                            const s = sentOrderPpkSuggestionByItemId.get(item.id);
+                                            return s != null && s > 0 ? formatPpkInputDisplay(s) : '';
+                                          })())
                                     }
                                     onChange={(e) =>
                                       setPricePerKgInputByItemId((prev) => ({ ...prev, [item.id]: e.target.value }))
                                     }
-                                    onBlur={() => commitPricePerKgInput(order.id, item.id)}
+                                    onBlur={() => commitPricePerKgBlur(order.id, item)}
                                     className="h-9 w-full min-w-0 rounded-md border border-zinc-300 bg-white px-2 py-1 text-sm font-semibold tabular-nums text-zinc-900 outline-none"
                                   />
                                 </div>
@@ -3316,16 +3516,21 @@ export default function PedidosPage() {
                                           inputMode="decimal"
                                           autoComplete="off"
                                           autoCorrect="off"
-                                          placeholder="3,45"
-                                          title="€/kg real"
+                                          placeholder=""
+                                          title="€/kg real (precarga desde máster / histórico / catálogo)"
                                           value={
                                             pricePerKgInputByItemId[item.id] ??
-                                            (item.receivedPricePerKg != null ? String(item.receivedPricePerKg) : '')
+                                            (item.receivedPricePerKg != null && item.receivedPricePerKg > 0
+                                              ? formatPpkInputDisplay(item.receivedPricePerKg)
+                                              : (() => {
+                                                  const s = sentOrderPpkSuggestionByItemId.get(item.id);
+                                                  return s != null && s > 0 ? formatPpkInputDisplay(s) : '';
+                                                })())
                                           }
                                           onChange={(e) =>
                                             setPricePerKgInputByItemId((prev) => ({ ...prev, [item.id]: e.target.value }))
                                           }
-                                          onBlur={() => commitPricePerKgInput(order.id, item.id)}
+                                          onBlur={() => commitPricePerKgBlur(order.id, item)}
                                           className="h-8 w-[5rem] rounded-md border border-zinc-300 bg-white px-1.5 text-xs font-semibold text-zinc-900 outline-none"
                                         />
                                       </div>

@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { normalizeDeliveryCycleWeekdays, normalizeDeliveryExceptionDates } from '@/lib/pedidos-coverage';
 import {
+  fetchPurchaseArticleCostHintsByIds,
   isMissingPurchaseArticlesError,
   linkPurchaseArticleToNewSupplierProduct,
 } from '@/lib/purchase-articles-supabase';
@@ -1562,6 +1563,116 @@ export async function fetchLastReceivedPricePerKgBySupplierProductIds(
     const v = Number(row.received_price_per_kg);
     if (!Number.isFinite(v) || v <= 0) continue;
     out.set(sid, Math.round(v * 10000) / 10000);
+  }
+  return out;
+}
+
+/** Pistas para sugerir €/kg en recepción (artículo máster + catálogo vivo facturación por kg). */
+export type ReceptionEuroPerKgHints = {
+  /** `purchase_articles.coste_unitario_uso` cuando `unidad_uso` es kg. */
+  articleEuroPerKg: number | null;
+  /** `pedido_supplier_products.price_per_billing_unit` cuando `billing_unit` es kg. */
+  catalogBillingEuroPerKg: number | null;
+};
+
+/**
+ * Por producto de proveedor: coste máster en €/kg (si aplica) y €/kg de catálogo cuando la factura es por kg.
+ */
+export async function fetchReceptionEuroPerKgHintsBySupplierProductIds(
+  supabase: SupabaseClient,
+  localId: string,
+  supplierProductIds: string[],
+): Promise<Map<string, ReceptionEuroPerKgHints>> {
+  const out = new Map<string, ReceptionEuroPerKgHints>();
+  if (!supplierProductIds.length) return out;
+
+  const { data, error } = await supabase
+    .from('pedido_supplier_products')
+    .select('id,article_id,billing_unit,price_per_billing_unit')
+    .eq('local_id', localId)
+    .in('id', supplierProductIds);
+  if (error) throw new Error(error.message);
+
+  const articleIds = new Set<string>();
+  const catalogBillingByPid = new Map<string, number | null>();
+  const articleIdByPid = new Map<string, string | null>();
+
+  for (const row of (data ?? []) as Record<string, unknown>[]) {
+    const id = String(row.id);
+    const aid = row.article_id != null ? String(row.article_id) : null;
+    articleIdByPid.set(id, aid);
+    if (aid) articleIds.add(aid);
+    const bu = row.billing_unit != null ? String(row.billing_unit).trim().toLowerCase() : '';
+    const rawPpb = row.price_per_billing_unit != null ? Number(row.price_per_billing_unit) : null;
+    const billingEuro =
+      bu === 'kg' && rawPpb != null && Number.isFinite(rawPpb) && rawPpb > 0
+        ? Math.round(rawPpb * 10000) / 10000
+        : null;
+    catalogBillingByPid.set(id, billingEuro);
+  }
+
+  const articleHints = await fetchPurchaseArticleCostHintsByIds(supabase, localId, [...articleIds]);
+
+  for (const pid of supplierProductIds) {
+    let articleEuroPerKg: number | null = null;
+    const aid = articleIdByPid.get(pid) ?? null;
+    if (aid) {
+      const ah = articleHints.get(aid);
+      if (ah) {
+        const u = (ah.unidadUso ?? '').trim().toLowerCase();
+        if (
+          u === 'kg' &&
+          ah.costeUnitarioUso != null &&
+          Number.isFinite(ah.costeUnitarioUso) &&
+          ah.costeUnitarioUso > 0
+        ) {
+          articleEuroPerKg = Math.round(ah.costeUnitarioUso * 10000) / 10000;
+        }
+      }
+    }
+    out.set(pid, {
+      articleEuroPerKg,
+      catalogBillingEuroPerKg: catalogBillingByPid.get(pid) ?? null,
+    });
+  }
+  return out;
+}
+
+/** Media de €/kg declarados en recepciones anteriores (PMP simple por líneas con dato). */
+export async function fetchAvgReceivedPricePerKgBySupplierProductIds(
+  supabase: SupabaseClient,
+  localId: string,
+  supplierProductIds: string[],
+): Promise<Map<string, number>> {
+  const out = new Map<string, number>();
+  if (!supplierProductIds.length) return out;
+
+  const { data, error } = await supabase
+    .from('purchase_order_items')
+    .select('supplier_product_id,received_price_per_kg')
+    .eq('local_id', localId)
+    .in('supplier_product_id', supplierProductIds)
+    .not('received_price_per_kg', 'is', null)
+    .gt('received_price_per_kg', 0);
+  if (error) throw new Error(error.message);
+
+  const sums = new Map<string, { sum: number; count: number }>();
+  for (const row of (data ?? []) as Array<{
+    supplier_product_id: string | null;
+    received_price_per_kg: number | string | null;
+  }>) {
+    const sid = row.supplier_product_id;
+    if (!sid) continue;
+    const v = Number(row.received_price_per_kg);
+    if (!Number.isFinite(v) || v <= 0) continue;
+    const cur = sums.get(sid) ?? { sum: 0, count: 0 };
+    cur.sum += v;
+    cur.count += 1;
+    sums.set(sid, cur);
+  }
+  for (const [sid, { sum, count }] of sums) {
+    if (count < 1) continue;
+    out.set(sid, Math.round((sum / count) * 10000) / 10000);
   }
   return out;
 }

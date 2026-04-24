@@ -8,6 +8,7 @@ import {
 } from '@/lib/pedidos-format';
 import {
   euroPerKgSuggestionHint,
+  formatPpkInputDisplay,
   parsePricePerKg,
   parseReceivedKg,
   tryParseReceivedKgPreview,
@@ -19,10 +20,6 @@ import {
   unitSupportsReceivedWeightKg,
   type PedidoOrderItem,
 } from '@/lib/pedidos-supabase';
-
-function formatPpkForInput(n: number): string {
-  return n.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 4 });
-}
 
 function buildPreviewItem(
   item: PedidoOrderItem,
@@ -114,9 +111,9 @@ function RecepcionLineRowInner({
   const [kgText, setKgText] = React.useState('');
   const [ppkText, setPpkText] = React.useState(() => {
     if (item.receivedPricePerKg != null && item.receivedPricePerKg > 0) {
-      return formatPpkForInput(item.receivedPricePerKg);
+      return formatPpkInputDisplay(item.receivedPricePerKg);
     }
-    if (suggestedEuroPerKg != null) return formatPpkForInput(suggestedEuroPerKg);
+    if (suggestedEuroPerKg != null) return formatPpkInputDisplay(suggestedEuroPerKg);
     return '';
   });
   const [priceText, setPriceText] = React.useState(() => item.pricePerUnit.toFixed(2));
@@ -132,10 +129,10 @@ function RecepcionLineRowInner({
   React.useEffect(() => {
     if (ppkFocusedRef.current) return;
     if (item.receivedPricePerKg != null && item.receivedPricePerKg > 0) {
-      setPpkText(formatPpkForInput(item.receivedPricePerKg));
+      setPpkText(formatPpkInputDisplay(item.receivedPricePerKg));
       return;
     }
-    setPpkText(defaultPpk != null ? formatPpkForInput(defaultPpk) : '');
+    setPpkText(defaultPpk != null ? formatPpkInputDisplay(defaultPpk) : '');
   }, [item.receivedPricePerKg, item.id, defaultPpk]);
 
   const previewItem = React.useMemo(
@@ -238,8 +235,8 @@ function RecepcionLineRowInner({
                   inputMode="decimal"
                   autoComplete="off"
                   autoCorrect="off"
-                  placeholder="0,00"
-                  title="€/kg real"
+                  placeholder=""
+                  title="€/kg real (referencia del sistema; editable)"
                   value={ppkText}
                   onFocus={() => {
                     ppkFocusedRef.current = true;
