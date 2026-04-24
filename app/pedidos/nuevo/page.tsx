@@ -1,6 +1,5 @@
 'use client';
 
-import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import React from 'react';
 import { useAuth } from '@/components/AuthProvider';
@@ -672,14 +671,6 @@ export default function NuevoPedidoPage() {
   if (editingId && editBlockedReason) {
     return (
       <div className="space-y-4">
-        <section>
-          <Link
-            href="/pedidos"
-            className="inline-flex h-9 items-center rounded-lg border border-zinc-300 bg-white px-3 text-sm font-semibold text-zinc-700"
-          >
-            ← Atras
-          </Link>
-        </section>
         <section className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950 ring-1 ring-amber-100">
           {editBlockedReason}
         </section>
@@ -690,30 +681,13 @@ export default function NuevoPedidoPage() {
   if (editingId && !isLoadedEdit) {
     return (
       <div className="space-y-4">
-        <section>
-          <Link
-            href="/pedidos"
-            className="inline-flex h-9 items-center rounded-lg border border-zinc-300 bg-white px-3 text-sm font-semibold text-zinc-700"
-          >
-            ← Atras
-          </Link>
-        </section>
         <p className="text-sm text-zinc-600">Cargando pedido…</p>
       </div>
     );
   }
 
   return (
-    <div className="space-y-4">
-      <section>
-        <Link
-          href="/pedidos"
-          className="inline-flex h-9 items-center rounded-lg border border-zinc-300 bg-white px-3 text-sm font-semibold text-zinc-700"
-        >
-          ← Atras
-        </Link>
-      </section>
-
+    <div className="space-y-3">
       {existingSentAt && editingId ? (
         <section
           className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs font-medium text-amber-950 shadow-sm ring-1 ring-amber-100"
@@ -726,14 +700,14 @@ export default function NuevoPedidoPage() {
         </section>
       ) : null}
 
-      <section className="rounded-2xl bg-white p-4 ring-1 ring-zinc-200">
-        <label className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Proveedor</label>
-        {loadingSuppliers ? <p className="mt-2 text-xs font-semibold text-zinc-500">Cargando catálogo de proveedores...</p> : null}
+      <section className="rounded-2xl bg-white px-3 py-2.5 ring-1 ring-zinc-200 sm:px-3.5 sm:py-3">
+        <label className="text-[10px] font-extrabold uppercase tracking-wide text-zinc-500">Proveedor</label>
+        {loadingSuppliers ? <p className="mt-1 text-[10px] font-semibold text-zinc-500">Cargando catálogo…</p> : null}
         <select
           value={supplierId}
           disabled={Boolean(existingSentAt && existingOrderId)}
           onChange={(e) => setSupplierId(e.target.value)}
-          className="mt-2 h-11 w-full rounded-xl border border-zinc-300 bg-white px-3 text-sm font-medium text-zinc-900 outline-none disabled:cursor-not-allowed disabled:bg-zinc-100 disabled:text-zinc-500"
+          className="mt-1 h-9 w-full rounded-lg border border-zinc-300 bg-white px-2.5 text-sm font-medium text-zinc-900 outline-none disabled:cursor-not-allowed disabled:bg-zinc-100 disabled:text-zinc-500"
         >
           {suppliers.map((s) => (
             <option key={s.id} value={s.id}>
@@ -741,46 +715,41 @@ export default function NuevoPedidoPage() {
             </option>
           ))}
         </select>
-        <div className="mx-auto mt-4 w-full max-w-sm rounded-2xl border border-zinc-200/90 bg-gradient-to-b from-zinc-50 to-white px-4 py-3 text-center shadow-sm ring-1 ring-zinc-100">
+        <div className="mt-2">
           <p className="text-[10px] font-extrabold uppercase tracking-wide text-zinc-500">Fecha de entrega</p>
-          <p className="mt-1.5 text-[11px] font-medium leading-snug text-zinc-600">
-            {deliveryDate
-              ? 'Esta fecha es la que llevará el pedido al enviarlo: el proveedor la verá como día de entrega.'
-              : 'Elige el día de entrega. Al enviar, el pedido saldrá con esa misma fecha.'}
-          </p>
-          <div className="relative mx-auto mt-3 w-full max-w-[17.5rem]">
+          <div className="relative mt-0.5 w-full max-w-md">
             <input
               type="date"
               value={deliveryDate}
               onChange={(e) => setDeliveryDate(e.target.value)}
               aria-label="Fecha de entrega del pedido"
               className={[
-                'box-border h-11 w-full rounded-xl border border-zinc-300 bg-white px-3 text-sm font-semibold outline-none focus:border-[#D32F2F] focus:ring-2 focus:ring-[#D32F2F]/25',
+                'box-border h-9 w-full rounded-lg border border-zinc-300 bg-white px-2.5 text-sm font-semibold outline-none focus:border-[#D32F2F] focus:ring-2 focus:ring-[#D32F2F]/25',
                 deliveryDate ? 'text-zinc-900' : 'text-transparent',
               ].join(' ')}
             />
             {!deliveryDate ? (
-              <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-zinc-500">
-                Seleccionar fecha
+              <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-sm text-zinc-500">
+                Elegir fecha
               </span>
             ) : null}
           </div>
         </div>
         {selectedDateIsException ? (
-          <p className="mt-3 text-[11px] font-semibold text-emerald-700">Fecha excepcional válida para este proveedor.</p>
+          <p className="mt-1.5 text-[10px] font-semibold text-emerald-700">Fecha excepcional válida para este proveedor.</p>
         ) : null}
         {coverageRangeLabel ? (
-          <div className="mt-3 rounded-xl border border-emerald-200 bg-emerald-50/90 p-3 text-[11px] text-emerald-950 ring-1 ring-emerald-100">
+          <div className="mt-2 rounded-lg border border-emerald-200 bg-emerald-50/90 px-2 py-1.5 text-[10px] text-emerald-950 ring-1 ring-emerald-100 sm:text-[11px]">
             <p className="text-center font-bold uppercase tracking-wide text-emerald-900">Cobertura de este pedido</p>
-            <p className="mt-1 text-center font-medium capitalize">{coverageRangeLabel}</p>
+            <p className="mt-0.5 text-center font-medium capitalize leading-tight">{coverageRangeLabel}</p>
           </div>
         ) : deliveryDate.trim() !== '' ? null : (
-          <p className="mt-3 text-[11px] text-zinc-500">
-            Elige fecha de entrega para ver el tramo hasta el siguiente reparto y los objetivos por línea.
+          <p className="mt-1.5 text-[10px] text-zinc-500">
+            Elige fecha de entrega para ver el tramo y los objetivos por línea.
           </p>
         )}
         {deliveryDayMismatch ? (
-          <p className="mt-2 text-[11px] font-semibold text-amber-800">
+          <p className="mt-1.5 text-[10px] font-semibold text-amber-800 sm:text-[11px]">
             Esta fecha no es un día de reparto marcado para el proveedor. Revisa Proveedores o la fecha del albarán.
           </p>
         ) : null}
