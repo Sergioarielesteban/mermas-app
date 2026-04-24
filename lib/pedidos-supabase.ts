@@ -418,13 +418,15 @@ async function runPurchaseOrderHeaderQuery(
 async function fetchPurchaseOrderItemRows(
   supabase: SupabaseClient,
   orderIds: string[],
-  options?: { signal?: AbortSignal },
+  options?: { signal?: AbortSignal; localId?: string },
 ): Promise<OrderItemRow[]> {
   const signal = options?.signal;
+  const localId = options?.localId;
   const ids = orderIds.length ? orderIds : ['00000000-0000-0000-0000-000000000000'];
   const selFull =
     'id,order_id,supplier_product_id,product_name,unit,quantity,received_quantity,price_per_unit,base_price_per_unit,vat_rate,line_total,estimated_kg_per_unit,received_weight_kg,received_price_per_kg,incident_type,incident_notes,billing_unit,billing_qty_per_order_unit,price_per_billing_unit';
   let q = supabase.from('purchase_order_items').select(selFull).in('order_id', ids);
+  if (localId) q = q.eq('local_id', localId);
   if (signal) q = q.abortSignal(signal);
   const withPricePerKg = await q;
   if (withPricePerKg.error) {
@@ -432,6 +434,7 @@ async function fetchPurchaseOrderItemRows(
       const selNoBill =
         'id,order_id,supplier_product_id,product_name,unit,quantity,received_quantity,price_per_unit,base_price_per_unit,vat_rate,line_total,estimated_kg_per_unit,received_weight_kg,received_price_per_kg,incident_type,incident_notes';
       let q2 = supabase.from('purchase_order_items').select(selNoBill).in('order_id', ids);
+      if (localId) q2 = q2.eq('local_id', localId);
       if (signal) q2 = q2.abortSignal(signal);
       const r2 = await q2;
       if (r2.error) throw new Error(r2.error.message);
@@ -446,6 +449,7 @@ async function fetchPurchaseOrderItemRows(
         'id,order_id,supplier_product_id,product_name,unit,quantity,received_quantity,price_per_unit,base_price_per_unit,vat_rate,line_total,estimated_kg_per_unit,received_weight_kg,incident_type,incident_notes',
       )
       .in('order_id', ids);
+    if (localId) legacy = legacy.eq('local_id', localId);
     if (signal) legacy = legacy.abortSignal(signal);
     const legacyRes = await legacy;
     if (legacyRes.error) throw new Error(legacyRes.error.message);
@@ -1255,83 +1259,13 @@ export async function fetchOrderById(
   }
   if (!row) return null;
 
-  let itemRows: OrderItemRow[] = [];
-  {
-    const withPricePerKg = await supabase
-      .from('purchase_order_items')
-      .select(
-        'id,order_id,supplier_product_id,product_name,unit,quantity,received_quantity,price_per_unit,base_price_per_unit,vat_rate,line_total,estimated_kg_per_unit,received_weight_kg,received_price_per_kg,incident_type,incident_notes',
-      )
-      .eq('order_id', orderId)
-      .eq('local_id', localId);
-    if (withPricePerKg.error) {
-      if (!isMissingReceivedPricePerKgColumnError(withPricePerKg.error.message)) {
-        throw new Error(withPricePerKg.error.message);
-      }
-      const legacy = await supabase
-        .from('purchase_order_items')
-        .select(
-          'id,order_id,supplier_product_id,product_name,unit,quantity,received_quantity,price_per_unit,base_price_per_unit,vat_rate,line_total,estimated_kg_per_unit,received_weight_kg,incident_type,incident_notes',
-        )
-        .eq('order_id', orderId)
-        .eq('local_id', localId);
-      if (legacy.error) throw new Error(legacy.error.message);
-      itemRows = (legacy.data ?? []) as OrderItemRow[];
-    } else {
-      itemRows = (withPricePerKg.data ?? []) as OrderItemRow[];
-    }
-  }
-
-  const items: PedidoOrderItem[] = itemRows.map((ir) => ({
-    id: ir.id,
-    supplierProductId: ir.supplier_product_id,
-    productName: ir.product_name,
-    unit: ir.unit as Unit,
-    quantity: Number(ir.quantity),
-    receivedQuantity: Number(ir.received_quantity),
-    pricePerUnit: Number(ir.price_per_unit),
-    vatRate: Number(ir.vat_rate ?? 0),
-    lineTotal: Number(ir.line_total),
-    ...(ir.base_price_per_unit != null && Number.isFinite(Number(ir.base_price_per_unit))
-      ? { basePricePerUnit: Number(ir.base_price_per_unit) }
-      : {}),
-    ...(ir.estimated_kg_per_unit != null ? { estimatedKgPerUnit: Number(ir.estimated_kg_per_unit) } : {}),
-    receivedWeightKg: ir.received_weight_kg != null ? Number(ir.received_weight_kg) : null,
-    ...(ir.received_price_per_kg != null && Number.isFinite(Number(ir.received_price_per_kg))
-      ? { receivedPricePerKg: Number(ir.received_price_per_kg) }
-      : {}),
-    incidentType: ir.incident_type,
-    incidentNotes: ir.incident_notes ?? undefined,
-  }));
-
-  const supplier = Array.isArray(row.pedido_suppliers) ? row.pedido_suppliers[0] : row.pedido_suppliers;
+  const itemRows = await fetchPurchaseOrderItemRows(supabase, [orderId], { localId });
   const profileByUserId = await fetchProfileLabelsByUserId(
     supabase,
     row.created_by ? [row.created_by] : [],
   );
-  const requester = requesterLabelForOrderRow(row, profileByUserId);
-  return {
-    id: row.id,
-    supplierId: row.supplier_id,
-    supplierName: supplier?.name ?? 'Proveedor',
-    supplierContact: supplier?.contact ?? undefined,
-    status: row.status,
-    notes: row.notes ?? '',
-    createdAt: row.created_at,
-    sentAt: row.sent_at ?? undefined,
-    receivedAt: row.received_at ?? undefined,
-    deliveryDate: row.delivery_date ?? undefined,
-    ...(row.price_review_archived_at != null && row.price_review_archived_at !== ''
-      ? { priceReviewArchivedAt: row.price_review_archived_at }
-      : {}),
-    ...(row.updated_at != null && row.updated_at !== '' ? { updatedAt: row.updated_at } : {}),
-    ...(row.content_revised_after_sent_at != null && row.content_revised_after_sent_at !== ''
-      ? { contentRevisedAfterSentAt: row.content_revised_after_sent_at }
-      : {}),
-    ...(requester ? { usuarioNombre: requester } : {}),
-    items,
-    total: items.reduce((acc, item) => acc + item.lineTotal, 0),
-  };
+  const [order] = buildPedidoOrdersFromRows([row], itemRows, profileByUserId);
+  return order ?? null;
 }
 
 export type MergePedidoOrdersOptions = {

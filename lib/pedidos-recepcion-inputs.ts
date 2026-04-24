@@ -5,10 +5,11 @@ import {
 } from '@/lib/pedidos-supabase';
 
 export type EuroPerKgSuggestionSource =
+  | 'order_billing_kg'
+  | 'order_line_implied_kg'
   | 'article_master'
   | 'last_reception'
   | 'avg_reception_pmp'
-  | 'order_billing_kg'
   | 'supplier_catalog_billing_kg';
 
 export type EuroPerKgResolutionOpts = {
@@ -23,8 +24,42 @@ function roundPpk(n: number): number {
 }
 
 /**
- * €/kg de referencia para recepción (sin dividir precio de envase entre kg estimados: eso inventaba valores).
- * Prioridad: artículo máster → última recepción → PMP recepciones → snapshot pedido (factura kg) → catálogo vivo €/kg.
+ * €/kg del propio pedido (línea actual): primero snapshot de facturación, si no, precio envase ÷ kg/unidad del catálogo al pedir.
+ */
+function orderLinePreferredEuroPerKg(
+  item: PedidoOrderItem,
+): { value: number; source: 'order_billing_kg' | 'order_line_implied_kg' } | null {
+  if (!unitSupportsReceivedWeightKg(item.unit)) {
+    return null;
+  }
+
+  if (
+    item.billingUnit === 'kg' &&
+    item.pricePerBillingUnit != null &&
+    Number.isFinite(item.pricePerBillingUnit) &&
+    item.pricePerBillingUnit > 0
+  ) {
+    return { value: roundPpk(item.pricePerBillingUnit), source: 'order_billing_kg' };
+  }
+
+  if (
+    item.estimatedKgPerUnit != null &&
+    Number.isFinite(item.estimatedKgPerUnit) &&
+    item.estimatedKgPerUnit > 0
+  ) {
+    const box = item.basePricePerUnit ?? item.pricePerUnit;
+    if (Number.isFinite(box) && box > 0) {
+      return { value: roundPpk(box / item.estimatedKgPerUnit), source: 'order_line_implied_kg' };
+    }
+  }
+
+  return null;
+}
+
+/**
+ * €/kg de referencia para recepción.
+ * Prioridad: **línea del pedido** (€/kg guardado o precio envase / kg estimado) → artículo máster → última recepción → PMP → catálogo vivo.
+ * Nunca mezclar con otra línea: históricos van por `supplierProductId` en opts pero solo si no hay dato en la línea.
  */
 export function resolveEuroPerKgSuggestion(
   item: PedidoOrderItem,
@@ -32,6 +67,11 @@ export function resolveEuroPerKgSuggestion(
 ): { value: number | null; source: EuroPerKgSuggestionSource | null } {
   if (!unitSupportsReceivedWeightKg(item.unit)) {
     return { value: null, source: null };
+  }
+
+  const fromLine = orderLinePreferredEuroPerKg(item);
+  if (fromLine) {
+    return { value: fromLine.value, source: fromLine.source };
   }
 
   const article = opts.articleEuroPerKg;
@@ -49,15 +89,6 @@ export function resolveEuroPerKgSuggestion(
     return { value: roundPpk(pmp), source: 'avg_reception_pmp' };
   }
 
-  if (
-    item.billingUnit === 'kg' &&
-    item.pricePerBillingUnit != null &&
-    Number.isFinite(item.pricePerBillingUnit) &&
-    item.pricePerBillingUnit > 0
-  ) {
-    return { value: roundPpk(item.pricePerBillingUnit), source: 'order_billing_kg' };
-  }
-
   const live = opts.liveCatalogBillingEuroPerKg;
   if (live != null && Number.isFinite(live) && live > 0) {
     return { value: roundPpk(live), source: 'supplier_catalog_billing_kg' };
@@ -68,14 +99,16 @@ export function resolveEuroPerKgSuggestion(
 
 export function euroPerKgSuggestionHint(source: EuroPerKgSuggestionSource | null): string {
   switch (source) {
+    case 'order_billing_kg':
+      return 'Precio referencia: €/kg del pedido (facturación por kg al enviar).';
+    case 'order_line_implied_kg':
+      return 'Precio referencia: €/kg del pedido (precio envase ÷ kg/unidad de la línea).';
     case 'article_master':
       return 'Precio referencia: artículo base / máster (€/kg).';
     case 'last_reception':
       return 'Precio referencia: última recepción con €/kg en este producto.';
     case 'avg_reception_pmp':
       return 'Precio referencia: media de €/kg en recepciones anteriores (PMP).';
-    case 'order_billing_kg':
-      return 'Precio referencia: €/kg del pedido (facturación por kg al enviar).';
     case 'supplier_catalog_billing_kg':
       return 'Precio referencia: €/kg actual en catálogo proveedor (factura por kg).';
     default:
