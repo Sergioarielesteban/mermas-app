@@ -96,7 +96,7 @@ export type ReceptionBillingSummary = {
   pedido: string;
   recibido: string;
   precioAplicado: string;
-  /** Si el cobro es €/kg, equivalencia en €/unidad de catálogo (coherente con histórico/PMP). */
+  /** Si el cobro es €/kg, precio por envase de referencia (pedido), no deducido del subtotal. */
   precioEquivCatalogo?: string;
   totalLinea: string;
 };
@@ -145,7 +145,7 @@ export function receptionBillingSummary(item: PedidoOrder['items'][number]): Rec
   ) {
     precioAplicado = `${item.receivedPricePerKg.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 4 })} €/kg`;
     const { effectivePricePerUnit } = receptionLineTotals(item);
-    precioEquivCatalogo = `${effectivePricePerUnit.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €/${suf} (equiv. catálogo)`;
+    precioEquivCatalogo = `${effectivePricePerUnit.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €/${suf} (ref. pedido)`;
   } else {
     precioAplicado = `${item.pricePerUnit.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €/${suf}`;
   }

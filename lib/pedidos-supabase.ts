@@ -66,8 +66,9 @@ export function billingQuantityForReceptionPrice(item: PedidoOrderItem): number 
 }
 
 /**
- * Subtotal e importe unitario efectivo en Recepción.
- * Envases/unidades ponderables: si hay kg reales y €/kg real, el subtotal es kg × €/kg y el unitario efectivo es subtotal / envases recibidos (albarán, histórico y PMP en €/unidad de catálogo).
+ * Subtotal e importe unitario de referencia en Recepción.
+ * Envases con kg reales y €/kg: el subtotal es kg × €/kg. El `price_per_unit` (€/caja, etc.) no se
+ * recalcula desde ese subtotal: sigue siendo el precio de referencia del pedido salvo edición manual.
  */
 export function receptionLineTotals(item: PedidoOrderItem): { lineTotal: number; effectivePricePerUnit: number } {
   if (item.unit === 'kg') {
@@ -86,14 +87,7 @@ export function receptionLineTotals(item: PedidoOrderItem): { lineTotal: number;
     item.receivedPricePerKg > 0
   ) {
     const lt = Math.round(item.receivedWeightKg * item.receivedPricePerKg * 100) / 100;
-    const denom =
-      item.receivedQuantity > 0
-        ? item.receivedQuantity
-        : item.quantity > 0 && !lineIsMissingNotReceived(item)
-          ? item.quantity
-          : 0;
-    const eff = denom > 0 ? Math.round((lt / denom) * 100) / 100 : item.pricePerUnit;
-    return { lineTotal: lt, effectivePricePerUnit: eff };
+    return { lineTotal: lt, effectivePricePerUnit: item.pricePerUnit };
   }
   const bq = billingQuantityForReceptionPrice(item);
   return {

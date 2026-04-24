@@ -311,7 +311,7 @@ function RecepcionLineRowInner({
                 previewItem.receivedPricePerKg > 0 &&
                 previewItem.receivedWeightKg != null &&
                 previewItem.receivedWeightKg > 0
-                  ? `≈ ${previewItem.pricePerUnit.toFixed(2)} €/${unitPriceCatalogSuffix[item.unit]}`
+                  ? `Ref. ${previewItem.pricePerUnit.toFixed(2)} €/${unitPriceCatalogSuffix[item.unit]}`
                   : 'Introduce kg reales; el subtotal se calcula con el €/kg mostrado.'}
               </p>
             </div>
