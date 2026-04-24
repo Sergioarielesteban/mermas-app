@@ -15,10 +15,10 @@ import PedidosPremiaLockedScreen from '@/components/PedidosPremiaLockedScreen';
 import { dispatchPedidosDataChanged, usePedidosDataChangedListener } from '@/hooks/usePedidosDataChangedListener';
 import { canAccessPedidos, canUsePedidosModule } from '@/lib/pedidos-access';
 import {
-  estimatedOrderLineSubtotal,
   formatIncidentLine,
   formatQuantityWithUnit,
   lineSubtotalForOrderListDisplay,
+  orderItemHasIncident,
   receptionBillingSummary,
   totalsWithVatForOrderListDisplay,
   unitPriceCatalogSuffix,
@@ -167,6 +167,63 @@ function parsePricePerKg(raw: string): number | null | 'invalid' {
   const n = Number(t.replace(',', '.'));
   if (!Number.isFinite(n) || n <= 0) return 'invalid';
   return Math.round(n * 10000) / 10000;
+}
+
+/** Subtotal en vivo al editar kg / €/kg (misma base que `receptionLineTotals` + `lineSubtotalForOrderListDisplay`). */
+function previewSentItemSubtotal(
+  item: PedidoOrderItem,
+  opts: { weightDraft?: string; ppkDraft?: string; ppkSuggestion: number | null },
+): number {
+  if (orderItemHasIncident(item)) {
+    return lineSubtotalForOrderListDisplay(item);
+  }
+
+  const kgText =
+    opts.weightDraft !== undefined
+      ? opts.weightDraft
+      : item.receivedWeightKg != null
+        ? String(item.receivedWeightKg)
+        : '';
+  const ppkText =
+    opts.ppkDraft !== undefined
+      ? opts.ppkDraft
+      : item.receivedPricePerKg != null && item.receivedPricePerKg > 0
+        ? String(item.receivedPricePerKg)
+        : '';
+
+  let receivedWeightKg: number | null = item.receivedWeightKg ?? null;
+  if (unitCanDeclareScaleKgOnReception(item.unit)) {
+    if (kgText.trim() === '') {
+      receivedWeightKg = item.receivedWeightKg ?? null;
+    } else {
+      const strictKg = parseReceivedKg(kgText);
+      if (strictKg === 'invalid') receivedWeightKg = item.receivedWeightKg ?? null;
+      else receivedWeightKg = strictKg;
+    }
+  }
+
+  let receivedPricePerKg: number | null = item.receivedPricePerKg ?? null;
+  if (unitSupportsReceivedWeightKg(item.unit)) {
+    const st = parsePricePerKg(ppkText);
+    if (ppkText.trim() === '') {
+      receivedPricePerKg = opts.ppkSuggestion ?? item.receivedPricePerKg ?? null;
+    } else if (st !== 'invalid' && st != null) {
+      receivedPricePerKg = st;
+    }
+  }
+
+  const merged: PedidoOrderItem = {
+    ...item,
+    receivedWeightKg,
+    ...(unitSupportsReceivedWeightKg(item.unit) ? { receivedPricePerKg } : {}),
+    ...(item.unit === 'kg' && receivedWeightKg != null && receivedWeightKg > 0
+      ? { receivedQuantity: receivedWeightKg }
+      : {}),
+  };
+
+  const { lineTotal, effectivePricePerUnit } = receptionLineTotals(merged);
+  const withTotals = { ...merged, pricePerUnit: effectivePricePerUnit, lineTotal };
+  return lineSubtotalForOrderListDisplay(withTotals);
 }
 
 function normalizeText(input: string): string {
@@ -3313,8 +3370,18 @@ export default function PedidosPage() {
                         !item.incidentType);
                     const isBad = mark === 'bad' || (mark === undefined && Boolean(item.incidentType));
                     const isDualKgReception = orderItemHasDistinctBilling(item) && item.billingUnit === 'kg';
-                    const estSub = estimatedOrderLineSubtotal(item);
-                    const realSub = lineSubtotalForOrderListDisplay(item);
+                    const ppkSug = sentOrderPpkSuggestionByItemId.get(item.id) ?? null;
+                    const hasKgPpkRow =
+                      isDualKgReception ||
+                      unitCanDeclareScaleKgOnReception(item.unit) ||
+                      unitSupportsReceivedWeightKg(item.unit);
+                    const liveSub = hasKgPpkRow
+                      ? previewSentItemSubtotal(item, {
+                          weightDraft: weightInputByItemId[item.id],
+                          ppkDraft: pricePerKgInputByItemId[item.id],
+                          ppkSuggestion: ppkSug,
+                        })
+                      : lineSubtotalForOrderListDisplay(item);
                     return (
                       <div key={item.id} className="space-y-1 rounded-lg bg-white p-2 ring-1 ring-zinc-200">
                         <div className="flex items-start justify-between gap-2">
@@ -3377,7 +3444,7 @@ export default function PedidosPage() {
                               <p className="text-[10px] font-bold uppercase tracking-wide text-emerald-900/90">
                                 B · Recepción real (editable)
                               </p>
-                              <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                              <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-3 sm:items-end">
                                 <div>
                                   <label className="mb-0.5 block text-[10px] font-semibold text-zinc-700">
                                     Cantidad real (kg)
@@ -3387,8 +3454,7 @@ export default function PedidosPage() {
                                     inputMode="decimal"
                                     autoComplete="off"
                                     autoCorrect="off"
-                                    placeholder="5,8"
-                                    title="Kilos reales (unidad de cobro)"
+                                    placeholder="0,00"
                                     value={
                                       weightInputByItemId[item.id] ??
                                       (item.receivedWeightKg != null ? String(item.receivedWeightKg) : '')
@@ -3410,7 +3476,6 @@ export default function PedidosPage() {
                                     autoComplete="off"
                                     autoCorrect="off"
                                     placeholder=""
-                                    title="Euros por kilo reales (precarga desde máster / histórico / catálogo)"
                                     value={
                                       pricePerKgInputByItemId[item.id] ??
                                       (item.receivedPricePerKg != null && item.receivedPricePerKg > 0
@@ -3427,6 +3492,14 @@ export default function PedidosPage() {
                                     className="h-9 w-full min-w-0 rounded-md border border-zinc-300 bg-white px-2 py-1 text-sm font-semibold tabular-nums text-zinc-900 outline-none"
                                   />
                                 </div>
+                                <div className="flex min-w-0 flex-col gap-0.5">
+                                  <span className="mb-0.5 block text-[10px] font-semibold text-zinc-700">Sub</span>
+                                  <div className="flex h-9 min-w-0 items-center rounded-md border border-transparent px-0.5">
+                                    <span className="text-base font-black tabular-nums text-emerald-950 sm:text-[1.05rem]">
+                                      {liveSub.toFixed(2)} €
+                                    </span>
+                                  </div>
+                                </div>
                               </div>
                             </div>
                           ) : (
@@ -3436,7 +3509,14 @@ export default function PedidosPage() {
                                   <p className="text-[10px] font-bold uppercase tracking-wide text-emerald-900/85">
                                     B · Recepción real (editable)
                                   </p>
-                                  <div className="mt-2 flex flex-wrap items-end gap-x-4 gap-y-2">
+                                  <div
+                                    className={[
+                                      'mt-2 grid grid-cols-1 gap-2 sm:items-end',
+                                      unitCanDeclareScaleKgOnReception(item.unit) && unitSupportsReceivedWeightKg(item.unit)
+                                        ? 'sm:grid-cols-3'
+                                        : 'sm:grid-cols-2',
+                                    ].join(' ')}
+                                  >
                                     {unitCanDeclareScaleKgOnReception(item.unit) ? (
                                       <div className="flex min-w-0 flex-col gap-0.5">
                                         <label className="text-[10px] font-semibold text-zinc-700">
@@ -3447,8 +3527,7 @@ export default function PedidosPage() {
                                           inputMode="decimal"
                                           autoComplete="off"
                                           autoCorrect="off"
-                                          placeholder="12,5"
-                                          title="Kg reales"
+                                          placeholder="0,00"
                                           value={
                                             weightInputByItemId[item.id] ??
                                             (item.receivedWeightKg != null ? String(item.receivedWeightKg) : '')
@@ -3457,7 +3536,7 @@ export default function PedidosPage() {
                                             setWeightInputByItemId((prev) => ({ ...prev, [item.id]: e.target.value }))
                                           }
                                           onBlur={() => commitWeightInput(order.id, item.id)}
-                                          className="h-8 w-[4.5rem] rounded-md border border-zinc-300 bg-white px-1.5 text-xs font-semibold text-zinc-900 outline-none sm:w-[5rem]"
+                                          className="h-8 w-full min-w-0 rounded-md border border-zinc-300 bg-white px-1.5 text-xs font-semibold text-zinc-900 outline-none sm:max-w-[6.5rem]"
                                         />
                                       </div>
                                     ) : null}
@@ -3472,7 +3551,6 @@ export default function PedidosPage() {
                                           autoComplete="off"
                                           autoCorrect="off"
                                           placeholder=""
-                                          title="€/kg real (precarga desde máster / histórico / catálogo)"
                                           value={
                                             pricePerKgInputByItemId[item.id] ??
                                             (item.receivedPricePerKg != null && item.receivedPricePerKg > 0
@@ -3486,14 +3564,22 @@ export default function PedidosPage() {
                                             setPricePerKgInputByItemId((prev) => ({ ...prev, [item.id]: e.target.value }))
                                           }
                                           onBlur={() => commitPricePerKgBlur(order.id, item)}
-                                          className="h-8 w-[5rem] rounded-md border border-zinc-300 bg-white px-1.5 text-xs font-semibold text-zinc-900 outline-none"
+                                          className="h-8 w-full min-w-0 rounded-md border border-zinc-300 bg-white px-1.5 text-xs font-semibold text-zinc-900 outline-none sm:max-w-[6.5rem]"
                                         />
                                       </div>
                                     ) : null}
+                                    <div className="flex min-w-0 flex-col gap-0.5">
+                                      <span className="text-[10px] font-semibold text-zinc-700">Sub</span>
+                                      <div className="flex h-8 min-w-0 items-center rounded-md border border-transparent px-0.5">
+                                        <span className="text-sm font-black tabular-nums text-emerald-950 sm:text-base">
+                                          {liveSub.toFixed(2)} €
+                                        </span>
+                                      </div>
+                                    </div>
                                   </div>
                                 </div>
                               ) : null}
-                              <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border-t border-zinc-100 pt-2">
+                              <div className="flex flex-wrap items-end justify-between gap-x-3 gap-y-2 border-t border-zinc-100 pt-2">
                                 <div className="flex min-w-0 items-center gap-1.5">
                                   <label className="shrink-0 text-[10px] font-semibold text-zinc-700">
                                     Precio (€/{unitPriceCatalogSuffix[item.unit]})
@@ -3502,7 +3588,6 @@ export default function PedidosPage() {
                                     type="number"
                                     step="0.01"
                                     min="0"
-                                    title={`Importe por ${unitPriceCatalogSuffix[item.unit]} de pedido`}
                                     value={priceInputByItemId[item.id] ?? item.pricePerUnit.toFixed(2)}
                                     onChange={(e) => {
                                       const raw = e.target.value;
@@ -3513,21 +3598,17 @@ export default function PedidosPage() {
                                     className="h-8 w-[4.75rem] rounded-md border border-zinc-300 bg-white px-1.5 text-sm font-semibold tabular-nums text-zinc-900 outline-none"
                                   />
                                 </div>
+                                {!unitCanDeclareScaleKgOnReception(item.unit) && !unitSupportsReceivedWeightKg(item.unit) ? (
+                                  <div className="flex shrink-0 flex-col items-end gap-0.5">
+                                    <span className="text-[10px] font-semibold text-zinc-700">Sub</span>
+                                    <span className="text-sm font-black tabular-nums text-zinc-950 sm:text-base">
+                                      {liveSub.toFixed(2)} €
+                                    </span>
+                                  </div>
+                                ) : null}
                               </div>
                             </>
                           )}
-
-                          <div className="rounded-lg border border-zinc-300 bg-white px-2 py-2 ring-1 ring-zinc-100">
-                            <p className="text-[10px] font-bold uppercase tracking-wide text-zinc-600">C · Resultado</p>
-                            <p className="mt-1 text-base font-black tabular-nums text-zinc-900">
-                              Subtotal final: {realSub.toFixed(2)} €
-                            </p>
-                            {isDualKgReception && item.incidentType !== 'missing' ? (
-                              <p className="mt-0.5 text-[10px] text-zinc-600">
-                                Estimado {estSub.toFixed(2)} € → Real {realSub.toFixed(2)} €
-                              </p>
-                            ) : null}
-                          </div>
                         </div>
                       </div>
                     );
