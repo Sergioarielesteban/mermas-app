@@ -36,6 +36,7 @@ import {
   fetchLastReceivedPricePerKgBySupplierProductIds,
   fetchReceptionEuroPerKgHintsBySupplierProductIds,
   fetchSuppliersWithProducts,
+  getPedidoRequesterDisplayName,
   persistReceptionItemTotals,
   receptionLineTotals,
   reopenReceivedOrderToSent,
@@ -3241,12 +3242,16 @@ export default function PedidosPage() {
                       >
                         {badgeLabel}
                       </span>
-                      {order.usuarioNombre?.trim() ? (
-                        <p className="max-w-[11rem] truncate text-right text-[11px] font-medium leading-tight text-[#666666] sm:text-xs">
-                          <span aria-hidden>👤 </span>
-                          {order.usuarioNombre.trim()}
-                        </p>
-                      ) : null}
+                      {(() => {
+                        const requesterName = getPedidoRequesterDisplayName(order);
+                        if (!requesterName) return null;
+                        return (
+                          <p className="max-w-[11rem] truncate text-right text-[11px] font-medium leading-tight text-[#666666] sm:text-xs">
+                            <span aria-hidden>👤 </span>
+                            {requesterName}
+                          </p>
+                        );
+                      })()}
                     </div>
                     <div className="flex justify-end gap-x-2">
                       <span className="text-zinc-400">s/IVA</span>

@@ -185,8 +185,13 @@ export type PedidoOrder = {
   updatedAt?: string;
   /** Última vez que se guardaron cambios de líneas en un pedido ya enviado (requiere migración SQL). */
   contentRevisedAfterSentAt?: string;
-  /** Quién creó o envió el pedido (columna usuario_nombre). */
+  /** Quién creó o envió el pedido (columna opcional usuario_nombre y/o perfil por created_by). */
   usuarioNombre?: string;
+  /** Alias por si el API expone otro nombre de columna en el futuro. */
+  responsableNombre?: string;
+  createdByName?: string;
+  /** Join opcional staff → nombre (si el API lo rellena). */
+  staff?: { name?: string | null };
   items: PedidoOrderItem[];
   total: number;
 };
@@ -246,7 +251,9 @@ type OrderRow = {
   price_review_archived_at?: string | null;
   updated_at?: string | null;
   content_revised_after_sent_at?: string | null;
+  /** Solo si la migración añadió la columna y se vuelve a incluir en el select. */
   usuario_nombre?: string | null;
+  created_by?: string | null;
   pedido_suppliers: { name: string; contact: string | null } | { name: string; contact: string | null }[] | null;
 };
 type OrderItemRow = {
@@ -326,12 +333,71 @@ function isMissingContentRevisedAfterSentColumnError(message: string): boolean {
   );
 }
 
+function trimRequesterLabel(value: string | null | undefined): string | null {
+  if (value == null) return null;
+  const t = String(value).trim();
+  return t.length ? t : null;
+}
+
+/**
+ * Nombres visibles por `user_id` (mismo local / RLS). No lanza: si falla o no hay filas, mapa vacío.
+ */
+async function fetchProfileLabelsByUserId(
+  supabase: SupabaseClient,
+  userIds: readonly string[],
+  options?: { signal?: AbortSignal },
+): Promise<Map<string, string>> {
+  const out = new Map<string, string>();
+  const ids = [...new Set(userIds.filter(Boolean))];
+  if (!ids.length) return out;
+  let q = supabase.from('profiles').select('user_id,full_name,login_username').in('user_id', ids);
+  if (options?.signal) q = q.abortSignal(options.signal);
+  const { data, error } = await q;
+  if (error) return out;
+  for (const row of data ?? []) {
+    const uid = (row as { user_id?: string }).user_id;
+    if (!uid) continue;
+    const full = trimRequesterLabel((row as { full_name?: string | null }).full_name);
+    const login = trimRequesterLabel((row as { login_username?: string | null }).login_username);
+    const label = full ?? login;
+    if (label) out.set(uid, label);
+  }
+  return out;
+}
+
+function requesterLabelForOrderRow(
+  row: OrderRow,
+  profileByUserId?: ReadonlyMap<string, string>,
+): string | null {
+  const fromCol = trimRequesterLabel(row.usuario_nombre);
+  if (fromCol) return fromCol;
+  const uid = row.created_by;
+  if (uid && profileByUserId?.size) {
+    const fromProfile = trimRequesterLabel(profileByUserId.get(uid));
+    if (fromProfile) return fromProfile;
+  }
+  return null;
+}
+
+/** Nombre para UI de quién hizo el pedido; nunca obligatorio. */
+export function getPedidoRequesterDisplayName(order: PedidoOrder): string | null {
+  const ext = order as PedidoOrder & { profile?: { display_name?: string | null } };
+  return (
+    trimRequesterLabel(order.usuarioNombre) ??
+    trimRequesterLabel(order.responsableNombre) ??
+    trimRequesterLabel(order.createdByName) ??
+    trimRequesterLabel(ext.profile?.display_name) ??
+    trimRequesterLabel(order.staff?.name) ??
+    null
+  );
+}
+
 const PURCHASE_ORDER_HEADER_SEL_WITH_REVISION =
-  'id,supplier_id,status,notes,created_at,sent_at,received_at,delivery_date,price_review_archived_at,updated_at,content_revised_after_sent_at,usuario_nombre,pedido_suppliers(name,contact)';
+  'id,supplier_id,status,notes,created_at,sent_at,received_at,delivery_date,price_review_archived_at,updated_at,content_revised_after_sent_at,created_by,pedido_suppliers(name,contact)';
 const PURCHASE_ORDER_HEADER_SEL_WITH_UPDATED =
-  'id,supplier_id,status,notes,created_at,sent_at,received_at,delivery_date,price_review_archived_at,updated_at,usuario_nombre,pedido_suppliers(name,contact)';
+  'id,supplier_id,status,notes,created_at,sent_at,received_at,delivery_date,price_review_archived_at,updated_at,created_by,pedido_suppliers(name,contact)';
 const PURCHASE_ORDER_HEADER_SEL_LEGACY =
-  'id,supplier_id,status,notes,created_at,sent_at,received_at,delivery_date,price_review_archived_at,usuario_nombre,pedido_suppliers(name,contact)';
+  'id,supplier_id,status,notes,created_at,sent_at,received_at,delivery_date,price_review_archived_at,created_by,pedido_suppliers(name,contact)';
 
 async function runPurchaseOrderHeaderQuery(
   supabase: SupabaseClient,
@@ -394,7 +460,11 @@ async function fetchPurchaseOrderItemRows(
   return (withPricePerKg.data ?? []) as OrderItemRow[];
 }
 
-function buildPedidoOrdersFromRows(orderRows: OrderRow[], itemRows: OrderItemRow[]): PedidoOrder[] {
+function buildPedidoOrdersFromRows(
+  orderRows: OrderRow[],
+  itemRows: OrderItemRow[],
+  profileByUserId?: ReadonlyMap<string, string>,
+): PedidoOrder[] {
   const byOrder = new Map<string, PedidoOrderItem[]>();
   for (const row of itemRows) {
     const list = byOrder.get(row.order_id) ?? [];
@@ -454,9 +524,10 @@ function buildPedidoOrdersFromRows(orderRows: OrderRow[], itemRows: OrderItemRow
       ...(row.content_revised_after_sent_at != null && row.content_revised_after_sent_at !== ''
         ? { contentRevisedAfterSentAt: row.content_revised_after_sent_at }
         : {}),
-      ...(row.usuario_nombre != null && String(row.usuario_nombre).trim() !== ''
-        ? { usuarioNombre: String(row.usuario_nombre).trim() }
-        : {}),
+      ...((() => {
+        const requester = requesterLabelForOrderRow(row, profileByUserId);
+        return requester ? { usuarioNombre: requester } : {};
+      })()),
       items,
       total: items.reduce((acc, item) => acc + item.lineTotal, 0),
     };
@@ -1073,7 +1144,12 @@ export async function fetchOrders(
     orderRows.map((row) => row.id),
     { signal },
   );
-  return buildPedidoOrdersFromRows(orderRows, itemRows);
+  const profileByUserId = await fetchProfileLabelsByUserId(
+    supabase,
+    orderRows.map((r) => r.created_by).filter((id): id is string => Boolean(id)),
+    { signal },
+  );
+  return buildPedidoOrdersFromRows(orderRows, itemRows, profileByUserId);
 }
 
 /**
@@ -1122,7 +1198,12 @@ export async function fetchOrdersForFinanzasCommitment(
     orderRows.map((r) => r.id),
     { signal },
   );
-  return buildPedidoOrdersFromRows(orderRows, itemRows);
+  const profileByUserId = await fetchProfileLabelsByUserId(
+    supabase,
+    orderRows.map((r) => r.created_by).filter((id): id is string => Boolean(id)),
+    { signal },
+  );
+  return buildPedidoOrdersFromRows(orderRows, itemRows, profileByUserId);
 }
 
 /** Una sola cabecera + líneas (menos datos que `fetchOrders`; útil tras crear un pedido). */
@@ -1135,9 +1216,7 @@ export async function fetchOrderById(
   {
     const withRevision = await supabase
       .from('purchase_orders')
-      .select(
-        'id,supplier_id,status,notes,created_at,sent_at,received_at,delivery_date,price_review_archived_at,updated_at,content_revised_after_sent_at,usuario_nombre,pedido_suppliers(name,contact)',
-      )
+      .select(PURCHASE_ORDER_HEADER_SEL_WITH_REVISION)
       .eq('local_id', localId)
       .eq('id', orderId)
       .maybeSingle();
@@ -1145,9 +1224,7 @@ export async function fetchOrderById(
       if (isMissingContentRevisedAfterSentColumnError(withRevision.error.message)) {
         const withUpdated = await supabase
           .from('purchase_orders')
-          .select(
-            'id,supplier_id,status,notes,created_at,sent_at,received_at,delivery_date,price_review_archived_at,updated_at,usuario_nombre,pedido_suppliers(name,contact)',
-          )
+          .select(PURCHASE_ORDER_HEADER_SEL_WITH_UPDATED)
           .eq('local_id', localId)
           .eq('id', orderId)
           .maybeSingle();
@@ -1157,9 +1234,7 @@ export async function fetchOrderById(
           }
           const legacy = await supabase
             .from('purchase_orders')
-            .select(
-              'id,supplier_id,status,notes,created_at,sent_at,received_at,delivery_date,price_review_archived_at,usuario_nombre,pedido_suppliers(name,contact)',
-            )
+            .select(PURCHASE_ORDER_HEADER_SEL_LEGACY)
             .eq('local_id', localId)
             .eq('id', orderId)
             .maybeSingle();
@@ -1171,9 +1246,7 @@ export async function fetchOrderById(
       } else if (isMissingPurchaseOrdersUpdatedAtColumnError(withRevision.error.message)) {
         const legacy = await supabase
           .from('purchase_orders')
-          .select(
-            'id,supplier_id,status,notes,created_at,sent_at,received_at,delivery_date,price_review_archived_at,usuario_nombre,pedido_suppliers(name,contact)',
-          )
+          .select(PURCHASE_ORDER_HEADER_SEL_LEGACY)
           .eq('local_id', localId)
           .eq('id', orderId)
           .maybeSingle();
@@ -1238,6 +1311,11 @@ export async function fetchOrderById(
   }));
 
   const supplier = Array.isArray(row.pedido_suppliers) ? row.pedido_suppliers[0] : row.pedido_suppliers;
+  const profileByUserId = await fetchProfileLabelsByUserId(
+    supabase,
+    row.created_by ? [row.created_by] : [],
+  );
+  const requester = requesterLabelForOrderRow(row, profileByUserId);
   return {
     id: row.id,
     supplierId: row.supplier_id,
@@ -1256,6 +1334,7 @@ export async function fetchOrderById(
     ...(row.content_revised_after_sent_at != null && row.content_revised_after_sent_at !== ''
       ? { contentRevisedAfterSentAt: row.content_revised_after_sent_at }
       : {}),
+    ...(requester ? { usuarioNombre: requester } : {}),
     items,
     total: items.reduce((acc, item) => acc + item.lineTotal, 0),
   };
