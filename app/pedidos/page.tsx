@@ -3218,7 +3218,7 @@ export default function PedidosPage() {
               </button>
               <div
                 className={[
-                  'flex flex-wrap items-center justify-end gap-0.5 border-t px-1.5 py-1',
+                  'flex w-full items-center justify-between border-t px-2.5 py-1 sm:px-3',
                   sentBadge === 'incidencia'
                     ? 'border-red-200/70 bg-white/60'
                     : sentBadge === 'correcto'
@@ -3229,7 +3229,7 @@ export default function PedidosPage() {
                 <Link
                   href={`/pedidos/nuevo?id=${encodeURIComponent(order.id)}`}
                   onClick={(e) => e.stopPropagation()}
-                  className="inline-flex h-8 items-center gap-0.5 rounded-md border border-zinc-200 bg-white px-1.5 text-[10px] font-semibold text-zinc-800 shadow-sm hover:bg-zinc-50"
+                  className="inline-flex min-h-[44px] min-w-[60px] shrink-0 items-center justify-center gap-0.5 rounded-md border border-zinc-200 bg-white px-2.5 text-[10px] font-semibold text-zinc-800 shadow-sm hover:bg-zinc-50 sm:min-w-[72px] sm:px-3"
                   title="Editar pedido"
                   aria-label="Editar pedido"
                 >
@@ -3239,7 +3239,7 @@ export default function PedidosPage() {
                 <button
                   type="button"
                   onClick={() => sendWhatsappOrder(order)}
-                  className="inline-flex h-8 items-center gap-0.5 rounded-md border border-zinc-200 bg-white px-1.5 text-[10px] font-semibold text-[#166534] shadow-sm hover:bg-zinc-50"
+                  className="inline-flex min-h-[44px] min-w-[60px] shrink-0 items-center justify-center gap-0.5 rounded-md border border-zinc-200 bg-white px-2.5 text-[10px] font-semibold text-[#166534] shadow-sm hover:bg-zinc-50 sm:min-w-[72px] sm:px-3"
                   title="WhatsApp"
                   aria-label="Enviar pedido por WhatsApp"
                 >
@@ -3272,7 +3272,7 @@ export default function PedidosPage() {
                       })
                       .catch((err: Error) => setMessage(err.message));
                   }}
-                  className="inline-flex h-8 items-center gap-0.5 rounded-md border border-zinc-200 bg-white px-1.5 text-[10px] font-semibold text-[#B91C1C] shadow-sm hover:bg-zinc-50"
+                  className="inline-flex min-h-[44px] min-w-[60px] shrink-0 items-center justify-center gap-0.5 rounded-md border border-zinc-200 bg-white px-2.5 text-[10px] font-semibold text-[#B91C1C] shadow-sm hover:bg-zinc-50 sm:min-w-[72px] sm:px-3"
                   title="Eliminar pedido"
                   aria-label="Eliminar pedido"
                 >
