@@ -3450,7 +3450,7 @@ export default function PedidosPage() {
                               <p className="text-[10px] font-bold uppercase tracking-wide text-emerald-900/90">
                                 B · Recepción real (editable)
                               </p>
-                              <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-3 sm:items-end">
+                              <div className="mt-2 flex max-w-[12rem] flex-col gap-2">
                                 <div>
                                   <label className="mb-0.5 block text-[10px] font-semibold text-zinc-700">
                                     Cantidad real (kg)
@@ -3515,14 +3515,7 @@ export default function PedidosPage() {
                                   <p className="text-[10px] font-bold uppercase tracking-wide text-emerald-900/85">
                                     B · Recepción real (editable)
                                   </p>
-                                  <div
-                                    className={[
-                                      'mt-2 grid grid-cols-1 gap-2 sm:items-end',
-                                      unitCanDeclareScaleKgOnReception(item.unit) && unitSupportsReceivedWeightKg(item.unit)
-                                        ? 'sm:grid-cols-3'
-                                        : 'sm:grid-cols-2',
-                                    ].join(' ')}
-                                  >
+                                  <div className="mt-2 flex max-w-[12rem] flex-col gap-2">
                                     {unitCanDeclareScaleKgOnReception(item.unit) ? (
                                       <div className="flex min-w-0 flex-col gap-0.5">
                                         <label className="text-[10px] font-semibold text-zinc-700">
@@ -3542,7 +3535,7 @@ export default function PedidosPage() {
                                             setWeightInputByItemId((prev) => ({ ...prev, [item.id]: e.target.value }))
                                           }
                                           onBlur={() => commitWeightInput(order.id, item.id)}
-                                          className="h-8 w-full min-w-0 rounded-md border border-zinc-300 bg-white px-1.5 text-xs font-semibold text-zinc-900 outline-none sm:max-w-[6.5rem]"
+                                          className="h-9 w-full min-w-0 rounded-md border border-zinc-300 bg-white px-2 py-1 text-sm font-semibold tabular-nums text-zinc-900 outline-none"
                                         />
                                       </div>
                                     ) : null}
@@ -3570,14 +3563,14 @@ export default function PedidosPage() {
                                             setPricePerKgInputByItemId((prev) => ({ ...prev, [item.id]: e.target.value }))
                                           }
                                           onBlur={() => commitPricePerKgBlur(order.id, item)}
-                                          className="h-8 w-full min-w-0 rounded-md border border-zinc-300 bg-white px-1.5 text-xs font-semibold text-zinc-900 outline-none sm:max-w-[6.5rem]"
+                                          className="h-9 w-full min-w-0 rounded-md border border-zinc-300 bg-white px-2 py-1 text-sm font-semibold tabular-nums text-zinc-900 outline-none"
                                         />
                                       </div>
                                     ) : null}
                                     <div className="flex min-w-0 flex-col gap-0.5">
                                       <span className="text-[10px] font-semibold text-zinc-700">Sub</span>
-                                      <div className="flex h-8 min-w-0 items-center rounded-md border border-transparent px-0.5">
-                                        <span className="text-sm font-black tabular-nums text-emerald-950 sm:text-base">
+                                      <div className="flex h-9 min-w-0 items-center rounded-md border border-transparent px-0.5">
+                                        <span className="text-base font-black tabular-nums text-emerald-950 sm:text-[1.05rem]">
                                           {liveSub.toFixed(2)} €
                                         </span>
                                       </div>
