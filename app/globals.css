@@ -6,8 +6,8 @@
   --brand-red: #d32f2f;
   /* Fondo del área bajo el header (barra «Volver» sticky en AppShell). */
   --page-bg: #fff;
-  /* Altura aprox. del header rojo; el scroll vive en <main>, el sticky «Volver» usa top:0 allí. */
-  --app-header-height: 4.5rem;
+  /* Altura del header rojo (min-h-14 + py-2; referencia ~72px). Sticky «Volver» en <main> usa top:0. */
+  --app-header-height: 72px;
 }
 
 @theme inline {
@@ -224,12 +224,14 @@ input[type='range'].merma-target-range::-moz-range-thumb {
   cursor: grab;
 }
 
-/* Barra «Volver» (AppShell): fija bajo el header mientras haces scroll en el módulo. */
+/* Barra «Volver» (AppShell): pegada al borde superior de <main> (justo bajo el header, sin franja). */
 .back-button-wrapper {
   position: sticky;
-  /* En <main> el scrollport empieza debajo del header; top:0 ancla al borde superior del main. */
+  /* Scroll en <main>: el borde superior del área de scroll coincide con el pie del header. */
   top: 0;
-  z-index: 40;
+  z-index: 60;
+  margin-top: 0;
   background: var(--page-bg, #fff);
-  padding: 8px 16px;
+  padding: 0;
+  padding-bottom: 8px;
 }

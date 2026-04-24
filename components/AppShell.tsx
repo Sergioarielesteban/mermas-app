@@ -538,7 +538,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
       <main
         className={[
-          'min-h-0 w-full flex-1 overflow-y-auto overscroll-contain py-5 md:py-6',
+          /* Sin padding-top: el «Volver» queda pegado al header; el margen bajo el scroll sigue con pb- */
+          'min-h-0 w-full flex-1 overflow-y-auto overscroll-contain pt-0 pb-5 md:pb-6',
           isPlanningFullBleed
             ? 'px-1 sm:px-2 md:px-2 lg:px-2'
             : 'mx-auto max-w-full px-4 sm:max-w-2xl sm:px-5 md:max-w-4xl md:px-6 lg:max-w-5xl lg:px-8',
@@ -549,8 +550,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             className={[
               'back-button-wrapper mb-4 border-b border-zinc-100/90 shadow-sm print:hidden',
               isPlanningFullBleed
-                ? '-mx-1 sm:-mx-2 md:-mx-2 lg:-mx-2'
-                : '-mx-4 sm:-mx-5 md:-mx-6 lg:-mx-8',
+                ? '-mx-1 px-1 sm:-mx-2 sm:px-2 md:-mx-2 md:px-2 lg:-mx-2 lg:px-2'
+                : '-mx-4 px-4 sm:-mx-5 sm:px-5 md:-mx-6 md:px-6 lg:-mx-8 lg:px-8',
             ].join(' ')}
           >
             <button
