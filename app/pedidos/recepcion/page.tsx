@@ -12,11 +12,9 @@ import { getSupabaseClient } from '@/lib/supabase-client';
 import PedidosPremiaLockedScreen from '@/components/PedidosPremiaLockedScreen';
 import { dispatchPedidosDataChanged } from '@/hooks/usePedidosDataChangedListener';
 import { canAccessPedidos, canUsePedidosModule } from '@/lib/pedidos-access';
-import {
-  formatQuantityWithUnit,
-  receptionBillingSummary,
-  unitPriceCatalogSuffix,
-} from '@/lib/pedidos-format';
+import RecepcionLineRow from '@/components/pedidos/recepcion/RecepcionLineRow';
+import { formatQuantityWithUnit, unitPriceCatalogSuffix } from '@/lib/pedidos-format';
+import { parsePricePerKg, parseReceivedKg, supplierDefaultPricePerKg } from '@/lib/pedidos-recepcion-inputs';
 import {
   billingQuantityForReceptionPrice,
   persistReceptionItemTotals,
@@ -31,22 +29,6 @@ import {
   type PedidoOrder,
 } from '@/lib/pedidos-supabase';
 import { actorLabel, notifyIncidenciaRecepcionDeduped } from '@/services/notifications';
-
-function parseReceivedKg(raw: string): number | null | 'invalid' {
-  const t = raw.trim();
-  if (t === '') return null;
-  const n = Number(t.replace(',', '.'));
-  if (!Number.isFinite(n) || n <= 0) return 'invalid';
-  return Math.round(n * 1000) / 1000;
-}
-
-function parsePricePerKg(raw: string): number | null | 'invalid' {
-  const t = raw.trim();
-  if (t === '') return null;
-  const n = Number(t.replace(',', '.'));
-  if (!Number.isFinite(n) || n <= 0) return 'invalid';
-  return Math.round(n * 10000) / 10000;
-}
 
 function orderHasAnyIncident(order: PedidoOrder): boolean {
   return order.items.some((i) => Boolean(i.incidentType) || Boolean(i.incidentNotes?.trim()));
@@ -72,18 +54,17 @@ export default function RecepcionPedidosPage() {
   );
   const [message, setMessage] = React.useState<string | null>(null);
   const [priceInputByItemId, setPriceInputByItemId] = React.useState<Record<string, string>>({});
-  const [weightInputByItemId, setWeightInputByItemId] = React.useState<Record<string, string>>({});
-  const [pricePerKgInputByItemId, setPricePerKgInputByItemId] = React.useState<Record<string, string>>({});
-  const weightInputRef = React.useRef<Record<string, string>>({});
-  weightInputRef.current = weightInputByItemId;
   const priceInputRef = React.useRef<Record<string, string>>({});
   priceInputRef.current = priceInputByItemId;
-  const pricePerKgInputRef = React.useRef<Record<string, string>>({});
-  pricePerKgInputRef.current = pricePerKgInputByItemId;
+  const ordersRef = React.useRef(orders);
+  ordersRef.current = orders;
 
-  const getLinePrice = React.useCallback((item: PedidoOrder['items'][number]) => {
-    const raw = priceInputRef.current[item.id];
-    const parsed = raw == null ? item.pricePerUnit : Number(raw.replace(',', '.'));
+  const getLinePrice = React.useCallback((item: PedidoOrder['items'][number], priceDraft?: string) => {
+    const raw = priceDraft !== undefined ? priceDraft : priceInputRef.current[item.id];
+    if (raw == null || String(raw).trim() === '') {
+      return item.pricePerUnit;
+    }
+    const parsed = Number(String(raw).replace(',', '.'));
     return Number.isNaN(parsed) || parsed < 0 ? item.pricePerUnit : Math.round(parsed * 100) / 100;
   }, []);
   const [incidentOpenByOrderId, setIncidentOpenByOrderId] = React.useState<Record<string, boolean>>({});
@@ -135,20 +116,7 @@ export default function RecepcionPedidosPage() {
     await Promise.all(
       order.items.map(async (item) => {
         const price = getLinePrice(item);
-        const rawPpk = pricePerKgInputRef.current[item.id];
-        let ppkMerge: number | null = item.receivedPricePerKg ?? null;
-        if (rawPpk !== undefined) {
-          if (rawPpk.trim() === '') ppkMerge = null;
-          else {
-            const n = Number(rawPpk.replace(',', '.'));
-            ppkMerge = Number.isFinite(n) && n > 0 ? Math.round(n * 10000) / 10000 : null;
-          }
-        }
-        const merged = {
-          ...item,
-          pricePerUnit: price,
-          ...(unitSupportsReceivedWeightKg(item.unit) ? { receivedPricePerKg: ppkMerge } : {}),
-        };
+        const merged = { ...item, pricePerUnit: price };
         if (unitCanDeclareScaleKgOnReception(item.unit)) {
           await persistReceptionItemTotals(supabase, localId, merged);
         } else {
@@ -160,13 +128,6 @@ export default function RecepcionPedidosPage() {
       const next = { ...prev };
       for (const item of order.items) {
         next[item.id] = getLinePrice(item).toFixed(2);
-      }
-      return next;
-    });
-    setPricePerKgInputByItemId((prev) => {
-      const next = { ...prev };
-      for (const item of order.items) {
-        if (unitSupportsReceivedWeightKg(item.unit)) delete next[item.id];
       }
       return next;
     });
@@ -235,16 +196,7 @@ export default function RecepcionPedidosPage() {
       }),
     );
 
-    setPricePerKgInputByItemId((prev) => {
-      const orderSnap = orders.find((o) => o.id === orderId);
-      const itemSnap = orderSnap?.items.find((i) => i.id === itemId);
-      if (!itemSnap || !unitSupportsReceivedWeightKg(itemSnap.unit)) return prev;
-      const next = { ...prev };
-      delete next[itemId];
-      return next;
-    });
-
-    const orderSnap = orders.find((o) => o.id === orderId);
+    const orderSnap = ordersRef.current.find((o) => o.id === orderId);
     const itemSnap = orderSnap?.items.find((i) => i.id === itemId);
     if (!itemSnap) return;
 
@@ -271,52 +223,43 @@ export default function RecepcionPedidosPage() {
       });
   };
 
-  const setLocalUnitPrice = (orderId: string, itemId: string, rawValue: string) => {
-    const parsed = Number(rawValue.replace(',', '.'));
-    if (Number.isNaN(parsed) || parsed < 0) return;
-    const nextPrice = Math.round(parsed * 100) / 100;
-    setOrders((prev) =>
-      prev.map((order) => {
-        if (order.id !== orderId) return order;
-        const nextItems = order.items.map((item) => {
-          if (item.id !== itemId) return item;
-          const merged = { ...item, pricePerUnit: nextPrice };
-          const { lineTotal, effectivePricePerUnit } = receptionLineTotals(merged);
-          return { ...merged, pricePerUnit: effectivePricePerUnit, lineTotal };
-        });
-        return { ...order, items: nextItems };
-      }),
-    );
-  };
-
-  const commitPriceInput = (orderId: string, itemId: string) => {
-    const orderSnap = orders.find((o) => o.id === orderId);
+  const commitPriceInput = (orderId: string, itemId: string, raw: string) => {
+    const orderSnap = ordersRef.current.find((o) => o.id === orderId);
     const itemSnap = orderSnap?.items.find((i) => i.id === itemId);
     if (!itemSnap) return;
-    const raw = priceInputByItemId[itemId] ?? itemSnap.pricePerUnit.toFixed(2);
     changeUnitPrice(orderId, itemId, raw);
     const parsed = Number(raw.replace(',', '.'));
     const normalized = Number.isNaN(parsed) || parsed < 0 ? '0.00' : (Math.round(parsed * 100) / 100).toFixed(2);
     setPriceInputByItemId((prev) => ({ ...prev, [itemId]: normalized }));
   };
 
-  const commitPricePerKgInput = (orderId: string, itemId: string) => {
+  const commitPricePerKgInput = (orderId: string, itemId: string, raw: string) => {
     if (!localId) return;
     const supabase = getSupabaseClient();
     if (!supabase) return;
-    const raw = pricePerKgInputByItemId[itemId];
-    if (raw === undefined) return;
-    const parsed = parsePricePerKg(raw);
-    if (parsed === 'invalid') {
-      setMessage('€/kg inválido.');
-      return;
-    }
 
-    const orderSnap = orders.find((o) => o.id === orderId);
+    const orderSnap = ordersRef.current.find((o) => o.id === orderId);
     const itemSnap = orderSnap?.items.find((i) => i.id === itemId);
     if (!itemSnap || !unitSupportsReceivedWeightKg(itemSnap.unit)) return;
 
-    if (parsed != null && (itemSnap.receivedWeightKg == null || itemSnap.receivedWeightKg <= 0)) {
+    const trimmed = raw.trim();
+    let parsed: number | null;
+    if (trimmed === '') {
+      parsed = supplierDefaultPricePerKg(itemSnap);
+    } else {
+      const p = parsePricePerKg(raw);
+      if (p === 'invalid') {
+        setMessage('€/kg inválido.');
+        return;
+      }
+      parsed = p;
+    }
+
+    if (
+      parsed != null &&
+      parsed > 0 &&
+      (itemSnap.receivedWeightKg == null || itemSnap.receivedWeightKg <= 0)
+    ) {
       setMessage('Indica primero los kg reales para aplicar €/kg.');
       return;
     }
@@ -344,12 +287,6 @@ export default function RecepcionPedidosPage() {
           }),
         );
         setPriceInputByItemId((prev) => ({ ...prev, [itemId]: effectivePricePerUnit.toFixed(2) }));
-        setPricePerKgInputByItemId((prev) => {
-          const next = { ...prev };
-          if (parsed == null) delete next[itemId];
-          else next[itemId] = String(parsed);
-          return next;
-        });
         setMessage(null);
         dispatchPedidosDataChanged();
       } catch (err: unknown) {
@@ -359,24 +296,22 @@ export default function RecepcionPedidosPage() {
     })();
   };
 
-  const commitWeightInput = (orderId: string, itemId: string) => {
+  const commitWeightInput = (orderId: string, itemId: string, rawKg: string, priceDraft?: string) => {
     if (!localId) return;
     const supabase = getSupabaseClient();
     if (!supabase) return;
-    const raw = weightInputByItemId[itemId];
-    if (raw === undefined) return;
-    const parsed = parseReceivedKg(raw);
+    const parsed = parseReceivedKg(rawKg);
     if (parsed === 'invalid') {
       setMessage('Peso recibido inválido.');
       return;
     }
 
-    const orderSnap = orders.find((o) => o.id === orderId);
+    const orderSnap = ordersRef.current.find((o) => o.id === orderId);
     const itemSnap = orderSnap?.items.find((i) => i.id === itemId);
     if (!itemSnap) return;
 
     if (itemSnap.unit === 'kg') {
-      const price = getLinePrice(itemSnap);
+      const price = getLinePrice(itemSnap, priceDraft);
       void (async () => {
         try {
           if (parsed == null) {
@@ -421,12 +356,6 @@ export default function RecepcionPedidosPage() {
               };
             }),
           );
-          setWeightInputByItemId((prev) => {
-            const next = { ...prev };
-            if (parsed == null) delete next[itemId];
-            else next[itemId] = String(parsed);
-            return next;
-          });
           dispatchPedidosDataChanged();
         } catch (err: unknown) {
           void reloadOrders();
@@ -439,7 +368,10 @@ export default function RecepcionPedidosPage() {
     void (async () => {
       try {
         const nextWeight = parsed == null ? null : parsed;
-        const nextPpk = nextWeight == null ? null : itemSnap.receivedPricePerKg ?? null;
+        const nextPpk =
+          nextWeight == null
+            ? null
+            : itemSnap.receivedPricePerKg ?? supplierDefaultPricePerKg(itemSnap) ?? null;
         const merged = {
           ...itemSnap,
           receivedWeightKg: nextWeight,
@@ -460,19 +392,6 @@ export default function RecepcionPedidosPage() {
             };
           }),
         );
-        setWeightInputByItemId((prev) => {
-          const next = { ...prev };
-          if (parsed == null) delete next[itemId];
-          else next[itemId] = String(parsed);
-          return next;
-        });
-        if (parsed == null) {
-          setPricePerKgInputByItemId((prev) => {
-            const next = { ...prev };
-            delete next[itemId];
-            return next;
-          });
-        }
         setPriceInputByItemId((prev) => ({ ...prev, [itemId]: effectivePricePerUnit.toFixed(2) }));
         dispatchPedidosDataChanged();
       } catch (err: unknown) {
@@ -592,7 +511,7 @@ export default function RecepcionPedidosPage() {
             <div
               key={order.id}
               className={[
-                'rounded-xl p-2.5 ring-1 transition-colors',
+                'rounded-xl p-2.5 ring-1',
                 orderIncidentMode ? 'bg-red-50 ring-2 ring-red-500 shadow-sm' : 'bg-zinc-50 ring-zinc-200',
               ].join(' ')}
             >
@@ -620,169 +539,22 @@ export default function RecepcionPedidosPage() {
                   aria-expanded={expanded}
                 >
                   {expanded ? 'Ocultar detalle' : 'Ver detalle'}
-                  <ChevronDown
-                    className={['h-4 w-4 transition-transform', expanded ? 'rotate-180' : ''].join(' ')}
-                    aria-hidden
-                  />
+                  <ChevronDown className={['h-4 w-4', expanded ? 'rotate-180' : ''].join(' ')} aria-hidden />
                 </button>
               </div>
               {expanded ? (
               <>
               <div className="mt-2 space-y-1.5">
-                {order.items.map((item) => {
-                  const lineSummary = receptionBillingSummary(item);
-                  return (
-                    <div key={item.id} className="space-y-1 rounded-lg bg-white p-2 ring-1 ring-zinc-200">
-                      <p className="text-sm font-semibold leading-tight text-zinc-800">{item.productName}</p>
-                      <p className="text-xs text-zinc-600">
-                        Pedido:{' '}
-                        <span className="text-base font-bold tabular-nums text-zinc-900 sm:text-lg">
-                          {formatQuantityWithUnit(item.quantity, item.unit)}
-                        </span>
-                      </p>
-                      <div className="rounded-lg border border-zinc-200/90 bg-zinc-50 px-2 py-1.5 text-[11px] leading-snug text-zinc-700">
-                        <p className="font-semibold text-zinc-500">Resumen albarán</p>
-                        <p className="mt-0.5">
-                          <span className="font-semibold text-zinc-500">Pedido</span> {lineSummary.pedido}
-                        </p>
-                        <p>
-                          <span className="font-semibold text-zinc-500">Recibido</span> {lineSummary.recibido}
-                        </p>
-                        <p>
-                          <span className="font-semibold text-zinc-500">Precio aplicado</span>{' '}
-                          {lineSummary.precioAplicado}
-                        </p>
-                        {lineSummary.precioEquivCatalogo ? (
-                          <p className="text-[10px] text-zinc-600">{lineSummary.precioEquivCatalogo}</p>
-                        ) : null}
-                        <p>
-                          <span className="font-semibold text-zinc-500">Total línea</span>{' '}
-                          <span className="font-bold tabular-nums text-zinc-900">{lineSummary.totalLinea}</span>
-                        </p>
-                      </div>
-                      {unitSupportsReceivedWeightKg(item.unit) &&
-                      item.estimatedKgPerUnit != null &&
-                      item.estimatedKgPerUnit > 0 ? (
-                        <p className="text-[11px] leading-tight text-zinc-600">
-                          Est. {(item.quantity * item.estimatedKgPerUnit).toFixed(2)} kg (
-                          {item.estimatedKgPerUnit.toFixed(2)} kg/{item.unit})
-                          {item.receivedQuantity > 0
-                            ? ` · recib.: ${(item.receivedQuantity * item.estimatedKgPerUnit).toFixed(2)} kg`
-                            : ''}
-                        </p>
-                      ) : null}
-                      <p className="text-[11px] leading-tight text-zinc-600">
-                        {item.basePricePerUnit != null && Number.isFinite(item.basePricePerUnit) ? (
-                          <>
-                            <span className="font-semibold text-zinc-500">p/base</span>{' '}
-                            <span className="font-semibold text-zinc-900">
-                              {item.basePricePerUnit.toFixed(2)} €/{unitPriceCatalogSuffix[item.unit]}
-                            </span>
-                            <span className="mx-1 text-zinc-300">·</span>
-                          </>
-                        ) : null}
-                        <span className="font-semibold text-zinc-500">p/alb</span>{' '}
-                        <span className="font-bold text-zinc-900">
-                          {item.pricePerUnit.toFixed(2)} €/{unitPriceCatalogSuffix[item.unit]}
-                        </span>
-                      </p>
-                      {item.basePricePerUnit != null &&
-                      Number.isFinite(item.basePricePerUnit) &&
-                      Math.abs(item.pricePerUnit - item.basePricePerUnit) > 0.005 ? (
-                        <p className="text-[10px] font-semibold leading-tight text-amber-900">
-                          Δ{' '}
-                          {item.pricePerUnit >= item.basePricePerUnit ? '+' : ''}
-                          {(item.pricePerUnit - item.basePricePerUnit).toFixed(2)} €
-                          {item.basePricePerUnit > 0
-                            ? ` (${item.pricePerUnit >= item.basePricePerUnit ? '+' : ''}${((((item.pricePerUnit - item.basePricePerUnit) / item.basePricePerUnit) * 100)).toFixed(1)} %)`
-                            : ''}
-                        </p>
-                      ) : null}
-                      {unitCanDeclareScaleKgOnReception(item.unit) || unitSupportsReceivedWeightKg(item.unit) ? (
-                        <div className="space-y-0.5">
-                          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                            {unitCanDeclareScaleKgOnReception(item.unit) ? (
-                              <div className="flex items-center gap-1">
-                                <label className="shrink-0 text-[11px] font-semibold text-zinc-600">Kg</label>
-                                <input
-                                  type="text"
-                                  inputMode="decimal"
-                                  autoComplete="off"
-                                  autoCorrect="off"
-                                  placeholder="12,5"
-                                  title="Kg reales"
-                                  value={
-                                    weightInputByItemId[item.id] ??
-                                    (item.receivedWeightKg != null ? String(item.receivedWeightKg) : '')
-                                  }
-                                  onChange={(e) =>
-                                    setWeightInputByItemId((prev) => ({ ...prev, [item.id]: e.target.value }))
-                                  }
-                                  onBlur={() => commitWeightInput(order.id, item.id)}
-                                  className="h-7 w-[3.25rem] max-w-[3.25rem] shrink-0 rounded-md border border-zinc-300 bg-white px-1 py-0.5 text-xs font-semibold text-zinc-900 outline-none sm:w-[4rem] sm:max-w-[4rem]"
-                                />
-                                {item.receivedWeightKg != null && item.receivedWeightKg > 0 ? (
-                                  <span className="text-[10px] text-zinc-500">{item.receivedWeightKg.toFixed(3)}</span>
-                                ) : null}
-                              </div>
-                            ) : null}
-                            {unitSupportsReceivedWeightKg(item.unit) ? (
-                              <div className="flex items-center gap-1">
-                                <label className="shrink-0 text-[11px] font-semibold text-zinc-600">€/kg</label>
-                                <input
-                                  type="text"
-                                  inputMode="decimal"
-                                  autoComplete="off"
-                                  autoCorrect="off"
-                                  placeholder="3,45"
-                                  title="€/kg real"
-                                  value={
-                                    pricePerKgInputByItemId[item.id] ??
-                                    (item.receivedPricePerKg != null ? String(item.receivedPricePerKg) : '')
-                                  }
-                                  onChange={(e) =>
-                                    setPricePerKgInputByItemId((prev) => ({ ...prev, [item.id]: e.target.value }))
-                                  }
-                                  onBlur={() => commitPricePerKgInput(order.id, item.id)}
-                                  className="h-7 w-14 max-w-[5.5rem] shrink-0 rounded-md border border-zinc-300 bg-white px-1 py-0.5 text-xs font-semibold text-zinc-900 outline-none sm:w-[5rem]"
-                                />
-                              </div>
-                            ) : null}
-                          </div>
-                          {unitSupportsReceivedWeightKg(item.unit) ? (
-                            <p className="text-[10px] leading-tight text-zinc-500">
-                              {item.receivedPricePerKg != null && item.receivedPricePerKg > 0
-                                ? `≈ ${item.pricePerUnit.toFixed(2)} €/${unitPriceCatalogSuffix[item.unit]}`
-                                : '€/kg opcional si hay kg reales.'}
-                            </p>
-                          ) : null}
-                        </div>
-                      ) : null}
-                      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-t border-zinc-100 pt-1.5">
-                        <div className="flex min-w-0 items-center gap-1.5">
-                          <label className="shrink-0 text-[11px] font-semibold text-zinc-600">Precio recibido</label>
-                          <input
-                            type="number"
-                            step="0.01"
-                            min="0"
-                            value={priceInputByItemId[item.id] ?? item.pricePerUnit.toFixed(2)}
-                            onChange={(e) => {
-                              const raw = e.target.value;
-                              setPriceInputByItemId((prev) => ({ ...prev, [item.id]: raw }));
-                              setLocalUnitPrice(order.id, item.id, raw);
-                            }}
-                            onBlur={() => commitPriceInput(order.id, item.id)}
-                            className="h-8 w-[4.5rem] rounded-md border border-zinc-300 bg-white px-1.5 text-sm font-semibold tabular-nums text-zinc-900 outline-none"
-                          />
-                        </div>
-                        <span className="shrink-0 text-[11px] text-zinc-700">
-                          Subt:{' '}
-                          <span className="font-bold tabular-nums text-zinc-900">{item.lineTotal.toFixed(2)} €</span>
-                        </span>
-                      </div>
-                    </div>
-                  );
-                })}
+                {order.items.map((item) => (
+                  <RecepcionLineRow
+                    key={item.id}
+                    orderId={order.id}
+                    item={item}
+                    commitWeightInput={commitWeightInput}
+                    commitPricePerKgInput={commitPricePerKgInput}
+                    commitPriceInput={commitPriceInput}
+                  />
+                ))}
               </div>
               <div className="mt-3 border-t border-red-200/70 pt-3">
                 <button
@@ -893,10 +665,7 @@ export default function RecepcionPedidosPage() {
                     {archivedPriceReviewOrders.length === 1 ? '' : 's'} · toca para plegar o desplegar
                   </p>
                 </div>
-                <span
-                  className="shrink-0 text-lg font-light text-zinc-400 transition-transform group-open:rotate-90"
-                  aria-hidden
-                >
+                <span className="shrink-0 text-lg font-light text-zinc-400 group-open:rotate-90" aria-hidden>
                   ›
                 </span>
               </summary>
