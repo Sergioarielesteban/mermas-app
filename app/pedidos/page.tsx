@@ -428,6 +428,9 @@ export default function PedidosPage() {
     registerPendingReceivedOrder,
     clearPendingReceivedOrder,
   } = usePedidosOrders();
+  /** Última lista de pedidos (p. ej. eliminar línea: no depender de cerrar del modal por IDs obsoletos tras Realtime). */
+  const ordersRef = React.useRef(orders);
+  ordersRef.current = orders;
   const [catalogPriceByProductId, setCatalogPriceByProductId] = React.useState<Map<string, number>>(() => new Map());
   const [message, setMessage] = React.useState<string | null>(null);
   const [showDeletedBanner, setShowDeletedBanner] = React.useState(false);
@@ -486,6 +489,7 @@ export default function PedidosPage() {
     itemId: string;
   } | null>(null);
   const [receptionLineActionBusy, setReceptionLineActionBusy] = React.useState(false);
+  const receptionLineDeleteInFlightRef = React.useRef(false);
   const [incidentOpenBySentOrderId, setIncidentOpenBySentOrderId] = React.useState<Record<string, boolean>>({});
   const [incidentNoteBySentOrderId, setIncidentNoteBySentOrderId] = React.useState<Record<string, string>>({});
   const [assistantInput, setAssistantInput] = React.useState('');
@@ -867,8 +871,18 @@ export default function PedidosPage() {
       });
   };
 
-  const removeReceptionLineFromSentOrder = (order: PedidoOrder, line: PedidoOrder['items'][number]) => {
-    if (!localId) return;
+  const removeReceptionLineFromSentOrder = (orderId: string, lineId: string) => {
+    if (!localId) {
+      setMessage('No se pudo guardar: perfil de local aún no disponible. Espera un segundo e inténtalo de nuevo.');
+      return;
+    }
+    const order = ordersRef.current.find((o) => o.id === orderId);
+    const line = order?.items.find((i) => i.id === lineId);
+    if (!order || !line) {
+      setMessage('No se encontró la línea (quizá se actualizó en otro dispositivo). Recarga Pedidos e inténtalo de nuevo.');
+      setReceptionLineAction(null);
+      return;
+    }
     const remaining = order.items.filter((i) => i.id !== line.id);
     if (remaining.length === 0) {
       setMessage('Un pedido enviado debe tener al menos un producto. Usa Editar o elimina el pedido entero.');
@@ -876,9 +890,10 @@ export default function PedidosPage() {
     }
     const supabase = getSupabaseClient();
     if (!supabase) {
-      setMessage('Sin conexión con Supabase.');
+      setMessage('Sin conexión con el servidor. Revisa la red o desactiva el modo demo.');
       return;
     }
+    receptionLineDeleteInFlightRef.current = true;
     setReceptionLineActionBusy(true);
     const usuarioNombre = actorLabel(displayName, loginUsername).trim();
     void saveOrder(supabase, localId, {
@@ -927,14 +942,18 @@ export default function PedidosPage() {
         void reloadOrders();
         setMessage(err.message);
       })
-      .finally(() => setReceptionLineActionBusy(false));
+      .finally(() => {
+        receptionLineDeleteInFlightRef.current = false;
+        setReceptionLineActionBusy(false);
+      });
   };
 
+  /** Solo si desaparece el pedido entero; no si falta el itemId (tras sustitución de líneas en Realtime, el id local puede dejar de coincidir y cerrar el modal al pulsar). */
   React.useEffect(() => {
     if (!receptionLineAction) return;
+    if (receptionLineDeleteInFlightRef.current) return;
     const o = orders.find((x) => x.id === receptionLineAction.orderId);
-    const hasItem = o?.items.some((i) => i.id === receptionLineAction.itemId);
-    if (!o || !hasItem) setReceptionLineAction(null);
+    if (!o) setReceptionLineAction(null);
   }, [receptionLineAction, orders]);
 
   const getLinePrice = React.useCallback((item: PedidoOrder['items'][number]) => {
@@ -3238,8 +3257,9 @@ export default function PedidosPage() {
               onClick={() => !receptionLineActionBusy && setReceptionLineAction(null)}
             >
               <div
-                className="w-full max-w-sm rounded-2xl border border-zinc-200 bg-white p-4 shadow-2xl ring-1 ring-black/5"
+                className="w-full max-w-sm touch-manipulation rounded-2xl border border-zinc-200 bg-white p-4 shadow-2xl ring-1 ring-black/5"
                 onClick={(e) => e.stopPropagation()}
+                onPointerDown={(e) => e.stopPropagation()}
               >
                 <h2 id="reception-line-action-title" className="text-base font-bold text-zinc-900">
                   ¿Qué quieres hacer con este producto?
@@ -3254,7 +3274,11 @@ export default function PedidosPage() {
                   <button
                     type="button"
                     disabled={receptionLineActionBusy}
-                    onClick={() => removeReceptionLineFromSentOrder(raOrder, raItem)}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      removeReceptionLineFromSentOrder(raOrder.id, raItem.id);
+                    }}
                     className="rounded-xl border border-[#B91C1C]/40 bg-[#B91C1C]/10 px-3 py-2.5 text-sm font-bold text-[#991B1B] transition enabled:hover:bg-[#B91C1C]/15 disabled:opacity-50"
                   >
                     Eliminar del pedido
