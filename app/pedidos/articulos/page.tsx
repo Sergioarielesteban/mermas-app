@@ -5,7 +5,6 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { ESCANDALLO_USAGE_UNIT_PRESETS, validateEscandalloUsageUnitInput } from '@/lib/escandallo-ingredient-units';
 import {
   AlertTriangle,
-  BookOpen,
   ChefHat,
   ChevronDown,
   GitCompare,
@@ -218,29 +217,6 @@ export default function PedidosArticulosPage() {
       {banner ? (
         <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950">{banner}</div>
       ) : null}
-
-      <section className="rounded-2xl border border-indigo-100 bg-indigo-50/50 p-4 ring-1 ring-indigo-100 sm:p-5">
-        <h2 className="flex items-center gap-2 text-xs font-black uppercase tracking-wide text-indigo-900">
-          <BookOpen className="h-4 w-4 shrink-0" aria-hidden />
-          Artículo vs producto de proveedor
-        </h2>
-        <div className="mt-3 grid gap-3 sm:grid-cols-2">
-          <div className="rounded-xl bg-white p-3 ring-1 ring-indigo-100/80">
-            <p className="text-[10px] font-black uppercase text-indigo-600">Artículo base</p>
-            <p className="mt-1 text-sm text-zinc-800">
-              Concepto <strong>interno</strong> del local: nombre unificado, unidad de referencia y{' '}
-              <strong>coste máster</strong> (referencia de coste que puedes ir afinando). No sustituye al catálogo.
-            </p>
-          </div>
-          <div className="rounded-xl bg-white p-3 ring-1 ring-zinc-200/80">
-            <p className="text-[10px] font-black uppercase text-zinc-500">Producto de proveedor</p>
-            <p className="mt-1 text-sm text-zinc-800">
-              Lo que eliges en <strong>Nuevo pedido</strong>: precio de catálogo, IVA, envase, etc. Los pedidos guardan este
-              vínculo; el artículo es una capa de análisis encima.
-            </p>
-          </div>
-        </div>
-      </section>
 
       <section className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-zinc-200 sm:p-5">
         <div className="flex flex-col gap-3 border-b border-zinc-100 pb-4 sm:flex-row sm:items-end sm:justify-between">
