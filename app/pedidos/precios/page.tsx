@@ -85,8 +85,6 @@ type PriceSummary = {
   catalogUnit: Unit;
   /** Id de producto de proveedor en las líneas (referencia / histórico de catálogo). */
   supplierProductId: string | null;
-  /** Solo una compra con precio en el periodo (el gráfico sigue mostrando el punto). */
-  singlePriceObservation?: boolean;
   /** En modo €/kg se usó precio por unidad de catálogo por no haber kg recibido/estimado. */
   usedPerKgUnitFallback?: boolean;
 };
@@ -297,6 +295,17 @@ function isPriceRiseAlert(row: PriceSummary, alertPct: number): boolean {
   return row.deltaPct >= alertPct;
 }
 
+/** Mínima diferencia en € entre primer y último precio de la serie para mostrarla como “evolución”. */
+const MIN_PRICE_VARIATION_EUR = 0.01;
+
+/**
+ * Solo mostrar en evolución si hay al menos 2 compras en el periodo y |Δ| > 0,01 € (misma unidad que base/actual).
+ */
+function hasPriceVariationForEvolution(row: PriceSummary): boolean {
+  if (row.purchases.length < 2) return false;
+  return Math.abs(row.delta) > MIN_PRICE_VARIATION_EUR;
+}
+
 function buildPriceSummariesWithDiagnostics(
   orders: PedidoOrder[],
   windowStartMs: number,
@@ -306,6 +315,8 @@ function buildPriceSummariesWithDiagnostics(
   catalogNameByProductId: ReadonlyMap<string, string> | null,
 ): {
   series: PriceSummary[];
+  /** Series con compras en ventana antes de exigir variación > 0,01 € y ≥2 compras. */
+  seriesCandidatesBeforeVariation: number;
   rawRows: EvolutionDebugRow[];
   groupedRows: GroupedEvolutionRow[];
   discardedProducts: DiscardedEvolution[];
@@ -452,7 +463,7 @@ function buildPriceSummariesWithDiagnostics(
   const daysWindow = Math.max(1, (windowEndMs - windowStartMs) / 86_400_000);
   const monthsInWindow = Math.max(1, daysWindow / 30);
 
-  const series = Array.from(map.values())
+  const seriesCandidates = Array.from(map.values())
     .map((acc) => {
       const ordered = [...acc.points].sort((a, b) => {
         const t = Date.parse(a.date) - Date.parse(b.date);
@@ -480,7 +491,6 @@ function buildPriceSummariesWithDiagnostics(
       const forecast30d = forecastPriceLinear(billAsc, 30);
       const monthlyQty = acc.wQty / monthsInWindow;
       const impactMonthlyVsWap = Math.round((current.price - weightedAvg) * monthlyQty * 100) / 100;
-      const singlePriceObservation = purchasesSorted.length === 1;
       return {
         key: acc.key,
         productName: acc.productName,
@@ -500,13 +510,15 @@ function buildPriceSummariesWithDiagnostics(
         supplierName: acc.supplierName,
         catalogUnit: acc.catalogUnit,
         supplierProductId: acc.supplierProductId,
-        singlePriceObservation,
         usedPerKgUnitFallback: acc.usedPerKgUnitFallback,
       };
     })
     .sort((a, b) => a.productName.localeCompare(b.productName, 'es'));
 
-  const groupedRows: GroupedEvolutionRow[] = series.map((s) => ({
+  const seriesCandidatesBeforeVariation = seriesCandidates.length;
+  const seriesOut = seriesCandidates.filter(hasPriceVariationForEvolution);
+
+  const groupedRows: GroupedEvolutionRow[] = seriesOut.map((s) => ({
     key: s.key,
     productName: s.productName,
     billPointCount: s.points.filter((p) => p.sortRank === 1).length,
@@ -522,7 +534,13 @@ function buildPriceSummariesWithDiagnostics(
       reason: r.discardReason!,
     }));
 
-  return { series, rawRows, groupedRows, discardedProducts };
+  return {
+    series: seriesOut,
+    seriesCandidatesBeforeVariation,
+    rawRows,
+    groupedRows,
+    discardedProducts,
+  };
 }
 
 function buildPriceSummaries(
@@ -1074,7 +1092,7 @@ export default function PedidosPreciosPage() {
     void reloadCatalogPriceHistory();
   }, [reloadCatalogPriceHistory]);
 
-  const { series, evolutionDebug } = React.useMemo(() => {
+  const { series, seriesCandidatesBeforeVariation, evolutionDebug } = React.useMemo(() => {
     const d = buildPriceSummariesWithDiagnostics(
       orders,
       windowStartMs,
@@ -1085,6 +1103,7 @@ export default function PedidosPreciosPage() {
     );
     return {
       series: d.series,
+      seriesCandidatesBeforeVariation: d.seriesCandidatesBeforeVariation,
       evolutionDebug: {
         rawRows: d.rawRows,
         groupedRows: d.groupedRows,
@@ -1104,7 +1123,11 @@ export default function PedidosPreciosPage() {
     console.log('Registros evolución crudos:', evolutionDebug.rawRows);
     console.log('Registros agrupados por producto:', evolutionDebug.groupedRows);
     console.log('Productos descartados:', evolutionDebug.discardedProducts);
-  }, [evolutionDebug, localId, windowLabel, supplierFilter, priceMode]);
+    console.log('[Evolución precios] Candidatos vs con variación >', MIN_PRICE_VARIATION_EUR, '€:', {
+      antesFiltroVariacion: seriesCandidatesBeforeVariation,
+      trasFiltro: series.length,
+    });
+  }, [evolutionDebug, localId, windowLabel, supplierFilter, priceMode, series.length, seriesCandidatesBeforeVariation]);
 
   const seriesAllSuppliers = React.useMemo(
     () => buildPriceSummaries(orders, windowStartMs, windowEndMs, priceMode, '', catalogNameByProductId),
@@ -1164,6 +1187,28 @@ export default function PedidosPreciosPage() {
     () => seriesFiltered.filter((r) => !dismissedSeriesKeys.has(r.key)),
     [seriesFiltered, dismissedSeriesKeys],
   );
+
+  const emptyEvolutionSectionMessage = React.useMemo(() => {
+    if (seriesFiltered.length > 0 && seriesFilteredVisible.length === 0) {
+      return 'No quedan referencias visibles: vaciaste la evolución con la papelera, o ajusta periodo y proveedor.';
+    }
+    if (productSearch.trim() && series.length > 0 && seriesFiltered.length === 0) {
+      return 'Ninguna referencia coincide con el buscador.';
+    }
+    if (series.length === 0 && seriesCandidatesBeforeVariation > 0) {
+      return 'No hay variaciones de precio en el periodo seleccionado.';
+    }
+    if (series.length === 0) {
+      return 'No hay evolución de precios en esta selección. Prueba otro periodo, proveedor o modo €/kg si aplica.';
+    }
+    return 'Ninguna referencia coincide con el buscador.';
+  }, [
+    productSearch,
+    series.length,
+    seriesCandidatesBeforeVariation,
+    seriesFiltered.length,
+    seriesFilteredVisible.length,
+  ]);
 
   const catalogHistoryFiltered = React.useMemo(() => {
     let list = catalogHistoryRows;
@@ -1282,7 +1327,7 @@ export default function PedidosPreciosPage() {
 
   const downloadReportPdf = React.useCallback(() => {
     if (seriesFilteredVisible.length === 0) {
-      setMessage('No hay datos con cambios de precio para descargar (ajusta filtros).');
+      setMessage('No hay variaciones de precio para descargar en el periodo seleccionado (ajusta filtros).');
       return;
     }
     const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' });
@@ -1318,7 +1363,7 @@ export default function PedidosPreciosPage() {
     );
     doc.setFontSize(9);
     doc.text(
-      'Referencias con variación en el periodo (primer vs último precio en ventana). Impacto mes: estimación vs PMP al ritmo de compra del periodo.',
+      'Solo referencias con variación: al menos 2 compras y |último − primero| > 0,01 € (misma unidad que en pantalla). Impacto mes: estimación vs PMP al ritmo de compra del periodo.',
       40,
       86,
       { maxWidth: pageW - 80 },
@@ -1558,7 +1603,7 @@ export default function PedidosPreciosPage() {
 
   const downloadCsv = React.useCallback(() => {
     if (seriesFilteredVisible.length === 0) {
-      setMessage('No hay filas para exportar (ajusta filtros).');
+      setMessage('No hay variaciones de precio para exportar en el periodo seleccionado (ajusta filtros).');
       return;
     }
     const supplierLabel = supplierFilter
@@ -2110,11 +2155,7 @@ export default function PedidosPreciosPage() {
       <section className="space-y-2">
         {seriesFilteredVisible.length === 0 ? (
           <div className="rounded-2xl bg-white p-4 text-sm text-zinc-500 ring-1 ring-zinc-200">
-            {series.length === 0
-              ? 'No hay evolución de precios en esta selección. Prueba otro periodo, proveedor o modo €/kg si aplica.'
-              : seriesFiltered.length === 0
-                ? 'Ninguna referencia coincide con el buscador.'
-                : 'No quedan referencias visibles: vaciaste el histórico de evolución de catálogo con la papelera, o ajusta periodo y proveedor.'}
+            {emptyEvolutionSectionMessage}
           </div>
         ) : null}
         {seriesFilteredVisible.map((row) => {
@@ -2131,9 +2172,6 @@ export default function PedidosPreciosPage() {
                 <div className="min-w-0 flex-1 pr-1">
                   <p className="text-sm font-black text-zinc-900">{row.productName}</p>
                   <p className="text-[11px] text-zinc-500">Proveedor: {row.supplierName}</p>
-                  {row.singlePriceObservation ? (
-                    <p className="pt-1 text-xs font-medium text-amber-900">Solo hay un registro de precio</p>
-                  ) : null}
                   {row.usedPerKgUnitFallback ? (
                     <p className="pt-0.5 text-[11px] text-zinc-500">
                       Modo €/kg: sin peso, se muestra el precio por {row.catalogUnit} del catálogo.
