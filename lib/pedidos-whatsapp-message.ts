@@ -1,8 +1,8 @@
 import { formatQuantityWithUnit } from '@/lib/pedidos-format';
 import type { Unit } from '@/lib/types';
 
-/** Separador exacto para cuerpo de pedido (WhatsApp). 20× U+2501. */
-export const WHATSAPP_PEDIDO_SEPARATOR = '━━━━━━━━━━━━━━━━━━━━';
+/** Separador de bloques en cuerpo de pedido (WhatsApp). 14× U+2501. */
+export const WHATSAPP_PEDIDO_SEPARATOR = '━━━━━━━━━━━━━━';
 
 const EN_DASH = '\u2013';
 
@@ -83,7 +83,7 @@ export type BuildPedidoWhatsappMessageInput = {
 };
 
 /**
- * Cuerpo del mensaje de pedido para WhatsApp. Sin HTML. Solo emojis: 📦 📅 🚚 🏪 👤 🧾 ✅
+ * Cuerpo del mensaje de pedido para WhatsApp. Sin HTML. Emojis: 📦 📅 🚚 👤 🧾 ✅
  * Codificación del enlace: encodeURIComponent(mensaje) (p. ej. en {@link openWhatsApp}).
  */
 export function buildPedidoWhatsappMessage(input: BuildPedidoWhatsappMessageInput): string {
@@ -101,10 +101,9 @@ export function buildPedidoWhatsappMessage(input: BuildPedidoWhatsappMessageInpu
   });
 
   const lines: string[] = [
-    `📦 PEDIDO ${EN_DASH} ${local}`,
+    `📦 LOCAL ${EN_DASH} ${local}`,
     `📅 Pedido: ${fechaPedido}`,
     `🚚 Entrega: ${fechaEntrega}`,
-    `🏪 Local: ${local}`,
     `👤 Responsable: ${responsable}`,
   ];
 
