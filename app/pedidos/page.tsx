@@ -40,6 +40,7 @@ import {
   persistReceptionItemTotals,
   receptionLineTotals,
   reopenReceivedOrderToSent,
+  saveOrder,
   setOrderStatus,
   setOrderPriceReviewArchived,
   unitCanDeclareScaleKgOnReception,
@@ -390,6 +391,29 @@ function historicoMonthKeyFromOrder(order: PedidoOrder): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 }
 
+/** Payload de línea para `saveOrder` (mismo criterio que en `pedidos/nuevo`). */
+function pedidoOrderItemToSaveOrderLine(item: PedidoOrderItem) {
+  return {
+    supplierProductId: item.supplierProductId,
+    productName: item.productName,
+    unit: item.unit,
+    quantity: item.quantity,
+    receivedQuantity: item.receivedQuantity,
+    pricePerUnit: item.pricePerUnit,
+    vatRate: item.vatRate,
+    lineTotal: item.lineTotal,
+    estimatedKgPerUnit: item.estimatedKgPerUnit ?? null,
+    receivedWeightKg: item.receivedWeightKg ?? null,
+    basePricePerUnit: item.basePricePerUnit ?? item.pricePerUnit,
+    incidentType: item.incidentType ?? null,
+    incidentNotes: item.incidentNotes?.trim() ? item.incidentNotes.trim() : null,
+    receivedPricePerKg: item.receivedPricePerKg ?? null,
+    billingUnit: item.billingUnit ?? null,
+    billingQtyPerOrderUnit: item.billingQtyPerOrderUnit ?? null,
+    pricePerBillingUnit: item.pricePerBillingUnit ?? null,
+  };
+}
+
 export default function PedidosPage() {
   const { localCode, localName, localId, email, userId, displayName, loginUsername, profileRole } = useAuth();
   const hasPedidosEntry = canAccessPedidos(localCode, email, localName, localId);
@@ -456,6 +480,12 @@ export default function PedidosPage() {
   const [receivingOrderId, setReceivingOrderId] = React.useState<string | null>(null);
   /** Marca visual por línea (varias a la vez); evita que un refetch parcial “borre” el estado al ir recibiendo. */
   const [quickLineMarks, setQuickLineMarks] = React.useState<Record<string, 'ok' | 'bad'>>({});
+  /** Línea de recepción (X): modal eliminar vs incidencia (ids para no retener refs obsoletas). */
+  const [receptionLineAction, setReceptionLineAction] = React.useState<{
+    orderId: string;
+    itemId: string;
+  } | null>(null);
+  const [receptionLineActionBusy, setReceptionLineActionBusy] = React.useState(false);
   const [incidentOpenBySentOrderId, setIncidentOpenBySentOrderId] = React.useState<Record<string, boolean>>({});
   const [incidentNoteBySentOrderId, setIncidentNoteBySentOrderId] = React.useState<Record<string, string>>({});
   const [assistantInput, setAssistantInput] = React.useState('');
@@ -836,6 +866,76 @@ export default function PedidosPage() {
         setMessage(err.message);
       });
   };
+
+  const removeReceptionLineFromSentOrder = (order: PedidoOrder, line: PedidoOrder['items'][number]) => {
+    if (!localId) return;
+    const remaining = order.items.filter((i) => i.id !== line.id);
+    if (remaining.length === 0) {
+      setMessage('Un pedido enviado debe tener al menos un producto. Usa Editar o elimina el pedido entero.');
+      return;
+    }
+    const supabase = getSupabaseClient();
+    if (!supabase) {
+      setMessage('Sin conexión con Supabase.');
+      return;
+    }
+    setReceptionLineActionBusy(true);
+    const usuarioNombre = actorLabel(displayName, loginUsername).trim();
+    void saveOrder(supabase, localId, {
+      orderId: order.id,
+      supplierId: order.supplierId,
+      status: 'sent',
+      notes: order.notes ?? '',
+      createdAt: order.createdAt,
+      sentAt: order.sentAt,
+      deliveryDate: order.deliveryDate,
+      expectedOrderUpdatedAt: order.updatedAt,
+      markContentRevisedAfterSent: true,
+      ...(usuarioNombre ? { usuarioNombre } : {}),
+      items: remaining.map(pedidoOrderItemToSaveOrderLine),
+    })
+      .then(() => {
+        setReceptionLineAction(null);
+        const id = line.id;
+        setQuickLineMarks((prev) => {
+          const next = { ...prev };
+          delete next[id];
+          return next;
+        });
+        setPriceInputByItemId((prev) => {
+          const next = { ...prev };
+          delete next[id];
+          return next;
+        });
+        setWeightInputByItemId((prev) => {
+          const next = { ...prev };
+          delete next[id];
+          return next;
+        });
+        setPricePerKgInputByItemId((prev) => {
+          const next = { ...prev };
+          delete next[id];
+          return next;
+        });
+        return reloadOrders();
+      })
+      .then(() => {
+        setMessage('Línea eliminada del pedido.');
+        dispatchPedidosDataChanged();
+      })
+      .catch((err: Error) => {
+        void reloadOrders();
+        setMessage(err.message);
+      })
+      .finally(() => setReceptionLineActionBusy(false));
+  };
+
+  React.useEffect(() => {
+    if (!receptionLineAction) return;
+    const o = orders.find((x) => x.id === receptionLineAction.orderId);
+    const hasItem = o?.items.some((i) => i.id === receptionLineAction.itemId);
+    if (!o || !hasItem) setReceptionLineAction(null);
+  }, [receptionLineAction, orders]);
 
   const getLinePrice = React.useCallback((item: PedidoOrder['items'][number]) => {
     const raw = priceInputRef.current[item.id];
@@ -3121,6 +3221,74 @@ export default function PedidosPage() {
         </div>
       ) : null}
 
+      {receptionLineAction ? (
+        (() => {
+          const raOrder = orders.find((o) => o.id === receptionLineAction.orderId);
+          const raItem = raOrder?.items.find((i) => i.id === receptionLineAction.itemId);
+          if (!raOrder || !raItem) return null;
+          const raMark = quickLineMarks[raItem.id];
+          const raServerBad = Boolean(raItem.incidentType);
+          const raIsBad = raMark === 'bad' || (raMark === undefined && raServerBad);
+          return (
+            <div
+              className="fixed inset-0 z-[100] flex items-end justify-center bg-black/40 p-4 sm:items-center"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="reception-line-action-title"
+              onClick={() => !receptionLineActionBusy && setReceptionLineAction(null)}
+            >
+              <div
+                className="w-full max-w-sm rounded-2xl border border-zinc-200 bg-white p-4 shadow-2xl ring-1 ring-black/5"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <h2 id="reception-line-action-title" className="text-base font-bold text-zinc-900">
+                  ¿Qué quieres hacer con este producto?
+                </h2>
+                <p className="mt-2 text-sm leading-relaxed text-zinc-600">
+                  Puedes eliminarlo si fue un error del pedido, o marcar incidencia si el producto no llegó o llegó mal.
+                </p>
+                <p className="mt-1 truncate text-xs font-semibold text-zinc-500" title={raItem.productName}>
+                  {raItem.productName}
+                </p>
+                <div className="mt-4 flex flex-col gap-2">
+                  <button
+                    type="button"
+                    disabled={receptionLineActionBusy}
+                    onClick={() => removeReceptionLineFromSentOrder(raOrder, raItem)}
+                    className="rounded-xl border border-[#B91C1C]/40 bg-[#B91C1C]/10 px-3 py-2.5 text-sm font-bold text-[#991B1B] transition enabled:hover:bg-[#B91C1C]/15 disabled:opacity-50"
+                  >
+                    Eliminar del pedido
+                  </button>
+                  <button
+                    type="button"
+                    disabled={receptionLineActionBusy}
+                    onClick={() => {
+                      setReceptionLineAction(null);
+                      if (raIsBad) {
+                        clearQuickReceive(raOrder.id, raItem);
+                      } else {
+                        quickReceiveItem(raOrder.id, raItem, false);
+                      }
+                    }}
+                    className="rounded-xl border border-amber-300/80 bg-amber-50 px-3 py-2.5 text-sm font-bold text-amber-950 transition enabled:hover:bg-amber-100/90 disabled:opacity-50"
+                  >
+                    {raIsBad ? 'Quitar incidencia' : 'Marcar incidencia'}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={receptionLineActionBusy}
+                    onClick={() => setReceptionLineAction(null)}
+                    className="rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm font-semibold text-zinc-700 transition enabled:hover:bg-zinc-50 disabled:opacity-50"
+                  >
+                    Cancelar
+                  </button>
+                </div>
+              </div>
+            </div>
+          );
+        })()
+      ) : null}
+
       <MermasStyleHero micro title="Pedidos y recepción" />
 
       {avisoPedido === 'enviado' ? (
@@ -3533,20 +3701,13 @@ export default function PedidosPage() {
                           <div className="flex shrink-0 items-center gap-1.5">
                             <button
                               type="button"
-                              onClick={() => {
-                                const serverBad = Boolean(item.incidentType);
-                                if (mark === 'bad' || (mark === undefined && serverBad)) {
-                                  clearQuickReceive(order.id, item);
-                                  return;
-                                }
-                                quickReceiveItem(order.id, item, false);
-                              }}
+                              onClick={() => setReceptionLineAction({ orderId: order.id, itemId: item.id })}
                               className={[
                                 'grid h-7 w-7 place-items-center rounded-full border text-sm font-black',
                                 isBad ? 'border-[#B91C1C] bg-[#B91C1C] text-white' : 'border-zinc-300 bg-white text-zinc-400',
                               ].join(' ')}
-                              title="No recibido (toca otra vez para quitar)"
-                              aria-label="No recibido"
+                              title="Qué hacer con esta línea (incidencia o eliminar)"
+                              aria-label="Opciones de línea de recepción"
                             >
                               {'\u2715'}
                             </button>
