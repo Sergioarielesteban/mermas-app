@@ -479,3 +479,6 @@ begin
   return query select v_order_id, v_order_updated_at;
 end;
 $$;
+
+-- Unidades de pedido extra (docena, litro, ml, g): ampliar CHECK con
+-- supabase-pedidos-order-units-migration.sql

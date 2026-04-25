@@ -15,6 +15,10 @@ const UNIT_WORD: Record<Unit, { one: string; many: string }> = {
   bolsa: { one: 'bolsa', many: 'bolsas' },
   paquete: { one: 'paquete', many: 'paquetes' },
   racion: { one: 'ración', many: 'raciones' },
+  docena: { one: 'docena', many: 'docenas' },
+  litro: { one: 'litro', many: 'litros' },
+  ml: { one: 'ml', many: 'ml' },
+  g: { one: 'g', many: 'g' },
 };
 
 /** True si la cantidad se muestra como singular (1, 1,0…). */
@@ -31,12 +35,12 @@ export function pluralUnitWord(unit: Unit, quantity: number): string {
 export function formatQuantityWithUnit(quantity: number, unit: Unit): string {
   const word = pluralUnitWord(unit, quantity);
   const rounded = Math.round(quantity * 100) / 100;
-  const formatted =
-    unit === 'kg'
-      ? rounded.toLocaleString('es-ES', { minimumFractionDigits: 0, maximumFractionDigits: 2 })
-      : Number.isInteger(rounded) || Math.abs(rounded - Math.round(rounded)) < 1e-6
-        ? String(Math.round(rounded))
-        : rounded.toLocaleString('es-ES', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+  const decimalUnits = unit === 'kg' || unit === 'litro' || unit === 'ml' || unit === 'g';
+  const formatted = decimalUnits
+    ? rounded.toLocaleString('es-ES', { minimumFractionDigits: 0, maximumFractionDigits: 2 })
+    : Number.isInteger(rounded) || Math.abs(rounded - Math.round(rounded)) < 1e-6
+      ? String(Math.round(rounded))
+      : rounded.toLocaleString('es-ES', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
   return `${formatted} ${word}`;
 }
 
@@ -49,6 +53,10 @@ export const unitPriceCatalogSuffix: Record<Unit, string> = {
   bolsa: 'bolsa',
   paquete: 'paquete',
   racion: 'ración',
+  docena: 'docena',
+  litro: 'litro',
+  ml: 'ml',
+  g: 'g',
 };
 
 export function formatIncidentLine(input: {

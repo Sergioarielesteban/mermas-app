@@ -39,6 +39,7 @@ import {
   type PedidoSupplierProduct,
 } from '@/lib/pedidos-supabase';
 import { PEDIDOS_SUPPLIERS_FROM_INVENTORY } from '@/lib/pedidos-inventory-import';
+import { PEDIDO_ORDER_UNITS, PEDIDO_RECIPE_UNITS } from '@/lib/pedidos-units';
 import type { Unit } from '@/lib/types';
 
 const PREFERRED_CONTACT_BY_SUPPLIER: Record<string, string> = {
@@ -63,11 +64,15 @@ function normalizeMatch(value: string) {
 function normalizeUnit(raw: string): Unit {
   const value = raw.trim().toLowerCase();
   if (value.includes('kg') || value === 'kilo' || value === 'kilos') return 'kg';
+  if (value.includes('docena')) return 'docena';
   if (value.includes('caja')) return 'caja';
   if (value.includes('paquete')) return 'paquete';
   if (value.includes('bandeja')) return 'bandeja';
   if (value.includes('bolsa')) return 'bolsa';
   if (value.includes('racion')) return 'racion';
+  if (value === 'l' || value.includes('litro')) return 'litro';
+  if (value.includes('ml')) return 'ml';
+  if (value === 'g' || value.includes('gr') || value.includes('gramo')) return 'g';
   return 'ud';
 }
 
@@ -920,13 +925,11 @@ export default function ProveedoresPage() {
               }}
               className="h-10 rounded-xl border border-zinc-300 bg-white px-3 text-sm text-zinc-900 outline-none"
             >
-              <option value="ud">ud</option>
-              <option value="kg">kg</option>
-              <option value="caja">caja</option>
-              <option value="paquete">paquete</option>
-              <option value="bandeja">bandeja</option>
-              <option value="bolsa">bolsa</option>
-              <option value="racion">racion</option>
+              {PEDIDO_ORDER_UNITS.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
             </select>
             {productDualKgBilling && unitSupportsReceivedWeightKg(productUnit) && productUnit !== 'kg' ? (
               <div className="flex h-10 items-center rounded-xl border border-zinc-200 bg-zinc-50 px-3 text-sm font-semibold text-zinc-800">
@@ -982,31 +985,30 @@ export default function ProveedoresPage() {
           <input
             value={productUnitsPerPack}
             onChange={(e) => setProductUnitsPerPack(e.target.value)}
-            placeholder="Piezas por envase en receta (1 = ya es precio por pieza)"
-            title="Ej. 40 panes en la caja. 1 = el precio ya es por unidad de receta."
+            placeholder="Unidades de uso interno por 1 unidad de pedido (ej. 12 huevos/docena)"
+            title="Ej. 12 si pides por docenas y el uso interno es por huevo (ud); 180 si 1 caja = 180 ud. 1 = el precio ya es por esa unidad de pedido."
             className="h-10 rounded-xl border border-zinc-300 bg-white px-3 text-sm text-zinc-900 placeholder:text-zinc-500 outline-none"
           />
           {parseUnitsPerPack(productUnitsPerPack) != null && parseUnitsPerPack(productUnitsPerPack)! > 1 ? (
             <div>
-              <label className="text-xs font-semibold text-zinc-600">Unidad en escandallo (por pieza)</label>
+              <label className="text-xs font-semibold text-zinc-600">Unidad de uso interna (escandallo / coste)</label>
               <select
                 value={productRecipeUnit}
                 onChange={(e) => setProductRecipeUnit(e.target.value as Unit)}
                 className="mt-1 h-10 w-full rounded-xl border border-zinc-300 bg-white px-3 text-sm text-zinc-900 outline-none"
               >
-                <option value="ud">ud</option>
-                <option value="kg">kg</option>
-                <option value="bolsa">bolsa</option>
-                <option value="racion">racion</option>
-                <option value="caja">caja</option>
-                <option value="paquete">paquete</option>
-                <option value="bandeja">bandeja</option>
+                {PEDIDO_RECIPE_UNITS.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
               </select>
             </div>
           ) : null}
           <p className="text-xs text-zinc-500">
-            El precio es por la unidad de pedido salvo «cobro por kg»: entonces se calcula como kg por envase × €/kg. Si un
-            envase trae varias piezas en receta, indica cuántas piezas.
+            La unidad de pedido (selector de arriba) es la que ves al hacer el pedido al proveedor. El precio es por esa
+            unidad salvo «cobro por kg». Si 1 docena / 1 caja equivale a varias unidades internas (huevos, piezas), indica
+            el factor y la unidad de uso interna.
           </p>
           <input
             value={productParWeekly}
@@ -1271,13 +1273,11 @@ export default function ProveedoresPage() {
                         }}
                         className="h-9 rounded-lg border border-zinc-300 bg-white px-3 text-sm text-zinc-900 outline-none"
                       >
-                        <option value="ud">ud</option>
-                        <option value="kg">kg</option>
-                        <option value="caja">caja</option>
-                        <option value="paquete">paquete</option>
-                        <option value="bandeja">bandeja</option>
-                        <option value="bolsa">bolsa</option>
-                        <option value="racion">racion</option>
+                        {PEDIDO_ORDER_UNITS.map((o) => (
+                          <option key={o.value} value={o.value}>
+                            {o.label}
+                          </option>
+                        ))}
                       </select>
                       {editDual ? (
                         <div className="flex h-9 items-center rounded-lg border border-zinc-200 bg-zinc-50 px-3 text-xs font-semibold text-zinc-800">
@@ -1447,13 +1447,11 @@ export default function ProveedoresPage() {
                         }
                         className="h-9 rounded-lg border border-zinc-300 bg-white px-3 text-sm text-zinc-900 outline-none"
                       >
-                        <option value="ud">ud (escandallo)</option>
-                        <option value="kg">kg</option>
-                        <option value="bolsa">bolsa</option>
-                        <option value="racion">racion</option>
-                        <option value="caja">caja</option>
-                        <option value="paquete">paquete</option>
-                        <option value="bandeja">bandeja</option>
+                        {PEDIDO_RECIPE_UNITS.map((o) => (
+                          <option key={o.value} value={o.value}>
+                            {o.label}
+                          </option>
+                        ))}
                       </select>
                     ) : null}
                     {!editDual && unitSupportsReceivedWeightKg(productDrafts[editP.id]?.unit ?? editP.unit) ? (

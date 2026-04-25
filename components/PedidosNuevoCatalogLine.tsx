@@ -4,6 +4,7 @@ import React from 'react';
 import { useRepeatPress } from '@/hooks/useRepeatPress';
 import { formatQuantityWithUnit, unitPriceCatalogSuffix } from '@/lib/pedidos-format';
 import { supplierProductHasDistinctBilling, type PedidoSupplierProduct } from '@/lib/pedidos-supabase';
+import { unitAllowsDecimalOrderQuantity } from '@/lib/pedidos-units';
 
 function shortUnitChip(unit: string): string {
   const u = unit.toLowerCase();
@@ -11,6 +12,10 @@ function shortUnitChip(unit: string): string {
   if (u === 'caja') return 'CAJ.';
   if (u === 'bolsa') return 'BOL.';
   if (u === 'racion') return 'RAC.';
+  if (u === 'docena') return 'DOC.';
+  if (u === 'litro') return 'L';
+  if (u === 'ml') return 'ML';
+  if (u === 'g') return 'G';
   return unit.toUpperCase();
 }
 
@@ -32,6 +37,12 @@ export default function PedidosNuevoCatalogLine({ product: p, qty, lineTotal, su
   const estKg =
     dual && qty > 0 && eq != null && eq > 0 ? Math.round(qty * eq * 1000) / 1000 : null;
   const ppk = dual && p.pricePerBillingUnit != null ? p.pricePerBillingUnit : null;
+  const pack = p.unitsPerPack > 0 ? p.unitsPerPack : 1;
+  const internalUseTotal =
+    pack > 1 && p.recipeUnit != null && qty > 0
+      ? Math.round(qty * pack * 10000) / 10000
+      : null;
+  const su = p.recipeUnit != null ? unitPriceCatalogSuffix[p.recipeUnit] : null;
 
   return (
     <div className="rounded-xl bg-zinc-50 p-3 ring-1 ring-zinc-200">
@@ -54,6 +65,12 @@ export default function PedidosNuevoCatalogLine({ product: p, qty, lineTotal, su
               Estimado: {estKg} kg · total estimado {lineTotal.toFixed(2)} €
             </p>
           ) : null}
+          {internalUseTotal != null && su != null ? (
+            <p className="mt-1 text-[11px] text-zinc-600">
+              Uso interno: {internalUseTotal.toLocaleString('es-ES', { maximumFractionDigits: 4 })} {su} ({pack}{' '}
+              {su} por {u})
+            </p>
+          ) : null}
           {suggestedQty != null ? (
             <p className="mt-1 text-[11px] font-semibold text-zinc-700">
               Cant. tramo: {formatQuantityWithUnit(suggestedQty, p.unit)}
@@ -74,13 +91,15 @@ export default function PedidosNuevoCatalogLine({ product: p, qty, lineTotal, su
         <input
           type="number"
           min={0}
-          step={p.unit === 'kg' ? 0.01 : 1}
+          step={unitAllowsDecimalOrderQuantity(p.unit) ? 0.01 : 1}
           inputMode="decimal"
           enterKeyHint="done"
           autoComplete="off"
           aria-label={`Cantidad ${p.name}`}
           className="h-10 min-w-[4.5rem] max-w-[6.5rem] flex-1 rounded-lg border border-zinc-300 bg-white px-2 text-center text-base font-semibold text-zinc-900 outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-          value={qty === 0 ? '' : p.unit === 'kg' ? qty : Math.round(qty)}
+          value={
+            qty === 0 ? '' : unitAllowsDecimalOrderQuantity(p.unit) ? qty : Math.round(qty)
+          }
           onChange={(e) => onManual(e.target.value)}
         />
         <button

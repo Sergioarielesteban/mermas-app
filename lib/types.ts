@@ -1,4 +1,20 @@
-export type Unit = 'kg' | 'ud' | 'bolsa' | 'racion' | 'caja' | 'paquete' | 'bandeja';
+/**
+ * Unidad de **pedido** (proveedor) y, en muchas líneas, la unidad almacenada en pedidos.
+ * Incluye unidades comerciales (docena, caja) distintas de la unidad de uso interna en recetas,
+ * que se relaciona vía `unitsPerPack` + `recipeUnit` en catálogo.
+ */
+export type Unit =
+  | 'kg'
+  | 'ud'
+  | 'bolsa'
+  | 'racion'
+  | 'caja'
+  | 'paquete'
+  | 'bandeja'
+  | 'docena'
+  | 'litro'
+  | 'ml'
+  | 'g';
 
 export type Product = {
   id: string;

@@ -15,6 +15,7 @@ export function unitSupportsReceivedWeightKg(unit: Unit): boolean {
   return (
     unit === 'bandeja' ||
     unit === 'caja' ||
+    unit === 'docena' ||
     unit === 'paquete' ||
     unit === 'bolsa' ||
     unit === 'ud' ||
