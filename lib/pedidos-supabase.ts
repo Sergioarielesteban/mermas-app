@@ -1237,6 +1237,131 @@ export async function updateSupplierProductPriceWithHistory(
   return { changed: true };
 }
 
+/** Fila de `pedido_supplier_product_price_history` (cambios de precio de catálogo, no líneas de pedido). */
+export type CatalogPriceHistoryListRow = {
+  id: string;
+  supplierProductId: string;
+  oldPricePerUnit: number;
+  newPricePerUnit: number;
+  source: SupplierProductPriceChangeSource;
+  createdAt: string;
+  isTest: boolean;
+  notes: string | null;
+};
+
+export type CatalogPriceHistoryFetchResult = {
+  rows: CatalogPriceHistoryListRow[];
+  /** Si false, la BD no expone is_test/notes: no se ofrece borrado masivo de pruebas. */
+  hasTestMetadataColumns: boolean;
+};
+
+function mapPriceHistoryRow(
+  r: {
+    id: string;
+    supplier_product_id: string;
+    old_price_per_unit: number | string;
+    new_price_per_unit: number | string;
+    source: string;
+    created_at: string;
+    is_test?: boolean;
+    notes?: string | null;
+  },
+  hasTestMeta: boolean,
+): CatalogPriceHistoryListRow {
+  return {
+    id: r.id,
+    supplierProductId: r.supplier_product_id,
+    oldPricePerUnit: Number(r.old_price_per_unit),
+    newPricePerUnit: Number(r.new_price_per_unit),
+    source: r.source as SupplierProductPriceChangeSource,
+    createdAt: r.created_at,
+    isTest: hasTestMeta ? Boolean(r.is_test) : false,
+    notes: hasTestMeta && r.notes != null ? String(r.notes) : null,
+  };
+}
+
+/**
+ * Historial de cambios de precio de catálogo (albarán / entrada rápida) en una ventana temporal.
+ * No incluye agregados desde líneas de pedido (eso es otra capa en la UI).
+ */
+export async function fetchCatalogPriceHistoryRows(
+  supabase: SupabaseClient,
+  localId: string,
+  window: { startMs: number; endMs: number },
+): Promise<CatalogPriceHistoryFetchResult> {
+  const startIso = new Date(window.startMs).toISOString();
+  const endIso = new Date(window.endMs).toISOString();
+  const q = supabase
+    .from('pedido_supplier_product_price_history')
+    .select('id, supplier_product_id, old_price_per_unit, new_price_per_unit, source, created_at, is_test, notes')
+    .eq('local_id', localId)
+    .gte('created_at', startIso)
+    .lte('created_at', endIso)
+    .order('created_at', { ascending: false });
+
+  let { data, error } = await q;
+  if (error) {
+    const msg = error.message.toLowerCase();
+    const code = (error as { code?: string }).code;
+    if (
+      msg.includes('is_test') ||
+      msg.includes('notes') ||
+      msg.includes('column') && (msg.includes('does not exist') || msg.includes('no existe')) ||
+      code === 'PGRST204' ||
+      code === '42703'
+    ) {
+      const r2 = await supabase
+        .from('pedido_supplier_product_price_history')
+        .select('id, supplier_product_id, old_price_per_unit, new_price_per_unit, source, created_at')
+        .eq('local_id', localId)
+        .gte('created_at', startIso)
+        .lte('created_at', endIso)
+        .order('created_at', { ascending: false });
+      if (r2.error) throw new Error(r2.error.message);
+      const rows = (r2.data ?? []).map((row) => mapPriceHistoryRow(row, false));
+      return { rows, hasTestMetadataColumns: false };
+    }
+    throw new Error(error.message);
+  }
+  const rows = (data ?? []).map((row) => mapPriceHistoryRow(row, true));
+  return { rows, hasTestMetadataColumns: true };
+}
+
+/**
+ * Elimina una fila del histórico de catálogo. No modifica `pedido_supplier_products` ni pedidos.
+ */
+export async function deleteCatalogPriceHistoryRow(
+  supabase: SupabaseClient,
+  localId: string,
+  id: string,
+) {
+  console.log('Deleting price history id:', id);
+  const { error } = await supabase
+    .from('pedido_supplier_product_price_history')
+    .delete()
+    .eq('id', id)
+    .eq('local_id', localId);
+  if (error) throw new Error(error.message);
+}
+
+/**
+ * Borra filas marcadas como prueba o con notas que contengan test/prueba (ilike).
+ * Requiere columnas is_test/notes. Si la BD no las tiene, no llames: devolverá 0 o error.
+ */
+export async function deleteCatalogPriceHistoryTestRows(
+  supabase: SupabaseClient,
+  localId: string,
+): Promise<{ deleted: number }> {
+  const { data, error } = await supabase
+    .from('pedido_supplier_product_price_history')
+    .delete()
+    .eq('local_id', localId)
+    .or('is_test.eq.true,notes.ilike.%test%,notes.ilike.%prueba%')
+    .select('id');
+  if (error) throw new Error(error.message);
+  return { deleted: (data ?? []).length };
+}
+
 export async function setSupplierProductActive(
   supabase: SupabaseClient,
   localId: string,

@@ -4,7 +4,7 @@ import Link from 'next/link';
 import React from 'react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { AlertTriangle, Download, Lightbulb, TrendingDown, TrendingUp } from 'lucide-react';
+import { AlertTriangle, Download, Lightbulb, Trash2, TrendingDown, TrendingUp } from 'lucide-react';
 import {
   CartesianGrid,
   Line,
@@ -16,14 +16,19 @@ import {
   YAxis,
 } from 'recharts';
 import { useAuth } from '@/components/AuthProvider';
+import { appAlert } from '@/lib/app-dialog-bridge';
 import { usePedidosOrders } from '@/components/PedidosOrdersProvider';
 import PedidosPremiaLockedScreen from '@/components/PedidosPremiaLockedScreen';
 import { canAccessPedidos, canUsePedidosModule } from '@/lib/pedidos-access';
 import { formatQuantityWithUnit } from '@/lib/pedidos-format';
 import {
   billingQuantityForLine,
+  deleteCatalogPriceHistoryRow,
+  deleteCatalogPriceHistoryTestRows,
+  fetchCatalogPriceHistoryRows,
   fetchSuppliersWithProducts,
   updateSupplierProductPriceWithHistory,
+  type CatalogPriceHistoryListRow,
   type PedidoOrder,
   type PedidoSupplier,
 } from '@/lib/pedidos-supabase';
@@ -219,6 +224,11 @@ function forecastPriceLinear(
 function escapeCsvCell(v: string): string {
   if (/[;"\n]/.test(v)) return `"${v.replace(/"/g, '""')}"`;
   return v;
+}
+
+function labelCatalogPriceHistorySource(source: CatalogPriceHistoryListRow['source']): string {
+  if (source === 'quick_input') return 'Entrada rápida';
+  return 'Albarán (validado)';
 }
 
 /** Umbral 0 = cualquier subida respecto al primer precio en la ventana (mínimo movimiento). */
@@ -797,6 +807,22 @@ export default function PedidosPreciosPage() {
   const [quickText, setQuickText] = React.useState('');
   const [quickBusy, setQuickBusy] = React.useState(false);
   const [quickFeedback, setQuickFeedback] = React.useState<string | null>(null);
+  const [catalogHistoryRows, setCatalogHistoryRows] = React.useState<CatalogPriceHistoryListRow[]>([]);
+  const [catalogHistoryLoading, setCatalogHistoryLoading] = React.useState(false);
+  const [catalogHistoryHasTestCols, setCatalogHistoryHasTestCols] = React.useState(false);
+  const [catalogHistoryDeleteBusy, setCatalogHistoryDeleteBusy] = React.useState(false);
+  const [deleteHistoryId, setDeleteHistoryId] = React.useState<string | null>(null);
+  const [confirmDeleteTestsOpen, setConfirmDeleteTestsOpen] = React.useState(false);
+
+  const productInfoBySupplierProductId = React.useMemo(() => {
+    const m = new Map<string, { productName: string; supplierName: string; supplierId: string }>();
+    for (const s of quickCatalog) {
+      for (const p of s.products) {
+        m.set(p.id, { productName: p.name, supplierName: s.name, supplierId: s.id });
+      }
+    }
+    return m;
+  }, [quickCatalog]);
 
   React.useEffect(() => {
     if (!localId || !canUse) return;
@@ -857,6 +883,29 @@ export default function PedidosPreciosPage() {
     return { windowStartMs: startMs, windowEndMs: endMs, windowLabel: label };
   }, [orders, windowPreset]);
 
+  const reloadCatalogPriceHistory = React.useCallback(async () => {
+    if (!localId || !canUse || !isSupabaseEnabled() || !getSupabaseClient()) return;
+    setCatalogHistoryLoading(true);
+    try {
+      const res = await fetchCatalogPriceHistoryRows(getSupabaseClient()!, localId, {
+        startMs: windowStartMs,
+        endMs: windowEndMs,
+      });
+      setCatalogHistoryRows(res.rows);
+      setCatalogHistoryHasTestCols(res.hasTestMetadataColumns);
+    } catch (e: unknown) {
+      setMessage(e instanceof Error ? e.message : 'No se pudo cargar el historial de catálogo.');
+      setCatalogHistoryRows([]);
+      setCatalogHistoryHasTestCols(false);
+    } finally {
+      setCatalogHistoryLoading(false);
+    }
+  }, [localId, canUse, windowStartMs, windowEndMs]);
+
+  React.useEffect(() => {
+    void reloadCatalogPriceHistory();
+  }, [reloadCatalogPriceHistory]);
+
   const series = React.useMemo(
     () => buildPriceSummaries(orders, windowStartMs, windowEndMs, priceMode, supplierFilter, catalogNameByProductId),
     [catalogNameByProductId, orders, supplierFilter, windowStartMs, windowEndMs, priceMode],
@@ -910,6 +959,22 @@ export default function PedidosPreciosPage() {
     if (!q) return series;
     return series.filter((s) => s.productName.toLowerCase().includes(q));
   }, [series, productSearch]);
+
+  const catalogHistoryFiltered = React.useMemo(() => {
+    let list = catalogHistoryRows;
+    if (supplierFilter) {
+      list = list.filter(
+        (r) => productInfoBySupplierProductId.get(r.supplierProductId)?.supplierId === supplierFilter,
+      );
+    }
+    const q = productSearch.trim().toLowerCase();
+    if (q) {
+      list = list.filter((r) =>
+        (productInfoBySupplierProductId.get(r.supplierProductId)?.productName ?? '').toLowerCase().includes(q),
+      );
+    }
+    return list;
+  }, [catalogHistoryRows, supplierFilter, productSearch, productInfoBySupplierProductId]);
 
   const actionRecommendations = React.useMemo((): ActionRecommendation[] => {
     const out: ActionRecommendation[] = [];
@@ -1395,13 +1460,45 @@ export default function PedidosPreciosPage() {
         setQuickText('');
         const list = await fetchSuppliersWithProducts(supabase, localId);
         setQuickCatalog(list);
+        void reloadCatalogPriceHistory();
       }
     } catch (e: unknown) {
       setQuickFeedback(e instanceof Error ? e.message : 'Error al actualizar.');
     } finally {
       setQuickBusy(false);
     }
-  }, [quickText, quickCatalog, supplierFilter, localId, userId]);
+  }, [quickText, quickCatalog, supplierFilter, localId, userId, reloadCatalogPriceHistory]);
+
+  const handleConfirmDeleteCatalogHistory = React.useCallback(async () => {
+    if (!deleteHistoryId || !localId || !isSupabaseEnabled() || !getSupabaseClient()) return;
+    setCatalogHistoryDeleteBusy(true);
+    try {
+      await deleteCatalogPriceHistoryRow(getSupabaseClient()!, localId, deleteHistoryId);
+      setDeleteHistoryId(null);
+      await reloadCatalogPriceHistory();
+    } catch {
+      await appAlert('No se pudo eliminar el registro.');
+    } finally {
+      setCatalogHistoryDeleteBusy(false);
+    }
+  }, [deleteHistoryId, localId, reloadCatalogPriceHistory]);
+
+  const handleConfirmDeleteTestHistory = React.useCallback(async () => {
+    if (!localId || !catalogHistoryHasTestCols || !isSupabaseEnabled() || !getSupabaseClient()) return;
+    setCatalogHistoryDeleteBusy(true);
+    try {
+      const { deleted } = await deleteCatalogPriceHistoryTestRows(getSupabaseClient()!, localId);
+      setConfirmDeleteTestsOpen(false);
+      await reloadCatalogPriceHistory();
+      if (deleted === 0) {
+        await appAlert('No había registros de prueba que coincidan (is_test o notas con test/prueba).');
+      }
+    } catch {
+      await appAlert('No se pudo eliminar el registro.');
+    } finally {
+      setCatalogHistoryDeleteBusy(false);
+    }
+  }, [localId, catalogHistoryHasTestCols, reloadCatalogPriceHistory]);
 
   if (!hasPedidosEntry) {
     return (
@@ -1547,6 +1644,92 @@ export default function PedidosPreciosPage() {
             <Download className="h-4 w-4" aria-hidden />
             CSV (Excel)
           </button>
+          <button
+            type="button"
+            disabled={!catalogHistoryHasTestCols || catalogHistoryDeleteBusy}
+            title={
+              catalogHistoryHasTestCols
+                ? 'Elimina solo filas con is_test o notas que contengan test o prueba'
+                : 'No hay columnas is_test/notas en la base: ejecuta supabase-pedidos-price-history-delete-and-test-columns.sql'
+            }
+            onClick={() => setConfirmDeleteTestsOpen(true)}
+            className="inline-flex h-10 items-center gap-2 rounded-xl border border-zinc-300 bg-white px-4 text-sm font-semibold text-zinc-800 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <Trash2 className="h-4 w-4" aria-hidden />
+            Eliminar pruebas
+          </button>
+        </div>
+
+        <div className="mt-6 rounded-xl border border-zinc-100 bg-zinc-50/60 p-4 ring-1 ring-zinc-100">
+          <p className="text-[10px] font-black uppercase tracking-wide text-zinc-500">Historial de catálogo (Supabase)</p>
+          <p className="mt-1 text-xs text-zinc-600">
+            Cambios de precio por albarán validado o entrada rápida. Quitar una fila solo borra el registro histórico; no
+            cambia el precio actual del artículo ni pedidos.
+          </p>
+          {catalogHistoryLoading ? (
+            <p className="mt-3 text-sm text-zinc-500">Cargando historial…</p>
+          ) : catalogHistoryFiltered.length === 0 ? (
+            <p className="mt-3 text-sm text-zinc-500">
+              {catalogHistoryRows.length === 0
+                ? 'No hay registros de historial de catálogo en este periodo.'
+                : 'Ningún registro coincide con proveedor o búsqueda actuales.'}
+            </p>
+          ) : (
+            <div className="mt-3 overflow-x-auto rounded-lg ring-1 ring-zinc-200">
+              <table className="w-full min-w-[720px] text-left text-xs">
+                <thead className="bg-zinc-100 text-[10px] font-bold uppercase tracking-wide text-zinc-500">
+                  <tr>
+                    <th className="px-2 py-2">Fecha</th>
+                    <th className="px-2 py-2">Producto</th>
+                    <th className="px-2 py-2">Proveedor</th>
+                    <th className="px-2 py-2">Origen</th>
+                    <th className="px-2 py-2 text-right">Ant. → Nuevo</th>
+                    <th className="w-12 px-2 py-2 text-right" aria-label="Acciones" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {catalogHistoryFiltered.map((h) => {
+                    const info = productInfoBySupplierProductId.get(h.supplierProductId);
+                    return (
+                      <tr key={h.id} className="border-t border-zinc-100 bg-white">
+                        <td className="whitespace-nowrap px-2 py-2 text-zinc-700">
+                          {new Date(h.createdAt).toLocaleString('es-ES', {
+                            day: '2-digit',
+                            month: 'short',
+                            year: '2-digit',
+                            hour: '2-digit',
+                            minute: '2-digit',
+                          })}
+                        </td>
+                        <td className="max-w-[10rem] truncate px-2 py-2 font-medium text-zinc-900" title={info?.productName}>
+                          {info?.productName ?? h.supplierProductId.slice(0, 8) + '…'}
+                        </td>
+                        <td className="max-w-[8rem] truncate px-2 py-2 text-zinc-600" title={info?.supplierName}>
+                          {info?.supplierName ?? '—'}
+                        </td>
+                        <td className="px-2 py-2 text-zinc-600">{labelCatalogPriceHistorySource(h.source)}</td>
+                        <td className="whitespace-nowrap px-2 py-2 text-right tabular-nums text-zinc-800">
+                          {h.oldPricePerUnit.toFixed(2)} → {h.newPricePerUnit.toFixed(2)} €
+                        </td>
+                        <td className="px-1 py-1 text-right">
+                          <button
+                            type="button"
+                            disabled={catalogHistoryDeleteBusy}
+                            onClick={() => setDeleteHistoryId(h.id)}
+                            className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-zinc-500 ring-1 ring-zinc-200 hover:bg-red-50 hover:text-red-800 disabled:opacity-50"
+                            aria-label="Eliminar"
+                            title="Eliminar este registro del histórico"
+                          >
+                            <Trash2 className="h-4 w-4" aria-hidden />
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       </section>
 
@@ -1799,6 +1982,96 @@ export default function PedidosPreciosPage() {
           );
         })}
       </section>
+
+      {deleteHistoryId != null ? (
+        <div className="fixed inset-0 z-[100] flex items-end justify-center p-4 sm:items-center">
+          <button
+            type="button"
+            className="absolute inset-0 bg-black/45"
+            aria-label="Cerrar"
+            onClick={() => {
+              if (!catalogHistoryDeleteBusy) setDeleteHistoryId(null);
+            }}
+          />
+          <div
+            className="relative z-10 w-full max-w-md rounded-2xl border border-zinc-200/90 bg-white p-5 shadow-2xl ring-1 ring-zinc-100"
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="delete-price-history-title"
+          >
+            <p id="delete-price-history-title" className="text-base font-bold text-zinc-900">
+              ¿Eliminar esta evolución de precio?
+            </p>
+            <p className="mt-2 text-sm leading-relaxed text-zinc-600">
+              Esta acción quitará este registro del histórico. No afecta al producto ni al proveedor.
+            </p>
+            <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                disabled={catalogHistoryDeleteBusy}
+                className="h-11 rounded-xl border border-zinc-300 bg-white px-4 text-sm font-bold text-zinc-800"
+                onClick={() => setDeleteHistoryId(null)}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={catalogHistoryDeleteBusy}
+                className="h-11 rounded-xl bg-[#D32F2F] px-4 text-sm font-black tracking-wide text-white"
+                onClick={() => void handleConfirmDeleteCatalogHistory()}
+              >
+                {catalogHistoryDeleteBusy ? 'Eliminando…' : 'Eliminar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {confirmDeleteTestsOpen ? (
+        <div className="fixed inset-0 z-[100] flex items-end justify-center p-4 sm:items-center">
+          <button
+            type="button"
+            className="absolute inset-0 bg-black/45"
+            aria-label="Cerrar"
+            onClick={() => {
+              if (!catalogHistoryDeleteBusy) setConfirmDeleteTestsOpen(false);
+            }}
+          />
+          <div
+            className="relative z-10 w-full max-w-md rounded-2xl border border-zinc-200/90 bg-white p-5 shadow-2xl ring-1 ring-zinc-100"
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="delete-tests-title"
+          >
+            <p id="delete-tests-title" className="text-base font-bold text-zinc-900">
+              ¿Eliminar registros de prueba?
+            </p>
+            <p className="mt-2 text-sm leading-relaxed text-zinc-600">
+              Se eliminarán las filas con <span className="font-semibold">is_test = true</span> o cuyo campo notas
+              contenga «test» o «prueba». No afecta a productos, proveedores ni pedidos. El precio actual del catálogo no
+              cambia.
+            </p>
+            <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                disabled={catalogHistoryDeleteBusy}
+                className="h-11 rounded-xl border border-zinc-300 bg-white px-4 text-sm font-bold text-zinc-800"
+                onClick={() => setConfirmDeleteTestsOpen(false)}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={catalogHistoryDeleteBusy}
+                className="h-11 rounded-xl bg-[#D32F2F] px-4 text-sm font-black tracking-wide text-white"
+                onClick={() => void handleConfirmDeleteTestHistory()}
+              >
+                {catalogHistoryDeleteBusy ? 'Eliminando…' : 'Eliminar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
