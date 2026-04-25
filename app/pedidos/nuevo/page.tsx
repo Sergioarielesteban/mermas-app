@@ -20,7 +20,7 @@ import {
   weeklyParScaledToCoverageDays,
 } from '@/lib/pedidos-coverage';
 import PedidosNuevoCatalogLine from '@/components/PedidosNuevoCatalogLine';
-import { formatQuantityWithUnit } from '@/lib/pedidos-format';
+import { buildPedidoWhatsappMessage } from '@/lib/pedidos-whatsapp-message';
 import { applyQuantityTapDelta, parseQuantityManualInput } from '@/lib/pedidos-order-quantity';
 import {
   readSuppliersSessionCache,
@@ -43,13 +43,7 @@ type QtyMap = Record<string, number>;
 
 const basketSessionKey = (localId: string) => `chefone_pedidos_basket:${localId}`;
 
-function normalizeLocalForWhatsapp(raw: string) {
-  const cleaned = raw.replace(/\bCAN\b/gi, '').replace(/\s+/g, ' ').trim();
-  return cleaned || 'CHEF-ONE MATARO';
-}
-
 function buildWhatsappDraftMessage(input: {
-  supplierName: string;
   createdAtIso: string;
   deliveryDate: string;
   localName: string;
@@ -58,24 +52,19 @@ function buildWhatsappDraftMessage(input: {
   items: PedidoOrderItem[];
   contentRevisedAfterSent?: boolean;
 }) {
-  const fechaPedido = new Date(input.createdAtIso).toLocaleDateString('es-ES');
-  return [
-    `Proveedor: ${input.supplierName}`,
-    `Fecha pedido: ${fechaPedido}`,
-    `Fecha entrega: ${input.deliveryDate}`,
-    `Local: ${normalizeLocalForWhatsapp(input.localName || 'CHEF-ONE MATARO')}`,
-    `Pedido por: ${input.requestedBy}`,
-    input.contentRevisedAfterSent ? '— Pedido actualizado (líneas revisadas tras el envío anterior). —' : '',
-    '------------------------------',
-    'PEDIDO:',
-    '------------------------------',
-    ...input.items.map((item) => `- ${item.productName}: ${formatQuantityWithUnit(item.quantity, item.unit)}`),
-    '------------------------------',
-    input.notes ? `Notas: ${input.notes}` : '',
-    'Por favor, confirmar pedido. Gracias.',
-  ]
-    .filter(Boolean)
-    .join('\n');
+  return buildPedidoWhatsappMessage({
+    localDisplayName: input.localName || 'CHEF-ONE MATARO',
+    fechaPedidoDisplay: new Date(input.createdAtIso).toLocaleDateString('es-ES'),
+    fechaEntregaDisplay: input.deliveryDate,
+    responsable: input.requestedBy.trim() || '—',
+    items: input.items.map((item) => ({
+      productName: item.productName,
+      quantity: item.quantity,
+      unit: item.unit,
+    })),
+    contentRevisedAfterSent: input.contentRevisedAfterSent,
+    notes: input.notes?.trim() || undefined,
+  });
 }
 
 export default function NuevoPedidoPage() {
@@ -647,7 +636,6 @@ export default function NuevoPedidoPage() {
         resetPedidoFormAfterSuccess();
         void pullNewOrderIntoStore(orderId);
         const whatsappMessage = buildWhatsappDraftMessage({
-          supplierName: selectedSupplier.name,
           createdAtIso: existingCreatedAt ?? new Date().toISOString(),
           deliveryDate: parsed.toLocaleDateString('es-ES'),
           localName: localName ?? 'MATARO',

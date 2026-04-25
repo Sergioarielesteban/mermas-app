@@ -100,6 +100,7 @@ import {
   notifyIncidenciaRecepcionDeduped,
   notifyPedidoRecibido,
 } from '@/services/notifications';
+import { buildPedidoWhatsappMessage } from '@/lib/pedidos-whatsapp-message';
 import { openWhatsApp, normalizeWhatsappPhone } from '@/lib/whatsapp';
 import {
   articleNombreByProductIdFromSuppliers,
@@ -108,40 +109,26 @@ import {
   orderLineSearchBubble,
 } from '@/lib/pedidos-line-display-name';
 
-function normalizeLocalForWhatsapp(raw: string) {
-  const cleaned = raw.replace(/\bCAN\b/gi, '').replace(/\s+/g, ' ').trim();
-  return cleaned || 'CHEF-ONE MATARO';
-}
-
 function buildWhatsappOrderMessage(
   order: PedidoOrder,
   deliveryDate: string,
   localName: string,
-  requestedBy: string,
+  responsable: string,
   catalogNameByProductId?: ReadonlyMap<string, string> | null,
 ) {
-  const fechaPedido = new Date(order.createdAt).toLocaleDateString('es-ES');
-  const lines = order.items.map(
-    (item) =>
-      `- ${orderLineDisplayName(item, catalogNameByProductId ?? null)}: ${formatQuantityWithUnit(item.quantity, item.unit)}`,
-  );
-  return [
-    `Proveedor: ${order.supplierName}`,
-    `Fecha pedido: ${fechaPedido}`,
-    `Fecha entrega: ${deliveryDate}`,
-    `Local: ${normalizeLocalForWhatsapp(localName || 'CHEF-ONE MATARO')}`,
-    `Pedido por: ${requestedBy}`,
-    order.contentRevisedAfterSentAt ? '— Pedido actualizado (líneas revisadas tras el envío anterior). —' : '',
-    '------------------------------',
-    'PEDIDO:',
-    '------------------------------',
-    ...lines,
-    '------------------------------',
-    order.notes ? `Notas: ${order.notes}` : '',
-    'Por favor, confirmar pedido. Gracias.',
-  ]
-    .filter(Boolean)
-    .join('\n');
+  return buildPedidoWhatsappMessage({
+    localDisplayName: localName || 'CHEF-ONE MATARO',
+    fechaPedidoDisplay: new Date(order.createdAt).toLocaleDateString('es-ES'),
+    fechaEntregaDisplay: deliveryDate,
+    responsable,
+    items: order.items.map((item) => ({
+      productName: orderLineDisplayName(item, catalogNameByProductId ?? null),
+      quantity: item.quantity,
+      unit: item.unit,
+    })),
+    contentRevisedAfterSent: Boolean(order.contentRevisedAfterSentAt),
+    notes: order.notes?.trim() || undefined,
+  });
 }
 
 function catalogPriceMapFromSuppliers(suppliers: PedidoSupplier[]) {
@@ -461,12 +448,13 @@ export default function PedidosPage() {
     const deliveryDate = Number.isNaN(parsed.getTime())
       ? new Date(order.createdAt).toLocaleDateString('es-ES')
       : parsed.toLocaleDateString('es-ES');
-    const requestedBy = (email ?? 'EQUIPO').split('@')[0] || 'EQUIPO';
+    const responsable =
+      getPedidoRequesterDisplayName(order) ?? ((email ?? 'EQUIPO').split('@')[0] || 'EQUIPO');
     const whatsappMessage = buildWhatsappOrderMessage(
       order,
       deliveryDate,
       localName ?? 'CHEF-ONE MATARO',
-      requestedBy,
+      responsable,
       catalogNameByProductId,
     );
     openWhatsApp(phone, whatsappMessage);
