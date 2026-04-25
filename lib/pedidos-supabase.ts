@@ -158,6 +158,14 @@ export type PedidoSupplierProduct = {
   id: string;
   /** Artículo base (purchase_articles); opcional hasta migrar o enlazar. */
   articleId?: string | null;
+  /**
+   * Nombre del artículo máster (solo capa interna; no sustituye a `name` en UI de pedidos).
+   * Puede rellenarse vía join en carga de catálogo para búsquedas.
+   */
+  articleMasterName?: string | null;
+  /** `purchase_articles.nombre_corto` (alias interno cocina) si el join lo trae. */
+  articleAliasInterno?: string | null;
+  /** Nombre del producto en catálogo del proveedor (albarán / operativa). */
   name: string;
   unit: Unit;
   pricePerUnit: number;
@@ -195,6 +203,10 @@ export type PedidoSupplier = {
 export type PedidoOrderItem = {
   id: string;
   supplierProductId: string | null;
+  /**
+   * Nombre fijado en `purchase_order_items.product_name` (snapshot al crear/editar;
+   * debe rellenarse con `pedido_supplier_products.name`, no con el título de artículo máster).
+   */
   productName: string;
   unit: Unit;
   quantity: number;
@@ -288,6 +300,8 @@ type SupplierProductRow = {
   billing_unit?: string | null;
   billing_qty_per_order_unit?: number | null;
   price_per_billing_unit?: number | null;
+  /** Join PostgREST opcional */
+  purchase_articles?: { nombre?: string | null; nombre_corto?: string | null } | { nombre?: string | null; nombre_corto?: string | null }[] | null;
 };
 type OrderRow = {
   id: string;
@@ -607,30 +621,25 @@ export async function fetchSuppliersWithProducts(supabase: SupabaseClient, local
 
   let productRows: unknown[] | null = null;
   {
-    const full = await supabase
-      .from('pedido_supplier_products')
-      .select(
-        'id,supplier_id,article_id,name,unit,price_per_unit,units_per_pack,recipe_unit,vat_rate,par_stock,is_active,estimated_kg_per_unit,billing_unit,billing_qty_per_order_unit,price_per_billing_unit',
-      )
-      .eq('local_id', localId)
-      .eq('is_active', true)
-      .order('name');
-    if (full.error && isMissingOrderItemBillingColumnsError(full.error.message)) {
-      const legacy = await supabase
-        .from('pedido_supplier_products')
-        .select(
-          'id,supplier_id,article_id,name,unit,price_per_unit,units_per_pack,recipe_unit,vat_rate,par_stock,is_active,estimated_kg_per_unit',
-        )
-        .eq('local_id', localId)
-        .eq('is_active', true)
-        .order('name');
-      if (legacy.error) throw new Error(legacy.error.message);
-      productRows = legacy.data ?? [];
-    } else if (full.error) {
-      throw new Error(full.error.message);
-    } else {
-      productRows = full.data ?? [];
+    const selLegacy =
+      'id,supplier_id,article_id,name,unit,price_per_unit,units_per_pack,recipe_unit,vat_rate,par_stock,is_active,estimated_kg_per_unit';
+    const selBilling = `${selLegacy},billing_unit,billing_qty_per_order_unit,price_per_billing_unit`;
+    const selBillingArticle = `${selBilling},purchase_articles(nombre,nombre_corto)`;
+    const q = (selectStr: string) =>
+      supabase.from('pedido_supplier_products').select(selectStr).eq('local_id', localId).eq('is_active', true).order('name');
+    let res = await q(selBillingArticle);
+    if (res.error) {
+      if (isMissingOrderItemBillingColumnsError(res.error.message)) {
+        res = await q(selLegacy);
+      } else {
+        res = await q(selBilling);
+      }
     }
+    if (res.error && isMissingOrderItemBillingColumnsError(res.error.message)) {
+      res = await q(selLegacy);
+    }
+    if (res.error) throw new Error(res.error.message);
+    productRows = res.data ?? [];
   }
 
   let exceptionRows: SupplierDeliveryExceptionRow[] = [];
@@ -655,12 +664,25 @@ export async function fetchSuppliersWithProducts(supabase: SupabaseClient, local
       unitsPerPack > 1 && row.recipe_unit != null && String(row.recipe_unit).trim() !== ''
         ? (String(row.recipe_unit) as Unit)
         : null;
+    const paRaw = row.purchase_articles;
+    const paOne = Array.isArray(paRaw) ? paRaw[0] : paRaw;
+    const articleMasterName =
+      paOne && typeof paOne === 'object' && paOne.nombre != null && String(paOne.nombre).trim() !== ''
+        ? String(paOne.nombre).trim()
+        : undefined;
+    const articleAliasInterno =
+      paOne && typeof paOne === 'object' && paOne.nombre_corto != null && String(paOne.nombre_corto).trim() !== ''
+        ? String(paOne.nombre_corto).trim()
+        : undefined;
+
     const list = bySupplier.get(row.supplier_id) ?? [];
     list.push({
       id: row.id,
       ...(row.article_id != null && String(row.article_id).trim() !== ''
         ? { articleId: String(row.article_id) }
         : {}),
+      ...(articleMasterName != null ? { articleMasterName } : {}),
+      ...(articleAliasInterno != null ? { articleAliasInterno } : {}),
       name: row.name,
       unit: row.unit as Unit,
       pricePerUnit: Number(row.price_per_unit),

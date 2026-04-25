@@ -10,7 +10,7 @@ import { CHEF_ONE_TAPER_LINE_CLASS } from '@/components/ChefOneGlowLine';
 import { appConfirm } from '@/lib/app-dialog-bridge';
 import { getSupabaseClient } from '@/lib/supabase-client';
 import PedidosPremiaLockedScreen from '@/components/PedidosPremiaLockedScreen';
-import { dispatchPedidosDataChanged } from '@/hooks/usePedidosDataChangedListener';
+import { dispatchPedidosDataChanged, usePedidosDataChangedListener } from '@/hooks/usePedidosDataChangedListener';
 import { canAccessPedidos, canUsePedidosModule } from '@/lib/pedidos-access';
 import RecepcionLineRow from '@/components/pedidos/recepcion/RecepcionLineRow';
 import { formatQuantityWithUnit, unitPriceCatalogSuffix } from '@/lib/pedidos-format';
@@ -24,6 +24,7 @@ import {
   fetchAvgReceivedPricePerKgBySupplierProductIds,
   fetchLastReceivedPricePerKgBySupplierProductIds,
   fetchReceptionEuroPerKgHintsBySupplierProductIds,
+  fetchSuppliersWithProducts,
   persistReceptionItemTotals,
   receptionLineTotals,
   resolveReceivedWeightKgForReceptionPreview,
@@ -36,8 +37,13 @@ import {
   updateOrderItemReceivedWeightKg,
   type PedidoOrder,
   type PedidoOrderItem,
+  type PedidoSupplier,
   type ReceptionEuroPerKgHints,
 } from '@/lib/pedidos-supabase';
+import {
+  catalogNameByProductIdFromSuppliers,
+  orderLineDisplayName,
+} from '@/lib/pedidos-line-display-name';
 import { actorLabel, notifyIncidenciaRecepcionDeduped } from '@/services/notifications';
 
 function orderHasAnyIncident(order: PedidoOrder): boolean {
@@ -63,11 +69,35 @@ export default function RecepcionPedidosPage() {
     [allOrders],
   );
   const [message, setMessage] = React.useState<string | null>(null);
+  const [catalogSuppliers, setCatalogSuppliers] = React.useState<PedidoSupplier[]>([]);
   const [priceInputByItemId, setPriceInputByItemId] = React.useState<Record<string, string>>({});
   const priceInputRef = React.useRef<Record<string, string>>({});
   priceInputRef.current = priceInputByItemId;
   const ordersRef = React.useRef(orders);
   ordersRef.current = orders;
+
+  const catalogNameByProductId = React.useMemo(
+    () => catalogNameByProductIdFromSuppliers(catalogSuppliers),
+    [catalogSuppliers],
+  );
+
+  const reloadCatalogSuppliers = React.useCallback(() => {
+    if (!localId) {
+      setCatalogSuppliers([]);
+      return;
+    }
+    const supabase = getSupabaseClient();
+    if (!supabase) return;
+    void fetchSuppliersWithProducts(supabase, localId)
+      .then((rows) => setCatalogSuppliers(rows))
+      .catch(() => setCatalogSuppliers([]));
+  }, [localId]);
+
+  React.useEffect(() => {
+    reloadCatalogSuppliers();
+  }, [reloadCatalogSuppliers]);
+
+  usePedidosDataChangedListener(reloadCatalogSuppliers, Boolean(hasPedidosEntry && canUse));
 
   const getLinePrice = React.useCallback((item: PedidoOrder['items'][number], priceDraft?: string) => {
     const raw = priceDraft !== undefined ? priceDraft : priceInputRef.current[item.id];
@@ -652,6 +682,7 @@ export default function RecepcionPedidosPage() {
                       key={item.id}
                       orderId={order.id}
                       item={item}
+                      lineDisplayName={orderLineDisplayName(item, catalogNameByProductId)}
                       suggestedEuroPerKg={sug.value}
                       suggestionSource={sug.source}
                       commitWeightInput={commitWeightInput}
@@ -812,7 +843,9 @@ export default function RecepcionPedidosPage() {
                               key={item.id}
                               className="space-y-1 rounded-lg bg-white p-2 ring-1 ring-zinc-200"
                             >
-                              <p className="text-sm font-semibold leading-tight text-zinc-800">{item.productName}</p>
+                              <p className="text-sm font-semibold leading-tight text-zinc-800">
+                                {orderLineDisplayName(item, catalogNameByProductId)}
+                              </p>
                               <p className="text-xs text-zinc-600">
                                 Pedido:{' '}
                                 <span className="text-base font-bold tabular-nums text-zinc-900">

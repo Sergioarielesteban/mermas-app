@@ -62,6 +62,8 @@ function buildPreviewItem(
 export type RecepcionLineRowProps = {
   orderId: string;
   item: PedidoOrderItem;
+  /** Nombre operativo (catálogo proveedor). Si se omite, se usa `item.productName` (snapshot en línea). */
+  lineDisplayName?: string;
   suggestedEuroPerKg: number | null;
   suggestionSource: EuroPerKgSuggestionSource | null;
   commitWeightInput: (orderId: string, itemId: string, rawKg: string, priceDraft?: string) => void;
@@ -71,6 +73,7 @@ export type RecepcionLineRowProps = {
 
 function recepcionLineRowPropsEqual(a: RecepcionLineRowProps, b: RecepcionLineRowProps): boolean {
   if (a.orderId !== b.orderId || a.item.id !== b.item.id) return false;
+  if (a.lineDisplayName !== b.lineDisplayName) return false;
   const x = a.item;
   const y = b.item;
   return (
@@ -95,6 +98,7 @@ function recepcionLineRowPropsEqual(a: RecepcionLineRowProps, b: RecepcionLineRo
 function RecepcionLineRowInner({
   orderId,
   item,
+  lineDisplayName,
   suggestedEuroPerKg,
   suggestionSource,
   commitWeightInput,
@@ -181,7 +185,7 @@ function RecepcionLineRowInner({
 
   return (
     <div className="space-y-1 rounded-lg bg-white p-2 ring-1 ring-zinc-200">
-      <p className="text-sm font-semibold leading-tight text-zinc-800">{item.productName}</p>
+      <p className="text-sm font-semibold leading-tight text-zinc-800">{lineDisplayName ?? item.productName}</p>
       <p className="text-xs text-zinc-600">
         Pedido:{' '}
         <span className="text-base font-bold tabular-nums text-zinc-900 sm:text-lg">

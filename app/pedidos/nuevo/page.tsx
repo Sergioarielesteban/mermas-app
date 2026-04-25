@@ -262,8 +262,15 @@ export default function NuevoPedidoPage() {
     return (selectedSupplier.deliveryExceptionDates ?? []).includes(deliveryDate);
   }, [deliveryDate, selectedSupplier]);
 
+  const qSearch = search.trim().toLowerCase();
   const filteredProducts = supplierProducts
-    .filter((p) => p.name.toLowerCase().includes(search.trim().toLowerCase()))
+    .filter((p) => {
+      if (!qSearch) return true;
+      if (p.name.toLowerCase().includes(qSearch)) return true;
+      if (p.articleMasterName?.toLowerCase().includes(qSearch)) return true;
+      if (p.articleAliasInterno?.toLowerCase().includes(qSearch)) return true;
+      return false;
+    })
     .sort((a, b) => a.name.localeCompare(b.name, 'es'));
 
   React.useEffect(() => {

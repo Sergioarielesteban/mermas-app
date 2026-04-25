@@ -95,16 +95,29 @@ import {
   notifyPedidoRecibido,
 } from '@/services/notifications';
 import { openWhatsApp, normalizeWhatsappPhone } from '@/lib/whatsapp';
+import {
+  articleNombreByProductIdFromSuppliers,
+  catalogNameByProductIdFromSuppliers,
+  orderLineDisplayName,
+  orderLineSearchBubble,
+} from '@/lib/pedidos-line-display-name';
 
 function normalizeLocalForWhatsapp(raw: string) {
   const cleaned = raw.replace(/\bCAN\b/gi, '').replace(/\s+/g, ' ').trim();
   return cleaned || 'CHEF-ONE MATARO';
 }
 
-function buildWhatsappOrderMessage(order: PedidoOrder, deliveryDate: string, localName: string, requestedBy: string) {
+function buildWhatsappOrderMessage(
+  order: PedidoOrder,
+  deliveryDate: string,
+  localName: string,
+  requestedBy: string,
+  catalogNameByProductId?: ReadonlyMap<string, string> | null,
+) {
   const fechaPedido = new Date(order.createdAt).toLocaleDateString('es-ES');
   const lines = order.items.map(
-    (item) => `- ${item.productName}: ${formatQuantityWithUnit(item.quantity, item.unit)}`,
+    (item) =>
+      `- ${orderLineDisplayName(item, catalogNameByProductId ?? null)}: ${formatQuantityWithUnit(item.quantity, item.unit)}`,
   );
   return [
     `Proveedor: ${order.supplierName}`,
@@ -151,11 +164,18 @@ function draftIncidentNoteForSentOrder(order: PedidoOrder, marks: Record<string,
   return uniq.join(' · ');
 }
 
-function historicoIncidentFooterText(order: PedidoOrder): string | null {
+function historicoIncidentFooterText(
+  order: PedidoOrder,
+  catalogNameByProductId?: ReadonlyMap<string, string> | null,
+): string | null {
   const rows: { name: string; text: string }[] = [];
   for (const item of order.items) {
     const t = formatIncidentLine(item);
-    if (t) rows.push({ name: item.productName, text: t });
+    if (t)
+      rows.push({
+        name: orderLineDisplayName(item, catalogNameByProductId ?? null),
+        text: t,
+      });
   }
   if (rows.length === 0) return null;
   const unique = [...new Set(rows.map((r) => r.text))];
@@ -397,6 +417,8 @@ export default function PedidosPage() {
   const ordersRef = React.useRef(orders);
   ordersRef.current = orders;
   const [catalogPriceByProductId, setCatalogPriceByProductId] = React.useState<Map<string, number>>(() => new Map());
+  const [catalogNameByProductId, setCatalogNameByProductId] = React.useState<Map<string, string>>(() => new Map());
+  const [articleNombreByProductId, setArticleNombreByProductId] = React.useState<Map<string, string>>(() => new Map());
   const [message, setMessage] = React.useState<string | null>(null);
   const [showDeletedBanner, setShowDeletedBanner] = React.useState(false);
   const deletedBannerTimeoutRef = React.useRef<number | null>(null);
@@ -431,10 +453,11 @@ export default function PedidosPage() {
       deliveryDate,
       localName ?? 'CHEF-ONE MATARO',
       requestedBy,
+      catalogNameByProductId,
     );
     openWhatsApp(phone, whatsappMessage);
   },
-  [email, localName],
+  [catalogNameByProductId, email, localName],
 );
 
   const [expandedSentId, setExpandedSentId] = React.useState<string | null>(null);
@@ -1271,7 +1294,7 @@ export default function PedidosPage() {
           const rawPpk = pricePerKgInputRef.current[item.id];
           if (rawW !== undefined && rawW.trim() !== '') {
             const p = parseReceivedKg(rawW);
-            if (p === 'invalid') throw new Error(`Peso inválido en ${item.productName}.`);
+            if (p === 'invalid') throw new Error(`Peso inválido en ${orderLineDisplayName(item, catalogNameByProductId)}.`);
           }
           const parsedWeight = unitCanDeclareScaleKgOnReception(item.unit)
             ? resolveReceivedWeightKgForReceptionPreview(item, rawW)
@@ -1279,7 +1302,7 @@ export default function PedidosPage() {
           let parsedPpk: number | null = item.receivedPricePerKg ?? null;
           if (rawPpk !== undefined) {
             const p = parsePricePerKg(rawPpk);
-            if (p === 'invalid') throw new Error(`€/kg inválido en ${item.productName}.`);
+            if (p === 'invalid') throw new Error(`€/kg inválido en ${orderLineDisplayName(item, catalogNameByProductId)}.`);
             parsedPpk = p;
           } else if (
             unitSupportsReceivedWeightKg(item.unit) &&
@@ -1311,7 +1334,7 @@ export default function PedidosPage() {
         }),
       );
     },
-    [getLinePrice, localId, resolvePpkForItemSnap],
+    [catalogNameByProductId, getLinePrice, localId, resolvePpkForItemSnap],
   );
 
   const commitSentOrderAsReceived = React.useCallback(
@@ -1438,6 +1461,8 @@ export default function PedidosPage() {
       .then((rows) => {
         const map = catalogPriceMapFromSuppliers(rows);
         setCatalogPriceByProductId(map);
+        setCatalogNameByProductId(catalogNameByProductIdFromSuppliers(rows));
+        setArticleNombreByProductId(articleNombreByProductIdFromSuppliers(rows));
         writeCatalogPricesSessionCache(lid, map);
       })
       .catch(() => {
@@ -1484,6 +1509,11 @@ export default function PedidosPage() {
   const receivedOrders = React.useMemo(
     () => orders.filter((row) => row.status === 'received'),
     [orders],
+  );
+
+  const lineLabel = React.useCallback(
+    (item: PedidoOrderItem) => orderLineDisplayName(item, catalogNameByProductId),
+    [catalogNameByProductId],
   );
 
   /** Histórico recibidos: mes (YYYY-MM) → pedidos, orden global por recepción descendente. */
@@ -2031,11 +2061,11 @@ export default function PedidosPage() {
           const when = new Date(o.receivedAt ?? o.sentAt ?? o.createdAt).getTime();
           if (!Number.isFinite(when) || when < fromTs) continue;
           for (const i of o.items) {
-            const name = normalizeText(i.productName);
-            if (!name.includes(productNeedle)) continue;
+            const bubble = orderLineSearchBubble(i, catalogNameByProductId, articleNombreByProductId);
+            if (!normalizeText(bubble).includes(productNeedle)) continue;
             rows.push({
               supplier: o.supplierName,
-              product: i.productName,
+              product: orderLineDisplayName(i, catalogNameByProductId),
               price: i.pricePerUnit,
               date: new Date(o.receivedAt ?? o.sentAt ?? o.createdAt).toLocaleDateString('es-ES'),
               ts: when,
@@ -2085,10 +2115,11 @@ export default function PedidosPage() {
           const when = new Date(o.receivedAt ?? o.sentAt ?? o.createdAt).getTime();
           if (!Number.isFinite(when)) continue;
           for (const i of o.items) {
-            if (!normalizeText(i.productName).includes(productNeedle)) continue;
+            const bubble = orderLineSearchBubble(i, catalogNameByProductId, articleNombreByProductId);
+            if (!normalizeText(bubble).includes(productNeedle)) continue;
             hits.push({
               supplier: o.supplierName,
-              product: i.productName,
+              product: orderLineDisplayName(i, catalogNameByProductId),
               price: i.pricePerUnit,
               date: new Date(o.receivedAt ?? o.sentAt ?? o.createdAt).toLocaleDateString('es-ES'),
               when,
@@ -2626,12 +2657,13 @@ export default function PedidosPage() {
         let candidates: Array<{ orderId: string; supplierName: string; itemId: string; productName: string; price: number }> = [];
         for (const o of sentOrders) {
           for (const i of o.items) {
-            if (normalizeText(i.productName).includes(productNeedle)) {
+            const bubble = orderLineSearchBubble(i, catalogNameByProductId, articleNombreByProductId);
+            if (normalizeText(bubble).includes(productNeedle)) {
               candidates.push({
                 orderId: o.id,
                 supplierName: o.supplierName,
                 itemId: i.id,
-                productName: i.productName,
+                productName: orderLineDisplayName(i, catalogNameByProductId),
                 price: i.pricePerUnit,
               });
             }
@@ -2712,6 +2744,8 @@ export default function PedidosPage() {
       setAssistantBusy(false);
     }
   }, [
+    articleNombreByProductId,
+    catalogNameByProductId,
     commitSentOrderAsReceived,
     localCode,
     localId,
@@ -3238,8 +3272,8 @@ export default function PedidosPage() {
                 <p className="mt-2 text-sm leading-relaxed text-zinc-600">
                   Puedes eliminarlo si fue un error del pedido, o marcar incidencia si el producto no llegó o llegó mal.
                 </p>
-                <p className="mt-1 truncate text-xs font-semibold text-zinc-500" title={raItem.productName}>
-                  {raItem.productName}
+                <p className="mt-1 truncate text-xs font-semibold text-zinc-500" title={lineLabel(raItem)}>
+                  {lineLabel(raItem)}
                 </p>
                 <div className="mt-4 flex flex-col gap-2">
                   <button
@@ -3692,7 +3726,7 @@ export default function PedidosPage() {
                       <div key={item.id} className="space-y-1 rounded-lg bg-white p-2 ring-1 ring-zinc-200">
                         <div className="flex items-start justify-between gap-2">
                           <div className="min-w-0 flex-1">
-                            <p className="text-sm font-semibold leading-tight text-zinc-900">{item.productName}</p>
+                            <p className="text-sm font-semibold leading-tight text-zinc-900">{lineLabel(item)}</p>
                             <p className="mt-0.5 text-xs text-zinc-600">
                               Pedido:{' '}
                               <span className="text-base font-bold tabular-nums text-zinc-900 sm:text-lg">
@@ -4048,7 +4082,7 @@ export default function PedidosPage() {
               <div className="space-y-1.5 border-t border-zinc-100 bg-zinc-50/40 px-1.5 pb-1.5 pt-1.5">
                 {monthOrders.map((order) => {
                   const needsAttention = receivedOrderHasAttention(order);
-                  const incidentFooterText = historicoIncidentFooterText(order);
+                  const incidentFooterText = historicoIncidentFooterText(order, catalogNameByProductId);
                   const detailOpen = expandedHistoricoId === order.id;
                   const totals = totalsWithVatForOrderListDisplay(order);
                   const requesterName = getPedidoRequesterDisplayName(order);
@@ -4225,7 +4259,7 @@ export default function PedidosPage() {
                               >
                                 <div className="flex items-start justify-between gap-2">
                                   <p className="min-w-0 flex-1 text-[11px] font-bold leading-tight text-zinc-900">
-                                    {item.productName}
+                                    {lineLabel(item)}
                                   </p>
                                   <span
                                     className={[

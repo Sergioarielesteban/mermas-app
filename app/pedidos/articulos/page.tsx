@@ -140,13 +140,18 @@ export default function PedidosArticulosPage() {
   const filtered = useMemo(() => {
     const t = q.trim().toLowerCase();
     if (!t) return articles;
-    return articles.filter(
-      (a) =>
+    return articles.filter((a) => {
+      const cat = catalogByArticle.get(a.id) ?? [];
+      const catalogNames = cat.map((r) => r.name).join(' ');
+      return (
         a.nombre.toLowerCase().includes(t) ||
+        (a.nombreCorto ?? '').toLowerCase().includes(t) ||
         (a.categoria ?? '').toLowerCase().includes(t) ||
-        (a.observaciones ?? '').toLowerCase().includes(t),
-    );
-  }, [articles, q]);
+        (a.observaciones ?? '').toLowerCase().includes(t) ||
+        catalogNames.toLowerCase().includes(t)
+      );
+    });
+  }, [articles, catalogByArticle, q]);
 
   if (!profileReady) {
     return (
@@ -398,6 +403,7 @@ function ArticleCard({
 
   const principalRefRow =
     (refProdId ? compareRows.find((r) => r.id === refProdId) : null) ?? originRow ?? compareRows[0];
+  const nombreVisibleProveedor = principalRefRow?.name?.trim() || '';
   const compraUnitEur =
     principalRefRow != null
       ? principalRefRow.pricePerUnit
@@ -461,7 +467,7 @@ function ArticleCard({
           <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-indigo-100 text-indigo-800">
             <Package className="h-5 w-5" aria-hidden />
           </div>
-          <div className="min-w-0">
+            <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <span className="rounded-md bg-indigo-100 px-2 py-0.5 text-[10px] font-black uppercase text-indigo-900">
                 Artículo
@@ -472,8 +478,19 @@ function ArticleCard({
                 <span className="text-[10px] font-bold uppercase text-zinc-500">Inactivo</span>
               )}
             </div>
-            <p className="mt-1 text-base font-bold text-zinc-900 sm:text-lg">{a.nombre}</p>
+            <p className="mt-0.5 text-[10px] font-bold uppercase text-zinc-500">Nombre visible (proveedor / albarán)</p>
+            <p className="mt-0.5 text-base font-bold text-zinc-900 sm:text-lg">
+              {nombreVisibleProveedor || a.nombre}
+            </p>
             <p className="text-xs text-zinc-600">
+              <span className="font-semibold text-zinc-500">Artículo máster (interno):</span> {a.nombre}
+            </p>
+            {a.nombreCorto?.trim() ? (
+              <p className="text-xs text-zinc-600">
+                <span className="font-semibold text-zinc-500">Alias interno:</span> {a.nombreCorto}
+              </p>
+            ) : null}
+            <p className="text-xs text-zinc-500">
               {a.unidadBase ? `Unidad ref.: ${a.unidadBase}` : 'Sin unidad base'}
               {a.categoria ? ` · ${a.categoria}` : ''}
             </p>

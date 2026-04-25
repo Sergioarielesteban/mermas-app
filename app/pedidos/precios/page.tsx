@@ -28,6 +28,7 @@ import {
   type PedidoSupplier,
 } from '@/lib/pedidos-supabase';
 import { matchSupplierProductFromHint, parseQuickChefPriceText } from '@/lib/pedidos-quick-price-text';
+import { catalogNameByProductIdFromSuppliers, orderLineDisplayName } from '@/lib/pedidos-line-display-name';
 import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
 import type { Unit } from '@/lib/types';
 
@@ -93,8 +94,15 @@ function orderBasePriceDate(order: PedidoOrder): string {
  * si en un pedido falta el UUID y en otro no, antes se creaban dos series y no había “evolución”.
  * Las incidencias no cambian esta clave: el precio facturado en línea sigue contando.
  */
-function evolutionProductKey(order: PedidoOrder, item: PedidoOrder['items'][number]): string {
-  const name = item.productName.trim().replace(/\s+/g, ' ').toLowerCase();
+function evolutionProductKey(
+  order: PedidoOrder,
+  item: PedidoOrder['items'][number],
+  catalogNameByProductId: ReadonlyMap<string, string> | null,
+): string {
+  const name = orderLineDisplayName(item, catalogNameByProductId)
+    .trim()
+    .replace(/\s+/g, ' ')
+    .toLowerCase();
   return `${order.supplierId}|${name}|${item.unit}`;
 }
 
@@ -242,6 +250,7 @@ function buildPriceSummaries(
   windowEndMs: number,
   priceMode: PriceMode,
   supplierFilter: string,
+  catalogNameByProductId: ReadonlyMap<string, string> | null,
 ): PriceSummary[] {
   type Acc = {
     key: string;
@@ -267,14 +276,14 @@ function buildPriceSummaries(
       const wq = weightQtyForEvolution(item, priceMode);
       if (wq <= 0) continue;
 
-      const key = evolutionProductKey(order, item);
+      const key = evolutionProductKey(order, item, catalogNameByProductId);
       const displayUnit = priceMode === 'per_kg' ? 'kg' : item.unit;
       const existing = map.get(key);
       const acc: Acc =
         existing ??
         {
           key,
-          productName: item.productName.trim(),
+          productName: orderLineDisplayName(item, catalogNameByProductId).trim(),
           supplierId: order.supplierId,
           supplierName: order.supplierName,
           catalogUnit: item.unit,
@@ -780,6 +789,10 @@ export default function PedidosPreciosPage() {
   const [priceMode, setPriceMode] = React.useState<PriceMode>('unit');
   const [alertPct, setAlertPct] = React.useState(0);
   const [quickCatalog, setQuickCatalog] = React.useState<PedidoSupplier[]>([]);
+  const catalogNameByProductId = React.useMemo(
+    () => catalogNameByProductIdFromSuppliers(quickCatalog),
+    [quickCatalog],
+  );
   const [quickCatalogLoading, setQuickCatalogLoading] = React.useState(false);
   const [quickText, setQuickText] = React.useState('');
   const [quickBusy, setQuickBusy] = React.useState(false);
@@ -845,13 +858,13 @@ export default function PedidosPreciosPage() {
   }, [orders, windowPreset]);
 
   const series = React.useMemo(
-    () => buildPriceSummaries(orders, windowStartMs, windowEndMs, priceMode, supplierFilter),
-    [orders, supplierFilter, windowStartMs, windowEndMs, priceMode],
+    () => buildPriceSummaries(orders, windowStartMs, windowEndMs, priceMode, supplierFilter, catalogNameByProductId),
+    [catalogNameByProductId, orders, supplierFilter, windowStartMs, windowEndMs, priceMode],
   );
 
   const seriesAllSuppliers = React.useMemo(
-    () => buildPriceSummaries(orders, windowStartMs, windowEndMs, priceMode, ''),
-    [orders, windowStartMs, windowEndMs, priceMode],
+    () => buildPriceSummaries(orders, windowStartMs, windowEndMs, priceMode, '', catalogNameByProductId),
+    [catalogNameByProductId, orders, windowStartMs, windowEndMs, priceMode],
   );
 
   const crossSupplierBenchmarks = React.useMemo((): CrossSupplierBenchmark[] => {

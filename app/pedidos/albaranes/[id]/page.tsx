@@ -50,7 +50,15 @@ import {
   type DeliveryNoteStatus,
 } from '@/lib/delivery-notes-supabase';
 import { syncCatalogPricesFromValidatedDeliveryNote } from '@/lib/delivery-note-catalog-price-sync';
-import { fetchOrderById, fetchOrders, type PedidoOrder, type PedidoOrderItem } from '@/lib/pedidos-supabase';
+import {
+  fetchOrderById,
+  fetchOrders,
+  fetchSuppliersWithProducts,
+  type PedidoOrder,
+  type PedidoOrderItem,
+  type PedidoSupplier,
+} from '@/lib/pedidos-supabase';
+import { catalogNameByProductIdFromSuppliers, orderLineDisplayName } from '@/lib/pedidos-line-display-name';
 import type { Unit } from '@/lib/types';
 
 const UNITS: { v: Unit; l: string }[] = [
@@ -219,6 +227,24 @@ export default function AlbaranDetallePage() {
   const [resolveComment, setResolveComment] = useState('');
   const [manualIncType, setManualIncType] = useState<DeliveryNoteIncidentType>('other');
   const [manualIncDesc, setManualIncDesc] = useState('');
+  const [catalogSuppliers, setCatalogSuppliers] = useState<PedidoSupplier[]>([]);
+
+  const catalogNameByProductId = useMemo(
+    () => catalogNameByProductIdFromSuppliers(catalogSuppliers),
+    [catalogSuppliers],
+  );
+
+  useEffect(() => {
+    if (!localId || !supabaseOk) {
+      setCatalogSuppliers([]);
+      return;
+    }
+    const supabase = getSupabaseClient();
+    if (!supabase) return;
+    void fetchSuppliersWithProducts(supabase, localId)
+      .then((rows) => setCatalogSuppliers(rows))
+      .catch(() => setCatalogSuppliers([]));
+  }, [localId, supabaseOk]);
 
   const load = useCallback(async () => {
     if (!localId || !supabaseOk || !id) {
@@ -853,7 +879,9 @@ export default function AlbaranDetallePage() {
                     const ms = ni?.matchStatus ?? null;
                     return (
                       <tr key={oi.id} className={`border-t border-zinc-100 ${ms ? matchRowAccent(ms) : ''}`}>
-                        <td className="px-2 py-2 font-medium text-zinc-900">{oi.productName}</td>
+                        <td className="px-2 py-2 font-medium text-zinc-900">
+                          {orderLineDisplayName(oi, catalogNameByProductId)}
+                        </td>
                         <td className="px-2 py-2 tabular-nums text-zinc-700">
                           {qOrd} {oi.unit} × {pOrd.toFixed(2)} €
                         </td>
