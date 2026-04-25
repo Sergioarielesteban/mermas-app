@@ -1376,6 +1376,25 @@ export function removePedidoOrderFromList(
     .filter((o) => !tombstones?.has(o.id));
 }
 
+/** Borra una línea de pedido por su id de fila en `purchase_order_items` (no `supplier_product_id`). */
+export async function deletePurchaseOrderItemById(
+  supabase: SupabaseClient,
+  localId: string,
+  purchaseOrderItemId: string,
+) {
+  const { data, error } = await supabase
+    .from('purchase_order_items')
+    .delete()
+    .eq('id', purchaseOrderItemId)
+    .eq('local_id', localId)
+    .select('id');
+  if (error) throw new Error(error.message);
+  if (!data?.length) {
+    throw new Error('No se eliminó ninguna fila. Comprueba la línea o recarga Pedidos.');
+  }
+  return { data };
+}
+
 export async function saveOrder(
   supabase: SupabaseClient,
   localId: string,

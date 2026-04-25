@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Bot, ChevronDown, MessageCircle, Pencil, Trash2 } from 'lucide-react';
+import { Bot, ChevronDown, Loader2, MessageCircle, Pencil, Trash2 } from 'lucide-react';
 import React from 'react';
 import { OIDO_CHEF_START_VOICE_EVENT, OIDO_CHEF_VOICE_NAV_FLAG } from '@/components/BottomNav';
 import { useAuth } from '@/components/AuthProvider';
@@ -32,6 +32,7 @@ import {
   billingQuantityForReceptionPrice,
   billingQuantityForLine,
   deleteOrder,
+  deletePurchaseOrderItemById,
   fetchAvgReceivedPricePerKgBySupplierProductIds,
   fetchLastReceivedPricePerKgBySupplierProductIds,
   fetchReceptionEuroPerKgHintsBySupplierProductIds,
@@ -40,7 +41,6 @@ import {
   persistReceptionItemTotals,
   receptionLineTotals,
   reopenReceivedOrderToSent,
-  saveOrder,
   setOrderStatus,
   setOrderPriceReviewArchived,
   unitCanDeclareScaleKgOnReception,
@@ -389,29 +389,6 @@ function parsePedidosPageUi(raw: string | null): PedidosPageUiV1 | null {
 function historicoMonthKeyFromOrder(order: PedidoOrder): string {
   const d = order.receivedAt ? new Date(order.receivedAt) : new Date(order.createdAt);
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-}
-
-/** Payload de línea para `saveOrder` (mismo criterio que en `pedidos/nuevo`). */
-function pedidoOrderItemToSaveOrderLine(item: PedidoOrderItem) {
-  return {
-    supplierProductId: item.supplierProductId,
-    productName: item.productName,
-    unit: item.unit,
-    quantity: item.quantity,
-    receivedQuantity: item.receivedQuantity,
-    pricePerUnit: item.pricePerUnit,
-    vatRate: item.vatRate,
-    lineTotal: item.lineTotal,
-    estimatedKgPerUnit: item.estimatedKgPerUnit ?? null,
-    receivedWeightKg: item.receivedWeightKg ?? null,
-    basePricePerUnit: item.basePricePerUnit ?? item.pricePerUnit,
-    incidentType: item.incidentType ?? null,
-    incidentNotes: item.incidentNotes?.trim() ? item.incidentNotes.trim() : null,
-    receivedPricePerKg: item.receivedPricePerKg ?? null,
-    billingUnit: item.billingUnit ?? null,
-    billingQtyPerOrderUnit: item.billingQtyPerOrderUnit ?? null,
-    pricePerBillingUnit: item.pricePerBillingUnit ?? null,
-  };
 }
 
 export default function PedidosPage() {
@@ -871,7 +848,7 @@ export default function PedidosPage() {
       });
   };
 
-  const removeReceptionLineFromSentOrder = (orderId: string, lineId: string) => {
+  const removeReceptionLineFromSentOrder = async (orderId: string, lineId: string) => {
     if (!localId) {
       setMessage('No se pudo guardar: perfil de local aún no disponible. Espera un segundo e inténtalo de nuevo.');
       return;
@@ -883,8 +860,7 @@ export default function PedidosPage() {
       setReceptionLineAction(null);
       return;
     }
-    const remaining = order.items.filter((i) => i.id !== line.id);
-    if (remaining.length === 0) {
+    if (order.items.length <= 1) {
       setMessage('Un pedido enviado debe tener al menos un producto. Usa Editar o elimina el pedido entero.');
       return;
     }
@@ -895,57 +871,53 @@ export default function PedidosPage() {
     }
     receptionLineDeleteInFlightRef.current = true;
     setReceptionLineActionBusy(true);
-    const usuarioNombre = actorLabel(displayName, loginUsername).trim();
-    void saveOrder(supabase, localId, {
-      orderId: order.id,
-      supplierId: order.supplierId,
-      status: 'sent',
-      notes: order.notes ?? '',
-      createdAt: order.createdAt,
-      sentAt: order.sentAt,
-      deliveryDate: order.deliveryDate,
-      expectedOrderUpdatedAt: order.updatedAt,
-      markContentRevisedAfterSent: true,
-      ...(usuarioNombre ? { usuarioNombre } : {}),
-      items: remaining.map(pedidoOrderItemToSaveOrderLine),
-    })
-      .then(() => {
-        setReceptionLineAction(null);
-        const id = line.id;
-        setQuickLineMarks((prev) => {
-          const next = { ...prev };
-          delete next[id];
-          return next;
-        });
-        setPriceInputByItemId((prev) => {
-          const next = { ...prev };
-          delete next[id];
-          return next;
-        });
-        setWeightInputByItemId((prev) => {
-          const next = { ...prev };
-          delete next[id];
-          return next;
-        });
-        setPricePerKgInputByItemId((prev) => {
-          const next = { ...prev };
-          delete next[id];
-          return next;
-        });
-        return reloadOrders();
-      })
-      .then(() => {
-        setMessage('Línea eliminada del pedido.');
-        dispatchPedidosDataChanged();
-      })
-      .catch((err: Error) => {
-        void reloadOrders();
-        setMessage(err.message);
-      })
-      .finally(() => {
-        receptionLineDeleteInFlightRef.current = false;
-        setReceptionLineActionBusy(false);
+    console.log('Deleting item:', lineId);
+    try {
+      const response = await deletePurchaseOrderItemById(supabase, localId, lineId);
+      console.log('Delete response:', response);
+      setReceptionLineAction(null);
+      const id = line.id;
+      setQuickLineMarks((prev) => {
+        const next = { ...prev };
+        delete next[id];
+        return next;
       });
+      setPriceInputByItemId((prev) => {
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      });
+      setWeightInputByItemId((prev) => {
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      });
+      setPricePerKgInputByItemId((prev) => {
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      });
+      setOrders((prev) =>
+        prev.map((o) => {
+          if (o.id !== orderId) return o;
+          const nextItems = o.items.filter((i) => i.id !== lineId);
+          const total = nextItems.reduce((acc, it) => acc + it.lineTotal, 0);
+          return { ...o, items: nextItems, total };
+        }),
+      );
+      setMessage('Línea eliminada del pedido.');
+      void reloadOrders();
+      dispatchPedidosDataChanged();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error('Delete purchase_order_items failed:', err);
+      setMessage(
+        msg ? `Error al eliminar producto: ${msg}` : 'Error al eliminar producto',
+      );
+    } finally {
+      receptionLineDeleteInFlightRef.current = false;
+      setReceptionLineActionBusy(false);
+    }
   };
 
   /** Solo si desaparece el pedido entero; no si falta el itemId (tras sustitución de líneas en Realtime, el id local puede dejar de coincidir y cerrar el modal al pulsar). */
@@ -3277,11 +3249,18 @@ export default function PedidosPage() {
                     onClick={(e) => {
                       e.preventDefault();
                       e.stopPropagation();
-                      removeReceptionLineFromSentOrder(raOrder.id, raItem.id);
+                      void removeReceptionLineFromSentOrder(raOrder.id, raItem.id);
                     }}
-                    className="rounded-xl border border-[#B91C1C]/40 bg-[#B91C1C]/10 px-3 py-2.5 text-sm font-bold text-[#991B1B] transition enabled:hover:bg-[#B91C1C]/15 disabled:opacity-50"
+                    className="inline-flex min-h-[2.75rem] items-center justify-center gap-2 rounded-xl border border-[#B91C1C]/40 bg-[#B91C1C]/10 px-3 py-2.5 text-sm font-bold text-[#991B1B] transition enabled:hover:bg-[#B91C1C]/15 disabled:opacity-60"
                   >
-                    Eliminar del pedido
+                    {receptionLineActionBusy ? (
+                      <>
+                        <Loader2 className="h-4 w-4 shrink-0 animate-spin" aria-hidden />
+                        Eliminando…
+                      </>
+                    ) : (
+                      'Eliminar del pedido'
+                    )}
                   </button>
                   <button
                     type="button"
