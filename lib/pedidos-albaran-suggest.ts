@@ -1,4 +1,4 @@
-import { unitCanDeclareScaleKgOnReception, type PedidoOrderItem } from '@/lib/pedidos-supabase';
+import { receptionBillsByWeight, type PedidoOrderItem } from '@/lib/pedidos-supabase';
 
 export type AlbaranOcrLineSuggestion = {
   itemId: string;
@@ -103,7 +103,7 @@ export function buildAlbaranSuggestionsFromOcr(ocrText: string, items: PedidoOrd
     };
 
     const isKgUnit = item.unit === 'kg';
-    const supportsScale = unitCanDeclareScaleKgOnReception(item.unit);
+    const supportsScale = receptionBillsByWeight(item);
 
     let ppk: number | undefined;
     const ppkMatch = picked.line.match(/(\d+[.,]\d+)\s*(?:€|eur)?\s*\/\s*kg/i);

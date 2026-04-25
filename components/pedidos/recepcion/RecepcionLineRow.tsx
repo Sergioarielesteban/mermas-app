@@ -11,14 +11,16 @@ import {
   formatKgInputDisplay,
   formatPpkInputDisplay,
   getDefaultReceivedKgNumeric,
+  getDefaultReceivedOrderQtyNumeric,
   parsePricePerKg,
   type EuroPerKgSuggestionSource,
 } from '@/lib/pedidos-recepcion-inputs';
 import {
+  receptionBillsByWeight,
+  receptionCalculationUnit,
   receptionLineTotals,
+  resolveReceivedQuantityForReceptionPreview,
   resolveReceivedWeightKgForReceptionPreview,
-  unitCanDeclareScaleKgOnReception,
-  unitSupportsReceivedWeightKg,
   type PedidoOrderItem,
 } from '@/lib/pedidos-supabase';
 
@@ -27,20 +29,9 @@ function buildPreviewItem(
   kgText: string,
   ppkText: string,
   priceText: string,
+  orderQtyText: string,
   supplierPpk: number | null,
 ): PedidoOrderItem {
-  const kgForMerge: number | null = unitCanDeclareScaleKgOnReception(item.unit)
-    ? resolveReceivedWeightKgForReceptionPreview(item, kgText)
-    : item.receivedWeightKg ?? null;
-
-  let ppkMerge: number | null = item.receivedPricePerKg ?? null;
-  if (unitSupportsReceivedWeightKg(item.unit)) {
-    const st = parsePricePerKg(ppkText);
-    if (ppkText.trim() === '') ppkMerge = supplierPpk;
-    else if (st !== 'invalid' && st != null) ppkMerge = st;
-    else ppkMerge = item.receivedPricePerKg ?? supplierPpk;
-  }
-
   let pricePu = item.pricePerUnit;
   const pr = priceText.trim().replace(',', '.');
   if (pr !== '') {
@@ -48,13 +39,36 @@ function buildPreviewItem(
     if (Number.isFinite(p) && p >= 0) pricePu = Math.round(p * 100) / 100;
   }
 
+  if (receptionBillsByWeight(item)) {
+    const kgForMerge: number | null = resolveReceivedWeightKgForReceptionPreview(item, kgText);
+
+    let ppkMerge: number | null = item.receivedPricePerKg ?? null;
+    if (item.unit !== 'kg') {
+      const st = parsePricePerKg(ppkText);
+      if (ppkText.trim() === '') ppkMerge = supplierPpk;
+      else if (st !== 'invalid' && st != null) ppkMerge = st;
+      else ppkMerge = item.receivedPricePerKg ?? supplierPpk;
+    }
+
+    const merged: PedidoOrderItem = {
+      ...item,
+      pricePerUnit: pricePu,
+      receivedWeightKg: kgForMerge,
+      ...(item.unit !== 'kg' ? { receivedPricePerKg: ppkMerge } : {}),
+    };
+
+    const { lineTotal, effectivePricePerUnit } = receptionLineTotals(merged);
+    return { ...merged, pricePerUnit: effectivePricePerUnit, lineTotal };
+  }
+
+  const qMerge = resolveReceivedQuantityForReceptionPreview(item, orderQtyText);
   const merged: PedidoOrderItem = {
     ...item,
     pricePerUnit: pricePu,
-    receivedWeightKg: kgForMerge,
-    ...(unitSupportsReceivedWeightKg(item.unit) ? { receivedPricePerKg: ppkMerge } : {}),
+    receivedQuantity: qMerge,
+    receivedWeightKg: null,
+    receivedPricePerKg: null,
   };
-
   const { lineTotal, effectivePricePerUnit } = receptionLineTotals(merged);
   return { ...merged, pricePerUnit: effectivePricePerUnit, lineTotal };
 }
@@ -67,6 +81,7 @@ export type RecepcionLineRowProps = {
   suggestedEuroPerKg: number | null;
   suggestionSource: EuroPerKgSuggestionSource | null;
   commitWeightInput: (orderId: string, itemId: string, rawKg: string, priceDraft?: string) => void;
+  commitReceivedOrderQtyInput: (orderId: string, itemId: string, rawQty: string, priceDraft?: string) => void;
   commitPricePerKgInput: (orderId: string, itemId: string, raw: string) => void;
   commitPriceInput: (orderId: string, itemId: string, raw: string) => void;
 };
@@ -90,6 +105,7 @@ function recepcionLineRowPropsEqual(a: RecepcionLineRowProps, b: RecepcionLineRo
     x.incidentType === y.incidentType &&
     x.incidentNotes === y.incidentNotes &&
     x.billingUnit === y.billingUnit &&
+    x.billingQtyPerOrderUnit === y.billingQtyPerOrderUnit &&
     a.suggestedEuroPerKg === b.suggestedEuroPerKg &&
     a.suggestionSource === b.suggestionSource
   );
@@ -102,10 +118,14 @@ function RecepcionLineRowInner({
   suggestedEuroPerKg,
   suggestionSource,
   commitWeightInput,
+  commitReceivedOrderQtyInput,
   commitPricePerKgInput,
   commitPriceInput,
 }: RecepcionLineRowProps) {
   const defaultPpk = suggestedEuroPerKg;
+  const billsByWeight = receptionBillsByWeight(item);
+  const calcU = receptionCalculationUnit(item);
+  const calcSuffix = unitPriceCatalogSuffix[calcU];
 
   const commitWeightRef = React.useRef(commitWeightInput);
   commitWeightRef.current = commitWeightInput;
@@ -113,6 +133,10 @@ function RecepcionLineRowInner({
   const [kgText, setKgText] = React.useState(() => {
     const n = getDefaultReceivedKgNumeric(item);
     return n != null ? formatKgInputDisplay(n) : '';
+  });
+  const [orderQtyText, setOrderQtyText] = React.useState(() => {
+    const n = getDefaultReceivedOrderQtyNumeric(item);
+    return formatKgInputDisplay(n);
   });
   const [ppkText, setPpkText] = React.useState(() => {
     if (item.receivedPricePerKg != null && item.receivedPricePerKg > 0) {
@@ -126,6 +150,7 @@ function RecepcionLineRowInner({
   const priceFocusedRef = React.useRef(false);
   const ppkFocusedRef = React.useRef(false);
   const kgFocusedRef = React.useRef(false);
+  const orderQtyFocusedRef = React.useRef(false);
   const autoDefaultKgPersistedRef = React.useRef(false);
 
   React.useEffect(() => {
@@ -137,12 +162,12 @@ function RecepcionLineRowInner({
    * para que €/kg y totales usen la misma base sin obligar a blur manual.
    */
   React.useEffect(() => {
-    if (!unitCanDeclareScaleKgOnReception(item.unit)) return;
+    if (!billsByWeight) return;
     if (item.receivedWeightKg != null && item.receivedWeightKg > 0) return;
     if (autoDefaultKgPersistedRef.current) return;
     let n: number | null = null;
     if (
-      unitSupportsReceivedWeightKg(item.unit) &&
+      item.unit !== 'kg' &&
       item.estimatedKgPerUnit != null &&
       item.estimatedKgPerUnit > 0 &&
       item.quantity > 0
@@ -154,7 +179,7 @@ function RecepcionLineRowInner({
     if (n == null) return;
     autoDefaultKgPersistedRef.current = true;
     commitWeightRef.current(orderId, item.id, formatKgInputDisplay(n), item.pricePerUnit.toFixed(2));
-  }, [orderId, item.id, item.unit, item.quantity, item.estimatedKgPerUnit, item.receivedWeightKg, item.pricePerUnit]);
+  }, [billsByWeight, orderId, item.id, item.unit, item.quantity, item.estimatedKgPerUnit, item.receivedWeightKg, item.pricePerUnit]);
 
   React.useEffect(() => {
     if (priceFocusedRef.current) return;
@@ -165,7 +190,12 @@ function RecepcionLineRowInner({
     if (kgFocusedRef.current) return;
     const n = getDefaultReceivedKgNumeric(item);
     setKgText(n != null ? formatKgInputDisplay(n) : '');
-  }, [item.id, item.receivedWeightKg, item.quantity, item.estimatedKgPerUnit, item.unit]);
+  }, [item.id, item.receivedWeightKg, item.quantity, item.estimatedKgPerUnit, item.unit, billsByWeight]);
+
+  React.useEffect(() => {
+    if (orderQtyFocusedRef.current) return;
+    setOrderQtyText(formatKgInputDisplay(getDefaultReceivedOrderQtyNumeric(item)));
+  }, [item.id, item.receivedQuantity, item.quantity, item.incidentType, billsByWeight]);
 
   React.useEffect(() => {
     if (ppkFocusedRef.current) return;
@@ -177,8 +207,8 @@ function RecepcionLineRowInner({
   }, [item.receivedPricePerKg, item.id, defaultPpk]);
 
   const previewItem = React.useMemo(
-    () => buildPreviewItem(item, kgText, ppkText, priceText, defaultPpk),
-    [item, kgText, ppkText, priceText, defaultPpk],
+    () => buildPreviewItem(item, kgText, ppkText, priceText, orderQtyText, defaultPpk),
+    [item, kgText, ppkText, priceText, orderQtyText, defaultPpk],
   );
 
   const lineSummary = React.useMemo(() => receptionBillingSummary(previewItem), [previewItem]);
@@ -211,7 +241,8 @@ function RecepcionLineRowInner({
           <span className="font-bold tabular-nums text-zinc-900">{lineSummary.totalLinea}</span>
         </p>
       </div>
-      {unitSupportsReceivedWeightKg(item.unit) &&
+      {billsByWeight &&
+      item.unit !== 'kg' &&
       item.estimatedKgPerUnit != null &&
       item.estimatedKgPerUnit > 0 ? (
         <p className="text-[11px] leading-tight text-zinc-600">
@@ -248,33 +279,31 @@ function RecepcionLineRowInner({
             : ''}
         </p>
       ) : null}
-      {unitCanDeclareScaleKgOnReception(item.unit) || unitSupportsReceivedWeightKg(item.unit) ? (
+      {billsByWeight ? (
         <div className="space-y-0.5">
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-            {unitCanDeclareScaleKgOnReception(item.unit) ? (
-              <div className="flex items-center gap-1">
-                <label className="shrink-0 text-[11px] font-semibold text-zinc-600">Cantidad real (kg)</label>
-                <input
-                  type="text"
-                  inputMode="decimal"
-                  autoComplete="off"
-                  autoCorrect="off"
-                  placeholder="0,00"
-                  title="Cantidad real (kg) en báscula; por defecto el peso estimado del pedido"
-                  value={kgText}
-                  onFocus={() => {
-                    kgFocusedRef.current = true;
-                  }}
-                  onChange={(e) => setKgText(e.target.value)}
-                  onBlur={() => {
-                    kgFocusedRef.current = false;
-                    commitWeightInput(orderId, item.id, kgText, priceText);
-                  }}
-                  className="h-7 w-[4.25rem] max-w-[5.25rem] shrink-0 rounded-md border border-zinc-300 bg-white px-1 py-0.5 text-xs font-semibold text-zinc-900 outline-none sm:w-[5.25rem] sm:max-w-[5.5rem]"
-                />
-              </div>
-            ) : null}
-            {unitSupportsReceivedWeightKg(item.unit) ? (
+            <div className="flex items-center gap-1">
+              <label className="shrink-0 text-[11px] font-semibold text-zinc-600">Cantidad real ({calcSuffix})</label>
+              <input
+                type="text"
+                inputMode="decimal"
+                autoComplete="off"
+                autoCorrect="off"
+                placeholder="0,00"
+                title="Peso en báscula; por defecto el estimado del pedido"
+                value={kgText}
+                onFocus={() => {
+                  kgFocusedRef.current = true;
+                }}
+                onChange={(e) => setKgText(e.target.value)}
+                onBlur={() => {
+                  kgFocusedRef.current = false;
+                  commitWeightInput(orderId, item.id, kgText, priceText);
+                }}
+                className="h-7 w-[4.25rem] max-w-[5.25rem] shrink-0 rounded-md border border-zinc-300 bg-white px-1 py-0.5 text-xs font-semibold text-zinc-900 outline-none sm:w-[5.25rem] sm:max-w-[5.5rem]"
+              />
+            </div>
+            {item.unit !== 'kg' ? (
               <div className="flex items-center gap-1">
                 <label className="shrink-0 text-[11px] font-semibold text-zinc-600">€/kg</label>
                 <input
@@ -283,7 +312,7 @@ function RecepcionLineRowInner({
                   autoComplete="off"
                   autoCorrect="off"
                   placeholder=""
-                  title="€/kg real (referencia del sistema; editable)"
+                  title="€/kg reales; subtotal = kg × €/kg"
                   value={ppkText}
                   onFocus={() => {
                     ppkFocusedRef.current = true;
@@ -298,7 +327,7 @@ function RecepcionLineRowInner({
               </div>
             ) : null}
           </div>
-          {unitSupportsReceivedWeightKg(item.unit) ? (
+          {item.unit !== 'kg' ? (
             <div className="space-y-0.5 text-[10px] leading-tight text-zinc-500">
               {suggestionSource ? (
                 <p className="text-zinc-600">{euroPerKgSuggestionHint(suggestionSource)}</p>
@@ -309,36 +338,90 @@ function RecepcionLineRowInner({
                 previewItem.receivedWeightKg != null &&
                 previewItem.receivedWeightKg > 0
                   ? `Ref. ${previewItem.pricePerUnit.toFixed(2)} €/${unitPriceCatalogSuffix[item.unit]}`
-                  : 'El subtotal usa kg en báscula o, si no hay, el peso estimado del pedido y el €/kg mostrado.'}
+                  : 'El subtotal es kg reales (o estimados) × €/kg. Abajo, precio de referencia por envase.'}
               </p>
             </div>
           ) : null}
         </div>
-      ) : null}
-      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-t border-zinc-100 pt-1.5">
-        <div className="flex min-w-0 items-center gap-1.5">
-          <label className="shrink-0 text-[11px] font-semibold text-zinc-600">Precio recibido</label>
-          <input
-            type="text"
-            inputMode="decimal"
-            autoComplete="off"
-            value={priceText}
-            onFocus={() => {
-              priceFocusedRef.current = true;
-            }}
-            onChange={(e) => setPriceText(e.target.value)}
-            onBlur={() => {
-              priceFocusedRef.current = false;
-              commitPriceInput(orderId, item.id, priceText);
-            }}
-            className="h-8 w-[4.5rem] rounded-md border border-zinc-300 bg-white px-1.5 text-sm font-semibold tabular-nums text-zinc-900 outline-none"
-          />
+      ) : (
+        <div className="rounded-lg border-2 border-emerald-500/40 bg-emerald-50/50 px-2 py-2">
+          <p className="text-[10px] font-bold uppercase tracking-wide text-emerald-900/90">Recepción (cantidad × precio)</p>
+          <div className="mt-1.5 grid min-w-0 grid-cols-3 items-end gap-x-2 gap-y-1">
+            <div className="min-w-0">
+              <label className="mb-0.5 block text-[10px] font-semibold text-zinc-700">Cantidad real ({calcSuffix})</label>
+              <input
+                type="text"
+                inputMode="decimal"
+                autoComplete="off"
+                autoCorrect="off"
+                placeholder="0"
+                value={orderQtyText}
+                onFocus={() => {
+                  orderQtyFocusedRef.current = true;
+                }}
+                onChange={(e) => setOrderQtyText(e.target.value)}
+                onBlur={() => {
+                  orderQtyFocusedRef.current = false;
+                  commitReceivedOrderQtyInput(orderId, item.id, orderQtyText, priceText);
+                }}
+                className="h-8 w-full min-w-0 rounded-md border border-zinc-300 bg-white px-1.5 text-sm font-semibold tabular-nums text-zinc-900 outline-none"
+              />
+            </div>
+            <div className="min-w-0">
+              <label className="mb-0.5 block text-[10px] font-semibold text-zinc-700">Precio real (€/{calcSuffix})</label>
+              <input
+                type="text"
+                inputMode="decimal"
+                autoComplete="off"
+                value={priceText}
+                onFocus={() => {
+                  priceFocusedRef.current = true;
+                }}
+                onChange={(e) => setPriceText(e.target.value)}
+                onBlur={() => {
+                  priceFocusedRef.current = false;
+                  commitPriceInput(orderId, item.id, priceText);
+                }}
+                className="h-8 w-full min-w-0 rounded-md border border-zinc-300 bg-white px-1.5 text-sm font-semibold tabular-nums text-zinc-900 outline-none"
+              />
+            </div>
+            <div className="flex min-h-[3.15rem] min-w-0 flex-col justify-end rounded-md border border-emerald-300/70 bg-emerald-100/70 px-1.5 py-1">
+              <span className="text-[10px] font-semibold text-emerald-900/85">Sub</span>
+              <span className="text-right text-base font-black leading-tight tabular-nums text-emerald-950 sm:text-lg">
+                {previewItem.lineTotal.toFixed(2)} €
+              </span>
+            </div>
+          </div>
         </div>
-        <span className="shrink-0 text-[11px] text-zinc-700">
-          Subt:{' '}
-          <span className="font-bold tabular-nums text-zinc-900">{previewItem.lineTotal.toFixed(2)} €</span>
-        </span>
-      </div>
+      )}
+      {billsByWeight ? (
+        <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-t border-zinc-100 pt-1.5">
+          <div className="flex min-w-0 items-center gap-1.5">
+            <label className="shrink-0 text-[11px] font-semibold text-zinc-600">
+              Precio recibido (€/{unitPriceCatalogSuffix[item.unit]})
+            </label>
+            <input
+              type="text"
+              inputMode="decimal"
+              autoComplete="off"
+              value={priceText}
+              onFocus={() => {
+                priceFocusedRef.current = true;
+              }}
+              onChange={(e) => setPriceText(e.target.value)}
+              onBlur={() => {
+                priceFocusedRef.current = false;
+                commitPriceInput(orderId, item.id, priceText);
+              }}
+              className="h-8 w-[4.5rem] rounded-md border border-zinc-300 bg-white px-1.5 text-sm font-semibold tabular-nums text-zinc-900 outline-none"
+            />
+          </div>
+          <span className="shrink-0 text-[11px] text-zinc-700">
+            Subt:{' '}
+            <span className="font-bold tabular-nums text-zinc-900">{previewItem.lineTotal.toFixed(2)} €</span>
+          </span>
+        </div>
+      ) : null}
     </div>
   );
 }

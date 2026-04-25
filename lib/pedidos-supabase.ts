@@ -37,6 +37,23 @@ export function orderItemHasDistinctBilling(
   return item.billingUnit != null && item.billingUnit !== item.unit;
 }
 
+/**
+ * Recepción con cobro por **peso** (kg reales o €/kg de facturación en kg).
+ * El resto de unidades (ud, caja, docena, … sin facturación en kg) usan
+ * `cantidad recibida × precio` en la unidad de pedido.
+ */
+export function receptionBillsByWeight(item: Pick<PedidoOrderItem, 'unit' | 'billingUnit'>): boolean {
+  if (item.unit === 'kg') return true;
+  return orderItemHasDistinctBilling(item) && item.billingUnit === 'kg';
+}
+
+/** Unidad de los campos «cantidad / precio real» y etiquetas (€/ud, €/caja, o kg). */
+export function receptionCalculationUnit(
+  item: Pick<PedidoOrderItem, 'unit' | 'billingUnit'>,
+): Unit {
+  return receptionBillsByWeight(item) ? 'kg' : item.unit;
+}
+
 /** Líneas donde se puede anotar peso en báscula al recibir (kg: el peso actualiza subtotal e IVA del albarán). */
 export function unitCanDeclareScaleKgOnReception(unit: Unit): boolean {
   return unit === 'kg' || unitSupportsReceivedWeightKg(unit);
@@ -52,6 +69,17 @@ export function billingQuantityForLine(item: Pick<PedidoOrderItem, 'unit' | 'rec
 
 function lineIsMissingNotReceived(item: Pick<PedidoOrderItem, 'incidentType'>): boolean {
   return item.incidentType === 'missing';
+}
+
+/**
+ * Cantidad de pedido convertida a unidades de cobro cuando no hay recepción guardada (no «no recibida»).
+ */
+export function defaultReceivedOrderQuantityForReception(
+  item: Pick<PedidoOrderItem, 'receivedQuantity' | 'quantity' | 'incidentType'>,
+): number {
+  if (lineIsMissingNotReceived(item)) return 0;
+  if (item.receivedQuantity > 0) return item.receivedQuantity;
+  return item.quantity > 0 ? item.quantity : 0;
 }
 
 /**
@@ -72,23 +100,29 @@ export function billingQuantityForReceptionPrice(item: PedidoOrderItem): number 
  * recalcula desde ese subtotal: sigue siendo el precio de referencia del pedido salvo edición manual.
  */
 export function receptionLineTotals(item: PedidoOrderItem): { lineTotal: number; effectivePricePerUnit: number } {
-  if (item.unit === 'kg') {
+  if (receptionBillsByWeight(item)) {
+    if (item.unit === 'kg') {
+      const bq = billingQuantityForReceptionPrice(item);
+      return {
+        lineTotal: Math.round(item.pricePerUnit * bq * 100) / 100,
+        effectivePricePerUnit: item.pricePerUnit,
+      };
+    }
+    if (
+      item.receivedWeightKg != null &&
+      item.receivedWeightKg > 0 &&
+      item.receivedPricePerKg != null &&
+      Number.isFinite(item.receivedPricePerKg) &&
+      item.receivedPricePerKg > 0
+    ) {
+      const lt = Math.round(item.receivedWeightKg * item.receivedPricePerKg * 100) / 100;
+      return { lineTotal: lt, effectivePricePerUnit: item.pricePerUnit };
+    }
     const bq = billingQuantityForReceptionPrice(item);
     return {
       lineTotal: Math.round(item.pricePerUnit * bq * 100) / 100,
       effectivePricePerUnit: item.pricePerUnit,
     };
-  }
-  if (
-    unitSupportsReceivedWeightKg(item.unit) &&
-    item.receivedWeightKg != null &&
-    item.receivedWeightKg > 0 &&
-    item.receivedPricePerKg != null &&
-    Number.isFinite(item.receivedPricePerKg) &&
-    item.receivedPricePerKg > 0
-  ) {
-    const lt = Math.round(item.receivedWeightKg * item.receivedPricePerKg * 100) / 100;
-    return { lineTotal: lt, effectivePricePerUnit: item.pricePerUnit };
   }
   const bq = billingQuantityForReceptionPrice(item);
   return {
@@ -150,6 +184,28 @@ export function resolveReceivedWeightKgForReceptionPreview(
   }
   if (item.receivedWeightKg != null && item.receivedWeightKg > 0) return item.receivedWeightKg;
   return defaultReceivedWeightKgFromEstimate(item);
+}
+
+/**
+ * Unidades de pedido (ud, caja, …) en recepción: borrador > BD > cantidad pedida.
+ */
+export function resolveReceivedQuantityForReceptionPreview(
+  item: PedidoOrderItem,
+  draft: string | undefined,
+): number {
+  if (draft !== undefined) {
+    const t = draft.trim();
+    if (t !== '') {
+      const n = Number(t.replace(',', '.'));
+      if (!Number.isFinite(n) || n < 0) {
+        return defaultReceivedOrderQuantityForReception(item);
+      }
+      return Math.round(n * 100) / 100;
+    }
+    return defaultReceivedOrderQuantityForReception(item);
+  }
+  if (item.receivedQuantity > 0) return item.receivedQuantity;
+  return defaultReceivedOrderQuantityForReception(item);
 }
 
 export type PedidoStatus = 'draft' | 'sent' | 'received';
@@ -1953,14 +2009,7 @@ export async function persistSentOrderAsReceived(
 ) {
   const preserveOrderPricing = options?.preserveOrderPricing === true;
   for (const item of order.items) {
-    if (item.unit === 'kg') {
-      await updateOrderItemReceivedWeightKg(
-        supabase,
-        localId,
-        item.id,
-        item.receivedWeightKg != null && item.receivedWeightKg > 0 ? item.receivedWeightKg : null,
-      );
-    } else if (unitSupportsReceivedWeightKg(item.unit)) {
+    if (receptionBillsByWeight(item)) {
       await updateOrderItemReceivedWeightKg(
         supabase,
         localId,
@@ -1970,12 +2019,7 @@ export async function persistSentOrderAsReceived(
     }
     await updateOrderItemReceived(supabase, localId, item.id, item.receivedQuantity);
     if (!preserveOrderPricing) {
-      if (unitCanDeclareScaleKgOnReception(item.unit)) {
-        await persistReceptionItemTotals(supabase, localId, item);
-      } else {
-        const billingQty = billingQuantityForReceptionPrice(item);
-        await updateOrderItemPrice(supabase, localId, item.id, item.pricePerUnit, billingQty);
-      }
+      await persistReceptionItemTotals(supabase, localId, item);
     }
   }
   await setOrderStatus(supabase, localId, order.id, 'received');
@@ -2015,12 +2059,27 @@ export async function updateOrderItemReceivedWeightKg(
 
 /**
  * Persiste peso, €/kg real (envases ponderables), precio unitario efectivo y subtotal en una sola escritura.
- * Para líneas kg o `unitSupportsReceivedWeightKg`; el resto delega en `updateOrderItemPrice`.
+ * Líneas con cobro en unidad de pedido (ud, caja, …) guardan `received_quantity` y precio × cantidad; sin trazas kg/€/kg.
  */
 export async function persistReceptionItemTotals(supabase: SupabaseClient, localId: string, item: PedidoOrderItem) {
-  if (!unitCanDeclareScaleKgOnReception(item.unit)) {
+  if (!receptionBillsByWeight(item)) {
     const qty = billingQuantityForReceptionPrice(item);
-    await updateOrderItemPrice(supabase, localId, item.id, item.pricePerUnit, qty);
+    if (!lineIsMissingNotReceived(item)) {
+      await updateOrderItemReceived(supabase, localId, item.id, qty);
+    }
+    const safePrice = Math.max(0, Math.round(item.pricePerUnit * 100) / 100);
+    const lineTotal = Math.round(safePrice * Math.max(0, qty) * 100) / 100;
+    const { error } = await supabase
+      .from('purchase_order_items')
+      .update({
+        price_per_unit: safePrice,
+        line_total: lineTotal,
+        received_weight_kg: null,
+        received_price_per_kg: null,
+      })
+      .eq('id', item.id)
+      .eq('local_id', localId);
+    if (error) throw new Error(error.message);
     return;
   }
 
@@ -2139,7 +2198,7 @@ export async function applyAlbaranOcrPatches(
 
     await updateOrderItemReceived(supabase, localId, patch.itemId, merged.receivedQuantity);
 
-    if (unitCanDeclareScaleKgOnReception(merged.unit)) {
+    if (receptionBillsByWeight(merged)) {
       await updateOrderItemReceivedWeightKg(
         supabase,
         localId,

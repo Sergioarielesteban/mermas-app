@@ -11,6 +11,8 @@ export type PedidosViewStateReceptionInputs = {
   priceInputByItemId: Record<string, string>;
   weightInputByItemId: Record<string, string>;
   pricePerKgInputByItemId: Record<string, string>;
+  /** Cantidad recibida (ud, caja, …) al expandir un pedido enviado. */
+  orderQtyInputByItemId?: Record<string, string>;
 };
 
 export type PedidosViewStateStored = {
@@ -76,6 +78,9 @@ export function parsePedidosViewState(
         !isRecordString(r.weightInputByItemId) ||
         !isRecordString(r.pricePerKgInputByItemId)
       ) {
+        return null;
+      }
+      if (r.orderQtyInputByItemId != null && !isRecordString(r.orderQtyInputByItemId)) {
         return null;
       }
     }

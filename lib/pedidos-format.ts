@@ -1,6 +1,7 @@
 import {
   billingQuantityForLine,
   orderItemHasDistinctBilling,
+  receptionBillsByWeight,
   receptionLineTotals,
   unitSupportsReceivedWeightKg,
   type PedidoOrder,
@@ -123,7 +124,7 @@ export function receptionBillingSummary(item: PedidoOrder['items'][number]): Rec
       recibido = formatQuantityWithUnit(item.receivedQuantity, 'kg');
     }
   } else if (
-    unitSupportsReceivedWeightKg(item.unit) &&
+    receptionBillsByWeight(item) &&
     item.receivedWeightKg != null &&
     item.receivedWeightKg > 0
   ) {
@@ -144,7 +145,7 @@ export function receptionBillingSummary(item: PedidoOrder['items'][number]): Rec
   } else if (item.unit === 'kg') {
     precioAplicado = `${item.pricePerUnit.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €/kg`;
   } else if (
-    unitSupportsReceivedWeightKg(item.unit) &&
+    receptionBillsByWeight(item) &&
     item.receivedWeightKg != null &&
     item.receivedWeightKg > 0 &&
     item.receivedPricePerKg != null &&

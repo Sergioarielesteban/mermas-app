@@ -1,7 +1,7 @@
 import {
   defaultReceivedWeightKgFromEstimate,
-  unitCanDeclareScaleKgOnReception,
-  unitSupportsReceivedWeightKg,
+  defaultReceivedOrderQuantityForReception,
+  receptionBillsByWeight,
   type PedidoOrderItem,
 } from '@/lib/pedidos-supabase';
 
@@ -30,7 +30,7 @@ function roundPpk(n: number): number {
 function orderLinePreferredEuroPerKg(
   item: PedidoOrderItem,
 ): { value: number; source: 'order_billing_kg' | 'order_line_implied_kg' } | null {
-  if (!unitSupportsReceivedWeightKg(item.unit)) {
+  if (!receptionBillsByWeight(item) || item.unit === 'kg') {
     return null;
   }
 
@@ -66,7 +66,7 @@ export function resolveEuroPerKgSuggestion(
   item: PedidoOrderItem,
   opts: EuroPerKgResolutionOpts = {},
 ): { value: number | null; source: EuroPerKgSuggestionSource | null } {
-  if (!unitSupportsReceivedWeightKg(item.unit)) {
+  if (!receptionBillsByWeight(item)) {
     return { value: null, source: null };
   }
 
@@ -130,11 +130,15 @@ export function formatKgInputDisplay(n: number): string {
  * Kg a mostrar/precargar en recepción: peso guardado, o estimado total (cantidad × kg/unidad), o kg pedidos si la línea es en kg.
  */
 export function getDefaultReceivedKgNumeric(item: PedidoOrderItem): number | null {
-  if (!unitCanDeclareScaleKgOnReception(item.unit)) return null;
+  if (!receptionBillsByWeight(item)) return null;
   if (item.receivedWeightKg != null && item.receivedWeightKg > 0) {
     return Math.round(item.receivedWeightKg * 1000) / 1000;
   }
   return defaultReceivedWeightKgFromEstimate(item);
+}
+
+export function getDefaultReceivedOrderQtyNumeric(item: PedidoOrderItem): number {
+  return defaultReceivedOrderQuantityForReception(item);
 }
 
 export function parseReceivedKg(raw: string): number | null | 'invalid' {

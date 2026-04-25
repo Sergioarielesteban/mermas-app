@@ -26,11 +26,11 @@ import {
   fetchReceptionEuroPerKgHintsBySupplierProductIds,
   fetchSuppliersWithProducts,
   persistReceptionItemTotals,
+  receptionBillsByWeight,
   receptionLineTotals,
+  resolveReceivedQuantityForReceptionPreview,
   resolveReceivedWeightKgForReceptionPreview,
   setOrderPriceReviewArchived,
-  unitCanDeclareScaleKgOnReception,
-  unitSupportsReceivedWeightKg,
   updateOrderItemIncident,
   updateOrderItemPrice,
   updateOrderItemReceived,
@@ -158,7 +158,7 @@ export default function RecepcionPedidosPage() {
     const ids = new Set<string>();
     for (const o of pendingPriceReviewOrders) {
       for (const it of o.items) {
-        if (unitSupportsReceivedWeightKg(it.unit) && it.supplierProductId) ids.add(it.supplierProductId);
+        if (receptionBillsByWeight(it) && it.supplierProductId) ids.add(it.supplierProductId);
       }
     }
     return [...ids];
@@ -210,7 +210,7 @@ export default function RecepcionPedidosPage() {
     const hints = receptionHintsByProductRef.current;
     for (const o of pendingPriceReviewOrders) {
       for (const it of o.items) {
-        if (!unitSupportsReceivedWeightKg(it.unit)) continue;
+        if (!receptionBillsByWeight(it)) continue;
         const sid = it.supplierProductId;
         const h = sid ? hints.get(sid) : undefined;
         m.set(
@@ -246,11 +246,7 @@ export default function RecepcionPedidosPage() {
       order.items.map(async (item) => {
         const price = getLinePrice(item);
         const merged = { ...item, pricePerUnit: price };
-        if (unitCanDeclareScaleKgOnReception(item.unit)) {
-          await persistReceptionItemTotals(supabase, localId, merged);
-        } else {
-          await updateOrderItemPrice(supabase, localId, item.id, price, billingQuantityForReceptionPrice(merged));
-        }
+        await persistReceptionItemTotals(supabase, localId, merged);
       }),
     );
     setPriceInputByItemId((prev) => {
@@ -316,7 +312,7 @@ export default function RecepcionPedidosPage() {
           const merged = {
             ...item,
             pricePerUnit: nextPrice,
-            ...(unitSupportsReceivedWeightKg(item.unit) ? { receivedPricePerKg: null } : {}),
+            ...(receptionBillsByWeight(item) && item.unit !== 'kg' ? { receivedPricePerKg: null } : {}),
           };
           const { lineTotal, effectivePricePerUnit } = receptionLineTotals(merged);
           return { ...merged, pricePerUnit: effectivePricePerUnit, lineTotal };
@@ -332,10 +328,10 @@ export default function RecepcionPedidosPage() {
     const merged = {
       ...itemSnap,
       pricePerUnit: nextPrice,
-      ...(unitSupportsReceivedWeightKg(itemSnap.unit) ? { receivedPricePerKg: null } : {}),
+      ...(receptionBillsByWeight(itemSnap) && itemSnap.unit !== 'kg' ? { receivedPricePerKg: null } : {}),
     };
 
-    void (unitCanDeclareScaleKgOnReception(itemSnap.unit)
+    void (receptionBillsByWeight(itemSnap)
       ? persistReceptionItemTotals(supabase, localId, merged)
       : updateOrderItemPrice(
           supabase,
@@ -350,6 +346,49 @@ export default function RecepcionPedidosPage() {
         void reloadOrders();
         setMessage(err.message);
       });
+  };
+
+  const commitReceivedOrderQtyInput = (orderId: string, itemId: string, rawQty: string, priceDraft?: string) => {
+    if (!localId) return;
+    const supabase = getSupabaseClient();
+    if (!supabase) return;
+    const orderSnap = ordersRef.current.find((o) => o.id === orderId);
+    const itemSnap = orderSnap?.items.find((i) => i.id === itemId);
+    if (!itemSnap || receptionBillsByWeight(itemSnap)) return;
+
+    const price = getLinePrice(itemSnap, priceDraft);
+    const q = resolveReceivedQuantityForReceptionPreview({ ...itemSnap, pricePerUnit: price }, rawQty);
+    const merged: PedidoOrderItem = {
+      ...itemSnap,
+      pricePerUnit: price,
+      receivedQuantity: q,
+      receivedWeightKg: null,
+      receivedPricePerKg: null,
+    };
+
+    void (async () => {
+      try {
+        await persistReceptionItemTotals(supabase, localId, merged);
+        const { lineTotal, effectivePricePerUnit } = receptionLineTotals(merged);
+        setOrders((prev) =>
+          prev.map((order) => {
+            if (order.id !== orderId) return order;
+            return {
+              ...order,
+              items: order.items.map((item) =>
+                item.id === itemId ? { ...merged, pricePerUnit: effectivePricePerUnit, lineTotal } : item,
+              ),
+            };
+          }),
+        );
+        setPriceInputByItemId((prev) => ({ ...prev, [itemId]: effectivePricePerUnit.toFixed(2) }));
+        setMessage(null);
+        dispatchPedidosDataChanged();
+      } catch (err: unknown) {
+        void reloadOrders();
+        setMessage(err instanceof Error ? err.message : 'No se pudo guardar la cantidad recibida.');
+      }
+    })();
   };
 
   const commitPriceInput = (orderId: string, itemId: string, raw: string) => {
@@ -369,7 +408,7 @@ export default function RecepcionPedidosPage() {
 
     const orderSnap = ordersRef.current.find((o) => o.id === orderId);
     const itemSnap = orderSnap?.items.find((i) => i.id === itemId);
-    if (!itemSnap || !unitSupportsReceivedWeightKg(itemSnap.unit)) return;
+    if (!itemSnap || !receptionBillsByWeight(itemSnap)) return;
 
     const trimmed = raw.trim();
     let parsed: number | null;
@@ -437,7 +476,7 @@ export default function RecepcionPedidosPage() {
     const itemSnap = orderSnap?.items.find((i) => i.id === itemId);
     if (!itemSnap) return;
 
-    if (itemSnap.unit === 'kg') {
+    if (itemSnap.unit === 'kg' && receptionBillsByWeight(itemSnap)) {
       const price = getLinePrice(itemSnap, priceDraft);
       void (async () => {
         try {
@@ -491,6 +530,8 @@ export default function RecepcionPedidosPage() {
       })();
       return;
     }
+
+    if (!receptionBillsByWeight(itemSnap)) return;
 
     void (async () => {
       try {
@@ -686,6 +727,7 @@ export default function RecepcionPedidosPage() {
                       suggestedEuroPerKg={sug.value}
                       suggestionSource={sug.source}
                       commitWeightInput={commitWeightInput}
+                      commitReceivedOrderQtyInput={commitReceivedOrderQtyInput}
                       commitPricePerKgInput={commitPricePerKgInput}
                       commitPriceInput={commitPriceInput}
                     />
