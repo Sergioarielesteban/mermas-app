@@ -3,17 +3,7 @@
 import Link from 'next/link';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { ESCANDALLO_USAGE_UNIT_PRESETS, validateEscandalloUsageUnitInput } from '@/lib/escandallo-ingredient-units';
-import {
-  AlertTriangle,
-  ChefHat,
-  ChevronDown,
-  GitCompare,
-  History,
-  LineChart,
-  Package,
-  Search,
-  Star,
-} from 'lucide-react';
+import { ChefHat, ChevronDown, GitCompare, History, LineChart, Package, Search, Star } from 'lucide-react';
 import MermasStyleHero from '@/components/MermasStyleHero';
 import { useAuth } from '@/components/AuthProvider';
 import { computeCosteUnitarioUsoEur } from '@/lib/purchase-article-internal-cost';
@@ -21,14 +11,12 @@ import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
 import PedidosPremiaLockedScreen from '@/components/PedidosPremiaLockedScreen';
 import { canAccessPedidos, canUsePedidosModule } from '@/lib/pedidos-access';
 import {
-  fetchPurchaseArticleDuplicateCandidates,
   fetchPurchaseArticles,
   fetchSupplierCatalogRowsForArticleIds,
   isMissingPurchaseArticlesError,
   labelMetodoCosteMaster,
   updatePurchaseArticleMasterCostFields,
   type PurchaseArticle,
-  type PurchaseArticleDuplicateCandidate,
   type SupplierCatalogRow,
 } from '@/lib/purchase-articles-supabase';
 import {
@@ -61,11 +49,9 @@ export default function PedidosArticulosPage() {
   const [catalogByArticle, setCatalogByArticle] = useState<Map<string, SupplierCatalogRow[]>>(new Map());
   const [priceHistory, setPriceHistory] = useState<Map<string, SupplierProductPriceHistory>>(new Map());
   const [priceSamples, setPriceSamples] = useState<Map<string, SupplierProductPriceSample[]>>(new Map());
-  const [duplicates, setDuplicates] = useState<PurchaseArticleDuplicateCandidate[]>([]);
   const [loading, setLoading] = useState(true);
   const [banner, setBanner] = useState<string | null>(null);
   const [q, setQ] = useState('');
-  const [showDup, setShowDup] = useState(false);
   const [hasArticulosReturn, setHasArticulosReturn] = useState(false);
 
   const load = useCallback(async () => {
@@ -74,7 +60,6 @@ export default function PedidosArticulosPage() {
       setCatalogByArticle(new Map());
       setPriceHistory(new Map());
       setPriceSamples(new Map());
-      setDuplicates([]);
       setLoading(false);
       return;
     }
@@ -84,16 +69,9 @@ export default function PedidosArticulosPage() {
       const supabase = getSupabaseClient()!;
       const list = await fetchPurchaseArticles(supabase, localId);
       const articleIds = list.map((a) => a.id);
-      const [catalogMap, dups] = await Promise.all([
-        fetchSupplierCatalogRowsForArticleIds(supabase, localId, articleIds).catch(() => new Map()),
-        fetchPurchaseArticleDuplicateCandidates(supabase, localId).catch((e: unknown) => {
-          const msg = e instanceof Error ? e.message : String(e);
-          if (/duplicate_candidates|purchase_article_duplicate|schema cache|does not exist/i.test(msg)) {
-            return [] as PurchaseArticleDuplicateCandidate[];
-          }
-          throw e;
-        }),
-      ]);
+      const catalogMap = await fetchSupplierCatalogRowsForArticleIds(supabase, localId, articleIds).catch(
+        () => new Map(),
+      );
 
       const productIds = [...new Set([...catalogMap.values()].flat().map((r) => r.id))];
       const [hist, samples] = await Promise.all([
@@ -105,7 +83,6 @@ export default function PedidosArticulosPage() {
       setCatalogByArticle(catalogMap);
       setPriceHistory(hist);
       setPriceSamples(samples);
-      setDuplicates(dups);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'No se pudieron cargar artículos.';
       if (isMissingPurchaseArticlesError(msg)) {
@@ -117,7 +94,6 @@ export default function PedidosArticulosPage() {
       setCatalogByArticle(new Map());
       setPriceHistory(new Map());
       setPriceSamples(new Map());
-      setDuplicates([]);
     } finally {
       setLoading(false);
     }
@@ -171,35 +147,37 @@ export default function PedidosArticulosPage() {
   }
 
   return (
-    <div className="space-y-4 pb-10">
+    <div className="space-y-2.5 pb-6 sm:space-y-3 sm:pb-8">
       <MermasStyleHero
         slim
+        className="!px-3 !py-1.5 sm:!px-4 sm:!py-2"
         eyebrow="Pedidos"
         title="Artículos base (master)"
-        description="Coste interno por unidad de uso; escandallo hereda unidad y coste cuando el crudo enlaza al artículo."
       />
 
-      <div className="flex flex-wrap items-center gap-2">
-        <Link
-          href="/pedidos/proveedores"
-          className="inline-flex min-h-[44px] items-center gap-2 rounded-xl border border-zinc-200 bg-white px-3 text-sm font-semibold text-zinc-700"
-        >
-          Proveedores
-        </Link>
-        <Link
-          href="/pedidos/precios"
-          className="inline-flex min-h-[44px] items-center gap-2 rounded-xl border border-sky-200 bg-sky-50 px-3 text-sm font-semibold text-sky-900"
-        >
-          <LineChart className="h-4 w-4" aria-hidden />
-          Precios
-        </Link>
-        <Link
-          href="/escandallos/recetas/nuevo?paso=ingredientes"
-          className="inline-flex min-h-[44px] items-center gap-2 rounded-xl border border-violet-200 bg-violet-50 px-3 text-sm font-semibold text-violet-900"
-        >
-          <ChefHat className="h-4 w-4 shrink-0" aria-hidden />
-          Ir a ingredientes de receta
-        </Link>
+      <div className="space-y-1.5">
+        <div className="grid min-h-0 grid-cols-3 gap-1 sm:gap-1.5">
+          <Link
+            href="/pedidos/proveedores"
+            className="inline-flex min-h-9 items-center justify-center rounded-lg border border-zinc-200 bg-white px-1.5 py-1.5 text-center text-[11px] font-semibold leading-tight text-zinc-700 sm:min-h-10 sm:px-2 sm:text-xs"
+          >
+            Proveedores
+          </Link>
+          <Link
+            href="/pedidos/precios"
+            className="inline-flex min-h-9 items-center justify-center gap-0.5 rounded-lg border border-sky-200 bg-sky-50 px-1.5 py-1.5 text-center text-[11px] font-semibold leading-tight text-sky-900 sm:min-h-10 sm:gap-1 sm:px-2 sm:text-xs"
+          >
+            <LineChart className="h-3.5 w-3.5 shrink-0" aria-hidden />
+            Precios
+          </Link>
+          <Link
+            href="/escandallos/recetas/nuevo?paso=ingredientes"
+            className="inline-flex min-h-9 items-center justify-center gap-0.5 rounded-lg border border-violet-200 bg-violet-50 px-1.5 py-1.5 text-center text-[11px] font-semibold leading-tight text-violet-900 sm:min-h-10 sm:gap-1 sm:px-2 sm:text-xs"
+          >
+            <ChefHat className="h-3.5 w-3.5 shrink-0" aria-hidden />
+            Ingredientes
+          </Link>
+        </div>
         {hasArticulosReturn ? (
           <Link
             href="/escandallos/recetas/nuevo"
@@ -207,7 +185,7 @@ export default function PedidosArticulosPage() {
               clearEscandalloWizardArticulosReturn();
               setHasArticulosReturn(false);
             }}
-            className="inline-flex min-h-[44px] items-center gap-2 rounded-xl border border-zinc-200 bg-white px-3 text-sm font-semibold text-zinc-700"
+            className="flex min-h-9 w-full items-center justify-center rounded-lg border border-zinc-200 bg-white px-2 py-1.5 text-center text-[11px] font-semibold text-zinc-700 sm:text-xs"
           >
             Volver al asistente
           </Link>
@@ -215,14 +193,14 @@ export default function PedidosArticulosPage() {
       </div>
 
       {banner ? (
-        <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950">{banner}</div>
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-sm text-amber-950">{banner}</div>
       ) : null}
 
-      <section className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-zinc-200 sm:p-5">
-        <div className="flex flex-col gap-3 border-b border-zinc-100 pb-4 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <p className="text-[10px] font-bold uppercase text-zinc-500">Listado</p>
-            <p className="text-sm text-zinc-600">
+      <section className="rounded-xl bg-white p-2.5 shadow-sm ring-1 ring-zinc-200 sm:p-3">
+        <div className="flex items-center justify-between gap-2">
+          <div className="min-w-0">
+            <p className="text-[9px] font-bold uppercase leading-tight text-zinc-500">Listado</p>
+            <p className="text-xs leading-tight text-zinc-600 sm:text-sm">
               <span className="font-bold tabular-nums text-zinc-900">{filtered.length}</span> artículos
               {q.trim() ? ' (filtrado)' : ''}
             </p>
@@ -230,56 +208,24 @@ export default function PedidosArticulosPage() {
           <button
             type="button"
             onClick={() => void load()}
-            className="min-h-[40px] rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-xs font-semibold text-zinc-800"
+            className="shrink-0 rounded-md border border-zinc-200 bg-zinc-50 px-2 py-1 text-[10px] font-semibold text-zinc-800 sm:px-2.5 sm:py-1.5 sm:text-xs"
           >
             Actualizar
           </button>
         </div>
-        <div className="relative mt-4">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" aria-hidden />
+        <div className="relative mt-2">
+          <Search
+            className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-zinc-400"
+            aria-hidden
+          />
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="Buscar por nombre, categoría…"
-            className="min-h-[48px] w-full rounded-xl border border-zinc-200 py-3 pl-9 pr-3 text-base outline-none focus:ring-2 focus:ring-[#D32F2F]/20 sm:text-sm"
+            placeholder="Buscar…"
+            className="min-h-[40px] w-full rounded-lg border border-zinc-200 py-2 pl-8 pr-2.5 text-sm outline-none focus:ring-2 focus:ring-[#D32F2F]/20"
           />
         </div>
       </section>
-
-      <details
-        className="rounded-2xl border border-amber-200 bg-amber-50/60 p-4 ring-1 ring-amber-100"
-        open={showDup}
-        onToggle={(e) => setShowDup(e.currentTarget.open)}
-      >
-        <summary className="flex min-h-[44px] cursor-pointer list-none items-center gap-2 text-sm font-bold text-amber-950">
-          <AlertTriangle className="h-4 w-4 shrink-0" aria-hidden />
-          Posibles duplicados (nombre parecido)
-        </summary>
-        <p className="mt-2 text-xs text-amber-900/90">
-          Solo sugerencias; no se fusionan artículos. Vista SQL:{' '}
-          <code className="rounded bg-white/80 px-1">purchase_article_duplicate_candidates</code>.
-        </p>
-        {duplicates.length === 0 ? (
-          <p className="mt-3 text-sm text-zinc-600">
-            {loading ? 'Cargando…' : 'No hay pares por encima del umbral o la vista aún no existe.'}
-          </p>
-        ) : (
-          <ul className="mt-3 max-h-64 space-y-2 overflow-y-auto text-sm">
-            {duplicates.map((d) => (
-              <li key={`${d.articleIdA}-${d.articleIdB}`} className="rounded-lg bg-white px-3 py-2 ring-1 ring-amber-200/80">
-                <p className="font-semibold text-zinc-900">
-                  {d.nombreA} ↔ {d.nombreB}
-                </p>
-                <p className="text-[11px] text-zinc-500">
-                  Similitud {(d.score * 100).toFixed(0)}% ·{' '}
-                  <span className="font-mono">{d.articleIdA.slice(0, 8)}…</span> /{' '}
-                  <span className="font-mono">{d.articleIdB.slice(0, 8)}…</span>
-                </p>
-              </li>
-            ))}
-          </ul>
-        )}
-      </details>
 
       {loading ? (
         <p className="text-center text-sm text-zinc-500">Cargando artículos…</p>
@@ -290,7 +236,7 @@ export default function PedidosArticulosPage() {
             : 'Nada coincide con la búsqueda.'}
         </p>
       ) : (
-        <ul className="space-y-3">
+        <ul className="space-y-2">
           {filtered.map((a) => (
             <ArticleCard
               key={a.id}
@@ -436,60 +382,61 @@ function ArticleCard({
     }
   };
 
+  const nombreCompacto = (nombreVisibleProveedor || a.nombre).trim();
+
   return (
-    <li className="overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm ring-1 ring-zinc-100">
-      <div className="flex flex-wrap items-start justify-between gap-3 p-4 sm:p-5">
-        <div className="flex min-w-0 gap-3">
-          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-indigo-100 text-indigo-800">
-            <Package className="h-5 w-5" aria-hidden />
+    <li className="list-none">
+      <details className="group overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm ring-1 ring-zinc-100">
+        <summary className="flex cursor-pointer list-none items-center gap-2 p-2.5 sm:gap-3 sm:p-3 [&::-webkit-details-marker]:hidden">
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-indigo-100 text-indigo-800">
+            <Package className="h-3.5 w-3.5" aria-hidden />
           </div>
-            <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="rounded-md bg-indigo-100 px-2 py-0.5 text-[10px] font-black uppercase text-indigo-900">
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="rounded bg-indigo-100 px-1.5 py-0.5 text-[8px] font-black uppercase leading-none text-indigo-900 sm:text-[9px]">
                 Artículo
               </span>
               {a.activo ? (
-                <span className="text-[10px] font-bold uppercase text-emerald-700">Activo</span>
+                <span className="text-[8px] font-bold uppercase leading-none text-emerald-700 sm:text-[9px]">Activo</span>
               ) : (
-                <span className="text-[10px] font-bold uppercase text-zinc-500">Inactivo</span>
+                <span className="text-[8px] font-bold uppercase leading-none text-zinc-500 sm:text-[9px]">Inactivo</span>
               )}
             </div>
-            <p className="mt-0.5 text-[10px] font-bold uppercase text-zinc-500">Nombre visible (proveedor / albarán)</p>
-            <p className="mt-0.5 text-base font-bold text-zinc-900 sm:text-lg">
-              {nombreVisibleProveedor || a.nombre}
+            <p className="mt-0.5 line-clamp-2 text-sm font-bold leading-snug text-zinc-900 sm:text-base">{nombreCompacto}</p>
+          </div>
+          <div className="shrink-0 text-right">
+            <p className="text-[8px] font-bold uppercase leading-tight text-zinc-500 sm:text-[9px]">Máster</p>
+            <p className="text-base font-black tabular-nums leading-tight text-zinc-900 sm:text-lg">
+              {master != null ? formatMoneyEur(roundMoney(master)) : '—'}
             </p>
-            <p className="text-xs text-zinc-600">
+          </div>
+          <ChevronDown
+            className="h-4 w-4 shrink-0 text-zinc-400 transition group-open:rotate-180"
+            aria-hidden
+          />
+        </summary>
+        <div className="space-y-3 border-t border-zinc-100 bg-zinc-50/40 px-3 pb-3 pt-2 sm:space-y-4 sm:px-4 sm:pb-4 sm:pt-2">
+          <div className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs text-zinc-700">
+            <p>
+              <span className="font-semibold text-zinc-500">Nombre visible (proveedor / albarán):</span>{' '}
+              {nombreVisibleProveedor || '—'}
+            </p>
+            <p className="mt-1">
               <span className="font-semibold text-zinc-500">Artículo máster (interno):</span> {a.nombre}
             </p>
             {a.nombreCorto?.trim() ? (
-              <p className="text-xs text-zinc-600">
+              <p className="mt-1">
                 <span className="font-semibold text-zinc-500">Alias interno:</span> {a.nombreCorto}
               </p>
             ) : null}
-            <p className="text-xs text-zinc-500">
+            <p className="mt-1 text-zinc-500">
               {a.unidadBase ? `Unidad ref.: ${a.unidadBase}` : 'Sin unidad base'}
               {a.categoria ? ` · ${a.categoria}` : ''}
             </p>
+            <p className="mt-1 text-zinc-500">
+              <span className="font-semibold text-zinc-500">Origen coste máster:</span> {labelMetodoCosteMaster(a.metodoCosteMaster)}
+            </p>
           </div>
-        </div>
-        <div className="w-full text-left sm:w-auto sm:text-right">
-          <p className="text-[10px] font-bold uppercase text-zinc-500">Coste máster</p>
-          <p className="text-xl font-black tabular-nums text-zinc-900 sm:text-2xl">
-            {master != null ? formatMoneyEur(roundMoney(master)) : '—'}
-          </p>
-          <p className="text-[11px] text-zinc-500">{labelMetodoCosteMaster(a.metodoCosteMaster)}</p>
-        </div>
-      </div>
-
-      <details className="group border-t border-zinc-100 bg-zinc-50/40">
-        <summary className="flex min-h-[52px] cursor-pointer list-none items-center justify-between gap-2 px-4 py-3 text-sm font-bold text-zinc-800 sm:px-5">
-          <span className="flex items-center gap-2">
-            <GitCompare className="h-4 w-4 text-zinc-500" aria-hidden />
-            Detalle: catálogo, histórico y comparativa
-          </span>
-          <ChevronDown className="h-5 w-5 shrink-0 text-zinc-400 transition group-open:rotate-180" aria-hidden />
-        </summary>
-        <div className="space-y-4 px-4 pb-4 pt-1 sm:px-5 sm:pb-5">
           <section className="rounded-xl border border-indigo-200/80 bg-indigo-50/40 p-3 ring-1 ring-indigo-100 sm:p-4">
             <h3 className="text-xs font-black uppercase text-indigo-900">Compra → uso cocina</h3>
             {masterMsg ? (
