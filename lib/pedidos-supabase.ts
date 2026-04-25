@@ -5,6 +5,7 @@ import {
   isMissingPurchaseArticlesError,
   linkPurchaseArticleToNewSupplierProduct,
 } from '@/lib/purchase-articles-supabase';
+import { comparablePriceHistoryPair } from '@/lib/price-evolution-comparable';
 import type { Unit } from '@/lib/types';
 
 /**
@@ -1184,11 +1185,21 @@ export async function updateSupplierProductPriceWithHistory(
   if (!Number.isFinite(newP) || newP < 0) throw new Error('Precio no válido.');
   if (Math.abs(oldP - newP) < 0.005) return { changed: false };
 
+  const histP = comparablePriceHistoryPair(
+    {
+      unit: String(row.unit),
+      price_per_unit: Number(row.price_per_unit),
+      estimated_kg_per_unit: row.estimated_kg_per_unit,
+      billing_unit: row.billing_unit ?? null,
+      billing_qty_per_order_unit: row.billing_qty_per_order_unit,
+    },
+    newP,
+  );
   const { error: hErr } = await supabase.from('pedido_supplier_product_price_history').insert({
     local_id: localId,
     supplier_product_id: supplierProductId,
-    old_price_per_unit: oldP,
-    new_price_per_unit: newP,
+    old_price_per_unit: histP.old,
+    new_price_per_unit: histP.new,
     source: meta.source,
     delivery_note_id: meta.deliveryNoteId ?? null,
     created_by: meta.userId ?? null,
