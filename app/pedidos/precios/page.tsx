@@ -85,6 +85,45 @@ type PriceSummary = {
   catalogUnit: Unit;
   /** Id de producto de proveedor en las líneas (referencia / histórico de catálogo). */
   supplierProductId: string | null;
+  /** Solo una compra con precio en el periodo (el gráfico sigue mostrando el punto). */
+  singlePriceObservation?: boolean;
+  /** En modo €/kg se usó precio por unidad de catálogo por no haber kg recibido/estimado. */
+  usedPerKgUnitFallback?: boolean;
+};
+
+/** Depuración temporal: líneas de pedido consideradas para la evolución (misma fuente que el gráfico: purchase_order_items vía fetchOrders). */
+type EvolutionDebugRow = {
+  orderId: string;
+  orderItemId: string;
+  supplierId: string;
+  supplierName: string;
+  evolutionKey: string;
+  productName: string;
+  supplierProductId: string | null;
+  unit: string;
+  orderPriceDate: string;
+  inWindow: boolean;
+  supplierFilteredOut: boolean;
+  excludeFromPriceEvolution: boolean;
+  evPrice: number | null;
+  weightQty: number;
+  perKgFallbackToUnit: boolean;
+  includedInSeries: boolean;
+  discardReason: string | null;
+};
+
+type GroupedEvolutionRow = {
+  key: string;
+  productName: string;
+  billPointCount: number;
+  pointCount: number;
+};
+
+type DiscardedEvolution = {
+  evolutionKey: string;
+  productName: string;
+  orderItemId: string;
+  reason: string;
 };
 
 function orderPriceDate(order: PedidoOrder): string {
@@ -258,30 +297,19 @@ function isPriceRiseAlert(row: PriceSummary, alertPct: number): boolean {
   return row.deltaPct >= alertPct;
 }
 
-/**
- * Incluir en la tabla de evolución aunque el primer y último punto coincidan (p. ej. catálogo 2 →
- * albarán 2,5 → albarán 2): si en algún pedido el albarán se apartó del precio base, o hay más de
- * un precio de albarán distinto entre sí, la serie sigue siendo relevante.
- */
-function shouldIncludePriceEvolutionRow(row: PriceSummary): boolean {
-  if (row.points.length < 2) return false;
-  if (Math.abs(row.delta) > 0.001) return true;
-  if (row.points.some((p) => p.sortRank === 0)) return true;
-  const bills = row.points.filter((p) => p.sortRank === 1).map((p) => p.price);
-  if (bills.length < 2) return false;
-  const mn = Math.min(...bills);
-  const mx = Math.max(...bills);
-  return Math.abs(mx - mn) > 0.001;
-}
-
-function buildPriceSummaries(
+function buildPriceSummariesWithDiagnostics(
   orders: PedidoOrder[],
   windowStartMs: number,
   windowEndMs: number,
   priceMode: PriceMode,
   supplierFilter: string,
   catalogNameByProductId: ReadonlyMap<string, string> | null,
-): PriceSummary[] {
+): {
+  series: PriceSummary[];
+  rawRows: EvolutionDebugRow[];
+  groupedRows: GroupedEvolutionRow[];
+  discardedProducts: DiscardedEvolution[];
+} {
   type Acc = {
     key: string;
     productName: string;
@@ -293,29 +321,73 @@ function buildPriceSummaries(
     purchases: PurchaseRow[];
     wSum: number;
     wQty: number;
+    usedPerKgUnitFallback: boolean;
   };
+  const rawRows: EvolutionDebugRow[] = [];
   const map = new Map<string, Acc>();
+
   for (const order of orders) {
-    if (supplierFilter && order.supplierId !== supplierFilter) continue;
+    const supplierFilteredOut = Boolean(supplierFilter && order.supplierId !== supplierFilter);
     const dBill = orderPriceDate(order);
     const dBase = orderBasePriceDate(order);
-    if (!inPriceWindow(dBill, windowStartMs, windowEndMs)) continue;
+    const inWindow = inPriceWindow(dBill, windowStartMs, windowEndMs);
 
     for (const item of order.items) {
-      if (item.excludeFromPriceEvolution) continue;
-      const evPrice = effectivePriceForEvolution(item, priceMode);
-      if (evPrice == null) continue;
-      const wq = weightQtyForEvolution(item, priceMode);
-      if (wq <= 0) continue;
-
+      const productName = orderLineDisplayName(item, catalogNameByProductId).trim();
       const key = evolutionProductKey(order, item, catalogNameByProductId);
-      const displayUnit = priceMode === 'per_kg' ? 'kg' : item.unit;
+
+      let perKgFallbackToUnit = false;
+      let evPrice = effectivePriceForEvolution(item, priceMode);
+      let wq = weightQtyForEvolution(item, priceMode);
+      if (priceMode === 'per_kg' && (evPrice == null || wq <= 0)) {
+        const u = unitPriceForPriceHistory(item);
+        if (u != null) {
+          evPrice = u;
+          wq = Math.max(1, weightQtyForHistory(item));
+          perKgFallbackToUnit = true;
+        }
+      }
+
+      let discardReason: string | null = null;
+      if (supplierFilteredOut) discardReason = 'filtrado por proveedor';
+      else if (!inWindow) discardReason = 'fecha fuera de rango';
+      else if (item.excludeFromPriceEvolution) discardReason = 'excluido manualmente';
+      else if (evPrice == null) discardReason = 'sin precio efectivo o sin datos para el modo (€/ud vs €/kg)';
+      else if (wq <= 0) discardReason = 'sin cantidad en modo actual (p. ej. sin kg en €/kg sin estimación ni recepción)';
+
+      const includedInSeries = discardReason == null;
+
+      rawRows.push({
+        orderId: order.id,
+        orderItemId: item.id,
+        supplierId: order.supplierId,
+        supplierName: order.supplierName,
+        evolutionKey: key,
+        productName,
+        supplierProductId: item.supplierProductId,
+        unit: item.unit,
+        orderPriceDate: dBill,
+        inWindow,
+        supplierFilteredOut,
+        excludeFromPriceEvolution: Boolean(item.excludeFromPriceEvolution),
+        evPrice,
+        weightQty: wq,
+        perKgFallbackToUnit,
+        includedInSeries,
+        discardReason: includedInSeries ? null : discardReason,
+      });
+
+      if (!includedInSeries) continue;
+
+      const lineEvPrice = evPrice!;
+      const displayUnit =
+        priceMode === 'per_kg' && !perKgFallbackToUnit ? 'kg' : item.unit;
       const existing = map.get(key);
       const acc: Acc =
         existing ??
         {
           key,
-          productName: orderLineDisplayName(item, catalogNameByProductId).trim(),
+          productName,
           supplierId: order.supplierId,
           supplierName: order.supplierName,
           catalogUnit: item.unit,
@@ -324,13 +396,15 @@ function buildPriceSummaries(
           purchases: [],
           wSum: 0,
           wQty: 0,
+          usedPerKgUnitFallback: false,
         };
+      if (perKgFallbackToUnit) acc.usedPerKgUnitFallback = true;
 
       const baseRaw = item.basePricePerUnit;
       let basePriceEv: number | null = null;
       if (baseRaw != null && Number.isFinite(baseRaw) && baseRaw > 0) {
         const b = Math.round(baseRaw * 100) / 100;
-        if (priceMode === 'per_kg' && item.unit !== 'kg') {
+        if (priceMode === 'per_kg' && item.unit !== 'kg' && !perKgFallbackToUnit) {
           const est = item.estimatedKgPerUnit;
           if (est != null && est > 0) {
             basePriceEv = Math.round((b / est) * 10000) / 10000;
@@ -339,7 +413,7 @@ function buildPriceSummaries(
           basePriceEv = b;
         }
       }
-      if (basePriceEv != null && Math.abs(basePriceEv - evPrice) > 0.001) {
+      if (basePriceEv != null && Math.abs(basePriceEv - lineEvPrice) > 0.001) {
         acc.points.push({
           date: dBase,
           supplier: order.supplierName,
@@ -354,7 +428,7 @@ function buildPriceSummaries(
         date: dBill,
         supplier: order.supplierName,
         unit: displayUnit,
-        price: evPrice,
+        price: lineEvPrice,
         orderCreatedAt: order.createdAt,
         itemId: item.id,
         sortRank: 1,
@@ -364,9 +438,9 @@ function buildPriceSummaries(
         supplier: order.supplierName,
         qty: wq,
         unit: displayUnit as Unit,
-        price: evPrice,
+        price: lineEvPrice,
       });
-      acc.wSum += evPrice * wq;
+      acc.wSum += lineEvPrice * wq;
       acc.wQty += wq;
       if (!acc.supplierProductId && item.supplierProductId) {
         acc.supplierProductId = item.supplierProductId;
@@ -378,7 +452,7 @@ function buildPriceSummaries(
   const daysWindow = Math.max(1, (windowEndMs - windowStartMs) / 86_400_000);
   const monthsInWindow = Math.max(1, daysWindow / 30);
 
-  return Array.from(map.values())
+  const series = Array.from(map.values())
     .map((acc) => {
       const ordered = [...acc.points].sort((a, b) => {
         const t = Date.parse(a.date) - Date.parse(b.date);
@@ -406,6 +480,7 @@ function buildPriceSummaries(
       const forecast30d = forecastPriceLinear(billAsc, 30);
       const monthlyQty = acc.wQty / monthsInWindow;
       const impactMonthlyVsWap = Math.round((current.price - weightedAvg) * monthlyQty * 100) / 100;
+      const singlePriceObservation = purchasesSorted.length === 1;
       return {
         key: acc.key,
         productName: acc.productName,
@@ -425,10 +500,47 @@ function buildPriceSummaries(
         supplierName: acc.supplierName,
         catalogUnit: acc.catalogUnit,
         supplierProductId: acc.supplierProductId,
+        singlePriceObservation,
+        usedPerKgUnitFallback: acc.usedPerKgUnitFallback,
       };
     })
-    .filter(shouldIncludePriceEvolutionRow)
     .sort((a, b) => a.productName.localeCompare(b.productName, 'es'));
+
+  const groupedRows: GroupedEvolutionRow[] = series.map((s) => ({
+    key: s.key,
+    productName: s.productName,
+    billPointCount: s.points.filter((p) => p.sortRank === 1).length,
+    pointCount: s.points.length,
+  }));
+
+  const discardedProducts: DiscardedEvolution[] = rawRows
+    .filter((r) => !r.includedInSeries && r.discardReason)
+    .map((r) => ({
+      evolutionKey: r.evolutionKey,
+      productName: r.productName,
+      orderItemId: r.orderItemId,
+      reason: r.discardReason!,
+    }));
+
+  return { series, rawRows, groupedRows, discardedProducts };
+}
+
+function buildPriceSummaries(
+  orders: PedidoOrder[],
+  windowStartMs: number,
+  windowEndMs: number,
+  priceMode: PriceMode,
+  supplierFilter: string,
+  catalogNameByProductId: ReadonlyMap<string, string> | null,
+): PriceSummary[] {
+  return buildPriceSummariesWithDiagnostics(
+    orders,
+    windowStartMs,
+    windowEndMs,
+    priceMode,
+    supplierFilter,
+    catalogNameByProductId,
+  ).series;
 }
 
 type CrossSupplierBenchmark = {
@@ -473,7 +585,24 @@ function PriceEvolutionMiniChart({ row }: { row: PriceSummary }) {
     });
   }, [row.points]);
 
-  if (data.length < 2) return null;
+  if (data.length < 1) return null;
+
+  if (data.length === 1) {
+    const p = data[0]!;
+    return (
+      <div className="mt-3 w-full min-w-0">
+        <div className="flex min-h-[8rem] items-center justify-center rounded-lg bg-zinc-50 px-3 py-6 ring-1 ring-zinc-200">
+          <div className="text-center">
+            <p className="text-xs font-semibold text-zinc-500">{p.dateLabel}</p>
+            <p className="mt-1 text-lg font-black tabular-nums text-zinc-900">
+              {p.price.toFixed(2)} €/{row.displayUnit}
+            </p>
+            <p className="mt-0.5 text-[10px] text-zinc-500">{p.kind}</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="mt-3 w-full min-w-0">
@@ -945,10 +1074,37 @@ export default function PedidosPreciosPage() {
     void reloadCatalogPriceHistory();
   }, [reloadCatalogPriceHistory]);
 
-  const series = React.useMemo(
-    () => buildPriceSummaries(orders, windowStartMs, windowEndMs, priceMode, supplierFilter, catalogNameByProductId),
-    [catalogNameByProductId, orders, supplierFilter, windowStartMs, windowEndMs, priceMode],
-  );
+  const { series, evolutionDebug } = React.useMemo(() => {
+    const d = buildPriceSummariesWithDiagnostics(
+      orders,
+      windowStartMs,
+      windowEndMs,
+      priceMode,
+      supplierFilter,
+      catalogNameByProductId,
+    );
+    return {
+      series: d.series,
+      evolutionDebug: {
+        rawRows: d.rawRows,
+        groupedRows: d.groupedRows,
+        discardedProducts: d.discardedProducts,
+      },
+    };
+  }, [catalogNameByProductId, orders, supplierFilter, windowStartMs, windowEndMs, priceMode]);
+
+  React.useEffect(() => {
+    if (process.env.NODE_ENV !== 'development') return;
+    console.log('[Evolución precios] Fuente: líneas purchase_order_items (pedidos no borrador) · local_id:', localId);
+    console.log('[Evolución precios] Filtros:', {
+      ventana: windowLabel,
+      proveedor: supplierFilter || '(todos)',
+      modo: priceMode,
+    });
+    console.log('Registros evolución crudos:', evolutionDebug.rawRows);
+    console.log('Registros agrupados por producto:', evolutionDebug.groupedRows);
+    console.log('Productos descartados:', evolutionDebug.discardedProducts);
+  }, [evolutionDebug, localId, windowLabel, supplierFilter, priceMode]);
 
   const seriesAllSuppliers = React.useMemo(
     () => buildPriceSummaries(orders, windowStartMs, windowEndMs, priceMode, '', catalogNameByProductId),
@@ -1975,6 +2131,14 @@ export default function PedidosPreciosPage() {
                 <div className="min-w-0 flex-1 pr-1">
                   <p className="text-sm font-black text-zinc-900">{row.productName}</p>
                   <p className="text-[11px] text-zinc-500">Proveedor: {row.supplierName}</p>
+                  {row.singlePriceObservation ? (
+                    <p className="pt-1 text-xs font-medium text-amber-900">Solo hay un registro de precio</p>
+                  ) : null}
+                  {row.usedPerKgUnitFallback ? (
+                    <p className="pt-0.5 text-[11px] text-zinc-500">
+                      Modo €/kg: sin peso, se muestra el precio por {row.catalogUnit} del catálogo.
+                    </p>
+                  ) : null}
                 </div>
                 <div className="flex shrink-0 items-center gap-1.5 self-start">
                   {alert ? (
@@ -2008,7 +2172,7 @@ export default function PedidosPreciosPage() {
                 </span>{' '}
                 · Cantidad periodo (ponderado):{' '}
                 <span className="tabular-nums">{row.totalWeightedQty.toLocaleString('es-ES')}</span>
-                {priceMode === 'per_kg' ? ' kg' : ''}
+                {priceMode === 'per_kg' && row.displayUnit === 'kg' ? ' kg' : ` ${row.displayUnit}`}
               </p>
               <p className="pt-1 text-xs text-zinc-600">
                 Impacto mensual vs PMP:{' '}
