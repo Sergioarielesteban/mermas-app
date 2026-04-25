@@ -12,12 +12,11 @@ import {
   formatPpkInputDisplay,
   getDefaultReceivedKgNumeric,
   parsePricePerKg,
-  parseReceivedKg,
-  tryParseReceivedKgPreview,
   type EuroPerKgSuggestionSource,
 } from '@/lib/pedidos-recepcion-inputs';
 import {
   receptionLineTotals,
+  resolveReceivedWeightKgForReceptionPreview,
   unitCanDeclareScaleKgOnReception,
   unitSupportsReceivedWeightKg,
   type PedidoOrderItem,
@@ -30,15 +29,9 @@ function buildPreviewItem(
   priceText: string,
   supplierPpk: number | null,
 ): PedidoOrderItem {
-  const strictKg = parseReceivedKg(kgText);
-  const previewKg = tryParseReceivedKgPreview(kgText);
-
-  let kgForMerge: number | null = item.receivedWeightKg ?? null;
-  if (unitCanDeclareScaleKgOnReception(item.unit)) {
-    if (kgText.trim() === '') kgForMerge = null;
-    else if (strictKg === 'invalid') kgForMerge = item.receivedWeightKg ?? null;
-    else kgForMerge = strictKg ?? previewKg ?? item.receivedWeightKg ?? null;
-  }
+  const kgForMerge: number | null = unitCanDeclareScaleKgOnReception(item.unit)
+    ? resolveReceivedWeightKgForReceptionPreview(item, kgText)
+    : item.receivedWeightKg ?? null;
 
   let ppkMerge: number | null = item.receivedPricePerKg ?? null;
   if (unitSupportsReceivedWeightKg(item.unit)) {
@@ -312,7 +305,7 @@ function RecepcionLineRowInner({
                 previewItem.receivedWeightKg != null &&
                 previewItem.receivedWeightKg > 0
                   ? `Ref. ${previewItem.pricePerUnit.toFixed(2)} €/${unitPriceCatalogSuffix[item.unit]}`
-                  : 'Introduce kg reales; el subtotal se calcula con el €/kg mostrado.'}
+                  : 'El subtotal usa kg en báscula o, si no hay, el peso estimado del pedido y el €/kg mostrado.'}
               </p>
             </div>
           ) : null}

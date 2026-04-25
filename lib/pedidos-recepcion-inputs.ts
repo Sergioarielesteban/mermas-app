@@ -1,4 +1,5 @@
 import {
+  defaultReceivedWeightKgFromEstimate,
   unitCanDeclareScaleKgOnReception,
   unitSupportsReceivedWeightKg,
   type PedidoOrderItem,
@@ -133,18 +134,7 @@ export function getDefaultReceivedKgNumeric(item: PedidoOrderItem): number | nul
   if (item.receivedWeightKg != null && item.receivedWeightKg > 0) {
     return Math.round(item.receivedWeightKg * 1000) / 1000;
   }
-  if (
-    unitSupportsReceivedWeightKg(item.unit) &&
-    item.estimatedKgPerUnit != null &&
-    item.estimatedKgPerUnit > 0 &&
-    item.quantity > 0
-  ) {
-    return Math.round(item.quantity * item.estimatedKgPerUnit * 1000) / 1000;
-  }
-  if (item.unit === 'kg' && item.quantity > 0) {
-    return Math.round(item.quantity * 1000) / 1000;
-  }
-  return null;
+  return defaultReceivedWeightKgFromEstimate(item);
 }
 
 export function parseReceivedKg(raw: string): number | null | 'invalid' {

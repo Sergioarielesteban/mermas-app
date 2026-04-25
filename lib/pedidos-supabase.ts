@@ -97,6 +97,61 @@ export function receptionLineTotals(item: PedidoOrderItem): { lineTotal: number;
   };
 }
 
+/**
+ * Kg de recepción por defecto si el usuario no anotó peso: pedido en kg, o
+ * `cantidad_pedida × kg_por_unidad` (cobro por kg: `billing_qty_per_order_unit`; si no, `estimated_kg_per_unit`).
+ */
+export function defaultReceivedWeightKgFromEstimate(item: PedidoOrderItem): number | null {
+  if (item.unit === 'kg') {
+    return item.quantity > 0 && Number.isFinite(item.quantity)
+      ? Math.round(item.quantity * 1000) / 1000
+      : null;
+  }
+  const q = item.quantity;
+  if (!(q > 0)) return null;
+  let kgPerOrderUnit: number | null = null;
+  if (item.billingUnit === 'kg' && item.billingQtyPerOrderUnit != null && item.billingQtyPerOrderUnit > 0) {
+    kgPerOrderUnit = item.billingQtyPerOrderUnit;
+  } else if (item.estimatedKgPerUnit != null && item.estimatedKgPerUnit > 0) {
+    kgPerOrderUnit = item.estimatedKgPerUnit;
+  }
+  if (kgPerOrderUnit == null) return null;
+  return Math.round(q * kgPerOrderUnit * 1000) / 1000;
+}
+
+/** Peso efectivo en BD: manual si hay; si no, estimado del pedido. */
+export function effectiveReceivedWeightKgForReception(item: PedidoOrderItem): number | null {
+  if (item.receivedWeightKg != null && item.receivedWeightKg > 0 && Number.isFinite(item.receivedWeightKg)) {
+    return Math.round(item.receivedWeightKg * 1000) / 1000;
+  }
+  return defaultReceivedWeightKgFromEstimate(item);
+}
+
+/**
+ * Kg usados en preview/commit: borrador de campo > peso en BD > estimación.
+ * Si el borrador existe y está vacío, se prioriza la estimación (no bloquea €/kg).
+ */
+export function resolveReceivedWeightKgForReceptionPreview(
+  item: PedidoOrderItem,
+  weightDraft: string | undefined,
+): number | null {
+  if (weightDraft !== undefined) {
+    const t = weightDraft.trim();
+    if (t !== '') {
+      const n = Number(t.replace(',', '.'));
+      if (!Number.isFinite(n) || n <= 0) {
+        return item.receivedWeightKg != null && item.receivedWeightKg > 0
+          ? item.receivedWeightKg
+          : defaultReceivedWeightKgFromEstimate(item);
+      }
+      return Math.round(n * 1000) / 1000;
+    }
+    return defaultReceivedWeightKgFromEstimate(item);
+  }
+  if (item.receivedWeightKg != null && item.receivedWeightKg > 0) return item.receivedWeightKg;
+  return defaultReceivedWeightKgFromEstimate(item);
+}
+
 export type PedidoStatus = 'draft' | 'sent' | 'received';
 
 export type PedidoSupplierProduct = {
@@ -1947,10 +2002,11 @@ export async function persistReceptionItemTotals(supabase: SupabaseClient, local
     return;
   }
 
+  const wEff = effectiveReceivedWeightKgForReception(item);
   const w =
-    item.receivedWeightKg == null || !Number.isFinite(item.receivedWeightKg) || item.receivedWeightKg <= 0
+    wEff == null || !Number.isFinite(wEff) || wEff <= 0
       ? null
-      : Math.round(item.receivedWeightKg * 1000) / 1000;
+      : Math.round(wEff * 1000) / 1000;
   let ppk: number | null =
     item.unit !== 'kg' &&
     unitSupportsReceivedWeightKg(item.unit) &&

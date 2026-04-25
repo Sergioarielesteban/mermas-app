@@ -40,6 +40,7 @@ import {
   getPedidoRequesterDisplayName,
   persistReceptionItemTotals,
   receptionLineTotals,
+  resolveReceivedWeightKgForReceptionPreview,
   reopenReceivedOrderToSent,
   setOrderStatus,
   setOrderPriceReviewArchived,
@@ -187,29 +188,16 @@ function previewSentItemSubtotal(
     return lineSubtotalForOrderListDisplay(item);
   }
 
-  const kgText =
-    opts.weightDraft !== undefined
-      ? opts.weightDraft
-      : item.receivedWeightKg != null
-        ? String(item.receivedWeightKg)
-        : '';
+  const receivedWeightKg = unitCanDeclareScaleKgOnReception(item.unit)
+    ? resolveReceivedWeightKgForReceptionPreview(item, opts.weightDraft)
+    : item.receivedWeightKg ?? null;
+
   const ppkText =
     opts.ppkDraft !== undefined
       ? opts.ppkDraft
       : item.receivedPricePerKg != null && item.receivedPricePerKg > 0
         ? String(item.receivedPricePerKg)
         : '';
-
-  let receivedWeightKg: number | null = item.receivedWeightKg ?? null;
-  if (unitCanDeclareScaleKgOnReception(item.unit)) {
-    if (kgText.trim() === '') {
-      receivedWeightKg = item.receivedWeightKg ?? null;
-    } else {
-      const strictKg = parseReceivedKg(kgText);
-      if (strictKg === 'invalid') receivedWeightKg = item.receivedWeightKg ?? null;
-      else receivedWeightKg = strictKg;
-    }
-  }
 
   let receivedPricePerKg: number | null = item.receivedPricePerKg ?? null;
   if (unitSupportsReceivedWeightKg(item.unit)) {
@@ -1187,16 +1175,20 @@ export default function PedidosPage() {
         parsed = p;
       }
 
-      if (
-        parsed != null &&
-        parsed > 0 &&
-        (itemSnap.receivedWeightKg == null || itemSnap.receivedWeightKg <= 0)
-      ) {
-        setMessage('Indica primero los kg reales para aplicar €/kg.');
-        return;
-      }
-
-      const merged = { ...itemSnap, receivedPricePerKg: parsed };
+      const price = getLinePrice(itemSnap);
+      const receivedWeightKg = resolveReceivedWeightKgForReceptionPreview(
+        itemSnap,
+        weightInputByItemId[itemId],
+      );
+      const merged: PedidoOrderItem = {
+        ...itemSnap,
+        pricePerUnit: price,
+        receivedWeightKg,
+        receivedPricePerKg: parsed,
+        ...(itemSnap.unit === 'kg' && receivedWeightKg != null && receivedWeightKg > 0
+          ? { receivedQuantity: receivedWeightKg }
+          : {}),
+      };
 
       void (async () => {
         try {
@@ -1230,7 +1222,16 @@ export default function PedidosPage() {
         }
       })();
     },
-    [localId, orders, pricePerKgInputByItemId, reloadOrders, resolvePpkForItemSnap, setOrders],
+    [
+      getLinePrice,
+      localId,
+      orders,
+      pricePerKgInputByItemId,
+      reloadOrders,
+      resolvePpkForItemSnap,
+      setOrders,
+      weightInputByItemId,
+    ],
   );
 
   const commitPricePerKgBlur = React.useCallback(
@@ -1268,12 +1269,13 @@ export default function PedidosPage() {
           const price = getLinePrice(item);
           const rawW = weightInputRef.current[item.id];
           const rawPpk = pricePerKgInputRef.current[item.id];
-          let parsedWeight: number | null = item.receivedWeightKg ?? null;
-          if (rawW !== undefined) {
+          if (rawW !== undefined && rawW.trim() !== '') {
             const p = parseReceivedKg(rawW);
             if (p === 'invalid') throw new Error(`Peso inválido en ${item.productName}.`);
-            parsedWeight = p;
           }
+          const parsedWeight = unitCanDeclareScaleKgOnReception(item.unit)
+            ? resolveReceivedWeightKgForReceptionPreview(item, rawW)
+            : item.receivedWeightKg ?? null;
           let parsedPpk: number | null = item.receivedPricePerKg ?? null;
           if (rawPpk !== undefined) {
             const p = parsePricePerKg(rawPpk);
@@ -1285,9 +1287,6 @@ export default function PedidosPage() {
             parsedWeight > 0
           ) {
             parsedPpk = item.receivedPricePerKg ?? resolvePpkForItemSnap(item) ?? null;
-          }
-          if (parsedPpk != null && (parsedWeight == null || parsedWeight <= 0)) {
-            throw new Error(`Faltan kg reales en ${item.productName} para usar €/kg.`);
           }
           const merged = {
             ...item,

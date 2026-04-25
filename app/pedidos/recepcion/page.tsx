@@ -15,7 +15,6 @@ import { canAccessPedidos, canUsePedidosModule } from '@/lib/pedidos-access';
 import RecepcionLineRow from '@/components/pedidos/recepcion/RecepcionLineRow';
 import { formatQuantityWithUnit, unitPriceCatalogSuffix } from '@/lib/pedidos-format';
 import {
-  getDefaultReceivedKgNumeric,
   parsePricePerKg,
   parseReceivedKg,
   resolveEuroPerKgSuggestion,
@@ -27,6 +26,7 @@ import {
   fetchReceptionEuroPerKgHintsBySupplierProductIds,
   persistReceptionItemTotals,
   receptionLineTotals,
+  resolveReceivedWeightKgForReceptionPreview,
   setOrderPriceReviewArchived,
   unitCanDeclareScaleKgOnReception,
   unitSupportsReceivedWeightKg,
@@ -354,26 +354,16 @@ export default function RecepcionPedidosPage() {
       parsed = p;
     }
 
-    const defaultKg = getDefaultReceivedKgNumeric(itemSnap);
-    const itemForPpk =
-      itemSnap.receivedWeightKg != null && itemSnap.receivedWeightKg > 0
-        ? itemSnap
-        : defaultKg != null && defaultKg > 0
-          ? { ...itemSnap, receivedWeightKg: defaultKg }
-          : itemSnap;
-
-    if (
-      parsed != null &&
-      parsed > 0 &&
-      (itemForPpk.receivedWeightKg == null || itemForPpk.receivedWeightKg <= 0)
-    ) {
-      setMessage('Indica primero los kg reales para aplicar €/kg.');
-      return;
-    }
-
-    const merged = {
-      ...itemForPpk,
+    const price = getLinePrice(itemSnap);
+    const receivedWeightKg = resolveReceivedWeightKgForReceptionPreview(itemSnap, undefined);
+    const merged: PedidoOrderItem = {
+      ...itemSnap,
+      pricePerUnit: price,
+      receivedWeightKg,
       receivedPricePerKg: parsed,
+      ...(itemSnap.unit === 'kg' && receivedWeightKg != null && receivedWeightKg > 0
+        ? { receivedQuantity: receivedWeightKg }
+        : {}),
     };
 
     void (async () => {
