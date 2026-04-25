@@ -441,6 +441,7 @@ export default function NuevoPedidoPage() {
         receivedPricePerKg: prev?.receivedPricePerKg ?? null,
         incidentType: prev?.incidentType ?? null,
         incidentNotes: prev?.incidentNotes,
+        excludeFromPriceEvolution: Boolean(prev?.excludeFromPriceEvolution),
       };
     })
     .filter((row) => row.quantity > 0);
@@ -532,6 +533,7 @@ export default function NuevoPedidoPage() {
         billingUnit: item.billingUnit ?? null,
         billingQtyPerOrderUnit: item.billingQtyPerOrderUnit ?? null,
         pricePerBillingUnit: item.pricePerBillingUnit ?? null,
+        excludeFromPriceEvolution: Boolean(item.excludeFromPriceEvolution),
       })),
     })
       .then((orderId) => {
@@ -628,6 +630,7 @@ export default function NuevoPedidoPage() {
         billingUnit: item.billingUnit ?? null,
         billingQtyPerOrderUnit: item.billingQtyPerOrderUnit ?? null,
         pricePerBillingUnit: item.pricePerBillingUnit ?? null,
+        excludeFromPriceEvolution: Boolean(item.excludeFromPriceEvolution),
       })),
     })
       .then((orderId) => {

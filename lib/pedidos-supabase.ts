@@ -285,6 +285,8 @@ export type PedidoOrderItem = {
   billingUnit?: Unit | null;
   billingQtyPerOrderUnit?: number | null;
   pricePerBillingUnit?: number | null;
+  /** Si true, la línea no cuenta en /pedidos/precios (columna en Supabase; no borra el pedido). */
+  excludeFromPriceEvolution?: boolean;
 };
 
 export type PedidoOrder = {
@@ -397,6 +399,7 @@ type OrderItemRow = {
   billing_unit?: string | null;
   billing_qty_per_order_unit?: number | null;
   price_per_billing_unit?: number | null;
+  exclude_from_price_evolution?: boolean;
 };
 
 function isMissingReceivedPricePerKgColumnError(message: string): boolean {
@@ -410,6 +413,14 @@ function isMissingOrderItemBillingColumnsError(message: string): boolean {
     (m.includes('billing_unit') || m.includes('billing_qty_per_order_unit') || m.includes('price_per_billing_unit')) &&
     (m.includes('column') || m.includes('schema cache'))
   );
+}
+
+function isMissingExcludeFromPriceEvolutionColumnError(message: string, code?: string): boolean {
+  const m = message.toLowerCase();
+  return (
+    m.includes('exclude_from_price_evolution') &&
+    (m.includes('column') || m.includes('schema cache') || m.includes('does not exist'))
+  ) || code === 'PGRST204' || code === '42703';
 }
 
 function normalizeLabelUpper(value: string) {
@@ -550,12 +561,22 @@ async function fetchPurchaseOrderItemRows(
   const signal = options?.signal;
   const localId = options?.localId;
   const ids = orderIds.length ? orderIds : ['00000000-0000-0000-0000-000000000000'];
-  const selFull =
+  const selFullBase =
     'id,order_id,supplier_product_id,product_name,unit,quantity,received_quantity,price_per_unit,base_price_per_unit,vat_rate,line_total,estimated_kg_per_unit,received_weight_kg,received_price_per_kg,incident_type,incident_notes,billing_unit,billing_qty_per_order_unit,price_per_billing_unit';
-  let q = supabase.from('purchase_order_items').select(selFull).in('order_id', ids);
-  if (localId) q = q.eq('local_id', localId);
-  if (signal) q = q.abortSignal(signal);
-  const withPricePerKg = await q;
+  const selFull = `${selFullBase},exclude_from_price_evolution`;
+  const runItemSelect = (sel: string) => {
+    let q0 = supabase.from('purchase_order_items').select(sel).in('order_id', ids);
+    if (localId) q0 = q0.eq('local_id', localId);
+    if (signal) q0 = q0.abortSignal(signal);
+    return q0;
+  };
+  let withPricePerKg = await runItemSelect(selFull);
+  if (withPricePerKg.error) {
+    const exCode = (withPricePerKg.error as { code?: string }).code;
+    if (isMissingExcludeFromPriceEvolutionColumnError(withPricePerKg.error.message, exCode)) {
+      withPricePerKg = await runItemSelect(selFullBase);
+    }
+  }
   if (withPricePerKg.error) {
     if (isMissingOrderItemBillingColumnsError(withPricePerKg.error.message)) {
       const selNoBill =
@@ -582,7 +603,7 @@ async function fetchPurchaseOrderItemRows(
     if (legacyRes.error) throw new Error(legacyRes.error.message);
     return (legacyRes.data ?? []) as OrderItemRow[];
   }
-  return (withPricePerKg.data ?? []) as OrderItemRow[];
+  return (withPricePerKg.data ?? []) as unknown as OrderItemRow[];
 }
 
 function buildPedidoOrdersFromRows(
@@ -624,6 +645,7 @@ function buildPedidoOrdersFromRows(
       ...(row.price_per_billing_unit != null && Number.isFinite(Number(row.price_per_billing_unit))
         ? { pricePerBillingUnit: Number(row.price_per_billing_unit) }
         : {}),
+      excludeFromPriceEvolution: Boolean(row.exclude_from_price_evolution),
     });
     byOrder.set(row.order_id, list);
   }
@@ -1355,18 +1377,40 @@ export async function deleteCatalogPriceHistoryRow(
   if (error) throw new Error(error.message);
 }
 
-/** Elimina todo el histórico de `pedido_supplier_product_price_history` para un producto de proveedor. */
-export async function deleteAllCatalogPriceHistoryForSupplierProduct(
+const EXCLUDE_EVOLUTION_CHUNK = 120;
+
+/**
+ * Marca líneas de pedido para que no entren en evolución de precios. No borra pedidos.
+ */
+export async function setOrderItemsExcludeFromPriceEvolution(
   supabase: SupabaseClient,
   localId: string,
-  supplierProductId: string,
+  itemIds: string[],
+  logProductId?: string,
 ) {
-  const { error } = await supabase
-    .from('pedido_supplier_product_price_history')
-    .delete()
-    .eq('local_id', localId)
-    .eq('supplier_product_id', supplierProductId);
-  if (error) throw new Error(error.message);
+  const sourceTable = 'purchase_order_items';
+  console.log('Fuente evolución:', sourceTable);
+  console.log('Deleting/hiding evolution for product:', logProductId ?? itemIds.length);
+  const unique = [...new Set(itemIds)].filter(Boolean);
+  if (unique.length === 0) {
+    const empty = { data: null as { id: string }[] | null, error: null as null, empty: true };
+    console.log('Supabase response:', empty);
+    return empty;
+  }
+  const all: { id: string }[] = [];
+  for (let i = 0; i < unique.length; i += EXCLUDE_EVOLUTION_CHUNK) {
+    const chunk = unique.slice(i, i + EXCLUDE_EVOLUTION_CHUNK);
+    const result = await supabase
+      .from('purchase_order_items')
+      .update({ exclude_from_price_evolution: true })
+      .eq('local_id', localId)
+      .in('id', chunk)
+      .select('id');
+    console.log('Supabase response:', result);
+    if (result.error) throw new Error(result.error.message);
+    if (result.data) for (const r of result.data) all.push(r);
+  }
+  return { data: all, error: null as null };
 }
 
 export async function setSupplierProductActive(
@@ -1694,6 +1738,7 @@ export async function saveOrder(
       billingUnit?: Unit | null;
       billingQtyPerOrderUnit?: number | null;
       pricePerBillingUnit?: number | null;
+      excludeFromPriceEvolution?: boolean;
     }>;
   },
 ) {
@@ -1745,6 +1790,7 @@ export async function saveOrder(
       item.pricePerBillingUnit != null && Number.isFinite(item.pricePerBillingUnit) && item.pricePerBillingUnit >= 0
         ? Math.round(item.pricePerBillingUnit * 10000) / 10000
         : null,
+    exclude_from_price_evolution: Boolean(item.excludeFromPriceEvolution),
   }));
 
   const { data, error } = await supabase.rpc('save_purchase_order_with_items', {

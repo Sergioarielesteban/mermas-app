@@ -322,6 +322,9 @@ alter table public.purchase_orders
 alter table public.purchase_orders
   add column if not exists usuario_nombre text;
 
+alter table public.purchase_order_items
+  add column if not exists exclude_from_price_evolution boolean not null default false;
+
 -- Guardado atómico de pedido + líneas (evita cabecera sin líneas en fallos intermedios).
 create or replace function public.save_purchase_order_with_items(
   p_order_id uuid,
@@ -430,7 +433,8 @@ begin
     incident_notes,
     billing_unit,
     billing_qty_per_order_unit,
-    price_per_billing_unit
+    price_per_billing_unit,
+    exclude_from_price_evolution
   )
   select
     p_local_id,
@@ -451,7 +455,8 @@ begin
     i.incident_notes,
     i.billing_unit,
     i.billing_qty_per_order_unit,
-    i.price_per_billing_unit
+    i.price_per_billing_unit,
+    coalesce(i.exclude_from_price_evolution, false)
   from jsonb_to_recordset(coalesce(p_items, '[]'::jsonb)) as i(
     supplier_product_id uuid,
     product_name text,
@@ -469,7 +474,8 @@ begin
     incident_notes text,
     billing_unit text,
     billing_qty_per_order_unit numeric,
-    price_per_billing_unit numeric
+    price_per_billing_unit numeric,
+    exclude_from_price_evolution boolean
   );
 
   select updated_at into v_order_updated_at

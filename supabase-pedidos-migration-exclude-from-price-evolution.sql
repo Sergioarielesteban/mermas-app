@@ -1,0 +1,169 @@
+-- Evolución de precios (/pedidos/precios): excluir líneas de purchase_order_items sin borrar pedidos.
+-- Ejecutar en Supabase SQL Editor. Idempotente.
+
+alter table public.purchase_order_items
+  add column if not exists exclude_from_price_evolution boolean not null default false;
+
+comment on column public.purchase_order_items.exclude_from_price_evolution is
+  'Si true, la línea no entra en agregados de evolución de precio; no borra el pedido ni la línea.';
+
+-- Función de guardado de pedido: conservar (o fijar) el flag al reinsertar líneas.
+create or replace function public.save_purchase_order_with_items(
+  p_order_id uuid,
+  p_local_id uuid,
+  p_supplier_id uuid,
+  p_status text,
+  p_notes text,
+  p_sent_at timestamptz,
+  p_delivery_date date,
+  p_items jsonb,
+  p_expected_order_updated_at timestamptz default null,
+  p_mark_content_revised_after_sent boolean default false,
+  p_usuario_nombre text default null
+)
+returns table(order_id uuid, order_updated_at timestamptz)
+language plpgsql
+security invoker
+set search_path = public
+as $$
+declare
+  v_order_id uuid;
+  v_order_updated_at timestamptz;
+  v_nombre text;
+begin
+  v_nombre := nullif(btrim(coalesce(p_usuario_nombre, '')), '');
+
+  if p_status not in ('draft', 'sent', 'received') then
+    raise exception 'Estado de pedido inválido';
+  end if;
+
+  if p_order_id is null then
+    insert into public.purchase_orders (
+      local_id,
+      supplier_id,
+      status,
+      notes,
+      sent_at,
+      delivery_date,
+      usuario_nombre
+    ) values (
+      p_local_id,
+      p_supplier_id,
+      p_status,
+      btrim(coalesce(p_notes, '')),
+      case when p_status = 'sent' then coalesce(p_sent_at, now()) else null end,
+      p_delivery_date,
+      v_nombre
+    )
+    returning id, updated_at into v_order_id, v_order_updated_at;
+  else
+    update public.purchase_orders
+    set
+      supplier_id = p_supplier_id,
+      status = p_status,
+      notes = btrim(coalesce(p_notes, '')),
+      sent_at = case when p_status = 'sent' then coalesce(p_sent_at, now()) else null end,
+      delivery_date = p_delivery_date,
+      content_revised_after_sent_at = case
+        when coalesce(p_mark_content_revised_after_sent, false) then now()
+        when p_status = 'draft' then null
+        else content_revised_after_sent_at
+      end,
+      usuario_nombre = coalesce(v_nombre, usuario_nombre)
+    where id = p_order_id
+      and local_id = p_local_id
+      and (p_expected_order_updated_at is null or updated_at = p_expected_order_updated_at)
+    returning id, updated_at into v_order_id, v_order_updated_at;
+
+    if v_order_id is null then
+      if exists (
+        select 1
+        from public.purchase_orders po
+        where po.id = p_order_id
+          and po.local_id = p_local_id
+      ) then
+        raise exception 'Order updated by another user (concurrency conflict)';
+      end if;
+      raise exception 'Pedido no encontrado o sin permisos para este local';
+    end if;
+
+    delete from public.purchase_order_items
+    where order_id = v_order_id
+      and local_id = p_local_id;
+  end if;
+
+  if coalesce(jsonb_typeof(p_items), 'null') <> 'array' then
+    raise exception 'p_items debe ser un array JSON';
+  end if;
+
+  insert into public.purchase_order_items (
+    local_id,
+    order_id,
+    supplier_product_id,
+    product_name,
+    unit,
+    quantity,
+    received_quantity,
+    price_per_unit,
+    base_price_per_unit,
+    vat_rate,
+    line_total,
+    estimated_kg_per_unit,
+    received_weight_kg,
+    received_price_per_kg,
+    incident_type,
+    incident_notes,
+    billing_unit,
+    billing_qty_per_order_unit,
+    price_per_billing_unit,
+    exclude_from_price_evolution
+  )
+  select
+    p_local_id,
+    v_order_id,
+    i.supplier_product_id,
+    i.product_name,
+    i.unit,
+    i.quantity,
+    coalesce(i.received_quantity, 0),
+    i.price_per_unit,
+    i.base_price_per_unit,
+    coalesce(i.vat_rate, 0),
+    i.line_total,
+    i.estimated_kg_per_unit,
+    i.received_weight_kg,
+    i.received_price_per_kg,
+    i.incident_type,
+    i.incident_notes,
+    i.billing_unit,
+    i.billing_qty_per_order_unit,
+    i.price_per_billing_unit,
+    coalesce(i.exclude_from_price_evolution, false)
+  from jsonb_to_recordset(coalesce(p_items, '[]'::jsonb)) as i(
+    supplier_product_id uuid,
+    product_name text,
+    unit text,
+    quantity numeric,
+    received_quantity numeric,
+    price_per_unit numeric,
+    base_price_per_unit numeric,
+    vat_rate numeric,
+    line_total numeric,
+    estimated_kg_per_unit numeric,
+    received_weight_kg numeric,
+    received_price_per_kg numeric,
+    incident_type text,
+    incident_notes text,
+    billing_unit text,
+    billing_qty_per_order_unit numeric,
+    price_per_billing_unit numeric,
+    exclude_from_price_evolution boolean
+  );
+
+  select updated_at into v_order_updated_at
+  from public.purchase_orders
+  where id = v_order_id;
+
+  return query select v_order_id, v_order_updated_at;
+end;
+$$;

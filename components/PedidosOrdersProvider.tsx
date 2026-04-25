@@ -98,6 +98,8 @@ type PedidosOrdersContextValue = {
   orders: PedidoOrder[];
   setOrders: React.Dispatch<React.SetStateAction<PedidoOrder[]>>;
   reloadOrders: () => void;
+  /** Recarga desde Supabase y espera el merge (p. ej. tras marcar exclusiones de evolución de precio). */
+  reloadOrdersAsync: () => Promise<void>;
   reloadError: string | null;
   /** Tras crear un pedido: mantenerlo visible hasta que la lectura Supabase lo devuelva (réplica). */
   pinOrderId: (id: string) => void;
@@ -217,6 +219,37 @@ export function PedidosOrdersProvider({ children }: { children: React.ReactNode 
       reloadOrdersNow();
     }, RELOAD_DEBOUNCE_MS);
   }, [reloadOrdersNow]);
+
+  const reloadOrdersAsync = useCallback(async () => {
+    if (!canUse || !localId) return;
+    if (isDemoMode()) return;
+    const targetId = localId;
+    const supabase = getSupabaseClient();
+    if (!supabase) return;
+    setReloadError(null);
+    reloadAbortRef.current?.abort();
+    const ac = new AbortController();
+    reloadAbortRef.current = ac;
+    try {
+      const rows = await fetchOrders(supabase, targetId, { signal: ac.signal });
+      if (ac.signal.aborted) return;
+      if (localIdRef.current !== targetId) return;
+      const tombstones = activeOrderTombstoneSet(locallyDeletedOrderIdsRef.current);
+      saveOrderTombstones(targetId, locallyDeletedOrderIdsRef.current);
+      setOrders((prev) =>
+        mergePedidoOrdersFromServer(prev, rows, pinUntilSeenRef.current, {
+          tombstoneIds: tombstones,
+          pendingReceivedById: pendingReceivedByIdRef.current,
+        }),
+      );
+      ordersReadyLocalIdRef.current = targetId;
+    } catch (error: unknown) {
+      if (ac.signal.aborted) return;
+      if (localIdRef.current !== targetId) return;
+      const msg = error instanceof Error ? error.message : 'No se pudo recargar pedidos.';
+      setReloadError(msg);
+    }
+  }, [canUse, localId]);
 
   /**
    * Realtime incremental: un solo pedido vía `fetchOrderById`.
@@ -379,6 +412,7 @@ export function PedidosOrdersProvider({ children }: { children: React.ReactNode 
       orders,
       setOrders,
       reloadOrders,
+      reloadOrdersAsync,
       reloadError,
       pinOrderId,
       releasePinOrderId,
@@ -390,6 +424,7 @@ export function PedidosOrdersProvider({ children }: { children: React.ReactNode 
     [
       orders,
       reloadOrders,
+      reloadOrdersAsync,
       reloadError,
       pinOrderId,
       releasePinOrderId,

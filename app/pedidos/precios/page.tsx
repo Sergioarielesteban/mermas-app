@@ -23,10 +23,10 @@ import { canAccessPedidos, canUsePedidosModule } from '@/lib/pedidos-access';
 import { formatQuantityWithUnit } from '@/lib/pedidos-format';
 import {
   billingQuantityForLine,
-  deleteAllCatalogPriceHistoryForSupplierProduct,
   deleteCatalogPriceHistoryRow,
   fetchCatalogPriceHistoryRows,
   fetchSuppliersWithProducts,
+  setOrderItemsExcludeFromPriceEvolution,
   updateSupplierProductPriceWithHistory,
   type CatalogPriceHistoryListRow,
   type PedidoOrder,
@@ -83,7 +83,7 @@ type PriceSummary = {
   supplierName: string;
   /** Unidad de catálogo (caja, kg…) — clave para comparar entre proveedores. */
   catalogUnit: Unit;
-  /** Catálogo proveedor; necesario para vaciar `pedido_supplier_product_price_history` por producto. */
+  /** Id de producto de proveedor en las líneas (referencia / histórico de catálogo). */
   supplierProductId: string | null;
 };
 
@@ -111,6 +111,24 @@ function evolutionProductKey(
     .replace(/\s+/g, ' ')
     .toLowerCase();
   return `${order.supplierId}|${name}|${item.unit}`;
+}
+
+function collectOrderLineIdsForEvolutionKey(
+  orders: PedidoOrder[],
+  evolutionKey: string,
+  catalogNameByProductId: ReadonlyMap<string, string> | null,
+): string[] {
+  const ids: string[] = [];
+  for (const order of orders) {
+    if (order.status === 'draft') continue;
+    for (const item of order.items) {
+      if (item.excludeFromPriceEvolution) continue;
+      if (evolutionProductKey(order, item, catalogNameByProductId) === evolutionKey) {
+        ids.push(item.id);
+      }
+    }
+  }
+  return ids;
 }
 
 /** Precio unitario para historial: incluye líneas con incidencia si `price_per_unit` quedó en 0 pero hay subtotal. */
@@ -284,6 +302,7 @@ function buildPriceSummaries(
     if (!inPriceWindow(dBill, windowStartMs, windowEndMs)) continue;
 
     for (const item of order.items) {
+      if (item.excludeFromPriceEvolution) continue;
       const evPrice = effectivePriceForEvolution(item, priceMode);
       if (evPrice == null) continue;
       const wq = weightQtyForEvolution(item, priceMode);
@@ -798,7 +817,7 @@ export default function PedidosPreciosPage() {
   const { localCode, localName, localId, email, userId } = useAuth();
   const hasPedidosEntry = canAccessPedidos(localCode, email, localName, localId);
   const canUse = canUsePedidosModule(localCode, email, localName, localId);
-  const { orders: allOrders } = usePedidosOrders();
+  const { orders: allOrders, reloadOrdersAsync } = usePedidosOrders();
   const orders = React.useMemo(() => allOrders.filter((o) => o.status !== 'draft'), [allOrders]);
   const [message, setMessage] = React.useState<string | null>(null);
   const [windowPreset, setWindowPreset] = React.useState<WindowPreset>('90');
@@ -822,7 +841,6 @@ export default function PedidosPreciosPage() {
   const [dismissedSeriesKeys, setDismissedSeriesKeys] = React.useState(() => new Set<string>());
   const [seriesDeleteContext, setSeriesDeleteContext] = React.useState<{
     key: string;
-    supplierProductId: string;
   } | null>(null);
   const [seriesEvolutionDeleteBusy, setSeriesEvolutionDeleteBusy] = React.useState(false);
   const [evolutionToast, setEvolutionToast] = React.useState<string | null>(null);
@@ -1519,13 +1537,24 @@ export default function PedidosPreciosPage() {
     setSeriesEvolutionDeleteBusy(true);
     try {
       const ctx = seriesDeleteContext;
-      await deleteAllCatalogPriceHistoryForSupplierProduct(getSupabaseClient()!, localId, ctx.supplierProductId);
+      const itemIds = collectOrderLineIdsForEvolutionKey(orders, ctx.key, catalogNameByProductId);
+      if (itemIds.length === 0) {
+        await appAlert('No hay líneas de pedido que excluir para esta evolución.');
+        return;
+      }
+      await setOrderItemsExcludeFromPriceEvolution(
+        getSupabaseClient()!,
+        localId,
+        itemIds,
+        ctx.key,
+      );
       setDismissedSeriesKeys((prev) => {
         const n = new Set(prev);
         n.add(ctx.key);
         return n;
       });
       setSeriesDeleteContext(null);
+      await reloadOrdersAsync();
       await reloadCatalogPriceHistory();
       setEvolutionToast('Evolución eliminada');
     } catch {
@@ -1533,7 +1562,14 @@ export default function PedidosPreciosPage() {
     } finally {
       setSeriesEvolutionDeleteBusy(false);
     }
-  }, [seriesDeleteContext, localId, reloadCatalogPriceHistory]);
+  }, [
+    seriesDeleteContext,
+    localId,
+    orders,
+    catalogNameByProductId,
+    reloadCatalogPriceHistory,
+    reloadOrdersAsync,
+  ]);
 
   if (!hasPedidosEntry) {
     return (
@@ -1949,20 +1985,10 @@ export default function PedidosPreciosPage() {
                   ) : null}
                   <button
                     type="button"
-                    disabled={!row.supplierProductId || seriesEvolutionDeleteBusy}
-                    title={
-                      row.supplierProductId
-                        ? 'Vaciar historial de evolución de precio (catálogo) de este producto'
-                        : 'Falta enlace a producto de catálogo en las líneas; no se puede vaciar el histórico.'
-                    }
+                    disabled={seriesEvolutionDeleteBusy}
+                    title="Excluir estas compras de la evolución de precio (no borra el pedido)"
                     onClick={() => {
-                      if (row.supplierProductId) {
-                        setSeriesDeleteContext({ key: row.key, supplierProductId: row.supplierProductId });
-                      } else {
-                        void appAlert(
-                          'No hay enlace a un producto de catálogo en las compras. No se puede vaciar el histórico vinculado.',
-                        );
-                      }
+                      setSeriesDeleteContext({ key: row.key });
                     }}
                     className="flex min-h-11 min-w-11 items-center justify-center rounded-xl text-zinc-400 transition-colors hover:bg-red-50 hover:text-[#B91C1C] active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-zinc-400"
                     aria-label="Vaciar evolución de precio de este producto"
