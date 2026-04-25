@@ -555,7 +555,7 @@ export default function EscandalloRecipeEditorClient({ recipeId }: { recipeId: s
   }
 
   return (
-    <div className="space-y-5 pb-32 max-lg:pb-[calc(9rem+env(safe-area-inset-bottom,0px))] lg:pb-8">
+    <div className="min-h-0 h-auto space-y-5 overflow-x-hidden overflow-y-visible pb-8 max-lg:pb-[calc(1.5rem+env(safe-area-inset-bottom,0px))] lg:overflow-visible lg:pb-8">
       {demoReadonly ? (
         <div className="flex justify-end">
           <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-bold text-amber-900">Demo · solo lectura</span>
@@ -576,7 +576,7 @@ export default function EscandalloRecipeEditorClient({ recipeId }: { recipeId: s
       ) : (
         <>
           {/* Bloque A — cabecera */}
-          <header className="sticky top-0 z-20 space-y-4 rounded-2xl border border-zinc-200/90 bg-white/95 p-4 shadow-sm ring-1 ring-zinc-100 backdrop-blur-md sm:p-5">
+          <header className="relative z-0 space-y-4 rounded-2xl border border-zinc-200/90 bg-white/95 p-4 shadow-sm ring-1 ring-zinc-100 backdrop-blur-md sm:p-5 lg:sticky lg:top-0 lg:z-20">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider text-zinc-500">
@@ -859,8 +859,8 @@ export default function EscandalloRecipeEditorClient({ recipeId }: { recipeId: s
             />
           ) : null}
 
-          {/* Bloque D — resumen fijo móvil */}
-          <div className="fixed inset-x-0 bottom-0 z-30 border-t border-zinc-200 bg-white/95 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 shadow-[0_-8px_30px_rgba(0,0,0,0.08)] backdrop-blur-md lg:static lg:z-0 lg:rounded-2xl lg:border lg:pb-3 lg:shadow-sm">
+          {/* Bloque D — móvil: en flujo (un solo scroll); lg: sticky cabecera sigue siendo la de arriba */}
+          <div className="relative z-0 mt-1 rounded-2xl border border-zinc-200 bg-white/95 px-4 py-3 shadow-sm backdrop-blur-md max-lg:shadow-[0_-2px_16px_rgba(0,0,0,0.06)] lg:mt-0 lg:pb-3">
             <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-3 text-sm text-zinc-800 sm:text-sm">
               <div className="flex flex-wrap gap-x-4 gap-y-1 tabular-nums text-zinc-700">
                 <span>

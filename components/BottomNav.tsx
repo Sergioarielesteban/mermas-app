@@ -81,10 +81,16 @@ export default function BottomNav() {
   const mermaActive = pathname === '/dashboard' || pathname.startsWith('/dashboard/');
   const pedidoActive = pathname === '/pedidos/nuevo' || pathname.startsWith('/pedidos/nuevo/');
   const tempActive = pathname.startsWith('/appcc/temperaturas');
+  /** Móvil: en el editor de receta se ocultan accesos rápidos; desde lg se mantiene la barra. */
+  const hideOnMobileRecipeEdit =
+    pathname != null && /^\/escandallos\/recetas\/.+\/editar$/.test(pathname);
 
   return (
     <nav
-      className="fixed inset-x-0 bottom-0 z-[70] border-t border-zinc-200/80 bg-white/98 pb-[max(0.5rem,env(safe-area-inset-bottom,0px))] shadow-[0_-6px_24px_rgba(15,15,20,0.08)] print:hidden"
+      className={[
+        'fixed inset-x-0 bottom-0 z-[70] border-t border-zinc-200/80 bg-white/98 pb-[max(0.5rem,env(safe-area-inset-bottom,0px))] shadow-[0_-6px_24px_rgba(15,15,20,0.08)] print:hidden',
+        hideOnMobileRecipeEdit ? 'max-lg:hidden' : '',
+      ].join(' ')}
       aria-label="Accesos rápidos: nuevo pedido, merma, temperaturas"
     >
       <div className="mx-auto flex w-full max-w-full items-stretch justify-center gap-2 px-3 py-2 sm:max-w-2xl sm:px-4 md:max-w-4xl md:px-4 lg:max-w-5xl">

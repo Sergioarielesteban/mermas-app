@@ -135,13 +135,26 @@ export default function AppFrame({ children }: { children: React.ReactNode }) {
     );
   }
 
+  const escandalloRecipeEditRoute =
+    pathname != null && /^\/escandallos\/recetas\/.+\/editar$/.test(pathname);
+  /** En editor receta móvil no hay BottomNav: solo safe area; desde lg el padding reserva la barra. */
+  const shellPadEscandalloRecipeEdit =
+    'max-lg:pb-[max(0.5rem,env(safe-area-inset-bottom,0px))] lg:pb-[calc(4.75rem+max(0.5rem,env(safe-area-inset-bottom,0px)))]';
+
   return (
     <>
       <div
-        className="flex min-h-0 flex-1 flex-col overflow-hidden"
-        style={{
-          paddingBottom: `calc(${BOTTOM_QUICK_ACTIONS_SCROLL_PADDING} + max(0.5rem, env(safe-area-inset-bottom, 0px)))`,
-        }}
+        className={[
+          'flex min-h-0 flex-1 flex-col overflow-hidden',
+          escandalloRecipeEditRoute ? shellPadEscandalloRecipeEdit : '',
+        ].join(' ')}
+        style={
+          escandalloRecipeEditRoute
+            ? undefined
+            : {
+                paddingBottom: `calc(${BOTTOM_QUICK_ACTIONS_SCROLL_PADDING} + max(0.5rem, env(safe-area-inset-bottom, 0px)))`,
+              }
+        }
       >
         <AppShell>{children}</AppShell>
       </div>
