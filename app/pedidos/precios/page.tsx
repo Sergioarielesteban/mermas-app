@@ -23,8 +23,8 @@ import { canAccessPedidos, canUsePedidosModule } from '@/lib/pedidos-access';
 import { formatQuantityWithUnit } from '@/lib/pedidos-format';
 import {
   billingQuantityForLine,
+  deleteAllCatalogPriceHistoryForSupplierProduct,
   deleteCatalogPriceHistoryRow,
-  deleteCatalogPriceHistoryTestRows,
   fetchCatalogPriceHistoryRows,
   fetchSuppliersWithProducts,
   updateSupplierProductPriceWithHistory,
@@ -83,6 +83,8 @@ type PriceSummary = {
   supplierName: string;
   /** Unidad de catálogo (caja, kg…) — clave para comparar entre proveedores. */
   catalogUnit: Unit;
+  /** Catálogo proveedor; necesario para vaciar `pedido_supplier_product_price_history` por producto. */
+  supplierProductId: string | null;
 };
 
 function orderPriceDate(order: PedidoOrder): string {
@@ -268,6 +270,7 @@ function buildPriceSummaries(
     supplierId: string;
     supplierName: string;
     catalogUnit: Unit;
+    supplierProductId: string | null;
     points: PricePoint[];
     purchases: PurchaseRow[];
     wSum: number;
@@ -297,6 +300,7 @@ function buildPriceSummaries(
           supplierId: order.supplierId,
           supplierName: order.supplierName,
           catalogUnit: item.unit,
+          supplierProductId: item.supplierProductId ?? null,
           points: [],
           purchases: [],
           wSum: 0,
@@ -345,6 +349,9 @@ function buildPriceSummaries(
       });
       acc.wSum += evPrice * wq;
       acc.wQty += wq;
+      if (!acc.supplierProductId && item.supplierProductId) {
+        acc.supplierProductId = item.supplierProductId;
+      }
       map.set(key, acc);
     }
   }
@@ -398,6 +405,7 @@ function buildPriceSummaries(
         supplierId: acc.supplierId,
         supplierName: acc.supplierName,
         catalogUnit: acc.catalogUnit,
+        supplierProductId: acc.supplierProductId,
       };
     })
     .filter(shouldIncludePriceEvolutionRow)
@@ -809,10 +817,15 @@ export default function PedidosPreciosPage() {
   const [quickFeedback, setQuickFeedback] = React.useState<string | null>(null);
   const [catalogHistoryRows, setCatalogHistoryRows] = React.useState<CatalogPriceHistoryListRow[]>([]);
   const [catalogHistoryLoading, setCatalogHistoryLoading] = React.useState(false);
-  const [catalogHistoryHasTestCols, setCatalogHistoryHasTestCols] = React.useState(false);
   const [catalogHistoryDeleteBusy, setCatalogHistoryDeleteBusy] = React.useState(false);
   const [deleteHistoryId, setDeleteHistoryId] = React.useState<string | null>(null);
-  const [confirmDeleteTestsOpen, setConfirmDeleteTestsOpen] = React.useState(false);
+  const [dismissedSeriesKeys, setDismissedSeriesKeys] = React.useState(() => new Set<string>());
+  const [seriesDeleteContext, setSeriesDeleteContext] = React.useState<{
+    key: string;
+    supplierProductId: string;
+  } | null>(null);
+  const [seriesEvolutionDeleteBusy, setSeriesEvolutionDeleteBusy] = React.useState(false);
+  const [evolutionToast, setEvolutionToast] = React.useState<string | null>(null);
 
   const productInfoBySupplierProductId = React.useMemo(() => {
     const m = new Map<string, { productName: string; supplierName: string; supplierId: string }>();
@@ -883,6 +896,16 @@ export default function PedidosPreciosPage() {
     return { windowStartMs: startMs, windowEndMs: endMs, windowLabel: label };
   }, [orders, windowPreset]);
 
+  React.useEffect(() => {
+    setDismissedSeriesKeys(new Set());
+  }, [windowPreset, priceMode, supplierFilter]);
+
+  React.useEffect(() => {
+    if (!evolutionToast) return;
+    const t = window.setTimeout(() => setEvolutionToast(null), 3800);
+    return () => window.clearTimeout(t);
+  }, [evolutionToast]);
+
   const reloadCatalogPriceHistory = React.useCallback(async () => {
     if (!localId || !canUse || !isSupabaseEnabled() || !getSupabaseClient()) return;
     setCatalogHistoryLoading(true);
@@ -892,11 +915,9 @@ export default function PedidosPreciosPage() {
         endMs: windowEndMs,
       });
       setCatalogHistoryRows(res.rows);
-      setCatalogHistoryHasTestCols(res.hasTestMetadataColumns);
     } catch (e: unknown) {
       setMessage(e instanceof Error ? e.message : 'No se pudo cargar el historial de catálogo.');
       setCatalogHistoryRows([]);
-      setCatalogHistoryHasTestCols(false);
     } finally {
       setCatalogHistoryLoading(false);
     }
@@ -916,9 +937,14 @@ export default function PedidosPreciosPage() {
     [catalogNameByProductId, orders, windowStartMs, windowEndMs, priceMode],
   );
 
+  const seriesAllSuppliersVisible = React.useMemo(
+    () => seriesAllSuppliers.filter((r) => !dismissedSeriesKeys.has(r.key)),
+    [seriesAllSuppliers, dismissedSeriesKeys],
+  );
+
   const crossSupplierBenchmarks = React.useMemo((): CrossSupplierBenchmark[] => {
     const byProduct = new Map<string, PriceSummary[]>();
-    for (const row of seriesAllSuppliers) {
+    for (const row of seriesAllSuppliersVisible) {
       const k = `${row.productName.trim().toLowerCase()}|${row.catalogUnit}`;
       const list = byProduct.get(k) ?? [];
       list.push(row);
@@ -952,13 +978,18 @@ export default function PedidosPreciosPage() {
       });
     }
     return out.sort((a, b) => b.spreadPct - a.spreadPct).slice(0, 12);
-  }, [seriesAllSuppliers]);
+  }, [seriesAllSuppliersVisible]);
 
   const seriesFiltered = React.useMemo(() => {
     const q = productSearch.trim().toLowerCase();
     if (!q) return series;
     return series.filter((s) => s.productName.toLowerCase().includes(q));
   }, [series, productSearch]);
+
+  const seriesFilteredVisible = React.useMemo(
+    () => seriesFiltered.filter((r) => !dismissedSeriesKeys.has(r.key)),
+    [seriesFiltered, dismissedSeriesKeys],
+  );
 
   const catalogHistoryFiltered = React.useMemo(() => {
     let list = catalogHistoryRows;
@@ -980,7 +1011,7 @@ export default function PedidosPreciosPage() {
     const out: ActionRecommendation[] = [];
     let id = 0;
     const nextId = () => `r-${++id}`;
-    for (const row of [...seriesFiltered]
+    for (const row of [...seriesFilteredVisible]
       .filter((s) => s.impactMonthlyVsWap > 0 && isPriceRiseAlert(s, alertPct))
       .sort((a, b) => b.impactMonthlyVsWap - a.impactMonthlyVsWap)
       .slice(0, 5)) {
@@ -1003,7 +1034,7 @@ export default function PedidosPreciosPage() {
       });
     }
     return out;
-  }, [seriesFiltered, crossSupplierBenchmarks, alertPct]);
+  }, [seriesFilteredVisible, crossSupplierBenchmarks, alertPct]);
 
   const benchmarksForUi = React.useMemo(() => {
     const q = productSearch.trim().toLowerCase();
@@ -1012,7 +1043,7 @@ export default function PedidosPreciosPage() {
   }, [crossSupplierBenchmarks, productSearch]);
 
   const executiveKpis = React.useMemo(() => {
-    const s = seriesFiltered;
+    const s = seriesFilteredVisible;
     const n = s.length;
     if (n === 0) {
       return {
@@ -1047,15 +1078,15 @@ export default function PedidosPreciosPage() {
       impactUpMonthly: Math.round(impactUpMonthly * 100) / 100,
       impactDownMonthly: Math.round(impactDownMonthly * 100) / 100,
     };
-  }, [seriesFiltered, alertPct]);
+  }, [seriesFilteredVisible, alertPct]);
 
   const impactRanking = React.useMemo(
     () =>
-      [...seriesFiltered]
+      [...seriesFilteredVisible]
         .filter((x) => x.impactMonthlyVsWap > 0)
         .sort((a, b) => b.impactMonthlyVsWap - a.impactMonthlyVsWap)
         .slice(0, 15),
-    [seriesFiltered],
+    [seriesFilteredVisible],
   );
 
   const trendLabel = (row: PriceSummary) => {
@@ -1076,7 +1107,7 @@ export default function PedidosPreciosPage() {
   };
 
   const downloadReportPdf = React.useCallback(() => {
-    if (seriesFiltered.length === 0) {
+    if (seriesFilteredVisible.length === 0) {
       setMessage('No hay datos con cambios de precio para descargar (ajusta filtros).');
       return;
     }
@@ -1148,7 +1179,7 @@ export default function PedidosPreciosPage() {
       doc.text(kpis[i]![1], x + 8, kpiY + 38);
     }
 
-    const hero = [...seriesFiltered].sort((a, b) => Math.abs(b.deltaPct) - Math.abs(a.deltaPct))[0]!;
+    const hero = [...seriesFilteredVisible].sort((a, b) => Math.abs(b.deltaPct) - Math.abs(a.deltaPct))[0]!;
     const pointsAsc = [...hero.points].sort((a, b) => Date.parse(a.date) - Date.parse(b.date));
 
     let yCursor = kpiY + kpiH + 18;
@@ -1166,7 +1197,7 @@ export default function PedidosPreciosPage() {
       currentPrice: hero.current.price,
     });
 
-    const rest = [...seriesFiltered]
+    const rest = [...seriesFilteredVisible]
       .sort((a, b) => Math.abs(b.deltaPct) - Math.abs(a.deltaPct))
       .filter((s) => s.key !== hero.key)
       .slice(0, 5);
@@ -1198,7 +1229,7 @@ export default function PedidosPreciosPage() {
     tableStart += 10;
 
     const body: string[][] = [];
-    for (const row of seriesFiltered) {
+    for (const row of seriesFilteredVisible) {
       body.push([
         row.productName,
         row.supplierName,
@@ -1240,7 +1271,7 @@ export default function PedidosPreciosPage() {
     });
 
     const docWithTable = doc as jsPDF & { lastAutoTable?: { finalY?: number } };
-    for (const row of seriesFiltered) {
+    for (const row of seriesFilteredVisible) {
       doc.addPage();
       let y = 44;
       doc.setFont('helvetica', 'bold');
@@ -1340,7 +1371,7 @@ export default function PedidosPreciosPage() {
     const stamp = new Date().toISOString().slice(0, 10);
     doc.save(`evolucion-precios-${stamp}.pdf`);
   }, [
-    seriesFiltered,
+    seriesFilteredVisible,
     executiveKpis,
     localName,
     localCode,
@@ -1352,7 +1383,7 @@ export default function PedidosPreciosPage() {
   ]);
 
   const downloadCsv = React.useCallback(() => {
-    if (seriesFiltered.length === 0) {
+    if (seriesFilteredVisible.length === 0) {
       setMessage('No hay filas para exportar (ajusta filtros).');
       return;
     }
@@ -1387,7 +1418,7 @@ export default function PedidosPreciosPage() {
       lines.push(row.map((c) => escapeCsvCell(String(c))).join(';'));
     }
     lines.push(head.map(escapeCsvCell).join(';'));
-    for (const row of seriesFiltered) {
+    for (const row of seriesFilteredVisible) {
       lines.push(
         [
           row.productName,
@@ -1417,7 +1448,7 @@ export default function PedidosPreciosPage() {
     URL.revokeObjectURL(url);
     setMessage(null);
   }, [
-    seriesFiltered,
+    seriesFilteredVisible,
     localName,
     localCode,
     windowLabel,
@@ -1483,22 +1514,26 @@ export default function PedidosPreciosPage() {
     }
   }, [deleteHistoryId, localId, reloadCatalogPriceHistory]);
 
-  const handleConfirmDeleteTestHistory = React.useCallback(async () => {
-    if (!localId || !catalogHistoryHasTestCols || !isSupabaseEnabled() || !getSupabaseClient()) return;
-    setCatalogHistoryDeleteBusy(true);
+  const handleConfirmDeleteSeriesEvolution = React.useCallback(async () => {
+    if (!seriesDeleteContext || !localId || !isSupabaseEnabled() || !getSupabaseClient()) return;
+    setSeriesEvolutionDeleteBusy(true);
     try {
-      const { deleted } = await deleteCatalogPriceHistoryTestRows(getSupabaseClient()!, localId);
-      setConfirmDeleteTestsOpen(false);
+      const ctx = seriesDeleteContext;
+      await deleteAllCatalogPriceHistoryForSupplierProduct(getSupabaseClient()!, localId, ctx.supplierProductId);
+      setDismissedSeriesKeys((prev) => {
+        const n = new Set(prev);
+        n.add(ctx.key);
+        return n;
+      });
+      setSeriesDeleteContext(null);
       await reloadCatalogPriceHistory();
-      if (deleted === 0) {
-        await appAlert('No había registros de prueba que coincidan (is_test o notas con test/prueba).');
-      }
+      setEvolutionToast('Evolución eliminada');
     } catch {
-      await appAlert('No se pudo eliminar el registro.');
+      await appAlert('No se pudo eliminar la evolución de precio.');
     } finally {
-      setCatalogHistoryDeleteBusy(false);
+      setSeriesEvolutionDeleteBusy(false);
     }
-  }, [localId, catalogHistoryHasTestCols, reloadCatalogPriceHistory]);
+  }, [seriesDeleteContext, localId, reloadCatalogPriceHistory]);
 
   if (!hasPedidosEntry) {
     return (
@@ -1643,20 +1678,6 @@ export default function PedidosPreciosPage() {
           >
             <Download className="h-4 w-4" aria-hidden />
             CSV (Excel)
-          </button>
-          <button
-            type="button"
-            disabled={!catalogHistoryHasTestCols || catalogHistoryDeleteBusy}
-            title={
-              catalogHistoryHasTestCols
-                ? 'Elimina solo filas con is_test o notas que contengan test o prueba'
-                : 'No hay columnas is_test/notas en la base: ejecuta supabase-pedidos-price-history-delete-and-test-columns.sql'
-            }
-            onClick={() => setConfirmDeleteTestsOpen(true)}
-            className="inline-flex h-10 items-center gap-2 rounded-xl border border-zinc-300 bg-white px-4 text-sm font-semibold text-zinc-800 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            <Trash2 className="h-4 w-4" aria-hidden />
-            Eliminar pruebas
           </button>
         </div>
 
@@ -1895,14 +1916,16 @@ export default function PedidosPreciosPage() {
       ) : null}
 
       <section className="space-y-2">
-        {seriesFiltered.length === 0 ? (
+        {seriesFilteredVisible.length === 0 ? (
           <div className="rounded-2xl bg-white p-4 text-sm text-zinc-500 ring-1 ring-zinc-200">
             {series.length === 0
               ? 'No hay evolución de precios en esta selección. Prueba otro periodo, proveedor o modo €/kg si aplica.'
-              : 'Ninguna referencia coincide con el buscador.'}
+              : seriesFiltered.length === 0
+                ? 'Ninguna referencia coincide con el buscador.'
+                : 'No quedan referencias visibles: vaciaste el histórico de evolución de catálogo con la papelera, o ajusta periodo y proveedor.'}
           </div>
         ) : null}
-        {seriesFiltered.map((row) => {
+        {seriesFilteredVisible.map((row) => {
           const alert = isPriceRiseAlert(row, alertPct);
           return (
             <div
@@ -1913,16 +1936,40 @@ export default function PedidosPreciosPage() {
               ].join(' ')}
             >
               <div className="flex flex-wrap items-start justify-between gap-2">
-                <div>
+                <div className="min-w-0 flex-1 pr-1">
                   <p className="text-sm font-black text-zinc-900">{row.productName}</p>
                   <p className="text-[11px] text-zinc-500">Proveedor: {row.supplierName}</p>
                 </div>
-                {alert ? (
-                  <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-950">
-                    <AlertTriangle className="h-3 w-3" aria-hidden />
-                    {alertPct <= 0 ? 'Subida' : `Alerta ≥${alertPct}%`}
-                  </span>
-                ) : null}
+                <div className="flex shrink-0 items-center gap-1.5 self-start">
+                  {alert ? (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-950">
+                      <AlertTriangle className="h-3 w-3" aria-hidden />
+                      {alertPct <= 0 ? 'Subida' : `Alerta ≥${alertPct}%`}
+                    </span>
+                  ) : null}
+                  <button
+                    type="button"
+                    disabled={!row.supplierProductId || seriesEvolutionDeleteBusy}
+                    title={
+                      row.supplierProductId
+                        ? 'Vaciar historial de evolución de precio (catálogo) de este producto'
+                        : 'Falta enlace a producto de catálogo en las líneas; no se puede vaciar el histórico.'
+                    }
+                    onClick={() => {
+                      if (row.supplierProductId) {
+                        setSeriesDeleteContext({ key: row.key, supplierProductId: row.supplierProductId });
+                      } else {
+                        void appAlert(
+                          'No hay enlace a un producto de catálogo en las compras. No se puede vaciar el histórico vinculado.',
+                        );
+                      }
+                    }}
+                    className="flex min-h-11 min-w-11 items-center justify-center rounded-xl text-zinc-400 transition-colors hover:bg-red-50 hover:text-[#B91C1C] active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-zinc-400"
+                    aria-label="Vaciar evolución de precio de este producto"
+                  >
+                    <Trash2 className="h-5 w-5" aria-hidden />
+                  </button>
+                </div>
               </div>
               <p className="pt-1 text-xs text-zinc-600">
                 Base: {row.base.price.toFixed(2)} €/{row.displayUnit} · Actual: {row.current.price.toFixed(2)} €/
@@ -2027,49 +2074,57 @@ export default function PedidosPreciosPage() {
         </div>
       ) : null}
 
-      {confirmDeleteTestsOpen ? (
+      {seriesDeleteContext != null ? (
         <div className="fixed inset-0 z-[100] flex items-end justify-center p-4 sm:items-center">
           <button
             type="button"
             className="absolute inset-0 bg-black/45"
             aria-label="Cerrar"
             onClick={() => {
-              if (!catalogHistoryDeleteBusy) setConfirmDeleteTestsOpen(false);
+              if (!seriesEvolutionDeleteBusy) setSeriesDeleteContext(null);
             }}
           />
           <div
             className="relative z-10 w-full max-w-md rounded-2xl border border-zinc-200/90 bg-white p-5 shadow-2xl ring-1 ring-zinc-100"
             role="alertdialog"
             aria-modal="true"
-            aria-labelledby="delete-tests-title"
+            aria-labelledby="delete-series-evolution-title"
           >
-            <p id="delete-tests-title" className="text-base font-bold text-zinc-900">
-              ¿Eliminar registros de prueba?
+            <p id="delete-series-evolution-title" className="text-base font-bold text-zinc-900">
+              Eliminar evolución de precio
             </p>
             <p className="mt-2 text-sm leading-relaxed text-zinc-600">
-              Se eliminarán las filas con <span className="font-semibold">is_test = true</span> o cuyo campo notas
-              contenga «test» o «prueba». No afecta a productos, proveedores ni pedidos. El precio actual del catálogo no
-              cambia.
+              Se eliminarán todos los registros de evolución de precio de este producto. No se eliminará el producto, el
+              proveedor ni los pedidos.
             </p>
             <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
               <button
                 type="button"
-                disabled={catalogHistoryDeleteBusy}
+                disabled={seriesEvolutionDeleteBusy}
                 className="h-11 rounded-xl border border-zinc-300 bg-white px-4 text-sm font-bold text-zinc-800"
-                onClick={() => setConfirmDeleteTestsOpen(false)}
+                onClick={() => setSeriesDeleteContext(null)}
               >
                 Cancelar
               </button>
               <button
                 type="button"
-                disabled={catalogHistoryDeleteBusy}
+                disabled={seriesEvolutionDeleteBusy}
                 className="h-11 rounded-xl bg-[#D32F2F] px-4 text-sm font-black tracking-wide text-white"
-                onClick={() => void handleConfirmDeleteTestHistory()}
+                onClick={() => void handleConfirmDeleteSeriesEvolution()}
               >
-                {catalogHistoryDeleteBusy ? 'Eliminando…' : 'Eliminar'}
+                {seriesEvolutionDeleteBusy ? 'Eliminando…' : 'Eliminar evolución'}
               </button>
             </div>
           </div>
+        </div>
+      ) : null}
+
+      {evolutionToast ? (
+        <div
+          className="pointer-events-none fixed bottom-6 left-1/2 z-[110] max-w-[min(100vw-2rem,24rem)] -translate-x-1/2 rounded-2xl bg-zinc-900 px-4 py-3 text-center text-sm font-semibold text-white shadow-lg"
+          role="status"
+        >
+          {evolutionToast}
         </div>
       ) : null}
     </div>

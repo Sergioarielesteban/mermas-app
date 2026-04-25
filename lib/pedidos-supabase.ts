@@ -1355,22 +1355,18 @@ export async function deleteCatalogPriceHistoryRow(
   if (error) throw new Error(error.message);
 }
 
-/**
- * Borra filas marcadas como prueba o con notas que contengan test/prueba (ilike).
- * Requiere columnas is_test/notes. Si la BD no las tiene, no llames: devolverá 0 o error.
- */
-export async function deleteCatalogPriceHistoryTestRows(
+/** Elimina todo el histórico de `pedido_supplier_product_price_history` para un producto de proveedor. */
+export async function deleteAllCatalogPriceHistoryForSupplierProduct(
   supabase: SupabaseClient,
   localId: string,
-): Promise<{ deleted: number }> {
-  const { data, error } = await supabase
+  supplierProductId: string,
+) {
+  const { error } = await supabase
     .from('pedido_supplier_product_price_history')
     .delete()
     .eq('local_id', localId)
-    .or('is_test.eq.true,notes.ilike.%test%,notes.ilike.%prueba%')
-    .select('id');
+    .eq('supplier_product_id', supplierProductId);
   if (error) throw new Error(error.message);
-  return { deleted: (data ?? []).length };
 }
 
 export async function setSupplierProductActive(
