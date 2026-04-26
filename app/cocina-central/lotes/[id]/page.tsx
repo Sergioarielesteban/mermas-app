@@ -9,6 +9,7 @@ import { useAuth } from '@/components/AuthProvider';
 import { ccForceDeleteProductionBatch, isForceDeleteTestDataEnabled } from '@/lib/cocina-central-force-delete';
 import { canCocinaCentralOperate } from '@/lib/cocina-central-permissions';
 import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
+import type { LoteProduccionMetaV1 } from '@/lib/cocina-central-production-meta';
 import { computeBatchProductionCost, type BatchProductionCostResult } from '@/lib/cocina-central-batch-cost';
 import type { BatchEstado } from '@/lib/cocina-central-supabase';
 import {
@@ -23,6 +24,31 @@ import {
 } from '@/lib/cocina-central-supabase';
 
 const eur = new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' });
+
+function parseLoteProduccionMeta(
+  raw: unknown,
+): LoteProduccionMetaV1 | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const o = raw as Record<string, unknown>;
+  if (o.target_output_qty == null) return null;
+  const q = Number(o.target_output_qty);
+  if (!Number.isFinite(q)) return null;
+  return {
+    version: 1,
+    production_recipe_id: o.production_recipe_id != null ? String(o.production_recipe_id) : null,
+    recipe_name: o.recipe_name != null ? String(o.recipe_name) : null,
+    target_output_qty: q,
+    target_output_unit: o.target_output_unit != null ? String(o.target_output_unit) : null,
+    total_kg: o.total_kg != null && Number.isFinite(Number(o.total_kg)) ? Number(o.total_kg) : null,
+    total_cost_eur: o.total_cost_eur != null && Number.isFinite(Number(o.total_cost_eur)) ? Number(o.total_cost_eur) : null,
+    cost_per_output_unit_eur:
+      o.cost_per_output_unit_eur != null && Number.isFinite(Number(o.cost_per_output_unit_eur))
+        ? Number(o.cost_per_output_unit_eur)
+        : null,
+    cost_per_kg_eur:
+      o.cost_per_kg_eur != null && Number.isFinite(Number(o.cost_per_kg_eur)) ? Number(o.cost_per_kg_eur) : null,
+  };
+}
 
 const ESTADOS: BatchEstado[] = [
   'disponible',
@@ -142,6 +168,8 @@ export default function CocinaCentralLoteDetailPage() {
     return <div className="text-sm text-zinc-600">{err ? err : 'Lote no encontrado o sin acceso.'}</div>;
   }
 
+  const loteMeta = parseLoteProduccionMeta(batch.lote_produccion_meta);
+
   return (
     <div className="space-y-6">
       <CocinaCentralForceDeleteModal
@@ -181,6 +209,43 @@ export default function CocinaCentralLoteDetailPage() {
 
       {err ? (
         <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">{err}</div>
+      ) : null}
+
+      {loteMeta ? (
+        <section className="rounded-2xl border border-[#D32F2F]/20 bg-white p-4 shadow-sm">
+          <h2 className="text-sm font-extrabold text-zinc-900">Producción (al confirmar)</h2>
+          <ul className="mt-2 space-y-1 text-sm text-zinc-800">
+            {loteMeta.recipe_name ? (
+              <li>
+                <span className="font-bold">Fórmula:</span> {loteMeta.recipe_name}
+              </li>
+            ) : null}
+            <li>
+              <span className="font-bold">Cantidad:</span> {loteMeta.target_output_qty} {loteMeta.target_output_unit ?? ''}
+            </li>
+            {loteMeta.total_kg != null ? (
+              <li>
+                <span className="font-bold">Peso total (estim.):</span> {loteMeta.total_kg} kg
+              </li>
+            ) : null}
+            {loteMeta.total_cost_eur != null ? (
+              <li>
+                <span className="font-bold">Coste total (est. orden):</span> {eur.format(loteMeta.total_cost_eur)}
+              </li>
+            ) : null}
+            {loteMeta.cost_per_output_unit_eur != null && loteMeta.target_output_unit ? (
+              <li>
+                <span className="font-bold">Coste / {loteMeta.target_output_unit}:</span>{' '}
+                {eur.format(loteMeta.cost_per_output_unit_eur)}
+              </li>
+            ) : null}
+            {loteMeta.cost_per_kg_eur != null ? (
+              <li>
+                <span className="font-bold">Coste / kg:</span> {eur.format(loteMeta.cost_per_kg_eur)}
+              </li>
+            ) : null}
+          </ul>
+        </section>
       ) : null}
 
       <section className="rounded-2xl border border-zinc-200 bg-white p-4">

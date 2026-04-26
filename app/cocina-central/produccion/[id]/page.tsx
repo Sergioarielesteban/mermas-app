@@ -7,6 +7,8 @@ import { useParams, useRouter } from 'next/navigation';
 import { CocinaCentralForceDeleteModal } from '@/components/cocina-central/CocinaCentralForceDeleteModal';
 import { useAuth } from '@/components/AuthProvider';
 import { appConfirm } from '@/lib/app-dialog-bridge';
+import type { LoteProduccionMetaV1 } from '@/lib/cocina-central-production-meta';
+import { estimateTotalOutputKg } from '@/lib/cocina-central-production-meta';
 import { ccForceDeleteProductionOrder, isForceDeleteTestDataEnabled } from '@/lib/cocina-central-force-delete';
 import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
 import { canCocinaCentralOperate } from '@/lib/cocina-central-permissions';
@@ -26,6 +28,8 @@ function addDaysYmd(ymd: string, days: number): string {
   d.setDate(d.getDate() + days);
   return d.toLocaleDateString('en-CA', { timeZone: 'Europe/Madrid' });
 }
+
+const eur = new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' });
 
 const STATE_LABEL: Record<string, string> = {
   borrador: 'Pendiente',
@@ -274,6 +278,45 @@ export default function DetalleProduccionPage() {
       });
 
       const cad = cadYmd.trim() || null;
+      const prFromOrder = order.production_recipes
+        ? (Array.isArray(order.production_recipes) ? order.production_recipes[0] : order.production_recipes)
+        : null;
+      const totalKg =
+        prFromOrder && prFromOrder.base_yield_quantity != null
+          ? estimateTotalOutputKg(oq, {
+              base_yield_quantity: Number(prFromOrder.base_yield_quantity),
+              weight_kg_per_base_yield: prFromOrder.weight_kg_per_base_yield ?? null,
+            })
+          : null;
+      let sumCost: number | null = null;
+      for (const row of lines) {
+        const st = linesState[row.id] ?? { real: String(row.theoretical_qty), origin: '' };
+        const rUsed = Number(String(st.real).replace(',', '.'));
+        const qty = Number.isFinite(rUsed) && rUsed >= 0 ? rUsed : row.theoretical_qty;
+        if (row.cost_estimated_eur != null && row.theoretical_qty > 0) {
+          const c = row.cost_estimated_eur * (qty / row.theoretical_qty);
+          sumCost = (sumCost ?? 0) + c;
+        }
+      }
+      if (sumCost != null) {
+        sumCost = Math.round(sumCost * 100) / 100;
+      }
+      const costPerOut = sumCost != null && oq > 0 ? Math.round((sumCost / oq) * 10000) / 10000 : null;
+      const costPerKg =
+        sumCost != null && totalKg != null && totalKg > 0
+          ? Math.round((sumCost / totalKg) * 10000) / 10000
+          : null;
+      const loteProduccionMeta: LoteProduccionMetaV1 = {
+        version: 1,
+        production_recipe_id: order.production_recipe_id,
+        recipe_name: prFromOrder?.name?.trim() ?? null,
+        target_output_qty: oq,
+        target_output_unit: prFromOrder?.final_unit ?? null,
+        total_kg: totalKg,
+        total_cost_eur: sumCost,
+        cost_per_output_unit_eur: costPerOut,
+        cost_per_kg_eur: costPerKg,
+      };
       const batchId = await ccRegisterProductionBatch(supabase, {
         orderId: order.id,
         preparationId: order.preparation_id,
@@ -283,6 +326,7 @@ export default function DetalleProduccionPage() {
         cantidad: oq,
         unidad: outUnidad,
         ingredients,
+        loteProduccionMeta,
       });
 
       await ccUpdateProductionOrder(supabase, order.id, {
@@ -319,6 +363,17 @@ export default function DetalleProduccionPage() {
 
   const title = ccProductName(outPrep ?? null);
   const nameSnap = recipeName;
+  const prData = order.production_recipes
+    ? (Array.isArray(order.production_recipes) ? order.production_recipes[0] : order.production_recipes)
+    : null;
+  const displayRecipeName = prData?.name?.trim() || nameSnap || title;
+  const totalEstKgForOrder =
+    prData && prData.base_yield_quantity != null
+      ? estimateTotalOutputKg(order.cantidad_objetivo, {
+          base_yield_quantity: Number(prData.base_yield_quantity),
+          weight_kg_per_base_yield: prData.weight_kg_per_base_yield ?? null,
+        })
+      : null;
 
   return (
     <div className="space-y-6">
@@ -337,8 +392,16 @@ export default function DetalleProduccionPage() {
         </Link>
         <h1 className="mt-2 text-xl font-extrabold text-zinc-900">Detalle de producción</h1>
         <p className="mt-1 text-sm text-zinc-600">
-          {nameSnap || title} · {STATE_LABEL[order.estado] ?? order.estado}
+          {displayRecipeName} · {STATE_LABEL[order.estado] ?? order.estado}
         </p>
+        {prData ? (
+          <p className="mt-1 text-sm font-semibold text-zinc-800">
+            Cantidad: {order.cantidad_objetivo} {prData.final_unit || ''}
+            {totalEstKgForOrder != null
+              ? ` · Peso total estimado: ${totalEstKgForOrder.toLocaleString('es-ES', { maximumFractionDigits: 4 })} kg`
+              : null}
+          </p>
+        ) : null}
       </div>
       {msg ? (
         <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900">{msg}</div>
@@ -351,11 +414,17 @@ export default function DetalleProduccionPage() {
         <h2 className="text-sm font-extrabold text-zinc-900">Resumen</h2>
         <ul className="mt-2 space-y-1 text-sm text-zinc-700">
           <li>
-            <span className="font-bold">Receta / elaboración:</span> {nameSnap || title}
+            <span className="font-bold">Fórmula / elaboración:</span> {displayRecipeName}
           </li>
           <li>
-            <span className="font-bold">Cantidad objetivo:</span> {order.cantidad_objetivo} ({String(outUnidad)})
+            <span className="font-bold">Cantidad a producir:</span> {order.cantidad_objetivo} {prData?.final_unit ? `· ${prData.final_unit}` : `(${String(outUnidad)})`}
           </li>
+          {totalEstKgForOrder != null ? (
+            <li>
+              <span className="font-bold">Peso total estimado:</span>{' '}
+              {totalEstKgForOrder.toLocaleString('es-ES', { maximumFractionDigits: 4 })} kg
+            </li>
+          ) : null}
           <li>
             <span className="font-bold">Fecha:</span> {order.fecha}
           </li>
@@ -400,7 +469,8 @@ export default function DetalleProduccionPage() {
       </section>
 
       <section className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm">
-        <h2 className="text-sm font-extrabold text-zinc-900">Ingredientes</h2>
+        <h2 className="text-sm font-extrabold text-zinc-900">Ingredientes calculados</h2>
+        <p className="mt-1 text-xs text-zinc-500">Cantidades teóricas escaladas desde la receta base; ajusta el real usado y el lote origen.</p>
         <div className="mt-3 space-y-3">
           {lines.length === 0 ? (
             <p className="text-sm text-zinc-500">
@@ -410,11 +480,26 @@ export default function DetalleProduccionPage() {
             lines.map((row) => {
               const st = linesState[row.id] ?? { real: String(row.theoretical_qty), origin: '' };
               const opts = batchesByIng[row.ingredient_preparation_id] ?? [];
+              const rUsed = Number(String(st.real).replace(',', '.'));
+              const qtyForCost =
+                Number.isFinite(rUsed) && rUsed >= 0 ? rUsed : row.theoretical_qty;
+              const lineCost =
+                row.cost_estimated_eur != null && row.theoretical_qty > 0
+                  ? row.cost_estimated_eur * (qtyForCost / row.theoretical_qty)
+                  : null;
               return (
                 <div key={row.id} className="rounded-xl border border-zinc-100 bg-zinc-50/80 p-3">
                   <p className="text-sm font-bold text-zinc-900">{row.label_snapshot}</p>
                   <p className="text-xs text-zinc-600">
-                    Teórico: {row.theoretical_qty} {row.unidad} · Real usado:
+                    Teórico: {row.theoretical_qty} {row.unidad}
+                    {row.cost_estimated_eur != null
+                      ? ` · Coste teórico (orden): ${eur.format(row.cost_estimated_eur)}`
+                      : null}
+                    {lineCost != null && qtyForCost !== row.theoretical_qty
+                      ? ` · Coste ajustado a cantidad: ${eur.format(Math.round(lineCost * 100) / 100)}`
+                      : null}
+                    {' · '}
+                    Real usado:
                   </p>
                   <div className="mt-2 flex flex-wrap gap-2">
                     <input

@@ -78,7 +78,26 @@ export type ProductionOrderRow = {
   created_by?: string | null;
   central_preparations?: { nombre: string; unidad_base?: string; rendimiento?: number | null; caducidad_dias?: number | null } | { nombre: string }[] | null;
   products?: { name: string } | { name: string }[] | null;
-  production_recipes?: { name: string; final_unit?: string; default_expiry_days?: number | null } | { name: string }[] | null;
+  production_recipes?:
+    | {
+        name: string;
+        final_unit?: string;
+        base_yield_quantity?: number;
+        base_yield_unit?: string;
+        default_expiry_days?: number | null;
+        weight_kg_per_base_yield?: number | null;
+        lot_code_prefix?: string | null;
+      }
+    | Array<{
+        name: string;
+        final_unit?: string;
+        base_yield_quantity?: number;
+        base_yield_unit?: string;
+        default_expiry_days?: number | null;
+        weight_kg_per_base_yield?: number | null;
+        lot_code_prefix?: string | null;
+      }>
+    | null;
 };
 
 export type ProductionOrderLineRow = {
@@ -114,6 +133,7 @@ export type ProductionBatchRow = {
   estado: BatchEstado;
   qr_token: string;
   created_at: string;
+  lote_produccion_meta?: Record<string, unknown> | null;
   central_preparations?: { nombre: string } | { nombre: string }[] | null;
   products?: { name: string } | { name: string }[] | null;
 };
@@ -372,7 +392,7 @@ export async function ccInsertProductionOrder(
 }
 
 const PRODUCTION_ORDER_LIST_SELECT =
-  '*, central_preparations(nombre, unidad_base, rendimiento, caducidad_dias), products(name), production_recipes(name, final_unit, default_expiry_days, base_yield_quantity, base_yield_unit)';
+  '*, central_preparations(nombre, unidad_base, rendimiento, caducidad_dias), products(name), production_recipes(name, final_unit, default_expiry_days, base_yield_quantity, base_yield_unit, weight_kg_per_base_yield, lot_code_prefix)';
 
 export async function ccFetchProductionOrders(
   supabase: SupabaseClient,
@@ -520,6 +540,7 @@ export async function ccRegisterProductionBatch(
     cantidad: number;
     unidad: CcUnit;
     ingredients?: Array<{ preparation_id: string; cantidad: number; unidad: CcUnit }>;
+    loteProduccionMeta?: Record<string, unknown> | null;
   },
 ): Promise<string> {
   const ingredients =
@@ -537,6 +558,7 @@ export async function ccRegisterProductionBatch(
     p_cantidad: args.cantidad,
     p_unidad: args.unidad,
     p_ingredients: ingredients,
+    p_lote_produccion_meta: args.loteProduccionMeta ?? null,
   });
   if (error) throw new Error(error.message);
   return data as string;

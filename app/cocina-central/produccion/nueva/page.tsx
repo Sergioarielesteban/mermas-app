@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/components/AuthProvider';
 import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
 import { canCocinaCentralOperate } from '@/lib/cocina-central-permissions';
+import { estimateTotalOutputKg } from '@/lib/cocina-central-production-meta';
 import { prCreateOrderFromInternalRecipe, prListActiveRecipes, type ProductionRecipeRow } from '@/lib/production-recipes-supabase';
 
 function todayMadridYmd(): string {
@@ -43,6 +44,22 @@ export default function NuevaOrdenProduccionPage() {
   }, [load]);
 
   const selected = recipes.find((r) => r.id === recipeId);
+  const targetNum = Number(String(targetQty).replace(',', '.'));
+  const totalKgEstimado =
+    selected && Number.isFinite(targetNum) && targetNum > 0
+      ? estimateTotalOutputKg(targetNum, {
+          base_yield_quantity: selected.base_yield_quantity,
+          weight_kg_per_base_yield: selected.weight_kg_per_base_yield ?? null,
+        })
+      : null;
+  const yq = selected ? Number(selected.base_yield_quantity) : NaN;
+  const wkg = selected?.weight_kg_per_base_yield != null ? Number(selected.weight_kg_per_base_yield) : null;
+  const baseLine =
+    selected && Number.isFinite(yq) && yq > 0
+      ? wkg != null && Number.isFinite(wkg) && wkg > 0
+        ? `Base fórmula: ${yq} ${selected.final_unit} = ${wkg} kg`
+        : `Base fórmula: ${yq} ${selected.final_unit} (indica kg por rendimiento en la fórmula para ver peso total)`
+      : null;
 
   const submit = async () => {
     if (!supabase || !localId) return;
@@ -119,22 +136,33 @@ export default function NuevaOrdenProduccionPage() {
             ))}
           </select>
         </label>
-        {selected ? (
-          <p className="text-xs text-zinc-600">
-            Rendimiento de referencia: {selected.base_yield_quantity} {selected.final_unit} (base: {selected.base_yield_unit}).
+        {selected ? <p className="text-sm text-zinc-700">{baseLine}</p> : null}
+        {totalKgEstimado != null ? (
+          <p className="text-sm font-extrabold text-zinc-900">
+            Producción total estimada: {totalKgEstimado.toLocaleString('es-ES', { maximumFractionDigits: 4 })} kg
+          </p>
+        ) : selected && (wkg == null || !Number.isFinite(wkg)) ? (
+          <p className="text-xs text-amber-800">
+            Configura en la fórmula el peso (kg) por rendimiento base para ver el total en kg estimado.
           </p>
         ) : null}
         <label className="block text-xs font-bold uppercase tracking-wide text-zinc-500">
-          Cantidad objetivo (misma unidad lógica que el rendimiento de la fórmula)
+          Cantidad a producir
           <input
             type="text"
             inputMode="decimal"
             className="mt-1 h-12 w-full rounded-xl border border-zinc-300 px-3 text-base font-semibold"
             value={targetQty}
             onChange={(e) => setTargetQty(e.target.value)}
-            placeholder="10"
+            placeholder="12"
           />
         </label>
+        {selected ? (
+          <p className="text-xs text-zinc-500">
+            Unidad: <span className="font-bold text-zinc-800">{selected.final_unit}</span> (según fórmula; los
+            ingredientes se escalan con el mismo factor que en la receta base).
+          </p>
+        ) : null}
         <label className="block text-xs font-bold uppercase tracking-wide text-zinc-500">
           Fecha de producción
           <input

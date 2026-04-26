@@ -8,10 +8,11 @@ import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
 import { canCocinaCentralOperate } from '@/lib/cocina-central-permissions';
 import { validateEscandalloUsageUnitInput, ESCANDALLO_USAGE_UNIT_PRESETS } from '@/lib/escandallo-ingredient-units';
 import MasterArticleSearchInput from '@/components/cocina-central/MasterArticleSearchInput';
+import { suggestLotCodePrefixFromName } from '@/lib/cocina-central-production-meta';
 import { prInsertRecipe, prReplaceLines } from '@/lib/production-recipes-supabase';
 import { fetchPurchaseArticles, type PurchaseArticle } from '@/lib/purchase-articles-supabase';
 
-const FINAL_UNITS = ['kg', 'l', 'ud', 'bandeja', 'ración', 'g', 'ml', 'porción'] as const;
+const FINAL_UNITS = ['kg', 'l', 'ud', 'bandeja', 'ración', 'g', 'ml', 'porción', 'bolsa', 'bolsas'] as const;
 
 type LineDraft = { id: string; articleId: string; quantity: string; unit: string };
 
@@ -30,6 +31,8 @@ export default function NuevaFormulaProduccionPage() {
   const [finalUnit, setFinalUnit] = useState<string>('kg');
   const [baseYield, setBaseYield] = useState('1');
   const [expiryDays, setExpiryDays] = useState('');
+  const [lotCodePrefix, setLotCodePrefix] = useState('');
+  const [weightKgPerBase, setWeightKgPerBase] = useState('');
   const [lines, setLines] = useState<LineDraft[]>([]);
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -128,6 +131,13 @@ export default function NuevaFormulaProduccionPage() {
       setBusy(false);
       return;
     }
+    const wkg = weightKgPerBase.trim() ? Number(String(weightKgPerBase).replace(',', '.')) : null;
+    if (wkg != null && (!Number.isFinite(wkg) || wkg <= 0)) {
+      setErr('Peso por rendimiento base no válido.');
+      setBusy(false);
+      return;
+    }
+    const prefix = lotCodePrefix.trim() || suggestLotCodePrefixFromName(n);
     try {
       const rec = await prInsertRecipe(supabase, {
         local_central_id: localId,
@@ -135,6 +145,8 @@ export default function NuevaFormulaProduccionPage() {
         final_unit: fu,
         base_yield_quantity: y,
         base_yield_unit: fu,
+        weight_kg_per_base_yield: wkg,
+        lot_code_prefix: prefix,
         default_expiry_days: exp,
         is_active: true,
         restricted_visibility: true,
@@ -186,7 +198,7 @@ export default function NuevaFormulaProduccionPage() {
         </label>
         <div className="grid gap-3 sm:grid-cols-2">
           <label className="block text-xs font-bold uppercase text-zinc-500">
-            Unidad final
+            Unidad final (de envasado / conteo)
             <select
               className="mt-1 h-12 w-full rounded-xl border border-zinc-300 px-3 text-sm font-semibold"
               value={finalUnit}
@@ -200,13 +212,37 @@ export default function NuevaFormulaProduccionPage() {
             </select>
           </label>
           <label className="block text-xs font-bold uppercase text-zinc-500">
-            Rendimiento esperado (receta base)
+            Rendimiento base (cantidad de esa unidad para la receta base)
             <input
               type="text"
               inputMode="decimal"
               className="mt-1 h-12 w-full rounded-xl border border-zinc-300 px-3 text-base font-semibold"
               value={baseYield}
               onChange={(e) => setBaseYield(e.target.value)}
+              placeholder="Ej. 1"
+            />
+          </label>
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <label className="block text-xs font-bold uppercase text-zinc-500">
+            Peso salida (kg) para ese rendimiento base
+            <input
+              type="text"
+              inputMode="decimal"
+              className="mt-1 h-12 w-full rounded-xl border border-zinc-300 px-3 text-base font-semibold"
+              value={weightKgPerBase}
+              onChange={(e) => setWeightKgPerBase(e.target.value)}
+              placeholder="Ej. 4 (1 bolsa = 4 kg)"
+            />
+          </label>
+          <label className="block text-xs font-bold uppercase text-zinc-500">
+            Prefijo código de lote (opcional)
+            <input
+              className="mt-1 h-12 w-full rounded-xl border border-zinc-300 px-3 font-mono text-sm font-semibold uppercase"
+              value={lotCodePrefix}
+              onChange={(e) => setLotCodePrefix(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''))}
+              placeholder="Vacío = sugerido del nombre"
+              maxLength={8}
             />
           </label>
         </div>

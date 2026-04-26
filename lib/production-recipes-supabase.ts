@@ -16,6 +16,10 @@ export type ProductionRecipeRow = {
   final_unit: string;
   base_yield_quantity: number;
   base_yield_unit: string;
+  /** Kg de salida para el bloque "rendimiento base" (p. ej. 4 para 1 bolsa de receta base). */
+  weight_kg_per_base_yield?: number | null;
+  /** Prefijo de código de lote (p. ej. SALBRAVA). */
+  lot_code_prefix?: string | null;
   default_expiry_days: number | null;
   is_active: boolean;
   restricted_visibility: boolean;
@@ -37,7 +41,7 @@ export type ProductionRecipeLineRow = {
 };
 
 const RECIPE_SEL =
-  'id,local_central_id,name,final_unit,base_yield_quantity,base_yield_unit,default_expiry_days,is_active,restricted_visibility,output_preparation_id,created_by,created_at,updated_at';
+  'id,local_central_id,name,final_unit,base_yield_quantity,base_yield_unit,weight_kg_per_base_yield,lot_code_prefix,default_expiry_days,is_active,restricted_visibility,output_preparation_id,created_by,created_at,updated_at';
 
 const LINE_SEL =
   'id,production_recipe_id,article_id,ingredient_name_snapshot,quantity,unit,sort_order,created_at';
@@ -105,6 +109,8 @@ export async function prInsertRecipe(
     final_unit: string;
     base_yield_quantity: number;
     base_yield_unit: string;
+    weight_kg_per_base_yield?: number | null;
+    lot_code_prefix?: string | null;
     default_expiry_days: number | null;
     is_active?: boolean;
     restricted_visibility?: boolean;
@@ -119,6 +125,8 @@ export async function prInsertRecipe(
       final_unit: row.final_unit.trim(),
       base_yield_quantity: row.base_yield_quantity,
       base_yield_unit: row.base_yield_unit.trim(),
+      weight_kg_per_base_yield: row.weight_kg_per_base_yield ?? null,
+      lot_code_prefix: row.lot_code_prefix?.trim() ? row.lot_code_prefix.trim() : null,
       default_expiry_days: row.default_expiry_days,
       is_active: row.is_active ?? true,
       restricted_visibility: row.restricted_visibility ?? true,
@@ -139,6 +147,8 @@ export async function prUpdateRecipe(
     final_unit: string;
     base_yield_quantity: number;
     base_yield_unit: string;
+    weight_kg_per_base_yield: number | null;
+    lot_code_prefix: string | null;
     default_expiry_days: number | null;
     is_active: boolean;
     restricted_visibility: boolean;
