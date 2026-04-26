@@ -1,13 +1,15 @@
 const STORAGE_KEY = 'mermas_cocina_central_module_unlocked';
-const PIN_ENV = 'NEXT_PUBLIC_COCINA_CENTRAL_MODULE_PIN';
 
 /**
  * Valor de `NEXT_PUBLIC_COCINA_CENTRAL_MODULE_PIN`: exactamente 4 dígitos.
  * Si no está definido o inválido, el módulo no pide clave.
+ *
+ * Nota: hay que leer con `process.env.NEXT_PUBLIC_…` literal. En el cliente, Next.js
+ * solo inyecta variables públicas si el nombre es estático; `process.env[clave]` no funciona.
  */
 export function getConfiguredCocinaCentralModulePin(): string | null {
   if (typeof process === 'undefined' || !process.env) return null;
-  const raw = process.env[PIN_ENV]?.trim() ?? '';
+  const raw = (process.env.NEXT_PUBLIC_COCINA_CENTRAL_MODULE_PIN ?? '').trim();
   if (raw.length !== 4) return null;
   if (!/^\d{4}$/.test(raw)) return null;
   return raw;
