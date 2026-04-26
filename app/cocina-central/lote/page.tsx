@@ -1,142 +1,85 @@
 'use client';
 
-import Link from 'next/link';
-import { useSearchParams } from 'next/navigation';
-import { useEffect, useState, Suspense } from 'react';
-import { useAuth } from '@/components/AuthProvider';
 import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
-import {
-  ccFetchBatchByQrToken,
-  ccFetchIngredientTrace,
-  ccFetchForwardTrace,
-  ccFetchStockForBatch,
-  ccProductName,
-} from '@/lib/cocina-central-supabase';
+import { ccFetchBatchByQrToken } from '@/lib/cocina-central-supabase';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { Suspense, useEffect, useState } from 'react';
+import { useAuth } from '@/components/AuthProvider';
 
-function LoteTokenBody() {
+const MSG_NO_TOKEN = 'Acceso no válido. Falta el token de seguridad en el enlace.';
+
+/**
+ * Compatibilidad: enlaces antiguos solo con ?token=
+ * Redirige a /cocina-central/lote/[id]?token=…
+ * Sin token: no se muestra ficha.
+ */
+function LegacyTokenOnlyBody() {
   const params = useSearchParams();
+  const router = useRouter();
   const token = params.get('token')?.trim() ?? '';
-  const { localId, profileReady } = useAuth();
+  const { profileReady } = useAuth();
   const supabase = getSupabaseClient();
   const [err, setErr] = useState<string | null>(null);
-  const [batch, setBatch] = useState<Awaited<ReturnType<typeof ccFetchBatchByQrToken>>>(null);
-  const [ing, setIng] = useState<Awaited<ReturnType<typeof ccFetchIngredientTrace>>>([]);
-  const [fwd, setFwd] = useState<Awaited<ReturnType<typeof ccFetchForwardTrace>>>([]);
-  const [stock, setStock] = useState<Awaited<ReturnType<typeof ccFetchStockForBatch>>>([]);
+  const [working, setWorking] = useState(false);
 
   useEffect(() => {
     if (!supabase || !token) return;
     let cancelled = false;
+    setWorking(true);
+    setErr(null);
     void (async () => {
-      setErr(null);
       try {
         const b = await ccFetchBatchByQrToken(supabase, token);
         if (cancelled) return;
-        setBatch(b);
-        if (!b) {
-          setErr('Lote no encontrado');
+        if (b) {
+          router.replace(`/cocina-central/lote/${b.id}?token=${encodeURIComponent(token)}`);
           return;
         }
-        const [i, f, s] = await Promise.all([
-          ccFetchIngredientTrace(supabase, b.id),
-          ccFetchForwardTrace(supabase, b.id),
-          ccFetchStockForBatch(supabase, b.id),
-        ]);
-        if (cancelled) return;
-        setIng(i);
-        setFwd(f);
-        setStock(s);
+        setErr('Acceso no válido.');
       } catch (e) {
-        if (!cancelled) setErr(e instanceof Error ? e.message : 'Error');
+        if (!cancelled) setErr(e instanceof Error ? e.message : 'Error al validar el enlace');
+      } finally {
+        if (!cancelled) setWorking(false);
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [supabase, token]);
+  }, [supabase, token, router]);
 
   if (!profileReady) return <p className="text-sm text-zinc-500">Cargando…</p>;
-  if (!isSupabaseEnabled() || !supabase || !localId) {
-    return <p className="text-sm text-zinc-600">Inicia sesión para ver la ficha.</p>;
+  if (!isSupabaseEnabled() || !supabase) {
+    return <p className="text-sm text-zinc-600">Conexión no disponible.</p>;
   }
 
   if (!token) {
-    return <p className="text-sm text-zinc-600">Falta el parámetro ?token= en la URL.</p>;
-  }
-
-  if (!batch) {
-    return <p className="text-sm text-zinc-600">{err ?? 'Buscando…'}</p>;
-  }
-
-  const here = stock.find((s) => s.local_id === localId);
-
-  return (
-    <div className="space-y-5">
-      <h1 className="text-xl font-extrabold text-zinc-900">
-        {ccProductName((Array.isArray(batch.central_preparations) ? batch.central_preparations[0] : batch.central_preparations) ?? batch.products)}
-      </h1>
-      <p className="text-sm font-semibold text-zinc-600">
-        {batch.codigo_lote} · {batch.estado}
-      </p>
-      <p className="text-xs text-zinc-500">
-        Elab. {batch.fecha_elaboracion}
-        {batch.fecha_caducidad ? ` · Cad. ${batch.fecha_caducidad}` : ''}
-      </p>
-      {here != null ? (
-        <p className="rounded-xl bg-emerald-50 px-3 py-2 text-sm font-bold text-emerald-900">
-          Stock en tu sede: {here.cantidad} {batch.unidad}
+    return (
+      <div className="space-y-2 rounded-2xl border border-zinc-200 bg-zinc-50 px-4 py-4 text-sm text-zinc-800">
+        <p className="font-semibold text-zinc-900">{MSG_NO_TOKEN}</p>
+        <p className="text-xs text-zinc-600">
+          Escanea de nuevo el QR de la etiqueta o abre un enlace que incluya el parámetro{' '}
+          <code className="rounded bg-zinc-200 px-1">token</code>.
         </p>
-      ) : (
-        <p className="text-xs text-zinc-500">Sin stock registrado en tu sede para este lote.</p>
-      )}
+      </div>
+    );
+  }
 
-      <section className="rounded-2xl border border-zinc-200 bg-white p-4">
-        <h2 className="text-sm font-extrabold">Ingredientes</h2>
-        <ul className="mt-2 text-sm text-zinc-700">
-          {ing.length === 0 ? (
-            <li className="text-zinc-500">—</li>
-          ) : (
-            ing.map((r) => (
-              <li key={r.id}>
-                {ccProductName((Array.isArray(r.central_preparations) ? r.central_preparations[0] : r.central_preparations) ?? r.products)} · {r.cantidad} {r.unidad}
-              </li>
-            ))
-          )}
-        </ul>
-      </section>
+  if (err) {
+    return (
+      <div className="space-y-2 rounded-2xl border border-zinc-200 bg-zinc-50 px-4 py-4 text-sm text-zinc-800">
+        <p className="font-semibold text-zinc-900">{err}</p>
+        <p className="text-xs text-zinc-600">Comprueba que el código no esté dañado o genera otra vez la etiqueta del lote.</p>
+      </div>
+    );
+  }
 
-      <section className="rounded-2xl border border-zinc-200 bg-white p-4">
-        <h2 className="text-sm font-extrabold">Envíos</h2>
-        <ul className="mt-2 text-sm text-zinc-700">
-          {fwd.length === 0 ? (
-            <li className="text-zinc-500">—</li>
-          ) : (
-            fwd.map((r, i) => {
-              const d = Array.isArray(r.deliveries) ? r.deliveries[0] : r.deliveries;
-              return (
-                <li key={i}>
-                  {r.cantidad} {r.unidad} → {d?.local_destino_label ?? '—'}
-                </li>
-              );
-            })
-          )}
-        </ul>
-      </section>
-
-      <Link
-        href={`/cocina-central/lotes/${batch.id}`}
-        className="block h-12 rounded-2xl bg-[#D32F2F] py-3 text-center text-sm font-extrabold text-white"
-      >
-        Abrir ficha completa
-      </Link>
-    </div>
-  );
+  return <p className="text-sm text-zinc-500">{working ? 'Validando enlace del lote…' : 'Redirigiendo…'}</p>;
 }
 
-export default function CocinaCentralLoteQrPage() {
+export default function CocinaCentralLoteLegacyPage() {
   return (
     <Suspense fallback={<p className="text-sm text-zinc-500">Cargando…</p>}>
-      <LoteTokenBody />
+      <LegacyTokenOnlyBody />
     </Suspense>
   );
 }

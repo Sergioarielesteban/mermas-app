@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 import QRCode from 'qrcode';
 import { useAuth } from '@/components/AuthProvider';
 import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
+import { buildCocinaCentralBatchQrUrl } from '@/lib/cocina-central-qr';
 import { ccFetchBatchById, ccProductName } from '@/lib/cocina-central-supabase';
 
 export default function CocinaCentralEtiquetaPage() {
@@ -29,7 +30,7 @@ export default function CocinaCentralEtiquetaPage() {
         }
         const origin =
           typeof window !== 'undefined' ? window.location.origin : process.env.NEXT_PUBLIC_SITE_URL ?? '';
-        const url = `${origin}/cocina-central/lote?token=${encodeURIComponent(b.qr_token)}`;
+        const url = buildCocinaCentralBatchQrUrl(origin, b.id, b.qr_token);
         const dataUrl = await QRCode.toDataURL(url, { margin: 1, width: 200 });
         if (!cancelled) setQr(dataUrl);
       } catch (e) {

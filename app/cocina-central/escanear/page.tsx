@@ -3,22 +3,8 @@
 import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import { useAuth } from '@/components/AuthProvider';
+import { parseScannedBatchQr } from '@/lib/cocina-central-qr';
 import { isSupabaseEnabled, getSupabaseClient } from '@/lib/supabase-client';
-
-function extractToken(raw: string): string | null {
-  const t = raw.trim();
-  try {
-    const u = new URL(t);
-    const q = u.searchParams.get('token');
-    if (q) return q;
-  } catch {
-    /* texto plano */
-  }
-  if (/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(t)) {
-    return t;
-  }
-  return null;
-}
 
 export default function CocinaCentralEscanearPage() {
   const router = useRouter();
@@ -39,10 +25,16 @@ export default function CocinaCentralEscanearPage() {
         { facingMode: 'environment' },
         { fps: 8, qrbox: { width: 240, height: 240 } },
         (decoded) => {
-          const token = extractToken(decoded);
-          if (token) {
+          const parsed = parseScannedBatchQr(decoded);
+          if (parsed) {
             void html5?.stop().catch(() => {});
-            router.push(`/cocina-central/lote?token=${encodeURIComponent(token)}`);
+            if (parsed.kind === 'full') {
+              router.push(
+                `/cocina-central/lote/${encodeURIComponent(parsed.batchId)}?token=${encodeURIComponent(parsed.token)}`,
+              );
+            } else {
+              router.push(`/cocina-central/lote?token=${encodeURIComponent(parsed.token)}`);
+            }
           }
         },
         () => {},
