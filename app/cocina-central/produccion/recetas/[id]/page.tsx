@@ -15,6 +15,7 @@ import {
   type ProductionRecipeLineRow,
   type ProductionRecipeRow,
 } from '@/lib/production-recipes-supabase';
+import MasterArticleSearchInput from '@/components/cocina-central/MasterArticleSearchInput';
 import { fetchPurchaseArticles, type PurchaseArticle } from '@/lib/purchase-articles-supabase';
 
 const FINAL_UNITS = ['kg', 'l', 'ud', 'bandeja', 'ración', 'g', 'ml', 'porción'] as const;
@@ -85,15 +86,14 @@ export default function EditarFormulaProduccionPage() {
   }, [load]);
 
   const addLine = () => {
-    const first = articles[0];
     setLines((prev) => [
       ...prev,
       {
         key: newKey(),
         lineId: null,
-        articleId: first?.id ?? '',
+        articleId: '',
         quantity: '1',
-        unit: first?.unidadUso?.trim() || 'ud',
+        unit: 'ud',
       },
     ]);
   };
@@ -304,31 +304,27 @@ export default function EditarFormulaProduccionPage() {
               key={line.key}
               className="flex flex-col gap-2 rounded-xl border border-zinc-200 bg-zinc-50/80 p-3 sm:flex-row sm:items-end sm:flex-wrap"
             >
-              <label className="min-w-0 flex-1 text-xs font-bold uppercase text-zinc-500">
-                Artículo
-                <select
-                  className="mt-1 h-11 w-full rounded-lg border border-zinc-300 text-sm"
+              <div className="min-w-0 flex-1">
+                <span className="text-xs font-bold uppercase text-zinc-500">Artículo</span>
+                <MasterArticleSearchInput
+                  className="mt-1"
+                  articles={articles}
                   value={line.articleId}
-                  onChange={(e) => {
-                    const id = e.target.value;
-                    const a = articles.find((x) => x.id === id);
+                  onSelect={(a) =>
                     setLines((prev) =>
                       prev.map((x) =>
                         x.key === line.key
-                          ? { ...x, articleId: id, unit: a?.unidadUso?.trim() || x.unit }
+                          ? { ...x, articleId: a.id, unit: a.unidadUso?.trim() || x.unit }
                           : x,
                       ),
-                    );
-                  }}
-                >
-                  <option value="">— Elegir —</option>
-                  {articles.map((a) => (
-                    <option key={a.id} value={a.id}>
-                      {a.nombre}
-                    </option>
-                  ))}
-                </select>
-              </label>
+                    )
+                  }
+                  onClear={() =>
+                    setLines((prev) => prev.map((x) => (x.key === line.key ? { ...x, articleId: '' } : x)))
+                  }
+                  disabled={articles.length === 0}
+                />
+              </div>
               <label className="w-full text-xs font-bold uppercase text-zinc-500 sm:w-24">
                 Cant.
                 <input
