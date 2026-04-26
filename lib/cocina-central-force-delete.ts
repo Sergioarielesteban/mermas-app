@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { isCocinaCentralModulePinConfigured, isCocinaCentralModuleUnlockedInSession } from '@/lib/cocina-central-module-pin';
 
 const PHRASE = 'ELIMINAR';
 
@@ -12,6 +13,17 @@ export function isForceDeleteTestDataEnabled(): boolean {
     process.env.ALLOW_FORCE_DELETE_TEST_DATA === 'true' ||
     process.env.NEXT_PUBLIC_ALLOW_FORCE_DELETE_TEST_DATA === 'true'
   );
+}
+
+/**
+ * Eliminación forzada (lote/orden con entregas, etc.): activa con modo pruebas
+ * **o** con PIN del módulo desbloqueado en esta sesión (`NEXT_PUBLIC_COCINA_CENTRAL_MODULE_PIN` + clave en pantalla de entrada).
+ * Sigue haciendo falta tener aplicadas en Supabase las funciones `cc_force_delete_*`.
+ */
+export function canUseCocinaCentralForceDelete(): boolean {
+  if (isForceDeleteTestDataEnabled()) return true;
+  if (isCocinaCentralModulePinConfigured() && isCocinaCentralModuleUnlockedInSession()) return true;
+  return false;
 }
 
 export async function ccForceDeleteProductionBatch(

@@ -7,7 +7,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { CocinaCentralForceDeleteModal } from '@/components/cocina-central/CocinaCentralForceDeleteModal';
 import { useAuth } from '@/components/AuthProvider';
 import { appConfirm } from '@/lib/app-dialog-bridge';
-import { isForceDeleteTestDataEnabled, ccForceDeleteProductionOrder } from '@/lib/cocina-central-force-delete';
+import { canUseCocinaCentralForceDelete, ccForceDeleteProductionOrder } from '@/lib/cocina-central-force-delete';
 import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
 import { canCocinaCentralOperate } from '@/lib/cocina-central-permissions';
 import {
@@ -46,7 +46,7 @@ export default function CocinaCentralProduccionHubPage() {
   const [toast, setToast] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [forceDeleteOrder, setForceDeleteOrder] = useState<ProductionOrderRow | null>(null);
-  const forceTest = isForceDeleteTestDataEnabled();
+  const canForceDelete = canUseCocinaCentralForceDelete();
 
   const reload = useCallback(async () => {
     if (!supabase || !localId || !canUse) return;
@@ -81,7 +81,7 @@ export default function CocinaCentralProduccionHubPage() {
   }, [toast]);
 
   const canDeleteOrder = (o: ProductionOrderRow) =>
-    forceTest || o.estado === 'cancelada' || o.estado === 'completada';
+    canForceDelete || o.estado === 'cancelada' || o.estado === 'completada';
 
   const runLegacyDelete = async (o: ProductionOrderRow) => {
     if (!supabase) return;
@@ -108,7 +108,7 @@ export default function CocinaCentralProduccionHubPage() {
   };
 
   const openDelete = (o: ProductionOrderRow) => {
-    if (forceTest) {
+    if (canForceDelete) {
       setForceDeleteOrder(o);
       return;
     }

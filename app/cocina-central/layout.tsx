@@ -1,5 +1,6 @@
 'use client';
 
+import { CocinaCentralModulePinGate } from '@/components/cocina-central/CocinaCentralModulePinGate';
 import { useAuth } from '@/components/AuthProvider';
 import { canAccessCocinaCentralModule } from '@/lib/cocina-central-permissions';
 
@@ -29,5 +30,5 @@ export default function CocinaCentralLayout({ children }: { children: React.Reac
     );
   }
 
-  return <>{children}</>;
+  return <CocinaCentralModulePinGate>{children}</CocinaCentralModulePinGate>;
 }

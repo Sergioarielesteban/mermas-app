@@ -6,7 +6,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
 import { CocinaCentralForceDeleteModal } from '@/components/cocina-central/CocinaCentralForceDeleteModal';
 import { useAuth } from '@/components/AuthProvider';
-import { ccForceDeleteProductionBatch, isForceDeleteTestDataEnabled } from '@/lib/cocina-central-force-delete';
+import { canUseCocinaCentralForceDelete, ccForceDeleteProductionBatch } from '@/lib/cocina-central-force-delete';
 import { canCocinaCentralOperate } from '@/lib/cocina-central-permissions';
 import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
 import type { LoteProduccionMetaV1 } from '@/lib/cocina-central-production-meta';
@@ -67,7 +67,7 @@ export default function CocinaCentralLoteDetailPage() {
   const { localId, userId, profileReady, isCentralKitchen, profileRole } = useAuth();
   const canUse = canCocinaCentralOperate(isCentralKitchen, profileRole);
   const supabase = getSupabaseClient();
-  const forceTest = isForceDeleteTestDataEnabled();
+  const canForceDelete = canUseCocinaCentralForceDelete();
   const [err, setErr] = useState<string | null>(null);
   const [forceDeleteOpen, setForceDeleteOpen] = useState(false);
   const [deleteBusy, setDeleteBusy] = useState(false);
@@ -193,7 +193,7 @@ export default function CocinaCentralLoteDetailPage() {
             QR token: <span className="font-mono">{batch.qr_token}</span>
           </p>
         </div>
-        {forceTest && canUse && batch.local_central_id === localId ? (
+        {canForceDelete && canUse && batch.local_central_id === localId ? (
           <button
             type="button"
             title="Eliminar lote"
