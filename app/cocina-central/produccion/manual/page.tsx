@@ -199,8 +199,8 @@ export default function RegistroManualLotePage() {
         </Link>
         <h1 className="mt-2 text-xl font-extrabold text-zinc-900">Registro manual de lote</h1>
         <p className="mt-1 text-sm text-zinc-600">
-          Uso excepcional: registrar un lote en central con elaboración interna, sin pasar por una orden desde escandallo. El flujo
-          recomendado es <Link href="/cocina-central/produccion/nueva">Nueva orden de producción</Link>.
+          Uso excepcional: registrar un lote en central con elaboración interna, sin pasar por una orden de producción. El flujo
+          recomendado es <Link href="/cocina-central/produccion/nueva">Nueva orden de producción</Link> desde una fórmula interna.
         </p>
       </div>
 

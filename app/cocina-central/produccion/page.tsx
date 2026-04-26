@@ -7,8 +7,6 @@ import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
 import { canCocinaCentralOperate } from '@/lib/cocina-central-permissions';
 import { ccFetchBatchesCentral, ccFetchProductionOrders, ccProductName } from '@/lib/cocina-central-supabase';
 import type { ProductionOrderRow } from '@/lib/cocina-central-supabase';
-import { fetchEscandalloRecipes } from '@/lib/escandallos-supabase';
-
 const STATE_ES: Record<string, string> = {
   borrador: 'Pendiente',
   en_curso: 'En curso',
@@ -16,12 +14,10 @@ const STATE_ES: Record<string, string> = {
   cancelada: 'Cancelada',
 };
 
-function recipeNameForOrder(
-  o: ProductionOrderRow,
-  recipeNames: Map<string, string>,
-): string {
-  const eid = o.escandallo_recipe_id;
-  if (eid && recipeNames.has(eid)) return recipeNames.get(eid)!;
+function orderTitle(o: ProductionOrderRow): string {
+  const pr = o.production_recipes;
+  const fromInternal = Array.isArray(pr) ? pr[0]?.name : pr?.name;
+  if (fromInternal) return fromInternal;
   return ccProductName(
     (Array.isArray(o.central_preparations) ? o.central_preparations[0] : o.central_preparations) ?? o.products,
   );
@@ -33,7 +29,6 @@ export default function CocinaCentralProduccionHubPage() {
   const supabase = getSupabaseClient();
 
   const [orders, setOrders] = useState<ProductionOrderRow[]>([]);
-  const [recipeNames, setRecipeNames] = useState<Map<string, string>>(() => new Map());
   const [lotes, setLotes] = useState(0);
   const [err, setErr] = useState<string | null>(null);
 
@@ -41,14 +36,12 @@ export default function CocinaCentralProduccionHubPage() {
     if (!supabase || !localId || !canUse) return;
     setErr(null);
     try {
-      const [o, rList, b] = await Promise.all([
+      const [o, b] = await Promise.all([
         ccFetchProductionOrders(supabase, localId),
-        fetchEscandalloRecipes(supabase, localId).catch(() => []),
         ccFetchBatchesCentral(supabase, localId).catch(() => []),
       ]);
       setOrders(o);
       setLotes(b.length);
-      setRecipeNames(new Map((rList ?? []).map((r) => [r.id, r.name])));
     } catch (e) {
       setErr(e instanceof Error ? e.message : 'Error al cargar');
     }
@@ -76,8 +69,7 @@ export default function CocinaCentralProduccionHubPage() {
       <div>
         <h1 className="text-xl font-extrabold text-zinc-900">Producción</h1>
         <p className="mt-1 text-sm text-zinc-600">
-          Flujo: receta/escandallo (referencia) → orden → ingredientes y lotes → lote final en stock central. Las elaboraciones
-          viven en cocina central; el escandallo no se modifica aquí.
+          Flujo: fórmula de producción interna → orden → ingredientes y lotes (Artículos Máster) → lote final en stock central.
         </p>
       </div>
       {err ? (
@@ -90,6 +82,12 @@ export default function CocinaCentralProduccionHubPage() {
           className="inline-flex h-12 min-w-[200px] items-center justify-center rounded-2xl bg-[#D32F2F] px-4 text-sm font-extrabold text-white"
         >
           Nueva orden de producción
+        </Link>
+        <Link
+          href="/cocina-central/produccion/recetas"
+          className="inline-flex h-12 min-w-[200px] items-center justify-center rounded-2xl border border-zinc-300 bg-white px-4 text-sm font-bold text-zinc-800"
+        >
+          Fórmulas de producción
         </Link>
         <a
           href="#ordenes-recientes"
@@ -118,7 +116,7 @@ export default function CocinaCentralProduccionHubPage() {
             <li className="px-4 py-6 text-sm text-zinc-500">Sin órdenes. Crea la primera con «Nueva orden de producción».</li>
           ) : (
             orders.slice(0, 24).map((o) => {
-              const name = recipeNameForOrder(o, recipeNames);
+              const name = orderTitle(o);
               return (
                 <li key={o.id} className="flex flex-col gap-1 px-4 py-3 text-sm sm:flex-row sm:items-center sm:justify-between">
                   <div>

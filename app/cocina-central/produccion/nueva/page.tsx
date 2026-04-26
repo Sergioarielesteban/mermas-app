@@ -6,13 +6,7 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/components/AuthProvider';
 import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
 import { canCocinaCentralOperate } from '@/lib/cocina-central-permissions';
-import {
-  buildProductionOrderLinePayloadFromEscandallo,
-  listEscandalloRecipesForProduction,
-  yieldLabelToCcPreparationUnit,
-} from '@/lib/cocina-central-escandallo-bridge';
-import type { EscandalloRecipe } from '@/lib/escandallos-supabase';
-import { ccInsertProductionOrder, ccReplaceProductionOrderLines } from '@/lib/cocina-central-supabase';
+import { prCreateOrderFromInternalRecipe, prListActiveRecipes, type ProductionRecipeRow } from '@/lib/production-recipes-supabase';
 
 function todayMadridYmd(): string {
   return new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/Madrid' });
@@ -24,7 +18,7 @@ export default function NuevaOrdenProduccionPage() {
   const canUse = canCocinaCentralOperate(isCentralKitchen, profileRole);
   const supabase = getSupabaseClient();
 
-  const [recipes, setRecipes] = useState<EscandalloRecipe[]>([]);
+  const [recipes, setRecipes] = useState<ProductionRecipeRow[]>([]);
   const [recipeId, setRecipeId] = useState('');
   const [targetQty, setTargetQty] = useState('10');
   const [fecha, setFecha] = useState(todayMadridYmd);
@@ -36,10 +30,9 @@ export default function NuevaOrdenProduccionPage() {
     if (!supabase || !localId || !canUse) return;
     setErr(null);
     try {
-      const r = await listEscandalloRecipesForProduction(supabase, localId);
-      const main = r.filter((x) => !x.isSubRecipe);
-      setRecipes(main);
-      setRecipeId((prev) => prev || main[0]?.id || '');
+      const r = await prListActiveRecipes(supabase, localId);
+      setRecipes(r);
+      setRecipeId((prev) => prev || r[0]?.id || '');
     } catch (e) {
       setErr(e instanceof Error ? e.message : 'Error al cargar recetas');
     }
@@ -50,7 +43,6 @@ export default function NuevaOrdenProduccionPage() {
   }, [load]);
 
   const selected = recipes.find((r) => r.id === recipeId);
-  const yieldLabel = selected ? yieldLabelToCcPreparationUnit(selected.yieldLabel) : '—';
 
   const submit = async () => {
     if (!supabase || !localId) return;
@@ -63,33 +55,14 @@ export default function NuevaOrdenProduccionPage() {
       return;
     }
     try {
-      const built = await buildProductionOrderLinePayloadFromEscandallo(supabase, localId, recipeId, tq);
-      if (built.lines.length === 0) {
-        setErr('La receta no tiene ingredientes enlazables (crudo/procesado) o solo tiene subrecetas o líneas manuales.');
-        setBusy(false);
-        return;
-      }
-      const orderId = await ccInsertProductionOrder(supabase, {
-        preparation_id: built.outputPreparationId,
-        local_central_id: localId,
+      const orderId = await prCreateOrderFromInternalRecipe(supabase, {
+        localCentralId: localId,
+        userId,
+        productionRecipeId: recipeId,
+        targetQuantity: tq,
         fecha,
-        cantidad_objetivo: tq,
-        estado: 'borrador',
-        created_by: userId,
         notes: notes.trim() || null,
-        escandallo_recipe_id: built.recipe.id,
       });
-      await ccReplaceProductionOrderLines(
-        supabase,
-        orderId,
-        built.lines.map((l) => ({
-          ingredient_preparation_id: l.ingredientPreparationId,
-          label_snapshot: l.label,
-          theoretical_qty: l.theoreticalQty,
-          unidad: l.unidad,
-          escandallo_line_id: l.escandalloLineId,
-        })),
-      );
       router.push(`/cocina-central/produccion/${orderId}`);
     } catch (e) {
       setErr(e instanceof Error ? e.message : 'Error al crear la orden');
@@ -119,16 +92,21 @@ export default function NuevaOrdenProduccionPage() {
         </Link>
         <h1 className="mt-2 text-xl font-extrabold text-zinc-900">Nueva orden de producción</h1>
         <p className="mt-1 text-sm text-zinc-600">
-          Parte de una receta/escandallo: se crean o actualizan las elaboraciones en cocina central (no se modifica el módulo de
-          escandallos).
+          Parte de una fórmula de producción interna (Cocina Central). Los ingredientes se toman de Artículos Máster; al generar
+          la orden se sincronizan elaboraciones y costes al vuelo.
         </p>
       </div>
       {err ? (
         <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">{err}</div>
       ) : null}
       <div className="space-y-4 rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm">
+        <p className="text-xs text-zinc-600">
+          <Link href="/cocina-central/produccion/recetas" className="font-bold text-[#D32F2F] underline">
+            Gestionar fórmulas de producción
+          </Link>
+        </p>
         <label className="block text-xs font-bold uppercase tracking-wide text-zinc-500">
-          Seleccionar receta
+          Seleccionar fórmula
           <select
             className="mt-1 h-12 w-full rounded-xl border border-zinc-300 bg-white px-3 text-base font-semibold"
             value={recipeId}
@@ -143,11 +121,11 @@ export default function NuevaOrdenProduccionPage() {
         </label>
         {selected ? (
           <p className="text-xs text-zinc-600">
-            Referencia escandallo: {selected.yieldQty} {selected.yieldLabel} (unidad interna: {String(yieldLabel)}).
+            Rendimiento de referencia: {selected.base_yield_quantity} {selected.final_unit} (base: {selected.base_yield_unit}).
           </p>
         ) : null}
         <label className="block text-xs font-bold uppercase tracking-wide text-zinc-500">
-          Cantidad objetivo (misma unidad lógica que el rendimiento de la receta)
+          Cantidad objetivo (misma unidad lógica que el rendimiento de la fórmula)
           <input
             type="text"
             inputMode="decimal"

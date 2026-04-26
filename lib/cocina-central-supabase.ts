@@ -44,6 +44,8 @@ export type CentralPreparationRow = {
   escandallo_recipe_id?: string | null;
   escandallo_raw_supplier_product_id?: string | null;
   escandallo_processed_product_id?: string | null;
+  production_recipe_id?: string | null;
+  purchase_article_id?: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -71,11 +73,12 @@ export type ProductionOrderRow = {
   estado: ProductionOrderEstado;
   notes?: string | null;
   escandallo_recipe_id?: string | null;
+  production_recipe_id?: string | null;
   created_at: string;
   created_by?: string | null;
   central_preparations?: { nombre: string; unidad_base?: string; rendimiento?: number | null; caducidad_dias?: number | null } | { nombre: string }[] | null;
   products?: { name: string } | { name: string }[] | null;
-  escandallo_recipes?: { name: string } | { name: string }[] | null;
+  production_recipes?: { name: string; final_unit?: string; default_expiry_days?: number | null } | { name: string }[] | null;
 };
 
 export type ProductionOrderLineRow = {
@@ -90,6 +93,8 @@ export type ProductionOrderLineRow = {
   cost_estimated_eur: number | null;
   cost_real_eur: number | null;
   escandallo_line_id: string | null;
+  article_id: string | null;
+  production_recipe_line_id: string | null;
   created_at: string;
   updated_at: string;
   ingredient_preparation?: CentralPreparationRow | CentralPreparationRow[] | null;
@@ -180,7 +185,7 @@ export type BatchMovementRow = {
 };
 
 const PREP_SELECT =
-  'id,local_central_id,nombre,descripcion,categoria,unidad_base,activo,rendimiento,caducidad_dias,observaciones,legacy_product_id,inventory_product_id,catalog_product_id,escandallo_recipe_id,escandallo_raw_supplier_product_id,escandallo_processed_product_id,created_at,updated_at';
+  'id,local_central_id,nombre,descripcion,categoria,unidad_base,activo,rendimiento,caducidad_dias,observaciones,legacy_product_id,inventory_product_id,catalog_product_id,escandallo_recipe_id,escandallo_raw_supplier_product_id,escandallo_processed_product_id,production_recipe_id,purchase_article_id,created_at,updated_at';
 
 export async function ccListDestinations(supabase: SupabaseClient): Promise<DestinationLocal[]> {
   const { data, error } = await supabase.rpc('cc_list_delivery_destinations');
@@ -238,6 +243,8 @@ export async function ccInsertPreparation(
     escandallo_recipe_id?: string | null;
     escandallo_raw_supplier_product_id?: string | null;
     escandallo_processed_product_id?: string | null;
+    production_recipe_id?: string | null;
+    purchase_article_id?: string | null;
   },
 ): Promise<CentralPreparationRow> {
   const { data, error } = await supabase
@@ -257,6 +264,8 @@ export async function ccInsertPreparation(
       escandallo_recipe_id: row.escandallo_recipe_id ?? null,
       escandallo_raw_supplier_product_id: row.escandallo_raw_supplier_product_id ?? null,
       escandallo_processed_product_id: row.escandallo_processed_product_id ?? null,
+      production_recipe_id: row.production_recipe_id ?? null,
+      purchase_article_id: row.purchase_article_id ?? null,
     })
     .select(PREP_SELECT)
     .single();
@@ -336,6 +345,7 @@ export async function ccInsertProductionOrder(
     product_id?: string | null;
     notes?: string | null;
     escandallo_recipe_id?: string | null;
+    production_recipe_id?: string | null;
   },
 ): Promise<string> {
   const { data, error } = await supabase
@@ -350,6 +360,7 @@ export async function ccInsertProductionOrder(
       created_by: row.created_by ?? null,
       notes: row.notes?.trim() || null,
       escandallo_recipe_id: row.escandallo_recipe_id ?? null,
+      production_recipe_id: row.production_recipe_id ?? null,
     })
     .select('id')
     .single();
@@ -358,7 +369,7 @@ export async function ccInsertProductionOrder(
 }
 
 const PRODUCTION_ORDER_LIST_SELECT =
-  '*, central_preparations(nombre, unidad_base, rendimiento, caducidad_dias), products(name)';
+  '*, central_preparations(nombre, unidad_base, rendimiento, caducidad_dias), products(name), production_recipes(name, final_unit, default_expiry_days, base_yield_quantity, base_yield_unit)';
 
 export async function ccFetchProductionOrders(
   supabase: SupabaseClient,
@@ -425,6 +436,8 @@ export async function ccReplaceProductionOrderLines(
     origin_batch_id?: string | null;
     cost_estimated_eur?: number | null;
     escandallo_line_id?: string | null;
+    article_id?: string | null;
+    production_recipe_line_id?: string | null;
   }>,
 ): Promise<void> {
   const { error: delErr } = await supabase
@@ -443,6 +456,8 @@ export async function ccReplaceProductionOrderLines(
     origin_batch_id: x.origin_batch_id ?? null,
     cost_estimated_eur: x.cost_estimated_eur ?? null,
     escandallo_line_id: x.escandallo_line_id ?? null,
+    article_id: x.article_id ?? null,
+    production_recipe_line_id: x.production_recipe_line_id ?? null,
   }));
   const { error } = await supabase.from('production_order_lines').insert(payload);
   if (error) throw new Error(error.message);

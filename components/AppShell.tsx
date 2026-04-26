@@ -103,6 +103,9 @@ function titleForPath(pathname: string | null) {
     if (pathname === '/cocina-central') return 'Cocina central';
     if (pathname === '/cocina-central/produccion/nueva') return 'Nueva orden de producción';
     if (pathname === '/cocina-central/produccion/manual') return 'Registro manual de lote';
+    if (pathname === '/cocina-central/produccion/recetas/nueva') return 'Nueva fórmula de producción';
+    if (pathname === '/cocina-central/produccion/recetas') return 'Fórmulas de producción';
+    if (pathname.startsWith('/cocina-central/produccion/recetas/')) return 'Fórmula de producción';
     if (
       pathname.startsWith('/cocina-central/produccion/') &&
       pathname !== '/cocina-central/produccion/nueva' &&

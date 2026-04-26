@@ -17,8 +17,6 @@ import {
   ccUpdateProductionOrder,
 } from '@/lib/cocina-central-supabase';
 import { ccProductName } from '@/lib/cocina-central-supabase';
-import { fetchEscandalloRecipes } from '@/lib/escandallos-supabase';
-
 function addDaysYmd(ymd: string, days: number): string {
   const d = new Date(`${ymd}T12:00:00`);
   d.setDate(d.getDate() + days);
@@ -62,15 +60,9 @@ export default function DetalleProduccionPage() {
         return;
       }
       setOrder(o);
-      setRecipeName(null);
-      if (o.escandallo_recipe_id) {
-        void fetchEscandalloRecipes(supabase, o.local_central_id)
-          .then((r) => {
-            const n = r.find((x) => x.id === o.escandallo_recipe_id)?.name;
-            if (n) setRecipeName(n);
-          })
-          .catch(() => {});
-      }
+      const pr = o.production_recipes;
+      const prName = Array.isArray(pr) ? pr[0]?.name : pr?.name;
+      setRecipeName(prName ?? null);
       setNotes(o.notes?.trim() ?? '');
       setOutQty(String(o.cantidad_producida ?? o.cantidad_objetivo));
       const ls = await ccFetchProductionOrderLines(supabase, id);
@@ -147,7 +139,10 @@ export default function DetalleProduccionPage() {
           unidad: row.unidad,
           real_qty: Number.isFinite(r) ? r : null,
           origin_batch_id: st.origin || null,
-          escandallo_line_id: row.escandallo_line_id ?? undefined,
+          cost_estimated_eur: row.cost_estimated_eur,
+          article_id: row.article_id,
+          production_recipe_line_id: row.production_recipe_line_id,
+          escandallo_line_id: null,
         };
       });
       await ccReplaceProductionOrderLines(supabase, order.id, payload);
@@ -336,7 +331,9 @@ export default function DetalleProduccionPage() {
         <h2 className="text-sm font-extrabold text-zinc-900">Ingredientes</h2>
         <div className="mt-3 space-y-3">
           {lines.length === 0 ? (
-            <p className="text-sm text-zinc-500">No hay ingredientes (regenera la orden desde receta o revisa el escandallo).</p>
+            <p className="text-sm text-zinc-500">
+              No hay ingredientes (revisa la fórmula de producción o vuelve a generar la orden).
+            </p>
           ) : (
             lines.map((row) => {
               const st = linesState[row.id] ?? { real: String(row.theoretical_qty), origin: '' };
