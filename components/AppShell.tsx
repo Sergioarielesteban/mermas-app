@@ -101,6 +101,15 @@ function titleForPath(pathname: string | null) {
   if (pathname.startsWith('/escandallos')) return 'Escandallos';
   if (pathname.startsWith('/cocina-central')) {
     if (pathname === '/cocina-central') return 'Cocina central';
+    if (pathname === '/cocina-central/produccion/nueva') return 'Nueva orden de producción';
+    if (pathname === '/cocina-central/produccion/manual') return 'Registro manual de lote';
+    if (
+      pathname.startsWith('/cocina-central/produccion/') &&
+      pathname !== '/cocina-central/produccion/nueva' &&
+      pathname !== '/cocina-central/produccion/manual'
+    ) {
+      return 'Detalle de producción';
+    }
     if (pathname.startsWith('/cocina-central/produccion')) return 'Producción central';
     if (pathname.startsWith('/cocina-central/lotes')) return 'Lotes';
     if (pathname.startsWith('/cocina-central/etiquetas')) return 'Etiqueta';

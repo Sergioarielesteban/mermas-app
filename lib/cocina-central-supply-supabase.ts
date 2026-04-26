@@ -74,6 +74,8 @@ export const CC_UNIT_SHORT: Record<CcUnit, string> = {
   ud: 'ud.',
   bolsa: 'bolsa',
   racion: 'ración',
+  litros: 'L',
+  unidades: 'ud.',
 };
 
 export function monthEntregaRange(monthKey: string): { from: string; to: string } {
