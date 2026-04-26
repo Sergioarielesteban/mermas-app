@@ -1,11 +1,18 @@
 'use client';
 
 import Link from 'next/link';
+import { Trash2 } from 'lucide-react';
 import React, { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '@/components/AuthProvider';
+import { appConfirm } from '@/lib/app-dialog-bridge';
 import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
 import { canCocinaCentralOperate } from '@/lib/cocina-central-permissions';
-import { ccFetchBatchesCentral, ccFetchProductionOrders, ccProductName } from '@/lib/cocina-central-supabase';
+import {
+  ccDeleteProductionOrder,
+  ccFetchBatchesCentral,
+  ccFetchProductionOrders,
+  ccProductName,
+} from '@/lib/cocina-central-supabase';
 import type { ProductionOrderRow } from '@/lib/cocina-central-supabase';
 const STATE_ES: Record<string, string> = {
   borrador: 'Pendiente',
@@ -31,6 +38,8 @@ export default function CocinaCentralProduccionHubPage() {
   const [orders, setOrders] = useState<ProductionOrderRow[]>([]);
   const [lotes, setLotes] = useState(0);
   const [err, setErr] = useState<string | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const reload = useCallback(async () => {
     if (!supabase || !localId || !canUse) return;
@@ -51,6 +60,37 @@ export default function CocinaCentralProduccionHubPage() {
     void reload();
   }, [reload]);
 
+  useEffect(() => {
+    if (!toast) return;
+    const t = window.setTimeout(() => setToast(null), 4000);
+    return () => window.clearTimeout(t);
+  }, [toast]);
+
+  const canDeleteOrder = (o: ProductionOrderRow) => o.estado === 'cancelada' || o.estado === 'completada';
+
+  const handleDeleteOrder = async (o: ProductionOrderRow) => {
+    if (!supabase || !canDeleteOrder(o)) return;
+    const ok1 = await appConfirm('¿Eliminar esta producción?');
+    if (!ok1) return;
+    if (o.estado === 'completada') {
+      const ok2 = await appConfirm(
+        'Esta orden generó un lote. Se eliminarán la orden, el lote y los movimientos de stock asociados en central. ¿Continuar?',
+      );
+      if (!ok2) return;
+    }
+    setDeletingId(o.id);
+    setErr(null);
+    try {
+      await ccDeleteProductionOrder(supabase, o.id);
+      setToast('Producción eliminada');
+      await reload();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : 'No se pudo eliminar');
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
   if (!profileReady) return <p className="text-sm text-zinc-500">Cargando…</p>;
   if (!isSupabaseEnabled() || !supabase) {
     return <p className="text-sm text-amber-800">Supabase no disponible.</p>;
@@ -65,7 +105,15 @@ export default function CocinaCentralProduccionHubPage() {
   }
 
   return (
-    <div className="space-y-8">
+    <div className="relative space-y-8">
+      {toast ? (
+        <div
+          className="fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-900 shadow-lg"
+          role="status"
+        >
+          {toast}
+        </div>
+      ) : null}
       <div>
         <h1 className="text-xl font-extrabold text-zinc-900">Producción</h1>
         <p className="mt-1 text-sm text-zinc-600">
@@ -117,18 +165,24 @@ export default function CocinaCentralProduccionHubPage() {
           ) : (
             orders.slice(0, 24).map((o) => {
               const name = orderTitle(o);
+              const canDel = canDeleteOrder(o);
               return (
-                <li key={o.id} className="flex flex-col gap-1 px-4 py-3 text-sm sm:flex-row sm:items-center sm:justify-between">
-                  <div>
+                <li
+                  key={o.id}
+                  className="flex flex-col gap-2 px-4 py-3 text-sm sm:flex-row sm:items-center sm:justify-between"
+                >
+                  <div className="min-w-0 flex-1">
                     <p className="font-bold text-zinc-900">{name.toUpperCase()}</p>
                     <p className="text-xs text-zinc-600">
                       {o.fecha} · {STATE_ES[o.estado] ?? o.estado} · objetivo {o.cantidad_objetivo}
                       {o.cantidad_producida != null ? ` · producida ${o.cantidad_producida}` : ''}
                     </p>
                   </div>
-                  <div className="flex flex-wrap items-center gap-2">
+                  <div className="flex flex-wrap items-center justify-end gap-2 sm:gap-3">
                     {o.estado === 'completada' ? (
-                      <span className="text-xs font-semibold text-emerald-700">Orden completada (ver lote en Lotes)</span>
+                      <span className="text-xs font-semibold text-emerald-700 sm:max-w-[200px] sm:text-right">
+                        Orden completada (ver lote en Lotes)
+                      </span>
                     ) : null}
                     <Link
                       href={`/cocina-central/produccion/${o.id}`}
@@ -136,6 +190,18 @@ export default function CocinaCentralProduccionHubPage() {
                     >
                       Abrir detalle
                     </Link>
+                    {canDel ? (
+                      <button
+                        type="button"
+                        title="Eliminar producción"
+                        disabled={deletingId === o.id}
+                        onClick={() => void handleDeleteOrder(o)}
+                        className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-red-200 bg-red-50 text-red-800 transition hover:bg-red-100 disabled:opacity-50"
+                        aria-label="Eliminar producción"
+                      >
+                        <Trash2 className="h-4 w-4" strokeWidth={2.2} />
+                      </button>
+                    ) : null}
                   </div>
                 </li>
               );

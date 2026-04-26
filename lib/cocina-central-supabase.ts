@@ -411,6 +411,15 @@ export async function ccUpdateProductionOrder(
   if (error) throw new Error(error.message);
 }
 
+/**
+ * Elimina orden (cancelada o completada) y lotes vinculados (vía RPC en servidor).
+ * Falla si el lote tiene entregas asociadas.
+ */
+export async function ccDeleteProductionOrder(supabase: SupabaseClient, orderId: string): Promise<void> {
+  const { error } = await supabase.rpc('cc_delete_production_order_central', { p_order_id: orderId });
+  if (error) throw new Error(error.message);
+}
+
 export async function ccFetchProductionOrderLines(
   supabase: SupabaseClient,
   orderId: string,
