@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/components/AuthProvider';
 import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
 import {
@@ -20,10 +21,13 @@ function stockLine(stocks: BatchStockRow[] | undefined, localId: string | null) 
 }
 
 export default function CocinaCentralLotesPage() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const { localId, profileReady, isCentralKitchen } = useAuth();
   const supabase = getSupabaseClient();
   const [rows, setRows] = useState<Awaited<ReturnType<typeof ccFetchBatchesCentral>>>([]);
   const [err, setErr] = useState<string | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!supabase || !localId) return;
@@ -49,13 +53,34 @@ export default function CocinaCentralLotesPage() {
     void load();
   }, [load]);
 
+  useEffect(() => {
+    if (searchParams.get('eliminado') !== '1') return;
+    setToast('Registro eliminado correctamente');
+    void load();
+    router.replace('/cocina-central/lotes', { scroll: false });
+  }, [searchParams, router, load]);
+
+  useEffect(() => {
+    if (!toast) return;
+    const t = window.setTimeout(() => setToast(null), 4000);
+    return () => window.clearTimeout(t);
+  }, [toast]);
+
   if (!profileReady) return <p className="text-sm text-zinc-500">Cargando…</p>;
   if (!isSupabaseEnabled() || !supabase || !localId) {
     return <p className="text-sm text-zinc-600">Sin conexión o local.</p>;
   }
 
   return (
-    <div className="space-y-4">
+    <div className="relative space-y-4">
+      {toast ? (
+        <div
+          className="fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-900 shadow-lg"
+          role="status"
+        >
+          {toast}
+        </div>
+      ) : null}
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-xl font-extrabold text-zinc-900">Lotes</h1>

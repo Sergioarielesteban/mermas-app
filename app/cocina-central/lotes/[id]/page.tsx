@@ -1,9 +1,13 @@
 'use client';
 
 import Link from 'next/link';
-import { useParams } from 'next/navigation';
+import { Trash2 } from 'lucide-react';
+import { useParams, useRouter } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
+import { CocinaCentralForceDeleteModal } from '@/components/cocina-central/CocinaCentralForceDeleteModal';
 import { useAuth } from '@/components/AuthProvider';
+import { ccForceDeleteProductionBatch, isForceDeleteTestDataEnabled } from '@/lib/cocina-central-force-delete';
+import { canCocinaCentralOperate } from '@/lib/cocina-central-permissions';
 import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
 import { computeBatchProductionCost, type BatchProductionCostResult } from '@/lib/cocina-central-batch-cost';
 import type { BatchEstado } from '@/lib/cocina-central-supabase';
@@ -33,9 +37,14 @@ const ESTADOS: BatchEstado[] = [
 
 export default function CocinaCentralLoteDetailPage() {
   const { id } = useParams<{ id: string }>();
-  const { localId, userId, profileReady } = useAuth();
+  const router = useRouter();
+  const { localId, userId, profileReady, isCentralKitchen, profileRole } = useAuth();
+  const canUse = canCocinaCentralOperate(isCentralKitchen, profileRole);
   const supabase = getSupabaseClient();
+  const forceTest = isForceDeleteTestDataEnabled();
   const [err, setErr] = useState<string | null>(null);
+  const [forceDeleteOpen, setForceDeleteOpen] = useState(false);
+  const [deleteBusy, setDeleteBusy] = useState(false);
   const [batch, setBatch] = useState<Awaited<ReturnType<typeof ccFetchBatchById>>>(null);
   const [stock, setStock] = useState<Awaited<ReturnType<typeof ccFetchStockForBatch>>>([]);
   const [ing, setIng] = useState<Awaited<ReturnType<typeof ccFetchIngredientTrace>>>([]);
@@ -109,6 +118,21 @@ export default function CocinaCentralLoteDetailPage() {
     }
   };
 
+  const confirmForceBatchDelete = async () => {
+    if (!supabase || !id) return;
+    setDeleteBusy(true);
+    setErr(null);
+    try {
+      await ccForceDeleteProductionBatch(supabase, id);
+      setForceDeleteOpen(false);
+      router.push('/cocina-central/lotes?eliminado=1');
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : 'Error');
+    } finally {
+      setDeleteBusy(false);
+    }
+  };
+
   if (!profileReady) return <p className="text-sm text-zinc-500">Cargando…</p>;
   if (!isSupabaseEnabled() || !supabase || !localId) {
     return <p className="text-sm text-zinc-600">Sin sesión.</p>;
@@ -120,16 +144,39 @@ export default function CocinaCentralLoteDetailPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-xl font-extrabold text-zinc-900">
-          {ccProductName((Array.isArray(batch.central_preparations) ? batch.central_preparations[0] : batch.central_preparations) ?? batch.products)}
-        </h1>
-        <p className="mt-1 text-sm font-semibold text-zinc-800">
-          {batch.codigo_lote} · <span className="capitalize">{String(batch.estado).replaceAll('_', ' ')}</span>
-        </p>
-        <p className="text-xs text-zinc-500">
-          QR token: <span className="font-mono">{batch.qr_token}</span>
-        </p>
+      <CocinaCentralForceDeleteModal
+        open={forceDeleteOpen}
+        onClose={() => {
+          if (!deleteBusy) setForceDeleteOpen(false);
+        }}
+        onConfirm={confirmForceBatchDelete}
+        entity="lote"
+        busy={deleteBusy}
+      />
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-xl font-extrabold text-zinc-900">
+            {ccProductName((Array.isArray(batch.central_preparations) ? batch.central_preparations[0] : batch.central_preparations) ?? batch.products)}
+          </h1>
+          <p className="mt-1 text-sm font-semibold text-zinc-800">
+            {batch.codigo_lote} · <span className="capitalize">{String(batch.estado).replaceAll('_', ' ')}</span>
+          </p>
+          <p className="text-xs text-zinc-500">
+            QR token: <span className="font-mono">{batch.qr_token}</span>
+          </p>
+        </div>
+        {forceTest && canUse && batch.local_central_id === localId ? (
+          <button
+            type="button"
+            title="Eliminar lote"
+            disabled={busy || deleteBusy}
+            onClick={() => setForceDeleteOpen(true)}
+            className="inline-flex h-10 shrink-0 items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-3 text-sm font-bold text-red-900 disabled:opacity-50"
+          >
+            <Trash2 className="h-4 w-4" strokeWidth={2.2} />
+            Eliminar
+          </button>
+        ) : null}
       </div>
 
       {err ? (

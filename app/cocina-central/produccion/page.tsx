@@ -3,8 +3,11 @@
 import Link from 'next/link';
 import { Trash2 } from 'lucide-react';
 import React, { useCallback, useEffect, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { CocinaCentralForceDeleteModal } from '@/components/cocina-central/CocinaCentralForceDeleteModal';
 import { useAuth } from '@/components/AuthProvider';
 import { appConfirm } from '@/lib/app-dialog-bridge';
+import { isForceDeleteTestDataEnabled, ccForceDeleteProductionOrder } from '@/lib/cocina-central-force-delete';
 import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
 import { canCocinaCentralOperate } from '@/lib/cocina-central-permissions';
 import {
@@ -31,6 +34,8 @@ function orderTitle(o: ProductionOrderRow): string {
 }
 
 export default function CocinaCentralProduccionHubPage() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const { localId, profileReady, isCentralKitchen, profileRole } = useAuth();
   const canUse = canCocinaCentralOperate(isCentralKitchen, profileRole);
   const supabase = getSupabaseClient();
@@ -40,6 +45,8 @@ export default function CocinaCentralProduccionHubPage() {
   const [err, setErr] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [forceDeleteOrder, setForceDeleteOrder] = useState<ProductionOrderRow | null>(null);
+  const forceTest = isForceDeleteTestDataEnabled();
 
   const reload = useCallback(async () => {
     if (!supabase || !localId || !canUse) return;
@@ -61,15 +68,24 @@ export default function CocinaCentralProduccionHubPage() {
   }, [reload]);
 
   useEffect(() => {
+    if (searchParams.get('eliminado') !== '1') return;
+    setToast('Registro eliminado correctamente');
+    void reload();
+    router.replace('/cocina-central/produccion', { scroll: false });
+  }, [searchParams, router, reload]);
+
+  useEffect(() => {
     if (!toast) return;
     const t = window.setTimeout(() => setToast(null), 4000);
     return () => window.clearTimeout(t);
   }, [toast]);
 
-  const canDeleteOrder = (o: ProductionOrderRow) => o.estado === 'cancelada' || o.estado === 'completada';
+  const canDeleteOrder = (o: ProductionOrderRow) =>
+    forceTest || o.estado === 'cancelada' || o.estado === 'completada';
 
-  const handleDeleteOrder = async (o: ProductionOrderRow) => {
-    if (!supabase || !canDeleteOrder(o)) return;
+  const runLegacyDelete = async (o: ProductionOrderRow) => {
+    if (!supabase) return;
+    if (o.estado !== 'completada' && o.estado !== 'cancelada') return;
     const ok1 = await appConfirm('¿Eliminar esta producción?');
     if (!ok1) return;
     if (o.estado === 'completada') {
@@ -83,6 +99,30 @@ export default function CocinaCentralProduccionHubPage() {
     try {
       await ccDeleteProductionOrder(supabase, o.id);
       setToast('Producción eliminada');
+      await reload();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : 'No se pudo eliminar');
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
+  const openDelete = (o: ProductionOrderRow) => {
+    if (forceTest) {
+      setForceDeleteOrder(o);
+      return;
+    }
+    void runLegacyDelete(o);
+  };
+
+  const confirmForceDelete = async () => {
+    if (!supabase || !forceDeleteOrder) return;
+    setDeletingId(forceDeleteOrder.id);
+    setErr(null);
+    try {
+      await ccForceDeleteProductionOrder(supabase, forceDeleteOrder.id);
+      setToast('Registro eliminado correctamente');
+      setForceDeleteOrder(null);
       await reload();
     } catch (e) {
       setErr(e instanceof Error ? e.message : 'No se pudo eliminar');
@@ -106,6 +146,15 @@ export default function CocinaCentralProduccionHubPage() {
 
   return (
     <div className="relative space-y-8">
+      <CocinaCentralForceDeleteModal
+        open={!!forceDeleteOrder}
+        onClose={() => {
+          if (!deletingId) setForceDeleteOrder(null);
+        }}
+        onConfirm={confirmForceDelete}
+        entity="orden"
+        busy={deletingId === forceDeleteOrder?.id}
+      />
       {toast ? (
         <div
           className="fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-900 shadow-lg"
@@ -195,7 +244,7 @@ export default function CocinaCentralProduccionHubPage() {
                         type="button"
                         title="Eliminar producción"
                         disabled={deletingId === o.id}
-                        onClick={() => void handleDeleteOrder(o)}
+                        onClick={() => void openDelete(o)}
                         className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-red-200 bg-red-50 text-red-800 transition hover:bg-red-100 disabled:opacity-50"
                         aria-label="Eliminar producción"
                       >

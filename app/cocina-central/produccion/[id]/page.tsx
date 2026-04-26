@@ -1,14 +1,18 @@
 'use client';
 
 import Link from 'next/link';
+import { Trash2 } from 'lucide-react';
 import React, { useCallback, useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
+import { CocinaCentralForceDeleteModal } from '@/components/cocina-central/CocinaCentralForceDeleteModal';
 import { useAuth } from '@/components/AuthProvider';
 import { appConfirm } from '@/lib/app-dialog-bridge';
+import { ccForceDeleteProductionOrder, isForceDeleteTestDataEnabled } from '@/lib/cocina-central-force-delete';
 import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
 import { canCocinaCentralOperate } from '@/lib/cocina-central-permissions';
 import type { CcPreparationUnit, CcUnit, ProductionOrderLineRow, ProductionOrderRow } from '@/lib/cocina-central-supabase';
 import {
+  ccDeleteProductionOrder,
   ccFetchProductionOrderById,
   ccFetchProductionOrderLines,
   ccListBatchesForPreparationInCentral,
@@ -49,6 +53,9 @@ export default function DetalleProduccionPage() {
   const [busy, setBusy] = useState(false);
   const [batchesByIng, setBatchesByIng] = useState<Record<string, Awaited<ReturnType<typeof ccListBatchesForPreparationInCentral>>>>({});
   const [recipeName, setRecipeName] = useState<string | null>(null);
+  const [forceDeleteOpen, setForceDeleteOpen] = useState(false);
+  const [deleteBusy, setDeleteBusy] = useState(false);
+  const forceTest = isForceDeleteTestDataEnabled();
 
   const load = useCallback(async () => {
     if (!supabase || !localId || !id) return;
@@ -174,6 +181,62 @@ export default function DetalleProduccionPage() {
     }
   };
 
+  const showDelete = Boolean(
+    canUse &&
+      order &&
+      (forceTest || order.estado === 'completada' || order.estado === 'cancelada'),
+  );
+
+  const runLegacyOrderDelete = async () => {
+    if (!supabase || !order) return;
+    if (order.estado !== 'completada' && order.estado !== 'cancelada') return;
+    if (!(await appConfirm('¿Eliminar esta producción?'))) return;
+    if (order.estado === 'completada') {
+      if (
+        !(await appConfirm(
+          'Esta orden generó un lote. Se eliminarán la orden, el lote y los movimientos de stock asociados en central. ¿Continuar?',
+        ))
+      ) {
+        return;
+      }
+    }
+    setDeleteBusy(true);
+    setErr(null);
+    setMsg(null);
+    try {
+      await ccDeleteProductionOrder(supabase, order.id);
+      router.push('/cocina-central/produccion');
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : 'No se pudo eliminar');
+    } finally {
+      setDeleteBusy(false);
+    }
+  };
+
+  const requestOrderDelete = () => {
+    if (forceTest) {
+      setForceDeleteOpen(true);
+      return;
+    }
+    void runLegacyOrderDelete();
+  };
+
+  const confirmForceOrderDelete = async () => {
+    if (!supabase || !order) return;
+    setDeleteBusy(true);
+    setErr(null);
+    setMsg(null);
+    try {
+      await ccForceDeleteProductionOrder(supabase, order.id);
+      setForceDeleteOpen(false);
+      router.push('/cocina-central/produccion?eliminado=1');
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : 'No se pudo eliminar');
+    } finally {
+      setDeleteBusy(false);
+    }
+  };
+
   const confirmProduccion = async () => {
     if (!supabase || !localId || !order || !order.preparation_id) return;
     if (order.estado === 'completada' || order.estado === 'cancelada') return;
@@ -259,6 +322,15 @@ export default function DetalleProduccionPage() {
 
   return (
     <div className="space-y-6">
+      <CocinaCentralForceDeleteModal
+        open={forceDeleteOpen}
+        onClose={() => {
+          if (!deleteBusy) setForceDeleteOpen(false);
+        }}
+        onConfirm={confirmForceOrderDelete}
+        entity="orden"
+        busy={deleteBusy}
+      />
       <div>
         <Link href="/cocina-central/produccion" className="text-sm font-semibold text-[#D32F2F]">
           ← Órdenes
@@ -423,6 +495,21 @@ export default function DetalleProduccionPage() {
           </Link>
           .
         </p>
+      ) : null}
+
+      {showDelete ? (
+        <div className="flex items-center justify-end border-t border-zinc-100 pt-4">
+          <button
+            type="button"
+            className="inline-flex h-10 items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-3 text-sm font-bold text-red-900 disabled:opacity-50"
+            disabled={busy || deleteBusy}
+            onClick={() => void requestOrderDelete()}
+            title="Eliminar producción"
+          >
+            <Trash2 className="h-4 w-4" strokeWidth={2.2} />
+            Eliminar
+          </button>
+        </div>
       ) : null}
     </div>
   );
