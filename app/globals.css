@@ -1,9 +1,20 @@
 @import "tailwindcss";
 
+/* App en modo claro: evita textos/inputs invisibles con prefers-color-scheme: dark (móvil). */
+html {
+  color-scheme: light;
+}
+
 :root {
   --background: #f4f5f7;
   --foreground: #14161a;
   --brand-red: #d32f2f;
+  --cc-btn-fg: #1f1f1f;
+  --cc-btn-bg: #ffffff;
+  --cc-btn-border: #d6d6d6;
+  --cc-btn-disabled-bg: #f3f3f3;
+  --cc-btn-disabled-fg: #9a9a9a;
+  --cc-btn-disabled-border: #dddddd;
   /* Fondo del área bajo el header (barra «Volver» sticky en AppShell). */
   --page-bg: #fff;
   /* Altura del header rojo (min-h-14 + py-2; referencia ~72px). Sticky «Volver» en <main> usa top:0. */
@@ -17,14 +28,16 @@
   --font-mono: var(--font-geist-mono);
 }
 
+/* Forzar palette clara aunque el SO esté en oscuro: legibilidad de formularios y botones. */
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --background: #f4f5f7;
+    --foreground: #14161a;
   }
 }
 
 body {
+  color-scheme: light;
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-app-serif), Georgia, "Times New Roman", serif;
@@ -32,15 +45,46 @@ body {
     radial-gradient(circle at 100% -5%, #ffecec 0, transparent 36%);
 }
 
-* {
-  -webkit-tap-highlight-color: transparent;
+select,
+input,
+textarea,
+button,
+option {
+  color-scheme: light;
 }
 
-/* Legibilidad en móvil/tablet: texto y cantidades en gris oscuro */
-input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='color']),
-textarea,
-select {
-  color: #27272a;
+/* Selectores: fondo y texto explícitos (iOS / tema oscuro del sistema) */
+select,
+input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='color']):not([type='file']),
+textarea {
+  background-color: #fff;
+  color: #1f1f1f;
+}
+
+select option,
+option {
+  background-color: #fff;
+  color: #1f1f1f;
+}
+
+/* Botones neutros deshabilitados: gris legible (no opacidad baja) */
+button:disabled {
+  background-color: var(--cc-btn-disabled-bg) !important;
+  color: var(--cc-btn-disabled-fg) !important;
+  border-color: var(--cc-btn-disabled-border) !important;
+  opacity: 1 !important;
+}
+
+/* Botones oscuros: no convertir en gris claro al deshabilitar */
+button.cc-preserve-dark:disabled {
+  background-color: #27272a !important;
+  color: #fafafa !important;
+  border-color: #3f3f46 !important;
+  opacity: 0.9 !important;
+}
+
+* {
+  -webkit-tap-highlight-color: transparent;
 }
 
 input::placeholder,
@@ -222,6 +266,27 @@ input[type='range'].merma-target-range::-moz-range-thumb {
     0 0 0 3px #fff;
   border: 2px solid #fff;
   cursor: grab;
+}
+
+/* Botones de estado / filtros (Cocina central y similares): legible; activo = Chef One. */
+.cc-ui-btn {
+  background: var(--cc-btn-bg);
+  color: var(--cc-btn-fg);
+  border: 1px solid var(--cc-btn-border);
+}
+.cc-ui-btn--on,
+.cc-ui-btn[aria-pressed='true'] {
+  background: var(--brand-red);
+  color: #fff;
+  border-color: var(--brand-red);
+}
+
+/* Estado activo: no aplicar gris de button:disabled (se usa disabled para no reenviar) */
+button.cc-ui-btn--on:disabled {
+  background: var(--brand-red) !important;
+  color: #fff !important;
+  border-color: var(--brand-red) !important;
+  opacity: 1 !important;
 }
 
 /* Barra «Volver» (AppShell): pegada al borde superior de <main> (justo bajo el header, sin franja). */

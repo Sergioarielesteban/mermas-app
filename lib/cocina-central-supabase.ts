@@ -169,7 +169,10 @@ export type IngredientTraceRow = {
   ingredient_preparation_id: string | null;
   cantidad: number;
   unidad: CcUnit;
-  central_preparations?: { nombre: string } | { nombre: string }[] | null;
+  central_preparations?:
+    | { nombre: string; purchase_article_id?: string | null }
+    | { nombre: string; purchase_article_id?: string | null }[]
+    | null;
   products?: { name: string } | { name: string }[] | null;
 };
 
@@ -612,7 +615,7 @@ export async function ccFetchIngredientTrace(
 ): Promise<IngredientTraceRow[]> {
   const { data, error } = await supabase
     .from('batch_ingredient_trace')
-    .select('*, central_preparations(nombre), products(name)')
+    .select('*, central_preparations(nombre, purchase_article_id), products(name)')
     .eq('batch_id', batchId);
   if (error) throw new Error(error.message);
   return (data ?? []) as IngredientTraceRow[];

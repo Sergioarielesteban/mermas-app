@@ -5,6 +5,7 @@ import { useParams } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '@/components/AuthProvider';
 import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
+import { computeBatchProductionCost, type BatchProductionCostResult } from '@/lib/cocina-central-batch-cost';
 import type { BatchEstado } from '@/lib/cocina-central-supabase';
 import {
   ccFetchBatchById,
@@ -16,6 +17,8 @@ import {
   ccSetBatchEstado,
   ccInsertIncident,
 } from '@/lib/cocina-central-supabase';
+
+const eur = new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' });
 
 const ESTADOS: BatchEstado[] = [
   'disponible',
@@ -40,6 +43,8 @@ export default function CocinaCentralLoteDetailPage() {
   const [fwd, setFwd] = useState<Awaited<ReturnType<typeof ccFetchForwardTrace>>>([]);
   const [incDesc, setIncDesc] = useState('');
   const [busy, setBusy] = useState(false);
+  const [costData, setCostData] = useState<BatchProductionCostResult | null>(null);
+  const [costErr, setCostErr] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!supabase || !id) return;
@@ -66,6 +71,30 @@ export default function CocinaCentralLoteDetailPage() {
     void load();
   }, [load]);
 
+  useEffect(() => {
+    if (!supabase || !localId || !batch) {
+      setCostData(null);
+      setCostErr(null);
+      return;
+    }
+    let cancel = false;
+    setCostErr(null);
+    void (async () => {
+      try {
+        const c = await computeBatchProductionCost(supabase, localId, batch, ing);
+        if (!cancel) setCostData(c);
+      } catch (e) {
+        if (!cancel) {
+          setCostData(null);
+          setCostErr(e instanceof Error ? e.message : 'No se pudo calcular el coste');
+        }
+      }
+    })();
+    return () => {
+      cancel = true;
+    };
+  }, [supabase, localId, batch, ing]);
+
   const setEstado = async (estado: BatchEstado) => {
     if (!supabase || !id) return;
     setBusy(true);
@@ -86,11 +115,7 @@ export default function CocinaCentralLoteDetailPage() {
   }
 
   if (!batch) {
-    return (
-      <div className="text-sm text-zinc-600">
-        {err ? err : 'Lote no encontrado o sin acceso.'}
-      </div>
-    );
+    return <div className="text-sm text-zinc-600">{err ? err : 'Lote no encontrado o sin acceso.'}</div>;
   }
 
   return (
@@ -99,8 +124,8 @@ export default function CocinaCentralLoteDetailPage() {
         <h1 className="text-xl font-extrabold text-zinc-900">
           {ccProductName((Array.isArray(batch.central_preparations) ? batch.central_preparations[0] : batch.central_preparations) ?? batch.products)}
         </h1>
-        <p className="mt-1 text-sm font-semibold text-zinc-600">
-          {batch.codigo_lote} · {batch.estado}
+        <p className="mt-1 text-sm font-semibold text-zinc-800">
+          {batch.codigo_lote} · <span className="capitalize">{String(batch.estado).replaceAll('_', ' ')}</span>
         </p>
         <p className="text-xs text-zinc-500">
           QR token: <span className="font-mono">{batch.qr_token}</span>
@@ -113,7 +138,7 @@ export default function CocinaCentralLoteDetailPage() {
 
       <section className="rounded-2xl border border-zinc-200 bg-white p-4">
         <h2 className="text-sm font-extrabold text-zinc-900">Stock por sede</h2>
-        <ul className="mt-2 text-sm text-zinc-700">
+        <ul className="mt-2 text-sm text-zinc-800">
           {stock.map((s) => (
             <li key={s.local_id}>
               {s.local_id === localId ? 'Este local' : `Sede ${s.local_id.slice(0, 8)}…`}: {s.cantidad}{' '}
@@ -123,41 +148,120 @@ export default function CocinaCentralLoteDetailPage() {
         </ul>
       </section>
 
+      <section className="rounded-2xl border border-[#D32F2F]/30 bg-white p-4 shadow-sm">
+        <h2 className="text-sm font-extrabold uppercase tracking-wide text-zinc-900">Coste de producción</h2>
+        {costErr ? (
+          <p className="mt-2 text-sm text-amber-800">{costErr}</p>
+        ) : !costData ? (
+          <p className="mt-2 text-sm text-zinc-500">Calculando costes…</p>
+        ) : (
+          <div className="mt-3 space-y-2 text-sm text-zinc-800">
+            <p>
+              <span className="font-semibold text-zinc-900">Coste total (ingredientes, máster actual):</span>{' '}
+              {costData.totalIngredientsEur != null ? (
+                eur.format(costData.totalIngredientsEur)
+              ) : (
+                <span className="text-zinc-500">coste no disponible (sin artículo máster en trazas)</span>
+              )}
+            </p>
+            <p>
+              <span className="font-semibold text-zinc-900">Cantidad producida:</span> {costData.cantidadProducida}{' '}
+              {costData.unidadLote}
+            </p>
+            <p>
+              <span className="font-semibold text-zinc-900">Coste por {costData.costPerOutputLabel}:</span>{' '}
+              {costData.costPerOutputUnit != null ? (
+                <>
+                  {eur.format(costData.costPerOutputUnit)} /{costData.costPerOutputLabel}
+                </>
+              ) : (
+                <span className="text-zinc-500">—</span>
+              )}
+            </p>
+            {costData.sumOrderEstimated != null || costData.sumOrderReal != null ? (
+              <div className="mt-3 border-t border-zinc-100 pt-3 text-xs text-zinc-700">
+                <p className="font-bold text-zinc-900">Registrado en la orden (si aplica)</p>
+                {costData.sumOrderEstimated != null ? (
+                  <p>
+                    Suma teórica en orden: {eur.format(costData.sumOrderEstimated)}
+                  </p>
+                ) : null}
+                {costData.sumOrderReal != null ? (
+                  <p>
+                    Suma real en orden: {eur.format(costData.sumOrderReal)}
+                  </p>
+                ) : null}
+                {costData.diffOrderTheoreticalVsReal != null ? (
+                  <p>
+                    Diferencia (real − teórico) en líneas: {eur.format(costData.diffOrderTheoreticalVsReal)}
+                  </p>
+                ) : null}
+                {costData.diffRealVsCalculated != null ? (
+                  <p>
+                    Diferencia (real de orden vs coste máster trazas): {eur.format(costData.diffRealVsCalculated)}
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
+        )}
+      </section>
+
       <section className="rounded-2xl border border-zinc-200 bg-white p-4">
         <h2 className="text-sm font-extrabold text-zinc-900">Cambiar estado</h2>
         <div className="mt-3 flex flex-wrap gap-2">
-          {ESTADOS.map((e) => (
-            <button
-              key={e}
-              type="button"
-              disabled={busy || batch.estado === e}
-              onClick={() => void setEstado(e)}
-              className="rounded-xl border border-zinc-300 bg-zinc-50 px-3 py-2 text-xs font-bold capitalize disabled:opacity-40"
-            >
-              {e.replace('_', ' ')}
-            </button>
-          ))}
+          {ESTADOS.map((e) => {
+            const isOn = batch.estado === e;
+            return (
+              <button
+                key={e}
+                type="button"
+                disabled={busy || isOn}
+                onClick={() => void setEstado(e)}
+                className={`cc-ui-btn rounded-xl px-3 py-2 text-xs font-bold capitalize ${isOn ? 'cc-ui-btn--on' : ''}`}
+                aria-pressed={isOn}
+              >
+                {e.replaceAll('_', ' ')}
+              </button>
+            );
+          })}
         </div>
       </section>
 
       <section className="rounded-2xl border border-zinc-200 bg-white p-4">
         <h2 className="text-sm font-extrabold text-zinc-900">Trazabilidad atrás (ingredientes)</h2>
-        <ul className="mt-2 space-y-1 text-sm">
+        <ul className="mt-2 space-y-2 text-sm text-zinc-800">
           {ing.length === 0 ? (
             <li className="text-zinc-500">Sin ingredientes registrados.</li>
           ) : (
-            ing.map((r) => (
-              <li key={r.id}>
-                {ccProductName((Array.isArray(r.central_preparations) ? r.central_preparations[0] : r.central_preparations) ?? r.products)} — {r.cantidad} {r.unidad}
-              </li>
-            ))
+            costData
+              ? costData.lines.map((row) => {
+                  const c =
+                    row.lineCostEur != null
+                      ? eur.format(row.lineCostEur)
+                      : 'coste no disponible';
+                  return (
+                    <li key={row.id} className="leading-snug">
+                      <span className="text-zinc-500">·</span>{' '}
+                      <span className="font-semibold text-zinc-900">{row.label}</span> — {row.cantidad} {row.unidad} — {c}
+                    </li>
+                  );
+                })
+              : ing.map((r) => (
+                  <li key={r.id} className="leading-snug text-zinc-800">
+                    {ccProductName(
+                      (Array.isArray(r.central_preparations) ? r.central_preparations[0] : r.central_preparations) ?? r.products,
+                    )}{' '}
+                    — {r.cantidad} {r.unidad}
+                  </li>
+                ))
           )}
         </ul>
       </section>
 
       <section className="rounded-2xl border border-zinc-200 bg-white p-4">
         <h2 className="text-sm font-extrabold text-zinc-900">Hacia delante (entregas)</h2>
-        <ul className="mt-2 space-y-1 text-sm">
+        <ul className="mt-2 space-y-1 text-sm text-zinc-800">
           {fwd.length === 0 ? (
             <li className="text-zinc-500">Sin envíos registrados con este lote.</li>
           ) : (
@@ -175,11 +279,11 @@ export default function CocinaCentralLoteDetailPage() {
 
       <section className="rounded-2xl border border-zinc-200 bg-white p-4">
         <h2 className="text-sm font-extrabold text-zinc-900">Movimientos</h2>
-        <ul className="mt-2 max-h-48 space-y-1 overflow-auto text-xs text-zinc-700">
+        <ul className="mt-2 max-h-48 space-y-1 overflow-auto text-xs text-zinc-800">
           {mov.map((m) => (
             <li key={m.id}>
-              {m.movimiento_en.slice(0, 16)} · {m.tipo} · {m.cantidad} (from {m.local_from?.slice(0, 6) ?? '—'}{' '}
-              → to {m.local_to?.slice(0, 6) ?? '—'})
+              {m.movimiento_en.slice(0, 16)} · {m.tipo} · {m.cantidad} (from {m.local_from?.slice(0, 6) ?? '—'} → to{' '}
+              {m.local_to?.slice(0, 6) ?? '—'})
             </li>
           ))}
         </ul>
@@ -188,7 +292,7 @@ export default function CocinaCentralLoteDetailPage() {
       <section className="rounded-2xl border border-amber-100 bg-amber-50/80 p-4">
         <h2 className="text-sm font-extrabold text-amber-950">Incidencia</h2>
         <textarea
-          className="mt-2 w-full rounded-xl border border-amber-200 bg-white p-3 text-sm"
+          className="mt-2 w-full rounded-xl border border-amber-200 bg-white p-3 text-sm text-zinc-900"
           rows={3}
           placeholder="Descripción breve"
           value={incDesc}
@@ -220,7 +324,7 @@ export default function CocinaCentralLoteDetailPage() {
                 }
               })()
             }
-            className="h-11 rounded-xl bg-zinc-900 px-4 text-xs font-bold text-white"
+            className="cc-preserve-dark h-11 rounded-xl bg-zinc-900 px-4 text-xs font-bold text-white"
           >
             Registrar + bloquear lote
           </button>
@@ -228,7 +332,7 @@ export default function CocinaCentralLoteDetailPage() {
             type="button"
             disabled={busy}
             onClick={() => void setEstado('bloqueado')}
-            className="h-11 rounded-xl border border-zinc-400 px-4 text-xs font-bold"
+            className="cc-ui-btn h-11 rounded-xl px-4 text-xs font-bold"
           >
             Solo bloquear
           </button>
@@ -236,7 +340,7 @@ export default function CocinaCentralLoteDetailPage() {
             type="button"
             disabled={busy}
             onClick={() => void setEstado('retirado')}
-            className="h-11 rounded-xl border border-red-300 bg-red-50 px-4 text-xs font-bold text-red-900"
+            className="h-11 rounded-xl border border-red-300 bg-red-50 px-4 text-xs font-bold text-red-950"
           >
             Marcar retirado
           </button>
