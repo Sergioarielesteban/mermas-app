@@ -289,14 +289,12 @@ button.cc-ui-btn--on:disabled {
   opacity: 1 !important;
 }
 
-/* Barra «Volver» (AppShell): pegada al borde superior de <main> (justo bajo el header, sin franja). */
+/* Barra «Volver» (AppShell): en flujo normal, sin efecto pegajoso al hacer scroll. */
 .back-button-wrapper {
-  position: sticky;
-  /* Scroll en <main>: el borde superior del área de scroll coincide con el pie del header. */
-  top: 0;
-  z-index: 60;
-  margin-top: 0;
+  position: relative;
+  top: auto;
+  z-index: 0;
   background: var(--page-bg, #fff);
   padding: 0;
-  padding-bottom: 8px;
+  padding-bottom: 4px;
 }
