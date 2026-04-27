@@ -2,7 +2,9 @@
 
 import { useParams, useRouter } from 'next/navigation';
 import React, { useCallback, useEffect, useState } from 'react';
+import { Trash2 } from 'lucide-react';
 import { useAuth } from '@/components/AuthProvider';
+import CentralSupplyOrderDeleteConfirm from '@/components/cocina-central/CentralSupplyOrderDeleteConfirm';
 import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
 import { canManageDeliveries } from '@/lib/cocina-central-permissions';
 import {
@@ -42,6 +44,8 @@ export default function CocinaCentralPedidoSedeDetallePage() {
   const [err, setErr] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleteBusy, setDeleteBusy] = useState(false);
 
   const load = useCallback(async () => {
     if (!supabase || !id || !isCentralKitchen || !canDeliver) {
@@ -68,6 +72,23 @@ export default function CocinaCentralPedidoSedeDetallePage() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  const deleteOrder = async () => {
+    if (!supabase || !order) return;
+    setDeleteBusy(true);
+    setErr(null);
+    try {
+      const { ccDeleteSupplyOrder } = await import('@/lib/cocina-central-supply-supabase');
+      await ccDeleteSupplyOrder(supabase, order.id);
+      setDeleteOpen(false);
+      router.replace('/cocina-central/pedidos-sedes');
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : 'No se pudo eliminar');
+      setDeleteOpen(false);
+    } finally {
+      setDeleteBusy(false);
+    }
+  };
 
   const saveEstado = async () => {
     if (!supabase || !order) return;
@@ -123,6 +144,16 @@ export default function CocinaCentralPedidoSedeDetallePage() {
 
   return (
     <div className="space-y-5">
+      <CentralSupplyOrderDeleteConfirm
+        open={deleteOpen}
+        busy={deleteBusy}
+        mode="single"
+        onCancel={() => {
+          if (!deleteBusy) setDeleteOpen(false);
+        }}
+        onConfirm={() => void deleteOrder()}
+      />
+
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
           <p className="text-[10px] font-extrabold uppercase tracking-wider text-zinc-500">Pedido de sede</p>
@@ -133,6 +164,14 @@ export default function CocinaCentralPedidoSedeDetallePage() {
             Entrega <strong>{fmtDate(order.fecha_entrega_deseada)}</strong> · {formatEur(Number(order.total_eur))}
           </p>
         </div>
+        <button
+          type="button"
+          onClick={() => setDeleteOpen(true)}
+          className="inline-flex h-11 items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-3 text-xs font-extrabold text-red-800 ring-1 ring-red-100 hover:bg-red-100/60"
+        >
+          <Trash2 className="h-4 w-4" />
+          Eliminar
+        </button>
       </div>
 
       <div className="rounded-2xl border border-zinc-200 bg-white p-4 ring-1 ring-zinc-100">

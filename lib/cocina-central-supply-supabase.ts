@@ -151,6 +151,14 @@ export async function ccUpdateSupplyOrderEstado(
   if (error) throw new Error(error.message);
 }
 
+/** Eliminación definitiva del pedido (UUID de `central_supply_orders.id`); las líneas se borran en cascada. */
+export async function ccDeleteSupplyOrder(supabase: SupabaseClient, orderId: string): Promise<void> {
+  const { error } = await supabase.rpc('cc_delete_supply_order', {
+    p_order_id: orderId,
+  });
+  if (error) throw new Error(error.message);
+}
+
 export async function ccListMySupplyOrders(supabase: SupabaseClient): Promise<CentralSupplyOrderRow[]> {
   const { data, error } = await supabase
     .from('central_supply_orders')
