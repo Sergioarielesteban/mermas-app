@@ -39,8 +39,8 @@ export const metadata: Metadata = {
   description: "Gestión operativa para restaurantes",
   manifest: "/manifest.webmanifest",
   icons: {
-    icon: "/logo-chef-one.svg",
-    apple: "/logo-chef-one.svg",
+    icon: "/logo-chef-one-menu.svg",
+    apple: "/logo-chef-one-menu.svg",
   },
   appleWebApp: {
     capable: true,
@@ -53,7 +53,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: "Chef-One",
     description: "Gestión operativa para restaurantes",
-    images: ["/logo-chef-one.svg"],
+    images: ["/logo-chef-one-menu.svg"],
   },
 };
 
