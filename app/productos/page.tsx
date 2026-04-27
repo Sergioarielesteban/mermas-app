@@ -798,7 +798,7 @@ export default function ProductosPage() {
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-0 sm:items-center sm:p-4">
           <div
             className="flex w-full max-w-md flex-col overflow-hidden rounded-t-2xl bg-white shadow-xl sm:max-h-[min(85vh,800px)] sm:rounded-2xl"
-            style={{ maxHeight: '85vh' }}
+            style={{ maxHeight: '85dvh' }}
           >
             <div className="sticky top-0 z-30 shrink-0 border-b border-zinc-100 bg-white px-4 py-3">
               <div className="flex items-center justify-between">
@@ -831,7 +831,7 @@ export default function ProductosPage() {
               </div>
             </div>
 
-            <div className="modal-body min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-3 pb-[120px]">
+            <div className="modal-body min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-3 pb-[140px]">
               <form id="merma-producto-form" className="space-y-3" onSubmit={handleSubmit}>
                 <label className="block text-xs font-semibold text-zinc-700">
                   Nombre del Producto
@@ -1159,13 +1159,13 @@ export default function ProductosPage() {
               </form>
             </div>
 
-            <div className="modal-footer sticky bottom-0 z-50 shrink-0 border-t border-zinc-100 bg-white px-4 pt-3 shadow-[0_-8px_24px_rgba(0,0,0,0.08)] pb-[calc(16px+env(safe-area-inset-bottom))]">
+            <div className="modal-footer sticky bottom-0 z-[999] shrink-0 border-t border-zinc-100 bg-white px-4 py-4 shadow-[0_-8px_24px_rgba(0,0,0,0.08)] pb-[calc(16px+env(safe-area-inset-bottom))]">
               <button
                 type="submit"
                 form="merma-producto-form"
                 className="h-12 w-full min-h-12 rounded-xl bg-[#D32F2F] text-sm font-extrabold uppercase text-white"
               >
-                {editingId ? 'Guardar Cambios' : 'Guardar Producto'}
+                {editingId ? 'GUARDAR CAMBIOS' : 'GUARDAR PRODUCTO'}
               </button>
             </div>
           </div>
