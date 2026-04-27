@@ -304,6 +304,73 @@ function ArticleCard({
     a.rendimientoPct,
   ]);
 
+  const isCc = a.origenArticulo === 'cocina_central';
+  if (isCc) {
+    const uso = (a.unidadUso ?? a.unidadBase ?? '').trim() || '—';
+    const cup = a.costeUnitarioUso ?? a.costeMaster;
+    return (
+      <li className="list-none">
+        <details className="group overflow-hidden rounded-2xl border border-amber-200/80 bg-white shadow-sm ring-1 ring-amber-100">
+          <summary className="flex cursor-pointer list-none items-center gap-2 p-2.5 sm:gap-3 sm:p-3 [&::-webkit-details-marker]:hidden">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-amber-100 text-amber-900">
+              <ChefHat className="h-3.5 w-3.5" aria-hidden />
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="rounded bg-amber-200/90 px-1.5 py-0.5 text-[8px] font-black uppercase leading-none text-amber-950 sm:text-[9px]">
+                  Cocina Central
+                </span>
+                {a.activo ? (
+                  <span className="text-[8px] font-bold uppercase leading-none text-emerald-700 sm:text-[9px]">Activo</span>
+                ) : (
+                  <span className="text-[8px] font-bold uppercase leading-none text-zinc-500 sm:text-[9px]">Inactivo</span>
+                )}
+              </div>
+              <p className="mt-0.5 line-clamp-2 text-sm font-bold leading-snug text-zinc-900 sm:text-base">{a.nombre}</p>
+            </div>
+            <div className="shrink-0 text-right">
+              <p className="text-[8px] font-bold uppercase leading-tight text-zinc-500 sm:text-[9px]">Coste uso</p>
+              <p className="text-base font-black tabular-nums leading-tight text-zinc-900 sm:text-lg">
+                {cup != null ? formatUnitPriceEur(roundMoney(cup), uso) : '—'}
+              </p>
+            </div>
+            <ChevronDown
+              className="h-4 w-4 shrink-0 text-zinc-400 transition group-open:rotate-180"
+              aria-hidden
+            />
+          </summary>
+          <div className="space-y-3 border-t border-amber-100 bg-amber-50/30 px-3 pb-3 pt-2 sm:px-4 sm:pb-4 sm:pt-2">
+            <div className="rounded-lg border border-amber-200/80 bg-white px-3 py-2 text-xs text-zinc-700">
+              <p>
+                <span className="font-semibold text-zinc-500">Origen:</span> Cocina Central (fórmula interna). En este
+                listado solo se muestra nombre, unidad y coste de uso; no hay ingredientes ni desglose.
+              </p>
+              <p className="mt-1">
+                <span className="font-semibold text-zinc-500">Unidad de uso:</span> {uso}
+              </p>
+              {a.centralCostSyncedAt ? (
+                <p className="mt-1 text-zinc-500">
+                  <span className="font-semibold text-zinc-600">Coste sincronizado:</span>{' '}
+                  {formatShortDate(a.centralCostSyncedAt)}
+                </p>
+              ) : null}
+              {a.centralProductionRecipeId ? (
+                <p className="mt-2">
+                  <Link
+                    href={`/cocina-central/produccion/recetas/${a.centralProductionRecipeId}`}
+                    className="font-bold text-[#D32F2F] underline"
+                  >
+                    Gestionar fórmula en Cocina Central
+                  </Link>
+                </p>
+              ) : null}
+            </div>
+          </div>
+        </details>
+      </li>
+    );
+  }
+
   const originId = a.createdFromSupplierProductId;
   const preferredId = a.proveedorPreferidoId;
   const activeRows = catalogRows.filter((r) => r.isActive);

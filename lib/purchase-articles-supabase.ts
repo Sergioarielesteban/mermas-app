@@ -31,6 +31,10 @@ export type PurchaseArticle = {
   /** € por `unidad_uso`; recalculado en BD al cambiar compra o conversión. */
   costeUnitarioUso: number | null;
   origenCoste: string | null;
+  /** proveedor: compra/catálogo. cocina_central: coste desde fórmula interna (sin receta en UI máster). */
+  origenArticulo: 'proveedor' | 'cocina_central';
+  centralProductionRecipeId: string | null;
+  centralCostSyncedAt: string | null;
 };
 
 export type PurchaseArticleDuplicateCandidate = {
@@ -59,6 +63,7 @@ export function labelMetodoCosteMaster(code: string | null | undefined): string 
   const c = code.trim().toLowerCase();
   if (c === 'migrado') return 'Migración inicial';
   if (c === 'alta_proveedor') return 'Alta en catálogo proveedor';
+  if (c === 'cocina_central') return 'Cocina Central';
   return code;
 }
 
@@ -145,11 +150,15 @@ function mapArticleRow(row: ArticleRow): PurchaseArticle {
     rendimientoPct: row.rendimiento_pct != null ? Number(row.rendimiento_pct) : null,
     costeUnitarioUso: row.coste_unitario_uso != null ? Number(row.coste_unitario_uso) : null,
     origenCoste: row.origen_coste != null ? String(row.origen_coste) : null,
+    origenArticulo: row.origen_articulo === 'cocina_central' ? 'cocina_central' : 'proveedor',
+    centralProductionRecipeId:
+      row.central_production_recipe_id != null ? String(row.central_production_recipe_id) : null,
+    centralCostSyncedAt: row.central_cost_synced_at != null ? String(row.central_cost_synced_at) : null,
   };
 }
 
 const ARTICLE_SEL =
-  'id,local_id,nombre,nombre_corto,categoria,subcategoria,descripcion,unidad_base,activo,coste_master,metodo_coste_master,coste_master_fijado_en,proveedor_preferido_id,observaciones,created_from_supplier_product_id,referencia_principal_supplier_product_id,unidad_compra,coste_compra_actual,iva_compra_pct,unidad_uso,unidades_uso_por_unidad_compra,rendimiento_pct,coste_unitario_uso,origen_coste,created_at,updated_at';
+  'id,local_id,nombre,nombre_corto,categoria,subcategoria,descripcion,unidad_base,activo,coste_master,metodo_coste_master,coste_master_fijado_en,proveedor_preferido_id,observaciones,created_from_supplier_product_id,referencia_principal_supplier_product_id,unidad_compra,coste_compra_actual,iva_compra_pct,unidad_uso,unidades_uso_por_unidad_compra,rendimiento_pct,coste_unitario_uso,origen_coste,origen_articulo,central_production_recipe_id,central_cost_synced_at,created_at,updated_at';
 
 export function isMissingPurchaseArticlesError(message: string): boolean {
   const m = message.toLowerCase();
@@ -214,6 +223,23 @@ export async function updatePurchaseArticleMasterCostFields(
   articleId: string,
   patch: PurchaseArticleMasterCostPatch,
 ): Promise<void> {
+  const { data: originRow, error: originErr } = await supabase
+    .from('purchase_articles')
+    .select('origen_articulo')
+    .eq('id', articleId)
+    .eq('local_id', localId)
+    .maybeSingle();
+  if (originErr) {
+    const m = originErr.message.toLowerCase();
+    if (!m.includes('column') && !m.includes('schema cache')) throw new Error(originErr.message);
+  }
+  const oa = (originRow as { origen_articulo?: string } | null)?.origen_articulo;
+  if (oa === 'cocina_central') {
+    throw new Error(
+      'Este artículo lo sincroniza Cocina Central desde la fórmula de producción; no se edita la compra aquí.',
+    );
+  }
+
   const touchesUsage =
     patch.unidadUso !== undefined ||
     patch.unidadesUsoPorUnidadCompra !== undefined ||
@@ -305,6 +331,7 @@ export async function syncPurchaseArticlesFromSupplierCatalogPrice(
       origen_coste: 'proveedor_catalogo',
     })
     .eq('local_id', localId)
+    .neq('origen_articulo', 'cocina_central')
     .eq('referencia_principal_supplier_product_id', supplierProductId);
   const q2 = supabase
     .from('purchase_articles')
@@ -315,6 +342,7 @@ export async function syncPurchaseArticlesFromSupplierCatalogPrice(
       origen_coste: 'proveedor_catalogo',
     })
     .eq('local_id', localId)
+    .neq('origen_articulo', 'cocina_central')
     .is('referencia_principal_supplier_product_id', null)
     .eq('created_from_supplier_product_id', supplierProductId);
   const [r1, r2] = await Promise.all([q1, q2]);
@@ -380,6 +408,7 @@ export async function linkPurchaseArticleToNewSupplierProduct(
       unidades_uso_por_unidad_compra: 1,
       rendimiento_pct: 100,
       origen_coste: 'alta_proveedor',
+      origen_articulo: 'proveedor',
     })
     .select('id')
     .single();

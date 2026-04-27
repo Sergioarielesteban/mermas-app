@@ -74,6 +74,15 @@ export async function fetchArticleOperationalCostHintsByIds(
 
   for (const a of articles) {
     const master = masterHints.get(a.id);
+    if (a.origenArticulo === 'cocina_central') {
+      const cu = master?.costeUnitarioUso ?? null;
+      out.set(a.id, {
+        costPerUsageUnit: cu != null && Number.isFinite(cu) && cu > 0 ? cu : null,
+        unidadUso: (master?.unidadUso ?? a.unidadUso ?? null)?.trim() || null,
+        source: 'articulo_master',
+      });
+      continue;
+    }
     const refId = a.referenciaPrincipalSupplierProductId ?? null;
     const sp = refId ? supplierById.get(refId) : undefined;
     const weightedPurchase = refId ? weighted.get(refId)?.weightedAvg ?? null : null;

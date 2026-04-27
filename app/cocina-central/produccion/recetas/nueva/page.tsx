@@ -2,13 +2,17 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useAuth } from '@/components/AuthProvider';
 import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
 import { canCocinaCentralOperate } from '@/lib/cocina-central-permissions';
 import { validateEscandalloUsageUnitInput, ESCANDALLO_USAGE_UNIT_PRESETS } from '@/lib/escandallo-ingredient-units';
 import MasterArticleSearchInput from '@/components/cocina-central/MasterArticleSearchInput';
 import { suggestLotCodePrefixFromName } from '@/lib/cocina-central-production-meta';
+import {
+  filterArticlesForInternalRecipeIngredients,
+  syncPurchaseArticleFromProductionRecipe,
+} from '@/lib/cocina-central-master-article-sync';
 import { prInsertRecipe, prReplaceLines } from '@/lib/production-recipes-supabase';
 import { fetchPurchaseArticles, type PurchaseArticle } from '@/lib/purchase-articles-supabase';
 
@@ -50,6 +54,8 @@ export default function NuevaFormulaProduccionPage() {
   useEffect(() => {
     void loadArticles();
   }, [loadArticles]);
+
+  const ingredientArticles = useMemo(() => filterArticlesForInternalRecipeIngredients(articles), [articles]);
 
   const addLine = () => {
     setLines((prev) => [
@@ -111,6 +117,11 @@ export default function NuevaFormulaProduccionPage() {
         return;
       }
       const art = articles.find((a) => a.id === L.articleId);
+      if (art?.origenArticulo === 'cocina_central') {
+        setErr('No puedes usar como ingrediente un producto elaborado en Cocina Central (solo materias de Artículos Máster de proveedor).');
+        setBusy(false);
+        return;
+      }
       built.push({
         article_id: L.articleId,
         ingredient_name_snapshot: art?.nombre?.trim() || 'Artículo',
@@ -153,6 +164,15 @@ export default function NuevaFormulaProduccionPage() {
         created_by: userId,
       });
       await prReplaceLines(supabase, rec.id, built);
+      try {
+        await syncPurchaseArticleFromProductionRecipe(supabase, localId, rec.id);
+      } catch (syncE) {
+        setErr(
+          syncE instanceof Error
+            ? `Fórmula creada, pero no se publicó en Artículos Máster: ${syncE.message}`
+            : 'Fórmula creada, pero falló la sincronización con Artículos Máster.',
+        );
+      }
       router.replace(`/cocina-central/produccion/recetas/${rec.id}`);
     } catch (e) {
       setErr(e instanceof Error ? e.message : 'Error al guardar');
@@ -272,6 +292,11 @@ export default function NuevaFormulaProduccionPage() {
         </div>
         {articles.length === 0 ? (
           <p className="text-sm text-zinc-500">No hay artículos máster en este local. Créalos en Pedidos → Artículos.</p>
+        ) : ingredientArticles.length === 0 ? (
+          <p className="text-sm text-amber-900">
+            No hay artículos de proveedor disponibles como ingredientes (los elaborados en Cocina Central no pueden usarse
+            dentro de otra fórmula).
+          </p>
         ) : null}
         <datalist id="cc-prod-units">
           {ESCANDALLO_USAGE_UNIT_PRESETS.map((u) => (
@@ -288,7 +313,7 @@ export default function NuevaFormulaProduccionPage() {
                 <span className="text-xs font-bold uppercase text-zinc-500">Artículo</span>
                 <MasterArticleSearchInput
                   className="mt-1"
-                  articles={articles}
+                  articles={ingredientArticles}
                   value={line.articleId}
                   onSelect={(a) =>
                     setLines((prev) =>
@@ -302,7 +327,7 @@ export default function NuevaFormulaProduccionPage() {
                   onClear={() =>
                     setLines((prev) => prev.map((x) => (x.id === line.id ? { ...x, articleId: '' } : x)))
                   }
-                  disabled={articles.length === 0}
+                  disabled={ingredientArticles.length === 0}
                 />
               </div>
               <label className="w-full text-xs font-bold uppercase text-zinc-500 sm:w-24">

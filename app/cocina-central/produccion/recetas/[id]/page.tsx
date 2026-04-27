@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useAuth } from '@/components/AuthProvider';
 import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
 import { canCocinaCentralOperate } from '@/lib/cocina-central-permissions';
@@ -17,6 +17,10 @@ import {
   type ProductionRecipeRow,
 } from '@/lib/production-recipes-supabase';
 import MasterArticleSearchInput from '@/components/cocina-central/MasterArticleSearchInput';
+import {
+  filterArticlesForInternalRecipeIngredients,
+  syncPurchaseArticleFromProductionRecipe,
+} from '@/lib/cocina-central-master-article-sync';
 import { fetchPurchaseArticles, type PurchaseArticle } from '@/lib/purchase-articles-supabase';
 
 const FINAL_UNITS = ['kg', 'l', 'ud', 'bandeja', 'ración', 'g', 'ml', 'porción', 'bolsa', 'bolsas'] as const;
@@ -94,6 +98,8 @@ export default function EditarFormulaProduccionPage() {
     void load();
   }, [load]);
 
+  const ingredientArticles = useMemo(() => filterArticlesForInternalRecipeIngredients(articles), [articles]);
+
   const addLine = () => {
     setLines((prev) => [
       ...prev,
@@ -155,6 +161,11 @@ export default function EditarFormulaProduccionPage() {
         return;
       }
       const art = articles.find((a) => a.id === L.articleId);
+      if (art?.origenArticulo === 'cocina_central') {
+        setErr('No puedes usar como ingrediente un producto elaborado en Cocina Central (solo materias de Artículos Máster de proveedor).');
+        setBusy(false);
+        return;
+      }
       built.push({
         article_id: L.articleId,
         ingredient_name_snapshot: art?.nombre?.trim() || 'Artículo',
@@ -194,6 +205,15 @@ export default function EditarFormulaProduccionPage() {
         is_active: isActive,
       });
       await prReplaceLines(supabase, recipe.id, built);
+      try {
+        await syncPurchaseArticleFromProductionRecipe(supabase, localId, recipe.id);
+      } catch (syncE) {
+        setErr(
+          syncE instanceof Error
+            ? `Cambios guardados, pero no se actualizó Artículos Máster: ${syncE.message}`
+            : 'Cambios guardados, pero falló la sincronización con Artículos Máster.',
+        );
+      }
       await load();
     } catch (e) {
       setErr(e instanceof Error ? e.message : 'Error al guardar');
@@ -348,7 +368,7 @@ export default function EditarFormulaProduccionPage() {
                 <span className="text-xs font-bold uppercase text-zinc-500">Artículo</span>
                 <MasterArticleSearchInput
                   className="mt-1"
-                  articles={articles}
+                  articles={ingredientArticles}
                   value={line.articleId}
                   onSelect={(a) =>
                     setLines((prev) =>
@@ -362,7 +382,7 @@ export default function EditarFormulaProduccionPage() {
                   onClear={() =>
                     setLines((prev) => prev.map((x) => (x.key === line.key ? { ...x, articleId: '' } : x)))
                   }
-                  disabled={articles.length === 0}
+                  disabled={ingredientArticles.length === 0}
                 />
               </div>
               <label className="w-full text-xs font-bold uppercase text-zinc-500 sm:w-24">
