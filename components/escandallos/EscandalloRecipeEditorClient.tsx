@@ -724,23 +724,31 @@ export default function EscandalloRecipeEditorClient({ recipeId }: { recipeId: s
                   return (
                     <li
                       key={line.id}
-                      className="flex flex-col gap-1 rounded-xl border border-zinc-100 bg-zinc-50/60 px-3 py-2 text-sm"
+                      className="min-h-0 overflow-visible rounded-xl border border-zinc-100 bg-zinc-50/60 px-3 py-3 text-sm"
                     >
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="rounded-md bg-white px-1.5 py-0.5 text-[10px] font-bold uppercase text-zinc-500 ring-1 ring-zinc-200">
-                          {src}
-                        </span>
-                        <span className="min-w-0 flex-1 font-semibold text-zinc-900">{line.label}</span>
-                        <span className="shrink-0 tabular-nums text-zinc-600">
-                          {line.qty} {line.unit} × {formatUnitPriceEur(unitEur, line.unit)}
-                        </span>
-                        <span className="shrink-0 font-bold tabular-nums text-zinc-900">{formatMoneyEur(lineCost)}</span>
-                        <div className="flex shrink-0 gap-0.5">
+                      <div className="flex flex-col gap-2">
+                        <div className="flex items-start gap-2">
+                          <span className="mt-0.5 shrink-0 rounded-md bg-white px-1.5 py-0.5 text-[10px] font-bold uppercase text-zinc-500 ring-1 ring-zinc-200">
+                            {src}
+                          </span>
+                          <span className="min-w-0 flex-1 break-words font-semibold leading-snug text-zinc-900">{line.label}</span>
+                        </div>
+                        <div className="flex flex-col gap-1.5 sm:flex-row sm:items-baseline sm:justify-between sm:gap-3">
+                          <p className="min-w-0 flex-1 text-[13px] leading-snug text-zinc-600">
+                            <span className="font-semibold tabular-nums text-zinc-800">
+                              {line.qty} {line.unit}
+                            </span>
+                            <span className="mx-1.5 text-zinc-300">·</span>
+                            <span className="tabular-nums">{formatUnitPriceEur(unitEur, line.unit)}</span>
+                          </p>
+                          <p className="shrink-0 text-right text-lg font-black tabular-nums text-zinc-900">{formatMoneyEur(lineCost)}</p>
+                        </div>
+                        <div className="flex justify-end gap-1 border-t border-zinc-200/80 pt-2">
                           <button
                             type="button"
                             disabled={idx === 0 || busyId === 'reorder' || demoReadonly}
                             onClick={() => void swapLineOrder(idx, idx - 1)}
-                            className="rounded-lg p-1 text-zinc-500 hover:bg-white disabled:opacity-30"
+                            className="min-h-[40px] min-w-[40px] rounded-lg border border-zinc-200/90 p-2 text-zinc-600 hover:bg-white disabled:opacity-30 sm:min-h-0 sm:min-w-0 sm:p-1.5"
                             aria-label="Subir"
                           >
                             <ArrowUp className="h-4 w-4" />
@@ -749,7 +757,7 @@ export default function EscandalloRecipeEditorClient({ recipeId }: { recipeId: s
                             type="button"
                             disabled={idx >= sortedLines.length - 1 || busyId === 'reorder' || demoReadonly}
                             onClick={() => void swapLineOrder(idx, idx + 1)}
-                            className="rounded-lg p-1 text-zinc-500 hover:bg-white disabled:opacity-30"
+                            className="min-h-[40px] min-w-[40px] rounded-lg border border-zinc-200/90 p-2 text-zinc-600 hover:bg-white disabled:opacity-30 sm:min-h-0 sm:min-w-0 sm:p-1.5"
                             aria-label="Bajar"
                           >
                             <ArrowDown className="h-4 w-4" />
@@ -758,7 +766,7 @@ export default function EscandalloRecipeEditorClient({ recipeId }: { recipeId: s
                             type="button"
                             disabled={busyId === line.id || demoReadonly}
                             onClick={() => void handleDeleteLine(line.id)}
-                            className="rounded-lg p-1 text-red-700 hover:bg-red-50 disabled:opacity-40"
+                            className="min-h-[40px] min-w-[40px] rounded-lg p-2 text-red-700 hover:bg-red-50 disabled:opacity-40 sm:min-h-0 sm:min-w-0 sm:p-1.5"
                             aria-label="Eliminar"
                           >
                             <Trash2 className="h-4 w-4" />
@@ -766,18 +774,18 @@ export default function EscandalloRecipeEditorClient({ recipeId }: { recipeId: s
                         </div>
                       </div>
                       {subLines.length > 0 ? (
-                        <details className="text-xs text-zinc-600">
-                          <summary className="cursor-pointer font-medium text-zinc-500 hover:text-zinc-800">
-                            Desglose base ({subLines.length})
-                          </summary>
-                          <ul className="mt-1 space-y-0.5 pl-2">
+                        <div className="mt-3 border-t border-dashed border-zinc-200/90 pt-2 text-[11px] leading-relaxed text-zinc-500">
+                          <p className="font-semibold text-zinc-600">Desglose base</p>
+                          <ul className="mt-1.5 space-y-1.5">
                             {subLines.map((sl) => (
-                              <li key={sl.id} className="truncate">
-                                {sl.label} · {sl.qty} {sl.unit}
+                              <li key={sl.id} className="break-words pl-0.5 tabular-nums">
+                                <span className="font-medium text-zinc-600">{sl.label}</span>
+                                <span className="text-zinc-400"> · </span>
+                                {sl.qty} {sl.unit}
                               </li>
                             ))}
                           </ul>
-                        </details>
+                        </div>
                       ) : null}
                     </li>
                   );

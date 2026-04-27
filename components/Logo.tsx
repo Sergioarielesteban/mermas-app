@@ -1,6 +1,6 @@
 import React from 'react';
 
-export type LogoVariant = 'header' | 'hero' | 'login' | 'banner' | 'footer' | 'inline';
+export type LogoVariant = 'header' | 'hero' | 'login' | 'banner' | 'footer' | 'inline' | 'sidebar';
 
 /**
  * SVG ~cuadrado: la **altura** escala con viewport (`vw` / `vmin`) con tope en `rem`
@@ -32,6 +32,12 @@ const variantClassName: Record<LogoVariant, string> = {
     'h-[min(36vmin,7.75rem)]',
     'sm:h-[min(34vmin,7.5rem)]',
     'md:h-[min(30vmin,7.25rem)]',
+  ].join(' '),
+  /** Menú lateral: compacto, centrado, sin fondo; object-fit compensa márgenes internos del SVG. */
+  sidebar: [
+    'mx-auto block h-auto w-[75%] max-w-[220px] min-w-0',
+    'object-contain object-center bg-transparent p-0',
+    'ring-0 outline-none',
   ].join(' '),
 };
 

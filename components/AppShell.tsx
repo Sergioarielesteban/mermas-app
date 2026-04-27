@@ -395,22 +395,30 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         ].join(' ')}
         aria-label="Menú lateral"
       >
-        <div className="relative shrink-0 border-b border-zinc-200 bg-gradient-to-b from-zinc-50/90 to-white px-3 pb-4 pt-3">
-          <button
-            type="button"
-            onClick={() => setOpen(false)}
-            className="absolute right-3 top-3 grid h-9 w-9 place-items-center rounded-xl text-zinc-500 hover:bg-zinc-100"
-            aria-label="Cerrar menú"
-          >
-            <X className="h-5 w-5" />
-          </button>
-          <div className="flex flex-col items-center px-2 pb-0 pt-11 text-center leading-none">
-            <Logo variant="inline" className="select-none drop-shadow-sm" alt="" role="presentation" />
-            <p className="mt-3 text-[0.8125rem] font-semibold tracking-wide text-zinc-600">Gestión operativa</p>
+        <div className="shrink-0 border-b border-zinc-200 bg-zinc-50/95">
+          {/* Fila compacta: cierre fuera del bloque logo (no solapa el área del logo) */}
+          <div className="flex h-8 shrink-0 items-center justify-end px-1.5 pt-1">
+            <button
+              type="button"
+              onClick={() => setOpen(false)}
+              className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-zinc-500 hover:bg-zinc-100/90"
+              aria-label="Cerrar menú"
+            >
+              <X className="h-[18px] w-[18px]" />
+            </button>
+          </div>
+          {/* Logo + título: padding vertical mínimo (8px), sin pt enorme reservado al X */}
+          <div className="px-2 pb-2 text-center">
+            <div className="py-2">
+              <Logo variant="sidebar" className="select-none drop-shadow-sm" alt="" role="presentation" />
+            </div>
+            <p className="mb-2 mt-2 text-[0.8125rem] font-semibold leading-tight tracking-wide text-zinc-600">
+              Gestión operativa
+            </p>
           </div>
         </div>
 
-        <nav className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-2 py-2">
+        <nav className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-2 pb-2 pt-1.5">
           {navItems.map((item) => {
             if ('kind' in item && item.kind === 'note') {
               return (
@@ -428,7 +436,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               return (
                 <div
                   key={entry.label}
-                  className="flex w-full items-center justify-between gap-3 rounded-xl px-3 py-3 text-sm font-semibold text-zinc-500 ring-1 ring-zinc-200"
+                  className="flex w-full items-center justify-between gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold text-zinc-500 ring-1 ring-zinc-200"
                 >
                   <span className="flex items-center gap-3">
                     <Icon className="h-5 w-5" />
@@ -464,7 +472,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                 href={targetHref}
                 onClick={() => setOpen(false)}
                 className={[
-                  'flex w-full items-center gap-3 rounded-xl px-3 py-[0.85rem] text-[0.9375rem] font-semibold leading-snug transition-all',
+                  'flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-[0.9375rem] font-semibold leading-snug transition-all',
                   entry.blocked ? 'opacity-55' : '',
                   isActive
                     ? 'bg-[#D32F2F]/10 text-[#D32F2F] shadow-sm ring-1 ring-[#D32F2F]/25'
@@ -486,7 +494,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           })}
         </nav>
 
-        <div className="shrink-0 px-3 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3">
+        <div className="shrink-0 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2">
           <div className="rounded-2xl bg-zinc-50 p-3 ring-1 ring-zinc-200">
             <div className="text-[10px] font-extrabold uppercase tracking-[0.12em] text-zinc-500">Sesión</div>
             <div className="mt-2 min-w-0 space-y-0.5">
@@ -550,7 +558,6 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
       <main
         className={[
-          /* Sin padding-top: el «Volver» queda pegado al header; el margen bajo el scroll sigue con pb- */
           'min-h-0 w-full flex-1 overflow-y-auto overscroll-contain pt-0 pb-5 md:pb-6',
           isPlanningFullBleed
             ? 'px-1 sm:px-2 md:px-2 lg:px-2'
@@ -560,18 +567,21 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         {pathname !== '/panel' && !pathname?.startsWith('/panel/') ? (
           <div
             className={[
-              'back-button-wrapper mb-4 border-b border-zinc-100/90 shadow-sm print:hidden',
+              'back-button-wrapper mt-1.5 mb-3 print:hidden',
               isPlanningFullBleed
                 ? '-mx-1 px-1 sm:-mx-2 sm:px-2 md:-mx-2 md:px-2 lg:-mx-2 lg:px-2'
                 : '-mx-4 px-4 sm:-mx-5 sm:px-5 md:-mx-6 md:px-6 lg:-mx-8 lg:px-8',
             ].join(' ')}
           >
+            {/* Separado del header rojo y del contenido; más bajo y sin sombra que lo “pegue” al panel */}
             <button
               type="button"
               onClick={goBackInApp}
-              className="flex w-full items-center justify-center gap-2 rounded-xl border border-zinc-300 bg-white py-2.5 text-sm font-bold text-zinc-800 shadow-sm ring-1 ring-zinc-200/80 hover:bg-zinc-50 active:scale-[0.99]"
+              className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-zinc-300/90 bg-white px-3 py-1.5 text-sm font-bold text-zinc-800 shadow-[0_1px_0_rgba(0,0,0,0.04)] ring-1 ring-zinc-200/70 hover:bg-zinc-50 active:scale-[0.99]"
             >
-              <span aria-hidden>←</span>
+              <span aria-hidden className="text-base leading-none">
+                ←
+              </span>
               Volver
             </button>
           </div>
