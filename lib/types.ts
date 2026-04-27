@@ -20,7 +20,17 @@ export type Product = {
   id: string;
   name: string;
   unit: Unit;
-  pricePerUnit: number; // € por unidad
+  pricePerUnit: number; // € por unidad (coste operativo efectivo)
+  typeOrigin?: 'manual' | 'master' | 'escandallo' | 'composicion';
+  masterArticleId?: string | null;
+  escandalloId?: string | null;
+  manualPricePerUnit?: number | null;
+  compositionLines?: Array<{
+    id: string;
+    masterArticleId: string;
+    qty: number;
+    unit: string;
+  }>;
   createdAt: string; // ISO
 };
 
@@ -49,5 +59,16 @@ export type MermaRecord = {
   shift?: MermaShift | null;
   /** Opcional: etiqueta libre (quién registra, etc.). */
   optionalUserLabel?: string;
+  /** Snapshot del origen y coste al registrar (histórico inmutable). */
+  originTypeUsed?: 'manual' | 'master' | 'escandallo' | 'composicion' | 'sin_precio';
+  unitCostSnapshot?: number | null;
+  totalCostSnapshot?: number | null;
+  compositionSnapshot?: Array<{
+    masterArticleId: string;
+    qty: number;
+    unit: string;
+    unitCost: number;
+    lineCost: number;
+  }>;
 };
 

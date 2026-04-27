@@ -11,6 +11,15 @@ import {
   type MermaRow,
   type ProductRow,
 } from '@/lib/mermas-supabase';
+import { fetchPurchaseArticleCostHintsByIds } from '@/lib/purchase-articles-supabase';
+import {
+  fetchEscandalloLines,
+  fetchEscandalloRawProductsWithWeightedPurchasePrices,
+  fetchEscandalloRecipes,
+  fetchProcessedProductsForEscandallo,
+  recipeTotalCostEur,
+  type EscandalloLine,
+} from '@/lib/escandallos-supabase';
 import { uid } from '@/lib/id';
 import { getDemoMermasStore } from '@/lib/demo-dataset';
 import { isDemoMode } from '@/lib/demo-mode';
@@ -23,6 +32,11 @@ type CreateProductInput = {
   name: string;
   unit: Unit;
   pricePerUnit: number;
+  typeOrigin?: 'manual' | 'master' | 'escandallo' | 'composicion';
+  masterArticleId?: string | null;
+  escandalloId?: string | null;
+  manualPricePerUnit?: number | null;
+  compositionLines?: Product['compositionLines'];
 };
 
 type AddMermaInput = {
@@ -883,11 +897,126 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
   const store = useMemo<MermasStore>(() => {
     // Sin cliente (p. ej. modo demo) las escrituras son solo locales.
     const useCloud = Boolean(supabaseEnabled && getSupabaseClient());
+    const resolveUnitCostForProduct = async (
+      product: Product,
+    ): Promise<{
+      unitCost: number;
+      originUsed: MermaRecord['originTypeUsed'];
+      compositionSnapshot?: NonNullable<MermaRecord['compositionSnapshot']>;
+    }> => {
+      const normalizeUnit = (u: string) =>
+        u
+          .trim()
+          .toLowerCase()
+          .normalize('NFD')
+          .replace(/\p{M}+/gu, '');
+      const convertCost = (costPerUnit: number, fromUnit: string, toUnit: string): number | null => {
+        if (!Number.isFinite(costPerUnit) || costPerUnit <= 0) return null;
+        const f = normalizeUnit(fromUnit);
+        const t = normalizeUnit(toUnit);
+        if (f === t) return costPerUnit;
+        if (f === 'kg' && t === 'g') return costPerUnit / 1000;
+        if (f === 'g' && t === 'kg') return costPerUnit * 1000;
+        if ((f === 'l' || f === 'litro' || f === 'litros') && t === 'ml') return costPerUnit / 1000;
+        if (f === 'ml' && (t === 'l' || t === 'litro' || t === 'litros')) return costPerUnit * 1000;
+        return null;
+      };
+      const origin = product.typeOrigin ?? 'manual';
+      const manual = product.manualPricePerUnit ?? product.pricePerUnit;
+      if (origin === 'manual') return { unitCost: Math.max(0, manual ?? 0), originUsed: 'manual' };
+      if (!useCloud || !localId) {
+        return { unitCost: Math.max(0, manual ?? 0), originUsed: 'manual' };
+      }
+      const supabase = getSupabaseClient();
+      if (!supabase) return { unitCost: Math.max(0, manual ?? 0), originUsed: 'manual' };
+
+      if (origin === 'master' && product.masterArticleId) {
+        try {
+          const hints = await fetchPurchaseArticleCostHintsByIds(supabase, localId, [product.masterArticleId]);
+          const h = hints.get(product.masterArticleId);
+          if (h?.costeUnitarioUso != null && Number.isFinite(h.costeUnitarioUso) && h.costeUnitarioUso > 0) {
+            return { unitCost: h.costeUnitarioUso, originUsed: 'master' };
+          }
+        } catch {
+          /* fallback manual */
+        }
+      }
+
+      if (origin === 'escandallo' && product.escandalloId) {
+        try {
+          const [recipes, rawProducts, processed] = await Promise.all([
+            fetchEscandalloRecipes(supabase, localId),
+            fetchEscandalloRawProductsWithWeightedPurchasePrices(supabase, localId),
+            fetchProcessedProductsForEscandallo(supabase, localId),
+          ]);
+          const recipe = recipes.find((r) => r.id === product.escandalloId);
+          if (recipe && recipe.yieldQty > 0) {
+            const linesByRecipe: Record<string, EscandalloLine[]> = {};
+            const linesList = await Promise.all(recipes.map((r) => fetchEscandalloLines(supabase, localId, r.id)));
+            recipes.forEach((r, i) => {
+              linesByRecipe[r.id] = linesList[i];
+            });
+            const total = recipeTotalCostEur(
+              linesByRecipe[recipe.id] ?? [],
+              new Map(rawProducts.map((x) => [x.id, x])),
+              new Map(processed.map((x) => [x.id, x])),
+              { linesByRecipe, recipesById: new Map(recipes.map((x) => [x.id, x])), recipeId: recipe.id },
+            );
+            const perUnit = total > 0 ? Math.round((total / recipe.yieldQty) * 10000) / 10000 : 0;
+            if (perUnit > 0) return { unitCost: perUnit, originUsed: 'escandallo' };
+          }
+        } catch {
+          /* fallback manual */
+        }
+      }
+
+      if (origin === 'composicion' && product.compositionLines && product.compositionLines.length > 0) {
+        try {
+          const articleIds = [...new Set(product.compositionLines.map((x) => x.masterArticleId).filter(Boolean))];
+          const hints = await fetchPurchaseArticleCostHintsByIds(supabase, localId, articleIds);
+          let sum = 0;
+          const snapshot: NonNullable<MermaRecord['compositionSnapshot']> = [];
+          for (const line of product.compositionLines) {
+            const h = hints.get(line.masterArticleId);
+            const baseCost = h?.costeUnitarioUso;
+            const baseUnit = h?.unidadUso ?? line.unit;
+            if (baseCost == null || !Number.isFinite(baseCost) || baseCost <= 0) continue;
+            const converted = convertCost(baseCost, baseUnit, line.unit);
+            const unitCost = converted != null ? converted : baseCost;
+            const lineCost = Math.round(line.qty * unitCost * 10000) / 10000;
+            sum += lineCost;
+            snapshot.push({
+              masterArticleId: line.masterArticleId,
+              qty: line.qty,
+              unit: line.unit,
+              unitCost,
+              lineCost,
+            });
+          }
+          const per = Math.round(sum * 10000) / 10000;
+          if (per > 0) return { unitCost: per, originUsed: 'composicion', compositionSnapshot: snapshot };
+        } catch {
+          /* fallback manual */
+        }
+      }
+
+      return { unitCost: Math.max(0, manual ?? 0), originUsed: manual && manual > 0 ? 'manual' : 'sin_precio' };
+    };
 
     const addProduct = (input: CreateProductInput) => {
       const trimmed = input.name.trim();
       if (!trimmed) return;
       if (!Number.isFinite(input.pricePerUnit) || input.pricePerUnit <= 0) return;
+      const typeOrigin = input.typeOrigin ?? 'manual';
+      const manualPrice = Math.round((input.manualPricePerUnit ?? input.pricePerUnit) * 100) / 100;
+      const masterArticleId = typeOrigin === 'master' ? (input.masterArticleId ?? null) : null;
+      const escandalloId = typeOrigin === 'escandallo' ? (input.escandalloId ?? null) : null;
+      const compositionLines =
+        typeOrigin === 'composicion'
+          ? (input.compositionLines ?? [])
+              .filter((x) => x.masterArticleId && Number.isFinite(x.qty) && x.qty > 0 && x.unit)
+              .map((x) => ({ id: x.id, masterArticleId: x.masterArticleId, qty: x.qty, unit: x.unit }))
+          : [];
       const normalized = normalizeName(trimmed);
       const exists = products.some((p) => normalizeName(p.name) === normalized);
       if (exists) return;
@@ -897,21 +1026,39 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
         const supabase = getSupabaseClient();
         if (!supabase) return;
         void (async () => {
-          const { data, error } = await supabase
+          const basePayload = {
+            local_id: localId,
+            name: trimmed,
+            unit: input.unit,
+            price_per_unit: Math.round(input.pricePerUnit * 100) / 100,
+            is_active: true,
+          };
+          let data: ProductRow | null = null;
+          const first = await supabase
             .from('products')
             .insert({
-              local_id: localId,
-              name: trimmed,
-              unit: input.unit,
-              price_per_unit: Math.round(input.pricePerUnit * 100) / 100,
-              is_active: true,
+              ...basePayload,
+              tipo_origen: typeOrigin,
+              master_article_id: masterArticleId,
+              escandallo_id: escandalloId,
+              precio_manual: manualPrice,
+              composicion_json: compositionLines,
             })
-            .select('id,name,unit,price_per_unit,created_at')
-            .single();
-          if (error || !data) return;
-          const p = mapProductRow(
-            data as { id: string; name: string; unit: string; price_per_unit: number; created_at: string },
-          );
+            .select('id,name,unit,price_per_unit,tipo_origen,master_article_id,escandallo_id,precio_manual,composicion_json,created_at')
+            .maybeSingle();
+          if (first.error) {
+            const fallback = await supabase
+              .from('products')
+              .insert(basePayload)
+              .select('id,name,unit,price_per_unit,created_at')
+              .single();
+            if (fallback.error || !fallback.data) return;
+            data = fallback.data as ProductRow;
+          } else if (first.data) {
+            data = first.data as ProductRow;
+          }
+          if (!data) return;
+          const p = mapProductRow(data);
           protectProductIdsRef.current.add(p.id);
           setProducts((prev) => sortProductsByName([p, ...prev]));
           markLocalEdit();
@@ -925,6 +1072,11 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
         name: trimmed,
         unit: input.unit,
         pricePerUnit: Math.round(input.pricePerUnit * 100) / 100,
+        typeOrigin,
+        masterArticleId,
+        escandalloId,
+        manualPricePerUnit: manualPrice,
+        compositionLines,
         createdAt: new Date().toISOString(),
       };
       markLocalEdit();
@@ -935,6 +1087,16 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
       const trimmed = input.name.trim();
       if (!trimmed) return;
       if (!Number.isFinite(input.pricePerUnit) || input.pricePerUnit <= 0) return;
+      const typeOrigin = input.typeOrigin ?? 'manual';
+      const manualPrice = Math.round((input.manualPricePerUnit ?? input.pricePerUnit) * 100) / 100;
+      const masterArticleId = typeOrigin === 'master' ? (input.masterArticleId ?? null) : null;
+      const escandalloId = typeOrigin === 'escandallo' ? (input.escandalloId ?? null) : null;
+      const compositionLines =
+        typeOrigin === 'composicion'
+          ? (input.compositionLines ?? [])
+              .filter((x) => x.masterArticleId && Number.isFinite(x.qty) && x.qty > 0 && x.unit)
+              .map((x) => ({ id: x.id, masterArticleId: x.masterArticleId, qty: x.qty, unit: x.unit }))
+          : [];
       const normalized = normalizeName(trimmed);
       const exists = products.some((p) => p.id !== id && normalizeName(p.name) === normalized);
       if (exists) return;
@@ -944,15 +1106,31 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
         const supabase = getSupabaseClient();
         if (!supabase) return;
         void (async () => {
-          const { error } = await supabase
+          const nextPrice = Math.round(input.pricePerUnit * 100) / 100;
+          const first = await supabase
             .from('products')
             .update({
               name: trimmed,
               unit: input.unit,
-              price_per_unit: Math.round(input.pricePerUnit * 100) / 100,
+              price_per_unit: nextPrice,
+              tipo_origen: typeOrigin,
+              master_article_id: masterArticleId,
+              escandallo_id: escandalloId,
+              precio_manual: manualPrice,
+              composicion_json: compositionLines,
             })
             .eq('id', id);
-          if (error) return;
+          if (first.error) {
+            const fallback = await supabase
+              .from('products')
+              .update({
+                name: trimmed,
+                unit: input.unit,
+                price_per_unit: nextPrice,
+              })
+              .eq('id', id);
+            if (fallback.error) return;
+          }
           setProducts((prev) =>
             sortProductsByName(
               prev.map((p) =>
@@ -961,7 +1139,12 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
                       ...p,
                       name: trimmed,
                       unit: input.unit,
-                      pricePerUnit: Math.round(input.pricePerUnit * 100) / 100,
+                      pricePerUnit: nextPrice,
+                      typeOrigin,
+                      masterArticleId,
+                      escandalloId,
+                      manualPricePerUnit: manualPrice,
+                      compositionLines,
                     }
                   : p,
               ),
@@ -981,6 +1164,11 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
                   name: trimmed,
                   unit: input.unit,
                   pricePerUnit: Math.round(input.pricePerUnit * 100) / 100,
+                  typeOrigin,
+                  masterArticleId,
+                  escandalloId,
+                  manualPricePerUnit: manualPrice,
+                  compositionLines,
                 }
               : p,
           ),
@@ -1018,9 +1206,10 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
         return { ok: false, reason: 'Selecciona un producto antes de guardar.' };
       }
       const product = products.find((p) => p.id === pid);
-      const price = product?.pricePerUnit ?? 0;
       const qty = Number.isFinite(input.quantity) ? input.quantity : 0;
-      const costEur = Math.round(qty * price * 100) / 100;
+      const resolved = product ? await resolveUnitCostForProduct(product) : { unitCost: 0, originUsed: 'sin_precio' as const };
+      const unitCostSnapshot = Math.round((resolved.unitCost ?? 0) * 10000) / 10000;
+      const totalCostSnapshot = Math.round(qty * unitCostSnapshot * 100) / 100;
       const shiftVal = input.shift === 'manana' || input.shift === 'tarde' ? input.shift : null;
       const optUser = input.optionalUserLabel?.trim() || '';
       const record: MermaRecord = {
@@ -1031,7 +1220,11 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
         notes: input.notes.trim(),
         occurredAt: input.occurredAt,
         photoDataUrl: input.photoDataUrl,
-        costEur,
+        costEur: totalCostSnapshot,
+        originTypeUsed: resolved.originUsed,
+        unitCostSnapshot,
+        totalCostSnapshot,
+        compositionSnapshot: resolved.compositionSnapshot,
         createdAt: new Date().toISOString(),
         shift: shiftVal,
         optionalUserLabel: optUser || undefined,
@@ -1057,15 +1250,49 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
             notes: input.notes.trim(),
             occurred_at: input.occurredAt,
             photo_data_url: input.photoDataUrl ?? null,
-            cost_eur: costEur,
+            cost_eur: totalCostSnapshot,
+            tipo_origen_usado: resolved.originUsed,
+            coste_unitario_snapshot: unitCostSnapshot,
+            coste_total_snapshot: totalCostSnapshot,
+            composicion_snapshot_json: resolved.compositionSnapshot ?? null,
             shift: shiftVal,
             optional_user_label: optUser || null,
           })
           .select(
-            'id,product_id,quantity,motive_key,notes,occurred_at,photo_data_url,cost_eur,created_at,shift,optional_user_label',
+            'id,product_id,quantity,motive_key,notes,occurred_at,photo_data_url,cost_eur,created_at,shift,optional_user_label,tipo_origen_usado,coste_unitario_snapshot,coste_total_snapshot,composicion_snapshot_json',
           )
           .single();
         if (error || !data) {
+          const fallback = await supabase
+            .from('mermas')
+            .insert({
+              local_id: localId,
+              product_id: pid,
+              quantity: qty,
+              motive_key: input.motiveKey,
+              notes: input.notes.trim(),
+              occurred_at: input.occurredAt,
+              photo_data_url: input.photoDataUrl ?? null,
+              cost_eur: totalCostSnapshot,
+              shift: shiftVal,
+              optional_user_label: optUser || null,
+            })
+            .select('id,product_id,quantity,motive_key,notes,occurred_at,photo_data_url,cost_eur,created_at,shift,optional_user_label')
+            .single();
+          if (!fallback.error && fallback.data) {
+            const saved = mapMermaRow(fallback.data as MermaRow);
+            protectMermaIdsRef.current.add(saved.id);
+            const mergedSaved: MermaRecord = {
+              ...saved,
+              originTypeUsed: record.originTypeUsed,
+              unitCostSnapshot: record.unitCostSnapshot,
+              totalCostSnapshot: record.totalCostSnapshot,
+              compositionSnapshot: record.compositionSnapshot,
+            };
+            setMermas((prev) => prev.map((m) => (m.id === record.id ? mergedSaved : m)));
+            markLocalEdit();
+            return { ok: true, record: mergedSaved };
+          }
           // Revert optimistic row so the UI does not suggest it was saved.
           setMermas((prev) => prev.filter((m) => m.id !== record.id));
           const raw = error?.message ?? '';
@@ -1092,7 +1319,6 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
       if (!product) return { ok: false, reason: 'Producto no encontrado.' };
       const qty = Number.isFinite(input.quantity) ? input.quantity : 0;
       if (qty <= 0) return { ok: false, reason: 'Cantidad inválida.' };
-      const costEur = Math.round(qty * product.pricePerUnit * 100) / 100;
       const existing = mermas.find((m) => m.id === id);
       const shiftVal =
         input.shift === 'manana' || input.shift === 'tarde'
@@ -1110,21 +1336,41 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
         const supabase = getSupabaseClient();
         if (!supabase) return { ok: false, reason: 'Sin conexión.' };
         void (async () => {
+          const resolved = await resolveUnitCostForProduct(product);
+          const unitCostSnapshot = Math.round((resolved.unitCost ?? 0) * 10000) / 10000;
+          const totalCostSnapshot = Math.round(qty * unitCostSnapshot * 100) / 100;
           const patch: Record<string, unknown> = {
             product_id: input.productId,
             quantity: qty,
             motive_key: input.motiveKey,
             notes: input.notes.trim(),
             occurred_at: input.occurredAt,
-            cost_eur: costEur,
+            cost_eur: totalCostSnapshot,
+            tipo_origen_usado: resolved.originUsed,
+            coste_unitario_snapshot: unitCostSnapshot,
+            coste_total_snapshot: totalCostSnapshot,
+            composicion_snapshot_json: resolved.compositionSnapshot ?? null,
             shift: shiftVal,
             optional_user_label: optUser || null,
           };
           if (input.photoDataUrl !== undefined) {
             patch.photo_data_url = input.photoDataUrl ?? null;
           }
-          const { error } = await supabase.from('mermas').update(patch).eq('id', id);
-          if (error) return;
+          const first = await supabase.from('mermas').update(patch).eq('id', id);
+          if (first.error) {
+            const fallback = await supabase.from('mermas').update({
+              product_id: input.productId,
+              quantity: qty,
+              motive_key: input.motiveKey,
+              notes: input.notes.trim(),
+              occurred_at: input.occurredAt,
+              cost_eur: totalCostSnapshot,
+              shift: shiftVal,
+              optional_user_label: optUser || null,
+              ...(input.photoDataUrl !== undefined ? { photo_data_url: input.photoDataUrl ?? null } : {}),
+            }).eq('id', id);
+            if (fallback.error) return;
+          }
           setMermas((prev) =>
             prev.map((m) =>
               m.id === id
@@ -1136,7 +1382,11 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
                     notes: input.notes.trim(),
                     occurredAt: input.occurredAt,
                     ...(input.photoDataUrl !== undefined ? { photoDataUrl: input.photoDataUrl } : {}),
-                    costEur,
+                    costEur: totalCostSnapshot,
+                    originTypeUsed: resolved.originUsed,
+                    unitCostSnapshot,
+                    totalCostSnapshot,
+                    compositionSnapshot: resolved.compositionSnapshot,
                     shift: shiftVal,
                     optionalUserLabel: optUser || undefined,
                   }
@@ -1159,7 +1409,10 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
                 notes: input.notes.trim(),
                 occurredAt: input.occurredAt,
                 photoDataUrl: input.photoDataUrl,
-                costEur,
+                costEur: Math.round(qty * product.pricePerUnit * 100) / 100,
+                originTypeUsed: product.typeOrigin ?? 'manual',
+                unitCostSnapshot: product.pricePerUnit,
+                totalCostSnapshot: Math.round(qty * product.pricePerUnit * 100) / 100,
                 shift: shiftVal,
                 optionalUserLabel: optUser || undefined,
               }

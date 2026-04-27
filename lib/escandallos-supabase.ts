@@ -346,35 +346,45 @@ export function escandalloRecipeUnitForRawProduct(p: EscandalloRawProduct): Esca
 /** € por unidad de receta (o € por unidad de compra si la línea va en envases). */
 export function rawSupplierLineUnitPriceEur(line: EscandalloLine, p: EscandalloRawProduct): number {
   const packSize = p.unitsPerPack > 0 ? p.unitsPerPack : 1;
-  const purchaseUnit = String(p.unit);
-  const perUsageFromPack = packSize > 0 ? p.pricePerUnit / packSize : p.pricePerUnit;
-  const operational = resolveOperationalPrice({
-    pmpPrice: p.operationalPriceSource === 'pmp' ? p.pricePerUnit : null,
-    supplierLastPrice: p.operationalPriceSource !== 'pmp' ? p.pricePerUnit : null,
-    articleMasterPrice: p.internalCostPerUsageUnitEur ?? null,
-  });
+  const purchaseUnit = sanitizeEscandalloIngredientUnit(String(p.unit));
+  const usageUnit = escandalloRecipeUnitForRawProduct(p);
+  const lineUnit = sanitizeEscandalloIngredientUnit(String(line.unit));
 
-  const internalLooksValid =
-    p.internalCostPerUsageUnitEur != null &&
-    Number.isFinite(p.internalCostPerUsageUnitEur) &&
-    p.internalUsageUnitLabel &&
-    unitsMatchForIngredientCost(line.unit, p.internalUsageUnitLabel) &&
-    !(packSize > 1 && p.internalCostPerUsageUnitEur > p.pricePerUnit + 1e-6);
+  const convFactor = (from: string, to: string): number | null => {
+    if (unitsMatchForIngredientCost(from, to)) return 1;
+    const f = from.trim().toLowerCase();
+    const t = to.trim().toLowerCase();
+    if (f === 'kg' && t === 'g') return 1 / 1000;
+    if (f === 'g' && t === 'kg') return 1000;
+    if ((f === 'l' || f === 'litro') && t === 'ml') return 1 / 1000;
+    if (f === 'ml' && (t === 'l' || t === 'litro')) return 1000;
+    return null;
+  };
 
-  if (operational.source === 'pmp' || operational.source === 'ultimo_precio') {
-    if (unitsMatchForIngredientCost(line.unit, purchaseUnit)) {
-      return roundMoney(p.pricePerUnit);
-    }
+  // 1) Si existe coste_unitario_uso del Artículo Máster, siempre prevalece.
+  let usageUnitPrice =
+    p.internalCostPerUsageUnitEur != null && Number.isFinite(p.internalCostPerUsageUnitEur) && p.internalCostPerUsageUnitEur > 0
+      ? p.internalCostPerUsageUnitEur
+      : null;
+
+  // 2) Si no hay coste de uso interno, convertir precio operativo de compra a unidad de uso.
+  if (usageUnitPrice == null) {
     if (packSize > 1) {
-      return roundMoney(perUsageFromPack);
+      usageUnitPrice = p.pricePerUnit / packSize;
+    } else {
+      const f = convFactor(purchaseUnit, usageUnit);
+      usageUnitPrice = f != null ? p.pricePerUnit * f : p.pricePerUnit;
     }
-    return roundMoney(p.pricePerUnit);
   }
 
-  if (internalLooksValid && p.internalCostPerUsageUnitEur != null) {
-    return roundMoney(p.internalCostPerUsageUnitEur);
-  }
-  return 0;
+  if (usageUnitPrice == null || !Number.isFinite(usageUnitPrice) || usageUnitPrice <= 0) return 0;
+
+  // 3) Ajustar al unit de la línea desde unidad de uso (kg↔g, l↔ml, equivalentes exactos).
+  const toLine = convFactor(usageUnit, lineUnit);
+  if (toLine != null) return roundMoney(usageUnitPrice * toLine);
+
+  // Fallback seguro: mantener coste por unidad de uso (nunca precio de caja bruto).
+  return roundMoney(usageUnitPrice);
 }
 
 export function rawProductPickerSummaryLine(p: EscandalloRawProduct): string {
