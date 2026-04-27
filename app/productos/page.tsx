@@ -795,10 +795,9 @@ export default function ProductosPage() {
       </button>
 
       {open ? (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-0 sm:items-center sm:p-4">
+        <div className="fixed inset-0 z-[2000] flex items-end justify-center bg-black/40 p-0 sm:items-center sm:p-4">
           <div
-            className="flex w-full max-w-md flex-col overflow-hidden rounded-t-2xl bg-white shadow-xl sm:max-h-[min(85vh,800px)] sm:rounded-2xl"
-            style={{ maxHeight: '85dvh' }}
+            className="flex h-[85dvh] max-h-[85dvh] w-full max-w-md flex-col overflow-hidden rounded-t-2xl bg-white shadow-xl sm:h-auto sm:max-h-[min(85vh,800px)] sm:rounded-2xl"
           >
             <div className="sticky top-0 z-30 shrink-0 border-b border-zinc-100 bg-white px-4 py-3">
               <div className="flex items-center justify-between">
