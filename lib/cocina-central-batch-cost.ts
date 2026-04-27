@@ -1,6 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { unitsMatchForIngredientCost } from '@/lib/escandallo-ingredient-units';
-import { fetchPurchaseArticleCostHintsByIds } from '@/lib/purchase-articles-supabase';
+import { fetchArticleOperationalCostHintsByIds } from '@/lib/article-operational-cost';
 import type { IngredientTraceRow, ProductionBatchRow } from '@/lib/cocina-central-supabase';
 
 export type BatchIngredientLineCost = {
@@ -58,7 +58,7 @@ export async function computeBatchProductionCost(
   trace: IngredientTraceRow[],
 ): Promise<BatchProductionCostResult> {
   const articleIds = [...new Set(trace.map(purchaseArticleIdFromTrace).filter(Boolean))] as string[];
-  const hints = await fetchPurchaseArticleCostHintsByIds(supabase, localCentralId, articleIds);
+  const hints = await fetchArticleOperationalCostHintsByIds(supabase, localCentralId, articleIds);
 
   const lines: BatchIngredientLineCost[] = trace.map((r) => {
     const label = prepName(r).toUpperCase();
@@ -68,11 +68,11 @@ export async function computeBatchProductionCost(
     let lineCostEur: number | null = null;
     if (articleId) {
       const h = hints.get(articleId);
-      if (h?.costeUnitarioUso != null && h.unidadUso) {
+      if (h?.costPerUsageUnit != null && h.unidadUso) {
         if (unitsMatchForIngredientCost(unidad, h.unidadUso)) {
-          lineCostEur = Math.round(cantidad * h.costeUnitarioUso * 100) / 100;
+          lineCostEur = Math.round(cantidad * h.costPerUsageUnit * 100) / 100;
         } else {
-          lineCostEur = Math.round(cantidad * h.costeUnitarioUso * 100) / 100;
+          lineCostEur = Math.round(cantidad * h.costPerUsageUnit * 100) / 100;
         }
       }
     }

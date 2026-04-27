@@ -4,7 +4,8 @@ import {
   ccInsertProductionOrder,
   ccReplaceProductionOrderLines,
 } from '@/lib/cocina-central-supabase';
-import { fetchPurchaseArticleCostHintsByIds, fetchPurchaseArticles, type PurchaseArticle } from '@/lib/purchase-articles-supabase';
+import { fetchPurchaseArticles, type PurchaseArticle } from '@/lib/purchase-articles-supabase';
+import { fetchArticleOperationalCostHintsByIds } from '@/lib/article-operational-cost';
 import { unitsMatchForIngredientCost } from '@/lib/escandallo-ingredient-units';
 import { mapLabelToCcPreparationUnit } from '@/lib/cocina-central-units';
 import { syncInternalRecipeToCentralPreparations } from '@/lib/internal-production-recipe-sync';
@@ -229,7 +230,7 @@ export async function prCreateOrderFromInternalRecipe(
   const factor = targetQuantity / yq;
   if (!Number.isFinite(factor) || factor <= 0) throw new Error('Cantidad objetivo inválida.');
 
-  const hints = await fetchPurchaseArticleCostHintsByIds(
+  const hints = await fetchArticleOperationalCostHintsByIds(
     supabase,
     localCentralId,
     lines.map((l) => l.article_id),
@@ -253,11 +254,11 @@ export async function prCreateOrderFromInternalRecipe(
     const art = byId.get(l.article_id);
     const h = hints.get(l.article_id);
     let costEur: number | null = null;
-    if (h?.costeUnitarioUso != null && art?.unidadUso) {
-      if (unitsMatchForIngredientCost(l.unit, h.unidadUso)) {
-        costEur = Math.round(theo * h.costeUnitarioUso * 100) / 100;
+    if (h?.costPerUsageUnit != null && art?.unidadUso) {
+      if (h.unidadUso && unitsMatchForIngredientCost(l.unit, h.unidadUso)) {
+        costEur = Math.round(theo * h.costPerUsageUnit * 100) / 100;
       } else {
-        costEur = Math.round(l.quantity * factor * h.costeUnitarioUso * 100) / 100;
+        costEur = Math.round(l.quantity * factor * h.costPerUsageUnit * 100) / 100;
       }
     }
     orderLinePayload.push({

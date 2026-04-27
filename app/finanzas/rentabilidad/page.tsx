@@ -23,6 +23,7 @@ import {
 import {
   fetchEscandalloLines,
   fetchEscandalloMonthlySales,
+  fetchEscandalloRawProductsWithWeightedPurchasePrices,
   fetchEscandalloRecipes,
   fetchProcessedProductsForEscandallo,
   fetchProductsForEscandallo,
@@ -31,11 +32,7 @@ import {
   type EscandalloRawProduct,
   type EscandalloRecipe,
 } from '@/lib/escandallos-supabase';
-import {
-  computeWeightedAvgBySupplierProductId,
-  ESCANDALLOS_WEIGHTED_PRICE_WINDOW_DAYS,
-} from '@/lib/escandallos-weighted-purchase-prices';
-import { fetchOrders } from '@/lib/pedidos-supabase';
+import { ESCANDALLOS_WEIGHTED_PRICE_WINDOW_DAYS } from '@/lib/escandallos-weighted-purchase-prices';
 
 function priorityClass(p: RentabilidadAlert['priority']): string {
   if (p === 'P1') return 'bg-red-600 text-white';
@@ -123,24 +120,14 @@ export default function FinanzasRentabilidadPage() {
     setLoading(true);
     setBanner(null);
     try {
-      const [rList, rawCat, orderList, proc, sales, catMap] = await Promise.all([
+      const [rList, rawCat, rawOperational, proc, sales, catMap] = await Promise.all([
         fetchEscandalloRecipes(supabase, localId),
         fetchProductsForEscandallo(supabase, localId),
-        fetchOrders(supabase, localId, { recentDays: 120 }),
+        fetchEscandalloRawProductsWithWeightedPurchasePrices(supabase, localId),
         fetchProcessedProductsForEscandallo(supabase, localId),
         fetchEscandalloMonthlySales(supabase, localId, yearMonth),
         fetchEscandalloRecipeCategoriasMap(supabase, localId),
       ]);
-
-      const weighted = computeWeightedAvgBySupplierProductId(
-        orderList.filter((o) => o.status !== 'draft'),
-        ESCANDALLOS_WEIGHTED_PRICE_WINDOW_DAYS,
-      );
-      const pmpList: EscandalloRawProduct[] = rawCat.map((p) => {
-        const w = weighted.get(p.id);
-        if (w != null && w.weightedQty > 0) return { ...p, pricePerUnit: w.weightedAvg };
-        return { ...p };
-      });
 
       const linesEntries = await Promise.all(
         rList.map(async (recipe) => {
@@ -158,7 +145,7 @@ export default function FinanzasRentabilidadPage() {
 
       setRecipes(rList);
       setRawCatalog(rawCat);
-      setRawPmp(pmpList);
+      setRawPmp(rawOperational);
       setProcessed(proc);
       setLinesByRecipe(linesMap);
       setQtyByRecipe(qMap);
