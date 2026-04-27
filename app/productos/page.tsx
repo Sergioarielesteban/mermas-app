@@ -43,7 +43,9 @@ export default function ProductosPage() {
   const [compositionLines, setCompositionLines] = useState<CompositionLineDraft[]>([]);
   const [masterSearch, setMasterSearch] = useState('');
   const [escandalloSearch, setEscandalloSearch] = useState('');
-  const [masterOptions, setMasterOptions] = useState<Array<{ id: string; nombre: string }>>([]);
+  const [masterOptions, setMasterOptions] = useState<
+    Array<{ id: string; nombre: string; costeUnitarioUso: number | null; unidadUso: string | null }>
+  >([]);
   const [escandalloOptions, setEscandalloOptions] = useState<Array<{ id: string; name: string }>>([]);
   const [baseSubrecipeOptions, setBaseSubrecipeOptions] = useState<Array<{ id: string; name: string; kind: 'recipe' | 'processed' }>>([]);
   const [escandalloAutoPrice, setEscandalloAutoPrice] = useState<number | null>(null);
@@ -124,7 +126,14 @@ export default function ProductosPage() {
           fetchProcessedProductsForEscandallo(supabase, localId),
         ]);
         if (!active) return;
-        setMasterOptions(articles.map((a) => ({ id: a.id, nombre: a.nombre })));
+        setMasterOptions(
+          articles.map((a) => ({
+            id: a.id,
+            nombre: a.nombre,
+            costeUnitarioUso: a.costeUnitarioUso,
+            unidadUso: a.unidadUso,
+          })),
+        );
         setEscandalloOptions(recipes.map((r) => ({ id: r.id, name: r.name })));
         setBaseSubrecipeOptions([
           ...recipes.filter((r) => r.isSubRecipe).map((r) => ({ id: r.id, name: r.name, kind: 'recipe' as const })),
@@ -233,11 +242,145 @@ export default function ProductosPage() {
     };
   }, [originType, baseSubrecipeId, baseSubrecipeKind, localId]);
 
+  const convertUnitCost = (costPerUnit: number, fromUnit: string, toUnit: string): number | null => {
+    if (!Number.isFinite(costPerUnit) || costPerUnit < 0) return null;
+    const f = fromUnit.trim().toLowerCase();
+    const t = toUnit.trim().toLowerCase();
+    if (!f || !t) return costPerUnit;
+    if (f === t) return costPerUnit;
+    if (f === 'kg' && t === 'g') return costPerUnit / 1000;
+    if (f === 'g' && t === 'kg') return costPerUnit * 1000;
+    if ((f === 'l' || f === 'litro' || f === 'litros') && t === 'ml') return costPerUnit / 1000;
+    if (f === 'ml' && (t === 'l' || t === 'litro' || t === 'litros')) return costPerUnit * 1000;
+    return null;
+  };
+
   useEffect(() => {
-    if (originType !== 'escandallo' && originType !== 'base_subreceta') return;
-    const next = originType === 'escandallo' ? escandalloAutoPrice ?? 0 : baseSubrecipeAutoPrice ?? 0;
+    if (originType !== 'escandallo' && originType !== 'base_subreceta' && originType !== 'composicion') return;
+    const next =
+      originType === 'escandallo'
+        ? escandalloAutoPrice ?? 0
+        : originType === 'base_subreceta'
+          ? baseSubrecipeAutoPrice ?? 0
+          : Number(price);
     setPrice(next.toFixed(2));
   }, [originType, escandalloAutoPrice, baseSubrecipeAutoPrice]);
+
+  useEffect(() => {
+    if (originType !== 'composicion') return;
+    if (!localId || !isSupabaseEnabled()) {
+      setPrice('0.00');
+      return;
+    }
+    const supabase = getSupabaseClient();
+    if (!supabase) {
+      setPrice('0.00');
+      return;
+    }
+    let active = true;
+    void (async () => {
+      setEscandalloPriceLoading(true);
+      try {
+        const validLines = compositionLines.filter(
+          (x) => x.componentId && Number.isFinite(Number(x.qty)) && Number(x.qty) > 0 && x.unit,
+        );
+        if (validLines.length === 0) {
+          if (active) setPrice('0.00');
+          console.log('[mermas:composicion] lineas vacias -> total 0');
+          return;
+        }
+        const [recipes, rawProducts, processedProducts] = await Promise.all([
+          fetchEscandalloRecipes(supabase, localId),
+          fetchEscandalloRawProductsWithWeightedPurchasePrices(supabase, localId),
+          fetchProcessedProductsForEscandallo(supabase, localId),
+        ]);
+        const linesByRecipe: Record<string, EscandalloLine[]> = {};
+        const recipesById = new Map(recipes.map((r) => [r.id, r]));
+        const escandalloCostCache = new Map<string, number | null>();
+        const resolveRecipeCostCached = async (recipeId: string): Promise<number | null> => {
+          if (escandalloCostCache.has(recipeId)) return escandalloCostCache.get(recipeId) ?? null;
+          const recipe = recipes.find((r) => r.id === recipeId);
+          if (!recipe || recipe.yieldQty <= 0) {
+            escandalloCostCache.set(recipeId, null);
+            return null;
+          }
+          const toVisit = [recipeId];
+          const visited = new Set<string>();
+          while (toVisit.length > 0) {
+            const current = toVisit.pop()!;
+            if (visited.has(current)) continue;
+            visited.add(current);
+            if (!linesByRecipe[current]) {
+              linesByRecipe[current] = await fetchEscandalloLines(supabase, localId, current);
+            }
+            for (const ln of linesByRecipe[current] ?? []) {
+              if (ln.sourceType === 'subrecipe' && ln.subRecipeId && !visited.has(ln.subRecipeId)) {
+                toVisit.push(ln.subRecipeId);
+              }
+            }
+          }
+          const total = recipeTotalCostEur(
+            linesByRecipe[recipeId] ?? [],
+            new Map(rawProducts.map((x) => [x.id, x])),
+            new Map(processedProducts.map((x) => [x.id, x])),
+            { linesByRecipe, recipesById, recipeId },
+          );
+          const per = total > 0 ? Math.round((total / recipe.yieldQty) * 10000) / 10000 : null;
+          escandalloCostCache.set(recipeId, per);
+          return per;
+        };
+
+        let total = 0;
+        const debugRows: Array<{ lineId: string; unitCost: number; lineCost: number }> = [];
+        for (const line of validLines) {
+          const qty = Number(line.qty);
+          let sourceUnitCost: number | null = null;
+          let sourceUnit: string = line.unit;
+          if (line.componentType === 'master') {
+            const m = masterOptions.find((x) => x.id === line.componentId);
+            if (m && m.costeUnitarioUso != null && m.costeUnitarioUso > 0) {
+              sourceUnitCost = m.costeUnitarioUso;
+              sourceUnit = m.unidadUso ?? line.unit;
+            }
+          } else if (line.componentType === 'escandallo') {
+            sourceUnitCost = await resolveRecipeCostCached(line.componentId);
+            sourceUnit = 'racion';
+          } else {
+            if (line.componentKind === 'processed') {
+              const p = processedProducts.find((x) => x.id === line.componentId);
+              const raw = p ? rawProducts.find((x) => x.id === p.sourceSupplierProductId) : null;
+              if (p && raw && p.outputQty > 0) {
+                sourceUnitCost = ((raw.pricePerUnit > 0 ? raw.pricePerUnit : 0) * p.inputQty + p.extraCostEur) / p.outputQty;
+                sourceUnit = p.outputUnit;
+              }
+            } else {
+              sourceUnitCost = await resolveRecipeCostCached(line.componentId);
+              sourceUnit = 'racion';
+            }
+          }
+          if (sourceUnitCost == null || !Number.isFinite(sourceUnitCost) || sourceUnitCost <= 0) continue;
+          const converted = convertUnitCost(sourceUnitCost, sourceUnit, line.unit);
+          const unitCost = converted != null ? converted : sourceUnitCost;
+          const lineCost = Math.round(unitCost * qty * 10000) / 10000;
+          total += lineCost;
+          debugRows.push({ lineId: line.id, unitCost, lineCost });
+        }
+        const rounded = Math.round(total * 100) / 100;
+        if (active) setPrice(rounded.toFixed(2));
+        console.log('[mermas:composicion] lineas', validLines);
+        console.log('[mermas:composicion] costes_linea', debugRows);
+        console.log('[mermas:composicion] total', rounded);
+      } catch (err) {
+        if (active) setPrice('0.00');
+        console.log('[mermas:composicion] error', err);
+      } finally {
+        if (active) setEscandalloPriceLoading(false);
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, [originType, compositionLines, localId, masterOptions]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -458,7 +601,7 @@ export default function ProductosPage() {
                     if (!(await confirmDestructiveOperation(profileRole, '¿Confirmar eliminación de este producto?'))) {
                       return;
                     }
-                    const result = removeProduct(p.id);
+                    const result = await removeProduct(p.id);
                     setMessage(result.ok ? 'Producto eliminado.' : result.reason ?? 'No se pudo eliminar.');
                     if (result.ok) {
                       setShowDeletedBanner(true);

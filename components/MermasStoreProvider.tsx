@@ -57,7 +57,7 @@ type MermasStore = {
   mermas: MermaRecord[];
   addProduct: (input: CreateProductInput) => void;
   updateProduct: (id: string, input: CreateProductInput) => void;
-  removeProduct: (id: string) => { ok: boolean; reason?: string };
+  removeProduct: (id: string) => Promise<{ ok: boolean; reason?: string }>;
   addMerma: (input: AddMermaInput) => Promise<{ ok: boolean; record?: MermaRecord; reason?: string }>;
   updateMerma: (id: string, input: AddMermaInput) => { ok: boolean; reason?: string };
   removeMerma: (id: string) => Promise<{ ok: boolean; reason?: string }>;
@@ -1348,22 +1348,31 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
       markLocalEdit();
     };
 
-    const removeProduct = (id: string) => {
-      const hasRelatedMermas = mermas.some((m) => m.productId === id);
-      if (hasRelatedMermas) {
-        return { ok: false, reason: 'No se puede eliminar: tiene mermas registradas.' };
-      }
+    const removeProduct = async (id: string) => {
       if (useCloud) {
         if (!localId) return { ok: false, reason: 'Perfil del local aún cargando. Reintenta en 2 segundos.' };
         const supabase = getSupabaseClient();
         if (!supabase) return { ok: false, reason: 'Sin conexión.' };
-        void (async () => {
-          const { error } = await supabase.from('products').update({ is_active: false }).eq('id', id);
-          if (error) return;
-          protectProductIdsRef.current.delete(id);
-          setProducts((prev) => prev.filter((p) => p.id !== id));
-          markLocalEdit();
-        })();
+        let ok = false;
+        const softDeleteWithTimestamp = await supabase
+          .from('products')
+          .update({ is_active: false, deleted_at: new Date().toISOString() })
+          .eq('id', id)
+          .eq('local_id', localId);
+        if (!softDeleteWithTimestamp.error) {
+          ok = true;
+        } else {
+          const fallbackSoftDelete = await supabase
+            .from('products')
+            .update({ is_active: false })
+            .eq('id', id)
+            .eq('local_id', localId);
+          if (!fallbackSoftDelete.error) ok = true;
+        }
+        if (!ok) return { ok: false, reason: 'No se pudo eliminar el producto.' };
+        protectProductIdsRef.current.delete(id);
+        setProducts((prev) => prev.filter((p) => p.id !== id));
+        markLocalEdit();
         return { ok: true };
       }
       markLocalEdit();
