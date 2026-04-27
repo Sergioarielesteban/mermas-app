@@ -4,6 +4,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import MermasStyleHero from '@/components/MermasStyleHero';
 import { PersonalSectionNav } from '@/components/staff/StaffPersonalShell';
 import { useAuth } from '@/components/AuthProvider';
+import { PersonalRouteBlocked } from '@/components/staff/PersonalRouteBlocked';
 import { buildStaffPermissions } from '@/lib/staff/permissions';
 import {
   formatMinutesHuman,
@@ -574,6 +575,14 @@ export default function PersonalRegistroPage() {
 
   if (!profileReady) return <p className="text-sm text-zinc-500">Cargando…</p>;
   if (!localId) return <p className="text-sm text-amber-800">Sin local.</p>;
+  if (!perms.canAccessPersonalFichajeRoutes) {
+    return (
+      <PersonalRouteBlocked
+        message="El registro completo del equipo solo está disponible para administración. Como encargado, consulta el resumen operativo en Personal o usa la tablet central para fichajes."
+        backHref="/personal"
+      />
+    );
+  }
 
   const staffSelfOnly = !perms.canViewTeamSummary;
 

@@ -10,7 +10,7 @@ import { fetchCartaRecipesWithReviewStatus, fetchProductAllergensForLocal } from
 import { ReviewStatusBadge } from '@/components/appcc/AllergenUi';
 
 export default function AppccCartaAlergenosIncidenciasPage() {
-  const { localId, profileReady } = useAuth();
+  const { localId, profileReady, profileRole } = useAuth();
   const supabaseReady = isSupabaseEnabled() && !!getSupabaseClient();
   const [loading, setLoading] = useState(true);
   const [banner, setBanner] = useState<string | null>(null);
@@ -19,6 +19,10 @@ export default function AppccCartaAlergenosIncidenciasPage() {
 
   useEffect(() => {
     if (!profileReady) return;
+    if (profileRole === 'manager') {
+      setLoading(false);
+      return;
+    }
     if (!localId || !supabaseReady) {
       setLoading(false);
       return;
@@ -84,7 +88,7 @@ export default function AppccCartaAlergenosIncidenciasPage() {
     return () => {
       active = false;
     };
-  }, [profileReady, localId, supabaseReady]);
+  }, [profileReady, profileRole, localId, supabaseReady]);
 
   const counts = useMemo(
     () => ({
@@ -100,6 +104,20 @@ export default function AppccCartaAlergenosIncidenciasPage() {
       <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-zinc-200">
         <p className="text-sm text-zinc-600">Cargando incidencias…</p>
       </section>
+    );
+  }
+
+  if (profileRole === 'manager') {
+    return (
+      <div className="space-y-4 pb-8">
+        <AppccCompactHero title="Acceso no autorizado" />
+        <section className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-950 ring-1 ring-amber-100">
+          El seguimiento administrativo de incidencias de carta no está disponible para tu perfil.
+        </section>
+        <Link href="/appcc/carta-alergenos/matriz" className="inline-flex text-sm font-bold text-[#D32F2F] underline underline-offset-2">
+          Ir a la matriz de consulta
+        </Link>
+      </div>
     );
   }
 

@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import React, { useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, Grid3X3, Search, ShieldAlert, Table2, Tags } from 'lucide-react';
 import MermasStyleHero from '@/components/MermasStyleHero';
@@ -35,7 +36,15 @@ function KpiCard({ label, value, tone = 'zinc' }: { label: string; value: number
 }
 
 export default function AppccCartaAlergenosPage() {
-  const { localId, profileReady } = useAuth();
+  const router = useRouter();
+  const { localId, profileReady, profileRole } = useAuth();
+
+  useEffect(() => {
+    if (!profileReady) return;
+    if (profileRole === 'manager') {
+      router.replace('/appcc/carta-alergenos/matriz');
+    }
+  }, [profileReady, profileRole, router]);
   const supabaseReady = isSupabaseEnabled() && !!getSupabaseClient();
 
   const [loading, setLoading] = useState(true);
@@ -156,6 +165,14 @@ export default function AppccCartaAlergenosPage() {
       <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-zinc-200">
         <p className="text-sm font-semibold text-zinc-900">Módulo no disponible</p>
         <p className="pt-1 text-sm text-zinc-600">Necesitas sesión de local activa con Supabase.</p>
+      </section>
+    );
+  }
+
+  if (profileRole === 'manager') {
+    return (
+      <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-zinc-200">
+        <p className="text-sm text-zinc-600">Abriendo la matriz de consulta…</p>
       </section>
     );
   }

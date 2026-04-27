@@ -15,7 +15,8 @@ import {
 import { ReviewStatusBadge } from '@/components/appcc/AllergenUi';
 
 export default function AppccCartaAlergenosMatrizPage() {
-  const { localId, profileReady } = useAuth();
+  const { localId, profileReady, profileRole } = useAuth();
+  const isManager = profileRole === 'manager';
   const supabaseReady = isSupabaseEnabled() && !!getSupabaseClient();
   const [loading, setLoading] = useState(true);
   const [banner, setBanner] = useState<string | null>(null);
@@ -85,6 +86,11 @@ export default function AppccCartaAlergenosMatrizPage() {
   return (
     <div className="space-y-4 pb-8">
       <AppccCompactHero title="Matriz carta y alérgenos" />
+      {isManager ? (
+        <p className="rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2 text-xs font-medium text-zinc-600 ring-1 ring-zinc-100">
+          Vista solo consulta. La edición y revisión de platos corresponde a administración del local.
+        </p>
+      ) : null}
       {banner ? (
         <div className="rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950 ring-1 ring-amber-100">
           {banner}
@@ -121,9 +127,16 @@ export default function AppccCartaAlergenosMatrizPage() {
                 <tr key={r.id} className="border-t border-zinc-100">
                   <td className="sticky left-0 z-10 bg-white px-2 py-2">
                     <div className="flex items-center gap-2">
-                      <Link href={`/appcc/carta-alergenos/${r.id}`} className="text-sm font-semibold text-zinc-900 hover:text-[#D32F2F]">
-                        {r.name}
-                      </Link>
+                      {!isManager ? (
+                        <Link
+                          href={`/appcc/carta-alergenos/${r.id}`}
+                          className="text-sm font-semibold text-zinc-900 hover:text-[#D32F2F]"
+                        >
+                          {r.name}
+                        </Link>
+                      ) : (
+                        <span className="text-sm font-semibold text-zinc-900">{r.name}</span>
+                      )}
                       <ReviewStatusBadge status={r.allergens_review_status} />
                     </div>
                   </td>

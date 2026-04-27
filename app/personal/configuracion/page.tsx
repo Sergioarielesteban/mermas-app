@@ -2,8 +2,23 @@
 
 import MermasStyleHero from '@/components/MermasStyleHero';
 import { PersonalSectionNav } from '@/components/staff/StaffPersonalShell';
+import { useAuth } from '@/components/AuthProvider';
 
 export default function PersonalConfigPage() {
+  const { profileReady, profileRole } = useAuth();
+  if (!profileReady) return <p className="text-sm text-zinc-500">Cargando…</p>;
+  if (profileRole !== 'admin') {
+    return (
+      <div className="space-y-4">
+        <MermasStyleHero eyebrow="Ajustes" title="Acceso restringido" compact />
+        <PersonalSectionNav />
+        <p className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-950 ring-1 ring-amber-100">
+          Estas instrucciones técnicas son solo para administración del local.
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-4">
       <MermasStyleHero eyebrow="Ajustes" title="Configuración básica" compact />
@@ -25,10 +40,9 @@ export default function PersonalConfigPage() {
           <code className="rounded bg-white px-1">staff_attendance_incidents</code> si quieres actualización en vivo.
         </p>
         <p>
-          <strong className="text-zinc-900">Roles:</strong> <code className="rounded bg-white px-1">admin</code> y{' '}
-          <code className="rounded bg-white px-1">manager</code> en <code className="rounded bg-white px-1">profiles.role</code>{' '}
-          gestionan cuadrante, equipo e incidencias. <code className="rounded bg-white px-1">staff</code> fichar y ver su
-          registro.
+          <strong className="text-zinc-900">Roles:</strong> <code className="rounded bg-white px-1">admin</code> gestiona
+          cuadrante, equipo e incidencias. <code className="rounded bg-white px-1">manager</code> tiene vista operativa de
+          horarios sin gestión de equipo. <code className="rounded bg-white px-1">staff</code> fichar y ver su registro.
         </p>
         <p>
           <strong className="text-zinc-900">Vincular usuario:</strong> en la tabla{' '}

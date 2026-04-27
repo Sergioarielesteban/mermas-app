@@ -33,7 +33,7 @@ type RecipeLite = {
 };
 
 export default function AppccCartaAlergenosDetailPage({ params }: { params: Promise<{ recipeId: string }> }) {
-  const { localId, profileReady } = useAuth();
+  const { localId, profileReady, profileRole } = useAuth();
   const supabaseReady = isSupabaseEnabled() && !!getSupabaseClient();
 
   const [recipeId, setRecipeId] = useState<string | null>(null);
@@ -128,8 +128,12 @@ export default function AppccCartaAlergenosDetailPage({ params }: { params: Prom
 
   useEffect(() => {
     if (!profileReady) return;
+    if (profileRole === 'manager') {
+      setLoading(false);
+      return;
+    }
     void load();
-  }, [profileReady, load]);
+  }, [profileReady, profileRole, load]);
 
   const groupedOrigins = useMemo(() => {
     const map = new Map<string, string[]>();
@@ -162,6 +166,23 @@ export default function AppccCartaAlergenosDetailPage({ params }: { params: Prom
       <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-zinc-200">
         <p className="text-sm text-zinc-600">Cargando revisión de alérgenos…</p>
       </section>
+    );
+  }
+
+  if (profileRole === 'manager') {
+    return (
+      <div className="space-y-4 pb-8">
+        <AppccCompactHero title="Acceso no autorizado" />
+        <section className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-950 ring-1 ring-amber-100">
+          No tienes permiso para revisar ni editar platos. Consulta la matriz general de carta y alérgenos.
+        </section>
+        <Link
+          href="/appcc/carta-alergenos/matriz"
+          className="inline-flex text-sm font-bold text-[#D32F2F] underline underline-offset-2"
+        >
+          Ir a la matriz
+        </Link>
+      </div>
     );
   }
 

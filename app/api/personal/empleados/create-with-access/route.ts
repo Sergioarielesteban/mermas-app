@@ -75,7 +75,7 @@ async function pinAlreadyInUse(localId: string, pin: string): Promise<boolean> {
 }
 
 export async function POST(request: Request) {
-  const actor = await requireProfileRoles(request, ['admin', 'manager']);
+  const actor = await requireProfileRoles(request, ['admin']);
   if (!actor.ok) {
     return NextResponse.json({ ok: false, error: actor.message || 'No autorizado' }, { status: actor.status });
   }

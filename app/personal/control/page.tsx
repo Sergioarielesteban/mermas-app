@@ -209,7 +209,7 @@ function PersonalControlInner() {
   if (!perms.canViewTeamSummary) {
     return (
       <p className="rounded-2xl bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-900 ring-1 ring-amber-200">
-        Solo encargados y administradores ven el control del día.
+        Solo la administración del local puede ver el control detallado del día.
       </p>
     );
   }

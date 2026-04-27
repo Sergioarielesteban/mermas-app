@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { CHEF_ONE_TAPER_LINE_CLASS } from '@/components/ChefOneGlowLine';
 import MermasStyleHero from '@/components/MermasStyleHero';
+import { useAuth } from '@/components/AuthProvider';
 
 const LINE_SM = `mx-auto mt-1 w-14 ${CHEF_ONE_TAPER_LINE_CLASS}`;
 
@@ -101,6 +102,9 @@ function ExpandableControlGroup({
 }
 
 export default function AppccHubPage() {
+  const { profileRole } = useAuth();
+  const isManager = profileRole === 'manager';
+
   return (
     <div className="space-y-3">
       <MermasStyleHero slim compactTitle eyebrow="APPCC" title="Puntos críticos y control diario" />
@@ -132,15 +136,19 @@ export default function AppccHubPage() {
 
       <ExpandableControlGroup
         title="Carta y alérgenos"
-        leadHref="/appcc/carta-alergenos"
-        leadLabel="Resumen de carta"
-        leadSub="Estados, revisión y trazabilidad"
+        leadHref={isManager ? '/appcc/carta-alergenos/matriz' : '/appcc/carta-alergenos'}
+        leadLabel={isManager ? 'Matriz carta y alérgenos' : 'Resumen de carta'}
+        leadSub={isManager ? 'Consulta general (solo lectura)' : 'Estados, revisión y trazabilidad'}
         LeadIcon={Tags}
-        items={[
-          { href: '/appcc/carta-alergenos/productos', label: 'Fichas ingrediente', sub: 'Completar alérgenos base', Icon: ClipboardList },
-          { href: '/appcc/carta-alergenos/matriz', label: 'Matriz de carta', sub: 'Consulta rápida por alérgeno', Icon: Table2 },
-          { href: '/appcc/carta-alergenos/incidencias', label: 'Incidencias', sub: 'Pendientes e incompletos', Icon: CircleAlert },
-        ]}
+        items={
+          isManager
+            ? []
+            : [
+                { href: '/appcc/carta-alergenos/productos', label: 'Fichas ingrediente', sub: 'Completar alérgenos base', Icon: ClipboardList },
+                { href: '/appcc/carta-alergenos/matriz', label: 'Matriz de carta', sub: 'Consulta rápida por alérgeno', Icon: Table2 },
+                { href: '/appcc/carta-alergenos/incidencias', label: 'Incidencias', sub: 'Pendientes e incompletos', Icon: CircleAlert },
+              ]
+        }
       />
 
       <ExpandableControlGroup

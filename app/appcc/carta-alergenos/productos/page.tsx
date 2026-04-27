@@ -21,7 +21,7 @@ import { AllergenChip, PresenceBadge } from '@/components/appcc/AllergenUi';
 type DraftMap = Record<string, { selected: boolean; presenceType: AllergenPresenceType }>;
 
 export default function AppccCartaAlergenosProductosPage() {
-  const { localId, userId, profileReady } = useAuth();
+  const { localId, userId, profileReady, profileRole } = useAuth();
   const supabaseReady = isSupabaseEnabled() && !!getSupabaseClient();
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -35,6 +35,10 @@ export default function AppccCartaAlergenosProductosPage() {
 
   useEffect(() => {
     if (!profileReady) return;
+    if (profileRole === 'manager') {
+      setLoading(false);
+      return;
+    }
     if (!localId || !supabaseReady) {
       setLoading(false);
       return;
@@ -65,7 +69,7 @@ export default function AppccCartaAlergenosProductosPage() {
     return () => {
       active = false;
     };
-  }, [profileReady, localId, supabaseReady]);
+  }, [profileReady, profileRole, localId, supabaseReady]);
 
   const filteredProducts = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -141,6 +145,20 @@ export default function AppccCartaAlergenosProductosPage() {
       <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-zinc-200">
         <p className="text-sm text-zinc-600">Cargando fichas de ingredientes…</p>
       </section>
+    );
+  }
+
+  if (profileRole === 'manager') {
+    return (
+      <div className="space-y-4 pb-8">
+        <AppccCompactHero title="Acceso no autorizado" />
+        <section className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-950 ring-1 ring-amber-100">
+          La edición de fichas de ingredientes es solo para administración del local.
+        </section>
+        <Link href="/appcc/carta-alergenos/matriz" className="inline-flex text-sm font-bold text-[#D32F2F] underline underline-offset-2">
+          Ir a la matriz de consulta
+        </Link>
+      </div>
     );
   }
 

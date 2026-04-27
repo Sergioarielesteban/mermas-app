@@ -272,20 +272,10 @@ export default function PersonalResumenPage() {
         </div>
       ) : isManagerOnly ? (
         <div className="space-y-4">
-          <section className="grid gap-2 sm:grid-cols-2">
-            <Link
-              href="/personal/fichaje"
-              className="flex min-h-[48px] items-center justify-center rounded-2xl border border-zinc-300 bg-white px-3 py-2 text-sm font-extrabold text-zinc-800"
-            >
-              Registrar jornada
-            </Link>
-            <Link
-              href="/personal/registro"
-              className="flex min-h-[48px] items-center justify-center rounded-2xl border border-zinc-300 bg-white px-3 py-2 text-sm font-extrabold text-zinc-800"
-            >
-              Ver registro del equipo
-            </Link>
-          </section>
+          <p className="rounded-2xl bg-zinc-50 px-4 py-3 text-xs font-medium text-zinc-600 ring-1 ring-zinc-200/90">
+            El fichaje del personal se registra en la <strong className="text-zinc-900">tablet central</strong> del local
+            (modo terminal), no desde este móvil.
+          </p>
 
           <section className="rounded-3xl bg-white p-4 ring-1 ring-zinc-200/90 md:p-5">
             <h2 className="text-sm font-extrabold uppercase tracking-wide text-zinc-500">Equipo del día</h2>

@@ -326,13 +326,13 @@ export default function TerminalFichajePage() {
     );
   }
 
-  if (!perms.canManageSchedules) {
+  if (!perms.canOperateAttendanceTerminal) {
     return (
       <div className="flex min-h-[100dvh] flex-col items-center justify-center gap-4 bg-white px-6 text-center text-zinc-800">
         <p className="text-lg font-semibold text-zinc-900">Terminal solo para encargados</p>
         <p className="max-w-sm text-sm text-zinc-600">
           Inicia sesión con un perfil <strong className="text-zinc-900">admin</strong> o{' '}
-          <strong className="text-zinc-900">manager</strong> en esta tablet.
+          <strong className="text-zinc-900">manager</strong> en esta tablet (fichaje central por PIN).
         </p>
         <button
           type="button"

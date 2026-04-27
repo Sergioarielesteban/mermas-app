@@ -8,6 +8,7 @@ import ClockPanel from '@/components/staff/ClockPanel';
 import { useAuth } from '@/components/AuthProvider';
 import { useStaffBundle } from '@/hooks/useStaffBundle';
 import { useStaffRealtime } from '@/hooks/useStaffRealtime';
+import { PersonalRouteBlocked } from '@/components/staff/PersonalRouteBlocked';
 import { buildStaffPermissions } from '@/lib/staff/permissions';
 import { startOfWeekMonday, ymdLocal } from '@/lib/staff/staff-dates';
 import { todayYmd } from '@/lib/staff/attendance-logic';
@@ -31,6 +32,15 @@ export default function PersonalFichajePage() {
   if (!profileReady) return <p className="text-sm text-zinc-500">Cargando…</p>;
   if (!localId) return <p className="text-sm text-amber-800">Sin local asignado.</p>;
   if (!supabase) return <p className="text-sm text-red-700">Supabase no disponible.</p>;
+  if (!perms.canAccessPersonalFichajeRoutes) {
+    return (
+      <PersonalRouteBlocked
+        message="Tu perfil de encargado no incluye fichaje desde el móvil. Usa la tablet del local o consulta tu resumen en Mi espacio."
+        backHref="/personal/mi"
+        backLabel="Ir a Mi espacio"
+      />
+    );
+  }
 
   return (
     <div className="space-y-4">

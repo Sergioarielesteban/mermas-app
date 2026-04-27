@@ -65,8 +65,9 @@ export default function PersonalIncidenciasPage() {
   }, [localId]);
 
   useEffect(() => {
+    if (profileRole !== 'admin') return;
     void reload();
-  }, [reload]);
+  }, [reload, profileRole]);
 
   const visible = useMemo(() => {
     let r = filter === 'open' ? rows.filter((x) => x.status === 'open') : rows;
@@ -123,6 +124,17 @@ export default function PersonalIncidenciasPage() {
 
   if (!profileReady) return <p className="text-sm text-zinc-500">Cargando…</p>;
   if (!localId) return <p className="text-sm text-amber-800">Sin local.</p>;
+  if (profileRole !== 'admin') {
+    return (
+      <div className="space-y-4">
+        <MermasStyleHero eyebrow="Incidencias" title="Acceso restringido" compact />
+        <PersonalSectionNav />
+        <p className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-950 ring-1 ring-amber-100">
+          Acceso no autorizado. La gestión de incidencias de asistencia es solo para administración del local.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4">
@@ -208,7 +220,7 @@ export default function PersonalIncidenciasPage() {
       </ul>
       <p className="text-xs text-zinc-500">
         Las incidencias automáticas (retrasos, ausencias) se pueden generar desde procesos futuros; ahora puedes
-        registrarlas manualmente como encargado.
+        registrarlas manualmente como administración del local.
       </p>
     </div>
   );

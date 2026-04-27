@@ -30,14 +30,17 @@ type NavLink = {
   /** Gestión de equipo (admin o encargado con permiso). */
   teamManagement?: boolean;
   staffVisible?: boolean;
+  /** Fichaje/registro en móvil (no manager). */
+  personalMobileClock?: boolean;
 };
 
 const LINKS: NavLink[] = [
   { href: '/personal', label: 'Resumen', Icon: LayoutGrid, end: true, staffVisible: true },
   { href: '/personal/planificacion', label: 'Cuadrante', Icon: CalendarRange, adminOnly: true },
   { href: '/personal/control', label: 'Control', Icon: LayoutPanelTop, adminOnly: true },
-  { href: '/personal/fichaje', label: 'Fichaje', Icon: Clock, staffVisible: true },
-  { href: '/personal/registro', label: 'Registro', Icon: ClipboardList, staffVisible: true },
+  /** Solo admin y staff (móvil); manager usa la tablet central. */
+  { href: '/personal/fichaje', label: 'Fichaje', Icon: Clock, staffVisible: true, personalMobileClock: true },
+  { href: '/personal/registro', label: 'Registro', Icon: ClipboardList, staffVisible: true, personalMobileClock: true },
   { href: '/personal/empleados', label: 'Equipo', Icon: Users, teamManagement: true },
   { href: '/personal/solicitudes', label: 'Solicitudes', Icon: Send, adminOnly: true },
   { href: '/personal/incidencias', label: 'Incidencias', Icon: AlertTriangle, adminOnly: true },
@@ -59,7 +62,6 @@ export function PersonalSectionNav() {
   const isMiApp = pathname.startsWith('/personal/mi');
   const role = profileRole ?? 'staff';
   const isAdmin = role === 'admin';
-  const isManager = role === 'manager';
 
   if (isMiApp) return null;
 
@@ -73,7 +75,8 @@ export function PersonalSectionNav() {
           if (l.teamManagement) return perms.canManageEmployees;
           if (l.adminOnly) return isAdmin;
           if (l.managerOnly) return perms.canViewTeamSummary;
-          if (isManager) return Boolean(l.staffVisible);
+          if (l.personalMobileClock) return perms.canAccessPersonalFichajeRoutes;
+          if (role === 'manager') return Boolean(l.staffVisible) && !l.personalMobileClock;
           return true;
         }).map((link) => {
           if (!perms.canViewTeamSummary && !link.staffVisible) return null;

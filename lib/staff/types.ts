@@ -145,6 +145,10 @@ export type StaffPermissions = {
   canCorrectEntries: boolean;
   canResolveIncidents: boolean;
   canViewTeamSummary: boolean;
+  /** Fichaje/registro desde el móvil ( /personal/fichaje, /personal/registro ). Admin y staff; no manager. */
+  canAccessPersonalFichajeRoutes: boolean;
+  /** Tablet de fichaje por PIN ( sesión encargado en el dispositivo ). Admin y manager. */
+  canOperateAttendanceTerminal: boolean;
 };
 
 export const STAFF_ZONE_PRESETS = [

@@ -31,14 +31,14 @@ const ROLE_ACTION_OVERRIDES: Partial<
 > = {
   manager: {
     personal: {
-      adjust: true,
-      export: true,
-      download_report: true,
-      register: true,
-      create: true,
-      edit: true,
-      delete: true,
-      open_management_modal: true,
+      adjust: false,
+      export: false,
+      download_report: false,
+      register: false,
+      create: false,
+      edit: false,
+      delete: false,
+      open_management_modal: false,
     },
   },
   staff: {

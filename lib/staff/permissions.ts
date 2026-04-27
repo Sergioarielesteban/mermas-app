@@ -5,14 +5,15 @@ export function buildStaffPermissions(profileRole: ProfileAppRole | null): Staff
   const role = profileRole ?? 'staff';
   const isAdmin = role === 'admin';
   const isManager = role === 'manager';
-  const canViewTeamSummary = role === 'admin' || role === 'manager';
   return {
     profileRole: profileRole ?? null,
     canManageSchedules: isAdmin,
-    canManageEmployees: isAdmin || isManager,
-    canCorrectEntries: isAdmin || isManager,
+    canManageEmployees: isAdmin,
+    canCorrectEntries: isAdmin,
     canResolveIncidents: isAdmin,
-    canViewTeamSummary,
+    canViewTeamSummary: isAdmin,
+    canAccessPersonalFichajeRoutes: isAdmin || role === 'staff',
+    canOperateAttendanceTerminal: isAdmin || isManager,
   };
 }
 
