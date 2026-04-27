@@ -527,6 +527,7 @@ export default function EscandallosPage() {
         open={quickCalcOpen}
         onClose={() => setQuickCalcOpen(false)}
         rawProducts={rawProducts}
+        localId={localId}
       />
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">

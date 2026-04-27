@@ -1,6 +1,5 @@
-import { sanitizeEscandalloIngredientUnit } from '@/lib/escandallo-ingredient-units';
 import { roundMoney } from '@/lib/money-format';
-import { rawSupplierLineUnitPriceEur, type EscandalloLine, type EscandalloRawProduct } from '@/lib/escandallos-supabase';
+import type { EscandalloRawProduct } from '@/lib/escandallos-supabase';
 
 export type QuickCalcResult = {
   costeTotal: number;
@@ -61,33 +60,37 @@ export function computeQuickCalc(
   };
 }
 
-function tempLine(p: EscandalloRawProduct, usageUnit: string): EscandalloLine {
-  const u = sanitizeEscandalloIngredientUnit(usageUnit);
-  return {
-    id: 'quick-calc',
-    localId: 'quick-calc',
-    recipeId: 'quick-calc',
-    sourceType: 'raw',
-    rawSupplierProductId: p.id,
-    processedProductId: null,
-    subRecipeId: null,
-    label: p.name,
-    qty: 1,
-    unit: u,
-    manualPricePerUnit: null,
-    sortOrder: 0,
-    createdAt: new Date().toISOString(),
-  };
+/**
+ * Línea desde Artículo máster: importe = cantidad en unidad de uso × coste unitario de uso (€/u).
+ * No usa precio de caja ni PMP; solo el coste de uso almacenado en el artículo máster.
+ */
+export function masterLineCostEur(cantidadEnUnidadUso: number, costeUnitarioUso: number): number {
+  if (!Number.isFinite(cantidadEnUnidadUso) || cantidadEnUnidadUso < 0) return 0;
+  if (!Number.isFinite(costeUnitarioUso) || costeUnitarioUso < 0) return 0;
+  return roundMoney(cantidadEnUnidadUso * costeUnitarioUso);
 }
 
-/** Coste de una línea desde catálogo (Artículo máster / proveedor) y cantidad en unidad de uso. */
-export function computeMasterLineCostEur(
+/**
+ * Coste de uso desde Artículo máster (coste_unitario_uso + unidad_uso). No usa precio de caja.
+ * Prioriza datos ya fusionados en el producto de escandallo; si faltan, usa el mapa de hints por `article_id`.
+ */
+export function resolveQuickCalcUsageCost(
   p: EscandalloRawProduct,
-  qty: number,
-  usageUnit: string,
-): number {
-  if (!Number.isFinite(qty) || qty < 0) return 0;
-  const line = tempLine(p, usageUnit);
-  const perUnit = rawSupplierLineUnitPriceEur(line, p);
-  return roundMoney(qty * perUnit);
+  hintsByArticleId: Map<string, { costeUnitarioUso: number | null; unidadUso: string | null }>,
+): { costeUnitarioUso: number; unidadUso: string } | null {
+  const fromHint = p.articleId ? hintsByArticleId.get(p.articleId) : undefined;
+  const costFromProduct =
+    p.internalCostPerUsageUnitEur != null && Number.isFinite(p.internalCostPerUsageUnitEur)
+      ? p.internalCostPerUsageUnitEur
+      : null;
+  const costFromHint =
+    fromHint?.costeUnitarioUso != null && Number.isFinite(fromHint.costeUnitarioUso)
+      ? fromHint.costeUnitarioUso
+      : null;
+  const cost = costFromProduct ?? costFromHint;
+  const unitRaw =
+    (p.internalUsageUnitLabel?.trim() || fromHint?.unidadUso?.trim() || '').trim();
+  if (cost == null || !Number.isFinite(cost) || cost < 0) return null;
+  if (!unitRaw) return null;
+  return { costeUnitarioUso: roundMoney(cost), unidadUso: unitRaw };
 }
