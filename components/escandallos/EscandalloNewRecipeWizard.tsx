@@ -33,6 +33,10 @@ import {
 } from '@/lib/escandallos-supabase';
 import { writeEscandalloWizardBeforeArticulosNav } from '@/lib/escandallo-articulos-nav';
 import {
+  clearEscandalloQuickCalcPrefill,
+  readEscandalloQuickCalcPrefill,
+} from '@/lib/escandallo-quick-calc-prefill';
+import {
   clearEscandalloWizardDraft,
   readEscandalloWizardDraft,
   writeEscandalloWizardDraft,
@@ -99,6 +103,22 @@ export default function EscandalloNewRecipeWizard() {
     }
     setWizardSessionReady(true);
   }, [profileReady, localId]);
+
+  /** Desde calculadora rápida: rellenar nombre, PVP e IVA si no hay borrador con nombre. */
+  useEffect(() => {
+    if (!wizardSessionReady || !localId) return;
+    const d = readEscandalloWizardDraft(localId);
+    const p = readEscandalloQuickCalcPrefill();
+    if (!p) return;
+    if (d?.name?.trim()) {
+      clearEscandalloQuickCalcPrefill();
+      return;
+    }
+    setName(p.name);
+    setSaleGross(p.saleGross);
+    setSaleVat(p.saleVat);
+    clearEscandalloQuickCalcPrefill();
+  }, [wizardSessionReady, localId]);
 
   /** Desde Artículos máster: abrir directamente el paso Ingredientes (sin perder borrador). */
   useEffect(() => {

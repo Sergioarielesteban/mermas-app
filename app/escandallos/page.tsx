@@ -65,6 +65,7 @@ import {
 } from '@/lib/escandallos-supabase';
 import { formatMoneyEur } from '@/lib/money-format';
 import { ESCANDALLOS_WEIGHTED_PRICE_WINDOW_DAYS } from '@/lib/escandallos-weighted-purchase-prices';
+import EscandalloQuickCalculatorModal from '@/components/escandallos/EscandalloQuickCalculatorModal';
 
 const TAPER = `mx-auto w-20 ${CHEF_ONE_TAPER_LINE_CLASS}`;
 
@@ -178,6 +179,7 @@ export default function EscandallosPage() {
   const [salesBusy, setSalesBusy] = useState(false);
   const [importError, setImportError] = useState<string | null>(null);
   const [importPreview, setImportPreview] = useState<SalesImportMatchedRow[] | null>(null);
+  const [quickCalcOpen, setQuickCalcOpen] = useState(false);
 
   const load = useCallback(async () => {
     if (!localId || (!supabaseOk && !isDemoMode())) {
@@ -509,6 +511,23 @@ export default function EscandallosPage() {
   return (
     <div className="space-y-5 pb-10">
       <MermasStyleHero slim compactTitle eyebrow="Inteligencia de carta" title="Escandallos" />
+
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
+        <button
+          type="button"
+          onClick={() => setQuickCalcOpen(true)}
+          className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-b from-[#C62828] to-[#B91C1C] px-4 py-3 text-sm font-bold text-white shadow-lg shadow-red-900/25 ring-2 ring-white/20 transition hover:from-[#B91C1C] hover:to-[#9a1515] active:scale-[0.99] sm:w-auto"
+        >
+          <Calculator className="h-5 w-5 shrink-0" strokeWidth={2.25} aria-hidden />
+          Calculadora rápida
+        </button>
+      </div>
+
+      <EscandalloQuickCalculatorModal
+        open={quickCalcOpen}
+        onClose={() => setQuickCalcOpen(false)}
+        rawProducts={rawProducts}
+      />
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <Link
