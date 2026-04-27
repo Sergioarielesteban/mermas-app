@@ -213,6 +213,10 @@ declare
   v_prev_status text;
   v_missing integer;
   v_new_status text;
+  v_prev_auto_fingerprint text;
+  v_new_auto_fingerprint text;
+  v_changed boolean := false;
+  v_prev_force_reviewed boolean := false;
 begin
   select r.local_id, r.allergens_review_status
   into v_local_id, v_prev_status
@@ -227,6 +231,77 @@ begin
     raise exception 'No autorizado para operar alérgenos de esta receta';
   end if;
 
+  select coalesce(r.allergens_force_reviewed, false)
+  into v_prev_force_reviewed
+  from public.escandallo_recipes r
+  where r.id = p_recipe_id;
+
+  select string_agg((ra.allergen_id::text || ':' || ra.presence_type), '|' order by ra.allergen_id::text, ra.presence_type)
+  into v_prev_auto_fingerprint
+  from public.recipe_allergens ra
+  where ra.recipe_id = p_recipe_id
+    and ra.local_id = v_local_id
+    and ra.source_type = 'automatic';
+
+  create temporary table if not exists tmp_appcc_new_auto_allergens (
+    allergen_id uuid not null,
+    presence_type text not null
+  ) on commit drop;
+  truncate table tmp_appcc_new_auto_allergens;
+
+  insert into tmp_appcc_new_auto_allergens (allergen_id, presence_type)
+  select
+    s.allergen_id,
+    case
+      when min(s.rank_presence) = 1 then 'contains'
+      when min(s.rank_presence) = 2 then 'traces'
+      else 'may_contain'
+    end as presence_type
+  from (
+    -- Crudos directos
+    select pa.allergen_id, case pa.presence_type when 'contains' then 1 when 'traces' then 2 else 3 end as rank_presence
+    from public.escandallo_recipe_lines l
+    join public.product_allergens pa
+      on pa.product_id = l.raw_supplier_product_id
+     and pa.local_id = v_local_id
+    where l.recipe_id = p_recipe_id
+      and l.source_type = 'raw'
+      and l.raw_supplier_product_id is not null
+
+    union all
+
+    -- Elaborados internos (heredan del crudo origen)
+    select pa.allergen_id, case pa.presence_type when 'contains' then 1 when 'traces' then 2 else 3 end as rank_presence
+    from public.escandallo_recipe_lines l
+    join public.escandallo_processed_products pp on pp.id = l.processed_product_id
+    join public.product_allergens pa
+      on pa.product_id = pp.source_supplier_product_id
+     and pa.local_id = v_local_id
+    where l.recipe_id = p_recipe_id
+      and l.source_type = 'processed'
+      and l.processed_product_id is not null
+
+    union all
+
+    -- Sub-receta: hereda alérgenos activos/confirmados de la sub-receta
+    select sra.allergen_id, case sra.presence_type when 'contains' then 1 when 'traces' then 2 else 3 end as rank_presence
+    from public.escandallo_recipe_lines l
+    join public.recipe_allergens sra
+      on sra.recipe_id = l.sub_recipe_id
+     and sra.local_id = v_local_id
+     and sra.status in ('active', 'confirmed', 'pending_review')
+    where l.recipe_id = p_recipe_id
+      and l.source_type = 'subrecipe'
+      and l.sub_recipe_id is not null
+  ) s
+  group by s.allergen_id;
+
+  select string_agg((t.allergen_id::text || ':' || t.presence_type), '|' order by t.allergen_id::text, t.presence_type)
+  into v_new_auto_fingerprint
+  from tmp_appcc_new_auto_allergens t;
+
+  v_changed := coalesce(v_prev_auto_fingerprint, '') is distinct from coalesce(v_new_auto_fingerprint, '');
+
   delete from public.recipe_allergen_sources s
   where s.recipe_id = p_recipe_id
     and s.local_id = v_local_id;
@@ -236,22 +311,15 @@ begin
     and ra.local_id = v_local_id
     and ra.source_type = 'automatic';
 
-  -- Crudos directos
   insert into public.recipe_allergens (local_id, recipe_id, allergen_id, presence_type, source_type, status)
-  select distinct
+  select
     v_local_id,
     p_recipe_id,
-    pa.allergen_id,
-    pa.presence_type,
+    t.allergen_id,
+    t.presence_type,
     'automatic',
     'pending_review'
-  from public.escandallo_recipe_lines l
-  join public.product_allergens pa
-    on pa.product_id = l.raw_supplier_product_id
-   and pa.local_id = v_local_id
-  where l.recipe_id = p_recipe_id
-    and l.source_type = 'raw'
-    and l.raw_supplier_product_id is not null
+  from tmp_appcc_new_auto_allergens t
   on conflict (local_id, recipe_id, allergen_id) do update
   set
     source_type = 'automatic',
@@ -287,33 +355,7 @@ begin
     and l.source_type = 'raw'
     and l.raw_supplier_product_id is not null;
 
-  -- Elaborados internos (heredan del crudo origen)
-  insert into public.recipe_allergens (local_id, recipe_id, allergen_id, presence_type, source_type, status)
-  select distinct
-    v_local_id,
-    p_recipe_id,
-    pa.allergen_id,
-    pa.presence_type,
-    'automatic',
-    'pending_review'
-  from public.escandallo_recipe_lines l
-  join public.escandallo_processed_products pp on pp.id = l.processed_product_id
-  join public.product_allergens pa
-    on pa.product_id = pp.source_supplier_product_id
-   and pa.local_id = v_local_id
-  where l.recipe_id = p_recipe_id
-    and l.source_type = 'processed'
-    and l.processed_product_id is not null
-  on conflict (local_id, recipe_id, allergen_id) do update
-  set
-    source_type = 'automatic',
-    presence_type = excluded.presence_type,
-    status = 'pending_review',
-    exclusion_reason = null,
-    confirmed_by = null,
-    confirmed_at = null,
-    updated_at = now();
-
+  -- Fuentes: crudos directos
   insert into public.recipe_allergen_sources (
     local_id,
     recipe_id,
@@ -340,33 +382,7 @@ begin
     and l.source_type = 'processed'
     and l.processed_product_id is not null;
 
-  -- Sub-receta: hereda alérgenos activos/confirmados de la sub-receta
-  insert into public.recipe_allergens (local_id, recipe_id, allergen_id, presence_type, source_type, status)
-  select distinct
-    v_local_id,
-    p_recipe_id,
-    sra.allergen_id,
-    sra.presence_type,
-    'automatic',
-    'pending_review'
-  from public.escandallo_recipe_lines l
-  join public.recipe_allergens sra
-    on sra.recipe_id = l.sub_recipe_id
-   and sra.local_id = v_local_id
-   and sra.status in ('active', 'confirmed', 'pending_review')
-  where l.recipe_id = p_recipe_id
-    and l.source_type = 'subrecipe'
-    and l.sub_recipe_id is not null
-  on conflict (local_id, recipe_id, allergen_id) do update
-  set
-    source_type = 'automatic',
-    presence_type = excluded.presence_type,
-    status = 'pending_review',
-    exclusion_reason = null,
-    confirmed_by = null,
-    confirmed_at = null,
-    updated_at = now();
-
+  -- Fuentes: sub-recetas
   insert into public.recipe_allergen_sources (
     local_id,
     recipe_id,
@@ -396,19 +412,29 @@ begin
   v_missing := public.appcc_recipe_missing_allergen_products_count(p_recipe_id);
   if v_missing > 0 then
     v_new_status := 'incomplete';
-  else
+  elsif v_prev_status = 'reviewed' and not v_changed then
+    v_new_status := 'reviewed';
+  elsif v_changed then
     v_new_status := case when v_prev_status = 'reviewed' then 'stale' else 'pending_review' end;
+  else
+    v_new_status := case when v_prev_status = 'incomplete' then 'pending_review' else v_prev_status end;
   end if;
 
   update public.escandallo_recipes
   set
     allergens_review_status = v_new_status,
     allergens_last_calculated_at = now(),
-    allergens_force_reviewed = false
+    allergens_force_reviewed =
+      case
+        when v_new_status = 'reviewed' and not v_changed then v_prev_force_reviewed
+        else false
+      end
   where id = p_recipe_id;
 
-  insert into public.recipe_allergen_review_log (local_id, recipe_id, action, note, actor_id)
-  values (v_local_id, p_recipe_id, 'recalculated', 'Recalculo automático por cambios en ingredientes/productos', auth.uid());
+  if v_changed or v_new_status is distinct from v_prev_status then
+    insert into public.recipe_allergen_review_log (local_id, recipe_id, action, note, actor_id)
+    values (v_local_id, p_recipe_id, 'recalculated', 'Recalculo automático por cambios en ingredientes/productos', auth.uid());
+  end if;
 end;
 $$;
 
@@ -452,8 +478,13 @@ declare
   v_local_id uuid;
   v_missing integer;
   v_action text;
+  v_prev_status text;
+  v_prev_force boolean;
 begin
-  select local_id into v_local_id from public.escandallo_recipes where id = p_recipe_id;
+  select local_id, allergens_review_status, allergens_force_reviewed
+  into v_local_id, v_prev_status, v_prev_force
+  from public.escandallo_recipes
+  where id = p_recipe_id;
   if v_local_id is null then
     raise exception 'Receta no encontrada';
   end if;
@@ -487,14 +518,17 @@ begin
   where id = p_recipe_id;
 
   v_action := case when p_force then 'forced_confirm' else 'confirmed' end;
-  insert into public.recipe_allergen_review_log (local_id, recipe_id, action, note, actor_id)
-  values (
-    v_local_id,
-    p_recipe_id,
-    v_action,
-    case when p_force then 'Confirmación forzada con ingredientes incompletos' else 'Confirmación de revisión de alérgenos' end,
-    auth.uid()
-  );
+  if coalesce(v_prev_status, '') is distinct from 'reviewed'
+     or coalesce(v_prev_force, false) is distinct from p_force then
+    insert into public.recipe_allergen_review_log (local_id, recipe_id, action, note, actor_id)
+    values (
+      v_local_id,
+      p_recipe_id,
+      v_action,
+      case when p_force then 'Confirmación forzada con ingredientes incompletos' else 'Confirmación de revisión de alérgenos' end,
+      auth.uid()
+    );
+  end if;
 end;
 $$;
 

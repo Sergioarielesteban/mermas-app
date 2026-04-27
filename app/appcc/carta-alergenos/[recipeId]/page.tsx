@@ -11,7 +11,6 @@ import {
   confirmRecipeAllergens,
   excludeRecipeAllergen,
   fetchAllergensMaster,
-  fetchRecipeAllergenReviewLog,
   fetchRecipeAllergens,
   fetchRecipeAllergenSources,
   refreshRecipeAllergens,
@@ -19,7 +18,6 @@ import {
   type AllergenMasterRow,
   type AllergenPresenceType,
   type GlutenFreeOption,
-  type RecipeAllergenReviewLogRow,
   type RecipeAllergenRow,
   type RecipeAllergenSourceRow,
 } from '@/lib/appcc-allergens-supabase';
@@ -49,7 +47,6 @@ export default function AppccCartaAlergenosDetailPage({ params }: { params: Prom
   const [master, setMaster] = useState<AllergenMasterRow[]>([]);
   const [rows, setRows] = useState<RecipeAllergenRow[]>([]);
   const [sources, setSources] = useState<RecipeAllergenSourceRow[]>([]);
-  const [logRows, setLogRows] = useState<RecipeAllergenReviewLogRow[]>([]);
   const [selectedAllergen, setSelectedAllergen] = useState<string>('');
   const [presenceType, setPresenceType] = useState<AllergenPresenceType>('contains');
   const [excludeReason, setExcludeReason] = useState('');
@@ -75,7 +72,7 @@ export default function AppccCartaAlergenosDetailPage({ params }: { params: Prom
     const supabase = getSupabaseClient()!;
     try {
       await refreshRecipeAllergens(supabase, recipeId);
-      const [recipeRes, m, r, s, logs, linesRes, processedRes, productsRes, profilesRes] = await Promise.all([
+      const [recipeRes, m, r, s, linesRes, processedRes, productsRes, profilesRes] = await Promise.all([
         supabase
           .from('escandallo_recipes')
           .select(
@@ -87,7 +84,6 @@ export default function AppccCartaAlergenosDetailPage({ params }: { params: Prom
         fetchAllergensMaster(supabase),
         fetchRecipeAllergens(supabase, localId, recipeId),
         fetchRecipeAllergenSources(supabase, localId, recipeId),
-        fetchRecipeAllergenReviewLog(supabase, localId, recipeId),
         supabase
           .from('escandallo_recipe_lines')
           .select('label,source_type,raw_supplier_product_id,processed_product_id')
@@ -138,7 +134,6 @@ export default function AppccCartaAlergenosDetailPage({ params }: { params: Prom
       setMaster(m);
       setRows(r);
       setSources(s);
-      setLogRows(logs);
       setMissingProducts(miss);
       if (m.length > 0) setSelectedAllergen((prev) => prev || m[0].id);
     } catch (e: unknown) {
@@ -213,7 +208,12 @@ export default function AppccCartaAlergenosDetailPage({ params }: { params: Prom
       await fn();
       await load();
     } catch (e: unknown) {
-      setBanner(e instanceof Error ? e.message : 'No se pudo completar la acción.');
+      const raw = e instanceof Error ? e.message : '';
+      if (/sin ficha de alérgenos/i.test(raw)) {
+        setBanner('Faltan fichas de ingredientes por completar.');
+      } else {
+        setBanner(raw || 'No se pudo completar la acción.');
+      }
     } finally {
       setBusy(false);
     }
@@ -488,21 +488,6 @@ export default function AppccCartaAlergenosDetailPage({ params }: { params: Prom
         </section>
       ) : null}
 
-      <section className="rounded-2xl border border-zinc-200 bg-white p-4 ring-1 ring-zinc-100">
-        <p className="text-sm font-bold text-zinc-900">Historial de revisión</p>
-        <ul className="mt-2 space-y-2">
-          {logRows.length === 0 ? <li className="text-xs text-zinc-500">Sin eventos de revisión.</li> : null}
-          {logRows.map((l) => (
-            <li key={l.id} className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2">
-              <p className="text-xs font-semibold text-zinc-800">{l.action}</p>
-              <p className="text-xs text-zinc-600">{l.note || 'Sin detalle'}</p>
-              <p className="mt-0.5 text-[11px] text-zinc-500">
-                {new Date(l.created_at).toLocaleString('es-ES', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
-              </p>
-            </li>
-          ))}
-        </ul>
-      </section>
     </div>
   );
 }
