@@ -40,7 +40,7 @@ function formatShortDate(iso: string) {
 }
 
 export default function PedidosArticulosPage() {
-  const { localCode, localName, localId, email, profileReady } = useAuth();
+  const { localCode, localName, localId, email, profileReady, isCentralKitchen } = useAuth();
   const hasPedidosEntry = canAccessPedidos(localCode, email, localName, localId);
   const canUse = canUsePedidosModule(localCode, email, localName, localId);
   const supabaseOk = isSupabaseEnabled() && getSupabaseClient();
@@ -52,6 +52,7 @@ export default function PedidosArticulosPage() {
   const [loading, setLoading] = useState(true);
   const [banner, setBanner] = useState<string | null>(null);
   const [q, setQ] = useState('');
+  const [origenFilter, setOrigenFilter] = useState<'todos' | 'proveedor' | 'cocina_central'>('todos');
   const [hasArticulosReturn, setHasArticulosReturn] = useState(false);
 
   const load = useCallback(async () => {
@@ -112,10 +113,18 @@ export default function PedidosArticulosPage() {
     setHasArticulosReturn(readEscandalloWizardArticulosReturn(localId) !== null);
   }, [localId]);
 
+  const ccCount = useMemo(() => articles.filter((a) => a.origenArticulo === 'cocina_central').length, [articles]);
+
   const filtered = useMemo(() => {
+    let list =
+      origenFilter === 'cocina_central'
+        ? articles.filter((a) => a.origenArticulo === 'cocina_central')
+        : origenFilter === 'proveedor'
+          ? articles.filter((a) => a.origenArticulo !== 'cocina_central')
+          : articles;
     const t = q.trim().toLowerCase();
-    if (!t) return articles;
-    return articles.filter((a) => {
+    if (!t) return list;
+    return list.filter((a) => {
       const cat = catalogByArticle.get(a.id) ?? [];
       const catalogNames = cat.map((r) => r.name).join(' ');
       return (
@@ -126,7 +135,7 @@ export default function PedidosArticulosPage() {
         catalogNames.toLowerCase().includes(t)
       );
     });
-  }, [articles, catalogByArticle, q]);
+  }, [articles, catalogByArticle, q, origenFilter]);
 
   if (!profileReady) {
     return (
@@ -196,13 +205,46 @@ export default function PedidosArticulosPage() {
         <div className="rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-sm text-amber-950">{banner}</div>
       ) : null}
 
+      <div className="rounded-xl border border-zinc-200 bg-zinc-50/80 px-3 py-2 text-[11px] leading-snug text-zinc-700 sm:text-xs">
+        <p className="font-semibold text-zinc-800">¿Dónde están los productos de Cocina Central?</p>
+        <ul className="mt-1.5 list-inside list-disc space-y-0.5">
+          <li>
+            Solo ves artículos del <strong>local de tu sesión actual</strong>
+            {localName ? ` (${localName})` : ''}. Si las fórmulas las guardas con otro local en el perfil, hay que entrar con
+            ese usuario (o simular ese local como superadmin).
+          </li>
+          <li>
+            Cada artículo «Cocina Central» se crea al pulsar <strong>Guardar</strong> en{' '}
+            <Link href="/cocina-central/produccion/recetas" className="font-bold text-[#D32F2F] underline">
+              Cocina Central → Fórmulas
+            </Link>
+            . Si añadiste el código hace poco, vuelve a abrir la fórmula y guarda otra vez.
+          </li>
+          <li>
+            En Supabase debe estar aplicado{' '}
+            <code className="rounded bg-white px-1 text-[10px]">supabase-purchase-articles-cocina-central-origen.sql</code>.
+          </li>
+        </ul>
+        {isCentralKitchen && ccCount === 0 && articles.length > 0 ? (
+          <p className="mt-2 rounded-lg border border-amber-200 bg-amber-50/90 px-2 py-1.5 text-amber-950">
+            Este local aún no tiene artículos sincronizados desde fórmulas. Crea o edita una fórmula y guarda.
+          </p>
+        ) : null}
+      </div>
+
       <section className="rounded-xl bg-white p-2.5 shadow-sm ring-1 ring-zinc-200 sm:p-3">
         <div className="flex items-center justify-between gap-2">
           <div className="min-w-0">
             <p className="text-[9px] font-bold uppercase leading-tight text-zinc-500">Listado</p>
             <p className="text-xs leading-tight text-zinc-600 sm:text-sm">
               <span className="font-bold tabular-nums text-zinc-900">{filtered.length}</span> artículos
-              {q.trim() ? ' (filtrado)' : ''}
+              {q.trim() || origenFilter !== 'todos' ? ' (filtrado)' : ''}
+              {ccCount > 0 ? (
+                <span className="text-zinc-500">
+                  {' '}
+                  · <span className="tabular-nums">{ccCount}</span> Cocina Central
+                </span>
+              ) : null}
             </p>
           </div>
           <button
@@ -212,6 +254,31 @@ export default function PedidosArticulosPage() {
           >
             Actualizar
           </button>
+        </div>
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          {(
+            [
+              ['todos', 'Todos'],
+              ['proveedor', 'Proveedor'],
+              ['cocina_central', 'Cocina Central'],
+            ] as const
+          ).map(([key, label]) => (
+            <button
+              key={key}
+              type="button"
+              onClick={() => setOrigenFilter(key)}
+              className={[
+                'rounded-lg border px-2 py-1 text-[10px] font-bold sm:text-[11px]',
+                origenFilter === key
+                  ? key === 'cocina_central'
+                    ? 'border-amber-300 bg-amber-100 text-amber-950'
+                    : 'border-zinc-400 bg-zinc-900 text-white'
+                  : 'border-zinc-200 bg-zinc-50 text-zinc-700',
+              ].join(' ')}
+            >
+              {label}
+            </button>
+          ))}
         </div>
         <div className="relative mt-2">
           <Search
@@ -233,7 +300,9 @@ export default function PedidosArticulosPage() {
         <p className="rounded-2xl bg-zinc-50 py-10 text-center text-sm text-zinc-600 ring-1 ring-zinc-200">
           {articles.length === 0
             ? 'Aún no hay artículos. Ejecuta la migración SQL o crea productos en Proveedores.'
-            : 'Nada coincide con la búsqueda.'}
+            : origenFilter === 'cocina_central' && ccCount === 0
+              ? 'Ningún artículo de Cocina Central en este local. Guarda una fórmula en Cocina Central (mismo local de sesión) o revisa la migración SQL.'
+              : 'Nada coincide con el filtro o la búsqueda.'}
         </p>
       ) : (
         <ul className="space-y-2">
