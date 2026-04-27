@@ -239,7 +239,7 @@ export default function MarketingHero() {
           </motion.div>
 
           <motion.h1
-            className="mx-auto w-full max-w-[min(100%,22rem)] text-balance font-extrabold tracking-[-0.03em] text-stone-950 sm:max-w-[min(100%,32rem)] md:max-w-[min(100%,38rem)] lg:max-w-[min(100%,42rem)] xl:max-w-[44rem] text-[clamp(2.125rem,7.5vw,4.75rem)] leading-[1.04] sm:text-[clamp(2.4rem,6.2vw,4.75rem)] md:leading-[1.03] lg:text-[clamp(2.65rem,5.1vw,4.75rem)]"
+            className="mx-auto w-full max-w-[min(100%,24rem)] text-balance font-extrabold tracking-[-0.03em] text-stone-950 sm:max-w-[min(100%,34rem)] md:max-w-[min(100%,40rem)] lg:max-w-[min(100%,45rem)] xl:max-w-[48rem] text-[clamp(2.45rem,8.8vw,5.35rem)] leading-[1.03] sm:text-[clamp(2.8rem,6.9vw,5.35rem)] md:leading-[1.02] lg:text-[clamp(3.1rem,5.6vw,5.35rem)]"
             initial={reduceMotion ? false : { opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5, delay: reduceMotion ? 0 : 0.06 }}

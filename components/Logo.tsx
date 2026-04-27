@@ -11,12 +11,12 @@ const variantClassName: Record<LogoVariant, string> = {
   /** Hero: legible en móvil, moderado en escritorio; ancho máximo (SVG cuadrado ⇒ h auto). */
   hero: [
     'mx-auto block h-auto w-auto border-0 bg-transparent object-contain object-center outline-none ring-0',
-    'max-w-[min(90vw,17rem)]',
-    'sm:max-w-[min(86vw,18rem)]',
-    'md:max-w-[min(52vw,12rem)]',
-    'lg:max-w-[11rem]',
-    'xl:max-w-[11.5rem]',
-    '2xl:max-w-[12rem]',
+    'max-w-[min(96vw,24rem)]',
+    'sm:max-w-[min(90vw,26rem)]',
+    'md:max-w-[min(64vw,24rem)]',
+    'lg:max-w-[24rem]',
+    'xl:max-w-[25rem]',
+    '2xl:max-w-[26rem]',
   ].join(' '),
   login: [
     'mx-auto block w-auto object-contain object-center',
@@ -49,10 +49,11 @@ export type LogoProps = {
 export default function Logo({ variant = 'inline', className = '', alt = 'Chef-One', ...rest }: LogoProps) {
   const v = variantClassName[variant];
   const isSidebar = variant === 'sidebar';
+  const useWordmarkCropped = variant === 'sidebar' || variant === 'hero';
   /** Wordmark recortado (sin bandas vacías del canvas 375²) para el menú lateral. */
-  const src = isSidebar ? '/logo-chef-one-menu.svg' : '/logo-chef-one.svg';
-  const w = isSidebar ? 272 : 375;
-  const h = isSidebar ? 52 : 375;
+  const src = useWordmarkCropped ? '/logo-chef-one-menu.svg' : '/logo-chef-one.svg';
+  const w = useWordmarkCropped ? 272 : 375;
+  const h = useWordmarkCropped ? 52 : 375;
 
   return (
     <img
