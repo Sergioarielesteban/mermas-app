@@ -29,6 +29,9 @@ export type EscandalloRecipe = {
   salePriceGrossEur: number | null;
   /** Código artículo en TPV (ej. 00042). null = sin enlace a export POS. */
   posArticleCode: string | null;
+  /** Peso/volumen final útil real para coste (si existe, prevalece sobre yieldQty). */
+  finalWeightQty: number | null;
+  finalWeightUnit: 'kg' | 'l' | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -116,6 +119,8 @@ type RecipeRow = {
   sale_vat_rate_pct?: number | null;
   sale_price_gross_eur?: number | null;
   pos_article_code?: string | null;
+  final_weight_qty?: number | null;
+  final_weight_unit?: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -183,9 +188,22 @@ function mapRecipe(row: RecipeRow): EscandalloRecipe {
       row.pos_article_code != null && String(row.pos_article_code).trim() !== ''
         ? String(row.pos_article_code).trim()
         : null,
+    finalWeightQty:
+      row.final_weight_qty != null && Number.isFinite(Number(row.final_weight_qty)) && Number(row.final_weight_qty) > 0
+        ? Number(row.final_weight_qty)
+        : null,
+    finalWeightUnit:
+      row.final_weight_unit === 'kg' || row.final_weight_unit === 'l' ? row.final_weight_unit : null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
+}
+
+export function effectiveRecipeYieldQtyForCost(recipe: Pick<EscandalloRecipe, 'yieldQty' | 'finalWeightQty'>): number {
+  if (recipe.finalWeightQty != null && Number.isFinite(recipe.finalWeightQty) && recipe.finalWeightQty > 0) {
+    return recipe.finalWeightQty;
+  }
+  return recipe.yieldQty > 0 ? recipe.yieldQty : 1;
 }
 
 function mapLine(row: LineRow): EscandalloLine {
@@ -229,15 +247,19 @@ function mapProcessed(row: ProcessedRow): EscandalloProcessedProduct {
 }
 
 export async function fetchEscandalloRecipes(supabase: SupabaseClient, localId: string): Promise<EscandalloRecipe[]> {
-  const { data, error } = await supabase
+  const selectWithFinalWeight =
+    'id,local_id,name,notes,yield_qty,yield_label,is_sub_recipe,sale_vat_rate_pct,sale_price_gross_eur,pos_article_code,final_weight_qty,final_weight_unit,created_at,updated_at';
+  const selectLegacy =
+    'id,local_id,name,notes,yield_qty,yield_label,is_sub_recipe,sale_vat_rate_pct,sale_price_gross_eur,pos_article_code,created_at,updated_at';
+  const withFinal = await supabase
     .from('escandallo_recipes')
-    .select(
-      'id,local_id,name,notes,yield_qty,yield_label,is_sub_recipe,sale_vat_rate_pct,sale_price_gross_eur,pos_article_code,created_at,updated_at',
-    )
+    .select(selectWithFinalWeight)
     .eq('local_id', localId)
     .order('name');
-  if (error) throw new Error(error.message);
-  return ((data ?? []) as RecipeRow[]).map(mapRecipe);
+  if (!withFinal.error) return ((withFinal.data ?? []) as RecipeRow[]).map(mapRecipe);
+  const legacy = await supabase.from('escandallo_recipes').select(selectLegacy).eq('local_id', localId).order('name');
+  if (legacy.error) throw new Error(legacy.error.message);
+  return ((legacy.data ?? []) as RecipeRow[]).map(mapRecipe);
 }
 
 export async function fetchEscandalloLines(
@@ -471,6 +493,8 @@ export async function insertEscandalloRecipe(
     saleVatRatePct?: number | null;
     salePriceGrossEur?: number | null;
     posArticleCode?: string | null;
+    finalWeightQty?: number | null;
+    finalWeightUnit?: 'kg' | 'l' | null;
   },
 ): Promise<EscandalloRecipe> {
   const yieldQty = opts?.yieldQty != null && opts.yieldQty > 0 ? opts.yieldQty : 1;
@@ -492,15 +516,28 @@ export async function insertEscandalloRecipe(
     const c = opts.posArticleCode?.trim() ?? '';
     row.pos_article_code = c === '' ? null : c;
   }
-  const { data, error } = await supabase
+  if (opts?.finalWeightQty != null && Number.isFinite(opts.finalWeightQty) && opts.finalWeightQty > 0) {
+    row.final_weight_qty = Math.round(opts.finalWeightQty * 10000) / 10000;
+    row.final_weight_unit = opts.finalWeightUnit === 'l' ? 'l' : 'kg';
+  }
+  const withFinal = await supabase
     .from('escandallo_recipes')
     .insert(row)
     .select(
-      'id,local_id,name,notes,yield_qty,yield_label,is_sub_recipe,sale_vat_rate_pct,sale_price_gross_eur,pos_article_code,created_at,updated_at',
+      'id,local_id,name,notes,yield_qty,yield_label,is_sub_recipe,sale_vat_rate_pct,sale_price_gross_eur,pos_article_code,final_weight_qty,final_weight_unit,created_at,updated_at',
     )
     .single();
-  if (error) throw new Error(error.message);
-  return mapRecipe(data as RecipeRow);
+  if (!withFinal.error) return mapRecipe(withFinal.data as RecipeRow);
+  const fallbackRow = { ...row };
+  delete fallbackRow.final_weight_qty;
+  delete fallbackRow.final_weight_unit;
+  const legacy = await supabase
+    .from('escandallo_recipes')
+    .insert(fallbackRow)
+    .select('id,local_id,name,notes,yield_qty,yield_label,is_sub_recipe,sale_vat_rate_pct,sale_price_gross_eur,pos_article_code,created_at,updated_at')
+    .single();
+  if (legacy.error) throw new Error(legacy.error.message);
+  return mapRecipe(legacy.data as RecipeRow);
 }
 
 export async function updateEscandalloRecipe(
@@ -516,6 +553,8 @@ export async function updateEscandalloRecipe(
     saleVatRatePct?: number | null;
     salePriceGrossEur?: number | null;
     posArticleCode?: string | null;
+    finalWeightQty?: number | null;
+    finalWeightUnit?: 'kg' | 'l' | null;
   },
 ): Promise<void> {
   const row: Record<string, unknown> = {};
@@ -540,13 +579,29 @@ export async function updateEscandalloRecipe(
     const c = patch.posArticleCode?.trim() ?? '';
     row.pos_article_code = c === '' ? null : c;
   }
+  if (patch.finalWeightQty !== undefined) {
+    if (patch.finalWeightQty != null && Number.isFinite(patch.finalWeightQty) && patch.finalWeightQty > 0) {
+      row.final_weight_qty = Math.round(patch.finalWeightQty * 10000) / 10000;
+      row.final_weight_unit = patch.finalWeightUnit === 'l' ? 'l' : 'kg';
+    } else {
+      row.final_weight_qty = null;
+      row.final_weight_unit = null;
+    }
+  } else if (patch.finalWeightUnit !== undefined) {
+    row.final_weight_unit = patch.finalWeightUnit === 'l' ? 'l' : patch.finalWeightUnit === 'kg' ? 'kg' : null;
+  }
   if (Object.keys(row).length === 0) return;
   const { error } = await supabase
     .from('escandallo_recipes')
     .update(row)
     .eq('id', recipeId)
     .eq('local_id', localId);
-  if (error) throw new Error(error.message);
+  if (!error) return;
+  const fallbackRow = { ...row };
+  delete fallbackRow.final_weight_qty;
+  delete fallbackRow.final_weight_unit;
+  const second = await supabase.from('escandallo_recipes').update(fallbackRow).eq('id', recipeId).eq('local_id', localId);
+  if (second.error) throw new Error(second.error.message);
 }
 
 export async function deleteEscandalloRecipe(
@@ -737,7 +792,7 @@ export function lineUnitPriceEur(
 ): number {
   if (line.sourceType === 'subrecipe' && line.subRecipeId && innerCtx) {
     const sub = innerCtx.recipesById.get(line.subRecipeId);
-    if (!sub || sub.yieldQty <= 0) return 0;
+    if (!sub) return 0;
     const total = recipeLinesTotalRecursive(
       line.subRecipeId,
       innerCtx.linesByRecipe,
@@ -746,7 +801,8 @@ export function lineUnitPriceEur(
       processedById,
       innerCtx.expanding,
     );
-    return roundMoney(total / sub.yieldQty);
+    const denom = effectiveRecipeYieldQtyForCost(sub);
+    return denom > 0 ? roundMoney(total / denom) : 0;
   }
   if (line.sourceType === 'raw' && line.rawSupplierProductId) {
     const p = rawProductById.get(line.rawSupplierProductId);

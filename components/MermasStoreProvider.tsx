@@ -17,6 +17,7 @@ import {
   fetchEscandalloRawProductsWithWeightedPurchasePrices,
   fetchEscandalloRecipes,
   fetchProcessedProductsForEscandallo,
+  effectiveRecipeYieldQtyForCost,
   recipeTotalCostEur,
   type EscandalloLine,
 } from '@/lib/escandallos-supabase';
@@ -952,7 +953,7 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
             fetchProcessedProductsForEscandallo(supabase, localId),
           ]);
           const recipe = recipes.find((r) => r.id === product.escandalloId);
-          if (recipe && recipe.yieldQty > 0) {
+          if (recipe) {
             const linesByRecipe: Record<string, EscandalloLine[]> = {};
             const linesList = await Promise.all(recipes.map((r) => fetchEscandalloLines(supabase, localId, r.id)));
             recipes.forEach((r, i) => {
@@ -964,7 +965,7 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
               new Map(processed.map((x) => [x.id, x])),
               { linesByRecipe, recipesById: new Map(recipes.map((x) => [x.id, x])), recipeId: recipe.id },
             );
-            const perUnit = total > 0 ? Math.round((total / recipe.yieldQty) * 10000) / 10000 : 0;
+            const perUnit = total > 0 ? Math.round((total / effectiveRecipeYieldQtyForCost(recipe)) * 10000) / 10000 : 0;
             if (perUnit > 0) return { unitCost: perUnit, originUsed: 'escandallo' };
           }
         } catch {
@@ -992,7 +993,7 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
             }
           } else {
             const recipe = recipes.find((r) => r.id === product.baseSubrecipeId);
-            if (recipe && recipe.yieldQty > 0) {
+            if (recipe) {
               const linesByRecipe: Record<string, EscandalloLine[]> = {};
               const linesList = await Promise.all(recipes.map((r) => fetchEscandalloLines(supabase, localId, r.id)));
               recipes.forEach((r, i) => {
@@ -1004,7 +1005,7 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
                 new Map(processed.map((x) => [x.id, x])),
                 { linesByRecipe, recipesById: new Map(recipes.map((x) => [x.id, x])), recipeId: recipe.id },
               );
-              const per = total > 0 ? Math.round((total / recipe.yieldQty) * 10000) / 10000 : 0;
+              const per = total > 0 ? Math.round((total / effectiveRecipeYieldQtyForCost(recipe)) * 10000) / 10000 : 0;
               if (per > 0) return { unitCost: per, originUsed: 'base_subreceta' };
             }
           }
@@ -1045,14 +1046,14 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
               baseUnit = h?.unidadUso ?? line.unit;
             } else if (line.componentType === 'escandallo') {
               const recipe = recipes.find((r) => r.id === line.componentId);
-              if (recipe && recipe.yieldQty > 0) {
+              if (recipe) {
                 const total = recipeTotalCostEur(
                   linesByRecipe[recipe.id] ?? [],
                   new Map(rawProducts.map((x) => [x.id, x])),
                   new Map(processed.map((x) => [x.id, x])),
                   { linesByRecipe, recipesById: new Map(recipes.map((x) => [x.id, x])), recipeId: recipe.id },
                 );
-                baseCost = total > 0 ? total / recipe.yieldQty : null;
+                baseCost = total > 0 ? total / effectiveRecipeYieldQtyForCost(recipe) : null;
                 baseUnit = recipe.yieldLabel || line.unit;
               }
             } else if (line.componentType === 'base_subreceta') {
@@ -1065,14 +1066,14 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
                 }
               } else {
                 const recipe = recipes.find((r) => r.id === line.componentId);
-                if (recipe && recipe.yieldQty > 0) {
+                if (recipe) {
                   const total = recipeTotalCostEur(
                     linesByRecipe[recipe.id] ?? [],
                     new Map(rawProducts.map((x) => [x.id, x])),
                     new Map(processed.map((x) => [x.id, x])),
                     { linesByRecipe, recipesById: new Map(recipes.map((x) => [x.id, x])), recipeId: recipe.id },
                   );
-                  baseCost = total > 0 ? total / recipe.yieldQty : null;
+                  baseCost = total > 0 ? total / effectiveRecipeYieldQtyForCost(recipe) : null;
                   baseUnit = recipe.yieldLabel || line.unit;
                 }
               }

@@ -62,6 +62,8 @@ export type EscandalloRecipeEditorPersistV1 = {
   draftSaleGross: string;
   draftSaleVat: string;
   draftPosArticleCode: string;
+  draftFinalWeightQty?: string;
+  draftFinalWeightUnit?: 'kg' | 'l';
   ingredientDrafts: IngredientDraftRow[];
   updatedAt: number;
 };

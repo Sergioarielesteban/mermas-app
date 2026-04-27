@@ -52,6 +52,7 @@ import {
   lineUnitPriceEur,
   recipeTotalCostEur,
   saleNetPerUnitFromGross,
+  effectiveRecipeYieldQtyForCost,
   updateEscandalloLine,
   updateEscandalloRecipe,
   type EscandalloLine,
@@ -89,6 +90,8 @@ export default function EscandalloRecipeEditorClient({ recipeId }: { recipeId: s
   const [draftSaleGross, setDraftSaleGross] = useState('');
   const [draftSaleVat, setDraftSaleVat] = useState('10');
   const [draftPosArticleCode, setDraftPosArticleCode] = useState('');
+  const [draftFinalWeightQty, setDraftFinalWeightQty] = useState('');
+  const [draftFinalWeightUnit, setDraftFinalWeightUnit] = useState<'kg' | 'l'>('kg');
   const [ingredientDrafts, setIngredientDrafts] = useState<IngredientDraftRow[]>([emptyIngredientDraft()]);
 
   const [techBundle, setTechBundle] = useState<RecipeTechBundle>({ sheet: null, steps: [], loading: false });
@@ -119,6 +122,8 @@ export default function EscandalloRecipeEditorClient({ recipeId }: { recipeId: s
     setDraftSaleGross(r.salePriceGrossEur != null ? String(r.salePriceGrossEur) : '');
     setDraftSaleVat(r.saleVatRatePct != null ? String(r.saleVatRatePct) : '10');
     setDraftPosArticleCode(r.posArticleCode ?? '');
+    setDraftFinalWeightQty(r.finalWeightQty != null ? String(r.finalWeightQty) : '');
+    setDraftFinalWeightUnit(r.finalWeightUnit === 'l' ? 'l' : 'kg');
     setIngredientDrafts([emptyIngredientDraft()]);
   }, []);
 
@@ -210,6 +215,8 @@ export default function EscandalloRecipeEditorClient({ recipeId }: { recipeId: s
       setDraftSaleGross(stored.draftSaleGross);
       setDraftSaleVat(stored.draftSaleVat);
       setDraftPosArticleCode(stored.draftPosArticleCode);
+      setDraftFinalWeightQty(stored.draftFinalWeightQty ?? (recipe.finalWeightQty != null ? String(recipe.finalWeightQty) : ''));
+      setDraftFinalWeightUnit(stored.draftFinalWeightUnit === 'l' ? 'l' : recipe.finalWeightUnit === 'l' ? 'l' : 'kg');
       setIngredientDrafts(stored.ingredientDrafts);
     } else {
       hydrateDraftFromRecipe(recipe);
@@ -230,6 +237,8 @@ export default function EscandalloRecipeEditorClient({ recipeId }: { recipeId: s
       draftSaleGross,
       draftSaleVat,
       draftPosArticleCode,
+      draftFinalWeightQty,
+      draftFinalWeightUnit,
       ingredientDrafts,
       updatedAt: Date.now(),
     });
@@ -244,6 +253,8 @@ export default function EscandalloRecipeEditorClient({ recipeId }: { recipeId: s
     draftSaleGross,
     draftSaleVat,
     draftPosArticleCode,
+    draftFinalWeightQty,
+    draftFinalWeightUnit,
     ingredientDrafts,
   ]);
 
@@ -298,7 +309,29 @@ export default function EscandalloRecipeEditorClient({ recipeId }: { recipeId: s
   }, [lines, rawById, processedById, linesByRecipe, recipesById, recipe]);
 
   const yLive = parseDecimal(draftYieldQty) ?? recipe?.yieldQty ?? 1;
-  const costPerYield = yLive > 0 ? Math.round((totalCostLive / yLive) * 100) / 100 : 0;
+  const finalWeightLive = parseDecimal(draftFinalWeightQty);
+  const effectiveYieldForCost =
+    recipe?.isSubRecipe
+      ? finalWeightLive != null && finalWeightLive > 0
+        ? finalWeightLive
+        : recipe
+          ? effectiveRecipeYieldQtyForCost(recipe)
+          : yLive
+      : yLive;
+  const costPerYield = effectiveYieldForCost > 0 ? Math.round((totalCostLive / effectiveYieldForCost) * 100) / 100 : 0;
+  const pesoEntradaKg = useMemo(() => {
+    const toKg = (qty: number, unit: EscandalloLine['unit']): number => {
+      if (!Number.isFinite(qty) || qty <= 0) return 0;
+      if (unit === 'kg') return qty;
+      if (unit === 'g') return qty / 1000;
+      return 0;
+    };
+    return Math.round(lines.reduce((acc, line) => acc + toKg(line.qty, line.unit), 0) * 1000) / 1000;
+  }, [lines]);
+  const rendimientoPct =
+    recipe?.isSubRecipe && finalWeightLive != null && finalWeightLive > 0 && pesoEntradaKg > 0
+      ? Math.round((finalWeightLive / pesoEntradaKg) * 10000) / 100
+      : null;
   const grossLive = parseDecimal(draftSaleGross);
   const vatLive = parseDecimal(draftSaleVat) ?? 10;
   const netSale =
@@ -339,6 +372,7 @@ export default function EscandalloRecipeEditorClient({ recipeId }: { recipeId: s
       return;
     }
     const y = parseDecimal(draftYieldQty);
+    const finalWeight = parseDecimal(draftFinalWeightQty);
     const gross = parseDecimal(draftSaleGross);
     const vat = parseDecimal(draftSaleVat);
     setBusyId(recipe.id);
@@ -351,6 +385,19 @@ export default function EscandalloRecipeEditorClient({ recipeId }: { recipeId: s
         yieldQty: y != null && y > 0 ? y : undefined,
         yieldLabel: draftYieldLabel,
       };
+      if (recipe.isSubRecipe) {
+        if (finalWeight != null && finalWeight > 0) {
+          if (pesoEntradaKg > 0 && finalWeight > pesoEntradaKg) {
+            setBanner('El peso final no puede superar el peso de entrada.');
+            return;
+          }
+          patch.finalWeightQty = finalWeight;
+          patch.finalWeightUnit = draftFinalWeightUnit;
+        } else {
+          patch.finalWeightQty = null;
+          patch.finalWeightUnit = null;
+        }
+      }
       if (!recipe.isSubRecipe) {
         patch.posArticleCode = draftPosArticleCode.trim() === '' ? null : draftPosArticleCode.trim();
         if (gross != null && gross > 0) {
@@ -394,6 +441,13 @@ export default function EscandalloRecipeEditorClient({ recipeId }: { recipeId: s
                       : draftPosArticleCode.trim() === ''
                         ? null
                         : draftPosArticleCode.trim(),
+                  finalWeightQty:
+                    r.isSubRecipe
+                      ? finalWeight != null && finalWeight > 0
+                        ? Math.round(finalWeight * 10000) / 10000
+                        : null
+                      : r.finalWeightQty,
+                  finalWeightUnit: r.isSubRecipe ? (finalWeight != null && finalWeight > 0 ? draftFinalWeightUnit : null) : r.finalWeightUnit,
                 }
               : r,
           )
@@ -619,6 +673,35 @@ export default function EscandalloRecipeEditorClient({ recipeId }: { recipeId: s
                   />
                 </div>
               </label>
+              {recipe.isSubRecipe ? (
+                <label className="block rounded-xl bg-zinc-50/80 px-3 py-2 ring-1 ring-zinc-100">
+                  <span className="text-[10px] font-bold uppercase text-zinc-500">Peso final obtenido</span>
+                  <div className="mt-1 flex gap-2">
+                    <input
+                      value={draftFinalWeightQty}
+                      disabled={demoReadonly}
+                      onChange={(e) => setDraftFinalWeightQty(e.target.value)}
+                      className="w-24 rounded-lg border border-zinc-200 bg-white px-2 py-1.5 text-sm font-semibold tabular-nums"
+                      inputMode="decimal"
+                      placeholder="kg / L"
+                    />
+                    <select
+                      value={draftFinalWeightUnit}
+                      disabled={demoReadonly}
+                      onChange={(e) => setDraftFinalWeightUnit(e.target.value === 'l' ? 'l' : 'kg')}
+                      className="rounded-lg border border-zinc-200 bg-white px-2 py-1.5 text-sm"
+                    >
+                      <option value="kg">kg</option>
+                      <option value="l">L</option>
+                    </select>
+                  </div>
+                  {pesoEntradaKg > 0 && finalWeightLive != null && finalWeightLive > pesoEntradaKg ? (
+                    <p className="mt-1 text-[11px] font-medium text-amber-700">
+                      Aviso: el peso final supera el peso de entrada.
+                    </p>
+                  ) : null}
+                </label>
+              ) : null}
               {!recipe.isSubRecipe ? (
                 <label className="block rounded-xl bg-zinc-50/80 px-3 py-2 ring-1 ring-zinc-100">
                   <span className="text-[10px] font-bold uppercase text-zinc-500">PVP (€ IVA inc.)</span>
@@ -644,7 +727,9 @@ export default function EscandalloRecipeEditorClient({ recipeId }: { recipeId: s
                 </label>
               ) : null}
               <div className="rounded-xl bg-gradient-to-br from-[#B91C1C]/12 via-white to-white px-3 py-2 ring-1 ring-[#D32F2F]/15">
-                <span className="text-[10px] font-bold uppercase text-zinc-500">Coste / {draftYieldLabel || recipe.yieldLabel}</span>
+                <span className="text-[10px] font-bold uppercase text-zinc-500">
+                  Coste / {recipe.isSubRecipe && finalWeightLive != null && finalWeightLive > 0 ? draftFinalWeightUnit : draftYieldLabel || recipe.yieldLabel}
+                </span>
                 <p className="mt-1 text-xl font-black tabular-nums text-zinc-900">{formatMoneyEur(costPerYield)}</p>
                 <p className="text-[11px] text-zinc-500">Total batch {formatMoneyEur(totalCostLive)}</p>
               </div>
@@ -675,6 +760,29 @@ export default function EscandalloRecipeEditorClient({ recipeId }: { recipeId: s
                   />
                 </label>
               </div>
+            ) : null}
+            {recipe.isSubRecipe ? (
+              <div className="grid gap-3 sm:grid-cols-3">
+                <div className="rounded-xl border border-zinc-100 bg-white px-3 py-2">
+                  <p className="text-[10px] font-bold uppercase text-zinc-500">Peso entrada</p>
+                  <p className="text-lg font-black tabular-nums text-zinc-900">{pesoEntradaKg.toFixed(3)} kg</p>
+                </div>
+                <div className="rounded-xl border border-zinc-100 bg-white px-3 py-2">
+                  <p className="text-[10px] font-bold uppercase text-zinc-500">Peso final</p>
+                  <p className="text-lg font-black tabular-nums text-zinc-900">
+                    {finalWeightLive != null && finalWeightLive > 0 ? `${finalWeightLive.toFixed(3)} ${draftFinalWeightUnit === 'l' ? 'L' : 'kg'}` : '—'}
+                  </p>
+                </div>
+                <div className="rounded-xl border border-zinc-100 bg-white px-3 py-2">
+                  <p className="text-[10px] font-bold uppercase text-zinc-500">Rendimiento</p>
+                  <p className="text-lg font-black tabular-nums text-zinc-900">
+                    {rendimientoPct != null ? `${rendimientoPct.toFixed(2)} %` : '—'}
+                  </p>
+                </div>
+              </div>
+            ) : null}
+            {recipe.isSubRecipe && (finalWeightLive == null || finalWeightLive <= 0) ? (
+              <p className="text-xs text-amber-700">Introduce el peso final tras cocción para un coste mas preciso.</p>
             ) : null}
 
             <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">

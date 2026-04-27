@@ -11,6 +11,7 @@ import {
   fetchEscandalloRawProductsWithWeightedPurchasePrices,
   fetchEscandalloRecipes,
   fetchProcessedProductsForEscandallo,
+  effectiveRecipeYieldQtyForCost,
   recipeTotalCostEur,
   type EscandalloLine,
 } from '@/lib/escandallos-supabase';
@@ -69,7 +70,7 @@ export default function ProductosPage() {
       fetchProcessedProductsForEscandallo(supabase, localId),
     ]);
     const recipe = recipes.find((r) => r.id === recipeId);
-    if (!recipe || recipe.yieldQty <= 0) return null;
+    if (!recipe) return null;
 
     const linesByRecipe: Record<string, EscandalloLine[]> = {};
     const recipesById = new Map(recipes.map((r) => [r.id, r]));
@@ -95,7 +96,7 @@ export default function ProductosPage() {
       { linesByRecipe, recipesById, recipeId: recipe.id },
     );
     if (!Number.isFinite(total) || total <= 0) return null;
-    const perUnit = Math.round((total / recipe.yieldQty) * 10000) / 10000;
+    const perUnit = Math.round((total / effectiveRecipeYieldQtyForCost(recipe)) * 10000) / 10000;
     return perUnit > 0 ? perUnit : null;
   };
 
@@ -213,7 +214,7 @@ export default function ProductosPage() {
           return;
         }
         const recipe = recipes.find((r) => r.id === baseSubrecipeId);
-        if (!recipe || recipe.yieldQty <= 0) {
+        if (!recipe) {
           setBaseSubrecipeAutoPrice(null);
           return;
         }
@@ -229,7 +230,8 @@ export default function ProductosPage() {
           new Map(processedProducts.map((x) => [x.id, x])),
           { linesByRecipe, recipesById: new Map(recipes.map((x) => [x.id, x])), recipeId: recipe.id },
         );
-        setBaseSubrecipeAutoPrice(total > 0 ? Math.round((total / recipe.yieldQty) * 10000) / 10000 : 0);
+        const denom = effectiveRecipeYieldQtyForCost(recipe);
+        setBaseSubrecipeAutoPrice(total > 0 ? Math.round((total / denom) * 10000) / 10000 : 0);
       } catch {
         if (!active) return;
         setBaseSubrecipeAutoPrice(null);
@@ -300,7 +302,7 @@ export default function ProductosPage() {
         const resolveRecipeCostCached = async (recipeId: string): Promise<number | null> => {
           if (escandalloCostCache.has(recipeId)) return escandalloCostCache.get(recipeId) ?? null;
           const recipe = recipes.find((r) => r.id === recipeId);
-          if (!recipe || recipe.yieldQty <= 0) {
+          if (!recipe) {
             escandalloCostCache.set(recipeId, null);
             return null;
           }
@@ -325,7 +327,7 @@ export default function ProductosPage() {
             new Map(processedProducts.map((x) => [x.id, x])),
             { linesByRecipe, recipesById, recipeId },
           );
-          const per = total > 0 ? Math.round((total / recipe.yieldQty) * 10000) / 10000 : null;
+          const per = total > 0 ? Math.round((total / effectiveRecipeYieldQtyForCost(recipe)) * 10000) / 10000 : null;
           escandalloCostCache.set(recipeId, per);
           return per;
         };
