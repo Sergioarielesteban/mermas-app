@@ -8,9 +8,11 @@ import InventoryResultadoInventario from '@/components/InventoryResultadoInventa
 import { useAuth } from '@/components/AuthProvider';
 import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
 import { downloadInventoryMonthlyPdf, type InventoryPdfRow } from '@/lib/inventory-pdf';
+import MasterArticleSearchInput from '@/components/cocina-central/MasterArticleSearchInput';
 import {
   type InventoryCatalogCategory,
   type InventoryCatalogItem,
+  type InventoryCostOrigen,
   type InventoryItem,
   type InventoryMonthSnapshot,
   currentInventoryYearMonth,
@@ -27,9 +29,12 @@ import {
   deactivateInventoryCatalogCategory,
   deactivateInventoryCatalogItem,
   deleteAllInventoryLinesForLocal,
+  resolveInventoryItemUnitPriceEur,
   updateInventoryItemLine,
   upsertInventoryMonthSnapshot,
 } from '@/lib/inventory-supabase';
+import { fetchEscandalloRecipes, type EscandalloRecipe } from '@/lib/escandallos-supabase';
+import { fetchPurchaseArticles, type PurchaseArticle } from '@/lib/purchase-articles-supabase';
 import { appConfirm } from '@/lib/app-dialog-bridge';
 import { confirmDestructiveOperation } from '@/lib/ops-role-confirm';
 import { actorLabel, notifyInventarioCerrado } from '@/services/notifications';
@@ -73,7 +78,29 @@ type LineDraft = {
   name: string;
   format_label: string;
   unit: string;
+  origenCoste: InventoryCostOrigen;
+  masterArticleId: string;
+  escandalloRecipeId: string;
 };
+
+function labelOrigenInventario(o: InventoryCostOrigen): string {
+  if (o === 'master') return 'Artículo máster';
+  if (o === 'produccion_propia') return 'Producción propia';
+  return 'Manual';
+}
+
+function lineDraftFromRow(row: InventoryItem): LineDraft {
+  return {
+    qty: String(row.quantity_on_hand),
+    price: String(row.price_per_unit),
+    name: row.name,
+    format_label: row.format_label ?? '',
+    unit: row.unit,
+    origenCoste: row.origenCoste,
+    masterArticleId: row.masterArticleId ?? '',
+    escandalloRecipeId: row.escandalloRecipeId ?? '',
+  };
+}
 
 export default function InventarioPage() {
   const { localId, profileReady, localName, localCode, userId, displayName, loginUsername, profileRole } =
@@ -109,6 +136,9 @@ export default function InventarioPage() {
   const [finishInventoryBusy, setFinishInventoryBusy] = useState(false);
   const [busyDeletingCategoryId, setBusyDeletingCategoryId] = useState<string | null>(null);
   const [busyDeletingCatalogItemId, setBusyDeletingCatalogItemId] = useState<string | null>(null);
+  const [purchaseArticles, setPurchaseArticles] = useState<PurchaseArticle[]>([]);
+  const [escandalloRecipes, setEscandalloRecipes] = useState<EscandalloRecipe[]>([]);
+  const [escandalloRecipeQuery, setEscandalloRecipeQuery] = useState<Record<string, string>>({});
   const loadRef = useRef<() => Promise<void>>(() => Promise.resolve());
 
   const supabaseOk = isSupabaseEnabled() && getSupabaseClient();
@@ -139,13 +169,7 @@ export default function InventarioPage() {
       const d: Record<string, LineDraft> = {};
       const cq: Record<string, string> = {};
       for (const row of inv) {
-        d[row.id] = {
-          qty: String(row.quantity_on_hand),
-          price: String(row.price_per_unit),
-          name: row.name,
-          format_label: row.format_label ?? '',
-          unit: row.unit,
-        };
+        d[row.id] = lineDraftFromRow(row);
         if (row.catalog_item_id) cq[row.catalog_item_id] = String(row.quantity_on_hand);
       }
       setDrafts(d);
@@ -164,6 +188,15 @@ export default function InventarioPage() {
       } else if (msg.toLowerCase().includes('local_id')) {
         setBanner(
           'El catálogo debe estar migrado por local. Ejecuta supabase-inventory-catalog-per-local.sql en Supabase (SQL Editor).',
+        );
+        setCategories([]);
+        setCatalogItems([]);
+        setLines([]);
+        setSnapshots([]);
+        setCatalogQtyDraft({});
+      } else if (msg.toLowerCase().includes('origen_coste') || msg.toLowerCase().includes('master_article_id')) {
+        setBanner(
+          'Falta la migración de origen de coste en inventario. Ejecuta en Supabase: supabase-inventory-origen-coste.sql',
         );
         setCategories([]);
         setCatalogItems([]);
@@ -192,6 +225,28 @@ export default function InventarioPage() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    if (!localId || !supabaseOk) {
+      setPurchaseArticles([]);
+      setEscandalloRecipes([]);
+      return;
+    }
+    const supabase = getSupabaseClient()!;
+    void (async () => {
+      try {
+        const [arts, rec] = await Promise.all([
+          fetchPurchaseArticles(supabase, localId),
+          fetchEscandalloRecipes(supabase, localId).catch(() => [] as EscandalloRecipe[]),
+        ]);
+        setPurchaseArticles(arts);
+        setEscandalloRecipes(rec);
+      } catch {
+        setPurchaseArticles([]);
+        setEscandalloRecipes([]);
+      }
+    })();
+  }, [localId, supabaseOk]);
 
   useEffect(() => {
     if (!localId || !supabaseOk) return;
@@ -254,14 +309,6 @@ export default function InventarioPage() {
     );
   }, [catalogItems, searchLower]);
 
-  const lineDraftFromRow = (row: InventoryItem): LineDraft => ({
-    qty: String(row.quantity_on_hand),
-    price: String(row.price_per_unit),
-    name: row.name,
-    format_label: row.format_label ?? '',
-    unit: row.unit,
-  });
-
   /** Valores en pantalla (borradores) → PDF, KPI por categoría y copia de historial. */
   const buildMonthClosureData = useCallback(() => {
     const itemToCat = new Map(catalogItems.map((i) => [i.id, i.catalog_category_id]));
@@ -271,13 +318,7 @@ export default function InventarioPage() {
     let total = 0;
     let linesWithStock = 0;
     for (const row of lines) {
-      const d = drafts[row.id] ?? {
-        qty: String(row.quantity_on_hand),
-        price: String(row.price_per_unit),
-        name: row.name,
-        format_label: row.format_label ?? '',
-        unit: row.unit,
-      };
+      const d = drafts[row.id] ?? lineDraftFromRow(row);
       const q = parseDecimal(d.qty ?? String(row.quantity_on_hand)) ?? row.quantity_on_hand;
       const p = parseDecimal(d.price ?? String(row.price_per_unit)) ?? row.price_per_unit;
       const sub = Math.round(q * p * 100) / 100;
@@ -375,10 +416,9 @@ export default function InventarioPage() {
       fail('Cantidad no válida.');
       return;
     }
-    if (p === null || p < 0) {
-      fail('Precio no válido.');
-      return;
-    }
+    const origen = d.origenCoste ?? 'manual';
+    const masterId = d.masterArticleId?.trim() ? d.masterArticleId.trim() : null;
+    const escId = d.escandalloRecipeId?.trim() ? d.escandalloRecipeId.trim() : null;
     const nm = d.name.trim();
     if (!nm) {
       fail('El nombre no puede estar vacío.');
@@ -392,16 +432,65 @@ export default function InventarioPage() {
     if (!opts?.skipBusy) setBusyId(row.id);
     if (!opts?.skipReload && !opts?.throwing) setBanner(null);
     try {
+      let priceOut: number;
+      let precioManual: number | null = null;
+      if (origen === 'manual') {
+        if (p === null || p < 0) {
+          fail('Precio no válido.');
+          return;
+        }
+        priceOut = p;
+        precioManual = p;
+      } else {
+        if (origen === 'master' && !masterId) {
+          fail('Elige un artículo máster.');
+          return;
+        }
+        if (origen === 'produccion_propia' && !escId) {
+          fail('Elige una base, subreceta o receta (producción propia).');
+          return;
+        }
+        const resolved = await resolveInventoryItemUnitPriceEur(supabase, localId, {
+          origenCoste: origen,
+          masterArticleId: origen === 'master' ? masterId : null,
+          escandalloRecipeId: origen === 'produccion_propia' ? escId : null,
+          price_per_unit: row.price_per_unit,
+          precioManual: row.precioManual,
+        });
+        if (resolved == null) {
+          fail(
+            origen === 'master'
+              ? 'No hay coste de uso (€/ud) para ese artículo máster.'
+              : 'No se pudo calcular el coste desde la receta (revisa el escandallo: ingredientes y unidades).',
+          );
+          return;
+        }
+        priceOut = resolved;
+      }
       await updateInventoryItemLine(supabase, {
         localId,
         itemId: row.id,
         quantity_on_hand: q,
-        price_per_unit: p,
+        price_per_unit: priceOut,
         name: nm,
         format_label: d.format_label.trim() ? d.format_label.trim() : null,
         unit: d.unit,
+        origenCoste: origen,
+        masterArticleId: origen === 'master' ? masterId : null,
+        escandalloRecipeId: origen === 'produccion_propia' ? escId : null,
+        precioManual: precioManual,
       });
-      setDrafts((prev) => ({ ...prev, [row.id]: { ...d, name: nm } }));
+      setDrafts((prev) => ({
+        ...prev,
+        [row.id]: {
+          ...d,
+          name: nm,
+          price: String(priceOut),
+          origenCoste: origen,
+          masterArticleId: origen === 'master' ? masterId ?? '' : '',
+          escandalloRecipeId: origen === 'produccion_propia' ? escId ?? '' : '',
+        },
+      }));
       const catalogId = row.catalog_item_id;
       if (catalogId) {
         setCatalogQtyDraft((prev) => ({ ...prev, [catalogId]: String(q) }));
@@ -1020,6 +1109,11 @@ export default function InventarioPage() {
                                   />
                                   <div className="min-w-0">
                                     <p className="text-xs font-semibold text-zinc-900">{it.name}</p>
+                                    {line && !detailsOpen ? (
+                                      <p className="mt-0.5 text-[10px] text-amber-900/90">
+                                        Origen coste: {labelOrigenInventario(line.origenCoste)}
+                                      </p>
+                                    ) : null}
                                     {detailsOpen ? (
                                       <p className="mt-1 text-[10px] leading-snug text-zinc-500">
                                         Catálogo: {it.default_price_per_unit.toFixed(2)} €/
@@ -1124,22 +1218,125 @@ export default function InventarioPage() {
                                     </select>
                                   </label>
                                 </div>
+                                <div className="rounded-lg border border-zinc-200 bg-zinc-50/80 px-2 py-2">
+                                  <p className="text-[10px] font-bold uppercase text-zinc-600">Origen del coste</p>
+                                  <select
+                                    value={lineDraft.origenCoste}
+                                    disabled={disabled || lineBusy || qtyBusy}
+                                    onChange={(e) => {
+                                      const v = e.target.value as InventoryCostOrigen;
+                                      setDrafts((prev) => {
+                                        const cur = prev[line.id] ?? lineDraftFromRow(line);
+                                        return {
+                                          ...prev,
+                                          [line.id]: {
+                                            ...cur,
+                                            origenCoste: v,
+                                            masterArticleId: v === 'master' ? cur.masterArticleId : '',
+                                            escandalloRecipeId: v === 'produccion_propia' ? cur.escandalloRecipeId : '',
+                                          },
+                                        };
+                                      });
+                                    }}
+                                    className="mt-1 h-9 w-full rounded-lg border border-zinc-200 bg-white px-2 text-xs font-semibold"
+                                  >
+                                    <option value="manual">Manual</option>
+                                    <option value="master">Artículo máster</option>
+                                    <option value="produccion_propia">Producción propia (base / subreceta)</option>
+                                  </select>
+                                  {lineDraft.origenCoste === 'master' ? (
+                                    <div className="mt-2">
+                                      <p className="text-[9px] font-bold uppercase text-zinc-500">Artículo máster</p>
+                                      <MasterArticleSearchInput
+                                        className="mt-0.5"
+                                        articles={purchaseArticles}
+                                        value={lineDraft.masterArticleId}
+                                        onSelect={(a) =>
+                                          setDrafts((prev) => ({
+                                            ...prev,
+                                            [line.id]: { ...(prev[line.id] ?? lineDraftFromRow(line)), masterArticleId: a.id },
+                                          }))
+                                        }
+                                        onClear={() =>
+                                          setDrafts((prev) => ({
+                                            ...prev,
+                                            [line.id]: { ...(prev[line.id] ?? lineDraftFromRow(line)), masterArticleId: '' },
+                                          }))
+                                        }
+                                        disabled={disabled || lineBusy || qtyBusy}
+                                      />
+                                    </div>
+                                  ) : null}
+                                  {lineDraft.origenCoste === 'produccion_propia' ? (
+                                    <div className="mt-2 space-y-1">
+                                      <p className="text-[9px] font-bold uppercase text-zinc-500">
+                                        Base / subreceta (escandallo)
+                                      </p>
+                                      <input
+                                        type="search"
+                                        placeholder="Filtrar por nombre…"
+                                        value={escandalloRecipeQuery[line.id] ?? ''}
+                                        disabled={disabled || lineBusy || qtyBusy}
+                                        onChange={(e) =>
+                                          setEscandalloRecipeQuery((prev) => ({
+                                            ...prev,
+                                            [line.id]: e.target.value,
+                                          }))
+                                        }
+                                        className="h-9 w-full rounded-lg border border-zinc-200 px-2 text-xs"
+                                      />
+                                      <select
+                                        value={lineDraft.escandalloRecipeId}
+                                        disabled={disabled || lineBusy || qtyBusy}
+                                        onChange={(e) =>
+                                          setDrafts((prev) => ({
+                                            ...prev,
+                                            [line.id]: {
+                                              ...(prev[line.id] ?? lineDraftFromRow(line)),
+                                              escandalloRecipeId: e.target.value,
+                                            },
+                                          }))
+                                        }
+                                        className="h-10 w-full max-h-40 rounded-lg border border-zinc-200 bg-white px-2 text-xs font-semibold"
+                                      >
+                                        <option value="">— Elegir receta —</option>
+                                        {escandalloRecipes
+                                          .filter((r) => {
+                                            const t = (escandalloRecipeQuery[line.id] ?? '').trim().toLowerCase();
+                                            if (!t) return true;
+                                            return r.name.toLowerCase().includes(t);
+                                          })
+                                          .map((r) => (
+                                            <option key={r.id} value={r.id}>
+                                              {r.isSubRecipe ? '[Base] ' : '[Plato] '}
+                                              {r.name}
+                                            </option>
+                                          ))}
+                                      </select>
+                                      <p className="text-[10px] leading-snug text-zinc-500">
+                                        Coste teórico del escandallo (ingredientes, rendimiento, subrecetas). Aquí no se
+                                        muestra la receta.
+                                      </p>
+                                    </div>
+                                  ) : null}
+                                </div>
                                 <label className="block sm:max-w-[10rem]">
                                   <span className="text-[9px] font-bold uppercase text-zinc-400">
                                     € / {UNIT_SUFFIX[lineDraft.unit] ?? lineDraft.unit}
+                                    {lineDraft.origenCoste !== 'manual' ? ' (auto. al guardar)' : ''}
                                   </span>
                                   <input
                                     type="text"
                                     inputMode="decimal"
                                     value={lineDraft.price}
-                                    disabled={disabled || lineBusy || qtyBusy}
+                                    disabled={disabled || lineBusy || qtyBusy || lineDraft.origenCoste !== 'manual'}
                                     onChange={(e) =>
                                       setDrafts((prev) => ({
                                         ...prev,
                                         [line.id]: { ...lineDraft, price: e.target.value },
                                       }))
                                     }
-                                    className="mt-0.5 h-9 w-full rounded-lg border border-zinc-200 px-2 text-sm font-semibold tabular-nums"
+                                    className="mt-0.5 h-9 w-full rounded-lg border border-zinc-200 px-2 text-sm font-semibold tabular-nums disabled:bg-zinc-100"
                                   />
                                 </label>
                                 <div className="flex flex-wrap items-center justify-between gap-2">

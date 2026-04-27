@@ -1,4 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { fetchEscandalloRecipeUnitCostEur } from '@/lib/inventory-escandallo-cost';
+import { fetchPurchaseArticleCostHintsByIds } from '@/lib/purchase-articles-supabase';
 
 export type InventoryCatalogCategory = {
   id: string;
@@ -20,6 +22,8 @@ export type InventoryCatalogItem = {
   is_active: boolean;
 };
 
+export type InventoryCostOrigen = 'manual' | 'master' | 'produccion_propia';
+
 export type InventoryItem = {
   id: string;
   local_id: string;
@@ -33,6 +37,10 @@ export type InventoryItem = {
   notes: string;
   sort_order: number;
   is_active: boolean;
+  origenCoste: InventoryCostOrigen;
+  masterArticleId: string | null;
+  escandalloRecipeId: string | null;
+  precioManual: number | null;
 };
 
 export async function fetchInventoryCatalogCategories(
@@ -81,18 +89,64 @@ export async function fetchInventoryItems(
   const { data, error } = await supabase
     .from('inventory_items')
     .select(
-      'id,local_id,catalog_item_id,local_category_id,name,unit,price_per_unit,quantity_on_hand,format_label,notes,sort_order,is_active',
+      'id,local_id,catalog_item_id,local_category_id,name,unit,price_per_unit,quantity_on_hand,format_label,notes,sort_order,is_active,origen_coste,master_article_id,escandallo_recipe_id,precio_manual',
     )
     .eq('local_id', localId)
     .eq('is_active', true)
     .order('sort_order', { ascending: true })
     .order('name', { ascending: true });
   if (error) throw new Error(error.message);
-  return (data ?? []).map((row) => ({
-    ...row,
+  return (data ?? []).map((row) => mapInventoryItemRow(row));
+}
+
+function mapInventoryItemRow(row: Record<string, unknown>): InventoryItem {
+  const o = row.origen_coste;
+  const origenCoste: InventoryCostOrigen =
+    o === 'master' || o === 'produccion_propia' ? o : 'manual';
+  return {
+    id: String(row.id),
+    local_id: String(row.local_id),
+    catalog_item_id: row.catalog_item_id != null ? String(row.catalog_item_id) : null,
+    local_category_id: row.local_category_id != null ? String(row.local_category_id) : null,
+    name: String(row.name ?? ''),
+    unit: String(row.unit ?? ''),
     price_per_unit: Number(row.price_per_unit),
     quantity_on_hand: Number(row.quantity_on_hand),
-  })) as InventoryItem[];
+    format_label: row.format_label != null ? String(row.format_label) : null,
+    notes: String(row.notes ?? ''),
+    sort_order: Number(row.sort_order ?? 0),
+    is_active: Boolean(row.is_active),
+    origenCoste,
+    masterArticleId: row.master_article_id != null ? String(row.master_article_id) : null,
+    escandalloRecipeId: row.escandallo_recipe_id != null ? String(row.escandallo_recipe_id) : null,
+    precioManual: row.precio_manual != null && Number.isFinite(Number(row.precio_manual)) ? Number(row.precio_manual) : null,
+  };
+}
+
+/**
+ * Resuelve €/ud de valoración según origen (máster, subreceta/escandallo, manual).
+ */
+export async function resolveInventoryItemUnitPriceEur(
+  supabase: SupabaseClient,
+  localId: string,
+  row: Pick<InventoryItem, 'origenCoste' | 'masterArticleId' | 'escandalloRecipeId' | 'price_per_unit' | 'precioManual'>,
+): Promise<number | null> {
+  if (row.origenCoste === 'manual') {
+    const p = row.precioManual;
+    if (p != null && Number.isFinite(p) && p >= 0) return Math.round(p * 100) / 100;
+    return row.price_per_unit >= 0 ? Math.round(row.price_per_unit * 100) / 100 : null;
+  }
+  if (row.origenCoste === 'master' && row.masterArticleId) {
+    const m = await fetchPurchaseArticleCostHintsByIds(supabase, localId, [row.masterArticleId]);
+    const h = m.get(row.masterArticleId);
+    const p = h?.costeUnitarioUso;
+    return p != null && Number.isFinite(p) && p > 0 ? Math.round(p * 10000) / 10000 : null;
+  }
+  if (row.origenCoste === 'produccion_propia' && row.escandalloRecipeId) {
+    const r = await fetchEscandalloRecipeUnitCostEur(supabase, localId, row.escandalloRecipeId);
+    return r?.costPerUnit ?? null;
+  }
+  return null;
 }
 
 export async function insertInventoryLineFromCatalog(
@@ -119,6 +173,7 @@ export async function insertInventoryLineFromCatalog(
     .maybeSingle();
   const nextSort = (maxRow?.sort_order ?? 0) + 1;
 
+  const basePrice = Math.round(c.default_price_per_unit * 100) / 100;
   const { data, error } = await supabase
     .from('inventory_items')
     .insert({
@@ -127,25 +182,24 @@ export async function insertInventoryLineFromCatalog(
       local_category_id: null,
       name: c.name,
       unit: c.unit,
-      price_per_unit: Math.round(c.default_price_per_unit * 100) / 100,
+      price_per_unit: basePrice,
       quantity_on_hand: q0,
       format_label: c.format_label,
       notes: '',
       sort_order: nextSort,
       is_active: true,
       created_by: params.userId,
+      origen_coste: 'manual',
+      master_article_id: null,
+      escandallo_recipe_id: null,
+      precio_manual: basePrice,
     })
     .select(
-      'id,local_id,catalog_item_id,local_category_id,name,unit,price_per_unit,quantity_on_hand,format_label,notes,sort_order,is_active',
+      'id,local_id,catalog_item_id,local_category_id,name,unit,price_per_unit,quantity_on_hand,format_label,notes,sort_order,is_active,origen_coste,master_article_id,escandallo_recipe_id,precio_manual',
     )
     .single();
   if (error) throw new Error(error.message);
-  const row = data as Record<string, unknown>;
-  return {
-    ...row,
-    price_per_unit: Number(row.price_per_unit),
-    quantity_on_hand: Number(row.quantity_on_hand),
-  } as InventoryItem;
+  return mapInventoryItemRow(data as Record<string, unknown>);
 }
 
 export async function updateInventoryItemLine(
@@ -158,22 +212,32 @@ export async function updateInventoryItemLine(
     name: string;
     format_label: string | null;
     unit: string;
+    origenCoste?: InventoryCostOrigen;
+    masterArticleId?: string | null;
+    escandalloRecipeId?: string | null;
+    precioManual?: number | null;
   },
 ): Promise<void> {
   const q = Math.round(params.quantity_on_hand * 1000) / 1000;
   const p = Math.round(params.price_per_unit * 100) / 100;
   const nm = params.name.trim();
-  const { error } = await supabase
-    .from('inventory_items')
-    .update({
-      quantity_on_hand: q,
-      price_per_unit: p,
-      name: nm,
-      format_label: params.format_label?.trim() ? params.format_label.trim() : null,
-      unit: params.unit,
-    })
-    .eq('id', params.itemId)
-    .eq('local_id', params.localId);
+  const row: Record<string, unknown> = {
+    quantity_on_hand: q,
+    price_per_unit: p,
+    name: nm,
+    format_label: params.format_label?.trim() ? params.format_label.trim() : null,
+    unit: params.unit,
+  };
+  if (params.origenCoste != null) row.origen_coste = params.origenCoste;
+  if (params.masterArticleId !== undefined) row.master_article_id = params.masterArticleId;
+  if (params.escandalloRecipeId !== undefined) row.escandallo_recipe_id = params.escandalloRecipeId;
+  if (params.precioManual !== undefined) {
+    row.precio_manual =
+      params.precioManual != null && Number.isFinite(params.precioManual)
+        ? Math.round(params.precioManual * 10000) / 10000
+        : null;
+  }
+  const { error } = await supabase.from('inventory_items').update(row).eq('id', params.itemId).eq('local_id', params.localId);
   if (error) throw new Error(error.message);
 }
 
