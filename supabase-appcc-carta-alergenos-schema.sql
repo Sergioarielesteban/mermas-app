@@ -74,6 +74,26 @@ create trigger trg_product_allergens_updated_at
 before update on public.product_allergens
 for each row execute procedure public.set_updated_at();
 
+create table if not exists public.product_allergen_profiles (
+  id uuid primary key default gen_random_uuid(),
+  local_id uuid not null references public.locals(id) on delete cascade,
+  product_id uuid not null references public.pedido_supplier_products(id) on delete cascade,
+  sin_alergenos boolean not null default false,
+  verified_by uuid references auth.users(id),
+  verified_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (local_id, product_id)
+);
+
+create index if not exists idx_product_allergen_profiles_local_product
+  on public.product_allergen_profiles(local_id, product_id);
+
+drop trigger if exists trg_product_allergen_profiles_updated_at on public.product_allergen_profiles;
+create trigger trg_product_allergen_profiles_updated_at
+before update on public.product_allergen_profiles
+for each row execute procedure public.set_updated_at();
+
 -- -----------------------------------------------------------------------------
 -- 3) Estado de revisión por plato (reutiliza escandallo_recipes)
 -- -----------------------------------------------------------------------------
@@ -173,6 +193,12 @@ as $$
     select 1
     from public.product_allergens pa
     where pa.product_id = rp.product_id
+  )
+  and not exists (
+    select 1
+    from public.product_allergen_profiles pap
+    where pap.product_id = rp.product_id
+      and pap.sin_alergenos is true
   );
 $$;
 
@@ -679,6 +705,11 @@ create trigger trg_appcc_recalc_on_product_allergen_change
 after insert or update or delete on public.product_allergens
 for each row execute function public.appcc_recalc_recipe_from_product_trigger();
 
+drop trigger if exists trg_appcc_recalc_on_product_allergen_profile_change on public.product_allergen_profiles;
+create trigger trg_appcc_recalc_on_product_allergen_profile_change
+after insert or update or delete on public.product_allergen_profiles
+for each row execute function public.appcc_recalc_recipe_from_product_trigger();
+
 -- -----------------------------------------------------------------------------
 -- 7) RLS
 -- -----------------------------------------------------------------------------
@@ -687,6 +718,7 @@ alter table public.product_allergens enable row level security;
 alter table public.recipe_allergens enable row level security;
 alter table public.recipe_allergen_sources enable row level security;
 alter table public.recipe_allergen_review_log enable row level security;
+alter table public.product_allergen_profiles enable row level security;
 
 drop policy if exists "allergens master read all authenticated" on public.allergens_master;
 create policy "allergens master read all authenticated"
@@ -705,6 +737,21 @@ using (local_id = public.current_local_id());
 drop policy if exists "product allergens same local write" on public.product_allergens;
 create policy "product allergens same local write"
 on public.product_allergens
+for all
+to authenticated
+using (local_id = public.current_local_id())
+with check (local_id = public.current_local_id());
+
+drop policy if exists "product allergen profiles same local read" on public.product_allergen_profiles;
+create policy "product allergen profiles same local read"
+on public.product_allergen_profiles
+for select
+to authenticated
+using (local_id = public.current_local_id());
+
+drop policy if exists "product allergen profiles same local write" on public.product_allergen_profiles;
+create policy "product allergen profiles same local write"
+on public.product_allergen_profiles
 for all
 to authenticated
 using (local_id = public.current_local_id())

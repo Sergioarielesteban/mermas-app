@@ -9,6 +9,7 @@ import { useAuth } from '@/components/AuthProvider';
 import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
 import {
   fetchCartaRecipesWithReviewStatus,
+  fetchProductAllergenProfilesForLocal,
   fetchProductAllergensForLocal,
   fetchRecipeAllergensForLocal,
   refreshRecipeAllergens,
@@ -69,10 +70,11 @@ export default function AppccCartaAlergenosPage() {
       try {
         const fetchedRecipes = await fetchCartaRecipesWithReviewStatus(supabase, localId);
         await Promise.all(fetchedRecipes.map((r) => refreshRecipeAllergens(supabase, r.id)));
-        const [recipesAfter, allergens, productRows, lineRows, processedRows] = await Promise.all([
+        const [recipesAfter, allergens, productRows, productProfiles, lineRows, processedRows] = await Promise.all([
           fetchCartaRecipesWithReviewStatus(supabase, localId),
           fetchRecipeAllergensForLocal(supabase, localId),
           fetchProductAllergensForLocal(supabase, localId),
+          fetchProductAllergenProfilesForLocal(supabase, localId),
           supabase
             .from('escandallo_recipe_lines')
             .select('raw_supplier_product_id,processed_product_id,source_type')
@@ -105,6 +107,9 @@ export default function AppccCartaAlergenosPage() {
           }
         }
         const productsWithSheet = new Set(productRows.map((r) => r.product_id));
+        productProfiles.forEach((p) => {
+          if (p.sin_alergenos) productsWithSheet.add(p.product_id);
+        });
         let without = 0;
         usedProducts.forEach((p) => {
           if (!productsWithSheet.has(p)) without += 1;

@@ -8,6 +8,7 @@ import { useAuth } from '@/components/AuthProvider';
 import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
 import {
   fetchAllergensMaster,
+  fetchProductAllergenProfilesForLocal,
   fetchProductAllergensForLocal,
   fetchSupplierProductsForAllergens,
   saveProductAllergenSelection,
@@ -29,6 +30,7 @@ export default function AppccCartaAlergenosProductosPage() {
   const [products, setProducts] = useState<SupplierProductLite[]>([]);
   const [allergens, setAllergens] = useState<AllergenMasterRow[]>([]);
   const [rows, setRows] = useState<ProductAllergenRow[]>([]);
+  const [noAllergenByProduct, setNoAllergenByProduct] = useState<Record<string, boolean>>({});
   const [search, setSearch] = useState('');
   const [selectedProductId, setSelectedProductId] = useState<string>('');
   const [draft, setDraft] = useState<DraftMap>({});
@@ -54,10 +56,17 @@ export default function AppccCartaAlergenosProductosPage() {
           fetchAllergensMaster(supabase),
           fetchProductAllergensForLocal(supabase, localId),
         ]);
+        const profiles = await fetchProductAllergenProfilesForLocal(supabase, localId);
         if (!active) return;
         setProducts(p);
         setAllergens(a);
         setRows(r);
+        setNoAllergenByProduct(
+          profiles.reduce<Record<string, boolean>>((acc, x) => {
+            acc[x.product_id] = Boolean(x.sin_alergenos);
+            return acc;
+          }, {}),
+        );
         if (p.length > 0) setSelectedProductId((prev) => prev || p[0].id);
       } catch (e: unknown) {
         setBanner(e instanceof Error ? e.message : 'No se pudo cargar productos.');
@@ -101,8 +110,12 @@ export default function AppccCartaAlergenosProductosPage() {
   }, [selectedProductId, byProduct, allergens]);
 
   const selectedProduct = products.find((p) => p.id === selectedProductId) ?? null;
+  const noAllergensSelected = selectedProductId ? (noAllergenByProduct[selectedProductId] ?? false) : false;
 
   const toggleAllergen = (allergenId: string) => {
+    if (selectedProductId) {
+      setNoAllergenByProduct((prev) => ({ ...prev, [selectedProductId]: false }));
+    }
     setDraft((prev) => ({
       ...prev,
       [allergenId]: {
@@ -128,10 +141,20 @@ export default function AppccCartaAlergenosProductosPage() {
         localId,
         productId: selectedProductId,
         userId,
+        noAllergens: noAllergensSelected,
         selections,
       });
-      const latestRows = await fetchProductAllergensForLocal(supabase, localId);
+      const [latestRows, profiles] = await Promise.all([
+        fetchProductAllergensForLocal(supabase, localId),
+        fetchProductAllergenProfilesForLocal(supabase, localId),
+      ]);
       setRows(latestRows);
+      setNoAllergenByProduct(
+        profiles.reduce<Record<string, boolean>>((acc, x) => {
+          acc[x.product_id] = Boolean(x.sin_alergenos);
+          return acc;
+        }, {}),
+      );
       setBanner('Ficha de alérgenos guardada.');
     } catch (e: unknown) {
       setBanner(e instanceof Error ? e.message : 'No se pudo guardar.');
@@ -183,7 +206,7 @@ export default function AppccCartaAlergenosProductosPage() {
         </div>
         <div className="mt-2 max-h-44 overflow-auto space-y-1">
           {filteredProducts.map((p) => {
-            const complete = (byProduct.get(p.id) ?? []).length > 0;
+            const complete = (byProduct.get(p.id) ?? []).length > 0 || Boolean(noAllergenByProduct[p.id]);
             return (
               <button
                 key={p.id}
@@ -208,11 +231,37 @@ export default function AppccCartaAlergenosProductosPage() {
         <section className="rounded-2xl border border-zinc-200 bg-white p-4 ring-1 ring-zinc-100">
           <p className="text-sm font-bold text-zinc-900">{selectedProduct.name}</p>
           <p className="text-xs text-zinc-500">Selecciona alérgenos y tipo de presencia.</p>
+          <div className="mt-3">
+            <button
+              type="button"
+              onClick={() => {
+                setNoAllergenByProduct((prev) => ({ ...prev, [selectedProduct.id]: true }));
+                const cleared: DraftMap = {};
+                allergens.forEach((a) => {
+                  cleared[a.id] = { selected: false, presenceType: draft[a.id]?.presenceType ?? 'contains' };
+                });
+                setDraft(cleared);
+              }}
+              className={[
+                'rounded-full border px-3 py-1.5 text-xs font-black uppercase tracking-wide',
+                noAllergensSelected
+                  ? 'border-emerald-300 bg-emerald-100 text-emerald-900 ring-1 ring-emerald-200'
+                  : 'border-zinc-300 bg-white text-zinc-700',
+              ].join(' ')}
+            >
+              Sin alérgenos
+            </button>
+          </div>
           <div className="mt-3 flex flex-wrap gap-2">
             {allergens.map((a) => (
               <AllergenChip key={a.id} allergen={a} selected={draft[a.id]?.selected ?? false} onClick={() => toggleAllergen(a.id)} />
             ))}
           </div>
+          {noAllergensSelected ? (
+            <p className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-900">
+              Sin alérgenos declarados
+            </p>
+          ) : null}
           <div className="mt-3 space-y-2">
             {allergens
               .filter((a) => draft[a.id]?.selected)

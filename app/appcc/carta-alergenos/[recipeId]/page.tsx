@@ -75,7 +75,7 @@ export default function AppccCartaAlergenosDetailPage({ params }: { params: Prom
     const supabase = getSupabaseClient()!;
     try {
       await refreshRecipeAllergens(supabase, recipeId);
-      const [recipeRes, m, r, s, logs, linesRes, processedRes, productsRes] = await Promise.all([
+      const [recipeRes, m, r, s, logs, linesRes, processedRes, productsRes, profilesRes] = await Promise.all([
         supabase
           .from('escandallo_recipes')
           .select(
@@ -98,13 +98,18 @@ export default function AppccCartaAlergenosDetailPage({ params }: { params: Prom
           .select('id,source_supplier_product_id')
           .eq('local_id', localId),
         supabase.from('product_allergens').select('product_id').eq('local_id', localId),
+        supabase.from('product_allergen_profiles').select('product_id,sin_alergenos').eq('local_id', localId),
       ]);
       if (recipeRes.error) throw new Error(recipeRes.error.message);
       if (linesRes.error) throw new Error(linesRes.error.message);
       if (processedRes.error) throw new Error(processedRes.error.message);
       if (productsRes.error) throw new Error(productsRes.error.message);
+      if (profilesRes.error) throw new Error(profilesRes.error.message);
 
       const productWithSheet = new Set((productsRes.data ?? []).map((x: { product_id: string }) => x.product_id));
+      for (const profile of (profilesRes.data ?? []) as Array<{ product_id: string; sin_alergenos: boolean }>) {
+        if (profile.sin_alergenos) productWithSheet.add(profile.product_id);
+      }
       const processedMap = new Map<string, string>(
         (processedRes.data ?? []).map((p: { id: string; source_supplier_product_id: string }) => [p.id, p.source_supplier_product_id]),
       );

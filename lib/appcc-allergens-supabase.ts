@@ -67,6 +67,17 @@ export type ProductAllergenRow = {
   updated_at: string;
 };
 
+export type ProductAllergenProfileRow = {
+  id: string;
+  local_id: string;
+  product_id: string;
+  sin_alergenos: boolean;
+  verified_by: string | null;
+  verified_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 /** Posibilidad sin gluten (columnas escandallo_recipes tras supabase-carta-recipe-gluten-fields.sql). */
 export type GlutenFreeOption = 'yes' | 'no' | 'ask';
 
@@ -256,22 +267,47 @@ export async function fetchProductAllergensForLocal(
   return (data ?? []) as ProductAllergenRow[];
 }
 
+export async function fetchProductAllergenProfilesForLocal(
+  supabase: SupabaseClient,
+  localId: string,
+): Promise<ProductAllergenProfileRow[]> {
+  const { data, error } = await supabase
+    .from('product_allergen_profiles')
+    .select('id,local_id,product_id,sin_alergenos,verified_by,verified_at,created_at,updated_at')
+    .eq('local_id', localId);
+  if (error) throw new Error(error.message);
+  return (data ?? []) as ProductAllergenProfileRow[];
+}
+
 export async function saveProductAllergenSelection(
   supabase: SupabaseClient,
   params: {
     localId: string;
     productId: string;
     userId: string;
+    noAllergens: boolean;
     selections: Array<{ allergenId: string; presenceType: AllergenPresenceType; notes?: string }>;
   },
 ) {
-  const { localId, productId, userId, selections } = params;
+  const { localId, productId, userId, noAllergens, selections } = params;
   const { error: deleteError } = await supabase
     .from('product_allergens')
     .delete()
     .eq('local_id', localId)
     .eq('product_id', productId);
   if (deleteError) throw new Error(deleteError.message);
+
+  const { error: profileError } = await supabase.from('product_allergen_profiles').upsert(
+    {
+      local_id: localId,
+      product_id: productId,
+      sin_alergenos: noAllergens && selections.length === 0,
+      verified_by: userId,
+      verified_at: new Date().toISOString(),
+    },
+    { onConflict: 'local_id,product_id' },
+  );
+  if (profileError) throw new Error(profileError.message);
 
   if (selections.length === 0) return;
   const payload = selections.map((s) => ({
