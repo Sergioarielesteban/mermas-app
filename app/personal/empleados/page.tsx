@@ -57,7 +57,9 @@ export default function PersonalEmpleadosPage() {
   const [operationalUsers, setOperationalUsers] = useState(0);
   const [formMode, setFormMode] = useState<'create' | 'edit'>('create');
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [editingUserId, setEditingUserId] = useState<string | null>(null);
+  /** `user_id` de app vinculado a la ficha (selector «Usuario asociado»). */
+  const [associatedUserId, setAssociatedUserId] = useState<string>('');
+  const [localProfiles, setLocalProfiles] = useState<Array<{ userId: string; label: string }>>([]);
   const [clearPin, setClearPin] = useState(false);
   const [linkedAppRole, setLinkedAppRole] = useState<ProfileAppRole>('staff');
   const [linkedProfileEmail, setLinkedProfileEmail] = useState<string | null>(null);
@@ -73,7 +75,8 @@ export default function PersonalEmpleadosPage() {
     setErr(null);
     setFormMode('create');
     setEditingId(null);
-    setEditingUserId(null);
+    setAssociatedUserId('');
+    setLocalProfiles([]);
     setClearPin(false);
     setLinkedAppRole('staff');
     setLinkedProfileEmail(null);
@@ -105,7 +108,7 @@ export default function PersonalEmpleadosPage() {
     setErr(null);
     setFormMode('edit');
     setEditingId(em.id);
-    setEditingUserId(em.userId);
+    setAssociatedUserId(em.userId ?? '');
     setFirstName(em.firstName);
     setLastName(em.lastName);
     setAlias(em.alias ?? '');
@@ -125,6 +128,25 @@ export default function PersonalEmpleadosPage() {
     setLinkedAppRole('staff');
     setLinkedProfileEmail(null);
     setFormOpen(true);
+  };
+
+  const linkMeToThisEmployee = async () => {
+    if (!editingId || !userId || !localId) return;
+    if (!ensurePersonalActionAccess('edit')) return;
+    const supabase = getSupabaseClient();
+    if (!supabase) return;
+    setBusy(true);
+    setErr(null);
+    try {
+      await updateStaffEmployee(supabase, editingId, { userId });
+      setAssociatedUserId(userId);
+      setOkMsg('Tu usuario quedó vinculado a esta ficha.');
+      await reload();
+    } catch (er: unknown) {
+      setErr(er instanceof Error ? er.message : 'No se pudo vincular');
+    } finally {
+      setBusy(false);
+    }
   };
 
   const ensurePersonalActionAccess = (action: ModuleAction): boolean => {
@@ -176,10 +198,45 @@ export default function PersonalEmpleadosPage() {
   }, [reload]);
 
   useEffect(() => {
-    if (formMode !== 'edit' || !editingUserId || !localId) {
+    if (formMode !== 'edit' || !localId) {
       if (formMode !== 'edit') {
         setLinkedProfileEmail(null);
       }
+      return;
+    }
+    if (!formOpen) return;
+    const supabase = getSupabaseClient();
+    if (!supabase) return;
+    let cancelled = false;
+    void (async () => {
+      const { data: list } = await supabase
+        .from('profiles')
+        .select('user_id,email,role')
+        .eq('local_id', localId)
+        .eq('is_active', true)
+        .order('email', { ascending: true });
+      if (cancelled) return;
+      const rows = (list ?? []) as { user_id: string; email: string; role: string }[];
+      setLocalProfiles(
+        rows.map((r) => ({
+          userId: String(r.user_id),
+          label: `${String(r.email ?? '').trim() || r.user_id} (${r.role})`,
+        })),
+      );
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [formMode, formOpen, localId]);
+
+  useEffect(() => {
+    if (formMode !== 'edit' || !localId) {
+      if (formMode !== 'edit') setLinkedProfileEmail(null);
+      return;
+    }
+    if (!associatedUserId.trim()) {
+      setLinkedAppRole('staff');
+      setLinkedProfileEmail(null);
       return;
     }
     let cancelled = false;
@@ -189,7 +246,7 @@ export default function PersonalEmpleadosPage() {
       const { data } = await supabase
         .from('profiles')
         .select('role,email')
-        .eq('user_id', editingUserId)
+        .eq('user_id', associatedUserId)
         .eq('local_id', localId)
         .maybeSingle();
       if (cancelled) return;
@@ -204,7 +261,7 @@ export default function PersonalEmpleadosPage() {
     return () => {
       cancelled = true;
     };
-  }, [formMode, editingUserId, localId]);
+  }, [formMode, associatedUserId, localId]);
 
   useEffect(() => {
     if (!formOpen || !localId) {
@@ -279,8 +336,9 @@ export default function PersonalEmpleadosPage() {
         };
         if (clearPin) patch.pinFichaje = null;
         else if (pin.trim()) patch.pinFichaje = pin.trim();
+        patch.userId = associatedUserId.trim() ? associatedUserId.trim() : null;
         await updateStaffEmployee(supabase, editingId, patch);
-        if (isAdminActor && editingUserId && linkedProfileEmail) {
+        if (isAdminActor && associatedUserId.trim() && linkedProfileEmail) {
           const {
             data: { session },
           } = await supabase.auth.getSession();
@@ -294,7 +352,7 @@ export default function PersonalEmpleadosPage() {
               'Content-Type': 'application/json',
               Authorization: `Bearer ${accessToken}`,
             },
-            body: JSON.stringify({ userId: editingUserId, appRole: linkedAppRole }),
+            body: JSON.stringify({ userId: associatedUserId.trim(), appRole: linkedAppRole }),
           });
           const payload = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string };
           if (!res.ok || payload.ok !== true) {
@@ -606,7 +664,40 @@ export default function PersonalEmpleadosPage() {
                   Quitar PIN de fichaje
                 </label>
               ) : null}
-              {formMode === 'edit' && editingUserId && isAdminActor ? (
+              {formMode === 'edit' ? (
+                <div className="mt-2 space-y-1.5">
+                  <label className="block text-xs font-extrabold text-zinc-700" htmlFor="employee-associated-user">
+                    Usuario asociado
+                  </label>
+                  <select
+                    id="employee-associated-user"
+                    className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm"
+                    value={associatedUserId}
+                    onChange={(e) => setAssociatedUserId(e.target.value)}
+                  >
+                    <option value="">— Sin usuario —</option>
+                    {localProfiles.map((p) => (
+                      <option key={p.userId} value={p.userId}>
+                        {p.label}
+                      </option>
+                    ))}
+                  </select>
+                  {userId && associatedUserId !== userId ? (
+                    <button
+                      type="button"
+                      onClick={() => void linkMeToThisEmployee()}
+                      disabled={busy}
+                      className="w-full rounded-xl border border-[#D32F2F]/30 bg-red-50 px-3 py-2 text-xs font-extrabold text-[#B91C1C] disabled:opacity-50"
+                    >
+                      Vincularme a este empleado
+                    </button>
+                  ) : null}
+                  <p className="text-[11px] font-medium text-zinc-500">
+                    Cuenta con la que esta ficha se enlaza a «Mi espacio» (turnos y fichaje).
+                  </p>
+                </div>
+              ) : null}
+              {formMode === 'edit' && associatedUserId && isAdminActor ? (
                 <section className="mt-2 space-y-2 rounded-2xl border border-amber-200 bg-amber-50/90 p-3">
                   <p className="text-sm font-extrabold text-zinc-900">Rol en la aplicación</p>
                   <p className="text-xs font-medium text-zinc-600">
@@ -625,7 +716,7 @@ export default function PersonalEmpleadosPage() {
                     Los roles admin y manager cuentan para el cupo de usuarios operativos del plan.
                   </p>
                 </section>
-              ) : formMode === 'edit' && editingUserId && !isAdminActor ? (
+              ) : formMode === 'edit' && associatedUserId && !isAdminActor ? (
                 <p className="text-xs font-semibold text-zinc-600">
                   Solo administración puede cambiar el rol en la app. Puedes editar datos del empleado.
                 </p>

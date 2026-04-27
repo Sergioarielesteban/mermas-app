@@ -3,6 +3,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '@/components/AuthProvider';
 import { useStaffBundle } from '@/hooks/useStaffBundle';
+import { canAccessMiEspacioPersonalContent } from '@/lib/staff/mi-espacio-access';
 import { useLinkedStaffEmployee } from '@/lib/staff/useLinkedStaffEmployee';
 import { createStaffRequest, fetchStaffRequests } from '@/lib/staff/staff-supabase';
 import { getSupabaseClient } from '@/lib/supabase-client';
@@ -10,10 +11,11 @@ import { startOfWeekMonday, ymdLocal } from '@/lib/staff/staff-dates';
 import type { StaffRequest } from '@/lib/staff/types';
 
 export default function PersonalMiSolicitudesPage() {
-  const { localId, profileReady, userId } = useAuth();
+  const { localId, profileReady, userId, profileRole } = useAuth();
   const [weekStart] = useState(() => ymdLocal(startOfWeekMonday(new Date())));
   const { employees, loading: le, error: be, reload } = useStaffBundle(localId, weekStart);
   const linked = useLinkedStaffEmployee(employees, userId);
+  const canSeeMi = canAccessMiEspacioPersonalContent(linked, profileRole);
   const [rows, setRows] = useState<StaffRequest[]>([]);
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
@@ -70,8 +72,19 @@ export default function PersonalMiSolicitudesPage() {
 
   if (!profileReady) return <p className="text-sm text-zinc-500">Cargando…</p>;
   if (!localId) return <p className="text-sm text-amber-800">Sin local.</p>;
-  if (!linked) {
+  if (!canSeeMi) {
     return <p className="rounded-2xl bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-900">Vincula tu usuario en Equipo.</p>;
+  }
+  if (!linked) {
+    return (
+      <div className="space-y-3">
+        <h1 className="text-xl font-extrabold text-zinc-900">Solicitudes</h1>
+        <p className="rounded-2xl bg-zinc-50 px-4 py-3 text-sm font-medium text-zinc-700 ring-1 ring-zinc-200">
+          Para enviar solicitudes de ausencia necesitas una ficha vinculada. Hazlo en{' '}
+          <strong>Personal → Equipo</strong> (editar empleado → Usuario asociado o «Vincularme a este empleado»).
+        </p>
+      </div>
+    );
   }
 
   return (

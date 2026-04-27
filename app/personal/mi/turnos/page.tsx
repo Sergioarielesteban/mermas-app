@@ -4,6 +4,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useAuth } from '@/components/AuthProvider';
 import { useStaffBundle } from '@/hooks/useStaffBundle';
+import { canAccessMiEspacioPersonalContent } from '@/lib/staff/mi-espacio-access';
 import { useLinkedStaffEmployee } from '@/lib/staff/useLinkedStaffEmployee';
 import { fetchShiftsRange } from '@/lib/staff/staff-supabase';
 import { getSupabaseClient } from '@/lib/supabase-client';
@@ -14,7 +15,7 @@ import type { StaffShift } from '@/lib/staff/types';
 import { plannedShiftMinutes } from '@/lib/staff/attendance-logic';
 
 export default function PersonalMiTurnosPage() {
-  const { localId, profileReady, userId } = useAuth();
+  const { localId, profileReady, userId, profileRole } = useAuth();
   const searchParams = useSearchParams();
   const semanaQuery = searchParams.get('semana');
   const [weekStart] = useState(() => ymdLocal(startOfWeekMonday(new Date())));
@@ -28,6 +29,8 @@ export default function PersonalMiTurnosPage() {
   );
   const { employees, loading: le, error: be } = useStaffBundle(localId, weekStart);
   const linked = useLinkedStaffEmployee(employees, userId);
+  const canSeeMi = canAccessMiEspacioPersonalContent(linked, profileRole);
+  const isAdmin = profileRole === 'admin';
   const [extra, setExtra] = useState<StaffShift[]>([]);
   const [loading2, setLoading2] = useState(false);
   const [weekPublication, setWeekPublication] = useState<StaffWeekPublication | null>(null);
@@ -53,7 +56,7 @@ export default function PersonalMiTurnosPage() {
   }, [localId, linked]);
 
   useEffect(() => {
-    if (!localId || !linked) {
+    if (!localId || (!linked && !isAdmin)) {
       setWeekPublication(null);
       return;
     }
@@ -66,7 +69,7 @@ export default function PersonalMiTurnosPage() {
     return () => {
       cancelled = true;
     };
-  }, [localId, linked, publicationWeekMonday]);
+  }, [localId, linked, isAdmin, publicationWeekMonday]);
 
   const byDay = useMemo(() => {
     const m = new Map<string, StaffShift[]>();
@@ -81,8 +84,18 @@ export default function PersonalMiTurnosPage() {
 
   if (!profileReady) return <p className="text-sm text-zinc-500">Cargando…</p>;
   if (!localId) return <p className="text-sm text-amber-800">Sin local.</p>;
-  if (!linked) {
+  if (!canSeeMi) {
     return <p className="rounded-2xl bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-900">Vincula tu usuario en Equipo.</p>;
+  }
+  if (!linked) {
+    return (
+      <div className="space-y-3">
+        <h1 className="text-xl font-extrabold text-zinc-900">Mis turnos</h1>
+        <p className="rounded-2xl bg-zinc-50 px-4 py-3 text-sm font-medium text-zinc-700 ring-1 ring-zinc-200">
+          Vincula tu ficha en <strong>Personal → Equipo</strong> (Usuario asociado) para ver aquí tus turnos personales.
+        </p>
+      </div>
+    );
   }
 
   return (

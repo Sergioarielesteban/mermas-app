@@ -129,13 +129,15 @@ export default function EscandalloQuickCalculatorModal({ open, onClose, rawProdu
 
   const filteredMasters = useMemo(() => {
     const q = masterQuery.trim().toLowerCase();
-    if (q.length < 1) return sorted.slice(0, 30);
+    if (q.length < 2) return [];
     return sorted
       .filter(
         (p) => p.name.toLowerCase().includes(q) || p.supplierName.toLowerCase().includes(q),
       )
-      .slice(0, 50);
+      .slice(0, 8);
   }, [masterQuery, sorted]);
+
+  const masterSearchActive = masterQuery.trim().length >= 2;
 
   const fc = parsePriceInput(foodCostPct) ?? 30;
   const iva = parsePriceInput(ivaPct) ?? 10;
@@ -289,20 +291,20 @@ export default function EscandalloQuickCalculatorModal({ open, onClose, rawProdu
                 autoComplete="off"
               />
             </div>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div>
+            <div className="flex flex-nowrap gap-3">
+              <div className="min-w-0 flex-1 basis-0">
                 <label className="text-xs font-semibold text-zinc-600">Food cost objetivo (%)</label>
                 <input
-                  className="mt-1 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 focus:border-red-300 focus:outline-none focus:ring-2 focus:ring-red-200/80"
+                  className="mt-0.5 w-full rounded-lg border border-zinc-200 bg-white px-2.5 py-1.5 text-sm text-zinc-900 focus:border-red-300 focus:outline-none focus:ring-2 focus:ring-red-200/80"
                   inputMode="decimal"
                   value={foodCostPct}
                   onChange={(e) => setFoodCostPct(e.target.value)}
                 />
               </div>
-              <div>
+              <div className="min-w-0 flex-1 basis-0">
                 <label className="text-xs font-semibold text-zinc-600">IVA venta (%)</label>
                 <input
-                  className="mt-1 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 focus:border-red-300 focus:outline-none focus:ring-2 focus:ring-red-200/80"
+                  className="mt-0.5 w-full rounded-lg border border-zinc-200 bg-white px-2.5 py-1.5 text-sm text-zinc-900 focus:border-red-300 focus:outline-none focus:ring-2 focus:ring-red-200/80"
                   inputMode="decimal"
                   value={ivaPct}
                   onChange={(e) => setIvaPct(e.target.value)}
@@ -433,29 +435,36 @@ export default function EscandalloQuickCalculatorModal({ open, onClose, rawProdu
                     <Search className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-zinc-400" />
                     <input
                       className="h-8 w-full rounded-lg border border-zinc-200 bg-white py-1 pl-7 pr-2 text-sm text-zinc-900"
-                      placeholder="Buscar producto…"
+                      placeholder="Buscar producto..."
                       value={masterQuery}
                       onChange={(e) => setMasterQuery(e.target.value)}
+                      autoComplete="off"
                     />
                   </div>
-                  <ul className="mt-1.5 max-h-28 overflow-y-auto rounded-lg border border-zinc-200 bg-white text-sm">
-                    {filteredMasters.length === 0 ? (
-                      <li className="px-2 py-1.5 text-xs text-zinc-500">Sin resultados</li>
-                    ) : (
-                      filteredMasters.map((p) => (
-                        <li key={p.id}>
-                          <button
-                            type="button"
-                            className="w-full border-b border-zinc-100 px-2 py-1.5 text-left text-xs last:border-0 hover:bg-zinc-50"
-                            onClick={() => onPickMaster(p)}
-                          >
-                            <span className="font-medium text-zinc-900">{p.name}</span>
-                            <span className="block text-zinc-500">{p.supplierName}</span>
-                          </button>
-                        </li>
-                      ))
-                    )}
-                  </ul>
+                  {masterSearchActive ? (
+                    <div className="mt-1">
+                      {filteredMasters.length === 0 ? (
+                        <p className="rounded-lg border border-zinc-200 bg-zinc-50/80 px-2 py-1.5 text-xs text-zinc-500">
+                          No encontrado
+                        </p>
+                      ) : (
+                        <ul className="max-h-[9.5rem] overflow-y-auto rounded-lg border border-zinc-200 bg-white text-sm shadow-sm">
+                          {filteredMasters.map((p) => (
+                            <li key={p.id}>
+                              <button
+                                type="button"
+                                className="w-full border-b border-zinc-100 px-2 py-1.5 text-left text-xs last:border-0 hover:bg-zinc-50"
+                                onClick={() => onPickMaster(p)}
+                              >
+                                <span className="font-medium text-zinc-900">{p.name}</span>
+                                <span className="block text-zinc-500">{p.supplierName}</span>
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  ) : null}
                 </>
               )}
             </div>

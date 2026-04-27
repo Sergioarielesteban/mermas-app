@@ -7,6 +7,7 @@ import { useAuth } from '@/components/AuthProvider';
 import { useStaffBundle } from '@/hooks/useStaffBundle';
 import { useStaffRealtime } from '@/hooks/useStaffRealtime';
 import { canAccessTeamManagement } from '@/lib/app-role-permissions';
+import { canAccessMiEspacioPersonalContent } from '@/lib/staff/mi-espacio-access';
 import { useLinkedStaffEmployee } from '@/lib/staff/useLinkedStaffEmployee';
 import {
   findShiftForToday,
@@ -29,6 +30,8 @@ export default function PersonalMiHomePage() {
   const [weekStart] = useState(() => ymdLocal(startOfWeekMonday(new Date())));
   const { employees, shifts, timeEntries, loading, error, reload } = useStaffBundle(localId, weekStart);
   const linked = useLinkedStaffEmployee(employees, userId);
+  const canSeeMiEspacio = canAccessMiEspacioPersonalContent(linked, profileRole);
+  const isAdmin = profileRole === 'admin';
   const [weekPublication, setWeekPublication] = useState<StaffWeekPublication | null>(null);
   const ymd = todayYmd();
   const entriesToday = useMemo(() => filterEntriesForLocalDay(timeEntries, ymd), [timeEntries, ymd]);
@@ -37,7 +40,7 @@ export default function PersonalMiHomePage() {
   useStaffRealtime(localId, onRt);
 
   useEffect(() => {
-    if (!localId || !linked) {
+    if (!localId || (!linked && !isAdmin)) {
       setWeekPublication(null);
       return;
     }
@@ -50,7 +53,7 @@ export default function PersonalMiHomePage() {
     return () => {
       cancelled = true;
     };
-  }, [localId, linked, weekStart]);
+  }, [localId, linked, isAdmin, weekStart]);
 
   const greeting =
     displayName?.trim() || (linked ? staffDisplayName(linked) : 'Equipo');
@@ -80,14 +83,15 @@ export default function PersonalMiHomePage() {
   if (!profileReady) return <p className="text-sm text-zinc-500">Cargando…</p>;
   if (!localId) return <p className="text-sm text-amber-800">Sin local.</p>;
 
-  if (!linked) {
+  if (!canSeeMiEspacio) {
     return (
       <div className="space-y-4">
         <div className="rounded-3xl bg-gradient-to-br from-zinc-900 to-zinc-800 px-5 py-8 text-white shadow-lg">
           <p className="text-sm font-bold text-white/80">Mi espacio</p>
           <h1 className="mt-2 text-2xl font-extrabold leading-tight">Vincula tu usuario</h1>
           <p className="mt-3 text-sm text-white/85">
-            Pide a un encargado que asocie tu cuenta en <strong>Personal → Equipo</strong> (campo usuario).
+            Pide a un encargado que asocie tu cuenta en <strong>Personal → Equipo</strong> (selector «Usuario asociado» en
+            editar empleado).
           </p>
         </div>
         {canGoTeamManagement ? (
@@ -115,6 +119,14 @@ export default function PersonalMiHomePage() {
           {new Date().toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' })}
         </p>
       </div>
+
+      {isAdmin && !linked ? (
+        <p className="rounded-2xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-xs font-medium text-zinc-700 ring-1 ring-zinc-100">
+          Como administrador puedes usar Mi espacio sin ficha propia. Para ver <strong>tus</strong> turnos y ficharte como
+          empleado, vincula tu usuario en <strong>Personal → Equipo</strong> (editar empleado → Usuario asociado, o «Vincularme
+          a este empleado»).
+        </p>
+      ) : null}
 
       {weekPublication &&
       (weekPublication.status === 'published' || weekPublication.status === 'updated_after_publish') ? (

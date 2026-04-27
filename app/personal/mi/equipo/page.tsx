@@ -3,6 +3,7 @@
 import React, { useMemo, useState } from 'react';
 import { useAuth } from '@/components/AuthProvider';
 import { useStaffBundle } from '@/hooks/useStaffBundle';
+import { canAccessMiEspacioPersonalContent } from '@/lib/staff/mi-espacio-access';
 import { useLinkedStaffEmployee } from '@/lib/staff/useLinkedStaffEmployee';
 import { startOfWeekMonday, ymdLocal } from '@/lib/staff/staff-dates';
 import { staffDisplayName } from '@/lib/staff/staff-supabase';
@@ -10,10 +11,11 @@ import { zoneLabel } from '@/lib/staff/staff-zone-styles';
 import { todayYmd } from '@/lib/staff/attendance-logic';
 
 export default function PersonalMiEquipoPage() {
-  const { localId, profileReady, userId } = useAuth();
+  const { localId, profileReady, userId, profileRole } = useAuth();
   const [weekStart] = useState(() => ymdLocal(startOfWeekMonday(new Date())));
   const { employees, shifts, loading, error } = useStaffBundle(localId, weekStart);
   const linked = useLinkedStaffEmployee(employees, userId);
+  const canSeeMi = canAccessMiEspacioPersonalContent(linked, profileRole);
   const ymd = todayYmd();
 
   const mates = useMemo(() => {
@@ -25,8 +27,19 @@ export default function PersonalMiEquipoPage() {
 
   if (!profileReady) return <p className="text-sm text-zinc-500">Cargando…</p>;
   if (!localId) return <p className="text-sm text-amber-800">Sin local.</p>;
-  if (!linked) {
+  if (!canSeeMi) {
     return <p className="rounded-2xl bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-900">Vincula tu usuario en Equipo.</p>;
+  }
+  if (!linked) {
+    return (
+      <div className="space-y-3">
+        <h1 className="text-xl font-extrabold text-zinc-900">Compañeros hoy</h1>
+        <p className="rounded-2xl bg-zinc-50 px-4 py-3 text-sm font-medium text-zinc-700 ring-1 ring-zinc-200">
+          Vincula tu ficha en <strong>Personal → Equipo</strong> (Usuario asociado o «Vincularme a este empleado») para ver con
+          quién coinciden tus turnos hoy.
+        </p>
+      </div>
+    );
   }
 
   return (
