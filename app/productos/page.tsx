@@ -1,6 +1,8 @@
 'use client';
 
-import React, { useEffect, useMemo, useState } from 'react';
+/* eslint-disable react-hooks/set-state-in-effect -- precios automáticos y composición: resets en el mismo useEffect (patrón de esta pantalla) */
+
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Pencil, Plus, Search, Trash2, X } from 'lucide-react';
 import { useMermasStore } from '@/components/MermasStoreProvider';
 import { useAuth } from '@/components/AuthProvider';
@@ -15,9 +17,30 @@ import {
   recipeTotalCostEur,
   type EscandalloLine,
 } from '@/lib/escandallos-supabase';
-import { fetchPurchaseArticles } from '@/lib/purchase-articles-supabase';
+import { fetchPurchaseArticleCostHintsByIds, fetchPurchaseArticles } from '@/lib/purchase-articles-supabase';
 import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
 import type { Unit } from '@/lib/types';
+
+function mapUnidadUsoToUnit(raw: string | null | undefined): Unit {
+  if (!raw) return 'ud';
+  const u = raw
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/\p{M}+/gu, '');
+  if (u === 'kg' || u === 'kilo' || u === 'kilos') return 'kg';
+  if (u === 'g' || u === 'gr' || u === 'grs' || u === 'gramo' || u === 'gramos') return 'g';
+  if (u === 'l' || u === 'litro' || u === 'litros') return 'litro';
+  if (u === 'ml' || u === 'mililitro' || u === 'mililitros') return 'ml';
+  if (u === 'ud' || u === 'u' || u === 'unidad' || u === 'unidades') return 'ud';
+  if (u === 'caja' || u === 'cajas') return 'caja';
+  if (u === 'bolsa' || u === 'bolsas') return 'bolsa';
+  if (u === 'racion' || u === 'ración' || u === 'raciones') return 'racion';
+  if (u === 'docena' || u === 'docenas') return 'docena';
+  if (u === 'paquete' || u === 'paquetes' || u === 'pack') return 'paquete';
+  if (u === 'bandeja' || u === 'bandejas') return 'bandeja';
+  return 'ud';
+}
 
 type CompositionLineDraft = {
   id: string;
@@ -51,7 +74,11 @@ export default function ProductosPage() {
   const [baseSubrecipeOptions, setBaseSubrecipeOptions] = useState<Array<{ id: string; name: string; kind: 'recipe' | 'processed' }>>([]);
   const [escandalloAutoPrice, setEscandalloAutoPrice] = useState<number | null>(null);
   const [baseSubrecipeAutoPrice, setBaseSubrecipeAutoPrice] = useState<number | null>(null);
+  const [masterAutoPrice, setMasterAutoPrice] = useState<number | null>(null);
   const [escandalloPriceLoading, setEscandalloPriceLoading] = useState(false);
+  const [masterPriceLoading, setMasterPriceLoading] = useState(false);
+  const [masterComboboxOpen, setMasterComboboxOpen] = useState(false);
+  const masterComboboxRef = useRef<HTMLDivElement | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [showDeletedBanner, setShowDeletedBanner] = useState(false);
@@ -103,11 +130,19 @@ export default function ProductosPage() {
   const filteredProducts = products.filter((p) =>
     p.name.toLowerCase().includes(search.trim().toLowerCase()),
   );
-  const filteredMasterOptions = useMemo(() => {
+  const masterComboboxResults = useMemo(() => {
     const q = masterSearch.trim().toLowerCase();
-    if (!q) return masterOptions;
-    return masterOptions.filter((x) => x.nombre.toLowerCase().includes(q));
+    if (q.length < 2) return [];
+    return masterOptions.filter((x) => x.nombre.toLowerCase().includes(q)).slice(0, 8);
   }, [masterOptions, masterSearch]);
+
+  const masterFieldValue = useMemo(() => {
+    if (masterComboboxOpen) return masterSearch;
+    if (masterArticleId) {
+      return masterOptions.find((x) => x.id === masterArticleId)?.nombre ?? masterSearch;
+    }
+    return masterSearch;
+  }, [masterComboboxOpen, masterSearch, masterArticleId, masterOptions]);
   const filteredEscandalloOptions = useMemo(() => {
     const q = escandalloSearch.trim().toLowerCase();
     if (!q) return escandalloOptions;
@@ -151,6 +186,67 @@ export default function ProductosPage() {
       active = false;
     };
   }, [localId]);
+
+  const masterOptionsRef = useRef<typeof masterOptions>(masterOptions);
+  useLayoutEffect(() => {
+    masterOptionsRef.current = masterOptions;
+  }, [masterOptions]);
+
+  const changeOrigin = (id: 'manual' | 'master' | 'escandallo' | 'base_subreceta' | 'composicion') => {
+    if (originType === 'master' && id !== 'master') {
+      setMasterArticleId('');
+      setMasterSearch('');
+      setMasterAutoPrice(null);
+      setMasterComboboxOpen(false);
+    }
+    setOriginType(id);
+  };
+
+  useEffect(() => {
+    const onDoc = (e: MouseEvent) => {
+      if (!masterComboboxRef.current?.contains(e.target as Node)) setMasterComboboxOpen(false);
+    };
+    document.addEventListener('mousedown', onDoc);
+    return () => document.removeEventListener('mousedown', onDoc);
+  }, []);
+
+  useEffect(() => {
+    if (!open) return;
+    if (originType !== 'master') return;
+    if (!masterArticleId || !localId || !isSupabaseEnabled()) {
+      return;
+    }
+    const supabase = getSupabaseClient();
+    if (!supabase) {
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      if (!cancelled) setMasterPriceLoading(true);
+      const map = await fetchPurchaseArticleCostHintsByIds(supabase, localId, [masterArticleId]);
+      if (cancelled) return;
+      const h = map.get(masterArticleId);
+      let coste = h?.costeUnitarioUso;
+      let unidad = h?.unidadUso;
+      if (coste == null || !Number.isFinite(coste) || coste <= 0) {
+        const fallback = masterOptionsRef.current.find((x) => x.id === masterArticleId);
+        if (fallback && fallback.costeUnitarioUso != null && fallback.costeUnitarioUso > 0) {
+          coste = fallback.costeUnitarioUso;
+          unidad = fallback.unidadUso;
+        }
+      }
+      if (coste != null && Number.isFinite(coste) && coste > 0) {
+        setMasterAutoPrice(Math.round(coste * 10000) / 10000);
+        setUnit(mapUnidadUsoToUnit(unidad));
+      } else {
+        setMasterAutoPrice(null);
+      }
+      if (!cancelled) setMasterPriceLoading(false);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [open, originType, masterArticleId, localId]);
 
   useEffect(() => {
     if (originType !== 'escandallo' || !escandalloId || !localId || !isSupabaseEnabled()) {
@@ -269,6 +365,13 @@ export default function ProductosPage() {
   }, [originType, escandalloAutoPrice, baseSubrecipeAutoPrice]);
 
   useEffect(() => {
+    if (originType !== 'master') return;
+    if (masterAutoPrice != null && masterAutoPrice > 0) {
+      setPrice(masterAutoPrice.toFixed(2));
+    }
+  }, [originType, masterAutoPrice]);
+
+  useEffect(() => {
     if (originType !== 'composicion') return;
     if (!localId || !isSupabaseEnabled()) {
       setPrice('0.00');
@@ -288,7 +391,6 @@ export default function ProductosPage() {
         );
         if (validLines.length === 0) {
           if (active) setPrice('0.00');
-          console.log('[mermas:composicion] lineas vacias -> total 0');
           return;
         }
         const [recipes, rawProducts, processedProducts] = await Promise.all([
@@ -333,7 +435,6 @@ export default function ProductosPage() {
         };
 
         let total = 0;
-        const debugRows: Array<{ lineId: string; unitCost: number; lineCost: number }> = [];
         for (const line of validLines) {
           const qty = Number(line.qty);
           let sourceUnitCost: number | null = null;
@@ -365,16 +466,11 @@ export default function ProductosPage() {
           const unitCost = converted != null ? converted : sourceUnitCost;
           const lineCost = Math.round(unitCost * qty * 10000) / 10000;
           total += lineCost;
-          debugRows.push({ lineId: line.id, unitCost, lineCost });
         }
         const rounded = Math.round(total * 100) / 100;
         if (active) setPrice(rounded.toFixed(2));
-        console.log('[mermas:composicion] lineas', validLines);
-        console.log('[mermas:composicion] costes_linea', debugRows);
-        console.log('[mermas:composicion] total', rounded);
-      } catch (err) {
+      } catch {
         if (active) setPrice('0.00');
-        console.log('[mermas:composicion] error', err);
       } finally {
         if (active) setEscandalloPriceLoading(false);
       }
@@ -384,6 +480,36 @@ export default function ProductosPage() {
     };
   }, [originType, compositionLines, localId, masterOptions]);
 
+  const isUnitReadOnly = originType !== 'manual';
+  const isPriceFromAuto = originType !== 'manual';
+
+  const priceFieldDisplay = useMemo(() => {
+    if (originType === 'master') {
+      if (masterPriceLoading) return '—';
+      if (masterAutoPrice != null && masterAutoPrice > 0) return masterAutoPrice.toFixed(2);
+      return '0.00';
+    }
+    if (originType === 'escandallo') {
+      if (escandalloPriceLoading) return '—';
+      if (escandalloAutoPrice != null && escandalloAutoPrice > 0) return escandalloAutoPrice.toFixed(2);
+      return '0.00';
+    }
+    if (originType === 'base_subreceta') {
+      if (escandalloPriceLoading) return '—';
+      if (baseSubrecipeAutoPrice != null && baseSubrecipeAutoPrice > 0) return baseSubrecipeAutoPrice.toFixed(2);
+      return '0.00';
+    }
+    return price;
+  }, [
+    originType,
+    masterAutoPrice,
+    masterPriceLoading,
+    escandalloAutoPrice,
+    baseSubrecipeAutoPrice,
+    escandalloPriceLoading,
+    price,
+  ]);
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const numeric =
@@ -391,7 +517,11 @@ export default function ProductosPage() {
         ? Math.max(0, escandalloAutoPrice ?? 0)
         : originType === 'base_subreceta'
           ? Math.max(0, baseSubrecipeAutoPrice ?? 0)
-          : Number(price);
+          : originType === 'master'
+            ? Math.max(0, masterAutoPrice ?? 0)
+            : originType === 'composicion'
+              ? Math.max(0, Number(price))
+              : Number(price);
     const trimmed = name.trim();
     if (!trimmed || !Number.isFinite(numeric) || numeric < 0) return;
     if (originType === 'manual' && numeric <= 0) {
@@ -400,6 +530,13 @@ export default function ProductosPage() {
     }
     if (originType === 'master' && !masterArticleId) {
       setMessage('Selecciona un Artículo Máster para este origen.');
+      return;
+    }
+    if (
+      originType === 'master' &&
+      (!Number.isFinite(masterAutoPrice ?? NaN) || (masterAutoPrice ?? 0) <= 0)
+    ) {
+      setMessage('No se pudo obtener el coste del artículo máster.');
       return;
     }
     if (originType === 'escandallo' && !escandalloId) {
@@ -497,6 +634,7 @@ export default function ProductosPage() {
     setEscandalloSearch('');
     setCompositionLines([]);
     setEscandalloAutoPrice(null);
+    setMasterAutoPrice(null);
     setEditingId(null);
     setOpen(false);
   };
@@ -577,6 +715,7 @@ export default function ProductosPage() {
                     setMasterSearch('');
                     setEscandalloSearch('');
                     setEscandalloAutoPrice(null);
+                    setMasterAutoPrice(null);
                     setCompositionLines(
                       (p.compositionLines ?? []).map((x) => ({
                         id: x.id,
@@ -646,6 +785,7 @@ export default function ProductosPage() {
           setEscandalloSearch('');
           setCompositionLines([]);
           setEscandalloAutoPrice(null);
+          setMasterAutoPrice(null);
           setMessage(null);
         }}
         className="fixed bottom-24 right-6 z-40 grid h-16 w-16 place-items-center rounded-full bg-gradient-to-r from-[#B91C1C] to-[#D32F2F] text-white shadow-xl"
@@ -655,131 +795,148 @@ export default function ProductosPage() {
       </button>
 
       {open ? (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 px-4">
-          <div className="w-full max-w-md rounded-2xl bg-white p-4 shadow-xl">
-            <div className="mb-2 flex items-center justify-between">
-              <h2 className="text-sm font-extrabold uppercase tracking-wide text-zinc-800">
-                {editingId ? 'Editar Producto' : 'Nuevo Producto'}
-              </h2>
-              <button
-                type="button"
-                onClick={() => {
-                  setOpen(false);
-                  setEditingId(null);
-                  setName('');
-                  setUnit('ud');
-                  setPrice('0');
-                  setOriginType('manual');
-                  setMasterArticleId('');
-                  setEscandalloId('');
-                  setBaseSubrecipeId('');
-                  setMasterSearch('');
-                  setEscandalloSearch('');
-                  setCompositionLines([]);
-                  setEscandalloAutoPrice(null);
-                }}
-                className="grid h-9 w-9 place-items-center rounded-lg text-zinc-600 hover:bg-zinc-100"
-                aria-label="Cerrar"
-              >
-                <X className="h-5 w-5" />
-              </button>
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-0 sm:items-center sm:p-4">
+          <div
+            className="flex w-full max-w-md flex-col overflow-hidden rounded-t-2xl bg-white shadow-xl sm:max-h-[min(85vh,800px)] sm:rounded-2xl"
+            style={{ maxHeight: '85vh' }}
+          >
+            <div className="shrink-0 border-b border-zinc-100 px-4 py-3">
+              <div className="flex items-center justify-between">
+                <h2 className="text-sm font-extrabold uppercase tracking-wide text-zinc-800">
+                  {editingId ? 'Editar Producto' : 'Nuevo Producto'}
+                </h2>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setOpen(false);
+                    setEditingId(null);
+                    setName('');
+                    setUnit('ud');
+                    setPrice('0');
+                    setOriginType('manual');
+                    setMasterArticleId('');
+                    setEscandalloId('');
+                    setBaseSubrecipeId('');
+                    setMasterSearch('');
+                    setEscandalloSearch('');
+                    setCompositionLines([]);
+                    setEscandalloAutoPrice(null);
+                    setMasterAutoPrice(null);
+                  }}
+                  className="grid h-9 w-9 place-items-center rounded-lg text-zinc-600 hover:bg-zinc-100"
+                  aria-label="Cerrar"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
             </div>
 
-            <form className="space-y-3" onSubmit={handleSubmit}>
-              <label className="block text-xs font-semibold text-zinc-700">
-                Nombre del Producto
-                <input
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  className="mt-1 h-11 w-full rounded-xl border border-zinc-200 px-3 text-sm outline-none focus:border-[#D32F2F] focus:ring-2 focus:ring-[#D32F2F]/20"
-                  placeholder="Ej: Alitas de Pollo"
-                />
-              </label>
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-3">
+              <form id="merma-producto-form" className="space-y-3" onSubmit={handleSubmit}>
+                <label className="block text-xs font-semibold text-zinc-700">
+                  Nombre del Producto
+                  <input
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    className="mt-1 h-11 w-full rounded-xl border border-zinc-200 px-3 text-sm outline-none focus:border-[#D32F2F] focus:ring-2 focus:ring-[#D32F2F]/20"
+                    placeholder="Ej: Alitas de Pollo"
+                  />
+                </label>
 
-              <label className="block text-xs font-semibold text-zinc-700">
-                Unidad de Medida
-                <select
-                  value={unit}
-                  onChange={(e) => setUnit(e.target.value as Unit)}
-                  className="mt-1 h-11 w-full rounded-xl border border-zinc-200 px-3 text-sm outline-none focus:border-[#D32F2F] focus:ring-2 focus:ring-[#D32F2F]/20"
-                >
-                  <option value="kg">kg</option>
-                  <option value="ud">ud</option>
-                  <option value="bolsa">bolsa</option>
-                  <option value="racion">racion</option>
-                </select>
-              </label>
-
-              <label className="block text-xs font-semibold text-zinc-700">
-                Precio por Unidad
-                <input
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={price}
-                  onChange={(e) => setPrice(e.target.value)}
-                  readOnly={originType !== 'manual'}
-                  disabled={originType !== 'manual'}
-                  className="mt-1 h-11 w-full rounded-xl border border-zinc-200 px-3 text-sm outline-none focus:border-[#D32F2F] focus:ring-2 focus:ring-[#D32F2F]/20"
-                  placeholder="0.00"
-                />
-                {originType !== 'manual' ? (
-                  <p className="mt-1 text-[11px] font-semibold text-zinc-500">
-                    {escandalloPriceLoading
-                      ? 'Calculando precio automático…'
-                      : originType === 'escandallo'
-                        ? 'Precio automático desde escandallo'
-                        : 'Precio automático'}
-                  </p>
-                ) : null}
-              </label>
-
-              <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-3">
-                <p className="text-xs font-semibold text-zinc-700">Origen del coste</p>
-                <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-4">
-                  {([
-                    { id: 'manual', label: 'Manual' },
-                    { id: 'master', label: 'Artículo Máster' },
-                    { id: 'escandallo', label: 'Escandallo' },
-                    { id: 'base_subreceta', label: 'Base/Subreceta' },
-                    { id: 'composicion', label: 'Composición' },
-                  ] as const).map((opt) => (
-                    <button
-                      key={opt.id}
-                      type="button"
-                      onClick={() => setOriginType(opt.id)}
-                      className={[
-                        'rounded-lg border px-2 py-2 text-xs font-semibold',
-                        originType === opt.id
-                          ? 'border-[#D32F2F] bg-[#D32F2F]/10 text-zinc-900'
-                          : 'border-zinc-200 bg-white text-zinc-700',
-                      ].join(' ')}
-                    >
-                      {opt.label}
-                    </button>
-                  ))}
-                </div>
+                <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-3">
+                  <p className="text-xs font-semibold text-zinc-700">Origen del coste</p>
+                  <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-4">
+                    {(
+                      [
+                        { id: 'manual', label: 'Manual' },
+                        { id: 'master', label: 'Artículo Máster' },
+                        { id: 'escandallo', label: 'Escandallo' },
+                        { id: 'base_subreceta', label: 'Base/Subreceta' },
+                        { id: 'composicion', label: 'Composición' },
+                      ] as const
+                    ).map((opt) => (
+                      <button
+                        key={opt.id}
+                        type="button"
+                        onClick={() => changeOrigin(opt.id)}
+                        className={[
+                          'rounded-lg border px-2 py-2 text-xs font-semibold',
+                          originType === opt.id
+                            ? 'border-[#D32F2F] bg-[#D32F2F]/10 text-zinc-900'
+                            : 'border-zinc-200 bg-white text-zinc-700',
+                        ].join(' ')}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
 
                 {originType === 'master' ? (
-                  <div className="mt-3 space-y-2">
+                  <div ref={masterComboboxRef} className="relative mt-3 space-y-2">
+                    <span className="text-xs font-semibold text-zinc-700">Buscar artículo máster</span>
                     <input
-                      value={masterSearch}
-                      onChange={(e) => setMasterSearch(e.target.value)}
-                      placeholder="Buscar artículo máster..."
+                      value={masterFieldValue}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        setMasterSearch(v);
+                        const cur = masterOptions.find((x) => x.id === masterArticleId);
+                        if (cur && v.trim() !== cur.nombre) {
+                          setMasterArticleId('');
+                          setMasterAutoPrice(null);
+                        }
+                        setMasterComboboxOpen(v.trim().length >= 2);
+                      }}
+                      onFocus={() => {
+                        if (originType === 'master' && masterArticleId) {
+                          const n = masterOptions.find((x) => x.id === masterArticleId)?.nombre;
+                          if (n) {
+                            setMasterSearch(n);
+                            if (n.trim().length >= 2) setMasterComboboxOpen(true);
+                            return;
+                          }
+                        }
+                        if (masterSearch.trim().length >= 2) setMasterComboboxOpen(true);
+                      }}
+                      placeholder="Escribe al menos 2 letras…"
                       className="h-10 w-full rounded-lg border border-zinc-200 bg-white px-3 text-sm outline-none focus:border-[#D32F2F] focus:ring-2 focus:ring-[#D32F2F]/20"
+                      autoComplete="off"
                     />
-                    <select
-                      value={masterArticleId}
-                      onChange={(e) => setMasterArticleId(e.target.value)}
-                      className="h-10 w-full rounded-lg border border-zinc-200 bg-white px-3 text-sm outline-none focus:border-[#D32F2F] focus:ring-2 focus:ring-[#D32F2F]/20"
-                    >
-                      <option value="">Selecciona artículo máster…</option>
-                      {filteredMasterOptions.map((a) => (
-                        <option key={a.id} value={a.id}>
-                          {a.nombre}
-                        </option>
-                      ))}
-                    </select>
+                    {masterComboboxOpen && masterComboboxResults.length > 0 ? (
+                      <ul
+                        className="absolute z-30 mt-1 max-h-48 w-full overflow-auto rounded-lg border border-zinc-200 bg-white py-1 shadow-lg"
+                        role="listbox"
+                      >
+                        {masterComboboxResults.map((a) => (
+                          <li key={a.id}>
+                            <button
+                              type="button"
+                              className="w-full px-3 py-2 text-left text-sm text-zinc-900 hover:bg-zinc-50"
+                              onMouseDown={(ev) => ev.preventDefault()}
+                              onClick={() => {
+                                setMasterArticleId(a.id);
+                                setMasterSearch(a.nombre);
+                                setMasterComboboxOpen(false);
+                                if (a.costeUnitarioUso != null && a.costeUnitarioUso > 0) {
+                                  setMasterAutoPrice(Math.round(a.costeUnitarioUso * 10000) / 10000);
+                                  setUnit(mapUnidadUsoToUnit(a.unidadUso));
+                                  setPrice(a.costeUnitarioUso.toFixed(2));
+                                }
+                              }}
+                            >
+                              {a.nombre}
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : null}
+                    {masterArticleId ? (
+                      <p className="text-[11px] text-zinc-600">
+                        Selección:{' '}
+                        <span className="font-semibold text-zinc-800">
+                          {masterOptions.find((x) => x.id === masterArticleId)?.nombre ?? masterSearch}
+                        </span>
+                      </p>
+                    ) : null}
                   </div>
                 ) : null}
 
@@ -955,15 +1112,62 @@ export default function ProductosPage() {
                     </button>
                   </div>
                 ) : null}
-              </div>
+                </div>
 
+                <label className="block text-xs font-semibold text-zinc-700">
+                  Unidad de Medida
+                  <select
+                    value={unit}
+                    disabled={isUnitReadOnly}
+                    onChange={(e) => setUnit(e.target.value as Unit)}
+                    className="mt-1 h-11 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm outline-none focus:border-[#D32F2F] focus:ring-2 focus:ring-[#D32F2F]/20 disabled:cursor-not-allowed disabled:bg-zinc-100 disabled:text-zinc-600"
+                  >
+                    <option value="kg">kg</option>
+                    <option value="g">g</option>
+                    <option value="ud">ud</option>
+                    <option value="bolsa">bolsa</option>
+                    <option value="racion">racion</option>
+                    <option value="litro">litro</option>
+                    <option value="ml">ml</option>
+                    <option value="caja">caja</option>
+                  </select>
+                </label>
+
+                <label className="block text-xs font-semibold text-zinc-700">
+                  Precio por Unidad
+                  <input
+                    type={isPriceFromAuto ? 'text' : 'number'}
+                    min={isPriceFromAuto ? undefined : 0}
+                    step={isPriceFromAuto ? undefined : '0.01'}
+                    value={isPriceFromAuto ? priceFieldDisplay : price}
+                    onChange={(e) => {
+                      if (originType === 'manual') setPrice(e.target.value);
+                    }}
+                    readOnly={isPriceFromAuto}
+                    disabled={isPriceFromAuto}
+                    className="mt-1 h-11 w-full rounded-xl border border-zinc-200 px-3 text-sm outline-none focus:border-[#D32F2F] focus:ring-2 focus:ring-[#D32F2F]/20 disabled:cursor-not-allowed disabled:bg-zinc-100"
+                    placeholder="0.00"
+                  />
+                  {isPriceFromAuto ? (
+                    <p className="mt-1 text-[11px] font-semibold text-zinc-500">
+                      {masterPriceLoading || escandalloPriceLoading
+                        ? 'Calculando precio automático…'
+                        : 'Precio automático'}
+                    </p>
+                  ) : null}
+                </label>
+              </form>
+            </div>
+
+            <div className="shrink-0 z-20 border-t border-zinc-100 bg-white px-4 pt-3 shadow-[0_-4px_12px_rgba(0,0,0,0.06)] pb-[max(0.75rem,env(safe-area-inset-bottom))]">
               <button
                 type="submit"
-                className="h-12 w-full rounded-xl bg-[#D32F2F] text-sm font-extrabold uppercase text-white"
+                form="merma-producto-form"
+                className="h-12 w-full min-h-12 rounded-xl bg-[#D32F2F] text-sm font-extrabold uppercase text-white"
               >
                 {editingId ? 'Guardar Cambios' : 'Guardar Producto'}
               </button>
-            </form>
+            </div>
           </div>
         </div>
       ) : null}
