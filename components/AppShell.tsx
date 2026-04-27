@@ -396,29 +396,30 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         aria-label="Menú lateral"
       >
         <div className="shrink-0 border-b border-zinc-200 bg-zinc-50/95">
-          {/* Fila compacta: cierre fuera del bloque logo (no solapa el área del logo) */}
-          <div className="flex h-8 shrink-0 items-center justify-end px-1.5 pt-1">
+          <div className="flex h-7 shrink-0 items-center justify-end px-1.5 pt-0.5">
             <button
               type="button"
               onClick={() => setOpen(false)}
-              className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-zinc-500 hover:bg-zinc-100/90"
+              className="grid h-7 w-7 shrink-0 place-items-center rounded-md text-zinc-500 hover:bg-zinc-100/90"
               aria-label="Cerrar menú"
             >
-              <X className="h-[18px] w-[18px]" />
+              <X className="h-[17px] w-[17px]" />
             </button>
           </div>
-          {/* Logo + título: padding vertical mínimo (8px), sin pt enorme reservado al X */}
-          <div className="px-2 pb-2 text-center">
-            <div className="py-2">
+          <div className="px-2 pb-1.5 text-center">
+            <div
+              className="mx-auto flex min-h-0 max-h-[70px] w-full items-center justify-center overflow-hidden p-0"
+              aria-hidden
+            >
               <Logo variant="sidebar" className="select-none drop-shadow-sm" alt="" role="presentation" />
             </div>
-            <p className="mb-2 mt-2 text-[0.8125rem] font-semibold leading-tight tracking-wide text-zinc-600">
+            <p className="mb-2 mt-1 text-[0.8125rem] font-semibold leading-tight tracking-wide text-zinc-600">
               Gestión operativa
             </p>
           </div>
         </div>
 
-        <nav className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-2 pb-2 pt-1.5">
+        <nav className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-2 pb-2 pt-1">
           {navItems.map((item) => {
             if ('kind' in item && item.kind === 'note') {
               return (

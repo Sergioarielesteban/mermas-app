@@ -33,10 +33,10 @@ const variantClassName: Record<LogoVariant, string> = {
     'sm:h-[min(34vmin,7.5rem)]',
     'md:h-[min(30vmin,7.25rem)]',
   ].join(' '),
-  /** Menú lateral: compacto, centrado, sin fondo; object-fit compensa márgenes internos del SVG. */
+  /** Menú lateral: logo-chef-one-menu.svg (viewBox al wordmark); ancho 75% hasta 220px, alto acotado. */
   sidebar: [
-    'mx-auto block h-auto w-[75%] max-w-[220px] min-w-0',
-    'object-contain object-center bg-transparent p-0',
+    'mx-auto block h-auto min-h-0 min-w-0 max-h-[70px] w-[75%] max-w-[220px]',
+    'object-contain object-center bg-transparent p-0 m-0',
     'ring-0 outline-none',
   ].join(' '),
 };
@@ -48,13 +48,18 @@ export type LogoProps = {
 
 export default function Logo({ variant = 'inline', className = '', alt = 'Chef-One', ...rest }: LogoProps) {
   const v = variantClassName[variant];
+  const isSidebar = variant === 'sidebar';
+  /** Wordmark recortado (sin bandas vacías del canvas 375²) para el menú lateral. */
+  const src = isSidebar ? '/logo-chef-one-menu.svg' : '/logo-chef-one.svg';
+  const w = isSidebar ? 272 : 375;
+  const h = isSidebar ? 52 : 375;
 
   return (
     <img
-      src="/logo-chef-one.svg"
+      src={src}
       alt={alt}
-      width={375}
-      height={375}
+      width={w}
+      height={h}
       decoding="async"
       className={[v, 'select-none', className].filter(Boolean).join(' ')}
       {...rest}
