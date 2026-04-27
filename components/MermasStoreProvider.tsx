@@ -1006,9 +1006,13 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
     const addProduct = (input: CreateProductInput) => {
       const trimmed = input.name.trim();
       if (!trimmed) return;
-      if (!Number.isFinite(input.pricePerUnit) || input.pricePerUnit <= 0) return;
       const typeOrigin = input.typeOrigin ?? 'manual';
-      const manualPrice = Math.round((input.manualPricePerUnit ?? input.pricePerUnit) * 100) / 100;
+      if (!Number.isFinite(input.pricePerUnit) || input.pricePerUnit < 0) return;
+      if (typeOrigin === 'manual' && input.pricePerUnit <= 0) return;
+      const manualPrice =
+        typeOrigin === 'manual'
+          ? Math.round((input.manualPricePerUnit ?? input.pricePerUnit) * 100) / 100
+          : null;
       const masterArticleId = typeOrigin === 'master' ? (input.masterArticleId ?? null) : null;
       const escandalloId = typeOrigin === 'escandallo' ? (input.escandalloId ?? null) : null;
       const compositionLines =
@@ -1086,9 +1090,13 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
     const updateProduct = (id: string, input: CreateProductInput) => {
       const trimmed = input.name.trim();
       if (!trimmed) return;
-      if (!Number.isFinite(input.pricePerUnit) || input.pricePerUnit <= 0) return;
       const typeOrigin = input.typeOrigin ?? 'manual';
-      const manualPrice = Math.round((input.manualPricePerUnit ?? input.pricePerUnit) * 100) / 100;
+      if (!Number.isFinite(input.pricePerUnit) || input.pricePerUnit < 0) return;
+      if (typeOrigin === 'manual' && input.pricePerUnit <= 0) return;
+      const manualPrice =
+        typeOrigin === 'manual'
+          ? Math.round((input.manualPricePerUnit ?? input.pricePerUnit) * 100) / 100
+          : null;
       const masterArticleId = typeOrigin === 'master' ? (input.masterArticleId ?? null) : null;
       const escandalloId = typeOrigin === 'escandallo' ? (input.escandalloId ?? null) : null;
       const compositionLines =

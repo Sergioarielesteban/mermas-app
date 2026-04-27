@@ -6,7 +6,14 @@ import { useMermasStore } from '@/components/MermasStoreProvider';
 import { useAuth } from '@/components/AuthProvider';
 import { appConfirm } from '@/lib/app-dialog-bridge';
 import { confirmDestructiveOperation } from '@/lib/ops-role-confirm';
-import { fetchEscandalloRecipes } from '@/lib/escandallos-supabase';
+import {
+  fetchEscandalloLines,
+  fetchEscandalloRawProductsWithWeightedPurchasePrices,
+  fetchEscandalloRecipes,
+  fetchProcessedProductsForEscandallo,
+  recipeTotalCostEur,
+  type EscandalloLine,
+} from '@/lib/escandallos-supabase';
 import { fetchPurchaseArticles } from '@/lib/purchase-articles-supabase';
 import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
 import type { Unit } from '@/lib/types';
@@ -34,6 +41,8 @@ export default function ProductosPage() {
   const [escandalloSearch, setEscandalloSearch] = useState('');
   const [masterOptions, setMasterOptions] = useState<Array<{ id: string; nombre: string }>>([]);
   const [escandalloOptions, setEscandalloOptions] = useState<Array<{ id: string; name: string }>>([]);
+  const [escandalloAutoPrice, setEscandalloAutoPrice] = useState<number | null>(null);
+  const [escandalloPriceLoading, setEscandalloPriceLoading] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [showDeletedBanner, setShowDeletedBanner] = useState(false);
@@ -79,11 +88,72 @@ export default function ProductosPage() {
     };
   }, [localId]);
 
+  useEffect(() => {
+    if (originType !== 'escandallo' || !escandalloId || !localId || !isSupabaseEnabled()) {
+      setEscandalloAutoPrice(null);
+      return;
+    }
+    const supabase = getSupabaseClient();
+    if (!supabase) {
+      setEscandalloAutoPrice(null);
+      return;
+    }
+    let active = true;
+    void (async () => {
+      setEscandalloPriceLoading(true);
+      try {
+        const [recipes, rawProducts, processedProducts] = await Promise.all([
+          fetchEscandalloRecipes(supabase, localId),
+          fetchEscandalloRawProductsWithWeightedPurchasePrices(supabase, localId),
+          fetchProcessedProductsForEscandallo(supabase, localId),
+        ]);
+        if (!active) return;
+        const recipe = recipes.find((r) => r.id === escandalloId);
+        if (!recipe || recipe.yieldQty <= 0) {
+          setEscandalloAutoPrice(null);
+          return;
+        }
+        const linesByRecipe: Record<string, EscandalloLine[]> = {};
+        const linesList = await Promise.all(recipes.map((r) => fetchEscandalloLines(supabase, localId, r.id)));
+        if (!active) return;
+        recipes.forEach((r, i) => {
+          linesByRecipe[r.id] = linesList[i];
+        });
+        const total = recipeTotalCostEur(
+          linesByRecipe[recipe.id] ?? [],
+          new Map(rawProducts.map((x) => [x.id, x])),
+          new Map(processedProducts.map((x) => [x.id, x])),
+          { linesByRecipe, recipesById: new Map(recipes.map((x) => [x.id, x])), recipeId: recipe.id },
+        );
+        const perUnit = total > 0 ? Math.round((total / recipe.yieldQty) * 10000) / 10000 : 0;
+        setEscandalloAutoPrice(perUnit > 0 ? perUnit : 0);
+      } catch {
+        if (!active) return;
+        setEscandalloAutoPrice(null);
+      } finally {
+        if (active) setEscandalloPriceLoading(false);
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, [originType, escandalloId, localId]);
+
+  useEffect(() => {
+    if (originType !== 'escandallo') return;
+    const next = escandalloAutoPrice ?? 0;
+    setPrice(next.toFixed(2));
+  }, [originType, escandalloAutoPrice]);
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const numeric = Number(price);
+    const numeric = originType === 'escandallo' ? Math.max(0, escandalloAutoPrice ?? 0) : Number(price);
     const trimmed = name.trim();
-    if (!trimmed || !Number.isFinite(numeric) || numeric <= 0) return;
+    if (!trimmed || !Number.isFinite(numeric) || numeric < 0) return;
+    if (originType === 'manual' && numeric <= 0) {
+      setMessage('Indica un precio manual mayor que 0.');
+      return;
+    }
     if (originType === 'master' && !masterArticleId) {
       setMessage('Selecciona un Artículo Máster para este origen.');
       return;
@@ -119,7 +189,7 @@ export default function ProductosPage() {
         typeOrigin: originType,
         masterArticleId: originType === 'master' ? masterArticleId || null : null,
         escandalloId: originType === 'escandallo' ? escandalloId || null : null,
-        manualPricePerUnit: numeric,
+        manualPricePerUnit: originType === 'manual' ? numeric : null,
         compositionLines:
           originType === 'composicion'
             ? compositionLines
@@ -136,7 +206,7 @@ export default function ProductosPage() {
         typeOrigin: originType,
         masterArticleId: originType === 'master' ? masterArticleId || null : null,
         escandalloId: originType === 'escandallo' ? escandalloId || null : null,
-        manualPricePerUnit: numeric,
+        manualPricePerUnit: originType === 'manual' ? numeric : null,
         compositionLines:
           originType === 'composicion'
             ? compositionLines
@@ -155,6 +225,7 @@ export default function ProductosPage() {
     setMasterSearch('');
     setEscandalloSearch('');
     setCompositionLines([]);
+    setEscandalloAutoPrice(null);
     setEditingId(null);
     setOpen(false);
   };
@@ -230,6 +301,7 @@ export default function ProductosPage() {
                     setEscandalloId(p.escandalloId ?? '');
                     setMasterSearch('');
                     setEscandalloSearch('');
+                    setEscandalloAutoPrice(null);
                     setCompositionLines(
                       (p.compositionLines ?? []).map((x) => ({
                         id: x.id,
@@ -295,6 +367,7 @@ export default function ProductosPage() {
           setMasterSearch('');
           setEscandalloSearch('');
           setCompositionLines([]);
+          setEscandalloAutoPrice(null);
           setMessage(null);
         }}
         className="fixed bottom-24 right-6 z-40 grid h-16 w-16 place-items-center rounded-full bg-gradient-to-r from-[#B91C1C] to-[#D32F2F] text-white shadow-xl"
@@ -324,6 +397,7 @@ export default function ProductosPage() {
                   setMasterSearch('');
                   setEscandalloSearch('');
                   setCompositionLines([]);
+                  setEscandalloAutoPrice(null);
                 }}
                 className="grid h-9 w-9 place-items-center rounded-lg text-zinc-600 hover:bg-zinc-100"
                 aria-label="Cerrar"
@@ -365,9 +439,16 @@ export default function ProductosPage() {
                   step="0.01"
                   value={price}
                   onChange={(e) => setPrice(e.target.value)}
+                  readOnly={originType === 'escandallo'}
+                  disabled={originType === 'escandallo'}
                   className="mt-1 h-11 w-full rounded-xl border border-zinc-200 px-3 text-sm outline-none focus:border-[#D32F2F] focus:ring-2 focus:ring-[#D32F2F]/20"
                   placeholder="0.00"
                 />
+                {originType === 'escandallo' ? (
+                  <p className="mt-1 text-[11px] font-semibold text-zinc-500">
+                    {escandalloPriceLoading ? 'Calculando precio automático desde escandallo…' : 'Precio automático desde escandallo'}
+                  </p>
+                ) : null}
               </label>
 
               <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-3">
