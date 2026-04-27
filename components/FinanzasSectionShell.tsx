@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import React, { useCallback, useEffect, useState } from 'react';
 import { RefreshCw } from 'lucide-react';
-import MermasStyleHero from '@/components/MermasStyleHero';
+import ModuleHeader from '@/components/ModuleHeader';
 import { useAuth } from '@/components/AuthProvider';
 import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
 import PedidosPremiaLockedScreen from '@/components/PedidosPremiaLockedScreen';
@@ -99,7 +99,8 @@ export default function FinanzasSectionShell({
 
   return (
     <div className="space-y-4 pb-10">
-      <MermasStyleHero slim eyebrow="Finanzas" title={title} description={description} />
+      <ModuleHeader title={`Finanzas · ${title}`} />
+      {description ? <p className="max-w-2xl text-sm text-zinc-600">{description}</p> : null}
 
       <div className="flex flex-wrap items-center gap-2">
         <div className="flex flex-wrap gap-1">

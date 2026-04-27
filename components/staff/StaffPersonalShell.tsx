@@ -53,7 +53,7 @@ const pillActive = 'bg-[#D32F2F] text-white';
 const pillInactive = 'bg-[#ebebeb] text-zinc-800 hover:bg-[#e0e0e0]';
 
 /**
- * Pills de sección Personal. Colocar justo debajo del `MermasStyleHero` en cada página (no en `/personal/mi/*`).
+ * Pills de sección Personal. Colocar justo debajo del `ModuleHeader` en cada página (no en `/personal/mi/*`).
  */
 export function PersonalSectionNav() {
   const pathname = usePathname();

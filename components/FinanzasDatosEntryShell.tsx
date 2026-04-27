@@ -1,7 +1,7 @@
 'use client';
 
 import type { ReactNode } from 'react';
-import MermasStyleHero from '@/components/MermasStyleHero';
+import ModuleHeader from '@/components/ModuleHeader';
 import { useAuth } from '@/components/AuthProvider';
 import { isSupabaseEnabled, getSupabaseClient } from '@/lib/supabase-client';
 import PedidosPremiaLockedScreen from '@/components/PedidosPremiaLockedScreen';
@@ -43,7 +43,8 @@ export default function FinanzasDatosEntryShell({
 
   return (
     <div className="space-y-4 pb-10">
-      <MermasStyleHero slim eyebrow="Finanzas · Datos" title={title} description={description} />
+      <ModuleHeader title={`Finanzas · Datos · ${title}`} />
+      {description ? <p className="max-w-2xl text-sm text-zinc-600">{description}</p> : null}
 
       {children({ localId })}
     </div>

@@ -18,6 +18,7 @@ import {
   restoreRecipeAllergen,
   type AllergenMasterRow,
   type AllergenPresenceType,
+  type GlutenFreeOption,
   type RecipeAllergenReviewLogRow,
   type RecipeAllergenRow,
   type RecipeAllergenSourceRow,
@@ -30,6 +31,10 @@ type RecipeLite = {
   name: string;
   allergens_review_status: 'reviewed' | 'pending_review' | 'stale' | 'incomplete';
   allergens_reviewed_at: string | null;
+  carta_category?: string | null;
+  gluten_free_option?: GlutenFreeOption | null;
+  gluten_free_option_note?: string | null;
+  gluten_cross_contamination_warning?: string | null;
 };
 
 export default function AppccCartaAlergenosDetailPage({ params }: { params: Promise<{ recipeId: string }> }) {
@@ -50,6 +55,11 @@ export default function AppccCartaAlergenosDetailPage({ params }: { params: Prom
   const [excludeReason, setExcludeReason] = useState('');
   const [forceReview, setForceReview] = useState(false);
   const [missingProducts, setMissingProducts] = useState<Array<{ line: string; product: string }>>([]);
+  const [cartaCategoryIn, setCartaCategoryIn] = useState('');
+  const [glutenOptIn, setGlutenOptIn] = useState<GlutenFreeOption>('ask');
+  const [glutenNoteIn, setGlutenNoteIn] = useState('');
+  const [glutenCcIn, setGlutenCcIn] = useState('');
+  const [savingMatrizMeta, setSavingMatrizMeta] = useState(false);
 
   useEffect(() => {
     void params.then((p) => setRecipeId(p.recipeId));
@@ -68,7 +78,9 @@ export default function AppccCartaAlergenosDetailPage({ params }: { params: Prom
       const [recipeRes, m, r, s, logs, linesRes, processedRes, productsRes] = await Promise.all([
         supabase
           .from('escandallo_recipes')
-          .select('id,local_id,name,allergens_review_status,allergens_reviewed_at')
+          .select(
+            'id,local_id,name,allergens_review_status,allergens_reviewed_at,carta_category,gluten_free_option,gluten_free_option_note,gluten_cross_contamination_warning',
+          )
           .eq('local_id', localId)
           .eq('id', recipeId)
           .single(),
@@ -112,7 +124,12 @@ export default function AppccCartaAlergenosDetailPage({ params }: { params: Prom
         }
       }
 
-      setRecipe(recipeRes.data as RecipeLite);
+      const rec = recipeRes.data as RecipeLite;
+      setRecipe(rec);
+      setCartaCategoryIn(rec.carta_category?.trim() ?? '');
+      setGlutenOptIn(rec.gluten_free_option ?? 'ask');
+      setGlutenNoteIn(rec.gluten_free_option_note?.trim() ?? '');
+      setGlutenCcIn(rec.gluten_cross_contamination_warning?.trim() ?? '');
       setMaster(m);
       setRows(r);
       setSources(s);
@@ -128,7 +145,7 @@ export default function AppccCartaAlergenosDetailPage({ params }: { params: Prom
 
   useEffect(() => {
     if (!profileReady) return;
-    if (profileRole === 'manager') {
+    if (profileRole !== 'admin') {
       setLoading(false);
       return;
     }
@@ -146,6 +163,42 @@ export default function AppccCartaAlergenosDetailPage({ params }: { params: Prom
 
   const activeRows = rows.filter((r) => r.status !== 'excluded');
   const excludedRows = rows.filter((r) => r.status === 'excluded');
+
+  const saveMatrizSalaMeta = async () => {
+    if (!recipeId || !localId || !supabaseReady) return;
+    setSavingMatrizMeta(true);
+    setBanner(null);
+    try {
+      const supabase = getSupabaseClient()!;
+      const { error } = await supabase
+        .from('escandallo_recipes')
+        .update({
+          carta_category: cartaCategoryIn.trim() || null,
+          gluten_free_option: glutenOptIn,
+          gluten_free_option_note: glutenNoteIn.trim() || null,
+          gluten_cross_contamination_warning: glutenCcIn.trim() || null,
+        })
+        .eq('id', recipeId)
+        .eq('local_id', localId);
+      if (error) throw new Error(error.message);
+      setRecipe((prev) =>
+        prev
+          ? {
+              ...prev,
+              carta_category: cartaCategoryIn.trim() || null,
+              gluten_free_option: glutenOptIn,
+              gluten_free_option_note: glutenNoteIn.trim() || null,
+              gluten_cross_contamination_warning: glutenCcIn.trim() || null,
+            }
+          : prev,
+      );
+      setBanner('Datos de consulta rápida (matriz) guardados.');
+    } catch (e: unknown) {
+      setBanner(e instanceof Error ? e.message : 'No se pudo guardar.');
+    } finally {
+      setSavingMatrizMeta(false);
+    }
+  };
 
   const withAction = async (fn: () => Promise<void>) => {
     if (!recipeId || !supabaseReady) return;
@@ -169,12 +222,13 @@ export default function AppccCartaAlergenosDetailPage({ params }: { params: Prom
     );
   }
 
-  if (profileRole === 'manager') {
+  if (profileRole !== 'admin') {
     return (
       <div className="space-y-4 pb-8">
         <AppccCompactHero title="Acceso no autorizado" />
         <section className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-950 ring-1 ring-amber-100">
-          No tienes permiso para revisar ni editar platos. Consulta la matriz general de carta y alérgenos.
+          La edición y revisión de platos es solo para administración. Usa la matriz de consulta rápida para atención al
+          cliente.
         </section>
         <Link
           href="/appcc/carta-alergenos/matriz"
@@ -244,6 +298,65 @@ export default function AppccCartaAlergenosDetailPage({ params }: { params: Prom
           <input type="checkbox" checked={forceReview} onChange={(e) => setForceReview(e.target.checked)} className="h-4 w-4 rounded border-zinc-300 text-[#D32F2F] focus:ring-[#D32F2F]/20" />
           Permitir confirmación forzada si faltan fichas de ingredientes
         </label>
+      </section>
+
+      <section className="rounded-2xl border border-zinc-200 bg-white p-4 ring-1 ring-zinc-100">
+        <p className="text-sm font-bold text-zinc-900">Matriz sala: categoría y sin gluten</p>
+        <p className="mt-1 text-xs text-zinc-600">
+          Visible en «Matriz carta y alérgenos» para sala y cocina. Requiere las columnas del SQL{' '}
+          <code className="rounded bg-zinc-100 px-1">supabase-carta-recipe-gluten-fields.sql</code>.
+        </p>
+        <div className="mt-3 grid gap-3 sm:grid-cols-2">
+          <label className="block text-xs font-bold text-zinc-600">
+            Categoría en carta
+            <input
+              value={cartaCategoryIn}
+              onChange={(e) => setCartaCategoryIn(e.target.value)}
+              className="mt-1 w-full rounded-xl border border-zinc-200 px-3 py-2 text-sm"
+              placeholder="Ej. Entrante, Principal…"
+            />
+          </label>
+          <label className="block text-xs font-bold text-zinc-600">
+            Posibilidad sin gluten
+            <select
+              value={glutenOptIn}
+              onChange={(e) => setGlutenOptIn(e.target.value as GlutenFreeOption)}
+              className="mt-1 w-full rounded-xl border border-zinc-200 px-3 py-2 text-sm font-semibold"
+            >
+              <option value="yes">Sí</option>
+              <option value="no">No</option>
+              <option value="ask">Consultar</option>
+            </select>
+          </label>
+        </div>
+        <label className="mt-3 block text-xs font-bold text-zinc-600">
+          Motivo / cómo prepararlo sin gluten
+          <textarea
+            value={glutenNoteIn}
+            onChange={(e) => setGlutenNoteIn(e.target.value)}
+            rows={2}
+            className="mt-1 w-full rounded-xl border border-zinc-200 px-3 py-2 text-sm"
+            placeholder="Texto breve para el equipo y el servicio."
+          />
+        </label>
+        <label className="mt-3 block text-xs font-bold text-zinc-600">
+          Advertencia contaminación cruzada (si aplica)
+          <textarea
+            value={glutenCcIn}
+            onChange={(e) => setGlutenCcIn(e.target.value)}
+            rows={2}
+            className="mt-1 w-full rounded-xl border border-zinc-200 px-3 py-2 text-sm"
+            placeholder="Opcional."
+          />
+        </label>
+        <button
+          type="button"
+          disabled={savingMatrizMeta || busy}
+          onClick={() => void saveMatrizSalaMeta()}
+          className="mt-3 min-h-[44px] w-full rounded-2xl bg-zinc-900 px-4 text-sm font-bold text-white hover:bg-zinc-800 disabled:opacity-50 sm:w-auto"
+        >
+          Guardar datos de matriz
+        </button>
       </section>
 
       {missingProducts.length > 0 ? (

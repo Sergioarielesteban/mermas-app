@@ -67,6 +67,9 @@ export type ProductAllergenRow = {
   updated_at: string;
 };
 
+/** Posibilidad sin gluten (columnas escandallo_recipes tras supabase-carta-recipe-gluten-fields.sql). */
+export type GlutenFreeOption = 'yes' | 'no' | 'ask';
+
 export type CartaRecipeRow = {
   id: string;
   local_id: string;
@@ -79,6 +82,10 @@ export type CartaRecipeRow = {
   allergens_force_reviewed: boolean;
   allergens_last_calculated_at: string | null;
   updated_at: string;
+  carta_category?: string | null;
+  gluten_free_option?: GlutenFreeOption | null;
+  gluten_free_option_note?: string | null;
+  gluten_cross_contamination_warning?: string | null;
 };
 
 export type SupplierProductLite = {
@@ -136,7 +143,7 @@ export async function fetchCartaRecipesWithReviewStatus(
   const { data, error } = await supabase
     .from('escandallo_recipes')
     .select(
-      'id,local_id,name,notes,is_sub_recipe,allergens_review_status,allergens_reviewed_at,allergens_reviewed_by,allergens_force_reviewed,allergens_last_calculated_at,updated_at',
+      'id,local_id,name,notes,is_sub_recipe,allergens_review_status,allergens_reviewed_at,allergens_reviewed_by,allergens_force_reviewed,allergens_last_calculated_at,updated_at,carta_category,gluten_free_option,gluten_free_option_note,gluten_cross_contamination_warning',
     )
     .eq('local_id', localId)
     .eq('is_sub_recipe', false)

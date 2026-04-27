@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronDown, CheckCircle2, Package, Plus, RotateCcw, Trash2 } from 'lucide-react';
-import MermasStyleHero from '@/components/MermasStyleHero';
+import ModuleHeader from '@/components/ModuleHeader';
 import InventoryResultadoInventario from '@/components/InventoryResultadoInventario';
 import { useAuth } from '@/components/AuthProvider';
 import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
@@ -804,7 +804,7 @@ export default function InventarioPage() {
 
   return (
     <div className="space-y-5">
-      <MermasStyleHero slim compactTitle title="Inventario" />
+      <ModuleHeader title="Inventario" />
 
       {!isSupabaseEnabled() || !getSupabaseClient() ? (
         <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
