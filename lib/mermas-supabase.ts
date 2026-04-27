@@ -9,6 +9,8 @@ export type ProductRow = {
   tipo_origen?: string | null;
   master_article_id?: string | null;
   escandallo_id?: string | null;
+  base_subreceta_id?: string | null;
+  base_subreceta_kind?: string | null;
   precio_manual?: number | null;
   composicion_json?: unknown;
   created_at: string;
@@ -40,13 +42,26 @@ export function mapProductRow(row: ProductRow): Product {
     ? row.composicion_json
         .map((x) => {
           const r = x as Record<string, unknown>;
-          const masterArticleId = typeof r.masterArticleId === 'string' ? r.masterArticleId : '';
+          const componentType: 'master' | 'escandallo' | 'base_subreceta' =
+            r.componentType === 'master' || r.componentType === 'escandallo' || r.componentType === 'base_subreceta'
+              ? r.componentType
+              : 'master';
+          const componentId =
+            typeof r.componentId === 'string'
+              ? r.componentId
+              : typeof r.masterArticleId === 'string'
+                ? r.masterArticleId
+                : '';
+          const componentKind: 'recipe' | 'processed' | null =
+            r.componentKind === 'recipe' || r.componentKind === 'processed' ? r.componentKind : null;
           const unit = typeof r.unit === 'string' ? r.unit : '';
           const qtyRaw = Number(r.qty);
-          if (!masterArticleId || !unit || !Number.isFinite(qtyRaw) || qtyRaw <= 0) return null;
+          if (!componentId || !unit || !Number.isFinite(qtyRaw) || qtyRaw <= 0) return null;
           return {
-            id: typeof r.id === 'string' ? r.id : `${masterArticleId}-${unit}`,
-            masterArticleId,
+            id: typeof r.id === 'string' ? r.id : `${componentType}-${componentId}-${unit}`,
+            componentType,
+            componentId,
+            componentKind,
             qty: qtyRaw,
             unit,
           };
@@ -59,11 +74,20 @@ export function mapProductRow(row: ProductRow): Product {
     unit: row.unit as Unit,
     pricePerUnit: Number(row.price_per_unit),
     typeOrigin:
-      row.tipo_origen === 'manual' || row.tipo_origen === 'master' || row.tipo_origen === 'escandallo' || row.tipo_origen === 'composicion'
+      row.tipo_origen === 'manual' ||
+      row.tipo_origen === 'master' ||
+      row.tipo_origen === 'escandallo' ||
+      row.tipo_origen === 'base_subreceta' ||
+      row.tipo_origen === 'composicion'
         ? row.tipo_origen
         : 'manual',
     masterArticleId: row.master_article_id ?? null,
     escandalloId: row.escandallo_id ?? null,
+    baseSubrecipeId: row.base_subreceta_id ?? null,
+    baseSubrecipeKind:
+      row.base_subreceta_kind === 'recipe' || row.base_subreceta_kind === 'processed'
+        ? row.base_subreceta_kind
+        : null,
     manualPricePerUnit:
       row.precio_manual != null && Number.isFinite(Number(row.precio_manual)) ? Number(row.precio_manual) : null,
     compositionLines,
@@ -81,13 +105,24 @@ export function mapMermaRow(row: MermaRow): MermaRecord {
     ? row.composicion_snapshot_json
         .map((x) => {
           const r = x as Record<string, unknown>;
-          const masterArticleId = typeof r.masterArticleId === 'string' ? r.masterArticleId : '';
+          const componentType: 'master' | 'escandallo' | 'base_subreceta' =
+            r.componentType === 'master' || r.componentType === 'escandallo' || r.componentType === 'base_subreceta'
+              ? r.componentType
+              : 'master';
+          const componentId =
+            typeof r.componentId === 'string'
+              ? r.componentId
+              : typeof r.masterArticleId === 'string'
+                ? r.masterArticleId
+                : '';
+          const componentKind: 'recipe' | 'processed' | null =
+            r.componentKind === 'recipe' || r.componentKind === 'processed' ? r.componentKind : null;
           const unit = typeof r.unit === 'string' ? r.unit : '';
           const qty = Number(r.qty);
           const unitCost = Number(r.unitCost);
           const lineCost = Number(r.lineCost);
-          if (!masterArticleId || !unit || !Number.isFinite(qty) || !Number.isFinite(unitCost) || !Number.isFinite(lineCost)) return null;
-          return { masterArticleId, qty, unit, unitCost, lineCost };
+          if (!componentId || !unit || !Number.isFinite(qty) || !Number.isFinite(unitCost) || !Number.isFinite(lineCost)) return null;
+          return { componentType, componentId, componentKind, qty, unit, unitCost, lineCost };
         })
         .filter((x): x is NonNullable<typeof x> => Boolean(x))
     : [];
@@ -104,7 +139,11 @@ export function mapMermaRow(row: MermaRow): MermaRecord {
     shift: mapShift(row.shift),
     optionalUserLabel: row.optional_user_label?.trim() || undefined,
     originTypeUsed:
-      row.tipo_origen_usado === 'manual' || row.tipo_origen_usado === 'master' || row.tipo_origen_usado === 'escandallo' || row.tipo_origen_usado === 'composicion'
+      row.tipo_origen_usado === 'manual' ||
+      row.tipo_origen_usado === 'master' ||
+      row.tipo_origen_usado === 'escandallo' ||
+      row.tipo_origen_usado === 'base_subreceta' ||
+      row.tipo_origen_usado === 'composicion'
         ? row.tipo_origen_usado
         : row.tipo_origen_usado === 'sin_precio'
           ? 'sin_precio'
@@ -135,7 +174,11 @@ export function mapMermaRowLean(row: Omit<MermaRow, 'photo_data_url'>): MermaRec
     shift: mapShift(row.shift),
     optionalUserLabel: row.optional_user_label?.trim() || undefined,
     originTypeUsed:
-      row.tipo_origen_usado === 'manual' || row.tipo_origen_usado === 'master' || row.tipo_origen_usado === 'escandallo' || row.tipo_origen_usado === 'composicion'
+      row.tipo_origen_usado === 'manual' ||
+      row.tipo_origen_usado === 'master' ||
+      row.tipo_origen_usado === 'escandallo' ||
+      row.tipo_origen_usado === 'base_subreceta' ||
+      row.tipo_origen_usado === 'composicion'
         ? row.tipo_origen_usado
         : row.tipo_origen_usado === 'sin_precio'
           ? 'sin_precio'
@@ -157,7 +200,7 @@ export async function fetchProductsAndMermas(supabase: SupabaseClient, localId: 
   try {
     const q = await supabase
       .from('products')
-      .select('id,name,unit,price_per_unit,tipo_origen,master_article_id,escandallo_id,precio_manual,composicion_json,created_at')
+      .select('id,name,unit,price_per_unit,tipo_origen,master_article_id,escandallo_id,base_subreceta_id,base_subreceta_kind,precio_manual,composicion_json,created_at')
       .eq('local_id', localId)
       .eq('is_active', true)
       .order('name');

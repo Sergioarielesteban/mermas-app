@@ -21,13 +21,17 @@ export type Product = {
   name: string;
   unit: Unit;
   pricePerUnit: number; // € por unidad (coste operativo efectivo)
-  typeOrigin?: 'manual' | 'master' | 'escandallo' | 'composicion';
+  typeOrigin?: 'manual' | 'master' | 'escandallo' | 'base_subreceta' | 'composicion';
   masterArticleId?: string | null;
   escandalloId?: string | null;
+  baseSubrecipeId?: string | null;
+  baseSubrecipeKind?: 'recipe' | 'processed' | null;
   manualPricePerUnit?: number | null;
   compositionLines?: Array<{
     id: string;
-    masterArticleId: string;
+    componentType: 'master' | 'escandallo' | 'base_subreceta';
+    componentId: string;
+    componentKind?: 'recipe' | 'processed' | null;
     qty: number;
     unit: string;
   }>;
@@ -60,11 +64,13 @@ export type MermaRecord = {
   /** Opcional: etiqueta libre (quién registra, etc.). */
   optionalUserLabel?: string;
   /** Snapshot del origen y coste al registrar (histórico inmutable). */
-  originTypeUsed?: 'manual' | 'master' | 'escandallo' | 'composicion' | 'sin_precio';
+  originTypeUsed?: 'manual' | 'master' | 'escandallo' | 'base_subreceta' | 'composicion' | 'sin_precio';
   unitCostSnapshot?: number | null;
   totalCostSnapshot?: number | null;
   compositionSnapshot?: Array<{
-    masterArticleId: string;
+    componentType: 'master' | 'escandallo' | 'base_subreceta';
+    componentId: string;
+    componentKind?: 'recipe' | 'processed' | null;
     qty: number;
     unit: string;
     unitCost: number;

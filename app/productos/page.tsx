@@ -20,7 +20,9 @@ import type { Unit } from '@/lib/types';
 
 type CompositionLineDraft = {
   id: string;
-  masterArticleId: string;
+  componentType: 'master' | 'escandallo' | 'base_subreceta';
+  componentId: string;
+  componentKind?: 'recipe' | 'processed' | null;
   qty: string;
   unit: Unit;
 };
@@ -33,15 +35,19 @@ export default function ProductosPage() {
   const [name, setName] = useState('');
   const [unit, setUnit] = useState<Unit>('ud');
   const [price, setPrice] = useState('0');
-  const [originType, setOriginType] = useState<'manual' | 'master' | 'escandallo' | 'composicion'>('manual');
+  const [originType, setOriginType] = useState<'manual' | 'master' | 'escandallo' | 'base_subreceta' | 'composicion'>('manual');
   const [masterArticleId, setMasterArticleId] = useState<string>('');
   const [escandalloId, setEscandalloId] = useState<string>('');
+  const [baseSubrecipeId, setBaseSubrecipeId] = useState<string>('');
+  const [baseSubrecipeKind, setBaseSubrecipeKind] = useState<'recipe' | 'processed'>('recipe');
   const [compositionLines, setCompositionLines] = useState<CompositionLineDraft[]>([]);
   const [masterSearch, setMasterSearch] = useState('');
   const [escandalloSearch, setEscandalloSearch] = useState('');
   const [masterOptions, setMasterOptions] = useState<Array<{ id: string; nombre: string }>>([]);
   const [escandalloOptions, setEscandalloOptions] = useState<Array<{ id: string; name: string }>>([]);
+  const [baseSubrecipeOptions, setBaseSubrecipeOptions] = useState<Array<{ id: string; name: string; kind: 'recipe' | 'processed' }>>([]);
   const [escandalloAutoPrice, setEscandalloAutoPrice] = useState<number | null>(null);
+  const [baseSubrecipeAutoPrice, setBaseSubrecipeAutoPrice] = useState<number | null>(null);
   const [escandalloPriceLoading, setEscandalloPriceLoading] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -70,17 +76,23 @@ export default function ProductosPage() {
     let active = true;
     void (async () => {
       try {
-        const [articles, recipes] = await Promise.all([
+        const [articles, recipes, processed] = await Promise.all([
           fetchPurchaseArticles(supabase, localId),
           fetchEscandalloRecipes(supabase, localId),
+          fetchProcessedProductsForEscandallo(supabase, localId),
         ]);
         if (!active) return;
         setMasterOptions(articles.map((a) => ({ id: a.id, nombre: a.nombre })));
         setEscandalloOptions(recipes.map((r) => ({ id: r.id, name: r.name })));
+        setBaseSubrecipeOptions([
+          ...recipes.filter((r) => r.isSubRecipe).map((r) => ({ id: r.id, name: r.name, kind: 'recipe' as const })),
+          ...processed.map((p) => ({ id: p.id, name: p.name, kind: 'processed' as const })),
+        ]);
       } catch {
         if (!active) return;
         setMasterOptions([]);
         setEscandalloOptions([]);
+        setBaseSubrecipeOptions([]);
       }
     })();
     return () => {
@@ -140,14 +152,80 @@ export default function ProductosPage() {
   }, [originType, escandalloId, localId]);
 
   useEffect(() => {
-    if (originType !== 'escandallo') return;
-    const next = escandalloAutoPrice ?? 0;
+    if (originType !== 'base_subreceta' || !baseSubrecipeId || !localId || !isSupabaseEnabled()) {
+      setBaseSubrecipeAutoPrice(null);
+      return;
+    }
+    const supabase = getSupabaseClient();
+    if (!supabase) {
+      setBaseSubrecipeAutoPrice(null);
+      return;
+    }
+    let active = true;
+    void (async () => {
+      setEscandalloPriceLoading(true);
+      try {
+        const [recipes, rawProducts, processedProducts] = await Promise.all([
+          fetchEscandalloRecipes(supabase, localId),
+          fetchEscandalloRawProductsWithWeightedPurchasePrices(supabase, localId),
+          fetchProcessedProductsForEscandallo(supabase, localId),
+        ]);
+        if (!active) return;
+        if (baseSubrecipeKind === 'processed') {
+          const p = processedProducts.find((x) => x.id === baseSubrecipeId);
+          const raw = p ? rawProducts.find((x) => x.id === p.sourceSupplierProductId) : null;
+          if (!p || !raw || p.outputQty <= 0) {
+            setBaseSubrecipeAutoPrice(null);
+            return;
+          }
+          const unitPrice = ((raw.pricePerUnit > 0 ? raw.pricePerUnit : 0) * p.inputQty + p.extraCostEur) / p.outputQty;
+          setBaseSubrecipeAutoPrice(Math.round(Math.max(0, unitPrice) * 10000) / 10000);
+          return;
+        }
+        const recipe = recipes.find((r) => r.id === baseSubrecipeId);
+        if (!recipe || recipe.yieldQty <= 0) {
+          setBaseSubrecipeAutoPrice(null);
+          return;
+        }
+        const linesByRecipe: Record<string, EscandalloLine[]> = {};
+        const linesList = await Promise.all(recipes.map((r) => fetchEscandalloLines(supabase, localId, r.id)));
+        if (!active) return;
+        recipes.forEach((r, i) => {
+          linesByRecipe[r.id] = linesList[i];
+        });
+        const total = recipeTotalCostEur(
+          linesByRecipe[recipe.id] ?? [],
+          new Map(rawProducts.map((x) => [x.id, x])),
+          new Map(processedProducts.map((x) => [x.id, x])),
+          { linesByRecipe, recipesById: new Map(recipes.map((x) => [x.id, x])), recipeId: recipe.id },
+        );
+        setBaseSubrecipeAutoPrice(total > 0 ? Math.round((total / recipe.yieldQty) * 10000) / 10000 : 0);
+      } catch {
+        if (!active) return;
+        setBaseSubrecipeAutoPrice(null);
+      } finally {
+        if (active) setEscandalloPriceLoading(false);
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, [originType, baseSubrecipeId, baseSubrecipeKind, localId]);
+
+  useEffect(() => {
+    if (originType !== 'escandallo' && originType !== 'base_subreceta') return;
+    const next = originType === 'escandallo' ? escandalloAutoPrice ?? 0 : baseSubrecipeAutoPrice ?? 0;
     setPrice(next.toFixed(2));
-  }, [originType, escandalloAutoPrice]);
+  }, [originType, escandalloAutoPrice, baseSubrecipeAutoPrice]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const numeric = originType === 'escandallo' ? Math.max(0, escandalloAutoPrice ?? 0) : Number(price);
+    const numeric =
+      originType === 'escandallo'
+        ? Math.max(0, escandalloAutoPrice ?? 0)
+        : originType === 'base_subreceta'
+          ? Math.max(0, baseSubrecipeAutoPrice ?? 0)
+          : Number(price);
     const trimmed = name.trim();
     if (!trimmed || !Number.isFinite(numeric) || numeric < 0) return;
     if (originType === 'manual' && numeric <= 0) {
@@ -162,9 +240,13 @@ export default function ProductosPage() {
       setMessage('Selecciona un Escandallo para este origen.');
       return;
     }
+    if (originType === 'base_subreceta' && !baseSubrecipeId) {
+      setMessage('Selecciona una base/subreceta/elaborado para este origen.');
+      return;
+    }
     if (originType === 'composicion') {
       const valid = compositionLines.filter(
-        (x) => x.masterArticleId && Number.isFinite(Number(x.qty)) && Number(x.qty) > 0 && x.unit,
+        (x) => x.componentId && Number.isFinite(Number(x.qty)) && Number(x.qty) > 0 && x.unit,
       );
       if (valid.length === 0) {
         setMessage('Añade al menos una línea válida en la composición.');
@@ -189,12 +271,21 @@ export default function ProductosPage() {
         typeOrigin: originType,
         masterArticleId: originType === 'master' ? masterArticleId || null : null,
         escandalloId: originType === 'escandallo' ? escandalloId || null : null,
+        baseSubrecipeId: originType === 'base_subreceta' ? baseSubrecipeId || null : null,
+        baseSubrecipeKind: originType === 'base_subreceta' ? baseSubrecipeKind : null,
         manualPricePerUnit: originType === 'manual' ? numeric : null,
         compositionLines:
           originType === 'composicion'
             ? compositionLines
-                .filter((x) => x.masterArticleId && Number.isFinite(Number(x.qty)) && Number(x.qty) > 0 && x.unit)
-                .map((x) => ({ id: x.id, masterArticleId: x.masterArticleId, qty: Number(x.qty), unit: x.unit }))
+                .filter((x) => x.componentId && Number.isFinite(Number(x.qty)) && Number(x.qty) > 0 && x.unit)
+                .map((x) => ({
+                  id: x.id,
+                  componentType: x.componentType,
+                  componentId: x.componentId,
+                  componentKind: x.componentKind ?? null,
+                  qty: Number(x.qty),
+                  unit: x.unit,
+                }))
             : [],
       });
       setMessage('Producto actualizado.');
@@ -206,12 +297,21 @@ export default function ProductosPage() {
         typeOrigin: originType,
         masterArticleId: originType === 'master' ? masterArticleId || null : null,
         escandalloId: originType === 'escandallo' ? escandalloId || null : null,
+        baseSubrecipeId: originType === 'base_subreceta' ? baseSubrecipeId || null : null,
+        baseSubrecipeKind: originType === 'base_subreceta' ? baseSubrecipeKind : null,
         manualPricePerUnit: originType === 'manual' ? numeric : null,
         compositionLines:
           originType === 'composicion'
             ? compositionLines
-                .filter((x) => x.masterArticleId && Number.isFinite(Number(x.qty)) && Number(x.qty) > 0 && x.unit)
-                .map((x) => ({ id: x.id, masterArticleId: x.masterArticleId, qty: Number(x.qty), unit: x.unit }))
+                .filter((x) => x.componentId && Number.isFinite(Number(x.qty)) && Number(x.qty) > 0 && x.unit)
+                .map((x) => ({
+                  id: x.id,
+                  componentType: x.componentType,
+                  componentId: x.componentId,
+                  componentKind: x.componentKind ?? null,
+                  qty: Number(x.qty),
+                  unit: x.unit,
+                }))
             : [],
       });
       setMessage('Producto añadido.');
@@ -222,6 +322,7 @@ export default function ProductosPage() {
     setOriginType('manual');
     setMasterArticleId('');
     setEscandalloId('');
+    setBaseSubrecipeId('');
     setMasterSearch('');
     setEscandalloSearch('');
     setCompositionLines([]);
@@ -283,6 +384,8 @@ export default function ProductosPage() {
                     ? 'Artículo Máster'
                     : p.typeOrigin === 'escandallo'
                       ? 'Escandallo'
+                      : p.typeOrigin === 'base_subreceta'
+                        ? 'Base/Subreceta'
                       : p.typeOrigin === 'composicion'
                         ? 'Composición'
                         : 'Manual'}
@@ -299,13 +402,17 @@ export default function ProductosPage() {
                     setOriginType(p.typeOrigin ?? 'manual');
                     setMasterArticleId(p.masterArticleId ?? '');
                     setEscandalloId(p.escandalloId ?? '');
+                    setBaseSubrecipeId(p.baseSubrecipeId ?? '');
+                    setBaseSubrecipeKind((p.baseSubrecipeKind ?? 'recipe') as 'recipe' | 'processed');
                     setMasterSearch('');
                     setEscandalloSearch('');
                     setEscandalloAutoPrice(null);
                     setCompositionLines(
                       (p.compositionLines ?? []).map((x) => ({
                         id: x.id,
-                        masterArticleId: x.masterArticleId,
+                        componentType: x.componentType,
+                        componentId: x.componentId,
+                        componentKind: x.componentKind ?? null,
                         qty: String(x.qty),
                         unit: x.unit as Unit,
                       })),
@@ -364,6 +471,7 @@ export default function ProductosPage() {
           setOriginType('manual');
           setMasterArticleId('');
           setEscandalloId('');
+          setBaseSubrecipeId('');
           setMasterSearch('');
           setEscandalloSearch('');
           setCompositionLines([]);
@@ -394,6 +502,7 @@ export default function ProductosPage() {
                   setOriginType('manual');
                   setMasterArticleId('');
                   setEscandalloId('');
+                  setBaseSubrecipeId('');
                   setMasterSearch('');
                   setEscandalloSearch('');
                   setCompositionLines([]);
@@ -439,14 +548,14 @@ export default function ProductosPage() {
                   step="0.01"
                   value={price}
                   onChange={(e) => setPrice(e.target.value)}
-                  readOnly={originType === 'escandallo'}
-                  disabled={originType === 'escandallo'}
+                  readOnly={originType !== 'manual'}
+                  disabled={originType !== 'manual'}
                   className="mt-1 h-11 w-full rounded-xl border border-zinc-200 px-3 text-sm outline-none focus:border-[#D32F2F] focus:ring-2 focus:ring-[#D32F2F]/20"
                   placeholder="0.00"
                 />
-                {originType === 'escandallo' ? (
+                {originType !== 'manual' ? (
                   <p className="mt-1 text-[11px] font-semibold text-zinc-500">
-                    {escandalloPriceLoading ? 'Calculando precio automático desde escandallo…' : 'Precio automático desde escandallo'}
+                    {escandalloPriceLoading ? 'Calculando precio automático…' : 'Precio automático'}
                   </p>
                 ) : null}
               </label>
@@ -458,6 +567,7 @@ export default function ProductosPage() {
                     { id: 'manual', label: 'Manual' },
                     { id: 'master', label: 'Artículo Máster' },
                     { id: 'escandallo', label: 'Escandallo' },
+                    { id: 'base_subreceta', label: 'Base/Subreceta' },
                     { id: 'composicion', label: 'Composición' },
                   ] as const).map((opt) => (
                     <button
@@ -522,26 +632,95 @@ export default function ProductosPage() {
                   </div>
                 ) : null}
 
+                {originType === 'base_subreceta' ? (
+                  <div className="mt-3 space-y-2">
+                    <select
+                      value={`${baseSubrecipeKind}:${baseSubrecipeId}`}
+                      onChange={(e) => {
+                        const [kind, id] = e.target.value.split(':');
+                        setBaseSubrecipeKind((kind === 'processed' ? 'processed' : 'recipe') as 'recipe' | 'processed');
+                        setBaseSubrecipeId(id || '');
+                      }}
+                      className="h-10 w-full rounded-lg border border-zinc-200 bg-white px-3 text-sm outline-none focus:border-[#D32F2F] focus:ring-2 focus:ring-[#D32F2F]/20"
+                    >
+                      <option value=":">Selecciona base/subreceta/elaborado…</option>
+                      {baseSubrecipeOptions.map((r) => (
+                        <option key={`${r.kind}-${r.id}`} value={`${r.kind}:${r.id}`}>
+                          {r.kind === 'processed' ? 'Elaborado · ' : 'Base/Subreceta · '}
+                          {r.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                ) : null}
+
                 {originType === 'composicion' ? (
                   <div className="mt-3 space-y-2">
                     <p className="text-xs font-semibold text-zinc-700">Composición de merma</p>
                     {compositionLines.map((line, idx) => (
                       <div key={line.id} className="grid grid-cols-12 gap-2 rounded-lg border border-zinc-200 bg-white p-2">
                         <select
-                          value={line.masterArticleId}
+                          value={line.componentType}
                           onChange={(e) =>
                             setCompositionLines((prev) =>
-                              prev.map((x) => (x.id === line.id ? { ...x, masterArticleId: e.target.value } : x)),
+                              prev.map((x) =>
+                                x.id === line.id
+                                  ? { ...x, componentType: e.target.value as CompositionLineDraft['componentType'], componentId: '' }
+                                  : x,
+                              ),
                             )
                           }
                           className="col-span-12 h-10 rounded-lg border border-zinc-200 px-2 text-sm outline-none focus:border-[#D32F2F] focus:ring-2 focus:ring-[#D32F2F]/20"
                         >
-                          <option value="">Artículo Máster…</option>
-                          {masterOptions.map((a) => (
-                            <option key={a.id} value={a.id}>
-                              {a.nombre}
-                            </option>
-                          ))}
+                          <option value="master">Artículo Máster</option>
+                          <option value="escandallo">Escandallo final</option>
+                          <option value="base_subreceta">Base/Subreceta/Elaborado</option>
+                        </select>
+                        <select
+                          value={line.componentId}
+                          onChange={(e) =>
+                            setCompositionLines((prev) =>
+                              prev.map((x) =>
+                                x.id === line.id
+                                  ? {
+                                      ...x,
+                                      componentId: e.target.value,
+                                      componentKind:
+                                        line.componentType === 'base_subreceta'
+                                          ? (e.target.selectedOptions[0]?.getAttribute('data-kind') as 'recipe' | 'processed' | null)
+                                          : null,
+                                    }
+                                  : x,
+                              ),
+                            )
+                          }
+                          className="col-span-12 h-10 rounded-lg border border-zinc-200 px-2 text-sm outline-none focus:border-[#D32F2F] focus:ring-2 focus:ring-[#D32F2F]/20"
+                        >
+                          <option value="">
+                            {line.componentType === 'master'
+                              ? 'Artículo Máster…'
+                              : line.componentType === 'escandallo'
+                                ? 'Escandallo…'
+                                : 'Base/Subreceta/Elaborado…'}
+                          </option>
+                          {line.componentType === 'master'
+                            ? masterOptions.map((a) => (
+                                <option key={a.id} value={a.id}>
+                                  {a.nombre}
+                                </option>
+                              ))
+                            : line.componentType === 'escandallo'
+                              ? escandalloOptions.map((r) => (
+                                  <option key={r.id} value={r.id}>
+                                    {r.name}
+                                  </option>
+                                ))
+                              : baseSubrecipeOptions.map((r) => (
+                                  <option key={`${r.kind}-${r.id}`} value={r.id} data-kind={r.kind}>
+                                    {r.kind === 'processed' ? 'Elaborado · ' : 'Base/Subreceta · '}
+                                    {r.name}
+                                  </option>
+                                ))}
                         </select>
                         <input
                           type="number"
@@ -586,7 +765,14 @@ export default function ProductosPage() {
                       onClick={() =>
                         setCompositionLines((prev) => [
                           ...prev,
-                          { id: `${Date.now()}-${Math.random()}`, masterArticleId: '', qty: '', unit: 'ud' },
+                          {
+                            id: `${Date.now()}-${Math.random()}`,
+                            componentType: 'master',
+                            componentId: '',
+                            componentKind: null,
+                            qty: '',
+                            unit: 'ud',
+                          },
                         ])
                       }
                       className="h-10 w-full rounded-lg border border-zinc-300 bg-white text-xs font-semibold text-zinc-700 hover:bg-zinc-100"

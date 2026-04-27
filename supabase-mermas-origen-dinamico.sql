@@ -5,6 +5,8 @@ alter table public.products
   add column if not exists tipo_origen text not null default 'manual',
   add column if not exists master_article_id uuid null references public.purchase_articles(id) on delete set null,
   add column if not exists escandallo_id uuid null references public.escandallo_recipes(id) on delete set null,
+  add column if not exists base_subreceta_id uuid null,
+  add column if not exists base_subreceta_kind text null,
   add column if not exists precio_manual numeric(10,2) null,
   add column if not exists composicion_json jsonb null;
 
@@ -18,10 +20,17 @@ alter table public.products
   drop constraint if exists products_tipo_origen_check;
 alter table public.products
   add constraint products_tipo_origen_check
-  check (tipo_origen in ('manual', 'master', 'escandallo', 'composicion'));
+  check (tipo_origen in ('manual', 'master', 'escandallo', 'base_subreceta', 'composicion'));
+
+alter table public.products
+  drop constraint if exists products_base_subreceta_kind_check;
+alter table public.products
+  add constraint products_base_subreceta_kind_check
+  check (base_subreceta_kind is null or base_subreceta_kind in ('recipe', 'processed'));
 
 create index if not exists idx_products_master_article_id on public.products(master_article_id);
 create index if not exists idx_products_escandallo_id on public.products(escandallo_id);
+create index if not exists idx_products_base_subreceta_id on public.products(base_subreceta_id);
 
 alter table public.mermas
   add column if not exists tipo_origen_usado text null,
@@ -33,7 +42,7 @@ alter table public.mermas
   drop constraint if exists mermas_tipo_origen_usado_check;
 alter table public.mermas
   add constraint mermas_tipo_origen_usado_check
-  check (tipo_origen_usado is null or tipo_origen_usado in ('manual', 'master', 'escandallo', 'composicion', 'sin_precio'));
+  check (tipo_origen_usado is null or tipo_origen_usado in ('manual', 'master', 'escandallo', 'base_subreceta', 'composicion', 'sin_precio'));
 
 update public.mermas
 set

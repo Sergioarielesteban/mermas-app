@@ -32,9 +32,11 @@ type CreateProductInput = {
   name: string;
   unit: Unit;
   pricePerUnit: number;
-  typeOrigin?: 'manual' | 'master' | 'escandallo' | 'composicion';
+  typeOrigin?: 'manual' | 'master' | 'escandallo' | 'base_subreceta' | 'composicion';
   masterArticleId?: string | null;
   escandalloId?: string | null;
+  baseSubrecipeId?: string | null;
+  baseSubrecipeKind?: 'recipe' | 'processed' | null;
   manualPricePerUnit?: number | null;
   compositionLines?: Product['compositionLines'];
 };
@@ -970,23 +972,120 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
         }
       }
 
+      if (origin === 'base_subreceta' && product.baseSubrecipeId) {
+        try {
+          const [recipes, rawProducts, processed] = await Promise.all([
+            fetchEscandalloRecipes(supabase, localId),
+            fetchEscandalloRawProductsWithWeightedPurchasePrices(supabase, localId),
+            fetchProcessedProductsForEscandallo(supabase, localId),
+          ]);
+          if (product.baseSubrecipeKind === 'processed') {
+            const p = processed.find((x) => x.id === product.baseSubrecipeId);
+            if (p) {
+              const raw = rawProducts.find((x) => x.id === p.sourceSupplierProductId);
+              if (raw && p.outputQty > 0) {
+                const linePrice =
+                  ((raw.pricePerUnit > 0 ? raw.pricePerUnit : 0) * p.inputQty + p.extraCostEur) / p.outputQty;
+                const per = Math.round(linePrice * 10000) / 10000;
+                if (per > 0) return { unitCost: per, originUsed: 'base_subreceta' };
+              }
+            }
+          } else {
+            const recipe = recipes.find((r) => r.id === product.baseSubrecipeId);
+            if (recipe && recipe.yieldQty > 0) {
+              const linesByRecipe: Record<string, EscandalloLine[]> = {};
+              const linesList = await Promise.all(recipes.map((r) => fetchEscandalloLines(supabase, localId, r.id)));
+              recipes.forEach((r, i) => {
+                linesByRecipe[r.id] = linesList[i];
+              });
+              const total = recipeTotalCostEur(
+                linesByRecipe[recipe.id] ?? [],
+                new Map(rawProducts.map((x) => [x.id, x])),
+                new Map(processed.map((x) => [x.id, x])),
+                { linesByRecipe, recipesById: new Map(recipes.map((x) => [x.id, x])), recipeId: recipe.id },
+              );
+              const per = total > 0 ? Math.round((total / recipe.yieldQty) * 10000) / 10000 : 0;
+              if (per > 0) return { unitCost: per, originUsed: 'base_subreceta' };
+            }
+          }
+        } catch {
+          /* fallback manual */
+        }
+      }
+
       if (origin === 'composicion' && product.compositionLines && product.compositionLines.length > 0) {
         try {
-          const articleIds = [...new Set(product.compositionLines.map((x) => x.masterArticleId).filter(Boolean))];
+          const articleIds = [
+            ...new Set(
+              product.compositionLines
+                .filter((x) => x.componentType === 'master')
+                .map((x) => x.componentId)
+                .filter(Boolean),
+            ),
+          ];
           const hints = await fetchPurchaseArticleCostHintsByIds(supabase, localId, articleIds);
+          const [recipes, rawProducts, processed] = await Promise.all([
+            fetchEscandalloRecipes(supabase, localId),
+            fetchEscandalloRawProductsWithWeightedPurchasePrices(supabase, localId),
+            fetchProcessedProductsForEscandallo(supabase, localId),
+          ]);
+          const linesByRecipe: Record<string, EscandalloLine[]> = {};
+          const linesList = await Promise.all(recipes.map((r) => fetchEscandalloLines(supabase, localId, r.id)));
+          recipes.forEach((r, i) => {
+            linesByRecipe[r.id] = linesList[i];
+          });
           let sum = 0;
           const snapshot: NonNullable<MermaRecord['compositionSnapshot']> = [];
           for (const line of product.compositionLines) {
-            const h = hints.get(line.masterArticleId);
-            const baseCost = h?.costeUnitarioUso;
-            const baseUnit = h?.unidadUso ?? line.unit;
+            let baseCost: number | null = null;
+            let baseUnit: string = line.unit;
+            if (line.componentType === 'master') {
+              const h = hints.get(line.componentId);
+              baseCost = h?.costeUnitarioUso ?? null;
+              baseUnit = h?.unidadUso ?? line.unit;
+            } else if (line.componentType === 'escandallo') {
+              const recipe = recipes.find((r) => r.id === line.componentId);
+              if (recipe && recipe.yieldQty > 0) {
+                const total = recipeTotalCostEur(
+                  linesByRecipe[recipe.id] ?? [],
+                  new Map(rawProducts.map((x) => [x.id, x])),
+                  new Map(processed.map((x) => [x.id, x])),
+                  { linesByRecipe, recipesById: new Map(recipes.map((x) => [x.id, x])), recipeId: recipe.id },
+                );
+                baseCost = total > 0 ? total / recipe.yieldQty : null;
+                baseUnit = recipe.yieldLabel || line.unit;
+              }
+            } else if (line.componentType === 'base_subreceta') {
+              if (line.componentKind === 'processed') {
+                const p = processed.find((x) => x.id === line.componentId);
+                const raw = p ? rawProducts.find((x) => x.id === p.sourceSupplierProductId) : null;
+                if (p && raw && p.outputQty > 0) {
+                  baseCost = ((raw.pricePerUnit > 0 ? raw.pricePerUnit : 0) * p.inputQty + p.extraCostEur) / p.outputQty;
+                  baseUnit = p.outputUnit;
+                }
+              } else {
+                const recipe = recipes.find((r) => r.id === line.componentId);
+                if (recipe && recipe.yieldQty > 0) {
+                  const total = recipeTotalCostEur(
+                    linesByRecipe[recipe.id] ?? [],
+                    new Map(rawProducts.map((x) => [x.id, x])),
+                    new Map(processed.map((x) => [x.id, x])),
+                    { linesByRecipe, recipesById: new Map(recipes.map((x) => [x.id, x])), recipeId: recipe.id },
+                  );
+                  baseCost = total > 0 ? total / recipe.yieldQty : null;
+                  baseUnit = recipe.yieldLabel || line.unit;
+                }
+              }
+            }
             if (baseCost == null || !Number.isFinite(baseCost) || baseCost <= 0) continue;
             const converted = convertCost(baseCost, baseUnit, line.unit);
             const unitCost = converted != null ? converted : baseCost;
             const lineCost = Math.round(line.qty * unitCost * 10000) / 10000;
             sum += lineCost;
             snapshot.push({
-              masterArticleId: line.masterArticleId,
+              componentType: line.componentType,
+              componentId: line.componentId,
+              componentKind: line.componentKind ?? null,
               qty: line.qty,
               unit: line.unit,
               unitCost,
@@ -1015,11 +1114,21 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
           : null;
       const masterArticleId = typeOrigin === 'master' ? (input.masterArticleId ?? null) : null;
       const escandalloId = typeOrigin === 'escandallo' ? (input.escandalloId ?? null) : null;
+      const baseSubrecipeId = typeOrigin === 'base_subreceta' ? (input.baseSubrecipeId ?? null) : null;
+      const baseSubrecipeKind = typeOrigin === 'base_subreceta' ? (input.baseSubrecipeKind ?? null) : null;
+      if (typeOrigin === 'base_subreceta' && !baseSubrecipeId) return;
       const compositionLines =
         typeOrigin === 'composicion'
           ? (input.compositionLines ?? [])
-              .filter((x) => x.masterArticleId && Number.isFinite(x.qty) && x.qty > 0 && x.unit)
-              .map((x) => ({ id: x.id, masterArticleId: x.masterArticleId, qty: x.qty, unit: x.unit }))
+              .filter((x) => x.componentId && Number.isFinite(x.qty) && x.qty > 0 && x.unit)
+              .map((x) => ({
+                id: x.id,
+                componentType: x.componentType,
+                componentId: x.componentId,
+                componentKind: x.componentKind ?? null,
+                qty: x.qty,
+                unit: x.unit,
+              }))
           : [];
       const normalized = normalizeName(trimmed);
       const exists = products.some((p) => normalizeName(p.name) === normalized);
@@ -1045,10 +1154,14 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
               tipo_origen: typeOrigin,
               master_article_id: masterArticleId,
               escandallo_id: escandalloId,
+              base_subreceta_id: baseSubrecipeId,
+              base_subreceta_kind: baseSubrecipeKind,
               precio_manual: manualPrice,
               composicion_json: compositionLines,
             })
-            .select('id,name,unit,price_per_unit,tipo_origen,master_article_id,escandallo_id,precio_manual,composicion_json,created_at')
+            .select(
+              'id,name,unit,price_per_unit,tipo_origen,master_article_id,escandallo_id,base_subreceta_id,base_subreceta_kind,precio_manual,composicion_json,created_at',
+            )
             .maybeSingle();
           if (first.error) {
             const fallback = await supabase
@@ -1079,6 +1192,8 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
         typeOrigin,
         masterArticleId,
         escandalloId,
+        baseSubrecipeId,
+        baseSubrecipeKind,
         manualPricePerUnit: manualPrice,
         compositionLines,
         createdAt: new Date().toISOString(),
@@ -1099,11 +1214,21 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
           : null;
       const masterArticleId = typeOrigin === 'master' ? (input.masterArticleId ?? null) : null;
       const escandalloId = typeOrigin === 'escandallo' ? (input.escandalloId ?? null) : null;
+      const baseSubrecipeId = typeOrigin === 'base_subreceta' ? (input.baseSubrecipeId ?? null) : null;
+      const baseSubrecipeKind = typeOrigin === 'base_subreceta' ? (input.baseSubrecipeKind ?? null) : null;
+      if (typeOrigin === 'base_subreceta' && !baseSubrecipeId) return;
       const compositionLines =
         typeOrigin === 'composicion'
           ? (input.compositionLines ?? [])
-              .filter((x) => x.masterArticleId && Number.isFinite(x.qty) && x.qty > 0 && x.unit)
-              .map((x) => ({ id: x.id, masterArticleId: x.masterArticleId, qty: x.qty, unit: x.unit }))
+              .filter((x) => x.componentId && Number.isFinite(x.qty) && x.qty > 0 && x.unit)
+              .map((x) => ({
+                id: x.id,
+                componentType: x.componentType,
+                componentId: x.componentId,
+                componentKind: x.componentKind ?? null,
+                qty: x.qty,
+                unit: x.unit,
+              }))
           : [];
       const normalized = normalizeName(trimmed);
       const exists = products.some((p) => p.id !== id && normalizeName(p.name) === normalized);
@@ -1124,6 +1249,8 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
               tipo_origen: typeOrigin,
               master_article_id: masterArticleId,
               escandallo_id: escandalloId,
+              base_subreceta_id: baseSubrecipeId,
+              base_subreceta_kind: baseSubrecipeKind,
               precio_manual: manualPrice,
               composicion_json: compositionLines,
             })
@@ -1151,6 +1278,8 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
                       typeOrigin,
                       masterArticleId,
                       escandalloId,
+                      baseSubrecipeId,
+                      baseSubrecipeKind,
                       manualPricePerUnit: manualPrice,
                       compositionLines,
                     }
@@ -1175,6 +1304,8 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
                   typeOrigin,
                   masterArticleId,
                   escandalloId,
+                  baseSubrecipeId,
+                  baseSubrecipeKind,
                   manualPricePerUnit: manualPrice,
                   compositionLines,
                 }
