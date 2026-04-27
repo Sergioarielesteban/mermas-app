@@ -800,7 +800,7 @@ export default function ProductosPage() {
             className="flex w-full max-w-md flex-col overflow-hidden rounded-t-2xl bg-white shadow-xl sm:max-h-[min(85vh,800px)] sm:rounded-2xl"
             style={{ maxHeight: '85vh' }}
           >
-            <div className="shrink-0 border-b border-zinc-100 px-4 py-3">
+            <div className="sticky top-0 z-30 shrink-0 border-b border-zinc-100 bg-white px-4 py-3">
               <div className="flex items-center justify-between">
                 <h2 className="text-sm font-extrabold uppercase tracking-wide text-zinc-800">
                   {editingId ? 'Editar Producto' : 'Nuevo Producto'}
@@ -831,7 +831,7 @@ export default function ProductosPage() {
               </div>
             </div>
 
-            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-3">
+            <div className="modal-body min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-3 pb-[120px]">
               <form id="merma-producto-form" className="space-y-3" onSubmit={handleSubmit}>
                 <label className="block text-xs font-semibold text-zinc-700">
                   Nombre del Producto
@@ -1159,7 +1159,7 @@ export default function ProductosPage() {
               </form>
             </div>
 
-            <div className="shrink-0 z-20 border-t border-zinc-100 bg-white px-4 pt-3 shadow-[0_-4px_12px_rgba(0,0,0,0.06)] pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+            <div className="modal-footer sticky bottom-0 z-50 shrink-0 border-t border-zinc-100 bg-white px-4 pt-3 shadow-[0_-8px_24px_rgba(0,0,0,0.08)] pb-[calc(16px+env(safe-area-inset-bottom))]">
               <button
                 type="submit"
                 form="merma-producto-form"
