@@ -55,6 +55,48 @@ export default function ProductosPage() {
   const deletedBannerTimeoutRef = React.useRef<number | null>(null);
   const [search, setSearch] = useState('');
 
+  const resolveEscandalloUnitCost = async (
+    recipeId: string,
+  ): Promise<number | null> => {
+    if (!localId || !isSupabaseEnabled()) return null;
+    const supabase = getSupabaseClient();
+    if (!supabase) return null;
+    const [recipes, rawProducts, processedProducts] = await Promise.all([
+      fetchEscandalloRecipes(supabase, localId),
+      fetchEscandalloRawProductsWithWeightedPurchasePrices(supabase, localId),
+      fetchProcessedProductsForEscandallo(supabase, localId),
+    ]);
+    const recipe = recipes.find((r) => r.id === recipeId);
+    if (!recipe || recipe.yieldQty <= 0) return null;
+
+    const linesByRecipe: Record<string, EscandalloLine[]> = {};
+    const recipesById = new Map(recipes.map((r) => [r.id, r]));
+    const toVisit = [recipeId];
+    const visited = new Set<string>();
+    while (toVisit.length > 0) {
+      const current = toVisit.pop()!;
+      if (visited.has(current)) continue;
+      visited.add(current);
+      const lines = await fetchEscandalloLines(supabase, localId, current);
+      linesByRecipe[current] = lines;
+      for (const ln of lines) {
+        if (ln.sourceType === 'subrecipe' && ln.subRecipeId && !visited.has(ln.subRecipeId)) {
+          toVisit.push(ln.subRecipeId);
+        }
+      }
+    }
+
+    const total = recipeTotalCostEur(
+      linesByRecipe[recipe.id] ?? [],
+      new Map(rawProducts.map((x) => [x.id, x])),
+      new Map(processedProducts.map((x) => [x.id, x])),
+      { linesByRecipe, recipesById, recipeId: recipe.id },
+    );
+    if (!Number.isFinite(total) || total <= 0) return null;
+    const perUnit = Math.round((total / recipe.yieldQty) * 10000) / 10000;
+    return perUnit > 0 ? perUnit : null;
+  };
+
   const filteredProducts = products.filter((p) =>
     p.name.toLowerCase().includes(search.trim().toLowerCase()),
   );
@@ -114,31 +156,10 @@ export default function ProductosPage() {
     void (async () => {
       setEscandalloPriceLoading(true);
       try {
-        const [recipes, rawProducts, processedProducts] = await Promise.all([
-          fetchEscandalloRecipes(supabase, localId),
-          fetchEscandalloRawProductsWithWeightedPurchasePrices(supabase, localId),
-          fetchProcessedProductsForEscandallo(supabase, localId),
-        ]);
         if (!active) return;
-        const recipe = recipes.find((r) => r.id === escandalloId);
-        if (!recipe || recipe.yieldQty <= 0) {
-          setEscandalloAutoPrice(null);
-          return;
-        }
-        const linesByRecipe: Record<string, EscandalloLine[]> = {};
-        const linesList = await Promise.all(recipes.map((r) => fetchEscandalloLines(supabase, localId, r.id)));
+        const perUnit = await resolveEscandalloUnitCost(escandalloId);
         if (!active) return;
-        recipes.forEach((r, i) => {
-          linesByRecipe[r.id] = linesList[i];
-        });
-        const total = recipeTotalCostEur(
-          linesByRecipe[recipe.id] ?? [],
-          new Map(rawProducts.map((x) => [x.id, x])),
-          new Map(processedProducts.map((x) => [x.id, x])),
-          { linesByRecipe, recipesById: new Map(recipes.map((x) => [x.id, x])), recipeId: recipe.id },
-        );
-        const perUnit = total > 0 ? Math.round((total / recipe.yieldQty) * 10000) / 10000 : 0;
-        setEscandalloAutoPrice(perUnit > 0 ? perUnit : 0);
+        setEscandalloAutoPrice(perUnit);
       } catch {
         if (!active) return;
         setEscandalloAutoPrice(null);
@@ -237,7 +258,11 @@ export default function ProductosPage() {
       return;
     }
     if (originType === 'escandallo' && !escandalloId) {
-      setMessage('Selecciona un Escandallo para este origen.');
+      setMessage('Selecciona un escandallo para usar precio automático.');
+      return;
+    }
+    if (originType === 'escandallo' && (!Number.isFinite(escandalloAutoPrice ?? NaN) || (escandalloAutoPrice ?? 0) <= 0)) {
+      setMessage('No se pudo resolver el coste del escandallo seleccionado.');
       return;
     }
     if (originType === 'base_subreceta' && !baseSubrecipeId) {
@@ -555,7 +580,11 @@ export default function ProductosPage() {
                 />
                 {originType !== 'manual' ? (
                   <p className="mt-1 text-[11px] font-semibold text-zinc-500">
-                    {escandalloPriceLoading ? 'Calculando precio automático…' : 'Precio automático'}
+                    {escandalloPriceLoading
+                      ? 'Calculando precio automático…'
+                      : originType === 'escandallo'
+                        ? 'Precio automático desde escandallo'
+                        : 'Precio automático'}
                   </p>
                 ) : null}
               </label>

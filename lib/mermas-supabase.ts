@@ -210,6 +210,16 @@ export async function fetchProductsAndMermas(supabase: SupabaseClient, localId: 
     pErr = { message: 'fallback' };
   }
   if (pErr) {
+    const fallbackCompat = await supabase
+      .from('products')
+      .select('id,name,unit,price_per_unit,tipo_origen,master_article_id,escandallo_id,precio_manual,composicion_json,created_at')
+      .eq('local_id', localId)
+      .eq('is_active', true)
+      .order('name');
+    productRows = (fallbackCompat.data ?? null) as ProductRow[] | null;
+    pErr = fallbackCompat.error;
+  }
+  if (pErr) {
     const fallback = await supabase
       .from('products')
       .select('id,name,unit,price_per_unit,created_at')

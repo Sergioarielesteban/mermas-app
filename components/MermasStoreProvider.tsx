@@ -1164,6 +1164,25 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
             )
             .maybeSingle();
           if (first.error) {
+            const fallbackCompat = await supabase
+              .from('products')
+              .insert({
+                ...basePayload,
+                tipo_origen: typeOrigin,
+                master_article_id: masterArticleId,
+                escandallo_id: escandalloId,
+                precio_manual: manualPrice,
+                composicion_json: compositionLines,
+              })
+              .select('id,name,unit,price_per_unit,tipo_origen,master_article_id,escandallo_id,precio_manual,composicion_json,created_at')
+              .maybeSingle();
+            if (!fallbackCompat.error && fallbackCompat.data) {
+              data = fallbackCompat.data as ProductRow;
+            }
+          } else if (first.data) {
+            data = first.data as ProductRow;
+          }
+          if (!data) {
             const fallback = await supabase
               .from('products')
               .insert(basePayload)
@@ -1171,8 +1190,6 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
               .single();
             if (fallback.error || !fallback.data) return;
             data = fallback.data as ProductRow;
-          } else if (first.data) {
-            data = first.data as ProductRow;
           }
           if (!data) return;
           const p = mapProductRow(data);
@@ -1256,7 +1273,21 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
             })
             .eq('id', id);
           if (first.error) {
-            const fallback = await supabase
+            const fallbackCompat = await supabase
+              .from('products')
+              .update({
+                name: trimmed,
+                unit: input.unit,
+                price_per_unit: nextPrice,
+                tipo_origen: typeOrigin,
+                master_article_id: masterArticleId,
+                escandallo_id: escandalloId,
+                precio_manual: manualPrice,
+                composicion_json: compositionLines,
+              })
+              .eq('id', id);
+            if (fallbackCompat.error) {
+              const fallback = await supabase
               .from('products')
               .update({
                 name: trimmed,
@@ -1264,7 +1295,8 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
                 price_per_unit: nextPrice,
               })
               .eq('id', id);
-            if (fallback.error) return;
+              if (fallback.error) return;
+            }
           }
           setProducts((prev) =>
             sortProductsByName(
