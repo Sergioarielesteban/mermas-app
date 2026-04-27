@@ -390,7 +390,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       {/* Drawer */}
       <aside
         className={[
-          'fixed left-0 top-0 z-[60] flex h-full max-h-[100dvh] w-[84%] max-w-[320px] flex-col overflow-hidden bg-white shadow-2xl transition-transform print:hidden',
+          'fixed left-0 top-0 z-[60] flex h-[calc(100dvh-max(5.5rem,env(safe-area-inset-bottom)))] w-[84%] max-w-[320px] flex-col overflow-hidden bg-white shadow-2xl transition-transform print:hidden',
           open ? 'translate-x-0' : '-translate-x-full',
         ].join(' ')}
         aria-label="Menú lateral"
@@ -419,7 +419,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           </div>
         </div>
 
-        <nav className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-2 pb-2 pt-1">
+        <nav className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-2 pb-3 pt-1">
           {navItems.map((item) => {
             if ('kind' in item && item.kind === 'note') {
               return (
@@ -495,24 +495,19 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           })}
         </nav>
 
-        <div className="shrink-0 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2">
-          <div className="rounded-2xl bg-zinc-50 p-3 ring-1 ring-zinc-200">
-            <div className="text-[10px] font-extrabold uppercase tracking-[0.12em] text-zinc-500">Sesión</div>
-            <div className="mt-2 min-w-0 space-y-0.5">
-              <p className="truncate text-base font-extrabold leading-tight text-zinc-900">{sessionLabel}</p>
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-zinc-500">Rol: {sessionRoleLabel}</p>
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-zinc-500">Plan: {planLabel(plan)}</p>
-            </div>
-            {localId && localLabel ? (
-              <p className="mt-2 truncate border-t border-zinc-200/90 pt-2 text-[11px] font-semibold text-zinc-700">
-                Local: <span className="font-bold text-zinc-900">{localLabel}</span>
+        <div className="shrink-0 px-3 pb-2 pt-1.5">
+          <div className="rounded-lg border border-zinc-200/70 bg-zinc-50/70 px-2.5 py-2">
+            <div className="min-w-0 space-y-0.5 text-xs leading-tight">
+              <p className="truncate font-semibold text-zinc-700">
+                {sessionLabel} · {sessionRoleLabel}
               </p>
-            ) : null}
+              <p className="truncate text-zinc-500">{localLabel || `Plan ${planLabel(plan)}`}</p>
+            </div>
             {isSuperadmin ? (
               <Link
                 href="/superadmin/locales"
                 onClick={() => setOpen(false)}
-                className="mt-2 flex w-full items-center justify-center rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs font-bold uppercase tracking-wide text-zinc-800 hover:bg-zinc-100"
+                className="mt-1.5 flex w-full items-center justify-center rounded-md border border-zinc-200 bg-white px-2 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-zinc-700 hover:bg-zinc-100"
               >
                 Panel global de locales
               </Link>
@@ -524,35 +519,22 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                   void clearSuperadminLocal();
                   setOpen(false);
                 }}
-                className="mt-2 flex w-full items-center justify-center rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-bold uppercase tracking-wide text-amber-900 hover:bg-amber-100"
+                className="mt-1.5 flex w-full items-center justify-center rounded-md border border-amber-200 bg-amber-50 px-2 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-amber-900 hover:bg-amber-100"
               >
                 Salir de simulación de local
               </button>
             ) : null}
             <button
               type="button"
-              onClick={refreshApp}
-              className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs font-bold uppercase tracking-wide text-zinc-700 hover:bg-zinc-100"
-            >
-              <RefreshCcw className="h-3.5 w-3.5" />
-              Actualizar version app
-            </button>
-            <button
-              type="button"
               onClick={() => {
                 confirmAndLogout();
                 setOpen(false);
               }}
-              className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs font-bold uppercase tracking-wide text-zinc-700 hover:bg-zinc-100"
+              className="mt-1.5 flex w-full items-center justify-center gap-1.5 rounded-md border border-zinc-200 bg-white px-2 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-zinc-700 hover:bg-zinc-100"
             >
               <LogOut className="h-3.5 w-3.5" />
               Cerrar Sesión
             </button>
-            <div className="mt-2 text-[11px] text-zinc-500">
-              {localId
-                ? 'Datos del local sincronizados con Supabase.'
-                : 'Datos guardados en este dispositivo (localStorage).'}
-            </div>
           </div>
         </div>
       </aside>
