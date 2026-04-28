@@ -145,6 +145,13 @@ function lineDraftFromRow(row: InventoryItem): LineDraft {
   };
 }
 
+/** Mismo criterio que `fetchInventoryItems`: sort_order, luego nombre. */
+function compareInventoryLines(a: InventoryItem, b: InventoryItem): number {
+  const so = (a.sort_order ?? 0) - (b.sort_order ?? 0);
+  if (so !== 0) return so;
+  return a.name.localeCompare(b.name, 'es');
+}
+
 function lineDraftFromCatalogItem(it: InventoryCatalogItem, qty = '0'): LineDraft {
   return {
     qty,
@@ -211,6 +218,17 @@ export default function InventarioPage() {
   const [ccRecipes, setCcRecipes] = useState<ProductionRecipeRow[]>([]);
   const [escandalloRecipeQuery, setEscandalloRecipeQuery] = useState<Record<string, string>>({});
   const loadRef = useRef<() => Promise<void>>(() => Promise.resolve());
+  const saveFlashTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [inventorySaveFlash, setInventorySaveFlash] = useState<string | null>(null);
+
+  const showInventorySaveFlash = useCallback((msg = 'Guardado ✔') => {
+    if (saveFlashTimerRef.current) clearTimeout(saveFlashTimerRef.current);
+    setInventorySaveFlash(msg);
+    saveFlashTimerRef.current = setTimeout(() => {
+      setInventorySaveFlash(null);
+      saveFlashTimerRef.current = null;
+    }, 2600);
+  }, []);
 
   const supabaseOk = isSupabaseEnabled() && getSupabaseClient();
 
@@ -495,7 +513,7 @@ export default function InventarioPage() {
   const saveLine = async (
     row: InventoryItem,
     override?: Partial<LineDraft>,
-    opts?: { skipReload?: boolean; skipBusy?: boolean; throwing?: boolean },
+    opts?: { skipBusy?: boolean; throwing?: boolean; silent?: boolean },
   ) => {
     if (!localId || !supabaseOk) return;
     const base = drafts[row.id] ?? lineDraftFromRow(row);
@@ -532,7 +550,7 @@ export default function InventarioPage() {
     const uc = normalizeInventoryUnidadCoste(d.unidadCoste);
     const supabase = getSupabaseClient()!;
     if (!opts?.skipBusy) setBusyId(row.id);
-    if (!opts?.skipReload && !opts?.throwing) setBanner(null);
+    if (!opts?.throwing) setBanner(null);
     try {
       let priceOut: number;
       let precioManual: number | null = null;
@@ -603,6 +621,28 @@ export default function InventarioPage() {
         ccRecipeFormatQty: origen === 'recetario_cc' ? ccFormatQty : null,
         precioManual: precioManual,
       });
+      const qRounded = Math.round(q * 1000) / 1000;
+      const priceRounded = Math.round(priceOut * 100) / 100;
+      const fmtOp = (d.formatoOperativo ?? '').trim() ? (d.formatoOperativo ?? '').trim() : null;
+      const mergedRow: InventoryItem = {
+        ...row,
+        quantity_on_hand: qRounded,
+        price_per_unit: priceRounded,
+        name: nm,
+        format_label: d.format_label.trim() ? d.format_label.trim() : null,
+        unit: d.unit,
+        unidadCoste: uc,
+        formatoOperativo: fmtOp,
+        origenCoste: origen,
+        masterCostSource: origen === 'master' ? masterCostSource : 'uso',
+        masterArticleId: origen === 'master' ? masterId : null,
+        escandalloRecipeId: origen === 'produccion_propia' ? escId : null,
+        centralProductionRecipeId: origen === 'recetario_cc' ? ccRecipeId : null,
+        ccRecipeFormatQty: origen === 'recetario_cc' ? ccFormatQty : null,
+        precioManual: origen === 'manual' ? priceRounded : null,
+      };
+      setLines((prev) => prev.map((item) => (item.id === row.id ? mergedRow : item)));
+      if (!opts?.silent) showInventorySaveFlash();
       setDrafts((prev) => ({
         ...prev,
         [row.id]: {
@@ -622,12 +662,13 @@ export default function InventarioPage() {
       }));
       const catalogId = row.catalog_item_id;
       if (catalogId) {
-        setCatalogQtyDraft((prev) => ({ ...prev, [catalogId]: String(q) }));
+        setCatalogQtyDraft((prev) => ({ ...prev, [catalogId]: String(qRounded) }));
       }
-      if (!opts?.skipReload) await load();
+      return mergedRow;
     } catch (e) {
       if (opts?.throwing) throw e;
       setBanner(humanizeClientError(e, 'Error al guardar.'));
+      return undefined;
     } finally {
       if (!opts?.skipBusy) setBusyId(null);
     }
@@ -638,16 +679,16 @@ export default function InventarioPage() {
     line: InventoryItem | null,
     draftKey: string,
     draft: LineDraft,
-  ) => {
-    if (!localId || !supabaseOk) return;
+    opts?: { silent?: boolean },
+  ): Promise<InventoryItem | undefined> => {
+    if (!localId || !supabaseOk) return undefined;
     if (line) {
-      await saveLine(line, draft);
-      return;
+      return saveLine(line, draft, { silent: opts?.silent });
     }
     const q = parseDecimal(draft.qty);
     if (q === null || q < 0) {
       setBanner('Cantidad no válida.');
-      return;
+      return undefined;
     }
     const supabase = getSupabaseClient()!;
     const {
@@ -671,26 +712,26 @@ export default function InventarioPage() {
       if (origen === 'manual') {
         if (!Number.isFinite(unitPrice) || unitPrice < 0) {
           setBanner('Precio no válido.');
-          return;
+          return undefined;
         }
         precioManual = unitPrice;
       } else {
         if (origen === 'master' && !masterId) {
           setBanner('Elige un artículo máster.');
-          return;
+          return undefined;
         }
         if (origen === 'produccion_propia' && !escId) {
           setBanner('Elige una base o subreceta de Escandallos.');
-          return;
+          return undefined;
         }
         if (origen === 'recetario_cc') {
           if (!isCentralKitchen) {
             setBanner('El Recetario Cocina Central solo aplica en cocina central.');
-            return;
+            return undefined;
           }
           if (!ccId) {
             setBanner('Elige una receta del Recetario Cocina Central.');
-            return;
+            return undefined;
           }
         }
         const resolved = await resolveInventoryItemUnitPriceEur(supabase, localId, {
@@ -712,7 +753,7 @@ export default function InventarioPage() {
                 ? 'No se pudo obtener el coste de la receta CC.'
                 : 'No se pudo calcular coste desde la receta seleccionada.',
           );
-          return;
+          return undefined;
         }
         unitPrice = resolved;
       }
@@ -743,9 +784,13 @@ export default function InventarioPage() {
         next[inserted.id] = lineDraftFromRow(inserted);
         return next;
       });
-      await load();
+      setLines((prev) => [...prev, inserted].sort(compareInventoryLines));
+      setCatalogQtyDraft((prev) => ({ ...prev, [it.id]: String(inserted.quantity_on_hand) }));
+      if (!opts?.silent) showInventorySaveFlash();
+      return inserted;
     } catch (e) {
       setBanner(humanizeClientError(e, 'Error al guardar la línea.'));
+      return undefined;
     } finally {
       setBusyId(null);
     }
@@ -782,17 +827,17 @@ export default function InventarioPage() {
 
   const applyCategoryBatch = async (catId: string, items: InventoryCatalogItem[]) => {
     if (!localId || !supabaseOk || items.length === 0) return;
-    const supabase = getSupabaseClient()!;
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
     setBusyCategoryId(catId);
     setBanner(null);
     try {
+      let workingLines: InventoryItem[] = [...lines];
+      let workingDrafts: Record<string, LineDraft> = { ...drafts };
+      let savedAny = false;
       for (const it of items) {
-        const line = lines.find((l) => l.catalog_item_id === it.id);
+        const line = workingLines.find((l) => l.catalog_item_id === it.id) ?? null;
         const draftKey = line ? line.id : `cat-${it.id}`;
-        const currentDraft = drafts[draftKey] ?? (line ? lineDraftFromRow(line) : lineDraftFromCatalogItem(it, '0'));
+        const currentDraft =
+          workingDrafts[draftKey] ?? (line ? lineDraftFromRow(line) : lineDraftFromCatalogItem(it, '0'));
         const raw = (catalogQtyDraft[it.id] ?? '').trim();
         const q = raw === '' ? 0 : parseDecimal(raw);
         if (q === null || q < 0) {
@@ -811,12 +856,19 @@ export default function InventarioPage() {
             defaultInventoryUnidadCosteFromStockUnit(it.unit) &&
           !(currentDraft.formatoOperativo ?? '').trim();
         if (!line && q === 0 && raw === '' && isDefaultDraft) continue;
-        await saveCatalogItemDraft(it, line ?? null, draftKey, { ...currentDraft, qty: String(q) });
+        const saved = await saveCatalogItemDraft(it, line, draftKey, { ...currentDraft, qty: String(q) }, {
+          silent: true,
+        });
+        if (saved) {
+          workingLines = [...workingLines.filter((l) => l.id !== saved.id), saved].sort(compareInventoryLines);
+          delete workingDrafts[`cat-${it.id}`];
+          workingDrafts[saved.id] = lineDraftFromRow(saved);
+          savedAny = true;
+        }
       }
-      await load();
+      if (savedAny) showInventorySaveFlash('Categoría guardada ✔');
     } catch (e) {
       setBanner(humanizeClientError(e, 'Error al guardar la categoría.'));
-      await load();
     } finally {
       setBusyCategoryId(null);
     }
@@ -965,7 +1017,19 @@ export default function InventarioPage() {
         userId: user?.id ?? null,
       });
       await deleteInventoryItemLine(supabase, localId, row.id);
-      await load();
+      setLines((prev) => prev.filter((l) => l.id !== row.id));
+      setDrafts((prev) => {
+        const next = { ...prev };
+        delete next[row.id];
+        return next;
+      });
+      if (row.catalog_item_id) {
+        setCatalogQtyDraft((prev) => {
+          const next = { ...prev };
+          delete next[row.catalog_item_id!];
+          return next;
+        });
+      }
     } catch (e) {
       const raw = e instanceof Error ? e.message : '';
       if (raw.includes('inventory_history') || raw.includes('does not exist')) {
@@ -1216,6 +1280,15 @@ export default function InventarioPage() {
 
       {banner ? (
         <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900">{banner}</div>
+      ) : null}
+
+      {inventorySaveFlash ? (
+        <div
+          className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm font-medium text-emerald-900 shadow-sm"
+          role="status"
+        >
+          {inventorySaveFlash}
+        </div>
       ) : null}
 
       {loading ? (
