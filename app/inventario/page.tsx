@@ -16,6 +16,7 @@ import {
   type InventoryMasterCostSource,
   type InventoryItem,
   type InventoryMonthSnapshot,
+  type InventoryUnidadCoste,
   currentInventoryYearMonth,
   deleteAllInventoryMonthSnapshots,
   deleteInventoryItemLine,
@@ -32,6 +33,8 @@ import {
   resolveInventoryItemUnitPriceEur,
   updateInventoryItemLine,
   upsertInventoryMonthSnapshot,
+  normalizeInventoryUnidadCoste,
+  defaultInventoryUnidadCosteFromStockUnit,
 } from '@/lib/inventory-supabase';
 import { fetchEscandalloRecipes, type EscandalloRecipe } from '@/lib/escandallos-supabase';
 import { fetchPurchaseArticles, type PurchaseArticle } from '@/lib/purchase-articles-supabase';
@@ -57,8 +60,28 @@ const UNIT_SUFFIX: Record<string, string> = {
   bandeja: 'bandeja',
 };
 
-/** Coincide con el check de `inventory_items.unit` en Supabase. */
+/** Coincide con el check de `inventory_items.unit` en Supabase (cantidad en stock). */
 const INVENTORY_UNITS = ['kg', 'ud', 'bolsa', 'racion', 'caja', 'paquete', 'bandeja'] as const;
+
+const UNIDAD_COSTE_OPTIONS: { value: InventoryUnidadCoste; label: string }[] = [
+  { value: 'kg', label: 'kg — precio por kilogramo' },
+  { value: 'l', label: 'L — precio por litro' },
+  { value: 'ud', label: 'ud — precio por unidad' },
+];
+
+/** Presentación; no interviene en el cálculo de € (solo etiqueta). */
+const FORMATO_OPERATIVO_OPTIONS: { value: string; label: string }[] = [
+  { value: '', label: '— Sin formato —' },
+  { value: 'bandeja', label: 'Bandeja' },
+  { value: 'caja', label: 'Caja' },
+  { value: 'bolsa', label: 'Bolsa' },
+  { value: 'paquete', label: 'Paquete' },
+  { value: 'racion', label: 'Ración' },
+];
+
+function precioEtiquetaUnidadCoste(uc: InventoryUnidadCoste): string {
+  return uc === 'l' ? 'L' : uc;
+}
 
 /** Safari/iOS suele lanzar esto cuando `fetch` no llega a recibir respuesta (red, cambio WiFi/4G, timeout). */
 function isLikelyNetworkError(e: unknown): boolean {
@@ -78,7 +101,12 @@ type LineDraft = {
   price: string;
   name: string;
   format_label: string;
+  /** Cantidad en esta unidad (bandeja, kg…). */
   unit: string;
+  /** Unidad del precio / vínculo con máster (€/kg, €/L, €/ud). */
+  unidadCoste: InventoryUnidadCoste;
+  /** Presentación informativa (bandeja, caja…). Vacío = null en BD. */
+  formatoOperativo: string;
   origenCoste: InventoryCostOrigen;
   masterCostSource: InventoryMasterCostSource;
   masterArticleId: string;
@@ -103,6 +131,8 @@ function lineDraftFromRow(row: InventoryItem): LineDraft {
     name: row.name,
     format_label: row.format_label ?? '',
     unit: row.unit,
+    unidadCoste: row.unidadCoste,
+    formatoOperativo: row.formatoOperativo ?? '',
     origenCoste: row.origenCoste,
     masterCostSource: row.masterCostSource,
     masterArticleId: row.masterArticleId ?? '',
@@ -122,6 +152,8 @@ function lineDraftFromCatalogItem(it: InventoryCatalogItem, qty = '0'): LineDraf
     name: it.name,
     format_label: it.format_label ?? '',
     unit: it.unit,
+    unidadCoste: defaultInventoryUnidadCosteFromStockUnit(it.unit),
+    formatoOperativo: '',
     origenCoste: 'manual',
     masterCostSource: 'uso',
     masterArticleId: '',
@@ -236,6 +268,15 @@ export default function InventarioPage() {
       } else if (msg.toLowerCase().includes('origen_coste') || msg.toLowerCase().includes('master_article_id')) {
         setBanner(
           'Falta la migración de origen de coste en inventario. Ejecuta en Supabase: supabase-inventory-origen-coste.sql',
+        );
+        setCategories([]);
+        setCatalogItems([]);
+        setLines([]);
+        setSnapshots([]);
+        setCatalogQtyDraft({});
+      } else if (msg.toLowerCase().includes('unidad_coste') || msg.toLowerCase().includes('formato_operativo')) {
+        setBanner(
+          'Falta la migración de unidad de coste / formato operativo. Ejecuta en Supabase: supabase-inventory-unidad-coste-formato.sql',
         );
         setCategories([]);
         setCatalogItems([]);
@@ -372,9 +413,13 @@ export default function InventarioPage() {
       total += sub;
       if (q > 0) linesWithStock += 1;
       const uKey = d.unit ?? row.unit;
+      const fo = (d.formatoOperativo ?? '').trim();
+      const flBase = (d.format_label ?? row.format_label ?? '').trim();
+      const formatLabelPdf =
+        fo && flBase ? `${flBase} · ${fo}` : fo || flBase;
       pdfRows.push({
         name: (d.name ?? row.name).trim() || row.name,
-        formatLabel: d.format_label ?? row.format_label ?? '',
+        formatLabel: formatLabelPdf,
         qty: q,
         unit: UNIT_SUFFIX[uKey] ?? uKey,
         price: p,
@@ -390,6 +435,8 @@ export default function InventarioPage() {
         name: (d.name ?? row.name).trim() || row.name,
         format_label: d.format_label?.trim() ? d.format_label.trim() : row.format_label,
         unit: uKey,
+        unidadCoste: normalizeInventoryUnidadCoste(d.unidadCoste),
+        formatoOperativo: fo ? fo : null,
       });
     }
     total = Math.round(total * 100) / 100;
@@ -482,6 +529,7 @@ export default function InventarioPage() {
       fail('Unidad no válida.');
       return;
     }
+    const uc = normalizeInventoryUnidadCoste(d.unidadCoste);
     const supabase = getSupabaseClient()!;
     if (!opts?.skipBusy) setBusyId(row.id);
     if (!opts?.skipReload && !opts?.throwing) setBanner(null);
@@ -521,14 +569,14 @@ export default function InventarioPage() {
           escandalloRecipeId: origen === 'produccion_propia' ? escId : null,
           centralProductionRecipeId: origen === 'recetario_cc' ? ccRecipeId : null,
           ccRecipeFormatQty: origen === 'recetario_cc' ? ccFormatQty : null,
-          unit: d.unit,
+          unidadCoste: uc,
           price_per_unit: row.price_per_unit,
           precioManual: row.precioManual,
         });
         if (resolved == null) {
           fail(
             origen === 'master'
-              ? 'No hay coste de uso (€/ud) para ese artículo máster.'
+              ? 'No hay coste en el artículo máster para la unidad de coste elegida (comprueba uso/compra vs kg, L o ud).'
               : origen === 'recetario_cc'
                 ? 'No se pudo obtener el coste de la receta (¿ejecutaste la migración recetario y guardaste la fórmula en CC?).'
                 : 'No se pudo calcular el coste desde la receta (revisa el escandallo: ingredientes y unidades).',
@@ -545,6 +593,8 @@ export default function InventarioPage() {
         name: nm,
         format_label: d.format_label.trim() ? d.format_label.trim() : null,
         unit: d.unit,
+        unidadCoste: uc,
+        formatoOperativo: (d.formatoOperativo ?? '').trim() ? (d.formatoOperativo ?? '').trim() : null,
         origenCoste: origen,
         masterCostSource: origen === 'master' ? masterCostSource : 'uso',
         masterArticleId: origen === 'master' ? masterId : null,
@@ -566,6 +616,8 @@ export default function InventarioPage() {
           centralProductionRecipeId: origen === 'recetario_cc' ? ccRecipeId ?? '' : '',
           ccRecipeFormatQty:
             origen === 'recetario_cc' ? String(ccFormatQty ?? 1) : '1',
+          unidadCoste: uc,
+          formatoOperativo: (d.formatoOperativo ?? '').trim(),
         },
       }));
       const catalogId = row.catalog_item_id;
@@ -614,6 +666,7 @@ export default function InventarioPage() {
         ccFormatQty = fq != null && fq > 0 ? fq : 1;
       }
       let unitPrice = parseDecimal(draft.price) ?? it.default_price_per_unit;
+      const uc = normalizeInventoryUnidadCoste(draft.unidadCoste);
       let precioManual: number | null = null;
       if (origen === 'manual') {
         if (!Number.isFinite(unitPrice) || unitPrice < 0) {
@@ -647,14 +700,14 @@ export default function InventarioPage() {
           escandalloRecipeId: origen === 'produccion_propia' ? escId : null,
           centralProductionRecipeId: origen === 'recetario_cc' ? ccId : null,
           ccRecipeFormatQty: origen === 'recetario_cc' ? ccFormatQty : null,
-          unit: draft.unit,
+          unidadCoste: uc,
           price_per_unit: unitPrice,
           precioManual: null,
         });
         if (resolved == null) {
           setBanner(
             origen === 'master'
-              ? 'No hay coste disponible en el artículo máster para esa unidad.'
+              ? 'No hay coste en el artículo máster para la unidad de coste elegida (comprueba uso/compra vs kg, L o ud).'
               : origen === 'recetario_cc'
                 ? 'No se pudo obtener el coste de la receta CC.'
                 : 'No se pudo calcular coste desde la receta seleccionada.',
@@ -680,6 +733,8 @@ export default function InventarioPage() {
           name: draft.name,
           unit: draft.unit,
           formatLabel: draft.format_label,
+          unidadCoste: uc,
+          formatoOperativo: (draft.formatoOperativo ?? '').trim() ? draft.formatoOperativo.trim() : null,
         },
       });
       setDrafts((prev) => {
@@ -713,7 +768,7 @@ export default function InventarioPage() {
       centralProductionRecipeId:
         draft.origenCoste === 'recetario_cc' ? (draft.centralProductionRecipeId || null) : null,
       ccRecipeFormatQty: draft.origenCoste === 'recetario_cc' ? ccFq : null,
-      unit: draft.unit,
+      unidadCoste: normalizeInventoryUnidadCoste(draft.unidadCoste),
       price_per_unit: parseDecimal(draft.price) ?? 0,
       precioManual: parseDecimal(draft.price),
     });
@@ -751,7 +806,10 @@ export default function InventarioPage() {
           !currentDraft.centralProductionRecipeId &&
           (currentDraft.name.trim() || it.name) === it.name &&
           (currentDraft.format_label ?? '') === (it.format_label ?? '') &&
-          (currentDraft.unit || it.unit) === it.unit;
+          (currentDraft.unit || it.unit) === it.unit &&
+          normalizeInventoryUnidadCoste(currentDraft.unidadCoste) ===
+            defaultInventoryUnidadCosteFromStockUnit(it.unit) &&
+          !(currentDraft.formatoOperativo ?? '').trim();
         if (!line && q === 0 && raw === '' && isDefaultDraft) continue;
         await saveCatalogItemDraft(it, line ?? null, draftKey, { ...currentDraft, qty: String(q) });
       }
@@ -999,6 +1057,8 @@ export default function InventarioPage() {
               name: row.name,
               format_label: row.format_label,
               unit: row.unit,
+              unidadCoste: row.unidadCoste,
+              formatoOperativo: row.formatoOperativo,
               origenCoste: row.origenCoste,
               masterCostSource: row.masterCostSource,
               masterArticleId: row.masterArticleId,
@@ -1044,6 +1104,8 @@ export default function InventarioPage() {
           name: row.name,
           format_label: row.format_label,
           unit: row.unit,
+          unidadCoste: row.unidadCoste,
+          formatoOperativo: row.formatoOperativo,
           origenCoste: row.origenCoste,
           masterCostSource: row.masterCostSource,
           masterArticleId: row.masterArticleId,
@@ -1420,7 +1482,7 @@ export default function InventarioPage() {
                                 <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
                                   <label className="min-w-0 flex-1">
                                     <span className="text-[9px] font-bold uppercase text-zinc-400">
-                                      Formato
+                                      Etiqueta / detalle (opc.)
                                     </span>
                                     <input
                                       type="text"
@@ -1437,22 +1499,84 @@ export default function InventarioPage() {
                                     />
                                   </label>
                                   <label className="sm:w-36">
-                                    <span className="text-[9px] font-bold uppercase text-zinc-400">Unidad</span>
+                                    <span className="text-[9px] font-bold uppercase text-zinc-400">
+                                      Unidad (cantidad)
+                                    </span>
                                     <select
                                       value={lineDraft.unit}
                                       disabled={disabled || lineBusy || qtyBusy}
                                       onChange={(e) =>
+                                        setDrafts((prev) => ({
+                                          ...prev,
+                                          [draftKey]: { ...lineDraft, unit: e.target.value },
+                                        }))
+                                      }
+                                      className="mt-0.5 h-9 w-full rounded-lg border border-zinc-200 px-2 text-xs font-semibold text-zinc-900"
+                                      aria-label="Unidad de cantidad en stock"
+                                    >
+                                      {INVENTORY_UNITS.map((key) => (
+                                        <option key={key} value={key}>
+                                          {UNIT_SUFFIX[key] ?? key}
+                                        </option>
+                                      ))}
+                                    </select>
+                                  </label>
+                                </div>
+                                <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+                                  <label className="min-w-0 flex-1">
+                                    <span className="text-[9px] font-bold uppercase text-zinc-400">
+                                      Unidad de coste <span className="text-red-600">*</span>
+                                    </span>
+                                    <select
+                                      value={lineDraft.unidadCoste}
+                                      disabled={disabled || lineBusy || qtyBusy}
+                                      required
+                                      onChange={(e) =>
                                         setDrafts((prev) => {
-                                          const nextDraft: LineDraft = { ...lineDraft, unit: e.target.value };
+                                          const nextDraft: LineDraft = {
+                                            ...lineDraft,
+                                            unidadCoste: e.target.value as InventoryUnidadCoste,
+                                          };
                                           void refreshDraftAutoPrice(draftKey, nextDraft);
                                           return { ...prev, [draftKey]: nextDraft };
                                         })
                                       }
                                       className="mt-0.5 h-9 w-full rounded-lg border border-zinc-200 px-2 text-xs font-semibold text-zinc-900"
+                                      aria-required
+                                      aria-label="Unidad del precio (coste)"
                                     >
-                                      {INVENTORY_UNITS.map((key) => (
-                                        <option key={key} value={key}>
-                                          {UNIT_SUFFIX[key] ?? key}
+                                      {UNIDAD_COSTE_OPTIONS.map((opt) => (
+                                        <option key={opt.value} value={opt.value}>
+                                          {opt.label}
+                                        </option>
+                                      ))}
+                                    </select>
+                                  </label>
+                                  <label className="min-w-0 flex-1 sm:max-w-[14rem]">
+                                    <span className="text-[9px] font-bold uppercase text-zinc-400">
+                                      Formato operativo (opc.)
+                                    </span>
+                                    <select
+                                      value={
+                                        FORMATO_OPERATIVO_OPTIONS.some(
+                                          (o) => o.value === lineDraft.formatoOperativo,
+                                        )
+                                          ? lineDraft.formatoOperativo
+                                          : ''
+                                      }
+                                      disabled={disabled || lineBusy || qtyBusy}
+                                      onChange={(e) =>
+                                        setDrafts((prev) => ({
+                                          ...prev,
+                                          [draftKey]: { ...lineDraft, formatoOperativo: e.target.value },
+                                        }))
+                                      }
+                                      className="mt-0.5 h-9 w-full rounded-lg border border-zinc-200 px-2 text-xs text-zinc-800"
+                                      aria-label="Formato operativo informativo"
+                                    >
+                                      {FORMATO_OPERATIVO_OPTIONS.map((opt) => (
+                                        <option key={opt.value || 'empty'} value={opt.value}>
+                                          {opt.label}
                                         </option>
                                       ))}
                                     </select>
@@ -1649,7 +1773,7 @@ export default function InventarioPage() {
                                 </div>
                                 <label className="block sm:max-w-[10rem]">
                                   <span className="text-[9px] font-bold uppercase text-zinc-400">
-                                    € / {UNIT_SUFFIX[lineDraft.unit] ?? lineDraft.unit}
+                                    € / {precioEtiquetaUnidadCoste(lineDraft.unidadCoste)}
                                     {lineDraft.origenCoste !== 'manual' ? ' (auto. al guardar)' : ''}
                                   </span>
                                   <input

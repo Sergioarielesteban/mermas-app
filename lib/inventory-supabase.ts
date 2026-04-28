@@ -25,6 +25,47 @@ export type InventoryCatalogItem = {
 export type InventoryCostOrigen = 'manual' | 'master' | 'produccion_propia' | 'recetario_cc';
 export type InventoryMasterCostSource = 'uso' | 'compra';
 
+/** Unidad del precio de valoración (€/kg, €/L, €/ud); independiente de `unit` (cantidad/stock). */
+export type InventoryUnidadCoste = 'kg' | 'l' | 'ud';
+
+export const INVENTORY_UNIDAD_COSTE_VALUES: InventoryUnidadCoste[] = ['kg', 'l', 'ud'];
+
+export function normalizeInventoryUnidadCoste(raw: string | null | undefined): InventoryUnidadCoste {
+  const x = String(raw ?? 'kg').trim().toLowerCase();
+  if (x === 'l' || x === 'litro' || x === 'litros' || x === 'lt') return 'l';
+  if (x === 'ud' || x === 'uds' || x === 'unidad' || x === 'unidades' || x === 'u') return 'ud';
+  if (x === 'kg' || x === 'kilogramo' || x === 'kilogramos' || x === 'kilo' || x === 'kilos') return 'kg';
+  return 'kg';
+}
+
+/** Valor por defecto al crear línea desde catálogo: si el catálogo ya es kg/L/ud, coincide; si no (ej. bandeja), coste en kg. */
+export function defaultInventoryUnidadCosteFromStockUnit(unit: string): InventoryUnidadCoste {
+  const u = String(unit ?? '').trim().toLowerCase();
+  if (u === 'l') return 'l';
+  if (u === 'ud') return 'ud';
+  if (u === 'kg') return 'kg';
+  return 'kg';
+}
+
+/** Normaliza etiquetas del artículo máster (Kg, litros, ud…) a kg | l | ud | null si no reconocida. */
+function normalizeMasterArticleCostUnit(raw: string | null | undefined): InventoryUnidadCoste | null {
+  const x = String(raw ?? '').trim().toLowerCase();
+  if (!x) return null;
+  if (/^(kg|kilogramo|kilogramos|kilos?|kilo|kgs?)$/.test(x)) return 'kg';
+  if (/^(l|litro|litros|lt)$/.test(x)) return 'l';
+  if (/^(ud|uds|unidad|unidades|u\.?)$/.test(x)) return 'ud';
+  return null;
+}
+
+/** Coincidencia para resolver € desde máster: vacío en máster = vale cualquier unidad de coste; sinonónimos kg/L/ud. */
+function masterCostUnitMatches(inv: InventoryUnidadCoste, articleUnitRaw: string | null | undefined): boolean {
+  const au = String(articleUnitRaw ?? '').trim();
+  if (!au) return true;
+  const n = normalizeMasterArticleCostUnit(au);
+  if (n !== null) return n === inv;
+  return au.toLowerCase() === inv;
+}
+
 export type InventoryItem = {
   id: string;
   local_id: string;
@@ -32,9 +73,14 @@ export type InventoryItem = {
   local_category_id: string | null;
   name: string;
   unit: string;
+  /** € por `unidadCoste` (no por `unit` de stock). */
   price_per_unit: number;
   quantity_on_hand: number;
   format_label: string | null;
+  /** €/kg, €/L o €/ud según precio/compra; usado al enlazar con artículo máster. */
+  unidadCoste: InventoryUnidadCoste;
+  /** Presentación (bandeja, caja…); solo informativo. */
+  formatoOperativo: string | null;
   notes: string;
   sort_order: number;
   is_active: boolean;
@@ -93,7 +139,7 @@ export async function fetchInventoryItems(
   const { data, error } = await supabase
     .from('inventory_items')
     .select(
-      'id,local_id,catalog_item_id,local_category_id,name,unit,price_per_unit,quantity_on_hand,format_label,notes,sort_order,is_active,origen_coste,master_cost_source,master_article_id,escandallo_recipe_id,central_production_recipe_id,cc_recipe_format_qty,precio_manual',
+      'id,local_id,catalog_item_id,local_category_id,name,unit,price_per_unit,quantity_on_hand,format_label,unidad_coste,formato_operativo,notes,sort_order,is_active,origen_coste,master_cost_source,master_article_id,escandallo_recipe_id,central_production_recipe_id,cc_recipe_format_qty,precio_manual',
     )
     .eq('local_id', localId)
     .eq('is_active', true)
@@ -119,6 +165,11 @@ function mapInventoryItemRow(row: Record<string, unknown>): InventoryItem {
     price_per_unit: Number(row.price_per_unit),
     quantity_on_hand: Number(row.quantity_on_hand),
     format_label: row.format_label != null ? String(row.format_label) : null,
+    unidadCoste: normalizeInventoryUnidadCoste(row.unidad_coste != null ? String(row.unidad_coste) : undefined),
+    formatoOperativo:
+      row.formato_operativo != null && String(row.formato_operativo).trim()
+        ? String(row.formato_operativo).trim()
+        : null,
     notes: String(row.notes ?? ''),
     sort_order: Number(row.sort_order ?? 0),
     is_active: Boolean(row.is_active),
@@ -137,7 +188,7 @@ function mapInventoryItemRow(row: Record<string, unknown>): InventoryItem {
 }
 
 /**
- * Resuelve €/ud de valoración según origen (máster, subreceta/escandallo, manual).
+ * Resuelve el precio de valoración (€ por `unidadCoste`) según origen: máster, escandallo, receta CC o manual.
  */
 export async function resolveInventoryItemUnitPriceEur(
   supabase: SupabaseClient,
@@ -152,7 +203,7 @@ export async function resolveInventoryItemUnitPriceEur(
     | 'ccRecipeFormatQty'
     | 'price_per_unit'
     | 'precioManual'
-    | 'unit'
+    | 'unidadCoste'
   >,
 ): Promise<number | null> {
   if (row.origenCoste === 'manual') {
@@ -171,16 +222,24 @@ export async function resolveInventoryItemUnitPriceEur(
     if (!data) return null;
     const compra = data.coste_compra_actual != null ? Number(data.coste_compra_actual) : null;
     const uso = data.coste_unitario_uso != null ? Number(data.coste_unitario_uso) : null;
-    const unitInv = String(row.unit ?? '').trim().toLowerCase();
-    const unitCompra = String(data.unidad_compra ?? '').trim().toLowerCase();
-    const unitUso = String(data.unidad_uso ?? '').trim().toLowerCase();
+    const uc = row.unidadCoste;
     if (row.masterCostSource === 'compra') {
-      if (compra != null && Number.isFinite(compra) && compra > 0 && (!unitCompra || unitInv === unitCompra)) {
+      if (
+        compra != null &&
+        Number.isFinite(compra) &&
+        compra > 0 &&
+        masterCostUnitMatches(uc, data.unidad_compra as string | null)
+      ) {
         return Math.round(compra * 10000) / 10000;
       }
       return null;
     }
-    if (uso != null && Number.isFinite(uso) && uso > 0 && (!unitUso || unitInv === unitUso)) {
+    if (
+      uso != null &&
+      Number.isFinite(uso) &&
+      uso > 0 &&
+      masterCostUnitMatches(uc, data.unidad_uso as string | null)
+    ) {
       return Math.round(uso * 10000) / 10000;
     }
     return null;
@@ -223,6 +282,8 @@ export async function insertInventoryLineFromCatalog(
       name: string;
       unit: string;
       formatLabel: string | null;
+      unidadCoste?: InventoryUnidadCoste;
+      formatoOperativo?: string | null;
     };
   },
 ): Promise<InventoryItem> {
@@ -257,6 +318,11 @@ export async function insertInventoryLineFromCatalog(
       price_per_unit: resolvedPrice,
       quantity_on_hand: q0,
       format_label: cfg?.formatLabel?.trim() ? cfg.formatLabel.trim() : c.format_label,
+      unidad_coste:
+        cfg?.unidadCoste != null
+          ? normalizeInventoryUnidadCoste(String(cfg.unidadCoste))
+          : defaultInventoryUnidadCosteFromStockUnit(c.unit),
+      formato_operativo: cfg?.formatoOperativo?.trim() ? cfg.formatoOperativo.trim() : null,
       notes: '',
       sort_order: nextSort,
       is_active: true,
@@ -270,7 +336,7 @@ export async function insertInventoryLineFromCatalog(
       precio_manual: cfg?.precioManual ?? basePrice,
     })
     .select(
-      'id,local_id,catalog_item_id,local_category_id,name,unit,price_per_unit,quantity_on_hand,format_label,notes,sort_order,is_active,origen_coste,master_cost_source,master_article_id,escandallo_recipe_id,central_production_recipe_id,cc_recipe_format_qty,precio_manual',
+      'id,local_id,catalog_item_id,local_category_id,name,unit,price_per_unit,quantity_on_hand,format_label,unidad_coste,formato_operativo,notes,sort_order,is_active,origen_coste,master_cost_source,master_article_id,escandallo_recipe_id,central_production_recipe_id,cc_recipe_format_qty,precio_manual',
     )
     .single();
   if (error) throw new Error(error.message);
@@ -287,6 +353,8 @@ export async function updateInventoryItemLine(
     name: string;
     format_label: string | null;
     unit: string;
+    unidadCoste: InventoryUnidadCoste;
+    formatoOperativo: string | null;
     origenCoste?: InventoryCostOrigen;
     masterCostSource?: InventoryMasterCostSource;
     masterArticleId?: string | null;
@@ -305,6 +373,8 @@ export async function updateInventoryItemLine(
     name: nm,
     format_label: params.format_label?.trim() ? params.format_label.trim() : null,
     unit: params.unit,
+    unidad_coste: normalizeInventoryUnidadCoste(params.unidadCoste),
+    formato_operativo: params.formatoOperativo?.trim() ? params.formatoOperativo.trim() : null,
   };
   if (params.origenCoste != null) row.origen_coste = params.origenCoste;
   if (params.masterCostSource != null) row.master_cost_source = params.masterCostSource;
