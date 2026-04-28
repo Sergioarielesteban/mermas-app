@@ -1,6 +1,11 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { fetchEscandalloRecipeUnitCostEur } from '@/lib/inventory-escandallo-cost';
 import { fetchProductionRecipeUnitCostEur } from '@/lib/production-recipe-cost';
+import {
+  fetchEffectiveSupplierProductUnitPriceEur,
+  fetchSupplierProductRowForInventory,
+  resolveSupplierLinkedInventoryUnitPriceEur,
+} from '@/lib/inventory-supplier-pricing';
 
 export type InventoryCatalogCategory = {
   id: string;
@@ -22,7 +27,7 @@ export type InventoryCatalogItem = {
   is_active: boolean;
 };
 
-export type InventoryCostOrigen = 'manual' | 'master' | 'produccion_propia' | 'recetario_cc';
+export type InventoryCostOrigen = 'manual' | 'articulo_proveedor' | 'produccion_propia' | 'recetario_cc';
 export type InventoryMasterCostSource = 'uso' | 'compra';
 
 /** Unidad del precio de valoración (€/kg, €/L, €/ud); independiente de `unit` (cantidad/stock). */
@@ -47,34 +52,22 @@ export function defaultInventoryUnidadCosteFromStockUnit(unit: string): Inventor
   return 'kg';
 }
 
-/** Normaliza etiquetas del artículo máster (Kg, litros, ud…) a kg | l | ud | null si no reconocida. */
-function normalizeMasterArticleCostUnit(raw: string | null | undefined): InventoryUnidadCoste | null {
-  const x = String(raw ?? '').trim().toLowerCase();
-  if (!x) return null;
-  if (/^(kg|kilogramo|kilogramos|kilos?|kilo|kgs?)$/.test(x)) return 'kg';
-  if (/^(l|litro|litros|lt)$/.test(x)) return 'l';
-  if (/^(ud|uds|unidad|unidades|u\.?)$/.test(x)) return 'ud';
-  return null;
-}
-
-/** Coincidencia para resolver € desde máster: vacío en máster = vale cualquier unidad de coste; sinonónimos kg/L/ud. */
 /** Normaliza lectura desde BD (trim/caso); solo «manual» si valor ausente o no reconocido. */
-export function normalizeInventoryOrigenCosteFromDb(raw: unknown): InventoryCostOrigen {
+export function normalizeInventoryOrigenCosteFromDb(
+  raw: unknown,
+  ctx?: { supplierProductId?: string | null },
+): InventoryCostOrigen {
   if (raw === null || raw === undefined) return 'manual';
   const s = String(raw).trim().toLowerCase();
-  if (s === 'master') return 'master';
+  if (s === 'articulo_proveedor') return 'articulo_proveedor';
+  if (s === 'master') {
+    const sid = ctx?.supplierProductId?.trim();
+    return sid ? 'articulo_proveedor' : 'manual';
+  }
   if (s === 'produccion_propia') return 'produccion_propia';
   if (s === 'recetario_cc') return 'recetario_cc';
   if (s === 'manual') return 'manual';
   return 'manual';
-}
-
-function masterCostUnitMatches(inv: InventoryUnidadCoste, articleUnitRaw: string | null | undefined): boolean {
-  const au = String(articleUnitRaw ?? '').trim();
-  if (!au) return true;
-  const n = normalizeMasterArticleCostUnit(au);
-  if (n !== null) return n === inv;
-  return au.toLowerCase() === inv;
 }
 
 export type InventoryItem = {
@@ -103,7 +96,12 @@ export type InventoryItem = {
   is_active: boolean;
   origenCoste: InventoryCostOrigen;
   masterCostSource: InventoryMasterCostSource;
+  /** @deprecated en inventario; conservado por filas antiguas. */
   masterArticleId: string | null;
+  supplierProductId: string | null;
+  supplierId: string | null;
+  /** Último precio calculado desde proveedor (€/unidad de conteo). */
+  precioUnitarioCalculado: number | null;
   escandalloRecipeId: string | null;
   centralProductionRecipeId: string | null;
   ccRecipeFormatQty: number | null;
@@ -156,7 +154,7 @@ export async function fetchInventoryItems(
   const { data, error } = await supabase
     .from('inventory_items')
     .select(
-      'id,local_id,catalog_item_id,local_category_id,name,unit,price_per_unit,quantity_on_hand,format_label,unidad_coste,formato_operativo,factor_conversion_manual,notes,sort_order,is_active,origen_coste,master_cost_source,master_article_id,escandallo_recipe_id,central_production_recipe_id,cc_recipe_format_qty,precio_manual',
+      'id,local_id,catalog_item_id,local_category_id,name,unit,price_per_unit,quantity_on_hand,format_label,unidad_coste,formato_operativo,factor_conversion_manual,notes,sort_order,is_active,origen_coste,master_cost_source,master_article_id,supplier_product_id,supplier_id,precio_unitario_calculado,escandallo_recipe_id,central_production_recipe_id,cc_recipe_format_qty,precio_manual',
     )
     .eq('local_id', localId)
     .eq('is_active', true)
@@ -167,7 +165,11 @@ export async function fetchInventoryItems(
 }
 
 function mapInventoryItemRow(row: Record<string, unknown>): InventoryItem {
-  const origenCoste = normalizeInventoryOrigenCosteFromDb(row.origen_coste);
+  const supplierProductId =
+    row.supplier_product_id != null ? String(row.supplier_product_id) : null;
+  const origenCoste = normalizeInventoryOrigenCosteFromDb(row.origen_coste, {
+    supplierProductId,
+  });
   const mcs = row.master_cost_source;
   const masterCostSource: InventoryMasterCostSource = mcs === 'compra' ? 'compra' : 'uso';
   return {
@@ -195,6 +197,12 @@ function mapInventoryItemRow(row: Record<string, unknown>): InventoryItem {
     origenCoste,
     masterCostSource,
     masterArticleId: row.master_article_id != null ? String(row.master_article_id) : null,
+    supplierProductId,
+    supplierId: row.supplier_id != null ? String(row.supplier_id) : null,
+    precioUnitarioCalculado:
+      row.precio_unitario_calculado != null && Number.isFinite(Number(row.precio_unitario_calculado))
+        ? Number(row.precio_unitario_calculado)
+        : null,
     escandalloRecipeId: row.escandallo_recipe_id != null ? String(row.escandallo_recipe_id) : null,
     centralProductionRecipeId:
       row.central_production_recipe_id != null ? String(row.central_production_recipe_id) : null,
@@ -215,14 +223,12 @@ export async function resolveInventoryItemUnitPriceEur(
   row: Pick<
     InventoryItem,
     | 'origenCoste'
-    | 'masterCostSource'
-    | 'masterArticleId'
+    | 'supplierProductId'
     | 'escandalloRecipeId'
     | 'centralProductionRecipeId'
     | 'ccRecipeFormatQty'
     | 'price_per_unit'
     | 'precioManual'
-    | 'unidadCoste'
     | 'factorConversionManual'
     | 'unit'
   >,
@@ -232,82 +238,20 @@ export async function resolveInventoryItemUnitPriceEur(
     if (p != null && Number.isFinite(p) && p >= 0) return Math.round(p * 100) / 100;
     return row.price_per_unit >= 0 ? Math.round(row.price_per_unit * 100) / 100 : null;
   }
-  const masterArticleRowId = row.masterArticleId?.trim();
-  if (row.origenCoste === 'master' && masterArticleRowId) {
-    const { data, error } = await supabase
-      .from('purchase_articles')
-      .select(
-        'id,unidad_compra,unidad_uso,coste_compra_actual,coste_unitario_uso,unidad_base_coste,coste_base,formato_compra_nombre,cantidad_por_formato,unidad_por_formato',
-      )
-      .eq('id', masterArticleRowId)
-      .eq('local_id', localId)
-      .maybeSingle();
-    if (error) throw new Error(error.message);
-    if (!data) return null;
-    const uc = row.unidadCoste;
-    const invUnit = String(row.unit ?? '').trim().toLowerCase();
-    const compra = data.coste_compra_actual != null ? Number(data.coste_compra_actual) : null;
-    const uso = data.coste_unitario_uso != null ? Number(data.coste_unitario_uso) : null;
-    const baseUnitRaw = data.unidad_base_coste != null ? String(data.unidad_base_coste) : null;
-    const baseUnit = normalizeMasterArticleCostUnit(baseUnitRaw);
-    const baseCost = data.coste_base != null ? Number(data.coste_base) : null;
-    const formatoNombre = String(data.formato_compra_nombre ?? '').trim().toLowerCase();
-    const cantidadPorFormato =
-      data.cantidad_por_formato != null ? Number(data.cantidad_por_formato) : null;
-    const unidadPorFormato = normalizeMasterArticleCostUnit(
-      data.unidad_por_formato != null ? String(data.unidad_por_formato) : null,
-    );
-
-    // 1) Nuevo motor universal: coste_base por unidad_base_coste.
-    if (baseUnit && baseCost != null && Number.isFinite(baseCost) && baseCost > 0) {
-      if (invUnit === baseUnit) return Math.round(baseCost * 10000) / 10000;
-
-      if (
-        formatoNombre &&
-        invUnit === formatoNombre &&
-        cantidadPorFormato != null &&
-        Number.isFinite(cantidadPorFormato) &&
-        cantidadPorFormato > 0 &&
-        unidadPorFormato === baseUnit
-      ) {
-        return Math.round(baseCost * cantidadPorFormato * 10000) / 10000;
-      }
-
-      const factor = row.factorConversionManual;
-      if (factor != null && Number.isFinite(factor) && factor > 0 && uc === baseUnit) {
-        return Math.round(baseCost * factor * 10000) / 10000;
-      }
-    }
-
-    // 2) Compatibilidad legacy (compra/uso por unidadCoste).
-    if (row.masterCostSource === 'compra') {
-      if (
-        compra != null &&
-        Number.isFinite(compra) &&
-        compra > 0 &&
-        masterCostUnitMatches(uc, data.unidad_compra as string | null)
-      ) {
-        if (invUnit === uc) return Math.round(compra * 10000) / 10000;
-        const factor = row.factorConversionManual;
-        if (factor != null && Number.isFinite(factor) && factor > 0) {
-          return Math.round(compra * factor * 10000) / 10000;
-        }
-      }
-      return null;
-    }
-    if (
-      uso != null &&
-      Number.isFinite(uso) &&
-      uso > 0 &&
-      masterCostUnitMatches(uc, data.unidad_uso as string | null)
-    ) {
-      if (invUnit === uc) return Math.round(uso * 10000) / 10000;
-      const factor = row.factorConversionManual;
-      if (factor != null && Number.isFinite(factor) && factor > 0) {
-        return Math.round(uso * factor * 10000) / 10000;
-      }
-    }
-    return null;
+  const supplierProductRowId = row.supplierProductId?.trim();
+  if (row.origenCoste === 'articulo_proveedor' && supplierProductRowId) {
+    const eff = await fetchEffectiveSupplierProductUnitPriceEur(supabase, localId, supplierProductRowId);
+    if (eff == null || !Number.isFinite(eff) || eff < 0) return null;
+    const prod = await fetchSupplierProductRowForInventory(supabase, localId, supplierProductRowId);
+    if (!prod) return null;
+    return resolveSupplierLinkedInventoryUnitPriceEur(supabase, localId, {
+      supplierProductId: supplierProductRowId,
+      catalogUnit: prod.unit,
+      effectivePricePerCatalogUnit: eff,
+      inventoryUnit: row.unit,
+      factorConversionManual: row.factorConversionManual,
+      productName: prod.name,
+    });
   }
   if (row.origenCoste === 'produccion_propia' && row.escandalloRecipeId) {
     const r = await fetchEscandalloRecipeUnitCostEur(supabase, localId, row.escandalloRecipeId);
@@ -326,7 +270,7 @@ export async function resolveInventoryItemUnitPriceEur(
   return null;
 }
 
-/** Tras cargar líneas: recalcula `price_per_unit` en memoria si el origen no es manual (artículo máster / escandallo / CC). */
+/** Tras cargar líneas: recalcula `price_per_unit` en memoria si el origen no es manual (proveedor / escandallo / CC). */
 export async function hydrateInventoryItemsPricingFromOrigin(
   supabase: SupabaseClient,
   localId: string,
@@ -361,12 +305,14 @@ export async function insertInventoryLineFromCatalog(
     initialCostConfig?: {
       origenCoste: InventoryCostOrigen;
       masterCostSource: InventoryMasterCostSource;
-      masterArticleId: string | null;
+      supplierProductId: string | null;
+      supplierId: string | null;
       escandalloRecipeId: string | null;
       centralProductionRecipeId: string | null;
       ccRecipeFormatQty: number | null;
       precioManual: number | null;
       pricePerUnit: number;
+      precioUnitarioCalculado?: number | null;
       name: string;
       unit: string;
       formatLabel: string | null;
@@ -422,7 +368,15 @@ export async function insertInventoryLineFromCatalog(
       created_by: params.userId,
       origen_coste: cfg?.origenCoste ?? 'manual',
       master_cost_source: cfg?.masterCostSource ?? 'uso',
-      master_article_id: cfg?.masterArticleId ?? null,
+      master_article_id: null,
+      supplier_product_id: cfg?.supplierProductId ?? null,
+      supplier_id: cfg?.supplierId ?? null,
+      precio_unitario_calculado:
+        cfg?.precioUnitarioCalculado != null && Number.isFinite(Number(cfg.precioUnitarioCalculado))
+          ? Math.round(Number(cfg.precioUnitarioCalculado) * 10000) / 10000
+          : cfg != null && Number.isFinite(cfg.pricePerUnit)
+            ? Math.round(cfg.pricePerUnit * 10000) / 10000
+            : null,
       escandallo_recipe_id: cfg?.escandalloRecipeId ?? null,
       central_production_recipe_id: cfg?.centralProductionRecipeId ?? null,
       cc_recipe_format_qty: cfg?.ccRecipeFormatQty ?? null,
@@ -434,7 +388,7 @@ export async function insertInventoryLineFromCatalog(
           : null,
     })
     .select(
-      'id,local_id,catalog_item_id,local_category_id,name,unit,price_per_unit,quantity_on_hand,format_label,unidad_coste,formato_operativo,factor_conversion_manual,notes,sort_order,is_active,origen_coste,master_cost_source,master_article_id,escandallo_recipe_id,central_production_recipe_id,cc_recipe_format_qty,precio_manual',
+      'id,local_id,catalog_item_id,local_category_id,name,unit,price_per_unit,quantity_on_hand,format_label,unidad_coste,formato_operativo,factor_conversion_manual,notes,sort_order,is_active,origen_coste,master_cost_source,master_article_id,supplier_product_id,supplier_id,precio_unitario_calculado,escandallo_recipe_id,central_production_recipe_id,cc_recipe_format_qty,precio_manual',
     )
     .single();
   if (error) throw new Error(error.message);
@@ -456,7 +410,9 @@ export async function updateInventoryItemLine(
     factorConversionManual: number | null;
     origenCoste: InventoryCostOrigen;
     masterCostSource?: InventoryMasterCostSource;
-    masterArticleId?: string | null;
+    supplierProductId?: string | null;
+    supplierId?: string | null;
+    precioUnitarioCalculado?: number | null;
     escandalloRecipeId?: string | null;
     centralProductionRecipeId?: string | null;
     ccRecipeFormatQty?: number | null;
@@ -481,7 +437,20 @@ export async function updateInventoryItemLine(
   };
   row.origen_coste = params.origenCoste;
   if (params.masterCostSource != null) row.master_cost_source = params.masterCostSource;
-  if (params.masterArticleId !== undefined) row.master_article_id = params.masterArticleId;
+  if (params.origenCoste === 'articulo_proveedor') {
+    row.master_article_id = null;
+    if (params.supplierProductId !== undefined) row.supplier_product_id = params.supplierProductId;
+    if (params.supplierId !== undefined) row.supplier_id = params.supplierId;
+  } else {
+    row.supplier_product_id = null;
+    row.supplier_id = null;
+  }
+  if (params.precioUnitarioCalculado !== undefined) {
+    row.precio_unitario_calculado =
+      params.precioUnitarioCalculado != null && Number.isFinite(params.precioUnitarioCalculado)
+        ? Math.round(params.precioUnitarioCalculado * 10000) / 10000
+        : null;
+  }
   if (params.escandalloRecipeId !== undefined) row.escandallo_recipe_id = params.escandalloRecipeId;
   if (params.centralProductionRecipeId !== undefined)
     row.central_production_recipe_id = params.centralProductionRecipeId;

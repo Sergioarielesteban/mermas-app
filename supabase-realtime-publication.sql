@@ -29,6 +29,7 @@ declare
     'appcc_cleaning_logs',
     'inventory_local_categories',
     'inventory_items',
+    'inventory_cost_conversions',
     'inventory_movements',
     'local_chat_messages',
     'notifications'
