@@ -35,6 +35,12 @@ export type PurchaseArticle = {
   origenArticulo: 'proveedor' | 'cocina_central';
   centralProductionRecipeId: string | null;
   centralCostSyncedAt: string | null;
+  /** Nuevo motor universal inventario: unidad/coste base (origen real del coste). */
+  unidadBaseCoste: 'kg' | 'l' | 'ud' | null;
+  costeBase: number | null;
+  formatoCompraNombre: string | null;
+  cantidadPorFormato: number | null;
+  unidadPorFormato: 'kg' | 'l' | 'ud' | null;
 };
 
 export type PurchaseArticleDuplicateCandidate = {
@@ -118,6 +124,12 @@ export async function fetchSupplierCatalogRowsForArticleIds(
 type ArticleRow = Record<string, unknown>;
 
 function mapArticleRow(row: ArticleRow): PurchaseArticle {
+  const ubcRaw = row.unidad_base_coste != null ? String(row.unidad_base_coste).trim().toLowerCase() : null;
+  const ubc: PurchaseArticle['unidadBaseCoste'] =
+    ubcRaw === 'kg' || ubcRaw === 'l' || ubcRaw === 'ud' ? ubcRaw : null;
+  const upfRaw = row.unidad_por_formato != null ? String(row.unidad_por_formato).trim().toLowerCase() : null;
+  const upf: PurchaseArticle['unidadPorFormato'] =
+    upfRaw === 'kg' || upfRaw === 'l' || upfRaw === 'ud' ? upfRaw : null;
   return {
     id: String(row.id),
     localId: String(row.local_id),
@@ -154,11 +166,18 @@ function mapArticleRow(row: ArticleRow): PurchaseArticle {
     centralProductionRecipeId:
       row.central_production_recipe_id != null ? String(row.central_production_recipe_id) : null,
     centralCostSyncedAt: row.central_cost_synced_at != null ? String(row.central_cost_synced_at) : null,
+    unidadBaseCoste: ubc,
+    costeBase: row.coste_base != null ? Number(row.coste_base) : null,
+    formatoCompraNombre:
+      row.formato_compra_nombre != null ? String(row.formato_compra_nombre) : null,
+    cantidadPorFormato:
+      row.cantidad_por_formato != null ? Number(row.cantidad_por_formato) : null,
+    unidadPorFormato: upf,
   };
 }
 
 const ARTICLE_SEL =
-  'id,local_id,nombre,nombre_corto,categoria,subcategoria,descripcion,unidad_base,activo,coste_master,metodo_coste_master,coste_master_fijado_en,proveedor_preferido_id,observaciones,created_from_supplier_product_id,referencia_principal_supplier_product_id,unidad_compra,coste_compra_actual,iva_compra_pct,unidad_uso,unidades_uso_por_unidad_compra,rendimiento_pct,coste_unitario_uso,origen_coste,origen_articulo,central_production_recipe_id,central_cost_synced_at,created_at,updated_at';
+  'id,local_id,nombre,nombre_corto,categoria,subcategoria,descripcion,unidad_base,activo,coste_master,metodo_coste_master,coste_master_fijado_en,proveedor_preferido_id,observaciones,created_from_supplier_product_id,referencia_principal_supplier_product_id,unidad_compra,coste_compra_actual,iva_compra_pct,unidad_uso,unidades_uso_por_unidad_compra,rendimiento_pct,coste_unitario_uso,origen_coste,origen_articulo,central_production_recipe_id,central_cost_synced_at,unidad_base_coste,coste_base,formato_compra_nombre,cantidad_por_formato,unidad_por_formato,created_at,updated_at';
 
 export function isMissingPurchaseArticlesError(message: string): boolean {
   const m = message.toLowerCase();

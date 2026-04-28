@@ -109,6 +109,8 @@ type LineDraft = {
   unidadCoste: InventoryUnidadCoste;
   /** Presentación informativa (bandeja, caja…). Vacío = null en BD. */
   formatoOperativo: string;
+  /** Equivalencia manual: 1 unidad inventario (caja/bandeja/bolsa...) = X unidadCoste. */
+  factorConversionManual: string;
   origenCoste: InventoryCostOrigen;
   masterCostSource: InventoryMasterCostSource;
   masterArticleId: string;
@@ -145,6 +147,10 @@ function lineDraftFromRow(row: InventoryItem): LineDraft {
     unit: row.unit,
     unidadCoste: row.unidadCoste,
     formatoOperativo: row.formatoOperativo ?? '',
+    factorConversionManual:
+      row.factorConversionManual != null && Number.isFinite(row.factorConversionManual)
+        ? String(row.factorConversionManual)
+        : '',
     origenCoste: row.origenCoste,
     masterCostSource: row.masterCostSource,
     masterArticleId: row.masterArticleId ?? '',
@@ -173,6 +179,7 @@ function lineDraftFromCatalogItem(it: InventoryCatalogItem, qty = '0'): LineDraf
     unit: it.unit,
     unidadCoste: defaultInventoryUnidadCosteFromStockUnit(it.unit),
     formatoOperativo: '',
+    factorConversionManual: '',
     origenCoste: 'manual',
     masterCostSource: 'uso',
     masterArticleId: '',
@@ -583,6 +590,7 @@ export default function InventarioPage() {
       if (q > 0) linesWithStock += 1;
       const uKey = d.unit ?? row.unit;
       const fo = (d.formatoOperativo ?? '').trim();
+      const factorConvDraft = parseDecimal(d.factorConversionManual ?? '');
       const flBase = (d.format_label ?? row.format_label ?? '').trim();
       const formatLabelPdf =
         fo && flBase ? `${flBase} · ${fo}` : fo || flBase;
@@ -606,6 +614,10 @@ export default function InventarioPage() {
         unit: uKey,
         unidadCoste: normalizeInventoryUnidadCoste(d.unidadCoste),
         formatoOperativo: fo ? fo : null,
+        factorConversionManual:
+          factorConvDraft != null && Number.isFinite(factorConvDraft) && factorConvDraft > 0
+            ? factorConvDraft
+            : null,
       });
     }
     total = Math.round(total * 100) / 100;
@@ -683,6 +695,11 @@ export default function InventarioPage() {
     const masterCostSource = d.masterCostSource ?? 'uso';
     const masterId =
       origen === 'master' ? (d.masterArticleId?.trim() || row.masterArticleId?.trim() || null) : null;
+    const factorConvParsed = parseDecimal(d.factorConversionManual ?? '');
+    const factorConversionManual =
+      factorConvParsed != null && Number.isFinite(factorConvParsed) && factorConvParsed > 0
+        ? factorConvParsed
+        : null;
     const escId = d.escandalloRecipeId?.trim() ? d.escandalloRecipeId.trim() : null;
     const ccRecipeId = d.centralProductionRecipeId?.trim() ? d.centralProductionRecipeId.trim() : null;
     let ccFormatQty: number | null = null;
@@ -740,13 +757,15 @@ export default function InventarioPage() {
           centralProductionRecipeId: origen === 'recetario_cc' ? ccRecipeId : null,
           ccRecipeFormatQty: origen === 'recetario_cc' ? ccFormatQty : null,
           unidadCoste: uc,
+          unit: d.unit,
+          factorConversionManual: origen === 'master' ? factorConversionManual : null,
           price_per_unit: row.price_per_unit,
           precioManual: row.precioManual,
         });
         if (resolved == null) {
           fail(
             origen === 'master'
-              ? 'No se pudo calcular el precio del artículo máster seleccionado.'
+              ? 'Falta equivalencia para calcular este formato. Indica cuántos kg/L/ud contiene 1 unidad de inventario.'
               : origen === 'recetario_cc'
                 ? 'No se pudo obtener el coste de la receta (¿ejecutaste la migración recetario y guardaste la fórmula en CC?).'
                 : 'No se pudo calcular el coste desde la receta (revisa el escandallo: ingredientes y unidades).',
@@ -781,6 +800,7 @@ export default function InventarioPage() {
         unit: d.unit,
         unidadCoste: uc,
         formatoOperativo: (d.formatoOperativo ?? '').trim() ? (d.formatoOperativo ?? '').trim() : null,
+        factorConversionManual: origen === 'master' ? factorConversionManual : null,
         origenCoste: origen,
         masterCostSource: origen === 'master' ? masterCostSource : 'uso',
         masterArticleId: origen === 'master' ? masterId : null,
@@ -801,6 +821,7 @@ export default function InventarioPage() {
         unit: d.unit,
         unidadCoste: uc,
         formatoOperativo: fmtOp,
+        factorConversionManual: origen === 'master' ? factorConversionManual : null,
         origenCoste: origen,
         masterCostSource: origen === 'master' ? masterCostSource : 'uso',
         masterArticleId: origen === 'master' ? masterId : null,
@@ -826,6 +847,8 @@ export default function InventarioPage() {
             origen === 'recetario_cc' ? String(ccFormatQty ?? 1) : '1',
           unidadCoste: uc,
           formatoOperativo: (d.formatoOperativo ?? '').trim(),
+          factorConversionManual:
+            origen === 'master' && factorConversionManual != null ? String(factorConversionManual) : '',
         },
       }));
       const catalogId = row.catalog_item_id;
@@ -869,6 +892,11 @@ export default function InventarioPage() {
       const masterId = draft.masterArticleId?.trim() ? draft.masterArticleId.trim() : null;
       const escId = draft.escandalloRecipeId?.trim() ? draft.escandalloRecipeId.trim() : null;
       const ccId = draft.centralProductionRecipeId?.trim() ? draft.centralProductionRecipeId.trim() : null;
+      const factorConvParsed = parseDecimal(draft.factorConversionManual ?? '');
+      const factorConversionManual =
+        factorConvParsed != null && Number.isFinite(factorConvParsed) && factorConvParsed > 0
+          ? factorConvParsed
+          : null;
       let ccFormatQty: number | null = null;
       if (origen === 'recetario_cc') {
         const fq = parseDecimal(draft.ccRecipeFormatQty ?? '1');
@@ -910,13 +938,15 @@ export default function InventarioPage() {
           centralProductionRecipeId: origen === 'recetario_cc' ? ccId : null,
           ccRecipeFormatQty: origen === 'recetario_cc' ? ccFormatQty : null,
           unidadCoste: uc,
+          unit: draft.unit,
+          factorConversionManual: origen === 'master' ? factorConversionManual : null,
           price_per_unit: unitPrice,
           precioManual: null,
         });
         if (resolved == null) {
           setBanner(
             origen === 'master'
-              ? 'No se pudo calcular el precio del artículo máster seleccionado.'
+              ? 'Falta equivalencia para calcular este formato. Indica cuántos kg/L/ud contiene 1 unidad de inventario.'
               : origen === 'recetario_cc'
                 ? 'No se pudo obtener el coste de la receta CC.'
                 : 'No se pudo calcular coste desde la receta seleccionada.',
@@ -944,6 +974,7 @@ export default function InventarioPage() {
           formatLabel: draft.format_label,
           unidadCoste: uc,
           formatoOperativo: (draft.formatoOperativo ?? '').trim() ? draft.formatoOperativo.trim() : null,
+          factorConversionManual: origen === 'master' ? factorConversionManual : null,
         },
       });
       setDrafts((prev) => {
@@ -982,6 +1013,14 @@ export default function InventarioPage() {
         draft.origenCoste === 'recetario_cc' ? (draft.centralProductionRecipeId || null) : null,
       ccRecipeFormatQty: draft.origenCoste === 'recetario_cc' ? ccFq : null,
       unidadCoste: normalizeInventoryUnidadCoste(draft.unidadCoste),
+      unit: draft.unit,
+      factorConversionManual:
+        draft.origenCoste === 'master'
+          ? (() => {
+              const x = parseDecimal(draft.factorConversionManual ?? '');
+              return x != null && Number.isFinite(x) && x > 0 ? x : null;
+            })()
+          : null,
       price_per_unit: parseDecimal(draft.price) ?? 0,
       precioManual: null,
     });
@@ -1022,7 +1061,8 @@ export default function InventarioPage() {
           (currentDraft.unit || it.unit) === it.unit &&
           normalizeInventoryUnidadCoste(currentDraft.unidadCoste) ===
             defaultInventoryUnidadCosteFromStockUnit(it.unit) &&
-          !(currentDraft.formatoOperativo ?? '').trim();
+          !(currentDraft.formatoOperativo ?? '').trim() &&
+          !(currentDraft.factorConversionManual ?? '').trim();
         if (!line && q === 0 && raw === '' && isDefaultDraft) continue;
         const saved = await saveCatalogItemDraft(it, line, draftKey, { ...currentDraft, qty: String(q) }, {
           silent: true,
@@ -1291,6 +1331,7 @@ export default function InventarioPage() {
               unit: row.unit,
               unidadCoste: row.unidadCoste,
               formatoOperativo: row.formatoOperativo,
+              factorConversionManual: row.factorConversionManual,
               origenCoste: row.origenCoste,
               masterCostSource: row.masterCostSource,
               masterArticleId: row.masterArticleId,
@@ -1338,6 +1379,7 @@ export default function InventarioPage() {
           unit: row.unit,
           unidadCoste: row.unidadCoste,
           formatoOperativo: row.formatoOperativo,
+          factorConversionManual: row.factorConversionManual,
           origenCoste: row.origenCoste,
           masterCostSource: row.masterCostSource,
           masterArticleId: row.masterArticleId,
@@ -1618,6 +1660,26 @@ export default function InventarioPage() {
                           catalogQtyDraft[it.id] ?? (line ? String(line.quantity_on_hand) : '');
                         const detailsOpen = Boolean(catalogDetailOpen[it.id]);
                         const lineDraft = drafts[draftKey] ?? (line ? lineDraftFromRow(line) : lineDraftFromCatalogItem(it, qtyValue || '0'));
+                        const selectedMasterArticle =
+                          lineDraft.masterArticleId
+                            ? purchaseArticles.find((a) => a.id === lineDraft.masterArticleId) ?? null
+                            : null;
+                        const detectedBaseUnit =
+                          selectedMasterArticle?.unidadBaseCoste ||
+                          (lineDraft.masterCostSource === 'compra'
+                            ? (selectedMasterArticle?.unidadCompra?.trim().toLowerCase() as
+                                | InventoryUnidadCoste
+                                | undefined)
+                            : (selectedMasterArticle?.unidadUso?.trim().toLowerCase() as
+                                | InventoryUnidadCoste
+                                | undefined)) ||
+                          lineDraft.unidadCoste;
+                        const detectedBaseCost =
+                          selectedMasterArticle?.costeBase ??
+                          (lineDraft.masterCostSource === 'compra'
+                            ? selectedMasterArticle?.costeCompraActual
+                            : selectedMasterArticle?.costeUnitarioUso) ??
+                          null;
                         const lineBusy = busyId === draftKey || (line ? busyId === line.id : false);
                         const lineSub =
                           Math.round(
@@ -1851,6 +1913,8 @@ export default function InventarioPage() {
                                           centralProductionRecipeId:
                                             v === 'recetario_cc' ? cur.centralProductionRecipeId : '',
                                           ccRecipeFormatQty: v === 'recetario_cc' ? cur.ccRecipeFormatQty : '1',
+                                          factorConversionManual:
+                                            v === 'master' ? cur.factorConversionManual : '',
                                         };
                                         void refreshDraftAutoPrice(draftKey, nextDraft);
                                         return {
@@ -1923,6 +1987,11 @@ export default function InventarioPage() {
                                                     centralProductionRecipeId: null,
                                                     ccRecipeFormatQty: null,
                                                     unidadCoste: uc,
+                                                    unit: nextDraft.unit,
+                                                    factorConversionManual: (() => {
+                                                      const x = parseDecimal(nextDraft.factorConversionManual ?? '');
+                                                      return x != null && Number.isFinite(x) && x > 0 ? x : null;
+                                                    })(),
                                                     price_per_unit: 0,
                                                     precioManual: null,
                                                   },
@@ -1958,6 +2027,49 @@ export default function InventarioPage() {
                                         }
                                         disabled={disabled || lineBusy || qtyBusy}
                                       />
+                                      {selectedMasterArticle ? (
+                                        <p className="mt-1 text-[10px] leading-snug text-zinc-500">
+                                          Coste base detectado:{' '}
+                                          {detectedBaseCost != null && Number.isFinite(detectedBaseCost)
+                                            ? `${detectedBaseCost.toFixed(4)} €/` +
+                                              `${detectedBaseUnit || lineDraft.unidadCoste}`
+                                            : 'sin coste base'}
+                                        </p>
+                                      ) : null}
+                                      {(lineDraft.unit !== (detectedBaseUnit || lineDraft.unidadCoste) ||
+                                        ['caja', 'bandeja', 'bolsa', 'paquete'].includes(lineDraft.unit)) ? (
+                                        <label className="mt-1 block">
+                                          <span className="text-[9px] font-bold uppercase text-zinc-500">
+                                            Equivalencia necesaria
+                                          </span>
+                                          <div className="mt-0.5 flex items-center gap-1 text-[11px] text-zinc-600">
+                                            <span>1 {lineDraft.unit}</span>
+                                            <span>=</span>
+                                            <input
+                                              type="text"
+                                              inputMode="decimal"
+                                              value={lineDraft.factorConversionManual}
+                                              disabled={disabled || lineBusy || qtyBusy}
+                                              placeholder="ej. 1.5"
+                                              onChange={(e) =>
+                                                setDrafts((prev) => ({
+                                                  ...prev,
+                                                  [draftKey]: {
+                                                    ...(prev[draftKey] ?? lineDraft),
+                                                    factorConversionManual: e.target.value,
+                                                  },
+                                                }))
+                                              }
+                                              className="h-8 w-20 rounded border border-zinc-200 px-2 text-[11px]"
+                                            />
+                                            <span>{detectedBaseUnit || lineDraft.unidadCoste}</span>
+                                          </div>
+                                          <p className="mt-0.5 text-[10px] text-zinc-500">
+                                            Indica cuántos {detectedBaseUnit || lineDraft.unidadCoste} contiene 1{' '}
+                                            {lineDraft.unit}.
+                                          </p>
+                                        </label>
+                                      ) : null}
                                     </div>
                                   ) : null}
                                   {lineDraft.origenCoste === 'produccion_propia' ? (

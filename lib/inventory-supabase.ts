@@ -92,6 +92,12 @@ export type InventoryItem = {
   unidadCoste: InventoryUnidadCoste;
   /** Presentación (bandeja, caja…); solo informativo. */
   formatoOperativo: string | null;
+  /**
+   * Equivalencia manual opcional para motor universal máster:
+   * 1 `unit` (unidad inventario) = `factorConversionManual` en `unidadCoste`.
+   * Ejemplo: 1 bandeja = 1.5 kg.
+   */
+  factorConversionManual: number | null;
   notes: string;
   sort_order: number;
   is_active: boolean;
@@ -150,7 +156,7 @@ export async function fetchInventoryItems(
   const { data, error } = await supabase
     .from('inventory_items')
     .select(
-      'id,local_id,catalog_item_id,local_category_id,name,unit,price_per_unit,quantity_on_hand,format_label,unidad_coste,formato_operativo,notes,sort_order,is_active,origen_coste,master_cost_source,master_article_id,escandallo_recipe_id,central_production_recipe_id,cc_recipe_format_qty,precio_manual',
+      'id,local_id,catalog_item_id,local_category_id,name,unit,price_per_unit,quantity_on_hand,format_label,unidad_coste,formato_operativo,factor_conversion_manual,notes,sort_order,is_active,origen_coste,master_cost_source,master_article_id,escandallo_recipe_id,central_production_recipe_id,cc_recipe_format_qty,precio_manual',
     )
     .eq('local_id', localId)
     .eq('is_active', true)
@@ -178,6 +184,10 @@ function mapInventoryItemRow(row: Record<string, unknown>): InventoryItem {
     formatoOperativo:
       row.formato_operativo != null && String(row.formato_operativo).trim()
         ? String(row.formato_operativo).trim()
+        : null,
+    factorConversionManual:
+      row.factor_conversion_manual != null && Number.isFinite(Number(row.factor_conversion_manual))
+        ? Number(row.factor_conversion_manual)
         : null,
     notes: String(row.notes ?? ''),
     sort_order: Number(row.sort_order ?? 0),
@@ -213,6 +223,8 @@ export async function resolveInventoryItemUnitPriceEur(
     | 'price_per_unit'
     | 'precioManual'
     | 'unidadCoste'
+    | 'factorConversionManual'
+    | 'unit'
   >,
 ): Promise<number | null> {
   if (row.origenCoste === 'manual') {
@@ -224,15 +236,50 @@ export async function resolveInventoryItemUnitPriceEur(
   if (row.origenCoste === 'master' && masterArticleRowId) {
     const { data, error } = await supabase
       .from('purchase_articles')
-      .select('id,unidad_compra,unidad_uso,coste_compra_actual,coste_unitario_uso')
+      .select(
+        'id,unidad_compra,unidad_uso,coste_compra_actual,coste_unitario_uso,unidad_base_coste,coste_base,formato_compra_nombre,cantidad_por_formato,unidad_por_formato',
+      )
       .eq('id', masterArticleRowId)
       .eq('local_id', localId)
       .maybeSingle();
     if (error) throw new Error(error.message);
     if (!data) return null;
+    const uc = row.unidadCoste;
+    const invUnit = String(row.unit ?? '').trim().toLowerCase();
     const compra = data.coste_compra_actual != null ? Number(data.coste_compra_actual) : null;
     const uso = data.coste_unitario_uso != null ? Number(data.coste_unitario_uso) : null;
-    const uc = row.unidadCoste;
+    const baseUnitRaw = data.unidad_base_coste != null ? String(data.unidad_base_coste) : null;
+    const baseUnit = normalizeMasterArticleCostUnit(baseUnitRaw);
+    const baseCost = data.coste_base != null ? Number(data.coste_base) : null;
+    const formatoNombre = String(data.formato_compra_nombre ?? '').trim().toLowerCase();
+    const cantidadPorFormato =
+      data.cantidad_por_formato != null ? Number(data.cantidad_por_formato) : null;
+    const unidadPorFormato = normalizeMasterArticleCostUnit(
+      data.unidad_por_formato != null ? String(data.unidad_por_formato) : null,
+    );
+
+    // 1) Nuevo motor universal: coste_base por unidad_base_coste.
+    if (baseUnit && baseCost != null && Number.isFinite(baseCost) && baseCost > 0) {
+      if (invUnit === baseUnit) return Math.round(baseCost * 10000) / 10000;
+
+      if (
+        formatoNombre &&
+        invUnit === formatoNombre &&
+        cantidadPorFormato != null &&
+        Number.isFinite(cantidadPorFormato) &&
+        cantidadPorFormato > 0 &&
+        unidadPorFormato === baseUnit
+      ) {
+        return Math.round(baseCost * cantidadPorFormato * 10000) / 10000;
+      }
+
+      const factor = row.factorConversionManual;
+      if (factor != null && Number.isFinite(factor) && factor > 0 && uc === baseUnit) {
+        return Math.round(baseCost * factor * 10000) / 10000;
+      }
+    }
+
+    // 2) Compatibilidad legacy (compra/uso por unidadCoste).
     if (row.masterCostSource === 'compra') {
       if (
         compra != null &&
@@ -240,7 +287,11 @@ export async function resolveInventoryItemUnitPriceEur(
         compra > 0 &&
         masterCostUnitMatches(uc, data.unidad_compra as string | null)
       ) {
-        return Math.round(compra * 10000) / 10000;
+        if (invUnit === uc) return Math.round(compra * 10000) / 10000;
+        const factor = row.factorConversionManual;
+        if (factor != null && Number.isFinite(factor) && factor > 0) {
+          return Math.round(compra * factor * 10000) / 10000;
+        }
       }
       return null;
     }
@@ -250,7 +301,11 @@ export async function resolveInventoryItemUnitPriceEur(
       uso > 0 &&
       masterCostUnitMatches(uc, data.unidad_uso as string | null)
     ) {
-      return Math.round(uso * 10000) / 10000;
+      if (invUnit === uc) return Math.round(uso * 10000) / 10000;
+      const factor = row.factorConversionManual;
+      if (factor != null && Number.isFinite(factor) && factor > 0) {
+        return Math.round(uso * factor * 10000) / 10000;
+      }
     }
     return null;
   }
@@ -317,6 +372,7 @@ export async function insertInventoryLineFromCatalog(
       formatLabel: string | null;
       unidadCoste?: InventoryUnidadCoste;
       formatoOperativo?: string | null;
+      factorConversionManual?: number | null;
     };
   },
 ): Promise<InventoryItem> {
@@ -356,6 +412,10 @@ export async function insertInventoryLineFromCatalog(
           ? normalizeInventoryUnidadCoste(String(cfg.unidadCoste))
           : defaultInventoryUnidadCosteFromStockUnit(c.unit),
       formato_operativo: cfg?.formatoOperativo?.trim() ? cfg.formatoOperativo.trim() : null,
+      factor_conversion_manual:
+        cfg?.factorConversionManual != null && Number.isFinite(Number(cfg.factorConversionManual))
+          ? Math.round(Number(cfg.factorConversionManual) * 1000000) / 1000000
+          : null,
       notes: '',
       sort_order: nextSort,
       is_active: true,
@@ -374,7 +434,7 @@ export async function insertInventoryLineFromCatalog(
           : null,
     })
     .select(
-      'id,local_id,catalog_item_id,local_category_id,name,unit,price_per_unit,quantity_on_hand,format_label,unidad_coste,formato_operativo,notes,sort_order,is_active,origen_coste,master_cost_source,master_article_id,escandallo_recipe_id,central_production_recipe_id,cc_recipe_format_qty,precio_manual',
+      'id,local_id,catalog_item_id,local_category_id,name,unit,price_per_unit,quantity_on_hand,format_label,unidad_coste,formato_operativo,factor_conversion_manual,notes,sort_order,is_active,origen_coste,master_cost_source,master_article_id,escandallo_recipe_id,central_production_recipe_id,cc_recipe_format_qty,precio_manual',
     )
     .single();
   if (error) throw new Error(error.message);
@@ -393,6 +453,7 @@ export async function updateInventoryItemLine(
     unit: string;
     unidadCoste: InventoryUnidadCoste;
     formatoOperativo: string | null;
+    factorConversionManual: number | null;
     origenCoste: InventoryCostOrigen;
     masterCostSource?: InventoryMasterCostSource;
     masterArticleId?: string | null;
@@ -413,6 +474,10 @@ export async function updateInventoryItemLine(
     unit: params.unit,
     unidad_coste: normalizeInventoryUnidadCoste(params.unidadCoste),
     formato_operativo: params.formatoOperativo?.trim() ? params.formatoOperativo.trim() : null,
+    factor_conversion_manual:
+      params.factorConversionManual != null && Number.isFinite(params.factorConversionManual)
+        ? Math.round(params.factorConversionManual * 1000000) / 1000000
+        : null,
   };
   row.origen_coste = params.origenCoste;
   if (params.masterCostSource != null) row.master_cost_source = params.masterCostSource;
