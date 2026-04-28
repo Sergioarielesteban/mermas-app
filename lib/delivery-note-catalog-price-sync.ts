@@ -1,6 +1,10 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { DeliveryNoteItem } from '@/lib/delivery-notes-supabase';
-import { fetchSupplierProductRow, updateSupplierProductPriceWithHistory } from '@/lib/pedidos-supabase';
+import {
+  fetchSupplierProductRow,
+  updateSupplierProductLastReceivedPrice,
+  updateSupplierProductPriceWithHistory,
+} from '@/lib/pedidos-supabase';
 
 export type DeliveryNoteCatalogPriceSyncResult = {
   updated: number;
@@ -37,6 +41,13 @@ export async function syncCatalogPricesFromValidatedDeliveryNote(
         skipped += 1;
         continue;
       }
+      await updateSupplierProductLastReceivedPrice(
+        supabase,
+        localId,
+        pid,
+        up,
+        new Date().toISOString(),
+      );
       const { changed } = await updateSupplierProductPriceWithHistory(supabase, localId, pid, up, {
         source: 'delivery_note_validated',
         deliveryNoteId,

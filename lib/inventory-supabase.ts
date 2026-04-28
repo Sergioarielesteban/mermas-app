@@ -215,7 +215,7 @@ function mapInventoryItemRow(row: Record<string, unknown>): InventoryItem {
 }
 
 /**
- * Resuelve el precio de valoración (€ por `unidadCoste`) según origen: máster, escandallo, receta CC o manual.
+ * Resuelve el precio de valoración (€ por unidad de conteo) según origen.
  */
 export async function resolveInventoryItemUnitPriceEur(
   supabase: SupabaseClient,
@@ -241,10 +241,12 @@ export async function resolveInventoryItemUnitPriceEur(
   const supplierProductRowId = row.supplierProductId?.trim();
   if (row.origenCoste === 'articulo_proveedor' && supplierProductRowId) {
     const eff = await fetchEffectiveSupplierProductUnitPriceEur(supabase, localId, supplierProductRowId);
-    if (eff == null || !Number.isFinite(eff) || eff < 0) return null;
+    if (eff == null || !Number.isFinite(eff) || eff < 0) {
+      return row.price_per_unit >= 0 ? Math.round(row.price_per_unit * 100) / 100 : null;
+    }
     const prod = await fetchSupplierProductRowForInventory(supabase, localId, supplierProductRowId);
-    if (!prod) return null;
-    return resolveSupplierLinkedInventoryUnitPriceEur(supabase, localId, {
+    if (!prod) return row.price_per_unit >= 0 ? Math.round(row.price_per_unit * 100) / 100 : null;
+    const resolved = await resolveSupplierLinkedInventoryUnitPriceEur(supabase, localId, {
       supplierProductId: supplierProductRowId,
       catalogUnit: prod.unit,
       effectivePricePerCatalogUnit: eff,
@@ -252,6 +254,10 @@ export async function resolveInventoryItemUnitPriceEur(
       factorConversionManual: row.factorConversionManual,
       productName: prod.name,
     });
+    if (resolved == null) {
+      return row.price_per_unit >= 0 ? Math.round(row.price_per_unit * 100) / 100 : null;
+    }
+    return resolved;
   }
   if (row.origenCoste === 'produccion_propia' && row.escandalloRecipeId) {
     const r = await fetchEscandalloRecipeUnitCostEur(supabase, localId, row.escandalloRecipeId);

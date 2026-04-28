@@ -350,6 +350,8 @@ type SupplierProductRow = {
   name: string;
   unit: string;
   price_per_unit: number;
+  ultimo_precio_recibido?: number | null;
+  fecha_ultimo_precio?: string | null;
   units_per_pack?: number | null;
   recipe_unit?: string | null;
   vat_rate: number;
@@ -963,7 +965,7 @@ function resolveSupplierProductBilling(input: {
 }
 
 const SUPPLIER_PRODUCT_SELECT_FULL =
-  'id,supplier_id,article_id,name,unit,price_per_unit,units_per_pack,recipe_unit,vat_rate,par_stock,is_active,estimated_kg_per_unit,billing_unit,billing_qty_per_order_unit,price_per_billing_unit';
+  'id,supplier_id,article_id,name,unit,price_per_unit,ultimo_precio_recibido,fecha_ultimo_precio,units_per_pack,recipe_unit,vat_rate,par_stock,is_active,estimated_kg_per_unit,billing_unit,billing_qty_per_order_unit,price_per_billing_unit';
 const SUPPLIER_PRODUCT_SELECT_LEGACY =
   'id,supplier_id,article_id,name,unit,price_per_unit,units_per_pack,recipe_unit,vat_rate,par_stock,is_active,estimated_kg_per_unit';
 
@@ -1016,7 +1018,11 @@ export async function createSupplierProduct(
   let data: SupplierProductRow | null = null;
   {
     const ins = await supabase.from('pedido_supplier_products').insert(insertRow).select(SUPPLIER_PRODUCT_SELECT_FULL).single();
-    if (ins.error && isMissingOrderItemBillingColumnsError(ins.error.message)) {
+    if (
+      ins.error &&
+      (isMissingOrderItemBillingColumnsError(ins.error.message) ||
+        isMissingSupplierProductLastReceivedColumnsError(ins.error.message))
+    ) {
       const { billing_unit: _b, billing_qty_per_order_unit: _q, price_per_billing_unit: _p, ...legacyInsert } = insertRow;
       const ins2 = await supabase
         .from('pedido_supplier_products')
@@ -1133,7 +1139,11 @@ export async function updateSupplierProduct(
       .eq('local_id', localId)
       .select(SUPPLIER_PRODUCT_SELECT_FULL)
       .single();
-    if (res.error && isMissingOrderItemBillingColumnsError(res.error.message)) {
+    if (
+      res.error &&
+      (isMissingOrderItemBillingColumnsError(res.error.message) ||
+        isMissingSupplierProductLastReceivedColumnsError(res.error.message))
+    ) {
       const legacyPatch = { ...patch };
       delete legacyPatch.billing_unit;
       delete legacyPatch.billing_qty_per_order_unit;
@@ -1167,7 +1177,11 @@ export async function fetchSupplierProductRow(
     .eq('local_id', localId)
     .eq('id', supplierProductId)
     .maybeSingle();
-  if (full.error && isMissingOrderItemBillingColumnsError(full.error.message)) {
+  if (
+    full.error &&
+    (isMissingOrderItemBillingColumnsError(full.error.message) ||
+      isMissingSupplierProductLastReceivedColumnsError(full.error.message))
+  ) {
     const leg = await supabase
       .from('pedido_supplier_products')
       .select(SUPPLIER_PRODUCT_SELECT_LEGACY)
@@ -1182,6 +1196,39 @@ export async function fetchSupplierProductRow(
 }
 
 export type SupplierProductPriceChangeSource = 'delivery_note_validated' | 'quick_input';
+
+function isMissingSupplierProductLastReceivedColumnsError(message: string): boolean {
+  const m = message.toLowerCase();
+  return (
+    (m.includes('ultimo_precio_recibido') || m.includes('fecha_ultimo_precio')) &&
+    (m.includes('column') || m.includes('schema cache') || m.includes('does not exist'))
+  );
+}
+
+/** Guarda el último precio real recibido para un artículo proveedor (sin tocar unidad ni vínculo). */
+export async function updateSupplierProductLastReceivedPrice(
+  supabase: SupabaseClient,
+  localId: string,
+  supplierProductId: string,
+  receivedUnitPrice: number,
+  atIso?: string | null,
+): Promise<void> {
+  const p = Math.round(receivedUnitPrice * 100) / 100;
+  if (!Number.isFinite(p) || p < 0) return;
+  const ts = atIso && String(atIso).trim() ? String(atIso) : new Date().toISOString();
+  const res = await supabase
+    .from('pedido_supplier_products')
+    .update({
+      ultimo_precio_recibido: p,
+      fecha_ultimo_precio: ts,
+    })
+    .eq('id', supplierProductId)
+    .eq('local_id', localId);
+  if (res.error) {
+    if (isMissingSupplierProductLastReceivedColumnsError(res.error.message)) return;
+    throw new Error(res.error.message);
+  }
+}
 
 /**
  * Cambia solo el precio de catálogo, guardando fila de histórico.

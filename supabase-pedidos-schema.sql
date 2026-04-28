@@ -103,6 +103,10 @@ alter table public.pedido_supplier_products
   add column if not exists vat_rate numeric(6,4) not null default 0;
 alter table public.pedido_supplier_products
   add column if not exists par_stock numeric(10,2) not null default 0;
+alter table public.pedido_supplier_products
+  add column if not exists ultimo_precio_recibido numeric(10,2);
+alter table public.pedido_supplier_products
+  add column if not exists fecha_ultimo_precio timestamptz;
 
 alter table public.purchase_order_items
   add column if not exists vat_rate numeric(6,4) not null default 0;

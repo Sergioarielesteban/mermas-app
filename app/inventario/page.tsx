@@ -2063,10 +2063,12 @@ export default function InventarioPage() {
                                             ? `${selectedSupplierProduct.pricePerUnit.toFixed(2)} €/${UNIT_SUFFIX[selectedSupplierProduct.unit] ?? selectedSupplierProduct.unit}`
                                             : '—'}
                                           {'. '}
-                                          Se aplica el último precio de pedido recibido o la media histórica si existe;
-                                          si no, este precio.
+                                          Se aplica primero el último precio recibido; si no existe, este precio.
                                         </p>
                                       ) : null}
+                                      <p className="text-[10px] font-semibold text-emerald-700">
+                                        Precio actualizado automáticamente desde última compra.
+                                      </p>
                                       {showSupplierEquivalence ? (
                                         <label className="mt-1 block">
                                           <span className="text-[9px] font-bold uppercase text-zinc-500">
