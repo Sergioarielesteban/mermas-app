@@ -24,6 +24,16 @@ alter table public.inventory_items
 alter table public.inventory_items
   add column if not exists precio_manual numeric(12, 4);
 
+alter table public.inventory_items
+  add column if not exists master_cost_source text not null default 'uso';
+
+alter table public.inventory_items
+  drop constraint if exists inventory_items_master_cost_source_chk;
+
+alter table public.inventory_items
+  add constraint inventory_items_master_cost_source_chk
+  check (master_cost_source in ('uso', 'compra'));
+
 do $$
 begin
   if not exists (select 1 from pg_constraint where conname = 'inventory_items_master_article_fkey') then
@@ -59,6 +69,9 @@ comment on column public.inventory_items.origen_coste is
 
 comment on column public.inventory_items.precio_manual is
   'Snapshot €/ud si origen=manual; null si el coste sale de máster o subreceta.';
+
+comment on column public.inventory_items.master_cost_source is
+  'Cuando origen_coste=master: uso=coste_unitario_uso, compra=coste_compra_actual.';
 
 -- Rellenar legado: todo manual con precio en precio_manual
 update public.inventory_items

@@ -1,6 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { fetchEscandalloRecipeUnitCostEur } from '@/lib/inventory-escandallo-cost';
-import { fetchPurchaseArticleCostHintsByIds } from '@/lib/purchase-articles-supabase';
 
 export type InventoryCatalogCategory = {
   id: string;
@@ -23,6 +22,7 @@ export type InventoryCatalogItem = {
 };
 
 export type InventoryCostOrigen = 'manual' | 'master' | 'produccion_propia';
+export type InventoryMasterCostSource = 'uso' | 'compra';
 
 export type InventoryItem = {
   id: string;
@@ -38,6 +38,7 @@ export type InventoryItem = {
   sort_order: number;
   is_active: boolean;
   origenCoste: InventoryCostOrigen;
+  masterCostSource: InventoryMasterCostSource;
   masterArticleId: string | null;
   escandalloRecipeId: string | null;
   precioManual: number | null;
@@ -89,7 +90,7 @@ export async function fetchInventoryItems(
   const { data, error } = await supabase
     .from('inventory_items')
     .select(
-      'id,local_id,catalog_item_id,local_category_id,name,unit,price_per_unit,quantity_on_hand,format_label,notes,sort_order,is_active,origen_coste,master_article_id,escandallo_recipe_id,precio_manual',
+      'id,local_id,catalog_item_id,local_category_id,name,unit,price_per_unit,quantity_on_hand,format_label,notes,sort_order,is_active,origen_coste,master_cost_source,master_article_id,escandallo_recipe_id,precio_manual',
     )
     .eq('local_id', localId)
     .eq('is_active', true)
@@ -103,6 +104,8 @@ function mapInventoryItemRow(row: Record<string, unknown>): InventoryItem {
   const o = row.origen_coste;
   const origenCoste: InventoryCostOrigen =
     o === 'master' || o === 'produccion_propia' ? o : 'manual';
+  const mcs = row.master_cost_source;
+  const masterCostSource: InventoryMasterCostSource = mcs === 'compra' ? 'compra' : 'uso';
   return {
     id: String(row.id),
     local_id: String(row.local_id),
@@ -117,6 +120,7 @@ function mapInventoryItemRow(row: Record<string, unknown>): InventoryItem {
     sort_order: Number(row.sort_order ?? 0),
     is_active: Boolean(row.is_active),
     origenCoste,
+    masterCostSource,
     masterArticleId: row.master_article_id != null ? String(row.master_article_id) : null,
     escandalloRecipeId: row.escandallo_recipe_id != null ? String(row.escandallo_recipe_id) : null,
     precioManual: row.precio_manual != null && Number.isFinite(Number(row.precio_manual)) ? Number(row.precio_manual) : null,
@@ -129,7 +133,10 @@ function mapInventoryItemRow(row: Record<string, unknown>): InventoryItem {
 export async function resolveInventoryItemUnitPriceEur(
   supabase: SupabaseClient,
   localId: string,
-  row: Pick<InventoryItem, 'origenCoste' | 'masterArticleId' | 'escandalloRecipeId' | 'price_per_unit' | 'precioManual'>,
+  row: Pick<
+    InventoryItem,
+    'origenCoste' | 'masterCostSource' | 'masterArticleId' | 'escandalloRecipeId' | 'price_per_unit' | 'precioManual' | 'unit'
+  >,
 ): Promise<number | null> {
   if (row.origenCoste === 'manual') {
     const p = row.precioManual;
@@ -137,10 +144,29 @@ export async function resolveInventoryItemUnitPriceEur(
     return row.price_per_unit >= 0 ? Math.round(row.price_per_unit * 100) / 100 : null;
   }
   if (row.origenCoste === 'master' && row.masterArticleId) {
-    const m = await fetchPurchaseArticleCostHintsByIds(supabase, localId, [row.masterArticleId]);
-    const h = m.get(row.masterArticleId);
-    const p = h?.costeUnitarioUso;
-    return p != null && Number.isFinite(p) && p > 0 ? Math.round(p * 10000) / 10000 : null;
+    const { data, error } = await supabase
+      .from('purchase_articles')
+      .select('id,unidad_compra,unidad_uso,coste_compra_actual,coste_unitario_uso')
+      .eq('id', row.masterArticleId)
+      .eq('local_id', localId)
+      .maybeSingle();
+    if (error) throw new Error(error.message);
+    if (!data) return null;
+    const compra = data.coste_compra_actual != null ? Number(data.coste_compra_actual) : null;
+    const uso = data.coste_unitario_uso != null ? Number(data.coste_unitario_uso) : null;
+    const unitInv = String(row.unit ?? '').trim().toLowerCase();
+    const unitCompra = String(data.unidad_compra ?? '').trim().toLowerCase();
+    const unitUso = String(data.unidad_uso ?? '').trim().toLowerCase();
+    if (row.masterCostSource === 'compra') {
+      if (compra != null && Number.isFinite(compra) && compra > 0 && (!unitCompra || unitInv === unitCompra)) {
+        return Math.round(compra * 10000) / 10000;
+      }
+      return null;
+    }
+    if (uso != null && Number.isFinite(uso) && uso > 0 && (!unitUso || unitInv === unitUso)) {
+      return Math.round(uso * 10000) / 10000;
+    }
+    return null;
   }
   if (row.origenCoste === 'produccion_propia' && row.escandalloRecipeId) {
     const r = await fetchEscandalloRecipeUnitCostEur(supabase, localId, row.escandalloRecipeId);
@@ -190,12 +216,13 @@ export async function insertInventoryLineFromCatalog(
       is_active: true,
       created_by: params.userId,
       origen_coste: 'manual',
+      master_cost_source: 'uso',
       master_article_id: null,
       escandallo_recipe_id: null,
       precio_manual: basePrice,
     })
     .select(
-      'id,local_id,catalog_item_id,local_category_id,name,unit,price_per_unit,quantity_on_hand,format_label,notes,sort_order,is_active,origen_coste,master_article_id,escandallo_recipe_id,precio_manual',
+      'id,local_id,catalog_item_id,local_category_id,name,unit,price_per_unit,quantity_on_hand,format_label,notes,sort_order,is_active,origen_coste,master_cost_source,master_article_id,escandallo_recipe_id,precio_manual',
     )
     .single();
   if (error) throw new Error(error.message);
@@ -213,6 +240,7 @@ export async function updateInventoryItemLine(
     format_label: string | null;
     unit: string;
     origenCoste?: InventoryCostOrigen;
+    masterCostSource?: InventoryMasterCostSource;
     masterArticleId?: string | null;
     escandalloRecipeId?: string | null;
     precioManual?: number | null;
@@ -229,6 +257,7 @@ export async function updateInventoryItemLine(
     unit: params.unit,
   };
   if (params.origenCoste != null) row.origen_coste = params.origenCoste;
+  if (params.masterCostSource != null) row.master_cost_source = params.masterCostSource;
   if (params.masterArticleId !== undefined) row.master_article_id = params.masterArticleId;
   if (params.escandalloRecipeId !== undefined) row.escandallo_recipe_id = params.escandalloRecipeId;
   if (params.precioManual !== undefined) {

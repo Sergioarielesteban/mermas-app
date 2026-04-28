@@ -13,6 +13,7 @@ import {
   type InventoryCatalogCategory,
   type InventoryCatalogItem,
   type InventoryCostOrigen,
+  type InventoryMasterCostSource,
   type InventoryItem,
   type InventoryMonthSnapshot,
   currentInventoryYearMonth,
@@ -79,6 +80,7 @@ type LineDraft = {
   format_label: string;
   unit: string;
   origenCoste: InventoryCostOrigen;
+  masterCostSource: InventoryMasterCostSource;
   masterArticleId: string;
   escandalloRecipeId: string;
 };
@@ -97,6 +99,7 @@ function lineDraftFromRow(row: InventoryItem): LineDraft {
     format_label: row.format_label ?? '',
     unit: row.unit,
     origenCoste: row.origenCoste,
+    masterCostSource: row.masterCostSource,
     masterArticleId: row.masterArticleId ?? '',
     escandalloRecipeId: row.escandalloRecipeId ?? '',
   };
@@ -417,6 +420,7 @@ export default function InventarioPage() {
       return;
     }
     const origen = d.origenCoste ?? 'manual';
+    const masterCostSource = d.masterCostSource ?? 'uso';
     const masterId = d.masterArticleId?.trim() ? d.masterArticleId.trim() : null;
     const escId = d.escandalloRecipeId?.trim() ? d.escandalloRecipeId.trim() : null;
     const nm = d.name.trim();
@@ -452,8 +456,10 @@ export default function InventarioPage() {
         }
         const resolved = await resolveInventoryItemUnitPriceEur(supabase, localId, {
           origenCoste: origen,
+          masterCostSource: origen === 'master' ? masterCostSource : 'uso',
           masterArticleId: origen === 'master' ? masterId : null,
           escandalloRecipeId: origen === 'produccion_propia' ? escId : null,
+          unit: d.unit,
           price_per_unit: row.price_per_unit,
           precioManual: row.precioManual,
         });
@@ -476,6 +482,7 @@ export default function InventarioPage() {
         format_label: d.format_label.trim() ? d.format_label.trim() : null,
         unit: d.unit,
         origenCoste: origen,
+        masterCostSource: origen === 'master' ? masterCostSource : 'uso',
         masterArticleId: origen === 'master' ? masterId : null,
         escandalloRecipeId: origen === 'produccion_propia' ? escId : null,
         precioManual: precioManual,
@@ -487,6 +494,7 @@ export default function InventarioPage() {
           name: nm,
           price: String(priceOut),
           origenCoste: origen,
+          masterCostSource: origen === 'master' ? masterCostSource : 'uso',
           masterArticleId: origen === 'master' ? masterId ?? '' : '',
           escandalloRecipeId: origen === 'produccion_propia' ? escId ?? '' : '',
         },
@@ -1232,6 +1240,7 @@ export default function InventarioPage() {
                                           [line.id]: {
                                             ...cur,
                                             origenCoste: v,
+                                            masterCostSource: v === 'master' ? cur.masterCostSource : 'uso',
                                             masterArticleId: v === 'master' ? cur.masterArticleId : '',
                                             escandalloRecipeId: v === 'produccion_propia' ? cur.escandalloRecipeId : '',
                                           },
@@ -1246,6 +1255,24 @@ export default function InventarioPage() {
                                   </select>
                                   {lineDraft.origenCoste === 'master' ? (
                                     <div className="mt-2">
+                                      <p className="text-[9px] font-bold uppercase text-zinc-500">Precio desde máster</p>
+                                      <select
+                                        value={lineDraft.masterCostSource}
+                                        disabled={disabled || lineBusy || qtyBusy}
+                                        onChange={(e) =>
+                                          setDrafts((prev) => ({
+                                            ...prev,
+                                            [line.id]: {
+                                              ...(prev[line.id] ?? lineDraftFromRow(line)),
+                                              masterCostSource: e.target.value as InventoryMasterCostSource,
+                                            },
+                                          }))
+                                        }
+                                        className="mt-0.5 h-9 w-full rounded-lg border border-zinc-200 bg-white px-2 text-xs font-semibold"
+                                      >
+                                        <option value="uso">Coste de uso</option>
+                                        <option value="compra">Coste de compra</option>
+                                      </select>
                                       <p className="text-[9px] font-bold uppercase text-zinc-500">Artículo máster</p>
                                       <MasterArticleSearchInput
                                         className="mt-0.5"
