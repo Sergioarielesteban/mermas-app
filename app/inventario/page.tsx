@@ -105,6 +105,20 @@ function lineDraftFromRow(row: InventoryItem): LineDraft {
   };
 }
 
+function lineDraftFromCatalogItem(it: InventoryCatalogItem, qty = '0'): LineDraft {
+  return {
+    qty,
+    price: String(it.default_price_per_unit),
+    name: it.name,
+    format_label: it.format_label ?? '',
+    unit: it.unit,
+    origenCoste: 'manual',
+    masterCostSource: 'uso',
+    masterArticleId: '',
+    escandalloRecipeId: '',
+  };
+}
+
 export default function InventarioPage() {
   const { localId, profileReady, localName, localCode, userId, displayName, loginUsername, profileRole } =
     useAuth();
@@ -509,6 +523,70 @@ export default function InventarioPage() {
       setBanner(humanizeClientError(e, 'Error al guardar.'));
     } finally {
       if (!opts?.skipBusy) setBusyId(null);
+    }
+  };
+
+  const saveCatalogItemDraft = async (
+    it: InventoryCatalogItem,
+    line: InventoryItem | null,
+    draftKey: string,
+    draft: LineDraft,
+  ) => {
+    if (!localId || !supabaseOk) return;
+    if (line) {
+      await saveLine(line, draft);
+      return;
+    }
+    const q = parseDecimal(draft.qty);
+    if (q === null || q < 0) {
+      setBanner('Cantidad no válida.');
+      return;
+    }
+    const supabase = getSupabaseClient()!;
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    setBusyId(draftKey);
+    setBanner(null);
+    try {
+      const inserted = await insertInventoryLineFromCatalog(supabase, {
+        localId,
+        catalogItem: it,
+        userId: user?.id ?? null,
+        initialQuantity: q,
+      });
+      await saveLine(inserted, { ...draft, qty: String(q) }, { skipReload: true, skipBusy: true, throwing: true });
+      setDrafts((prev) => {
+        const next = { ...prev };
+        delete next[draftKey];
+        return next;
+      });
+      await load();
+    } catch (e) {
+      setBanner(humanizeClientError(e, 'Error al guardar la línea.'));
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const refreshDraftAutoPrice = async (draftKey: string, draft: LineDraft) => {
+    if (!localId || !supabaseOk) return;
+    if (draft.origenCoste === 'manual') return;
+    const supabase = getSupabaseClient()!;
+    const resolved = await resolveInventoryItemUnitPriceEur(supabase, localId, {
+      origenCoste: draft.origenCoste,
+      masterCostSource: draft.masterCostSource,
+      masterArticleId: draft.origenCoste === 'master' ? (draft.masterArticleId || null) : null,
+      escandalloRecipeId: draft.origenCoste === 'produccion_propia' ? (draft.escandalloRecipeId || null) : null,
+      unit: draft.unit,
+      price_per_unit: parseDecimal(draft.price) ?? 0,
+      precioManual: parseDecimal(draft.price),
+    });
+    if (resolved != null) {
+      setDrafts((prev) => ({
+        ...prev,
+        [draftKey]: { ...(prev[draftKey] ?? draft), price: String(resolved) },
+      }));
     }
   };
 
@@ -1062,22 +1140,19 @@ export default function InventarioPage() {
                       ) : null}
                       {items.map((it) => {
                         const line = lines.find((l) => l.catalog_item_id === it.id);
+                        const draftKey = line ? line.id : `cat-${it.id}`;
                         const qtyBusy = busyCategoryId === cat.id;
                         const qtyValue =
                           catalogQtyDraft[it.id] ?? (line ? String(line.quantity_on_hand) : '');
                         const detailsOpen = Boolean(catalogDetailOpen[it.id]);
-                        const lineDraft = line
-                          ? drafts[line.id] ?? lineDraftFromRow(line)
-                          : null;
-                        const lineBusy = line ? busyId === line.id : false;
+                        const lineDraft = drafts[draftKey] ?? (line ? lineDraftFromRow(line) : lineDraftFromCatalogItem(it, qtyValue || '0'));
+                        const lineBusy = busyId === draftKey || (line ? busyId === line.id : false);
                         const lineSub =
-                          line && lineDraft
-                            ? Math.round(
-                                (parseDecimal(lineDraft.qty) ?? 0) *
-                                  (parseDecimal(lineDraft.price) ?? 0) *
-                                  100,
-                              ) / 100
-                            : 0;
+                          Math.round(
+                            (parseDecimal(lineDraft.qty) ?? 0) *
+                              (parseDecimal(lineDraft.price) ?? 0) *
+                              100,
+                          ) / 100;
                         return (
                           <li
                             key={it.id}
@@ -1149,12 +1224,10 @@ export default function InventarioPage() {
                                   onChange={(e) => {
                                     const v = e.target.value;
                                     setCatalogQtyDraft((prev) => ({ ...prev, [it.id]: v }));
-                                    if (line) {
-                                      setDrafts((prev) => {
-                                        const cur = prev[line.id] ?? lineDraftFromRow(line);
-                                        return { ...prev, [line.id]: { ...cur, qty: v } };
-                                      });
-                                    }
+                                    setDrafts((prev) => {
+                                      const cur = prev[draftKey] ?? lineDraft;
+                                      return { ...prev, [draftKey]: { ...cur, qty: v } };
+                                    });
                                   }}
                                   className="h-9 w-[4.75rem] rounded-lg border border-zinc-200 px-2 text-center text-sm font-semibold tabular-nums"
                                 />
@@ -1166,10 +1239,9 @@ export default function InventarioPage() {
                                 onClick={(e) => e.stopPropagation()}
                                 onKeyDown={(e) => e.stopPropagation()}
                               >
-                                {line && lineDraft ? (
-                                  <>
+                                <>
                                     <p className="text-[10px] font-bold uppercase tracking-wide text-zinc-500">
-                                      Tu línea en inventario
+                                      {line ? 'Tu línea en inventario' : 'Configurar línea de inventario'}
                                     </p>
                                     <label className="block">
                                   <span className="text-[9px] font-bold uppercase text-zinc-400">Nombre</span>
@@ -1180,7 +1252,7 @@ export default function InventarioPage() {
                                     onChange={(e) =>
                                       setDrafts((prev) => ({
                                         ...prev,
-                                        [line.id]: { ...lineDraft, name: e.target.value },
+                                        [draftKey]: { ...lineDraft, name: e.target.value },
                                       }))
                                     }
                                     className="mt-0.5 w-full rounded-lg border border-zinc-200 px-2 py-1.5 text-sm font-semibold text-zinc-900"
@@ -1199,7 +1271,7 @@ export default function InventarioPage() {
                                       onChange={(e) =>
                                         setDrafts((prev) => ({
                                           ...prev,
-                                          [line.id]: { ...lineDraft, format_label: e.target.value },
+                                          [draftKey]: { ...lineDraft, format_label: e.target.value },
                                         }))
                                       }
                                       className="mt-0.5 w-full rounded-lg border border-zinc-200 px-2 py-1.5 text-xs text-zinc-800"
@@ -1211,10 +1283,11 @@ export default function InventarioPage() {
                                       value={lineDraft.unit}
                                       disabled={disabled || lineBusy || qtyBusy}
                                       onChange={(e) =>
-                                        setDrafts((prev) => ({
-                                          ...prev,
-                                          [line.id]: { ...lineDraft, unit: e.target.value },
-                                        }))
+                                        setDrafts((prev) => {
+                                          const nextDraft: LineDraft = { ...lineDraft, unit: e.target.value };
+                                          void refreshDraftAutoPrice(draftKey, nextDraft);
+                                          return { ...prev, [draftKey]: nextDraft };
+                                        })
                                       }
                                       className="mt-0.5 h-9 w-full rounded-lg border border-zinc-200 px-2 text-xs font-semibold text-zinc-900"
                                     >
@@ -1234,16 +1307,18 @@ export default function InventarioPage() {
                                     onChange={(e) => {
                                       const v = e.target.value as InventoryCostOrigen;
                                       setDrafts((prev) => {
-                                        const cur = prev[line.id] ?? lineDraftFromRow(line);
+                                        const cur = prev[draftKey] ?? lineDraft;
+                                        const nextDraft: LineDraft = {
+                                          ...cur,
+                                          origenCoste: v,
+                                          masterCostSource: v === 'master' ? cur.masterCostSource : 'uso',
+                                          masterArticleId: v === 'master' ? cur.masterArticleId : '',
+                                          escandalloRecipeId: v === 'produccion_propia' ? cur.escandalloRecipeId : '',
+                                        };
+                                        void refreshDraftAutoPrice(draftKey, nextDraft);
                                         return {
                                           ...prev,
-                                          [line.id]: {
-                                            ...cur,
-                                            origenCoste: v,
-                                            masterCostSource: v === 'master' ? cur.masterCostSource : 'uso',
-                                            masterArticleId: v === 'master' ? cur.masterArticleId : '',
-                                            escandalloRecipeId: v === 'produccion_propia' ? cur.escandalloRecipeId : '',
-                                          },
+                                          [draftKey]: nextDraft,
                                         };
                                       });
                                     }}
@@ -1260,13 +1335,14 @@ export default function InventarioPage() {
                                         value={lineDraft.masterCostSource}
                                         disabled={disabled || lineBusy || qtyBusy}
                                         onChange={(e) =>
-                                          setDrafts((prev) => ({
-                                            ...prev,
-                                            [line.id]: {
-                                              ...(prev[line.id] ?? lineDraftFromRow(line)),
+                                          setDrafts((prev) => {
+                                            const nextDraft: LineDraft = {
+                                              ...(prev[draftKey] ?? lineDraft),
                                               masterCostSource: e.target.value as InventoryMasterCostSource,
-                                            },
-                                          }))
+                                            };
+                                            void refreshDraftAutoPrice(draftKey, nextDraft);
+                                            return { ...prev, [draftKey]: nextDraft };
+                                          })
                                         }
                                         className="mt-0.5 h-9 w-full rounded-lg border border-zinc-200 bg-white px-2 text-xs font-semibold"
                                       >
@@ -1279,15 +1355,16 @@ export default function InventarioPage() {
                                         articles={purchaseArticles}
                                         value={lineDraft.masterArticleId}
                                         onSelect={(a) =>
-                                          setDrafts((prev) => ({
-                                            ...prev,
-                                            [line.id]: { ...(prev[line.id] ?? lineDraftFromRow(line)), masterArticleId: a.id },
-                                          }))
+                                          setDrafts((prev) => {
+                                            const nextDraft: LineDraft = { ...(prev[draftKey] ?? lineDraft), masterArticleId: a.id };
+                                            void refreshDraftAutoPrice(draftKey, nextDraft);
+                                            return { ...prev, [draftKey]: nextDraft };
+                                          })
                                         }
                                         onClear={() =>
                                           setDrafts((prev) => ({
                                             ...prev,
-                                            [line.id]: { ...(prev[line.id] ?? lineDraftFromRow(line)), masterArticleId: '' },
+                                            [draftKey]: { ...(prev[draftKey] ?? lineDraft), masterArticleId: '' },
                                           }))
                                         }
                                         disabled={disabled || lineBusy || qtyBusy}
@@ -1302,12 +1379,12 @@ export default function InventarioPage() {
                                       <input
                                         type="search"
                                         placeholder="Filtrar por nombre…"
-                                        value={escandalloRecipeQuery[line.id] ?? ''}
+                                        value={escandalloRecipeQuery[draftKey] ?? ''}
                                         disabled={disabled || lineBusy || qtyBusy}
                                         onChange={(e) =>
                                           setEscandalloRecipeQuery((prev) => ({
                                             ...prev,
-                                            [line.id]: e.target.value,
+                                            [draftKey]: e.target.value,
                                           }))
                                         }
                                         className="h-9 w-full rounded-lg border border-zinc-200 px-2 text-xs"
@@ -1316,20 +1393,21 @@ export default function InventarioPage() {
                                         value={lineDraft.escandalloRecipeId}
                                         disabled={disabled || lineBusy || qtyBusy}
                                         onChange={(e) =>
-                                          setDrafts((prev) => ({
-                                            ...prev,
-                                            [line.id]: {
-                                              ...(prev[line.id] ?? lineDraftFromRow(line)),
+                                          setDrafts((prev) => {
+                                            const nextDraft: LineDraft = {
+                                              ...(prev[draftKey] ?? lineDraft),
                                               escandalloRecipeId: e.target.value,
-                                            },
-                                          }))
+                                            };
+                                            void refreshDraftAutoPrice(draftKey, nextDraft);
+                                            return { ...prev, [draftKey]: nextDraft };
+                                          })
                                         }
                                         className="h-10 w-full max-h-40 rounded-lg border border-zinc-200 bg-white px-2 text-xs font-semibold"
                                       >
                                         <option value="">— Elegir receta —</option>
                                         {escandalloRecipes
                                           .filter((r) => {
-                                            const t = (escandalloRecipeQuery[line.id] ?? '').trim().toLowerCase();
+                                            const t = (escandalloRecipeQuery[draftKey] ?? '').trim().toLowerCase();
                                             if (!t) return true;
                                             return r.name.toLowerCase().includes(t);
                                           })
@@ -1360,7 +1438,7 @@ export default function InventarioPage() {
                                     onChange={(e) =>
                                       setDrafts((prev) => ({
                                         ...prev,
-                                        [line.id]: { ...lineDraft, price: e.target.value },
+                                        [draftKey]: { ...lineDraft, price: e.target.value },
                                       }))
                                     }
                                     className="mt-0.5 h-9 w-full rounded-lg border border-zinc-200 px-2 text-sm font-semibold tabular-nums disabled:bg-zinc-100"
@@ -1374,23 +1452,24 @@ export default function InventarioPage() {
                                     <button
                                       type="button"
                                       disabled={disabled || lineBusy || qtyBusy}
-                                      onClick={() => void saveLine(line)}
+                                      onClick={() => void saveCatalogItemDraft(it, line ?? null, draftKey, lineDraft)}
                                       className="h-9 rounded-lg bg-[#D32F2F] px-3 text-xs font-bold text-white disabled:opacity-45"
                                     >
                                       {lineBusy ? '…' : 'Guardar línea'}
                                     </button>
-                                    <button
-                                      type="button"
-                                      disabled={disabled || lineBusy || qtyBusy}
-                                      onClick={() => void removeLine(line)}
-                                      className="h-9 rounded-lg border border-zinc-300 bg-white px-3 text-xs font-bold text-zinc-800 disabled:opacity-45"
-                                    >
-                                      Quitar del inventario
-                                    </button>
+                                    {line ? (
+                                      <button
+                                        type="button"
+                                        disabled={disabled || lineBusy || qtyBusy}
+                                        onClick={() => void removeLine(line)}
+                                        className="h-9 rounded-lg border border-zinc-300 bg-white px-3 text-xs font-bold text-zinc-800 disabled:opacity-45"
+                                      >
+                                        Quitar del inventario
+                                      </button>
+                                    ) : null}
                                   </div>
                                 </div>
-                                  </>
-                                ) : null}
+                                </>
                                 <div className="rounded-lg border border-red-100 bg-red-50/50 px-3 py-2.5">
                                   <p className="text-[10px] font-bold uppercase tracking-wide text-red-800/90">
                                     Catálogo de tu local
