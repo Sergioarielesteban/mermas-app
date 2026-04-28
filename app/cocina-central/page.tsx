@@ -11,6 +11,7 @@ import {
   ShoppingBag,
   ListOrdered,
   Warehouse,
+  BookOpen,
 } from 'lucide-react';
 import { useAuth } from '@/components/AuthProvider';
 import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
@@ -62,6 +63,12 @@ export default function CocinaCentralHubPage() {
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         {operate ? (
           <>
+            <Tile
+              href="/cocina-central/recetario"
+              label="Recetario Central"
+              sub="Elaboraciones internas y costes"
+              icon={BookOpen}
+            />
             <Tile
               href="/cocina-central/produccion"
               label="Producción"

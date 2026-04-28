@@ -35,6 +35,7 @@ import {
 } from '@/lib/inventory-supabase';
 import { fetchEscandalloRecipes, type EscandalloRecipe } from '@/lib/escandallos-supabase';
 import { fetchPurchaseArticles, type PurchaseArticle } from '@/lib/purchase-articles-supabase';
+import { prListActiveRecipes, type ProductionRecipeRow } from '@/lib/production-recipes-supabase';
 import { appConfirm } from '@/lib/app-dialog-bridge';
 import { confirmDestructiveOperation } from '@/lib/ops-role-confirm';
 import { actorLabel, notifyInventarioCerrado } from '@/services/notifications';
@@ -82,11 +83,16 @@ type LineDraft = {
   masterCostSource: InventoryMasterCostSource;
   masterArticleId: string;
   escandalloRecipeId: string;
+  /** Recetario Cocina Central (solo cocina central). */
+  centralProductionRecipeId: string;
+  /** Cantidad de salida de la receta por unidad de inventario (ej. 4 para bolsa 4 kg si la receta es €/kg). */
+  ccRecipeFormatQty: string;
 };
 
 function labelOrigenInventario(o: InventoryCostOrigen): string {
   if (o === 'master') return 'Artículo máster';
-  if (o === 'produccion_propia') return 'Producción propia';
+  if (o === 'produccion_propia') return 'Base/subreceta (Escandallos)';
+  if (o === 'recetario_cc') return 'Recetario Cocina Central';
   return 'Manual';
 }
 
@@ -101,6 +107,11 @@ function lineDraftFromRow(row: InventoryItem): LineDraft {
     masterCostSource: row.masterCostSource,
     masterArticleId: row.masterArticleId ?? '',
     escandalloRecipeId: row.escandalloRecipeId ?? '',
+    centralProductionRecipeId: row.centralProductionRecipeId ?? '',
+    ccRecipeFormatQty:
+      row.ccRecipeFormatQty != null && Number.isFinite(row.ccRecipeFormatQty)
+        ? String(row.ccRecipeFormatQty)
+        : '1',
   };
 }
 
@@ -115,12 +126,23 @@ function lineDraftFromCatalogItem(it: InventoryCatalogItem, qty = '0'): LineDraf
     masterCostSource: 'uso',
     masterArticleId: '',
     escandalloRecipeId: '',
+    centralProductionRecipeId: '',
+    ccRecipeFormatQty: '1',
   };
 }
 
 export default function InventarioPage() {
-  const { localId, profileReady, localName, localCode, userId, displayName, loginUsername, profileRole } =
-    useAuth();
+  const {
+    localId,
+    profileReady,
+    localName,
+    localCode,
+    userId,
+    displayName,
+    loginUsername,
+    profileRole,
+    isCentralKitchen,
+  } = useAuth();
   const [categories, setCategories] = useState<InventoryCatalogCategory[]>([]);
   const [catalogItems, setCatalogItems] = useState<InventoryCatalogItem[]>([]);
   const [lines, setLines] = useState<InventoryItem[]>([]);
@@ -154,6 +176,7 @@ export default function InventarioPage() {
   const [busyDeletingCatalogItemId, setBusyDeletingCatalogItemId] = useState<string | null>(null);
   const [purchaseArticles, setPurchaseArticles] = useState<PurchaseArticle[]>([]);
   const [escandalloRecipes, setEscandalloRecipes] = useState<EscandalloRecipe[]>([]);
+  const [ccRecipes, setCcRecipes] = useState<ProductionRecipeRow[]>([]);
   const [escandalloRecipeQuery, setEscandalloRecipeQuery] = useState<Record<string, string>>({});
   const loadRef = useRef<() => Promise<void>>(() => Promise.resolve());
 
@@ -246,6 +269,7 @@ export default function InventarioPage() {
     if (!localId || !supabaseOk) {
       setPurchaseArticles([]);
       setEscandalloRecipes([]);
+      setCcRecipes([]);
       return;
     }
     const supabase = getSupabaseClient()!;
@@ -257,12 +281,19 @@ export default function InventarioPage() {
         ]);
         setPurchaseArticles(arts);
         setEscandalloRecipes(rec);
+        if (isCentralKitchen) {
+          const cc = await prListActiveRecipes(supabase, localId).catch(() => [] as ProductionRecipeRow[]);
+          setCcRecipes(cc);
+        } else {
+          setCcRecipes([]);
+        }
       } catch {
         setPurchaseArticles([]);
         setEscandalloRecipes([]);
+        setCcRecipes([]);
       }
     })();
-  }, [localId, supabaseOk]);
+  }, [localId, supabaseOk, isCentralKitchen]);
 
   useEffect(() => {
     if (!localId || !supabaseOk) return;
@@ -436,6 +467,12 @@ export default function InventarioPage() {
     const masterCostSource = d.masterCostSource ?? 'uso';
     const masterId = d.masterArticleId?.trim() ? d.masterArticleId.trim() : null;
     const escId = d.escandalloRecipeId?.trim() ? d.escandalloRecipeId.trim() : null;
+    const ccRecipeId = d.centralProductionRecipeId?.trim() ? d.centralProductionRecipeId.trim() : null;
+    let ccFormatQty: number | null = null;
+    if (origen === 'recetario_cc') {
+      const fq = parseDecimal(d.ccRecipeFormatQty ?? '1');
+      ccFormatQty = fq != null && fq > 0 ? fq : 1;
+    }
     const nm = d.name.trim();
     if (!nm) {
       fail('El nombre no puede estar vacío.');
@@ -464,14 +501,26 @@ export default function InventarioPage() {
           return;
         }
         if (origen === 'produccion_propia' && !escId) {
-          fail('Elige una base, subreceta o receta (producción propia).');
+          fail('Elige una base o subreceta de Escandallos.');
           return;
+        }
+        if (origen === 'recetario_cc') {
+          if (!isCentralKitchen) {
+            fail('El Recetario Cocina Central solo aplica en el local de cocina central.');
+            return;
+          }
+          if (!ccRecipeId) {
+            fail('Elige una receta del Recetario Cocina Central.');
+            return;
+          }
         }
         const resolved = await resolveInventoryItemUnitPriceEur(supabase, localId, {
           origenCoste: origen,
           masterCostSource: origen === 'master' ? masterCostSource : 'uso',
           masterArticleId: origen === 'master' ? masterId : null,
           escandalloRecipeId: origen === 'produccion_propia' ? escId : null,
+          centralProductionRecipeId: origen === 'recetario_cc' ? ccRecipeId : null,
+          ccRecipeFormatQty: origen === 'recetario_cc' ? ccFormatQty : null,
           unit: d.unit,
           price_per_unit: row.price_per_unit,
           precioManual: row.precioManual,
@@ -480,7 +529,9 @@ export default function InventarioPage() {
           fail(
             origen === 'master'
               ? 'No hay coste de uso (€/ud) para ese artículo máster.'
-              : 'No se pudo calcular el coste desde la receta (revisa el escandallo: ingredientes y unidades).',
+              : origen === 'recetario_cc'
+                ? 'No se pudo obtener el coste de la receta (¿ejecutaste la migración recetario y guardaste la fórmula en CC?).'
+                : 'No se pudo calcular el coste desde la receta (revisa el escandallo: ingredientes y unidades).',
           );
           return;
         }
@@ -498,6 +549,8 @@ export default function InventarioPage() {
         masterCostSource: origen === 'master' ? masterCostSource : 'uso',
         masterArticleId: origen === 'master' ? masterId : null,
         escandalloRecipeId: origen === 'produccion_propia' ? escId : null,
+        centralProductionRecipeId: origen === 'recetario_cc' ? ccRecipeId : null,
+        ccRecipeFormatQty: origen === 'recetario_cc' ? ccFormatQty : null,
         precioManual: precioManual,
       });
       setDrafts((prev) => ({
@@ -510,6 +563,9 @@ export default function InventarioPage() {
           masterCostSource: origen === 'master' ? masterCostSource : 'uso',
           masterArticleId: origen === 'master' ? masterId ?? '' : '',
           escandalloRecipeId: origen === 'produccion_propia' ? escId ?? '' : '',
+          centralProductionRecipeId: origen === 'recetario_cc' ? ccRecipeId ?? '' : '',
+          ccRecipeFormatQty:
+            origen === 'recetario_cc' ? String(ccFormatQty ?? 1) : '1',
         },
       }));
       const catalogId = row.catalog_item_id;
@@ -551,6 +607,12 @@ export default function InventarioPage() {
       const origen = draft.origenCoste;
       const masterId = draft.masterArticleId?.trim() ? draft.masterArticleId.trim() : null;
       const escId = draft.escandalloRecipeId?.trim() ? draft.escandalloRecipeId.trim() : null;
+      const ccId = draft.centralProductionRecipeId?.trim() ? draft.centralProductionRecipeId.trim() : null;
+      let ccFormatQty: number | null = null;
+      if (origen === 'recetario_cc') {
+        const fq = parseDecimal(draft.ccRecipeFormatQty ?? '1');
+        ccFormatQty = fq != null && fq > 0 ? fq : 1;
+      }
       let unitPrice = parseDecimal(draft.price) ?? it.default_price_per_unit;
       let precioManual: number | null = null;
       if (origen === 'manual') {
@@ -565,14 +627,26 @@ export default function InventarioPage() {
           return;
         }
         if (origen === 'produccion_propia' && !escId) {
-          setBanner('Elige una base, subreceta o receta (producción propia).');
+          setBanner('Elige una base o subreceta de Escandallos.');
           return;
+        }
+        if (origen === 'recetario_cc') {
+          if (!isCentralKitchen) {
+            setBanner('El Recetario Cocina Central solo aplica en cocina central.');
+            return;
+          }
+          if (!ccId) {
+            setBanner('Elige una receta del Recetario Cocina Central.');
+            return;
+          }
         }
         const resolved = await resolveInventoryItemUnitPriceEur(supabase, localId, {
           origenCoste: origen,
           masterCostSource: draft.masterCostSource,
           masterArticleId: origen === 'master' ? masterId : null,
           escandalloRecipeId: origen === 'produccion_propia' ? escId : null,
+          centralProductionRecipeId: origen === 'recetario_cc' ? ccId : null,
+          ccRecipeFormatQty: origen === 'recetario_cc' ? ccFormatQty : null,
           unit: draft.unit,
           price_per_unit: unitPrice,
           precioManual: null,
@@ -581,7 +655,9 @@ export default function InventarioPage() {
           setBanner(
             origen === 'master'
               ? 'No hay coste disponible en el artículo máster para esa unidad.'
-              : 'No se pudo calcular coste desde la receta seleccionada.',
+              : origen === 'recetario_cc'
+                ? 'No se pudo obtener el coste de la receta CC.'
+                : 'No se pudo calcular coste desde la receta seleccionada.',
           );
           return;
         }
@@ -597,6 +673,8 @@ export default function InventarioPage() {
           masterCostSource: draft.masterCostSource,
           masterArticleId: origen === 'master' ? masterId : null,
           escandalloRecipeId: origen === 'produccion_propia' ? escId : null,
+          centralProductionRecipeId: origen === 'recetario_cc' ? ccId : null,
+          ccRecipeFormatQty: origen === 'recetario_cc' ? ccFormatQty : null,
           precioManual,
           pricePerUnit: unitPrice,
           name: draft.name,
@@ -622,11 +700,19 @@ export default function InventarioPage() {
     if (!localId || !supabaseOk) return;
     if (draft.origenCoste === 'manual') return;
     const supabase = getSupabaseClient()!;
+    let ccFq: number | null = null;
+    if (draft.origenCoste === 'recetario_cc') {
+      const fq = parseDecimal(draft.ccRecipeFormatQty ?? '1');
+      ccFq = fq != null && fq > 0 ? fq : 1;
+    }
     const resolved = await resolveInventoryItemUnitPriceEur(supabase, localId, {
       origenCoste: draft.origenCoste,
       masterCostSource: draft.masterCostSource,
       masterArticleId: draft.origenCoste === 'master' ? (draft.masterArticleId || null) : null,
       escandalloRecipeId: draft.origenCoste === 'produccion_propia' ? (draft.escandalloRecipeId || null) : null,
+      centralProductionRecipeId:
+        draft.origenCoste === 'recetario_cc' ? (draft.centralProductionRecipeId || null) : null,
+      ccRecipeFormatQty: draft.origenCoste === 'recetario_cc' ? ccFq : null,
       unit: draft.unit,
       price_per_unit: parseDecimal(draft.price) ?? 0,
       precioManual: parseDecimal(draft.price),
@@ -662,6 +748,7 @@ export default function InventarioPage() {
           currentDraft.masterCostSource === 'uso' &&
           !currentDraft.masterArticleId &&
           !currentDraft.escandalloRecipeId &&
+          !currentDraft.centralProductionRecipeId &&
           (currentDraft.name.trim() || it.name) === it.name &&
           (currentDraft.format_label ?? '') === (it.format_label ?? '') &&
           (currentDraft.unit || it.unit) === it.unit;
@@ -916,6 +1003,8 @@ export default function InventarioPage() {
               masterCostSource: row.masterCostSource,
               masterArticleId: row.masterArticleId,
               escandalloRecipeId: row.escandalloRecipeId,
+              centralProductionRecipeId: row.centralProductionRecipeId,
+              ccRecipeFormatQty: row.ccRecipeFormatQty,
               precioManual: row.precioManual,
             });
           }
@@ -959,6 +1048,8 @@ export default function InventarioPage() {
           masterCostSource: row.masterCostSource,
           masterArticleId: row.masterArticleId,
           escandalloRecipeId: row.escandalloRecipeId,
+          centralProductionRecipeId: row.centralProductionRecipeId,
+          ccRecipeFormatQty: row.ccRecipeFormatQty,
           precioManual: row.precioManual,
         });
       }
@@ -1382,6 +1473,9 @@ export default function InventarioPage() {
                                           masterCostSource: v === 'master' ? cur.masterCostSource : 'uso',
                                           masterArticleId: v === 'master' ? cur.masterArticleId : '',
                                           escandalloRecipeId: v === 'produccion_propia' ? cur.escandalloRecipeId : '',
+                                          centralProductionRecipeId:
+                                            v === 'recetario_cc' ? cur.centralProductionRecipeId : '',
+                                          ccRecipeFormatQty: v === 'recetario_cc' ? cur.ccRecipeFormatQty : '1',
                                         };
                                         void refreshDraftAutoPrice(draftKey, nextDraft);
                                         return {
@@ -1394,7 +1488,10 @@ export default function InventarioPage() {
                                   >
                                     <option value="manual">Manual</option>
                                     <option value="master">Artículo máster</option>
-                                    <option value="produccion_propia">Producción propia (base / subreceta)</option>
+                                    <option value="produccion_propia">Base/subreceta Escandallos</option>
+                                    <option value="recetario_cc" disabled={!isCentralKitchen}>
+                                      Recetario Cocina Central {!isCentralKitchen ? '(solo central)' : ''}
+                                    </option>
                                   </select>
                                   {lineDraft.origenCoste === 'master' ? (
                                     <div className="mt-2">
@@ -1489,6 +1586,63 @@ export default function InventarioPage() {
                                       <p className="text-[10px] leading-snug text-zinc-500">
                                         Coste teórico del escandallo (ingredientes, rendimiento, subrecetas). Aquí no se
                                         muestra la receta.
+                                      </p>
+                                    </div>
+                                  ) : null}
+                                  {lineDraft.origenCoste === 'recetario_cc' && isCentralKitchen ? (
+                                    <div className="mt-2 space-y-1">
+                                      <p className="text-[9px] font-bold uppercase text-zinc-500">
+                                        Receta Cocina Central (sin ingredientes visibles)
+                                      </p>
+                                      <select
+                                        value={lineDraft.centralProductionRecipeId}
+                                        disabled={disabled || lineBusy || qtyBusy}
+                                        onChange={(e) =>
+                                          setDrafts((prev) => {
+                                            const nextDraft: LineDraft = {
+                                              ...(prev[draftKey] ?? lineDraft),
+                                              centralProductionRecipeId: e.target.value,
+                                            };
+                                            void refreshDraftAutoPrice(draftKey, nextDraft);
+                                            return { ...prev, [draftKey]: nextDraft };
+                                          })
+                                        }
+                                        className="h-10 w-full rounded-lg border border-zinc-200 bg-white px-2 text-xs font-semibold"
+                                      >
+                                        <option value="">— Elegir receta CC —</option>
+                                        {ccRecipes.map((r) => (
+                                          <option key={r.id} value={r.id}>
+                                            {r.name} · {r.base_yield_quantity} {r.final_unit}
+                                            {r.operative_format_label ? ` · ${r.operative_format_label}` : ''}
+                                          </option>
+                                        ))}
+                                      </select>
+                                      <label className="block">
+                                        <span className="text-[9px] font-bold uppercase text-zinc-500">
+                                          Cantidad formato (× €/ud receta)
+                                        </span>
+                                        <input
+                                          type="text"
+                                          inputMode="decimal"
+                                          placeholder="ej. 4 (bolsa 4 kg)"
+                                          value={lineDraft.ccRecipeFormatQty}
+                                          disabled={disabled || lineBusy || qtyBusy}
+                                          onChange={(e) =>
+                                            setDrafts((prev) => {
+                                              const nextDraft: LineDraft = {
+                                                ...(prev[draftKey] ?? lineDraft),
+                                                ccRecipeFormatQty: e.target.value,
+                                              };
+                                              void refreshDraftAutoPrice(draftKey, nextDraft);
+                                              return { ...prev, [draftKey]: nextDraft };
+                                            })
+                                          }
+                                          className="mt-0.5 h-9 w-full rounded-lg border border-zinc-200 px-2 text-xs"
+                                        />
+                                      </label>
+                                      <p className="text-[10px] leading-snug text-zinc-500">
+                                        Precio = coste unitario de la fórmula × esta cantidad (ej. 2 €/kg × 4 kg = 8 € por
+                                        bolsa).
                                       </p>
                                     </div>
                                   ) : null}

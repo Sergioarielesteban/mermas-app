@@ -13,10 +13,22 @@ import {
   filterArticlesForInternalRecipeIngredients,
   syncPurchaseArticleFromProductionRecipe,
 } from '@/lib/cocina-central-master-article-sync';
-import { prInsertRecipe, prReplaceLines } from '@/lib/production-recipes-supabase';
+import {
+  prInsertRecipe,
+  prReplaceLines,
+  type ProductionRecipeCategory,
+} from '@/lib/production-recipes-supabase';
 import { fetchPurchaseArticles, type PurchaseArticle } from '@/lib/purchase-articles-supabase';
 
 const FINAL_UNITS = ['kg', 'l', 'ud', 'bandeja', 'ración', 'g', 'ml', 'porción', 'bolsa', 'bolsas'] as const;
+
+const RECIPE_CATEGORIES: { id: ProductionRecipeCategory; label: string }[] = [
+  { id: 'salsa', label: 'Salsa' },
+  { id: 'base', label: 'Base' },
+  { id: 'elaborado', label: 'Elaborado' },
+  { id: 'postre', label: 'Postre' },
+  { id: 'otro', label: 'Otro' },
+];
 
 type LineDraft = { id: string; articleId: string; quantity: string; unit: string };
 
@@ -38,6 +50,9 @@ export default function NuevaFormulaProduccionPage() {
   const [lotCodePrefix, setLotCodePrefix] = useState('');
   const [weightKgPerBase, setWeightKgPerBase] = useState('');
   const [lines, setLines] = useState<LineDraft[]>([]);
+  const [recipeCategory, setRecipeCategory] = useState<ProductionRecipeCategory>('otro');
+  const [operativeFormat, setOperativeFormat] = useState('');
+  const [procedureNotes, setProcedureNotes] = useState('');
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -91,6 +106,7 @@ export default function NuevaFormulaProduccionPage() {
       return;
     }
     const built: Array<{
+      line_kind: 'articulo_master';
       article_id: string;
       ingredient_name_snapshot: string;
       quantity: number;
@@ -123,6 +139,7 @@ export default function NuevaFormulaProduccionPage() {
         return;
       }
       built.push({
+        line_kind: 'articulo_master',
         article_id: L.articleId,
         ingredient_name_snapshot: art?.nombre?.trim() || 'Artículo',
         quantity: q,
@@ -153,6 +170,9 @@ export default function NuevaFormulaProduccionPage() {
       const rec = await prInsertRecipe(supabase, {
         local_central_id: localId,
         name: n,
+        recipe_category: recipeCategory,
+        operative_format_label: operativeFormat.trim() ? operativeFormat.trim() : null,
+        procedure_notes: procedureNotes.trim() ? procedureNotes.trim() : null,
         final_unit: fu,
         base_yield_quantity: y,
         base_yield_unit: fu,
@@ -214,6 +234,38 @@ export default function NuevaFormulaProduccionPage() {
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="Ej. Salsa brava"
+          />
+        </label>
+        <label className="block text-xs font-bold uppercase text-zinc-500">
+          Categoría (Recetario Central)
+          <select
+            className="mt-1 h-12 w-full rounded-xl border border-zinc-300 px-3 text-sm font-semibold"
+            value={recipeCategory}
+            onChange={(e) => setRecipeCategory(e.target.value as ProductionRecipeCategory)}
+          >
+            {RECIPE_CATEGORIES.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="block text-xs font-bold uppercase text-zinc-500">
+          Formato operativo (opcional)
+          <input
+            className="mt-1 h-12 w-full rounded-xl border border-zinc-300 px-3 text-sm font-semibold"
+            value={operativeFormat}
+            onChange={(e) => setOperativeFormat(e.target.value)}
+            placeholder="Ej. bolsa 4 kg, cubo 10 L"
+          />
+        </label>
+        <label className="block text-xs font-bold uppercase text-zinc-500">
+          Procedimiento (privado; solo Cocina Central)
+          <textarea
+            className="mt-1 min-h-[88px] w-full rounded-xl border border-zinc-300 px-3 py-2 text-sm text-zinc-900"
+            value={procedureNotes}
+            onChange={(e) => setProcedureNotes(e.target.value)}
+            placeholder="Pasos de elaboración…"
           />
         </label>
         <div className="grid gap-3 sm:grid-cols-2">

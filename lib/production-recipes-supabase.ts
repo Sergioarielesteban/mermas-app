@@ -8,12 +8,23 @@ import { fetchPurchaseArticles, type PurchaseArticle } from '@/lib/purchase-arti
 import { fetchArticleOperationalCostHintsByIds } from '@/lib/article-operational-cost';
 import { unitsMatchForIngredientCost } from '@/lib/escandallo-ingredient-units';
 import { mapLabelToCcPreparationUnit } from '@/lib/cocina-central-units';
-import { syncInternalRecipeToCentralPreparations } from '@/lib/internal-production-recipe-sync';
+import { syncInternalRecipeToCentralPreparations, type SyncProductionRecipeLineInput } from '@/lib/internal-production-recipe-sync';
+import {
+  flattenProductionRecipeLinesForOrder,
+  mergeFlattenedOrderLines,
+} from '@/lib/production-recipe-cost';
+
+export type ProductionRecipeCategory = 'salsa' | 'base' | 'elaborado' | 'postre' | 'otro';
+
+export type ProductionRecipeLineKind = 'articulo_master' | 'receta_cc_interna' | 'manual';
 
 export type ProductionRecipeRow = {
   id: string;
   local_central_id: string;
   name: string;
+  recipe_category?: ProductionRecipeCategory | string;
+  operative_format_label?: string | null;
+  procedure_notes?: string | null;
   final_unit: string;
   base_yield_quantity: number;
   base_yield_unit: string;
@@ -33,7 +44,10 @@ export type ProductionRecipeRow = {
 export type ProductionRecipeLineRow = {
   id: string;
   production_recipe_id: string;
-  article_id: string;
+  line_kind?: ProductionRecipeLineKind | string;
+  article_id: string | null;
+  nested_production_recipe_id?: string | null;
+  manual_unit_cost_eur?: number | null;
   ingredient_name_snapshot: string;
   quantity: number;
   unit: string;
@@ -42,10 +56,10 @@ export type ProductionRecipeLineRow = {
 };
 
 const RECIPE_SEL =
-  'id,local_central_id,name,final_unit,base_yield_quantity,base_yield_unit,weight_kg_per_base_yield,lot_code_prefix,default_expiry_days,is_active,restricted_visibility,output_preparation_id,created_by,created_at,updated_at';
+  'id,local_central_id,name,recipe_category,operative_format_label,procedure_notes,final_unit,base_yield_quantity,base_yield_unit,weight_kg_per_base_yield,lot_code_prefix,default_expiry_days,is_active,restricted_visibility,output_preparation_id,created_by,created_at,updated_at';
 
 const LINE_SEL =
-  'id,production_recipe_id,article_id,ingredient_name_snapshot,quantity,unit,sort_order,created_at';
+  'id,production_recipe_id,line_kind,article_id,nested_production_recipe_id,manual_unit_cost_eur,ingredient_name_snapshot,quantity,unit,sort_order,created_at';
 
 export async function prListActiveRecipes(
   supabase: SupabaseClient,
@@ -107,6 +121,9 @@ export async function prInsertRecipe(
   row: {
     local_central_id: string;
     name: string;
+    recipe_category?: ProductionRecipeCategory | string;
+    operative_format_label?: string | null;
+    procedure_notes?: string | null;
     final_unit: string;
     base_yield_quantity: number;
     base_yield_unit: string;
@@ -123,6 +140,9 @@ export async function prInsertRecipe(
     .insert({
       local_central_id: row.local_central_id,
       name: row.name.trim(),
+      recipe_category: row.recipe_category ?? 'otro',
+      operative_format_label: row.operative_format_label?.trim() ? row.operative_format_label.trim() : null,
+      procedure_notes: row.procedure_notes?.trim() ? row.procedure_notes.trim() : null,
       final_unit: row.final_unit.trim(),
       base_yield_quantity: row.base_yield_quantity,
       base_yield_unit: row.base_yield_unit.trim(),
@@ -145,6 +165,9 @@ export async function prUpdateRecipe(
   localCentralId: string,
   patch: Partial<{
     name: string;
+    recipe_category: ProductionRecipeCategory | string;
+    operative_format_label: string | null;
+    procedure_notes: string | null;
     final_unit: string;
     base_yield_quantity: number;
     base_yield_unit: string;
@@ -168,7 +191,10 @@ export async function prReplaceLines(
   supabase: SupabaseClient,
   recipeId: string,
   lines: Array<{
-    article_id: string;
+    line_kind?: ProductionRecipeLineKind;
+    article_id?: string | null;
+    nested_production_recipe_id?: string | null;
+    manual_unit_cost_eur?: number | null;
     ingredient_name_snapshot: string;
     quantity: number;
     unit: string;
@@ -181,16 +207,95 @@ export async function prReplaceLines(
     .eq('production_recipe_id', recipeId);
   if (delE) throw new Error(delE.message);
   if (lines.length === 0) return;
-  const payload = lines.map((l, i) => ({
-    production_recipe_id: recipeId,
-    article_id: l.article_id,
-    ingredient_name_snapshot: l.ingredient_name_snapshot,
-    quantity: l.quantity,
-    unit: l.unit,
-    sort_order: l.sort_order ?? i,
-  }));
+  const payload = lines.map((l, i) => {
+    const kind = l.line_kind ?? 'articulo_master';
+    const row: Record<string, unknown> = {
+      production_recipe_id: recipeId,
+      line_kind: kind,
+      ingredient_name_snapshot: l.ingredient_name_snapshot,
+      quantity: l.quantity,
+      unit: l.unit,
+      sort_order: l.sort_order ?? i,
+    };
+    if (kind === 'articulo_master') {
+      row.article_id = l.article_id ?? null;
+      row.nested_production_recipe_id = null;
+      row.manual_unit_cost_eur = null;
+    } else if (kind === 'receta_cc_interna') {
+      row.article_id = null;
+      row.nested_production_recipe_id = l.nested_production_recipe_id ?? null;
+      row.manual_unit_cost_eur = null;
+    } else {
+      row.article_id = null;
+      row.nested_production_recipe_id = null;
+      row.manual_unit_cost_eur = l.manual_unit_cost_eur ?? null;
+    }
+    return row;
+  });
   const { error } = await supabase.from('production_recipe_lines').insert(payload);
   if (error) throw new Error(error.message);
+}
+
+/** Duplica una receta CC y sus líneas (copia independiente). */
+export async function prDuplicateRecipe(
+  supabase: SupabaseClient,
+  localCentralId: string,
+  sourceRecipeId: string,
+  createdBy: string | null,
+): Promise<ProductionRecipeRow> {
+  const src = await prGetRecipe(supabase, sourceRecipeId, localCentralId);
+  if (!src) throw new Error('Receta origen no encontrada.');
+  const srcLines = await prGetRecipeLines(supabase, sourceRecipeId);
+  const baseName = `${src.name.trim()} (copia)`;
+  const created = await prInsertRecipe(supabase, {
+    local_central_id: localCentralId,
+    name: baseName,
+    recipe_category: src.recipe_category ?? 'otro',
+    operative_format_label: src.operative_format_label ?? null,
+    procedure_notes: src.procedure_notes ?? null,
+    final_unit: src.final_unit,
+    base_yield_quantity: src.base_yield_quantity,
+    base_yield_unit: src.base_yield_unit,
+    weight_kg_per_base_yield: src.weight_kg_per_base_yield ?? null,
+    lot_code_prefix: src.lot_code_prefix ? `${src.lot_code_prefix}CP` : null,
+    default_expiry_days: src.default_expiry_days,
+    is_active: src.is_active,
+    restricted_visibility: src.restricted_visibility,
+    created_by: createdBy,
+  });
+  const mapped = srcLines.map((l, i) => {
+    const kind = (l.line_kind ?? 'articulo_master') as ProductionRecipeLineKind;
+    if (kind === 'articulo_master') {
+      return {
+        line_kind: 'articulo_master' as const,
+        article_id: l.article_id ?? '',
+        ingredient_name_snapshot: l.ingredient_name_snapshot,
+        quantity: l.quantity,
+        unit: l.unit,
+        sort_order: i,
+      };
+    }
+    if (kind === 'receta_cc_interna') {
+      return {
+        line_kind: 'receta_cc_interna' as const,
+        nested_production_recipe_id: l.nested_production_recipe_id ?? '',
+        ingredient_name_snapshot: l.ingredient_name_snapshot,
+        quantity: l.quantity,
+        unit: l.unit,
+        sort_order: i,
+      };
+    }
+    return {
+      line_kind: 'manual' as const,
+      ingredient_name_snapshot: l.ingredient_name_snapshot,
+      quantity: l.quantity,
+      unit: l.unit,
+      manual_unit_cost_eur: l.manual_unit_cost_eur ?? null,
+      sort_order: i,
+    };
+  });
+  await prReplaceLines(supabase, created.id, mapped);
+  return created;
 }
 
 /**
@@ -212,8 +317,27 @@ export async function prCreateOrderFromInternalRecipe(
   const recipe = await prGetRecipe(supabase, productionRecipeId, localCentralId);
   if (!recipe) throw new Error('Receta interna no encontrada.');
   if (!recipe.is_active) throw new Error('Receta inactiva.');
-  const lines = await prGetRecipeLines(supabase, productionRecipeId);
-  if (lines.length === 0) throw new Error('Añade ingredientes a la receta (Artículos Máster).');
+
+  const yq = Number(recipe.base_yield_quantity);
+  if (!Number.isFinite(yq) || yq <= 0) throw new Error('Rendimiento base inválido en la receta.');
+  if (!Number.isFinite(targetQuantity) || targetQuantity <= 0) throw new Error('Cantidad objetivo inválida.');
+
+  const batchFlat = mergeFlattenedOrderLines(
+    await flattenProductionRecipeLinesForOrder(supabase, localCentralId, productionRecipeId, yq),
+  );
+  if (batchFlat.length === 0) {
+    throw new Error(
+      'Para generar la orden hace falta al menos un ingrediente desde Artículos Máster (las líneas solo manuales no consumen stock automático).',
+    );
+  }
+
+  const syncLines: SyncProductionRecipeLineInput[] = batchFlat.map((x, i) => ({
+    id: `flat-${i}`,
+    article_id: x.article_id,
+    ingredient_name_snapshot: x.ingredient_name_snapshot,
+    quantity: x.quantity,
+    unit: x.unit,
+  }));
 
   const articles = await fetchPurchaseArticles(supabase, localCentralId);
   const byId = new Map(articles.map((a) => [a.id, a]));
@@ -221,19 +345,21 @@ export async function prCreateOrderFromInternalRecipe(
     supabase,
     localCentralId,
     recipe,
-    lines,
+    syncLines,
     byId,
   );
 
-  const yq = Number(recipe.base_yield_quantity);
-  if (!Number.isFinite(yq) || yq <= 0) throw new Error('Rendimiento base inválido en la receta.');
-  const factor = targetQuantity / yq;
-  if (!Number.isFinite(factor) || factor <= 0) throw new Error('Cantidad objetivo inválida.');
+  const orderFlat = mergeFlattenedOrderLines(
+    await flattenProductionRecipeLinesForOrder(supabase, localCentralId, productionRecipeId, targetQuantity),
+  );
+  if (orderFlat.length === 0) {
+    throw new Error('No se pudieron calcular líneas de consumo para esta orden.');
+  }
 
   const hints = await fetchArticleOperationalCostHintsByIds(
     supabase,
     localCentralId,
-    lines.map((l) => l.article_id),
+    orderFlat.map((l) => l.article_id),
   );
 
   const orderLinePayload: Array<{
@@ -243,13 +369,13 @@ export async function prCreateOrderFromInternalRecipe(
     unidad: CcPreparationUnit;
     cost_estimated_eur: number | null;
     article_id: string;
-    production_recipe_line_id: string;
+    production_recipe_line_id: string | null;
   }> = [];
 
-  for (const l of lines) {
+  for (const l of orderFlat) {
     const prepId = articleToPrep.get(l.article_id);
     if (!prepId) throw new Error(`Sin elaboración de ingrediente para artículo ${l.article_id}`);
-    const theo = Math.round(l.quantity * factor * 10000) / 10000;
+    const theo = Math.round(l.quantity * 10000) / 10000;
     const u = mapLabelToCcPreparationUnit(l.unit) as CcPreparationUnit;
     const art = byId.get(l.article_id);
     const h = hints.get(l.article_id);
@@ -258,7 +384,7 @@ export async function prCreateOrderFromInternalRecipe(
       if (h.unidadUso && unitsMatchForIngredientCost(l.unit, h.unidadUso)) {
         costEur = Math.round(theo * h.costPerUsageUnit * 100) / 100;
       } else {
-        costEur = Math.round(l.quantity * factor * h.costPerUsageUnit * 100) / 100;
+        costEur = Math.round(theo * h.costPerUsageUnit * 100) / 100;
       }
     }
     orderLinePayload.push({
@@ -268,7 +394,7 @@ export async function prCreateOrderFromInternalRecipe(
       unidad: u,
       cost_estimated_eur: costEur,
       article_id: l.article_id,
-      production_recipe_line_id: l.id,
+      production_recipe_line_id: null,
     });
   }
 
