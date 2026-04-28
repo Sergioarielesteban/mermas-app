@@ -29,7 +29,6 @@ import {
   insertInventoryLineFromCatalog,
   deactivateInventoryCatalogCategory,
   deactivateInventoryCatalogItem,
-  deleteAllInventoryLinesForLocal,
   resolveInventoryItemUnitPriceEur,
   updateInventoryItemLine,
   upsertInventoryMonthSnapshot,
@@ -651,34 +650,23 @@ export default function InventarioPage() {
     try {
       for (const it of items) {
         const line = lines.find((l) => l.catalog_item_id === it.id);
+        const draftKey = line ? line.id : `cat-${it.id}`;
+        const currentDraft = drafts[draftKey] ?? (line ? lineDraftFromRow(line) : lineDraftFromCatalogItem(it, '0'));
         const raw = (catalogQtyDraft[it.id] ?? '').trim();
-        if (line) {
-          const q = raw === '' ? 0 : parseDecimal(raw);
-          if (q === null || q < 0) {
-            throw new Error(`Cantidad no válida: ${it.name}`);
-          }
-          await saveLine(line, { qty: String(q) }, { skipReload: true, skipBusy: true, throwing: true });
-        } else {
-          if (raw === '') continue;
-          const q = parseDecimal(raw);
-          if (q === null || q < 0) {
-            throw new Error(`Cantidad no válida: ${it.name}`);
-          }
-          try {
-            await insertInventoryLineFromCatalog(supabase, {
-              localId,
-              catalogItem: it,
-              userId: user?.id ?? null,
-              initialQuantity: q,
-            });
-          } catch (err) {
-            const msg = err instanceof Error ? err.message : '';
-            if (msg.includes('duplicate') || msg.includes('unique') || msg.includes('23505')) {
-              throw new Error(`«${it.name}» ya está en tu inventario; recarga e inténtalo de nuevo.`);
-            }
-            throw err;
-          }
+        const q = raw === '' ? 0 : parseDecimal(raw);
+        if (q === null || q < 0) {
+          throw new Error(`Cantidad no válida: ${it.name}`);
         }
+        const isDefaultDraft =
+          currentDraft.origenCoste === 'manual' &&
+          currentDraft.masterCostSource === 'uso' &&
+          !currentDraft.masterArticleId &&
+          !currentDraft.escandalloRecipeId &&
+          (currentDraft.name.trim() || it.name) === it.name &&
+          (currentDraft.format_label ?? '') === (it.format_label ?? '') &&
+          (currentDraft.unit || it.unit) === it.unit;
+        if (!line && q === 0 && raw === '' && isDefaultDraft) continue;
+        await saveCatalogItemDraft(it, line ?? null, draftKey, { ...currentDraft, qty: String(q) });
       }
       await load();
     } catch (e) {
@@ -904,7 +892,7 @@ export default function InventarioPage() {
     const hasSnap = snapshots.some((s) => s.year_month === closingYearMonth);
     if (!hasSnap) {
       const saveFirst = await appConfirm(
-        `No hay cierre mensual guardado para ${closingYearMonth} en los gráficos. Pulsa Aceptar para descargar el PDF, guardar ese cierre e historial, y vaciar las líneas. (Si el inventario es de otro mes, cambia primero «Mes del cierre» arriba.)`,
+        `No hay cierre mensual guardado para ${closingYearMonth} en los gráficos. Pulsa Aceptar para descargar el PDF, guardar ese cierre e historial, y reiniciar cantidades a 0. (Si el inventario es de otro mes, cambia primero «Mes del cierre» arriba.)`,
       );
       if (saveFirst) {
         const supabase = getSupabaseClient()!;
@@ -915,9 +903,24 @@ export default function InventarioPage() {
         setBanner(null);
         try {
           await saveMonthClosureToSupabase(closingYearMonth, { recordHistory: true, userId: user?.id ?? null });
-          await deleteAllInventoryLinesForLocal(supabase, localId);
+          for (const row of lines) {
+            await updateInventoryItemLine(supabase, {
+              localId,
+              itemId: row.id,
+              quantity_on_hand: 0,
+              price_per_unit: row.price_per_unit,
+              name: row.name,
+              format_label: row.format_label,
+              unit: row.unit,
+              origenCoste: row.origenCoste,
+              masterCostSource: row.masterCostSource,
+              masterArticleId: row.masterArticleId,
+              escandalloRecipeId: row.escandalloRecipeId,
+              precioManual: row.precioManual,
+            });
+          }
           await load();
-          setBanner(`Cierre ${closingYearMonth} guardado y líneas vaciadas.`);
+          setBanner(`Cierre ${closingYearMonth} guardado y cantidades reiniciadas (se mantiene origen/coste).`);
         } catch (e) {
           setBanner(humanizeClientError(e, 'Error al guardar cierre o reiniciar.'));
         } finally {
@@ -927,14 +930,14 @@ export default function InventarioPage() {
       }
       if (
         !(await appConfirm(
-          'Vas a vaciar las líneas sin guardar cierre en los informes ni PDF. ¿Continuar de todos modos?',
+          'Vas a reiniciar cantidades a 0 sin guardar cierre en los informes ni PDF. ¿Continuar de todos modos?',
         ))
       ) {
         return;
       }
     } else if (
       !(await appConfirm(
-        'Se borrarán todas las líneas de inventario de este local. El valor total quedará en 0. El catálogo no cambia. ¿Continuar?',
+        'Se pondrán a 0 las cantidades de todas las líneas del inventario. Se mantiene origen, vínculos y configuración de coste. ¿Continuar?',
       ))
     ) {
       return;
@@ -943,7 +946,22 @@ export default function InventarioPage() {
     setResetInventoryBusy(true);
     setBanner(null);
     try {
-      await deleteAllInventoryLinesForLocal(supabase, localId);
+      for (const row of lines) {
+        await updateInventoryItemLine(supabase, {
+          localId,
+          itemId: row.id,
+          quantity_on_hand: 0,
+          price_per_unit: row.price_per_unit,
+          name: row.name,
+          format_label: row.format_label,
+          unit: row.unit,
+          origenCoste: row.origenCoste,
+          masterCostSource: row.masterCostSource,
+          masterArticleId: row.masterArticleId,
+          escandalloRecipeId: row.escandalloRecipeId,
+          precioManual: row.precioManual,
+        });
+      }
       await load();
     } catch (e) {
       setBanner(humanizeClientError(e, 'Error al reiniciar.'));
