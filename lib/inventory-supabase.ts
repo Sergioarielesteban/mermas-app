@@ -58,6 +58,17 @@ function normalizeMasterArticleCostUnit(raw: string | null | undefined): Invento
 }
 
 /** Coincidencia para resolver € desde máster: vacío en máster = vale cualquier unidad de coste; sinonónimos kg/L/ud. */
+/** Normaliza lectura desde BD (trim/caso); solo «manual» si valor ausente o no reconocido. */
+export function normalizeInventoryOrigenCosteFromDb(raw: unknown): InventoryCostOrigen {
+  if (raw === null || raw === undefined) return 'manual';
+  const s = String(raw).trim().toLowerCase();
+  if (s === 'master') return 'master';
+  if (s === 'produccion_propia') return 'produccion_propia';
+  if (s === 'recetario_cc') return 'recetario_cc';
+  if (s === 'manual') return 'manual';
+  return 'manual';
+}
+
 function masterCostUnitMatches(inv: InventoryUnidadCoste, articleUnitRaw: string | null | undefined): boolean {
   const au = String(articleUnitRaw ?? '').trim();
   if (!au) return true;
@@ -150,9 +161,7 @@ export async function fetchInventoryItems(
 }
 
 function mapInventoryItemRow(row: Record<string, unknown>): InventoryItem {
-  const o = row.origen_coste;
-  const origenCoste: InventoryCostOrigen =
-    o === 'master' || o === 'produccion_propia' || o === 'recetario_cc' ? o : 'manual';
+  const origenCoste = normalizeInventoryOrigenCosteFromDb(row.origen_coste);
   const mcs = row.master_cost_source;
   const masterCostSource: InventoryMasterCostSource = mcs === 'compra' ? 'compra' : 'uso';
   return {
@@ -211,11 +220,12 @@ export async function resolveInventoryItemUnitPriceEur(
     if (p != null && Number.isFinite(p) && p >= 0) return Math.round(p * 100) / 100;
     return row.price_per_unit >= 0 ? Math.round(row.price_per_unit * 100) / 100 : null;
   }
-  if (row.origenCoste === 'master' && row.masterArticleId) {
+  const masterArticleRowId = row.masterArticleId?.trim();
+  if (row.origenCoste === 'master' && masterArticleRowId) {
     const { data, error } = await supabase
       .from('purchase_articles')
       .select('id,unidad_compra,unidad_uso,coste_compra_actual,coste_unitario_uso')
-      .eq('id', row.masterArticleId)
+      .eq('id', masterArticleRowId)
       .eq('local_id', localId)
       .maybeSingle();
     if (error) throw new Error(error.message);
@@ -259,6 +269,29 @@ export async function resolveInventoryItemUnitPriceEur(
     return null;
   }
   return null;
+}
+
+/** Tras cargar líneas: recalcula `price_per_unit` en memoria si el origen no es manual (artículo máster / escandallo / CC). */
+export async function hydrateInventoryItemsPricingFromOrigin(
+  supabase: SupabaseClient,
+  localId: string,
+  items: InventoryItem[],
+): Promise<InventoryItem[]> {
+  return Promise.all(
+    items.map(async (item) => {
+      if (item.origenCoste === 'manual') return item;
+      const resolved = await resolveInventoryItemUnitPriceEur(supabase, localId, item);
+      if (resolved == null || !Number.isFinite(resolved)) {
+        return { ...item, precioManual: null };
+      }
+      const rounded = Math.round(resolved * 100) / 100;
+      return {
+        ...item,
+        price_per_unit: rounded,
+        precioManual: null,
+      };
+    }),
+  );
 }
 
 export async function insertInventoryLineFromCatalog(
@@ -333,7 +366,12 @@ export async function insertInventoryLineFromCatalog(
       escandallo_recipe_id: cfg?.escandalloRecipeId ?? null,
       central_production_recipe_id: cfg?.centralProductionRecipeId ?? null,
       cc_recipe_format_qty: cfg?.ccRecipeFormatQty ?? null,
-      precio_manual: cfg?.precioManual ?? basePrice,
+      precio_manual:
+        cfg?.origenCoste === 'manual' &&
+        cfg?.precioManual != null &&
+        Number.isFinite(Number(cfg.precioManual))
+          ? Math.round(Number(cfg.precioManual) * 10000) / 10000
+          : null,
     })
     .select(
       'id,local_id,catalog_item_id,local_category_id,name,unit,price_per_unit,quantity_on_hand,format_label,unidad_coste,formato_operativo,notes,sort_order,is_active,origen_coste,master_cost_source,master_article_id,escandallo_recipe_id,central_production_recipe_id,cc_recipe_format_qty,precio_manual',
@@ -355,7 +393,7 @@ export async function updateInventoryItemLine(
     unit: string;
     unidadCoste: InventoryUnidadCoste;
     formatoOperativo: string | null;
-    origenCoste?: InventoryCostOrigen;
+    origenCoste: InventoryCostOrigen;
     masterCostSource?: InventoryMasterCostSource;
     masterArticleId?: string | null;
     escandalloRecipeId?: string | null;
@@ -376,7 +414,7 @@ export async function updateInventoryItemLine(
     unidad_coste: normalizeInventoryUnidadCoste(params.unidadCoste),
     formato_operativo: params.formatoOperativo?.trim() ? params.formatoOperativo.trim() : null,
   };
-  if (params.origenCoste != null) row.origen_coste = params.origenCoste;
+  row.origen_coste = params.origenCoste;
   if (params.masterCostSource != null) row.master_cost_source = params.masterCostSource;
   if (params.masterArticleId !== undefined) row.master_article_id = params.masterArticleId;
   if (params.escandalloRecipeId !== undefined) row.escandallo_recipe_id = params.escandalloRecipeId;

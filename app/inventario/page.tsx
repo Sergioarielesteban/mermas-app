@@ -35,6 +35,7 @@ import {
   upsertInventoryMonthSnapshot,
   normalizeInventoryUnidadCoste,
   defaultInventoryUnidadCosteFromStockUnit,
+  hydrateInventoryItemsPricingFromOrigin,
 } from '@/lib/inventory-supabase';
 import { fetchEscandalloRecipes, type EscandalloRecipe } from '@/lib/escandallos-supabase';
 import { fetchPurchaseArticles, type PurchaseArticle } from '@/lib/purchase-articles-supabase';
@@ -42,6 +43,7 @@ import { prListActiveRecipes, type ProductionRecipeRow } from '@/lib/production-
 import { appConfirm } from '@/lib/app-dialog-bridge';
 import { confirmDestructiveOperation } from '@/lib/ops-role-confirm';
 import { actorLabel, notifyInventarioCerrado } from '@/services/notifications';
+import { usePersistedViewState } from '@/hooks/usePersistedViewState';
 
 function parseDecimal(raw: string): number | null {
   const t = String(raw).trim().replace(/\s/g, '').replace(',', '.');
@@ -115,6 +117,16 @@ type LineDraft = {
   centralProductionRecipeId: string;
   /** Cantidad de salida de la receta por unidad de inventario (ej. 4 para bolsa 4 kg si la receta es €/kg). */
   ccRecipeFormatQty: string;
+};
+
+type InventoryViewState = {
+  localId: string | null;
+  scrollY: number;
+  search: string;
+  openCategoryIds: string[];
+  openItemIds: string[];
+  draftByKey: Record<string, LineDraft>;
+  catalogQtyDraft: Record<string, string>;
 };
 
 function labelOrigenInventario(o: InventoryCostOrigen): string {
@@ -196,6 +208,7 @@ export default function InventarioPage() {
   const [busyCategoryId, setBusyCategoryId] = useState<string | null>(null);
   /** Catálogo: precio, formato y categoría solo al expandir tocando el artículo. */
   const [catalogDetailOpen, setCatalogDetailOpen] = useState<Record<string, boolean>>({});
+  const [openCategories, setOpenCategories] = useState<Record<string, boolean>>({});
   const [snapshots, setSnapshots] = useState<InventoryMonthSnapshot[]>([]);
   const [pdfBusy, setPdfBusy] = useState(false);
   const [chartsResetBusy, setChartsResetBusy] = useState(false);
@@ -220,8 +233,16 @@ export default function InventarioPage() {
   const loadRef = useRef<() => Promise<void>>(() => Promise.resolve());
   const saveFlashTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [inventorySaveFlash, setInventorySaveFlash] = useState<string | null>(null);
+  const restoreOnceRef = useRef<InventoryViewState | null>(null);
+  const didApplyRestoreRef = useRef(false);
+  const scrollPersistRafRef = useRef<number | null>(null);
+  const { load: loadPersistedViewState, save: savePersistedViewState } =
+    usePersistedViewState<InventoryViewState>('inventory', {
+      storage: 'local',
+      ttlMs: 12 * 60 * 60 * 1000,
+    });
 
-  const showInventorySaveFlash = useCallback((msg = 'Guardado ✔') => {
+  const showInventorySaveFlash = useCallback((msg = 'Guardado') => {
     if (saveFlashTimerRef.current) clearTimeout(saveFlashTimerRef.current);
     setInventorySaveFlash(msg);
     saveFlashTimerRef.current = setTimeout(() => {
@@ -229,6 +250,24 @@ export default function InventarioPage() {
       saveFlashTimerRef.current = null;
     }, 2600);
   }, []);
+
+  const buildCurrentViewState = useCallback((): InventoryViewState => {
+    const safeScrollY = typeof window !== 'undefined' ? Math.max(0, window.scrollY || 0) : 0;
+    return {
+      localId: localId ?? null,
+      scrollY: safeScrollY,
+      search,
+      openCategoryIds: Object.keys(openCategories).filter((id) => openCategories[id]),
+      openItemIds: Object.keys(catalogDetailOpen).filter((id) => catalogDetailOpen[id]),
+      draftByKey: drafts,
+      catalogQtyDraft,
+    };
+  }, [localId, search, openCategories, catalogDetailOpen, drafts, catalogQtyDraft]);
+
+  const persistViewStateNow = useCallback(() => {
+    if (!localId) return;
+    savePersistedViewState(buildCurrentViewState());
+  }, [localId, savePersistedViewState, buildCurrentViewState]);
 
   const supabaseOk = isSupabaseEnabled() && getSupabaseClient();
 
@@ -238,6 +277,8 @@ export default function InventarioPage() {
       setCatalogItems([]);
       setLines([]);
       setCatalogQtyDraft({});
+      setCatalogDetailOpen({});
+      setOpenCategories({});
       setLoading(false);
       return;
     }
@@ -245,24 +286,68 @@ export default function InventarioPage() {
     setLoading(true);
     setBanner(null);
     try {
-      const [cats, items, inv, snaps] = await Promise.all([
+      const [cats, items, invRaw, snaps] = await Promise.all([
         fetchInventoryCatalogCategories(supabase, localId),
         fetchInventoryCatalogItems(supabase, localId),
         fetchInventoryItems(supabase, localId),
         fetchInventoryMonthSnapshots(supabase, localId).catch(() => [] as InventoryMonthSnapshot[]),
       ]);
-      setCategories(cats);
-      setCatalogItems(items);
-      setLines(inv);
-      setSnapshots(snaps);
+      const inv = await hydrateInventoryItemsPricingFromOrigin(supabase, localId, invRaw);
+      if (typeof window !== 'undefined') {
+        console.log(
+          '[inv-debug] inventario cargado (origen máster)',
+          inv.map((row) => ({
+            id: row.id,
+            origen_coste: row.origenCoste,
+            master_article_id: row.masterArticleId,
+            price_per_unit: row.price_per_unit,
+          })),
+        );
+      }
       const d: Record<string, LineDraft> = {};
       const cq: Record<string, string> = {};
       for (const row of inv) {
         d[row.id] = lineDraftFromRow(row);
         if (row.catalog_item_id) cq[row.catalog_item_id] = String(row.quantity_on_hand);
       }
-      setDrafts(d);
-      setCatalogQtyDraft(cq);
+      let nextSearch = '';
+      let nextOpenItems: Record<string, boolean> = {};
+      let nextOpenCategories: Record<string, boolean> = {};
+      let nextDrafts = d;
+      let nextCatalogQty = cq;
+      const pendingRestore = restoreOnceRef.current;
+      if (pendingRestore && pendingRestore.localId === localId) {
+        nextSearch = pendingRestore.search ?? '';
+        const validCategoryIds = new Set(cats.map((c) => c.id));
+        const validItemIds = new Set(items.map((it) => it.id));
+        nextOpenItems = Object.fromEntries(
+          (pendingRestore.openItemIds ?? [])
+            .filter((id) => validItemIds.has(id))
+            .map((id) => [id, true] as const),
+        );
+        nextOpenCategories = Object.fromEntries(
+          (pendingRestore.openCategoryIds ?? [])
+            .filter((id) => validCategoryIds.has(id))
+            .map((id) => [id, true] as const),
+        );
+        const validLineKeys = new Set(inv.map((row) => row.id));
+        const mergedDrafts: Record<string, LineDraft> = { ...d };
+        for (const [k, v] of Object.entries(pendingRestore.draftByKey ?? {})) {
+          if (!v || typeof v !== 'object') continue;
+          if (k.startsWith('cat-') || validLineKeys.has(k)) mergedDrafts[k] = v;
+        }
+        nextDrafts = mergedDrafts;
+        nextCatalogQty = { ...cq, ...(pendingRestore.catalogQtyDraft ?? {}) };
+      }
+      setCategories(cats);
+      setCatalogItems(items);
+      setLines(inv);
+      setSnapshots(snaps);
+      setSearch(nextSearch);
+      setCatalogDetailOpen(nextOpenItems);
+      setOpenCategories(nextOpenCategories);
+      setDrafts(nextDrafts);
+      setCatalogQtyDraft(nextCatalogQty);
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Error al cargar inventario.';
       if (msg.toLowerCase().includes('relation') || msg.includes('does not exist')) {
@@ -321,8 +406,74 @@ export default function InventarioPage() {
   loadRef.current = () => load();
 
   useEffect(() => {
+    if (!localId) {
+      restoreOnceRef.current = null;
+      didApplyRestoreRef.current = true;
+      return;
+    }
+    restoreOnceRef.current = loadPersistedViewState();
+    didApplyRestoreRef.current = false;
+  }, [localId, loadPersistedViewState]);
+
+  useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    if (!localId) return;
+    persistViewStateNow();
+  }, [localId, search, openCategories, catalogDetailOpen, drafts, catalogQtyDraft, persistViewStateNow]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !localId) return;
+    const onScroll = () => {
+      if (scrollPersistRafRef.current != null) return;
+      scrollPersistRafRef.current = window.requestAnimationFrame(() => {
+        scrollPersistRafRef.current = null;
+        persistViewStateNow();
+      });
+    };
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => {
+      window.removeEventListener('scroll', onScroll);
+      if (scrollPersistRafRef.current != null) {
+        window.cancelAnimationFrame(scrollPersistRafRef.current);
+        scrollPersistRafRef.current = null;
+      }
+    };
+  }, [localId, persistViewStateNow]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !localId) return;
+    const onVisibility = () => {
+      if (document.visibilityState === 'hidden') persistViewStateNow();
+    };
+    const onPageHide = () => persistViewStateNow();
+    const onBeforeUnload = () => persistViewStateNow();
+    document.addEventListener('visibilitychange', onVisibility);
+    window.addEventListener('pagehide', onPageHide);
+    window.addEventListener('beforeunload', onBeforeUnload);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibility);
+      window.removeEventListener('pagehide', onPageHide);
+      window.removeEventListener('beforeunload', onBeforeUnload);
+    };
+  }, [localId, persistViewStateNow]);
+
+  useEffect(() => {
+    if (loading || didApplyRestoreRef.current) return;
+    const st = restoreOnceRef.current;
+    if (!st || st.localId !== localId || typeof window === 'undefined') {
+      didApplyRestoreRef.current = true;
+      return;
+    }
+    didApplyRestoreRef.current = true;
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        window.scrollTo({ top: Math.max(0, st.scrollY || 0), behavior: 'auto' });
+      });
+    });
+  }, [loading, localId, categories.length, catalogItems.length, lines.length]);
 
   useEffect(() => {
     if (!localId || !supabaseOk) {
@@ -528,9 +679,10 @@ export default function InventarioPage() {
       fail('Cantidad no válida.');
       return;
     }
-    const origen = d.origenCoste ?? 'manual';
+    const origen = (d.origenCoste ?? row.origenCoste) ?? 'manual';
     const masterCostSource = d.masterCostSource ?? 'uso';
-    const masterId = d.masterArticleId?.trim() ? d.masterArticleId.trim() : null;
+    const masterId =
+      origen === 'master' ? (d.masterArticleId?.trim() || row.masterArticleId?.trim() || null) : null;
     const escId = d.escandalloRecipeId?.trim() ? d.escandalloRecipeId.trim() : null;
     const ccRecipeId = d.centralProductionRecipeId?.trim() ? d.centralProductionRecipeId.trim() : null;
     let ccFormatQty: number | null = null;
@@ -594,7 +746,7 @@ export default function InventarioPage() {
         if (resolved == null) {
           fail(
             origen === 'master'
-              ? 'No hay coste en el artículo máster para la unidad de coste elegida (comprueba uso/compra vs kg, L o ud).'
+              ? 'No se pudo calcular el precio del artículo máster seleccionado.'
               : origen === 'recetario_cc'
                 ? 'No se pudo obtener el coste de la receta (¿ejecutaste la migración recetario y guardaste la fórmula en CC?).'
                 : 'No se pudo calcular el coste desde la receta (revisa el escandallo: ingredientes y unidades).',
@@ -602,6 +754,22 @@ export default function InventarioPage() {
           return;
         }
         priceOut = resolved;
+        if (!Number.isFinite(priceOut) || priceOut < 0) {
+          fail(
+            origen === 'master'
+              ? 'No se pudo calcular el precio del artículo máster seleccionado.'
+              : 'Precio calculado no válido.',
+          );
+          return;
+        }
+      }
+      if (typeof window !== 'undefined') {
+        console.log('[inv-debug] guardar línea', {
+          inventory_item_id: row.id,
+          origen_coste: origen,
+          master_article_id: masterId,
+          precio_unitario_calculado: priceOut,
+        });
       }
       await updateInventoryItemLine(supabase, {
         localId,
@@ -619,7 +787,7 @@ export default function InventarioPage() {
         escandalloRecipeId: origen === 'produccion_propia' ? escId : null,
         centralProductionRecipeId: origen === 'recetario_cc' ? ccRecipeId : null,
         ccRecipeFormatQty: origen === 'recetario_cc' ? ccFormatQty : null,
-        precioManual: precioManual,
+        precioManual: origen === 'manual' ? precioManual : null,
       });
       const qRounded = Math.round(q * 1000) / 1000;
       const priceRounded = Math.round(priceOut * 100) / 100;
@@ -748,7 +916,7 @@ export default function InventarioPage() {
         if (resolved == null) {
           setBanner(
             origen === 'master'
-              ? 'No hay coste en el artículo máster para la unidad de coste elegida (comprueba uso/compra vs kg, L o ud).'
+              ? 'No se pudo calcular el precio del artículo máster seleccionado.'
               : origen === 'recetario_cc'
                 ? 'No se pudo obtener el coste de la receta CC.'
                 : 'No se pudo calcular coste desde la receta seleccionada.',
@@ -815,7 +983,7 @@ export default function InventarioPage() {
       ccRecipeFormatQty: draft.origenCoste === 'recetario_cc' ? ccFq : null,
       unidadCoste: normalizeInventoryUnidadCoste(draft.unidadCoste),
       price_per_unit: parseDecimal(draft.price) ?? 0,
-      precioManual: parseDecimal(draft.price),
+      precioManual: null,
     });
     if (resolved != null) {
       setDrafts((prev) => ({
@@ -866,7 +1034,7 @@ export default function InventarioPage() {
           savedAny = true;
         }
       }
-      if (savedAny) showInventorySaveFlash('Categoría guardada ✔');
+      if (savedAny) showInventorySaveFlash('Categoría guardada');
     } catch (e) {
       setBanner(humanizeClientError(e, 'Error al guardar la categoría.'));
     } finally {
@@ -1207,6 +1375,11 @@ export default function InventarioPage() {
     try {
       await deactivateInventoryCatalogCategory(supabase, { categoryId: cat.id, localId: localId });
       setCatalogDetailOpen({});
+      setOpenCategories((prev) => {
+        const next = { ...prev };
+        delete next[cat.id];
+        return next;
+      });
       await load();
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Error al eliminar la categoría.';
@@ -1388,6 +1561,11 @@ export default function InventarioPage() {
                   <details
                     key={cat.id}
                     className="rounded-xl border border-zinc-200 bg-zinc-50/80 ring-1 ring-zinc-100"
+                    open={Boolean(openCategories[cat.id])}
+                    onToggle={(e) => {
+                      const isOpen = (e.currentTarget as HTMLDetailsElement).open;
+                      setOpenCategories((prev) => ({ ...prev, [cat.id]: isOpen }));
+                    }}
                   >
                     <summary className="cursor-pointer list-none px-3 py-2.5 text-sm font-bold text-zinc-800 [&::-webkit-details-marker]:hidden">
                       <span className="flex items-center justify-between gap-2">
@@ -1716,13 +1894,62 @@ export default function InventarioPage() {
                                         className="mt-0.5"
                                         articles={purchaseArticles}
                                         value={lineDraft.masterArticleId}
-                                        onSelect={(a) =>
+                                        onSelect={(a) => {
+                                          if (typeof window !== 'undefined') {
+                                            console.log('[inv-debug] máster seleccionado', {
+                                              master_article_id: a.id,
+                                              nombre: a.nombre,
+                                            });
+                                          }
                                           setDrafts((prev) => {
-                                            const nextDraft: LineDraft = { ...(prev[draftKey] ?? lineDraft), masterArticleId: a.id };
-                                            void refreshDraftAutoPrice(draftKey, nextDraft);
+                                            const cur =
+                                              prev[draftKey] ??
+                                              (line
+                                                ? lineDraftFromRow(line)
+                                                : lineDraftFromCatalogItem(it, qtyValue || '0'));
+                                            const nextDraft: LineDraft = { ...cur, masterArticleId: a.id };
+                                            const supabase = getSupabaseClient();
+                                            if (localId && supabase && nextDraft.origenCoste === 'master') {
+                                              void (async () => {
+                                                const uc = normalizeInventoryUnidadCoste(nextDraft.unidadCoste);
+                                                const resolved = await resolveInventoryItemUnitPriceEur(
+                                                  supabase,
+                                                  localId,
+                                                  {
+                                                    origenCoste: 'master',
+                                                    masterCostSource: nextDraft.masterCostSource,
+                                                    masterArticleId: a.id,
+                                                    escandalloRecipeId: null,
+                                                    centralProductionRecipeId: null,
+                                                    ccRecipeFormatQty: null,
+                                                    unidadCoste: uc,
+                                                    price_per_unit: 0,
+                                                    precioManual: null,
+                                                  },
+                                                );
+                                                if (typeof window !== 'undefined') {
+                                                  console.log('[inv-debug] precio resuelto tras elegir máster', {
+                                                    master_article_id: a.id,
+                                                    precio_unitario_calculado: resolved,
+                                                    unidad_coste: uc,
+                                                  });
+                                                }
+                                                setDrafts((p2) => ({
+                                                  ...p2,
+                                                  [draftKey]: {
+                                                    ...(p2[draftKey] ?? nextDraft),
+                                                    masterArticleId: a.id,
+                                                    price:
+                                                      resolved != null && Number.isFinite(resolved)
+                                                        ? String(Math.round(resolved * 100) / 100)
+                                                        : '',
+                                                  },
+                                                }));
+                                              })();
+                                            }
                                             return { ...prev, [draftKey]: nextDraft };
-                                          })
-                                        }
+                                          });
+                                        }}
                                         onClear={() =>
                                           setDrafts((prev) => ({
                                             ...prev,
