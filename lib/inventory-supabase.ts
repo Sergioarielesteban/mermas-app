@@ -183,6 +183,18 @@ export async function insertInventoryLineFromCatalog(
     userId: string | null;
     /** Cantidad inicial (ej. 0,2); por defecto 0. */
     initialQuantity?: number;
+    /** Configuración inicial de coste al crear (opcional). */
+    initialCostConfig?: {
+      origenCoste: InventoryCostOrigen;
+      masterCostSource: InventoryMasterCostSource;
+      masterArticleId: string | null;
+      escandalloRecipeId: string | null;
+      precioManual: number | null;
+      pricePerUnit: number;
+      name: string;
+      unit: string;
+      formatLabel: string | null;
+    };
   },
 ): Promise<InventoryItem> {
   const c = params.catalogItem;
@@ -200,26 +212,31 @@ export async function insertInventoryLineFromCatalog(
   const nextSort = (maxRow?.sort_order ?? 0) + 1;
 
   const basePrice = Math.round(c.default_price_per_unit * 100) / 100;
+  const cfg = params.initialCostConfig;
+  const resolvedPrice =
+    cfg != null && Number.isFinite(cfg.pricePerUnit) && cfg.pricePerUnit >= 0
+      ? Math.round(cfg.pricePerUnit * 100) / 100
+      : basePrice;
   const { data, error } = await supabase
     .from('inventory_items')
     .insert({
       local_id: params.localId,
       catalog_item_id: c.id,
       local_category_id: null,
-      name: c.name,
-      unit: c.unit,
-      price_per_unit: basePrice,
+      name: cfg?.name?.trim() ? cfg.name.trim() : c.name,
+      unit: cfg?.unit?.trim() ? cfg.unit : c.unit,
+      price_per_unit: resolvedPrice,
       quantity_on_hand: q0,
-      format_label: c.format_label,
+      format_label: cfg?.formatLabel?.trim() ? cfg.formatLabel.trim() : c.format_label,
       notes: '',
       sort_order: nextSort,
       is_active: true,
       created_by: params.userId,
-      origen_coste: 'manual',
-      master_cost_source: 'uso',
-      master_article_id: null,
-      escandallo_recipe_id: null,
-      precio_manual: basePrice,
+      origen_coste: cfg?.origenCoste ?? 'manual',
+      master_cost_source: cfg?.masterCostSource ?? 'uso',
+      master_article_id: cfg?.masterArticleId ?? null,
+      escandallo_recipe_id: cfg?.escandalloRecipeId ?? null,
+      precio_manual: cfg?.precioManual ?? basePrice,
     })
     .select(
       'id,local_id,catalog_item_id,local_category_id,name,unit,price_per_unit,quantity_on_hand,format_label,notes,sort_order,is_active,origen_coste,master_cost_source,master_article_id,escandallo_recipe_id,precio_manual',

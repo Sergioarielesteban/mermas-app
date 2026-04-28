@@ -549,16 +549,66 @@ export default function InventarioPage() {
     setBusyId(draftKey);
     setBanner(null);
     try {
+      const origen = draft.origenCoste;
+      const masterId = draft.masterArticleId?.trim() ? draft.masterArticleId.trim() : null;
+      const escId = draft.escandalloRecipeId?.trim() ? draft.escandalloRecipeId.trim() : null;
+      let unitPrice = parseDecimal(draft.price) ?? it.default_price_per_unit;
+      let precioManual: number | null = null;
+      if (origen === 'manual') {
+        if (!Number.isFinite(unitPrice) || unitPrice < 0) {
+          setBanner('Precio no válido.');
+          return;
+        }
+        precioManual = unitPrice;
+      } else {
+        if (origen === 'master' && !masterId) {
+          setBanner('Elige un artículo máster.');
+          return;
+        }
+        if (origen === 'produccion_propia' && !escId) {
+          setBanner('Elige una base, subreceta o receta (producción propia).');
+          return;
+        }
+        const resolved = await resolveInventoryItemUnitPriceEur(supabase, localId, {
+          origenCoste: origen,
+          masterCostSource: draft.masterCostSource,
+          masterArticleId: origen === 'master' ? masterId : null,
+          escandalloRecipeId: origen === 'produccion_propia' ? escId : null,
+          unit: draft.unit,
+          price_per_unit: unitPrice,
+          precioManual: null,
+        });
+        if (resolved == null) {
+          setBanner(
+            origen === 'master'
+              ? 'No hay coste disponible en el artículo máster para esa unidad.'
+              : 'No se pudo calcular coste desde la receta seleccionada.',
+          );
+          return;
+        }
+        unitPrice = resolved;
+      }
       const inserted = await insertInventoryLineFromCatalog(supabase, {
         localId,
         catalogItem: it,
         userId: user?.id ?? null,
         initialQuantity: q,
+        initialCostConfig: {
+          origenCoste: origen,
+          masterCostSource: draft.masterCostSource,
+          masterArticleId: origen === 'master' ? masterId : null,
+          escandalloRecipeId: origen === 'produccion_propia' ? escId : null,
+          precioManual,
+          pricePerUnit: unitPrice,
+          name: draft.name,
+          unit: draft.unit,
+          formatLabel: draft.format_label,
+        },
       });
-      await saveLine(inserted, { ...draft, qty: String(q) }, { skipReload: true, skipBusy: true, throwing: true });
       setDrafts((prev) => {
         const next = { ...prev };
         delete next[draftKey];
+        next[inserted.id] = lineDraftFromRow(inserted);
         return next;
       });
       await load();
