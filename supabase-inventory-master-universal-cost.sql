@@ -17,6 +17,49 @@ alter table public.purchase_articles
 alter table public.purchase_articles
   add column if not exists unidad_por_formato text;
 
+-- Backfill inicial desde campos legacy (uso/compra), normalizando a kg/L/ud.
+update public.purchase_articles
+set
+  unidad_base_coste = coalesce(
+    unidad_base_coste,
+    case
+      when lower(trim(unidad_uso)) in ('kg', 'kilo', 'kilogramo', 'kilogramos', 'kilos') then 'kg'
+      when lower(trim(unidad_uso)) in ('l', 'lt', 'litro', 'litros') then 'l'
+      when lower(trim(unidad_uso)) in ('ud', 'uds', 'unidad', 'unidades') then 'ud'
+      -- Formatos físicos/discretos legacy pasan a base ud
+      when lower(trim(unidad_uso)) in ('caja', 'bandeja', 'bolsa', 'paquete', 'racion') then 'ud'
+      when lower(trim(unidad_compra)) in ('kg', 'kilo', 'kilogramo', 'kilogramos', 'kilos') then 'kg'
+      when lower(trim(unidad_compra)) in ('l', 'lt', 'litro', 'litros') then 'l'
+      when lower(trim(unidad_compra)) in ('ud', 'uds', 'unidad', 'unidades') then 'ud'
+      when lower(trim(unidad_compra)) in ('caja', 'bandeja', 'bolsa', 'paquete', 'racion') then 'ud'
+      else null
+    end
+  ),
+  coste_base = coalesce(coste_base, coste_unitario_uso)
+where (unidad_base_coste is null or trim(unidad_base_coste) = '')
+   or coste_base is null;
+
+-- Reparación por si hubo ejecuciones parciales con valores inválidos en unidad_base_coste.
+update public.purchase_articles
+set unidad_base_coste = case
+  when lower(trim(unidad_base_coste)) in ('kg', 'kilo', 'kilogramo', 'kilogramos', 'kilos') then 'kg'
+  when lower(trim(unidad_base_coste)) in ('l', 'lt', 'litro', 'litros') then 'l'
+  when lower(trim(unidad_base_coste)) in ('ud', 'uds', 'unidad', 'unidades') then 'ud'
+  when lower(trim(unidad_base_coste)) in ('caja', 'bandeja', 'bolsa', 'paquete', 'racion') then 'ud'
+  else null
+end
+where unidad_base_coste is not null;
+
+update public.purchase_articles
+set unidad_por_formato = case
+  when lower(trim(unidad_por_formato)) in ('kg', 'kilo', 'kilogramo', 'kilogramos', 'kilos') then 'kg'
+  when lower(trim(unidad_por_formato)) in ('l', 'lt', 'litro', 'litros') then 'l'
+  when lower(trim(unidad_por_formato)) in ('ud', 'uds', 'unidad', 'unidades') then 'ud'
+  else null
+end
+where unidad_por_formato is not null;
+
+-- Constraints (después del backfill/normalización).
 alter table public.purchase_articles
   drop constraint if exists purchase_articles_unidad_base_coste_chk;
 
@@ -44,14 +87,6 @@ alter table public.purchase_articles
 alter table public.purchase_articles
   add constraint purchase_articles_cantidad_por_formato_pos_chk
   check (cantidad_por_formato is null or cantidad_por_formato > 0);
-
--- Backfill inicial desde campos legacy (uso).
-update public.purchase_articles
-set
-  unidad_base_coste = coalesce(unidad_base_coste, lower(trim(unidad_uso))),
-  coste_base = coalesce(coste_base, coste_unitario_uso)
-where (unidad_base_coste is null or trim(unidad_base_coste) = '')
-   or coste_base is null;
 
 -- 2) Inventario: equivalencia manual por línea (1 unidad inventario = X unidad_coste).
 alter table public.inventory_items
