@@ -15,6 +15,7 @@ import {
   fetchSupplierCatalogRowsForArticleIds,
   isMissingPurchaseArticlesError,
   labelMetodoCosteMaster,
+  setPurchaseArticleActivo,
   updatePurchaseArticleMasterCostFields,
   type PurchaseArticle,
   type SupplierCatalogRow,
@@ -53,6 +54,8 @@ export default function PedidosArticulosPage() {
   const [banner, setBanner] = useState<string | null>(null);
   const [q, setQ] = useState('');
   const [origenFilter, setOrigenFilter] = useState<'todos' | 'proveedor' | 'cocina_central'>('todos');
+  /** Por defecto solo activos: los inactivos siguen en BD y se recuperan con Inactivos/Todos. */
+  const [estadoFilter, setEstadoFilter] = useState<'activos' | 'inactivos' | 'todos'>('activos');
   const [hasArticulosReturn, setHasArticulosReturn] = useState(false);
 
   const load = useCallback(async () => {
@@ -122,6 +125,8 @@ export default function PedidosArticulosPage() {
         : origenFilter === 'proveedor'
           ? articles.filter((a) => a.origenArticulo !== 'cocina_central')
           : articles;
+    if (estadoFilter === 'activos') list = list.filter((a) => a.activo);
+    else if (estadoFilter === 'inactivos') list = list.filter((a) => !a.activo);
     const t = q.trim().toLowerCase();
     if (!t) return list;
     return list.filter((a) => {
@@ -135,7 +140,7 @@ export default function PedidosArticulosPage() {
         catalogNames.toLowerCase().includes(t)
       );
     });
-  }, [articles, catalogByArticle, q, origenFilter]);
+  }, [articles, catalogByArticle, q, origenFilter, estadoFilter]);
 
   if (!profileReady) {
     return (
@@ -238,7 +243,7 @@ export default function PedidosArticulosPage() {
             <p className="text-[9px] font-bold uppercase leading-tight text-zinc-500">Listado</p>
             <p className="text-xs leading-tight text-zinc-600 sm:text-sm">
               <span className="font-bold tabular-nums text-zinc-900">{filtered.length}</span> artículos
-              {q.trim() || origenFilter !== 'todos' ? ' (filtrado)' : ''}
+              {q.trim() || origenFilter !== 'todos' || estadoFilter !== 'activos' ? ' (filtrado)' : ''}
               {ccCount > 0 ? (
                 <span className="text-zinc-500">
                   {' '}
@@ -280,6 +285,30 @@ export default function PedidosArticulosPage() {
             </button>
           ))}
         </div>
+        <div className="mt-2 flex flex-wrap gap-1.5 border-t border-zinc-200 pt-2">
+          <p className="w-full text-[9px] font-bold uppercase text-zinc-500">Estado</p>
+          {(
+            [
+              ['activos', 'Activos'],
+              ['inactivos', 'Inactivos'],
+              ['todos', 'Todos'],
+            ] as const
+          ).map(([key, label]) => (
+            <button
+              key={key}
+              type="button"
+              onClick={() => setEstadoFilter(key)}
+              className={[
+                'rounded-lg border px-2 py-1 text-[10px] font-bold sm:text-[11px]',
+                estadoFilter === key
+                  ? 'border-emerald-600 bg-emerald-900 text-white'
+                  : 'border-zinc-200 bg-white text-zinc-700',
+              ].join(' ')}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
         <div className="relative mt-2">
           <Search
             className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-zinc-400"
@@ -302,7 +331,11 @@ export default function PedidosArticulosPage() {
             ? 'Aún no hay artículos. Ejecuta la migración SQL o crea productos en Proveedores.'
             : origenFilter === 'cocina_central' && ccCount === 0
               ? 'Ningún artículo de Cocina Central en este local. Guarda una fórmula en Cocina Central (mismo local de sesión) o revisa la migración SQL.'
-              : 'Nada coincide con el filtro o la búsqueda.'}
+              : estadoFilter === 'inactivos' && articles.every((x) => x.activo)
+                ? 'No hay artículos desactivados. Los artículos desactivados siguen guardados: cambia el filtro a «Todos» o «Activos».'
+                : estadoFilter === 'activos' && articles.every((x) => !x.activo)
+                  ? 'No hay artículos activos con el filtro actual. Usa «Inactivos» o «Todos» para ver y reactivar artículos.'
+                  : 'Nada coincide con el filtro o la búsqueda.'}
         </p>
       ) : (
         <ul className="space-y-2">
@@ -337,6 +370,8 @@ function ArticleCard({
 }) {
   const { localId } = useAuth();
   const supabaseOk = isSupabaseEnabled() && getSupabaseClient();
+  const [activoBusy, setActivoBusy] = useState(false);
+  const [activoErr, setActivoErr] = useState<string | null>(null);
   const [masterBusy, setMasterBusy] = useState(false);
   const [masterMsg, setMasterMsg] = useState<string | null>(null);
   const [refProdId, setRefProdId] = useState(
@@ -374,11 +409,30 @@ function ArticleCard({
   ]);
 
   const isCc = a.origenArticulo === 'cocina_central';
+
+  const applyActivo = async (next: boolean) => {
+    if (!localId || !supabaseOk) return;
+    if (a.activo && !next) {
+      if (!window.confirm('Este artículo dejará de aparecer en pedidos e inventario.')) return;
+    }
+    setActivoErr(null);
+    setActivoBusy(true);
+    try {
+      const supabase = getSupabaseClient()!;
+      await setPurchaseArticleActivo(supabase, localId, a.id, next);
+      onReload();
+    } catch (e: unknown) {
+      setActivoErr(e instanceof Error ? e.message : 'No se pudo actualizar el estado del artículo.');
+    } finally {
+      setActivoBusy(false);
+    }
+  };
+
   if (isCc) {
     const uso = (a.unidadUso ?? a.unidadBase ?? '').trim() || '—';
     const cup = a.costeUnitarioUso ?? a.costeMaster;
     return (
-      <li className="list-none">
+      <li className={['list-none', !a.activo ? 'opacity-60' : ''].join(' ')}>
         <details className="group overflow-hidden rounded-2xl border border-amber-200/80 bg-white shadow-sm ring-1 ring-amber-100">
           <summary className="flex cursor-pointer list-none items-center gap-2 p-2.5 sm:gap-3 sm:p-3 [&::-webkit-details-marker]:hidden">
             <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-amber-100 text-amber-900">
@@ -389,13 +443,20 @@ function ArticleCard({
                 <span className="rounded bg-amber-200/90 px-1.5 py-0.5 text-[8px] font-black uppercase leading-none text-amber-950 sm:text-[9px]">
                   Cocina Central
                 </span>
-                {a.activo ? (
-                  <span className="text-[8px] font-bold uppercase leading-none text-emerald-700 sm:text-[9px]">Activo</span>
-                ) : (
-                  <span className="text-[8px] font-bold uppercase leading-none text-zinc-500 sm:text-[9px]">Inactivo</span>
-                )}
+                {!a.activo ? (
+                  <span className="rounded-full bg-zinc-200 px-2 py-0.5 text-[8px] font-bold uppercase leading-none text-zinc-700 sm:text-[9px]">
+                    Inactivo
+                  </span>
+                ) : null}
               </div>
-              <p className="mt-0.5 line-clamp-2 text-sm font-bold leading-snug text-zinc-900 sm:text-base">{a.nombre}</p>
+              <p
+                className={[
+                  'mt-0.5 line-clamp-2 text-sm font-bold leading-snug sm:text-base',
+                  a.activo ? 'text-zinc-900' : 'text-zinc-500',
+                ].join(' ')}
+              >
+                {a.nombre}
+              </p>
             </div>
             <div className="shrink-0 text-right">
               <p className="text-[8px] font-bold uppercase leading-tight text-zinc-500 sm:text-[9px]">Coste uso</p>
@@ -403,12 +464,27 @@ function ArticleCard({
                 {cup != null ? formatUnitPriceEur(roundMoney(cup), uso) : '—'}
               </p>
             </div>
+            <button
+              type="button"
+              disabled={activoBusy || !localId || !supabaseOk}
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                void applyActivo(!a.activo);
+              }}
+              className="shrink-0 rounded-lg border border-amber-300/80 bg-white px-2 py-1.5 text-[10px] font-bold text-amber-950 shadow-sm disabled:opacity-50 sm:text-[11px]"
+            >
+              {activoBusy ? '…' : a.activo ? 'Desactivar' : 'Activar'}
+            </button>
             <ChevronDown
               className="h-4 w-4 shrink-0 text-zinc-400 transition group-open:rotate-180"
               aria-hidden
             />
           </summary>
           <div className="space-y-3 border-t border-amber-100 bg-amber-50/30 px-3 pb-3 pt-2 sm:px-4 sm:pb-4 sm:pt-2">
+            {activoErr ? (
+              <p className="rounded-lg border border-red-200 bg-red-50 px-2 py-1.5 text-xs text-red-900">{activoErr}</p>
+            ) : null}
             <div className="rounded-lg border border-amber-200/80 bg-white px-3 py-2 text-xs text-zinc-700">
               <p>
                 <span className="font-semibold text-zinc-500">Origen:</span> Cocina Central (fórmula interna). En este
@@ -521,7 +597,7 @@ function ArticleCard({
   const nombreCompacto = (nombreVisibleProveedor || a.nombre).trim();
 
   return (
-    <li className="list-none">
+    <li className={['list-none', !a.activo ? 'opacity-60' : ''].join(' ')}>
       <details className="group overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm ring-1 ring-zinc-100">
         <summary className="flex cursor-pointer list-none items-center gap-2 p-2.5 sm:gap-3 sm:p-3 [&::-webkit-details-marker]:hidden">
           <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-indigo-100 text-indigo-800">
@@ -532,13 +608,20 @@ function ArticleCard({
               <span className="rounded bg-indigo-100 px-1.5 py-0.5 text-[8px] font-black uppercase leading-none text-indigo-900 sm:text-[9px]">
                 Artículo
               </span>
-              {a.activo ? (
-                <span className="text-[8px] font-bold uppercase leading-none text-emerald-700 sm:text-[9px]">Activo</span>
-              ) : (
-                <span className="text-[8px] font-bold uppercase leading-none text-zinc-500 sm:text-[9px]">Inactivo</span>
-              )}
+              {!a.activo ? (
+                <span className="rounded-full bg-zinc-200 px-2 py-0.5 text-[8px] font-bold uppercase leading-none text-zinc-700 sm:text-[9px]">
+                  Inactivo
+                </span>
+              ) : null}
             </div>
-            <p className="mt-0.5 line-clamp-2 text-sm font-bold leading-snug text-zinc-900 sm:text-base">{nombreCompacto}</p>
+            <p
+              className={[
+                'mt-0.5 line-clamp-2 text-sm font-bold leading-snug sm:text-base',
+                a.activo ? 'text-zinc-900' : 'text-zinc-500',
+              ].join(' ')}
+            >
+              {nombreCompacto}
+            </p>
           </div>
           <div className="shrink-0 text-right">
             <p className="text-[8px] font-bold uppercase leading-tight text-zinc-500 sm:text-[9px]">Máster</p>
@@ -546,12 +629,27 @@ function ArticleCard({
               {master != null ? formatMoneyEur(roundMoney(master)) : '—'}
             </p>
           </div>
+          <button
+            type="button"
+            disabled={activoBusy || !localId || !supabaseOk}
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              void applyActivo(!a.activo);
+            }}
+            className="shrink-0 rounded-lg border border-zinc-300 bg-white px-2 py-1.5 text-[10px] font-bold text-zinc-900 shadow-sm disabled:opacity-50 sm:text-[11px]"
+          >
+            {activoBusy ? '…' : a.activo ? 'Desactivar' : 'Activar'}
+          </button>
           <ChevronDown
             className="h-4 w-4 shrink-0 text-zinc-400 transition group-open:rotate-180"
             aria-hidden
           />
         </summary>
         <div className="space-y-3 border-t border-zinc-100 bg-zinc-50/40 px-3 pb-3 pt-2 sm:space-y-4 sm:px-4 sm:pb-4 sm:pt-2">
+          {activoErr ? (
+            <p className="rounded-lg border border-red-200 bg-red-50 px-2 py-1.5 text-xs text-red-900">{activoErr}</p>
+          ) : null}
           <div className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs text-zinc-700">
             <p>
               <span className="font-semibold text-zinc-500">Nombre visible (proveedor / albarán):</span>{' '}

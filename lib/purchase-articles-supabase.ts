@@ -329,6 +329,21 @@ export async function updatePurchaseArticleMasterCostFields(
   if (error) throw new Error(error.message);
 }
 
+/** Solo cambia el flag `activo` del artículo máster (no borra datos). */
+export async function setPurchaseArticleActivo(
+  supabase: SupabaseClient,
+  localId: string,
+  articleId: string,
+  activo: boolean,
+): Promise<void> {
+  const { error } = await supabase
+    .from('purchase_articles')
+    .update({ activo })
+    .eq('id', articleId)
+    .eq('local_id', localId);
+  if (error) throw new Error(error.message);
+}
+
 /**
  * Sincroniza coste de compra del artículo desde el catálogo proveedor (fallback si el trigger SQL no está desplegado).
  */
