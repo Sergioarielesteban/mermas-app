@@ -12,7 +12,6 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import { BarChart2, FileDown } from 'lucide-react';
 import type { InventoryCatalogCategory, InventoryCatalogItem, InventoryItem, InventoryMonthSnapshot } from '@/lib/inventory-supabase';
 import { computeInventoryCategoryBreakdownEuros } from '@/lib/inventory-supabase';
 
@@ -31,15 +30,11 @@ const CATEGORY_BAR_COLORS = ['#D32F2F', '#e57373', '#ffb74d', '#81c784', '#64b5f
 type Props = {
   snapshots: InventoryMonthSnapshot[];
   totalValor: number;
+  /** Valores ya fusionados con borradores (KPI operativos del inventario en curso). */
   lines: InventoryItem[];
   catalogItems: InventoryCatalogItem[];
   categories: InventoryCatalogCategory[];
   yearMonth: string;
-  onDownloadPdf: () => void | Promise<void>;
-  pdfBusy: boolean;
-  disabled: boolean;
-  onResetCharts: () => void | Promise<void>;
-  chartsResetBusy: boolean;
 };
 
 export default function InventoryResultadoInventario({
@@ -49,11 +44,6 @@ export default function InventoryResultadoInventario({
   catalogItems,
   categories,
   yearMonth,
-  onDownloadPdf,
-  pdfBusy,
-  disabled,
-  onResetCharts,
-  chartsResetBusy,
 }: Props) {
   const barData = useMemo(() => {
     const fromSnaps = snapshots.map((s) => ({
@@ -123,34 +113,11 @@ export default function InventoryResultadoInventario({
     <section className="space-y-3">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <h2 className="text-base font-bold text-zinc-900">Resultado de inventarios</h2>
-        <div className="flex flex-wrap gap-2">
-          <button
-            type="button"
-            disabled={disabled || pdfBusy || lines.length === 0}
-            onClick={() => void onDownloadPdf()}
-            className="inline-flex h-9 items-center justify-center gap-2 self-start rounded-lg bg-zinc-950 px-3 text-xs font-bold text-white ring-1 ring-zinc-700 disabled:opacity-45"
-          >
-            <FileDown className="h-4 w-4" />
-            {pdfBusy ? 'Generando…' : 'PDF mensual'}
-          </button>
-          {snapshots.length > 0 ? (
-            <button
-              type="button"
-              disabled={disabled || chartsResetBusy || pdfBusy}
-              onClick={() => void onResetCharts()}
-              title="Quita del gráfico «Valor por mes» los cierres guardados (KPI). No borra líneas de inventario."
-              className="inline-flex h-9 items-center justify-center gap-2 self-start rounded-lg border border-zinc-300 bg-white px-3 text-xs font-bold text-zinc-800 hover:bg-zinc-50 disabled:opacity-45"
-            >
-              <BarChart2 className={`h-4 w-4 ${chartsResetBusy ? 'animate-pulse' : ''}`} aria-hidden />
-              {chartsResetBusy ? 'Reiniciando…' : 'Reiniciar gráficos'}
-            </button>
-          ) : null}
-        </div>
       </div>
       <p className="text-[11px] leading-snug text-zinc-500">
-        «Terminar inventario» y el PDF usan el <span className="font-semibold text-zinc-600">mes del cierre</span>{' '}
-        que eliges arriba ({yearMonth}) para los KPI y este gráfico. Los cierres guardados no se pueden borrar desde la
-        app. Ejecuta en Supabase{' '}
+        El gráfico <span className="font-semibold text-zinc-600">Valor por mes</span> acumula los cierres guardados
+        (PDF / terminar inventario). Los gráficos de categoría y cobertura reflejan el inventario en pantalla (incluye
+        cantidades aún no guardadas). Ejecuta en Supabase{' '}
         <code className="rounded bg-zinc-100 px-1 text-[10px] text-zinc-800">supabase-inventory-catalog-write-and-snapshots.sql</code>{' '}
         si fallan snapshots.
       </p>

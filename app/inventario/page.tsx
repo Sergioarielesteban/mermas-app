@@ -2,7 +2,17 @@
 
 import Link from 'next/link';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronDown, CheckCircle2, Package, Plus, RotateCcw, Trash2 } from 'lucide-react';
+import {
+  BarChart2,
+  ChevronDown,
+  CheckCircle2,
+  FileDown,
+  Minus,
+  Package,
+  Plus,
+  RotateCcw,
+  Trash2,
+} from 'lucide-react';
 import ModuleHeader from '@/components/ModuleHeader';
 import InventoryResultadoInventario from '@/components/InventoryResultadoInventario';
 import { useAuth } from '@/components/AuthProvider';
@@ -17,7 +27,7 @@ import {
   type InventoryMonthSnapshot,
   type InventoryUnidadCoste,
   currentInventoryYearMonth,
-  deleteAllInventoryMonthSnapshots,
+  deleteInventoryMonthSnapshot,
   deleteInventoryItemLine,
   fetchInventoryCatalogCategories,
   fetchInventoryCatalogItems,
@@ -193,6 +203,70 @@ function lineDraftFromCatalogItem(it: InventoryCatalogItem, qty = '0'): LineDraf
   };
 }
 
+type MonthClosureComputed = {
+  pdfRows: InventoryPdfRow[];
+  total: number;
+  breakdown: Record<string, number>;
+  historyLines: InventoryItem[];
+  linesWithStock: number;
+};
+
+/** Misma lógica que el PDF/cierre: borradores + filas; detalle PDF solo con cantidad &gt; 0. */
+function computeMonthClosurePayload(
+  invLines: InventoryItem[],
+  draftMap: Record<string, LineDraft>,
+  catalogItems: InventoryCatalogItem[],
+): MonthClosureComputed {
+  const itemToCat = new Map(catalogItems.map((i) => [i.id, i.catalog_category_id]));
+  const breakdown: Record<string, number> = {};
+  const pdfRows: InventoryPdfRow[] = [];
+  const historyLines: InventoryItem[] = [];
+  let total = 0;
+  let linesWithStock = 0;
+  for (const row of invLines) {
+    const d = draftMap[row.id] ?? lineDraftFromRow(row);
+    const q = parseDecimal(d.qty ?? String(row.quantity_on_hand)) ?? row.quantity_on_hand;
+    const p = parseDecimal(d.price ?? String(row.price_per_unit)) ?? row.price_per_unit;
+    const sub = Math.round(q * p * 100) / 100;
+    total += sub;
+    if (q > 0) linesWithStock += 1;
+    const uKey = d.unit ?? row.unit;
+    const fo = (d.formatoOperativo ?? '').trim();
+    const factorConvDraft = parseDecimal(d.factorConversionManual ?? '');
+    const flBase = (d.format_label ?? row.format_label ?? '').trim();
+    const formatLabelPdf = fo && flBase ? `${flBase} · ${fo}` : fo || flBase;
+    if (q > 0) {
+      pdfRows.push({
+        name: (d.name ?? row.name).trim() || row.name,
+        formatLabel: formatLabelPdf,
+        qty: q,
+        unit: UNIT_SUFFIX[uKey] ?? uKey,
+        price: p,
+        sub,
+      });
+    }
+    const cid = row.catalog_item_id ? itemToCat.get(row.catalog_item_id) : undefined;
+    const key = cid ?? '__sin_catalogo__';
+    breakdown[key] = Math.round(((breakdown[key] ?? 0) + sub) * 100) / 100;
+    historyLines.push({
+      ...row,
+      quantity_on_hand: q,
+      price_per_unit: p,
+      name: (d.name ?? row.name).trim() || row.name,
+      format_label: d.format_label?.trim() ? d.format_label.trim() : row.format_label,
+      unit: uKey,
+      unidadCoste: normalizeInventoryUnidadCoste(d.unidadCoste),
+      formatoOperativo: fo ? fo : null,
+      factorConversionManual:
+        factorConvDraft != null && Number.isFinite(factorConvDraft) && factorConvDraft > 0
+          ? factorConvDraft
+          : null,
+    });
+  }
+  total = Math.round(total * 100) / 100;
+  return { pdfRows, total, breakdown, historyLines, linesWithStock };
+}
+
 export default function InventarioPage() {
   const {
     localId,
@@ -235,6 +309,7 @@ export default function InventarioPage() {
   const [newArticleFormat, setNewArticleFormat] = useState('');
   const [resetInventoryBusy, setResetInventoryBusy] = useState(false);
   const [finishInventoryBusy, setFinishInventoryBusy] = useState(false);
+  const [inventoryEditLocked, setInventoryEditLocked] = useState(false);
   const [busyDeletingCategoryId, setBusyDeletingCategoryId] = useState<string | null>(null);
   const [busyDeletingCatalogItemId, setBusyDeletingCatalogItemId] = useState<string | null>(null);
   const [supplierSearchProducts, setSupplierSearchProducts] = useState<InventorySupplierProductSearchRow[]>([]);
@@ -242,6 +317,12 @@ export default function InventarioPage() {
   const [ccRecipes, setCcRecipes] = useState<ProductionRecipeRow[]>([]);
   const [escandalloRecipeQuery, setEscandalloRecipeQuery] = useState<Record<string, string>>({});
   const loadRef = useRef<() => Promise<void>>(() => Promise.resolve());
+  const linesRef = useRef<InventoryItem[]>([]);
+  const draftsRef = useRef<Record<string, LineDraft>>({});
+  const catalogQtyDraftRef = useRef<Record<string, string>>({});
+  const realtimeIgnoreUntilRef = useRef(0);
+  const realtimeDebounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const qtyDebounceTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const saveFlashTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [inventorySaveFlash, setInventorySaveFlash] = useState<string | null>(null);
   const restoreOnceRef = useRef<InventoryViewState | null>(null);
@@ -280,7 +361,22 @@ export default function InventarioPage() {
     savePersistedViewState(buildCurrentViewState());
   }, [localId, savePersistedViewState, buildCurrentViewState]);
 
+  linesRef.current = lines;
+  draftsRef.current = drafts;
+  catalogQtyDraftRef.current = catalogQtyDraft;
+
   const supabaseOk = isSupabaseEnabled() && getSupabaseClient();
+
+  const scheduleRealtimeReload = useCallback(() => {
+    if (typeof window === 'undefined') return;
+    if (Date.now() < realtimeIgnoreUntilRef.current) return;
+    if (realtimeDebounceTimerRef.current) clearTimeout(realtimeDebounceTimerRef.current);
+    realtimeDebounceTimerRef.current = setTimeout(() => {
+      realtimeDebounceTimerRef.current = null;
+      if (Date.now() < realtimeIgnoreUntilRef.current) return;
+      void loadRef.current();
+    }, 1100);
+  }, []);
 
   const load = useCallback(async () => {
     if (!localId || !supabaseOk) {
@@ -525,7 +621,7 @@ export default function InventarioPage() {
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'inventory_items', filter: `local_id=eq.${localId}` },
-        () => void loadRef.current(),
+        () => scheduleRealtimeReload(),
       )
       .on(
         'postgres_changes',
@@ -535,21 +631,53 @@ export default function InventarioPage() {
           table: 'pedido_supplier_products',
           filter: `local_id=eq.${localId}`,
         },
-        () => void loadRef.current(),
+        () => scheduleRealtimeReload(),
       )
       .subscribe();
     return () => {
       void supabase.removeChannel(ch);
     };
-  }, [localId, supabaseOk]);
+  }, [localId, supabaseOk, scheduleRealtimeReload]);
+
+  useEffect(() => {
+    return () => {
+      for (const t of Object.values(qtyDebounceTimersRef.current)) {
+        if (t) clearTimeout(t);
+      }
+      if (realtimeDebounceTimerRef.current) clearTimeout(realtimeDebounceTimerRef.current);
+    };
+  }, []);
 
   const totalValor = useMemo(() => {
     let t = 0;
     for (const row of lines) {
-      t += row.quantity_on_hand * row.price_per_unit;
+      const d = drafts[row.id] ?? lineDraftFromRow(row);
+      const q = parseDecimal(d.qty ?? String(row.quantity_on_hand)) ?? row.quantity_on_hand;
+      const p = parseDecimal(d.price ?? String(row.price_per_unit)) ?? row.price_per_unit;
+      t += q * p;
+    }
+    for (const it of catalogItems) {
+      if (lines.some((l) => l.catalog_item_id === it.id)) continue;
+      const dk = `cat-${it.id}`;
+      const d = drafts[dk];
+      if (!d) continue;
+      const q = parseDecimal(d.qty) ?? 0;
+      const p = parseDecimal(d.price) ?? it.default_price_per_unit;
+      t += q * p;
     }
     return Math.round(t * 100) / 100;
-  }, [lines]);
+  }, [lines, drafts, catalogItems]);
+
+  const mergedLinesForCharts = useMemo((): InventoryItem[] => {
+    return lines.map((row) => {
+      const d = drafts[row.id] ?? lineDraftFromRow(row);
+      const q = parseDecimal(d.qty ?? String(row.quantity_on_hand)) ?? row.quantity_on_hand;
+      const p = parseDecimal(d.price ?? String(row.price_per_unit)) ?? row.price_per_unit;
+      const qR = Math.round(q * 1000) / 1000;
+      const pR = Math.round(p * 100) / 100;
+      return { ...row, quantity_on_hand: qR, price_per_unit: pR };
+    });
+  }, [lines, drafts]);
 
   const itemsByCategory = useMemo(() => {
     const map = new Map<string, InventoryCatalogItem[]>();
@@ -563,20 +691,33 @@ export default function InventarioPage() {
   }, [categories, catalogItems]);
 
   const categoryTotals = useMemo(() => {
-    const byCatalogItem = new Map(lines.map((l) => [l.catalog_item_id, l] as const));
+    const byCatalogItem = new Map(
+      lines.filter((l) => l.catalog_item_id).map((l) => [l.catalog_item_id!, l] as const),
+    );
     const totals: Record<string, number> = {};
+    const lineSubForCatalogItem = (it: InventoryCatalogItem): number => {
+      const line = byCatalogItem.get(it.id);
+      if (line) {
+        const d = drafts[line.id] ?? lineDraftFromRow(line);
+        const q = parseDecimal(d.qty ?? String(line.quantity_on_hand)) ?? line.quantity_on_hand;
+        const p = parseDecimal(d.price ?? String(line.price_per_unit)) ?? line.price_per_unit;
+        return Math.round(q * p * 100) / 100;
+      }
+      const dk = `cat-${it.id}`;
+      const d = drafts[dk];
+      if (!d) return 0;
+      const q = parseDecimal(d.qty) ?? 0;
+      const p = parseDecimal(d.price) ?? it.default_price_per_unit;
+      return Math.round(q * p * 100) / 100;
+    };
     for (const cat of categories) {
       const items = itemsByCategory.get(cat.id) ?? [];
       let acc = 0;
-      for (const it of items) {
-        const line = byCatalogItem.get(it.id);
-        if (!line) continue;
-        acc += line.quantity_on_hand * line.price_per_unit;
-      }
+      for (const it of items) acc += lineSubForCatalogItem(it);
       totals[cat.id] = Math.round(acc * 100) / 100;
     }
     return totals;
-  }, [categories, itemsByCategory, lines]);
+  }, [categories, itemsByCategory, lines, drafts]);
 
   const searchLower = search.trim().toLowerCase();
   const filteredCatalog = useMemo(() => {
@@ -588,67 +729,22 @@ export default function InventarioPage() {
     );
   }, [catalogItems, searchLower]);
 
-  /** Valores en pantalla (borradores) → PDF, KPI por categoría y copia de historial. */
-  const buildMonthClosureData = useCallback(() => {
-    const itemToCat = new Map(catalogItems.map((i) => [i.id, i.catalog_category_id]));
-    const breakdown: Record<string, number> = {};
-    const pdfRows: InventoryPdfRow[] = [];
-    const historyLines: InventoryItem[] = [];
-    let total = 0;
-    let linesWithStock = 0;
-    for (const row of lines) {
-      const d = drafts[row.id] ?? lineDraftFromRow(row);
-      const q = parseDecimal(d.qty ?? String(row.quantity_on_hand)) ?? row.quantity_on_hand;
-      const p = parseDecimal(d.price ?? String(row.price_per_unit)) ?? row.price_per_unit;
-      const sub = Math.round(q * p * 100) / 100;
-      total += sub;
-      if (q > 0) linesWithStock += 1;
-      const uKey = d.unit ?? row.unit;
-      const fo = (d.formatoOperativo ?? '').trim();
-      const factorConvDraft = parseDecimal(d.factorConversionManual ?? '');
-      const flBase = (d.format_label ?? row.format_label ?? '').trim();
-      const formatLabelPdf =
-        fo && flBase ? `${flBase} · ${fo}` : fo || flBase;
-      pdfRows.push({
-        name: (d.name ?? row.name).trim() || row.name,
-        formatLabel: formatLabelPdf,
-        qty: q,
-        unit: UNIT_SUFFIX[uKey] ?? uKey,
-        price: p,
-        sub,
-      });
-      const cid = row.catalog_item_id ? itemToCat.get(row.catalog_item_id) : undefined;
-      const key = cid ?? '__sin_catalogo__';
-      breakdown[key] = Math.round(((breakdown[key] ?? 0) + sub) * 100) / 100;
-      historyLines.push({
-        ...row,
-        quantity_on_hand: q,
-        price_per_unit: p,
-        name: (d.name ?? row.name).trim() || row.name,
-        format_label: d.format_label?.trim() ? d.format_label.trim() : row.format_label,
-        unit: uKey,
-        unidadCoste: normalizeInventoryUnidadCoste(d.unidadCoste),
-        formatoOperativo: fo ? fo : null,
-        factorConversionManual:
-          factorConvDraft != null && Number.isFinite(factorConvDraft) && factorConvDraft > 0
-            ? factorConvDraft
-            : null,
-      });
-    }
-    total = Math.round(total * 100) / 100;
-    return { pdfRows, total, breakdown, historyLines, linesWithStock };
-  }, [lines, drafts, catalogItems]);
-
-  const saveMonthClosureToSupabase = useCallback(
-    async (yearMonth: string, opts: { recordHistory: boolean; userId: string | null }) => {
+  const persistMonthClosure = useCallback(
+    async (
+      yearMonth: string,
+      opts: { recordHistory: boolean; userId: string | null },
+      data: MonthClosureComputed,
+      linesCountForMeta: number,
+      closedAt: Date,
+    ) => {
       if (!localId || !supabaseOk) return;
       const supabase = getSupabaseClient()!;
-      const { pdfRows, total, breakdown, historyLines, linesWithStock } = buildMonthClosureData();
+      const { pdfRows, total, breakdown, historyLines, linesWithStock } = data;
       await upsertInventoryMonthSnapshot(supabase, {
         localId,
         yearMonth,
         totalValue: total,
-        linesCount: lines.length,
+        linesCount: linesCountForMeta,
         categoryBreakdown: breakdown,
       });
       const categoryRows = Object.entries(breakdown)
@@ -662,20 +758,26 @@ export default function InventarioPage() {
         }))
         .filter((x) => x.valueEur > 0)
         .sort((a, b) => b.valueEur - a.valueEur);
+      const closedAtLabel = closedAt.toLocaleString('es-ES', {
+        timeZone: 'Europe/Madrid',
+        dateStyle: 'medium',
+        timeStyle: 'short',
+      });
       downloadInventoryMonthlyPdf({
         localLabel: localName ?? localCode ?? '—',
         yearMonth,
         rows: pdfRows,
         total,
         categoryRows,
-        linesCount: lines.length,
+        linesCount: linesCountForMeta,
         linesWithStock,
+        closedAtLabel,
       });
       if (opts.recordHistory) {
         await insertInventoryHistorySnapshot(supabase, {
           localId,
           eventType: 'inventory_final',
-          summary: `Inventario terminado (${yearMonth}) — ${lines.length} línea(s), ${total.toFixed(2)} €`,
+          summary: `Inventario terminado (${yearMonth}) — ${linesCountForMeta} línea(s), ${total.toFixed(2)} €`,
           lines: historyLines,
           userId: opts.userId,
         });
@@ -685,8 +787,24 @@ export default function InventarioPage() {
       );
       setSnapshots(refreshed);
     },
-    [localId, supabaseOk, lines.length, buildMonthClosureData, localName, localCode, categories],
+    [localId, supabaseOk, localName, localCode, categories],
   );
+
+  const applyLocalInventoryZero = (inv: InventoryItem[]) => {
+    const cleared = inv.map((r) => ({ ...r, quantity_on_hand: 0 }));
+    setLines(cleared);
+    linesRef.current = cleared;
+    const dC: Record<string, LineDraft> = {};
+    for (const row of cleared) dC[row.id] = lineDraftFromRow(row);
+    setDrafts(dC);
+    draftsRef.current = dC;
+    const cqC: Record<string, string> = {};
+    for (const row of cleared) {
+      if (row.catalog_item_id) cqC[row.catalog_item_id] = '0';
+    }
+    setCatalogQtyDraft(cqC);
+    catalogQtyDraftRef.current = cqC;
+  };
 
   const saveLine = async (
     row: InventoryItem,
@@ -694,7 +812,7 @@ export default function InventarioPage() {
     opts?: { skipBusy?: boolean; throwing?: boolean; silent?: boolean },
   ) => {
     if (!localId || !supabaseOk) return;
-    const base = drafts[row.id] ?? lineDraftFromRow(row);
+    const base = draftsRef.current[row.id] ?? lineDraftFromRow(row);
     const d = { ...base, ...override };
     const q = parseDecimal(d.qty);
     const p = parseDecimal(d.price);
@@ -860,31 +978,44 @@ export default function InventarioPage() {
         ccRecipeFormatQty: origen === 'recetario_cc' ? ccFormatQty : null,
         precioManual: origen === 'manual' ? priceRounded : null,
       };
-      setLines((prev) => prev.map((item) => (item.id === row.id ? mergedRow : item)));
+      realtimeIgnoreUntilRef.current = Date.now() + 2800;
+      setLines((prev) => {
+        const next = prev.map((item) => (item.id === row.id ? mergedRow : item));
+        linesRef.current = next;
+        return next;
+      });
       if (!opts?.silent) showInventorySaveFlash();
-      setDrafts((prev) => ({
-        ...prev,
-        [row.id]: {
-          ...d,
-          name: nm,
-          price: String(priceOut),
-          origenCoste: origen,
-          supplierProductId: origen === 'articulo_proveedor' ? supplierProductIdRaw ?? '' : '',
-          escandalloRecipeId: origen === 'produccion_propia' ? escId ?? '' : '',
-          centralProductionRecipeId: origen === 'recetario_cc' ? ccRecipeId ?? '' : '',
-          ccRecipeFormatQty:
-            origen === 'recetario_cc' ? String(ccFormatQty ?? 1) : '1',
-          unidadCoste: uc,
-          formatoOperativo: (d.formatoOperativo ?? '').trim(),
-          factorConversionManual:
-            origen === 'articulo_proveedor' && factorConversionManual != null
-              ? String(factorConversionManual)
-              : '',
-        },
-      }));
+      setDrafts((prev) => {
+        const next = {
+          ...prev,
+          [row.id]: {
+            ...d,
+            name: nm,
+            price: String(priceOut),
+            origenCoste: origen,
+            supplierProductId: origen === 'articulo_proveedor' ? supplierProductIdRaw ?? '' : '',
+            escandalloRecipeId: origen === 'produccion_propia' ? escId ?? '' : '',
+            centralProductionRecipeId: origen === 'recetario_cc' ? ccRecipeId ?? '' : '',
+            ccRecipeFormatQty:
+              origen === 'recetario_cc' ? String(ccFormatQty ?? 1) : '1',
+            unidadCoste: uc,
+            formatoOperativo: (d.formatoOperativo ?? '').trim(),
+            factorConversionManual:
+              origen === 'articulo_proveedor' && factorConversionManual != null
+                ? String(factorConversionManual)
+                : '',
+          },
+        };
+        draftsRef.current = next;
+        return next;
+      });
       const catalogId = row.catalog_item_id;
       if (catalogId) {
-        setCatalogQtyDraft((prev) => ({ ...prev, [catalogId]: String(qRounded) }));
+        setCatalogQtyDraft((prev) => {
+          const next = { ...prev, [catalogId]: String(qRounded) };
+          catalogQtyDraftRef.current = next;
+          return next;
+        });
       }
       return mergedRow;
     } catch (e) {
@@ -1034,14 +1165,24 @@ export default function InventarioPage() {
           factorConversionManual: origen === 'articulo_proveedor' ? factorConversionManual : null,
         },
       });
+      realtimeIgnoreUntilRef.current = Date.now() + 2800;
       setDrafts((prev) => {
         const next = { ...prev };
         delete next[draftKey];
         next[inserted.id] = lineDraftFromRow(inserted);
+        draftsRef.current = next;
         return next;
       });
-      setLines((prev) => [...prev, inserted].sort(compareInventoryLines));
-      setCatalogQtyDraft((prev) => ({ ...prev, [it.id]: String(inserted.quantity_on_hand) }));
+      setLines((prev) => {
+        const next = [...prev, inserted].sort(compareInventoryLines);
+        linesRef.current = next;
+        return next;
+      });
+      setCatalogQtyDraft((prev) => {
+        const next = { ...prev, [it.id]: String(inserted.quantity_on_hand) };
+        catalogQtyDraftRef.current = next;
+        return next;
+      });
       if (!opts?.silent) showInventorySaveFlash();
       return inserted;
     } catch (e) {
@@ -1050,6 +1191,74 @@ export default function InventarioPage() {
     } finally {
       setBusyId(null);
     }
+  };
+
+  const flushPendingAndReloadLines = async () => {
+    if (!localId || !supabaseOk) throw new Error('Sin conexión.');
+    const supabase = getSupabaseClient()!;
+    realtimeIgnoreUntilRef.current = Date.now() + 120_000;
+    try {
+      const snapshotLines = [...linesRef.current];
+      for (const row of snapshotLines) {
+        const saved = await saveLine(row, undefined, {
+          silent: true,
+          skipBusy: true,
+          throwing: true,
+        });
+        if (saved) {
+          linesRef.current = linesRef.current.map((x) => (x.id === saved.id ? saved : x));
+        }
+      }
+      const lineByCatalog = new Map(
+        linesRef.current.filter((l) => l.catalog_item_id).map((l) => [l.catalog_item_id!, l] as const),
+      );
+      for (const it of catalogItems) {
+        if (lineByCatalog.has(it.id)) continue;
+        const dk = `cat-${it.id}`;
+        const rawQty = (catalogQtyDraftRef.current[it.id] ?? '').trim();
+        const draft =
+          draftsRef.current[dk] ?? lineDraftFromCatalogItem(it, rawQty || '0');
+        const q = parseDecimal(rawQty || draft.qty) ?? 0;
+        if (q <= 0) continue;
+        const inserted = await saveCatalogItemDraft(it, null, dk, { ...draft, qty: String(q) }, { silent: true });
+        if (inserted) lineByCatalog.set(it.id, inserted);
+      }
+      const invRaw = await fetchInventoryItems(supabase, localId);
+      const inv = await hydrateInventoryItemsPricingFromOrigin(supabase, localId, invRaw);
+      const d: Record<string, LineDraft> = {};
+      const cq: Record<string, string> = {};
+      for (const row of inv) {
+        d[row.id] = lineDraftFromRow(row);
+        if (row.catalog_item_id) cq[row.catalog_item_id] = String(row.quantity_on_hand);
+      }
+      setLines(inv);
+      setDrafts(d);
+      setCatalogQtyDraft(cq);
+      linesRef.current = inv;
+      draftsRef.current = d;
+      catalogQtyDraftRef.current = cq;
+      return { inv, drafts: d, catalogQty: cq };
+    } finally {
+      realtimeIgnoreUntilRef.current = Date.now() + 3500;
+    }
+  };
+
+  const scheduleDebouncedQtySave = (it: InventoryCatalogItem) => {
+    if (inventoryEditLocked || !localId || !supabaseOk) return;
+    const tkey = it.id;
+    const existing = qtyDebounceTimersRef.current[tkey];
+    if (existing) clearTimeout(existing);
+    qtyDebounceTimersRef.current[tkey] = setTimeout(() => {
+      delete qtyDebounceTimersRef.current[tkey];
+      const curLine = linesRef.current.find((l) => l.catalog_item_id === it.id) ?? null;
+      const dk = curLine ? curLine.id : `cat-${it.id}`;
+      const baseDraft =
+        draftsRef.current[dk] ??
+        (curLine ? lineDraftFromRow(curLine) : lineDraftFromCatalogItem(it, '0'));
+      const raw = (catalogQtyDraftRef.current[it.id] ?? '').trim();
+      const merged: LineDraft = { ...baseDraft, qty: raw !== '' ? raw : baseDraft.qty };
+      void saveCatalogItemDraft(it, curLine, dk, merged, { silent: true });
+    }, 700);
   };
 
   const refreshDraftAutoPrice = async (draftKey: string, draft: LineDraft) => {
@@ -1081,10 +1290,14 @@ export default function InventarioPage() {
       precioManual: null,
     });
     if (resolved != null) {
-      setDrafts((prev) => ({
-        ...prev,
-        [draftKey]: { ...(prev[draftKey] ?? draft), price: String(resolved) },
-      }));
+      setDrafts((prev) => {
+        const next = {
+          ...prev,
+          [draftKey]: { ...(prev[draftKey] ?? draft), price: String(resolved) },
+        };
+        draftsRef.current = next;
+        return next;
+      });
     }
   };
 
@@ -1129,7 +1342,10 @@ export default function InventarioPage() {
           savedAny = true;
         }
       }
-      if (savedAny) showInventorySaveFlash('Categoría guardada');
+      if (savedAny) {
+        realtimeIgnoreUntilRef.current = Date.now() + 3500;
+        showInventorySaveFlash('Categoría guardada');
+      }
     } catch (e) {
       setBanner(humanizeClientError(e, 'Error al guardar la categoría.'));
     } finally {
@@ -1218,8 +1434,18 @@ export default function InventarioPage() {
     setPdfBusy(true);
     setBanner(null);
     try {
-      await saveMonthClosureToSupabase(closingYearMonth, { recordHistory: false, userId: null });
-      setBanner(`PDF descargado y cierre ${closingYearMonth} actualizado en los gráficos.`);
+      await flushPendingAndReloadLines();
+      const inv = linesRef.current;
+      const d = draftsRef.current;
+      const data = computeMonthClosurePayload(inv, d, catalogItems);
+      await persistMonthClosure(
+        closingYearMonth,
+        { recordHistory: false, userId: null },
+        data,
+        inv.length,
+        new Date(),
+      );
+      setBanner(`PDF generado: ${data.total.toFixed(2)} € (mismo total que en pantalla tras guardar pendientes).`);
     } catch (e) {
       setBanner(humanizeClientError(e, 'Error al generar el PDF o guardar el mes.'));
     } finally {
@@ -1228,10 +1454,15 @@ export default function InventarioPage() {
   };
 
   const resetInventoryCharts = async () => {
-    if (!localId || !supabaseOk || snapshots.length === 0) return;
+    if (!localId || !supabaseOk) return;
+    const hasSnap = snapshots.some((s) => s.year_month === closingYearMonth);
+    if (!hasSnap) {
+      setBanner(`No hay punto guardado en «Valor por mes» para ${closingYearMonth}.`);
+      return;
+    }
     if (
       !(await appConfirm(
-        'Se borrarán todos los puntos del gráfico «Valor por mes» (cierres mensuales guardados para KPI). No se borran las líneas de inventario, el catálogo ni el historial. ¿Continuar?',
+        `¿Quitar solo del gráfico «Valor por mes» el cierre de ${closingYearMonth}? No se borran otros meses ni las líneas de inventario.`,
       ))
     ) {
       return;
@@ -1240,14 +1471,14 @@ export default function InventarioPage() {
     setChartsResetBusy(true);
     setBanner(null);
     try {
-      await deleteAllInventoryMonthSnapshots(supabase, localId);
+      await deleteInventoryMonthSnapshot(supabase, localId, closingYearMonth);
       const refreshed = await fetchInventoryMonthSnapshots(supabase, localId).catch(
         () => [] as InventoryMonthSnapshot[],
       );
       setSnapshots(refreshed);
-      setBanner('Gráficos de inventario reiniciados.');
+      setBanner(`Eliminado el punto de ${closingYearMonth} del histórico mensual.`);
     } catch (e) {
-      setBanner(humanizeClientError(e, 'Error al reiniciar gráficos.'));
+      setBanner(humanizeClientError(e, 'Error al actualizar el gráfico mensual.'));
     } finally {
       setChartsResetBusy(false);
     }
@@ -1280,16 +1511,23 @@ export default function InventarioPage() {
         userId: user?.id ?? null,
       });
       await deleteInventoryItemLine(supabase, localId, row.id);
-      setLines((prev) => prev.filter((l) => l.id !== row.id));
+      realtimeIgnoreUntilRef.current = Date.now() + 2800;
+      setLines((prev) => {
+        const next = prev.filter((l) => l.id !== row.id);
+        linesRef.current = next;
+        return next;
+      });
       setDrafts((prev) => {
         const next = { ...prev };
         delete next[row.id];
+        draftsRef.current = next;
         return next;
       });
       if (row.catalog_item_id) {
         setCatalogQtyDraft((prev) => {
           const next = { ...prev };
           delete next[row.catalog_item_id!];
+          catalogQtyDraftRef.current = next;
           return next;
         });
       }
@@ -1313,7 +1551,7 @@ export default function InventarioPage() {
     }
     if (
       !(await appConfirm(
-        `Se guardará el cierre del mes ${closingYearMonth}: copia en historial, PDF descargado y datos en los gráficos/KPI de abajo. Las líneas en pantalla no se borran (usa «Reiniciar inventario» para empezar de cero). ¿Continuar?`,
+        `Se guardará el cierre de ${closingYearMonth}: primero se guardan todas las cantidades pendientes; luego historial, snapshot y PDF con ese total; después las cantidades pasan a 0 y el inventario queda bloqueado hasta «Reiniciar inventario». ¿Continuar?`,
       ))
     ) {
       return;
@@ -1325,14 +1563,53 @@ export default function InventarioPage() {
     setFinishInventoryBusy(true);
     setBanner(null);
     try {
-      await saveMonthClosureToSupabase(closingYearMonth, { recordHistory: true, userId: user?.id ?? null });
+      await flushPendingAndReloadLines();
+      const inv = linesRef.current;
+      const d = draftsRef.current;
+      const data = computeMonthClosurePayload(inv, d, catalogItems);
+      const closedAt = new Date();
+      await persistMonthClosure(
+        closingYearMonth,
+        { recordHistory: true, userId: user?.id ?? null },
+        data,
+        inv.length,
+        closedAt,
+      );
       void notifyInventarioCerrado(supabase, {
         localId,
         userId: user?.id ?? userId,
         actorName: actorLabel(displayName, loginUsername),
         yearMonth: closingYearMonth,
       });
-      setBanner(`Cierre ${closingYearMonth} guardado: PDF descargado, KPI actualizados e historial registrado.`);
+      for (const row of inv) {
+        await updateInventoryItemLine(supabase, {
+          localId,
+          itemId: row.id,
+          quantity_on_hand: 0,
+          price_per_unit: row.price_per_unit,
+          name: row.name,
+          format_label: row.format_label,
+          unit: row.unit,
+          unidadCoste: row.unidadCoste,
+          formatoOperativo: row.formatoOperativo,
+          factorConversionManual: row.factorConversionManual,
+          origenCoste: row.origenCoste,
+          masterCostSource: row.masterCostSource,
+          supplierProductId: row.supplierProductId,
+          supplierId: row.supplierId,
+          precioUnitarioCalculado: row.precioUnitarioCalculado,
+          escandalloRecipeId: row.escandalloRecipeId,
+          centralProductionRecipeId: row.centralProductionRecipeId,
+          ccRecipeFormatQty: row.ccRecipeFormatQty,
+          precioManual: row.precioManual,
+        });
+      }
+      applyLocalInventoryZero(inv);
+      setInventoryEditLocked(true);
+      realtimeIgnoreUntilRef.current = Date.now() + 4000;
+      setBanner(
+        `Cierre ${closingYearMonth} guardado: PDF ${data.total.toFixed(2)} €. Cantidades a 0; bloqueado hasta «Reiniciar inventario».`,
+      );
     } catch (e) {
       const raw = e instanceof Error ? e.message : '';
       if (
@@ -1356,6 +1633,7 @@ export default function InventarioPage() {
     if (!(await confirmDestructiveOperation(profileRole, '¿Confirmar vaciar todas las líneas de inventario?'))) {
       return;
     }
+    setInventoryEditLocked(false);
     if (!localId || !supabaseOk) return;
     if (lines.length === 0) {
       setBanner('No hay líneas en el inventario.');
@@ -1374,8 +1652,17 @@ export default function InventarioPage() {
         setResetInventoryBusy(true);
         setBanner(null);
         try {
-          await saveMonthClosureToSupabase(closingYearMonth, { recordHistory: true, userId: user?.id ?? null });
-          for (const row of lines) {
+          await flushPendingAndReloadLines();
+          const inv0 = linesRef.current;
+          const closureData = computeMonthClosurePayload(inv0, draftsRef.current, catalogItems);
+          await persistMonthClosure(
+            closingYearMonth,
+            { recordHistory: true, userId: user?.id ?? null },
+            closureData,
+            inv0.length,
+            new Date(),
+          );
+          for (const row of inv0) {
             await updateInventoryItemLine(supabase, {
               localId,
               itemId: row.id,
@@ -1398,7 +1685,8 @@ export default function InventarioPage() {
               precioManual: row.precioManual,
             });
           }
-          await load();
+          applyLocalInventoryZero(inv0);
+          realtimeIgnoreUntilRef.current = Date.now() + 3500;
           setBanner(`Cierre ${closingYearMonth} guardado y cantidades reiniciadas (se mantiene origen/coste).`);
         } catch (e) {
           setBanner(humanizeClientError(e, 'Error al guardar cierre o reiniciar.'));
@@ -1425,7 +1713,8 @@ export default function InventarioPage() {
     setResetInventoryBusy(true);
     setBanner(null);
     try {
-      for (const row of lines) {
+      const snapL = [...lines];
+      for (const row of snapL) {
         await updateInventoryItemLine(supabase, {
           localId,
           itemId: row.id,
@@ -1448,7 +1737,8 @@ export default function InventarioPage() {
           precioManual: row.precioManual,
         });
       }
-      await load();
+      applyLocalInventoryZero(snapL);
+      realtimeIgnoreUntilRef.current = Date.now() + 3500;
     } catch (e) {
       setBanner(humanizeClientError(e, 'Error al reiniciar.'));
     } finally {
@@ -1535,6 +1825,7 @@ export default function InventarioPage() {
   };
 
   const disabled = !localId || !profileReady || !supabaseOk || loading;
+  const editDisabled = disabled || inventoryEditLocked;
 
   return (
     <div className="space-y-5">
@@ -1556,9 +1847,15 @@ export default function InventarioPage() {
         <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900">{banner}</div>
       ) : null}
 
+      {inventoryEditLocked ? (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-950">
+          Cierre registrado: no puedes editar cantidades hasta pulsar «Reiniciar inventario».
+        </div>
+      ) : null}
+
       {inventorySaveFlash ? (
         <div
-          className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm font-medium text-emerald-900 shadow-sm"
+          className="pointer-events-none fixed bottom-4 left-1/2 z-[140] max-w-[min(92vw,18rem)] -translate-x-1/2 rounded-lg border border-emerald-300/80 bg-emerald-950 px-3 py-2 text-center text-[11px] font-semibold text-emerald-50 shadow-lg"
           role="status"
         >
           {inventorySaveFlash}
@@ -1569,49 +1866,66 @@ export default function InventarioPage() {
         <p className="text-center text-sm text-zinc-500">Cargando…</p>
       ) : (
         <>
-          <section className="rounded-2xl border border-zinc-200 bg-gradient-to-br from-zinc-50 to-white px-4 py-4 ring-1 ring-zinc-100">
+          <section className="rounded-2xl border border-zinc-200 bg-gradient-to-br from-zinc-50 to-white px-3 py-3 ring-1 ring-zinc-100 sm:px-4">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex items-center gap-3">
-                <div className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-[#D32F2F]/12 text-[#D32F2F]">
-                  <Package className="h-5 w-5" />
+              <div className="flex items-center gap-2.5">
+                <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[#D32F2F]/12 text-[#D32F2F]">
+                  <Package className="h-4 w-4" />
                 </div>
                 <div>
-                  <p className="text-xs font-bold uppercase tracking-wide text-zinc-500">Valor total inventario</p>
-                  <p className="text-2xl font-extrabold tabular-nums text-zinc-900">{totalValor.toFixed(2)} €</p>
-                  <p className="text-[11px] text-zinc-500">{lines.length} línea(s) activa(s)</p>
+                  <p className="text-[10px] font-bold uppercase tracking-wide text-zinc-500">Valor total inventario</p>
+                  <p className="text-xl font-extrabold tabular-nums text-zinc-900 sm:text-2xl">{totalValor.toFixed(2)} €</p>
+                  <p className="text-[10px] text-zinc-500">{lines.length} línea(s)</p>
                 </div>
               </div>
-              <div className="flex w-full min-w-0 flex-col gap-2 sm:max-w-md sm:items-end">
+              <div className="flex w-full min-w-0 flex-col gap-2 sm:max-w-xl sm:items-end">
                 <label className="flex w-full flex-col gap-0.5 sm:items-end">
-                  <span className="text-[10px] font-bold uppercase tracking-wide text-zinc-500">
-                    Mes
-                  </span>
+                  <span className="text-[10px] font-bold uppercase tracking-wide text-zinc-500">Mes del cierre</span>
                   <input
                     type="month"
                     value={closingYearMonth}
                     onChange={(e) => setClosingYearMonth(e.target.value)}
                     disabled={disabled}
-                    className="h-10 w-full max-w-[11rem] rounded-xl border border-zinc-200 bg-white px-2 text-sm font-semibold text-zinc-900 shadow-sm disabled:opacity-45 sm:text-right"
+                    className="h-9 w-full max-w-[11rem] rounded-lg border border-zinc-200 bg-white px-2 text-sm font-semibold text-zinc-900 shadow-sm disabled:opacity-45 sm:text-right"
                   />
                 </label>
-                <div className="flex flex-wrap gap-2">
+                <div className="grid w-full grid-cols-2 gap-1.5 sm:flex sm:flex-wrap sm:justify-end">
                   <button
                     type="button"
-                    disabled={disabled || lines.length === 0 || finishInventoryBusy || resetInventoryBusy}
+                    disabled={editDisabled || lines.length === 0 || finishInventoryBusy || resetInventoryBusy}
                     onClick={() => void finishInventoryToHistory()}
-                    className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-emerald-300 bg-emerald-50 px-3 text-xs font-bold text-emerald-950 shadow-sm disabled:opacity-45"
+                    className="inline-flex h-9 items-center justify-center gap-1 rounded-lg border border-emerald-300 bg-emerald-50 px-2 text-[11px] font-bold text-emerald-950 shadow-sm disabled:opacity-45"
                   >
-                    <CheckCircle2 className={`h-4 w-4 ${finishInventoryBusy ? 'animate-pulse' : ''}`} />
-                    {finishInventoryBusy ? 'Guardando…' : 'Terminar inventario'}
+                    <CheckCircle2 className={`h-3.5 w-3.5 shrink-0 ${finishInventoryBusy ? 'animate-pulse' : ''}`} />
+                    <span className="truncate">{finishInventoryBusy ? '…' : 'Terminar'}</span>
                   </button>
                   <button
                     type="button"
                     disabled={disabled || lines.length === 0 || resetInventoryBusy || finishInventoryBusy}
                     onClick={() => void resetInventoryClearLines()}
-                    className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-amber-300 bg-amber-50 px-3 text-xs font-bold text-amber-950 shadow-sm disabled:opacity-45"
+                    className="inline-flex h-9 items-center justify-center gap-1 rounded-lg border border-amber-300 bg-amber-50 px-2 text-[11px] font-bold text-amber-950 shadow-sm disabled:opacity-45"
                   >
-                    <RotateCcw className={`h-4 w-4 ${resetInventoryBusy ? 'animate-spin' : ''}`} />
-                    {resetInventoryBusy ? 'Borrando…' : 'Reiniciar inventario'}
+                    <RotateCcw className={`h-3.5 w-3.5 shrink-0 ${resetInventoryBusy ? 'animate-spin' : ''}`} />
+                    <span className="truncate">{resetInventoryBusy ? '…' : 'Reiniciar'}</span>
+                  </button>
+                  <button
+                    type="button"
+                    disabled={disabled || pdfBusy || lines.length === 0}
+                    onClick={() => void handleDownloadMonthlyPdf()}
+                    className="inline-flex h-9 items-center justify-center gap-1 rounded-lg bg-zinc-900 px-2 text-[11px] font-bold text-white ring-1 ring-zinc-700 disabled:opacity-45"
+                  >
+                    <FileDown className="h-3.5 w-3.5 shrink-0" />
+                    <span className="truncate">{pdfBusy ? 'PDF…' : 'PDF mensual'}</span>
+                  </button>
+                  <button
+                    type="button"
+                    disabled={disabled || chartsResetBusy}
+                    onClick={() => void resetInventoryCharts()}
+                    title="Quita del gráfico «Valor por mes» solo el mes seleccionado arriba"
+                    className="inline-flex h-9 items-center justify-center gap-1 rounded-lg border border-zinc-300 bg-white px-2 text-[11px] font-bold text-zinc-800 shadow-sm disabled:opacity-45"
+                  >
+                    <BarChart2 className={`h-3.5 w-3.5 shrink-0 ${chartsResetBusy ? 'animate-pulse' : ''}`} />
+                    <span className="truncate">{chartsResetBusy ? '…' : 'Gráficos'}</span>
                   </button>
                 </div>
               </div>
@@ -1668,14 +1982,19 @@ export default function InventarioPage() {
                       setOpenCategories((prev) => ({ ...prev, [cat.id]: isOpen }));
                     }}
                   >
-                    <summary className="cursor-pointer list-none px-3 py-2.5 text-sm font-bold text-zinc-800 [&::-webkit-details-marker]:hidden">
+                    <summary className="cursor-pointer list-none px-2.5 py-2 text-sm font-bold text-zinc-800 [&::-webkit-details-marker]:hidden">
                       <span className="flex items-center justify-between gap-2">
-                        <span className="min-w-0 truncate">{cat.name}</span>
+                        <span className="min-w-0 truncate">
+                          {cat.name}
+                          <span className="ml-1.5 font-normal text-[10px] text-zinc-500 sm:hidden">
+                            · {items.length} · {(categoryTotals[cat.id] ?? 0).toFixed(2)} €
+                          </span>
+                        </span>
                         <span className="flex shrink-0 items-center gap-2">
                           <button
                             type="button"
                             disabled={
-                              disabled ||
+                              editDisabled ||
                               busyDeletingCategoryId !== null ||
                               busyCategoryId === cat.id ||
                               busyDeletingCatalogItemId !== null
@@ -1696,16 +2015,20 @@ export default function InventarioPage() {
                               </>
                             )}
                           </button>
-                          <span className="inline-flex items-center gap-2 text-xs font-semibold text-zinc-500 tabular-nums">
-                            <span>{items.length}</span>
-                            <span className="rounded-full border border-zinc-200 bg-zinc-50 px-2 py-0.5 text-[10px] font-bold text-zinc-700">
-                              {(categoryTotals[cat.id] ?? 0).toFixed(2)} €
+                          <span className="hidden items-center gap-2 text-[10px] font-semibold text-zinc-600 tabular-nums sm:inline-flex">
+                            <span>{items.length} líneas</span>
+                            <span className="rounded-full border border-zinc-200 bg-white px-2 py-0.5 font-bold text-zinc-800">
+                              {(categoryTotals[cat.id] ?? 0).toLocaleString('es-ES', {
+                                minimumFractionDigits: 2,
+                                maximumFractionDigits: 2,
+                              })}{' '}
+                              €
                             </span>
                           </span>
                         </span>
                       </span>
                     </summary>
-                    <ul className="space-y-1 border-t border-zinc-100 px-2 py-2">
+                    <ul className="space-y-1 border-t border-zinc-100 px-1.5 py-1.5">
                       {items.length === 0 ? (
                         <li className="rounded-lg bg-white px-2 py-4 text-center text-[11px] text-zinc-500 ring-1 ring-zinc-100">
                           Sin artículos en esta categoría. Pulsa «+ Artículo».
@@ -1746,66 +2069,82 @@ export default function InventarioPage() {
                               (parseDecimal(lineDraft.price) ?? 0) *
                               100,
                           ) / 100;
+                        const formatoDisplay =
+                          (lineDraft.formatoOperativo || '').trim() ||
+                          (it.format_label || '').trim() ||
+                          '—';
+                        const unitDisplay = UNIT_SUFFIX[lineDraft.unit] ?? lineDraft.unit;
+                        const priceNum = parseDecimal(lineDraft.price) ?? 0;
+                        const priceDisplay = priceNum.toLocaleString('es-ES', {
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 2,
+                        });
                         return (
                           <li
                             key={it.id}
-                            className="rounded-lg bg-white px-2 py-2 ring-1 ring-zinc-100"
+                            className="rounded-lg border border-zinc-100 bg-white px-1.5 py-1 shadow-sm"
                           >
-                            <div className="flex flex-wrap items-start justify-between gap-2">
-                              <div
-                                role="button"
-                                tabIndex={0}
+                            <div className="flex items-start gap-1">
+                              <button
+                                type="button"
+                                className="mt-0.5 shrink-0 rounded p-0.5 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 disabled:opacity-40"
                                 aria-expanded={detailsOpen}
                                 aria-label={
-                                  detailsOpen
-                                    ? `Ocultar detalles de ${it.name}`
-                                    : `Ver detalles de ${it.name}`
+                                  detailsOpen ? `Menos detalle: ${it.name}` : `Más detalle: ${it.name}`
                                 }
-                                className="min-w-0 flex-1 cursor-pointer rounded-lg py-0.5 pl-0.5 outline-none focus-visible:ring-2 focus-visible:ring-[#D32F2F]/35"
+                                disabled={editDisabled}
                                 onClick={() =>
                                   setCatalogDetailOpen((prev) => ({
                                     ...prev,
                                     [it.id]: !prev[it.id],
                                   }))
                                 }
-                                onKeyDown={(e) => {
-                                  if (e.key === 'Enter' || e.key === ' ') {
-                                    e.preventDefault();
-                                    setCatalogDetailOpen((prev) => ({
-                                      ...prev,
-                                      [it.id]: !prev[it.id],
-                                    }));
-                                  }
-                                }}
                               >
-                                <div className="flex items-start gap-1.5">
-                                  <ChevronDown
-                                    className={`mt-0.5 h-4 w-4 shrink-0 text-zinc-400 transition-transform duration-200 ${detailsOpen ? 'rotate-180' : ''}`}
-                                    aria-hidden
-                                  />
-                                  <div className="min-w-0">
-                                    <p className="text-xs font-semibold text-zinc-900">{it.name}</p>
-                                    {line && !detailsOpen ? (
-                                      <p className="mt-0.5 text-[10px] text-amber-900/90">
-                                        Origen coste: {labelOrigenInventario(line.origenCoste)}
-                                      </p>
-                                    ) : null}
-                                    {detailsOpen ? (
-                                      <p className="mt-1 text-[10px] leading-snug text-zinc-500">
-                                        Catálogo: {it.default_price_per_unit.toFixed(2)} €/
-                                        {UNIT_SUFFIX[it.unit] ?? it.unit}
-                                        {it.format_label ? ` · ${it.format_label}` : ''}
-                                        <span className="text-zinc-400"> · {cat.name}</span>
-                                      </p>
-                                    ) : null}
-                                  </div>
-                                </div>
+                                <ChevronDown
+                                  className={`h-3.5 w-3.5 transition-transform duration-200 ${detailsOpen ? 'rotate-180' : ''}`}
+                                  aria-hidden
+                                />
+                              </button>
+                              <div className="min-w-0 flex-1">
+                                <p className="text-[11px] font-bold leading-tight text-zinc-900">{it.name}</p>
+                                <p className="mt-0.5 text-[10px] leading-snug text-zinc-600">
+                                  {formatoDisplay} · {priceDisplay} €/{unitDisplay}
+                                </p>
+                                <p className="mt-0.5 text-[10px] font-semibold tabular-nums text-zinc-800">
+                                  Subtotal: {lineSub.toFixed(2)} €
+                                </p>
+                                {detailsOpen ? (
+                                  <p className="mt-1 text-[10px] leading-snug text-zinc-500">
+                                    Catálogo ref.: {it.default_price_per_unit.toFixed(2)} €/
+                                    {UNIT_SUFFIX[it.unit] ?? it.unit}
+                                    {line ? ` · ${labelOrigenInventario(line.origenCoste)}` : ''}
+                                  </p>
+                                ) : null}
                               </div>
-                              <label
-                                className="flex shrink-0 flex-col gap-0.5"
+                              <div
+                                className="flex shrink-0 items-center gap-0.5"
                                 onClick={(e) => e.stopPropagation()}
+                                onKeyDown={(e) => e.stopPropagation()}
                               >
-                                <span className="text-[9px] font-bold uppercase text-zinc-400">Cant.</span>
+                                <button
+                                  type="button"
+                                  disabled={editDisabled || qtyBusy}
+                                  className="grid h-8 w-8 shrink-0 place-items-center rounded-md border border-zinc-200 bg-zinc-50 text-zinc-800 disabled:opacity-45"
+                                  aria-label={`Menos una unidad de ${it.name}`}
+                                  onClick={() => {
+                                    const cur = parseDecimal(qtyValue) ?? 0;
+                                    const next = Math.max(0, cur - 1);
+                                    const s = Number.isInteger(next) ? String(next) : String(next);
+                                    setCatalogQtyDraft((prev) => ({ ...prev, [it.id]: s }));
+                                    setDrafts((prev) => {
+                                      const curD = prev[draftKey] ?? lineDraft;
+                                      return { ...prev, [draftKey]: { ...curD, qty: s } };
+                                    });
+                                    scheduleDebouncedQtySave(it);
+                                  }}
+                                >
+                                  <Minus className="h-3.5 w-3.5" aria-hidden />
+                                </button>
                                 <input
                                   type="text"
                                   inputMode="decimal"
@@ -1813,7 +2152,7 @@ export default function InventarioPage() {
                                   placeholder="0"
                                   aria-label={`Cantidad de ${it.name}`}
                                   value={qtyValue}
-                                  disabled={disabled || qtyBusy}
+                                  disabled={editDisabled || qtyBusy}
                                   onChange={(e) => {
                                     const v = e.target.value;
                                     setCatalogQtyDraft((prev) => ({ ...prev, [it.id]: v }));
@@ -1821,10 +2160,30 @@ export default function InventarioPage() {
                                       const cur = prev[draftKey] ?? lineDraft;
                                       return { ...prev, [draftKey]: { ...cur, qty: v } };
                                     });
+                                    scheduleDebouncedQtySave(it);
                                   }}
-                                  className="h-9 w-[4.75rem] rounded-lg border border-zinc-200 px-2 text-center text-sm font-semibold tabular-nums"
+                                  className="h-8 w-11 rounded-md border border-zinc-200 px-0.5 text-center text-xs font-semibold tabular-nums"
                                 />
-                              </label>
+                                <button
+                                  type="button"
+                                  disabled={editDisabled || qtyBusy}
+                                  className="grid h-8 w-8 shrink-0 place-items-center rounded-md border border-zinc-200 bg-zinc-50 text-zinc-800 disabled:opacity-45"
+                                  aria-label={`Más una unidad de ${it.name}`}
+                                  onClick={() => {
+                                    const cur = parseDecimal(qtyValue) ?? 0;
+                                    const next = cur + 1;
+                                    const s = Number.isInteger(next) ? String(next) : String(next);
+                                    setCatalogQtyDraft((prev) => ({ ...prev, [it.id]: s }));
+                                    setDrafts((prev) => {
+                                      const curD = prev[draftKey] ?? lineDraft;
+                                      return { ...prev, [draftKey]: { ...curD, qty: s } };
+                                    });
+                                    scheduleDebouncedQtySave(it);
+                                  }}
+                                >
+                                  <Plus className="h-3.5 w-3.5" aria-hidden />
+                                </button>
+                              </div>
                             </div>
                             {detailsOpen ? (
                               <div
@@ -1841,7 +2200,7 @@ export default function InventarioPage() {
                                   <input
                                     type="text"
                                     value={lineDraft.name}
-                                    disabled={disabled || lineBusy || qtyBusy}
+                                    disabled={editDisabled || lineBusy || qtyBusy}
                                     onChange={(e) =>
                                       setDrafts((prev) => ({
                                         ...prev,
@@ -1859,7 +2218,7 @@ export default function InventarioPage() {
                                     <input
                                       type="text"
                                       value={lineDraft.format_label}
-                                      disabled={disabled || lineBusy || qtyBusy}
+                                      disabled={editDisabled || lineBusy || qtyBusy}
                                       placeholder="ej. PAQUETE 11 ud"
                                       onChange={(e) =>
                                         setDrafts((prev) => ({
@@ -1876,7 +2235,7 @@ export default function InventarioPage() {
                                     </span>
                                     <select
                                       value={lineDraft.unit}
-                                      disabled={disabled || lineBusy || qtyBusy}
+                                      disabled={editDisabled || lineBusy || qtyBusy}
                                       onChange={(e) =>
                                         setDrafts((prev) => {
                                           const cur = prev[draftKey] ?? lineDraft;
@@ -1903,7 +2262,7 @@ export default function InventarioPage() {
                                     </span>
                                     <select
                                       value={lineDraft.unidadCoste}
-                                      disabled={disabled || lineBusy || qtyBusy}
+                                      disabled={editDisabled || lineBusy || qtyBusy}
                                       required
                                       onChange={(e) =>
                                         setDrafts((prev) => {
@@ -1938,7 +2297,7 @@ export default function InventarioPage() {
                                           ? lineDraft.formatoOperativo
                                           : ''
                                       }
-                                      disabled={disabled || lineBusy || qtyBusy}
+                                      disabled={editDisabled || lineBusy || qtyBusy}
                                       onChange={(e) =>
                                         setDrafts((prev) => ({
                                           ...prev,
@@ -1960,7 +2319,7 @@ export default function InventarioPage() {
                                   <p className="text-[10px] font-bold uppercase text-zinc-600">Origen del coste</p>
                                   <select
                                     value={lineDraft.origenCoste}
-                                    disabled={disabled || lineBusy || qtyBusy}
+                                    disabled={editDisabled || lineBusy || qtyBusy}
                                     onChange={(e) => {
                                       const v = e.target.value as InventoryCostOrigen;
                                       setDrafts((prev) => {
@@ -2054,7 +2413,7 @@ export default function InventarioPage() {
                                             [draftKey]: { ...(prev[draftKey] ?? lineDraft), supplierProductId: '' },
                                           }))
                                         }
-                                        disabled={disabled || lineBusy || qtyBusy}
+                                        disabled={editDisabled || lineBusy || qtyBusy}
                                       />
                                       {selectedSupplierProduct ? (
                                         <p className="mt-1 text-[10px] leading-snug text-zinc-500">
@@ -2087,7 +2446,7 @@ export default function InventarioPage() {
                                               type="text"
                                               inputMode="decimal"
                                               value={lineDraft.factorConversionManual}
-                                              disabled={disabled || lineBusy || qtyBusy}
+                                              disabled={editDisabled || lineBusy || qtyBusy}
                                               placeholder={suggestedKgHint != null ? String(suggestedKgHint) : 'ej. 6'}
                                               onChange={(e) => {
                                                 const v = e.target.value;
@@ -2117,7 +2476,7 @@ export default function InventarioPage() {
                                         type="search"
                                         placeholder="Filtrar por nombre…"
                                         value={escandalloRecipeQuery[draftKey] ?? ''}
-                                        disabled={disabled || lineBusy || qtyBusy}
+                                        disabled={editDisabled || lineBusy || qtyBusy}
                                         onChange={(e) =>
                                           setEscandalloRecipeQuery((prev) => ({
                                             ...prev,
@@ -2128,7 +2487,7 @@ export default function InventarioPage() {
                                       />
                                       <select
                                         value={lineDraft.escandalloRecipeId}
-                                        disabled={disabled || lineBusy || qtyBusy}
+                                        disabled={editDisabled || lineBusy || qtyBusy}
                                         onChange={(e) =>
                                           setDrafts((prev) => {
                                             const nextDraft: LineDraft = {
@@ -2168,7 +2527,7 @@ export default function InventarioPage() {
                                       </p>
                                       <select
                                         value={lineDraft.centralProductionRecipeId}
-                                        disabled={disabled || lineBusy || qtyBusy}
+                                        disabled={editDisabled || lineBusy || qtyBusy}
                                         onChange={(e) =>
                                           setDrafts((prev) => {
                                             const nextDraft: LineDraft = {
@@ -2198,7 +2557,7 @@ export default function InventarioPage() {
                                           inputMode="decimal"
                                           placeholder="ej. 4 (bolsa 4 kg)"
                                           value={lineDraft.ccRecipeFormatQty}
-                                          disabled={disabled || lineBusy || qtyBusy}
+                                          disabled={editDisabled || lineBusy || qtyBusy}
                                           onChange={(e) =>
                                             setDrafts((prev) => {
                                               const nextDraft: LineDraft = {
@@ -2228,7 +2587,7 @@ export default function InventarioPage() {
                                     type="text"
                                     inputMode="decimal"
                                     value={lineDraft.price}
-                                    disabled={disabled || lineBusy || qtyBusy || lineDraft.origenCoste !== 'manual'}
+                                    disabled={editDisabled || lineBusy || qtyBusy || lineDraft.origenCoste !== 'manual'}
                                     onChange={(e) =>
                                       setDrafts((prev) => ({
                                         ...prev,
@@ -2245,7 +2604,7 @@ export default function InventarioPage() {
                                   <div className="flex flex-wrap gap-2">
                                     <button
                                       type="button"
-                                      disabled={disabled || lineBusy || qtyBusy}
+                                      disabled={editDisabled || lineBusy || qtyBusy}
                                       onClick={() => void saveCatalogItemDraft(it, line ?? null, draftKey, lineDraft)}
                                       className="h-9 rounded-lg bg-[#D32F2F] px-3 text-xs font-bold text-white disabled:opacity-45"
                                     >
@@ -2254,7 +2613,7 @@ export default function InventarioPage() {
                                     {line ? (
                                       <button
                                         type="button"
-                                        disabled={disabled || lineBusy || qtyBusy}
+                                        disabled={editDisabled || lineBusy || qtyBusy}
                                         onClick={() => void removeLine(line)}
                                         className="h-9 rounded-lg border border-zinc-300 bg-white px-3 text-xs font-bold text-zinc-800 disabled:opacity-45"
                                       >
@@ -2271,7 +2630,7 @@ export default function InventarioPage() {
                                   <button
                                     type="button"
                                     disabled={
-                                      disabled ||
+                                      editDisabled ||
                                       qtyBusy ||
                                       busyDeletingCatalogItemId !== null ||
                                       busyDeletingCategoryId !== null
@@ -2294,9 +2653,9 @@ export default function InventarioPage() {
                         <li className="px-1 pt-2">
                           <button
                             type="button"
-                            disabled={disabled || busyCategoryId === cat.id}
+                            disabled={editDisabled || busyCategoryId === cat.id}
                             onClick={() => void applyCategoryBatch(cat.id, items)}
-                            className="h-10 w-full rounded-xl bg-[#D32F2F] text-sm font-bold text-white shadow-sm disabled:opacity-45"
+                            className="h-9 w-full rounded-lg bg-[#D32F2F] text-xs font-bold text-white shadow-sm disabled:opacity-45"
                           >
                             {busyCategoryId === cat.id ? 'Guardando…' : 'OK'}
                           </button>
@@ -2312,15 +2671,10 @@ export default function InventarioPage() {
           <InventoryResultadoInventario
             snapshots={snapshots}
             totalValor={totalValor}
-            lines={lines}
+            lines={mergedLinesForCharts}
             catalogItems={catalogItems}
             categories={categories}
             yearMonth={closingYearMonth}
-            onDownloadPdf={handleDownloadMonthlyPdf}
-            pdfBusy={pdfBusy}
-            disabled={disabled}
-            onResetCharts={resetInventoryCharts}
-            chartsResetBusy={chartsResetBusy}
           />
         </>
       )}

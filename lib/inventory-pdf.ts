@@ -77,6 +77,8 @@ export function downloadInventoryMonthlyPdf(opts: {
   categoryRows: InventoryPdfCategoryRow[];
   linesCount: number;
   linesWithStock: number;
+  /** Fecha/hora del cierre mostrada en la portada (ya formateada). */
+  closedAtLabel?: string;
 }): void {
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
   const periodLabel = formatYearMonthLabel(opts.yearMonth);
@@ -109,7 +111,17 @@ export function downloadInventoryMonthlyPdf(opts: {
     doc.setTextColor(...BRAND_R);
     doc.text(`Cierre: ${periodLabel}`, 14, y);
     doc.setTextColor(...ZINC_900);
-    y += 10;
+    y += 5;
+    if (opts.closedAtLabel) {
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(8.5);
+      doc.setTextColor(...ZINC_600);
+      doc.text(`Cerrado: ${opts.closedAtLabel}`, 14, y);
+      doc.setTextColor(...ZINC_900);
+      y += 7;
+    } else {
+      y += 5;
+    }
 
     doc.setFillColor(...ZINC_50);
     doc.roundedRect(14, y, 182, 32, 2, 2, 'F');
