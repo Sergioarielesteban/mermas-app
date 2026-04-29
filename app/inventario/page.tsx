@@ -185,6 +185,17 @@ function compareInventoryLines(a: InventoryItem, b: InventoryItem): number {
   return a.name.localeCompare(b.name, 'es');
 }
 
+function compareCatalogItemsAlphabetical(a: InventoryCatalogItem, b: InventoryCatalogItem): number {
+  const aName = (a.name ?? '').trim();
+  const bName = (b.name ?? '').trim();
+  const aEmpty = aName.length === 0;
+  const bEmpty = bName.length === 0;
+  if (aEmpty && bEmpty) return 0;
+  if (aEmpty) return 1;
+  if (bEmpty) return -1;
+  return aName.localeCompare(bName, 'es', { sensitivity: 'base' });
+}
+
 function lineDraftFromCatalogItem(it: InventoryCatalogItem, qty = '0'): LineDraft {
   return {
     qty,
@@ -1969,7 +1980,9 @@ export default function InventarioPage() {
             />
             <div className="space-y-2">
               {categories.map((cat) => {
-                const allInCat = itemsByCategory.get(cat.id) ?? [];
+                const allInCat = [...(itemsByCategory.get(cat.id) ?? [])].sort(
+                  compareCatalogItemsAlphabetical,
+                );
                 const items = allInCat.filter((it) => filteredCatalog.some((f) => f.id === it.id));
                 if (searchLower && items.length === 0) return null;
                 return (
