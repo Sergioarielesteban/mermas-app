@@ -6,18 +6,15 @@ const BRAND = '#D32F2F';
 const plans = [
   {
     name: 'Operativo',
-    price: '39,90€/mes',
     modules: ['Pedidos', 'Recepción', 'Mermas', 'Chat interno'],
   },
   {
     name: 'Control',
-    price: '69,90€/mes',
     modules: ['Todo Operativo', 'Escandallos', 'Finanzas', 'Inventario'],
     recommended: true,
   },
   {
     name: 'PRO',
-    price: '99,90€/mes',
     modules: ['Todo Control', 'APPCC completo', 'Equipo y horarios', 'Soporte prioritario'],
   },
 ] as const;
@@ -49,8 +46,8 @@ export default function MarketingPricingHighlight() {
             >
               <p className="text-sm font-extrabold text-stone-900">{plan.name}</p>
               <p className="mt-2 text-xs font-semibold uppercase tracking-wide text-[#D32F2F]">Empieza sin permanencia</p>
-              <p className="mt-2 text-2xl font-black text-stone-900">{plan.price}</p>
-              <p className="mt-1 text-xs text-stone-500">Menos de lo que cuestan 2 menú del día</p>
+              <p className="mt-2 text-2xl font-black text-stone-900">Próximamente</p>
+              <p className="mt-1 text-xs text-stone-500">Estamos definiendo el precio final de este plan</p>
               <p className="mt-1 text-xs font-medium text-stone-600">Cancela cuando quieras</p>
 
               <ul className="mt-4 space-y-2">

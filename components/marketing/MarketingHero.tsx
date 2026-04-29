@@ -219,12 +219,12 @@ export default function MarketingHero() {
           className={[
             'mx-auto flex w-full max-w-[min(100%,44rem)] flex-col items-center text-center',
             'sm:max-w-[min(100%,50rem)] md:max-w-[min(100%,54rem)] lg:max-w-[58rem] xl:max-w-[62rem]',
-            'gap-1.5 sm:gap-2 md:gap-3',
+            'gap-3 sm:gap-4 md:gap-5',
           ].join(' ')}
         >
           {/* Sin translateY aquí: si no, el full-bleed/centering rompe y el logo se corta en móvil. */}
           <motion.div
-            className="flex w-full shrink-0 justify-center leading-none [-webkit-tap-highlight-color:transparent]"
+            className="mb-1 flex w-full shrink-0 justify-center leading-none [-webkit-tap-highlight-color:transparent] sm:mb-2"
             initial={reduceMotion ? false : { opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ duration: 0.48, ease: SLIDE_EASE, delay: reduceMotion ? 0 : 0.02 }}
@@ -234,7 +234,10 @@ export default function MarketingHero() {
               className="inline-flex max-w-full outline-none ring-offset-4 focus-visible:ring-2 focus-visible:ring-[#D32F2F]/40"
               aria-label="Chef-One — inicio"
             >
-              <Logo variant="hero" />
+              <Logo
+                variant="hero"
+                className="max-w-[min(98vw,28rem)] sm:max-w-[min(92vw,30rem)] md:max-w-[min(70vw,28rem)] lg:max-w-[28rem] xl:max-w-[29rem]"
+              />
             </Link>
           </motion.div>
 
