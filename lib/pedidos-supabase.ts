@@ -337,7 +337,6 @@ type SupplierRow = {
   id: string;
   name: string;
   contact: string;
-  is_active?: boolean | null;
   delivery_cycle_weekdays?: number[] | null;
 };
 type SupplierDeliveryExceptionRow = {
@@ -694,18 +693,12 @@ export type FetchOrdersOptions = {
 };
 
 export async function fetchSuppliersWithProducts(supabase: SupabaseClient, localId: string) {
-  const querySuppliers = async (sel: string) =>
-    supabase.from('pedido_suppliers').select(sel).eq('local_id', localId).order('name');
-  let supplierRes = await querySuppliers('id,name,contact,is_active,delivery_cycle_weekdays');
-  if (supplierRes.error) {
-    const m = supplierRes.error.message.toLowerCase();
-    const missingActive =
-      m.includes('is_active') && (m.includes('column') || m.includes('schema cache') || m.includes('does not exist'));
-    if (!missingActive) throw new Error(supplierRes.error.message);
-    supplierRes = await querySuppliers('id,name,contact,delivery_cycle_weekdays');
-    if (supplierRes.error) throw new Error(supplierRes.error.message);
-  }
-  const supplierRows = ((supplierRes.data ?? []) as unknown) as SupplierRow[];
+  const { data: supplierRows, error: sErr } = await supabase
+    .from('pedido_suppliers')
+    .select('id,name,contact,delivery_cycle_weekdays')
+    .eq('local_id', localId)
+    .order('name');
+  if (sErr) throw new Error(sErr.message);
 
   let productRows: unknown[] | null = null;
   {
@@ -802,16 +795,14 @@ export async function fetchSuppliersWithProducts(supabase: SupabaseClient, local
     exBySupplier.set(row.supplier_id, list);
   }
 
-  const suppliers: PedidoSupplier[] = supplierRows
-    .filter((row) => row.is_active !== false)
-    .map((row) => ({
-      id: row.id,
-      name: row.name,
-      contact: row.contact ?? '',
-      deliveryCycleWeekdays: normalizeDeliveryCycleWeekdays(row.delivery_cycle_weekdays),
-      deliveryExceptionDates: normalizeDeliveryExceptionDates(exBySupplier.get(row.id) ?? []),
-      products: bySupplier.get(row.id) ?? [],
-    }));
+  const suppliers: PedidoSupplier[] = ((supplierRows ?? []) as SupplierRow[]).map((row) => ({
+    id: row.id,
+    name: row.name,
+    contact: row.contact ?? '',
+    deliveryCycleWeekdays: normalizeDeliveryCycleWeekdays(row.delivery_cycle_weekdays),
+    deliveryExceptionDates: normalizeDeliveryExceptionDates(exBySupplier.get(row.id) ?? []),
+    products: bySupplier.get(row.id) ?? [],
+  }));
   return suppliers;
 }
 
