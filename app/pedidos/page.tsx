@@ -101,7 +101,7 @@ import {
   notifyPedidoRecibido,
 } from '@/services/notifications';
 import { buildPedidoWhatsappMessage } from '@/lib/pedidos-whatsapp-message';
-import { openWhatsApp, normalizeWhatsappPhone } from '@/lib/whatsapp';
+import { normalizeWhatsappPhone, openWhatsAppMessage } from '@/lib/whatsapp';
 import {
   articleNombreByProductIdFromSuppliers,
   catalogNameByProductIdFromSuppliers,
@@ -457,7 +457,7 @@ export default function PedidosPage() {
       responsable,
       catalogNameByProductId,
     );
-    openWhatsApp(phone, whatsappMessage);
+    openWhatsAppMessage(phone, whatsappMessage);
   },
   [catalogNameByProductId, email, localName],
 );

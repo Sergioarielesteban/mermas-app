@@ -84,7 +84,7 @@ export type BuildPedidoWhatsappMessageInput = {
 
 /**
  * Cuerpo del mensaje de pedido para WhatsApp. Sin HTML. Emojis: 📦 📅 🚚 👤 🧾 ✅
- * Codificación del enlace: encodeURIComponent(mensaje) (p. ej. en {@link openWhatsApp}).
+ * Codificación del enlace: encodeURIComponent(mensaje) (p. ej. en {@link openWhatsAppMessage}).
  */
 export function buildPedidoWhatsappMessage(input: BuildPedidoWhatsappMessageInput): string {
   const local = normalizeLocalNameForWhatsapp(input.localDisplayName);

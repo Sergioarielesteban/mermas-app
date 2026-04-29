@@ -37,7 +37,7 @@ import {
   type PedidoSupplier,
 } from '@/lib/pedidos-supabase';
 import { actorLabel, notifyPedidoEnviado } from '@/services/notifications';
-import { openWhatsApp, normalizeWhatsappPhone } from '@/lib/whatsapp';
+import { normalizeWhatsappPhone, openWhatsAppMessage } from '@/lib/whatsapp';
 
 type QtyMap = Record<string, number>;
 
@@ -644,7 +644,7 @@ export default function NuevoPedidoPage() {
           items,
           contentRevisedAfterSent: markRevWhatsapp || Boolean(hadContentRevisionFlag),
         });
-        openWhatsApp(phone, whatsappMessage, { popupWindow: popup });
+        openWhatsAppMessage(phone, whatsappMessage, { popupWindow: popup });
         dispatchPedidosDataChanged();
         router.replace('/pedidos?pedido=enviado');
       })

@@ -1,3 +1,5 @@
+import { normalizeWhatsappPhone } from '@/lib/whatsapp';
+
 export type MarketingContactLinks = {
   /** Solo dígitos, con prefijo país (ej. 34600111222) */
   digits: string;
@@ -11,10 +13,10 @@ export type MarketingContactLinks = {
  */
 export function parseMarketingContactPhone(envValue: string | undefined): MarketingContactLinks | null {
   if (!envValue?.trim()) return null;
-  const digits = envValue.replace(/\D/g, '');
-  if (digits.length < 9) return null;
+  const digits = normalizeWhatsappPhone(envValue);
+  if (!digits || digits.length < 9) return null;
   const telHref = `tel:+${digits}`;
-  const whatsappUrl = `https://wa.me/${digits}?text=${encodeURIComponent('Hola, me interesa Chef-One.')}`;
+  const whatsappUrl = `https://api.whatsapp.com/send?phone=${digits}&text=${encodeURIComponent('Hola, me interesa Chef-One.')}`;
   return { digits, telHref, whatsappUrl };
 }
 
