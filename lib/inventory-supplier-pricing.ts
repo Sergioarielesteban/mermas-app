@@ -25,6 +25,14 @@ export type InventorySupplierProductRow = {
   price_per_billing_unit: number | null;
 };
 
+export type SupplierRealPricingModel = {
+  realUnit: string;
+  realPricePerUnit: number;
+  deliveryFormatUnit: string;
+  /** Cuántas unidades reales contiene 1 formato de entrega, si se conoce. */
+  realUnitsPerDeliveryFormat: number | null;
+};
+
 /** Precio efectivo por unidad de catálogo (`unit`): último precio recibido, si no precio actual catálogo. */
 export async function fetchEffectiveSupplierProductUnitPriceEur(
   supabase: SupabaseClient,
@@ -79,6 +87,53 @@ export function suggestKgPerPackFromProductName(name: string): number | null {
 }
 
 /**
+ * Determina la unidad/precio real de coste:
+ * - Si hay facturación dual (billing_*), manda esa unidad/precio.
+ * - Si no, manda la unidad/precio de catálogo.
+ */
+export function resolveSupplierRealPricingModel(
+  row: Pick<
+    InventorySupplierProductRow,
+    'unit' | 'price_per_unit' | 'billing_unit' | 'billing_qty_per_order_unit' | 'price_per_billing_unit'
+  >,
+  effectivePricePerCatalogUnit: number | null,
+): SupplierRealPricingModel | null {
+  const deliveryFormatUnit = normalizeConversionUnit(row.unit);
+  const catalogPrice =
+    effectivePricePerCatalogUnit != null && Number.isFinite(effectivePricePerCatalogUnit) && effectivePricePerCatalogUnit >= 0
+      ? Number(effectivePricePerCatalogUnit)
+      : Number(row.price_per_unit);
+  if (!Number.isFinite(catalogPrice) || catalogPrice < 0) return null;
+
+  const bUnit = row.billing_unit != null ? normalizeConversionUnit(String(row.billing_unit)) : '';
+  const bQty =
+    row.billing_qty_per_order_unit != null && Number.isFinite(Number(row.billing_qty_per_order_unit))
+      ? Number(row.billing_qty_per_order_unit)
+      : null;
+  const pBill =
+    row.price_per_billing_unit != null && Number.isFinite(Number(row.price_per_billing_unit))
+      ? Number(row.price_per_billing_unit)
+      : null;
+  const hasDual = bUnit !== '' && bUnit !== deliveryFormatUnit && bQty != null && bQty > 0 && pBill != null && pBill >= 0;
+
+  if (hasDual) {
+    return {
+      realUnit: bUnit,
+      realPricePerUnit: Math.round(pBill * 10000) / 10000,
+      deliveryFormatUnit,
+      realUnitsPerDeliveryFormat: Math.round(bQty * 10000) / 10000,
+    };
+  }
+
+  return {
+    realUnit: deliveryFormatUnit,
+    realPricePerUnit: Math.round(catalogPrice * 10000) / 10000,
+    deliveryFormatUnit,
+    realUnitsPerDeliveryFormat: null,
+  };
+}
+
+/**
  * Resuelve € por unidad de inventario (`inventoryUnit`), vinculado a un artículo proveedor.
  * `catalogUnit` es pedido_supplier_products.unit; el precio de compra es por esa unidad.
  */
@@ -87,20 +142,28 @@ export async function resolveSupplierLinkedInventoryUnitPriceEur(
   localId: string,
   params: {
     supplierProductId: string;
-    catalogUnit: string;
-    effectivePricePerCatalogUnit: number;
+    pricingModel: SupplierRealPricingModel;
     inventoryUnit: string;
     factorConversionManual: number | null;
     productName?: string | null;
   },
 ): Promise<number | null> {
-  const catU = normalizeConversionUnit(params.catalogUnit);
+  const catU = normalizeConversionUnit(params.pricingModel.realUnit);
   const invU = normalizeConversionUnit(params.inventoryUnit);
-  const price = params.effectivePricePerCatalogUnit;
+  const price = params.pricingModel.realPricePerUnit;
   if (!Number.isFinite(price) || price < 0) return null;
 
   const tryConvert = async (): Promise<number | null> => {
     if (catU === invU) return Math.round(price * 10000) / 10000;
+
+    const fromFormatU = normalizeConversionUnit(params.pricingModel.deliveryFormatUnit);
+    const fromFormatQty = params.pricingModel.realUnitsPerDeliveryFormat;
+    if (invU === fromFormatU && catU !== fromFormatU && fromFormatQty != null && fromFormatQty > 0) {
+      return Math.round(price * fromFormatQty * 10000) / 10000;
+    }
+    if (catU === fromFormatU && invU !== fromFormatU && fromFormatQty != null && fromFormatQty > 0) {
+      return Math.round((price / fromFormatQty) * 10000) / 10000;
+    }
 
     let f = await fetchInventoryCostConversionFactor(
       supabase,
@@ -144,6 +207,9 @@ export type InventorySupplierProductSearchRow = {
   name: string;
   unit: string;
   pricePerUnit: number;
+  billingUnit: string | null;
+  billingQtyPerOrderUnit: number | null;
+  pricePerBillingUnit: number | null;
   category: string | null;
 };
 
@@ -153,7 +219,7 @@ export async function fetchInventorySupplierProductsForSearch(
 ): Promise<InventorySupplierProductSearchRow[]> {
   const { data: products, error: pErr } = await supabase
     .from('pedido_supplier_products')
-    .select('id,supplier_id,name,unit,price_per_unit,article_id')
+    .select('id,supplier_id,name,unit,price_per_unit,billing_unit,billing_qty_per_order_unit,price_per_billing_unit,article_id')
     .eq('local_id', localId)
     .eq('is_active', true)
     .order('name');
@@ -164,6 +230,9 @@ export async function fetchInventorySupplierProductsForSearch(
     name: string;
     unit: string;
     price_per_unit: number;
+    billing_unit: string | null;
+    billing_qty_per_order_unit: number | null;
+    price_per_billing_unit: number | null;
     article_id: string | null;
   }>;
   const supIds = [...new Set(plist.map((r) => r.supplier_id))];
@@ -193,6 +262,11 @@ export async function fetchInventorySupplierProductsForSearch(
     name: String(r.name ?? ''),
     unit: String(r.unit ?? ''),
     pricePerUnit: Number(r.price_per_unit),
+    billingUnit: r.billing_unit != null ? String(r.billing_unit) : null,
+    billingQtyPerOrderUnit:
+      r.billing_qty_per_order_unit != null ? Number(r.billing_qty_per_order_unit) : null,
+    pricePerBillingUnit:
+      r.price_per_billing_unit != null ? Number(r.price_per_billing_unit) : null,
     category: r.article_id ? artMap.get(String(r.article_id)) ?? null : null,
   }));
 }

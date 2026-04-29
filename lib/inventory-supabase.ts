@@ -4,6 +4,7 @@ import { fetchProductionRecipeUnitCostEur } from '@/lib/production-recipe-cost';
 import {
   fetchEffectiveSupplierProductUnitPriceEur,
   fetchSupplierProductRowForInventory,
+  resolveSupplierRealPricingModel,
   resolveSupplierLinkedInventoryUnitPriceEur,
 } from '@/lib/inventory-supplier-pricing';
 
@@ -246,10 +247,13 @@ export async function resolveInventoryItemUnitPriceEur(
     }
     const prod = await fetchSupplierProductRowForInventory(supabase, localId, supplierProductRowId);
     if (!prod) return row.price_per_unit >= 0 ? Math.round(row.price_per_unit * 100) / 100 : null;
+    const pricingModel = resolveSupplierRealPricingModel(prod, eff);
+    if (!pricingModel) {
+      return row.price_per_unit >= 0 ? Math.round(row.price_per_unit * 100) / 100 : null;
+    }
     const resolved = await resolveSupplierLinkedInventoryUnitPriceEur(supabase, localId, {
       supplierProductId: supplierProductRowId,
-      catalogUnit: prod.unit,
-      effectivePricePerCatalogUnit: eff,
+      pricingModel,
       inventoryUnit: row.unit,
       factorConversionManual: row.factorConversionManual,
       productName: prod.name,

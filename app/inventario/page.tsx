@@ -50,6 +50,7 @@ import { upsertInventoryCostConversion, normalizeConversionUnit } from '@/lib/in
 import {
   fetchInventorySupplierProductsForSearch,
   fetchSupplierProductRowForInventory,
+  resolveSupplierRealPricingModel,
   suggestKgPerPackFromProductName,
   type InventorySupplierProductSearchRow,
 } from '@/lib/inventory-supplier-pricing';
@@ -99,6 +100,14 @@ const FORMATO_OPERATIVO_OPTIONS: { value: string; label: string }[] = [
 
 function precioEtiquetaUnidadCoste(uc: InventoryUnidadCoste): string {
   return uc === 'l' ? 'L' : uc;
+}
+
+function labelUnidadCorta(raw: string): string {
+  const u = String(raw ?? '').trim().toLowerCase();
+  if (u === 'l' || u === 'litro' || u === 'litros') return 'L';
+  if (u === 'ud' || u === 'unidad' || u === 'unidades' || u === 'uds') return 'ud';
+  if (u === 'kg') return 'kg';
+  return UNIT_SUFFIX[u] ?? u;
 }
 
 /** Safari/iOS suele lanzar esto cuando `fetch` no llega a recibir respuesta (red, cambio WiFi/4G, timeout). */
@@ -2059,8 +2068,23 @@ export default function InventarioPage() {
                           lineDraft.supplierProductId
                             ? supplierSearchProducts.find((p) => p.id === lineDraft.supplierProductId) ?? null
                             : null;
+                        const supplierPricingModel = selectedSupplierProduct
+                          ? resolveSupplierRealPricingModel(
+                              {
+                                unit: selectedSupplierProduct.unit,
+                                price_per_unit: selectedSupplierProduct.pricePerUnit,
+                                billing_unit: selectedSupplierProduct.billingUnit,
+                                billing_qty_per_order_unit: selectedSupplierProduct.billingQtyPerOrderUnit,
+                                price_per_billing_unit: selectedSupplierProduct.pricePerBillingUnit,
+                              },
+                              selectedSupplierProduct.pricePerUnit,
+                            )
+                          : null;
                         const catalogUnitNorm = selectedSupplierProduct
                           ? normalizeConversionUnit(selectedSupplierProduct.unit)
+                          : '';
+                        const pricingRealUnitNorm = supplierPricingModel
+                          ? normalizeConversionUnit(supplierPricingModel.realUnit)
                           : '';
                         const invUnitNorm = normalizeConversionUnit(lineDraft.unit);
                         const suggestedKgHint =
@@ -2069,12 +2093,25 @@ export default function InventarioPage() {
                           (invUnitNorm === 'kg' || lineDraft.unidadCoste === 'kg')
                             ? suggestKgPerPackFromProductName(selectedSupplierProduct.name)
                             : null;
+                        const canCountByRealUnit =
+                          supplierPricingModel &&
+                          (pricingRealUnitNorm === 'kg' ||
+                            pricingRealUnitNorm === 'l' ||
+                            pricingRealUnitNorm === 'ud');
+                        const canCountByDeliveryFormat =
+                          supplierPricingModel && catalogUnitNorm !== '' && catalogUnitNorm !== pricingRealUnitNorm;
+                        const hasAutoFormatEquivalence =
+                          supplierPricingModel &&
+                          supplierPricingModel.realUnitsPerDeliveryFormat != null &&
+                          supplierPricingModel.realUnitsPerDeliveryFormat > 0;
+                        const realPriceForUi = supplierPricingModel?.realPricePerUnit ?? null;
                         const showSupplierEquivalence =
                           lineDraft.origenCoste === 'articulo_proveedor' &&
                           selectedSupplierProduct &&
-                          catalogUnitNorm &&
+                          pricingRealUnitNorm &&
                           invUnitNorm &&
-                          catalogUnitNorm !== invUnitNorm;
+                          pricingRealUnitNorm !== invUnitNorm &&
+                          !hasAutoFormatEquivalence;
                         const lineBusy = busyId === draftKey || (line ? busyId === line.id : false);
                         const lineSub =
                           Math.round(
@@ -2429,14 +2466,62 @@ export default function InventarioPage() {
                                         disabled={editDisabled || lineBusy || qtyBusy}
                                       />
                                       {selectedSupplierProduct ? (
-                                        <p className="mt-1 text-[10px] leading-snug text-zinc-500">
-                                          Precio catálogo:{' '}
-                                          {Number.isFinite(selectedSupplierProduct.pricePerUnit)
-                                            ? `${selectedSupplierProduct.pricePerUnit.toFixed(2)} €/${UNIT_SUFFIX[selectedSupplierProduct.unit] ?? selectedSupplierProduct.unit}`
-                                            : '—'}
-                                          {'. '}
-                                          Se aplica primero el último precio recibido; si no existe, este precio.
-                                        </p>
+                                        <>
+                                          <p className="mt-1 text-[10px] leading-snug text-zinc-500">
+                                            Formato entrega: {labelUnidadCorta(selectedSupplierProduct.unit)}
+                                            {supplierPricingModel?.realUnitsPerDeliveryFormat != null &&
+                                            supplierPricingModel.realUnitsPerDeliveryFormat > 0
+                                              ? ` · 1 ${labelUnidadCorta(selectedSupplierProduct.unit)} = ${supplierPricingModel.realUnitsPerDeliveryFormat} ${labelUnidadCorta(supplierPricingModel.realUnit)}`
+                                              : ''}
+                                          </p>
+                                          <p className="text-[10px] leading-snug text-zinc-600">
+                                            Precio real:{' '}
+                                            {realPriceForUi != null && Number.isFinite(realPriceForUi)
+                                              ? `${realPriceForUi.toFixed(2)} €/${labelUnidadCorta(supplierPricingModel?.realUnit ?? '')}`
+                                              : '—'}
+                                          </p>
+                                          {lineDraft.origenCoste === 'articulo_proveedor' &&
+                                          (canCountByRealUnit || canCountByDeliveryFormat) ? (
+                                            <label className="mt-1 block">
+                                              <span className="text-[9px] font-bold uppercase text-zinc-500">
+                                                Contar inventario por
+                                              </span>
+                                              <select
+                                                value={lineDraft.unit}
+                                                disabled={editDisabled || lineBusy || qtyBusy}
+                                                onChange={(e) =>
+                                                  setDrafts((prev) => {
+                                                    const cur = prev[draftKey] ?? lineDraft;
+                                                    const nextUnit = e.target.value;
+                                                    const nextDraft: LineDraft = {
+                                                      ...cur,
+                                                      unit: nextUnit,
+                                                      unidadCoste: (supplierPricingModel?.realUnit === 'kg' ||
+                                                        supplierPricingModel?.realUnit === 'l' ||
+                                                        supplierPricingModel?.realUnit === 'ud'
+                                                        ? (supplierPricingModel.realUnit as InventoryUnidadCoste)
+                                                        : cur.unidadCoste),
+                                                    };
+                                                    void refreshDraftAutoPrice(draftKey, nextDraft);
+                                                    return { ...prev, [draftKey]: nextDraft };
+                                                  })
+                                                }
+                                                className="mt-0.5 h-8 w-full rounded border border-zinc-200 bg-white px-2 text-[11px]"
+                                              >
+                                                {canCountByRealUnit ? (
+                                                  <option value={pricingRealUnitNorm}>
+                                                    {labelUnidadCorta(pricingRealUnitNorm)}
+                                                  </option>
+                                                ) : null}
+                                                {canCountByDeliveryFormat ? (
+                                                  <option value={catalogUnitNorm}>
+                                                    {labelUnidadCorta(catalogUnitNorm)}
+                                                  </option>
+                                                ) : null}
+                                              </select>
+                                            </label>
+                                          ) : null}
+                                        </>
                                       ) : null}
                                       <p className="text-[10px] font-semibold text-emerald-700">
                                         Precio actualizado automáticamente desde última compra.
@@ -2447,10 +2532,10 @@ export default function InventarioPage() {
                                             Equivalencia
                                           </span>
                                           <p className="mt-0.5 text-[10px] text-zinc-600">
-                                            ¿Cuántos {invUnitNorm} contiene 1 {catalogUnitNorm}?
+                                            Indica cuántos {pricingRealUnitNorm} tiene 1 {invUnitNorm}
                                             {suggestedKgHint != null ? (
                                               <span className="block text-zinc-500">
-                                                Valor sugerido: {suggestedKgHint} {invUnitNorm}
+                                                Valor sugerido: {suggestedKgHint} {pricingRealUnitNorm}
                                               </span>
                                             ) : null}
                                           </p>
@@ -2473,7 +2558,7 @@ export default function InventarioPage() {
                                               className="h-8 w-20 rounded border border-zinc-200 px-2 text-[11px]"
                                             />
                                             <span>
-                                              {invUnitNorm} por 1 {catalogUnitNorm}
+                                              {pricingRealUnitNorm} por 1 {invUnitNorm}
                                             </span>
                                           </div>
                                         </label>
