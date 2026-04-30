@@ -4,8 +4,8 @@
 -- - DISTERRI
 -- - COCACOLA
 -- - DAMM BARRIL
--- Proveedor destino:
--- - SERHS S.L.
+-- Proveedor destino (cualquier grafía habitual):
+--   SERHS S.L. · SERHS, S.L. · SERHS SL … (se detecta normalizando a SERHSSL)
 --
 -- Idempotente y seguro: migra referencias y desactiva proveedores origen.
 
@@ -21,11 +21,12 @@ with supplier_name_map as (
   select unnest(array['DDI PROVEA SL', 'DISTERRI', 'COCACOLA', 'DAMM BARRIL']) as old_name
 ),
 targets as (
-  select
+  select distinct on (s.local_id)
     s.local_id,
     s.id as serhs_id
   from public.pedido_suppliers s
-  where upper(trim(s.name)) = 'SERHS S.L.'
+  where regexp_replace(upper(trim(s.name)), '[,\s]+', '', 'g') = 'SERHSSL'
+  order by s.local_id, s.created_at asc
 ),
 old_suppliers as (
   select
