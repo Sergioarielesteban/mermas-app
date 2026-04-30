@@ -5,7 +5,7 @@ import {
   isMissingPurchaseArticlesError,
   linkPurchaseArticleToNewSupplierProduct,
 } from '@/lib/purchase-articles-supabase';
-import { comparablePriceHistoryPair } from '@/lib/price-evolution-comparable';
+import { comparablePriceDisplayUnit, comparablePriceHistoryPair } from '@/lib/price-evolution-comparable';
 import type { Unit } from '@/lib/types';
 
 /**
@@ -1204,7 +1204,13 @@ export async function fetchSupplierProductRow(
   return full.data ? (full.data as SupplierProductRow) : null;
 }
 
-export type SupplierProductPriceChangeSource = 'delivery_note_validated' | 'quick_input';
+function isMissingHistoricoPreciosTableError(message: string): boolean {
+  const m = message.toLowerCase();
+  return (
+    m.includes('historico_precios') &&
+    (m.includes('does not exist') || m.includes('schema cache') || m.includes('no existe'))
+  );
+}
 
 function isMissingSupplierProductLastReceivedColumnsError(message: string): boolean {
   const m = message.toLowerCase();
@@ -1239,58 +1245,103 @@ export async function updateSupplierProductLastReceivedPrice(
   }
 }
 
-/**
- * Cambia solo el precio de catálogo, guardando fila de histórico.
- * Omite si el precio redondeado coincide con el actual.
- */
-export async function updateSupplierProductPriceWithHistory(
+const HISTORICO_PRICE_EPS = 0.005;
+
+async function fetchLastHistoricoComparablePrice(
   supabase: SupabaseClient,
   localId: string,
   supplierProductId: string,
-  newPricePerUnit: number,
+): Promise<number | null> {
+  const { data, error } = await supabase
+    .from('historico_precios')
+    .select('precio_nuevo')
+    .eq('local_id', localId)
+    .eq('supplier_product_id', supplierProductId)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) {
+    if (isMissingHistoricoPreciosTableError(error.message)) {
+      throw new Error(
+        'Falta la tabla historico_precios. Ejecuta supabase-pedidos-historico-precios-recepcion.sql en Supabase.',
+      );
+    }
+    throw new Error(error.message);
+  }
+  if (!data || data.precio_nuevo == null) return null;
+  const v = Number(data.precio_nuevo);
+  return Number.isFinite(v) ? Math.round(v * 10000) / 10000 : null;
+}
+
+/**
+ * Al validar un albarán: actualiza catálogo y escribe `historico_precios` solo si el precio
+ * comparable cambia respecto al último registro de histórico (o al baseline de catálogo si no hay filas).
+ */
+export async function updateSupplierProductPriceFromRecepcion(
+  supabase: SupabaseClient,
+  localId: string,
+  supplierProductId: string,
+  newPriceInCatalogUnit: number,
   meta: {
-    source: SupplierProductPriceChangeSource;
-    deliveryNoteId?: string | null;
+    deliveryNoteId: string;
+    receptionDate: string | null;
     userId?: string | null;
-    /** Si ya tienes la fila (p. ej. comprobación de unidad), evita un segundo SELECT. */
     existingRow?: SupplierProductRow | null;
   },
 ): Promise<{ changed: boolean }> {
   const row = meta.existingRow ?? (await fetchSupplierProductRow(supabase, localId, supplierProductId));
   if (!row) throw new Error('Producto de proveedor no encontrado.');
-  const oldP = Math.round(Number(row.price_per_unit) * 100) / 100;
-  const newP = Math.round(newPricePerUnit * 100) / 100;
+  const newP = Math.round(newPriceInCatalogUnit * 100) / 100;
   if (!Number.isFinite(newP) || newP < 0) throw new Error('Precio no válido.');
-  if (Math.abs(oldP - newP) < 0.005) return { changed: false };
 
-  const histP = comparablePriceHistoryPair(
-    {
-      unit: String(row.unit),
-      price_per_unit: Number(row.price_per_unit),
-      estimated_kg_per_unit: row.estimated_kg_per_unit,
-      billing_unit: row.billing_unit ?? null,
-      billing_qty_per_order_unit: row.billing_qty_per_order_unit,
-    },
-    newP,
-  );
-  const { error: hErr } = await supabase.from('pedido_supplier_product_price_history').insert({
+  const catalogRow = {
+    unit: String(row.unit),
+    price_per_unit: Number(row.price_per_unit),
+    estimated_kg_per_unit: row.estimated_kg_per_unit,
+    billing_unit: row.billing_unit ?? null,
+    billing_qty_per_order_unit: row.billing_qty_per_order_unit,
+  };
+  const histP = comparablePriceHistoryPair(catalogRow, newP);
+  const newC = histP.new;
+  const catalogComparable = histP.old;
+
+  const lastNuevo = await fetchLastHistoricoComparablePrice(supabase, localId, supplierProductId);
+  const baseline = lastNuevo != null ? lastNuevo : catalogComparable;
+
+  if (Math.abs(newC - baseline) < HISTORICO_PRICE_EPS) {
+    return { changed: false };
+  }
+
+  const diff = Math.round((newC - baseline) * 10000) / 10000;
+  const diffPct =
+    baseline > 0 ? Math.round((diff / baseline) * 10000) / 10000 : null;
+  const fechaYmd =
+    meta.receptionDate && /^\d{4}-\d{2}-\d{2}/.test(meta.receptionDate)
+      ? meta.receptionDate.slice(0, 10)
+      : new Date().toISOString().slice(0, 10);
+  const uComp = comparablePriceDisplayUnit(catalogRow);
+
+  const ins = await supabase.from('historico_precios').insert({
     local_id: localId,
+    articulo_id: row.article_id ?? null,
+    proveedor_id: row.supplier_id,
     supplier_product_id: supplierProductId,
-    old_price_per_unit: histP.old,
-    new_price_per_unit: histP.new,
-    source: meta.source,
-    delivery_note_id: meta.deliveryNoteId ?? null,
+    fecha: fechaYmd,
+    precio_anterior: baseline,
+    precio_nuevo: newC,
+    diferencia: diff,
+    diferencia_pct: diffPct,
+    unidad_comparacion: uComp,
+    albaran_id: meta.deliveryNoteId,
     created_by: meta.userId ?? null,
   });
-  if (hErr) {
-    const msg = hErr.message.toLowerCase();
-    if (
-      msg.includes('pedido_supplier_product_price_history') &&
-      (msg.includes('does not exist') || msg.includes('schema cache'))
-    ) {
-      throw new Error('Falta la tabla de histórico de precios. Ejecuta el SQL de supabase-pedidos-delivery-notes.sql.');
+  if (ins.error) {
+    if (isMissingHistoricoPreciosTableError(ins.error.message)) {
+      throw new Error(
+        'Falta la tabla historico_precios. Ejecuta supabase-pedidos-historico-precios-recepcion.sql en Supabase.',
+      );
     }
-    throw new Error(hErr.message);
+    throw new Error(ins.error.message);
   }
 
   const packRaw = row.units_per_pack != null ? Number(row.units_per_pack) : 1;
@@ -1323,17 +1374,45 @@ export async function updateSupplierProductPriceWithHistory(
     ...(derivedPricePerBilling != null ? { pricePerBillingUnit: derivedPricePerBilling } : {}),
   });
 
+  await updateSupplierProductLastReceivedPrice(supabase, localId, supplierProductId, newP, new Date().toISOString());
+
   return { changed: true };
 }
 
-/** Fila de `pedido_supplier_product_price_history` (cambios de precio de catálogo, no líneas de pedido). */
+/** @deprecated Usar `updateSupplierProductPriceFromRecepcion` (solo albarán). */
+export async function updateSupplierProductPriceWithHistory(
+  supabase: SupabaseClient,
+  localId: string,
+  supplierProductId: string,
+  newPricePerUnit: number,
+  meta: {
+    source: 'delivery_note_validated';
+    deliveryNoteId: string;
+    receptionDate?: string | null;
+    userId?: string | null;
+    existingRow?: SupplierProductRow | null;
+  },
+): Promise<{ changed: boolean }> {
+  return updateSupplierProductPriceFromRecepcion(supabase, localId, supplierProductId, newPricePerUnit, {
+    deliveryNoteId: meta.deliveryNoteId,
+    receptionDate: meta.receptionDate ?? null,
+    userId: meta.userId,
+    existingRow: meta.existingRow,
+  });
+}
+
+/** Fila de `historico_precios` (recepción / albarán). */
 export type CatalogPriceHistoryListRow = {
   id: string;
   supplierProductId: string;
   oldPricePerUnit: number;
   newPricePerUnit: number;
-  source: SupplierProductPriceChangeSource;
+  source: 'delivery_note_validated';
   createdAt: string;
+  fecha: string;
+  diferenciaPct: number | null;
+  albaranId: string | null;
+  displayUnit: string;
   isTest: boolean;
   notes: string | null;
 };
@@ -1344,34 +1423,35 @@ export type CatalogPriceHistoryFetchResult = {
   hasTestMetadataColumns: boolean;
 };
 
-function mapPriceHistoryRow(
-  r: {
-    id: string;
-    supplier_product_id: string;
-    old_price_per_unit: number | string;
-    new_price_per_unit: number | string;
-    source: string;
-    created_at: string;
-    is_test?: boolean;
-    notes?: string | null;
-  },
-  hasTestMeta: boolean,
-): CatalogPriceHistoryListRow {
+function mapHistoricoPrecioRow(r: {
+  id: string;
+  supplier_product_id: string;
+  precio_anterior: number | string;
+  precio_nuevo: number | string;
+  fecha: string;
+  diferencia_pct: number | string | null;
+  albaran_id: string | null;
+  unidad_comparacion: string | null;
+  created_at: string;
+}): CatalogPriceHistoryListRow {
   return {
     id: r.id,
     supplierProductId: r.supplier_product_id,
-    oldPricePerUnit: Number(r.old_price_per_unit),
-    newPricePerUnit: Number(r.new_price_per_unit),
-    source: r.source as SupplierProductPriceChangeSource,
+    oldPricePerUnit: Number(r.precio_anterior),
+    newPricePerUnit: Number(r.precio_nuevo),
+    source: 'delivery_note_validated',
     createdAt: r.created_at,
-    isTest: hasTestMeta ? Boolean(r.is_test) : false,
-    notes: hasTestMeta && r.notes != null ? String(r.notes) : null,
+    fecha: String(r.fecha),
+    diferenciaPct: r.diferencia_pct != null && r.diferencia_pct !== '' ? Number(r.diferencia_pct) : null,
+    albaranId: r.albaran_id,
+    displayUnit: r.unidad_comparacion != null && String(r.unidad_comparacion).trim() !== '' ? String(r.unidad_comparacion) : 'ud',
+    isTest: false,
+    notes: null,
   };
 }
 
 /**
- * Historial de cambios de precio de catálogo (albarán / entrada rápida) en una ventana temporal.
- * No incluye agregados desde líneas de pedido (eso es otra capa en la UI).
+ * Historial de cambios de precio por recepción (albarán validado) en una ventana temporal.
  */
 export async function fetchCatalogPriceHistoryRows(
   supabase: SupabaseClient,
@@ -1381,55 +1461,49 @@ export async function fetchCatalogPriceHistoryRows(
   const startIso = new Date(window.startMs).toISOString();
   const endIso = new Date(window.endMs).toISOString();
   const q = supabase
-    .from('pedido_supplier_product_price_history')
-    .select('id, supplier_product_id, old_price_per_unit, new_price_per_unit, source, created_at, is_test, notes')
+    .from('historico_precios')
+    .select(
+      'id,supplier_product_id,precio_anterior,precio_nuevo,fecha,diferencia_pct,albaran_id,unidad_comparacion,created_at',
+    )
     .eq('local_id', localId)
     .gte('created_at', startIso)
     .lte('created_at', endIso)
     .order('created_at', { ascending: false });
 
-  let { data, error } = await q;
+  const { data, error } = await q;
   if (error) {
-    const msg = error.message.toLowerCase();
-    const code = (error as { code?: string }).code;
-    if (
-      msg.includes('is_test') ||
-      msg.includes('notes') ||
-      msg.includes('column') && (msg.includes('does not exist') || msg.includes('no existe')) ||
-      code === 'PGRST204' ||
-      code === '42703'
-    ) {
-      const r2 = await supabase
-        .from('pedido_supplier_product_price_history')
-        .select('id, supplier_product_id, old_price_per_unit, new_price_per_unit, source, created_at')
-        .eq('local_id', localId)
-        .gte('created_at', startIso)
-        .lte('created_at', endIso)
-        .order('created_at', { ascending: false });
-      if (r2.error) throw new Error(r2.error.message);
-      const rows = (r2.data ?? []).map((row) => mapPriceHistoryRow(row, false));
-      return { rows, hasTestMetadataColumns: false };
+    if (isMissingHistoricoPreciosTableError(error.message)) {
+      return { rows: [], hasTestMetadataColumns: false };
     }
     throw new Error(error.message);
   }
-  const rows = (data ?? []).map((row) => mapPriceHistoryRow(row, true));
-  return { rows, hasTestMetadataColumns: true };
+  const rows = (data ?? []).map((row) => mapHistoricoPrecioRow(row as Parameters<typeof mapHistoricoPrecioRow>[0]));
+  return { rows, hasTestMetadataColumns: false };
 }
 
 /**
- * Elimina una fila del histórico de catálogo. No modifica `pedido_supplier_products` ni pedidos.
+ * Elimina una fila del histórico de recepción. No modifica el catálogo ni pedidos.
  */
 export async function deleteCatalogPriceHistoryRow(
   supabase: SupabaseClient,
   localId: string,
   id: string,
 ) {
-  console.log('Deleting price history id:', id);
+  const { error } = await supabase.from('historico_precios').delete().eq('id', id).eq('local_id', localId);
+  if (error) throw new Error(error.message);
+}
+
+/** Borra todo el histórico de precios de un producto proveedor (recepciones). */
+export async function deleteHistoricoPreciosForSupplierProduct(
+  supabase: SupabaseClient,
+  localId: string,
+  supplierProductId: string,
+) {
   const { error } = await supabase
-    .from('pedido_supplier_product_price_history')
+    .from('historico_precios')
     .delete()
-    .eq('id', id)
-    .eq('local_id', localId);
+    .eq('local_id', localId)
+    .eq('supplier_product_id', supplierProductId);
   if (error) throw new Error(error.message);
 }
 
@@ -1905,19 +1979,22 @@ export async function fetchSupplierProductPriceHistory(
 ) {
   if (!supplierProductIds.length) return new Map<string, SupplierProductPriceHistory>();
   const { data, error } = await supabase
-    .from('purchase_order_items')
-    .select('supplier_product_id,price_per_unit,created_at')
+    .from('historico_precios')
+    .select('supplier_product_id,precio_nuevo,created_at')
     .eq('local_id', localId)
     .in('supplier_product_id', supplierProductIds)
     .order('created_at', { ascending: false });
-  if (error) throw new Error(error.message);
+  if (error) {
+    if (isMissingHistoricoPreciosTableError(error.message)) return new Map();
+    throw new Error(error.message);
+  }
 
   const out = new Map<string, SupplierProductPriceHistory>();
   const grouped = new Map<string, number[]>();
-  for (const row of (data ?? []) as Array<{ supplier_product_id: string | null; price_per_unit: number }>) {
+  for (const row of (data ?? []) as Array<{ supplier_product_id: string; precio_nuevo: number | string }>) {
     if (!row.supplier_product_id) continue;
     const list = grouped.get(row.supplier_product_id) ?? [];
-    list.push(Number(row.price_per_unit));
+    list.push(Number(row.precio_nuevo));
     grouped.set(row.supplier_product_id, list);
   }
   for (const [id, prices] of grouped.entries()) {
@@ -2096,18 +2173,21 @@ export async function fetchSupplierProductPriceSamples(
   if (!supplierProductIds.length) return out;
 
   const { data, error } = await supabase
-    .from('purchase_order_items')
-    .select('supplier_product_id,price_per_unit,created_at')
+    .from('historico_precios')
+    .select('supplier_product_id,precio_nuevo,created_at')
     .eq('local_id', localId)
     .in('supplier_product_id', supplierProductIds)
     .order('created_at', { ascending: false })
     .limit(maxTotal);
-  if (error) throw new Error(error.message);
+  if (error) {
+    if (isMissingHistoricoPreciosTableError(error.message)) return out;
+    throw new Error(error.message);
+  }
 
   const counts = new Map<string, number>();
   for (const row of (data ?? []) as Array<{
-    supplier_product_id: string | null;
-    price_per_unit: number;
+    supplier_product_id: string;
+    precio_nuevo: number | string;
     created_at: string;
   }>) {
     const sid = row.supplier_product_id;
@@ -2118,7 +2198,7 @@ export async function fetchSupplierProductPriceSamples(
     const list = out.get(sid) ?? [];
     list.push({
       supplierProductId: sid,
-      pricePerUnit: Math.round(Number(row.price_per_unit) * 100) / 100,
+      pricePerUnit: Math.round(Number(row.precio_nuevo) * 100) / 100,
       at: String(row.created_at),
     });
     out.set(sid, list);

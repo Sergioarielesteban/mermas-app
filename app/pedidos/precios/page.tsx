@@ -17,23 +17,19 @@ import {
 } from 'recharts';
 import { useAuth } from '@/components/AuthProvider';
 import { appAlert } from '@/lib/app-dialog-bridge';
-import { usePedidosOrders } from '@/components/PedidosOrdersProvider';
 import PedidosPremiaLockedScreen from '@/components/PedidosPremiaLockedScreen';
 import { canAccessPedidos, canUsePedidosModule } from '@/lib/pedidos-access';
 import { formatQuantityWithUnit } from '@/lib/pedidos-format';
 import {
-  billingQuantityForLine,
   deleteCatalogPriceHistoryRow,
+  deleteHistoricoPreciosForSupplierProduct,
   fetchCatalogPriceHistoryRows,
   fetchSuppliersWithProducts,
-  setOrderItemsExcludeFromPriceEvolution,
-  updateSupplierProductPriceWithHistory,
+  updateSupplierProduct,
   type CatalogPriceHistoryListRow,
-  type PedidoOrder,
   type PedidoSupplier,
 } from '@/lib/pedidos-supabase';
 import { matchSupplierProductFromHint, parseQuickChefPriceText } from '@/lib/pedidos-quick-price-text';
-import { catalogNameByProductIdFromSuppliers, orderLineDisplayName } from '@/lib/pedidos-line-display-name';
 import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
 import type { Unit } from '@/lib/types';
 
@@ -89,23 +85,16 @@ type PriceSummary = {
   usedPerKgUnitFallback?: boolean;
 };
 
-/** Depuración temporal: líneas de pedido consideradas para la evolución (misma fuente que el gráfico: purchase_order_items vía fetchOrders). */
+/** Depuración: filas de historico_precios consideradas para la evolución. */
 type EvolutionDebugRow = {
-  orderId: string;
-  orderItemId: string;
   supplierId: string;
   supplierName: string;
   evolutionKey: string;
   productName: string;
-  supplierProductId: string | null;
-  unit: string;
-  orderPriceDate: string;
-  inWindow: boolean;
-  supplierFilteredOut: boolean;
-  excludeFromPriceEvolution: boolean;
-  evPrice: number | null;
-  weightQty: number;
-  perKgFallbackToUnit: boolean;
+  supplierProductId: string;
+  historicoId: string;
+  createdAt: string;
+  displayUnit: string;
   includedInSeries: boolean;
   discardReason: string | null;
 };
@@ -120,127 +109,20 @@ type GroupedEvolutionRow = {
 type DiscardedEvolution = {
   evolutionKey: string;
   productName: string;
-  orderItemId: string;
+  referenceId: string;
   reason: string;
 };
 
-function orderPriceDate(order: PedidoOrder): string {
-  return order.receivedAt ?? order.sentAt ?? order.createdAt;
+type ProductInfo = { productName: string; supplierName: string; supplierId: string; catalogUnit: Unit };
+
+function evolutionKeyFromSupplierProduct(supplierId: string, supplierProductId: string): string {
+  return `${supplierId}|${supplierProductId}`;
 }
 
-/** Fecha del precio «pedido» (catálogo al enviar) para contrastar con albarán en un mismo pedido. */
-function orderBasePriceDate(order: PedidoOrder): string {
-  return order.sentAt ?? order.createdAt;
-}
-
-/**
- * Clave estable por proveedor + producto + unidad. No usar solo `supplier_product_id`:
- * si en un pedido falta el UUID y en otro no, antes se creaban dos series y no había “evolución”.
- * Las incidencias no cambian esta clave: el precio facturado en línea sigue contando.
- */
-function evolutionProductKey(
-  order: PedidoOrder,
-  item: PedidoOrder['items'][number],
-  catalogNameByProductId: ReadonlyMap<string, string> | null,
-): string {
-  const name = orderLineDisplayName(item, catalogNameByProductId)
-    .trim()
-    .replace(/\s+/g, ' ')
-    .toLowerCase();
-  return `${order.supplierId}|${name}|${item.unit}`;
-}
-
-function collectOrderLineIdsForEvolutionKey(
-  orders: PedidoOrder[],
-  evolutionKey: string,
-  catalogNameByProductId: ReadonlyMap<string, string> | null,
-): string[] {
-  const ids: string[] = [];
-  for (const order of orders) {
-    if (order.status === 'draft') continue;
-    for (const item of order.items) {
-      if (item.excludeFromPriceEvolution) continue;
-      if (evolutionProductKey(order, item, catalogNameByProductId) === evolutionKey) {
-        ids.push(item.id);
-      }
-    }
-  }
-  return ids;
-}
-
-/** Precio unitario para historial: incluye líneas con incidencia si `price_per_unit` quedó en 0 pero hay subtotal. */
-function unitPriceForPriceHistory(item: PedidoOrder['items'][number]): number | null {
-  const p = item.pricePerUnit;
-  if (Number.isFinite(p) && p > 0) return Math.round(p * 100) / 100;
-  const billed = billingQuantityForLine(item);
-  if (billed > 0 && item.lineTotal > 0) {
-    return Math.round((item.lineTotal / billed) * 100) / 100;
-  }
-  if (item.quantity > 0 && item.lineTotal > 0) {
-    return Math.round((item.lineTotal / item.quantity) * 100) / 100;
-  }
-  return null;
-}
-
-function weightQtyForHistory(item: PedidoOrder['items'][number]): number {
-  const billed = billingQuantityForLine(item);
-  if (billed > 0) return billed;
-  if (item.quantity > 0) return item.quantity;
-  /* Incluir la línea en evolución/media aunque cantidad sea 0 (p. ej. incidencia), para no perder el precio facturado. */
-  return 1;
-}
-
-/** Kg comprados (reales, o envase × estimado) para modo €/kg en evolución. */
-function weightKgForEvolution(item: PedidoOrder['items'][number]): number | null {
-  if (item.unit === 'kg') {
-    const b = billingQuantityForLine(item);
-    if (b > 0) return b;
-    if (item.quantity > 0) return item.quantity;
-    return null;
-  }
-  if (item.receivedWeightKg != null && item.receivedWeightKg > 0) return item.receivedWeightKg;
-  const est = item.estimatedKgPerUnit;
-  if (est != null && est > 0) {
-    const env = item.receivedQuantity > 0 ? item.receivedQuantity : item.quantity;
-    if (env > 0) return env * est;
-  }
-  return null;
-}
-
-function effectivePriceForEvolution(
-  item: PedidoOrder['items'][number],
-  mode: PriceMode,
-): number | null {
-  if (mode === 'unit') return unitPriceForPriceHistory(item);
-  if (item.unit === 'kg') return unitPriceForPriceHistory(item);
-  const unitP = unitPriceForPriceHistory(item);
-  if (unitP == null) return null;
-  if (item.receivedPricePerKg != null && item.receivedPricePerKg > 0) {
-    return Math.round(item.receivedPricePerKg * 10000) / 10000;
-  }
-  const w = item.receivedWeightKg;
-  if (w != null && w > 0 && item.lineTotal > 0) {
-    return Math.round((item.lineTotal / w) * 10000) / 10000;
-  }
-  const est = item.estimatedKgPerUnit;
-  if (est != null && est > 0) {
-    return Math.round((unitP / est) * 10000) / 10000;
-  }
-  return null;
-}
-
-function weightQtyForEvolution(item: PedidoOrder['items'][number], mode: PriceMode): number {
-  if (mode === 'per_kg') {
-    const kg = weightKgForEvolution(item);
-    return kg != null && kg > 0 ? kg : 0;
-  }
-  return weightQtyForHistory(item);
-}
-
-function inPriceWindow(iso: string, startMs: number, endMs: number): boolean {
-  const t = Date.parse(iso);
-  if (!Number.isFinite(t)) return false;
-  return t >= startMs && t <= endMs;
+function supplierProductIdFromEvolutionKey(key: string): string | null {
+  const i = key.indexOf('|');
+  if (i < 0) return null;
+  return key.slice(i + 1).trim() || null;
 }
 
 function sampleStdev(xs: number[]): number {
@@ -283,9 +165,8 @@ function escapeCsvCell(v: string): string {
   return v;
 }
 
-function labelCatalogPriceHistorySource(source: CatalogPriceHistoryListRow['source']): string {
-  if (source === 'quick_input') return 'Entrada rápida';
-  return 'Albarán (validado)';
+function labelCatalogPriceHistorySource(_source: CatalogPriceHistoryListRow['source']): string {
+  return 'Recepción (albarán)';
 }
 
 /** Umbral 0 = cualquier subida respecto al primer precio en la ventana (mínimo movimiento). */
@@ -295,27 +176,21 @@ function isPriceRiseAlert(row: PriceSummary, alertPct: number): boolean {
   return row.deltaPct >= alertPct;
 }
 
-/** Mínima diferencia en € entre primer y último precio de la serie para mostrarla como “evolución”. */
-const MIN_PRICE_VARIATION_EUR = 0.01;
-
-/**
- * Solo mostrar en evolución si hay al menos 2 compras en el periodo y |Δ| > 0,01 € (misma unidad que base/actual).
- */
+/** Solo artículos con al menos un cambio registrado en recepción (histórico) en la ventana. */
 function hasPriceVariationForEvolution(row: PriceSummary): boolean {
-  if (row.purchases.length < 2) return false;
-  return Math.abs(row.delta) > MIN_PRICE_VARIATION_EUR;
+  if (row.purchases.length < 1) return false;
+  return Math.abs(row.delta) > 0.0001;
 }
 
 function buildPriceSummariesWithDiagnostics(
-  orders: PedidoOrder[],
+  historicoRows: CatalogPriceHistoryListRow[],
   windowStartMs: number,
   windowEndMs: number,
   priceMode: PriceMode,
   supplierFilter: string,
-  catalogNameByProductId: ReadonlyMap<string, string> | null,
+  productInfoBySupplierProductId: ReadonlyMap<string, ProductInfo>,
 ): {
   series: PriceSummary[];
-  /** Series con compras en ventana antes de exigir variación > 0,01 € y ≥2 compras. */
   seriesCandidatesBeforeVariation: number;
   rawRows: EvolutionDebugRow[];
   groupedRows: GroupedEvolutionRow[];
@@ -327,137 +202,56 @@ function buildPriceSummariesWithDiagnostics(
     supplierId: string;
     supplierName: string;
     catalogUnit: Unit;
-    supplierProductId: string | null;
-    points: PricePoint[];
-    purchases: PurchaseRow[];
-    wSum: number;
-    wQty: number;
-    usedPerKgUnitFallback: boolean;
+    supplierProductId: string;
+    historicoRows: CatalogPriceHistoryListRow[];
   };
   const rawRows: EvolutionDebugRow[] = [];
   const map = new Map<string, Acc>();
 
-  for (const order of orders) {
-    const supplierFilteredOut = Boolean(supplierFilter && order.supplierId !== supplierFilter);
-    const dBill = orderPriceDate(order);
-    const dBase = orderBasePriceDate(order);
-    const inWindow = inPriceWindow(dBill, windowStartMs, windowEndMs);
+  for (const r of historicoRows) {
+    const t = Date.parse(r.createdAt);
+    const inWindow = Number.isFinite(t) && t >= windowStartMs && t <= windowEndMs;
+    const info = productInfoBySupplierProductId.get(r.supplierProductId);
+    const supplierFilteredOut = Boolean(supplierFilter && info && info.supplierId !== supplierFilter);
 
-    for (const item of order.items) {
-      const productName = orderLineDisplayName(item, catalogNameByProductId).trim();
-      const key = evolutionProductKey(order, item, catalogNameByProductId);
+    let discardReason: string | null = null;
+    if (!info) discardReason = 'producto no está en catálogo cargado';
+    else if (supplierFilteredOut) discardReason = 'filtrado por proveedor';
+    else if (!inWindow) discardReason = 'fecha fuera de rango';
+    else if (priceMode === 'per_kg' && r.displayUnit !== 'kg') discardReason = 'modo €/kg: unidad comparable no es kg';
+    else if (priceMode === 'unit' && r.displayUnit === 'kg') discardReason = 'modo €/ud: serie en €/kg (usar vista €/kg)';
 
-      let perKgFallbackToUnit = false;
-      let evPrice = effectivePriceForEvolution(item, priceMode);
-      let wq = weightQtyForEvolution(item, priceMode);
-      if (priceMode === 'per_kg' && (evPrice == null || wq <= 0)) {
-        const u = unitPriceForPriceHistory(item);
-        if (u != null) {
-          evPrice = u;
-          wq = Math.max(1, weightQtyForHistory(item));
-          perKgFallbackToUnit = true;
-        }
-      }
+    const key = info ? evolutionKeyFromSupplierProduct(info.supplierId, r.supplierProductId) : r.supplierProductId;
 
-      let discardReason: string | null = null;
-      if (supplierFilteredOut) discardReason = 'filtrado por proveedor';
-      else if (!inWindow) discardReason = 'fecha fuera de rango';
-      else if (item.excludeFromPriceEvolution) discardReason = 'excluido manualmente';
-      else if (evPrice == null) discardReason = 'sin precio efectivo o sin datos para el modo (€/ud vs €/kg)';
-      else if (wq <= 0) discardReason = 'sin cantidad en modo actual (p. ej. sin kg en €/kg sin estimación ni recepción)';
+    rawRows.push({
+      supplierId: info?.supplierId ?? '',
+      supplierName: info?.supplierName ?? '',
+      evolutionKey: key,
+      productName: info?.productName ?? '',
+      supplierProductId: r.supplierProductId,
+      historicoId: r.id,
+      createdAt: r.createdAt,
+      displayUnit: r.displayUnit,
+      includedInSeries: discardReason == null,
+      discardReason: discardReason == null ? null : discardReason,
+    });
 
-      const includedInSeries = discardReason == null;
+    if (discardReason != null || !info) continue;
 
-      rawRows.push({
-        orderId: order.id,
-        orderItemId: item.id,
-        supplierId: order.supplierId,
-        supplierName: order.supplierName,
-        evolutionKey: key,
-        productName,
-        supplierProductId: item.supplierProductId,
-        unit: item.unit,
-        orderPriceDate: dBill,
-        inWindow,
-        supplierFilteredOut,
-        excludeFromPriceEvolution: Boolean(item.excludeFromPriceEvolution),
-        evPrice,
-        weightQty: wq,
-        perKgFallbackToUnit,
-        includedInSeries,
-        discardReason: includedInSeries ? null : discardReason,
-      });
-
-      if (!includedInSeries) continue;
-
-      const lineEvPrice = evPrice!;
-      const displayUnit =
-        priceMode === 'per_kg' && !perKgFallbackToUnit ? 'kg' : item.unit;
-      const existing = map.get(key);
-      const acc: Acc =
-        existing ??
-        {
-          key,
-          productName,
-          supplierId: order.supplierId,
-          supplierName: order.supplierName,
-          catalogUnit: item.unit,
-          supplierProductId: item.supplierProductId ?? null,
-          points: [],
-          purchases: [],
-          wSum: 0,
-          wQty: 0,
-          usedPerKgUnitFallback: false,
-        };
-      if (perKgFallbackToUnit) acc.usedPerKgUnitFallback = true;
-
-      const baseRaw = item.basePricePerUnit;
-      let basePriceEv: number | null = null;
-      if (baseRaw != null && Number.isFinite(baseRaw) && baseRaw > 0) {
-        const b = Math.round(baseRaw * 100) / 100;
-        if (priceMode === 'per_kg' && item.unit !== 'kg' && !perKgFallbackToUnit) {
-          const est = item.estimatedKgPerUnit;
-          if (est != null && est > 0) {
-            basePriceEv = Math.round((b / est) * 10000) / 10000;
-          }
-        } else {
-          basePriceEv = b;
-        }
-      }
-      if (basePriceEv != null && Math.abs(basePriceEv - lineEvPrice) > 0.001) {
-        acc.points.push({
-          date: dBase,
-          supplier: order.supplierName,
-          unit: displayUnit,
-          price: basePriceEv,
-          orderCreatedAt: order.createdAt,
-          itemId: `${item.id}:base`,
-          sortRank: 0,
-        });
-      }
-      acc.points.push({
-        date: dBill,
-        supplier: order.supplierName,
-        unit: displayUnit,
-        price: lineEvPrice,
-        orderCreatedAt: order.createdAt,
-        itemId: item.id,
-        sortRank: 1,
-      });
-      acc.purchases.push({
-        date: dBill,
-        supplier: order.supplierName,
-        qty: wq,
-        unit: displayUnit as Unit,
-        price: lineEvPrice,
-      });
-      acc.wSum += lineEvPrice * wq;
-      acc.wQty += wq;
-      if (!acc.supplierProductId && item.supplierProductId) {
-        acc.supplierProductId = item.supplierProductId;
-      }
-      map.set(key, acc);
-    }
+    const existing = map.get(key);
+    const acc: Acc =
+      existing ??
+      {
+        key,
+        productName: info.productName,
+        supplierId: info.supplierId,
+        supplierName: info.supplierName,
+        catalogUnit: info.catalogUnit,
+        supplierProductId: r.supplierProductId,
+        historicoRows: [],
+      };
+    acc.historicoRows.push(r);
+    map.set(key, acc);
   }
 
   const daysWindow = Math.max(1, (windowEndMs - windowStartMs) / 86_400_000);
@@ -465,44 +259,79 @@ function buildPriceSummariesWithDiagnostics(
 
   const seriesCandidates = Array.from(map.values())
     .map((acc) => {
-      const ordered = [...acc.points].sort((a, b) => {
-        const t = Date.parse(a.date) - Date.parse(b.date);
-        if (t !== 0) return t;
-        const oc = Date.parse(a.orderCreatedAt) - Date.parse(b.orderCreatedAt);
-        if (oc !== 0) return oc;
-        const ra = a.sortRank ?? 0;
-        const rb = b.sortRank ?? 0;
-        if (ra !== rb) return ra - rb;
+      const sorted = [...acc.historicoRows].sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt));
+      const displayUnit = (sorted[0]?.displayUnit ?? 'ud') as string;
+      const points: PricePoint[] = [];
+      const purchases: PurchaseRow[] = [];
+      let wSum = 0;
+      for (const h of sorted) {
+        const iso = h.createdAt;
+        const price = h.newPricePerUnit;
+        points.push({
+          date: iso,
+          supplier: acc.supplierName,
+          unit: displayUnit,
+          price,
+          orderCreatedAt: iso,
+          itemId: h.id,
+          sortRank: 1,
+        });
+        purchases.push({
+          date: iso,
+          supplier: acc.supplierName,
+          qty: 1,
+          unit: displayUnit as Unit,
+          price,
+        });
+        wSum += price;
+      }
+      const ordered = [...points].sort((a, b) => {
+        const td = Date.parse(a.date) - Date.parse(b.date);
+        if (td !== 0) return td;
         return a.itemId.localeCompare(b.itemId);
       });
-      const base = ordered[0]!;
-      const current = ordered[ordered.length - 1]!;
-      const delta = Math.round((current.price - base.price) * 100) / 100;
-      const deltaPct = base.price > 0 ? Math.round((delta / base.price) * 10000) / 100 : 0;
-      const weightedAvg = acc.wQty > 0 ? Math.round((acc.wSum / acc.wQty) * 100) / 100 : current.price;
-      const purchasesSorted = [...acc.purchases].sort((a, b) => Date.parse(b.date) - Date.parse(a.date));
-      const billOnly = ordered.filter((p) => p.sortRank === 1).map((p) => p.price);
+      const firstH = sorted[0]!;
+      const lastH = sorted[sorted.length - 1]!;
+      const basePrice = firstH.oldPricePerUnit;
+      const currentPrice = lastH.newPricePerUnit;
+      const basePoint: PricePoint = {
+        date: firstH.createdAt,
+        supplier: acc.supplierName,
+        unit: displayUnit,
+        price: basePrice,
+        orderCreatedAt: firstH.createdAt,
+        itemId: `${firstH.id}:prev`,
+        sortRank: 0,
+      };
+      const orderedWithAnchor = [basePoint, ...ordered.filter((p) => p.sortRank === 1)];
+      const base = orderedWithAnchor[0]!;
+      const current = orderedWithAnchor[orderedWithAnchor.length - 1]!;
+      const delta = Math.round((currentPrice - basePrice) * 100) / 100;
+      const deltaPct =
+        basePrice > 0 ? Math.round((delta / basePrice) * 10000) / 100 : 0;
+      const wQty = sorted.length;
+      const weightedAvg = wQty > 0 ? Math.round((wSum / wQty) * 100) / 100 : currentPrice;
+      const purchasesSorted = [...purchases].sort((a, b) => Date.parse(b.date) - Date.parse(a.date));
+      const billOnly = sorted.map((h) => h.newPricePerUnit);
       const vol = sampleStdev(billOnly);
       const volatilityCvPct =
         weightedAvg > 0 && billOnly.length >= 2 ? Math.round((vol / weightedAvg) * 10000) / 100 : 0;
-      const billAsc = ordered
-        .filter((p) => p.sortRank === 1)
-        .map((p) => ({ date: p.date, price: p.price }));
+      const billAsc = sorted.map((h) => ({ date: h.createdAt, price: h.newPricePerUnit }));
       const forecast30d = forecastPriceLinear(billAsc, 30);
-      const monthlyQty = acc.wQty / monthsInWindow;
-      const impactMonthlyVsWap = Math.round((current.price - weightedAvg) * monthlyQty * 100) / 100;
+      const monthlyQty = wQty / monthsInWindow;
+      const impactMonthlyVsWap = Math.round((currentPrice - weightedAvg) * monthlyQty * 100) / 100;
       return {
         key: acc.key,
         productName: acc.productName,
-        points: [...ordered].reverse(),
+        points: [...orderedWithAnchor].reverse(),
         purchases: purchasesSorted,
         weightedAvg,
-        totalWeightedQty: acc.wQty,
+        totalWeightedQty: wQty,
         base,
         current,
         delta,
         deltaPct,
-        displayUnit: base.unit,
+        displayUnit,
         impactMonthlyVsWap,
         volatilityCvPct,
         forecast30d,
@@ -510,7 +339,7 @@ function buildPriceSummariesWithDiagnostics(
         supplierName: acc.supplierName,
         catalogUnit: acc.catalogUnit,
         supplierProductId: acc.supplierProductId,
-        usedPerKgUnitFallback: acc.usedPerKgUnitFallback,
+        usedPerKgUnitFallback: false,
       };
     })
     .sort((a, b) => a.productName.localeCompare(b.productName, 'es'));
@@ -530,7 +359,7 @@ function buildPriceSummariesWithDiagnostics(
     .map((r) => ({
       evolutionKey: r.evolutionKey,
       productName: r.productName,
-      orderItemId: r.orderItemId,
+      referenceId: r.historicoId,
       reason: r.discardReason!,
     }));
 
@@ -544,20 +373,20 @@ function buildPriceSummariesWithDiagnostics(
 }
 
 function buildPriceSummaries(
-  orders: PedidoOrder[],
+  historicoRows: CatalogPriceHistoryListRow[],
   windowStartMs: number,
   windowEndMs: number,
   priceMode: PriceMode,
   supplierFilter: string,
-  catalogNameByProductId: ReadonlyMap<string, string> | null,
+  productInfoBySupplierProductId: ReadonlyMap<string, ProductInfo>,
 ): PriceSummary[] {
   return buildPriceSummariesWithDiagnostics(
-    orders,
+    historicoRows,
     windowStartMs,
     windowEndMs,
     priceMode,
     supplierFilter,
-    catalogNameByProductId,
+    productInfoBySupplierProductId,
   ).series;
 }
 
@@ -597,7 +426,7 @@ function PriceEvolutionMiniChart({ row }: { row: PriceSummary }) {
       return {
         dateLabel,
         price: p.price,
-        kind: p.sortRank === 0 ? 'Pedido' : 'Albarán',
+        kind: p.sortRank === 0 ? 'Inicio' : 'Recepción',
         supplier: p.supplier,
       };
     });
@@ -657,7 +486,7 @@ function PriceEvolutionMiniChart({ row }: { row: PriceSummary }) {
                   <p className="font-semibold text-zinc-900">{p.dateLabel}</p>
                   <p className="text-zinc-600">{p.supplier}</p>
                   <p className="tabular-nums text-zinc-900">
-                    {p.price.toFixed(2)} €/{row.displayUnit} · {p.kind}
+                    {p.price.toFixed(2)} €/{row.displayUnit} · <span className="text-zinc-600">{p.kind}</span>
                   </p>
                 </div>
               );
@@ -683,7 +512,7 @@ function PriceEvolutionMiniChart({ row }: { row: PriceSummary }) {
             dot={(props: { cx?: number; cy?: number; payload?: { kind: string } }) => {
               const { cx, cy, payload } = props;
               if (cx == null || cy == null) return null;
-              const fill = payload?.kind === 'Pedido' ? '#94a3b8' : '#D32F2F';
+              const fill = payload?.kind === 'Inicio' ? '#94a3b8' : '#D32F2F';
               return <circle cx={cx} cy={cy} r={4} fill={fill} stroke="#fff" strokeWidth={1} />;
             }}
             activeDot={{ r: 6, stroke: '#fff', strokeWidth: 2 }}
@@ -692,7 +521,7 @@ function PriceEvolutionMiniChart({ row }: { row: PriceSummary }) {
       </ResponsiveContainer>
       </div>
       <p className="mt-3 rounded-lg bg-zinc-50 px-2.5 py-2 text-center text-[10px] leading-relaxed text-zinc-600 ring-1 ring-zinc-200/80">
-        Gris = precio pedido · Rojo = albarán · Línea gris = PMP del periodo
+        Gris = precio previo al cambio · Rojo = recepción (albarán) · Línea gris = media del periodo
       </p>
     </div>
   );
@@ -781,7 +610,7 @@ function drawExecutivePriceChart(
   doc.setFontSize(7);
   doc.setTextColor(...PDF_ZINC_400);
   doc.text(`€/${opts.unit}`, opts.x + 14, cy + innerH * 0.65, { angle: 90 });
-  doc.text('Evolución del precio unitario registrado en pedidos (línea roja) y precio medio ponderado de todas las compras (línea gris).', cx, cy + innerH + 28, { maxWidth: innerW });
+  doc.text('Evolución desde historico_precios (recepción / albarán). Línea roja = precios tras recepción; línea gris = media del periodo.', cx, cy + innerH + 28, { maxWidth: innerW });
 
   const tx = (t: number) => cx + ((t - minT) / (maxT - minT || 1)) * innerW;
   const py = (p: number) => cy + innerH - ((p - minP) / range) * innerH;
@@ -964,8 +793,6 @@ export default function PedidosPreciosPage() {
   const { localCode, localName, localId, email, userId } = useAuth();
   const hasPedidosEntry = canAccessPedidos(localCode, email, localName, localId);
   const canUse = canUsePedidosModule(localCode, email, localName, localId);
-  const { orders: allOrders, reloadOrdersAsync } = usePedidosOrders();
-  const orders = React.useMemo(() => allOrders.filter((o) => o.status !== 'draft'), [allOrders]);
   const [message, setMessage] = React.useState<string | null>(null);
   const [windowPreset, setWindowPreset] = React.useState<WindowPreset>('90');
   const [supplierFilter, setSupplierFilter] = React.useState<string>('');
@@ -973,10 +800,6 @@ export default function PedidosPreciosPage() {
   const [priceMode, setPriceMode] = React.useState<PriceMode>('unit');
   const [alertPct, setAlertPct] = React.useState(0);
   const [quickCatalog, setQuickCatalog] = React.useState<PedidoSupplier[]>([]);
-  const catalogNameByProductId = React.useMemo(
-    () => catalogNameByProductIdFromSuppliers(quickCatalog),
-    [quickCatalog],
-  );
   const [quickCatalogLoading, setQuickCatalogLoading] = React.useState(false);
   const [quickText, setQuickText] = React.useState('');
   const [quickBusy, setQuickBusy] = React.useState(false);
@@ -993,10 +816,15 @@ export default function PedidosPreciosPage() {
   const [evolutionToast, setEvolutionToast] = React.useState<string | null>(null);
 
   const productInfoBySupplierProductId = React.useMemo(() => {
-    const m = new Map<string, { productName: string; supplierName: string; supplierId: string }>();
+    const m = new Map<string, ProductInfo>();
     for (const s of quickCatalog) {
       for (const p of s.products) {
-        m.set(p.id, { productName: p.name, supplierName: s.name, supplierId: s.id });
+        m.set(p.id, {
+          productName: p.name,
+          supplierName: s.name,
+          supplierId: s.id,
+          catalogUnit: p.unit,
+        });
       }
     }
     return m;
@@ -1023,21 +851,16 @@ export default function PedidosPreciosPage() {
     };
   }, [localId, canUse]);
 
-  const supplierOptions = React.useMemo(() => {
-    const m = new Map<string, string>();
-    for (const o of orders) {
-      if (!m.has(o.supplierId)) m.set(o.supplierId, o.supplierName);
-    }
-    return [...m.entries()].sort((a, b) => a[1].localeCompare(b[1], 'es'));
-  }, [orders]);
+  const supplierOptions = React.useMemo(
+    () =>
+      [...quickCatalog]
+        .map((s) => [s.id, s.name] as [string, string])
+        .sort((a, b) => a[1].localeCompare(b[1], 'es')),
+    [quickCatalog],
+  );
 
   const { windowStartMs, windowEndMs, windowLabel } = React.useMemo(() => {
-    let maxT = 0;
-    for (const o of orders) {
-      const t = Date.parse(orderPriceDate(o));
-      if (Number.isFinite(t) && t > maxT) maxT = t;
-    }
-    const endMs = maxT > 0 ? maxT : Date.now();
+    const endMs = Date.now();
     let startMs = 0;
     let label = 'Todo el histórico';
     if (windowPreset === '30') {
@@ -1050,16 +873,11 @@ export default function PedidosPreciosPage() {
       startMs = endMs - 365 * 86_400_000;
       label = 'Últimos 12 meses';
     } else {
-      let minT = endMs;
-      for (const o of orders) {
-        const t = Date.parse(orderPriceDate(o));
-        if (Number.isFinite(t) && t < minT) minT = t;
-      }
-      startMs = minT > 0 ? minT : 0;
+      startMs = 0;
       label = 'Todo el histórico';
     }
     return { windowStartMs: startMs, windowEndMs: endMs, windowLabel: label };
-  }, [orders, windowPreset]);
+  }, [windowPreset]);
 
   React.useEffect(() => {
     setDismissedSeriesKeys(new Set());
@@ -1094,12 +912,12 @@ export default function PedidosPreciosPage() {
 
   const { series, seriesCandidatesBeforeVariation, evolutionDebug } = React.useMemo(() => {
     const d = buildPriceSummariesWithDiagnostics(
-      orders,
+      catalogHistoryRows,
       windowStartMs,
       windowEndMs,
       priceMode,
       supplierFilter,
-      catalogNameByProductId,
+      productInfoBySupplierProductId,
     );
     return {
       series: d.series,
@@ -1110,11 +928,18 @@ export default function PedidosPreciosPage() {
         discardedProducts: d.discardedProducts,
       },
     };
-  }, [catalogNameByProductId, orders, supplierFilter, windowStartMs, windowEndMs, priceMode]);
+  }, [
+    catalogHistoryRows,
+    productInfoBySupplierProductId,
+    supplierFilter,
+    windowStartMs,
+    windowEndMs,
+    priceMode,
+  ]);
 
   React.useEffect(() => {
     if (process.env.NODE_ENV !== 'development') return;
-    console.log('[Evolución precios] Fuente: líneas purchase_order_items (pedidos no borrador) · local_id:', localId);
+    console.log('[Evolución precios] Fuente: historico_precios (solo recepción / albarán) · local_id:', localId);
     console.log('[Evolución precios] Filtros:', {
       ventana: windowLabel,
       proveedor: supplierFilter || '(todos)',
@@ -1123,15 +948,23 @@ export default function PedidosPreciosPage() {
     console.log('Registros evolución crudos:', evolutionDebug.rawRows);
     console.log('Registros agrupados por producto:', evolutionDebug.groupedRows);
     console.log('Productos descartados:', evolutionDebug.discardedProducts);
-    console.log('[Evolución precios] Candidatos vs con variación >', MIN_PRICE_VARIATION_EUR, '€:', {
+    console.log('[Evolución precios] Candidatos vs series filtradas:', {
       antesFiltroVariacion: seriesCandidatesBeforeVariation,
       trasFiltro: series.length,
     });
   }, [evolutionDebug, localId, windowLabel, supplierFilter, priceMode, series.length, seriesCandidatesBeforeVariation]);
 
   const seriesAllSuppliers = React.useMemo(
-    () => buildPriceSummaries(orders, windowStartMs, windowEndMs, priceMode, '', catalogNameByProductId),
-    [catalogNameByProductId, orders, windowStartMs, windowEndMs, priceMode],
+    () =>
+      buildPriceSummaries(
+        catalogHistoryRows,
+        windowStartMs,
+        windowEndMs,
+        priceMode,
+        '',
+        productInfoBySupplierProductId,
+      ),
+    [catalogHistoryRows, productInfoBySupplierProductId, windowStartMs, windowEndMs, priceMode],
   );
 
   const seriesAllSuppliersVisible = React.useMemo(
@@ -1199,7 +1032,7 @@ export default function PedidosPreciosPage() {
       return 'No hay variaciones de precio en el periodo seleccionado.';
     }
     if (series.length === 0) {
-      return 'No hay evolución de precios en esta selección. Prueba otro periodo, proveedor o modo €/kg si aplica.';
+      return 'No hay cambios de precio por recepción en esta selección. Valida albaranes con precio distinto al último registrado, o prueba otro periodo / proveedor / modo €/kg.';
     }
     return 'Ninguna referencia coincide con el buscador.';
   }, [
@@ -1363,7 +1196,7 @@ export default function PedidosPreciosPage() {
     );
     doc.setFontSize(9);
     doc.text(
-      'Solo referencias con variación: al menos 2 compras y |último − primero| > 0,01 € (misma unidad que en pantalla). Impacto mes: estimación vs PMP al ritmo de compra del periodo.',
+      'Referencias con cambios registrados en recepción (historico_precios). Impacto mes: estimación vs media del periodo según número de recepciones en la ventana.',
       40,
       86,
       { maxWidth: pageW - 80 },
@@ -1695,23 +1528,28 @@ export default function PedidosPreciosPage() {
     setQuickBusy(true);
     try {
       const supabase = getSupabaseClient()!;
-      const { changed } = await updateSupplierProductPriceWithHistory(supabase, localId, match.product.id, parsed.price, {
-        source: 'quick_input',
-        userId: userId ?? null,
+      const p = match.product;
+      await updateSupplierProduct(supabase, localId, p.id, {
+        name: p.name,
+        unit: p.unit,
+        pricePerUnit: parsed.price,
+        vatRate: p.vatRate,
+        parStock: p.parStock,
+        estimatedKgPerUnit: p.estimatedKgPerUnit ?? null,
+        unitsPerPack: p.unitsPerPack,
+        recipeUnit: p.recipeUnit,
+        billingUnit: p.billingUnit ?? null,
+        billingQtyPerOrderUnit: p.billingQtyPerOrderUnit ?? null,
+        pricePerBillingUnit: p.pricePerBillingUnit ?? null,
+        lastPriceUpdatedAt: true,
+        priceUpdateOnly: true,
       });
-      if (!changed) {
-        setQuickFeedback(
-          `«${match.product.name}» ya tenía ese precio (${parsed.price.toFixed(2)} €/${match.product.unit}).`,
-        );
-      } else {
-        setQuickFeedback(
-          `Actualizado: ${match.supplier.name} · ${match.product.name} → ${parsed.price.toFixed(2)} €/${match.product.unit}.`,
-        );
-        setQuickText('');
-        const list = await fetchSuppliersWithProducts(supabase, localId);
-        setQuickCatalog(list);
-        void reloadCatalogPriceHistory();
-      }
+      setQuickFeedback(
+        `Catálogo actualizado: ${match.supplier.name} · ${p.name} → ${parsed.price.toFixed(2)} €/${p.unit}. No se crea histórico (solo recepción / albarán).`,
+      );
+      setQuickText('');
+      const list = await fetchSuppliersWithProducts(supabase, localId);
+      setQuickCatalog(list);
     } catch (e: unknown) {
       setQuickFeedback(e instanceof Error ? e.message : 'Error al actualizar.');
     } finally {
@@ -1738,39 +1576,26 @@ export default function PedidosPreciosPage() {
     setSeriesEvolutionDeleteBusy(true);
     try {
       const ctx = seriesDeleteContext;
-      const itemIds = collectOrderLineIdsForEvolutionKey(orders, ctx.key, catalogNameByProductId);
-      if (itemIds.length === 0) {
-        await appAlert('No hay líneas de pedido que excluir para esta evolución.');
+      const spId = supplierProductIdFromEvolutionKey(ctx.key);
+      if (!spId) {
+        await appAlert('No se pudo identificar el producto.');
         return;
       }
-      await setOrderItemsExcludeFromPriceEvolution(
-        getSupabaseClient()!,
-        localId,
-        itemIds,
-        ctx.key,
-      );
+      await deleteHistoricoPreciosForSupplierProduct(getSupabaseClient()!, localId, spId);
       setDismissedSeriesKeys((prev) => {
         const n = new Set(prev);
         n.add(ctx.key);
         return n;
       });
       setSeriesDeleteContext(null);
-      await reloadOrdersAsync();
       await reloadCatalogPriceHistory();
-      setEvolutionToast('Evolución eliminada');
+      setEvolutionToast('Histórico de recepción eliminado para este producto');
     } catch {
-      await appAlert('No se pudo eliminar la evolución de precio.');
+      await appAlert('No se pudo eliminar el histórico de precios.');
     } finally {
       setSeriesEvolutionDeleteBusy(false);
     }
-  }, [
-    seriesDeleteContext,
-    localId,
-    orders,
-    catalogNameByProductId,
-    reloadCatalogPriceHistory,
-    reloadOrdersAsync,
-  ]);
+  }, [seriesDeleteContext, localId, reloadCatalogPriceHistory]);
 
   if (!hasPedidosEntry) {
     return (
@@ -1801,7 +1626,8 @@ export default function PedidosPreciosPage() {
       <section className="rounded-2xl border border-amber-100 bg-amber-50/60 p-4 shadow-sm ring-1 ring-amber-100/80 sm:p-5">
         <p className="text-[10px] font-black uppercase tracking-wide text-amber-900">Entrada rápida (texto)</p>
         <p className="mt-1 text-xs text-amber-950">
-          Una frase tipo «Oye Chef: el bacon ha subido a 7,80» — detectamos producto y precio y actualizamos el catálogo.
+          Actualiza solo el precio del catálogo. La evolución de precios y el histórico se alimentan únicamente de albaranes
+          validados en recepción.
         </p>
         <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-stretch">
           <input
@@ -1829,8 +1655,8 @@ export default function PedidosPreciosPage() {
         <p className="text-center text-[10px] font-bold uppercase tracking-[0.2em] text-zinc-500">Pedidos</p>
         <h1 className="text-center text-lg font-black text-zinc-900">Evolución de precios</h1>
         <p className="mx-auto mt-2 max-w-2xl text-center text-xs text-zinc-600">
-          Control de tensiones con precio medio ponderado (PMP), impacto mensual estimado y tendencia. Ajusta ventana,
-          proveedor y vista €/ud o €/kg.
+          Vista única sobre la tabla historico_precios: solo cambios reales al validar albaranes. Ajusta periodo, proveedor
+          y vista €/ud o €/kg (según unidad comparable guardada).
         </p>
         {message ? <p className="pt-2 text-center text-sm text-[#B91C1C]">{message}</p> : null}
 
@@ -1919,10 +1745,10 @@ export default function PedidosPreciosPage() {
         </div>
 
         <div className="mt-6 rounded-xl border border-zinc-100 bg-zinc-50/60 p-4 ring-1 ring-zinc-100">
-          <p className="text-[10px] font-black uppercase tracking-wide text-zinc-500">Historial de catálogo (Supabase)</p>
+          <p className="text-[10px] font-black uppercase tracking-wide text-zinc-500">Historial de recepción (Supabase)</p>
           <p className="mt-1 text-xs text-zinc-600">
-            Cambios de precio por albarán validado o entrada rápida. Quitar una fila solo borra el registro histórico; no
-            cambia el precio actual del artículo ni pedidos.
+            Una fila por cada cambio de precio al validar un albarán. Quitar una fila solo borra ese registro; no revierte el
+            precio del catálogo.
           </p>
           {catalogHistoryLoading ? (
             <p className="mt-3 text-sm text-zinc-500">Cargando historial…</p>
@@ -1942,6 +1768,7 @@ export default function PedidosPreciosPage() {
                     <th className="px-2 py-2">Proveedor</th>
                     <th className="px-2 py-2">Origen</th>
                     <th className="px-2 py-2 text-right">Ant. → Nuevo</th>
+                    <th className="px-2 py-2 text-right">Δ %</th>
                     <th className="w-12 px-2 py-2 text-right" aria-label="Acciones" />
                   </tr>
                 </thead>
@@ -1967,7 +1794,12 @@ export default function PedidosPreciosPage() {
                         </td>
                         <td className="px-2 py-2 text-zinc-600">{labelCatalogPriceHistorySource(h.source)}</td>
                         <td className="whitespace-nowrap px-2 py-2 text-right tabular-nums text-zinc-800">
-                          {h.oldPricePerUnit.toFixed(2)} → {h.newPricePerUnit.toFixed(2)} €
+                          {h.oldPricePerUnit.toFixed(2)} → {h.newPricePerUnit.toFixed(2)} €/{h.displayUnit}
+                        </td>
+                        <td className="whitespace-nowrap px-2 py-2 text-right tabular-nums text-zinc-700">
+                          {h.diferenciaPct != null && Number.isFinite(h.diferenciaPct)
+                            ? `${h.diferenciaPct >= 0 ? '+' : ''}${h.diferenciaPct.toFixed(2)} %`
+                            : '—'}
                         </td>
                         <td className="px-1 py-1 text-right">
                           <button
@@ -2012,8 +1844,8 @@ export default function PedidosPreciosPage() {
             </p>
             <p className="mt-1 text-xs text-zinc-600">
               {alertPct <= 0
-                ? 'Cualquier subida respecto al primer precio de la ventana (listado ya excluye cambios irrelevantes).'
-                : `≥ ${alertPct}% respecto al primer precio en la ventana`}
+                ? 'Cualquier subida respecto al precio inicial de la serie en la ventana.'
+                : `≥ ${alertPct}% respecto al precio inicial en la ventana`}
             </p>
           </div>
           <div className="rounded-xl bg-white p-4 shadow-sm ring-1 ring-zinc-100">
@@ -2049,10 +1881,10 @@ export default function PedidosPreciosPage() {
             <Lightbulb className="h-5 w-5 text-amber-800" aria-hidden />
             <p className="text-sm font-black text-zinc-900">Recomendaciones automáticas</p>
           </div>
-          <p className="mt-1 text-xs text-zinc-600">
-            Basadas en impacto vs PMP, alertas de subida y huecos de precio entre proveedores en la misma ventana y modo
-            de vista.
-          </p>
+            <p className="mt-1 text-xs text-zinc-600">
+              Basadas en impacto vs media del periodo, alertas de subida y huecos entre proveedores (misma ventana y modo
+              de vista).
+            </p>
           <ul className="mt-3 space-y-2">
             {actionRecommendations.map((rec) => (
               <li
@@ -2188,12 +2020,12 @@ export default function PedidosPreciosPage() {
                   <button
                     type="button"
                     disabled={seriesEvolutionDeleteBusy}
-                    title="Excluir estas compras de la evolución de precio (no borra el pedido)"
+                    title="Borrar todo el histórico de recepción de este producto (no borra el catálogo ni pedidos)"
                     onClick={() => {
                       setSeriesDeleteContext({ key: row.key });
                     }}
                     className="flex min-h-11 min-w-11 items-center justify-center rounded-xl text-zinc-400 transition-colors hover:bg-red-50 hover:text-[#B91C1C] active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-zinc-400"
-                    aria-label="Vaciar evolución de precio de este producto"
+                    aria-label="Borrar histórico de recepción de este producto"
                   >
                     <Trash2 className="h-5 w-5" aria-hidden />
                   </button>
@@ -2234,7 +2066,7 @@ export default function PedidosPreciosPage() {
               <p className={`pt-1 text-xs font-semibold ${trendClass(row)}`}>{trendLabel(row)}</p>
               <p className="pt-2 text-[10px] font-bold uppercase tracking-wide text-zinc-500">Gráfico de evolución</p>
               <PriceEvolutionMiniChart row={row} />
-              <p className="pt-5 text-[10px] font-bold uppercase tracking-wide text-zinc-500">Compras</p>
+              <p className="pt-5 text-[10px] font-bold uppercase tracking-wide text-zinc-500">Recepciones (histórico)</p>
               <div className="mt-1.5 max-h-44 space-y-1 overflow-y-auto overflow-x-hidden rounded-lg bg-zinc-50 p-2 pb-3 ring-1 ring-zinc-200">
                 {row.purchases.map((pur, idx) => (
                   <p key={`${row.key}-p-${idx}`} className="text-xs leading-snug text-zinc-600">
@@ -2249,7 +2081,7 @@ export default function PedidosPreciosPage() {
                   <p key={`${row.key}-${idx}`} className="text-xs text-zinc-600">
                     {new Date(point.date).toLocaleDateString('es-ES')} · {point.supplier} · {point.price.toFixed(2)} €/
                     {point.unit}
-                    {point.sortRank === 0 ? ' · (precio pedido)' : ''}
+                    {point.sortRank === 0 ? ' · (referencia previa)' : ''}
                   </p>
                 ))}
               </div>
@@ -2319,11 +2151,11 @@ export default function PedidosPreciosPage() {
             aria-labelledby="delete-series-evolution-title"
           >
             <p id="delete-series-evolution-title" className="text-base font-bold text-zinc-900">
-              Eliminar evolución de precio
+              Borrar histórico de recepción
             </p>
             <p className="mt-2 text-sm leading-relaxed text-zinc-600">
-              Se eliminarán todos los registros de evolución de precio de este producto. No se eliminará el producto, el
-              proveedor ni los pedidos.
+              Se eliminarán todas las filas de <code className="text-xs">historico_precios</code> para este producto de
+              proveedor. No se borra el catálogo ni los pedidos.
             </p>
             <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
               <button
@@ -2340,7 +2172,7 @@ export default function PedidosPreciosPage() {
                 className="h-11 rounded-xl bg-[#D32F2F] px-4 text-sm font-black tracking-wide text-white"
                 onClick={() => void handleConfirmDeleteSeriesEvolution()}
               >
-                {seriesEvolutionDeleteBusy ? 'Eliminando…' : 'Eliminar evolución'}
+                {seriesEvolutionDeleteBusy ? 'Eliminando…' : 'Borrar histórico'}
               </button>
             </div>
           </div>

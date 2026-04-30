@@ -30,5 +30,5 @@
     ".next/dev/types/**/*.ts",
     "**/*.mts"
   ],
-  "exclude": ["node_modules"]
+  "exclude": ["node_modules", "chef-one-CODIGO-PARTE-1-producto-ux-20260430-2020"]
 }

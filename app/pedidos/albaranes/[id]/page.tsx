@@ -549,6 +549,7 @@ export default function AlbaranDetallePage() {
           note.id,
           pack.items,
           userId ?? null,
+          { receptionDate: pack.note.deliveryDate },
         );
         if (syn.updated > 0) {
           extra = ` ${syn.updated} precio(s) de catálogo actualizado(s).`;

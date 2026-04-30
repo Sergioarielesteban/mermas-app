@@ -1,10 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { DeliveryNoteItem } from '@/lib/delivery-notes-supabase';
-import {
-  fetchSupplierProductRow,
-  updateSupplierProductLastReceivedPrice,
-  updateSupplierProductPriceWithHistory,
-} from '@/lib/pedidos-supabase';
+import { fetchSupplierProductRow, updateSupplierProductPriceFromRecepcion } from '@/lib/pedidos-supabase';
 
 export type DeliveryNoteCatalogPriceSyncResult = {
   updated: number;
@@ -13,8 +9,8 @@ export type DeliveryNoteCatalogPriceSyncResult = {
 };
 
 /**
- * Tras validar un albarán: si una línea enlaza a `pedido_supplier_products` y el €/ud del albarán
- * difiere del catálogo (misma unidad), actualiza precio + histórico.
+ * Tras validar un albarán: si una línea enlaza a `pedido_supplier_products` y el precio comparable
+ * difiere del último registrado en `historico_precios` (o del baseline de catálogo), actualiza catálogo + histórico.
  */
 export async function syncCatalogPricesFromValidatedDeliveryNote(
   supabase: SupabaseClient,
@@ -22,10 +18,12 @@ export async function syncCatalogPricesFromValidatedDeliveryNote(
   deliveryNoteId: string,
   items: DeliveryNoteItem[],
   userId: string | null,
+  opts?: { receptionDate?: string | null },
 ): Promise<DeliveryNoteCatalogPriceSyncResult> {
   let updated = 0;
   let unchanged = 0;
   let skipped = 0;
+  const receptionDate = opts?.receptionDate ?? null;
 
   for (const item of items) {
     const pid = item.internalProductId;
@@ -41,16 +39,9 @@ export async function syncCatalogPricesFromValidatedDeliveryNote(
         skipped += 1;
         continue;
       }
-      await updateSupplierProductLastReceivedPrice(
-        supabase,
-        localId,
-        pid,
-        up,
-        new Date().toISOString(),
-      );
-      const { changed } = await updateSupplierProductPriceWithHistory(supabase, localId, pid, up, {
-        source: 'delivery_note_validated',
+      const { changed } = await updateSupplierProductPriceFromRecepcion(supabase, localId, pid, up, {
         deliveryNoteId,
+        receptionDate,
         userId,
         existingRow: cat,
       });

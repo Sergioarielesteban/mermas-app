@@ -16,7 +16,7 @@ export type CatalogRowForPriceEvolution = {
 const r2 = (n: number) => Math.round(n * 100) / 100;
 
 /**
- * @param newPriceInCatalogUnit — Mismo criterio que hoy para `updateSupplierProductPriceWithHistory` (€ por unidad de catálogo).
+ * @param newPriceInCatalogUnit — Mismo criterio que `updateSupplierProductPriceFromRecepcion` (€ por unidad de catálogo).
  * @returns Par old/new a guardar en historial, en la **unidad comparable** (p. ej. €/kg si se puede, no €/caja).
  */
 export function comparablePriceHistoryPair(
@@ -57,4 +57,17 @@ export function comparablePriceHistoryPair(
 
   // Sin factor a kg: guardar precio de formato (caja, bandeja, etc.) como hasta ahora
   return { old: r2(oldC), new: r2(newC) };
+}
+
+/** Unidad en la que están `old`/`new` del par comparable (para filtros €/ud vs €/kg en evolución). */
+export function comparablePriceDisplayUnit(row: CatalogRowForPriceEvolution): string {
+  const u = String(row.unit) as Unit;
+  if (u === 'kg') return 'kg';
+  const bq = row.billing_qty_per_order_unit != null ? Number(row.billing_qty_per_order_unit) : 0;
+  if (String(row.billing_unit) === 'kg' && bq > 0) return 'kg';
+  const est = row.estimated_kg_per_unit != null ? Number(row.estimated_kg_per_unit) : 0;
+  if (est > 0) return 'kg';
+  if (u === 'litro') return 'litro';
+  if (u === 'ud') return 'ud';
+  return u;
 }
