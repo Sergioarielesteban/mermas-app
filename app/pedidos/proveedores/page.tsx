@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import React from 'react';
-import { ChevronRight, ListTree, Plus, Upload } from 'lucide-react';
+import { ChevronRight, ListTree, Plus, Search, Upload } from 'lucide-react';
 import { ProveedoresModalShell } from '@/components/pedidos/ProveedoresModalShell';
 import { useAuth } from '@/components/AuthProvider';
 import { appConfirm } from '@/lib/app-dialog-bridge';
@@ -193,6 +193,7 @@ export default function ProveedoresPage() {
   const [editingSupplierId, setEditingSupplierId] = React.useState<string | null>(null);
   const [editingProductId, setEditingProductId] = React.useState<string | null>(null);
   const [expandedSupplierId, setExpandedSupplierId] = React.useState<string | null>(null);
+  const [supplierCatalogQuery, setSupplierCatalogQuery] = React.useState('');
   const [supplierDrafts, setSupplierDrafts] = React.useState<
     Record<
       string,
@@ -596,6 +597,24 @@ export default function ProveedoresPage() {
   const editProductTarget = editingProductId
     ? findProductContext(suppliers, editingProductId)
     : null;
+
+  const visibleSuppliers = React.useMemo(() => {
+    const sorted = [...suppliers].sort((a, b) => a.name.localeCompare(b.name, 'es'));
+    const raw = supplierCatalogQuery.trim();
+    if (!raw) return sorted;
+    const q = normalizeMatch(raw);
+    return sorted.filter((s) => {
+      if (normalizeMatch(s.name).includes(q)) return true;
+      return s.products.some((p) => normalizeMatch(p.name).includes(q));
+    });
+  }, [suppliers, supplierCatalogQuery]);
+
+  const openAddProductForSupplier = (supplierId: string) => {
+    setMessage(null);
+    setProductSupplierId(supplierId);
+    setAddProductOpen(true);
+  };
+
   return (
     <div className="mx-auto w-full max-w-2xl space-y-4">
       {showDeletedBanner ? (
@@ -622,15 +641,9 @@ export default function ProveedoresPage() {
 
       <section className="rounded-2xl border border-zinc-200/80 bg-white p-4 shadow-sm sm:p-5" style={{ borderRadius: 16 }}>
         <h1 className="text-lg font-bold tracking-tight text-zinc-900">Proveedores</h1>
-        <p className="mt-0.5 text-xs leading-relaxed text-zinc-500">
-          Catálogo de compra (ficha, IVA, envase). El coste unificado en la cocina:{' '}
-          <Link className="font-semibold text-[#B91C1C] underline underline-offset-2" href="/pedidos/articulos">
-            Artículos base
-          </Link>
-        </p>
-        <div className="mt-4 flex flex-col gap-2.5 sm:flex-row sm:items-stretch sm:justify-start">
+        <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
           <button
-            className="inline-flex h-10 w-full min-w-0 items-center justify-center gap-2 rounded-2xl bg-[#D32F2F] px-4 text-sm font-semibold text-white shadow-sm transition hover:bg-[#B91C1C] sm:max-w-[16rem] sm:shrink-0"
+            className="inline-flex h-10 min-w-0 flex-1 items-center justify-center gap-2 rounded-xl bg-[#D32F2F] px-4 text-sm font-semibold text-white shadow-sm transition hover:bg-[#B91C1C] sm:max-w-[14rem] sm:flex-none"
             type="button"
             onClick={() => {
               setMessage(null);
@@ -641,82 +654,70 @@ export default function ProveedoresPage() {
             <span>+ Nuevo proveedor</span>
           </button>
           <button
-            className="inline-flex h-10 w-full min-w-0 items-center justify-center gap-2 rounded-2xl border border-zinc-200 bg-white px-4 text-sm font-medium text-zinc-800 shadow-sm transition hover:bg-zinc-50 disabled:opacity-50 sm:max-w-[16rem] sm:shrink-0"
+            className="inline-flex h-10 min-w-0 flex-1 items-center justify-center gap-2 rounded-xl border border-zinc-200 bg-white px-4 text-sm font-medium text-zinc-800 shadow-sm transition hover:bg-zinc-50 disabled:opacity-50 sm:max-w-[14rem] sm:flex-none"
             disabled={bulkImportBusy}
             type="button"
             onClick={importMissingSuppliersFromInventory}
           >
             <Upload className="h-4 w-4 shrink-0" />
-            {bulkImportBusy ? 'Importando…' : 'Importar proveedores'}
+            {bulkImportBusy ? 'Importando…' : 'Importar'}
           </button>
+        </div>
+        <div className="relative mt-3">
+          <Search
+            className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400"
+            strokeWidth={2}
+            aria-hidden
+          />
+          <input
+            value={supplierCatalogQuery}
+            onChange={(e) => setSupplierCatalogQuery(e.target.value)}
+            placeholder="Buscar proveedor o artículo…"
+            className="h-10 w-full rounded-xl border border-zinc-200 bg-zinc-50/50 pl-10 pr-3 text-sm text-zinc-900 outline-none placeholder:text-zinc-400 focus:border-zinc-300 focus:bg-white"
+          />
         </div>
       </section>
 
-      <section className="rounded-2xl border border-zinc-200/80 bg-white p-4 shadow-sm sm:p-5" style={{ borderRadius: 16 }}>
-        <h2 className="text-sm font-bold text-zinc-900">Productos</h2>
-        <p className="mt-0.5 text-xs text-zinc-500">Selector de proveedor y añadir líneas al catálogo (el formulario se abre al continuar).</p>
-        <div className="mt-3 flex flex-col gap-2.5 sm:flex-row sm:items-stretch">
-          <select
-            className="h-10 min-h-0 w-full min-w-0 flex-1 rounded-2xl border border-zinc-200 bg-zinc-50/50 px-3 text-sm font-medium text-zinc-900 outline-none focus:border-zinc-400"
-            value={productSupplierId}
-            onChange={(e) => setProductSupplierId(e.target.value)}
-          >
-            {suppliers.length === 0 ? <option value="">Aún no hay proveedores</option> : null}
-            {suppliers.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.name}
-              </option>
-            ))}
-          </select>
-          <button
-            className="inline-flex h-10 shrink-0 items-center justify-center gap-1.5 rounded-2xl border border-dashed border-[#D32F2F] bg-white px-4 text-sm font-semibold text-[#B91C1C] transition hover:bg-red-50/80 disabled:cursor-not-allowed disabled:opacity-50 sm:px-5"
-            disabled={!suppliers.length}
-            type="button"
-            onClick={() => {
-              setMessage(null);
-              setAddProductOpen(true);
-            }}
-          >
-            <Plus className="h-4 w-4" />
-            + Añadir producto
-          </button>
-        </div>
-      </section>
-
-      {[...suppliers]
-        .sort((a, b) => a.name.localeCompare(b.name, 'es'))
-        .map((supplier) => (
+      {visibleSuppliers.map((supplier) => (
         <section key={supplier.id} className="overflow-hidden rounded-2xl border border-zinc-200/80 bg-white shadow-sm">
-          <button
-            type="button"
-            onClick={() => setExpandedSupplierId((id) => (id === supplier.id ? null : supplier.id))}
-            className="flex w-full items-center justify-between gap-3 px-3 py-2.5 text-left sm:px-3.5 sm:py-2.5"
-            aria-expanded={expandedSupplierId === supplier.id}
-          >
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-bold leading-tight text-zinc-900">{supplier.name}</p>
-              <p className="mt-0.5 text-[11px] leading-tight text-zinc-500">Contacto: {supplier.contact || '—'}</p>
-              <p className="mt-0.5 text-[10px] leading-tight text-zinc-500">
-                Reparto: {formatDeliveryCycleSummary(supplier.deliveryCycleWeekdays ?? [])}
-              </p>
+          <div className="px-3 py-2.5 sm:px-3.5 sm:py-3">
+            <p className="truncate text-sm font-bold leading-tight text-zinc-900">{supplier.name}</p>
+            <p className="mt-0.5 text-[11px] leading-tight text-zinc-500">Contacto: {supplier.contact || '—'}</p>
+            <p className="mt-0.5 text-[10px] leading-tight text-zinc-500">
+              Reparto: {formatDeliveryCycleSummary(supplier.deliveryCycleWeekdays ?? [])}
+            </p>
+            <div className="mt-2.5 flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => setExpandedSupplierId((id) => (id === supplier.id ? null : supplier.id))}
+                className={[
+                  'inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-[11px] font-bold uppercase tracking-wide sm:flex-none',
+                  expandedSupplierId === supplier.id
+                    ? 'bg-zinc-200/90 text-zinc-900'
+                    : 'bg-[#D32F2F]/10 text-[#B91C1C] ring-1 ring-[#D32F2F]/25',
+                ].join(' ')}
+                aria-expanded={expandedSupplierId === supplier.id}
+              >
+                <ListTree className="h-3.5 w-3.5 shrink-0" strokeWidth={2.25} />
+                {expandedSupplierId === supplier.id ? 'Ocultar' : 'Ver artículos'}
+                <ChevronRight
+                  className={['h-3.5 w-3.5 shrink-0 transition-transform', expandedSupplierId === supplier.id ? 'rotate-90' : ''].join(
+                    ' ',
+                  )}
+                  strokeWidth={2.25}
+                  aria-hidden
+                />
+              </button>
+              <button
+                type="button"
+                onClick={() => openAddProductForSupplier(supplier.id)}
+                className="inline-flex flex-1 items-center justify-center gap-1 rounded-lg border border-zinc-300 bg-white px-3 py-2 text-[11px] font-semibold text-zinc-900 shadow-sm sm:flex-none"
+              >
+                <Plus className="h-3.5 w-3.5 shrink-0" strokeWidth={2.5} />
+                + Añadir producto
+              </button>
             </div>
-            <span
-              className={[
-                'inline-flex shrink-0 items-center gap-1.5 rounded-lg px-2 py-1.5 text-[10px] font-bold uppercase tracking-wide',
-                expandedSupplierId === supplier.id
-                  ? 'bg-zinc-200/80 text-zinc-800'
-                  : 'bg-[#D32F2F]/10 text-[#B91C1C] ring-1 ring-[#D32F2F]/25',
-              ].join(' ')}
-            >
-              <ListTree className="h-3.5 w-3.5" strokeWidth={2.25} />
-              {expandedSupplierId === supplier.id ? 'Ocultar' : 'Ver artículos'}
-              <ChevronRight
-                className={['h-3.5 w-3.5 transition-transform', expandedSupplierId === supplier.id ? 'rotate-90' : ''].join(' ')}
-                strokeWidth={2.25}
-                aria-hidden
-              />
-            </span>
-          </button>
+          </div>
 
           {expandedSupplierId === supplier.id ? (
             <div className="border-t border-zinc-100 px-4 pb-4 pt-3">
@@ -854,6 +855,12 @@ export default function ProveedoresPage() {
         </section>
       ))}
 
+      {suppliers.length > 0 && visibleSuppliers.length === 0 ? (
+        <p className="rounded-2xl border border-zinc-200 bg-zinc-50 px-4 py-6 text-center text-sm text-zinc-600">
+          Ningún proveedor coincide con la búsqueda.
+        </p>
+      ) : null}
+
       <ProveedoresModalShell
         open={newSupplierOpen}
         title="Nuevo proveedor"
@@ -894,17 +901,9 @@ export default function ProveedoresPage() {
         onClose={() => setAddProductOpen(false)}
       >
         <div className="mt-2 grid grid-cols-1 gap-2">
-          <select
-            value={productSupplierId}
-            onChange={(e) => setProductSupplierId(e.target.value)}
-            className="h-10 rounded-xl border border-zinc-300 bg-white px-3 text-sm text-zinc-900 outline-none"
-          >
-            {suppliers.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.name}
-              </option>
-            ))}
-          </select>
+          <p className="rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2.5 text-sm font-semibold text-zinc-900">
+            {suppliers.find((s) => s.id === productSupplierId)?.name ?? 'Proveedor'}
+          </p>
           <input
             value={productName}
             onChange={(e) => setProductName(e.target.value)}

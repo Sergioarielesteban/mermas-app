@@ -65,13 +65,13 @@ function MermaDashSection({
   children: React.ReactNode;
 }) {
   return (
-    <section className="rounded-2xl border border-zinc-200/90 bg-zinc-50/40 p-4 shadow-sm sm:p-5">
-      <header className="border-b border-zinc-200/80 pb-3">
+    <section className="rounded-2xl border border-zinc-200/90 bg-zinc-50/40 p-3 shadow-sm sm:p-4">
+      <header className="border-b border-zinc-200/80 pb-2">
         <p className="text-[10px] font-extrabold uppercase tracking-[0.16em] text-[#B91C1C]">{tier}</p>
-        <h2 className="mt-1 text-base font-black text-zinc-900">{title}</h2>
-        <p className="mt-1 text-xs leading-relaxed text-zinc-600">{hint}</p>
+        <h2 className="mt-0.5 text-sm font-black text-zinc-900 sm:text-base">{title}</h2>
+        <p className="mt-0.5 text-[11px] leading-snug text-zinc-600">{hint}</p>
       </header>
-      <div className="mt-4 space-y-5">{children}</div>
+      <div className="mt-3 space-y-4">{children}</div>
     </section>
   );
 }
@@ -609,7 +609,7 @@ export default function DashboardPage() {
       <MermaDashSection
         tier="Encargado"
         title="Revisión operativa"
-        hint="Alertas, anomalías, comparativas cortas y tops. Las sugerencias solo aparecen si hay un patrón claro en los datos."
+        hint="Alertas y patrones detectados."
       >
         {insights.length > 0 ? (
           <div className="rounded-2xl border border-amber-200/80 bg-amber-50/80 p-3 ring-1 ring-amber-100">
@@ -889,15 +889,13 @@ export default function DashboardPage() {
       <MermaDashSection
         tier="Dirección"
         title="Lectura global"
-        hint="Objetivos, tendencias, comparación mensual y exportación en PDF para dirección."
+        hint="Objetivos, tendencias y exportación PDF."
       >
         <section className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-zinc-200">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <h2 className="text-sm font-extrabold uppercase tracking-wide text-zinc-700">Objetivos de merma</h2>
-              <p className="mt-1 max-w-xl text-xs leading-relaxed text-zinc-600">
-                Desliza la barra para subir o bajar el tope (como el volumen del móvil). Se guarda en este dispositivo.
-              </p>
+              <p className="mt-0.5 text-[11px] text-zinc-600">Ajuste en este dispositivo.</p>
             </div>
             <button
               type="button"

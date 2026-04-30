@@ -41,7 +41,7 @@ function formatShortDate(iso: string) {
 }
 
 export default function PedidosArticulosPage() {
-  const { localCode, localName, localId, email, profileReady, isCentralKitchen } = useAuth();
+  const { localCode, localName, localId, email, profileReady } = useAuth();
   const hasPedidosEntry = canAccessPedidos(localCode, email, localName, localId);
   const canUse = canUsePedidosModule(localCode, email, localName, localId);
   const supabaseOk = isSupabaseEnabled() && getSupabaseClient();
@@ -90,7 +90,7 @@ export default function PedidosArticulosPage() {
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'No se pudieron cargar artículos.';
       if (isMissingPurchaseArticlesError(msg)) {
-        setBanner('Ejecuta en Supabase: supabase-pedidos-migration-purchase-articles.sql');
+        setBanner('Los artículos de compra no están disponibles para este local. Consulta con administración.');
       } else {
         setBanner(msg);
       }
@@ -210,40 +210,13 @@ export default function PedidosArticulosPage() {
         <div className="rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-sm text-amber-950">{banner}</div>
       ) : null}
 
-      <div className="rounded-xl border border-zinc-200 bg-zinc-50/80 px-3 py-2 text-[11px] leading-snug text-zinc-700 sm:text-xs">
-        <p className="font-semibold text-zinc-800">¿Dónde están los productos de Cocina Central?</p>
-        <ul className="mt-1.5 list-inside list-disc space-y-0.5">
-          <li>
-            Solo ves artículos del <strong>local de tu sesión actual</strong>
-            {localName ? ` (${localName})` : ''}. Si las fórmulas las guardas con otro local en el perfil, hay que entrar con
-            ese usuario (o simular ese local como superadmin).
-          </li>
-          <li>
-            Cada artículo «Cocina Central» se crea al pulsar <strong>Guardar</strong> en{' '}
-            <Link href="/cocina-central/produccion/recetas" className="font-bold text-[#D32F2F] underline">
-              Cocina Central → Fórmulas
-            </Link>
-            . Si añadiste el código hace poco, vuelve a abrir la fórmula y guarda otra vez.
-          </li>
-          <li>
-            En Supabase debe estar aplicado{' '}
-            <code className="rounded bg-white px-1 text-[10px]">supabase-purchase-articles-cocina-central-origen.sql</code>.
-          </li>
-        </ul>
-        {isCentralKitchen && ccCount === 0 && articles.length > 0 ? (
-          <p className="mt-2 rounded-lg border border-amber-200 bg-amber-50/90 px-2 py-1.5 text-amber-950">
-            Este local aún no tiene artículos sincronizados desde fórmulas. Crea o edita una fórmula y guarda.
-          </p>
-        ) : null}
-      </div>
-
-      <section className="rounded-xl bg-white p-2.5 shadow-sm ring-1 ring-zinc-200 sm:p-3">
-        <div className="flex items-center justify-between gap-2">
+      <section className="rounded-xl bg-white p-2 shadow-sm ring-1 ring-zinc-200 sm:p-2.5">
+        <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
             <p className="text-[9px] font-bold uppercase leading-tight text-zinc-500">Listado</p>
-            <p className="text-xs leading-tight text-zinc-600 sm:text-sm">
+            <p className="text-[11px] leading-tight text-zinc-600 sm:text-xs">
               <span className="font-bold tabular-nums text-zinc-900">{filtered.length}</span> artículos
-              {q.trim() || origenFilter !== 'todos' || estadoFilter !== 'activos' ? ' (filtrado)' : ''}
+              {q.trim() || origenFilter !== 'todos' || estadoFilter !== 'activos' ? ' · filtrado' : ''}
               {ccCount > 0 ? (
                 <span className="text-zinc-500">
                   {' '}
@@ -255,12 +228,12 @@ export default function PedidosArticulosPage() {
           <button
             type="button"
             onClick={() => void load()}
-            className="shrink-0 rounded-md border border-zinc-200 bg-zinc-50 px-2 py-1 text-[10px] font-semibold text-zinc-800 sm:px-2.5 sm:py-1.5 sm:text-xs"
+            className="shrink-0 rounded-md border border-zinc-200 bg-white px-2 py-0.5 text-[9px] font-semibold text-zinc-700 shadow-sm sm:py-1 sm:text-[10px]"
           >
             Actualizar
           </button>
         </div>
-        <div className="mt-2 flex flex-wrap gap-1.5">
+        <div className="mt-1.5 grid grid-cols-3 gap-1 sm:flex sm:flex-wrap sm:gap-1">
           {(
             [
               ['todos', 'Todos'],
@@ -273,7 +246,7 @@ export default function PedidosArticulosPage() {
               type="button"
               onClick={() => setOrigenFilter(key)}
               className={[
-                'rounded-lg border px-2 py-1 text-[10px] font-bold sm:text-[11px]',
+                'min-h-8 rounded-md border px-1.5 py-1 text-[9px] font-bold leading-tight sm:min-h-0 sm:px-2 sm:text-[10px]',
                 origenFilter === key
                   ? key === 'cocina_central'
                     ? 'border-amber-300 bg-amber-100 text-amber-950'
@@ -285,8 +258,7 @@ export default function PedidosArticulosPage() {
             </button>
           ))}
         </div>
-        <div className="mt-2 flex flex-wrap gap-1.5 border-t border-zinc-200 pt-2">
-          <p className="w-full text-[9px] font-bold uppercase text-zinc-500">Estado</p>
+        <div className="mt-1.5 grid grid-cols-3 gap-1 sm:flex sm:flex-wrap sm:gap-1">
           {(
             [
               ['activos', 'Activos'],
@@ -299,7 +271,7 @@ export default function PedidosArticulosPage() {
               type="button"
               onClick={() => setEstadoFilter(key)}
               className={[
-                'rounded-lg border px-2 py-1 text-[10px] font-bold sm:text-[11px]',
+                'min-h-8 rounded-md border px-1.5 py-1 text-[9px] font-bold leading-tight sm:min-h-0 sm:px-2 sm:text-[10px]',
                 estadoFilter === key
                   ? 'border-emerald-600 bg-emerald-900 text-white'
                   : 'border-zinc-200 bg-white text-zinc-700',
@@ -309,16 +281,16 @@ export default function PedidosArticulosPage() {
             </button>
           ))}
         </div>
-        <div className="relative mt-2">
+        <div className="relative mt-1.5">
           <Search
-            className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-zinc-400"
+            className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-zinc-400"
             aria-hidden
           />
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
             placeholder="Buscar…"
-            className="min-h-[40px] w-full rounded-lg border border-zinc-200 py-2 pl-8 pr-2.5 text-sm outline-none focus:ring-2 focus:ring-[#D32F2F]/20"
+            className="h-9 w-full rounded-lg border border-zinc-200 py-1.5 pl-7 pr-2 text-sm outline-none focus:ring-2 focus:ring-[#D32F2F]/20"
           />
         </div>
       </section>
@@ -328,13 +300,13 @@ export default function PedidosArticulosPage() {
       ) : filtered.length === 0 ? (
         <p className="rounded-2xl bg-zinc-50 py-10 text-center text-sm text-zinc-600 ring-1 ring-zinc-200">
           {articles.length === 0
-            ? 'Aún no hay artículos. Ejecuta la migración SQL o crea productos en Proveedores.'
+            ? 'Aún no hay artículos. Alta en Proveedores o revisa la configuración del local.'
             : origenFilter === 'cocina_central' && ccCount === 0
-              ? 'Ningún artículo de Cocina Central en este local. Guarda una fórmula en Cocina Central (mismo local de sesión) o revisa la migración SQL.'
+              ? 'No hay artículos de Cocina Central en este local.'
               : estadoFilter === 'inactivos' && articles.every((x) => x.activo)
-                ? 'No hay artículos desactivados. Los artículos desactivados siguen guardados: cambia el filtro a «Todos» o «Activos».'
+                ? 'No hay artículos inactivos. Prueba «Activos» o «Todos».'
                 : estadoFilter === 'activos' && articles.every((x) => !x.activo)
-                  ? 'No hay artículos activos con el filtro actual. Usa «Inactivos» o «Todos» para ver y reactivar artículos.'
+                  ? 'No hay artículos activos. Prueba «Inactivos» o «Todos».'
                   : 'Nada coincide con el filtro o la búsqueda.'}
         </p>
       ) : (
@@ -481,31 +453,24 @@ function ArticleCard({
               aria-hidden
             />
           </summary>
-          <div className="space-y-3 border-t border-amber-100 bg-amber-50/30 px-3 pb-3 pt-2 sm:px-4 sm:pb-4 sm:pt-2">
+          <div className="space-y-2 border-t border-amber-100 bg-amber-50/30 px-3 pb-2.5 pt-2 sm:px-4 sm:pb-3">
             {activoErr ? (
               <p className="rounded-lg border border-red-200 bg-red-50 px-2 py-1.5 text-xs text-red-900">{activoErr}</p>
             ) : null}
-            <div className="rounded-lg border border-amber-200/80 bg-white px-3 py-2 text-xs text-zinc-700">
+            <div className="rounded-lg border border-amber-200/80 bg-white px-2.5 py-1.5 text-[11px] text-zinc-700">
               <p>
-                <span className="font-semibold text-zinc-500">Origen:</span> Cocina Central (fórmula interna). En este
-                listado solo se muestra nombre, unidad y coste de uso; no hay ingredientes ni desglose.
+                <span className="font-semibold text-zinc-500">Uso:</span> {uso}
+                {a.centralCostSyncedAt ? (
+                  <span className="text-zinc-500"> · Actualizado {formatShortDate(a.centralCostSyncedAt)}</span>
+                ) : null}
               </p>
-              <p className="mt-1">
-                <span className="font-semibold text-zinc-500">Unidad de uso:</span> {uso}
-              </p>
-              {a.centralCostSyncedAt ? (
-                <p className="mt-1 text-zinc-500">
-                  <span className="font-semibold text-zinc-600">Coste sincronizado:</span>{' '}
-                  {formatShortDate(a.centralCostSyncedAt)}
-                </p>
-              ) : null}
               {a.centralProductionRecipeId ? (
-                <p className="mt-2">
+                <p className="mt-1">
                   <Link
                     href={`/cocina-central/produccion/recetas/${a.centralProductionRecipeId}`}
-                    className="font-bold text-[#D32F2F] underline"
+                    className="font-semibold text-[#D32F2F] underline"
                   >
-                    Gestionar fórmula en Cocina Central
+                    Fórmula
                   </Link>
                 </p>
               ) : null}
@@ -584,11 +549,7 @@ function ArticleCard({
       });
       onReload();
     } catch (e: unknown) {
-      setMasterMsg(
-        e instanceof Error
-          ? e.message
-          : 'No se pudo guardar. ¿Ejecutaste supabase-pedidos-migration-master-article-usage-cost.sql?',
-      );
+      setMasterMsg(e instanceof Error ? e.message : 'No se pudo guardar. Inténtalo de nuevo.');
     } finally {
       setMasterBusy(false);
     }
@@ -646,96 +607,81 @@ function ArticleCard({
             aria-hidden
           />
         </summary>
-        <div className="space-y-3 border-t border-zinc-100 bg-zinc-50/40 px-3 pb-3 pt-2 sm:space-y-4 sm:px-4 sm:pb-4 sm:pt-2">
+        <div className="space-y-2 border-t border-zinc-100 bg-zinc-50/40 px-3 pb-3 pt-2 sm:space-y-3 sm:px-4 sm:pb-4 sm:pt-2">
           {activoErr ? (
             <p className="rounded-lg border border-red-200 bg-red-50 px-2 py-1.5 text-xs text-red-900">{activoErr}</p>
           ) : null}
-          <div className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs text-zinc-700">
-            <p>
-              <span className="font-semibold text-zinc-500">Nombre visible (proveedor / albarán):</span>{' '}
-              {nombreVisibleProveedor || '—'}
-            </p>
-            <p className="mt-1">
-              <span className="font-semibold text-zinc-500">Artículo máster (interno):</span> {a.nombre}
-            </p>
+          <div className="rounded-lg border border-zinc-200 bg-white px-2.5 py-1.5 text-[11px] text-zinc-700">
             {a.nombreCorto?.trim() ? (
-              <p className="mt-1">
-                <span className="font-semibold text-zinc-500">Alias interno:</span> {a.nombreCorto}
+              <p>
+                <span className="font-semibold text-zinc-500">Alias:</span> {a.nombreCorto}
               </p>
             ) : null}
-            <p className="mt-1 text-zinc-500">
-              {a.unidadBase ? `Unidad ref.: ${a.unidadBase}` : 'Sin unidad base'}
+            <p className={a.nombreCorto?.trim() ? 'mt-0.5 text-zinc-600' : ''}>
+              {a.unidadBase ? `${a.unidadBase}` : '—'}
               {a.categoria ? ` · ${a.categoria}` : ''}
             </p>
-            <p className="mt-1 text-zinc-500">
-              <span className="font-semibold text-zinc-500">Origen coste máster:</span> {labelMetodoCosteMaster(a.metodoCosteMaster)}
-            </p>
           </div>
-          <section className="rounded-xl border border-indigo-200/80 bg-indigo-50/40 p-3 ring-1 ring-indigo-100 sm:p-4">
-            <h3 className="text-xs font-black uppercase text-indigo-900">Compra → uso cocina</h3>
+          <section className="rounded-lg border border-indigo-200/80 bg-indigo-50/40 p-2.5 ring-1 ring-indigo-100 sm:p-3">
+            <h3 className="text-[10px] font-black uppercase tracking-wide text-indigo-900">Compra y uso en cocina</h3>
             {masterMsg ? (
-              <p className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-2 py-1.5 text-xs text-amber-950">
+              <p className="mt-1.5 rounded-md border border-amber-200 bg-amber-50 px-2 py-1 text-[11px] text-amber-950">
                 {masterMsg}
               </p>
             ) : null}
-            <div className="mt-3 space-y-3">
+            <div className="mt-2 space-y-2">
               <div>
-                <p className="text-[10px] font-black uppercase text-indigo-900/80">A) Compra</p>
-                <dl className="mt-1 grid gap-1 text-xs text-zinc-800 sm:grid-cols-2">
+                <p className="text-[9px] font-black uppercase text-indigo-900/75">Compra</p>
+                <dl className="mt-1 grid gap-1 text-[11px] text-zinc-800 sm:grid-cols-2">
                   <div>
-                    <dt className="font-semibold text-zinc-500">Proveedor habitual</dt>
-                    <dd>{principalRefRow?.supplierName ?? '—'}</dd>
+                    <dt className="text-zinc-500">Proveedor habitual</dt>
+                    <dd className="font-medium">{principalRefRow?.supplierName ?? '—'}</dd>
                   </div>
-                  <div>
-                    <dt className="font-semibold text-zinc-500">Referencia principal</dt>
-                    <dd className="truncate" title={principalRefRow?.name}>
-                      {principalRefRow?.name ?? '—'}
+                  <div className="sm:col-span-2">
+                    <dt className="text-zinc-500">Referencia</dt>
+                    <dd>
+                      <select
+                        value={refProdId}
+                        disabled={masterBusy || compareRows.length === 0}
+                        onChange={(e) => setRefProdId(e.target.value)}
+                        className="mt-0.5 w-full rounded-md border border-zinc-200 bg-white px-2 py-1.5 text-xs"
+                      >
+                        <option value="">—</option>
+                        {compareRows.map((r) => (
+                          <option key={r.id} value={r.id}>
+                            {r.supplierName} · {r.name} ({formatUnitPriceEur(r.pricePerUnit, r.unit)})
+                          </option>
+                        ))}
+                      </select>
                     </dd>
                   </div>
                   <div>
-                    <dt className="font-semibold text-zinc-500">Unidad de compra</dt>
+                    <dt className="text-zinc-500">Unidad de compra</dt>
                     <dd>{principalRefRow?.unit ?? a.unidadCompra ?? '—'}</dd>
                   </div>
                   <div>
-                    <dt className="font-semibold text-zinc-500">IVA compra</dt>
+                    <dt className="text-zinc-500">Precio compra actual</dt>
+                    <dd className="font-semibold tabular-nums">
+                      {compraUnitEur != null ? formatMoneyEur(roundMoney(compraUnitEur)) : '—'}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-zinc-500">IVA</dt>
                     <dd>{a.ivaCompraPct != null ? `${a.ivaCompraPct} %` : '—'}</dd>
                   </div>
                 </dl>
               </div>
               <div>
-                <p className="text-[10px] font-black uppercase text-indigo-900/80">B) Uso interno</p>
-                <div className="mt-2 grid gap-3 sm:grid-cols-2">
-                  <label className="block text-xs font-semibold text-zinc-700">
-                    Referencia principal (catálogo)
-                    <select
-                      value={refProdId}
-                      disabled={masterBusy || compareRows.length === 0}
-                      onChange={(e) => setRefProdId(e.target.value)}
-                      className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-2 py-2 text-sm"
-                    >
-                      <option value="">—</option>
-                      {compareRows.map((r) => (
-                        <option key={r.id} value={r.id}>
-                          {r.supplierName} · {r.name} ({formatUnitPriceEur(r.pricePerUnit, r.unit)})
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <div className="rounded-lg bg-white/90 px-3 py-2 text-xs ring-1 ring-indigo-100">
-                    <p className="font-bold uppercase text-zinc-500">Coste compra actual</p>
-                    <p className="mt-1 text-lg font-black tabular-nums text-zinc-900">
-                      {compraUnitEur != null ? formatMoneyEur(roundMoney(compraUnitEur)) : '—'}
-                    </p>
-                    <p className="text-[10px] text-zinc-500">Sincronizado con la referencia (SQL).</p>
-                  </div>
-                  <label className="block text-xs font-semibold text-zinc-700">
+                <p className="text-[9px] font-black uppercase text-indigo-900/75">Uso en cocina</p>
+                <div className="mt-1 grid gap-2 sm:grid-cols-2">
+                  <label className="block text-[11px] font-semibold text-zinc-700">
                     Unidad de uso
                     <input
                       list={`pa-usage-${a.id}`}
                       value={unidadUso}
                       disabled={masterBusy}
                       onChange={(e) => setUnidadUso(e.target.value)}
-                      className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-2 py-2 text-sm"
+                      className="mt-0.5 w-full rounded-md border border-zinc-200 bg-white px-2 py-1.5 text-sm"
                       placeholder="loncha, g, ración…"
                     />
                     <datalist id={`pa-usage-${a.id}`}>
@@ -744,73 +690,72 @@ function ArticleCard({
                       ))}
                     </datalist>
                   </label>
-                  <label className="block text-xs font-semibold text-zinc-700">
-                    Unidades de uso por unidad de compra
+                  <label className="block text-[11px] font-semibold text-zinc-700">
+                    Uso por unidad de compra
                     <input
                       value={factorUso}
                       disabled={masterBusy}
                       onChange={(e) => setFactorUso(e.target.value)}
-                      className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-2 py-2 text-sm tabular-nums"
+                      className="mt-0.5 w-full rounded-md border border-zinc-200 bg-white px-2 py-1.5 text-sm tabular-nums"
                       inputMode="decimal"
-                      placeholder="Ej. 50 lonchas / 1 kg → 50"
                     />
                   </label>
-                  <label className="block text-xs font-semibold text-zinc-700 sm:col-span-1">
-                    Rendimiento útil (%)
+                  <label className="block text-[11px] font-semibold text-zinc-700">
+                    Rendimiento (%)
                     <input
                       value={rendPct}
                       disabled={masterBusy}
                       onChange={(e) => setRendPct(e.target.value)}
-                      className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-2 py-2 text-sm tabular-nums"
+                      className="mt-0.5 w-full rounded-md border border-zinc-200 bg-white px-2 py-1.5 text-sm tabular-nums"
                       inputMode="decimal"
                     />
                   </label>
-                  <div className="flex flex-col justify-end rounded-lg bg-white/90 px-3 py-2 ring-1 ring-indigo-100 sm:col-span-1">
-                    <p className="text-[10px] font-bold uppercase text-zinc-500">Coste unitario de uso (vista)</p>
-                    <p className="text-lg font-black tabular-nums text-emerald-800">
+                  <div className="flex flex-col justify-end rounded-md bg-white/90 px-2 py-1.5 ring-1 ring-indigo-100">
+                    <p className="text-[9px] font-bold uppercase text-zinc-500">Coste unitario de uso</p>
+                    <p className="text-base font-black tabular-nums text-emerald-800">
                       {previewCosteUso != null ? formatMoneyEur(roundMoney(previewCosteUso)) : '—'}
                     </p>
-                    <p className="text-[10px] text-zinc-500">
-                      En BD: {a.costeUnitarioUso != null ? formatMoneyEur(roundMoney(a.costeUnitarioUso)) : '—'}
-                    </p>
+                    {a.costeUnitarioUso != null ? (
+                      <p className="text-[10px] text-zinc-500">Guardado: {formatMoneyEur(roundMoney(a.costeUnitarioUso))}</p>
+                    ) : null}
                   </div>
                 </div>
               </div>
-              <div className="rounded-lg border border-indigo-100 bg-white/60 px-3 py-2 text-xs text-zinc-700">
-                <p className="text-[10px] font-black uppercase text-indigo-900/80">C) Impacto</p>
-                <ul className="mt-1 list-inside list-disc space-y-0.5">
-                  <li>
-                    <strong>Escandallos:</strong> sí (unidad + coste del máster).
-                  </li>
-                  <li>
-                    <strong>Mermas:</strong> no conectado.
-                  </li>
-                  <li>
-                    <strong>Comida personal:</strong> pendiente.
-                  </li>
-                </ul>
+              <div className="rounded-md border border-indigo-100 bg-white/70 px-2 py-1.5 text-[11px] text-zinc-700">
+                <p className="text-[9px] font-black uppercase text-indigo-900/75">Impacto</p>
+                <dl className="mt-1 grid grid-cols-3 gap-1 text-center sm:text-left">
+                  <div>
+                    <dt className="text-[9px] text-zinc-500">Escandallos</dt>
+                    <dd className="font-semibold">Sí</dd>
+                  </div>
+                  <div>
+                    <dt className="text-[9px] text-zinc-500">Mermas</dt>
+                    <dd className="font-semibold text-zinc-400">—</dd>
+                  </div>
+                  <div>
+                    <dt className="text-[9px] text-zinc-500">Comida personal</dt>
+                    <dd className="font-semibold text-zinc-400">—</dd>
+                  </div>
+                </dl>
               </div>
             </div>
             <button
               type="button"
               disabled={masterBusy || !localId || !supabaseOk}
               onClick={() => void saveMasterEconomics()}
-              className="mt-3 w-full rounded-xl bg-indigo-900 py-2.5 text-sm font-bold text-white disabled:opacity-50 sm:w-auto sm:px-6"
+              className="mt-2 w-full rounded-lg bg-indigo-900 py-2 text-xs font-bold text-white disabled:opacity-50 sm:w-auto sm:px-5 sm:text-sm"
             >
-              {masterBusy ? 'Guardando…' : 'Guardar conversión y referencia'}
+              {masterBusy ? 'Guardando…' : 'Guardar'}
             </button>
           </section>
 
           {/* Coste máster */}
-          <section className="rounded-xl bg-white p-3 ring-1 ring-zinc-200 sm:p-4">
-            <h3 className="flex items-center gap-2 text-xs font-black uppercase text-zinc-600">
+          <section className="rounded-lg bg-white p-2.5 ring-1 ring-zinc-200 sm:p-3">
+            <h3 className="flex items-center gap-2 text-[10px] font-black uppercase text-zinc-600">
               <LineChart className="h-3.5 w-3.5" aria-hidden />
-              Coste máster (referencia)
+              Coste máster
             </h3>
-            <p className="mt-2 text-xs text-zinc-600">
-              Histórico / compatibilidad. Coste cocina: <strong>coste_unitario_uso</strong> (bloque B arriba).
-            </p>
-            <dl className="mt-3 grid gap-2 text-sm sm:grid-cols-2">
+            <dl className="mt-2 grid gap-1.5 text-sm sm:grid-cols-2">
               <div>
                 <dt className="text-[10px] font-bold uppercase text-zinc-500">Importe</dt>
                 <dd className="font-mono font-semibold tabular-nums text-zinc-900">
@@ -829,22 +774,18 @@ function ArticleCard({
               ) : null}
             </dl>
             {masterStale ? (
-              <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-950">
-                El precio de catálogo más bajo ahora es <strong>{formatMoneyEur(roundMoney(minCatalog!))}</strong> y el máster es{' '}
-                <strong>{formatMoneyEur(roundMoney(master!))}</strong>. Revisa si quieres alinear el máster manualmente en base de datos
-                o en una futura edición en app.
+              <p className="mt-2 rounded-md border border-amber-200 bg-amber-50 px-2 py-1.5 text-[11px] text-amber-950">
+                Catálogo mín. <strong>{formatMoneyEur(roundMoney(minCatalog!))}</strong> · Máster{' '}
+                <strong>{formatMoneyEur(roundMoney(master!))}</strong>. Conviene revisar la coherencia.
               </p>
             ) : null}
           </section>
 
           {/* Producto vinculado */}
           {originRow ? (
-            <section className="rounded-xl border border-dashed border-zinc-300 bg-zinc-50/80 p-3 sm:p-4">
-              <h3 className="text-xs font-black uppercase text-zinc-600">Producto de proveedor de referencia</h3>
-              <p className="mt-1 text-xs text-zinc-600">
-                Línea de catálogo enlazada (origen migración o alta). Es la que usa el flujo de pedidos con ese UUID.
-              </p>
-              <div className="mt-3 flex flex-col gap-2 rounded-lg bg-white p-3 ring-1 ring-zinc-200 sm:flex-row sm:items-center sm:justify-between">
+            <section className="rounded-lg border border-dashed border-zinc-300 bg-zinc-50/80 p-2.5 sm:p-3">
+              <h3 className="text-[10px] font-black uppercase text-zinc-600">Producto de referencia</h3>
+              <div className="mt-2 flex flex-col gap-2 rounded-lg bg-white p-2.5 ring-1 ring-zinc-200 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <span className="rounded bg-zinc-100 px-1.5 py-0.5 text-[10px] font-black uppercase text-zinc-600">
                     Catálogo
@@ -875,26 +816,21 @@ function ArticleCard({
               </div>
             </section>
           ) : (
-            <p className="rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-600">
-              No hay filas de catálogo con este <code className="rounded bg-zinc-100 px-1">article_id</code>. Comprueba la
-              migración o el enlace en Proveedores.
+            <p className="rounded-lg border border-zinc-200 bg-white px-2.5 py-2 text-xs text-zinc-600">
+              Sin catálogo vinculado. Revisa en Proveedores.
             </p>
           )}
 
           {/* Comparativa proveedores */}
-          <section className="rounded-xl bg-white p-3 ring-1 ring-zinc-200 sm:p-4">
-            <h3 className="flex items-center gap-2 text-xs font-black uppercase text-zinc-600">
+          <section className="rounded-lg bg-white p-2.5 ring-1 ring-zinc-200 sm:p-3">
+            <h3 className="flex items-center gap-2 text-[10px] font-black uppercase text-zinc-600">
               <GitCompare className="h-3.5 w-3.5" aria-hidden />
-              Comparativa por proveedor (mismo artículo)
+              Comparativa por proveedor
             </h3>
-            <p className="mt-1 text-xs text-zinc-600">
-              Filas de <strong>pedido_supplier_products</strong> que comparten este artículo. Ordenadas por precio de catálogo.
-              Si solo hay una, más adelante podrás enlazar otro proveedor al mismo artículo para comparar.
-            </p>
             {compareRows.length === 0 ? (
-              <p className="mt-2 text-sm text-zinc-500">Sin datos de catálogo.</p>
+              <p className="mt-2 text-xs text-zinc-500">Sin datos de catálogo.</p>
             ) : (
-              <div className="mt-3 overflow-x-auto rounded-lg ring-1 ring-zinc-100">
+              <div className="mt-2 overflow-x-auto rounded-lg ring-1 ring-zinc-100">
                 <table className="min-w-full text-left text-xs">
                   <thead className="bg-zinc-50 font-black uppercase text-zinc-500">
                     <tr>
@@ -969,24 +905,24 @@ function ArticleCard({
               </div>
             )}
             {compareRows.length > 1 && minCatalog != null && maxCatalog != null ? (
-              <p className="mt-2 text-[11px] text-zinc-500">
-                Rango catálogo activo: {formatMoneyEur(roundMoney(minCatalog))} – {formatMoneyEur(roundMoney(maxCatalog))} ({compareRows.length}{' '}
-                filas)
+              <p className="mt-1.5 text-[10px] text-zinc-500">
+                {formatMoneyEur(roundMoney(minCatalog))} – {formatMoneyEur(roundMoney(maxCatalog))} · {compareRows.length} líneas
               </p>
             ) : null}
           </section>
 
           {/* Histórico precios pedidos */}
-          <section className="rounded-xl bg-white p-3 ring-1 ring-zinc-200 sm:p-4">
-            <h3 className="flex items-center gap-2 text-xs font-black uppercase text-zinc-600">
-              <History className="h-3.5 w-3.5" aria-hidden />
-              Histórico de precios (pedidos)
+          <section className="rounded-lg bg-white p-2.5 ring-1 ring-zinc-200 sm:p-3">
+            <h3 className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] font-black uppercase text-zinc-600">
+              <span className="inline-flex items-center gap-2">
+                <History className="h-3.5 w-3.5" aria-hidden />
+                Histórico de precios
+              </span>
+              <Link href="/pedidos/precios" className="font-semibold normal-case text-[#B91C1C] underline-offset-2 hover:underline">
+                Evolución
+              </Link>
             </h3>
-            <p className="mt-1 text-xs text-zinc-600">
-              Resumen y últimas líneas con <strong>supplier_product_id</strong> en pedidos enviados/recibidos. Para gráficos
-              avanzados usa <Link href="/pedidos/precios" className="font-bold text-[#D32F2F] underline">Precios</Link>.
-            </p>
-            <div className="mt-3 space-y-3">
+            <div className="mt-2 space-y-2">
               {compareRows.map((row) => {
                 const h = priceHistory.get(row.id);
                 const samples = priceSamples.get(row.id) ?? [];

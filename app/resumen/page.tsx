@@ -204,9 +204,8 @@ export default function ResumenPage() {
         </div>
       ) : null}
       <div className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-zinc-200">
-        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-zinc-500">Resumen de Operaciones</p>
-        <p className="pt-1 text-sm text-zinc-700">Historial de mermas registradas y su impacto economico.</p>
-        <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+        <h1 className="text-base font-bold tracking-tight text-zinc-900">Resumen de operaciones</h1>
+        <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2">
           <select
             value={productFilter}
             onChange={(e) => setProductFilter(e.target.value)}
@@ -243,8 +242,8 @@ export default function ResumenPage() {
             Descargar informe
           </button>
         </div>
-        <p className="mt-2 text-xs text-zinc-500">
-          Registros filtrados: {filtered.length} | Valor total: {totalFiltered.toFixed(2)} €
+        <p className="mt-2 text-[11px] tabular-nums text-zinc-500">
+          {filtered.length} registros · {totalFiltered.toFixed(2)} €
         </p>
       </div>
 

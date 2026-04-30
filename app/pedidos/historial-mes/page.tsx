@@ -385,14 +385,11 @@ export default function PedidosHistorialMesPage() {
         </Link>
       </section>
 
-      <section className="rounded-2xl bg-zinc-950 px-4 py-2.5 text-white shadow-lg shadow-zinc-900/20 sm:px-5">
-        <p className="text-center text-base font-semibold tracking-tight text-white sm:text-lg">Compras del mes</p>
-        <p className="mx-auto mt-1 max-w-sm text-center text-[11px] leading-snug text-zinc-400">
-          Pulsa el proveedor para ver productos.
-        </p>
+      <section className="flex flex-col gap-2 rounded-xl border border-zinc-200/90 bg-white px-3 py-2.5 shadow-sm sm:flex-row sm:items-center sm:justify-between sm:px-4 sm:py-3">
+        <h1 className="text-sm font-bold tracking-tight text-zinc-900 sm:text-base">Compras del mes</h1>
         <Link
           href="/pedidos/precios"
-          className="mt-2 block w-full rounded-xl border border-white/25 bg-white/10 px-3 py-1.5 text-center text-xs font-semibold text-white transition hover:bg-white/15"
+          className="inline-flex h-9 shrink-0 items-center justify-center rounded-lg border border-zinc-300 bg-zinc-50 px-3 text-xs font-semibold text-zinc-900 shadow-sm transition hover:border-zinc-400 hover:bg-white sm:h-9 sm:px-4"
         >
           Evolución de precios
         </Link>
