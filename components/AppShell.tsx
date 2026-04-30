@@ -45,7 +45,7 @@ import {
   canAccessPedidosByRole,
 } from '@/lib/app-role-permissions';
 import { getModuleAccess } from '@/lib/canAccessModule';
-import { goBackOrToPanel } from '@/lib/navigate-back-or-fallback';
+import { APP_MODULE_HOME, getAppNavBreadcrumb, getParentRoute } from '@/lib/app-navigation';
 
 type NavItemNote = { kind: 'note'; text: string };
 type NavItemLink = {
@@ -262,9 +262,15 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
   const confirmAndLogout = () => setConfirmLogoutOpen(true);
 
-  const goBackInApp = useCallback(() => {
-    goBackOrToPanel(router);
+  const goHierarchyBack = useCallback(() => {
+    router.push(getParentRoute(pathname));
+  }, [router, pathname]);
+
+  const exitToModuleHome = useCallback(() => {
+    router.push(APP_MODULE_HOME);
   }, [router]);
+
+  const navBreadcrumb = useMemo(() => getAppNavBreadcrumb(pathname), [pathname]);
 
   /**
    * Recuperación fuerte: sin desregistrar el SW, `/_next/static/` sigue en cache-first y puedes quedarte
@@ -550,23 +556,45 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         {pathname !== '/panel' && !pathname?.startsWith('/panel/') ? (
           <div
             className={[
-              'back-button-wrapper mt-1.5 mb-3 print:hidden',
+              'back-button-wrapper mt-1.5 mb-3 space-y-2 print:hidden',
               isPlanningFullBleed
                 ? '-mx-1 px-1 sm:-mx-2 sm:px-2 md:-mx-2 md:px-2 lg:-mx-2 lg:px-2'
                 : '-mx-4 px-4 sm:-mx-5 sm:px-5 md:-mx-6 md:px-6 lg:-mx-8 lg:px-8',
             ].join(' ')}
           >
-            {/* Separado del header rojo y del contenido; más bajo y sin sombra que lo “pegue” al panel */}
-            <button
-              type="button"
-              onClick={goBackInApp}
-              className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-zinc-300/90 bg-white px-3 py-1.5 text-sm font-bold text-zinc-800 shadow-[0_1px_0_rgba(0,0,0,0.04)] ring-1 ring-zinc-200/70 hover:bg-zinc-50 active:scale-[0.99]"
-            >
-              <span aria-hidden className="text-base leading-none">
-                ←
-              </span>
-              Volver
-            </button>
+            <div className="flex flex-col gap-2 min-[400px]:flex-row min-[400px]:items-stretch">
+              <button
+                type="button"
+                onClick={goHierarchyBack}
+                className="flex min-h-10 flex-1 items-center justify-center gap-1.5 rounded-lg border border-zinc-300/90 bg-white px-3 py-2 text-sm font-bold text-zinc-800 shadow-[0_1px_0_rgba(0,0,0,0.04)] ring-1 ring-zinc-200/70 hover:bg-zinc-50 active:scale-[0.99]"
+              >
+                <span aria-hidden className="text-base leading-none">
+                  ←
+                </span>
+                Volver
+              </button>
+              <button
+                type="button"
+                onClick={exitToModuleHome}
+                className="flex min-h-10 flex-1 items-center justify-center rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-xs font-bold uppercase tracking-wide text-zinc-800 ring-1 ring-zinc-200/80 hover:bg-zinc-100 active:scale-[0.99]"
+              >
+                Salir del módulo
+              </button>
+            </div>
+            {navBreadcrumb ? (
+              <p className="text-center text-[11px] leading-snug text-zinc-600">
+                <Link
+                  href={navBreadcrumb.parentHref}
+                  className="font-semibold text-[#B91C1C] underline-offset-2 hover:underline"
+                >
+                  ← {navBreadcrumb.parentLabel}
+                </Link>
+                <span className="mx-1.5 text-zinc-400" aria-hidden>
+                  /
+                </span>
+                <span className="font-medium text-zinc-800">{navBreadcrumb.currentLabel}</span>
+              </p>
+            ) : null}
           </div>
         ) : null}
         <PullToRefreshPedidos>

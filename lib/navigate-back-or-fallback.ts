@@ -1,19 +1,16 @@
+import { APP_MODULE_HOME } from '@/lib/app-navigation';
+
 /**
- * Navegación tipo app nativa: `router.back()` cuando hay historial previo
- * (coherente con el gesto «atrás» en iOS Safari / WebView).
- * Si no hay pila (entrada directa, nueva pestaña), `router.push(fallbackHref)`.
+ * Navegación fija al panel de módulos (sin `history.back`).
+ * @deprecated Prefer `getParentRoute` + `router.push` desde `@/lib/app-navigation`.
  */
 export function goBackOrFallback(
-  router: { back: () => void; push: (href: string) => void },
-  fallbackHref: string,
+  router: { push: (href: string) => void },
+  fallbackHref: string = APP_MODULE_HOME,
 ) {
-  if (typeof window !== 'undefined' && window.history.length > 1) {
-    router.back();
-    return;
-  }
   router.push(fallbackHref);
 }
 
-export function goBackOrToPanel(router: { back: () => void; push: (href: string) => void }) {
-  goBackOrFallback(router, '/panel');
+export function goBackOrToPanel(router: { push: (href: string) => void }) {
+  router.push(APP_MODULE_HOME);
 }
