@@ -2,11 +2,13 @@
 
 import Link from 'next/link';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Copy, Pencil } from 'lucide-react';
+import { Copy, Pencil, Trash2 } from 'lucide-react';
 import { useAuth } from '@/components/AuthProvider';
 import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
 import { canCocinaCentralOperate } from '@/lib/cocina-central-permissions';
 import {
+  PRODUCTION_RECIPE_DELETE_BLOCKED_NESTED,
+  prDeleteRecipe,
   prDuplicateRecipe,
   prListAllRecipes,
   prUpdateRecipe,
@@ -32,6 +34,7 @@ export default function RecetarioCentralPage() {
   const [err, setErr] = useState<string | null>(null);
   const [busyDup, setBusyDup] = useState<string | null>(null);
   const [busyToggle, setBusyToggle] = useState<string | null>(null);
+  const [busyDelete, setBusyDelete] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!supabase || !localId || !canUse) return;
@@ -77,6 +80,26 @@ export default function RecetarioCentralPage() {
     }
   };
 
+  const removeRecipe = async (r: ProductionRecipeRow) => {
+    if (!supabase || !localId || !canUse) return;
+    if (!window.confirm('¿Eliminar esta receta definitivamente?')) return;
+    setBusyDelete(r.id);
+    setErr(null);
+    try {
+      await prDeleteRecipe(supabase, r.id, localId);
+      await load();
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'No se pudo eliminar';
+      if (msg === PRODUCTION_RECIPE_DELETE_BLOCKED_NESTED) {
+        setErr('No se puede eliminar porque está vinculada a otros módulos. Desactívala en su lugar.');
+      } else {
+        setErr(msg);
+      }
+    } finally {
+      setBusyDelete(null);
+    }
+  };
+
   const toggleActive = async (r: ProductionRecipeRow) => {
     if (!supabase || !localId || !canUse) return;
     setBusyToggle(r.id);
@@ -112,11 +135,7 @@ export default function RecetarioCentralPage() {
         <Link href="/cocina-central" className="text-sm font-semibold text-[#D32F2F]">
           ← Cocina central
         </Link>
-        <h1 className="mt-2 text-xl font-extrabold text-zinc-900">Recetario Central</h1>
-        <p className="mt-1 text-sm text-zinc-600">
-          Fuente única de coste para elaboraciones internas. La receta completa solo se edita aquí; el resto de módulos
-          ven nombre, unidad, formato y coste automático.
-        </p>
+        <h1 className="mt-2 text-center text-xl font-extrabold text-zinc-900">Recetario Central</h1>
       </div>
 
       {err ? (
@@ -232,6 +251,15 @@ export default function RecetarioCentralPage() {
                     className="inline-flex flex-1 items-center justify-center rounded-xl border border-zinc-300 px-3 py-2 text-xs font-bold text-zinc-800 min-[360px]:flex-none disabled:opacity-50"
                   >
                     {busyToggle === r.id ? '…' : r.is_active ? 'Desactivar' : 'Activar'}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={busyDelete === r.id}
+                    onClick={() => void removeRecipe(r)}
+                    className="inline-flex flex-1 items-center justify-center gap-1 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-bold text-[#B91C1C] min-[360px]:flex-none disabled:opacity-50"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" aria-hidden />
+                    {busyDelete === r.id ? '…' : 'Eliminar'}
                   </button>
                 </div>
               </div>

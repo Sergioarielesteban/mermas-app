@@ -111,16 +111,7 @@ export default function InventoryResultadoInventario({
 
   return (
     <section className="space-y-3">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <h2 className="text-base font-bold text-zinc-900">Resultado de inventarios</h2>
-      </div>
-      <p className="text-[11px] leading-snug text-zinc-500">
-        El gráfico <span className="font-semibold text-zinc-600">Valor por mes</span> acumula los cierres guardados
-        (PDF / terminar inventario). Los gráficos de categoría y cobertura reflejan el inventario en pantalla (incluye
-        cantidades aún no guardadas). Ejecuta en Supabase{' '}
-        <code className="rounded bg-zinc-100 px-1 text-[10px] text-zinc-800">supabase-inventory-catalog-write-and-snapshots.sql</code>{' '}
-        si fallan snapshots.
-      </p>
+      <h2 className="text-center text-base font-bold text-zinc-900">Resultado de inventarios</h2>
 
       <div className="grid gap-3 md:grid-cols-3">
         <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-3 text-zinc-100 shadow-sm ring-1 ring-black/40">
@@ -213,9 +204,6 @@ export default function InventoryResultadoInventario({
               style={{ width: `${stockCoverage.pct}%` }}
             />
           </div>
-          <p className="mt-3 text-[11px] leading-snug text-zinc-500">
-            Indica cuántas líneas del inventario local tienen existencias; útil para revisar huecos antes del cierre mensual.
-          </p>
         </div>
       </div>
     </section>

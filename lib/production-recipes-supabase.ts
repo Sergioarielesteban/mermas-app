@@ -159,6 +159,42 @@ export async function prInsertRecipe(
   return data as ProductionRecipeRow;
 }
 
+/** Otra receta usa esta como subreceta (línea receta_cc_interna). */
+export const PRODUCTION_RECIPE_DELETE_BLOCKED_NESTED = 'PRODUCTION_RECIPE_DELETE_BLOCKED_NESTED';
+
+/**
+ * Elimina una receta del recetario y sus líneas (cascade).
+ * Falla si otra receta la referencia como ingrediente interno.
+ */
+export async function prDeleteRecipe(
+  supabase: SupabaseClient,
+  recipeId: string,
+  localCentralId: string,
+): Promise<void> {
+  const recipe = await prGetRecipe(supabase, recipeId, localCentralId);
+  if (!recipe) throw new Error('Receta no encontrada.');
+  const { data: nestedRefs, error: nestedErr } = await supabase
+    .from('production_recipe_lines')
+    .select('id')
+    .eq('nested_production_recipe_id', recipeId)
+    .limit(1);
+  if (nestedErr) throw new Error(nestedErr.message);
+  if (nestedRefs && nestedRefs.length > 0) {
+    throw new Error(PRODUCTION_RECIPE_DELETE_BLOCKED_NESTED);
+  }
+  const { error } = await supabase
+    .from('production_recipes')
+    .delete()
+    .eq('id', recipeId)
+    .eq('local_central_id', localCentralId);
+  if (error) {
+    if (error.code === '23503' || /foreign key|violates foreign key/i.test(error.message)) {
+      throw new Error(PRODUCTION_RECIPE_DELETE_BLOCKED_NESTED);
+    }
+    throw new Error(error.message);
+  }
+}
+
 export async function prUpdateRecipe(
   supabase: SupabaseClient,
   id: string,

@@ -25,11 +25,9 @@ import {
   deleteHistoricoPreciosForSupplierProduct,
   fetchCatalogPriceHistoryRows,
   fetchSuppliersWithProducts,
-  updateSupplierProduct,
   type CatalogPriceHistoryListRow,
   type PedidoSupplier,
 } from '@/lib/pedidos-supabase';
-import { matchSupplierProductFromHint, parseQuickChefPriceText } from '@/lib/pedidos-quick-price-text';
 import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
 import type { Unit } from '@/lib/types';
 
@@ -85,7 +83,7 @@ type PriceSummary = {
   usedPerKgUnitFallback?: boolean;
 };
 
-/** Depuración: filas de historico_precios consideradas para la evolución. */
+/** Filas de histórico de precios consideradas para la evolución. */
 type EvolutionDebugRow = {
   supplierId: string;
   supplierName: string;
@@ -166,7 +164,7 @@ function escapeCsvCell(v: string): string {
 }
 
 function labelCatalogPriceHistorySource(_source: CatalogPriceHistoryListRow['source']): string {
-  return 'Recepción (albarán)';
+  return 'Recepción';
 }
 
 /** Umbral 0 = cualquier subida respecto al primer precio en la ventana (mínimo movimiento). */
@@ -521,7 +519,7 @@ function PriceEvolutionMiniChart({ row }: { row: PriceSummary }) {
       </ResponsiveContainer>
       </div>
       <p className="mt-3 rounded-lg bg-zinc-50 px-2.5 py-2 text-center text-[10px] leading-relaxed text-zinc-600 ring-1 ring-zinc-200/80">
-        Gris = precio previo al cambio · Rojo = recepción (albarán) · Línea gris = media del periodo
+        Gris = referencia previa · Rojo = último precio · Línea gris = media del periodo
       </p>
     </div>
   );
@@ -790,7 +788,7 @@ function drawComparisonIndexChart(
 }
 
 export default function PedidosPreciosPage() {
-  const { localCode, localName, localId, email, userId } = useAuth();
+  const { localCode, localName, localId, email } = useAuth();
   const hasPedidosEntry = canAccessPedidos(localCode, email, localName, localId);
   const canUse = canUsePedidosModule(localCode, email, localName, localId);
   const [message, setMessage] = React.useState<string | null>(null);
@@ -799,11 +797,7 @@ export default function PedidosPreciosPage() {
   const [productSearch, setProductSearch] = React.useState('');
   const [priceMode, setPriceMode] = React.useState<PriceMode>('unit');
   const [alertPct, setAlertPct] = React.useState(0);
-  const [quickCatalog, setQuickCatalog] = React.useState<PedidoSupplier[]>([]);
-  const [quickCatalogLoading, setQuickCatalogLoading] = React.useState(false);
-  const [quickText, setQuickText] = React.useState('');
-  const [quickBusy, setQuickBusy] = React.useState(false);
-  const [quickFeedback, setQuickFeedback] = React.useState<string | null>(null);
+  const [supplierCatalog, setSupplierCatalog] = React.useState<PedidoSupplier[]>([]);
   const [catalogHistoryRows, setCatalogHistoryRows] = React.useState<CatalogPriceHistoryListRow[]>([]);
   const [catalogHistoryLoading, setCatalogHistoryLoading] = React.useState(false);
   const [catalogHistoryDeleteBusy, setCatalogHistoryDeleteBusy] = React.useState(false);
@@ -817,7 +811,7 @@ export default function PedidosPreciosPage() {
 
   const productInfoBySupplierProductId = React.useMemo(() => {
     const m = new Map<string, ProductInfo>();
-    for (const s of quickCatalog) {
+    for (const s of supplierCatalog) {
       for (const p of s.products) {
         m.set(p.id, {
           productName: p.name,
@@ -828,22 +822,18 @@ export default function PedidosPreciosPage() {
       }
     }
     return m;
-  }, [quickCatalog]);
+  }, [supplierCatalog]);
 
   React.useEffect(() => {
     if (!localId || !canUse) return;
     if (!isSupabaseEnabled() || !getSupabaseClient()) return;
     let cancelled = false;
-    (async () => {
-      setQuickCatalogLoading(true);
-      setQuickFeedback(null);
+    void (async () => {
       try {
         const list = await fetchSuppliersWithProducts(getSupabaseClient()!, localId);
-        if (!cancelled) setQuickCatalog(list);
+        if (!cancelled) setSupplierCatalog(list);
       } catch (e: unknown) {
-        if (!cancelled) setQuickFeedback(e instanceof Error ? e.message : 'No se pudo cargar el catálogo.');
-      } finally {
-        if (!cancelled) setQuickCatalogLoading(false);
+        if (!cancelled) setMessage(e instanceof Error ? e.message : 'No se pudo cargar el catálogo.');
       }
     })();
     return () => {
@@ -853,10 +843,10 @@ export default function PedidosPreciosPage() {
 
   const supplierOptions = React.useMemo(
     () =>
-      [...quickCatalog]
+      [...supplierCatalog]
         .map((s) => [s.id, s.name] as [string, string])
         .sort((a, b) => a[1].localeCompare(b[1], 'es')),
-    [quickCatalog],
+    [supplierCatalog],
   );
 
   const { windowStartMs, windowEndMs, windowLabel } = React.useMemo(() => {
@@ -939,7 +929,7 @@ export default function PedidosPreciosPage() {
 
   React.useEffect(() => {
     if (process.env.NODE_ENV !== 'development') return;
-    console.log('[Evolución precios] Fuente: historico_precios (solo recepción / albarán) · local_id:', localId);
+    console.log('[Evolución precios] local_id:', localId);
     console.log('[Evolución precios] Filtros:', {
       ventana: windowLabel,
       proveedor: supplierFilter || '(todos)',
@@ -1023,25 +1013,16 @@ export default function PedidosPreciosPage() {
 
   const emptyEvolutionSectionMessage = React.useMemo(() => {
     if (seriesFiltered.length > 0 && seriesFilteredVisible.length === 0) {
-      return 'No quedan referencias visibles: vaciaste la evolución con la papelera, o ajusta periodo y proveedor.';
+      return 'Sin referencias visibles en esta selección.';
     }
     if (productSearch.trim() && series.length > 0 && seriesFiltered.length === 0) {
       return 'Ninguna referencia coincide con el buscador.';
     }
-    if (series.length === 0 && seriesCandidatesBeforeVariation > 0) {
-      return 'No hay variaciones de precio en el periodo seleccionado.';
-    }
     if (series.length === 0) {
-      return 'No hay cambios de precio por recepción en esta selección. Valida albaranes con precio distinto al último registrado, o prueba otro periodo / proveedor / modo €/kg.';
+      return 'Sin cambios de precio.';
     }
     return 'Ninguna referencia coincide con el buscador.';
-  }, [
-    productSearch,
-    series.length,
-    seriesCandidatesBeforeVariation,
-    seriesFiltered.length,
-    seriesFilteredVisible.length,
-  ]);
+  }, [productSearch, series.length, seriesFiltered.length, seriesFilteredVisible.length]);
 
   const catalogHistoryFiltered = React.useMemo(() => {
     let list = catalogHistoryRows;
@@ -1510,53 +1491,6 @@ export default function PedidosPreciosPage() {
     productSearch,
   ]);
 
-  const applyQuickPrice = React.useCallback(async () => {
-    if (!localId) return;
-    setQuickFeedback(null);
-    const parsed = parseQuickChefPriceText(quickText);
-    if (!parsed) {
-      setQuickFeedback('No se detectó un precio. Ejemplo: «el bacon ha subido a 7,80».');
-      return;
-    }
-    const match = matchSupplierProductFromHint(quickCatalog, parsed.nameHint, supplierFilter || undefined);
-    if (!match) {
-      setQuickFeedback(
-        `No encontré un producto que encaje con «${parsed.nameHint}». Prueba otro nombre o quita el filtro de proveedor.`,
-      );
-      return;
-    }
-    setQuickBusy(true);
-    try {
-      const supabase = getSupabaseClient()!;
-      const p = match.product;
-      await updateSupplierProduct(supabase, localId, p.id, {
-        name: p.name,
-        unit: p.unit,
-        pricePerUnit: parsed.price,
-        vatRate: p.vatRate,
-        parStock: p.parStock,
-        estimatedKgPerUnit: p.estimatedKgPerUnit ?? null,
-        unitsPerPack: p.unitsPerPack,
-        recipeUnit: p.recipeUnit,
-        billingUnit: p.billingUnit ?? null,
-        billingQtyPerOrderUnit: p.billingQtyPerOrderUnit ?? null,
-        pricePerBillingUnit: p.pricePerBillingUnit ?? null,
-        lastPriceUpdatedAt: true,
-        priceUpdateOnly: true,
-      });
-      setQuickFeedback(
-        `Catálogo actualizado: ${match.supplier.name} · ${p.name} → ${parsed.price.toFixed(2)} €/${p.unit}. No se crea histórico (solo recepción / albarán).`,
-      );
-      setQuickText('');
-      const list = await fetchSuppliersWithProducts(supabase, localId);
-      setQuickCatalog(list);
-    } catch (e: unknown) {
-      setQuickFeedback(e instanceof Error ? e.message : 'Error al actualizar.');
-    } finally {
-      setQuickBusy(false);
-    }
-  }, [quickText, quickCatalog, supplierFilter, localId, userId, reloadCatalogPriceHistory]);
-
   const handleConfirmDeleteCatalogHistory = React.useCallback(async () => {
     if (!deleteHistoryId || !localId || !isSupabaseEnabled() || !getSupabaseClient()) return;
     setCatalogHistoryDeleteBusy(true);
@@ -1623,41 +1557,9 @@ export default function PedidosPreciosPage() {
         </Link>
       </section>
 
-      <section className="rounded-2xl border border-amber-100 bg-amber-50/60 p-4 shadow-sm ring-1 ring-amber-100/80 sm:p-5">
-        <p className="text-[10px] font-black uppercase tracking-wide text-amber-900">Entrada rápida (texto)</p>
-        <p className="mt-1 text-xs text-amber-950">
-          Actualiza solo el precio del catálogo. La evolución de precios y el histórico se alimentan únicamente de albaranes
-          validados en recepción.
-        </p>
-        <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-stretch">
-          <input
-            value={quickText}
-            onChange={(e) => setQuickText(e.target.value)}
-            placeholder="Ej.: Oye Chef: el bacon ha subido a 7,80"
-            className="min-h-[48px] flex-1 rounded-xl border border-amber-200 bg-white px-3 text-sm font-medium text-zinc-900 outline-none focus:border-amber-500"
-            disabled={quickBusy || quickCatalogLoading}
-            autoComplete="off"
-          />
-          <button
-            type="button"
-            disabled={quickBusy || quickCatalogLoading || !quickText.trim()}
-            onClick={() => void applyQuickPrice()}
-            className="min-h-[48px] shrink-0 rounded-xl bg-amber-600 px-4 text-sm font-black text-white shadow-sm disabled:opacity-50"
-          >
-            {quickBusy ? 'Aplicando…' : 'Actualizar precio'}
-          </button>
-        </div>
-        {quickCatalogLoading ? <p className="mt-2 text-xs text-amber-900">Cargando catálogo…</p> : null}
-        {quickFeedback ? <p className="mt-2 text-sm font-semibold text-amber-950">{quickFeedback}</p> : null}
-      </section>
-
       <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-zinc-200">
         <p className="text-center text-[10px] font-bold uppercase tracking-[0.2em] text-zinc-500">Pedidos</p>
         <h1 className="text-center text-lg font-black text-zinc-900">Evolución de precios</h1>
-        <p className="mx-auto mt-2 max-w-2xl text-center text-xs text-zinc-600">
-          Vista única sobre la tabla historico_precios: solo cambios reales al validar albaranes. Ajusta periodo, proveedor
-          y vista €/ud o €/kg (según unidad comparable guardada).
-        </p>
         {message ? <p className="pt-2 text-center text-sm text-[#B91C1C]">{message}</p> : null}
 
         <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -1745,19 +1647,11 @@ export default function PedidosPreciosPage() {
         </div>
 
         <div className="mt-6 rounded-xl border border-zinc-100 bg-zinc-50/60 p-4 ring-1 ring-zinc-100">
-          <p className="text-[10px] font-black uppercase tracking-wide text-zinc-500">Historial de recepción (Supabase)</p>
-          <p className="mt-1 text-xs text-zinc-600">
-            Una fila por cada cambio de precio al validar un albarán. Quitar una fila solo borra ese registro; no revierte el
-            precio del catálogo.
-          </p>
+          <p className="text-[10px] font-black uppercase tracking-wide text-zinc-500">Historial de recepción</p>
           {catalogHistoryLoading ? (
             <p className="mt-3 text-sm text-zinc-500">Cargando historial…</p>
           ) : catalogHistoryFiltered.length === 0 ? (
-            <p className="mt-3 text-sm text-zinc-500">
-              {catalogHistoryRows.length === 0
-                ? 'No hay registros de historial de catálogo en este periodo.'
-                : 'Ningún registro coincide con proveedor o búsqueda actuales.'}
-            </p>
+            <p className="mt-3 text-sm text-zinc-500">Sin historial.</p>
           ) : (
             <div className="mt-3 overflow-x-auto rounded-lg ring-1 ring-zinc-200">
               <table className="w-full min-w-[720px] text-left text-xs">
@@ -2020,12 +1914,12 @@ export default function PedidosPreciosPage() {
                   <button
                     type="button"
                     disabled={seriesEvolutionDeleteBusy}
-                    title="Borrar todo el histórico de recepción de este producto (no borra el catálogo ni pedidos)"
+                    title="Borrar histórico de este producto"
                     onClick={() => {
                       setSeriesDeleteContext({ key: row.key });
                     }}
                     className="flex min-h-11 min-w-11 items-center justify-center rounded-xl text-zinc-400 transition-colors hover:bg-red-50 hover:text-[#B91C1C] active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-zinc-400"
-                    aria-label="Borrar histórico de recepción de este producto"
+                    aria-label="Borrar histórico de este producto"
                   >
                     <Trash2 className="h-5 w-5" aria-hidden />
                   </button>
@@ -2154,8 +2048,7 @@ export default function PedidosPreciosPage() {
               Borrar histórico de recepción
             </p>
             <p className="mt-2 text-sm leading-relaxed text-zinc-600">
-              Se eliminarán todas las filas de <code className="text-xs">historico_precios</code> para este producto de
-              proveedor. No se borra el catálogo ni los pedidos.
+              Se eliminarán todos los registros de evolución de precio de este producto. No se borra el catálogo ni los pedidos.
             </p>
             <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
               <button

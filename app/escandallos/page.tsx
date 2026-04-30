@@ -808,12 +808,7 @@ export default function EscandallosPage() {
                   <p className="mt-1 text-[11px] text-zinc-500">Real menos teórico (puntos porcentuales)</p>
                 </div>
               </div>
-            ) : (
-              <p className="mt-3 text-sm text-zinc-600">
-                Introduce cantidades en la tabla inferior. Hace falta PVP en cada plato para cerrar el food cost real del
-                mix.
-              </p>
-            )}
+            ) : null}
 
             {mixMetrics.skippedNoPvpUnits > 0 ? (
               <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50/90 px-3 py-2 text-xs text-amber-950">
