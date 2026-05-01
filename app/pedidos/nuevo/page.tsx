@@ -36,12 +36,29 @@ import {
   type PedidoOrder,
   type PedidoSupplier,
 } from '@/lib/pedidos-supabase';
-import { actorLabel, notifyPedidoEnviado } from '@/services/notifications';
+import { notifyPedidoEnviado } from '@/services/notifications';
 import { normalizeWhatsappPhone, openWhatsAppMessage } from '@/lib/whatsapp';
 
 type QtyMap = Record<string, number>;
 
 const basketSessionKey = (localId: string) => `chefone_pedidos_basket:${localId}`;
+
+/**
+ * Quién solicita el pedido: perfil (`full_name` / vinculación empleado), alias de sesión, email y fallback.
+ */
+function resolvePedidoRequesterDisplayName(
+  displayName: string | null,
+  loginUsername: string | null,
+  email: string | null,
+): string {
+  const dn = displayName?.trim();
+  if (dn) return dn;
+  const lu = loginUsername?.trim();
+  if (lu) return lu;
+  const em = email?.trim();
+  if (em) return em;
+  return 'Usuario sin nombre';
+}
 
 function buildWhatsappDraftMessage(input: {
   createdAtIso: string;
@@ -71,6 +88,10 @@ export default function NuevoPedidoPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { localCode, localName, localId, email, userId, displayName, loginUsername } = useAuth();
+  const requesterResolvedName = React.useMemo(
+    () => resolvePedidoRequesterDisplayName(displayName, loginUsername, email),
+    [displayName, loginUsername, email],
+  );
   const { upsertOrder, orders } = usePedidosOrders();
 
   const pullNewOrderIntoStore = React.useCallback(
@@ -103,7 +124,8 @@ export default function NuevoPedidoPage() {
   const [qtyByProductId, setQtyByProductId] = React.useState<QtyMap>({});
   const [message, setMessage] = React.useState<string | null>(null);
   const [deliveryDate, setDeliveryDate] = React.useState('');
-  const [requestedBy, setRequestedBy] = React.useState('');
+  /** Aviso local junto al campo de fecha de entrega (sin subir la pantalla). */
+  const [deliveryDateFieldError, setDeliveryDateFieldError] = React.useState(false);
   const [loadingSuppliers, setLoadingSuppliers] = React.useState(false);
   const [isLoadedEdit, setIsLoadedEdit] = React.useState(false);
   const [existingCreatedAt, setExistingCreatedAt] = React.useState<string | null>(null);
@@ -129,7 +151,7 @@ export default function NuevoPedidoPage() {
     setQtyByProductId({});
     setSearch('');
     setDeliveryDate('');
-    setRequestedBy('');
+    setDeliveryDateFieldError(false);
     setMessage(null);
     setExistingOrderId(null);
     setExistingCreatedAt(null);
@@ -186,7 +208,6 @@ export default function NuevoPedidoPage() {
         qtyByProductId?: QtyMap;
         notes?: string;
         deliveryDate?: string;
-        requestedBy?: string;
       };
       if (parsed.supplierId) setSupplierId(parsed.supplierId);
       if (parsed.qtyByProductId && typeof parsed.qtyByProductId === 'object') {
@@ -194,7 +215,6 @@ export default function NuevoPedidoPage() {
       }
       if (typeof parsed.notes === 'string') setNotes(parsed.notes);
       if (typeof parsed.deliveryDate === 'string') setDeliveryDate(parsed.deliveryDate);
-      if (typeof parsed.requestedBy === 'string') setRequestedBy(parsed.requestedBy);
     } catch {
       /* ignore */
     }
@@ -210,13 +230,12 @@ export default function NuevoPedidoPage() {
           qtyByProductId,
           notes,
           deliveryDate,
-          requestedBy,
         }),
       );
     } catch {
       /* ignore */
     }
-  }, [canUse, localId, editingId, supplierId, qtyByProductId, notes, deliveryDate, requestedBy]);
+  }, [canUse, localId, editingId, supplierId, qtyByProductId, notes, deliveryDate]);
 
   usePedidosDataChangedListener(reloadSuppliers, Boolean(hasPedidosEntry && canUse));
 
@@ -448,10 +467,16 @@ export default function NuevoPedidoPage() {
       setMessage('Añade al menos un producto.');
       return;
     }
+    if (!deliveryDate.trim()) {
+      setDeliveryDateFieldError(true);
+      setMessage(null);
+      return;
+    }
     if (!localId) {
       setMessage('Perfil del local aún cargando.');
       return;
     }
+    const usuarioNombrePersist = requesterResolvedName;
     const editingSent = Boolean(existingSentAt && existingOrderId);
     const effectiveStatus: 'draft' | 'sent' = editingSent ? 'sent' : nextStatus;
     const markContentRevisedAfterSent = editingSent && effectiveStatus === 'sent';
@@ -478,9 +503,7 @@ export default function NuevoPedidoPage() {
           id: item.id || `demo-li-${uid('i')}`,
         })),
         total: lineTotalSum,
-        ...(actorLabel(displayName, loginUsername).trim()
-          ? { usuarioNombre: actorLabel(displayName, loginUsername).trim() }
-          : {}),
+        usuarioNombre: usuarioNombrePersist,
       };
       resetPedidoFormAfterSuccess();
       upsertOrder(order);
@@ -493,7 +516,6 @@ export default function NuevoPedidoPage() {
       setMessage('Sin conexión con Supabase.');
       return;
     }
-    const usuarioNombrePedido = actorLabel(displayName, loginUsername).trim();
     void saveOrder(supabase, localId, {
       orderId: existingOrderId ?? undefined,
       supplierId: selectedSupplier.id,
@@ -504,7 +526,7 @@ export default function NuevoPedidoPage() {
       deliveryDate: deliveryDate || undefined,
       expectedOrderUpdatedAt: existingOrderUpdatedAt ?? undefined,
       markContentRevisedAfterSent,
-      ...(usuarioNombrePedido ? { usuarioNombre: usuarioNombrePedido } : {}),
+      usuarioNombre: usuarioNombrePersist,
       items: items.map((item) => ({
         supplierProductId: item.supplierProductId,
         productName: item.productName,
@@ -540,8 +562,11 @@ export default function NuevoPedidoPage() {
     if (!selectedSupplier) return setMessage('Selecciona proveedor.');
     if (items.length === 0) return setMessage('Añade al menos un producto.');
     if (!localId) return setMessage('Perfil del local aún cargando.');
-    if (!deliveryDate.trim()) return setMessage('Fecha de entrega obligatoria.');
-    if (!requestedBy.trim()) return setMessage('Indica quién pide.');
+    if (!deliveryDate.trim()) {
+      setDeliveryDateFieldError(true);
+      setMessage(null);
+      return;
+    }
     const phone = normalizeWhatsappPhone(selectedSupplier.contact);
     if (!phone) return setMessage('El proveedor no tiene teléfono válido en contacto.');
     const parsed = new Date(`${deliveryDate}T00:00:00`);
@@ -571,9 +596,7 @@ export default function NuevoPedidoPage() {
           id: item.id || `demo-li-${uid('i')}`,
         })),
         total: lineTotalSum,
-        ...(actorLabel(displayName, loginUsername).trim()
-          ? { usuarioNombre: actorLabel(displayName, loginUsername).trim() }
-          : {}),
+        usuarioNombre: requesterResolvedName,
       };
       resetPedidoFormAfterSuccess();
       upsertOrder(order);
@@ -591,7 +614,6 @@ export default function NuevoPedidoPage() {
       return;
     }
 
-    const usuarioNombreWhatsapp = actorLabel(displayName, loginUsername).trim();
     void saveOrder(supabase, localId, {
       orderId: existingOrderId ?? undefined,
       supplierId: selectedSupplier.id,
@@ -602,7 +624,7 @@ export default function NuevoPedidoPage() {
       deliveryDate,
       expectedOrderUpdatedAt: existingOrderUpdatedAt ?? undefined,
       markContentRevisedAfterSent: markRevWhatsapp,
-      ...(usuarioNombreWhatsapp ? { usuarioNombre: usuarioNombreWhatsapp } : {}),
+      usuarioNombre: requesterResolvedName,
       items: items.map((item) => ({
         supplierProductId: item.supplierProductId,
         productName: item.productName,
@@ -630,7 +652,7 @@ export default function NuevoPedidoPage() {
           void notifyPedidoEnviado(supa, {
             localId,
             userId,
-            actorName: actorLabel(displayName, loginUsername),
+            actorName: requesterResolvedName,
             supplierName: selectedSupplier.name,
             orderId,
           });
@@ -641,7 +663,7 @@ export default function NuevoPedidoPage() {
           createdAtIso: existingCreatedAt ?? new Date().toISOString(),
           deliveryDate: parsed.toLocaleDateString('es-ES'),
           localName: localName ?? 'MATARO',
-          requestedBy: requestedBy.trim(),
+          requestedBy: requesterResolvedName,
           notes: notes.trim(),
           items,
           contentRevisedAfterSent: markRevWhatsapp || Boolean(hadContentRevisionFlag),
@@ -715,44 +737,6 @@ export default function NuevoPedidoPage() {
             </option>
           ))}
         </select>
-        <div className="mt-2">
-          <p className="text-[10px] font-extrabold uppercase tracking-wide text-zinc-500">Fecha de entrega</p>
-          <div className="relative mt-1 w-full min-w-0">
-            <input
-              type="date"
-              value={deliveryDate}
-              onChange={(e) => setDeliveryDate(e.target.value)}
-              aria-label="Fecha de entrega del pedido"
-              className={[
-                'box-border h-9 w-full min-w-0 rounded-lg border border-zinc-300 bg-white px-2.5 text-sm font-medium text-zinc-900 outline-none focus:border-[#D32F2F] focus:ring-2 focus:ring-[#D32F2F]/25',
-                deliveryDate ? 'text-zinc-900' : 'text-transparent',
-              ].join(' ')}
-            />
-            {!deliveryDate ? (
-              <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-sm text-zinc-500">
-                Elegir fecha
-              </span>
-            ) : null}
-          </div>
-        </div>
-        {selectedDateIsException ? (
-          <p className="mt-1.5 text-[10px] font-semibold text-emerald-700">Fecha excepcional válida para este proveedor.</p>
-        ) : null}
-        {coverageRangeLabel ? (
-          <div className="mt-2 rounded-lg border border-emerald-200 bg-emerald-50/90 px-2 py-1.5 text-[10px] text-emerald-950 ring-1 ring-emerald-100 sm:text-[11px]">
-            <p className="text-center font-bold uppercase tracking-wide text-emerald-900">Cobertura de este pedido</p>
-            <p className="mt-0.5 text-center font-medium capitalize leading-tight">{coverageRangeLabel}</p>
-          </div>
-        ) : deliveryDate.trim() !== '' ? null : (
-          <p className="mt-1.5 text-[10px] text-zinc-500">
-            Elige fecha de entrega para ver el tramo y los objetivos por línea.
-          </p>
-        )}
-        {deliveryDayMismatch ? (
-          <p className="mt-1.5 text-[10px] font-semibold text-amber-800 sm:text-[11px]">
-            Esta fecha no es un día de reparto marcado para el proveedor. Revisa Proveedores o la fecha del albarán.
-          </p>
-        ) : null}
       </section>
 
       <section className="rounded-2xl bg-white p-4 ring-1 ring-zinc-200">
@@ -787,13 +771,6 @@ export default function NuevoPedidoPage() {
             );
           })}
         </div>
-        <label className="mt-4 block text-xs font-semibold uppercase tracking-wide text-zinc-500">Quién pide</label>
-        <input
-          value={requestedBy}
-          onChange={(e) => setRequestedBy(e.target.value)}
-          placeholder="Nombre de quien pide"
-          className="mt-2 h-10 w-full min-w-0 rounded-xl border border-zinc-300 bg-white px-3 text-sm font-sans text-zinc-900 placeholder:text-zinc-500 outline-none"
-        />
       </section>
 
       <section className="rounded-2xl bg-white p-4 ring-1 ring-zinc-200">
@@ -805,10 +782,65 @@ export default function NuevoPedidoPage() {
           className="mt-2 w-full rounded-xl border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 placeholder:text-zinc-500 outline-none"
           placeholder="Observaciones del pedido..."
         />
-        {message ? <p className="mt-3 text-sm text-[#B91C1C]">{message}</p> : null}
       </section>
 
       <section className="rounded-2xl border border-zinc-200 bg-white p-3 shadow-sm ring-1 ring-zinc-100">
+        <p className="mb-3 text-[10px] leading-snug text-zinc-600">
+          Pedido realizado por:{' '}
+          <span className="font-bold text-zinc-900">{requesterResolvedName}</span>
+        </p>
+        <div className="mb-3">
+          <p className="text-[10px] font-extrabold uppercase tracking-wide text-zinc-500">Fecha de entrega</p>
+          <div className="relative mt-1 w-full min-w-0">
+            <input
+              id="pedido-nuevo-fecha-entrega"
+              type="date"
+              value={deliveryDate}
+              aria-invalid={deliveryDateFieldError}
+              aria-describedby={deliveryDateFieldError ? 'pedido-nuevo-fecha-entrega-aviso' : undefined}
+              onChange={(e) => {
+                setDeliveryDate(e.target.value);
+                setDeliveryDateFieldError(false);
+              }}
+              aria-label="Fecha de entrega del pedido"
+              className={[
+                'box-border h-10 w-full min-w-0 rounded-lg border px-2.5 text-sm font-medium outline-none focus:border-[#D32F2F] focus:ring-2 focus:ring-[#D32F2F]/25',
+                deliveryDateFieldError ? 'border-red-400 bg-red-50/90' : 'border-zinc-300 bg-white',
+                deliveryDate ? 'text-zinc-900' : 'text-transparent',
+              ].join(' ')}
+            />
+            {!deliveryDate ? (
+              <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-sm text-zinc-500">
+                Elegir fecha
+              </span>
+            ) : null}
+          </div>
+          {deliveryDateFieldError ? (
+            <p id="pedido-nuevo-fecha-entrega-aviso" className="mt-1.5 text-xs font-semibold text-red-700">
+              Selecciona fecha de entrega para continuar
+            </p>
+          ) : null}
+          {selectedDateIsException ? (
+            <p className="mt-1.5 text-[10px] font-semibold text-emerald-700">
+              Fecha excepcional válida para este proveedor.
+            </p>
+          ) : null}
+          {coverageRangeLabel ? (
+            <div className="mt-2 rounded-lg border border-emerald-200 bg-emerald-50/90 px-2 py-1.5 text-[10px] text-emerald-950 ring-1 ring-emerald-100 sm:text-[11px]">
+              <p className="text-center font-bold uppercase tracking-wide text-emerald-900">Cobertura de este pedido</p>
+              <p className="mt-0.5 text-center font-medium capitalize leading-tight">{coverageRangeLabel}</p>
+            </div>
+          ) : deliveryDate.trim() !== '' ? null : (
+            <p className="mt-1.5 text-[10px] text-zinc-500">
+              Si eliges fecha verás aquí el tramo de cobertura y los objetivos por línea.
+            </p>
+          )}
+          {deliveryDayMismatch ? (
+            <p className="mt-1.5 text-[10px] font-semibold text-amber-800 sm:text-[11px]">
+              Esta fecha no es un día de reparto marcado para el proveedor. Revisa Proveedores o la fecha del albarán.
+            </p>
+          ) : null}
+        </div>
         <div className="rounded-xl bg-zinc-50 p-2 ring-1 ring-zinc-200">
           <div className="mt-1 flex items-center justify-between text-sm text-zinc-700">
             <span>Subtotal</span>
@@ -823,6 +855,7 @@ export default function NuevoPedidoPage() {
             <span>{total.toFixed(2)} €</span>
           </div>
         </div>
+        {message ? <p className="mt-2 text-sm text-[#B91C1C]">{message}</p> : null}
         <div className="mt-2 grid grid-cols-3 gap-2">
           <button
             type="button"
