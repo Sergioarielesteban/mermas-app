@@ -32,6 +32,7 @@ import {
   updateChefProductionSessionLineQty,
 } from '@/lib/chef-ops-supabase';
 import { appConfirm } from '@/lib/app-dialog-bridge';
+import { shouldUseManualPrintOnly } from '@/lib/print-platform';
 
 const STORAGE_LAST_TEMPLATE = 'chef_prod_last_template_v1';
 
@@ -494,6 +495,12 @@ function ProduccionBoardInner() {
       /* ignore */
     }
     const url = `/produccion/etiquetas/print?date=${encodeURIComponent(session.workDate)}&templateId=${encodeURIComponent(templateId)}`;
+    /** En iPhone/iPad, una pestaña nueva suele ir en segundo plano o quedar vacía hasta hidratar la sesión — mismo flujo que Cocina Central: página completa + «Imprimir etiqueta». */
+    if (shouldUseManualPrintOnly()) {
+      setLabelsPreview(null);
+      router.push(url);
+      return;
+    }
     const w = window.open(url, '_blank', 'noopener,noreferrer');
     setLabelsPreview(null);
     if (!w) {
@@ -501,7 +508,7 @@ function ProduccionBoardInner() {
     } else {
       setBanner(null);
     }
-  }, [session, templateId, labelsPreview]);
+  }, [session, templateId, labelsPreview, router]);
 
   const sectionGroups = useMemo(() => groupRowsByKitchenSection(boardRows), [boardRows]);
 

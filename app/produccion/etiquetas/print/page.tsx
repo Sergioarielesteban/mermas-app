@@ -16,16 +16,7 @@ import {
   mergedRowSessionLine,
   type ChefProductionSessionLine,
 } from '@/lib/chef-ops-supabase';
-
-/** iOS/iPadOS: AirPrint requiere toque directo en `window.print()` (como Cocina Central / etiqueta de lote). */
-function shouldUseManualPrintOnly(): boolean {
-  if (typeof navigator === 'undefined') return false;
-  const ua = navigator.userAgent || '';
-  if (/iPhone|iPod/i.test(ua)) return true;
-  if (/iPad/i.test(ua)) return true;
-  if (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1) return true;
-  return false;
-}
+import { shouldUseManualPrintOnly } from '@/lib/print-platform';
 
 type LabelPayload = {
   producto: string;

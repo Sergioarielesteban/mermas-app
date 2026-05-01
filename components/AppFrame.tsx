@@ -47,7 +47,7 @@ export default function AppFrame({ children }: { children: React.ReactNode }) {
       router.replace('/panel');
       return;
     }
-    if (!email && !isLogin && !isPublicHome && !isOnboarding && !isPrecio) {
+    if (!email && !isLogin && !isPublicHome && !isOnboarding && !isPrecio && !isProduccionEtiquetasPrint) {
       router.replace('/login');
       // Fallback in case client router transition gets stuck.
       loginFallbackTimerRef.current = window.setTimeout(() => {
@@ -66,7 +66,16 @@ export default function AppFrame({ children }: { children: React.ReactNode }) {
         loginFallbackTimerRef.current = null;
       }
     };
-  }, [effectiveLoading, email, isLogin, isPublicHome, isOnboarding, isPrecio, router]);
+  }, [
+    effectiveLoading,
+    email,
+    isLogin,
+    isPublicHome,
+    isOnboarding,
+    isPrecio,
+    isProduccionEtiquetasPrint,
+    router,
+  ]);
 
   // /login y la landing en / no usan el shell de la app ni el bloqueo de "Cargando sesión".
   if (isLogin || isPublicHome || isOnboarding || isPrecio) {
@@ -127,7 +136,8 @@ export default function AppFrame({ children }: { children: React.ReactNode }) {
     );
   }
 
-  if (!email && !isLogin && !isOnboarding && !isPrecio) {
+  /** Nueva pestaña de impresión puede hidratar email unos ms después: no dejar pantalla en blanco. */
+  if (!email && !isLogin && !isOnboarding && !isPrecio && !isProduccionEtiquetasPrint) {
     return null;
   }
 
