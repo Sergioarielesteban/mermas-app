@@ -281,24 +281,6 @@ function ProduccionBoardInner() {
     }
   };
 
-  const bumpHecho = async (sessionLineId: string | null, delta: number) => {
-    if (!sessionLineId || !supabaseOk || session?.completedAt) return;
-    clearDebouncePersist();
-    const cur = sessionLines.find((s) => s.id === sessionLineId);
-    const draftN = parseQty(hechoDraftRef.current[sessionLineId] ?? '');
-    const base =
-      draftN != null && !Number.isNaN(draftN)
-        ? draftN
-        : cur?.qtyOnHand != null && !Number.isNaN(Number(cur.qtyOnHand))
-          ? Number(cur.qtyOnHand)
-          : 0;
-    const next = Math.max(0, base + delta);
-    const nextStr = fmtQty(next);
-    hechoDraftRef.current = { ...hechoDraftRef.current, [sessionLineId]: nextStr };
-    setHechoDraft((prev) => ({ ...prev, [sessionLineId]: nextStr }));
-    await persistHecho(sessionLineId, nextStr);
-  };
-
   const guardarDia = async () => {
     if (!supabaseOk || !session?.id || session.completedAt) return;
     if (!(await appConfirm('¿Guardar y cerrar este día? Quedará en el historial con el resumen del momento.')))
@@ -455,15 +437,14 @@ function ProduccionBoardInner() {
           ) : null}
 
           <div className="mt-3 overflow-x-auto rounded border border-zinc-200 bg-white">
-            <table className="w-full min-w-[340px] border-collapse text-left text-xs">
+            <table className="w-full min-w-[280px] border-collapse text-left text-xs">
               <thead>
                 <tr className="border-b border-zinc-200 bg-zinc-100 text-[10px] font-black uppercase text-zinc-700">
-                  <th className="px-2 py-2">Producto</th>
-                  <th className="w-12 px-1 py-2 text-center tabular-nums">L–J</th>
-                  <th className="w-12 px-1 py-2 text-center tabular-nums">V–D</th>
-                  <th className="w-16 px-1 py-2 text-center">Hecho</th>
-                  <th className="w-12 px-1 py-2 text-center tabular-nums">Hacer</th>
-                  <th className="w-24 px-1 py-2 text-center"> </th>
+                  <th className="min-w-[7.5rem] px-2 py-2 sm:min-w-[10rem]">Producto</th>
+                  <th className="w-11 px-1 py-2 text-center tabular-nums sm:w-12">L–J</th>
+                  <th className="w-11 px-1 py-2 text-center tabular-nums sm:w-12">V–D</th>
+                  <th className="w-[4.25rem] px-1 py-2 text-center sm:w-16">Hecho</th>
+                  <th className="min-w-[2.75rem] px-1 py-2 text-center tabular-nums sm:w-14">Hacer</th>
                 </tr>
               </thead>
               <tbody>
@@ -472,7 +453,7 @@ function ProduccionBoardInner() {
                     title.trim() !== '' ? (
                       <tr key={`h-${title}`} className="bg-zinc-50">
                         <td
-                          colSpan={6}
+                          colSpan={5}
                           className="border-t border-zinc-200 px-2 py-1.5 text-[10px] font-black uppercase tracking-wide text-zinc-600"
                         >
                           Zona: {title}
@@ -509,12 +490,12 @@ function ProduccionBoardInner() {
 
                     return (
                       <tr key={row.rowKey} className={[rowTint, 'border-b border-zinc-100'].join(' ')}>
-                        <td className="max-w-[9rem] px-2 py-1 font-bold leading-tight text-zinc-900 sm:max-w-none">
+                        <td className="min-w-[7.5rem] max-w-[min(92vw,20rem)] px-2 py-2 font-bold leading-snug text-zinc-900 sm:max-w-none sm:py-2.5">
                           {row.displayLabel}
                         </td>
-                        <td className="px-1 py-1 text-center tabular-nums text-zinc-800">{ljT}</td>
-                        <td className="px-1 py-1 text-center tabular-nums text-zinc-800">{vdT}</td>
-                        <td className="px-1 py-1 text-center">
+                        <td className="px-1 py-2 text-center tabular-nums text-zinc-800 sm:py-2.5">{ljT}</td>
+                        <td className="px-1 py-2 text-center tabular-nums text-zinc-800 sm:py-2.5">{vdT}</td>
+                        <td className="px-1 py-2 text-center sm:py-2.5">
                           {sl && lineId ? (
                             <input
                               inputMode="decimal"
@@ -534,34 +515,14 @@ function ProduccionBoardInner() {
                                 clearDebouncePersist();
                                 void persistHecho(lineId, hechoDraftRef.current[lineId] ?? '');
                               }}
-                              className="w-14 rounded border border-zinc-300 bg-white px-1 py-0.5 text-center text-sm font-black tabular-nums text-zinc-900 disabled:opacity-50"
+                              className="h-9 min-w-[3.5rem] rounded border border-zinc-300 bg-white px-2 py-1 text-center text-sm font-black tabular-nums text-zinc-900 disabled:opacity-50"
                             />
                           ) : (
                             <span className="text-zinc-400">—</span>
                           )}
                         </td>
-                        <td className="px-1 py-1 text-center text-sm font-black tabular-nums text-zinc-900">{hacer}</td>
-                        <td className="px-1 py-1">
-                          {sl && lineId && !isClosed ? (
-                            <div className="flex justify-end gap-0.5">
-                              <button
-                                type="button"
-                                disabled={saving}
-                                onClick={() => void bumpHecho(lineId, 1)}
-                                className="min-h-8 min-w-8 rounded border border-zinc-300 bg-white text-[10px] font-black text-zinc-900 active:scale-[0.98] disabled:opacity-45"
-                              >
-                                +1
-                              </button>
-                              <button
-                                type="button"
-                                disabled={saving}
-                                onClick={() => void bumpHecho(lineId, 5)}
-                                className="min-h-8 min-w-8 rounded border border-zinc-300 bg-white text-[10px] font-black text-zinc-900 active:scale-[0.98] disabled:opacity-45"
-                              >
-                                +5
-                              </button>
-                            </div>
-                          ) : null}
+                        <td className="px-1 py-2 text-center text-sm font-black tabular-nums text-zinc-900 sm:py-2.5">
+                          {hacer}
                         </td>
                       </tr>
                     );
