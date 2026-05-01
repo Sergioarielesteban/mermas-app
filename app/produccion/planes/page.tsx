@@ -292,15 +292,29 @@ export default function ProduccionPlantillasPage() {
     }
   };
 
-  const persistProduct = async (item: ChefProductionBlockItem, label: string, targetRaw: string) => {
-    if (!supabaseOk || !label.trim()) return;
-    const targetQty = parseTarget(targetRaw);
+  const persistProduct = async (item: ChefProductionBlockItem) => {
+    if (!supabaseOk) return;
+    const lbl = (document.getElementById(`lbl-${item.id}`) as HTMLInputElement)?.value ?? '';
+    const tgt = (document.getElementById(`tgt-${item.id}`) as HTMLInputElement)?.value ?? '';
+    const secRaw = (document.getElementById(`sec-${item.id}`) as HTMLInputElement)?.value ?? '';
+    const shelfRaw = (document.getElementById(`shelf-${item.id}`) as HTMLInputElement)?.value ?? '';
+    if (!lbl.trim()) return;
+    const targetQty = parseTarget(tgt);
+    const kitchenSection = secRaw.trim();
+    const shelfT = shelfRaw.trim();
+    let shelfLifeDays: number | null = null;
+    if (shelfT !== '') {
+      const n = Math.floor(Number(shelfT.replace(',', '.')));
+      shelfLifeDays = Number.isFinite(n) && n >= 0 ? n : null;
+    }
     setBusy(true);
     try {
       const supabase = getSupabaseClient()!;
       await updateChefProductionBlockItem(supabase, item.id, {
-        label: label.trim(),
+        label: lbl.trim(),
         targetQty,
+        kitchenSection,
+        shelfLifeDays,
       });
       await load();
     } catch (e) {
@@ -338,7 +352,7 @@ export default function ProduccionPlantillasPage() {
       <MermasStyleHero
         eyebrow="Producción"
         title="Plantillas"
-        description="Cada bloque son solo días. Dentro de cada bloque añades productos y la cantidad objetivo para ese periodo."
+        description="Configuración: bloques Lun–Jue y Vie–Dom, sección de pizarra (ej. PLANCHA), objetivos y vida útil para etiquetas. El trabajo diario está en Producción del día."
         slim
       />
 
@@ -592,18 +606,39 @@ export default function ProduccionPlantillasPage() {
                                           id={`lbl-${it.id}`}
                                           defaultValue={it.label}
                                           disabled={busy}
-                                          onBlur={() => {
-                                            const lbl = (
-                                              document.getElementById(`lbl-${it.id}`) as HTMLInputElement
-                                            ).value;
-                                            const tgt = (
-                                              document.getElementById(`tgt-${it.id}`) as HTMLInputElement
-                                            ).value;
-                                            if (lbl.trim()) void persistProduct(it, lbl, tgt);
-                                          }}
+                                          onBlur={() => void persistProduct(it)}
                                           className="min-w-0 flex-1 rounded-lg border border-zinc-200 bg-white px-2 py-1.5 text-sm font-bold text-zinc-900 outline-none focus:border-[#D32F2F]/40"
                                           placeholder="Producto"
                                         />
+                                        <div className="grid w-full gap-2 sm:grid-cols-2">
+                                          <label className="flex flex-col">
+                                            <span className="text-[9px] font-bold uppercase text-zinc-700">
+                                              Bloque en pizarra
+                                            </span>
+                                            <input
+                                              id={`sec-${it.id}`}
+                                              defaultValue={it.kitchenSection}
+                                              disabled={busy}
+                                              onBlur={() => void persistProduct(it)}
+                                              placeholder="Ej. PLANCHA Y FRITOS"
+                                              className="h-9 w-full rounded-lg border border-zinc-200 bg-white px-2 text-xs font-semibold text-zinc-900 outline-none focus:border-[#D32F2F]/40"
+                                            />
+                                          </label>
+                                          <label className="flex flex-col">
+                                            <span className="text-[9px] font-bold uppercase text-zinc-700">
+                                              Vida útil (días)
+                                            </span>
+                                            <input
+                                              id={`shelf-${it.id}`}
+                                              inputMode="numeric"
+                                              defaultValue={it.shelfLifeDays != null ? String(it.shelfLifeDays) : ''}
+                                              disabled={busy}
+                                              onBlur={() => void persistProduct(it)}
+                                              placeholder="Etiquetas"
+                                              className="h-9 w-full rounded-lg border border-zinc-200 bg-white px-2 text-xs font-black tabular-nums text-zinc-900 outline-none focus:border-[#D32F2F]/40"
+                                            />
+                                          </label>
+                                        </div>
                                         <div className="flex items-center gap-2">
                                           <label className="flex flex-col">
                                             <span className="text-[9px] font-bold uppercase text-zinc-700">
@@ -614,15 +649,7 @@ export default function ProduccionPlantillasPage() {
                                               inputMode="decimal"
                                               defaultValue={String(it.targetQty)}
                                               disabled={busy}
-                                              onBlur={() => {
-                                                const lbl = (
-                                                  document.getElementById(`lbl-${it.id}`) as HTMLInputElement
-                                                ).value;
-                                                const tgt = (
-                                                  document.getElementById(`tgt-${it.id}`) as HTMLInputElement
-                                                ).value;
-                                                if (lbl.trim()) void persistProduct(it, lbl, tgt);
-                                              }}
+                                              onBlur={() => void persistProduct(it)}
                                               className="h-9 w-[4.5rem] rounded-lg border border-zinc-200 bg-white px-2 text-sm font-black tabular-nums text-zinc-900 outline-none focus:border-[#D32F2F]/40"
                                             />
                                           </label>

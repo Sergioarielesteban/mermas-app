@@ -1,6 +1,6 @@
 'use client';
 
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Minus, Plus } from 'lucide-react';
 import MermasStyleHero from '@/components/MermasStyleHero';
@@ -60,6 +60,7 @@ function isSnapshotV1(x: unknown): x is ChefProductionSnapshotV1 {
 }
 
 export default function ProduccionCorrerPage() {
+  const router = useRouter();
   const params = useParams();
   const sessionId = typeof params.runId === 'string' ? params.runId : '';
   const { localId, profileReady } = useAuth();
@@ -128,6 +129,10 @@ export default function ProduccionCorrerPage() {
         setBanner('Lista no encontrada o de otro local.');
         return;
       }
+      if (!s.completedAt) {
+        router.replace(`/produccion?sesion=${sessionId}`);
+        return;
+      }
       setSession(s);
       const tpl = await fetchChefProductionTemplate(supabase, localId, s.templateId);
       setTemplate(tpl);
@@ -152,7 +157,7 @@ export default function ProduccionCorrerPage() {
     } finally {
       setLoading(false);
     }
-  }, [sessionId, localId, supabaseOk]);
+  }, [sessionId, localId, supabaseOk, router]);
 
   useEffect(() => {
     if (!profileReady) return;

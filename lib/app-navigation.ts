@@ -43,8 +43,8 @@ const PATH_LABEL: Record<string, string> = {
   '/finanzas': 'Finanzas',
   '/checklist': 'Check list',
   '/checklist/ejecutar': 'Ejecutar',
-  '/produccion': 'Producción',
-  '/produccion/ejecutar': 'Lista del día',
+  '/produccion': 'Producción del día',
+  '/produccion/ejecutar': 'Producción',
   '/produccion/planes': 'Plantillas',
   '/produccion/historial': 'Historial',
   '/servicio': 'Servicio',
@@ -80,7 +80,7 @@ export function navLabelForPath(pathname: string): string {
   if (/^\/pedidos\/albaranes\/[^/]+$/.test(path)) return 'Albarán';
   if (/^\/escandallos\/recetas\/[^/]+\/editar$/.test(path)) return 'Editar receta';
   if (/^\/checklist\/correr\/[^/]+$/.test(path)) return 'Check list';
-  if (/^\/produccion\/correr\/[^/]+$/.test(path)) return 'Lista en curso';
+  if (/^\/produccion\/correr\/[^/]+$/.test(path)) return 'Día archivado';
   if (/^\/pedidos-cocina\/[^/]+$/.test(path)) return 'Pedido';
   if (/^\/servicio\/plato\/[^/]+$/.test(path)) return 'Plato';
   if (/^\/servicio\/platos\/[^/]+\/editar$/.test(path)) return 'Editar plato';
@@ -178,7 +178,7 @@ export function getParentRoute(pathname: string | null): string {
 
   // —— Checklist / producción local (runs en curso) ——
   if (/^\/checklist\/correr\/[^/]+$/.test(path)) return '/checklist/ejecutar';
-  if (/^\/produccion\/correr\/[^/]+$/.test(path)) return '/produccion/ejecutar';
+  if (/^\/produccion\/correr\/[^/]+$/.test(path)) return '/produccion';
 
   // —— Pedidos a cocina central ——
   if (/^\/pedidos-cocina\/[^/]+$/.test(path)) return '/pedidos-cocina';

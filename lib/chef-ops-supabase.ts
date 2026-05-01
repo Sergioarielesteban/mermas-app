@@ -83,7 +83,104 @@ export type ChefProductionBlockItem = {
   label: string;
   targetQty: number;
   sortOrder: number;
+  /** Título de sección en la pizarra (ej. PLANCHA Y FRITOS). Vacío si no agrupa. */
+  kitchenSection: string;
+  /** Días de vida útil para etiquetas; NULL = sin caducidad calculada. */
+  shelfLifeDays: number | null;
 };
+
+/** Referencias de calendario fijas para resolver bloque Lun–Jue vs Vie–Dom dentro de una plantilla. */
+export const CHEF_PRODUCTION_REF_MONDAY_ISO = '2024-01-01';
+export const CHEF_PRODUCTION_REF_FRIDAY_ISO = '2024-01-05';
+
+/** Filas combinadas para la vista pizarra (dos columnas de objetivos por producto). */
+export type ChefProductionBoardRow = {
+  labelKey: string;
+  displayLabel: string;
+  kitchenSection: string;
+  ljItem: ChefProductionBlockItem | null;
+  vdItem: ChefProductionBlockItem | null;
+  sortOrder: number;
+};
+
+export function resolveLjAndVdBlocks(blocks: ChefProductionDayBlock[]): {
+  ljBlock: ChefProductionDayBlock | null;
+  vdBlock: ChefProductionDayBlock | null;
+} {
+  const ljBlock = resolveChefProductionDayBlock(blocks, CHEF_PRODUCTION_REF_MONDAY_ISO, null);
+  const vdBlock = resolveChefProductionDayBlock(blocks, CHEF_PRODUCTION_REF_FRIDAY_ISO, null);
+  return { ljBlock, vdBlock };
+}
+
+function normalizeProductionBoardLabelKey(s: string): string {
+  return s.trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
+/**
+ * Une productos del bloque Lun–Jue y Vie–Dom por nombre (misma clave tras normalizar).
+ */
+export function buildChefProductionBoardRows(
+  ljItems: ChefProductionBlockItem[],
+  vdItems: ChefProductionBlockItem[],
+): ChefProductionBoardRow[] {
+  const ljSorted = [...ljItems].sort((a, b) => a.sortOrder - b.sortOrder || a.label.localeCompare(b.label));
+  const vdSorted = [...vdItems].sort((a, b) => a.sortOrder - b.sortOrder || a.label.localeCompare(b.label));
+  const byKey = new Map<string, ChefProductionBoardRow>();
+
+  for (const it of ljSorted) {
+    const key = normalizeProductionBoardLabelKey(it.label);
+    if (!key) continue;
+    const sec = (it.kitchenSection ?? '').trim();
+    byKey.set(key, {
+      labelKey: key,
+      displayLabel: it.label.trim(),
+      kitchenSection: sec,
+      ljItem: it,
+      vdItem: null,
+      sortOrder: it.sortOrder,
+    });
+  }
+
+  for (const it of vdSorted) {
+    const key = normalizeProductionBoardLabelKey(it.label);
+    if (!key) continue;
+    const existing = byKey.get(key);
+    const sec = (it.kitchenSection ?? '').trim();
+    if (existing) {
+      existing.vdItem = it;
+      if (!existing.kitchenSection && sec) existing.kitchenSection = sec;
+      existing.sortOrder = Math.min(existing.sortOrder, it.sortOrder);
+    } else {
+      byKey.set(key, {
+        labelKey: key,
+        displayLabel: it.label.trim(),
+        kitchenSection: sec,
+        ljItem: null,
+        vdItem: it,
+        sortOrder: it.sortOrder,
+      });
+    }
+  }
+
+  return [...byKey.values()].sort((a, b) => {
+    const sa = a.kitchenSection || '\uffff';
+    const sb = b.kitchenSection || '\uffff';
+    if (sa !== sb) return sa.localeCompare(sb, 'es');
+    return a.sortOrder - b.sortOrder || a.displayLabel.localeCompare(b.displayLabel, 'es');
+  });
+}
+
+export function activeChefProductionBoardBlockItem(
+  row: ChefProductionBoardRow,
+  activeBlockId: string | null,
+  ljBlockId: string | null,
+  vdBlockId: string | null,
+): ChefProductionBlockItem | null {
+  if (!activeBlockId) return null;
+  if (ljBlockId && activeBlockId === ljBlockId && row.ljItem) return row.ljItem;
+  if (vdBlockId && activeBlockId === vdBlockId && row.vdItem) return row.vdItem;
+  return null;
+}
 
 export type ChefProductionSession = {
   id: string;
@@ -183,12 +280,16 @@ function mapProductionDayBlock(r: Record<string, unknown>): ChefProductionDayBlo
 }
 
 function mapProductionBlockItem(r: Record<string, unknown>): ChefProductionBlockItem {
+  const shelf = r.shelf_life_days;
+  const shelfN = shelf != null && shelf !== '' ? Number(shelf) : NaN;
   return {
     id: String(r.id),
     blockId: String(r.block_id),
     label: String(r.label),
     targetQty: Number(r.target_qty ?? 0),
     sortOrder: Number(r.sort_order ?? 0),
+    kitchenSection: String(r.kitchen_section ?? '').trim(),
+    shelfLifeDays: Number.isFinite(shelfN) ? shelfN : null,
   };
 }
 
@@ -245,11 +346,11 @@ export function productionQtyToMake(target: number, hecho: number | null): numbe
 export function formatProductionMigrationError(e: unknown): string {
   const raw = e instanceof Error ? e.message : String(e);
   if (
-    /chef_production_templates|chef_production_sessions|chef_production_day_blocks|chef_production_block_items|block_item_id|does not exist|relation.*does not exist/i.test(
+    /chef_production_templates|chef_production_sessions|chef_production_day_blocks|chef_production_block_items|block_item_id|does not exist|relation.*does not exist|kitchen_section|shelf_life_days/i.test(
       raw,
     )
   ) {
-    return 'Falta o está desactualizado el esquema de Producción en Supabase. Ejecuta supabase-chef-production-v3-block-items.sql (si ya tenías v2) o supabase-chef-production-templates-v2.sql (instalación completa) y recarga.';
+    return 'Falta o está desactualizado el esquema de Producción en Supabase. Ejecuta supabase-chef-production-board-v4.sql (columnas pizarra/caducidad), supabase-chef-production-v3-block-items.sql si venías de v2, o supabase-chef-production-templates-v2.sql en instalación nueva, y recarga.';
   }
   return raw;
 }
@@ -690,6 +791,8 @@ export async function duplicateChefProductionTemplate(
         label: it.label,
         targetQty: it.targetQty,
         sortOrder: it.sortOrder,
+        kitchenSection: it.kitchenSection,
+        shelfLifeDays: it.shelfLifeDays,
       });
     }
   }
@@ -754,7 +857,7 @@ export async function fetchChefProductionBlockItems(
 ): Promise<ChefProductionBlockItem[]> {
   const { data, error } = await supabase
     .from('chef_production_block_items')
-    .select('id,block_id,label,target_qty,sort_order')
+    .select('id,block_id,label,target_qty,sort_order,kitchen_section,shelf_life_days')
     .eq('block_id', blockId)
     .order('sort_order', { ascending: true });
   if (error) throw new Error(error.message);
@@ -764,17 +867,26 @@ export async function fetchChefProductionBlockItems(
 export async function insertChefProductionBlockItem(
   supabase: SupabaseClient,
   blockId: string,
-  input: { label: string; targetQty: number; sortOrder: number },
+  input: {
+    label: string;
+    targetQty: number;
+    sortOrder: number;
+    kitchenSection?: string;
+    shelfLifeDays?: number | null;
+  },
 ): Promise<ChefProductionBlockItem> {
+  const row: Record<string, unknown> = {
+    block_id: blockId,
+    label: input.label.trim(),
+    target_qty: input.targetQty,
+    sort_order: input.sortOrder,
+    kitchen_section: (input.kitchenSection ?? '').trim(),
+    shelf_life_days: input.shelfLifeDays ?? null,
+  };
   const { data, error } = await supabase
     .from('chef_production_block_items')
-    .insert({
-      block_id: blockId,
-      label: input.label.trim(),
-      target_qty: input.targetQty,
-      sort_order: input.sortOrder,
-    })
-    .select('id,block_id,label,target_qty,sort_order')
+    .insert(row)
+    .select('id,block_id,label,target_qty,sort_order,kitchen_section,shelf_life_days')
     .single();
   if (error) throw new Error(error.message);
   return mapProductionBlockItem(data as Record<string, unknown>);
@@ -783,12 +895,20 @@ export async function insertChefProductionBlockItem(
 export async function updateChefProductionBlockItem(
   supabase: SupabaseClient,
   itemId: string,
-  patch: { label?: string; targetQty?: number; sortOrder?: number },
+  patch: {
+    label?: string;
+    targetQty?: number;
+    sortOrder?: number;
+    kitchenSection?: string;
+    shelfLifeDays?: number | null;
+  },
 ): Promise<void> {
   const row: Record<string, unknown> = {};
   if (patch.label !== undefined) row.label = patch.label.trim();
   if (patch.targetQty !== undefined) row.target_qty = patch.targetQty;
   if (patch.sortOrder !== undefined) row.sort_order = patch.sortOrder;
+  if (patch.kitchenSection !== undefined) row.kitchen_section = patch.kitchenSection.trim();
+  if (patch.shelfLifeDays !== undefined) row.shelf_life_days = patch.shelfLifeDays;
   if (Object.keys(row).length === 0) return;
   const { error } = await supabase.from('chef_production_block_items').update(row).eq('id', itemId);
   if (error) throw new Error(error.message);

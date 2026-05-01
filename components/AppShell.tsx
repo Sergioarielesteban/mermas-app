@@ -86,11 +86,11 @@ function titleForPath(pathname: string | null) {
     return 'Servicio';
   }
   if (pathname.startsWith('/produccion')) {
-    if (pathname === '/produccion') return 'Producción';
-    if (pathname.startsWith('/produccion/ejecutar')) return 'Lista del día';
+    if (pathname === '/produccion') return 'Producción del día';
+    if (pathname.startsWith('/produccion/ejecutar')) return 'Producción del día';
     if (pathname.startsWith('/produccion/planes')) return 'Plantillas';
     if (pathname.startsWith('/produccion/historial')) return 'Historial producción';
-    if (pathname.startsWith('/produccion/correr')) return 'Lista en curso';
+    if (pathname.startsWith('/produccion/correr')) return 'Día archivado';
     return 'Producción';
   }
   if (pathname.startsWith('/inventario')) return 'Inventario';
