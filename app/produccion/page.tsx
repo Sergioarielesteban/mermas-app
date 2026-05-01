@@ -67,42 +67,192 @@ type LabelPayload = {
   lote: string;
 };
 
-function openPrintLabels(workDateIso: string, rows: LabelPayload[]) {
-  if (typeof window === 'undefined') return;
-  const w = window.open('', '_blank', 'noopener,noreferrer');
-  if (!w) {
-    alert('Permite ventanas emergentes para imprimir.');
-    return;
-  }
+function escapeHtml(s: string): string {
+  return s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
+}
+
+function buildLabelsPrintHtml(workDateIso: string, rows: LabelPayload[]): string {
   const itemsHtml = rows
-    .map(
-      (r) => `
+    .map((r) => {
+      const cad = r.caducidad != null && r.caducidad.trim() !== '' ? r.caducidad : '—';
+      const loteRow =
+        r.lote.trim() !== ''
+          ? `<div class="row lote">Lote: ${escapeHtml(r.lote)}</div>`
+          : '';
+      return `
     <article class="etq">
       <div class="p">${escapeHtml(r.producto)}</div>
-      <div class="meta">Elab. ${escapeHtml(r.elaboracion)}${r.caducidad ? ` · Cad. ${escapeHtml(r.caducidad)}` : ''}</div>
-      <div class="lote">${escapeHtml(r.lote)}</div>
-    </article>`,
-    )
+      <div class="row">Fecha elaboración: ${escapeHtml(r.elaboracion)}</div>
+      <div class="row">Caducidad: ${escapeHtml(cad)}</div>
+      ${loteRow}
+    </article>`;
+    })
     .join('');
-  const doc = `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"/><title>Etiquetas ${escapeHtml(
+  return `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>Etiquetas ${escapeHtml(
     workDateIso,
   )}</title><style>
 @page { size: 58mm auto; margin: 2mm; }
 *{box-sizing:border-box}
 body{font-family:system-ui,-apple-system,sans-serif;margin:0;padding:4px;color:#111}
 .etq{width:54mm;margin:0 auto 4mm;padding:5px 4px;border:1px solid #333;border-radius:2mm;break-inside:avoid;page-break-inside:avoid}
-.p{font-size:11px;font-weight:800;line-height:1.2;text-transform:uppercase;letter-spacing:.02em;word-break:break-word}
-.meta{font-size:9px;margin-top:3px;line-height:1.25;color:#444}
-.lote{font-size:8px;margin-top:2px;color:#555;font-variant-numeric:tabular-nums}
-@media screen{body{max-width:90mm;margin:0 auto;background:#fafafa;padding:12px}}
-</style></head><body>${itemsHtml}<script>window.onload=function(){setTimeout(function(){window.print()},100)};<\/script></body></html>`;
-  w.document.open();
-  w.document.write(doc);
-  w.document.close();
+.p{font-size:11px;font-weight:800;line-height:1.25;text-transform:uppercase;letter-spacing:.02em;word-break:break-word}
+.row{font-size:9px;margin-top:3px;line-height:1.25;color:#333}
+.row.lote{font-size:8px;color:#444;font-variant-numeric:tabular-nums}
+</style></head><body>${itemsHtml}</body></html>`;
 }
 
-function escapeHtml(s: string): string {
-  return s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
+/** Impresión sin pestaña nueva: iframe oculto con HTML cargado antes de imprimir (mejor en móvil que window.open ''). */
+function printLabelsViaIframe(html: string): void {
+  if (typeof document === 'undefined') return;
+
+  const iframe = document.createElement('iframe');
+  iframe.title = 'Vista previa impresión';
+  iframe.setAttribute('aria-hidden', 'true');
+  Object.assign(iframe.style, {
+    position: 'fixed',
+    inset: '0',
+    width: '0',
+    height: '0',
+    border: '0',
+    opacity: '0',
+    pointerEvents: 'none',
+  });
+  document.body.appendChild(iframe);
+
+  const win = iframe.contentWindow;
+  if (!win) {
+    iframe.remove();
+    return;
+  }
+
+  let cleaned = false;
+  const cleanup = () => {
+    if (cleaned) return;
+    cleaned = true;
+    if (iframe.isConnected) iframe.remove();
+  };
+
+  const invokePrint = () => {
+    try {
+      win.focus();
+      win.addEventListener('afterprint', cleanup, { once: true });
+      win.print();
+    } catch {
+      cleanup();
+      return;
+    }
+    window.setTimeout(cleanup, 4000);
+  };
+
+  let kicked = false;
+  const schedulePrintOnce = () => {
+    if (kicked) return;
+    kicked = true;
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(invokePrint);
+    });
+  };
+
+  iframe.addEventListener('load', schedulePrintOnce, { once: true });
+  iframe.srcdoc = html;
+
+  /** Respaldo: algunos WebKit no disparan load de srcdoc de forma fiable antes de imprimir. */
+  window.setTimeout(() => {
+    if (!kicked) schedulePrintOnce();
+  }, 750);
+}
+
+function ProduccionLabelPreviewCard({ label }: { label: LabelPayload }) {
+  const cad = label.caducidad ?? '—';
+  return (
+    <article
+      className="mx-auto w-[54mm] max-w-[min(54mm,92vw)] break-inside-avoid rounded-sm border border-zinc-900 bg-white px-3 py-2 shadow-sm print:border-black"
+      style={{ WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}
+    >
+      <div className="text-[11px] font-black uppercase leading-snug tracking-wide text-zinc-900">{label.producto}</div>
+      <div className="mt-2 text-[9px] font-semibold leading-relaxed text-zinc-800">
+        Fecha elaboración: <span className="font-bold tabular-nums">{label.elaboracion}</span>
+      </div>
+      <div className="text-[9px] font-semibold leading-relaxed text-zinc-800">
+        Caducidad: <span className="font-bold tabular-nums">{cad}</span>
+      </div>
+      {label.lote.trim() !== '' ? (
+        <div className="mt-1 text-[8px] font-bold tabular-nums text-zinc-600">Lote: {label.lote}</div>
+      ) : null}
+    </article>
+  );
+}
+
+function ProduccionLabelsPreviewModal({
+  workDateIso,
+  labels,
+  onClose,
+  onPrintClick,
+}: {
+  workDateIso: string;
+  labels: LabelPayload[];
+  onClose: () => void;
+  onPrintClick: () => void;
+}) {
+  useEffect(() => {
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = prevOverflow;
+    };
+  }, []);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  return (
+    <div className="fixed inset-0 z-[100]" role="dialog" aria-modal="true" aria-labelledby="prod-label-preview-title">
+      <button
+        type="button"
+        className="absolute inset-0 bg-black/50"
+        aria-label="Cerrar vista previa"
+        onClick={onClose}
+      />
+      <div className="pointer-events-none flex min-h-full items-end justify-center p-3 sm:items-center sm:p-6">
+        <div className="pointer-events-auto flex max-h-[min(92vh,640px)] w-full max-w-md flex-col overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-2xl">
+          <div className="border-b border-zinc-100 px-4 py-3">
+            <h2 id="prod-label-preview-title" className="text-sm font-black text-zinc-900">
+              Vista previa de etiqueta
+            </h2>
+            <p className="mt-0.5 text-[11px] font-medium text-zinc-600">
+              {labels.length} etiqueta{labels.length !== 1 ? 's' : ''} · {workDateIso} · tamaño típico 58&nbsp;mm
+            </p>
+          </div>
+          <div className="min-h-[12rem] flex-1 overflow-y-auto bg-zinc-100 px-4 py-4 space-y-4">
+            {labels.map((label, idx) => (
+              <ProduccionLabelPreviewCard key={`${idx}-${label.lote}-${label.producto}`} label={label} />
+            ))}
+          </div>
+          <div className="flex flex-wrap gap-2 border-t border-zinc-100 bg-white px-4 py-3">
+            <button
+              type="button"
+              onClick={onClose}
+              className="h-10 flex-1 rounded-xl border border-zinc-300 bg-white text-xs font-black uppercase tracking-wide text-zinc-900 sm:flex-initial sm:px-6"
+            >
+              Cerrar
+            </button>
+            <button
+              type="button"
+              onClick={onPrintClick}
+              className="h-10 flex-1 rounded-xl border border-zinc-900 bg-zinc-900 text-xs font-black uppercase tracking-wide text-white sm:flex-initial sm:px-6"
+            >
+              Imprimir
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function groupRowsByKitchenSection(rows: ChefProductionBoardRow[]): { title: string; rows: ChefProductionBoardRow[] }[] {
@@ -136,10 +286,13 @@ function ProduccionBoardInner() {
   const [sessionLines, setSessionLines] = useState<ChefProductionSessionLine[]>([]);
   const [hechoDraft, setHechoDraft] = useState<Record<string, string>>({});
   const hechoDraftRef = useRef(hechoDraft);
-  hechoDraftRef.current = hechoDraft;
+  useEffect(() => {
+    hechoDraftRef.current = hechoDraft;
+  }, [hechoDraft]);
 
   const [savingLineId, setSavingLineId] = useState<string | null>(null);
   const [closing, setClosing] = useState(false);
+  const [labelsPreview, setLabelsPreview] = useState<LabelPayload[] | null>(null);
   const debouncePersistRef = useRef<number | null>(null);
   const sesionBootstrapRef = useRef<string | null>(null);
 
@@ -246,8 +399,9 @@ function ProduccionBoardInner() {
         return;
       }
 
-      typeof window !== 'undefined' &&
+      if (typeof window !== 'undefined') {
         window.localStorage.setItem(STORAGE_LAST_TEMPLATE, templateEff);
+      }
 
       const sess = await getOrCreateChefProductionSession(
         supabase,
@@ -298,6 +452,7 @@ function ProduccionBoardInner() {
 
   useEffect(() => {
     if (!profileReady) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- carga inicial de sesión cuando el perfil está listo
     void load();
   }, [profileReady, load]);
 
@@ -388,7 +543,7 @@ function ProduccionBoardInner() {
       return;
     }
     setBanner(null);
-    openPrintLabels(session.workDate, labels);
+    setLabelsPreview(labels);
   };
 
   const sectionGroups = useMemo(() => groupRowsByKitchenSection(boardRows), [boardRows]);
@@ -677,6 +832,18 @@ function ProduccionBoardInner() {
           ) : null}
         </>
       )}
+
+      {labelsPreview && labelsPreview.length > 0 && session ? (
+        <ProduccionLabelsPreviewModal
+          workDateIso={session.workDate}
+          labels={labelsPreview}
+          onClose={() => setLabelsPreview(null)}
+          onPrintClick={() => {
+            const html = buildLabelsPrintHtml(session.workDate, labelsPreview);
+            printLabelsViaIframe(html);
+          }}
+        />
+      ) : null}
     </div>
   );
 }
