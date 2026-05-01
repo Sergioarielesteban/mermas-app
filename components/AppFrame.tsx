@@ -16,6 +16,8 @@ export default function AppFrame({ children }: { children: React.ReactNode }) {
   const isPublicHome = pathname === '/';
   const isOnboarding = pathname === '/onboarding';
   const isPrecio = pathname === '/precio';
+  /** Impresión de etiquetas Producción del día — sin shell (como página de etiqueta de lote). */
+  const isProduccionEtiquetasPrint = pathname === '/produccion/etiquetas/print';
   /** Tablet fichaje a pantalla completa (sesión encargado; empleados solo PIN). */
   const isTerminalFichaje =
     pathname === '/terminal-fichaje' || pathname.startsWith('/terminal-fichaje/');
@@ -132,6 +134,12 @@ export default function AppFrame({ children }: { children: React.ReactNode }) {
   if (isTerminalFichaje) {
     return (
       <main className="flex min-h-[100dvh] flex-col bg-zinc-950 text-white">{children}</main>
+    );
+  }
+
+  if (isProduccionEtiquetasPrint) {
+    return (
+      <main className="min-h-[100dvh] bg-white p-4 text-zinc-900 print:bg-white print:p-0">{children}</main>
     );
   }
 

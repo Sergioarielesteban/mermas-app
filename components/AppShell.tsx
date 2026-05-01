@@ -91,6 +91,7 @@ function titleForPath(pathname: string | null) {
     if (pathname.startsWith('/produccion/planes')) return 'Plantillas';
     if (pathname.startsWith('/produccion/historial')) return 'Historial producción';
     if (pathname.startsWith('/produccion/correr')) return 'Día archivado';
+    if (pathname === '/produccion/etiquetas/print') return 'Imprimir etiquetas';
     return 'Producción';
   }
   if (pathname.startsWith('/inventario')) return 'Inventario';

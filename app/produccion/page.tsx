@@ -17,7 +17,7 @@ import {
   fetchChefProductionSessionLines,
   fetchChefProductionSessionRow,
   fetchChefProductionTemplates,
-  fetchMergedProductionBoardRowsForTemplate,
+  fetchFullProductionDayBoardRowsForTemplate,
   formatProductionMigrationError,
   getOrCreateChefProductionSession,
   mergedRowSessionLine,
@@ -67,101 +67,6 @@ type LabelPayload = {
   caducidad: string | null;
   lote: string;
 };
-
-function escapeHtml(s: string): string {
-  return s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
-}
-
-function buildLabelsPrintHtml(workDateIso: string, rows: LabelPayload[]): string {
-  const itemsHtml = rows
-    .map((r) => {
-      const cad = r.caducidad != null && r.caducidad.trim() !== '' ? r.caducidad : '—';
-      const loteRow =
-        r.lote.trim() !== ''
-          ? `<div class="row lote">Lote: ${escapeHtml(r.lote)}</div>`
-          : '';
-      return `
-    <article class="etq">
-      <div class="p">${escapeHtml(r.producto)}</div>
-      <div class="row">Fecha elaboración: ${escapeHtml(r.elaboracion)}</div>
-      <div class="row">Caducidad: ${escapeHtml(cad)}</div>
-      ${loteRow}
-    </article>`;
-    })
-    .join('');
-  return `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>Etiquetas ${escapeHtml(
-    workDateIso,
-  )}</title><style>
-@page { size: 58mm auto; margin: 2mm; }
-*{box-sizing:border-box}
-body{font-family:system-ui,-apple-system,sans-serif;margin:0;padding:4px;color:#111}
-.etq{width:54mm;margin:0 auto 4mm;padding:5px 4px;border:1px solid #333;border-radius:2mm;break-inside:avoid;page-break-inside:avoid}
-.p{font-size:11px;font-weight:800;line-height:1.25;text-transform:uppercase;letter-spacing:.02em;word-break:break-word}
-.row{font-size:9px;margin-top:3px;line-height:1.25;color:#333}
-.row.lote{font-size:8px;color:#444;font-variant-numeric:tabular-nums}
-</style></head><body>${itemsHtml}</body></html>`;
-}
-
-/** Impresión sin pestaña nueva: iframe oculto con HTML cargado antes de imprimir (mejor en móvil que window.open ''). */
-function printLabelsViaIframe(html: string): void {
-  if (typeof document === 'undefined') return;
-
-  const iframe = document.createElement('iframe');
-  iframe.title = 'Vista previa impresión';
-  iframe.setAttribute('aria-hidden', 'true');
-  Object.assign(iframe.style, {
-    position: 'fixed',
-    inset: '0',
-    width: '0',
-    height: '0',
-    border: '0',
-    opacity: '0',
-    pointerEvents: 'none',
-  });
-  document.body.appendChild(iframe);
-
-  const win = iframe.contentWindow;
-  if (!win) {
-    iframe.remove();
-    return;
-  }
-
-  let cleaned = false;
-  const cleanup = () => {
-    if (cleaned) return;
-    cleaned = true;
-    if (iframe.isConnected) iframe.remove();
-  };
-
-  const invokePrint = () => {
-    try {
-      win.focus();
-      win.addEventListener('afterprint', cleanup, { once: true });
-      win.print();
-    } catch {
-      cleanup();
-      return;
-    }
-    window.setTimeout(cleanup, 4000);
-  };
-
-  let kicked = false;
-  const schedulePrintOnce = () => {
-    if (kicked) return;
-    kicked = true;
-    window.requestAnimationFrame(() => {
-      window.requestAnimationFrame(invokePrint);
-    });
-  };
-
-  iframe.addEventListener('load', schedulePrintOnce, { once: true });
-  iframe.srcdoc = html;
-
-  /** Respaldo: algunos WebKit no disparan load de srcdoc de forma fiable antes de imprimir. */
-  window.setTimeout(() => {
-    if (!kicked) schedulePrintOnce();
-  }, 750);
-}
 
 function ProduccionLabelPreviewCard({ label }: { label: LabelPayload }) {
   const cad = label.caducidad ?? '—';
@@ -318,6 +223,22 @@ function ProduccionBoardInner() {
     return resolveChefProductionDayBlock(blocks, session.workDate, session.forcedBlockId);
   }, [session, blocks]);
 
+  /** Si la fecha no coincide con ningún bloque, usar periodo Lun–Jue (o primer bloque), sin vaciar la tabla. */
+  const effectivePeriodBlockId = useMemo(() => {
+    if (activeBlock) return activeBlock.id;
+    return (
+      ljBlockId ??
+      vdBlockId ??
+      [...blocks].sort((a, b) => a.sortOrder - b.sortOrder || a.label.localeCompare(b.label))[0]?.id ??
+      null
+    );
+  }, [activeBlock, ljBlockId, vdBlockId, blocks]);
+
+  const effectivePeriodBlock = useMemo(
+    () => (effectivePeriodBlockId ? blocks.find((b) => b.id === effectivePeriodBlockId) ?? null : null),
+    [blocks, effectivePeriodBlockId],
+  );
+
   const persistHecho = useCallback(
     async (sessionLineId: string, displayValue: string) => {
       if (!supabaseOk || session?.completedAt) return;
@@ -425,7 +346,7 @@ function ProduccionBoardInner() {
         () => [] as { id: string; label: string }[],
       );
       const zoneMap = new Map(zones.map((z) => [z.id, z.label]));
-      const rows = await fetchMergedProductionBoardRowsForTemplate(supabase, templateEff, {
+      const rows = await fetchFullProductionDayBoardRowsForTemplate(supabase, templateEff, {
         zoneLabel: (zid) => (zid ? zoneMap.get(zid) ?? '' : ''),
       });
       setBoardRows(rows);
@@ -530,7 +451,7 @@ function ProduccionBoardInner() {
             : 0;
       if (hecho <= 0) continue;
       seq += 1;
-      const shelf = row.ljItem?.shelfLifeDays ?? row.vdItem?.shelfLifeDays ?? null;
+      const shelf = row.ljItem?.shelfLifeDays ?? row.vdItem?.shelfLifeDays ?? row.extraItem?.shelfLifeDays ?? null;
       const caducidad =
         shelf != null && Number.isFinite(shelf) ? fmtEsDate(addCalendarDaysIso(session.workDate, shelf)) : null;
       const lotePref = session.workDate.replace(/-/g, '');
@@ -547,6 +468,16 @@ function ProduccionBoardInner() {
       return;
     }
     setBanner(null);
+    if (typeof window !== 'undefined') {
+      try {
+        sessionStorage.setItem(
+          `chef_prod_labels_${session.id}`,
+          JSON.stringify({ workDate: session.workDate, labels }),
+        );
+      } catch {
+        /* ignore */
+      }
+    }
     setLabelsPreview(labels);
   };
 
@@ -651,7 +582,9 @@ function ProduccionBoardInner() {
 
           {!activeBlock && blocks.length > 0 ? (
             <div className="mt-3 space-y-1 rounded-md border border-amber-200 bg-amber-50/90 px-3 py-2">
-              <p className="text-[11px] font-bold text-amber-950">Ningún bloque encaja en esta fecha. Elige uno:</p>
+              <p className="text-[11px] font-bold text-amber-950">
+                Ningún bloque coincide con esta fecha de forma automática. Se usa <span className="font-black">Lun–jueves</span> por defecto para objetivos y «hacer». Puedes forzar otro periodo aquí sin perder la lista de productos.
+              </p>
               <div className="flex flex-wrap gap-1">
                 {[...blocks]
                   .sort((a, b) => a.sortOrder - b.sortOrder || a.label.localeCompare(b.label))
@@ -670,10 +603,11 @@ function ProduccionBoardInner() {
             </div>
           ) : null}
 
-          {activeBlock ? (
+          {effectivePeriodBlock ? (
             <p className="mt-2 text-[11px] font-semibold text-zinc-600">
-              Periodo aplicado: <span className="font-black text-zinc-900">{activeBlock.label}</span>
-              {session.forcedBlockId ? ' · manual' : ' · auto'}
+              Periodo aplicado:{' '}
+              <span className="font-black text-zinc-900">{effectivePeriodBlock.label}</span>
+              {session.forcedBlockId ? ' · manual' : activeBlock ? ' · auto' : ' · Lun–jue por defecto'}
             </p>
           ) : null}
 
@@ -705,12 +639,12 @@ function ProduccionBoardInner() {
                   const bodyRows = secRows.map((row) => {
                     const activeItem = activeChefProductionBoardBlockItem(
                       row,
-                      activeBlock?.id ?? null,
+                      effectivePeriodBlockId,
                       ljBlockId,
                       vdBlockId,
                     );
                     const sl = mergedRowSessionLine(row, byBlockItemId);
-                    const ljT = row.ljItem?.targetQty ?? 0;
+                    const ljT = row.ljItem?.targetQty ?? (row.extraItem ? row.extraItem.targetQty : 0);
                     const vdT = row.vdItem?.targetQty ?? 0;
                     const activeTarget = activeItem?.targetQty ?? 0;
                     const lineId = sl?.id ?? null;
@@ -731,7 +665,7 @@ function ProduccionBoardInner() {
                     const saving = lineId !== null && savingLineId === lineId;
 
                     return (
-                      <tr key={row.labelKey} className={[rowTint, 'border-b border-zinc-100'].join(' ')}>
+                      <tr key={row.rowKey} className={[rowTint, 'border-b border-zinc-100'].join(' ')}>
                         <td className="max-w-[9rem] px-2 py-1 font-bold leading-tight text-zinc-900 sm:max-w-none">
                           {row.displayLabel}
                         </td>
@@ -795,7 +729,7 @@ function ProduccionBoardInner() {
             </table>
           </div>
 
-          {!isClosed && blocks.length > 1 && activeBlock ? (
+          {!isClosed && blocks.length > 1 ? (
             <div className="mt-2 flex flex-wrap items-center gap-1 text-[10px] font-bold text-zinc-600">
               <span className="uppercase">Periodo</span>
               <button
@@ -820,7 +754,7 @@ function ProduccionBoardInner() {
                     onClick={() => void setForcedBlock(b.id)}
                     className={
                       session.forcedBlockId === b.id ||
-                      (session.forcedBlockId == null && activeBlock.id === b.id)
+                      (session.forcedBlockId == null && effectivePeriodBlockId === b.id)
                         ? 'rounded bg-zinc-900 px-2 py-1 text-white'
                         : 'rounded border border-zinc-200 bg-white px-2 py-1'
                     }
@@ -839,8 +773,16 @@ function ProduccionBoardInner() {
           labels={labelsPreview}
           onClose={() => setLabelsPreview(null)}
           onPrintClick={() => {
-            const html = buildLabelsPrintHtml(session.workDate, labelsPreview);
-            printLabelsViaIframe(html);
+            if (!session?.id || typeof window === 'undefined') return;
+            try {
+              sessionStorage.setItem(
+                `chef_prod_labels_${session.id}`,
+                JSON.stringify({ workDate: session.workDate, labels: labelsPreview }),
+              );
+            } catch {
+              /* ignore */
+            }
+            window.open(`/produccion/etiquetas/print?sessionId=${encodeURIComponent(session.id)}`, '_blank');
           }}
         />
       ) : null}

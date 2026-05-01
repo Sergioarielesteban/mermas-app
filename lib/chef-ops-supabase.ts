@@ -104,11 +104,15 @@ export const CHEF_PRODUCTION_REF_FRIDAY_ISO = '2024-01-05';
 
 /** Filas combinadas para la vista pizarra (dos columnas de objetivos por producto). */
 export type ChefProductionBoardRow = {
+  /** Estable para React (evita colisión por labelKey igual en filas distintas). */
+  rowKey: string;
   labelKey: string;
   displayLabel: string;
   kitchenSection: string;
   ljItem: ChefProductionBlockItem | null;
   vdItem: ChefProductionBlockItem | null;
+  /** Producto en otro bloque (no Lun–Jue / Vie–Dom resueltos). */
+  extraItem: ChefProductionBlockItem | null;
   sortOrder: number;
 };
 
@@ -148,11 +152,13 @@ export function buildChefProductionBoardRows(
     if (!key) continue;
     const sec = sectionFor(it);
     byKey.set(key, {
+      rowKey: '', // se asigna al devolver la lista (ver final de buildChefProductionBoardRows)
       labelKey: key,
       displayLabel: it.label.trim(),
       kitchenSection: sec,
       ljItem: it,
       vdItem: null,
+      extraItem: null,
       sortOrder: it.sortOrder,
     });
   }
@@ -168,21 +174,32 @@ export function buildChefProductionBoardRows(
       existing.sortOrder = Math.min(existing.sortOrder, it.sortOrder);
     } else {
       byKey.set(key, {
+        rowKey: '',
         labelKey: key,
         displayLabel: it.label.trim(),
         kitchenSection: sec,
         ljItem: null,
         vdItem: it,
+        extraItem: null,
         sortOrder: it.sortOrder,
       });
     }
   }
 
-  return [...byKey.values()].sort((a, b) => {
+  const sortedMerged = [...byKey.values()].sort((a, b) => {
     const sa = a.kitchenSection || '\uffff';
     const sb = b.kitchenSection || '\uffff';
     if (sa !== sb) return sa.localeCompare(sb, 'es');
     return a.sortOrder - b.sortOrder || a.displayLabel.localeCompare(b.displayLabel, 'es');
+  });
+  let anonSeq = 0;
+  return sortedMerged.map((r) => {
+    const canon = r.ljItem?.id ?? r.vdItem?.id ?? null;
+    const rowKey =
+      canon != null
+        ? `m:${canon}`
+        : `m:anon:${++anonSeq}:${r.labelKey}:${r.sortOrder}:${r.displayLabel}`;
+    return { ...r, rowKey };
   });
 }
 
@@ -199,12 +216,58 @@ export async function fetchMergedProductionBoardRowsForTemplate(
   return buildChefProductionBoardRows(ljItems, vdItems, opts);
 }
 
+/**
+ * Fusionado L–J / V–D más **todos** los productos de bloques que no son el par Lun–Jue/Vie–Dom resuelto.
+ */
+export async function fetchFullProductionDayBoardRowsForTemplate(
+  supabase: SupabaseClient,
+  templateId: string,
+  opts?: { zoneLabel?: (zoneId: string | null) => string },
+): Promise<ChefProductionBoardRow[]> {
+  const blocks = await fetchChefProductionDayBlocks(supabase, templateId);
+  const sortedBlocks = [...blocks].sort((a, b) => a.sortOrder - b.sortOrder || a.label.localeCompare(b.label));
+  const { ljBlock, vdBlock } = resolveLjAndVdBlocks(blocks);
+  const ljId = ljBlock?.id ?? null;
+  const vdId = vdBlock?.id ?? null;
+  const coreIds = new Set([ljId, vdId].filter(Boolean) as string[]);
+
+  const merged = await fetchMergedProductionBoardRowsForTemplate(supabase, templateId, opts);
+  const extras: ChefProductionBoardRow[] = [];
+  let order = merged.length;
+
+  for (const b of sortedBlocks) {
+    if (coreIds.has(b.id)) continue;
+    const items = await fetchChefProductionBlockItems(supabase, b.id);
+    const zoneLabelFn = opts?.zoneLabel ?? ((_z: string | null) => '');
+    const list = [...items].sort((a, c) => a.sortOrder - c.sortOrder || a.label.localeCompare(c.label));
+    for (const it of list) {
+      const nk = normalizeProductionBoardLabelKey(it.label);
+      if (!nk) continue;
+      const z = zoneLabelFn(it.productionZoneId ?? null).trim();
+      const sec = z || (it.kitchenSection ?? '').trim();
+      extras.push({
+        rowKey: `e:${it.id}`,
+        labelKey: nk,
+        displayLabel: it.label.trim(),
+        kitchenSection: sec,
+        ljItem: null,
+        vdItem: null,
+        extraItem: it,
+        sortOrder: order++,
+      });
+    }
+  }
+
+  extras.sort((a, b) => a.sortOrder - b.sortOrder || a.displayLabel.localeCompare(b.displayLabel, 'es'));
+  return [...merged, ...extras];
+}
+
 /** Ids `block_item_id` canónicos para la pizarra (una línea por producto fusionado). */
 export async function listCanonicalSessionBlockItemIdsForTemplate(
   supabase: SupabaseClient,
   templateId: string,
 ): Promise<string[]> {
-  const rows = await fetchMergedProductionBoardRowsForTemplate(supabase, templateId);
+  const rows = await fetchFullProductionDayBoardRowsForTemplate(supabase, templateId);
   return rows.map((r) => canonicalBlockItemIdForBoardRow(r)).filter((id): id is string => Boolean(id));
 }
 
@@ -215,6 +278,7 @@ export function activeChefProductionBoardBlockItem(
   vdBlockId: string | null,
 ): ChefProductionBlockItem | null {
   if (!activeBlockId) return null;
+  if (row.extraItem && activeBlockId === row.extraItem.blockId) return row.extraItem;
   if (ljBlockId && activeBlockId === ljBlockId && row.ljItem) return row.ljItem;
   if (vdBlockId && activeBlockId === vdBlockId && row.vdItem) return row.vdItem;
   return null;
@@ -222,7 +286,7 @@ export function activeChefProductionBoardBlockItem(
 
 /** Id de línea de bloque canónico para sesión / “hecho” (prioriza Lun–Jue). */
 export function canonicalBlockItemIdForBoardRow(row: ChefProductionBoardRow): string | null {
-  return row.ljItem?.id ?? row.vdItem?.id ?? null;
+  return row.ljItem?.id ?? row.vdItem?.id ?? row.extraItem?.id ?? null;
 }
 
 /**
@@ -232,10 +296,14 @@ export function mergedRowSessionLine(
   row: ChefProductionBoardRow,
   linesByBlockItemId: Map<string, ChefProductionSessionLine>,
 ): ChefProductionSessionLine | null {
-  const primaryId = row.ljItem?.id ?? row.vdItem?.id ?? null;
+  const primaryId = row.ljItem?.id ?? row.vdItem?.id ?? row.extraItem?.id ?? null;
   if (!primaryId) return null;
   const secondaryId =
-    row.ljItem && row.vdItem ? (row.vdItem!.id === primaryId ? row.ljItem!.id : row.vdItem!.id) : null;
+    row.ljItem && row.vdItem && row.ljItem.id !== row.vdItem.id
+      ? row.vdItem.id === primaryId
+        ? row.ljItem.id
+        : row.vdItem.id
+      : null;
   const a = linesByBlockItemId.get(primaryId);
   if (a) return a;
   if (secondaryId) {
@@ -1114,7 +1182,7 @@ export async function ensureChefProductionSessionLinesForTemplate(
   sessionId: string,
   templateId: string,
 ): Promise<void> {
-  const rows = await fetchMergedProductionBoardRowsForTemplate(supabase, templateId);
+  const rows = await fetchFullProductionDayBoardRowsForTemplate(supabase, templateId);
   const canonNeeded = new Set(
     rows.map((r) => canonicalBlockItemIdForBoardRow(r)).filter((id): id is string => Boolean(id)),
   );
@@ -1126,7 +1194,11 @@ export async function ensureChefProductionSessionLinesForTemplate(
     const canon = canonicalBlockItemIdForBoardRow(row);
     if (!canon) continue;
     const secondary =
-      row.ljItem && row.vdItem ? (row.ljItem.id === canon ? row.vdItem.id : row.ljItem.id) : null;
+      row.ljItem && row.vdItem && row.ljItem.id !== row.vdItem.id
+        ? row.ljItem.id === canon
+          ? row.vdItem.id
+          : row.ljItem.id
+        : null;
 
     const lineCanon = existing.find((sl) => sl.blockItemId === canon);
     const lineSec = secondary ? existing.find((sl) => sl.blockItemId === secondary) : undefined;
