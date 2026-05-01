@@ -8,6 +8,7 @@ import { useAuth } from '@/components/AuthProvider';
 import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
 import {
   activeChefProductionBoardBlockItem,
+  chefProdLabelsStorageKeyV2,
   type ChefProductionBoardRow,
   completeChefProductionSession,
   ensureChefProductionSessionLinesForTemplate,
@@ -468,10 +469,10 @@ function ProduccionBoardInner() {
       return;
     }
     setBanner(null);
-    if (typeof window !== 'undefined') {
+    if (typeof window !== 'undefined' && templateId.trim() !== '') {
       try {
         sessionStorage.setItem(
-          `chef_prod_labels_${session.id}`,
+          chefProdLabelsStorageKeyV2(session.workDate, templateId),
           JSON.stringify({ workDate: session.workDate, labels }),
         );
       } catch {
@@ -480,6 +481,27 @@ function ProduccionBoardInner() {
     }
     setLabelsPreview(labels);
   };
+
+  /** Abre ventana solo con etiquetas y dispara impresión nativa (AirPrint en iOS tras pulsar en esa pantalla). */
+  const handlePrintProductionLabels = useCallback(() => {
+    if (!session || !templateId || !labelsPreview?.length || typeof window === 'undefined') return;
+    try {
+      sessionStorage.setItem(
+        chefProdLabelsStorageKeyV2(session.workDate, templateId),
+        JSON.stringify({ workDate: session.workDate, labels: labelsPreview }),
+      );
+    } catch {
+      /* ignore */
+    }
+    const url = `/produccion/etiquetas/print?date=${encodeURIComponent(session.workDate)}&templateId=${encodeURIComponent(templateId)}`;
+    const w = window.open(url, '_blank', 'noopener,noreferrer');
+    setLabelsPreview(null);
+    if (!w) {
+      setBanner('No se abrió la ventana de impresión. Activa ventanas emergentes y pulsa de nuevo «Imprimir».');
+    } else {
+      setBanner(null);
+    }
+  }, [session, templateId, labelsPreview]);
 
   const sectionGroups = useMemo(() => groupRowsByKitchenSection(boardRows), [boardRows]);
 
@@ -772,18 +794,7 @@ function ProduccionBoardInner() {
           workDateIso={session.workDate}
           labels={labelsPreview}
           onClose={() => setLabelsPreview(null)}
-          onPrintClick={() => {
-            if (!session?.id || typeof window === 'undefined') return;
-            try {
-              sessionStorage.setItem(
-                `chef_prod_labels_${session.id}`,
-                JSON.stringify({ workDate: session.workDate, labels: labelsPreview }),
-              );
-            } catch {
-              /* ignore */
-            }
-            window.open(`/produccion/etiquetas/print?sessionId=${encodeURIComponent(session.id)}`, '_blank');
-          }}
+          onPrintClick={handlePrintProductionLabels}
         />
       ) : null}
     </div>

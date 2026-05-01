@@ -484,6 +484,11 @@ export function productionQtyToMake(target: number, hecho: number | null): numbe
   return diff > 0 ? diff : 0;
 }
 
+/** Clave sessionStorage al abrir impresión desde Producción del día (debe coincidir con `date` y `templateId` de la URL). */
+export function chefProdLabelsStorageKeyV2(workDateIso: string, templateId: string): string {
+  return `chef_prod_labels_v2_${workDateIso}_${templateId}`;
+}
+
 /** Si Supabase aún no tiene el esquema de producción (plantillas + bloques + productos por bloque). */
 export function formatProductionMigrationError(e: unknown): string {
   const raw = e instanceof Error ? e.message : String(e);

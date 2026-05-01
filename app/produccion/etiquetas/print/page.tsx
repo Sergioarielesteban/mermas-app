@@ -7,15 +7,25 @@ import { useAuth } from '@/components/AuthProvider';
 import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
 import {
   type ChefProductionBoardRow,
+  chefProdLabelsStorageKeyV2,
+  ensureChefProductionSessionLinesForTemplate,
   fetchChefProductionSessionLines,
-  fetchChefProductionSessionRow,
   fetchFullProductionDayBoardRowsForTemplate,
   fetchChefProductionZones,
+  getOrCreateChefProductionSession,
   mergedRowSessionLine,
   type ChefProductionSessionLine,
 } from '@/lib/chef-ops-supabase';
 
-const STORAGE_PREFIX = 'chef_prod_labels_';
+/** iOS/iPadOS: AirPrint requiere toque directo en `window.print()` (como Cocina Central / etiqueta de lote). */
+function shouldUseManualPrintOnly(): boolean {
+  if (typeof navigator === 'undefined') return false;
+  const ua = navigator.userAgent || '';
+  if (/iPhone|iPod/i.test(ua)) return true;
+  if (/iPad/i.test(ua)) return true;
+  if (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1) return true;
+  return false;
+}
 
 type LabelPayload = {
   producto: string;
@@ -73,19 +83,32 @@ function labelsFromBoardAndLines(
 
 function ProduccionEtiquetasPrintInner() {
   const searchParams = useSearchParams();
-  const sessionId = searchParams.get('sessionId');
-  const { localId, profileReady } = useAuth();
+  const dateParam = searchParams.get('date');
+  const templateParam = searchParams.get('templateId');
+  const { localId, profileReady, userId } = useAuth();
   const supabaseOk = isSupabaseEnabled() && getSupabaseClient();
 
   const [err, setErr] = useState<string | null>(null);
   const [labels, setLabels] = useState<LabelPayload[]>([]);
   const [meta, setMeta] = useState<{ workDate: string } | null>(null);
+  const [manualPrintOnly, setManualPrintOnly] = useState(false);
 
   useEffect(() => {
-    if (!profileReady || !localId || !supabaseOk || !sessionId) {
-      if (profileReady && (!sessionId || !localId || !supabaseOk)) {
-        setErr(!sessionId ? 'Falta sessionId.' : 'Sin sesión o Supabase.');
+    setManualPrintOnly(shouldUseManualPrintOnly());
+  }, []);
+
+  useEffect(() => {
+    if (!profileReady || !localId || !supabaseOk) {
+      if (profileReady && (!localId || !supabaseOk)) {
+        setErr('Sin sesión o Supabase.');
       }
+      return;
+    }
+
+    const dateEff = dateParam?.trim() ?? '';
+    const tplEff = templateParam?.trim() ?? '';
+    if (!dateEff || !tplEff || dateEff.length < 10) {
+      if (profileReady) setErr(!dateEff || !tplEff ? 'Faltan parámetros date o templateId en la URL.' : 'Fecha no válida.');
       return;
     }
 
@@ -93,23 +116,17 @@ function ProduccionEtiquetasPrintInner() {
     void (async () => {
       const supabase = getSupabaseClient()!;
       try {
-        const session = await fetchChefProductionSessionRow(supabase, sessionId);
-        if (cancelled) return;
-        if (!session || session.localId !== localId) {
-          setErr('Sesión de producción no encontrada.');
-          return;
-        }
-
         let nextLabels: LabelPayload[] = [];
+
         if (typeof window !== 'undefined') {
           try {
-            const raw = sessionStorage.getItem(`${STORAGE_PREFIX}${sessionId}`);
+            const raw = sessionStorage.getItem(chefProdLabelsStorageKeyV2(dateEff, tplEff));
             if (raw) {
               const parsed = JSON.parse(raw) as { workDate?: string; labels?: LabelPayload[] };
               if (
                 Array.isArray(parsed.labels) &&
                 parsed.labels.length > 0 &&
-                parsed.workDate === session.workDate
+                parsed.workDate === dateEff
               ) {
                 nextLabels = parsed.labels;
               }
@@ -120,9 +137,21 @@ function ProduccionEtiquetasPrintInner() {
         }
 
         if (nextLabels.length === 0) {
-          const zones = await fetchChefProductionZones(supabase, session.templateId).catch(() => [] as { id: string; label: string }[]);
+          const session = await getOrCreateChefProductionSession(
+            supabase,
+            localId,
+            tplEff,
+            dateEff,
+            null,
+            userId ?? null,
+          );
+          if (cancelled) return;
+          if (!session.completedAt) {
+            await ensureChefProductionSessionLinesForTemplate(supabase, session.id, tplEff);
+          }
+          const zones = await fetchChefProductionZones(supabase, tplEff).catch(() => [] as { id: string; label: string }[]);
           const zoneMap = new Map(zones.map((z) => [z.id, z.label]));
-          const rows = await fetchFullProductionDayBoardRowsForTemplate(supabase, session.templateId, {
+          const rows = await fetchFullProductionDayBoardRowsForTemplate(supabase, tplEff, {
             zoneLabel: (zid) => (zid ? zoneMap.get(zid) ?? '' : ''),
           });
           const sl = await fetchChefProductionSessionLines(supabase, session.id);
@@ -131,7 +160,7 @@ function ProduccionEtiquetasPrintInner() {
 
         if (cancelled) return;
         setErr(null);
-        setMeta({ workDate: session.workDate });
+        setMeta({ workDate: dateEff });
         setLabels(nextLabels);
         if (nextLabels.length === 0) {
           setErr('No hay producción registrada (hecho > 0) para etiquetar.');
@@ -144,10 +173,11 @@ function ProduccionEtiquetasPrintInner() {
     return () => {
       cancelled = true;
     };
-  }, [profileReady, localId, supabaseOk, sessionId]);
+  }, [profileReady, localId, supabaseOk, dateParam, templateParam, userId]);
 
+  /** Escritorio: disparo automático tipo ventana nueva. iOS/Android con WebKit restrictivo: el usuario pulsa «Imprimir» (gesto → window.print, igual que /cocina-central/etiquetas). */
   useEffect(() => {
-    if (labels.length === 0 || err || !sessionId) return;
+    if (labels.length === 0 || err || manualPrintOnly) return;
     let cancelled = false;
     const t = window.setTimeout(() => {
       if (!cancelled) {
@@ -162,7 +192,7 @@ function ProduccionEtiquetasPrintInner() {
       cancelled = true;
       window.clearTimeout(t);
     };
-  }, [labels, err, sessionId]);
+  }, [labels, err, manualPrintOnly]);
 
   if (!profileReady) return <p className="p-6 text-sm text-zinc-600">Cargando…</p>;
   if (err) return <p className="p-6 text-sm text-red-700">{err}</p>;
@@ -176,9 +206,18 @@ function ProduccionEtiquetasPrintInner() {
           __html: `
         @page { size: 58mm 40mm; margin: 0; }
         @media print {
-          html, body { margin: 0 !important; padding: 0 !important; background: white !important; }
+          body { margin: 0 !important; background: white !important; }
+          html { margin: 0 !important; padding: 0 !important; background: white !important; }
           .no-print { display: none !important; }
-          .production-label { border-color: #000 !important; box-shadow: none !important; }
+          .production-label {
+            border-color: #000 !important;
+            box-shadow: none !important;
+            width: 58mm !important;
+            min-height: 38mm !important;
+            padding: 3mm !important;
+            box-sizing: border-box !important;
+            page-break-after: always !important;
+          }
         }
         .production-label {
           box-sizing: border-box;
@@ -196,10 +235,12 @@ function ProduccionEtiquetasPrintInner() {
       <div className="no-print mb-4 flex flex-wrap items-center gap-2 print:hidden">
         <button
           type="button"
-          onClick={() => window.print()}
-          className="rounded-xl bg-zinc-900 px-4 py-2 text-xs font-black uppercase tracking-wide text-white"
+          onClick={() => {
+            window.print();
+          }}
+          className="min-h-12 rounded-xl bg-zinc-900 px-6 py-3 text-sm font-black uppercase tracking-wide text-white touch-manipulation"
         >
-          Imprimir
+          Imprimir etiqueta
         </button>
         <button
           type="button"
@@ -211,6 +252,11 @@ function ProduccionEtiquetasPrintInner() {
         <span className="text-[11px] text-zinc-600">
           {meta?.workDate ?? ''} · {labels.length} etiqueta{labels.length !== 1 ? 's' : ''}
         </span>
+        {manualPrintOnly ? (
+          <p className="w-full text-[11px] font-semibold leading-snug text-zinc-700">
+            En iPhone o iPad, pulsa <span className="font-black">Imprimir etiqueta</span> para abrir AirPrint (el navegador no permite abrir impresión automática sin tu toque).
+          </p>
+        ) : null}
       </div>
 
       <div className="bg-white">
