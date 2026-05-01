@@ -1,7 +1,5 @@
 'use client';
 
-import Link from 'next/link';
-import React, { useCallback, useEffect, useState } from 'react';
 import { ChevronDown, ChevronUp, Copy, Plus, Trash2 } from 'lucide-react';
 import MermasStyleHero from '@/components/MermasStyleHero';
 import { useAuth } from '@/components/AuthProvider';
@@ -31,11 +29,46 @@ import {
 
 const ALL_WEEKDAYS = [0, 1, 2, 3, 4, 5, 6] as const;
 
+const DEBOUNCE_SAVE_MS = 500;
+
 function parseTarget(s: string): number {
   const t = s.trim().replace(',', '.');
   if (t === '') return 0;
   const n = Number(t);
   return Number.isFinite(n) ? n : 0;
+}
+
+/** Valor mostrado en Obj. a partir del número guardado (sin forzar decimales). */
+function formatQtyDraftFromSaved(n: number): string {
+  if (!Number.isFinite(n) || Number.isNaN(n)) return '0';
+  return String(n);
+}
+
+function patchItemInBlocks(
+  prev: Record<string, ChefProductionBlockItem[]>,
+  blockId: string,
+  itemId: string,
+  patch: Partial<ChefProductionBlockItem>,
+): Record<string, ChefProductionBlockItem[]> {
+  const list = prev[blockId];
+  if (!list) return prev;
+  return {
+    ...prev,
+    [blockId]: list.map((row) => (row.id === itemId ? ({ ...row, ...patch } as ChefProductionBlockItem) : row)),
+  };
+}
+
+function removeItemFromBlock(
+  prev: Record<string, ChefProductionBlockItem[]>,
+  blockId: string,
+  itemId: string,
+): Record<string, ChefProductionBlockItem[]> {
+  const list = prev[blockId];
+  if (!list) return prev;
+  return {
+    ...prev,
+    [blockId]: list.filter((x) => x.id !== itemId),
+  };
 }
 
 export default function ProduccionPlantillasPage() {
@@ -44,47 +77,180 @@ export default function ProduccionPlantillasPage() {
   const [templates, setTemplates] = useState<ChefProductionTemplate[]>([]);
   const [blocksByTpl, setBlocksByTpl] = useState<Record<string, ChefProductionDayBlock[]>>({});
   const [itemsByBlock, setItemsByBlock] = useState<Record<string, ChefProductionBlockItem[]>>({});
+  const itemsByBlockRef = useRef(itemsByBlock);
+  useEffect(() => {
+    itemsByBlockRef.current = itemsByBlock;
+  }, [itemsByBlock]);
+
   const [openId, setOpenId] = useState<string | null>(null);
   const [banner, setBanner] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [newName, setNewName] = useState('');
+  /** Solo operaciones estructurales (crear plantilla, eliminar, duplicar…), no edición de celdas. */
   const [busy, setBusy] = useState(false);
 
-  const load = useCallback(async () => {
+  const debounceTimersRef = useRef<Record<string, number>>({});
+
+  const clearItemDebounce = useCallback((itemId: string) => {
+    const t = debounceTimersRef.current[itemId];
+    if (t != null) {
+      window.clearTimeout(t);
+      delete debounceTimersRef.current[itemId];
+    }
+  }, []);
+
+  useEffect(
+    () => () => {
+      for (const k of Object.keys(debounceTimersRef.current)) {
+        clearItemDebounce(k);
+      }
+    },
+    [clearItemDebounce],
+  );
+
+  const fetchDataset = useCallback(async () => {
     if (!localId || !supabaseOk) {
-      setTemplates([]);
-      setLoading(false);
-      return;
+      return { ts: [] as ChefProductionTemplate[], blocks: {}, items: {} } as {
+        ts: ChefProductionTemplate[];
+        blocks: Record<string, ChefProductionDayBlock[]>;
+        items: Record<string, ChefProductionBlockItem[]>;
+      };
     }
     const supabase = getSupabaseClient()!;
-    setLoading(true);
-    setBanner(null);
-    try {
-      const ts = await fetchChefProductionTemplates(supabase, localId);
-      setTemplates(ts);
-      const blocks: Record<string, ChefProductionDayBlock[]> = {};
-      const items: Record<string, ChefProductionBlockItem[]> = {};
-      for (const t of ts) {
-        const bl = await fetchChefProductionDayBlocks(supabase, t.id);
-        blocks[t.id] = bl;
-        for (const b of bl) {
-          items[b.id] = await fetchChefProductionBlockItems(supabase, b.id);
-        }
+    const ts = await fetchChefProductionTemplates(supabase, localId);
+    const blocks: Record<string, ChefProductionDayBlock[]> = {};
+    const items: Record<string, ChefProductionBlockItem[]> = {};
+    for (const t of ts) {
+      const bl = await fetchChefProductionDayBlocks(supabase, t.id);
+      blocks[t.id] = bl;
+      for (const b of bl) {
+        items[b.id] = await fetchChefProductionBlockItems(supabase, b.id);
       }
-      setBlocksByTpl(blocks);
-      setItemsByBlock(items);
+    }
+    return { ts, blocks, items };
+  }, [localId, supabaseOk]);
+
+  const applyDataset = useCallback(
+    (
+      ds: {
+        ts: ChefProductionTemplate[];
+        blocks: Record<string, ChefProductionDayBlock[]>;
+        items: Record<string, ChefProductionBlockItem[]>;
+      },
+      opts?: { clearBanner?: boolean },
+    ) => {
+      setTemplates(ds.ts);
+      setBlocksByTpl(ds.blocks);
+      setItemsByBlock(ds.items);
+      if (opts?.clearBanner) setBanner(null);
+    },
+    [],
+  );
+
+  /** Recarga desde servidor sin pantalla «Cargando…» ni perder scroll/acordeón. */
+  const reloadSilent = useCallback(async () => {
+    if (!localId || !supabaseOk) return;
+    try {
+      const ds = await fetchDataset();
+      applyDataset(ds, { clearBanner: true });
     } catch (e) {
       setBanner(formatProductionMigrationError(e));
-      setTemplates([]);
-    } finally {
-      setLoading(false);
     }
-  }, [localId, supabaseOk]);
+  }, [localId, supabaseOk, fetchDataset, applyDataset]);
+
+  const load = useCallback(
+    async (opts?: { showSpinner?: boolean }) => {
+      if (!localId || !supabaseOk) {
+        setTemplates([]);
+        setBlocksByTpl({});
+        setItemsByBlock({});
+        setLoading(false);
+        return;
+      }
+      const showSpinner = opts?.showSpinner ?? false;
+      if (showSpinner) setLoading(true);
+      try {
+        setBanner(null);
+        const ds = await fetchDataset();
+        applyDataset(ds, { clearBanner: true });
+      } catch (e) {
+        setBanner(formatProductionMigrationError(e));
+        setTemplates([]);
+        setBlocksByTpl({});
+        setItemsByBlock({});
+      } finally {
+        if (showSpinner) setLoading(false);
+      }
+    },
+    [localId, supabaseOk, fetchDataset, applyDataset],
+  );
 
   useEffect(() => {
     if (!profileReady) return;
-    void load();
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- bootstrap de datos cuando el perfil está listo
+    void load({ showSpinner: true });
   }, [profileReady, load]);
+
+  const flushItemToSupabase = useCallback(
+    async (blockId: string, item: ChefProductionBlockItem) => {
+      if (!supabaseOk) return;
+      const supabase = getSupabaseClient()!;
+      try {
+        await updateChefProductionBlockItem(supabase, item.id, {
+          label: item.label.trim(),
+          targetQty: item.targetQty,
+          kitchenSection: item.kitchenSection ?? '',
+          shelfLifeDays: item.shelfLifeDays,
+        });
+      } catch (e) {
+        setBanner(e instanceof Error ? e.message : 'No se pudo guardar.');
+        await reloadSilent();
+      }
+    },
+    [supabaseOk, reloadSilent],
+  );
+
+  const persistItemRowAfterQtyPatch = useCallback(
+    async (blockId: string, itemId: string, qty: number) => {
+      let merged: ChefProductionBlockItem | undefined;
+      setItemsByBlock((prev) => {
+        const list = prev[blockId];
+        if (!list) return prev;
+        const idx = list.findIndex((x) => x.id === itemId);
+        if (idx < 0) return prev;
+        const row = list[idx]!;
+        merged = { ...row, targetQty: qty };
+        const nextList = [...list];
+        nextList[idx] = merged;
+        return { ...prev, [blockId]: nextList };
+      });
+      if (!merged?.label.trim()) return;
+      await flushItemToSupabase(blockId, merged);
+    },
+    [flushItemToSupabase],
+  );
+
+  const scheduleItemPersist = useCallback(
+    (blockId: string, itemId: string) => {
+      clearItemDebounce(itemId);
+      debounceTimersRef.current[itemId] = window.setTimeout(() => {
+        delete debounceTimersRef.current[itemId];
+        const list = itemsByBlockRef.current[blockId] ?? [];
+        const item = list.find((x) => x.id === itemId);
+        if (!item || !item.label.trim()) return;
+        void flushItemToSupabase(blockId, item);
+      }, DEBOUNCE_SAVE_MS);
+    },
+    [clearItemDebounce, flushItemToSupabase],
+  );
+
+  const updateItemField = useCallback(
+    (blockId: string, itemId: string, patch: Partial<ChefProductionBlockItem>, persist: boolean) => {
+      setItemsByBlock((prev) => patchItemInBlocks(prev, blockId, itemId, patch));
+      if (persist) scheduleItemPersist(blockId, itemId);
+    },
+    [scheduleItemPersist],
+  );
 
   const addTemplate = async () => {
     if (!localId || !supabaseOk || !newName.trim()) return;
@@ -105,7 +271,7 @@ export default function ProduccionPlantillasPage() {
         sortOrder: curBlocks.length + 1,
       });
       setNewName('');
-      await load();
+      await reloadSilent();
       setOpenId(tpl.id);
     } catch (e) {
       setBanner(e instanceof Error ? e.message : 'No se pudo crear.');
@@ -121,7 +287,7 @@ export default function ProduccionPlantillasPage() {
     try {
       const supabase = getSupabaseClient()!;
       await deleteChefProductionTemplate(supabase, localId, id);
-      await load();
+      await reloadSilent();
       if (openId === id) setOpenId(null);
     } catch (e) {
       setBanner(e instanceof Error ? e.message : 'No se pudo eliminar.');
@@ -136,7 +302,7 @@ export default function ProduccionPlantillasPage() {
     try {
       const supabase = getSupabaseClient()!;
       await duplicateChefProductionTemplate(supabase, localId, id);
-      await load();
+      await reloadSilent();
     } catch (e) {
       setBanner(e instanceof Error ? e.message : 'No se pudo duplicar.');
     } finally {
@@ -149,10 +315,11 @@ export default function ProduccionPlantillasPage() {
     setBusy(true);
     try {
       const supabase = getSupabaseClient()!;
-      await updateChefProductionTemplateName(supabase, localId, id, name);
-      await load();
+      await updateChefProductionTemplateName(supabase, localId, id, name.trim());
+      setTemplates((prev) => prev.map((t) => (t.id === id ? { ...t, name: name.trim() } : t)));
     } catch (e) {
       setBanner(e instanceof Error ? e.message : 'No se pudo renombrar.');
+      await reloadSilent();
     } finally {
       setBusy(false);
     }
@@ -171,7 +338,7 @@ export default function ProduccionPlantillasPage() {
         weekdays: [...ALL_WEEKDAYS],
         sortOrder: cur.length,
       });
-      await load();
+      await reloadSilent();
     } catch (e) {
       setBanner(e instanceof Error ? e.message : 'Error al añadir bloque.');
     } finally {
@@ -179,22 +346,31 @@ export default function ProduccionPlantillasPage() {
     }
   };
 
-  const removeBlock = async (blockId: string) => {
+  const removeBlock = async (templateId: string, blockId: string) => {
     if (!supabaseOk) return;
     if (!(await appConfirm('¿Eliminar este bloque y todos sus productos?'))) return;
     setBusy(true);
     try {
       const supabase = getSupabaseClient()!;
       await deleteChefProductionDayBlock(supabase, blockId);
-      await load();
+      setBlocksByTpl((prev) => ({
+        ...prev,
+        [templateId]: (prev[templateId] ?? []).filter((b) => b.id !== blockId),
+      }));
+      setItemsByBlock((prev) => {
+        const next = { ...prev };
+        delete next[blockId];
+        return next;
+      });
     } catch (e) {
       setBanner(e instanceof Error ? e.message : 'Error al eliminar bloque.');
+      await reloadSilent();
     } finally {
       setBusy(false);
     }
   };
 
-  const toggleWeekday = async (block: ChefProductionDayBlock, dow: number) => {
+  const toggleWeekday = async (templateId: string, block: ChefProductionDayBlock, dow: number) => {
     if (!supabaseOk) return;
     const set = new Set(block.weekdays);
     if (set.has(dow)) {
@@ -203,19 +379,25 @@ export default function ProduccionPlantillasPage() {
     } else {
       set.add(dow);
     }
-    setBusy(true);
+    const nextWd = [...set];
+    setBlocksByTpl((prev) => ({
+      ...prev,
+      [templateId]: (prev[templateId] ?? []).map((b) => (b.id === block.id ? { ...b, weekdays: nextWd } : b)),
+    }));
     try {
       const supabase = getSupabaseClient()!;
-      await updateChefProductionDayBlock(supabase, block.id, { weekdays: [...set] });
-      await load();
+      await updateChefProductionDayBlock(supabase, block.id, { weekdays: nextWd });
     } catch (e) {
       setBanner(e instanceof Error ? e.message : 'No se pudo actualizar días.');
-    } finally {
-      setBusy(false);
+      await reloadSilent();
     }
   };
 
-  const applyPresetWeekdays = async (block: ChefProductionDayBlock, preset: 'lunjue' | 'viedom' | 'diario') => {
+  const applyPresetWeekdays = async (
+    templateId: string,
+    block: ChefProductionDayBlock,
+    preset: 'lunjue' | 'viedom' | 'diario',
+  ) => {
     if (!supabaseOk) return;
     const w =
       preset === 'lunjue'
@@ -223,15 +405,16 @@ export default function ProduccionPlantillasPage() {
         : preset === 'viedom'
           ? [5, 6, 0]
           : [...ALL_WEEKDAYS];
-    setBusy(true);
+    setBlocksByTpl((prev) => ({
+      ...prev,
+      [templateId]: (prev[templateId] ?? []).map((b) => (b.id === block.id ? { ...b, weekdays: w } : b)),
+    }));
     try {
       const supabase = getSupabaseClient()!;
       await updateChefProductionDayBlock(supabase, block.id, { weekdays: w });
-      await load();
     } catch (e) {
       setBanner(e instanceof Error ? e.message : 'No se pudo actualizar.');
-    } finally {
-      setBusy(false);
+      await reloadSilent();
     }
   };
 
@@ -244,16 +427,15 @@ export default function ProduccionPlantillasPage() {
     if (i < 0 || j < 0 || j >= list.length) return;
     const reordered = [...list];
     [reordered[i], reordered[j]] = [reordered[j], reordered[i]];
-    setBusy(true);
+    const withOrder = reordered.map((b, idx) => ({ ...b, sortOrder: idx }));
+    setBlocksByTpl((prev) => ({ ...prev, [templateId]: withOrder }));
     try {
-      for (let k = 0; k < reordered.length; k++) {
-        await updateChefProductionDayBlock(supabase, reordered[k].id, { sortOrder: k });
+      for (let k = 0; k < withOrder.length; k++) {
+        await updateChefProductionDayBlock(supabase, withOrder[k]!.id, { sortOrder: k });
       }
-      await load();
     } catch (e) {
       setBanner(e instanceof Error ? e.message : 'No se pudo reordenar.');
-    } finally {
-      setBusy(false);
+      await reloadSilent();
     }
   };
 
@@ -265,62 +447,36 @@ export default function ProduccionPlantillasPage() {
     try {
       const supabase = getSupabaseClient()!;
       const cur = itemsByBlock[blockId] ?? [];
-      await insertChefProductionBlockItem(supabase, blockId, {
+      const inserted = await insertChefProductionBlockItem(supabase, blockId, {
         label: label.trim(),
         targetQty: 0,
         sortOrder: cur.length,
       });
-      await load();
+      setItemsByBlock((prev) => ({
+        ...prev,
+        [blockId]: [...(prev[blockId] ?? []), inserted].sort(
+          (a, c) => a.sortOrder - c.sortOrder || a.label.localeCompare(c.label),
+        ),
+      }));
     } catch (e) {
       setBanner(e instanceof Error ? e.message : 'Error al añadir producto.');
+      await reloadSilent();
     } finally {
       setBusy(false);
     }
   };
 
-  const removeProduct = async (itemId: string) => {
+  const removeProduct = async (blockId: string, itemId: string) => {
     if (!supabaseOk) return;
-    setBusy(true);
+    clearItemDebounce(itemId);
+    const prevItems = itemsByBlock[blockId] ?? [];
+    setItemsByBlock((p) => removeItemFromBlock(p, blockId, itemId));
     try {
       const supabase = getSupabaseClient()!;
       await deleteChefProductionBlockItem(supabase, itemId);
-      await load();
     } catch (e) {
       setBanner(e instanceof Error ? e.message : 'Error al eliminar.');
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const persistProduct = async (item: ChefProductionBlockItem) => {
-    if (!supabaseOk) return;
-    const lbl = (document.getElementById(`lbl-${item.id}`) as HTMLInputElement)?.value ?? '';
-    const tgt = (document.getElementById(`tgt-${item.id}`) as HTMLInputElement)?.value ?? '';
-    const secRaw = (document.getElementById(`sec-${item.id}`) as HTMLInputElement)?.value ?? '';
-    const shelfRaw = (document.getElementById(`shelf-${item.id}`) as HTMLInputElement)?.value ?? '';
-    if (!lbl.trim()) return;
-    const targetQty = parseTarget(tgt);
-    const kitchenSection = secRaw.trim();
-    const shelfT = shelfRaw.trim();
-    let shelfLifeDays: number | null = null;
-    if (shelfT !== '') {
-      const n = Math.floor(Number(shelfT.replace(',', '.')));
-      shelfLifeDays = Number.isFinite(n) && n >= 0 ? n : null;
-    }
-    setBusy(true);
-    try {
-      const supabase = getSupabaseClient()!;
-      await updateChefProductionBlockItem(supabase, item.id, {
-        label: lbl.trim(),
-        targetQty,
-        kitchenSection,
-        shelfLifeDays,
-      });
-      await load();
-    } catch (e) {
-      setBanner(e instanceof Error ? e.message : 'No se pudo guardar.');
-    } finally {
-      setBusy(false);
+      setItemsByBlock((p) => ({ ...p, [blockId]: prevItems }));
     }
   };
 
@@ -332,18 +488,34 @@ export default function ProduccionPlantillasPage() {
     const j = i + dir;
     if (i < 0 || j < 0 || j >= list.length) return;
     const next = [...list];
-    [next[i], next[j]] = [next[j], next[i]];
-    setBusy(true);
+    [next[i], next[j]] = [next[j]!, next[i]!];
+    const reordered = next.map((x, idx) => ({ ...x, sortOrder: idx }));
+    setItemsByBlock((prev) => ({ ...prev, [blockId]: reordered }));
     try {
       await reorderChefProductionBlockItems(
         supabase,
-        next.map((x) => x.id),
+        reordered.map((x) => x.id),
       );
-      await load();
     } catch (e) {
       setBanner(e instanceof Error ? e.message : 'No se pudo reordenar.');
-    } finally {
-      setBusy(false);
+      await reloadSilent();
+    }
+  };
+
+  const updateBlockLabel = async (templateId: string, block: ChefProductionDayBlock, raw: string) => {
+    if (!supabaseOk) return;
+    const v = raw.trim();
+    if (!v || v === block.label) return;
+    setBlocksByTpl((prev) => ({
+      ...prev,
+      [templateId]: (prev[templateId] ?? []).map((b) => (b.id === block.id ? { ...b, label: v } : b)),
+    }));
+    try {
+      const supabase = getSupabaseClient()!;
+      await updateChefProductionDayBlock(supabase, block.id, { label: v });
+    } catch (e) {
+      setBanner(e instanceof Error ? e.message : 'No se pudo guardar el bloque.');
+      await reloadSilent();
     }
   };
 
@@ -471,211 +643,26 @@ export default function ProduccionPlantillasPage() {
                               (a, c) => a.sortOrder - c.sortOrder || a.label.localeCompare(c.label),
                             );
                             return (
-                              <div
+                              <BlockCard
                                 key={b.id}
-                                className="rounded-lg border border-zinc-200/80 bg-white/90 p-2 ring-1 ring-zinc-50 sm:rounded-xl sm:p-3"
-                              >
-                                <div className="flex flex-wrap items-center gap-1.5 border-b border-zinc-100 pb-1.5 sm:gap-2 sm:pb-2">
-                                  <input
-                                    defaultValue={b.label}
-                                    disabled={busy}
-                                    onBlur={(e) => {
-                                      const v = e.target.value.trim();
-                                      if (v && v !== b.label) {
-                                        void (async () => {
-                                          const supabase = getSupabaseClient()!;
-                                          await updateChefProductionDayBlock(supabase, b.id, { label: v });
-                                          await load();
-                                        })();
-                                      }
-                                    }}
-                                    className="min-w-[8rem] flex-1 rounded-lg border border-zinc-200 bg-white px-2 py-1.5 text-xs font-black text-zinc-900 outline-none focus:border-[#D32F2F]/40"
-                                  />
-                                  <div className="flex gap-0.5">
-                                    <button
-                                      type="button"
-                                      disabled={busy || bi === 0}
-                                      onClick={() => void moveBlock(p.id, b.id, -1)}
-                                      className="rounded-md border border-zinc-200 p-1 text-zinc-600 disabled:opacity-30"
-                                      aria-label="Subir bloque"
-                                    >
-                                      <ChevronUp className="h-4 w-4" />
-                                    </button>
-                                    <button
-                                      type="button"
-                                      disabled={busy || bi >= blocks.length - 1}
-                                      onClick={() => void moveBlock(p.id, b.id, 1)}
-                                      className="rounded-md border border-zinc-200 p-1 text-zinc-600 disabled:opacity-30"
-                                      aria-label="Bajar bloque"
-                                    >
-                                      <ChevronDown className="h-4 w-4" />
-                                    </button>
-                                  </div>
-                                  <button
-                                    type="button"
-                                    disabled={busy}
-                                    onClick={() => void removeBlock(b.id)}
-                                    className="text-red-600"
-                                  >
-                                    <Trash2 className="h-4 w-4" />
-                                  </button>
-                                </div>
-
-                                <p className="mt-2 text-[10px] font-bold uppercase text-zinc-700">Días del bloque</p>
-                                <div className="mt-1 flex flex-wrap gap-1">
-                                  <button
-                                    type="button"
-                                    disabled={busy}
-                                    onClick={() => void applyPresetWeekdays(b, 'lunjue')}
-                                    className="rounded-md bg-zinc-100 px-2 py-1 text-[10px] font-bold text-zinc-700"
-                                  >
-                                    Lun–Jue
-                                  </button>
-                                  <button
-                                    type="button"
-                                    disabled={busy}
-                                    onClick={() => void applyPresetWeekdays(b, 'viedom')}
-                                    className="rounded-md bg-zinc-100 px-2 py-1 text-[10px] font-bold text-zinc-700"
-                                  >
-                                    Vie–Dom
-                                  </button>
-                                  <button
-                                    type="button"
-                                    disabled={busy}
-                                    onClick={() => void applyPresetWeekdays(b, 'diario')}
-                                    className="rounded-md bg-zinc-100 px-2 py-1 text-[10px] font-bold text-zinc-700"
-                                  >
-                                    Diario
-                                  </button>
-                                </div>
-                                <div className="mt-2 flex flex-wrap gap-1">
-                                  {CHEF_PRODUCTION_WEEKDAY_SHORT.map(({ dow, label }) => {
-                                    const on = b.weekdays.includes(dow);
-                                    return (
-                                      <button
-                                        key={dow}
-                                        type="button"
-                                        disabled={busy}
-                                        onClick={() => void toggleWeekday(b, dow)}
-                                        className={[
-                                          'h-9 min-w-[2rem] rounded-lg text-xs font-black',
-                                          on
-                                            ? 'bg-[#D32F2F] text-white shadow-sm'
-                                            : 'border border-zinc-200 bg-zinc-50 text-zinc-700',
-                                        ].join(' ')}
-                                      >
-                                        {label}
-                                      </button>
-                                    );
-                                  })}
-                                </div>
-
-                                <p className="mt-3 text-[10px] font-bold uppercase text-zinc-700">
-                                  Productos en este bloque
-                                </p>
-                                <div className="mt-2 space-y-2">
-                                  {products.length === 0 ? (
-                                    <p className="rounded-lg bg-zinc-50/80 px-3 py-2 text-[11px] font-medium text-zinc-800">
-                                      Aún no hay productos. Usa el botón de abajo.
-                                    </p>
-                                  ) : (
-                                    products.map((it, pi) => (
-                                      <div
-                                        key={it.id}
-                                        className="flex flex-col gap-2 rounded-lg border border-zinc-100 bg-zinc-50/50 p-2.5 sm:flex-row sm:items-center"
-                                      >
-                                        <div className="flex gap-0.5 sm:pt-0.5">
-                                          <button
-                                            type="button"
-                                            disabled={busy || pi === 0}
-                                            onClick={() => void moveProduct(b.id, it.id, -1)}
-                                            className="rounded border border-zinc-200 bg-white p-0.5 text-zinc-600 disabled:opacity-30"
-                                          >
-                                            <ChevronUp className="h-3.5 w-3.5" />
-                                          </button>
-                                          <button
-                                            type="button"
-                                            disabled={busy || pi >= products.length - 1}
-                                            onClick={() => void moveProduct(b.id, it.id, 1)}
-                                            className="rounded border border-zinc-200 bg-white p-0.5 text-zinc-600 disabled:opacity-30"
-                                          >
-                                            <ChevronDown className="h-3.5 w-3.5" />
-                                          </button>
-                                        </div>
-                                        <input
-                                          id={`lbl-${it.id}`}
-                                          defaultValue={it.label}
-                                          disabled={busy}
-                                          onBlur={() => void persistProduct(it)}
-                                          className="min-w-0 flex-1 rounded-lg border border-zinc-200 bg-white px-2 py-1.5 text-sm font-bold text-zinc-900 outline-none focus:border-[#D32F2F]/40"
-                                          placeholder="Producto"
-                                        />
-                                        <div className="grid w-full gap-2 sm:grid-cols-2">
-                                          <label className="flex flex-col">
-                                            <span className="text-[9px] font-bold uppercase text-zinc-700">
-                                              Bloque en pizarra
-                                            </span>
-                                            <input
-                                              id={`sec-${it.id}`}
-                                              defaultValue={it.kitchenSection}
-                                              disabled={busy}
-                                              onBlur={() => void persistProduct(it)}
-                                              placeholder="Ej. PLANCHA Y FRITOS"
-                                              className="h-9 w-full rounded-lg border border-zinc-200 bg-white px-2 text-xs font-semibold text-zinc-900 outline-none focus:border-[#D32F2F]/40"
-                                            />
-                                          </label>
-                                          <label className="flex flex-col">
-                                            <span className="text-[9px] font-bold uppercase text-zinc-700">
-                                              Vida útil (días)
-                                            </span>
-                                            <input
-                                              id={`shelf-${it.id}`}
-                                              inputMode="numeric"
-                                              defaultValue={it.shelfLifeDays != null ? String(it.shelfLifeDays) : ''}
-                                              disabled={busy}
-                                              onBlur={() => void persistProduct(it)}
-                                              placeholder="Etiquetas"
-                                              className="h-9 w-full rounded-lg border border-zinc-200 bg-white px-2 text-xs font-black tabular-nums text-zinc-900 outline-none focus:border-[#D32F2F]/40"
-                                            />
-                                          </label>
-                                        </div>
-                                        <div className="flex items-center gap-2">
-                                          <label className="flex flex-col">
-                                            <span className="text-[9px] font-bold uppercase text-zinc-700">
-                                              Obj.
-                                            </span>
-                                            <input
-                                              id={`tgt-${it.id}`}
-                                              inputMode="decimal"
-                                              defaultValue={String(it.targetQty)}
-                                              disabled={busy}
-                                              onBlur={() => void persistProduct(it)}
-                                              className="h-9 w-[4.5rem] rounded-lg border border-zinc-200 bg-white px-2 text-sm font-black tabular-nums text-zinc-900 outline-none focus:border-[#D32F2F]/40"
-                                            />
-                                          </label>
-                                          <button
-                                            type="button"
-                                            onClick={() => void removeProduct(it.id)}
-                                            className="text-red-600"
-                                          >
-                                            <Trash2 className="h-4 w-4" />
-                                          </button>
-                                        </div>
-                                      </div>
-                                    ))
-                                  )}
-                                </div>
-
-                                <button
-                                  type="button"
-                                  disabled={busy}
-                                  onClick={() => void addProductToBlock(b.id)}
-                                  className="mt-2 flex w-full items-center justify-center gap-1 rounded-lg border border-dashed border-zinc-300 py-2 text-[11px] font-bold text-zinc-800"
-                                >
-                                  <Plus className="h-3.5 w-3.5" />
-                                  Añadir producto
-                                </button>
-                              </div>
+                                block={b}
+                                blockIndex={bi}
+                                blocksLength={blocks.length}
+                                products={products}
+                                busy={busy}
+                                onBlockLabelBlur={(v) => void updateBlockLabel(p.id, b, v)}
+                                onMoveBlock={(dir) => void moveBlock(p.id, b.id, dir)}
+                                onRemoveBlock={() => void removeBlock(p.id, b.id)}
+                                onToggleWeekday={(dow) => void toggleWeekday(p.id, b, dow)}
+                                onPresetWeekdays={(preset) => void applyPresetWeekdays(p.id, b, preset)}
+                                onAddProduct={() => void addProductToBlock(b.id)}
+                                onMoveProduct={(itemId, dir) => void moveProduct(b.id, itemId, dir)}
+                                onRemoveProduct={(itemId) => void removeProduct(b.id, itemId)}
+                                onUpdateItem={(itemId, patch, persist) => updateItemField(b.id, itemId, patch, persist)}
+                                onPersistTargetQty={(bid, itemId, qty) =>
+                                  void persistItemRowAfterQtyPatch(bid, itemId, qty)
+                                }
+                              />
                             );
                           })
                         )}
@@ -689,5 +676,326 @@ export default function ProduccionPlantillasPage() {
         </>
       )}
     </div>
+  );
+}
+
+/** Inputs controlados por props; no depende de getElementById ni de recargas. */
+function BlockCard({
+  block,
+  blockIndex,
+  blocksLength,
+  products,
+  busy,
+  onBlockLabelBlur,
+  onMoveBlock,
+  onRemoveBlock,
+  onToggleWeekday,
+  onPresetWeekdays,
+  onAddProduct,
+  onMoveProduct,
+  onRemoveProduct,
+  onUpdateItem,
+  onPersistTargetQty,
+}: {
+  block: ChefProductionDayBlock;
+  blockIndex: number;
+  blocksLength: number;
+  products: ChefProductionBlockItem[];
+  busy: boolean;
+  onBlockLabelBlur: (value: string) => void;
+  onMoveBlock: (dir: -1 | 1) => void;
+  onRemoveBlock: () => void;
+  onToggleWeekday: (dow: number) => void;
+  onPresetWeekdays: (preset: 'lunjue' | 'viedom' | 'diario') => void;
+  onAddProduct: () => void;
+  onMoveProduct: (itemId: string, dir: -1 | 1) => void;
+  onRemoveProduct: (itemId: string) => void;
+  onUpdateItem: (itemId: string, patch: Partial<ChefProductionBlockItem>, persist: boolean) => void;
+  onPersistTargetQty: (blockId: string, itemId: string, qty: number) => void;
+}) {
+  return (
+    <div className="rounded-lg border border-zinc-200/80 bg-white/90 p-2 ring-1 ring-zinc-50 sm:rounded-xl sm:p-3">
+      <div className="flex flex-wrap items-center gap-1.5 border-b border-zinc-100 pb-1.5 sm:gap-2 sm:pb-2">
+        <BlockLabelInput
+          key={block.id}
+          blockId={block.id}
+          initialLabel={block.label}
+          disabled={busy}
+          onCommit={onBlockLabelBlur}
+        />
+        <div className="flex gap-0.5">
+          <button
+            type="button"
+            disabled={busy || blockIndex === 0}
+            onClick={() => onMoveBlock(-1)}
+            className="rounded-md border border-zinc-200 p-1 text-zinc-600 disabled:opacity-30"
+            aria-label="Subir bloque"
+          >
+            <ChevronUp className="h-4 w-4" />
+          </button>
+          <button
+            type="button"
+            disabled={busy || blockIndex >= blocksLength - 1}
+            onClick={() => onMoveBlock(1)}
+            className="rounded-md border border-zinc-200 p-1 text-zinc-600 disabled:opacity-30"
+            aria-label="Bajar bloque"
+          >
+            <ChevronDown className="h-4 w-4" />
+          </button>
+        </div>
+        <button type="button" disabled={busy} onClick={() => void onRemoveBlock()} className="text-red-600">
+          <Trash2 className="h-4 w-4" />
+        </button>
+      </div>
+
+      <p className="mt-2 text-[10px] font-bold uppercase text-zinc-700">Días del bloque</p>
+      <div className="mt-1 flex flex-wrap gap-1">
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => onPresetWeekdays('lunjue')}
+          className="rounded-md bg-zinc-100 px-2 py-1 text-[10px] font-bold text-zinc-700"
+        >
+          Lun–Jue
+        </button>
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => onPresetWeekdays('viedom')}
+          className="rounded-md bg-zinc-100 px-2 py-1 text-[10px] font-bold text-zinc-700"
+        >
+          Vie–Dom
+        </button>
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => onPresetWeekdays('diario')}
+          className="rounded-md bg-zinc-100 px-2 py-1 text-[10px] font-bold text-zinc-700"
+        >
+          Diario
+        </button>
+      </div>
+      <div className="mt-2 flex flex-wrap gap-1">
+        {CHEF_PRODUCTION_WEEKDAY_SHORT.map(({ dow, label }) => {
+          const on = block.weekdays.includes(dow);
+          return (
+            <button
+              key={dow}
+              type="button"
+              disabled={busy}
+              onClick={() => onToggleWeekday(dow)}
+              className={[
+                'h-9 min-w-[2rem] rounded-lg text-xs font-black',
+                on ? 'bg-[#D32F2F] text-white shadow-sm' : 'border border-zinc-200 bg-zinc-50 text-zinc-700',
+              ].join(' ')}
+            >
+              {label}
+            </button>
+          );
+        })}
+      </div>
+
+      <p className="mt-3 text-[10px] font-bold uppercase text-zinc-700">Productos en este bloque</p>
+      <div className="mt-2 space-y-2">
+        {products.length === 0 ? (
+          <p className="rounded-lg bg-zinc-50/80 px-3 py-2 text-[11px] font-medium text-zinc-800">
+            Aún no hay productos. Usa el botón de abajo.
+          </p>
+        ) : (
+          products.map((it, pi) => (
+            <div
+              key={it.id}
+              className="flex flex-col gap-2 rounded-lg border border-zinc-100 bg-zinc-50/50 p-2.5 sm:flex-row sm:items-center"
+            >
+              <div className="flex gap-0.5 sm:pt-0.5">
+                <button
+                  type="button"
+                  disabled={busy || pi === 0}
+                  onClick={() => onMoveProduct(it.id, -1)}
+                  className="rounded border border-zinc-200 bg-white p-0.5 text-zinc-600 disabled:opacity-30"
+                >
+                  <ChevronUp className="h-3.5 w-3.5" />
+                </button>
+                <button
+                  type="button"
+                  disabled={busy || pi >= products.length - 1}
+                  onClick={() => onMoveProduct(it.id, 1)}
+                  className="rounded border border-zinc-200 bg-white p-0.5 text-zinc-600 disabled:opacity-30"
+                >
+                  <ChevronDown className="h-3.5 w-3.5" />
+                </button>
+              </div>
+              <input
+                value={it.label}
+                disabled={busy}
+                onChange={(e) => onUpdateItem(it.id, { label: e.target.value }, true)}
+                className="min-w-0 flex-1 rounded-lg border border-zinc-200 bg-white px-2 py-1.5 text-sm font-bold text-zinc-900 outline-none focus:border-[#D32F2F]/40"
+                placeholder="Producto"
+              />
+              <div className="grid w-full gap-2 sm:grid-cols-2">
+                <label className="flex flex-col">
+                  <span className="text-[9px] font-bold uppercase text-zinc-700">Bloque en pizarra</span>
+                  <input
+                    value={it.kitchenSection ?? ''}
+                    disabled={busy}
+                    onChange={(e) => onUpdateItem(it.id, { kitchenSection: e.target.value }, true)}
+                    placeholder="Ej. PLANCHA Y FRITOS"
+                    className="h-9 w-full rounded-lg border border-zinc-200 bg-white px-2 text-xs font-semibold text-zinc-900 outline-none focus:border-[#D32F2F]/40"
+                  />
+                </label>
+                <label className="flex flex-col">
+                  <span className="text-[9px] font-bold uppercase text-zinc-700">Vida útil (días)</span>
+                  <input
+                    inputMode="numeric"
+                    value={it.shelfLifeDays != null ? String(it.shelfLifeDays) : ''}
+                    disabled={busy}
+                    onChange={(e) => {
+                      const raw = e.target.value.trim();
+                      let shelfLifeDays: number | null = null;
+                      if (raw !== '') {
+                        const n = Math.floor(Number(raw.replace(',', '.')));
+                        shelfLifeDays = Number.isFinite(n) && n >= 0 ? n : null;
+                      }
+                      onUpdateItem(it.id, { shelfLifeDays }, true);
+                    }}
+                    placeholder="Etiquetas"
+                    className="h-9 w-full rounded-lg border border-zinc-200 bg-white px-2 text-xs font-black tabular-nums text-zinc-900 outline-none focus:border-[#D32F2F]/40"
+                  />
+                </label>
+              </div>
+              <div className="flex items-center gap-2">
+                <label className="flex flex-col">
+                  <span className="text-[9px] font-bold uppercase text-zinc-700">Obj.</span>
+                  <TargetQtyInput
+                    blockId={block.id}
+                    itemId={it.id}
+                    savedQty={it.targetQty}
+                    disabled={busy}
+                    onPersistQty={onPersistTargetQty}
+                  />
+                </label>
+                <button type="button" onClick={() => void onRemoveProduct(it.id)} className="text-red-600">
+                  <Trash2 className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+
+      <button
+        type="button"
+        disabled={busy}
+        onClick={() => void onAddProduct()}
+        className="mt-2 flex w-full items-center justify-center gap-1 rounded-lg border border-dashed border-zinc-300 py-2 text-[11px] font-bold text-zinc-800"
+      >
+        <Plus className="h-3.5 w-3.5" />
+        Añadir producto
+      </button>
+    </div>
+  );
+}
+
+/** Obj.: texto libre en pantalla + debounce a Supabase sin perder foco ni intermedios ("2.", etc.). */
+function TargetQtyInput({
+  blockId,
+  itemId,
+  savedQty,
+  disabled,
+  onPersistQty,
+}: {
+  blockId: string;
+  itemId: string;
+  savedQty: number;
+  disabled: boolean;
+  onPersistQty: (blockId: string, itemId: string, qty: number) => void;
+}) {
+  const [draft, setDraft] = useState(() => formatQtyDraftFromSaved(savedQty));
+  const timerRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    // sync draft from persisted value / server
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- borrador editable vs prop numérica
+    setDraft(formatQtyDraftFromSaved(savedQty));
+  }, [itemId, savedQty]);
+
+  useEffect(
+    () => () => {
+      if (timerRef.current != null) {
+        window.clearTimeout(timerRef.current);
+        timerRef.current = null;
+      }
+    },
+    [],
+  );
+
+  const flush = useCallback(
+    (raw: string) => {
+      const qty = parseTarget(raw);
+      onPersistQty(blockId, itemId, qty);
+    },
+    [blockId, itemId, onPersistQty],
+  );
+
+  const scheduleFlush = useCallback(
+    (raw: string) => {
+      if (timerRef.current != null) window.clearTimeout(timerRef.current);
+      timerRef.current = window.setTimeout(() => {
+        timerRef.current = null;
+        flush(raw);
+      }, DEBOUNCE_SAVE_MS);
+    },
+    [flush],
+  );
+
+  return (
+    <input
+      inputMode="decimal"
+      value={draft}
+      disabled={disabled}
+      onChange={(e) => {
+        const v = e.target.value;
+        setDraft(v);
+        scheduleFlush(v);
+      }}
+      onBlur={() => {
+        if (timerRef.current != null) {
+          window.clearTimeout(timerRef.current);
+          timerRef.current = null;
+        }
+        const qty = parseTarget(draft);
+        setDraft(formatQtyDraftFromSaved(qty));
+        flush(draft);
+      }}
+      className="h-9 w-[4.5rem] rounded-lg border border-zinc-200 bg-white px-2 text-sm font-black tabular-nums text-zinc-900 outline-none focus:border-[#D32F2F]/40"
+    />
+  );
+}
+
+/** Título del bloque: estado local hasta commit; resetea si cambia id o etiqueta desde el padre. */
+function BlockLabelInput({
+  blockId,
+  initialLabel,
+  disabled,
+  onCommit,
+}: {
+  blockId: string;
+  initialLabel: string;
+  disabled: boolean;
+  onCommit: (value: string) => void;
+}) {
+  const [value, setValue] = useState(initialLabel);
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- sincroniza borrador cuando el padre cambia la etiqueta
+    setValue(initialLabel);
+  }, [blockId, initialLabel]);
+  return (
+    <input
+      value={value}
+      disabled={disabled}
+      onChange={(e) => setValue(e.target.value)}
+      onBlur={() => onCommit(value)}
+      className="min-w-[8rem] flex-1 rounded-lg border border-zinc-200 bg-white px-2 py-1.5 text-xs font-black text-zinc-900 outline-none focus:border-[#D32F2F]/40"
+    />
   );
 }
