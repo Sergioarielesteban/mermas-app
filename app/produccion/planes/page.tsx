@@ -8,20 +8,27 @@ import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
 import { appConfirm, appPrompt } from '@/lib/app-dialog-bridge';
 import {
   CHEF_PRODUCTION_WEEKDAY_SHORT,
+  buildChefProductionBoardRows,
   type ChefProductionBlockItem,
+  type ChefProductionBoardRow,
   type ChefProductionDayBlock,
   type ChefProductionTemplate,
+  type ChefProductionZone,
   deleteChefProductionBlockItem,
   deleteChefProductionDayBlock,
+  deleteChefProductionZone,
   deleteChefProductionTemplate,
   duplicateChefProductionTemplate,
   fetchChefProductionBlockItems,
   fetchChefProductionDayBlocks,
   fetchChefProductionTemplates,
+  fetchChefProductionZones,
   insertChefProductionBlockItem,
   insertChefProductionDayBlock,
   insertChefProductionTemplate,
+  insertChefProductionZone,
   reorderChefProductionBlockItems,
+  resolveLjAndVdBlocks,
   updateChefProductionBlockItem,
   updateChefProductionDayBlock,
   updateChefProductionTemplateName,
@@ -83,6 +90,8 @@ export default function ProduccionPlantillasPage() {
     itemsByBlockRef.current = itemsByBlock;
   }, [itemsByBlock]);
 
+  const [zonesByTpl, setZonesByTpl] = useState<Record<string, ChefProductionZone[]>>({});
+
   const [openId, setOpenId] = useState<string | null>(null);
   const [banner, setBanner] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -111,24 +120,31 @@ export default function ProduccionPlantillasPage() {
 
   const fetchDataset = useCallback(async () => {
     if (!localId || !supabaseOk) {
-      return { ts: [] as ChefProductionTemplate[], blocks: {}, items: {} } as {
+      return { ts: [] as ChefProductionTemplate[], blocks: {}, items: {}, zones: {} } as {
         ts: ChefProductionTemplate[];
         blocks: Record<string, ChefProductionDayBlock[]>;
         items: Record<string, ChefProductionBlockItem[]>;
+        zones: Record<string, ChefProductionZone[]>;
       };
     }
     const supabase = getSupabaseClient()!;
     const ts = await fetchChefProductionTemplates(supabase, localId);
     const blocks: Record<string, ChefProductionDayBlock[]> = {};
     const items: Record<string, ChefProductionBlockItem[]> = {};
+    const zones: Record<string, ChefProductionZone[]> = {};
     for (const t of ts) {
       const bl = await fetchChefProductionDayBlocks(supabase, t.id);
       blocks[t.id] = bl;
       for (const b of bl) {
         items[b.id] = await fetchChefProductionBlockItems(supabase, b.id);
       }
+      try {
+        zones[t.id] = await fetchChefProductionZones(supabase, t.id);
+      } catch {
+        zones[t.id] = [];
+      }
     }
-    return { ts, blocks, items };
+    return { ts, blocks, items, zones };
   }, [localId, supabaseOk]);
 
   const applyDataset = useCallback(
@@ -137,12 +153,14 @@ export default function ProduccionPlantillasPage() {
         ts: ChefProductionTemplate[];
         blocks: Record<string, ChefProductionDayBlock[]>;
         items: Record<string, ChefProductionBlockItem[]>;
+        zones: Record<string, ChefProductionZone[]>;
       },
       opts?: { clearBanner?: boolean },
     ) => {
       setTemplates(ds.ts);
       setBlocksByTpl(ds.blocks);
       setItemsByBlock(ds.items);
+      setZonesByTpl(ds.zones);
       if (opts?.clearBanner) setBanner(null);
     },
     [],
@@ -165,6 +183,7 @@ export default function ProduccionPlantillasPage() {
         setTemplates([]);
         setBlocksByTpl({});
         setItemsByBlock({});
+        setZonesByTpl({});
         setLoading(false);
         return;
       }
@@ -179,6 +198,7 @@ export default function ProduccionPlantillasPage() {
         setTemplates([]);
         setBlocksByTpl({});
         setItemsByBlock({});
+        setZonesByTpl({});
       } finally {
         if (showSpinner) setLoading(false);
       }
@@ -202,6 +222,7 @@ export default function ProduccionPlantillasPage() {
           targetQty: item.targetQty,
           kitchenSection: item.kitchenSection ?? '',
           shelfLifeDays: item.shelfLifeDays,
+          productionZoneId: item.productionZoneId,
         });
       } catch (e) {
         setBanner(e instanceof Error ? e.message : 'No se pudo guardar.');
@@ -302,10 +323,51 @@ export default function ProduccionPlantillasPage() {
     setBusy(true);
     try {
       const supabase = getSupabaseClient()!;
-      await duplicateChefProductionTemplate(supabase, localId, id);
+      const copy = await duplicateChefProductionTemplate(supabase, localId, id);
       await reloadSilent();
+      setOpenId(copy.id);
     } catch (e) {
       setBanner(e instanceof Error ? e.message : 'No se pudo duplicar.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const addProductionZoneToTemplate = async (templateId: string) => {
+    if (!supabaseOk) return;
+    const label = await appPrompt('Nombre de la zona', 'Cuarto frío');
+    if (!label?.trim()) return;
+    setBusy(true);
+    try {
+      const supabase = getSupabaseClient()!;
+      const cur = zonesByTpl[templateId] ?? [];
+      const z = await insertChefProductionZone(supabase, templateId, {
+        label: label.trim(),
+        sortOrder: cur.length,
+      });
+      setZonesByTpl((prev) => ({ ...prev, [templateId]: [...(prev[templateId] ?? []), z] }));
+    } catch (e) {
+      setBanner(e instanceof Error ? e.message : 'No se pudo crear la zona.');
+      await reloadSilent();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const removeProductionZone = async (templateId: string, zoneId: string) => {
+    if (!supabaseOk) return;
+    if (!(await appConfirm('¿Eliminar esta zona? Los productos pasarán a «sin zona».'))) return;
+    setBusy(true);
+    try {
+      const supabase = getSupabaseClient()!;
+      await deleteChefProductionZone(supabase, zoneId);
+      setZonesByTpl((prev) => ({
+        ...prev,
+        [templateId]: (prev[templateId] ?? []).filter((z) => z.id !== zoneId),
+      }));
+    } catch (e) {
+      setBanner(e instanceof Error ? e.message : 'No se pudo eliminar la zona.');
+      await reloadSilent();
     } finally {
       setBusy(false);
     }
@@ -525,7 +587,7 @@ export default function ProduccionPlantillasPage() {
       <MermasStyleHero
         eyebrow="Producción"
         title="Plantillas"
-        description="Configuración: bloques Lun–Jue y Vie–Dom, sección de pizarra (ej. PLANCHA), objetivos y vida útil para etiquetas. El trabajo diario está en Producción del día."
+        description="Bloques Lun–Jue y Vie–Dom, objetivos por periodo y vida útil (etiquetas). Zona opcional para agrupar en la pizarra. Producción operativa está en Producción del día."
         slim
       />
 
@@ -634,40 +696,119 @@ export default function ProduccionPlantillasPage() {
                         </button>
                       </div>
 
-                      <div className="space-y-3">
-                        <p className="text-[11px] font-black uppercase text-zinc-700">Bloques y productos</p>
-                        {blocks.length === 0 ? (
-                          <p className="text-xs font-medium text-zinc-700">Añade un bloque para definir días y productos.</p>
+                      <div className="space-y-2 rounded-lg border border-zinc-200/80 bg-zinc-50/40 px-3 py-2 sm:px-3 sm:py-2.5">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <p className="text-[10px] font-black uppercase tracking-wide text-zinc-700">Zonas de producción</p>
+                          <button
+                            type="button"
+                            disabled={busy}
+                            onClick={() => void addProductionZoneToTemplate(p.id)}
+                            className="inline-flex items-center gap-1 rounded-md border border-zinc-300 bg-white px-2 py-1 text-[10px] font-bold text-zinc-800"
+                          >
+                            <Plus className="h-3 w-3" /> Zona de producción
+                          </button>
+                        </div>
+                        {(zonesByTpl[p.id] ?? []).length === 0 ? (
+                          <p className="text-[10px] font-medium text-zinc-600">
+                            Opcional. Ej.: Cuarto frío · Plancha y fritos · Quesos. Cada producto puede elegir zona o quedar sin
+                            zona.
+                          </p>
                         ) : (
-                          blocks.map((b, bi) => {
-                            const products = [...(itemsByBlock[b.id] ?? [])].sort(
-                              (a, c) => a.sortOrder - c.sortOrder || a.label.localeCompare(c.label),
-                            );
-                            return (
-                              <BlockCard
-                                key={b.id}
-                                block={b}
-                                blockIndex={bi}
-                                blocksLength={blocks.length}
-                                products={products}
-                                busy={busy}
-                                onBlockLabelBlur={(v) => void updateBlockLabel(p.id, b, v)}
-                                onMoveBlock={(dir) => void moveBlock(p.id, b.id, dir)}
-                                onRemoveBlock={() => void removeBlock(p.id, b.id)}
-                                onToggleWeekday={(dow) => void toggleWeekday(p.id, b, dow)}
-                                onPresetWeekdays={(preset) => void applyPresetWeekdays(p.id, b, preset)}
-                                onAddProduct={() => void addProductToBlock(b.id)}
-                                onMoveProduct={(itemId, dir) => void moveProduct(b.id, itemId, dir)}
-                                onRemoveProduct={(itemId) => void removeProduct(b.id, itemId)}
-                                onUpdateItem={(itemId, patch, persist) => updateItemField(b.id, itemId, patch, persist)}
-                                onPersistTargetQty={(bid, itemId, qty) =>
-                                  void persistItemRowAfterQtyPatch(bid, itemId, qty)
-                                }
-                              />
-                            );
-                          })
+                          <div className="flex flex-wrap gap-1">
+                            {[...(zonesByTpl[p.id] ?? [])]
+                              .sort((a, b) => a.sortOrder - b.sortOrder || a.label.localeCompare(b.label))
+                              .map((z) => (
+                                <span
+                                  key={z.id}
+                                  className="inline-flex items-center gap-1 rounded-full border border-zinc-200 bg-white px-2 py-1 text-[10px] font-bold text-zinc-900"
+                                >
+                                  {z.label}
+                                  <button
+                                    type="button"
+                                    disabled={busy}
+                                    onClick={() => void removeProductionZone(p.id, z.id)}
+                                    className="rounded p-0.5 text-red-600 hover:bg-red-50"
+                                    aria-label={`Eliminar zona ${z.label}`}
+                                  >
+                                    <Trash2 className="h-3 w-3" />
+                                  </button>
+                                </span>
+                              ))}
+                          </div>
                         )}
                       </div>
+
+                      {(() => {
+                        const { ljBlock, vdBlock } = resolveLjAndVdBlocks(blocks);
+                        const useMerged = Boolean(ljBlock && vdBlock);
+                        const tplZones = zonesByTpl[p.id] ?? [];
+                        return (
+                          <>
+                            {useMerged && ljBlock && vdBlock ? (
+                              <MergedTemplateProductTable
+                                ljBlock={ljBlock}
+                                vdBlock={vdBlock}
+                                zones={tplZones}
+                                busy={busy}
+                                supabaseOk={Boolean(supabaseOk)}
+                                clearItemDebounce={clearItemDebounce}
+                                updateItemField={updateItemField}
+                                persistItemRowAfterQtyPatch={persistItemRowAfterQtyPatch}
+                                reloadSilent={reloadSilent}
+                                setBanner={setBanner}
+                                ljItems={itemsByBlock[ljBlock.id] ?? []}
+                                vdItems={itemsByBlock[vdBlock.id] ?? []}
+                              />
+                            ) : null}
+
+                            <div className="space-y-3">
+                              <p className="text-[11px] font-black uppercase text-zinc-700">Bloques y productos</p>
+                              {blocks.length === 0 ? (
+                                <p className="text-xs font-medium text-zinc-700">
+                                  Añade un bloque para definir días y productos.
+                                </p>
+                              ) : (
+                                blocks.map((b, bi) => (
+                                  <BlockCard
+                                    key={b.id}
+                                    block={b}
+                                    blockIndex={bi}
+                                    blocksLength={blocks.length}
+                                    products={[...(itemsByBlock[b.id] ?? [])].sort(
+                                      (a, c) =>
+                                        a.sortOrder - c.sortOrder || a.label.localeCompare(c.label),
+                                    )}
+                                    zones={tplZones}
+                                    hideProducts={
+                                      Boolean(
+                                        useMerged &&
+                                          ljBlock &&
+                                          vdBlock &&
+                                          (b.id === ljBlock.id || b.id === vdBlock.id),
+                                      )
+                                    }
+                                    busy={busy}
+                                    onBlockLabelBlur={(v) => void updateBlockLabel(p.id, b, v)}
+                                    onMoveBlock={(dir) => void moveBlock(p.id, b.id, dir)}
+                                    onRemoveBlock={() => void removeBlock(p.id, b.id)}
+                                    onToggleWeekday={(dow) => void toggleWeekday(p.id, b, dow)}
+                                    onPresetWeekdays={(preset) => void applyPresetWeekdays(p.id, b, preset)}
+                                    onAddProduct={() => void addProductToBlock(b.id)}
+                                    onMoveProduct={(itemId, dir) => void moveProduct(b.id, itemId, dir)}
+                                    onRemoveProduct={(itemId) => void removeProduct(b.id, itemId)}
+                                    onUpdateItem={(itemId, patch, persist) =>
+                                      updateItemField(b.id, itemId, patch, persist)
+                                    }
+                                    onPersistTargetQty={(bid, itemId, qty) =>
+                                      void persistItemRowAfterQtyPatch(bid, itemId, qty)
+                                    }
+                                  />
+                                ))
+                              )}
+                            </div>
+                          </>
+                        );
+                      })()}
                     </div>
                   ) : null}
                 </div>
@@ -680,12 +821,284 @@ export default function ProduccionPlantillasPage() {
   );
 }
 
+/** Tabla fusionada Lun–Jue / Vie–Dom: un producto, dos objetivos, misma vida útil y zona. */
+function MergedTemplateProductTable({
+  ljBlock,
+  vdBlock,
+  zones,
+  busy,
+  supabaseOk,
+  clearItemDebounce,
+  updateItemField,
+  persistItemRowAfterQtyPatch,
+  reloadSilent,
+  setBanner,
+  ljItems,
+  vdItems,
+}: {
+  ljBlock: ChefProductionDayBlock;
+  vdBlock: ChefProductionDayBlock;
+  zones: ChefProductionZone[];
+  busy: boolean;
+  supabaseOk: boolean;
+  clearItemDebounce: (itemId: string) => void;
+  updateItemField: (
+    blockId: string,
+    itemId: string,
+    patch: Partial<ChefProductionBlockItem>,
+    persist: boolean,
+  ) => void;
+  persistItemRowAfterQtyPatch: (blockId: string, itemId: string, qty: number) => Promise<void>;
+  reloadSilent: () => Promise<void>;
+  setBanner: React.Dispatch<React.SetStateAction<string | null>>;
+  ljItems: ChefProductionBlockItem[];
+  vdItems: ChefProductionBlockItem[];
+}) {
+  const mergedRows = useMemo(() => {
+    const zm = new Map(zones.map((z) => [z.id, z.label]));
+    const ljS = [...ljItems].sort((a, b) => a.sortOrder - b.sortOrder || a.label.localeCompare(b.label));
+    const vdS = [...vdItems].sort((a, b) => a.sortOrder - b.sortOrder || a.label.localeCompare(b.label));
+    return buildChefProductionBoardRows(ljS, vdS, {
+      zoneLabel: (zid) => (zid ? zm.get(zid) ?? '' : ''),
+    });
+  }, [ljItems, vdItems, zones]);
+
+  const syncPair = (
+    row: ChefProductionBoardRow,
+    patch: Partial<ChefProductionBlockItem>,
+    persist: boolean,
+  ) => {
+    if (row.ljItem) updateItemField(ljBlock.id, row.ljItem.id, patch, persist);
+    if (row.vdItem) updateItemField(vdBlock.id, row.vdItem.id, patch, persist);
+  };
+
+  const addMergedRows = async () => {
+    if (!supabaseOk) return;
+    const label = await appPrompt('Nombre del producto o preparación');
+    if (!label?.trim()) return;
+    const supabase = getSupabaseClient()!;
+    try {
+      const ord = Math.max(ljItems.length, vdItems.length);
+      await insertChefProductionBlockItem(supabase, ljBlock.id, {
+        label: label.trim(),
+        targetQty: 0,
+        sortOrder: ord,
+      });
+      await insertChefProductionBlockItem(supabase, vdBlock.id, {
+        label: label.trim(),
+        targetQty: 0,
+        sortOrder: ord,
+      });
+      await reloadSilent();
+    } catch (e) {
+      setBanner(e instanceof Error ? e.message : 'Error al añadir producto.');
+      await reloadSilent();
+    }
+  };
+
+  const removeMergedRow = async (row: ChefProductionBoardRow) => {
+    if (!supabaseOk) return;
+    const supabase = getSupabaseClient()!;
+    try {
+      if (row.ljItem) {
+        clearItemDebounce(row.ljItem.id);
+        await deleteChefProductionBlockItem(supabase, row.ljItem.id);
+      }
+      if (row.vdItem) {
+        clearItemDebounce(row.vdItem.id);
+        await deleteChefProductionBlockItem(supabase, row.vdItem.id);
+      }
+      await reloadSilent();
+    } catch (e) {
+      setBanner(e instanceof Error ? e.message : 'Error al eliminar.');
+      await reloadSilent();
+    }
+  };
+
+  const reorderMergedRows = async (idx: number, dir: -1 | 1) => {
+    const j = idx + dir;
+    if (!supabaseOk || idx < 0 || j < 0 || j >= mergedRows.length) return;
+    const copy = [...mergedRows];
+    [copy[idx], copy[j]] = [copy[j]!, copy[idx]!];
+    const supabase = getSupabaseClient()!;
+    setBanner(null);
+    try {
+      for (let o = 0; o < copy.length; o++) {
+        const r = copy[o];
+        if (r?.ljItem)
+          await updateChefProductionBlockItem(supabase, r.ljItem.id, { sortOrder: o });
+        if (r?.vdItem)
+          await updateChefProductionBlockItem(supabase, r.vdItem.id, { sortOrder: o });
+      }
+      await reloadSilent();
+    } catch (e) {
+      setBanner(e instanceof Error ? e.message : 'No se pudo reordenar.');
+      await reloadSilent();
+    }
+  };
+
+  return (
+    <div className="space-y-2 rounded-xl border border-zinc-200/90 bg-white/90 p-3 ring-1 ring-zinc-100 sm:p-4">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-100 pb-2">
+        <p className="text-[11px] font-black uppercase text-zinc-700">
+          Productos (L–J · V–D)
+        </p>
+        <p className="text-[9px] font-semibold uppercase text-zinc-500">
+          Objetivos y orden se guardan solo (debounce ~{DEBOUNCE_SAVE_MS}&nbsp;ms)
+        </p>
+      </div>
+      <p className="text-[10px] font-medium leading-snug text-zinc-600">
+        Misma línea enlaza Lun–jueves y Vie–domingo por nombre normalizado en pizarra. Usa etiquetas coherentes si quieres
+        que cuenten como un solo producto.
+      </p>
+      {mergedRows.length === 0 ? (
+        <p className="rounded-lg bg-zinc-50 px-3 py-2 text-[11px] font-medium text-zinc-700">
+          Aún no hay productos en estos bloques.
+        </p>
+      ) : (
+        mergedRows.map((row, mi) => {
+          const sid = row.ljItem?.shelfLifeDays ?? row.vdItem?.shelfLifeDays ?? null;
+          const zid =
+            row.ljItem?.productionZoneId ??
+            row.vdItem?.productionZoneId ??
+            null;
+          return (
+            <div
+              key={row.labelKey}
+              className="flex flex-col gap-2 rounded-lg border border-zinc-100 bg-zinc-50/50 p-2.5 sm:grid sm:grid-cols-[auto_1fr_5rem_minmax(0,7rem)_4.25rem_4.25rem_auto] sm:items-end sm:gap-2 sm:p-3"
+            >
+              <div className="flex gap-0.5 sm:flex-col">
+                <button
+                  type="button"
+                  disabled={busy || mi === 0}
+                  onClick={() => void reorderMergedRows(mi, -1)}
+                  className="rounded border border-zinc-200 bg-white p-0.5 text-zinc-600 disabled:opacity-30"
+                  aria-label="Subir"
+                >
+                  <ChevronUp className="h-3.5 w-3.5" />
+                </button>
+                <button
+                  type="button"
+                  disabled={busy || mi >= mergedRows.length - 1}
+                  onClick={() => void reorderMergedRows(mi, 1)}
+                  className="rounded border border-zinc-200 bg-white p-0.5 text-zinc-600 disabled:opacity-30"
+                  aria-label="Bajar"
+                >
+                  <ChevronDown className="h-3.5 w-3.5" />
+                </button>
+              </div>
+              <label className="flex min-w-0 flex-col sm:contents">
+                <span className="text-[9px] font-bold uppercase text-zinc-700 sm:hidden">Producto</span>
+                <input
+                  value={row.displayLabel}
+                  disabled={busy}
+                  onChange={(e) => syncPair(row, { label: e.target.value }, true)}
+                  className="w-full rounded-lg border border-zinc-200 bg-white px-2 py-1.5 text-sm font-bold text-zinc-900 outline-none focus:border-[#D32F2F]/40"
+                  placeholder="Producto"
+                />
+              </label>
+              <label className="flex flex-col gap-0.5">
+                <span className="text-[9px] font-bold uppercase text-zinc-700">Vida útil</span>
+                <input
+                  inputMode="numeric"
+                  value={sid != null ? String(sid) : ''}
+                  disabled={busy}
+                  onChange={(e) => {
+                    const raw = e.target.value.trim();
+                    let shelfLifeDays: number | null = null;
+                    if (raw !== '') {
+                      const n = Math.floor(Number(raw.replace(',', '.')));
+                      shelfLifeDays = Number.isFinite(n) && n >= 0 ? n : null;
+                    }
+                    syncPair(row, { shelfLifeDays }, true);
+                  }}
+                  placeholder="Días"
+                  className="h-9 min-w-[3.75rem] rounded-lg border border-zinc-200 bg-white px-2 text-xs font-black tabular-nums outline-none focus:border-[#D32F2F]/40 sm:w-full"
+                />
+              </label>
+              <label className="flex min-w-0 flex-col gap-0.5 sm:col-span-1">
+                <span className="text-[9px] font-bold uppercase text-zinc-700">Zona</span>
+                <select
+                  value={zid ?? ''}
+                  disabled={busy}
+                  onChange={(e) => {
+                    const v = e.target.value.trim();
+                    syncPair(row, { productionZoneId: v === '' ? null : v }, true);
+                  }}
+                  className="h-9 min-w-0 max-w-[10rem] rounded-lg border border-zinc-200 bg-white px-1.5 text-[11px] font-semibold outline-none focus:border-[#D32F2F]/40 sm:max-w-none"
+                >
+                  <option value="">Sin zona</option>
+                  {zones.map((z) => (
+                    <option key={z.id} value={z.id}>
+                      {z.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="flex flex-col gap-0.5">
+                <span className="text-[9px] font-bold uppercase text-zinc-700">Obj L–J</span>
+                {row.ljItem ? (
+                  <TargetQtyInput
+                    blockId={ljBlock.id}
+                    itemId={row.ljItem.id}
+                    savedQty={row.ljItem.targetQty}
+                    disabled={busy}
+                    onPersistQty={persistItemRowAfterQtyPatch}
+                  />
+                ) : (
+                  <span className="text-[10px] text-zinc-400">—</span>
+                )}
+              </label>
+              <label className="flex flex-col gap-0.5">
+                <span className="text-[9px] font-bold uppercase text-zinc-700">Obj V–D</span>
+                {row.vdItem ? (
+                  <TargetQtyInput
+                    blockId={vdBlock.id}
+                    itemId={row.vdItem.id}
+                    savedQty={row.vdItem.targetQty}
+                    disabled={busy}
+                    onPersistQty={persistItemRowAfterQtyPatch}
+                  />
+                ) : (
+                  <span className="text-[10px] text-zinc-400">—</span>
+                )}
+              </label>
+              <div className="flex justify-end sm:items-end sm:justify-center">
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => void removeMergedRow(row)}
+                  className="p-2 text-red-600"
+                  aria-label="Eliminar línea fusionada"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+          );
+        })
+      )}
+      <button
+        type="button"
+        disabled={busy}
+        onClick={() => void addMergedRows()}
+        className="mt-2 flex w-full items-center justify-center gap-1 rounded-lg border border-dashed border-zinc-300 py-2 text-[11px] font-bold text-zinc-800"
+      >
+        <Plus className="h-3.5 w-3.5" />
+        Añadir producto en L–J y V–D
+      </button>
+    </div>
+  );
+}
+
 /** Inputs controlados por props; no depende de getElementById ni de recargas. */
 function BlockCard({
   block,
   blockIndex,
   blocksLength,
   products,
+  zones = [],
+  hideProducts = false,
   busy,
   onBlockLabelBlur,
   onMoveBlock,
@@ -702,6 +1115,8 @@ function BlockCard({
   blockIndex: number;
   blocksLength: number;
   products: ChefProductionBlockItem[];
+  zones?: ChefProductionZone[];
+  hideProducts?: boolean;
   busy: boolean;
   onBlockLabelBlur: (value: string) => void;
   onMoveBlock: (dir: -1 | 1) => void;
@@ -797,6 +1212,11 @@ function BlockCard({
       </div>
 
       <p className="mt-3 text-[10px] font-bold uppercase text-zinc-700">Productos en este bloque</p>
+      {hideProducts ? (
+        <p className="mt-2 rounded-lg bg-zinc-50/80 px-3 py-2 text-[11px] font-medium text-zinc-700">
+          Lun–jueves y Vie–domingo se editan en la tabla fusionada superior.
+        </p>
+      ) : (
       <div className="mt-2 space-y-2">
         {products.length === 0 ? (
           <p className="rounded-lg bg-zinc-50/80 px-3 py-2 text-[11px] font-medium text-zinc-800">
@@ -806,7 +1226,7 @@ function BlockCard({
           products.map((it, pi) => (
             <div
               key={it.id}
-              className="flex flex-col gap-2 rounded-lg border border-zinc-100 bg-zinc-50/50 p-2.5 sm:flex-row sm:items-center"
+              className="flex flex-col gap-2 rounded-lg border border-zinc-100 bg-zinc-50/50 p-2.5 sm:flex-row sm:flex-wrap sm:items-end"
             >
               <div className="flex gap-0.5 sm:pt-0.5">
                 <button
@@ -830,21 +1250,35 @@ function BlockCard({
                 value={it.label}
                 disabled={busy}
                 onChange={(e) => onUpdateItem(it.id, { label: e.target.value }, true)}
-                className="min-w-0 flex-1 rounded-lg border border-zinc-200 bg-white px-2 py-1.5 text-sm font-bold text-zinc-900 outline-none focus:border-[#D32F2F]/40"
+                className="min-w-0 flex-1 rounded-lg border border-zinc-200 bg-white px-2 py-1.5 text-sm font-bold text-zinc-900 outline-none focus:border-[#D32F2F]/40 sm:min-w-[8rem]"
                 placeholder="Producto"
               />
-              <div className="grid w-full gap-2 sm:grid-cols-2">
-                <label className="flex flex-col">
-                  <span className="text-[9px] font-bold uppercase text-zinc-700">Bloque en pizarra</span>
-                  <input
-                    value={it.kitchenSection ?? ''}
+              <div className="grid w-full gap-2 sm:grid-cols-[minmax(0,12rem)_4.5rem] sm:gap-3">
+                <label className="flex min-w-0 flex-col gap-0.5">
+                  <span className="text-[9px] font-bold uppercase text-zinc-700">Zona</span>
+                  <select
+                    value={it.productionZoneId ?? ''}
                     disabled={busy}
-                    onChange={(e) => onUpdateItem(it.id, { kitchenSection: e.target.value }, true)}
-                    placeholder="Ej. PLANCHA Y FRITOS"
-                    className="h-9 w-full rounded-lg border border-zinc-200 bg-white px-2 text-xs font-semibold text-zinc-900 outline-none focus:border-[#D32F2F]/40"
-                  />
+                    onChange={(e) =>
+                      onUpdateItem(
+                        it.id,
+                        {
+                          productionZoneId: e.target.value.trim() === '' ? null : e.target.value,
+                        },
+                        true,
+                      )
+                    }
+                    className="h-9 max-w-[14rem] rounded-lg border border-zinc-200 bg-white px-2 text-[11px] font-semibold text-zinc-900 outline-none focus:border-[#D32F2F]/40"
+                  >
+                    <option value="">Sin zona</option>
+                    {zones.map((z) => (
+                      <option key={z.id} value={z.id}>
+                        {z.label}
+                      </option>
+                    ))}
+                  </select>
                 </label>
-                <label className="flex flex-col">
+                <label className="flex flex-col gap-0.5">
                   <span className="text-[9px] font-bold uppercase text-zinc-700">Vida útil (días)</span>
                   <input
                     inputMode="numeric"
@@ -860,12 +1294,12 @@ function BlockCard({
                       onUpdateItem(it.id, { shelfLifeDays }, true);
                     }}
                     placeholder="Etiquetas"
-                    className="h-9 w-full rounded-lg border border-zinc-200 bg-white px-2 text-xs font-black tabular-nums text-zinc-900 outline-none focus:border-[#D32F2F]/40"
+                    className="h-9 w-full rounded-lg border border-zinc-200 bg-white px-2 text-xs font-black tabular-nums text-zinc-900 outline-none focus:border-[#D32F2F]/40 sm:w-auto"
                   />
                 </label>
               </div>
-              <div className="flex items-center gap-2">
-                <label className="flex flex-col">
+              <div className="flex items-center gap-2 sm:ml-auto">
+                <label className="flex flex-col gap-0.5">
                   <span className="text-[9px] font-bold uppercase text-zinc-700">Obj.</span>
                   <TargetQtyInput
                     blockId={block.id}
@@ -883,7 +1317,9 @@ function BlockCard({
           ))
         )}
       </div>
+      )}
 
+      {!hideProducts ? (
       <button
         type="button"
         disabled={busy}
@@ -893,6 +1329,7 @@ function BlockCard({
         <Plus className="h-3.5 w-3.5" />
         Añadir producto
       </button>
+      ) : null}
     </div>
   );
 }

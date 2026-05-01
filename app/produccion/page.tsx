@@ -8,18 +8,19 @@ import { useAuth } from '@/components/AuthProvider';
 import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
 import {
   activeChefProductionBoardBlockItem,
-  buildChefProductionBoardRows,
   type ChefProductionBoardRow,
   completeChefProductionSession,
   ensureChefProductionSessionLinesForTemplate,
   type ChefProductionDayBlock,
-  fetchChefProductionBlockItems,
   fetchChefProductionDayBlocks,
+  fetchChefProductionZones,
   fetchChefProductionSessionLines,
   fetchChefProductionSessionRow,
   fetchChefProductionTemplates,
+  fetchMergedProductionBoardRowsForTemplate,
   formatProductionMigrationError,
   getOrCreateChefProductionSession,
+  mergedRowSessionLine,
   productionQtyToMake,
   resolveChefProductionDayBlock,
   resolveLjAndVdBlocks,
@@ -256,10 +257,11 @@ function ProduccionLabelsPreviewModal({
 }
 
 function groupRowsByKitchenSection(rows: ChefProductionBoardRow[]): { title: string; rows: ChefProductionBoardRow[] }[] {
+  const anyNamed = rows.some((r) => r.kitchenSection.trim() !== '');
   const m = new Map<string, ChefProductionBoardRow[]>();
   for (const row of rows) {
-    const t = row.kitchenSection.trim();
-    const key = t;
+    const raw = row.kitchenSection.trim();
+    const key = anyNamed ? raw || 'Sin zona' : '';
     if (!m.has(key)) m.set(key, []);
     m.get(key)!.push(row);
   }
@@ -419,9 +421,13 @@ function ProduccionBoardInner() {
       setLjBlockId(ljBlock?.id ?? null);
       setVdBlockId(vdBlock?.id ?? null);
 
-      const ljItems = ljBlock ? await fetchChefProductionBlockItems(supabase, ljBlock.id) : [];
-      const vdItems = vdBlock ? await fetchChefProductionBlockItems(supabase, vdBlock.id) : [];
-      const rows = buildChefProductionBoardRows(ljItems, vdItems);
+      const zones = await fetchChefProductionZones(supabase, templateEff).catch(
+        () => [] as { id: string; label: string }[],
+      );
+      const zoneMap = new Map(zones.map((z) => [z.id, z.label]));
+      const rows = await fetchMergedProductionBoardRowsForTemplate(supabase, templateEff, {
+        zoneLabel: (zid) => (zid ? zoneMap.get(zid) ?? '' : ''),
+      });
       setBoardRows(rows);
 
       if (!sess.completedAt) {
@@ -512,9 +518,7 @@ function ProduccionBoardInner() {
     const labels: LabelPayload[] = [];
 
     for (const row of boardRows) {
-      const activeItem = activeChefProductionBoardBlockItem(row, activeBlock?.id ?? null, ljBlockId, vdBlockId);
-      if (!activeItem) continue;
-      const sl = byBlockItemId.get(activeItem.id);
+      const sl = mergedRowSessionLine(row, byBlockItemId);
       if (!sl) continue;
       const draftRaw = hechoDraft[sl.id] ?? '';
       const draftN = parseQty(draftRaw);
@@ -526,7 +530,7 @@ function ProduccionBoardInner() {
             : 0;
       if (hecho <= 0) continue;
       seq += 1;
-      const shelf = activeItem.shelfLifeDays ?? row.ljItem?.shelfLifeDays ?? row.vdItem?.shelfLifeDays ?? null;
+      const shelf = row.ljItem?.shelfLifeDays ?? row.vdItem?.shelfLifeDays ?? null;
       const caducidad =
         shelf != null && Number.isFinite(shelf) ? fmtEsDate(addCalendarDaysIso(session.workDate, shelf)) : null;
       const lotePref = session.workDate.replace(/-/g, '');
@@ -694,7 +698,7 @@ function ProduccionBoardInner() {
                           colSpan={6}
                           className="border-t border-zinc-200 px-2 py-1.5 text-[10px] font-black uppercase tracking-wide text-zinc-600"
                         >
-                          {title}
+                          Zona: {title}
                         </td>
                       </tr>
                     ) : null;
@@ -705,10 +709,10 @@ function ProduccionBoardInner() {
                       ljBlockId,
                       vdBlockId,
                     );
+                    const sl = mergedRowSessionLine(row, byBlockItemId);
                     const ljT = row.ljItem?.targetQty ?? 0;
                     const vdT = row.vdItem?.targetQty ?? 0;
                     const activeTarget = activeItem?.targetQty ?? 0;
-                    const sl = activeItem ? (byBlockItemId.get(activeItem.id) ?? null) : null;
                     const lineId = sl?.id ?? null;
                     const draftStr = lineId ? (hechoDraft[lineId] ?? '') : '';
                     const parsedDraft = parseQty(draftStr);
@@ -723,11 +727,7 @@ function ProduccionBoardInner() {
                           : 0;
                     const hacer = productionQtyToMake(activeTarget, sl ? hechoNum : null);
                     const rowTint =
-                      !activeItem || !sl || isClosed
-                        ? 'bg-zinc-50/50'
-                        : hacer > 0
-                          ? 'bg-rose-50/90'
-                          : 'bg-emerald-50/80';
+                      !sl || isClosed ? 'bg-zinc-50/50' : hacer > 0 ? 'bg-rose-50/90' : 'bg-emerald-50/80';
                     const saving = lineId !== null && savingLineId === lineId;
 
                     return (
@@ -738,7 +738,7 @@ function ProduccionBoardInner() {
                         <td className="px-1 py-1 text-center tabular-nums text-zinc-800">{ljT}</td>
                         <td className="px-1 py-1 text-center tabular-nums text-zinc-800">{vdT}</td>
                         <td className="px-1 py-1 text-center">
-                          {activeItem && lineId ? (
+                          {sl && lineId ? (
                             <input
                               inputMode="decimal"
                               disabled={isClosed || saving}
@@ -765,7 +765,7 @@ function ProduccionBoardInner() {
                         </td>
                         <td className="px-1 py-1 text-center text-sm font-black tabular-nums text-zinc-900">{hacer}</td>
                         <td className="px-1 py-1">
-                          {activeItem && lineId && !isClosed ? (
+                          {sl && lineId && !isClosed ? (
                             <div className="flex justify-end gap-0.5">
                               <button
                                 type="button"

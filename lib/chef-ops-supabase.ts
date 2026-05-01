@@ -76,6 +76,14 @@ export type ChefProductionDayBlock = {
   sortOrder: number;
 };
 
+/** Zona de agrupación en pizarra (ej. Plancha y fritos), por plantilla. */
+export type ChefProductionZone = {
+  id: string;
+  templateId: string;
+  label: string;
+  sortOrder: number;
+};
+
 /** Producto / preparación dentro de un bloque, con objetivo para ese bloque. */
 export type ChefProductionBlockItem = {
   id: string;
@@ -83,8 +91,9 @@ export type ChefProductionBlockItem = {
   label: string;
   targetQty: number;
   sortOrder: number;
-  /** Título de sección en la pizarra (ej. PLANCHA Y FRITOS). Vacío si no agrupa. */
+  /** @deprecated Preferir productionZoneId + chef_production_zones. */
   kitchenSection: string;
+  productionZoneId: string | null;
   /** Días de vida útil para etiquetas; NULL = sin caducidad calculada. */
   shelfLifeDays: number | null;
 };
@@ -122,7 +131,14 @@ function normalizeProductionBoardLabelKey(s: string): string {
 export function buildChefProductionBoardRows(
   ljItems: ChefProductionBlockItem[],
   vdItems: ChefProductionBlockItem[],
+  opts?: { zoneLabel?: (zoneId: string | null) => string },
 ): ChefProductionBoardRow[] {
+  const zoneLabel = opts?.zoneLabel ?? ((_z: string | null) => '');
+  const sectionFor = (it: ChefProductionBlockItem): string => {
+    const z = zoneLabel(it.productionZoneId ?? null).trim();
+    if (z) return z;
+    return (it.kitchenSection ?? '').trim();
+  };
   const ljSorted = [...ljItems].sort((a, b) => a.sortOrder - b.sortOrder || a.label.localeCompare(b.label));
   const vdSorted = [...vdItems].sort((a, b) => a.sortOrder - b.sortOrder || a.label.localeCompare(b.label));
   const byKey = new Map<string, ChefProductionBoardRow>();
@@ -130,7 +146,7 @@ export function buildChefProductionBoardRows(
   for (const it of ljSorted) {
     const key = normalizeProductionBoardLabelKey(it.label);
     if (!key) continue;
-    const sec = (it.kitchenSection ?? '').trim();
+    const sec = sectionFor(it);
     byKey.set(key, {
       labelKey: key,
       displayLabel: it.label.trim(),
@@ -145,7 +161,7 @@ export function buildChefProductionBoardRows(
     const key = normalizeProductionBoardLabelKey(it.label);
     if (!key) continue;
     const existing = byKey.get(key);
-    const sec = (it.kitchenSection ?? '').trim();
+    const sec = sectionFor(it);
     if (existing) {
       existing.vdItem = it;
       if (!existing.kitchenSection && sec) existing.kitchenSection = sec;
@@ -170,6 +186,28 @@ export function buildChefProductionBoardRows(
   });
 }
 
+/** Filas fusionadas Lun–Jue / Vie–Dom (opcional zona vía etiquetas desde `chef_production_zones`). */
+export async function fetchMergedProductionBoardRowsForTemplate(
+  supabase: SupabaseClient,
+  templateId: string,
+  opts?: { zoneLabel?: (zoneId: string | null) => string },
+): Promise<ChefProductionBoardRow[]> {
+  const blocks = await fetchChefProductionDayBlocks(supabase, templateId);
+  const { ljBlock, vdBlock } = resolveLjAndVdBlocks(blocks);
+  const ljItems = ljBlock ? await fetchChefProductionBlockItems(supabase, ljBlock.id) : [];
+  const vdItems = vdBlock ? await fetchChefProductionBlockItems(supabase, vdBlock.id) : [];
+  return buildChefProductionBoardRows(ljItems, vdItems, opts);
+}
+
+/** Ids `block_item_id` canónicos para la pizarra (una línea por producto fusionado). */
+export async function listCanonicalSessionBlockItemIdsForTemplate(
+  supabase: SupabaseClient,
+  templateId: string,
+): Promise<string[]> {
+  const rows = await fetchMergedProductionBoardRowsForTemplate(supabase, templateId);
+  return rows.map((r) => canonicalBlockItemIdForBoardRow(r)).filter((id): id is string => Boolean(id));
+}
+
 export function activeChefProductionBoardBlockItem(
   row: ChefProductionBoardRow,
   activeBlockId: string | null,
@@ -179,6 +217,31 @@ export function activeChefProductionBoardBlockItem(
   if (!activeBlockId) return null;
   if (ljBlockId && activeBlockId === ljBlockId && row.ljItem) return row.ljItem;
   if (vdBlockId && activeBlockId === vdBlockId && row.vdItem) return row.vdItem;
+  return null;
+}
+
+/** Id de línea de bloque canónico para sesión / “hecho” (prioriza Lun–Jue). */
+export function canonicalBlockItemIdForBoardRow(row: ChefProductionBoardRow): string | null {
+  return row.ljItem?.id ?? row.vdItem?.id ?? null;
+}
+
+/**
+ * Obtiene la fila de sesión asociada a un producto fusionado (prioriza línea enlazada al id canónico).
+ */
+export function mergedRowSessionLine(
+  row: ChefProductionBoardRow,
+  linesByBlockItemId: Map<string, ChefProductionSessionLine>,
+): ChefProductionSessionLine | null {
+  const primaryId = row.ljItem?.id ?? row.vdItem?.id ?? null;
+  if (!primaryId) return null;
+  const secondaryId =
+    row.ljItem && row.vdItem ? (row.vdItem!.id === primaryId ? row.ljItem!.id : row.vdItem!.id) : null;
+  const a = linesByBlockItemId.get(primaryId);
+  if (a) return a;
+  if (secondaryId) {
+    const b = linesByBlockItemId.get(secondaryId);
+    if (b) return b;
+  }
   return null;
 }
 
@@ -282,6 +345,7 @@ function mapProductionDayBlock(r: Record<string, unknown>): ChefProductionDayBlo
 function mapProductionBlockItem(r: Record<string, unknown>): ChefProductionBlockItem {
   const shelf = r.shelf_life_days;
   const shelfN = shelf != null && shelf !== '' ? Number(shelf) : NaN;
+  const z = r.production_zone_id;
   return {
     id: String(r.id),
     blockId: String(r.block_id),
@@ -289,7 +353,17 @@ function mapProductionBlockItem(r: Record<string, unknown>): ChefProductionBlock
     targetQty: Number(r.target_qty ?? 0),
     sortOrder: Number(r.sort_order ?? 0),
     kitchenSection: String(r.kitchen_section ?? '').trim(),
+    productionZoneId: z != null && String(z) !== '' ? String(z) : null,
     shelfLifeDays: Number.isFinite(shelfN) ? shelfN : null,
+  };
+}
+
+function mapProductionZone(r: Record<string, unknown>): ChefProductionZone {
+  return {
+    id: String(r.id),
+    templateId: String(r.template_id),
+    label: String(r.label),
+    sortOrder: Number(r.sort_order ?? 0),
   };
 }
 
@@ -346,11 +420,11 @@ export function productionQtyToMake(target: number, hecho: number | null): numbe
 export function formatProductionMigrationError(e: unknown): string {
   const raw = e instanceof Error ? e.message : String(e);
   if (
-    /chef_production_templates|chef_production_sessions|chef_production_day_blocks|chef_production_block_items|block_item_id|does not exist|relation.*does not exist|kitchen_section|shelf_life_days/i.test(
+    /chef_production_templates|chef_production_zones|chef_production_sessions|chef_production_day_blocks|chef_production_block_items|block_item_id|does not exist|relation.*does not exist|kitchen_section|shelf_life_days|production_zone_id/i.test(
       raw,
     )
   ) {
-    return 'Falta o está desactualizado el esquema de Producción en Supabase. Ejecuta supabase-chef-production-board-v4.sql (columnas pizarra/caducidad), supabase-chef-production-v3-block-items.sql si venías de v2, o supabase-chef-production-templates-v2.sql en instalación nueva, y recarga.';
+    return 'Falta o está desactualizado el esquema de Producción en Supabase. Ejecuta supabase-chef-production-zones-v5.sql (zonas), supabase-chef-production-board-v4.sql (pizarra/caducidad), supabase-chef-production-v3-block-items.sql si venías de v2, o supabase-chef-production-templates-v2.sql en instalación nueva, y recarga.';
   }
   return raw;
 }
@@ -766,6 +840,53 @@ export async function deleteChefProductionTemplate(supabase: SupabaseClient, loc
   if (error) throw new Error(error.message);
 }
 
+export async function fetchChefProductionZones(supabase: SupabaseClient, templateId: string): Promise<ChefProductionZone[]> {
+  const { data, error } = await supabase
+    .from('chef_production_zones')
+    .select('id,template_id,label,sort_order')
+    .eq('template_id', templateId)
+    .order('sort_order', { ascending: true })
+    .order('label', { ascending: true });
+  if (error) throw new Error(error.message);
+  return (data ?? []).map((r) => mapProductionZone(r as Record<string, unknown>));
+}
+
+export async function insertChefProductionZone(
+  supabase: SupabaseClient,
+  templateId: string,
+  input: { label: string; sortOrder: number },
+): Promise<ChefProductionZone> {
+  const { data, error } = await supabase
+    .from('chef_production_zones')
+    .insert({
+      template_id: templateId,
+      label: input.label.trim(),
+      sort_order: input.sortOrder,
+    })
+    .select('id,template_id,label,sort_order')
+    .single();
+  if (error) throw new Error(error.message);
+  return mapProductionZone(data as Record<string, unknown>);
+}
+
+export async function updateChefProductionZone(
+  supabase: SupabaseClient,
+  zoneId: string,
+  patch: { label?: string; sortOrder?: number },
+): Promise<void> {
+  const row: Record<string, unknown> = {};
+  if (patch.label !== undefined) row.label = patch.label.trim();
+  if (patch.sortOrder !== undefined) row.sort_order = patch.sortOrder;
+  if (Object.keys(row).length === 0) return;
+  const { error } = await supabase.from('chef_production_zones').update(row).eq('id', zoneId);
+  if (error) throw new Error(error.message);
+}
+
+export async function deleteChefProductionZone(supabase: SupabaseClient, zoneId: string): Promise<void> {
+  const { error } = await supabase.from('chef_production_zones').delete().eq('id', zoneId);
+  if (error) throw new Error(error.message);
+}
+
 export async function duplicateChefProductionTemplate(
   supabase: SupabaseClient,
   localId: string,
@@ -774,9 +895,14 @@ export async function duplicateChefProductionTemplate(
   const src = await fetchChefProductionTemplate(supabase, localId, sourceId);
   if (!src) throw new Error('Plantilla no encontrada.');
   const blocks = await fetchChefProductionDayBlocks(supabase, sourceId);
-  const blockIdMap = new Map<string, string>();
-
   const dup = await insertChefProductionTemplate(supabase, localId, { name: `${src.name} (copia)` });
+
+  const srcZones = await fetchChefProductionZones(supabase, sourceId).catch(() => [] as ChefProductionZone[]);
+  const zoneMap = new Map<string, string>();
+  for (const z of [...srcZones].sort((a, b) => a.sortOrder - b.sortOrder || a.label.localeCompare(b.label))) {
+    const nz = await insertChefProductionZone(supabase, dup.id, { label: z.label, sortOrder: z.sortOrder });
+    zoneMap.set(z.id, nz.id);
+  }
 
   for (const b of [...blocks].sort((a, z) => a.sortOrder - z.sortOrder || a.label.localeCompare(z.label))) {
     const nb = await insertChefProductionDayBlock(supabase, dup.id, {
@@ -784,15 +910,16 @@ export async function duplicateChefProductionTemplate(
       weekdays: [...b.weekdays],
       sortOrder: b.sortOrder,
     });
-    blockIdMap.set(b.id, nb.id);
     const items = await fetchChefProductionBlockItems(supabase, b.id);
     for (const it of [...items].sort((a, z) => a.sortOrder - z.sortOrder)) {
+      const mz = it.productionZoneId ? zoneMap.get(it.productionZoneId) : null;
       await insertChefProductionBlockItem(supabase, nb.id, {
         label: it.label,
         targetQty: it.targetQty,
         sortOrder: it.sortOrder,
-        kitchenSection: it.kitchenSection,
+        kitchenSection: '',
         shelfLifeDays: it.shelfLifeDays,
+        productionZoneId: mz ?? null,
       });
     }
   }
@@ -857,7 +984,7 @@ export async function fetchChefProductionBlockItems(
 ): Promise<ChefProductionBlockItem[]> {
   const { data, error } = await supabase
     .from('chef_production_block_items')
-    .select('id,block_id,label,target_qty,sort_order,kitchen_section,shelf_life_days')
+    .select('id,block_id,label,target_qty,sort_order,kitchen_section,shelf_life_days,production_zone_id')
     .eq('block_id', blockId)
     .order('sort_order', { ascending: true });
   if (error) throw new Error(error.message);
@@ -873,6 +1000,7 @@ export async function insertChefProductionBlockItem(
     sortOrder: number;
     kitchenSection?: string;
     shelfLifeDays?: number | null;
+    productionZoneId?: string | null;
   },
 ): Promise<ChefProductionBlockItem> {
   const row: Record<string, unknown> = {
@@ -882,11 +1010,12 @@ export async function insertChefProductionBlockItem(
     sort_order: input.sortOrder,
     kitchen_section: (input.kitchenSection ?? '').trim(),
     shelf_life_days: input.shelfLifeDays ?? null,
+    production_zone_id: input.productionZoneId ?? null,
   };
   const { data, error } = await supabase
     .from('chef_production_block_items')
     .insert(row)
-    .select('id,block_id,label,target_qty,sort_order,kitchen_section,shelf_life_days')
+    .select('id,block_id,label,target_qty,sort_order,kitchen_section,shelf_life_days,production_zone_id')
     .single();
   if (error) throw new Error(error.message);
   return mapProductionBlockItem(data as Record<string, unknown>);
@@ -901,6 +1030,7 @@ export async function updateChefProductionBlockItem(
     sortOrder?: number;
     kitchenSection?: string;
     shelfLifeDays?: number | null;
+    productionZoneId?: string | null;
   },
 ): Promise<void> {
   const row: Record<string, unknown> = {};
@@ -909,6 +1039,7 @@ export async function updateChefProductionBlockItem(
   if (patch.sortOrder !== undefined) row.sort_order = patch.sortOrder;
   if (patch.kitchenSection !== undefined) row.kitchen_section = patch.kitchenSection.trim();
   if (patch.shelfLifeDays !== undefined) row.shelf_life_days = patch.shelfLifeDays;
+  if (patch.productionZoneId !== undefined) row.production_zone_id = patch.productionZoneId;
   if (Object.keys(row).length === 0) return;
   const { error } = await supabase.from('chef_production_block_items').update(row).eq('id', itemId);
   if (error) throw new Error(error.message);
@@ -946,21 +1077,89 @@ export async function collectAllBlockItemsInTemplate(
   return out;
 }
 
-/** Añade filas de sesión para productos nuevos en plantilla (sesión abierta). */
+function mergeChefProductionSessionQty(
+  qtyCanon: number | null,
+  qtyOther: number | null,
+): number | null {
+  const a = qtyCanon != null && !Number.isNaN(Number(qtyCanon)) ? Number(qtyCanon) : null;
+  const b = qtyOther != null && !Number.isNaN(Number(qtyOther)) ? Number(qtyOther) : null;
+  if (a != null && b != null) return Math.max(a, b);
+  return a ?? b ?? null;
+}
+
+export async function deleteChefProductionSessionLinesByIds(
+  supabase: SupabaseClient,
+  ids: string[],
+): Promise<void> {
+  if (ids.length === 0) return;
+  const { error } = await supabase.from('chef_production_session_lines').delete().in('id', ids);
+  if (error) throw new Error(error.message);
+}
+
+export async function updateChefProductionSessionLineBlockItemId(
+  supabase: SupabaseClient,
+  sessionLineId: string,
+  blockItemId: string,
+): Promise<void> {
+  const { error } = await supabase
+    .from('chef_production_session_lines')
+    .update({ block_item_id: blockItemId })
+    .eq('id', sessionLineId);
+  if (error) throw new Error(error.message);
+}
+
+/** Alinea líneas de sesión con la pizarra fusionada: una fila por producto, «hecho» en el id canónico (Lun–Jue). */
 export async function ensureChefProductionSessionLinesForTemplate(
   supabase: SupabaseClient,
   sessionId: string,
   templateId: string,
 ): Promise<void> {
-  const items = await collectAllBlockItemsInTemplate(supabase, templateId);
-  const existing = await fetchChefProductionSessionLines(supabase, sessionId);
+  const rows = await fetchMergedProductionBoardRowsForTemplate(supabase, templateId);
+  const canonNeeded = new Set(
+    rows.map((r) => canonicalBlockItemIdForBoardRow(r)).filter((id): id is string => Boolean(id)),
+  );
+
+  let existing = await fetchChefProductionSessionLines(supabase, sessionId);
+  const dupDeleteIds: string[] = [];
+
+  for (const row of rows) {
+    const canon = canonicalBlockItemIdForBoardRow(row);
+    if (!canon) continue;
+    const secondary =
+      row.ljItem && row.vdItem ? (row.ljItem.id === canon ? row.vdItem.id : row.ljItem.id) : null;
+
+    const lineCanon = existing.find((sl) => sl.blockItemId === canon);
+    const lineSec = secondary ? existing.find((sl) => sl.blockItemId === secondary) : undefined;
+
+    if (lineCanon && lineSec) {
+      const merged = mergeChefProductionSessionQty(lineCanon.qtyOnHand, lineSec.qtyOnHand);
+      if (merged !== lineCanon.qtyOnHand) {
+        await updateChefProductionSessionLineQty(supabase, lineCanon.id, merged);
+      }
+      dupDeleteIds.push(lineSec.id);
+    } else if (!lineCanon && lineSec) {
+      await updateChefProductionSessionLineBlockItemId(supabase, lineSec.id, canon);
+    }
+  }
+
+  if (dupDeleteIds.length > 0) {
+    await deleteChefProductionSessionLinesByIds(supabase, dupDeleteIds);
+  }
+
+  existing = await fetchChefProductionSessionLines(supabase, sessionId);
+  const orphanIds = existing.filter((sl) => !canonNeeded.has(sl.blockItemId)).map((sl) => sl.id);
+  if (orphanIds.length > 0) {
+    await deleteChefProductionSessionLinesByIds(supabase, orphanIds);
+    existing = await fetchChefProductionSessionLines(supabase, sessionId);
+  }
+
   const have = new Set(existing.map((e) => e.blockItemId));
-  const missing = items.filter((it) => !have.has(it.id));
+  const missing = [...canonNeeded].filter((id) => !have.has(id));
   if (missing.length === 0) return;
   const { error } = await supabase.from('chef_production_session_lines').insert(
-    missing.map((it) => ({
+    missing.map((block_item_id) => ({
       session_id: sessionId,
-      block_item_id: it.id,
+      block_item_id,
       qty_on_hand: null as number | null,
     })),
   );
@@ -1040,15 +1239,15 @@ export async function getOrCreateChefProductionSession(
     const sess = mapProductionSession(existing as Record<string, unknown>);
     const existingLines = await fetchChefProductionSessionLines(supabase, sess.id);
     if (existingLines.length === 0) {
-      const blockItems = await collectAllBlockItemsInTemplate(supabase, templateId);
-      if (blockItems.length === 0) {
+      const canonicalIds = await listCanonicalSessionBlockItemIdsForTemplate(supabase, templateId);
+      if (canonicalIds.length === 0) {
         throw new Error(
           'Esta plantilla no tiene productos en ningún bloque. Edítala en Plantillas antes de abrir el día.',
         );
       }
-      const slRows = blockItems.map((it) => ({
+      const slRows = canonicalIds.map((block_item_id) => ({
         session_id: sess.id,
-        block_item_id: it.id,
+        block_item_id,
         qty_on_hand: null as number | null,
       }));
       const { error: lineErr } = await supabase.from('chef_production_session_lines').insert(slRows);
@@ -1057,8 +1256,8 @@ export async function getOrCreateChefProductionSession(
     return sess;
   }
 
-  const blockItems = await collectAllBlockItemsInTemplate(supabase, templateId);
-  if (blockItems.length === 0) {
+  const canonicalIds = await listCanonicalSessionBlockItemIdsForTemplate(supabase, templateId);
+  if (canonicalIds.length === 0) {
     throw new Error(
       'Esta plantilla no tiene productos en ningún bloque. Edítala en Plantillas antes de abrir el día.',
     );
@@ -1095,9 +1294,9 @@ export async function getOrCreateChefProductionSession(
   }
 
   const session = mapProductionSession(row as Record<string, unknown>);
-  const slRows = blockItems.map((it) => ({
+  const slRows = canonicalIds.map((block_item_id) => ({
     session_id: session.id,
-    block_item_id: it.id,
+    block_item_id,
     qty_on_hand: null as number | null,
   }));
   const { error: lineErr } = await supabase.from('chef_production_session_lines').insert(slRows);
