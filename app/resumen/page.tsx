@@ -184,6 +184,9 @@ export default function ResumenPage() {
       rows: filtered,
       products,
       filters: { productLabel, fromLabel, toLabel },
+      productFilter,
+      dateRangeKeys: { from: fromDate || null, to: toDate || null },
+      allMermas: mermas,
     });
   };
 
