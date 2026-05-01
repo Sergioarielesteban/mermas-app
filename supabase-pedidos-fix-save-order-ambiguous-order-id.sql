@@ -1,8 +1,8 @@
--- Marca pedidos enviados que se editaron tras el primer envío (líneas/cantidades).
--- Ejecutar en Supabase SQL Editor si ya tenías el esquema de pedidos desplegado.
-
-alter table public.purchase_orders
-  add column if not exists content_revised_after_sent_at timestamptz;
+-- Corrige "column reference order_id is ambiguous" al guardar un pedido existido.
+-- Causa: save_purchase_order_with_items declara RETURNS TABLE(order_id uuid, ...), lo que crea
+-- variables PL/pgSQL homónimas a las columnas; el DELETE usaba WHERE order_id = ... sin tabla.
+--
+-- Ejecutar en Supabase SQL Editor en cualquier proyecto que ya use save_purchase_order_with_items.
 
 create or replace function public.save_purchase_order_with_items(
   p_order_id uuid,
@@ -14,7 +14,8 @@ create or replace function public.save_purchase_order_with_items(
   p_delivery_date date,
   p_items jsonb,
   p_expected_order_updated_at timestamptz default null,
-  p_mark_content_revised_after_sent boolean default false
+  p_mark_content_revised_after_sent boolean default false,
+  p_usuario_nombre text default null
 )
 returns table(order_id uuid, order_updated_at timestamptz)
 language plpgsql
@@ -24,7 +25,10 @@ as $$
 declare
   v_order_id uuid;
   v_order_updated_at timestamptz;
+  v_nombre text;
 begin
+  v_nombre := nullif(btrim(coalesce(p_usuario_nombre, '')), '');
+
   if p_status not in ('draft', 'sent', 'received') then
     raise exception 'Estado de pedido inválido';
   end if;
@@ -36,14 +40,16 @@ begin
       status,
       notes,
       sent_at,
-      delivery_date
+      delivery_date,
+      usuario_nombre
     ) values (
       p_local_id,
       p_supplier_id,
       p_status,
       btrim(coalesce(p_notes, '')),
       case when p_status = 'sent' then coalesce(p_sent_at, now()) else null end,
-      p_delivery_date
+      p_delivery_date,
+      v_nombre
     )
     returning id, updated_at into v_order_id, v_order_updated_at;
   else
@@ -58,7 +64,8 @@ begin
         when coalesce(p_mark_content_revised_after_sent, false) then now()
         when p_status = 'draft' then null
         else content_revised_after_sent_at
-      end
+      end,
+      usuario_nombre = coalesce(v_nombre, usuario_nombre)
     where id = p_order_id
       and local_id = p_local_id
       and (p_expected_order_updated_at is null or updated_at = p_expected_order_updated_at)
@@ -101,7 +108,11 @@ begin
     received_weight_kg,
     received_price_per_kg,
     incident_type,
-    incident_notes
+    incident_notes,
+    billing_unit,
+    billing_qty_per_order_unit,
+    price_per_billing_unit,
+    exclude_from_price_evolution
   )
   select
     p_local_id,
@@ -119,7 +130,11 @@ begin
     i.received_weight_kg,
     i.received_price_per_kg,
     i.incident_type,
-    i.incident_notes
+    i.incident_notes,
+    i.billing_unit,
+    i.billing_qty_per_order_unit,
+    i.price_per_billing_unit,
+    coalesce(i.exclude_from_price_evolution, false)
   from jsonb_to_recordset(coalesce(p_items, '[]'::jsonb)) as i(
     supplier_product_id uuid,
     product_name text,
@@ -134,7 +149,11 @@ begin
     received_weight_kg numeric,
     received_price_per_kg numeric,
     incident_type text,
-    incident_notes text
+    incident_notes text,
+    billing_unit text,
+    billing_qty_per_order_unit numeric,
+    price_per_billing_unit numeric,
+    exclude_from_price_evolution boolean
   );
 
   select updated_at into v_order_updated_at

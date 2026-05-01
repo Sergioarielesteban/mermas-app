@@ -409,9 +409,9 @@ begin
       raise exception 'Pedido no encontrado o sin permisos para este local';
     end if;
 
-    delete from public.purchase_order_items
-    where order_id = v_order_id
-      and local_id = p_local_id;
+    delete from public.purchase_order_items poi
+    where poi.order_id = v_order_id
+      and poi.local_id = p_local_id;
   end if;
 
   if coalesce(jsonb_typeof(p_items), 'null') <> 'array' then

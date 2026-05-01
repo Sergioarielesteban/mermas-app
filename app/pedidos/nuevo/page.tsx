@@ -459,7 +459,8 @@ export default function NuevoPedidoPage() {
     if (isDemoMode()) {
       const orderId = existingOrderId ?? `demo-order-${uid('o')}`;
       const created = existingCreatedAt ?? new Date().toISOString();
-      const lineTotalSum = Math.round(items.reduce((s, i) => s + i.lineTotal, 0) * 100) / 100;
+      const lineTotalSum =
+        Math.round(items.reduce((s, i) => s + i.lineTotal + i.lineTotal * i.vatRate, 0) * 100) / 100;
       const order: PedidoOrder = {
         id: orderId,
         supplierId: selectedSupplier.id,
@@ -551,7 +552,8 @@ export default function NuevoPedidoPage() {
     if (isDemoMode()) {
       const orderId = existingOrderId ?? `demo-order-${uid('o')}`;
       const created = existingCreatedAt ?? new Date().toISOString();
-      const lineTotalSum = Math.round(items.reduce((s, i) => s + i.lineTotal, 0) * 100) / 100;
+      const lineTotalSum =
+        Math.round(items.reduce((s, i) => s + i.lineTotal + i.lineTotal * i.vatRate, 0) * 100) / 100;
       const order: PedidoOrder = {
         id: orderId,
         supplierId: selectedSupplier.id,

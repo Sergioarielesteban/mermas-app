@@ -314,6 +314,7 @@ export type PedidoOrder = {
   /** Join opcional staff → nombre (si el API lo rellena). */
   staff?: { name?: string | null };
   items: PedidoOrderItem[];
+  /** Total estimado con IVA (Σ base línea × (1 + vat_rate)); coherente con la pantalla de nuevo pedido. */
   total: number;
 };
 
@@ -679,7 +680,9 @@ function buildPedidoOrdersFromRows(
         return requester ? { usuarioNombre: requester } : {};
       })()),
       items,
-      total: items.reduce((acc, item) => acc + item.lineTotal, 0),
+      total: Math.round(
+        items.reduce((acc, item) => acc + item.lineTotal + item.lineTotal * Number(item.vatRate ?? 0), 0) * 100,
+      ) / 100,
     };
   });
 }
@@ -1938,6 +1941,11 @@ export async function saveOrder(
   });
 
   if (error) {
+    if (/order_id\s+is\s+ambiguous/i.test(error.message)) {
+      throw new Error(
+        'Error al guardar por un fallo en la función SQL del servidor. Ejecuta en Supabase el script supabase-pedidos-fix-save-order-ambiguous-order-id.sql y vuelve a intentar.',
+      );
+    }
     if (isMissingSaveOrderRpcError(error.message)) {
       throw new Error(
         'Falta la función SQL save_purchase_order_with_items en Supabase. Ejecuta el último supabase-pedidos-schema.sql y vuelve a intentar.',
