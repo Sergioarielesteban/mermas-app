@@ -137,7 +137,8 @@ function drawMonthOverMonthBlock(
   opts: { x: number; y: number; w: number; data: MermasMonthOverMonth },
 ): number {
   const pad = 10;
-  const boxH = 62;
+  /** Más alto para separar texto de mes y cifras. */
+  const boxH = 78;
   doc.setFillColor(...PDF_ZINC_100);
   doc.roundedRect(opts.x, opts.y, opts.w, boxH, 4, 4, 'F');
   doc.setDrawColor(...PDF_ZINC_400);
@@ -150,25 +151,31 @@ function drawMonthOverMonthBlock(
   doc.text('Comparativa mes civil (mismo filtro de producto)', opts.x + pad, opts.y + 14);
 
   const colW = (opts.w - pad * 2 - 8) / 3;
-  const baseY = opts.y + 38;
+  const cx2 = opts.x + pad + colW + 4;
+  const cx3 = opts.x + pad + (colW + 4) * 2 - 12;
+  /** Etiquetas de mes / variación; debajo van las cifras con más aire. */
+  const labelY = opts.y + 36;
+  const valueY = opts.y + 56;
+
+  doc.setFont('helvetica', 'normal');
   doc.setFontSize(8);
   doc.setTextColor(...PDF_ZINC_500);
-  doc.text(opts.data.prevLabel, opts.x + pad, baseY - 10);
+  doc.text(opts.data.prevLabel, opts.x + pad, labelY);
   doc.setFontSize(14);
   doc.setTextColor(...PDF_ZINC_900);
-  doc.text(`${opts.data.prevEur.toFixed(2)} €`, opts.x + pad, baseY);
+  doc.text(`${opts.data.prevEur.toFixed(2)} €`, opts.x + pad, valueY);
 
   doc.setFontSize(8);
   doc.setTextColor(...PDF_ZINC_500);
-  doc.text(opts.data.currLabel, opts.x + pad + colW + 4, baseY - 10);
+  doc.text(opts.data.currLabel, cx2, labelY);
   doc.setFontSize(14);
   doc.setTextColor(...PDF_BRAND);
-  doc.text(`${opts.data.currEur.toFixed(2)} €`, opts.x + pad + colW + 4, baseY);
+  doc.text(`${opts.data.currEur.toFixed(2)} €`, cx2, valueY);
 
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(8);
   doc.setTextColor(...PDF_ZINC_500);
-  doc.text('Variación vs mes anterior', opts.x + pad + (colW + 4) * 2 - 12, baseY - 10);
+  doc.text('Variación vs mes anterior', cx3, labelY);
   const pctTxt =
     opts.data.pctVsPrev == null
       ? opts.data.prevEur <= 0 && opts.data.currEur > 0
@@ -183,7 +190,7 @@ function drawMonthOverMonthBlock(
   } else {
     doc.setTextColor(...PDF_ZINC_900);
   }
-  doc.text(pctTxt, opts.x + pad + (colW + 4) * 2 - 12, baseY);
+  doc.text(pctTxt, cx3, valueY);
 
   doc.setTextColor(...PDF_ZINC_900);
   doc.setFont('helvetica', 'normal');
@@ -361,17 +368,9 @@ export function downloadMermasReportPdf(input: {
   doc.setFontSize(18);
   doc.text('Informe para dirección', margin, 42);
   doc.setFont('helvetica', 'normal');
-  doc.setFontSize(10.5);
+  doc.setFontSize(11);
   doc.setTextColor(...PDF_ZINC_500);
-  doc.text(`Producto: ${filters.productLabel}`, margin, 58);
-  doc.text(`Periodo (filtro): ${filters.fromLabel} – ${filters.toLabel}`, margin, 72);
-  doc.setFontSize(9);
-  doc.text(
-    'Resumen ejecutivo (sin detalle línea a línea). Las gráficas y tablas siguen los filtros de producto y fechas seleccionados. Importes como en el panel.',
-    margin,
-    88,
-    { maxWidth: contentW },
-  );
+  doc.text(`Periodo: ${filters.fromLabel} – ${filters.toLabel}`, margin, 60);
 
   const priceById = new Map(products.map((p) => [p.id, p.pricePerUnit]));
   const rowCost = (m: MermaRecord) => normalizedCostForRecord(m, priceById.get(m.productId));
@@ -390,7 +389,8 @@ export function downloadMermasReportPdf(input: {
     ? `${motives[0].label.length > 20 ? `${motives[0].label.slice(0, 19)}…` : motives[0].label} (${topMotivePct.toFixed(0)}%)`
     : '—';
 
-  const kpiY = 108;
+  /** Tras una cabecera más corta (solo título + periodo). */
+  const kpiY = 80;
   const gap = 8;
   const nKpi = 6;
   const kpiW = (contentW - (nKpi - 1) * gap) / nKpi;
