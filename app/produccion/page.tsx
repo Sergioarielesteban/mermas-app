@@ -8,7 +8,6 @@ import { useAuth } from '@/components/AuthProvider';
 import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
 import {
   activeChefProductionBoardBlockItem,
-  chefProdLabelsStorageKeyV2,
   type ChefProductionBoardRow,
   completeChefProductionSession,
   ensureChefProductionSessionLinesForTemplate,
@@ -32,7 +31,6 @@ import {
   updateChefProductionSessionLineQty,
 } from '@/lib/chef-ops-supabase';
 import { appConfirm } from '@/lib/app-dialog-bridge';
-import { shouldUseManualPrintOnly } from '@/lib/print-platform';
 
 const STORAGE_LAST_TEMPLATE = 'chef_prod_last_template_v1';
 
@@ -46,121 +44,6 @@ function parseQty(s: string): number | null {
 function fmtQty(n: number | null): string {
   if (n == null || Number.isNaN(n)) return '';
   return String(n);
-}
-
-function addCalendarDaysIso(iso: string, deltaDays: number): string {
-  const [y, m, d] = iso.slice(0, 10).split('-').map(Number);
-  const dt = new Date(y, m - 1, d);
-  dt.setDate(dt.getDate() + deltaDays);
-  const yy = dt.getFullYear();
-  const mm = String(dt.getMonth() + 1).padStart(2, '0');
-  const dd = String(dt.getDate()).padStart(2, '0');
-  return `${yy}-${mm}-${dd}`;
-}
-
-function fmtEsDate(iso: string): string {
-  const [y, m, d] = iso.slice(0, 10).split('-');
-  return `${d}/${m}/${y}`;
-}
-
-type LabelPayload = {
-  producto: string;
-  elaboracion: string;
-  caducidad: string | null;
-  lote: string;
-};
-
-function ProduccionLabelPreviewCard({ label }: { label: LabelPayload }) {
-  const cad = label.caducidad ?? '—';
-  return (
-    <article
-      className="mx-auto w-[54mm] max-w-[min(54mm,92vw)] break-inside-avoid rounded-sm border border-zinc-900 bg-white px-3 py-2 shadow-sm print:border-black"
-      style={{ WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}
-    >
-      <div className="text-[11px] font-black uppercase leading-snug tracking-wide text-zinc-900">{label.producto}</div>
-      <div className="mt-2 text-[9px] font-semibold leading-relaxed text-zinc-800">
-        Fecha elaboración: <span className="font-bold tabular-nums">{label.elaboracion}</span>
-      </div>
-      <div className="text-[9px] font-semibold leading-relaxed text-zinc-800">
-        Caducidad: <span className="font-bold tabular-nums">{cad}</span>
-      </div>
-      {label.lote.trim() !== '' ? (
-        <div className="mt-1 text-[8px] font-bold tabular-nums text-zinc-600">Lote: {label.lote}</div>
-      ) : null}
-    </article>
-  );
-}
-
-function ProduccionLabelsPreviewModal({
-  workDateIso,
-  labels,
-  onClose,
-  onPrintClick,
-}: {
-  workDateIso: string;
-  labels: LabelPayload[];
-  onClose: () => void;
-  onPrintClick: () => void;
-}) {
-  useEffect(() => {
-    const prevOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    return () => {
-      document.body.style.overflow = prevOverflow;
-    };
-  }, []);
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
-
-  return (
-    <div className="fixed inset-0 z-[100]" role="dialog" aria-modal="true" aria-labelledby="prod-label-preview-title">
-      <button
-        type="button"
-        className="absolute inset-0 bg-black/50"
-        aria-label="Cerrar vista previa"
-        onClick={onClose}
-      />
-      <div className="pointer-events-none flex min-h-full items-end justify-center p-3 sm:items-center sm:p-6">
-        <div className="pointer-events-auto flex max-h-[min(92vh,640px)] w-full max-w-md flex-col overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-2xl">
-          <div className="border-b border-zinc-100 px-4 py-3">
-            <h2 id="prod-label-preview-title" className="text-sm font-black text-zinc-900">
-              Vista previa de etiqueta
-            </h2>
-            <p className="mt-0.5 text-[11px] font-medium text-zinc-600">
-              {labels.length} etiqueta{labels.length !== 1 ? 's' : ''} · {workDateIso} · tamaño típico 58&nbsp;mm
-            </p>
-          </div>
-          <div className="min-h-[12rem] flex-1 overflow-y-auto bg-zinc-100 px-4 py-4 space-y-4">
-            {labels.map((label, idx) => (
-              <ProduccionLabelPreviewCard key={`${idx}-${label.lote}-${label.producto}`} label={label} />
-            ))}
-          </div>
-          <div className="flex flex-wrap gap-2 border-t border-zinc-100 bg-white px-4 py-3">
-            <button
-              type="button"
-              onClick={onClose}
-              className="h-10 flex-1 rounded-xl border border-zinc-300 bg-white text-xs font-black uppercase tracking-wide text-zinc-900 sm:flex-initial sm:px-6"
-            >
-              Cerrar
-            </button>
-            <button
-              type="button"
-              onClick={onPrintClick}
-              className="h-10 flex-1 rounded-xl border border-zinc-900 bg-zinc-900 text-xs font-black uppercase tracking-wide text-white sm:flex-initial sm:px-6"
-            >
-              Imprimir
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
 }
 
 function groupRowsByKitchenSection(rows: ChefProductionBoardRow[]): { title: string; rows: ChefProductionBoardRow[] }[] {
@@ -201,7 +84,6 @@ function ProduccionBoardInner() {
 
   const [savingLineId, setSavingLineId] = useState<string | null>(null);
   const [closing, setClosing] = useState(false);
-  const [labelsPreview, setLabelsPreview] = useState<LabelPayload[] | null>(null);
   const debouncePersistRef = useRef<number | null>(null);
   const sesionBootstrapRef = useRef<string | null>(null);
 
@@ -434,81 +316,13 @@ function ProduccionBoardInner() {
     }
   };
 
-  const imprimirEtiquetas = () => {
-    if (!session) return;
-    const elaboracion = fmtEsDate(session.workDate);
-    let seq = 0;
-    const labels: LabelPayload[] = [];
-
-    for (const row of boardRows) {
-      const sl = mergedRowSessionLine(row, byBlockItemId);
-      if (!sl) continue;
-      const draftRaw = hechoDraft[sl.id] ?? '';
-      const draftN = parseQty(draftRaw);
-      const hecho =
-        draftN != null && !Number.isNaN(draftN) && draftRaw.trim() !== ''
-          ? draftN
-          : sl.qtyOnHand != null && !Number.isNaN(Number(sl.qtyOnHand))
-            ? Number(sl.qtyOnHand)
-            : 0;
-      if (hecho <= 0) continue;
-      seq += 1;
-      const shelf = row.ljItem?.shelfLifeDays ?? row.vdItem?.shelfLifeDays ?? row.extraItem?.shelfLifeDays ?? null;
-      const caducidad =
-        shelf != null && Number.isFinite(shelf) ? fmtEsDate(addCalendarDaysIso(session.workDate, shelf)) : null;
-      const lotePref = session.workDate.replace(/-/g, '');
-      labels.push({
-        producto: row.displayLabel,
-        elaboracion,
-        caducidad,
-        lote: `L${lotePref}-${seq}`,
-      });
-    }
-
-    if (labels.length === 0) {
-      setBanner('No hay producción registrada (hecho > 0) para etiquetar hoy.');
-      return;
-    }
+  const irEtiquetasImprimir = () => {
+    if (!session || !templateId.trim()) return;
     setBanner(null);
-    if (typeof window !== 'undefined' && templateId.trim() !== '') {
-      try {
-        sessionStorage.setItem(
-          chefProdLabelsStorageKeyV2(session.workDate, templateId),
-          JSON.stringify({ workDate: session.workDate, labels }),
-        );
-      } catch {
-        /* ignore */
-      }
-    }
-    setLabelsPreview(labels);
+    router.push(
+      `/produccion/etiquetas/print?date=${encodeURIComponent(session.workDate)}&templateId=${encodeURIComponent(templateId)}`,
+    );
   };
-
-  /** Abre ventana solo con etiquetas y dispara impresión nativa (AirPrint en iOS tras pulsar en esa pantalla). */
-  const handlePrintProductionLabels = useCallback(() => {
-    if (!session || !templateId || !labelsPreview?.length || typeof window === 'undefined') return;
-    try {
-      sessionStorage.setItem(
-        chefProdLabelsStorageKeyV2(session.workDate, templateId),
-        JSON.stringify({ workDate: session.workDate, labels: labelsPreview }),
-      );
-    } catch {
-      /* ignore */
-    }
-    const url = `/produccion/etiquetas/print?date=${encodeURIComponent(session.workDate)}&templateId=${encodeURIComponent(templateId)}`;
-    /** En iPhone/iPad, una pestaña nueva suele ir en segundo plano o quedar vacía hasta hidratar la sesión — mismo flujo que Cocina Central: página completa + «Imprimir etiqueta». */
-    if (shouldUseManualPrintOnly()) {
-      setLabelsPreview(null);
-      router.push(url);
-      return;
-    }
-    const w = window.open(url, '_blank', 'noopener,noreferrer');
-    setLabelsPreview(null);
-    if (!w) {
-      setBanner('No se abrió la ventana de impresión. Activa ventanas emergentes y pulsa de nuevo «Imprimir».');
-    } else {
-      setBanner(null);
-    }
-  }, [session, templateId, labelsPreview, router]);
 
   const sectionGroups = useMemo(() => groupRowsByKitchenSection(boardRows), [boardRows]);
 
@@ -570,8 +384,8 @@ function ProduccionBoardInner() {
             </button>
             <button
               type="button"
-              disabled={!session}
-              onClick={imprimirEtiquetas}
+              disabled={!session?.id || !templateId.trim()}
+              onClick={irEtiquetasImprimir}
               className="h-10 rounded border border-zinc-300 bg-white px-3 text-xs font-black uppercase tracking-wide text-zinc-900 disabled:opacity-45"
             >
               Imprimir etiquetas
@@ -795,15 +609,6 @@ function ProduccionBoardInner() {
           ) : null}
         </>
       )}
-
-      {labelsPreview && labelsPreview.length > 0 && session ? (
-        <ProduccionLabelsPreviewModal
-          workDateIso={session.workDate}
-          labels={labelsPreview}
-          onClose={() => setLabelsPreview(null)}
-          onPrintClick={handlePrintProductionLabels}
-        />
-      ) : null}
     </div>
   );
 }

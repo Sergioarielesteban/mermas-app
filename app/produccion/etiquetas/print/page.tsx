@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { Suspense, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 
@@ -7,7 +8,6 @@ import { useAuth } from '@/components/AuthProvider';
 import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
 import {
   type ChefProductionBoardRow,
-  chefProdLabelsStorageKeyV2,
   ensureChefProductionSessionLinesForTemplate,
   fetchChefProductionSessionLines,
   fetchFullProductionDayBoardRowsForTemplate,
@@ -16,7 +16,6 @@ import {
   mergedRowSessionLine,
   type ChefProductionSessionLine,
 } from '@/lib/chef-ops-supabase';
-import { shouldUseManualPrintOnly } from '@/lib/print-platform';
 
 type LabelPayload = {
   producto: string;
@@ -79,85 +78,61 @@ function ProduccionEtiquetasPrintInner() {
   const { localId, profileReady, userId } = useAuth();
   const supabaseOk = isSupabaseEnabled() && getSupabaseClient();
 
+  const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
   const [labels, setLabels] = useState<LabelPayload[]>([]);
   const [meta, setMeta] = useState<{ workDate: string } | null>(null);
-  const [manualPrintOnly, setManualPrintOnly] = useState(false);
 
   useEffect(() => {
-    setManualPrintOnly(shouldUseManualPrintOnly());
-  }, []);
-
-  useEffect(() => {
-    if (!profileReady || !localId || !supabaseOk) {
-      if (profileReady && (!localId || !supabaseOk)) {
-        setErr('Sin sesión o Supabase.');
-      }
-      return;
-    }
+    if (!profileReady) return;
 
     const dateEff = dateParam?.trim() ?? '';
     const tplEff = templateParam?.trim() ?? '';
+
+    if (!localId || !supabaseOk) {
+      setLoading(false);
+      setErr('Sin sesión o Supabase.');
+      return;
+    }
     if (!dateEff || !tplEff || dateEff.length < 10) {
-      if (profileReady) setErr(!dateEff || !tplEff ? 'Faltan parámetros date o templateId en la URL.' : 'Fecha no válida.');
+      setLoading(false);
+      setErr(!dateEff || !tplEff ? 'Faltan date o templateId en la URL.' : 'Fecha no válida.');
       return;
     }
 
     let cancelled = false;
+    setLoading(true);
+    setErr(null);
+
     void (async () => {
       const supabase = getSupabaseClient()!;
       try {
-        let nextLabels: LabelPayload[] = [];
-
-        if (typeof window !== 'undefined') {
-          try {
-            const raw = sessionStorage.getItem(chefProdLabelsStorageKeyV2(dateEff, tplEff));
-            if (raw) {
-              const parsed = JSON.parse(raw) as { workDate?: string; labels?: LabelPayload[] };
-              if (
-                Array.isArray(parsed.labels) &&
-                parsed.labels.length > 0 &&
-                parsed.workDate === dateEff
-              ) {
-                nextLabels = parsed.labels;
-              }
-            }
-          } catch {
-            /* ignore */
-          }
-        }
-
-        if (nextLabels.length === 0) {
-          const session = await getOrCreateChefProductionSession(
-            supabase,
-            localId,
-            tplEff,
-            dateEff,
-            null,
-            userId ?? null,
-          );
-          if (cancelled) return;
-          if (!session.completedAt) {
-            await ensureChefProductionSessionLinesForTemplate(supabase, session.id, tplEff);
-          }
-          const zones = await fetchChefProductionZones(supabase, tplEff).catch(() => [] as { id: string; label: string }[]);
-          const zoneMap = new Map(zones.map((z) => [z.id, z.label]));
-          const rows = await fetchFullProductionDayBoardRowsForTemplate(supabase, tplEff, {
-            zoneLabel: (zid) => (zid ? zoneMap.get(zid) ?? '' : ''),
-          });
-          const sl = await fetchChefProductionSessionLines(supabase, session.id);
-          nextLabels = labelsFromBoardAndLines(session.workDate, rows, sl);
-        }
-
+        const sessionRow = await getOrCreateChefProductionSession(
+          supabase,
+          localId,
+          tplEff,
+          dateEff,
+          null,
+          userId ?? null,
+        );
         if (cancelled) return;
-        setErr(null);
+        if (!sessionRow.completedAt) {
+          await ensureChefProductionSessionLinesForTemplate(supabase, sessionRow.id, tplEff);
+        }
+        const zones = await fetchChefProductionZones(supabase, tplEff).catch(() => [] as { id: string; label: string }[]);
+        const zoneMap = new Map(zones.map((z) => [z.id, z.label]));
+        const boardRows = await fetchFullProductionDayBoardRowsForTemplate(supabase, tplEff, {
+          zoneLabel: (zid) => (zid ? zoneMap.get(zid) ?? '' : ''),
+        });
+        const sl = await fetchChefProductionSessionLines(supabase, sessionRow.id);
+        const nextLabels = labelsFromBoardAndLines(sessionRow.workDate, boardRows, sl);
+        if (cancelled) return;
         setMeta({ workDate: dateEff });
         setLabels(nextLabels);
-        if (nextLabels.length === 0) {
-          setErr('No hay producción registrada (hecho > 0) para etiquetar.');
-        }
       } catch (e) {
         if (!cancelled) setErr(e instanceof Error ? e.message : 'Error al cargar.');
+      } finally {
+        if (!cancelled) setLoading(false);
       }
     })();
 
@@ -166,48 +141,48 @@ function ProduccionEtiquetasPrintInner() {
     };
   }, [profileReady, localId, supabaseOk, dateParam, templateParam, userId]);
 
-  /** Escritorio: disparo automático tipo ventana nueva. iOS/Android con WebKit restrictivo: el usuario pulsa «Imprimir» (gesto → window.print, igual que /cocina-central/etiquetas). */
-  useEffect(() => {
-    if (labels.length === 0 || err || manualPrintOnly) return;
-    let cancelled = false;
-    const t = window.setTimeout(() => {
-      if (!cancelled) {
-        try {
-          window.print();
-        } catch {
-          /* ignore */
-        }
-      }
-    }, 500);
-    return () => {
-      cancelled = true;
-      window.clearTimeout(t);
-    };
-  }, [labels, err, manualPrintOnly]);
+  if (!profileReady || loading) {
+    return (
+      <div className="p-6">
+        <p className="text-sm text-zinc-600">Cargando etiquetas…</p>
+      </div>
+    );
+  }
 
-  if (!profileReady) return <p className="p-6 text-sm text-zinc-600">Cargando…</p>;
-  if (err) return <p className="p-6 text-sm text-red-700">{err}</p>;
-  if (labels.length === 0) return <p className="p-6 text-sm text-zinc-600">Sin etiquetas.</p>;
+  if (err) {
+    return (
+      <div className="no-print space-y-4 p-6">
+        <p className="text-sm text-red-700">{err}</p>
+        <Link
+          href="/produccion"
+          className="inline-flex rounded-xl border border-zinc-300 bg-white px-4 py-2 text-xs font-bold text-zinc-800"
+        >
+          Volver a producción
+        </Link>
+      </div>
+    );
+  }
 
   return (
     <>
       <style
-        // eslint-disable-next-line react/no-danger -- CSS de impresión estático sin datos de usuario como HTML ejecutable.
+        // eslint-disable-next-line react/no-danger -- CSS de impresión estático
         dangerouslySetInnerHTML={{
           __html: `
         @page { size: 58mm 40mm; margin: 0; }
         @media print {
-          body { margin: 0 !important; background: white !important; }
-          html { margin: 0 !important; padding: 0 !important; background: white !important; }
           .no-print { display: none !important; }
+          body {
+            margin: 0 !important;
+            background: white !important;
+          }
           .production-label {
-            border-color: #000 !important;
-            box-shadow: none !important;
             width: 58mm !important;
             min-height: 38mm !important;
             padding: 3mm !important;
             box-sizing: border-box !important;
             page-break-after: always !important;
+            border: 1px solid #000 !important;
           }
         }
         .production-label {
@@ -215,59 +190,72 @@ function ProduccionEtiquetasPrintInner() {
           width: 58mm;
           min-height: 38mm;
           padding: 3mm;
-          margin: 0 auto 4mm;
-          border: 1px solid #333;
+          margin: 0 auto 12px;
+          border: 1px solid #000;
           page-break-after: always;
           font-family: system-ui, -apple-system, sans-serif;
         }`,
         }}
       />
 
-      <div className="no-print mb-4 flex flex-wrap items-center gap-2 print:hidden">
-        <button
-          type="button"
-          onClick={() => {
-            window.print();
-          }}
-          className="min-h-12 rounded-xl bg-zinc-900 px-6 py-3 text-sm font-black uppercase tracking-wide text-white touch-manipulation"
-        >
-          Imprimir etiqueta
-        </button>
-        <button
-          type="button"
-          onClick={() => window.close()}
-          className="rounded-xl border border-zinc-300 bg-white px-4 py-2 text-xs font-bold text-zinc-800"
-        >
-          Cerrar
-        </button>
-        <span className="text-[11px] text-zinc-600">
-          {meta?.workDate ?? ''} · {labels.length} etiqueta{labels.length !== 1 ? 's' : ''}
-        </span>
-        {manualPrintOnly ? (
-          <p className="w-full text-[11px] font-semibold leading-snug text-zinc-700">
-            En iPhone o iPad, pulsa <span className="font-black">Imprimir etiqueta</span> para abrir AirPrint (el navegador no permite abrir impresión automática sin tu toque).
-          </p>
-        ) : null}
-      </div>
+      <div className="mx-auto max-w-md px-4 py-6 print:px-0 print:py-0">
+        <div className="no-print mb-6 space-y-3">
+          <h1 className="text-xs font-semibold uppercase tracking-wide text-zinc-600">Etiquetas de producción</h1>
+          {meta ? (
+            <p className="text-[11px] text-zinc-500">{meta.workDate}</p>
+          ) : null}
+          {labels.length > 0 ? (
+            <>
+              <button
+                type="button"
+                onClick={() => window.print()}
+                className="flex min-h-[3rem] w-full items-center justify-center rounded-xl bg-zinc-900 text-sm font-black uppercase tracking-wide text-white touch-manipulation"
+              >
+                IMPRIMIR
+              </button>
+              <Link
+                href="/produccion"
+                className="flex min-h-10 items-center justify-center rounded-xl border border-zinc-300 bg-white text-xs font-bold text-zinc-800"
+              >
+                Volver a producción
+              </Link>
+            </>
+          ) : (
+            <>
+              <p className="text-sm leading-relaxed text-zinc-700">
+                No hay etiquetas para imprimir. Marca cantidades en HECHO en Producción del día.
+              </p>
+              <Link
+                href="/produccion"
+                className="inline-flex rounded-xl border border-zinc-300 bg-white px-4 py-2 text-xs font-bold text-zinc-800"
+              >
+                Volver a producción
+              </Link>
+            </>
+          )}
+        </div>
 
-      <div className="bg-white">
-        {labels.map((lb, idx) => {
-          const cad = lb.caducidad != null && lb.caducidad.trim() !== '' ? lb.caducidad : '—';
-          return (
-            <article key={`${lb.lote}-${idx}`} className="production-label">
-              <div className="text-[11px] font-extrabold uppercase leading-snug tracking-wide">{lb.producto}</div>
-              <div className="mt-2 text-[9px] font-semibold text-zinc-800">
-                Fecha elaboración: <span className="font-bold tabular-nums">{lb.elaboracion}</span>
-              </div>
-              <div className="text-[9px] font-semibold text-zinc-800">
-                Caducidad: <span className="font-bold tabular-nums">{cad}</span>
-              </div>
-              {lb.lote.trim() !== '' ? (
-                <div className="mt-1 text-[8px] font-bold tabular-nums text-zinc-600">Lote: {lb.lote}</div>
-              ) : null}
-            </article>
-          );
-        })}
+        {labels.length > 0 ? (
+          <div className="bg-white">
+            {labels.map((lb, idx) => {
+              const cad = lb.caducidad != null && lb.caducidad.trim() !== '' ? lb.caducidad : '—';
+              return (
+                <article key={`${lb.lote}-${idx}`} className="production-label">
+                  <div className="text-[10px] font-extrabold uppercase leading-snug">{lb.producto}</div>
+                  <div className="mt-1.5 text-[8px] font-semibold text-zinc-800">
+                    Fecha elaboración: <span className="font-bold tabular-nums">{lb.elaboracion}</span>
+                  </div>
+                  <div className="text-[8px] font-semibold text-zinc-800">
+                    Caducidad: <span className="font-bold tabular-nums">{cad}</span>
+                  </div>
+                  {lb.lote.trim() !== '' ? (
+                    <div className="mt-1 text-[7px] font-bold tabular-nums text-zinc-600">Lote: {lb.lote}</div>
+                  ) : null}
+                </article>
+              );
+            })}
+          </div>
+        ) : null}
       </div>
     </>
   );
