@@ -16,6 +16,13 @@ import {
   mergedRowSessionLine,
   type ChefProductionSessionLine,
 } from '@/lib/chef-ops-supabase';
+import {
+  buildProductionLabelPrintCss,
+  DEFAULT_PRODUCTION_LABEL_CONFIG,
+  PRODUCTION_LABEL_MAIN_LOGO_SRC,
+  PRODUCTION_LABEL_SECONDARY_LOGO_SRC,
+  productionLabelAlignClass,
+} from '@/lib/production-label-config';
 
 type LabelPayload = {
   producto: string;
@@ -77,6 +84,9 @@ function ProduccionEtiquetasPrintInner() {
   const templateParam = searchParams.get('templateId');
   const { localId, profileReady, userId } = useAuth();
   const supabaseOk = isSupabaseEnabled() && getSupabaseClient();
+
+  const labelCfg = DEFAULT_PRODUCTION_LABEL_CONFIG;
+  const labelAlignClass = productionLabelAlignClass(labelCfg.align);
 
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
@@ -166,35 +176,9 @@ function ProduccionEtiquetasPrintInner() {
   return (
     <>
       <style
-        // eslint-disable-next-line react/no-danger -- CSS de impresión estático
+        // eslint-disable-next-line react/no-danger -- CSS de impresión con medidas desde LabelConfig
         dangerouslySetInnerHTML={{
-          __html: `
-        @page { size: 58mm 40mm; margin: 0; }
-        @media print {
-          .no-print { display: none !important; }
-          body {
-            margin: 0 !important;
-            background: white !important;
-          }
-          .production-label {
-            width: 58mm !important;
-            min-height: 38mm !important;
-            padding: 3mm !important;
-            box-sizing: border-box !important;
-            page-break-after: always !important;
-            border: 1px solid #000 !important;
-          }
-        }
-        .production-label {
-          box-sizing: border-box;
-          width: 58mm;
-          min-height: 38mm;
-          padding: 3mm;
-          margin: 0 auto 12px;
-          border: 1px solid #000;
-          page-break-after: always;
-          font-family: system-ui, -apple-system, sans-serif;
-        }`,
+          __html: buildProductionLabelPrintCss(labelCfg),
         }}
       />
 
@@ -240,16 +224,33 @@ function ProduccionEtiquetasPrintInner() {
             {labels.map((lb, idx) => {
               const cad = lb.caducidad != null && lb.caducidad.trim() !== '' ? lb.caducidad : '—';
               return (
-                <article key={`${lb.lote}-${idx}`} className="production-label">
-                  <div className="text-[10px] font-extrabold uppercase leading-snug">{lb.producto}</div>
-                  <div className="mt-1.5 text-[8px] font-semibold text-zinc-800">
-                    Fecha elaboración: <span className="font-bold tabular-nums">{lb.elaboracion}</span>
+                <article
+                  key={`${lb.lote}-${idx}`}
+                  className={['production-label', labelAlignClass].join(' ')}
+                >
+                  {labelCfg.showMainLogo ? (
+                    // eslint-disable-next-line @next/next/no-img-element -- impresión: PNG en /public, fiel al archivo
+                    <img src={PRODUCTION_LABEL_MAIN_LOGO_SRC} alt="" className="logo-main" />
+                  ) : null}
+                  <div className="production-label-body">
+                    <div className="text-[10px] font-extrabold uppercase leading-snug">{lb.producto}</div>
+                    <div className="mt-1 text-[8px] font-semibold text-zinc-800">
+                      Fecha elaboración: <span className="font-bold tabular-nums">{lb.elaboracion}</span>
+                    </div>
+                    <div className="text-[8px] font-semibold text-zinc-800">
+                      Caducidad: <span className="font-bold tabular-nums">{cad}</span>
+                    </div>
+                    {lb.lote.trim() !== '' ? (
+                      <div className="mt-1 text-[7px] font-bold tabular-nums text-zinc-600">Lote: {lb.lote}</div>
+                    ) : null}
                   </div>
-                  <div className="text-[8px] font-semibold text-zinc-800">
-                    Caducidad: <span className="font-bold tabular-nums">{cad}</span>
-                  </div>
-                  {lb.lote.trim() !== '' ? (
-                    <div className="mt-1 text-[7px] font-bold tabular-nums text-zinc-600">Lote: {lb.lote}</div>
+                  {labelCfg.showChefOneLogo ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={PRODUCTION_LABEL_SECONDARY_LOGO_SRC}
+                      alt=""
+                      className="logo-secondary"
+                    />
                   ) : null}
                 </article>
               );
