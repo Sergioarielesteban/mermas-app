@@ -18,6 +18,7 @@ import { unitPriceCatalogSuffix } from '@/lib/pedidos-format';
 import {
   formatDecimalInputEs,
   formatMoneyEur,
+  formatUnitPriceEur,
   parsePriceInput,
 } from '@/lib/money-format';
 import {
