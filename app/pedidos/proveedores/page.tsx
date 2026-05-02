@@ -268,6 +268,7 @@ export default function ProveedoresPage() {
     void fetchSuppliersWithProducts(supabase, lid)
       .then((rows) => {
         applySupplierRows(rows);
+        setTimeout(() => { try { const s = sessionStorage.getItem("pedidos_scroll"); if (s) window.scrollTo({ top: parseInt(s), behavior: 'instant' }); } catch {} }, 300);
         writeSuppliersSessionCache(lid, rows);
       })
       .catch((err: Error) => setMessage(err.message));
