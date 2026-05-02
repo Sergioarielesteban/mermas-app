@@ -1,0 +1,7 @@
+Aquí tienes la primera parte: concepto y funciones.
+
+Incluye el dossier AUDITORIA-PARTE-1-CONCEPTO-Y-FUNCIONES.md, el README del proyecto,
+la definición de módulos en components/marketing, la página de planes, la home pública
+y los archivos de permisos de plan en lib/.
+
+La Parte 2 (ZIP separado) contiene el stack, integraciones y el código completo para auditoría técnica.

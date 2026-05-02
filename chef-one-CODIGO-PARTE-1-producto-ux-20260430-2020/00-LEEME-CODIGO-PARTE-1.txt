@@ -1,0 +1,12 @@
+Aquí tienes la primera parte: concepto y funciones.
+
+Este ZIP es SOLO código orientado a producto y experiencia de usuario:
+- Rutas Next.js (app/) excepto app/api/
+- Componentes React (components/)
+- Hooks (hooks/)
+- Estáticos públicos (public/)
+- README del repositorio
+
+Para compilar el proyecto hace falta también la Parte 2 (lib/, app/api/, SQL, package-lock, etc.).
+La otra IA puede auditar primero el alcance funcional y los flujos en esta parte;
+la capa de datos, integraciones y despliegue está en el segundo ZIP.
