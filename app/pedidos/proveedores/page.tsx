@@ -194,7 +194,7 @@ export default function ProveedoresPage() {
   const [editingProductId, setEditingProductId] = React.useState<string | null>(null);
   const [expandedSupplierId, setExpandedSupplierId] = React.useState<string | null>(() => { try { return sessionStorage.getItem('pedidos_expanded_supplier'); } catch { return null; } });
   React.useEffect(() => { try { if (expandedSupplierId) sessionStorage.setItem('pedidos_expanded_supplier', expandedSupplierId); else sessionStorage.removeItem('pedidos_expanded_supplier'); } catch {} }, [expandedSupplierId]);
-  React.useEffect(() => { const handleScroll = () => { try { sessionStorage.setItem("pedidos_scroll", window.scrollY.toString()); } catch {} }; window.addEventListener("scroll", handleScroll); const saved = sessionStorage.getItem("pedidos_scroll"); if (saved) setTimeout(() => window.scrollTo(0, parseInt(saved)), 100); return () => window.removeEventListener("scroll", handleScroll); }, []);
+  React.useEffect(() => { const handleScroll = () => { try { sessionStorage.setItem("pedidos_scroll", window.scrollY.toString()); } catch {} }; window.addEventListener("scroll", handleScroll); const saved = sessionStorage.getItem("pedidos_scroll"); if (saved) setTimeout(() => window.scrollTo(0, parseInt(saved)), 1500); return () => window.removeEventListener("scroll", handleScroll); }, []);
   const [supplierCatalogQuery, setSupplierCatalogQuery] = React.useState('');
   const [supplierDrafts, setSupplierDrafts] = React.useState<
     Record<
