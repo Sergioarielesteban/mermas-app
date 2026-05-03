@@ -192,9 +192,9 @@ export default function ProveedoresPage() {
   const [productPricePerKg, setProductPricePerKg] = React.useState('');
   const [editingSupplierId, setEditingSupplierId] = React.useState<string | null>(null);
   const [editingProductId, setEditingProductId] = React.useState<string | null>(null);
-  const [expandedSupplierId, setExpandedSupplierId] = React.useState<string | null>(() => { try { return sessionStorage.getItem('pedidos_expanded_supplier'); } catch { return null; } });
-  React.useEffect(() => { try { if (expandedSupplierId) sessionStorage.setItem('pedidos_expanded_supplier', expandedSupplierId); else sessionStorage.removeItem('pedidos_expanded_supplier'); } catch {} }, [expandedSupplierId]);
-  React.useEffect(() => { const handleScroll = () => { try { sessionStorage.setItem("pedidos_scroll", window.scrollY.toString()); } catch {} }; window.addEventListener("scroll", handleScroll); const saved = sessionStorage.getItem("pedidos_scroll"); if (saved) setTimeout(() => window.scrollTo(0, parseInt(saved)), 1500); return () => window.removeEventListener("scroll", handleScroll); }, []);
+  const [expandedSupplierId, setExpandedSupplierId] = React.useState<string | null>(() => { try { return localStorage.getItem('pedidos_expanded_supplier'); } catch { return null; } });
+  React.useEffect(() => { try { if (expandedSupplierId) localStorage.setItem('pedidos_expanded_supplier', expandedSupplierId); else localStorage.removeItem('pedidos_expanded_supplier'); } catch {} }, [expandedSupplierId]);
+  React.useEffect(() => { const handleScroll = () => { try { localStorage.setItem("pedidos_scroll", window.scrollY.toString()); } catch {} }; window.addEventListener("scroll", handleScroll); const saved = localStorage.getItem("pedidos_scroll"); if (saved) setTimeout(() => window.scrollTo(0, parseInt(saved)), 1500); return () => window.removeEventListener("scroll", handleScroll); }, []);
   const [supplierCatalogQuery, setSupplierCatalogQuery] = React.useState('');
   const [supplierDrafts, setSupplierDrafts] = React.useState<
     Record<
@@ -268,7 +268,7 @@ export default function ProveedoresPage() {
     void fetchSuppliersWithProducts(supabase, lid)
       .then((rows) => {
         applySupplierRows(rows);
-        setTimeout(() => { try { const s = sessionStorage.getItem("pedidos_scroll"); if (s) window.scrollTo({ top: parseInt(s), behavior: 'instant' }); } catch {} }, 300);
+        setTimeout(() => { try { const s = localStorage.getItem("pedidos_scroll"); if (s) window.scrollTo({ top: parseInt(s), behavior: 'instant' }); } catch {} }, 300);
         writeSuppliersSessionCache(lid, rows);
       })
       .catch((err: Error) => setMessage(err.message));
