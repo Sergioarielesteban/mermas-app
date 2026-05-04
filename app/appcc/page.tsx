@@ -18,6 +18,23 @@ import { CHEF_ONE_TAPER_LINE_CLASS } from '@/components/ChefOneGlowLine';
 import MermasStyleHero from '@/components/MermasStyleHero';
 import { useAuth } from '@/components/AuthProvider';
 
+function TemperaturasMainCard() {
+  return (
+    <Link
+      href="/appcc/temperaturas"
+      className="flex flex-col items-center gap-3 rounded-2xl border border-zinc-200/90 bg-white px-6 py-7 shadow-sm ring-1 ring-zinc-100 transition hover:shadow-md hover:ring-zinc-200 active:scale-[0.98]"
+    >
+      <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-[#D32F2F]/10 shadow-inner">
+        <Thermometer className="h-8 w-8 text-[#D32F2F]" strokeWidth={2} />
+      </div>
+      <div className="text-center">
+        <p className="text-base font-bold text-zinc-900">Registrar temperaturas</p>
+        <p className="mt-0.5 text-[12px] font-medium text-zinc-400">Mañana y noche · por sector</p>
+      </div>
+    </Link>
+  );
+}
+
 const LINE_SM = `mx-auto mt-1 w-14 ${CHEF_ONE_TAPER_LINE_CLASS}`;
 
 type GroupItem = {
@@ -109,18 +126,7 @@ export default function AppccHubPage() {
     <div className="space-y-3">
       <MermasStyleHero slim compactTitle eyebrow="APPCC" title="Puntos críticos y control diario" />
 
-      <ExpandableControlGroup
-        title="Control de temperaturas"
-        leadHref="/appcc/temperaturas"
-        leadLabel="Registros de temperatura"
-        leadGridLabel="Registrar nueva temperatura"
-        leadSub="Mañana y noche"
-        LeadIcon={Thermometer}
-        items={[
-          { href: '/appcc/equipos', label: 'Gestionar equipos', sub: 'Neveras y congeladores', Icon: Wrench },
-          { href: '/appcc/historial', label: 'Historial', sub: 'Últimos días con registros', Icon: History },
-        ]}
-      />
+      <TemperaturasMainCard />
 
       <ExpandableControlGroup
         title="Cambios de aceite"

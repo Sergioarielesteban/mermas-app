@@ -416,7 +416,7 @@ function SlotEditor({
                 if (e.key === 'Enter') void save();
               }}
               disabled={saving}
-              placeholder={unit.unit_type === 'congelador' ? 'Ej. 18' : 'Ej. 4'}
+              placeholder=""
               className="h-10 w-full rounded-lg border border-zinc-200 bg-white px-2 text-center text-lg font-black tabular-nums text-zinc-900 outline-none focus:border-[#D32F2F]/60 focus:ring-1 focus:ring-[#D32F2F]/25"
               autoFocus
             />
