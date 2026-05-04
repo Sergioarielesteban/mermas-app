@@ -191,6 +191,22 @@ export default function AppccCartaAlergenosPage() {
         compact
       />
 
+      {/* Botones secundarios */}
+      <div className="flex gap-2">
+        <Link href="/appcc/carta-alergenos/productos"
+          className="flex-1 flex h-9 items-center justify-center rounded-xl border border-zinc-200 bg-white text-[12px] font-bold text-zinc-700 hover:bg-zinc-50">
+          Fichas
+        </Link>
+        <Link href="/appcc/carta-alergenos/matriz"
+          className="flex-1 flex h-9 items-center justify-center rounded-xl border border-zinc-200 bg-white text-[12px] font-bold text-zinc-700 hover:bg-zinc-50">
+          Matriz
+        </Link>
+        <Link href="/appcc/carta-alergenos/incidencias"
+          className="flex-1 flex h-9 items-center justify-center rounded-xl border border-zinc-200 bg-white text-[12px] font-bold text-zinc-700 hover:bg-zinc-50">
+          Incidencias
+        </Link>
+      </div>
+
       {banner ? (
         <div className="rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950 ring-1 ring-amber-100">
           {banner}
@@ -205,20 +221,6 @@ export default function AppccCartaAlergenosPage() {
           <KpiCard label="Desactualizados" value={kpis.stale} tone="amber" />
           <KpiCard label="Incompletos" value={kpis.incomplete} tone="red" />
           <KpiCard label="Ingredientes sin ficha" value={productsWithoutSheet} tone="red" />
-        </div>
-        <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
-          <Link href="/appcc/carta-alergenos/matriz" className="inline-flex items-center justify-center gap-2 rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm font-semibold text-zinc-800 hover:bg-white">
-            <Table2 className="h-4 w-4" />
-            Ver matriz completa
-          </Link>
-          <Link href="/appcc/carta-alergenos/incidencias" className="inline-flex items-center justify-center gap-2 rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm font-semibold text-zinc-800 hover:bg-white">
-            <ShieldAlert className="h-4 w-4" />
-            Ver incidencias
-          </Link>
-          <Link href="/appcc/carta-alergenos/productos" className="inline-flex items-center justify-center gap-2 rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm font-semibold text-zinc-800 hover:bg-white">
-            <Tags className="h-4 w-4" />
-            Ficha de ingredientes
-          </Link>
         </div>
       </section>
 

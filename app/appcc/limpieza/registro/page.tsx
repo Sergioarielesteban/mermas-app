@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import React, { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { BrushCleaning, CalendarDays } from 'lucide-react';
+import { BrushCleaning } from 'lucide-react';
 import AppccCompactHero from '@/components/AppccCompactHero';
 import { useAuth } from '@/components/AuthProvider';
 import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
@@ -378,13 +378,22 @@ function AppccLimpiezaRegistroInner() {
   return (
     <div className="space-y-3">
       <AppccCompactHero title="Registrar limpieza" />
-      <Link
-        href="/appcc/limpieza/cronograma"
-        className="flex items-center justify-center gap-2 rounded-xl border border-[#D32F2F]/30 bg-[#D32F2F]/10 px-3 py-2.5 text-sm font-bold text-[#B91C1C] shadow-sm ring-1 ring-[#D32F2F]/15 transition hover:bg-[#D32F2F]/15"
-      >
-        <CalendarDays className="h-4 w-4 shrink-0" aria-hidden />
-        Ver qué toca hoy · cronograma semanal
-      </Link>
+
+      {/* Botones secundarios */}
+      <div className="flex gap-2">
+        <Link href="/appcc/limpieza/tareas"
+          className="flex-1 flex h-9 items-center justify-center rounded-xl border border-zinc-200 bg-white text-[12px] font-bold text-zinc-700 hover:bg-zinc-50">
+          Tareas
+        </Link>
+        <Link href="/appcc/limpieza/cronograma"
+          className="flex-1 flex h-9 items-center justify-center rounded-xl border border-zinc-200 bg-white text-[12px] font-bold text-zinc-700 hover:bg-zinc-50">
+          Cronograma
+        </Link>
+        <Link href="/appcc/limpieza/historial"
+          className="flex-1 flex h-9 items-center justify-center rounded-xl border border-zinc-200 bg-white text-[12px] font-bold text-zinc-700 hover:bg-zinc-50">
+          Historial
+        </Link>
+      </div>
 
       {banner ? (
         <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950">{banner}</div>

@@ -511,6 +511,27 @@ function AppccAceiteRegistroInner() {
     <div className="space-y-4">
       <AppccCompactHero title="Aceite en freidoras" />
 
+      {/* Botones secundarios */}
+      <div className="flex gap-2">
+        <Link href="/appcc/aceite/historial"
+          className="flex-1 flex h-9 items-center justify-center rounded-xl border border-zinc-200 bg-white text-[12px] font-bold text-zinc-700 hover:bg-zinc-50">
+          Historial
+        </Link>
+        <Link href="/appcc/aceite/equipos"
+          className="flex-1 flex h-9 items-center justify-center rounded-xl border border-zinc-200 bg-white text-[12px] font-bold text-zinc-700 hover:bg-zinc-50">
+          Freidoras
+        </Link>
+        <button
+          type="button"
+          onClick={() => void handleDownloadPdf()}
+          disabled={!localId || !supabaseOk || pdfBusy}
+          className="flex-1 flex h-9 items-center justify-center gap-1 rounded-xl border border-zinc-200 bg-white text-[12px] font-bold text-zinc-700 hover:bg-zinc-50 disabled:opacity-40"
+        >
+          <Download className="h-3.5 w-3.5" aria-hidden />
+          {pdfBusy ? 'PDF…' : 'PDF'}
+        </button>
+      </div>
+
       {!isSupabaseEnabled() || !getSupabaseClient() ? (
         <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
           Configura <code className="rounded bg-amber-100 px-1">NEXT_PUBLIC_SUPABASE_URL</code> y{' '}
@@ -577,29 +598,6 @@ function AppccAceiteRegistroInner() {
             autoComplete="name"
             className="mt-0.5 h-10 w-full rounded-lg border border-zinc-200 bg-white px-3 text-sm text-zinc-900 outline-none focus:ring-2 focus:ring-[#D32F2F]/25"
           />
-        </div>
-        <div className="flex flex-wrap items-center justify-center gap-2">
-          <Link
-            href="/appcc/aceite/historial"
-            className="inline-flex h-9 items-center justify-center rounded-lg border border-zinc-300 bg-white px-3 text-xs font-bold text-zinc-800 hover:bg-zinc-50"
-          >
-            Historial
-          </Link>
-          <button
-            type="button"
-            onClick={() => void handleDownloadPdf()}
-            disabled={!localId || !supabaseOk || pdfBusy}
-            className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border border-zinc-900/15 bg-zinc-900 px-3 text-xs font-bold text-white hover:bg-zinc-800 disabled:opacity-45"
-          >
-            <Download className="h-3.5 w-3.5" aria-hidden />
-            {pdfBusy ? 'PDF…' : 'Descargar PDF'}
-          </button>
-          <Link
-            href="/appcc/aceite/equipos"
-            className="inline-flex h-9 items-center justify-center rounded-lg border border-zinc-300 bg-white px-3 text-xs font-bold text-zinc-800 hover:bg-zinc-50"
-          >
-            Freidoras
-          </Link>
         </div>
       </div>
 
