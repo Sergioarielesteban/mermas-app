@@ -49,53 +49,82 @@ function panelHref(tile: PanelTile) {
   return tile.blocked ? '/planes' : tile.href;
 }
 
-/** Misma altura en todas las filas; ~30 % menos que la base anterior (Pedidos no usa esto). */
-const PANEL_GRID_CARD_H =
-  'h-[5.95rem] min-h-[5.95rem] max-h-[5.95rem] sm:h-[6.125rem] sm:min-h-[6.125rem] sm:max-h-[6.125rem]';
-
-function PanelGridEmpty() {
-  return <div className={['rounded-[18px] bg-transparent', PANEL_GRID_CARD_H].join(' ')} aria-hidden />;
+// ─── Saludo según hora del día ────────────────────────────────────────────────
+function useGreeting() {
+  const hour = new Date().getHours();
+  if (hour >= 6 && hour < 14) return { text: 'Buenos días', emoji: '☀️' };
+  if (hour >= 14 && hour < 21) return { text: 'Buenas tardes', emoji: '🍳' };
+  return { text: 'Buenas noches', emoji: '🌙' };
 }
 
-/**
- * Tarjeta blanca del grid: medidas unificadas (icono, título, descripción, flecha, línea roja).
- * La descripción no puede crecer: 2 líneas fijas.
- */
+function useDateLabel() {
+  return new Intl.DateTimeFormat('es-ES', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+  }).format(new Date());
+}
+
+// ─── Tarjeta compacta de acceso rápido (icono + label) ───────────────────────
+function QuickTile({ tile }: { tile: PanelTile }) {
+  const Icon = tile.Icon;
+  return (
+    <Link
+      href={panelHref(tile)}
+      className="flex flex-col items-center gap-1.5 select-none touch-manipulation outline-none min-w-[4.5rem]"
+    >
+      <div
+        className={[
+          'grid h-14 w-14 place-items-center rounded-2xl shadow-sm ring-1 transition-transform active:scale-95',
+          tile.blocked
+            ? 'bg-zinc-100 ring-zinc-200 text-zinc-400'
+            : 'bg-white ring-zinc-200/80 text-[#D32F2F]',
+        ].join(' ')}
+      >
+        <Icon className="h-6 w-6" strokeWidth={2} />
+      </div>
+      <span
+        className={[
+          'w-full max-w-[4.5rem] text-center text-[11px] font-medium leading-tight',
+          tile.blocked ? 'text-zinc-400' : 'text-zinc-700',
+        ].join(' ')}
+      >
+        {tile.label}
+      </span>
+    </Link>
+  );
+}
+
+// ─── Tarjeta de módulo (grid) ─────────────────────────────────────────────────
 function PanelGridCard({ tile }: { tile: PanelTile }) {
   const Icon = tile.Icon;
   return (
     <Link
       href={panelHref(tile)}
       className={[
-        'panel-ref-card-white flex flex-col rounded-[18px] bg-white px-3 py-2.5 text-left antialiased outline-none select-none touch-manipulation sm:px-3.5 sm:py-2.5',
-        PANEL_GRID_CARD_H,
-        tile.blocked ? 'panel-ref-card--blocked opacity-[0.58]' : '',
-        'focus-visible:ring-2 focus-visible:ring-[#D32F2F]/35 focus-visible:ring-offset-2 focus-visible:ring-offset-[#f5f5f7]',
+        'flex items-center gap-3 rounded-2xl bg-white px-3.5 py-3 text-left antialiased outline-none select-none touch-manipulation shadow-sm ring-1 ring-zinc-200/80 transition-transform active:scale-[0.98]',
+        tile.blocked ? 'opacity-50' : '',
+        'focus-visible:ring-2 focus-visible:ring-[#D32F2F]/35',
       ].join(' ')}
     >
-      <div className="flex min-h-0 flex-1 items-center gap-2.5 sm:gap-3">
-        <div className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-[#D32F2F]/12 text-[#D32F2F] ring-1 ring-[#D32F2F]/10">
-          <Icon className="h-6 w-6" strokeWidth={2} />
-        </div>
-        <div className="min-w-0 flex-1 self-center">
-          <p className="line-clamp-1 text-sm font-semibold leading-tight tracking-tight text-zinc-900">{tile.label}</p>
-          <p className="mt-0.5 h-[2.4em] max-h-[2.4em] min-h-[2.4em] line-clamp-2 overflow-hidden text-xs font-normal leading-[1.2] text-zinc-500">
-            {tile.sub}
-          </p>
-        </div>
-        <ChevronRight
-          className="h-5 w-5 shrink-0 self-center text-[#D32F2F]"
-          strokeWidth={2.25}
-          aria-hidden
-        />
+      <div
+        className={[
+          'grid h-10 w-10 shrink-0 place-items-center rounded-xl',
+          tile.blocked ? 'bg-zinc-100 text-zinc-400' : 'bg-[#D32F2F]/10 text-[#D32F2F]',
+        ].join(' ')}
+      >
+        <Icon className="h-5 w-5" strokeWidth={2} />
       </div>
-      <div className="mt-2.5 flex shrink-0 justify-center">
-        <ChefOneGlowLine className="w-14 sm:w-16" />
+      <div className="min-w-0 flex-1">
+        <p className="line-clamp-1 text-[13px] font-semibold leading-tight text-zinc-900">{tile.label}</p>
+        <p className="mt-0.5 line-clamp-1 text-[11px] leading-tight text-zinc-400">{tile.sub}</p>
       </div>
+      <ChevronRight className="h-4 w-4 shrink-0 text-zinc-300" strokeWidth={2.5} aria-hidden />
     </Link>
   );
 }
 
+// ─── Tarjeta destacada Pedidos ────────────────────────────────────────────────
 function PanelFeaturedPedidosDark({
   tile,
 }: {
@@ -106,23 +135,20 @@ function PanelFeaturedPedidosDark({
     <Link
       href={tile.blocked ? '/planes' : tile.href}
       className={[
-        'panel-ref-card-dark flex flex-col rounded-[18px] bg-gradient-to-br from-zinc-900 via-zinc-950 to-black px-3.5 py-3 text-left text-white antialiased outline-none select-none touch-manipulation sm:px-3.5',
-        tile.blocked ? 'panel-ref-card--blocked opacity-[0.58]' : '',
-        'focus-visible:ring-2 focus-visible:ring-white/40 focus-visible:ring-offset-2 focus-visible:ring-offset-[#f5f5f7]',
+        'flex items-center gap-3.5 rounded-2xl bg-gradient-to-br from-zinc-900 via-zinc-950 to-black px-4 py-3.5 text-left text-white antialiased outline-none select-none touch-manipulation shadow-md transition-transform active:scale-[0.99]',
+        tile.blocked ? 'opacity-50' : '',
+        'focus-visible:ring-2 focus-visible:ring-white/40',
       ].join(' ')}
     >
-      <div className="flex items-center gap-3">
-        <div className="grid h-14 w-14 shrink-0 place-items-center rounded-2xl bg-white/10 ring-1 ring-white/10">
-          <Icon className="h-7 w-7 text-[#D32F2F]" strokeWidth={2} />
-        </div>
-        <div className="min-w-0 flex-1">
-          <p className="text-[1.02rem] font-semibold leading-[1.2] tracking-tight">{tile.label}</p>
-          <p className="mt-0.5 text-sm font-normal leading-tight text-zinc-400">{tile.sub}</p>
-        </div>
-        <ChevronRight className="h-5 w-5 shrink-0 text-[#D32F2F]" strokeWidth={2.25} aria-hidden />
+      <div className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-white/10 ring-1 ring-white/10">
+        <Icon className="h-6 w-6 text-[#D32F2F]" strokeWidth={2} />
       </div>
-      <div className="mt-2.5 flex justify-center">
-        <ChefOneGlowLine className="w-16 sm:w-20" />
+      <div className="min-w-0 flex-1">
+        <p className="text-[15px] font-bold leading-tight tracking-tight">{tile.label}</p>
+        <p className="mt-0.5 text-[12px] text-zinc-400">{tile.sub}</p>
+      </div>
+      <div className="flex flex-col items-end gap-1">
+        <ChevronRight className="h-5 w-5 text-[#D32F2F]" strokeWidth={2.25} aria-hidden />
       </div>
     </Link>
   );
@@ -131,6 +157,9 @@ function PanelFeaturedPedidosDark({
 export default function PanelControlPage() {
   const { localCode, localName, localId, email, profileRole, profileReady, isCentralKitchen, plan } = useAuth();
   const role = profileRole ?? 'staff';
+  const greeting = useGreeting();
+  const dateLabel = useDateLabel();
+
   const isBlockedByPlan = React.useCallback(
     (module: PlanModule) => {
       if (!profileReady || !profileRole) return false;
@@ -138,6 +167,7 @@ export default function PanelControlPage() {
     },
     [plan, profileReady, profileRole],
   );
+
   const showCocinaCentral = canAccessCocinaCentralModule(profileRole);
   const showPedidos = canAccessPedidos(localCode, email, localName, localId) && canAccessPedidosByRole(role);
   const showPedidosCocina = canPlaceCentralSupplyOrder(isCentralKitchen, localId);
@@ -147,129 +177,84 @@ export default function PanelControlPage() {
   const showChat = canAccessChat(role);
 
   const mermas: PanelTile = {
-    id: 'mermas',
-    href: '/dashboard',
-    label: 'Mermas',
-    sub: 'Registro y seguimiento en tiempo real',
-    Icon: BookOpen,
-    blocked: false,
+    id: 'mermas', href: '/dashboard', label: 'Mermas',
+    sub: 'Registro y seguimiento', Icon: BookOpen, blocked: false,
   };
   const appcc: PanelTile = {
-    id: 'appcc',
-    href: '/appcc',
-    label: 'APPCC',
-    sub: 'Controles, registros y trazabilidad',
-    Icon: ShieldCheck,
-    blocked: isBlockedByPlan('appcc'),
+    id: 'appcc', href: '/appcc', label: 'APPCC',
+    sub: 'Controles y registros', Icon: ShieldCheck, blocked: isBlockedByPlan('appcc'),
   };
   const checklist: PanelTile = {
-    id: 'checklist',
-    href: '/checklist',
-    label: 'Check list',
-    sub: 'Listas y ejecución diaria',
-    Icon: ListChecks,
-    blocked: isBlockedByPlan('checklist'),
+    id: 'checklist', href: '/checklist', label: 'Check list',
+    sub: 'Listas y ejecución', Icon: ListChecks, blocked: isBlockedByPlan('checklist'),
   };
   const produccion: PanelTile = {
-    id: 'produccion',
-    href: '/produccion',
-    label: 'Producción',
-    sub: 'Planes y ejecución en cocina',
-    Icon: Factory,
-    blocked: isBlockedByPlan('produccion'),
+    id: 'produccion', href: '/produccion', label: 'Producción',
+    sub: 'Planes y ejecución', Icon: Factory, blocked: isBlockedByPlan('produccion'),
   };
   const servicio: PanelTile = {
-    id: 'servicio',
-    href: '/servicio',
-    label: 'Servicio',
-    sub: 'Carta y producción del día',
-    Icon: Soup,
-    blocked: isBlockedByPlan('servicio'),
+    id: 'servicio', href: '/servicio', label: 'Servicio',
+    sub: 'Carta y producción', Icon: Soup, blocked: isBlockedByPlan('servicio'),
   };
   const consumoInterno: PanelTile = {
-    id: 'comida-personal',
-    href: '/comida-personal',
-    label: 'Consumo interno',
-    sub: 'Comida del equipo',
-    Icon: UtensilsCrossed,
-    blocked: isBlockedByPlan('comida_personal'),
+    id: 'comida-personal', href: '/comida-personal', label: 'Consumos',
+    sub: 'Comida del equipo', Icon: UtensilsCrossed, blocked: isBlockedByPlan('comida_personal'),
   };
   const pedirCentral: PanelTile = {
-    id: 'pedidos-cocina',
-    href: '/pedidos-cocina',
-    label: 'Pedir a central',
-    sub: 'Pedidos a cocina central',
-    Icon: Package,
-    blocked: false,
+    id: 'pedidos-cocina', href: '/pedidos-cocina', label: 'Pedir a central',
+    sub: 'Pedidos a cocina central', Icon: Package, blocked: false,
   };
   const cocinaCentral: PanelTile = {
-    id: 'cocina-central',
-    href: '/cocina-central',
-    label: 'Cocina central',
-    sub: 'Gestión de sede central',
-    Icon: ChefHat,
-    blocked: isBlockedByPlan('cocina_central'),
+    id: 'cocina-central', href: '/cocina-central', label: 'Cocina central',
+    sub: 'Gestión de sede central', Icon: ChefHat, blocked: isBlockedByPlan('cocina_central'),
   };
   const horarios: PanelTile = {
-    id: 'personal',
-    href: '/personal',
-    label: 'Horarios',
-    sub: 'Equipo, turnos y fichaje',
-    Icon: CalendarDays,
-    blocked: isBlockedByPlan('personal'),
+    id: 'personal', href: '/personal', label: 'Horarios',
+    sub: 'Equipo, turnos y fichaje', Icon: CalendarDays, blocked: isBlockedByPlan('personal'),
   };
   const inventarioTile: PanelTile = {
-    id: 'inventario',
-    href: '/inventario',
-    label: 'Inventario',
-    sub: 'Stock y movimientos',
-    Icon: ClipboardList,
-    blocked: !showInventario || isBlockedByPlan('inventario'),
+    id: 'inventario', href: '/inventario', label: 'Inventario',
+    sub: 'Stock y movimientos', Icon: ClipboardList, blocked: !showInventario || isBlockedByPlan('inventario'),
   };
   const chat: PanelTile = {
-    id: 'chat',
-    href: '/chat',
-    label: 'Chat',
-    sub: 'Mensajes del equipo',
-    Icon: MessageCircle,
-    blocked: !showChat || isBlockedByPlan('chat'),
+    id: 'chat', href: '/chat', label: 'Chat',
+    sub: 'Mensajes del equipo', Icon: MessageCircle, blocked: !showChat || isBlockedByPlan('chat'),
   };
   const escandallos: PanelTile = {
-    id: 'escandallos',
-    href: '/escandallos',
-    label: 'Escandallos',
-    sub: 'Recetas y costes',
-    Icon: Calculator,
-    blocked: !showEscandallos || isBlockedByPlan('escandallos'),
+    id: 'escandallos', href: '/escandallos', label: 'Escandallos',
+    sub: 'Recetas y costes', Icon: Calculator, blocked: !showEscandallos || isBlockedByPlan('escandallos'),
   };
   const finanzasTile: PanelTile = {
-    id: 'finanzas',
-    href: '/finanzas',
-    label: 'Finanzas',
-    sub: 'Ventas, márgenes y análisis por local',
-    Icon: BarChart3,
-    blocked: isBlockedByPlan('finanzas'),
+    id: 'finanzas', href: '/finanzas', label: 'Finanzas',
+    sub: 'Ventas, márgenes y análisis', Icon: BarChart3, blocked: isBlockedByPlan('finanzas'),
   };
 
+  // ─── Accesos rápidos (icono compacto, scroll horizontal) ──────────────────
+  const quickTiles: PanelTile[] = [
+    mermas,
+    produccion,
+    inventarioTile,
+    checklist,
+    appcc,
+    horarios,
+    ...(showChat ? [chat] : []),
+    ...(showEscandallos ? [escandallos] : []),
+    ...(canAccessComidaPersonal(role) ? [consumoInterno] : []),
+  ].filter(Boolean);
+
+  // ─── Grid de módulos secundarios ──────────────────────────────────────────
   let row3Right: PanelTile | null = null;
-  if (canAccessComidaPersonal(role)) {
-    row3Right = consumoInterno;
-  } else if (showPedidosCocina) {
-    row3Right = pedirCentral;
-  } else if (showCocinaCentral) {
-    row3Right = cocinaCentral;
-  }
+  if (canAccessComidaPersonal(role)) row3Right = consumoInterno;
+  else if (showPedidosCocina) row3Right = pedirCentral;
+  else if (showCocinaCentral) row3Right = cocinaCentral;
 
   const row3UsesCocina = row3Right?.id === 'cocina-central';
   const row3UsesPedCocina = row3Right?.id === 'pedidos-cocina';
 
   let row4Right: PanelTile = inventarioTile;
   if (!showInventario) {
-    if (showCocinaCentral && !row3UsesCocina) {
-      row4Right = cocinaCentral;
-    } else if (showPedidosCocina && !row3UsesPedCocina) {
-      row4Right = pedirCentral;
-    }
+    if (showCocinaCentral && !row3UsesCocina) row4Right = cocinaCentral;
+    else if (showPedidosCocina && !row3UsesPedCocina) row4Right = pedirCentral;
   }
 
   const cocinaInGrid = row3UsesCocina || row4Right.id === 'cocina-central';
@@ -281,29 +266,12 @@ export default function PanelControlPage() {
 
   let row6Left: PanelTile | null = null;
   let row6Right: PanelTile | null = null;
-  /** Fila 6: hasta 2 módulos; Finanzas usa la misma tarjeta que el resto (mitad de ancho). */
-  if (needCocina && needFinanzas) {
-    row6Left = cocinaCentral;
-    row6Right = finanzasTile;
-  } else if (needCocina && needPedir) {
-    row6Left = cocinaCentral;
-    row6Right = pedirCentral;
-  } else if (needPedir && needFinanzas) {
-    row6Left = pedirCentral;
-    row6Right = finanzasTile;
-  } else if (needCocina) {
-    row6Left = cocinaCentral;
-    if (needPedir) {
-      row6Right = pedirCentral;
-    }
-  } else if (needPedir) {
-    row6Left = pedirCentral;
-    if (needFinanzas) {
-      row6Right = finanzasTile;
-    }
-  } else if (needFinanzas) {
-    row6Left = finanzasTile;
-  }
+  if (needCocina && needFinanzas) { row6Left = cocinaCentral; row6Right = finanzasTile; }
+  else if (needCocina && needPedir) { row6Left = cocinaCentral; row6Right = pedirCentral; }
+  else if (needPedir && needFinanzas) { row6Left = pedirCentral; row6Right = finanzasTile; }
+  else if (needCocina) { row6Left = cocinaCentral; if (needPedir) row6Right = pedirCentral; }
+  else if (needPedir) { row6Left = pedirCentral; if (needFinanzas) row6Right = finanzasTile; }
+  else if (needFinanzas) { row6Left = finanzasTile; }
 
   const gridRows: [PanelTile | null, PanelTile | null][] = [
     [mermas, appcc],
@@ -315,28 +283,65 @@ export default function PanelControlPage() {
   ];
 
   const pedidosBlocked = !showPedidos || isBlockedByPlan('pedidos');
-  const featuredPedidos: Pick<PanelTile, 'href' | 'label' | 'sub' | 'Icon' | 'blocked'> = {
-    href: '/pedidos',
-    label: 'Pedidos',
-    sub: 'Proveedores y recepción',
-    Icon: ShoppingCart,
-    blocked: pedidosBlocked,
+  const featuredPedidos = {
+    href: '/pedidos', label: 'Pedidos', sub: 'Proveedores y recepción',
+    Icon: ShoppingCart, blocked: pedidosBlocked,
   };
 
+  const displayName = localName ?? localCode ?? '';
+
   return (
-    <div className="-mx-4 bg-[#f5f5f7] px-4 pb-10 pt-2 sm:-mx-5 sm:px-5 md:-mx-6 md:px-6 lg:-mx-8 lg:px-8">
-      <div className="mx-auto max-w-full space-y-2.5 sm:max-w-2xl md:max-w-4xl lg:max-w-5xl sm:space-y-2.5">
+    <div className="-mx-4 min-h-screen bg-[#f5f5f7] px-4 pb-12 pt-3 sm:-mx-5 sm:px-5 md:-mx-6 md:px-6">
+      <div className="mx-auto max-w-full space-y-3 sm:max-w-2xl md:max-w-4xl">
+
+        {/* ── Saludo ─────────────────────────────────────────────── */}
+        <div className="rounded-2xl bg-white px-4 py-3.5 shadow-sm ring-1 ring-zinc-200/80">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-[17px] font-bold tracking-tight text-zinc-900">
+                {greeting.text}, equipo {greeting.emoji}
+              </p>
+              {displayName && (
+                <p className="mt-0.5 text-[13px] font-medium text-zinc-400">{displayName}</p>
+              )}
+            </div>
+            <div className="text-right">
+              <p className="text-[11px] capitalize text-zinc-400">{dateLabel}</p>
+            </div>
+          </div>
+        </div>
+
+        {/* ── Checklist guiado (si aplica) ───────────────────────── */}
         <ProductoGuiadoChecklist />
 
-        {showPedidos ? <PanelFeaturedPedidosDark tile={featuredPedidos} /> : null}
+        {/* ── Pedidos destacado ───────────────────────────────────── */}
+        {showPedidos && <PanelFeaturedPedidosDark tile={featuredPedidos} />}
 
-        <div className="flex flex-col gap-y-2.5 sm:gap-y-2.5">
-          {gridRows.map(([left, right], idx) => (
-            <div key={idx} className="grid grid-cols-2 gap-x-2.5 gap-y-2.5 sm:gap-x-3 sm:gap-y-2.5">
-              {left ? <PanelGridCard tile={left} /> : <PanelGridEmpty />}
-              {right ? <PanelGridCard tile={right} /> : <PanelGridEmpty />}
-            </div>
-          ))}
+        {/* ── Accesos rápidos (scroll horizontal) ─────────────────── */}
+        <div>
+          <p className="mb-2 px-0.5 text-[11px] font-semibold uppercase tracking-widest text-zinc-400">
+            Accesos rápidos
+          </p>
+          <div className="-mx-4 flex gap-3 overflow-x-auto px-4 pb-1 sm:-mx-5 sm:px-5">
+            {quickTiles.map((tile) => (
+              <QuickTile key={tile.id} tile={tile} />
+            ))}
+          </div>
+        </div>
+
+        {/* ── Todos los módulos ────────────────────────────────────── */}
+        <div>
+          <p className="mb-2 px-0.5 text-[11px] font-semibold uppercase tracking-widest text-zinc-400">
+            Todos los módulos
+          </p>
+          <div className="flex flex-col gap-y-2">
+            {gridRows.map(([left, right], idx) => (
+              <div key={idx} className="grid grid-cols-2 gap-2">
+                {left ? <PanelGridCard tile={left} /> : <div />}
+                {right ? <PanelGridCard tile={right} /> : <div />}
+              </div>
+            ))}
+          </div>
         </div>
 
       </div>
