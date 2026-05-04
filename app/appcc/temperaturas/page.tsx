@@ -132,8 +132,11 @@ function RegistradorSelector({
 
   if (!value || editing) {
     return (
-      <div className="rounded-2xl bg-white px-4 py-4 shadow-sm ring-1 ring-zinc-200/80">
-        <p className="text-[11px] font-bold uppercase tracking-wider text-zinc-400">¿Quién registra hoy?</p>
+      <div className="rounded-2xl bg-white px-4 py-4 shadow-sm ring-1 ring-[#D32F2F]/40">
+        <div className="flex items-center gap-2 mb-3">
+          <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#D32F2F] text-[10px] font-black text-white">!</span>
+          <p className="text-[12px] font-bold text-[#D32F2F]">Indica quién registra para continuar</p>
+        </div>
         {names.length > 0 && !editing ? (
           <div className="mt-3 flex flex-wrap gap-2">
             {names.map((n) => (
@@ -723,7 +726,7 @@ function AppccTemperaturasInner() {
     return result;
   }, [byZone, bySlot]);
 
-  const disabled = !localId || !profileReady || !supabaseOk || loading;
+  const disabled = !localId || !profileReady || !supabaseOk || loading || !registrador;
   const localLabel = localName ?? localCode ?? '—';
 
   const handleDownloadPdf = async () => {
@@ -916,6 +919,11 @@ function AppccTemperaturasInner() {
           )}
 
           {/* Tarjetas de equipos */}
+          {!registrador && (
+            <p className="rounded-xl border border-zinc-200 bg-zinc-50 py-3 text-center text-[12px] font-semibold text-zinc-400">
+              Indica quién registra para poder añadir lecturas
+            </p>
+          )}
           <div className="space-y-3">
             {currentZoneUnits.length === 0 ? (
               <p className="py-4 text-center text-sm text-zinc-400">No hay equipos en este sector.</p>
