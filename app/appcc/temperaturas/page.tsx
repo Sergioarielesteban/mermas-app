@@ -3,13 +3,12 @@
 import Link from 'next/link';
 import React, { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { Download, Thermometer } from 'lucide-react';
+import { Check, ChevronDown, Download, Minus, Plus, Thermometer, X } from 'lucide-react';
 import AppccCompactHero from '@/components/AppccCompactHero';
 import { useAuth } from '@/components/AuthProvider';
 import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
 import { downloadAppccTemperaturasPdf, downloadAppccTemperaturasRangePdf } from '@/lib/appcc-pdf';
 import {
-  APPCC_SLOT_LABEL,
   APPCC_UNIT_TYPE_LABEL,
   APPCC_ZONE_LABEL,
   type AppccColdUnitRow,
@@ -30,6 +29,20 @@ import {
 import { notifyAppccAlerta } from '@/services/notifications';
 
 const PDF_MAX_DAYS = 120;
+const LS_REGISTRADOR = 'appcc_registrador';
+const LS_REGISTRADORES = 'appcc_registradores';
+const MAX_NAMES = 6;
+
+const SLOT_DISPLAY: Record<AppccSlot, string> = {
+  manana: 'Mañana',
+  tarde: 'Tarde',
+  noche: 'Noche',
+};
+
+/** Solo dos turnos al día (mañana y noche); «tarde» queda en BD por lecturas antiguas. */
+const TEMP_REGISTRO_SLOTS: AppccSlot[] = ['manana', 'noche'];
+
+// ─── Helpers ────────────────────────────────────────────────────────────────
 
 function sanitizeTempInput(raw: string): string {
   const plain = String(raw).replace(/\s+/g, '').replace(',', '.').replace(/[^0-9.]/g, '');
@@ -51,9 +64,13 @@ function parseTempInput(raw: string, unitType: AppccColdUnitRow['unit_type']): n
   return unitType === 'congelador' ? -abs : abs;
 }
 
-function initialTempFieldValue(unit: AppccColdUnitRow, reading: AppccReadingRow | undefined): string {
-  if (reading != null) return sanitizeTempInput(String(Math.abs(reading.temperature_c)));
-  return '';
+function formatHourMin(isoString: string): string {
+  try {
+    const d = new Date(isoString);
+    return d.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', hour12: false });
+  } catch {
+    return '';
+  }
 }
 
 function formatSignedTempLabel(temp: number): string {
@@ -61,14 +78,128 @@ function formatSignedTempLabel(temp: number): string {
   return `${fixed} °C`;
 }
 
-/** Solo dos turnos al día (mañana y noche); «tarde» queda en BD por lecturas antiguas. */
-const TEMP_REGISTRO_SLOTS: AppccSlot[] = ['manana', 'noche'];
+function stepTemp(current: string, delta: number, unitType: AppccColdUnitRow['unit_type']): string {
+  const parsed = parseFloat(current.replace(',', '.'));
+  const base = isNaN(parsed) ? (unitType === 'congelador' ? 18 : 4) : parsed;
+  const next = Math.round((base + delta) * 10) / 10;
+  return String(next).replace('.', ',');
+}
 
-const SLOT_DISPLAY: Record<AppccSlot, string> = {
-  manana: 'Mañana',
-  tarde: 'Tarde',
-  noche: 'Noche',
-};
+// ─── localStorage helpers ────────────────────────────────────────────────────
+
+function loadRegistrador(): string {
+  if (typeof window === 'undefined') return '';
+  return localStorage.getItem(LS_REGISTRADOR) ?? '';
+}
+
+function loadRegistradores(): string[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    return JSON.parse(localStorage.getItem(LS_REGISTRADORES) ?? '[]');
+  } catch {
+    return [];
+  }
+}
+
+function saveRegistrador(name: string) {
+  localStorage.setItem(LS_REGISTRADOR, name);
+  const existing = loadRegistradores();
+  const updated = [name, ...existing.filter((n) => n !== name)].slice(0, MAX_NAMES);
+  localStorage.setItem(LS_REGISTRADORES, JSON.stringify(updated));
+}
+
+// ─── RegistradorSelector ─────────────────────────────────────────────────────
+
+function RegistradorSelector({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (name: string) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [inputVal, setInputVal] = useState('');
+  const names = loadRegistradores();
+
+  const commit = (name: string) => {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    saveRegistrador(trimmed);
+    onChange(trimmed);
+    setEditing(false);
+    setInputVal('');
+  };
+
+  if (!value || editing) {
+    return (
+      <div className="rounded-2xl bg-white px-4 py-4 shadow-sm ring-1 ring-zinc-200/80">
+        <p className="text-[11px] font-bold uppercase tracking-wider text-zinc-400">¿Quién registra hoy?</p>
+        {names.length > 0 && !editing ? (
+          <div className="mt-3 flex flex-wrap gap-2">
+            {names.map((n) => (
+              <button
+                key={n}
+                type="button"
+                onClick={() => { saveRegistrador(n); onChange(n); }}
+                className="rounded-full bg-zinc-100 px-3 py-1.5 text-[13px] font-semibold text-zinc-800 transition hover:bg-[#D32F2F] hover:text-white"
+              >
+                {n}
+              </button>
+            ))}
+            <button
+              type="button"
+              onClick={() => setEditing(true)}
+              className="rounded-full bg-zinc-50 px-3 py-1.5 text-[13px] font-semibold text-zinc-400 ring-1 ring-zinc-200 transition hover:bg-zinc-100"
+            >
+              + Otro
+            </button>
+          </div>
+        ) : (
+          <div className="mt-3 flex gap-2">
+            <input
+              autoFocus
+              type="text"
+              value={inputVal}
+              onChange={(e) => setInputVal(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') commit(inputVal); if (e.key === 'Escape') { setEditing(false); setInputVal(''); } }}
+              placeholder="Tu nombre o iniciales…"
+              className="h-10 flex-1 rounded-xl border border-zinc-200 bg-zinc-50 px-3 text-sm text-zinc-900 outline-none focus:border-[#D32F2F]/60 focus:ring-1 focus:ring-[#D32F2F]/25"
+            />
+            <button
+              type="button"
+              onClick={() => commit(inputVal)}
+              disabled={!inputVal.trim()}
+              className="h-10 rounded-xl bg-[#D32F2F] px-4 text-[13px] font-bold text-white disabled:opacity-40"
+            >
+              Listo
+            </button>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex items-center gap-2 rounded-2xl bg-white px-4 py-3 shadow-sm ring-1 ring-zinc-200/80">
+      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-emerald-500/10">
+        <Check className="h-4 w-4 text-emerald-600" aria-hidden />
+      </div>
+      <div className="min-w-0 flex-1">
+        <p className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">Registrando como</p>
+        <p className="text-[15px] font-bold text-zinc-900">{value}</p>
+      </div>
+      <button
+        type="button"
+        onClick={() => { setEditing(true); setInputVal(''); }}
+        className="text-[11px] font-bold text-zinc-400 underline underline-offset-2 hover:text-zinc-600"
+      >
+        Cambiar
+      </button>
+    </div>
+  );
+}
+
+// ─── SlotEditor ──────────────────────────────────────────────────────────────
 
 function SlotEditor({
   unit,
@@ -78,6 +209,7 @@ function SlotEditor({
   onSaved,
   onDeleted,
   disabled,
+  registrador,
 }: {
   unit: AppccColdUnitRow;
   slot: AppccSlot;
@@ -86,51 +218,41 @@ function SlotEditor({
   onSaved: (row: AppccReadingRow) => void;
   onDeleted: (coldUnitId: string, slot: AppccSlot) => void;
   disabled: boolean;
+  registrador: string;
 }) {
   const { localId, userId: authUserId } = useAuth();
-  const [value, setValue] = useState(() => initialTempFieldValue(unit, reading));
-  const [notes, setNotes] = useState(reading?.notes ?? '');
+  const [open, setOpen] = useState(false);
+  const [value, setValue] = useState('');
+  const [notes, setNotes] = useState('');
+  const [showNotes, setShowNotes] = useState(false);
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  /** Tras Guardar OK: mostrar «Guardado» al instante sin esperar al refetch del padre. */
-  const [justSaved, setJustSaved] = useState(false);
+  const [savedMeta, setSavedMeta] = useState<{ name: string; time: string } | null>(null);
 
   useEffect(() => {
-    setValue(initialTempFieldValue(unit, reading));
-    setNotes(reading?.notes ?? '');
-    setJustSaved(false);
-  }, [reading, unit]);
+    setOpen(false);
+    setValue('');
+    setNotes('');
+    setErr(null);
+    setSavedMeta(null);
+  }, [reading?.id, dateKey]);
 
-  const tInput = parseTempInput(value, unit.unit_type);
+  const tempParsed = parseTempInput(value, unit.unit_type);
   const hasLimits = unit.temp_min_c != null || unit.temp_max_c != null;
-  const effectiveTemp = tInput !== null ? tInput : (reading?.temperature_c ?? null);
-  const out =
-    effectiveTemp !== null &&
-    hasLimits &&
-    isTempOutOfRange(effectiveTemp, unit.temp_min_c, unit.temp_max_c);
-
-  const matchesServerReading =
-    reading != null &&
-    tInput !== null &&
-    Math.round(reading.temperature_c * 100) === Math.round(tInput * 100) &&
-    notes.trim() === (reading.notes ?? '').trim();
-
-  const isSavedSynced = justSaved || matchesServerReading;
+  const effectiveTemp = tempParsed ?? reading?.temperature_c ?? null;
+  const outOfRange =
+    effectiveTemp !== null && hasLimits && isTempOutOfRange(effectiveTemp, unit.temp_min_c, unit.temp_max_c);
 
   const remove = async () => {
     if (!reading) return;
     setErr(null);
     const supabase = getSupabaseClient();
-    if (!supabase || !localId) {
-      setErr('Sesión o Supabase no disponible.');
-      return;
-    }
+    if (!supabase || !localId) { setErr('Sesión no disponible.'); return; }
     setSaving(true);
     try {
       await deleteAppccReading(supabase, reading.id);
-      setValue(initialTempFieldValue(unit, undefined));
-      setNotes('');
-      setJustSaved(false);
+      setOpen(false);
+      setSavedMeta(null);
       onDeleted(unit.id, slot);
     } catch (e) {
       setErr(e instanceof Error ? e.message : 'Error al quitar.');
@@ -142,35 +264,26 @@ function SlotEditor({
   const save = async () => {
     setErr(null);
     const supabase = getSupabaseClient();
-    if (!supabase || !localId) {
-      setErr('Sesión o Supabase no disponible.');
-      return;
-    }
+    if (!supabase || !localId) { setErr('Sesión no disponible.'); return; }
     const t = parseTempInput(value, unit.unit_type);
-    if (t === null) {
-      setErr('Introduce temperatura en °C.');
-      return;
-    }
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user?.id) {
-      setErr('Usuario no identificado.');
-      return;
-    }
+    if (t === null) { setErr('Introduce temperatura.'); return; }
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user?.id) { setErr('Usuario no identificado.'); return; }
     setSaving(true);
     try {
+      const notesValue = notes.trim()
+        ? (registrador ? `[${registrador}] ${notes.trim()}` : notes.trim())
+        : (registrador ? `[${registrador}]` : '');
       const row = await upsertAppccReading(supabase, {
         localId,
         coldUnitId: unit.id,
         readingDate: dateKey,
         slot,
         temperatureC: t,
-        notes: notes.trim(),
+        notes: notesValue,
         userId: user.id,
       });
-      const limitsOk = unit.temp_min_c != null || unit.temp_max_c != null;
-      if (limitsOk && isTempOutOfRange(t, unit.temp_min_c, unit.temp_max_c) && localId) {
+      if (hasLimits && isTempOutOfRange(t, unit.temp_min_c, unit.temp_max_c) && localId) {
         void notifyAppccAlerta(supabase, {
           localId,
           userId: user.id ?? authUserId,
@@ -179,7 +292,8 @@ function SlotEditor({
           dateKey,
         });
       }
-      setJustSaved(true);
+      setSavedMeta({ name: registrador || 'Registrado', time: formatHourMin(row.recorded_at) });
+      setOpen(false);
       onSaved(row);
     } catch (e) {
       setErr(e instanceof Error ? e.message : 'Error al guardar.');
@@ -188,114 +302,207 @@ function SlotEditor({
     }
   };
 
-  /** Sincroniza con el servidor al salir del cuadro (temp o notas) o al pulsar Guardar; no mientras escribes. */
-  const flushSlot = async () => {
-    if (disabled || saving) return;
-    setErr(null);
+  const slotLabel = SLOT_DISPLAY[slot];
 
-    const t = parseTempInput(value, unit.unit_type);
-    const hasReading = Boolean(reading?.id);
-    const sameAsServer =
-      reading != null &&
-      t != null &&
-      Math.round(reading.temperature_c * 100) === Math.round(t * 100) &&
-      notes.trim() === (reading.notes ?? '').trim();
+  // ── Caso: ya hay lectura ──────────────────────────────────────────────────
+  if (reading && !open) {
+    const displayName = savedMeta?.name ?? parseRegistradorFromNotes(reading.notes);
+    const displayTime = savedMeta?.time ?? formatHourMin(reading.recorded_at);
+    const tempLabel = formatSignedTempLabel(reading.temperature_c);
 
-    if (sameAsServer) {
-      setJustSaved(true);
-      return;
-    }
-
-    if (t === null) {
-      setJustSaved(false);
-      if (!hasReading) return;
-      await remove();
-      return;
-    }
-
-    await save();
-  };
-
-  return (
-    <div className="min-w-0 rounded-lg border border-zinc-200/80 bg-zinc-50/50 px-2 py-2 ring-1 ring-zinc-100/90">
-      <div className="flex items-center justify-between gap-2">
-        <span
-          className="inline-flex items-center rounded-md bg-white px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wide text-zinc-700 ring-1 ring-zinc-200/90"
-          title={APPCC_SLOT_LABEL[slot]}
+    return (
+      <div className="flex flex-col gap-1">
+        <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">{slotLabel}</span>
+        <div
+          className={[
+            'flex items-center justify-between rounded-xl px-3 py-2.5 ring-1',
+            outOfRange
+              ? 'bg-red-50 ring-red-200'
+              : 'bg-emerald-50 ring-emerald-200/80',
+          ].join(' ')}
         >
-          {SLOT_DISPLAY[slot]}
-        </span>
-        {out ? (
-          <span className="text-[9px] font-bold uppercase tracking-wide text-red-600">Fuera de rango</span>
-        ) : null}
-      </div>
-      <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-        <div className="flex min-w-0 flex-1 items-center gap-1">
-          <input
-            type="text"
-            inputMode="decimal"
-            value={value}
-            onChange={(e) => {
-              setJustSaved(false);
-              setValue(sanitizeTempInput(e.target.value));
+          <div className="flex items-center gap-2">
+            <Check
+              className={['h-4 w-4 shrink-0', outOfRange ? 'text-red-500' : 'text-emerald-500'].join(' ')}
+              aria-hidden
+            />
+            <div>
+              <p
+                className={[
+                  'text-[15px] font-black tabular-nums leading-none',
+                  outOfRange ? 'text-red-700' : 'text-emerald-700',
+                ].join(' ')}
+              >
+                {tempLabel}
+              </p>
+              {outOfRange && (
+                <p className="mt-0.5 text-[9px] font-bold uppercase tracking-wide text-red-600">Fuera de rango</p>
+              )}
+              {displayName && (
+                <p className="mt-0.5 text-[10px] font-medium text-zinc-500">
+                  {displayName}{displayTime ? ` · ${displayTime}` : ''}
+                </p>
+              )}
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              setValue(sanitizeTempInput(String(Math.abs(reading.temperature_c))));
+              setNotes(parseRealNotesFromNotes(reading.notes));
+              setOpen(true);
             }}
-            onKeyDown={(e) => {
-              if (e.key === '-' || e.key === '+' || e.key.toLowerCase() === 'e') e.preventDefault();
-            }}
-            onBlur={() => {
-              void flushSlot();
-            }}
-            disabled={disabled || saving}
-            placeholder={unit.unit_type === 'congelador' ? 'Ej. 16' : 'Ej. 4,5'}
-            title={
-              unit.unit_type === 'congelador'
-                ? 'Congelador: escribe solo números; el signo negativo se aplica automáticamente.'
-                : 'Número con coma o punto decimal (ej. 4,5 °C)'
-            }
-            className={[
-              'h-8 min-w-[4rem] flex-1 rounded-lg border border-zinc-200 bg-white px-2 text-center text-base font-bold tabular-nums text-zinc-900 outline-none transition focus:border-[#D32F2F]/60 focus:ring-1 focus:ring-[#D32F2F]/25 sm:min-w-[4.5rem]',
-            ].join(' ')}
-            aria-label={`Temperatura ${SLOT_DISPLAY[slot]}`}
-          />
-          <span className="text-xs font-semibold text-zinc-500">
-            {effectiveTemp == null ? '°C' : formatSignedTempLabel(effectiveTemp)}
-          </span>
+            disabled={disabled}
+            className="rounded-lg p-1.5 text-zinc-400 transition hover:bg-white/70 hover:text-zinc-600 disabled:opacity-30"
+            title="Editar lectura"
+          >
+            <ChevronDown className="h-3.5 w-3.5" aria-hidden />
+          </button>
         </div>
       </div>
-      <input
-        type="text"
-        value={notes}
-        onChange={(e) => {
-          setJustSaved(false);
-          setNotes(e.target.value);
-        }}
-        onBlur={() => {
-          void flushSlot();
-        }}
-        disabled={disabled || saving}
-        placeholder="Notas (opcional)"
-        className="mt-1.5 h-7 w-full rounded-lg border border-zinc-200 bg-white px-2 text-xs text-zinc-800 outline-none focus:ring-1 focus:ring-[#D32F2F]/25"
-      />
-      <button
-        type="button"
-        title={isSavedSynced ? 'Sincronizado con el servidor' : 'Guardar ahora'}
-        onClick={() => {
-          if (disabled || saving) return;
-          if (isSavedSynced) return;
-          void flushSlot();
-        }}
-        disabled={disabled || saving}
-        className={[
-          'mt-1.5 flex h-7 w-full items-center justify-center rounded-lg text-[10px] font-black uppercase tracking-wide text-white shadow-sm transition disabled:opacity-50',
-          isSavedSynced ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-[#D32F2F] hover:bg-[#b71c1c]',
-        ].join(' ')}
-      >
-        {saving ? '…' : isSavedSynced ? 'Guardado' : 'Guardar'}
-      </button>
-      {err ? <p className="mt-1 text-[10px] font-medium text-red-600">{err}</p> : null}
+    );
+  }
+
+  // ── Caso: sin lectura ─────────────────────────────────────────────────────
+  if (!reading && !open) {
+    return (
+      <div className="flex flex-col gap-1">
+        <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">{slotLabel}</span>
+        <button
+          type="button"
+          onClick={() => { setOpen(true); setValue(''); setErr(null); }}
+          disabled={disabled}
+          className="flex h-11 items-center justify-center gap-1.5 rounded-xl border-2 border-dashed border-zinc-200 bg-white text-[13px] font-bold text-zinc-400 transition hover:border-[#D32F2F]/60 hover:text-[#D32F2F] disabled:opacity-30"
+        >
+          <Plus className="h-4 w-4" aria-hidden />
+          Añadir
+        </button>
+      </div>
+    );
+  }
+
+  // ── Modo edición ──────────────────────────────────────────────────────────
+  return (
+    <div className="flex flex-col gap-1">
+      <div className="flex items-center justify-between">
+        <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">{slotLabel}</span>
+        <button
+          type="button"
+          onClick={() => { setOpen(false); setErr(null); }}
+          className="rounded p-0.5 text-zinc-400 hover:text-zinc-600"
+          title="Cancelar"
+        >
+          <X className="h-3.5 w-3.5" aria-hidden />
+        </button>
+      </div>
+      <div className="rounded-xl bg-zinc-50 px-3 py-3 ring-1 ring-zinc-200">
+        {/* Stepper */}
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setValue((v) => stepTemp(v, -0.5, unit.unit_type))}
+            className="flex h-9 w-9 items-center justify-center rounded-lg bg-white text-zinc-600 ring-1 ring-zinc-200 transition active:bg-zinc-100"
+          >
+            <Minus className="h-4 w-4" aria-hidden />
+          </button>
+          <div className="relative flex-1">
+            <input
+              type="text"
+              inputMode="decimal"
+              value={value}
+              onChange={(e) => setValue(sanitizeTempInput(e.target.value))}
+              onKeyDown={(e) => {
+                if (e.key === '-' || e.key === '+' || e.key.toLowerCase() === 'e') e.preventDefault();
+                if (e.key === 'Enter') void save();
+              }}
+              disabled={saving}
+              placeholder={unit.unit_type === 'congelador' ? 'Ej. 18' : 'Ej. 4'}
+              className="h-10 w-full rounded-lg border border-zinc-200 bg-white px-2 text-center text-lg font-black tabular-nums text-zinc-900 outline-none focus:border-[#D32F2F]/60 focus:ring-1 focus:ring-[#D32F2F]/25"
+              autoFocus
+            />
+            {tempParsed !== null && (
+              <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-[11px] font-bold text-zinc-400">
+                {unit.unit_type === 'congelador' ? '-' : ''}{Math.abs(tempParsed)}°C
+              </span>
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={() => setValue((v) => stepTemp(v, 0.5, unit.unit_type))}
+            className="flex h-9 w-9 items-center justify-center rounded-lg bg-white text-zinc-600 ring-1 ring-zinc-200 transition active:bg-zinc-100"
+          >
+            <Plus className="h-4 w-4" aria-hidden />
+          </button>
+        </div>
+
+        {/* Límites hint */}
+        {hasLimits && (
+          <p className="mt-1.5 text-center text-[10px] font-medium text-zinc-400">
+            Rango: {unit.temp_min_c ?? '—'} – {unit.temp_max_c ?? '—'} °C
+            {outOfRange && <span className="ml-1.5 font-bold text-red-600">⚠ Fuera de rango</span>}
+          </p>
+        )}
+
+        {/* Notas colapsables */}
+        <button
+          type="button"
+          onClick={() => setShowNotes((s) => !s)}
+          className="mt-2.5 flex w-full items-center gap-1 text-left text-[10px] font-semibold text-zinc-400 hover:text-zinc-600"
+        >
+          <Plus className={['h-3 w-3 transition-transform', showNotes ? 'rotate-45' : ''].join(' ')} aria-hidden />
+          Añadir nota (opcional)
+        </button>
+        {showNotes && (
+          <input
+            type="text"
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            placeholder="Observaciones…"
+            className="mt-1.5 h-8 w-full rounded-lg border border-zinc-200 bg-white px-2.5 text-xs text-zinc-800 outline-none focus:ring-1 focus:ring-[#D32F2F]/25"
+          />
+        )}
+
+        {err && <p className="mt-1.5 text-[10px] font-medium text-red-600">{err}</p>}
+
+        {/* Acciones */}
+        <div className="mt-3 flex gap-2">
+          {reading && (
+            <button
+              type="button"
+              onClick={() => void remove()}
+              disabled={saving}
+              className="h-9 rounded-lg bg-zinc-200 px-3 text-[12px] font-bold text-zinc-600 transition hover:bg-zinc-300 disabled:opacity-40"
+            >
+              Quitar
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => void save()}
+            disabled={saving || tempParsed === null}
+            className="h-9 flex-1 rounded-lg bg-[#D32F2F] text-[12px] font-black uppercase tracking-wide text-white shadow-sm transition hover:bg-[#b71c1c] disabled:opacity-40"
+          >
+            {saving ? '…' : 'Guardar'}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
+
+// Helpers para notas con nombre embebido
+function parseRegistradorFromNotes(notes: string | null | undefined): string {
+  if (!notes) return '';
+  const m = notes.match(/^\[(.+?)\]/);
+  return m ? m[1] : '';
+}
+
+function parseRealNotesFromNotes(notes: string | null | undefined): string {
+  if (!notes) return '';
+  return notes.replace(/^\[.+?\]\s*/, '');
+}
+
+// ─── UnitCard ────────────────────────────────────────────────────────────────
 
 function UnitCard({
   unit,
@@ -304,6 +511,7 @@ function UnitCard({
   disabled,
   onReadingSaved,
   onReadingDeleted,
+  registrador,
 }: {
   unit: AppccColdUnitRow;
   dateKey: string;
@@ -311,28 +519,50 @@ function UnitCard({
   disabled: boolean;
   onReadingSaved: (row: AppccReadingRow) => void;
   onReadingDeleted: (coldUnitId: string, slot: AppccSlot) => void;
+  registrador: string;
 }) {
   const rM = map.get(`${unit.id}:manana`);
   const rN = map.get(`${unit.id}:noche`);
 
-  const range =
-    unit.temp_min_c != null || unit.temp_max_c != null
-      ? ` · ${unit.temp_min_c ?? '—'} – ${unit.temp_max_c ?? '—'} °C`
-      : '';
+  const allDone = Boolean(rM && rN);
+  const anyDone = Boolean(rM || rN);
+  const hasOutOfRange =
+    (rM && isTempOutOfRange(rM.temperature_c, unit.temp_min_c, unit.temp_max_c)) ||
+    (rN && isTempOutOfRange(rN.temperature_c, unit.temp_min_c, unit.temp_max_c));
+
+  const statusBadge = hasOutOfRange
+    ? { label: 'REVISAR', cls: 'bg-orange-100 text-orange-700 ring-orange-200' }
+    : allDone
+    ? { label: 'OK', cls: 'bg-emerald-100 text-emerald-700 ring-emerald-200' }
+    : anyDone
+    ? { label: 'PARCIAL', cls: 'bg-amber-100 text-amber-700 ring-amber-200' }
+    : { label: 'SIN DATOS', cls: 'bg-zinc-100 text-zinc-500 ring-zinc-200' };
 
   return (
-    <div className="rounded-xl border border-zinc-200/90 bg-white px-3 py-2.5 shadow-sm ring-1 ring-zinc-100">
-      <div className="mb-2 flex items-start justify-between gap-2 border-b border-zinc-100 pb-2">
-        <div className="min-w-0">
-          <p className="font-serif text-base font-bold leading-tight text-zinc-900">{unit.name}</p>
-          <p className="mt-0.5 text-[11px] font-medium leading-snug text-zinc-500">
-            {APPCC_UNIT_TYPE_LABEL[unit.unit_type]}
-            {range}
-          </p>
+    <div className="overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-zinc-200/80">
+      {/* Header */}
+      <div className="flex items-center justify-between gap-2 px-4 py-3">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-zinc-100">
+            <Thermometer className="h-4 w-4 text-[#D32F2F]" aria-hidden />
+          </div>
+          <div className="min-w-0">
+            <p className="font-serif text-[15px] font-bold leading-tight text-zinc-900 truncate">{unit.name}</p>
+            <p className="text-[11px] font-medium text-zinc-400">{APPCC_UNIT_TYPE_LABEL[unit.unit_type]}</p>
+          </div>
         </div>
-        <Thermometer className="h-5 w-5 shrink-0 text-[#D32F2F]/80" aria-hidden />
+        <span
+          className={[
+            'shrink-0 rounded-full px-2 py-0.5 text-[9px] font-black uppercase tracking-widest ring-1',
+            statusBadge.cls,
+          ].join(' ')}
+        >
+          {statusBadge.label}
+        </span>
       </div>
-      <div className="grid grid-cols-2 gap-2">
+
+      {/* Slots */}
+      <div className="grid grid-cols-2 gap-3 border-t border-zinc-100 px-4 py-3">
         {TEMP_REGISTRO_SLOTS.map((slot) => (
           <SlotEditor
             key={slot}
@@ -343,12 +573,15 @@ function UnitCard({
             onSaved={onReadingSaved}
             onDeleted={onReadingDeleted}
             disabled={disabled}
+            registrador={registrador}
           />
         ))}
       </div>
     </div>
   );
 }
+
+// ─── Main inner component ────────────────────────────────────────────────────
 
 function AppccTemperaturasInner() {
   const searchParams = useSearchParams();
@@ -361,6 +594,13 @@ function AppccTemperaturasInner() {
   const [loading, setLoading] = useState(true);
   const [banner, setBanner] = useState<string | null>(null);
   const [pdfBusy, setPdfBusy] = useState(false);
+  const [activeZone, setActiveZone] = useState<AppccZone>('cocina');
+  const [registrador, setRegistrador] = useState<string>('');
+  const [showPdfPanel, setShowPdfPanel] = useState(false);
+
+  useEffect(() => {
+    setRegistrador(loadRegistrador());
+  }, []);
 
   useEffect(() => {
     const d = searchParams.get('d');
@@ -395,14 +635,10 @@ function AppccTemperaturasInner() {
       const msg = e instanceof Error ? e.message : 'Error al cargar datos.';
       if (!silent) {
         if (msg.toLowerCase().includes('relation') || msg.includes('does not exist')) {
-          setBanner(
-            'Faltan las tablas APPCC en Supabase. Ejecuta supabase-appcc-schema.sql y añade las tablas a la publicación Realtime si la usas.',
-          );
+          setBanner('Faltan las tablas APPCC en Supabase. Ejecuta supabase-appcc-schema.sql.');
         } else {
           setBanner(msg);
         }
-      }
-      if (!silent) {
         setUnits([]);
         setReadings([]);
       }
@@ -431,20 +667,15 @@ function AppccTemperaturasInner() {
   const loadRef = useRef(load);
   loadRef.current = load;
 
-  useEffect(() => {
-    void load();
-  }, [load]);
+  useEffect(() => { void load(); }, [load]);
 
-  /** PWA / segundo plano: al volver, volver a pedir equipos (Realtime a veces no llega en móvil). */
   useEffect(() => {
     const ping = () => {
       if (document.visibilityState === 'visible') void loadRef.current({ silent: true });
     };
     document.addEventListener('visibilitychange', ping);
     window.addEventListener('focus', ping);
-    const onPageShow = (ev: PageTransitionEvent) => {
-      if (ev.persisted) ping();
-    };
+    const onPageShow = (ev: PageTransitionEvent) => { if (ev.persisted) ping(); };
     window.addEventListener('pageshow', onPageShow);
     return () => {
       document.removeEventListener('visibilitychange', ping);
@@ -458,42 +689,13 @@ function AppccTemperaturasInner() {
     const supabase = getSupabaseClient()!;
     const channel = supabase
       .channel(`appcc-readings-${localId}`)
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'appcc_temperature_readings',
-          filter: `local_id=eq.${localId}`,
-        },
-        () => void load({ silent: true }),
-      )
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'appcc_cold_units',
-          filter: `local_id=eq.${localId}`,
-        },
-        () => void load({ silent: true }),
-      )
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'appcc_temperature_readings', filter: `local_id=eq.${localId}` }, () => void load({ silent: true }))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'appcc_cold_units', filter: `local_id=eq.${localId}` }, () => void load({ silent: true }))
       .subscribe();
-    return () => {
-      void supabase.removeChannel(channel);
-    };
+    return () => { void supabase.removeChannel(channel); };
   }, [localId, supabaseOk, load]);
 
   const bySlot = useMemo(() => readingsByUnitAndSlot(readings), [readings]);
-
-  const orderedUnits = useMemo(() => {
-    const zones: AppccZone[] = ['cocina', 'barra'];
-    const out: AppccColdUnitRow[] = [];
-    for (const z of zones) {
-      out.push(...units.filter((u) => u.zone === z));
-    }
-    return out;
-  }, [units]);
 
   const byZone = useMemo(() => {
     const zones: AppccZone[] = ['cocina', 'barra'];
@@ -503,46 +705,46 @@ function AppccTemperaturasInner() {
     }));
   }, [units]);
 
-  const disabled = !localId || !profileReady || !supabaseOk || loading;
+  // Zones that actually have units
+  const activeZones = useMemo(() => byZone.filter(({ list }) => list.length > 0), [byZone]);
 
+  // Badge count: pending slots in each zone
+  const pendingByZone = useMemo(() => {
+    const result: Record<string, number> = {};
+    for (const { zone, list } of byZone) {
+      let pending = 0;
+      for (const unit of list) {
+        for (const slot of TEMP_REGISTRO_SLOTS) {
+          if (!bySlot.get(`${unit.id}:${slot}`)) pending++;
+        }
+      }
+      result[zone] = pending;
+    }
+    return result;
+  }, [byZone, bySlot]);
+
+  const disabled = !localId || !profileReady || !supabaseOk || loading;
   const localLabel = localName ?? localCode ?? '—';
 
   const handleDownloadPdf = async () => {
+    const orderedUnits = byZone.flatMap(({ list }) => list);
     if (orderedUnits.length === 0) return;
     const from = pdfDateFrom <= pdfDateTo ? pdfDateFrom : pdfDateTo;
     const to = pdfDateFrom <= pdfDateTo ? pdfDateTo : pdfDateFrom;
     const span = enumerateDateKeysInclusive(from, to).length;
     if (span === 0) return;
-    if (span > PDF_MAX_DAYS) {
-      setBanner(`El PDF admite como máximo ${PDF_MAX_DAYS} días por archivo.`);
-      return;
-    }
+    if (span > PDF_MAX_DAYS) { setBanner(`El PDF admite máximo ${PDF_MAX_DAYS} días.`); return; }
     setPdfBusy(true);
     setBanner(null);
     try {
       const supabase = getSupabaseClient();
-      if (!supabase || !localId) {
-        setBanner('Sesión no disponible para descargar.');
-        return;
-      }
+      if (!supabase || !localId) { setBanner('Sesión no disponible.'); return; }
       if (from === to && from === dateKey) {
-        downloadAppccTemperaturasPdf({
-          localLabel,
-          dateKey: from,
-          dateFormatted: formatAppccDateEs(from),
-          orderedUnits,
-          bySlot,
-        });
+        downloadAppccTemperaturasPdf({ localLabel, dateKey: from, dateFormatted: formatAppccDateEs(from), orderedUnits, bySlot });
         return;
       }
       const rows = await fetchAppccReadingsInRange(supabase, localId, from, to);
-      downloadAppccTemperaturasRangePdf({
-        localLabel,
-        dateFrom: from,
-        dateTo: to,
-        orderedUnits,
-        readings: rows,
-      });
+      downloadAppccTemperaturasRangePdf({ localLabel, dateFrom: from, dateTo: to, orderedUnits, readings: rows });
     } catch (e) {
       setBanner(e instanceof Error ? e.message : 'Error al generar el PDF.');
     } finally {
@@ -550,10 +752,23 @@ function AppccTemperaturasInner() {
     }
   };
 
-  return (
-    <div className="space-y-4">
-      <AppccCompactHero title="Registros de temperatura" />
+  // Ensure active zone is valid
+  useEffect(() => {
+    if (activeZones.length > 0 && !activeZones.find((z) => z.zone === activeZone)) {
+      setActiveZone(activeZones[0].zone);
+    }
+  }, [activeZones, activeZone]);
 
+  const currentZoneUnits = useMemo(
+    () => byZone.find((z) => z.zone === activeZone)?.list ?? [],
+    [byZone, activeZone],
+  );
+
+  return (
+    <div className="space-y-4 pb-8">
+      <AppccCompactHero title="Temperaturas" />
+
+      {/* Alertas de configuración */}
       {!isSupabaseEnabled() || !getSupabaseClient() ? (
         <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
           Configura <code className="rounded bg-amber-100 px-1">NEXT_PUBLIC_SUPABASE_URL</code> y{' '}
@@ -563,7 +778,7 @@ function AppccTemperaturasInner() {
 
       {!localId && profileReady ? (
         <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
-          Tu usuario necesita un perfil con <strong>local</strong> en Supabase para usar los registros de temperatura.
+          Tu usuario necesita un perfil con <strong>local</strong> para usar los registros de temperatura.
         </div>
       ) : null}
 
@@ -571,121 +786,155 @@ function AppccTemperaturasInner() {
         <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900">{banner}</div>
       ) : null}
 
-      <div className="flex flex-col gap-3">
-        <div className="flex flex-col items-center text-center">
-          <label htmlFor="appcc-date" className="text-[10px] font-bold uppercase tracking-wide text-zinc-500">
-            Día operativo del registro
-          </label>
-          <p className="mx-auto mt-1 max-w-sm text-[11px] font-medium leading-snug text-zinc-500">
-            El día cambia a las <strong className="text-zinc-700">02:00</strong> (hora Madrid): antes de esa hora sigues en el día anterior.
-          </p>
-          {/* Input nativo encima (invisible): el texto centrado es formatAppccDateEs; iOS alinea mal type=date */}
-          <div className="relative mt-2 flex h-11 w-full max-w-[17rem] items-center justify-center rounded-xl border border-zinc-200 bg-white shadow-sm ring-1 ring-zinc-100">
-            <span className="pointer-events-none px-3 text-center text-sm font-semibold capitalize tracking-tight text-zinc-900">
-              {formatAppccDateEs(dateKey)}
-            </span>
-            <input
-              id="appcc-date"
-              type="date"
-              value={dateKey}
-              onChange={(e) => {
-                const v = e.target.value;
-                setDateKey(v);
-                setPdfDateFrom(v);
-                setPdfDateTo(v);
-              }}
-              className="absolute inset-0 min-h-full min-w-full cursor-pointer opacity-0 text-base"
-              aria-label="Elegir día operativo del registro"
-            />
-          </div>
+      {/* ¿Quién registra hoy? */}
+      <RegistradorSelector value={registrador} onChange={setRegistrador} />
+
+      {/* Selector de fecha */}
+      <div className="flex items-center gap-3 rounded-2xl bg-white px-4 py-3 shadow-sm ring-1 ring-zinc-200/80">
+        <div className="flex-1">
+          <p className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">Día del registro</p>
+          <p className="mt-0.5 text-[13px] font-semibold capitalize text-zinc-900">{formatAppccDateEs(dateKey)}</p>
         </div>
-        <div className="mx-auto w-full max-w-sm rounded-2xl border border-zinc-100 bg-zinc-50/90 px-4 py-3 text-center ring-1 ring-zinc-100">
-          <p className="text-[10px] font-bold uppercase tracking-wide text-zinc-500">Exportar PDF</p>
-          <p className="mt-1.5 text-[11px] font-semibold leading-snug text-zinc-700">
-            Elige el rango de días (clave de registro). Una página por día; máximo {PDF_MAX_DAYS} días.
-          </p>
-          <div className="mt-3 flex flex-wrap items-end justify-center gap-4">
-            <label className="flex flex-col gap-0.5 text-left">
-              <span className="text-[9px] font-bold uppercase tracking-wide text-zinc-500">Desde</span>
-              <input
-                type="date"
-                value={pdfDateFrom}
-                onChange={(e) => setPdfDateFrom(e.target.value)}
-                className="h-10 rounded-xl border border-zinc-200 bg-white px-2.5 text-xs font-semibold text-zinc-900 outline-none focus:ring-2 focus:ring-[#D32F2F]/20"
-              />
-            </label>
-            <label className="flex flex-col gap-0.5 text-left">
-              <span className="text-[9px] font-bold uppercase tracking-wide text-zinc-500">Hasta</span>
-              <input
-                type="date"
-                value={pdfDateTo}
-                onChange={(e) => setPdfDateTo(e.target.value)}
-                className="h-10 rounded-xl border border-zinc-200 bg-white px-2.5 text-xs font-semibold text-zinc-900 outline-none focus:ring-2 focus:ring-[#D32F2F]/20"
-              />
-            </label>
-          </div>
-        </div>
-        <div className="flex flex-wrap items-center justify-center gap-2">
-          <Link
-            href="/appcc/historial"
-            className="inline-flex h-10 items-center justify-center rounded-xl border border-zinc-300 bg-white px-4 text-xs font-bold text-zinc-800 hover:bg-zinc-50"
-          >
-            Historial
-          </Link>
-          <button
-            type="button"
-            onClick={() => void handleDownloadPdf()}
-            disabled={orderedUnits.length === 0 || pdfBusy}
-            className="inline-flex h-10 items-center justify-center gap-1.5 rounded-xl border border-zinc-900/15 bg-zinc-900 px-4 text-xs font-bold text-white hover:bg-zinc-800 disabled:opacity-45"
-          >
-            <Download className="h-3.5 w-3.5" aria-hidden />
-            {pdfBusy ? 'PDF…' : 'Descargar PDF'}
-          </button>
-          <Link
-            href="/appcc/equipos"
-            className="inline-flex h-10 items-center justify-center rounded-xl border border-zinc-300 bg-white px-4 text-xs font-bold text-zinc-800 hover:bg-zinc-50"
-          >
-            Equipos
-          </Link>
+        <div className="relative">
+          <span className="pointer-events-none block rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-1.5 text-[11px] font-bold text-zinc-600">
+            Cambiar día
+          </span>
+          <input
+            type="date"
+            value={dateKey}
+            onChange={(e) => {
+              const v = e.target.value;
+              setDateKey(v);
+              setPdfDateFrom(v);
+              setPdfDateTo(v);
+            }}
+            className="absolute inset-0 min-h-full min-w-full cursor-pointer opacity-0 text-base"
+            aria-label="Elegir día"
+          />
         </div>
       </div>
 
-      {loading ? (
-        <p className="text-center text-sm text-zinc-500">Cargando…</p>
-      ) : units.length === 0 && localId && supabaseOk && !banner ? (
-        <div className="rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-6 text-center">
-          <p className="text-sm font-semibold text-zinc-800">No hay equipos de frío dados de alta.</p>
-          <p className="mt-1 text-xs text-zinc-600">Añádelos en gestión de equipos.</p>
-          <Link
-            href="/appcc/equipos"
-            className="mt-3 inline-flex h-9 items-center rounded-lg bg-[#D32F2F] px-4 text-xs font-bold uppercase tracking-wide text-white"
+      {/* Acciones: historial, PDF, equipos */}
+      <div className="flex gap-2">
+        <Link
+          href="/appcc/historial"
+          className="flex-1 flex h-9 items-center justify-center rounded-xl border border-zinc-200 bg-white text-[12px] font-bold text-zinc-700 hover:bg-zinc-50"
+        >
+          Historial
+        </Link>
+        <button
+          type="button"
+          onClick={() => setShowPdfPanel((s) => !s)}
+          className="flex-1 flex h-9 items-center justify-center gap-1.5 rounded-xl border border-zinc-200 bg-white text-[12px] font-bold text-zinc-700 hover:bg-zinc-50"
+        >
+          <Download className="h-3.5 w-3.5" aria-hidden />
+          PDF
+        </button>
+        <Link
+          href="/appcc/equipos"
+          className="flex-1 flex h-9 items-center justify-center rounded-xl border border-zinc-200 bg-white text-[12px] font-bold text-zinc-700 hover:bg-zinc-50"
+        >
+          Equipos
+        </Link>
+      </div>
+
+      {/* Panel PDF expandible */}
+      {showPdfPanel && (
+        <div className="rounded-2xl border border-zinc-100 bg-zinc-50 px-4 py-4 ring-1 ring-zinc-100">
+          <p className="text-[11px] font-bold uppercase tracking-wide text-zinc-500">Exportar PDF</p>
+          <p className="mt-1 text-[11px] font-medium text-zinc-500">Máximo {PDF_MAX_DAYS} días por archivo.</p>
+          <div className="mt-3 flex gap-4">
+            <label className="flex flex-col gap-0.5">
+              <span className="text-[9px] font-bold uppercase tracking-wide text-zinc-500">Desde</span>
+              <input type="date" value={pdfDateFrom} onChange={(e) => setPdfDateFrom(e.target.value)}
+                className="h-10 rounded-xl border border-zinc-200 bg-white px-2.5 text-xs font-semibold text-zinc-900 outline-none focus:ring-2 focus:ring-[#D32F2F]/20" />
+            </label>
+            <label className="flex flex-col gap-0.5">
+              <span className="text-[9px] font-bold uppercase tracking-wide text-zinc-500">Hasta</span>
+              <input type="date" value={pdfDateTo} onChange={(e) => setPdfDateTo(e.target.value)}
+                className="h-10 rounded-xl border border-zinc-200 bg-white px-2.5 text-xs font-semibold text-zinc-900 outline-none focus:ring-2 focus:ring-[#D32F2F]/20" />
+            </label>
+          </div>
+          <button
+            type="button"
+            onClick={() => void handleDownloadPdf()}
+            disabled={units.length === 0 || pdfBusy}
+            className="mt-3 flex h-10 w-full items-center justify-center gap-1.5 rounded-xl bg-zinc-900 text-xs font-bold text-white hover:bg-zinc-800 disabled:opacity-45"
           >
+            <Download className="h-3.5 w-3.5" aria-hidden />
+            {pdfBusy ? 'Generando…' : 'Descargar PDF'}
+          </button>
+        </div>
+      )}
+
+      {/* Cuerpo principal */}
+      {loading ? (
+        <p className="py-8 text-center text-sm text-zinc-400">Cargando…</p>
+      ) : units.length === 0 && localId && supabaseOk && !banner ? (
+        <div className="rounded-2xl border border-zinc-200 bg-zinc-50 px-4 py-8 text-center">
+          <p className="text-sm font-semibold text-zinc-800">No hay equipos de frío dados de alta.</p>
+          <p className="mt-1 text-xs text-zinc-500">Añádelos en gestión de equipos.</p>
+          <Link href="/appcc/equipos" className="mt-4 inline-flex h-9 items-center rounded-xl bg-[#D32F2F] px-5 text-xs font-bold uppercase tracking-wide text-white">
             Ir a equipos
           </Link>
         </div>
       ) : (
-        <div className="space-y-4">
-          {byZone.map(({ zone, list }) =>
-            list.length === 0 ? null : (
-              <section key={zone}>
-                <h2 className="mb-2 font-serif text-base font-bold text-zinc-900">{APPCC_ZONE_LABEL[zone]}</h2>
-                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                  {list.map((unit) => (
-                    <UnitCard
-                      key={unit.id}
-                      unit={unit}
-                      dateKey={dateKey}
-                      map={bySlot}
-                      disabled={disabled}
-                      onReadingSaved={mergeReading}
-                      onReadingDeleted={dropReading}
-                    />
-                  ))}
-                </div>
-              </section>
-            ),
+        <>
+          {/* Tabs de sector */}
+          {activeZones.length > 1 && (
+            <div className="flex gap-2 rounded-2xl bg-white p-1.5 shadow-sm ring-1 ring-zinc-200/80">
+              {activeZones.map(({ zone }) => {
+                const pending = pendingByZone[zone] ?? 0;
+                const isActive = zone === activeZone;
+                return (
+                  <button
+                    key={zone}
+                    type="button"
+                    onClick={() => setActiveZone(zone)}
+                    className={[
+                      'flex flex-1 items-center justify-center gap-1.5 rounded-xl py-2 text-[13px] font-bold transition',
+                      isActive
+                        ? 'bg-zinc-900 text-white shadow-sm'
+                        : 'text-zinc-500 hover:bg-zinc-50',
+                    ].join(' ')}
+                  >
+                    {APPCC_ZONE_LABEL[zone]}
+                    {pending > 0 && (
+                      <span
+                        className={[
+                          'rounded-full px-1.5 py-0.5 text-[9px] font-black leading-none',
+                          isActive ? 'bg-white/20 text-white' : 'bg-amber-100 text-amber-700',
+                        ].join(' ')}
+                      >
+                        {pending}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
           )}
-        </div>
+
+          {/* Tarjetas de equipos */}
+          <div className="space-y-3">
+            {currentZoneUnits.length === 0 ? (
+              <p className="py-4 text-center text-sm text-zinc-400">No hay equipos en este sector.</p>
+            ) : (
+              currentZoneUnits.map((unit) => (
+                <UnitCard
+                  key={unit.id}
+                  unit={unit}
+                  dateKey={dateKey}
+                  map={bySlot}
+                  disabled={disabled}
+                  onReadingSaved={mergeReading}
+                  onReadingDeleted={dropReading}
+                  registrador={registrador}
+                />
+              ))
+            )}
+          </div>
+        </>
       )}
     </div>
   );
@@ -693,11 +942,7 @@ function AppccTemperaturasInner() {
 
 export default function AppccTemperaturasPage() {
   return (
-    <Suspense
-      fallback={
-        <div className="py-12 text-center text-sm text-zinc-500">Cargando…</div>
-      }
-    >
+    <Suspense fallback={<div className="py-12 text-center text-sm text-zinc-500">Cargando…</div>}>
       <AppccTemperaturasInner />
     </Suspense>
   );
