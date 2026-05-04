@@ -29,9 +29,14 @@ import {
 import { notifyAppccAlerta } from '@/services/notifications';
 
 const PDF_MAX_DAYS = 120;
-const LS_REGISTRADOR = 'appcc_registrador';
+/** Lista histórica de nombres usados (chips), compartida entre días y sectores. */
 const LS_REGISTRADORES = 'appcc_registradores';
 const MAX_NAMES = 6;
+
+/** Clave única por día + sector, p.ej. "appcc_reg_2026-05-04_cocina" */
+function regKey(dateKey: string, zone: string) {
+  return `appcc_reg_${dateKey}_${zone}`;
+}
 
 const SLOT_DISPLAY: Record<AppccSlot, string> = {
   manana: 'Mañana',
@@ -87,9 +92,9 @@ function stepTemp(current: string, delta: number, unitType: AppccColdUnitRow['un
 
 // ─── localStorage helpers ────────────────────────────────────────────────────
 
-function loadRegistrador(): string {
+function loadRegistradorForKey(key: string): string {
   if (typeof window === 'undefined') return '';
-  return localStorage.getItem(LS_REGISTRADOR) ?? '';
+  return localStorage.getItem(key) ?? '';
 }
 
 function loadRegistradores(): string[] {
@@ -101,8 +106,8 @@ function loadRegistradores(): string[] {
   }
 }
 
-function saveRegistrador(name: string) {
-  localStorage.setItem(LS_REGISTRADOR, name);
+function saveRegistradorForKey(key: string, name: string) {
+  localStorage.setItem(key, name);
   const existing = loadRegistradores();
   const updated = [name, ...existing.filter((n) => n !== name)].slice(0, MAX_NAMES);
   localStorage.setItem(LS_REGISTRADORES, JSON.stringify(updated));
@@ -113,9 +118,13 @@ function saveRegistrador(name: string) {
 function RegistradorSelector({
   value,
   onChange,
+  storageKey,
+  zoneLabel,
 }: {
   value: string;
   onChange: (name: string) => void;
+  storageKey: string;
+  zoneLabel: string;
 }) {
   const [editing, setEditing] = useState(false);
   const [inputVal, setInputVal] = useState('');
@@ -124,7 +133,7 @@ function RegistradorSelector({
   const commit = (name: string) => {
     const trimmed = name.trim();
     if (!trimmed) return;
-    saveRegistrador(trimmed);
+    saveRegistradorForKey(storageKey, trimmed);
     onChange(trimmed);
     setEditing(false);
     setInputVal('');
@@ -135,15 +144,17 @@ function RegistradorSelector({
       <div className="rounded-2xl bg-white px-4 py-4 shadow-sm ring-1 ring-[#D32F2F]/40">
         <div className="flex items-center gap-2 mb-3">
           <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#D32F2F] text-[10px] font-black text-white">!</span>
-          <p className="text-[12px] font-bold text-[#D32F2F]">Indica quién registra para continuar</p>
+          <p className="text-[12px] font-bold text-[#D32F2F]">
+            ¿Quién registra en <span className="capitalize">{zoneLabel}</span>?
+          </p>
         </div>
-        {names.length > 0 && !editing ? (
+          {names.length > 0 && !editing ? (
           <div className="mt-3 flex flex-wrap gap-2">
             {names.map((n) => (
               <button
                 key={n}
                 type="button"
-                onClick={() => { saveRegistrador(n); onChange(n); }}
+                onClick={() => { saveRegistradorForKey(storageKey, n); onChange(n); }}
                 className="rounded-full bg-zinc-100 px-3 py-1.5 text-[13px] font-semibold text-zinc-800 transition hover:bg-[#D32F2F] hover:text-white"
               >
                 {n}
@@ -598,12 +609,16 @@ function AppccTemperaturasInner() {
   const [banner, setBanner] = useState<string | null>(null);
   const [pdfBusy, setPdfBusy] = useState(false);
   const [activeZone, setActiveZone] = useState<AppccZone>('cocina');
-  const [registrador, setRegistrador] = useState<string>('');
   const [showPdfPanel, setShowPdfPanel] = useState(false);
 
+  // Nombre del registrador: independiente por sector y por día
+  const currentRegKey = regKey(dateKey, activeZone);
+  const [registrador, setRegistrador] = useState<string>('');
+
+  // Recarga el nombre cuando cambia el sector o el día
   useEffect(() => {
-    setRegistrador(loadRegistrador());
-  }, []);
+    setRegistrador(loadRegistradorForKey(currentRegKey));
+  }, [currentRegKey]);
 
   useEffect(() => {
     const d = searchParams.get('d');
@@ -789,8 +804,13 @@ function AppccTemperaturasInner() {
         <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900">{banner}</div>
       ) : null}
 
-      {/* ¿Quién registra hoy? */}
-      <RegistradorSelector value={registrador} onChange={setRegistrador} />
+      {/* ¿Quién registra hoy? — independiente por sector y día */}
+      <RegistradorSelector
+        value={registrador}
+        onChange={(name) => { saveRegistradorForKey(currentRegKey, name); setRegistrador(name); }}
+        storageKey={currentRegKey}
+        zoneLabel={APPCC_ZONE_LABEL[activeZone] ?? activeZone}
+      />
 
       {/* Selector de fecha */}
       <div className="flex items-center gap-3 rounded-2xl bg-white px-4 py-3 shadow-sm ring-1 ring-zinc-200/80">
