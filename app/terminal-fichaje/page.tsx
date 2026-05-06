@@ -69,6 +69,18 @@ const PIN_ERR: Record<string, string> = {
 function pickMessage(list: string[]) {
   return list[Math.floor(Math.random() * list.length)] ?? list[0] ?? '';
 }
+function formatBreakDuration(minutes: number) {
+  if (minutes < 1) return 'menos de 1 minuto';
+  if (minutes === 1) return '1 minuto';
+  if (minutes < 60) return `${minutes} minutos`;
+
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+
+  if (m === 0) return h === 1 ? '1 hora' : `${h} horas`;
+
+  return `${h} h ${m} min`;
+}
 
 function initials(first: string, last: string, alias: string | null): string {
   const a = alias?.trim();
@@ -249,6 +261,50 @@ export default function TerminalFichajePage() {
 
       const session = getClockSessionState(recentEntries);
       const want: StaffTimeEventType = pendingAction;
+      if (session.lastEventType === 'break_start') {
+        const lastBreakStart = [...recentEntries]
+          .reverse()
+          .find((entry) => entry.eventType === 'break_start');
+      
+        const breakMinutes = lastBreakStart
+          ? Math.max(
+              0,
+              Math.round(
+                (Date.now() - new Date(lastBreakStart.occurredAt).getTime()) / 60000
+              )
+            )
+          : 0;
+      
+        const planned = findShiftForToday(shifts, r.employeeId, ymd);
+        const shiftId = planned?.id ?? null;
+      
+        if (want === 'clock_in') {
+          await recordStaffTimeEvent(supabase, {
+            employeeId: r.employeeId,
+            eventType: 'break_end',
+            shiftId,
+            pin: fullPin,
+            origin: 'device',
+          });
+      
+          finishSuccess({
+            employeeId: r.employeeId,
+            firstName: r.firstName,
+            lastName: r.lastName,
+            alias: r.alias,
+            action: 'break_end',
+            message: `Has estado ${formatBreakDuration(
+              breakMinutes
+            )} de descanso. A seguir con el turno, con calma y buen ritmo.`,
+          });
+      
+          return;
+        }
+      
+        setBanner('Estás en descanso. Para continuar, pulsa LLEGADA y vuelve al turno.');
+        setPin('');
+        return;
+      }
 
       if (!session.availableActions.includes(want)) {
         const open = session.lastEventType != null && session.lastEventType !== 'clock_out';
