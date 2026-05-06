@@ -261,7 +261,7 @@ export default function TerminalFichajePage() {
 
       const session = getClockSessionState(recentEntries);
       const want: StaffTimeEventType = pendingAction;
-      if (session.lastEventType === 'break_start') {
+      if (String(session.lastEventType) === 'break_start') {
         const lastBreakStart = [...recentEntries]
           .reverse()
           .find((entry) => entry.eventType === 'break_start');
