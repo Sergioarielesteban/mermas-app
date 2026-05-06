@@ -19,6 +19,9 @@ html {
   --page-bg: #fff;
   /* Altura del header rojo (min-h-14 + py-2; referencia ~72px). Sticky «Volver» en <main> usa top:0. */
   --app-header-height: 72px;
+  --color-terracotta: #b84b2f;
+  --color-accent-terracotta: #9a3a22;
+  --card-bg: #ffffff;
 }
 
 @theme inline {

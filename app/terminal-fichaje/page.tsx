@@ -372,12 +372,7 @@ export default function TerminalFichajePage() {
           </div>
         ) : (
           <div className="flex w-full items-center justify-between gap-3">
-            <div className="min-w-0 flex-1 text-left">
-              <p className="truncate font-serif text-lg font-bold text-zinc-900 sm:text-xl">
-                {localName ?? 'Local'}
-              </p>
-              <p className="text-sm font-medium capitalize text-zinc-500">{dateLabel}</p>
-            </div>
+            <Logo variant="inline" className="!h-10 sm:!h-12" />
             <div className="flex shrink-0 items-center gap-2">
               <button
                 type="button"
@@ -402,26 +397,40 @@ export default function TerminalFichajePage() {
       <div className="relative z-10 flex flex-1 flex-col items-center justify-center px-4 pb-10 pt-6 sm:px-8">
         {step === 'home' ? (
           <>
-            <div className="mb-4 flex w-full justify-center px-2 sm:mb-6">
-              <Logo variant="inline" className="mx-auto !h-[min(40vmin,9rem)] sm:!h-[min(36vmin,8.5rem)]" />
+            {/* Greeting + date  |  Clock */}
+            <div className="flex w-full items-start justify-between gap-4 px-2 mb-10 sm:mb-14">
+              <div className="flex flex-col text-left">
+                <h2 className="text-2xl font-extrabold text-zinc-900 sm:text-3xl">
+                  ¡Hola, bienvenido/a! 👋
+                </h2>
+                <p className="mt-1 text-sm font-medium capitalize text-zinc-500">{dateLabel}</p>
+                <p className="mt-0.5 text-xs font-medium text-zinc-400">{localName ?? 'Local'}</p>
+              </div>
+              <p className="shrink-0 text-6xl font-black tabular-nums tracking-tight text-zinc-900 sm:text-7xl">
+                {timeLabel}
+              </p>
             </div>
-            <p className="text-7xl font-black tabular-nums tracking-tight text-zinc-900 sm:text-8xl">{timeLabel}</p>
-            <div className="mt-10 grid w-full max-w-lg grid-cols-2 gap-4 sm:mt-14 sm:gap-5">
+
+            {/* Action buttons — stacked, full-width */}
+            <div className="flex w-full max-w-sm flex-col gap-5">
               <button
                 type="button"
                 onClick={() => goPin('clock_in')}
-                className="min-h-[88px] rounded-3xl bg-zinc-100 py-6 text-xl font-extrabold text-zinc-900 ring-1 ring-zinc-200/90 shadow-sm transition hover:bg-zinc-200/70 active:scale-[0.98] sm:min-h-[100px] sm:text-2xl"
+                className="min-h-[80px] w-full rounded-3xl bg-[var(--color-terracotta)] py-5 text-xl font-extrabold tracking-wide text-white shadow-lg transition hover:opacity-90 active:scale-[0.98] sm:text-2xl"
+                aria-label="Llegada de turno"
               >
-                Llegada
+                LLEGADA
               </button>
               <button
                 type="button"
                 onClick={() => goPin('clock_out')}
-                className="min-h-[88px] rounded-3xl bg-sky-600 py-6 text-xl font-extrabold text-white shadow-lg shadow-sky-900/25 transition hover:bg-sky-500 active:scale-[0.98] sm:min-h-[100px] sm:text-2xl"
+                className="min-h-[80px] w-full rounded-3xl bg-zinc-900 py-5 text-xl font-extrabold tracking-wide text-white shadow-lg transition hover:bg-zinc-800 active:scale-[0.98] sm:text-2xl"
+                aria-label="Salida de turno"
               >
-                Salida
+                SALIDA
               </button>
             </div>
+
             <p className="mt-10 text-center text-[11px] font-medium text-zinc-400">
               Modo terminal · sesión de encargado
             </p>
@@ -496,44 +505,48 @@ export default function TerminalFichajePage() {
         ) : null}
 
         {step === 'choose_out' && pendingResolved ? (
-          <div className="flex w-full max-w-md flex-col items-center text-center">
-            <Logo variant="inline" className="mb-5 !h-[min(36vmin,8rem)] sm:!h-[min(34vmin,7.75rem)]" />
-            <p className="text-xl font-extrabold text-zinc-900">¿Te vas al descanso o acabaste turno?</p>
-            <p className="mt-2 text-sm font-medium text-zinc-600">
-              {staffDisplayName({
-                firstName: pendingResolved.firstName,
-                lastName: pendingResolved.lastName,
-                alias: pendingResolved.alias,
-              })}
-            </p>
-            <div className="mt-6 grid w-full grid-cols-1 gap-3">
-              <button
-                type="button"
-                disabled={busy}
-                onClick={() => void recordOutChoice('break_start')}
-                className="min-h-[64px] rounded-2xl bg-amber-500 text-lg font-extrabold text-white shadow-lg"
-              >
-                Me voy al descanso
-              </button>
-              <button
-                type="button"
-                disabled={busy}
-                onClick={() => void recordOutChoice('clock_out')}
-                className="min-h-[64px] rounded-2xl bg-sky-600 text-lg font-extrabold text-white shadow-lg"
-              >
-                He acabado mi turno
-              </button>
-              <button
-                type="button"
-                disabled={busy}
-                onClick={() => {
-                  setStep('pin');
-                  setPendingResolved(null);
-                }}
-                className="mt-1 text-sm font-bold text-zinc-500"
-              >
-                Cancelar
-              </button>
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+            onClick={() => { setStep('pin'); setPendingResolved(null); }}
+          >
+            <div
+              className="w-full max-w-md rounded-xl bg-[var(--card-bg)] p-8 shadow-2xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <p className="mb-1 text-sm font-medium text-zinc-500">
+                {staffDisplayName({
+                  firstName: pendingResolved.firstName,
+                  lastName: pendingResolved.lastName,
+                  alias: pendingResolved.alias,
+                })}
+              </p>
+              <h3 className="mb-6 text-2xl font-bold text-zinc-900">¿Qué quieres registrar?</h3>
+              <div className="flex flex-col gap-4">
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => void recordOutChoice('break_start')}
+                  className="w-full rounded-xl bg-yellow-500 py-3 text-lg font-semibold text-white shadow transition hover:bg-yellow-600 active:scale-[0.98] disabled:opacity-50"
+                >
+                  ➡️ Voy al descanso
+                </button>
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => void recordOutChoice('clock_out')}
+                  className="w-full rounded-xl bg-[var(--color-terracotta)] py-3 text-lg font-semibold text-white shadow transition hover:bg-[var(--color-accent-terracotta)] active:scale-[0.98] disabled:opacity-50"
+                >
+                  🚪 Acabo el turno (Salida Final)
+                </button>
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => { setStep('pin'); setPendingResolved(null); }}
+                  className="w-full rounded-xl bg-gray-200 py-3 text-lg font-semibold text-zinc-800 shadow transition hover:bg-gray-300 active:scale-[0.98] disabled:opacity-50"
+                >
+                  ❌ Cancelar
+                </button>
+              </div>
             </div>
           </div>
         ) : null}
