@@ -326,7 +326,7 @@ export default function TerminalFichajePage() {
       const planned = findShiftForToday(shifts, r.employeeId, ymd);
       const shiftId = planned?.id ?? null;
 
-      if (want === 'clock_out' && session.lastEventType === 'break_start') {
+      if (session.lastEventType === 'break_start') {
         await recordStaffTimeEvent(supabase, {
           employeeId: r.employeeId,
           eventType: 'break_end',
