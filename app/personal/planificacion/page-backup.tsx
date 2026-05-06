@@ -2,7 +2,7 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
-import { CalendarDays, ChevronLeft, ChevronRight, Copy, Plus, Users } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Copy } from 'lucide-react';
 import MermasStyleHero from '@/components/MermasStyleHero';
 import { useAuth } from '@/components/AuthProvider';
 import ShiftEditorModal, { PLANIFICACION_MODAL_ABORT, type ShiftDraft } from '@/components/staff/ShiftEditorModal';
@@ -131,32 +131,6 @@ export default function PersonalPlanificacionPage() {
     () => shifts.filter((shift) => !optimisticHiddenShiftIds.has(shift.id)),
     [shifts, optimisticHiddenShiftIds],
   );
-
-
-  const weekDays = useMemo(() => Array.from({ length: 7 }, (_, i) => addDays(weekStartDate, i)), [weekStartDate]);
-  const weekDayYmds = useMemo(() => weekDays.map((d) => ymdLocal(d)), [weekDays]);
-  const focusedDayInWeek = weekDayYmds.includes(dayFocus) ? dayFocus : weekStart;
-  const focusedDayShifts = useMemo(
-    () => visibleShifts.filter((s) => s.shiftDate === focusedDayInWeek),
-    [visibleShifts, focusedDayInWeek],
-  );
-  const shiftsThisWeek = useMemo(
-    () => visibleShifts.filter((s) => s.shiftDate >= weekStart && s.shiftDate <= weekEndYmd),
-    [visibleShifts, weekStart, weekEndYmd],
-  );
-  const planningStats = useMemo(() => {
-    const assignedEmployeeIds = new Set(shiftsThisWeek.map((s) => s.employeeId).filter(Boolean));
-    const totalMinutes = shiftsThisWeek.reduce((sum, s) => sum + shiftDurationMinutes(s), 0);
-    const lunch = focusedDayShifts.filter((s) => Number(s.startTime.slice(0, 2)) < 17).length;
-    const dinner = focusedDayShifts.length - lunch;
-    return {
-      weekShifts: shiftsThisWeek.length,
-      assignedEmployees: assignedEmployeeIds.size,
-      weekHours: Math.round(totalMinutes / 60),
-      lunch,
-      dinner,
-    };
-  }, [shiftsThisWeek, focusedDayShifts]);
 
   const refetchWeekPublication = useCallback(async () => {
     if (!localId || !supabase) {
@@ -673,7 +647,7 @@ export default function PersonalPlanificacionPage() {
       <MermasStyleHero
         eyebrow="Cuadrante"
         title="Planificación"
-        tagline="Vista semanal rápida para montar turnos por puesto o por empleado, publicar cambios y controlar cobertura de comidas y cenas."
+        tagline="Semana: cuadrante por puesto (vista principal) o por empleado; franja 00:00–24:00 y arrastre (encargados)."
         compact
       />
       <PersonalSectionNav />
@@ -682,36 +656,21 @@ export default function PersonalPlanificacionPage() {
         <p className="rounded-2xl bg-red-50 px-4 py-3 text-sm font-semibold text-red-900">{error}</p>
       ) : null}
 
-      <section className="overflow-hidden rounded-[2rem] bg-[#fbfaf7] p-3 shadow-[0_18px_55px_rgba(15,23,42,0.08)] ring-1 ring-zinc-200/70 sm:p-5">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          <div>
-            <p className="text-[11px] font-black uppercase tracking-[0.24em] text-[#D32F2F]">SHIFT OPERATIVO</p>
-            <h2 className="mt-1 text-2xl font-black tracking-tight text-zinc-950">Horarios del equipo</h2>
-          </div>
-          <div className="grid grid-cols-3 rounded-2xl bg-white p-1 ring-1 ring-zinc-200">
-            {(['semana', 'dia', 'mes'] as const).map((v) => (
-              <button
-                key={v}
-                type="button"
-                onClick={() => setView(v)}
-                className={[
-                  'rounded-xl px-3 py-2 text-xs font-black capitalize transition',
-                  view === v ? 'bg-zinc-950 text-white shadow-sm' : 'text-zinc-600 hover:bg-zinc-50',
-                ].join(' ')}
-              >
-                {v}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
-          <PlanningMetricCard label="Turnos semana" value={String(planningStats.weekShifts)} />
-          <PlanningMetricCard label="Equipo asignado" value={String(planningStats.assignedEmployees)} />
-          <PlanningMetricCard label="Horas plan" value={`${planningStats.weekHours} h`} />
-          <PlanningMetricCard label="Hoy" value={`${planningStats.lunch} comida · ${planningStats.dinner} cena`} />
-        </div>
-      </section>
+      <div className="flex flex-wrap items-center gap-2">
+        {(['semana', 'dia', 'mes'] as const).map((v) => (
+          <button
+            key={v}
+            type="button"
+            onClick={() => setView(v)}
+            className={[
+              'rounded-full px-4 py-2 text-xs font-extrabold capitalize',
+              view === v ? 'bg-zinc-900 text-white' : 'bg-zinc-100 text-zinc-700 ring-1 ring-zinc-200',
+            ].join(' ')}
+          >
+            {v}
+          </button>
+        ))}
+      </div>
 
       {view === 'semana' ? (
         <>
@@ -809,73 +768,59 @@ export default function PersonalPlanificacionPage() {
                 type="button"
                 onClick={() => setWeekLayout(k)}
                 className={[
-                  'inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-[11px] font-extrabold sm:text-xs',
+                  'rounded-full px-3 py-1.5 text-[11px] font-extrabold sm:text-xs',
                   weekLayout === k ? 'bg-[#D32F2F] text-white' : 'bg-zinc-100 text-zinc-700 ring-1 ring-zinc-200',
                 ].join(' ')}
               >
-                {k === 'empleados' ? <Users className="h-3.5 w-3.5" /> : <CalendarDays className="h-3.5 w-3.5" />}
                 {k === 'empleados' ? 'Por empleado' : 'Por puesto'}
               </button>
             ))}
           </div>
-
-          <MobileSchedulePreview
-            weekDays={weekDays}
-            selectedYmd={focusedDayInWeek}
-            shifts={focusedDayShifts}
-            employees={employees}
-            canManageSchedules={perms.canManageSchedules}
-            onPickDay={(ymd) => setDayFocus(ymd)}
-            onAddShift={(ymd) => openNew(SHIFT_GRID_UNASSIGNED_ROW_ID, ymd)}
-            onEditShift={perms.canManageSchedules ? openEdit : peekShiftReadOnly}
-          />
           {loading ? <p className="text-sm text-zinc-500">Cargando…</p> : null}
           {!perms.canManageSchedules ? (
             <p className="text-sm text-zinc-600">Solo lectura: pide a un encargado los cambios de cuadrante.</p>
           ) : null}
-          <div className="hidden xl:block">
-            {weekLayout === 'empleados' ? (
-              <ShiftWeekGrid
+          {weekLayout === 'empleados' ? (
+            <ShiftWeekGrid
+              weekStartMonday={weekStartDate}
+              employees={employeesForShiftWeekGrid}
+              shifts={visibleShifts}
+              scheduleDayMarks={scheduleDayMarks}
+              canManageSchedules={perms.canManageSchedules}
+              onEditShift={perms.canManageSchedules ? openEdit : peekShiftReadOnly}
+              onNewShift={openNew}
+              onRemoveShift={perms.canManageSchedules ? removeShiftFromPlan : undefined}
+              onCopyShiftToDays={perms.canManageSchedules ? copyShiftToDays : undefined}
+              onUpsertDayMark={perms.canManageSchedules ? upsertDayMark : undefined}
+              onRemoveDayMark={perms.canManageSchedules ? removeDayMark : undefined}
+            />
+          ) : (
+            <>
+              <OperationalWeekGrid
                 weekStartMonday={weekStartDate}
-                employees={employeesForShiftWeekGrid}
+                employees={employees}
                 shifts={visibleShifts}
-                scheduleDayMarks={scheduleDayMarks}
-                canManageSchedules={perms.canManageSchedules}
-                onEditShift={perms.canManageSchedules ? openEdit : peekShiftReadOnly}
-                onNewShift={openNew}
-                onRemoveShift={perms.canManageSchedules ? removeShiftFromPlan : undefined}
-                onCopyShiftToDays={perms.canManageSchedules ? copyShiftToDays : undefined}
-                onUpsertDayMark={perms.canManageSchedules ? upsertDayMark : undefined}
-                onRemoveDayMark={perms.canManageSchedules ? removeDayMark : undefined}
+                operationalWindow={operationalWindow}
+                operationalZoneRegistry={operationalZoneRegistry}
+                onOpenOperationalZonesManager={() => setOperationalZonesManagerOpen(true)}
+                canEdit={perms.canManageSchedules}
+                onShiftPlaced={onOperationalShiftPlaced}
+                onQuickCreateShift={onOperationalQuickCreate}
+                onEmptyLongPress={onOperationalEmptyLongPress}
+                onShiftAdvancedEdit={openEdit}
+                onRemoveShift={(s) => removeShiftFromPlan(s)}
               />
-            ) : (
-              <>
-                <OperationalWeekGrid
-                  weekStartMonday={weekStartDate}
-                  employees={employees}
-                  shifts={visibleShifts}
-                  operationalWindow={operationalWindow}
-                  operationalZoneRegistry={operationalZoneRegistry}
-                  onOpenOperationalZonesManager={() => setOperationalZonesManagerOpen(true)}
-                  canEdit={perms.canManageSchedules}
-                  onShiftPlaced={onOperationalShiftPlaced}
-                  onQuickCreateShift={onOperationalQuickCreate}
-                  onEmptyLongPress={onOperationalEmptyLongPress}
-                  onShiftAdvancedEdit={openEdit}
-                  onRemoveShift={(s) => removeShiftFromPlan(s)}
-                />
-                <OperationalZonesManagerModal
-                  open={operationalZonesManagerOpen}
-                  onClose={() => setOperationalZonesManagerOpen(false)}
-                  zones={operationalZoneRegistry}
-                  shifts={shifts}
-                  onApply={applyOperationalZoneRegistry}
-                  onMigrateZoneShiftsToUnassigned={migrateZoneShiftsToUnassigned}
-                  canEdit={perms.canManageSchedules}
-                />
-              </>
-            )}
-          </div>
+              <OperationalZonesManagerModal
+                open={operationalZonesManagerOpen}
+                onClose={() => setOperationalZonesManagerOpen(false)}
+                zones={operationalZoneRegistry}
+                shifts={shifts}
+                onApply={applyOperationalZoneRegistry}
+                onMigrateZoneShiftsToUnassigned={migrateZoneShiftsToUnassigned}
+                canEdit={perms.canManageSchedules}
+              />
+            </>
+          )}
         </>
       ) : null}
 
@@ -970,143 +915,6 @@ export default function PersonalPlanificacionPage() {
       ) : null}
     </div>
   );
-}
-
-
-function PlanningMetricCard({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-2xl bg-white px-3 py-3 ring-1 ring-zinc-200">
-      <p className="text-[10px] font-black uppercase tracking-wide text-zinc-400">{label}</p>
-      <p className="mt-1 text-lg font-black text-zinc-950">{value}</p>
-    </div>
-  );
-}
-
-function MobileSchedulePreview({
-  weekDays,
-  selectedYmd,
-  shifts,
-  employees,
-  canManageSchedules,
-  onPickDay,
-  onAddShift,
-  onEditShift,
-}: {
-  weekDays: Date[];
-  selectedYmd: string;
-  shifts: StaffShift[];
-  employees: StaffEmployee[];
-  canManageSchedules: boolean;
-  onPickDay: (ymd: string) => void;
-  onAddShift: (ymd: string) => void;
-  onEditShift: (shift: StaffShift) => void;
-}) {
-  return (
-    <section className="rounded-[2rem] bg-white p-3 shadow-sm ring-1 ring-zinc-200 sm:p-4 xl:hidden">
-      <div className="mb-3 flex items-center justify-between gap-3">
-        <div>
-          <p className="text-[10px] font-black uppercase tracking-[0.2em] text-zinc-400">Vista rápida móvil</p>
-          <h3 className="text-base font-black text-zinc-950">Turnos por día</h3>
-        </div>
-        {canManageSchedules ? (
-          <button
-            type="button"
-            onClick={() => onAddShift(selectedYmd)}
-            className="inline-flex items-center gap-1 rounded-2xl bg-[#D32F2F] px-3 py-2 text-xs font-black text-white"
-          >
-            <Plus className="h-4 w-4" /> Turno
-          </button>
-        ) : null}
-      </div>
-
-      <div className="grid grid-cols-7 gap-1">
-        {weekDays.map((d) => {
-          const ymd = ymdLocal(d);
-          const active = ymd === selectedYmd;
-          return (
-            <button
-              key={ymd}
-              type="button"
-              onClick={() => onPickDay(ymd)}
-              className={[
-                'rounded-2xl px-1 py-2 text-center ring-1 transition',
-                active ? 'bg-zinc-950 text-white ring-zinc-950' : 'bg-[#fbfaf7] text-zinc-700 ring-zinc-100',
-              ].join(' ')}
-            >
-              <span className="block text-[9px] font-black uppercase opacity-70">
-                {d.toLocaleDateString('es-ES', { weekday: 'short' }).slice(0, 3)}
-              </span>
-              <span className="block text-sm font-black">{d.getDate()}</span>
-            </button>
-          );
-        })}
-      </div>
-
-      <div className="mt-3 space-y-2">
-        {shifts.length === 0 ? (
-          <div className="rounded-2xl bg-zinc-50 px-4 py-5 text-center ring-1 ring-zinc-100">
-            <p className="text-sm font-black text-zinc-800">Sin turnos este día</p>
-            <p className="mt-1 text-xs font-semibold text-zinc-500">Pulsa “Turno” para crear el primer bloque.</p>
-          </div>
-        ) : (
-          shifts
-            .slice()
-            .sort((a, b) => a.startTime.localeCompare(b.startTime))
-            .map((s) => {
-              const employee = s.employeeId ? employees.find((e) => e.id === s.employeeId) : null;
-              const name = employee ? employeeLabel(employee) : 'Sin asignar';
-              const color = s.colorHint || employee?.color || '#D32F2F';
-              return (
-                <button
-                  key={s.id}
-                  type="button"
-                  onClick={() => onEditShift(s)}
-                  className="flex w-full items-stretch overflow-hidden rounded-2xl bg-white text-left shadow-sm ring-1 ring-zinc-200"
-                >
-                  <span className="w-2 shrink-0" style={{ backgroundColor: color }} />
-                  <span className="grid min-w-0 flex-1 grid-cols-[82px_1fr_auto] items-center gap-3 px-3 py-3">
-                    <span className="text-xs font-black leading-tight text-zinc-950">
-                      {s.startTime.slice(0, 5)}
-                      <br />
-                      <span className="text-zinc-500">{s.endTime.slice(0, 5)}</span>
-                    </span>
-                    <span className="min-w-0">
-                      <span className="block truncate text-sm font-black text-zinc-950">{name}</span>
-                      <span className="block truncate text-xs font-semibold text-zinc-500">{s.zone || 'Sin puesto'}</span>
-                    </span>
-                    <span className="rounded-full bg-zinc-100 px-2 py-1 text-[10px] font-black text-zinc-700">
-                      {formatShiftDuration(s)}
-                    </span>
-                  </span>
-                </button>
-              );
-            })
-        )}
-      </div>
-    </section>
-  );
-}
-
-function employeeLabel(employee: StaffEmployee): string {
-  const alias = employee.alias?.trim();
-  if (alias) return alias;
-  return `${employee.firstName} ${employee.lastName}`.trim() || 'Empleado';
-}
-
-function shiftDurationMinutes(shift: StaffShift): number {
-  const [sh, sm] = shift.startTime.slice(0, 5).split(':').map(Number);
-  const [eh, em] = shift.endTime.slice(0, 5).split(':').map(Number);
-  let start = sh * 60 + sm;
-  let end = eh * 60 + em;
-  if (shift.endsNextDay || end <= start) end += 24 * 60;
-  return Math.max(0, end - start - (shift.breakMinutes || 0));
-}
-
-function formatShiftDuration(shift: StaffShift): string {
-  const min = shiftDurationMinutes(shift);
-  const h = Math.floor(min / 60);
-  const m = min % 60;
-  return m ? `${h}h ${m}m` : `${h}h`;
 }
 
 function MonthMiniCalendar({
