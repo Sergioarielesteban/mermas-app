@@ -608,12 +608,6 @@ export default function NuevoPedidoPage() {
     }
     const supabase = getSupabaseClient();
     if (!supabase) return setMessage('Sin conexión con Supabase.');
-    const popup = window.open('about:blank', '_blank');
-    if (!popup) {
-      setMessage('Tu navegador bloqueó WhatsApp. Permite ventanas emergentes e inténtalo de nuevo.');
-      return;
-    }
-
     void saveOrder(supabase, localId, {
       orderId: existingOrderId ?? undefined,
       supplierId: selectedSupplier.id,
@@ -668,12 +662,11 @@ export default function NuevoPedidoPage() {
           items,
           contentRevisedAfterSent: markRevWhatsapp || Boolean(hadContentRevisionFlag),
         });
-        openWhatsAppMessage(phone, whatsappMessage, { popupWindow: popup });
+        openWhatsAppMessage(phone, whatsappMessage);
         dispatchPedidosDataChanged();
         router.replace('/pedidos?pedido=enviado');
       })
       .catch((err: Error) => {
-        popup.close();
         setMessage(err.message);
       });
   };
