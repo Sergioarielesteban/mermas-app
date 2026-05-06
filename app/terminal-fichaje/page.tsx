@@ -6,7 +6,11 @@ import { useRouter } from 'next/navigation';
 import { Lock, RefreshCw, Settings } from 'lucide-react';
 import { useAuth } from '@/components/AuthProvider';
 import { buildStaffPermissions } from '@/lib/staff/permissions';
-import { findShiftForToday, getClockSessionState, todayYmd } from '@/lib/staff/attendance-logic';
+import {
+  findShiftForToday,
+  getClockSessionState,
+  todayYmd,
+} from '@/lib/staff/attendance-logic';
 import {
   fetchRecentStaffTimeEntriesForEmployee,
   fetchShiftsRange,
@@ -24,87 +28,47 @@ type Step = 'home' | 'pin' | 'choose_out' | 'success';
 function initials(first: string, last: string, alias: string | null): string {
   const a = alias?.trim();
   if (a) return a.slice(0, 2).toUpperCase();
-  const f = (first.trim()[0] ?? '?').toUpperCase();
-  const l = (last.trim()[0] ?? '').toUpperCase();
-  return (f + l).slice(0, 2);
+  return `${first[0] ?? ''}${last[0] ?? ''}`.toUpperCase();
 }
 
 function displayFirstName(first: string, alias: string | null): string {
-  const a = alias?.trim();
-  if (a) return a.split(/\s+/)[0] ?? a;
-  return first.trim() || 'compañero';
-}
-
-const PIN_ERR: Record<string, string> = {
-  no_match: 'Código incorrecto',
-  forbidden: 'Esta tablet debe tener sesión de encargado',
-  ambiguous: 'Hay dos fichas con el mismo PIN. Revisa Equipo.',
-  invalid_pin: 'El PIN debe tener 4 dígitos',
-  not_authenticated: 'Sesión caducada. Vuelve a entrar.',
-  no_local: 'Sin local asignado',
-  invalid_response: 'Error del servidor',
-  unknown: 'No se pudo validar',
-};
-
-/** La RPC usa el último fichaje global del empleado; mensajes crípticos → texto claro. */
-function friendlyFichajeRpcMessage(raw: string): string {
-  const m = raw.trim();
-  if (m.includes('PIN de fichaje incorrecto')) return 'Código incorrecto';
-  if (m.includes('Secuencia de fichaje inválida')) {
-    return 'El PIN es correcto, pero esta acción no toca ahora: suele pasar si hay una entrada abierta (a veces de otro día). Prueba Salida, o pide al encargado que revise el último fichaje.';
-  }
-  if (m.includes('Primero debes fichar la entrada')) return 'Primero debes fichar la llegada.';
-  if (m.includes('Ya cerraste la jornada')) return 'La jornada ya está cerrada. Ficha llegada para empezar otra.';
-  if (m.includes('Debes finalizar la pausa')) return 'Estás en pausa: primero fin de pausa, después puedes salir.';
-  return m;
+  return alias?.trim() || first.trim() || 'compañero';
 }
 
 export default function TerminalFichajePage() {
   const router = useRouter();
   const { localId, localName, profileReady, profileRole } = useAuth();
-  const perms = useMemo(() => buildStaffPermissions(profileRole), [profileRole]);
+
+  const perms = useMemo(
+    () => buildStaffPermissions(profileRole),
+    [profileRole]
+  );
+
   const supabase = getSupabaseClient();
 
-  const [now, setNow] = useState(() => new Date());
   const [step, setStep] = useState<Step>('home');
-  const [pendingAction, setPendingAction] = useState<'clock_in' | 'clock_out' | null>(null);
-  const [pendingResolved, setPendingResolved] = useState<{
-    employeeId: string;
-    firstName: string;
-    lastName: string;
-    alias: string | null;
-    fullPin: string;
-    shiftId: string | null;
-  } | null>(null);
+  const [pendingAction, setPendingAction] = useState<
+    'clock_in' | 'clock_out' | null
+  >(null);
+
   const [pin, setPin] = useState('');
   const [busy, setBusy] = useState(false);
   const [banner, setBanner] = useState<string | null>(null);
 
+  const [resolved, setResolved] = useState<any>(null);
   const [successAt, setSuccessAt] = useState<string | null>(null);
-  const [successAction, setSuccessAction] = useState<StaffTimeEventType | null>(null);
-  const [successPhrase, setSuccessPhrase] = useState<string | null>(null);
-  const [successEmoji, setSuccessEmoji] = useState<string | null>(null);
-  const [resolved, setResolved] = useState<{
-    employeeId: string;
-    firstName: string;
-    lastName: string;
-    alias: string | null;
-  } | null>(null);
+  const [successAction, setSuccessAction] =
+    useState<StaffTimeEventType | null>(null);
+
+  const [now, setNow] = useState(() => new Date());
 
   useEffect(() => {
-    const t = window.setInterval(() => setNow(new Date()), 1000);
-    return () => window.clearInterval(t);
-  }, []);
+    const timer = window.setInterval(() => {
+      setNow(new Date());
+    }, 1000);
 
-  const dateLabel = useMemo(
-    () =>
-      now.toLocaleDateString('es-ES', {
-        weekday: 'long',
-        day: 'numeric',
-        month: 'long',
-      }),
-    [now],
-  );
+    return () => window.clearInterval(timer);
+  }, []);
 
   const timeLabel = useMemo(
     () =>
@@ -113,34 +77,43 @@ export default function TerminalFichajePage() {
         minute: '2-digit',
         hour12: false,
       }),
-    [now],
+    [now]
+  );
+
+  const dateLabel = useMemo(
+    () =>
+      now.toLocaleDateString('es-ES', {
+        weekday: 'long',
+        day: 'numeric',
+        month: 'long',
+      }),
+    [now]
   );
 
   const resetFlow = useCallback(() => {
     setStep('home');
     setPendingAction(null);
-    setPendingResolved(null);
     setPin('');
     setBanner(null);
     setResolved(null);
     setSuccessAt(null);
     setSuccessAction(null);
-    setSuccessPhrase(null);
-    setSuccessEmoji(null);
   }, []);
 
   const goPin = (action: 'clock_in' | 'clock_out') => {
-    setBanner(null);
     setPendingAction(action);
-    setPendingResolved(null);
-    setPin('');
     setStep('pin');
+    setPin('');
+    setBanner(null);
   };
 
   const appendDigit = (d: string) => {
     if (pin.length >= 4 || busy) return;
+
     const next = pin + d;
+
     setPin(next);
+
     if (next.length === 4) {
       void submitPin(next);
     }
@@ -148,160 +121,71 @@ export default function TerminalFichajePage() {
 
   const submitPin = async (fullPin: string) => {
     if (!supabase || !localId || !pendingAction) return;
+
     setBusy(true);
     setBanner(null);
+
     try {
       const r = await staffKioskResolveByPin(supabase, fullPin);
+
       if (!r.ok) {
-        setBanner(PIN_ERR[r.error] ?? PIN_ERR.unknown);
+        setBanner('PIN incorrecto');
         setPin('');
         return;
       }
 
       const ymd = todayYmd();
+
       const [recentEntries, shifts] = await Promise.all([
-        fetchRecentStaffTimeEntriesForEmployee(supabase, localId, r.employeeId, 48),
+        fetchRecentStaffTimeEntriesForEmployee(
+          supabase,
+          localId,
+          r.employeeId,
+          48
+        ),
         fetchShiftsRange(supabase, localId, ymd, ymd),
       ]);
+
       const session = getClockSessionState(recentEntries);
-      const want: StaffTimeEventType = pendingAction;
-      if (!session.availableActions.includes(want)) {
-        const open =
-          session.lastEventType != null && session.lastEventType !== 'clock_out';
-        const hint =
-          want === 'clock_in'
-            ? open
-              ? 'Ya tienes jornada abierta (puede ser de otro día sin salida). Ficha Salida antes de una nueva Llegada, o pide al encargado que revise fichajes.'
-              : 'No puedes fichar llegada ahora.'
-            : session.lastEventType == null
-              ? 'No hay entrada registrada: ficha Llegada primero.'
-              : 'No puedes fichar salida en este momento (¿estás en pausa?).';
-        setBanner(hint);
+
+      if (!session.availableActions.includes(pendingAction)) {
+        setBanner('Acción no disponible');
         setPin('');
         return;
       }
 
       const planned = findShiftForToday(shifts, r.employeeId, ymd);
-      const shiftId = planned?.id ?? null;
-
-      if (want === 'clock_out' && session.lastEventType === 'break_start') {
-        await recordStaffTimeEvent(supabase, {
-          employeeId: r.employeeId,
-          eventType: 'break_end',
-          shiftId,
-          pin: fullPin,
-          origin: 'device',
-        });
-        const at = new Date().toLocaleTimeString('es-ES', {
-          hour: '2-digit',
-          minute: '2-digit',
-          hour12: false,
-        });
-        setResolved({
-          employeeId: r.employeeId,
-          firstName: r.firstName,
-          lastName: r.lastName,
-          alias: r.alias,
-        });
-        setSuccessAction('break_end');
-        setSuccessAt(at);
-        setSuccessPhrase('Bienvenido de nuevo');
-        setSuccessEmoji('👋');
-        setStep('success');
-        setPin('');
-        return;
-      }
-
-      if (want === 'clock_out' && session.availableActions.includes('break_start')) {
-        setPendingResolved({
-          employeeId: r.employeeId,
-          firstName: r.firstName,
-          lastName: r.lastName,
-          alias: r.alias,
-          fullPin,
-          shiftId,
-        });
-        setStep('choose_out');
-        setPin('');
-        return;
-      }
 
       await recordStaffTimeEvent(supabase, {
         employeeId: r.employeeId,
-        eventType: want,
-        shiftId,
+        eventType: pendingAction,
+        shiftId: planned?.id ?? null,
         pin: fullPin,
         origin: 'device',
       });
 
-      const at = new Date().toLocaleTimeString('es-ES', {
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: false,
-      });
       setResolved({
         employeeId: r.employeeId,
         firstName: r.firstName,
         lastName: r.lastName,
         alias: r.alias,
       });
-      setSuccessAction(want);
-      setSuccessAt(at);
-      if (want === 'clock_in') {
-        setSuccessPhrase(`Hola, ${displayFirstName(r.firstName, r.alias)}`);
-        setSuccessEmoji('👋');
-      } else {
-        setSuccessPhrase('Adiós');
-        setSuccessEmoji('🫡');
-      }
-      setStep('success');
-      setPin('');
-    } catch (e: unknown) {
-      const raw = e instanceof Error ? e.message : 'Error al fichar';
-      setBanner(friendlyFichajeRpcMessage(raw));
-      setPin('');
-    } finally {
-      setBusy(false);
-    }
-  };
 
-  const recordOutChoice = async (eventType: 'break_start' | 'clock_out') => {
-    if (!supabase || !pendingResolved) return;
-    setBusy(true);
-    setBanner(null);
-    try {
-      await recordStaffTimeEvent(supabase, {
-        employeeId: pendingResolved.employeeId,
-        eventType,
-        shiftId: pendingResolved.shiftId,
-        pin: pendingResolved.fullPin,
-        origin: 'device',
-      });
-      const at = new Date().toLocaleTimeString('es-ES', {
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: false,
-      });
-      setResolved({
-        employeeId: pendingResolved.employeeId,
-        firstName: pendingResolved.firstName,
-        lastName: pendingResolved.lastName,
-        alias: pendingResolved.alias,
-      });
-      setSuccessAction(eventType);
-      setSuccessAt(at);
-      if (eventType === 'break_start') {
-        setSuccessPhrase('Buen descanso');
-        setSuccessEmoji('☕');
-      } else {
-        setSuccessPhrase('Adiós');
-        setSuccessEmoji('🫡');
-      }
+      setSuccessAction(pendingAction);
+
+      setSuccessAt(
+        new Date().toLocaleTimeString('es-ES', {
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: false,
+        })
+      );
+
       setStep('success');
-      setPendingResolved(null);
-    } catch (e: unknown) {
-      setBanner(friendlyFichajeRpcMessage(e instanceof Error ? e.message : 'Error al fichar'));
-      setStep('pin');
+      setPin('');
+    } catch (e) {
+      setBanner('Error al fichar');
+      setPin('');
     } finally {
       setBusy(false);
     }
@@ -309,311 +193,237 @@ export default function TerminalFichajePage() {
 
   if (!profileReady) {
     return (
-      <div className="flex min-h-[100dvh] items-center justify-center bg-white text-zinc-500">
-        Cargando…
+      <div className="flex min-h-screen items-center justify-center">
+        Cargando...
       </div>
     );
   }
 
   if (!localId || !supabase) {
     return (
-      <div className="flex min-h-[100dvh] flex-col items-center justify-center gap-4 bg-white px-6 text-center text-zinc-600">
-        <p>No hay local o conexión. Abre esta pantalla con un usuario configurado.</p>
-        <Link href="/login" className="font-bold text-emerald-600 underline">
-          Ir al acceso
-        </Link>
+      <div className="flex min-h-screen items-center justify-center">
+        Sin conexión
       </div>
     );
   }
 
   if (!perms.canOperateAttendanceTerminal) {
     return (
-      <div className="flex min-h-[100dvh] flex-col items-center justify-center gap-4 bg-white px-6 text-center text-zinc-800">
-        <p className="text-lg font-semibold text-zinc-900">Terminal solo para encargados</p>
-        <p className="max-w-sm text-sm text-zinc-600">
-          Inicia sesión con un perfil <strong className="text-zinc-900">admin</strong> o{' '}
-          <strong className="text-zinc-900">manager</strong> en esta tablet (fichaje central por PIN).
+      <div className="flex min-h-screen flex-col items-center justify-center gap-5 bg-white px-6 text-center">
+        <p className="text-2xl font-black text-zinc-900">
+          Acceso restringido
         </p>
+
         <button
           type="button"
           onClick={() => goBackOrToPanel(router)}
-          className="rounded-2xl bg-zinc-900 px-6 py-3 text-sm font-extrabold text-white"
+          className="rounded-2xl bg-zinc-900 px-6 py-3 text-white"
         >
-          Ir al panel
+          Volver
         </button>
       </div>
     );
   }
 
   return (
-    <div className="relative flex min-h-[100dvh] flex-col bg-[#ffffff] text-zinc-900">
-      <header className="relative z-10 flex items-start justify-between gap-3 px-4 pt-4 sm:px-6 sm:pt-6">
-        {step === 'success' && resolved ? (
-          <div className="flex min-w-0 flex-1 items-center gap-3">
-            <div className="grid h-12 w-12 shrink-0 place-items-center rounded-full bg-sky-600 text-sm font-extrabold text-white shadow-lg">
-              {initials(resolved.firstName, resolved.lastName, resolved.alias)}
-            </div>
-            <div className="min-w-0">
-              <p className="truncate text-base font-extrabold sm:text-lg">
-                {staffDisplayName({
-                  firstName: resolved.firstName,
-                  lastName: resolved.lastName,
-                  alias: resolved.alias,
-                })}
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={resetFlow}
-              className="ml-auto shrink-0 text-sm font-bold text-sky-600 underline-offset-4 hover:underline"
-            >
-              ¡No soy yo!
-            </button>
-          </div>
-        ) : (
-          <div className="flex w-full items-center justify-between gap-3">
-            <Logo variant="inline" className="!h-10 sm:!h-12" />
-            <div className="flex shrink-0 items-center gap-2">
-              <button
-                type="button"
-                onClick={() => window.location.reload()}
-                className="grid h-11 w-11 place-items-center rounded-full bg-zinc-100 text-zinc-700 ring-1 ring-zinc-200/80 hover:bg-zinc-200/80"
-                aria-label="Actualizar"
-              >
-                <RefreshCw className="h-5 w-5" />
-              </button>
-              <Link
-                href="/personal/fichaje"
-                className="grid h-11 w-11 place-items-center rounded-full bg-zinc-100 text-zinc-700 ring-1 ring-zinc-200/80 hover:bg-zinc-200/80"
-                aria-label="Ajustes fichaje"
-              >
-                <Settings className="h-5 w-5" />
-              </Link>
-            </div>
-          </div>
-        )}
+    <div className="relative flex min-h-screen flex-col overflow-hidden bg-[#f8f6f4] text-zinc-950">
+      <header className="flex items-center justify-between px-4 py-4 sm:px-8">
+        <div className="w-14" />
+
+        <Logo variant="inline" className="!h-9 sm:!h-10" />
+
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => window.location.reload()}
+            className="grid h-11 w-11 place-items-center rounded-full bg-white shadow-sm ring-1 ring-zinc-200 transition hover:bg-zinc-50"
+          >
+            <RefreshCw className="h-5 w-5 text-zinc-700" />
+          </button>
+
+          <Link
+            href="/personal/fichaje"
+            className="grid h-11 w-11 place-items-center rounded-full bg-white shadow-sm ring-1 ring-zinc-200 transition hover:bg-zinc-50"
+          >
+            <Settings className="h-5 w-5 text-zinc-700" />
+          </Link>
+        </div>
       </header>
 
-      <div className="relative z-10 flex flex-1 flex-col items-center justify-center px-4 pb-10 pt-6 sm:px-8">
-        {step === 'home' ? (
-          <>
-            {/* Greeting + date  |  Clock */}
-            <div className="flex w-full items-start justify-between gap-4 px-2 mb-10 sm:mb-14">
-              <div className="flex flex-col text-left">
-                <h2 className="text-2xl font-extrabold text-zinc-900 sm:text-3xl">
-                  ¡Hola, bienvenido/a! 👋
-                </h2>
-                <p className="mt-1 text-sm font-medium capitalize text-zinc-500">{dateLabel}</p>
-                <p className="mt-0.5 text-xs font-medium text-zinc-400">{localName ?? 'Local'}</p>
-              </div>
-              <p className="shrink-0 text-6xl font-black tabular-nums tracking-tight text-zinc-900 sm:text-7xl">
-                {timeLabel}
-              </p>
+      <main className="flex flex-1 items-center justify-center px-4 pb-10 sm:px-8">
+        {step === 'home' && (
+          <section className="w-full max-w-5xl rounded-[36px] border border-zinc-100 bg-white px-5 py-8 text-center shadow-[0_24px_80px_rgba(15,23,42,0.08)] sm:px-10 sm:py-10 lg:px-16">
+            <h1 className="font-serif text-5xl font-semibold tracking-tight text-[#D71920] sm:text-6xl md:text-7xl">
+              Chef One
+            </h1>
+
+            <p className="mt-4 text-lg font-extrabold text-zinc-950 sm:text-xl">
+              ¡Hola, bienvenido/a! 👋
+            </p>
+
+            <p className="mt-1 text-sm font-semibold capitalize text-zinc-400 sm:text-base">
+              {dateLabel}
+            </p>
+
+            <div className="mt-6 text-[76px] font-black leading-none tracking-[-0.07em] text-zinc-950 sm:text-[118px] md:text-[140px]">
+              {timeLabel}
             </div>
 
-            {/* Action buttons — stacked, full-width */}
-            <div className="flex w-full max-w-sm flex-col gap-5">
+            <p className="mt-2 text-xs font-bold text-zinc-400">
+              {localName ?? 'Local'}
+            </p>
+
+            <p className="mx-auto mt-6 max-w-md text-base font-medium leading-relaxed text-zinc-500 sm:text-lg">
+              <span className="px-2 text-2xl font-black text-[#D71920]">
+                “
+              </span>
+              Cada día es una nueva oportunidad para ser mejor que ayer.
+              <span className="px-2 text-2xl font-black text-[#D71920]">
+                ”
+              </span>
+            </p>
+
+            <div className="mx-auto mt-8 grid max-w-xl grid-cols-1 gap-3 sm:grid-cols-2">
               <button
                 type="button"
                 onClick={() => goPin('clock_in')}
-                className="min-h-[80px] w-full rounded-3xl bg-[var(--color-terracotta)] py-5 text-xl font-extrabold tracking-wide text-white shadow-lg transition hover:opacity-90 active:scale-[0.98] sm:text-2xl"
-                aria-label="Llegada de turno"
+                className="flex min-h-[68px] items-center justify-center gap-3 rounded-2xl border border-zinc-200 bg-white px-5 text-base font-black uppercase tracking-wide text-[#D71920] shadow-sm transition hover:bg-zinc-50 active:scale-[0.99]"
               >
+                <span className="text-3xl">↪</span>
                 LLEGADA
               </button>
+
               <button
                 type="button"
                 onClick={() => goPin('clock_out')}
-                className="min-h-[80px] w-full rounded-3xl bg-zinc-900 py-5 text-xl font-extrabold tracking-wide text-white shadow-lg transition hover:bg-zinc-800 active:scale-[0.98] sm:text-2xl"
-                aria-label="Salida de turno"
+                className="flex min-h-[68px] items-center justify-center gap-3 rounded-2xl bg-[#D71920] px-5 text-base font-black uppercase tracking-wide text-white shadow-[0_14px_34px_rgba(215,25,32,0.22)] transition hover:bg-[#b9151b] active:scale-[0.99]"
               >
+                <span className="text-3xl">↩</span>
                 SALIDA
               </button>
             </div>
 
-            <p className="mt-10 text-center text-[11px] font-medium text-zinc-400">
+            <p className="mt-7 text-sm font-medium text-zinc-500">
+              Gracias por tu compromiso ❤️
+            </p>
+
+            <p className="mt-3 text-[11px] font-bold uppercase tracking-[0.18em] text-zinc-300">
               Modo terminal · sesión de encargado
             </p>
-          </>
-        ) : null}
+          </section>
+        )}
 
-        {step === 'pin' ? (
-          <div className="flex w-full max-w-md flex-col items-center text-center">
-            <Logo variant="inline" className="mb-5 !h-[min(36vmin,8rem)] sm:!h-[min(34vmin,7.75rem)]" />
+        {step === 'pin' && (
+          <section className="w-full max-w-md rounded-[34px] border border-zinc-100 bg-white px-5 py-7 text-center shadow-[0_24px_80px_rgba(15,23,42,0.08)] sm:px-8">
             <button
               type="button"
               onClick={resetFlow}
-              className="mb-6 text-sm font-bold text-zinc-500 hover:text-zinc-900"
+              className="mb-5 text-sm font-bold text-zinc-400"
             >
               Cancelar
             </button>
-            <div className="relative mb-6">
-              <div className="absolute -inset-6 rounded-full border border-zinc-200/70 bg-zinc-100/50" />
-              <div className="relative grid h-24 w-24 place-items-center rounded-full bg-zinc-50/90 ring-2 ring-amber-400/55 shadow-sm">
-                <Lock className="h-10 w-10 text-amber-600" strokeWidth={2.2} />
-              </div>
+
+            <div className="mx-auto grid h-20 w-20 place-items-center rounded-full bg-zinc-50 ring-1 ring-zinc-200">
+              <Lock className="h-9 w-9 text-[#D71920]" />
             </div>
-            <p className="text-xl font-semibold text-zinc-900">Introduce tu código PIN</p>
+
+            <p className="mt-5 text-xl font-extrabold text-zinc-950">
+              Introduce tu código PIN
+            </p>
+
             <div className="mt-6 flex justify-center gap-3">
               {[0, 1, 2, 3].map((i) => (
                 <span
                   key={i}
                   className={[
-                    'h-3 w-3 rounded-full border border-zinc-300 transition-colors',
-                    pin.length > i ? 'border-sky-500 bg-sky-500' : 'bg-transparent',
+                    'h-3 w-3 rounded-full border border-zinc-300',
+                    pin.length > i
+                      ? 'border-[#D71920] bg-[#D71920]'
+                      : '',
                   ].join(' ')}
                 />
               ))}
             </div>
-            {banner ? (
-              <p className="mt-4 max-w-[90%] text-sm font-semibold text-amber-700">{banner}</p>
-            ) : null}
-            <div className="mt-10 grid w-full max-w-xs grid-cols-3 justify-items-center gap-x-6 gap-y-5 text-3xl font-semibold text-zinc-900 sm:text-4xl">
-              {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map((n) => (
+
+            {banner && (
+              <p className="mt-4 rounded-2xl bg-amber-50 px-4 py-3 text-sm font-bold text-amber-800">
+                {banner}
+              </p>
+            )}
+
+            <div className="mt-8 grid grid-cols-3 justify-items-center gap-x-5 gap-y-4 text-3xl font-bold text-zinc-950">
+              {['1','2','3','4','5','6','7','8','9'].map((n) => (
                 <button
                   key={n}
                   type="button"
                   disabled={busy}
                   onClick={() => appendDigit(n)}
-                  className="h-14 w-full max-w-[4.5rem] rounded-2xl transition hover:bg-zinc-100 active:bg-zinc-200/80 disabled:opacity-40 sm:h-16"
+                  className="grid h-16 w-16 place-items-center rounded-2xl transition hover:bg-zinc-100 active:bg-zinc-200"
                 >
                   {n}
                 </button>
               ))}
+
               <div />
+
               <button
                 type="button"
                 disabled={busy}
                 onClick={() => appendDigit('0')}
-                className="h-14 w-full max-w-[4.5rem] rounded-2xl transition hover:bg-zinc-100 active:bg-zinc-200/80 disabled:opacity-40 sm:h-16"
+                className="grid h-16 w-16 place-items-center rounded-2xl transition hover:bg-zinc-100 active:bg-zinc-200"
               >
                 0
               </button>
+
               <button
                 type="button"
-                disabled={busy}
-                onClick={() => {
-                  setPin((p) => p.slice(0, -1));
-                  setBanner(null);
-                }}
-                className="h-14 text-sm font-extrabold uppercase tracking-wide text-zinc-500 hover:text-zinc-900 sm:h-16"
+                onClick={() => setPin((p) => p.slice(0, -1))}
+                className="h-16 text-sm font-extrabold uppercase tracking-wide text-zinc-400"
               >
                 Borrar
               </button>
             </div>
-          </div>
-        ) : null}
+          </section>
+        )}
 
-        {step === 'choose_out' && pendingResolved ? (
-          <div
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
-            onClick={() => { setStep('pin'); setPendingResolved(null); }}
-          >
-            <div
-              className="w-full max-w-md rounded-xl bg-[var(--card-bg)] p-8 shadow-2xl"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <p className="mb-1 text-sm font-medium text-zinc-500">
-                {staffDisplayName({
-                  firstName: pendingResolved.firstName,
-                  lastName: pendingResolved.lastName,
-                  alias: pendingResolved.alias,
-                })}
-              </p>
-              <h3 className="mb-6 text-2xl font-bold text-zinc-900">¿Qué quieres registrar?</h3>
-              <div className="flex flex-col gap-4">
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={() => void recordOutChoice('break_start')}
-                  className="w-full rounded-xl bg-yellow-500 py-3 text-lg font-semibold text-white shadow transition hover:bg-yellow-600 active:scale-[0.98] disabled:opacity-50"
-                >
-                  ➡️ Voy al descanso
-                </button>
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={() => void recordOutChoice('clock_out')}
-                  className="w-full rounded-xl bg-[var(--color-terracotta)] py-3 text-lg font-semibold text-white shadow transition hover:bg-[var(--color-accent-terracotta)] active:scale-[0.98] disabled:opacity-50"
-                >
-                  🚪 Acabo el turno (Salida Final)
-                </button>
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={() => { setStep('pin'); setPendingResolved(null); }}
-                  className="w-full rounded-xl bg-gray-200 py-3 text-lg font-semibold text-zinc-800 shadow transition hover:bg-gray-300 active:scale-[0.98] disabled:opacity-50"
-                >
-                  ❌ Cancelar
-                </button>
-              </div>
+        {step === 'success' && resolved && successAt && (
+          <section className="w-full max-w-md rounded-[34px] border border-zinc-100 bg-white px-5 py-7 text-center shadow-[0_24px_80px_rgba(15,23,42,0.08)] sm:px-8">
+            <div className="text-5xl">
+              {successAction === 'clock_in' ? '👋' : '🫡'}
             </div>
-          </div>
-        ) : null}
 
-        {step === 'success' && resolved && successAt && successAction ? (
-          <div
-            className={[
-              'w-full max-w-md rounded-[2rem] border bg-[#ffffff] p-6 shadow-xl shadow-zinc-900/10 ring-1 sm:p-8',
-              successAction === 'clock_in'
-                ? 'border-emerald-200 ring-emerald-100'
-                : 'border-amber-200 ring-amber-100',
-            ].join(' ')}
-          >
-            <div className="flex justify-center">
-              <Logo variant="inline" className="!h-[min(36vmin,8rem)] sm:!h-[min(34vmin,7.75rem)]" />
-            </div>
-            <div className="mt-4 text-center text-5xl leading-none">{successEmoji ?? '✨'}</div>
-            <h2 className="mt-3 text-center text-2xl font-extrabold text-zinc-900 sm:text-3xl">
-              {successAction === 'clock_out'
-                ? `¡Adiós ${displayFirstName(resolved.firstName, resolved.alias)}!`
-                : successAction === 'break_start'
-                  ? `Buen descanso, ${displayFirstName(resolved.firstName, resolved.alias)}`
-                  : successAction === 'break_end'
-                    ? `Bienvenido de nuevo, ${displayFirstName(resolved.firstName, resolved.alias)}`
-                    : `¡Hola ${displayFirstName(resolved.firstName, resolved.alias)}!`}
-            </h2>
-            <p className="mt-3 text-center text-sm font-medium text-zinc-600">
+            <h2 className="mt-4 text-2xl font-black text-zinc-950 sm:text-3xl">
               {successAction === 'clock_in'
-                ? 'Hemos registrado tu llegada a las'
-                : successAction === 'break_start'
-                  ? 'Hemos registrado tu salida a descanso a las'
-                  : successAction === 'break_end'
-                    ? 'Hemos registrado tu vuelta de descanso a las'
-                    : 'Hemos registrado tu salida final a las'}
+                ? `¡Hola ${displayFirstName(
+                    resolved.firstName,
+                    resolved.alias
+                  )}!`
+                : `¡Adiós ${displayFirstName(
+                    resolved.firstName,
+                    resolved.alias
+                  )}!`}
+            </h2>
+
+            <p className="mt-3 text-sm font-medium text-zinc-500">
+              Registro completado a las
             </p>
-            <div className="mt-5 rounded-2xl bg-zinc-50 px-4 py-5 text-center ring-1 ring-zinc-200/90">
-              <span className="text-5xl font-black tabular-nums text-zinc-900 sm:text-6xl">{successAt}</span>
+
+            <div className="mt-5 rounded-3xl bg-zinc-50 px-4 py-5 text-center ring-1 ring-zinc-200">
+              <span className="text-5xl font-black tracking-[-0.05em] text-zinc-950 sm:text-6xl">
+                {successAt}
+              </span>
             </div>
-            {successPhrase ? (
-              <p
-                className={[
-                  'mt-5 rounded-2xl px-4 py-3 text-center text-base font-semibold leading-snug sm:text-lg',
-                  successAction === 'clock_in'
-                    ? 'bg-emerald-50 text-emerald-900 ring-1 ring-emerald-200/80'
-                    : 'bg-amber-50 text-amber-950 ring-1 ring-amber-200/80',
-                ].join(' ')}
-              >
-                {successPhrase}
-              </p>
-            ) : null}
+
             <button
               type="button"
               onClick={resetFlow}
-              className={[
-                'mt-8 min-h-[56px] w-full rounded-2xl text-lg font-extrabold text-white shadow-lg transition active:scale-[0.99]',
-              successAction === 'clock_in'
-                ? 'bg-emerald-500 shadow-emerald-900/30 hover:bg-emerald-400'
-                : successAction === 'break_end'
-                  ? 'bg-indigo-500 shadow-indigo-900/30 hover:bg-indigo-400'
-                  : 'bg-amber-500 shadow-amber-900/35 hover:bg-amber-400',
-              ].join(' ')}
+              className="mt-7 min-h-[58px] w-full rounded-2xl bg-[#D71920] text-lg font-black text-white shadow-[0_14px_34px_rgba(215,25,32,0.22)] transition active:scale-[0.99]"
             >
               Aceptar
             </button>
-          </div>
-        ) : null}
-      </div>
+          </section>
+        )}
+      </main>
     </div>
   );
 }
