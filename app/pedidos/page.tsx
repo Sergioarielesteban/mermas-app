@@ -31,6 +31,7 @@ import { buildOidoChefAiContext } from '@/lib/oido-chef-ai-context';
 import {
   billingQuantityForReceptionPrice,
   billingQuantityForLine,
+  commitPriceEvolutionFromReceivedOrderItem,
   deleteOrder,
   deletePurchaseOrderItemById,
   fetchAvgReceivedPricePerKgBySupplierProductIds,
@@ -1380,6 +1381,10 @@ export default function PedidosPage() {
               parsedWeight,
             );
             await persistReceptionItemTotals(supabase, localId, merged);
+            void commitPriceEvolutionFromReceivedOrderItem(supabase, localId, merged, {
+              userId,
+              receivedAt: new Date().toISOString(),
+            }).catch(() => {});
             return;
           }
           const rawOq = orderQtyInputRef.current[item.id];
@@ -1392,10 +1397,14 @@ export default function PedidosPage() {
             receivedPricePerKg: null,
           };
           await persistReceptionItemTotals(supabase, localId, merged);
+          void commitPriceEvolutionFromReceivedOrderItem(supabase, localId, merged, {
+            userId,
+            receivedAt: new Date().toISOString(),
+          }).catch(() => {});
         }),
       );
     },
-    [catalogNameByProductId, getLinePrice, localId, resolvePpkForItemSnap],
+    [catalogNameByProductId, getLinePrice, localId, resolvePpkForItemSnap, userId],
   );
 
   const commitSentOrderAsReceived = React.useCallback(
