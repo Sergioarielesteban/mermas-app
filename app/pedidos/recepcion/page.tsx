@@ -243,17 +243,21 @@ export default function RecepcionPedidosPage() {
     if (!localId) throw new Error('Sin local.');
     const supabase = getSupabaseClient();
     if (!supabase) throw new Error('Supabase no disponible.');
+
     await Promise.all(
       order.items.map(async (item) => {
         const price = getLinePrice(item);
         const merged = { ...item, pricePerUnit: price };
+
         await persistReceptionItemTotals(supabase, localId, merged);
+
+        await commitPriceEvolutionFromReceivedOrderItem(supabase, localId, merged, {
+          userId,
+          receivedAt: order.receivedAt ?? new Date().toISOString(),
+        });
       }),
     );
-    await commitPriceEvolutionFromReceivedOrderItem(supabase, localId, merged, {
-      userId,
-      receivedAt: order.receivedAt ?? new Date().toISOString(),
-    });
+
     setPriceInputByItemId((prev) => {
       const next = { ...prev };
       for (const item of order.items) {
@@ -261,6 +265,7 @@ export default function RecepcionPedidosPage() {
       }
       return next;
     });
+
     dispatchPedidosDataChanged();
   };
 

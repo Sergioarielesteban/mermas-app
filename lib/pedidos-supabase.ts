@@ -1390,6 +1390,21 @@ export async function commitPriceEvolutionFromReceivedOrderItem(
     receivedAt?: string | null;
   },
 ): Promise<{ changed: boolean }> {
+  console.log('[PRICE_EVOLUTION_DEBUG]', {
+    itemId: item.id,
+    supplierProductId: item.supplierProductId,
+    productName: item.productName,
+    pricePerUnit: item.pricePerUnit,
+    receivedPricePerKg: item.receivedPricePerKg,
+    receivedWeightKg: item.receivedWeightKg,
+    receivedQuantity: item.receivedQuantity,
+    unit: item.unit,
+    billingUnit: item.billingUnit,
+    billingQtyPerOrderUnit: item.billingQtyPerOrderUnit,
+    excludeFromPriceEvolution: item.excludeFromPriceEvolution,
+    incidentType: item.incidentType,
+  });
+
   if (!item.supplierProductId) return { changed: false };
   if (item.excludeFromPriceEvolution) return { changed: false };
   if (item.incidentType === 'missing') return { changed: false };
@@ -1415,9 +1430,7 @@ export async function commitPriceEvolutionFromReceivedOrderItem(
         Number.isFinite(item.billingQtyPerOrderUnit) &&
         item.billingQtyPerOrderUnit > 0
       ) {
-        nextCatalogPrice =
-          item.receivedPricePerKg *
-          item.billingQtyPerOrderUnit;
+        nextCatalogPrice = item.receivedPricePerKg * item.billingQtyPerOrderUnit;
       } else if (
         item.receivedWeightKg != null &&
         Number.isFinite(item.receivedWeightKg) &&
@@ -1427,17 +1440,13 @@ export async function commitPriceEvolutionFromReceivedOrderItem(
         item.receivedQuantity > 0
       ) {
         nextCatalogPrice =
-          (item.receivedPricePerKg *
-            item.receivedWeightKg) /
-          item.receivedQuantity;
+          (item.receivedPricePerKg * item.receivedWeightKg) / item.receivedQuantity;
       } else if (
         item.estimatedKgPerUnit != null &&
         Number.isFinite(item.estimatedKgPerUnit) &&
         item.estimatedKgPerUnit > 0
       ) {
-        nextCatalogPrice =
-          item.receivedPricePerKg *
-          item.estimatedKgPerUnit;
+        nextCatalogPrice = item.receivedPricePerKg * item.estimatedKgPerUnit;
       }
     }
   } else {
