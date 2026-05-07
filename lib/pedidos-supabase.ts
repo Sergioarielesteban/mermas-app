@@ -1286,7 +1286,7 @@ export async function updateSupplierProductPriceFromRecepcion(
   supplierProductId: string,
   newPriceInCatalogUnit: number,
   meta: {
-    deliveryNoteId: string;
+    deliveryNoteId?: string | null;
     receptionDate: string | null;
     userId?: string | null;
     existingRow?: SupplierProductRow | null;
@@ -1335,7 +1335,7 @@ export async function updateSupplierProductPriceFromRecepcion(
     diferencia: diff,
     diferencia_pct: diffPct,
     unidad_comparacion: uComp,
-    albaran_id: meta.deliveryNoteId,
+    albaran_id: meta.deliveryNoteId ?? null,
     created_by: meta.userId ?? null,
   });
   if (ins.error) {
@@ -1380,6 +1380,95 @@ export async function updateSupplierProductPriceFromRecepcion(
   await updateSupplierProductLastReceivedPrice(supabase, localId, supplierProductId, newP, new Date().toISOString());
 
   return { changed: true };
+}
+export async function commitPriceEvolutionFromReceivedOrderItem(
+  supabase: SupabaseClient,
+  localId: string,
+  item: PedidoOrderItem,
+  meta?: {
+    userId?: string | null;
+    receivedAt?: string | null;
+  },
+): Promise<{ changed: boolean }> {
+  if (!item.supplierProductId) return { changed: false };
+  if (item.excludeFromPriceEvolution) return { changed: false };
+  if (item.incidentType === 'missing') return { changed: false };
+
+  let nextCatalogPrice: number | null = null;
+
+  if (receptionBillsByWeight(item)) {
+    if (item.unit === 'kg') {
+      nextCatalogPrice =
+        item.pricePerUnit != null &&
+        Number.isFinite(item.pricePerUnit) &&
+        item.pricePerUnit > 0
+          ? item.pricePerUnit
+          : null;
+    } else if (
+      item.receivedPricePerKg != null &&
+      Number.isFinite(item.receivedPricePerKg) &&
+      item.receivedPricePerKg > 0
+    ) {
+      if (
+        item.billingUnit === 'kg' &&
+        item.billingQtyPerOrderUnit != null &&
+        Number.isFinite(item.billingQtyPerOrderUnit) &&
+        item.billingQtyPerOrderUnit > 0
+      ) {
+        nextCatalogPrice =
+          item.receivedPricePerKg *
+          item.billingQtyPerOrderUnit;
+      } else if (
+        item.receivedWeightKg != null &&
+        Number.isFinite(item.receivedWeightKg) &&
+        item.receivedWeightKg > 0 &&
+        item.receivedQuantity != null &&
+        Number.isFinite(item.receivedQuantity) &&
+        item.receivedQuantity > 0
+      ) {
+        nextCatalogPrice =
+          (item.receivedPricePerKg *
+            item.receivedWeightKg) /
+          item.receivedQuantity;
+      } else if (
+        item.estimatedKgPerUnit != null &&
+        Number.isFinite(item.estimatedKgPerUnit) &&
+        item.estimatedKgPerUnit > 0
+      ) {
+        nextCatalogPrice =
+          item.receivedPricePerKg *
+          item.estimatedKgPerUnit;
+      }
+    }
+  } else {
+    nextCatalogPrice =
+      item.pricePerUnit != null &&
+      Number.isFinite(item.pricePerUnit) &&
+      item.pricePerUnit > 0
+        ? item.pricePerUnit
+        : null;
+  }
+
+  if (
+    nextCatalogPrice == null ||
+    !Number.isFinite(nextCatalogPrice) ||
+    nextCatalogPrice <= 0
+  ) {
+    return { changed: false };
+  }
+
+  return updateSupplierProductPriceFromRecepcion(
+    supabase,
+    localId,
+    item.supplierProductId,
+    Math.round(nextCatalogPrice * 10000) / 10000,
+    {
+      deliveryNoteId: null,
+      receptionDate: meta?.receivedAt ?? new Date().toISOString(),
+      userId: meta?.userId ?? null,
+      existingRow: null,
+    },
+  );
 }
 
 /** @deprecated Usar `updateSupplierProductPriceFromRecepcion` (solo albarán). */

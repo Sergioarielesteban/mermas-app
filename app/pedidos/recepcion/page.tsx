@@ -26,6 +26,7 @@ import {
   fetchReceptionEuroPerKgHintsBySupplierProductIds,
   fetchSuppliersWithProducts,
   persistReceptionItemTotals,
+  commitPriceEvolutionFromReceivedOrderItem,
   receptionBillsByWeight,
   receptionLineTotals,
   resolveReceivedQuantityForReceptionPreview,
@@ -249,6 +250,10 @@ export default function RecepcionPedidosPage() {
         await persistReceptionItemTotals(supabase, localId, merged);
       }),
     );
+    await commitPriceEvolutionFromReceivedOrderItem(supabase, localId, merged, {
+      userId,
+      receivedAt: order.receivedAt ?? new Date().toISOString(),
+    });
     setPriceInputByItemId((prev) => {
       const next = { ...prev };
       for (const item of order.items) {
