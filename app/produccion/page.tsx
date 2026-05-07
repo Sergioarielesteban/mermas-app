@@ -311,8 +311,8 @@ function ProduccionBoardInner() {
   const isClosed = Boolean(session?.completedAt);
 
   return (
-    <div className="w-full min-w-0 pb-16 pt-0 sm:pt-1">
-      <header className="sticky top-0 z-20 -mx-4 w-[calc(100%+2rem)] border-b border-zinc-200/90 bg-[#fafafa]/95 px-4 py-3 shadow-[0_4px_24px_-8px_rgba(0,0,0,0.08)] backdrop-blur-md supports-[backdrop-filter]:bg-[#fafafa]/88 sm:static sm:z-auto sm:mx-0 sm:mb-1 sm:w-full sm:border-0 sm:bg-transparent sm:px-0 sm:py-0 sm:shadow-none sm:backdrop-blur-none">
+    <div className="touch-pan-y w-full min-w-0 max-w-full overflow-x-hidden pb-16 pt-0 [overflow-wrap:anywhere] sm:pt-1">
+      <header className="sticky top-0 z-20 w-full max-w-full border-b border-zinc-200/90 bg-[#fafafa]/95 py-3 shadow-[0_4px_24px_-8px_rgba(0,0,0,0.06)] backdrop-blur-md supports-[backdrop-filter]:bg-[#fafafa]/88 sm:static sm:z-auto sm:mb-1 sm:border-0 sm:bg-transparent sm:py-0 sm:shadow-none sm:backdrop-blur-none">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0 flex-1 pr-1">
             <h1 className="font-serif text-[0.95rem] font-black leading-tight tracking-tight text-zinc-900 sm:text-lg">
@@ -363,18 +363,18 @@ function ProduccionBoardInner() {
               ))}
             </select>
           </label>
-          <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:justify-end sm:gap-2 sm:pl-0 md:ml-auto">
+          <div className="grid min-w-0 grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:justify-end sm:gap-2 sm:pl-0 md:ml-auto">
             <button
               type="button"
               disabled={closing || !session?.id || isClosed}
               onClick={() => void guardarDia()}
-              className="col-span-2 h-10 rounded-lg border border-zinc-900 bg-zinc-900 px-3 text-[11px] font-black uppercase tracking-wide text-white shadow-sm transition hover:bg-zinc-800 disabled:opacity-45 sm:col-span-1"
+              className="col-span-2 h-10 min-w-0 rounded-lg border border-zinc-900 bg-zinc-900 px-2 text-[11px] font-black uppercase tracking-wide text-white shadow-sm transition hover:bg-zinc-800 disabled:opacity-45 sm:col-span-1 sm:px-3"
             >
               {closing ? '…' : 'Guardar día'}
             </button>
             <Link
               href="/produccion/etiquetas"
-              className="flex h-10 items-center justify-center rounded-lg border border-zinc-200 bg-white px-2.5 text-center text-[11px] font-black uppercase tracking-wide text-zinc-900 shadow-sm transition hover:border-zinc-300 hover:bg-zinc-50"
+              className="flex h-10 min-w-0 items-center justify-center rounded-lg border border-zinc-200 bg-white px-1.5 text-center text-[10px] font-black uppercase leading-tight tracking-wide text-zinc-900 shadow-sm transition hover:border-zinc-300 hover:bg-zinc-50 sm:px-2.5 sm:text-[11px]"
             >
               Etiquetas a mano
             </Link>
@@ -382,7 +382,7 @@ function ProduccionBoardInner() {
               type="button"
               disabled={!session?.id || !templateId.trim()}
               onClick={irEtiquetasImprimir}
-              className="h-10 rounded-lg border border-zinc-200 bg-white px-2.5 text-[11px] font-black uppercase tracking-wide text-zinc-900 shadow-sm transition hover:border-zinc-300 hover:bg-zinc-50 disabled:opacity-45"
+              className="h-10 min-w-0 rounded-lg border border-zinc-200 bg-white px-1.5 text-[10px] font-black uppercase leading-tight tracking-wide text-zinc-900 shadow-sm transition hover:border-zinc-300 hover:bg-zinc-50 disabled:opacity-45 sm:px-2.5 sm:text-[11px]"
             >
               Imprimir etiquetas
             </button>
@@ -450,8 +450,9 @@ function ProduccionBoardInner() {
             </p>
           ) : null}
 
-          <div className="mt-3 w-full min-w-0 overflow-x-auto rounded-xl border border-zinc-200/95 bg-white shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
-            <table className="table-fixed w-full min-w-0 border-collapse text-left text-xs">
+          <div className="mt-3 w-full min-w-0 max-w-full overflow-hidden rounded-xl border border-zinc-200/95 bg-white shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
+            <div className="w-full min-w-0 max-w-full overflow-x-auto overscroll-x-contain [-webkit-overflow-scrolling:touch]">
+            <table className="table-fixed w-full min-w-0 max-w-full border-collapse text-left text-xs">
               <colgroup>
                 <col style={{ width: 'auto' }} />
                 <col style={{ width: '2.375rem' }} />
@@ -552,6 +553,7 @@ function ProduccionBoardInner() {
                 })}
               </tbody>
             </table>
+            </div>
           </div>
 
           {!isClosed && blocks.length > 1 ? (
