@@ -5,6 +5,7 @@ import { Suspense, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 
 import { useAuth } from '@/components/AuthProvider';
+import LabelPrintSetupTip from '@/components/LabelPrintSetupTip';
 import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
 import {
   type ChefProductionBoardRow,
@@ -271,13 +272,16 @@ function ProduccionEtiquetasPrintInner() {
           </p>
 
           {labels.length > 0 ? (
-            <button
-              type="button"
-              onClick={() => window.print()}
-              className="flex min-h-[3.25rem] w-full touch-manipulation items-center justify-center rounded-2xl bg-zinc-900 text-sm font-black uppercase tracking-wide text-white"
-            >
-              Imprimir {labels.length} etiqueta{labels.length === 1 ? '' : 's'}
-            </button>
+            <>
+              <button
+                type="button"
+                onClick={() => window.print()}
+                className="flex min-h-[3.25rem] w-full touch-manipulation items-center justify-center rounded-2xl bg-zinc-900 text-sm font-black uppercase tracking-wide text-white"
+              >
+                Imprimir {labels.length} etiqueta{labels.length === 1 ? '' : 's'}
+              </button>
+              <LabelPrintSetupTip />
+            </>
           ) : (
             <p className="text-sm leading-relaxed text-zinc-700">
               No hay etiquetas para imprimir. Marca cantidades en HECHO en Producción del día.

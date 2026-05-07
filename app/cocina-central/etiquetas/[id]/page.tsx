@@ -4,6 +4,7 @@ import { useParams } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 import QRCode from 'qrcode';
 import { useAuth } from '@/components/AuthProvider';
+import LabelPrintSetupTip from '@/components/LabelPrintSetupTip';
 import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
 import { buildCocinaCentralBatchQrUrl } from '@/lib/cocina-central-qr';
 import { ccFetchBatchById, ccProductName } from '@/lib/cocina-central-supabase';
@@ -133,6 +134,7 @@ export default function CocinaCentralEtiquetaPage() {
           >
             Imprimir etiqueta
           </button>
+          <LabelPrintSetupTip />
         </div>
 
         <div className="label-sheet">

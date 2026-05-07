@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
+import LabelPrintSetupTip from '@/components/LabelPrintSetupTip';
 import {
   buildLabelPrintCss,
   getLabelTemplate,
@@ -109,8 +110,8 @@ export default function ProduccionEtiquetasPage() {
 
   return (
     <>
-      <div className="no-print min-h-screen bg-zinc-50 px-4 py-5 text-zinc-950">
-        <div className="mx-auto max-w-7xl">
+      <div className="no-print min-h-screen w-full min-w-0 max-w-full overflow-x-hidden bg-zinc-50 px-3 py-4 text-zinc-950 sm:px-4">
+        <div className="mx-auto w-full min-w-0 max-w-7xl">
           <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
             <div>
               <div className="text-xs font-semibold text-zinc-500">Producción / Etiquetas</div>
@@ -137,21 +138,30 @@ export default function ProduccionEtiquetasPage() {
             <main className="space-y-5">
               <section className="rounded-3xl bg-white p-4 shadow-sm ring-1 ring-zinc-200">
                 <div className="flex flex-wrap gap-2 border-b border-zinc-100 pb-4">
-                  <button
-                    type="button"
-                    className="rounded-xl bg-red-50 px-4 py-2 text-sm font-black text-red-700 ring-1 ring-red-200"
+                  <Link
+                    href="/produccion"
+                    className="rounded-xl bg-red-50 px-4 py-2 text-sm font-black text-red-700 ring-1 ring-red-200 transition hover:bg-red-100/80"
                   >
                     Producción del día
-                  </button>
-                  <button type="button" className="rounded-xl bg-white px-4 py-2 text-sm font-bold text-zinc-600 ring-1 ring-zinc-200">
+                  </Link>
+                  <Link
+                    href="/pedidos/articulos"
+                    className="rounded-xl bg-white px-4 py-2 text-sm font-bold text-zinc-600 ring-1 ring-zinc-200 transition hover:bg-zinc-50"
+                  >
                     Artículos
-                  </button>
-                  <button type="button" className="rounded-xl bg-white px-4 py-2 text-sm font-bold text-zinc-600 ring-1 ring-zinc-200">
+                  </Link>
+                  <Link
+                    href="/inventario"
+                    className="rounded-xl bg-white px-4 py-2 text-sm font-bold text-zinc-600 ring-1 ring-zinc-200 transition hover:bg-zinc-50"
+                  >
                     Inventario
-                  </button>
-                  <button type="button" className="rounded-xl bg-white px-4 py-2 text-sm font-bold text-zinc-600 ring-1 ring-zinc-200">
+                  </Link>
+                  <Link
+                    href="/produccion/historial"
+                    className="rounded-xl bg-white px-4 py-2 text-sm font-bold text-zinc-600 ring-1 ring-zinc-200 transition hover:bg-zinc-50"
+                  >
                     Historial
-                  </button>
+                  </Link>
                 </div>
                 <div className="mt-4 flex flex-wrap gap-3">
                   <input
@@ -162,7 +172,7 @@ export default function ProduccionEtiquetasPage() {
                     Filtros
                   </button>
                 </div>
-                <div className="mt-4 overflow-hidden rounded-2xl border border-zinc-200">
+                <div className="mt-4 overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
                   {[
                     ['BACON TIRAS', '07/05 08:15', 24],
                     ['SALSA BOLOÑESA', '07/05 09:30', 18],
@@ -172,13 +182,13 @@ export default function ProduccionEtiquetasPage() {
                   ].map((row) => (
                     <div
                       key={String(row[0])}
-                      className="grid grid-cols-[1fr_90px_110px] items-center gap-3 border-b border-zinc-100 px-4 py-3 last:border-b-0"
+                      className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-2 border-b border-zinc-100 px-3 py-2.5 last:border-b-0 sm:gap-3 sm:px-4 sm:py-3"
                     >
-                      <div>
-                        <p className="text-sm font-black text-zinc-900">{row[0]}</p>
-                        <p className="text-xs font-medium text-zinc-500">Elab: {row[1]}</p>
+                      <div className="min-w-0">
+                        <p className="break-words text-sm font-black leading-snug text-zinc-900">{row[0]}</p>
+                        <p className="mt-0.5 text-[11px] font-medium text-zinc-500">Elab: {row[1]}</p>
                       </div>
-                      <div className="text-center text-lg font-black tabular-nums">{row[2]}</div>
+                      <div className="shrink-0 text-center text-sm font-bold tabular-nums text-zinc-800 sm:text-base">{row[2]}</div>
                       <button
                         type="button"
                         onClick={() => {
@@ -186,7 +196,7 @@ export default function ProduccionEtiquetasPage() {
                           setLote(makeLot());
                           setQuickOpen(true);
                         }}
-                        className="rounded-xl border border-zinc-300 bg-white px-3 py-2 text-xs font-bold"
+                        className="shrink-0 rounded-lg border border-zinc-200 bg-white px-2.5 py-2 text-[11px] font-bold text-zinc-900 shadow-sm transition hover:border-zinc-300 hover:bg-zinc-50 whitespace-nowrap sm:px-3"
                       >
                         Imprimir
                       </button>
@@ -275,6 +285,7 @@ export default function ProduccionEtiquetasPage() {
                 >
                   Imprimir {quantity} etiqueta{quantity === 1 ? '' : 's'}
                 </button>
+                <LabelPrintSetupTip />
               </div>
             </aside>
           </div>
@@ -358,6 +369,7 @@ export default function ProduccionEtiquetasPage() {
                   </button>
                 ))}
               </div>
+              <LabelPrintSetupTip />
               <div className="grid grid-cols-2 gap-3 pt-2">
                 <button
                   type="button"

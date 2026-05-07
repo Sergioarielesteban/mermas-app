@@ -311,41 +311,49 @@ function ProduccionBoardInner() {
   const isClosed = Boolean(session?.completedAt);
 
   return (
-    <div className="pb-16 pt-2">
-      <header className="sticky top-0 z-10 -mx-1 border-b border-zinc-200/90 bg-[#fafafa] px-1 pb-2 pt-1 sm:static sm:mx-0 sm:border-0 sm:bg-transparent sm:pb-0 sm:pt-0">
-        <div className="flex flex-wrap items-center gap-2 sm:justify-between">
-          <div className="min-w-0 flex-1">
-            <h1 className="text-base font-black tracking-tight text-zinc-900 sm:text-lg">Producción del día</h1>
-            <p className="text-[11px] font-medium text-zinc-600">{templateName || '—'}</p>
+    <div className="w-full min-w-0 pb-16 pt-0 sm:pt-1">
+      <header className="sticky top-0 z-20 -mx-4 w-[calc(100%+2rem)] border-b border-zinc-200/90 bg-[#fafafa]/95 px-4 py-3 shadow-[0_4px_24px_-8px_rgba(0,0,0,0.08)] backdrop-blur-md supports-[backdrop-filter]:bg-[#fafafa]/88 sm:static sm:z-auto sm:mx-0 sm:mb-1 sm:w-full sm:border-0 sm:bg-transparent sm:px-0 sm:py-0 sm:shadow-none sm:backdrop-blur-none">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0 flex-1 pr-1">
+            <h1 className="font-serif text-[0.95rem] font-black leading-tight tracking-tight text-zinc-900 sm:text-lg">
+              Producción del día
+            </h1>
+            <p className="mt-0.5 truncate text-[11px] font-medium text-zinc-500 sm:whitespace-normal">{templateName || '—'}</p>
           </div>
-          <nav className="flex flex-wrap gap-2 text-[11px] font-bold">
-            <Link href="/produccion/planes" className="rounded-md border border-zinc-300 bg-white px-2 py-1 text-zinc-800">
+          <nav className="flex shrink-0 flex-wrap justify-end gap-1.5 text-[10px] font-bold sm:gap-2 sm:text-[11px]">
+            <Link
+              href="/produccion/planes"
+              className="rounded-lg border border-zinc-200/90 bg-white px-2.5 py-1.5 text-zinc-800 shadow-sm transition hover:border-zinc-300 hover:bg-zinc-50"
+            >
               Plantillas
             </Link>
-            <Link href="/produccion/historial" className="rounded-md border border-zinc-300 bg-white px-2 py-1 text-zinc-800">
+            <Link
+              href="/produccion/historial"
+              className="rounded-lg border border-zinc-200/90 bg-white px-2.5 py-1.5 text-zinc-800 shadow-sm transition hover:border-zinc-300 hover:bg-zinc-50"
+            >
               Historial
             </Link>
           </nav>
         </div>
 
-        <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
-          <label className="flex min-w-[10rem] flex-1 flex-col gap-0.5 text-[10px] font-bold uppercase text-zinc-700">
+        <div className="mt-3 grid gap-2.5 sm:mt-4 sm:flex sm:flex-row sm:flex-wrap sm:items-end">
+          <label className="flex min-w-0 flex-col gap-1 text-[10px] font-bold uppercase tracking-wide text-zinc-600 sm:min-w-[10rem] sm:flex-1">
             Fecha
             <input
               type="date"
               value={workDate}
               disabled={isClosed || loading}
               onChange={(e) => setWorkDate(e.target.value)}
-              className="h-10 rounded border border-zinc-300 bg-white px-2 text-sm font-semibold text-zinc-900 disabled:opacity-50"
+              className="h-10 w-full rounded-lg border border-zinc-200 bg-white px-2.5 text-sm font-semibold text-zinc-900 shadow-inner shadow-zinc-100/80 outline-none ring-0 transition focus:border-zinc-400 disabled:opacity-50"
             />
           </label>
-          <label className="flex min-w-[12rem] flex-1 flex-col gap-0.5 text-[10px] font-bold uppercase text-zinc-700">
+          <label className="flex min-w-0 flex-col gap-1 text-[10px] font-bold uppercase tracking-wide text-zinc-600 sm:min-w-[12rem] sm:flex-1">
             Plantilla
             <select
               value={templateId}
               disabled={isClosed || loading || templates.length === 0}
               onChange={(e) => setTemplateId(e.target.value)}
-              className="h-10 rounded border border-zinc-300 bg-white px-2 text-sm font-semibold text-zinc-900 disabled:opacity-50"
+              className="h-10 w-full rounded-lg border border-zinc-200 bg-white px-2.5 text-sm font-semibold text-zinc-900 shadow-inner shadow-zinc-100/80 outline-none transition focus:border-zinc-400 disabled:opacity-50"
             >
               {templates.length === 0 ? <option value="">Sin plantillas</option> : null}
               {templates.map((t) => (
@@ -355,18 +363,18 @@ function ProduccionBoardInner() {
               ))}
             </select>
           </label>
-          <div className="flex flex-wrap gap-2 sm:ml-auto">
+          <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:justify-end sm:gap-2 sm:pl-0 md:ml-auto">
             <button
               type="button"
               disabled={closing || !session?.id || isClosed}
               onClick={() => void guardarDia()}
-              className="h-10 rounded border border-zinc-800 bg-zinc-900 px-3 text-xs font-black uppercase tracking-wide text-white disabled:opacity-45"
+              className="col-span-2 h-10 rounded-lg border border-zinc-900 bg-zinc-900 px-3 text-[11px] font-black uppercase tracking-wide text-white shadow-sm transition hover:bg-zinc-800 disabled:opacity-45 sm:col-span-1"
             >
               {closing ? '…' : 'Guardar día'}
             </button>
             <Link
               href="/produccion/etiquetas"
-              className="flex h-10 items-center rounded border border-zinc-300 bg-white px-3 text-xs font-black uppercase tracking-wide text-zinc-900"
+              className="flex h-10 items-center justify-center rounded-lg border border-zinc-200 bg-white px-2.5 text-center text-[11px] font-black uppercase tracking-wide text-zinc-900 shadow-sm transition hover:border-zinc-300 hover:bg-zinc-50"
             >
               Etiquetas a mano
             </Link>
@@ -374,7 +382,7 @@ function ProduccionBoardInner() {
               type="button"
               disabled={!session?.id || !templateId.trim()}
               onClick={irEtiquetasImprimir}
-              className="h-10 rounded border border-zinc-300 bg-white px-3 text-xs font-black uppercase tracking-wide text-zinc-900 disabled:opacity-45"
+              className="h-10 rounded-lg border border-zinc-200 bg-white px-2.5 text-[11px] font-black uppercase tracking-wide text-zinc-900 shadow-sm transition hover:border-zinc-300 hover:bg-zinc-50 disabled:opacity-45"
             >
               Imprimir etiquetas
             </button>
@@ -442,15 +450,22 @@ function ProduccionBoardInner() {
             </p>
           ) : null}
 
-          <div className="mt-3 overflow-x-auto rounded border border-zinc-200 bg-white">
-            <table className="w-full min-w-[280px] border-collapse text-left text-xs">
+          <div className="mt-3 w-full min-w-0 overflow-x-auto rounded-xl border border-zinc-200/95 bg-white shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
+            <table className="table-fixed w-full min-w-0 border-collapse text-left text-xs">
+              <colgroup>
+                <col style={{ width: 'auto' }} />
+                <col style={{ width: '2.375rem' }} />
+                <col style={{ width: '2.375rem' }} />
+                <col style={{ width: '3.125rem' }} />
+                <col style={{ width: '2.5rem' }} />
+              </colgroup>
               <thead>
-                <tr className="border-b border-zinc-200 bg-zinc-100 text-[10px] font-black uppercase text-zinc-700">
-                  <th className="min-w-[7.5rem] px-2 py-2 sm:min-w-[10rem]">Producto</th>
-                  <th className="w-11 px-1 py-2 text-center tabular-nums sm:w-12">L–J</th>
-                  <th className="w-11 px-1 py-2 text-center tabular-nums sm:w-12">V–D</th>
-                  <th className="w-[4.25rem] px-1 py-2 text-center sm:w-16">Hecho</th>
-                  <th className="min-w-[2.75rem] px-1 py-2 text-center tabular-nums sm:w-14">Hacer</th>
+                <tr className="h-10 border-b border-zinc-200 bg-gradient-to-b from-zinc-50 to-zinc-100/90 text-[9px] font-black uppercase tracking-wide text-zinc-600">
+                  <th className="min-w-0 px-2 py-2 pl-2.5">Producto</th>
+                  <th className="px-0 py-2 text-center tabular-nums">L–J</th>
+                  <th className="px-0 py-2 text-center tabular-nums">V–D</th>
+                  <th className="px-0 py-2 text-center text-[8px] sm:text-[9px]">Hecho</th>
+                  <th className="px-0 py-2 text-center tabular-nums">Hacer</th>
                 </tr>
               </thead>
               <tbody>
@@ -495,13 +510,13 @@ function ProduccionBoardInner() {
                     const saving = lineId !== null && savingLineId === lineId;
 
                     return (
-                      <tr key={row.rowKey} className={[rowTint, 'border-b border-zinc-100'].join(' ')}>
-                        <td className="min-w-[7.5rem] max-w-[min(92vw,20rem)] px-2 py-2 font-bold leading-snug text-zinc-900 sm:max-w-none sm:py-2.5">
+                      <tr key={row.rowKey} className={[rowTint, 'border-b border-zinc-100 last:border-b-0'].join(' ')}>
+                        <td className="min-w-0 max-w-0 break-words px-2 py-2 pl-2.5 text-[13px] font-bold leading-snug text-zinc-900 sm:text-xs sm:py-2.5">
                           {row.displayLabel}
                         </td>
-                        <td className="px-1 py-2 text-center tabular-nums text-zinc-800 sm:py-2.5">{ljT}</td>
-                        <td className="px-1 py-2 text-center tabular-nums text-zinc-800 sm:py-2.5">{vdT}</td>
-                        <td className="px-1 py-2 text-center sm:py-2.5">
+                        <td className="px-0 py-2 text-center text-[12px] tabular-nums text-zinc-800 sm:py-2.5 sm:text-xs">{ljT}</td>
+                        <td className="px-0 py-2 text-center text-[12px] tabular-nums text-zinc-800 sm:py-2.5 sm:text-xs">{vdT}</td>
+                        <td className="px-0 py-2 text-center sm:py-2.5">
                           {sl && lineId ? (
                             <input
                               inputMode="decimal"
@@ -521,13 +536,13 @@ function ProduccionBoardInner() {
                                 clearDebouncePersist();
                                 void persistHecho(lineId, hechoDraftRef.current[lineId] ?? '');
                               }}
-                              className="h-9 min-w-[3.5rem] rounded border border-zinc-300 bg-white px-2 py-1 text-center text-sm font-black tabular-nums text-zinc-900 disabled:opacity-50"
+                              className="box-border h-8 w-[2.75rem] max-w-full rounded-md border border-zinc-300/90 bg-white px-0.5 text-center text-xs font-black tabular-nums text-zinc-900 shadow-inner shadow-zinc-100/50 outline-none transition focus:border-zinc-500 focus:ring-1 focus:ring-zinc-400/30 disabled:opacity-50 sm:h-9 sm:w-12 sm:px-1 sm:text-sm"
                             />
                           ) : (
                             <span className="text-zinc-400">—</span>
                           )}
                         </td>
-                        <td className="px-1 py-2 text-center text-sm font-black tabular-nums text-zinc-900 sm:py-2.5">
+                        <td className="px-0 py-2 text-center text-xs font-black tabular-nums text-zinc-900 sm:py-2.5 sm:text-sm">
                           {hacer}
                         </td>
                       </tr>
