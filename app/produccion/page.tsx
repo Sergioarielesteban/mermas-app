@@ -364,6 +364,12 @@ function ProduccionBoardInner() {
             >
               {closing ? '…' : 'Guardar día'}
             </button>
+            <Link
+              href="/produccion/etiquetas"
+              className="flex h-10 items-center rounded border border-zinc-300 bg-white px-3 text-xs font-black uppercase tracking-wide text-zinc-900"
+            >
+              Etiquetas a mano
+            </Link>
             <button
               type="button"
               disabled={!session?.id || !templateId.trim()}
