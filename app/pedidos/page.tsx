@@ -486,6 +486,12 @@ export default function PedidosPage() {
   const scrollRestorePendingRef = React.useRef<number | null>(null);
   /** Evita escribir en localStorage (y machacar un estado bueno) antes de restaurar. */
   const hasRestoredViewStateRef = React.useRef(false);
+  /**
+   * true solo tras aplicar snapshot válido (sessionStorage o localStorage en hydrate).
+   * false tras entrada nueva sin estado (FRESH_MODULE) o sin local/canUse.
+   * Los efectos que implementan “home limpia” / poda agresiva deben respetarlo.
+   */
+  const appliedValidSavedPedidosUiRef = React.useRef(false);
   const scrollPersistTimeoutRef = React.useRef<number | null>(null);
   /** Tras restaurar UI, no podar expanded* hasta que haya pasado (evita carrera con fetch inicial). */
   const suppressOrderPruneUntilRef = React.useRef(0);
@@ -525,6 +531,7 @@ export default function PedidosPage() {
       pedidosDiagLog('useLayoutEffect[hydrate] BRANCH', { action: 'clear_refs_setUiHydrated_false', reason: '!localId || !canUse' });
       pedidosPageUiRestoreAttemptedRef.current = null;
       hasRestoredViewStateRef.current = false;
+      appliedValidSavedPedidosUiRef.current = false;
       setUiHydrated(false);
       return;
     }
@@ -532,6 +539,7 @@ export default function PedidosPage() {
       pedidosDiagLog('useLayoutEffect[hydrate] BRANCH', { action: 'avisoPedido_skip_restore', avisoPedido });
       pedidosPageUiRestoreAttemptedRef.current = localId;
       hasRestoredViewStateRef.current = true;
+      appliedValidSavedPedidosUiRef.current = false;
       setUiHydrated(true);
       return;
     }
@@ -566,6 +574,7 @@ export default function PedidosPage() {
           : null,
       });
       if (sess) {
+        appliedValidSavedPedidosUiRef.current = true;
         console.log('[PEDIDOS_UI] restore start', {
           pendingExpanded: sess.pendingExpanded,
           expandedPedidoId: sess.expandedPedidoId,
@@ -622,6 +631,7 @@ export default function PedidosPage() {
         //      but localStorage survived (disk) → restore from localStorage.
         const st = parsePedidosViewState(window.localStorage.getItem(PEDIDOS_VIEW_STATE_KEY), localId);
         if (st) {
+          appliedValidSavedPedidosUiRef.current = true;
           // Case B: OS killed the tab — restore full UI state from localStorage.
           console.log('[PEDIDOS_UI] restore from localStorage fallback (OS tab kill)', {
             openedSection: st.openedSection,
@@ -687,6 +697,7 @@ export default function PedidosPage() {
           suppressOrderPruneUntilRef.current = Date.now() + 2000;
         } else {
           // Case A: intentional module exit (localStorage also cleared) → fresh start.
+          appliedValidSavedPedidosUiRef.current = false;
           console.log('[PEDIDOS_UI] reset reason', 'no_valid_session_fresh_module_entry');
           pedidosDiagLog('useLayoutEffect[hydrate] FRESH_MODULE_RESET', {
             action: 'setPendientes false, expanded null, clear incident/quickMarks/historicoMonth',
@@ -699,9 +710,15 @@ export default function PedidosPage() {
           setHistoricoMonthOpen({});
           setIncidentOpenBySentOrderId({});
           setQuickLineMarks({});
+          try {
+            setMainScrollTop(0);
+          } catch {
+            /* ignore */
+          }
         }
       }
     } catch (err) {
+      appliedValidSavedPedidosUiRef.current = false;
       pedidosDiagLog('useLayoutEffect[hydrate] CATCH', { error: String(err) });
     } finally {
       hasRestoredViewStateRef.current = true;
@@ -2048,6 +2065,7 @@ export default function PedidosPage() {
       suppressActive: Date.now() < suppressOrderPruneUntilRef.current,
       expandedSentId,
       expandedHistoricoId,
+      appliedValidSaved: appliedValidSavedPedidosUiRef.current,
     });
     if (!uiHydrated || !ordersEverNonEmptyRef.current) return;
     if (Date.now() < suppressOrderPruneUntilRef.current) {
@@ -2058,23 +2076,60 @@ export default function PedidosPage() {
     }
     // Mientras orders está vacío (refetch / resume), no podar: `some` sería false y borraría UI buena.
     if (orders.length === 0) return;
-    if (expandedSentId && !orders.some((o) => o.id === expandedSentId && o.status === 'sent')) {
-      console.log('[PEDIDOS_UI] reset reason', 'expanded_sent_order_missing_after_fetch');
-      pedidosDiagLog('useEffect[orderPruneExpanded] CLEAR expandedSentId', {
-        expandedSentId,
-        reason: 'order not in list as sent',
-        withStack: true,
-      });
-      setExpandedSentId(null);
+
+    if (expandedSentId) {
+      const inList = orders.some((o) => o.id === expandedSentId);
+      const isSent = orders.some((o) => o.id === expandedSentId && o.status === 'sent');
+      if (!inList) {
+        console.log('[PEDIDOS_UI] reset reason', 'expanded_sent_order_missing_after_fetch');
+        pedidosDiagLog('useEffect[orderPruneExpanded] CLEAR expandedSentId', {
+          expandedSentId,
+          reason: 'order id not in orders list',
+          withStack: true,
+        });
+        setExpandedSentId(null);
+      } else if (appliedValidSavedPedidosUiRef.current) {
+        pedidosDiagLog('useEffect[orderPruneExpanded] SKIP_PRUNE_VALID_SAVED', {
+          expandedSentId,
+          isSent,
+          note: 'Restored trabajo: no forzar cierre mientras el pedido siga existiendo en lista.',
+        });
+      } else if (!isSent) {
+        console.log('[PEDIDOS_UI] reset reason', 'expanded_sent_order_missing_after_fetch');
+        pedidosDiagLog('useEffect[orderPruneExpanded] CLEAR expandedSentId', {
+          expandedSentId,
+          reason: 'order not in list as sent',
+          withStack: true,
+        });
+        setExpandedSentId(null);
+      }
     }
-    if (expandedHistoricoId && !orders.some((o) => o.id === expandedHistoricoId && o.status === 'received')) {
-      console.log('[PEDIDOS_UI] reset reason', 'expanded_historico_order_missing_after_fetch');
-      pedidosDiagLog('useEffect[orderPruneExpanded] CLEAR expandedHistoricoId', {
-        expandedHistoricoId,
-        reason: 'order not in list as received',
-        withStack: true,
-      });
-      setExpandedHistoricoId(null);
+    if (expandedHistoricoId) {
+      const inList = orders.some((o) => o.id === expandedHistoricoId);
+      const isReceived = orders.some((o) => o.id === expandedHistoricoId && o.status === 'received');
+      if (!inList) {
+        console.log('[PEDIDOS_UI] reset reason', 'expanded_historico_order_missing_after_fetch');
+        pedidosDiagLog('useEffect[orderPruneExpanded] CLEAR expandedHistoricoId', {
+          expandedHistoricoId,
+          reason: 'order id not in orders list',
+          withStack: true,
+        });
+        setExpandedHistoricoId(null);
+      } else if (appliedValidSavedPedidosUiRef.current) {
+        pedidosDiagLog('useEffect[orderPruneExpanded] SKIP_PRUNE_VALID_SAVED_HISTORICO', {
+          expandedHistoricoId,
+          isReceived,
+          note: 'Restored trabajo: no forzar cierre mientras el pedido siga existiendo en lista.',
+        });
+      } else if (!isReceived) {
+        console.log('[PEDIDOS_UI] reset reason', 'expanded_historico_order_missing_after_fetch');
+        pedidosDiagLog('useEffect[orderPruneExpanded] CLEAR expandedHistoricoId', {
+          expandedHistoricoId,
+          reason: 'order not in list as received',
+          withStack: true,
+        });
+        setExpandedHistoricoId(null);
+      }
     }
   }, [uiHydrated, orders, expandedSentId, expandedHistoricoId]);
 
