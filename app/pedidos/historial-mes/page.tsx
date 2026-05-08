@@ -2,10 +2,24 @@
 
 import Link from 'next/link';
 import React from 'react';
-import { ChevronDown, Download } from 'lucide-react';
+import {
+  AlertTriangle,
+  ArrowDownRight,
+  ArrowUpRight,
+  BarChart3,
+  ChevronRight,
+  ClipboardList,
+  Download,
+  FileText,
+  Receipt,
+  ShoppingCart,
+  SlidersHorizontal,
+  Sparkles,
+  TrendingDown,
+  TrendingUp,
+} from 'lucide-react';
 import { useAuth } from '@/components/AuthProvider';
 import { usePedidosOrders } from '@/components/PedidosOrdersProvider';
-import { CHEF_ONE_TAPER_LINE_CLASS } from '@/components/ChefOneGlowLine';
 import PedidosPremiaLockedScreen from '@/components/PedidosPremiaLockedScreen';
 import { canAccessPedidos, canUsePedidosModule } from '@/lib/pedidos-access';
 import { formatQuantityWithUnit, totalsWithVatForOrderListDisplay } from '@/lib/pedidos-format';
@@ -41,6 +55,8 @@ export default function PedidosHistorialMesPage() {
   const [activeWeek, setActiveWeek] = React.useState<number | null>(null);
   const [supplierFilter, setSupplierFilter] = React.useState<'all' | string>('all');
   const [topN, setTopN] = React.useState(10);
+  const [alertsExpanded, setAlertsExpanded] = React.useState(false);
+  const [filtersOpen, setFiltersOpen] = React.useState(false);
 
   const accountingOrders = React.useMemo(
     () => orders.filter((row) => row.status === 'sent' || row.status === 'received'),
@@ -118,32 +134,151 @@ export default function PedidosHistorialMesPage() {
       prev.totalWithVat > 0
         ? Math.round(((now.totalWithVat - prev.totalWithVat) / prev.totalWithVat) * 1000) / 10
         : null;
-    return { ...now, deltaPct };
+    const deltaTotalEur = Math.round((now.totalWithVat - prev.totalWithVat) * 100) / 100;
+    const deltaOrderCount = now.orderCount - prev.orderCount;
+    const deltaTicketPct =
+      prev.avgTicket > 0
+        ? Math.round(((now.avgTicket - prev.avgTicket) / prev.avgTicket) * 1000) / 10
+        : null;
+    const vatOverBasePct =
+      now.totalBase > 0 ? Math.round((now.totalVat / now.totalBase) * 1000) / 10 : 0;
+    return {
+      ...now,
+      deltaPct,
+      deltaTotalEur,
+      deltaOrderCount,
+      deltaTicketPct,
+      vatOverBasePct,
+    };
   }, [filteredMonthlyOrders, filteredPreviousMonthOrders, totalsForOrders]);
 
+  const compareMonthLabel = React.useMemo(() => {
+    const [y, m] = previousMonth.split('-').map(Number);
+    if (!y || !m) return '';
+    return new Date(y, m - 1, 15).toLocaleDateString('es-ES', { month: 'short', year: 'numeric' });
+  }, [previousMonth]);
+
+  const prevMonthProductSpend = React.useMemo(() => {
+    const byName = new Map<string, number>();
+    for (const order of filteredPreviousMonthOrders) {
+      for (const item of order.items) {
+        const qty = order.status === 'received' ? item.receivedQuantity : item.quantity;
+        const spend = Math.max(0, qty) * item.pricePerUnit * (1 + item.vatRate);
+        const key = item.productName;
+        byName.set(key, (byName.get(key) ?? 0) + spend);
+      }
+    }
+    return byName;
+  }, [filteredPreviousMonthOrders]);
+
   const monthlyTopProducts = React.useMemo(() => {
-    const byName = new Map<string, { productName: string; spend: number; qty: number; unit: Unit }>();
+    const byName = new Map<
+      string,
+      {
+        productName: string;
+        spend: number;
+        qty: number;
+        unit: Unit;
+        bySupplierSpend: Map<string, number>;
+      }
+    >();
     for (const order of filteredMonthlyOrders) {
       for (const item of order.items) {
         const qty = order.status === 'received' ? item.receivedQuantity : item.quantity;
         const spend = Math.max(0, qty) * item.pricePerUnit * (1 + item.vatRate);
         const key = item.productName;
-        const prev = byName.get(key) ?? { productName: item.productName, spend: 0, qty: 0, unit: item.unit as Unit };
+        const prev =
+          byName.get(key) ?? {
+            productName: item.productName,
+            spend: 0,
+            qty: 0,
+            unit: item.unit as Unit,
+            bySupplierSpend: new Map<string, number>(),
+          };
         prev.spend += spend;
         prev.qty += qty;
+        const sn = order.supplierName?.trim() || 'Proveedor';
+        prev.bySupplierSpend.set(sn, (prev.bySupplierSpend.get(sn) ?? 0) + spend);
         byName.set(key, prev);
       }
     }
     const total = Array.from(byName.values()).reduce((acc, r) => acc + r.spend, 0);
     return Array.from(byName.values())
-      .map((r) => ({
-        ...r,
-        spend: Math.round(r.spend * 100) / 100,
-        qty: Math.round(r.qty * 100) / 100,
-        pct: total > 0 ? Math.round((r.spend / total) * 1000) / 10 : 0,
-      }))
+      .map((r) => {
+        let topSupplier: string | null = null;
+        let topSupSpend = 0;
+        for (const [name, sp] of r.bySupplierSpend) {
+          if (sp > topSupSpend) {
+            topSupSpend = sp;
+            topSupplier = name;
+          }
+        }
+        const prevSpend = prevMonthProductSpend.get(r.productName) ?? 0;
+        const spendMomPct =
+          prevSpend > 0 ? Math.round(((r.spend - prevSpend) / prevSpend) * 1000) / 10 : null;
+        return {
+          productName: r.productName,
+          spend: Math.round(r.spend * 100) / 100,
+          qty: Math.round(r.qty * 100) / 100,
+          unit: r.unit,
+          pct: total > 0 ? Math.round((r.spend / total) * 1000) / 10 : 0,
+          topSupplierName: topSupplier,
+          spendMomPct,
+        };
+      })
       .sort((a, b) => b.spend - a.spend);
-  }, [filteredMonthlyOrders]);
+  }, [filteredMonthlyOrders, prevMonthProductSpend]);
+
+  /** Mayor subida de precio unitario ponderado (mismo criterio operativo: líneas del mes vs mes anterior). */
+  const topProductsByUnitPriceIncrease = React.useMemo(() => {
+    type Agg = { qty: number; sumPxQty: number; unit: Unit };
+    const aggregate = (orderRows: PedidoOrder[]) => {
+      const m = new Map<string, Agg>();
+      for (const order of orderRows) {
+        for (const item of order.items) {
+          const qty = order.status === 'received' ? item.receivedQuantity : item.quantity;
+          const q = Math.max(0, qty);
+          if (q <= 0) continue;
+          const cur = m.get(item.productName) ?? { qty: 0, sumPxQty: 0, unit: item.unit as Unit };
+          cur.qty += q;
+          cur.sumPxQty += q * item.pricePerUnit;
+          m.set(item.productName, cur);
+        }
+      }
+      return m;
+    };
+    const nowM = aggregate(filteredMonthlyOrders);
+    const prevM = aggregate(filteredPreviousMonthOrders);
+    const out: {
+      name: string;
+      deltaPct: number;
+      deltaAbs: number;
+      unit: Unit;
+      prevAvg: number;
+      nowAvg: number;
+    }[] = [];
+    for (const [name, n] of nowM) {
+      if (n.qty <= 0) continue;
+      const nowAvg = n.sumPxQty / n.qty;
+      const p = prevM.get(name);
+      if (!p || p.qty <= 0) continue;
+      const prevAvg = p.sumPxQty / p.qty;
+      if (prevAvg <= 0) continue;
+      const deltaPct = ((nowAvg - prevAvg) / prevAvg) * 100;
+      const deltaAbs = nowAvg - prevAvg;
+      if (deltaPct >= 0.15 || deltaAbs >= 0.01) {
+        out.push({
+          name,
+          deltaPct: Math.round(deltaPct * 10) / 10,
+          deltaAbs: Math.round(deltaAbs * 100) / 100,
+          unit: n.unit,
+          prevAvg: Math.round(prevAvg * 100) / 100,
+          nowAvg: Math.round(nowAvg * 100) / 100,
+        });
+      }
+    }
+    return out.sort((a, b) => b.deltaPct - a.deltaPct).slice(0, topN);
+  }, [filteredMonthlyOrders, filteredPreviousMonthOrders, topN]);
 
   const weeklySummary = React.useMemo(() => {
     const weeks = new Map<
@@ -256,6 +391,104 @@ export default function PedidosHistorialMesPage() {
     };
   }, [supplierPerformance]);
 
+  type PurchaseAlertItem = {
+    id: string;
+    tone: 'amber' | 'rose';
+    tag: string;
+    title: string;
+    lines: string[];
+  };
+
+  const purchaseAlerts = React.useMemo((): PurchaseAlertItem[] => {
+    const list: PurchaseAlertItem[] = [];
+    const totalSpend = supplierPerformance.reduce((acc, s) => acc + s.spend, 0);
+
+    for (const p of topProductsByUnitPriceIncrease.slice(0, 3)) {
+      if (p.deltaPct >= 8) {
+        list.push({
+          id: `pp-${p.name}`,
+          tone: 'rose',
+          tag: 'Subida precio',
+          title: p.name,
+          lines: [
+            `+${p.deltaPct.toLocaleString('es-ES', { maximumFractionDigits: 1 })}% vs mes anterior`,
+            `+${p.deltaAbs.toFixed(2)} €/${p.unit} en unitario`,
+          ],
+        });
+      }
+    }
+
+    for (const p of monthlyTopProducts.slice(0, 15)) {
+      const prev = prevMonthProductSpend.get(p.productName) ?? 0;
+      const delta = p.spend - prev;
+      if (prev > 0 && delta >= 200) {
+        list.push({
+          id: `abs-${p.productName}`,
+          tone: 'rose',
+          tag: 'Mayor gasto',
+          title: p.productName,
+          lines: [`+${delta.toFixed(0)} € vs mes anterior`, 'Incremento de compra del producto'],
+        });
+      }
+    }
+
+    const topBySpend = supplierPerformance[0];
+    if (topBySpend && totalSpend > 0) {
+      const pct = (topBySpend.spend / totalSpend) * 100;
+      if (pct >= 40) {
+        list.push({
+          id: `conc-${topBySpend.supplierId}`,
+          tone: 'amber',
+          tag: 'Concentración',
+          title: topBySpend.supplierName,
+          lines: [`${pct.toFixed(0)}% del gasto total`, 'Riesgo de dependencia'],
+        });
+      }
+    }
+
+    if (deviationKpis.deviationPct >= 4 && deviationKpis.requested > 0) {
+      list.push({
+        id: 'dev-pct',
+        tone: 'amber',
+        tag: 'Desvío',
+        title: 'Pedido / recepción',
+        lines: [
+          `${deviationKpis.deviationPct.toFixed(1)}% · ${deviationKpis.deviationAbs.toFixed(0)} €`,
+          'Cantidades o precios vs pedido',
+        ],
+      });
+    }
+
+    if (deviationKpis.incidents > 0) {
+      list.push({
+        id: 'inc',
+        tone: 'amber',
+        tag: 'Acción requerida',
+        title:
+          deviationKpis.incidents === 1
+            ? '1 pedido con incidencias'
+            : `${deviationKpis.incidents} pedidos con incidencias`,
+        lines: [
+          'Revisar recepciones',
+          `De ${deviationKpis.totalOrders} pedidos en el período`,
+        ],
+      });
+    }
+
+    const seen = new Set<string>();
+    return list.filter((a) => {
+      if (seen.has(a.id)) return false;
+      seen.add(a.id);
+      return true;
+    });
+  }, [
+    topProductsByUnitPriceIncrease,
+    monthlyTopProducts,
+    prevMonthProductSpend,
+    supplierPerformance,
+    deviationKpis,
+  ]);
+
   const monthlyBySupplier = React.useMemo(() => {
     const bySupplier = new Map<
       string,
@@ -305,15 +538,6 @@ export default function PedidosHistorialMesPage() {
       }))
       .sort((a, b) => b.totalWithVat - a.totalWithVat);
   }, [accountingOrders, month, viewMode]);
-
-  const [expandedSupplierId, setExpandedSupplierId] = React.useState<string | null>(null);
-  const displayedSuppliers = React.useMemo(
-    () =>
-      supplierFilter === 'all'
-        ? monthlyBySupplier
-        : monthlyBySupplier.filter((s) => s.supplierId === supplierFilter),
-    [monthlyBySupplier, supplierFilter],
-  );
 
   React.useEffect(() => {
     if (supplierFilter === 'all') return;
@@ -385,14 +609,9 @@ export default function PedidosHistorialMesPage() {
         </Link>
       </section>
 
-      <section className="flex flex-col gap-1.5 rounded-xl border border-zinc-200/90 bg-white px-2.5 py-2 ring-1 ring-zinc-100 sm:flex-row sm:items-center sm:justify-between sm:px-3 sm:py-2">
+      <section className="rounded-xl border border-zinc-200/90 bg-white px-2.5 py-2 ring-1 ring-zinc-100 sm:px-3 sm:py-2">
         <h1 className="text-sm font-bold tracking-tight text-zinc-900 sm:text-base">Compras del mes</h1>
-        <Link
-          href="/pedidos/precios"
-          className="inline-flex h-8 shrink-0 items-center justify-center rounded-lg border border-zinc-200 bg-zinc-50/80 px-2.5 text-[11px] font-semibold text-zinc-800 transition hover:border-zinc-300 hover:bg-white sm:px-3 sm:text-xs"
-        >
-          Evolución de precios
-        </Link>
+        <p className="mt-0.5 text-[11px] leading-snug text-zinc-500">Centro de control · decisión rápida · vista operativa</p>
       </section>
 
       {message ? (
@@ -400,7 +619,7 @@ export default function PedidosHistorialMesPage() {
       ) : null}
 
       <section className="min-w-0 rounded-2xl bg-white p-3 ring-1 ring-zinc-200/85 sm:p-4">
-        <div className="grid grid-cols-2 gap-2 border-b border-zinc-100 pb-3 sm:grid-cols-4">
+        <div className="grid grid-cols-2 gap-2 border-b border-zinc-100 pb-3 sm:grid-cols-3">
           <label className="text-[10px] font-medium text-zinc-500">
             <span className="block uppercase tracking-wide text-zinc-400">Período</span>
             <input
@@ -408,7 +627,6 @@ export default function PedidosHistorialMesPage() {
               value={month}
               onChange={(e) => {
                 setMonth(e.target.value);
-                setExpandedSupplierId(null);
               }}
               className="mt-0.5 h-9 w-full rounded-lg border border-zinc-200/90 bg-zinc-50 px-2 text-sm font-semibold text-zinc-900 outline-none focus:border-zinc-300 focus:bg-white focus:ring-1 focus:ring-zinc-200"
             />
@@ -420,7 +638,6 @@ export default function PedidosHistorialMesPage() {
               onChange={(e) => {
                 setSupplierFilter(e.target.value);
                 setActiveWeek(null);
-                setExpandedSupplierId(null);
               }}
               className="mt-0.5 h-9 w-full rounded-lg border border-zinc-200/90 bg-zinc-50 px-2 text-xs font-semibold text-zinc-900 outline-none focus:border-zinc-300 focus:bg-white focus:ring-1 focus:ring-zinc-200"
             >
@@ -432,40 +649,57 @@ export default function PedidosHistorialMesPage() {
               ))}
             </select>
           </label>
-          <label className="text-[10px] font-medium text-zinc-500">
-            <span className="block uppercase tracking-wide text-zinc-400">Top N</span>
-            <select
-              value={String(topN)}
-              onChange={(e) => setTopN(Number(e.target.value))}
-              className="mt-0.5 h-9 w-full rounded-lg border border-zinc-200/90 bg-zinc-50 px-2 text-xs font-semibold text-zinc-900 outline-none focus:border-zinc-300 focus:bg-white focus:ring-1 focus:ring-zinc-200"
-            >
-              <option value="5">Top 5</option>
-              <option value="10">Top 10</option>
-              <option value="15">Top 15</option>
-              <option value="20">Top 20</option>
-            </select>
-          </label>
-          <label className="col-span-2 text-[10px] font-medium text-zinc-500 sm:col-span-1">
-            <span className="block uppercase tracking-wide text-zinc-400">Modo</span>
-            <select
-              value={viewMode}
-              onChange={(e) => {
-                setViewMode(e.target.value as ViewMode);
-                setActiveWeek(null);
-                setExpandedSupplierId(null);
-              }}
-              className="mt-0.5 h-9 w-full rounded-lg border border-zinc-200/90 bg-zinc-50 px-2 text-xs font-semibold text-zinc-900 outline-none focus:border-zinc-300 focus:bg-white focus:ring-1 focus:ring-zinc-200"
-            >
-              <option value="real">Real (recepción)</option>
-              <option value="previsto">Previsto (entrega)</option>
-            </select>
-          </label>
+          <button
+            type="button"
+            onClick={() => setFiltersOpen((o) => !o)}
+            className="col-span-2 flex h-9 items-center justify-center gap-1.5 self-end rounded-lg border border-zinc-200/90 bg-zinc-50/90 text-[11px] font-semibold text-zinc-800 transition hover:border-zinc-300 hover:bg-white sm:col-span-1"
+          >
+            <SlidersHorizontal className="h-3.5 w-3.5 text-zinc-600" aria-hidden />
+            Filtros
+          </button>
         </div>
-        <p className="mt-2 text-[11px] leading-snug text-zinc-500">
-          {viewMode === 'real'
-            ? 'Real: solo pedidos recibidos (entrada al local).'
-            : 'Previsto: recibidos por fecha real y pendientes por entrega prevista.'}
-        </p>
+        {filtersOpen ? (
+          <div className="mt-2 grid grid-cols-2 gap-2 border-b border-zinc-100 pb-3">
+            <label className="text-[10px] font-medium text-zinc-500">
+              <span className="block uppercase tracking-wide text-zinc-400">Top N</span>
+              <select
+                value={String(topN)}
+                onChange={(e) => setTopN(Number(e.target.value))}
+                className="mt-0.5 h-9 w-full rounded-lg border border-zinc-200/90 bg-zinc-50 px-2 text-xs font-semibold text-zinc-900 outline-none focus:border-zinc-300 focus:bg-white focus:ring-1 focus:ring-zinc-200"
+              >
+                <option value="5">Top 5</option>
+                <option value="10">Top 10</option>
+                <option value="15">Top 15</option>
+                <option value="20">Top 20</option>
+              </select>
+            </label>
+            <label className="text-[10px] font-medium text-zinc-500">
+              <span className="block uppercase tracking-wide text-zinc-400">Modo</span>
+              <select
+                value={viewMode}
+                onChange={(e) => {
+                  setViewMode(e.target.value as ViewMode);
+                  setActiveWeek(null);
+                }}
+                className="mt-0.5 h-9 w-full rounded-lg border border-zinc-200/90 bg-zinc-50 px-2 text-xs font-semibold text-zinc-900 outline-none focus:border-zinc-300 focus:bg-white focus:ring-1 focus:ring-zinc-200"
+              >
+                <option value="real">Real (recepción)</option>
+                <option value="previsto">Previsto (entrega)</option>
+              </select>
+            </label>
+            <p className="col-span-2 text-[10px] leading-snug text-zinc-500">
+              {viewMode === 'real'
+                ? 'Real: solo pedidos recibidos (entrada al local).'
+                : 'Previsto: recibidos por fecha real y pendientes por entrega prevista.'}
+            </p>
+          </div>
+        ) : (
+          <p className="mt-2 text-[11px] leading-snug text-zinc-500">
+            {viewMode === 'real'
+              ? 'Real: solo pedidos recibidos (entrada al local).'
+              : 'Previsto: recibidos por fecha real y pendientes por entrega prevista.'}
+          </p>
+        )}
         <div className="mt-2 flex flex-wrap gap-1.5">
           <button
             type="button"
@@ -476,63 +710,391 @@ export default function PedidosHistorialMesPage() {
             Informe PDF completo
           </button>
         </div>
-        <div className="mt-3 grid min-w-0 grid-cols-2 gap-1.5 sm:grid-cols-3 lg:grid-cols-6">
-          <div className="rounded-xl bg-zinc-50 px-2 py-1.5 ring-1 ring-zinc-200/80">
-            <p className="text-[9px] font-semibold uppercase tracking-wide text-zinc-500">Total mes</p>
-            <p className="text-base font-black tabular-nums leading-tight text-zinc-900">{kpis.totalWithVat.toFixed(2)} €</p>
+
+        <div className="mt-3 grid min-w-0 grid-cols-3 gap-1.5">
+          <div className="relative overflow-hidden rounded-lg bg-gradient-to-b from-zinc-50 to-white px-2 py-1.5 ring-1 ring-zinc-200/75">
+            <ShoppingCart className="absolute right-1.5 top-1.5 h-3.5 w-3.5 text-[#C62828]/90" aria-hidden />
+            <p className="pr-6 text-[8px] font-semibold uppercase tracking-wide text-zinc-500">Total mes</p>
+            <p className="text-sm font-bold tabular-nums leading-tight text-zinc-900">{kpis.totalWithVat.toFixed(2)} €</p>
+            <p className="text-[9px] text-zinc-500">IVA incl.</p>
+            {kpis.deltaPct != null && compareMonthLabel ? (
+              <p
+                className={[
+                  'mt-0.5 text-[9px] font-semibold tabular-nums leading-tight',
+                  kpis.deltaPct <= 0 ? 'text-emerald-600' : 'text-rose-600',
+                ].join(' ')}
+              >
+                {kpis.deltaPct >= 0 ? '+' : ''}
+                {kpis.deltaPct.toFixed(1)}% vs {compareMonthLabel}
+                <span className="block font-normal text-zinc-500">
+                  ({kpis.deltaTotalEur >= 0 ? '+' : ''}
+                  {kpis.deltaTotalEur.toFixed(2)} €)
+                </span>
+              </p>
+            ) : null}
           </div>
-          <div className="rounded-xl bg-zinc-50 px-2 py-1.5 ring-1 ring-zinc-200/80">
-            <p className="text-[9px] font-semibold uppercase tracking-wide text-zinc-500">Base</p>
-            <p className="text-base font-black tabular-nums leading-tight text-zinc-900">{kpis.totalBase.toFixed(2)} €</p>
+          <div className="relative overflow-hidden rounded-lg bg-gradient-to-b from-zinc-50 to-white px-2 py-1.5 ring-1 ring-zinc-200/75">
+            <FileText className="absolute right-1.5 top-1.5 h-3.5 w-3.5 text-amber-600/90" aria-hidden />
+            <p className="pr-6 text-[8px] font-semibold uppercase tracking-wide text-zinc-500">Base</p>
+            <p className="text-sm font-bold tabular-nums leading-tight text-zinc-900">{kpis.totalBase.toFixed(2)} €</p>
+            <p className="text-[9px] text-zinc-500">Sin IVA</p>
           </div>
-          <div className="rounded-xl bg-zinc-50 px-2 py-1.5 ring-1 ring-zinc-200/80">
-            <p className="text-[9px] font-semibold uppercase tracking-wide text-zinc-500">IVA</p>
-            <p className="text-base font-black tabular-nums leading-tight text-zinc-900">{kpis.totalVat.toFixed(2)} €</p>
+          <div className="relative overflow-hidden rounded-lg bg-gradient-to-b from-zinc-50 to-white px-2 py-1.5 ring-1 ring-zinc-200/75">
+            <Receipt className="absolute right-1.5 top-1.5 h-3.5 w-3.5 text-emerald-600/85" aria-hidden />
+            <p className="pr-6 text-[8px] font-semibold uppercase tracking-wide text-zinc-500">IVA</p>
+            <p className="text-sm font-bold tabular-nums leading-tight text-zinc-900">{kpis.totalVat.toFixed(2)} €</p>
+            <p className="text-[9px] tabular-nums text-zinc-500">
+              {kpis.vatOverBasePct > 0 ? `${kpis.vatOverBasePct.toFixed(2)}% s/ base` : '—'}
+            </p>
           </div>
-          <div className="rounded-xl bg-zinc-50 px-2 py-1.5 ring-1 ring-zinc-200/80">
-            <p className="text-[9px] font-semibold uppercase tracking-wide text-zinc-500">Pedidos</p>
-            <p className="text-base font-black tabular-nums leading-tight text-zinc-900">{kpis.orderCount}</p>
+          <div className="relative overflow-hidden rounded-lg bg-gradient-to-b from-zinc-50 to-white px-2 py-1.5 ring-1 ring-zinc-200/75">
+            <ClipboardList className="absolute right-1.5 top-1.5 h-3.5 w-3.5 text-sky-600/90" aria-hidden />
+            <p className="pr-6 text-[8px] font-semibold uppercase tracking-wide text-zinc-500">Pedidos</p>
+            <p className="text-sm font-bold tabular-nums leading-tight text-zinc-900">{kpis.orderCount}</p>
+            <p className="text-[9px] text-zinc-500">En el período</p>
+            {compareMonthLabel ? (
+              <p
+                className={[
+                  'mt-0.5 text-[9px] font-semibold tabular-nums',
+                  kpis.deltaOrderCount <= 0 ? 'text-emerald-600' : 'text-rose-600',
+                ].join(' ')}
+              >
+                {kpis.deltaOrderCount >= 0 ? '+' : ''}
+                {kpis.deltaOrderCount} vs {compareMonthLabel}
+              </p>
+            ) : null}
           </div>
-          <div className="rounded-xl bg-zinc-50 px-2 py-1.5 ring-1 ring-zinc-200/80">
-            <p className="text-[9px] font-semibold uppercase tracking-wide text-zinc-500">Ticket medio</p>
-            <p className="text-base font-black tabular-nums leading-tight text-zinc-900">{kpis.avgTicket.toFixed(2)} €</p>
+          <div className="relative overflow-hidden rounded-lg bg-gradient-to-b from-zinc-50 to-white px-2 py-1.5 ring-1 ring-zinc-200/75">
+            <BarChart3 className="absolute right-1.5 top-1.5 h-3.5 w-3.5 text-violet-600/85" aria-hidden />
+            <p className="pr-6 text-[8px] font-semibold uppercase tracking-wide text-zinc-500">Ticket medio</p>
+            <p className="text-sm font-bold tabular-nums leading-tight text-zinc-900">{kpis.avgTicket.toFixed(2)} €</p>
+            <p className="text-[9px] text-zinc-500">Por pedido</p>
+            {kpis.deltaTicketPct != null && compareMonthLabel ? (
+              <p
+                className={[
+                  'mt-0.5 text-[9px] font-semibold tabular-nums',
+                  kpis.deltaTicketPct <= 0 ? 'text-emerald-600' : 'text-rose-600',
+                ].join(' ')}
+              >
+                {kpis.deltaTicketPct >= 0 ? '+' : ''}
+                {kpis.deltaTicketPct.toFixed(1)}% vs {compareMonthLabel}
+              </p>
+            ) : null}
           </div>
-          <div className="rounded-xl bg-zinc-50 px-2 py-1.5 ring-1 ring-zinc-200/80">
-            <p className="text-[9px] font-semibold uppercase tracking-wide text-zinc-500">Vs mes ant.</p>
-            <p className="text-base font-black tabular-nums leading-tight text-zinc-900">
+          <div
+            className={[
+              'relative overflow-hidden rounded-lg px-2 py-1.5 ring-1',
+              kpis.deltaPct != null && kpis.deltaPct <= 0
+                ? 'bg-emerald-50/50 ring-emerald-200/70'
+                : kpis.deltaPct != null && kpis.deltaPct > 0
+                  ? 'bg-rose-50/40 ring-rose-200/60'
+                  : 'bg-gradient-to-b from-zinc-50 to-white ring-zinc-200/75',
+            ].join(' ')}
+          >
+            {kpis.deltaPct == null ? (
+              <TrendingUp className="absolute right-1.5 top-1.5 h-3.5 w-3.5 text-zinc-400" aria-hidden />
+            ) : kpis.deltaPct <= 0 ? (
+              <TrendingDown className="absolute right-1.5 top-1.5 h-3.5 w-3.5 text-emerald-600" aria-hidden />
+            ) : (
+              <TrendingUp className="absolute right-1.5 top-1.5 h-3.5 w-3.5 text-rose-600/80" aria-hidden />
+            )}
+            <p className="pr-6 text-[8px] font-semibold uppercase tracking-wide text-zinc-600">Vs mes ant.</p>
+            <p
+              className={[
+                'text-sm font-bold tabular-nums leading-tight',
+                kpis.deltaPct == null
+                  ? 'text-zinc-800'
+                  : kpis.deltaPct <= 0
+                    ? 'text-emerald-800'
+                    : 'text-rose-800',
+              ].join(' ')}
+            >
               {kpis.deltaPct == null ? '—' : `${kpis.deltaPct >= 0 ? '+' : ''}${kpis.deltaPct.toFixed(1)}%`}
             </p>
+            {kpis.deltaPct != null && compareMonthLabel ? (
+              <p className="text-[9px] font-semibold tabular-nums text-zinc-600">
+                ({kpis.deltaTotalEur >= 0 ? '+' : ''}
+                {kpis.deltaTotalEur.toFixed(2)} €)
+              </p>
+            ) : (
+              <p className="text-[9px] text-zinc-500">Total IVA incl.</p>
+            )}
           </div>
         </div>
 
-        <div className="mt-4 grid min-w-0 gap-3 lg:grid-cols-2">
-          <div className="min-w-0 rounded-xl border border-zinc-100/90 bg-zinc-50/70 p-3 ring-1 ring-zinc-100">
-            <p className="text-[11px] font-bold uppercase tracking-wide text-zinc-600">Top productos por gasto</p>
-            <div className="mt-2 space-y-1.5">
-              {monthlyTopProducts.slice(0, topN).map((p) => (
-                <div key={p.productName} className="min-w-0 rounded-lg bg-white px-2 py-1.5 ring-1 ring-zinc-200/80">
-                  <div className="flex items-baseline justify-between gap-2">
-                    <p className="min-w-0 truncate text-[13px] font-semibold leading-tight text-zinc-900">{p.productName}</p>
-                    <p className="shrink-0 text-[13px] font-bold tabular-nums text-zinc-900">{p.spend.toFixed(2)} €</p>
+        <div className="mt-4 rounded-xl border border-amber-200/40 bg-gradient-to-br from-amber-50/35 via-white to-rose-50/25 p-3 ring-1 ring-amber-100/60">
+          <div className="flex flex-wrap items-start justify-between gap-2">
+            <div className="flex min-w-0 items-center gap-2">
+              <Sparkles className="h-4 w-4 shrink-0 text-amber-600/90" aria-hidden />
+              <div>
+                <h2 className="text-[11px] font-bold uppercase tracking-wide text-zinc-800">Alertas de compra</h2>
+                <p className="text-[10px] text-zinc-500">Desliza para ver todas · vs. mes anterior y riesgos.</p>
+              </div>
+            </div>
+            {purchaseAlerts.length > 3 ? (
+              <button
+                type="button"
+                onClick={() => setAlertsExpanded((e) => !e)}
+                className="shrink-0 text-[11px] font-semibold text-[#B91C1C] underline-offset-2 hover:underline"
+              >
+                {alertsExpanded ? 'Ocultar' : `Ver todas (${purchaseAlerts.length})`}
+              </button>
+            ) : null}
+          </div>
+          {purchaseAlerts.length === 0 ? (
+            <p className="mt-2.5 text-xs text-zinc-600">Sin alertas destacadas en este filtro.</p>
+          ) : (
+            <>
+              <div className="mt-2.5 -mx-1 flex gap-2 overflow-x-auto overflow-y-hidden overscroll-x-contain px-1 pb-1 pt-0.5 [-webkit-overflow-scrolling:touch] [scrollbar-width:thin] snap-x snap-mandatory">
+                {purchaseAlerts.map((a) => (
+                  <div
+                    key={a.id}
+                    className={[
+                      'min-w-[min(82vw,260px)] max-w-[280px] flex-shrink-0 snap-start rounded-xl px-3 py-2.5 shadow-sm ring-1',
+                      a.tone === 'rose'
+                        ? 'bg-white/90 ring-rose-200/60'
+                        : 'bg-white/90 ring-amber-200/55',
+                    ].join(' ')}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <span
+                        className={[
+                          'inline-flex rounded-full px-2 py-0.5 text-[8px] font-bold uppercase tracking-wide',
+                          a.tone === 'rose'
+                            ? 'bg-rose-100/90 text-rose-900'
+                            : 'bg-amber-100/90 text-amber-950',
+                        ].join(' ')}
+                      >
+                        {a.tag}
+                      </span>
+                      <AlertTriangle
+                        className={[
+                          'h-3.5 w-3.5 shrink-0 opacity-75',
+                          a.tone === 'rose' ? 'text-rose-600' : 'text-amber-600',
+                        ].join(' ')}
+                        aria-hidden
+                      />
+                    </div>
+                    <p className="mt-2 line-clamp-2 text-[12px] font-bold leading-snug text-zinc-900">{a.title}</p>
+                    <div className="mt-1.5 space-y-0.5">
+                      {a.lines.map((line, li) => (
+                        <p key={`${a.id}-ln-${li}`} className="text-[10px] leading-snug text-zinc-600">
+                          {line}
+                        </p>
+                      ))}
+                    </div>
                   </div>
-                  <div className="mt-0.5 flex items-center justify-between text-[10px] text-zinc-500">
-                    <span>{formatQuantityWithUnit(p.qty, p.unit)}</span>
-                    <span className="tabular-nums text-zinc-600">{p.pct.toFixed(1)}%</span>
-                  </div>
-                  <div className="mt-1 h-1 w-full overflow-hidden rounded-full bg-zinc-100">
-                    <div
-                      className="h-full rounded-full bg-[#D32F2F]/85"
-                      style={{ width: `${Math.min(100, p.pct)}%` }}
-                    />
+                ))}
+              </div>
+              {alertsExpanded ? (
+                <ul className="mt-2 grid gap-1.5 sm:grid-cols-2">
+                  {purchaseAlerts.map((a) => (
+                    <li
+                      key={`${a.id}-full`}
+                      className={[
+                        'rounded-lg px-2.5 py-2 ring-1',
+                        a.tone === 'rose'
+                          ? 'bg-rose-50/50 ring-rose-200/50'
+                          : 'bg-amber-50/40 ring-amber-200/45',
+                      ].join(' ')}
+                    >
+                      <span className="text-[9px] font-bold text-zinc-700">{a.tag}</span>
+                      <p className="text-[11px] font-semibold text-zinc-900">{a.title}</p>
+                      <p className="text-[10px] text-zinc-600">{a.lines.join(' · ')}</p>
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+            </>
+          )}
+        </div>
+
+        <div className="mt-4 grid min-w-0 gap-3 lg:grid-cols-2 lg:items-start">
+        <div className="min-w-0 rounded-xl border border-zinc-100/90 bg-zinc-50/70 p-3 ring-1 ring-zinc-100">
+          <h2 className="text-[11px] font-bold uppercase tracking-wide text-zinc-700">Top productos por gasto</h2>
+          <p className="mt-0.5 text-[10px] text-zinc-500">Productos críticos por importe (IVA incl.).</p>
+          <div className="mt-2 space-y-1.5">
+            {monthlyTopProducts.slice(0, topN).map((p, idx) => {
+              const rank = idx + 1;
+              const badgeClass =
+                rank === 1
+                  ? 'bg-[#D32F2F]/15 text-[#B71C1C] ring-[#D32F2F]/25'
+                  : rank === 2
+                    ? 'bg-zinc-200/80 text-zinc-800 ring-zinc-300/70'
+                    : rank === 3
+                      ? 'bg-orange-100/70 text-orange-900 ring-orange-200/60'
+                      : 'bg-zinc-100/80 text-zinc-600 ring-zinc-200/70';
+              const mom = p.spendMomPct;
+              return (
+                <div
+                  key={p.productName}
+                  className="min-w-0 rounded-lg bg-white px-2 py-1.5 ring-1 ring-zinc-200/70"
+                >
+                  <div className="flex items-start gap-2">
+                    <span
+                      className={[
+                        'mt-0.5 inline-flex h-5 min-w-[1.5rem] shrink-0 items-center justify-center rounded-md text-[10px] font-black tabular-nums ring-1',
+                        badgeClass,
+                      ].join(' ')}
+                    >
+                      #{rank}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-baseline justify-between gap-2">
+                        <p className="min-w-0 truncate text-[12px] font-semibold leading-tight text-zinc-900" title={p.productName}>
+                          {p.productName}
+                        </p>
+                        <p className="shrink-0 text-[12px] font-bold tabular-nums text-zinc-900">{p.spend.toFixed(2)} €</p>
+                      </div>
+                      <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] text-zinc-500">
+                        <span>{formatQuantityWithUnit(p.qty, p.unit)}</span>
+                        {p.topSupplierName ? (
+                          <span className="min-w-0 truncate text-zinc-600" title={p.topSupplierName}>
+                            · {p.topSupplierName}
+                          </span>
+                        ) : null}
+                      </div>
+                      <div className="mt-1 flex items-center gap-2">
+                        <div className="h-0.5 min-w-0 flex-1 overflow-hidden rounded-full bg-zinc-100">
+                          <div
+                            className="h-full rounded-full bg-gradient-to-r from-[#D32F2F]/55 to-[#D32F2F]"
+                            style={{ width: `${Math.min(100, p.pct)}%` }}
+                          />
+                        </div>
+                        {mom == null ? (
+                          <span className="shrink-0 text-[10px] tabular-nums text-zinc-400">—</span>
+                        ) : (
+                          <span
+                            className={[
+                              'inline-flex shrink-0 items-center gap-0.5 text-[10px] font-semibold tabular-nums',
+                              mom > 0 ? 'text-rose-600' : mom < 0 ? 'text-emerald-700' : 'text-zinc-500',
+                            ].join(' ')}
+                          >
+                            {mom > 0 ? <ArrowUpRight className="h-3 w-3" aria-hidden /> : null}
+                            {mom < 0 ? <ArrowDownRight className="h-3 w-3" aria-hidden /> : null}
+                            {mom > 0 ? '+' : ''}
+                            {mom.toFixed(1)}%
+                          </span>
+                        )}
+                        <span className="shrink-0 tabular-nums text-[9px] text-zinc-400">{p.pct.toFixed(1)}%</span>
+                        <ChevronRight className="h-3.5 w-3.5 shrink-0 text-zinc-300" aria-hidden />
+                      </div>
+                      <p className="mt-0.5 text-[9px] tabular-nums text-zinc-400">del gasto del mes</p>
+                    </div>
                   </div>
                 </div>
-              ))}
-              {monthlyTopProducts.length === 0 ? (
-                <p className="text-sm text-zinc-500">Sin productos con gasto en este mes.</p>
-              ) : null}
-            </div>
+              );
+            })}
+            {monthlyTopProducts.length === 0 ? (
+              <p className="text-sm text-zinc-500">Sin productos con gasto en este mes.</p>
+            ) : null}
           </div>
-          <div className="min-w-0 rounded-xl border border-zinc-100/90 bg-zinc-50/70 p-3 ring-1 ring-zinc-100">
+        </div>
+
+        <div className="mt-3 min-w-0 rounded-xl border border-zinc-100/90 bg-zinc-50/70 p-3 ring-1 ring-zinc-100 lg:mt-0">
+          <h2 className="text-[11px] font-bold uppercase tracking-wide text-zinc-700">Mayor subida de precio</h2>
+          <p className="mt-0.5 text-[10px] text-zinc-500">Precio unitario medio ponderado vs. mes anterior (misma lógica operativa).</p>
+          <div className="mt-2 space-y-1.5">
+            {topProductsByUnitPriceIncrease.slice(0, Math.min(10, topN)).map((p) => (
+              <div
+                key={p.name}
+                className="flex min-w-0 items-center justify-between gap-2 rounded-lg bg-white px-2 py-1.5 ring-1 ring-zinc-200/70"
+              >
+                <p className="min-w-0 truncate text-[12px] font-semibold text-zinc-900" title={p.name}>
+                  {p.name}
+                </p>
+                <div className="shrink-0 text-right leading-tight">
+                  <p className="text-[12px] font-bold tabular-nums text-rose-700">
+                    +{p.deltaPct.toLocaleString('es-ES', { maximumFractionDigits: 1 })}%
+                  </p>
+                  <p className="text-[9px] font-medium tabular-nums text-zinc-500">
+                    {p.deltaAbs >= 0 ? '+' : ''}
+                    {p.deltaAbs.toFixed(2)} €/{p.unit}
+                  </p>
+                </div>
+              </div>
+            ))}
+            {topProductsByUnitPriceIncrease.length === 0 ? (
+              <p className="text-sm text-zinc-500">Sin subidas relevantes vs. el mes anterior.</p>
+            ) : null}
+          </div>
+        </div>
+        </div>
+
+        <div className="mt-4 min-w-0 rounded-xl border border-zinc-100/90 bg-zinc-50/70 p-3 ring-1 ring-zinc-100">
+          <h2 className="text-[11px] font-bold uppercase tracking-wide text-zinc-700">Top proveedores</h2>
+          <p className="mt-0.5 text-[10px] text-zinc-500">Desliza · gasto, pedidos, incidencias y desvío.</p>
+          {supplierPerformance.length === 0 ? (
+            <p className="mt-2 text-sm text-zinc-500">Sin datos de proveedores en este mes.</p>
+          ) : (
+            <div className="mt-2 -mx-1 flex gap-2 overflow-x-auto overflow-y-hidden overscroll-x-contain px-1 pb-1 pt-0.5 [-webkit-overflow-scrolling:touch] [scrollbar-width:thin] snap-x snap-mandatory">
+              {(() => {
+                const maxSp = supplierPerformance[0]?.spend ?? 1;
+                return supplierPerformance.slice(0, topN).map((s) => (
+                  <div
+                    key={s.supplierId}
+                    className="min-w-[min(78vw,220px)] max-w-[240px] flex-shrink-0 snap-start rounded-xl bg-white px-3 py-2.5 shadow-sm ring-1 ring-zinc-200/75"
+                  >
+                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-zinc-100 to-zinc-50 text-[11px] font-black text-zinc-600 ring-1 ring-zinc-200/80">
+                      {s.supplierName.slice(0, 1).toUpperCase()}
+                    </div>
+                    <p className="mt-2 line-clamp-2 text-[12px] font-bold leading-tight text-zinc-900" title={s.supplierName}>
+                      {s.supplierName}
+                    </p>
+                    <p className="mt-1 text-[13px] font-black tabular-nums text-zinc-900">{s.spend.toFixed(2)} €</p>
+                    <p className="text-[10px] text-zinc-500">{s.orderCount} pedidos</p>
+                    <div className="mt-2 flex items-center justify-between gap-2">
+                      <span
+                        className={[
+                          'rounded-full px-2 py-0.5 text-[9px] font-bold tabular-nums',
+                          s.incidencePct >= 15
+                            ? 'bg-rose-100 text-rose-800'
+                            : s.incidencePct > 0
+                              ? 'bg-amber-100 text-amber-900'
+                              : 'bg-emerald-100 text-emerald-800',
+                        ].join(' ')}
+                      >
+                        {s.incidencePct.toFixed(0)}% incid.
+                      </span>
+                      <span className="text-[10px] font-semibold tabular-nums text-zinc-600">Δ {s.deviation.toFixed(0)} €</span>
+                    </div>
+                    <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-zinc-100">
+                      <div
+                        className="h-full rounded-full bg-[#D32F2F]/80"
+                        style={{ width: `${maxSp > 0 ? Math.min(100, (s.spend / maxSp) * 100) : 0}%` }}
+                      />
+                    </div>
+                  </div>
+                ));
+              })()}
+            </div>
+          )}
+        </div>
+
+        <div
+          className="mt-3 flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5 rounded-xl border border-zinc-200/70 bg-zinc-100/50 px-3 py-2 text-[10px] text-zinc-700 ring-1 ring-zinc-100"
+          role="status"
+        >
+          <span>
+            <span className="font-semibold text-zinc-900">Desvío ped./recep.</span>{' '}
+            <span className="tabular-nums">{deviationKpis.deviationAbs.toFixed(2)} €</span>
+          </span>
+          <span className="hidden h-3 w-px bg-zinc-300 sm:block" aria-hidden />
+          <span>
+            <span className="font-semibold text-zinc-900">Desvío %</span>{' '}
+            <span className="tabular-nums">{deviationKpis.deviationPct.toFixed(1)}%</span>
+          </span>
+          <span className="hidden h-3 w-px bg-zinc-300 sm:block" aria-hidden />
+          <span>
+            <span className="font-semibold text-zinc-900">Pedidos con incidencia</span>{' '}
+            <span className="tabular-nums">
+              {deviationKpis.incidents} de {deviationKpis.totalOrders}
+            </span>
+          </span>
+        </div>
+
+        <div className="mt-3 min-w-0">
+          <div className="rounded-xl border border-zinc-100/90 bg-zinc-50/70 p-3 ring-1 ring-zinc-100">
             <p className="text-[11px] font-bold uppercase tracking-wide text-zinc-600">Resumen semanal</p>
             <div className="mt-2 flex flex-wrap gap-1.5">
               {weeklySummary.map((w) => (
@@ -547,158 +1109,43 @@ export default function PedidosHistorialMesPage() {
                       : 'border-zinc-200 bg-white text-zinc-700',
                   ].join(' ')}
                 >
-                  Semana {w.week} · {w.total.toFixed(2)} €
+                  S{w.week} · {w.total.toFixed(0)} €
                 </button>
               ))}
             </div>
             {activeWeek != null ? (
-              <div className="mt-3 space-y-2">
+              <div className="mt-2 space-y-1">
                 {(weeklySummary.find((w) => w.week === activeWeek)?.topProducts ?? []).map((p) => (
-                  <div key={p.name} className="flex items-center justify-between rounded-lg bg-white px-3 py-2 ring-1 ring-zinc-200">
-                    <p className="truncate text-sm text-zinc-800">{p.name}</p>
-                    <p className="shrink-0 text-sm font-semibold tabular-nums text-zinc-900">{p.spend.toFixed(2)} €</p>
+                  <div key={p.name} className="flex items-center justify-between rounded-lg bg-white px-2 py-1.5 ring-1 ring-zinc-200/80">
+                    <p className="truncate text-[11px] text-zinc-800">{p.name}</p>
+                    <p className="shrink-0 text-[11px] font-semibold tabular-nums text-zinc-900">{p.spend.toFixed(2)} €</p>
                   </div>
                 ))}
                 {(weeklySummary.find((w) => w.week === activeWeek)?.topProducts ?? []).length === 0 ? (
-                  <p className="text-sm text-zinc-500">Sin datos de productos en esta semana.</p>
+                  <p className="text-xs text-zinc-500">Sin datos en esta semana.</p>
                 ) : null}
               </div>
             ) : (
-              <p className="mt-3 text-sm text-zinc-500">Toca una semana para ver productos con más gasto.</p>
+              <p className="mt-2 text-[11px] text-zinc-500">Toca una semana para el detalle.</p>
             )}
           </div>
         </div>
 
-        <div className="mt-3 grid gap-3 lg:grid-cols-2">
-          <div className="min-w-0 rounded-xl border border-zinc-100/90 bg-zinc-50/70 p-3 ring-1 ring-zinc-100">
-            <p className="text-[11px] font-bold uppercase tracking-wide text-zinc-600">Top proveedores</p>
-            <div className="mt-2 space-y-1.5">
-              {supplierPerformance.slice(0, topN).map((s) => (
-                <div key={s.supplierId} className="min-w-0 rounded-lg bg-white px-2 py-1.5 ring-1 ring-zinc-200/80">
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="min-w-0 truncate text-sm font-semibold text-zinc-900">{s.supplierName}</p>
-                    <p className="shrink-0 text-sm font-black tabular-nums text-zinc-900">{s.spend.toFixed(2)} €</p>
-                  </div>
-                  <div className="mt-1 flex items-center justify-between text-[11px] text-zinc-500">
-                    <span>{s.orderCount} pedidos</span>
-                    <span>{s.incidencePct.toFixed(1)}% incidencias</span>
-                  </div>
-                  <div className="mt-1 text-[11px] text-zinc-500">
-                    Desvío pedido/recepción: <span className="font-semibold tabular-nums text-zinc-700">{s.deviation.toFixed(2)} €</span>
-                  </div>
-                </div>
-              ))}
-              {supplierPerformance.length === 0 ? (
-                <p className="text-sm text-zinc-500">Sin datos de proveedores en este mes.</p>
-              ) : null}
+        <div className="mt-4 rounded-xl border border-zinc-200/80 bg-zinc-50/40 p-3 ring-1 ring-zinc-100">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 className="text-[11px] font-bold uppercase tracking-wide text-zinc-700">Evolución de precios</h2>
+              <p className="mt-0.5 max-w-md text-[10px] leading-snug text-zinc-500">
+                Herramienta avanzada: curvas, histórico y comparativas fuera de este resumen mensual.
+              </p>
             </div>
+            <Link
+              href="/pedidos/precios"
+              className="inline-flex h-9 shrink-0 items-center justify-center rounded-lg border border-zinc-300/90 bg-white px-3 text-[11px] font-semibold text-zinc-800 shadow-sm transition hover:border-zinc-400 hover:bg-zinc-50"
+            >
+              Abrir análisis
+            </Link>
           </div>
-          <div className="rounded-xl border border-zinc-100/90 bg-zinc-50/70 p-3 ring-1 ring-zinc-100">
-            <p className="text-[11px] font-bold uppercase tracking-wide text-zinc-600">Desvío pedido vs recepción</p>
-            <div className="mt-2 grid grid-cols-2 gap-1.5">
-              <div className="rounded-lg bg-white px-2 py-1.5 ring-1 ring-zinc-200/80">
-                <p className="text-[9px] uppercase tracking-wide text-zinc-500">Pedido (est.)</p>
-                <p className="text-base font-black tabular-nums text-zinc-900">{deviationKpis.requested.toFixed(2)} €</p>
-              </div>
-              <div className="rounded-lg bg-white px-2 py-1.5 ring-1 ring-zinc-200/80">
-                <p className="text-[9px] uppercase tracking-wide text-zinc-500">Recepción</p>
-                <p className="text-base font-black tabular-nums text-zinc-900">{deviationKpis.received.toFixed(2)} €</p>
-              </div>
-              <div className="rounded-lg bg-white px-2 py-1.5 ring-1 ring-zinc-200/80">
-                <p className="text-[9px] uppercase tracking-wide text-zinc-500">Desvío €</p>
-                <p className="text-base font-black tabular-nums text-zinc-900">{deviationKpis.deviationAbs.toFixed(2)} €</p>
-              </div>
-              <div className="rounded-lg bg-white px-2 py-1.5 ring-1 ring-zinc-200/80">
-                <p className="text-[9px] uppercase tracking-wide text-zinc-500">Desvío %</p>
-                <p className="text-base font-black tabular-nums text-zinc-900">{deviationKpis.deviationPct.toFixed(1)}%</p>
-              </div>
-            </div>
-            <p className="mt-2 text-xs text-zinc-600">
-              Pedidos con incidencia: <span className="font-semibold text-zinc-900">{deviationKpis.incidents}</span> de{' '}
-              <span className="font-semibold text-zinc-900">{deviationKpis.totalOrders}</span>
-            </p>
-          </div>
-        </div>
-        <div className="mt-4 space-y-2.5">
-          {displayedSuppliers.length === 0 ? (
-            <p className="py-12 text-center text-sm text-zinc-500">No hay compras registradas en este mes.</p>
-          ) : null}
-          {displayedSuppliers.map((supplier) => {
-            const open = expandedSupplierId === supplier.supplierId;
-            return (
-              <div
-                key={supplier.supplierId}
-                className={[
-                  'overflow-hidden rounded-2xl transition-colors duration-200',
-                  open
-                    ? 'bg-white ring-1 ring-zinc-200 shadow-sm'
-                    : 'bg-zinc-50/85 ring-1 ring-zinc-200/85 hover:bg-white',
-                ].join(' ')}
-              >
-                <button
-                  type="button"
-                  onClick={() =>
-                    setExpandedSupplierId((id) => (id === supplier.supplierId ? null : supplier.supplierId))
-                  }
-                  className="flex w-full flex-col items-center px-4 py-4 text-center outline-none active:bg-zinc-50/50 focus-visible:ring-2 focus-visible:ring-[#D32F2F]/40 focus-visible:ring-offset-1 sm:px-5 sm:py-5"
-                  aria-expanded={open}
-                  id={`historial-proveedor-${supplier.supplierId}`}
-                >
-                  <span className="text-center text-lg font-semibold leading-tight tracking-tight text-zinc-900 sm:text-xl">
-                    {supplier.supplierName}
-                  </span>
-                  <span
-                    className={`mx-auto mt-2 w-20 ${CHEF_ONE_TAPER_LINE_CLASS}`}
-                    aria-hidden
-                  />
-                  <span className="mt-2 flex items-center gap-1.5 text-[11px] text-zinc-500">
-                    <span className="tabular-nums font-semibold text-zinc-800">{supplier.totalWithVat.toFixed(2)} €</span>
-                    <span className="text-zinc-300">·</span>
-                    <span>
-                      {supplier.orderCount} pedido{supplier.orderCount === 1 ? '' : 's'} · IVA incl.
-                    </span>
-                  </span>
-                  <span className="mt-3 flex items-center gap-1.5 text-[10px] font-semibold text-[#D32F2F]">
-                    {open ? 'Ocultar productos' : 'Ver productos'}
-                    <ChevronDown
-                      className={[
-                        'h-3.5 w-3.5 transition-transform duration-200',
-                        open ? 'rotate-180' : '',
-                      ].join(' ')}
-                      aria-hidden
-                    />
-                  </span>
-                </button>
-                {open ? (
-                  <div
-                    id={`historial-productos-${supplier.supplierId}`}
-                    role="region"
-                    aria-labelledby={`historial-proveedor-${supplier.supplierId}`}
-                    className="border-t border-zinc-100 bg-gradient-to-b from-zinc-50/80 to-zinc-50/40 px-3 pb-3 pt-3 sm:px-4"
-                  >
-                    <p className="mb-2 text-center text-[9px] font-semibold uppercase tracking-[0.14em] text-zinc-400">
-                      Productos · cantidades del mes
-                    </p>
-                    <ul className="space-y-1.5">
-                      {supplier.products.map((product) => (
-                        <li
-                          key={`${supplier.supplierId}-${product.name}`}
-                          className="flex items-center justify-between gap-3 rounded-xl border border-zinc-100/90 bg-white px-3 py-2 ring-1 ring-zinc-100"
-                        >
-                          <span className="min-w-0 flex-1 text-left text-sm font-medium leading-snug text-zinc-800">
-                            {product.name}
-                          </span>
-                          <span className="shrink-0 text-right text-sm font-semibold tabular-nums text-zinc-900">
-                            {formatQuantityWithUnit(product.quantity, product.unit as Unit)}
-                          </span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                ) : null}
-              </div>
-            );
-          })}
         </div>
       </section>
     </div>
