@@ -71,10 +71,12 @@ import {
   type StaffMealWorker,
 } from '@/lib/comida-personal-supabase';
 import { getPedidoDrafts } from '@/lib/pedidos-storage';
+import { getAppMainScrollElement, readMainScrollTop, setMainScrollTop } from '@/lib/pedidos-main-scroll';
 import {
   CHEFONE_PEDIDOS_UI_STATE_KEY,
-  parsePedidosUiSessionState,
-  serializePedidosUiSessionState,
+  loadPedidosUiState,
+  PEDIDOS_HOME_PATHNAME,
+  savePedidosUiState,
 } from '@/lib/pedidos-ui-session';
 import {
   PEDIDOS_VIEW_STATE_KEY,
@@ -458,6 +460,8 @@ export default function PedidosPage() {
   /** Coalesce varias líneas marcadas ✗ en el mismo pedido antes de notificar. */
   const incidenciaRecepcionDebounceRef = React.useRef<Map<string, number>>(new Map());
   const router = useRouter();
+  const routerRef = React.useRef(router);
+  routerRef.current = router;
   const searchParams = useSearchParams();
   const oidoStandalone = searchParams.get('oido') === '1';
   const avisoPedido = searchParams.get('pedido');
@@ -467,6 +471,8 @@ export default function PedidosPage() {
   /** Evita escribir en localStorage (y machacar un estado bueno) antes de restaurar. */
   const hasRestoredViewStateRef = React.useRef(false);
   const scrollPersistTimeoutRef = React.useRef<number | null>(null);
+  /** Tras restaurar UI, no podar expanded* hasta que haya pasado (evita carrera con fetch inicial). */
+  const suppressOrderPruneUntilRef = React.useRef(0);
 
   React.useEffect(() => {
     if (!avisoPedido) return;
@@ -496,13 +502,17 @@ export default function PedidosPage() {
     }
     pedidosPageUiRestoreAttemptedRef.current = localId;
     try {
-      const route = window.location.pathname + window.location.search;
-      const sess = parsePedidosUiSessionState(
-        window.sessionStorage.getItem(CHEFONE_PEDIDOS_UI_STATE_KEY),
-        localId,
-        route,
-      );
+      const pathname = window.location.pathname;
+      const route = pathname + window.location.search;
+      const rawSess = window.sessionStorage.getItem(CHEFONE_PEDIDOS_UI_STATE_KEY);
+      const sess = loadPedidosUiState(rawSess, localId, pathname);
       if (sess) {
+        console.log('[PEDIDOS_UI] restore start', {
+          pendingExpanded: sess.pendingExpanded,
+          expandedPedidoId: sess.expandedPedidoId,
+          scrollY: sess.scrollY,
+          pathname: sess.pathname,
+        });
         if (sess.receptionInputs) {
           const {
             priceInputByItemId: pi,
@@ -516,21 +526,29 @@ export default function PedidosPage() {
           setPricePerKgInputByItemId((prev) => ({ ...prev, ...ppi }));
         }
         setHistoricoMonthOpen({ ...sess.historicoMonthOpen });
-        setPendientesEntregaAccordionOpen(sess.pendientesAccordionOpen);
-        setHistoricoRecibidosAccordionOpen(sess.historicoAccordionOpen);
-        setExpandedSentId(sess.expandedSentId);
-        setExpandedHistoricoId(sess.expandedHistoricoId);
+        setPendientesEntregaAccordionOpen(sess.pendingExpanded);
+        setHistoricoRecibidosAccordionOpen(sess.historyExpanded);
+        setExpandedSentId(sess.expandedPedidoId);
+        setExpandedHistoricoId(sess.expandedHistoricoPedidoId);
         setIncidentOpenBySentOrderId({ ...sess.incidentOpenBySentOrderId });
         setQuickLineMarks({ ...sess.quickLineMarks });
+        suppressOrderPruneUntilRef.current = Date.now() + 2000;
         if (sess.scrollY > 0) {
           scrollRestorePendingRef.current = sess.scrollY;
         }
+        console.log('[PEDIDOS_UI] restore applied', {
+          pendingExpanded: sess.pendingExpanded,
+          historyExpanded: sess.historyExpanded,
+          expandedPedidoId: sess.expandedPedidoId,
+          expandedHistoricoPedidoId: sess.expandedHistoricoPedidoId,
+          scrollY: sess.scrollY,
+        });
       } else {
         const st = parsePedidosViewState(window.localStorage.getItem(PEDIDOS_VIEW_STATE_KEY), localId);
         if (st) {
           const r = st.route;
           if (r && r.startsWith('/pedidos') && r !== route) {
-            router.replace(r, { scroll: false });
+            routerRef.current.replace(r, { scroll: false });
           }
           if (st.receptionInputs) {
             const {
@@ -545,6 +563,7 @@ export default function PedidosPage() {
             setPricePerKgInputByItemId((prev) => ({ ...prev, ...ppi }));
           }
         }
+        console.log('[PEDIDOS_UI] reset reason', 'no_valid_session_fresh_module_entry');
         /** Sin sesión de módulo: entrada limpia (p. ej. volver desde panel). No reabrir acordeones desde localStorage. */
         setPendientesEntregaAccordionOpen(false);
         setHistoricoRecibidosAccordionOpen(false);
@@ -560,7 +579,11 @@ export default function PedidosPage() {
       hasRestoredViewStateRef.current = true;
       setUiHydrated(true);
     }
-  }, [localId, canUse, avisoPedido, router]);
+  }, [localId, canUse, avisoPedido]);
+
+  React.useEffect(() => {
+    suppressOrderPruneUntilRef.current = 0;
+  }, [localId]);
 
   const scheduleIncidenciaRecepcionNotifyDebounced = React.useCallback(
     (order: PedidoOrder) => {
@@ -1580,7 +1603,7 @@ export default function PedidosPage() {
         if (o?.status === 'sent') openedSection = 'pending';
         else if (o?.status === 'received') openedSection = 'received';
       }
-      const scrollY = Math.max(0, Math.round(window.scrollY));
+      const scrollY = readMainScrollTop();
       let historicoMonthKey: string | null = null;
       if (expandedHistoricoId) {
         const ho = orders.find((o) => o.id === expandedHistoricoId);
@@ -1602,26 +1625,29 @@ export default function PedidosPage() {
         },
       };
       window.localStorage.setItem(PEDIDOS_VIEW_STATE_KEY, serializePedidosViewState(payload));
-      const sessionPayload = {
-        v: 1 as const,
+      const expandedLinesByPedido: Record<string, boolean> = {
+        ...(expandedSentId ? { [expandedSentId]: true } : {}),
+        ...(expandedHistoricoId ? { [expandedHistoricoId]: true } : {}),
+      };
+      savePedidosUiState({
         localId,
-        route,
-        pendientesAccordionOpen: pendientesEntregaAccordionOpen,
-        historicoAccordionOpen: historicoRecibidosAccordionOpen,
-        expandedSentId,
-        expandedHistoricoId,
+        pathname: PEDIDOS_HOME_PATHNAME,
+        pendingExpanded: pendientesEntregaAccordionOpen,
+        historyExpanded: historicoRecibidosAccordionOpen,
+        expandedPedidoId: expandedSentId,
+        expandedHistoricoPedidoId: expandedHistoricoId,
+        expandedLinesByPedido,
+        scrollY,
         historicoMonthOpen: { ...historicoMonthOpen },
         incidentOpenBySentOrderId: { ...incidentOpenBySentOrderId },
         quickLineMarks: { ...quickLineMarks },
-        scrollY,
         receptionInputs: {
           priceInputByItemId: { ...priceInputByItemId },
           weightInputByItemId: { ...weightInputByItemId },
           orderQtyInputByItemId: { ...orderQtyInputByItemId },
           pricePerKgInputByItemId: { ...pricePerKgInputByItemId },
         },
-      };
-      window.sessionStorage.setItem(CHEFONE_PEDIDOS_UI_STATE_KEY, serializePedidosUiSessionState(sessionPayload));
+      });
     } catch {
       /* ignore */
     }
@@ -1652,6 +1678,9 @@ export default function PedidosPage() {
     if (!localId || !canUse) return;
     const onVisibility = () => {
       if (document.visibilityState === 'hidden') persistPedidosViewState();
+      if (document.visibilityState === 'visible') {
+        suppressOrderPruneUntilRef.current = Date.now() + 1600;
+      }
     };
     const onPageHide = () => {
       persistPedidosViewState();
@@ -1678,10 +1707,16 @@ export default function PedidosPage() {
         persistPedidosViewState();
       }, 200);
     };
-    window.addEventListener('scroll', onScroll, { passive: true });
+    const main = getAppMainScrollElement();
+    const targets: (HTMLElement | Window)[] = main ? [main, window] : [window];
+    for (const t of targets) {
+      t.addEventListener('scroll', onScroll, { passive: true });
+    }
     return () => {
       if (scrollPersistTimeoutRef.current != null) window.clearTimeout(scrollPersistTimeoutRef.current);
-      window.removeEventListener('scroll', onScroll);
+      for (const t of targets) {
+        t.removeEventListener('scroll', onScroll);
+      }
     };
   }, [localId, canUse, persistPedidosViewState]);
 
@@ -1694,7 +1729,8 @@ export default function PedidosPage() {
       scrollRestorePendingRef.current = null;
       const outer = requestAnimationFrame(() => {
         requestAnimationFrame(() => {
-          window.scrollTo({ top: y, behavior: 'auto' });
+          setMainScrollTop(y);
+          window.setTimeout(() => setMainScrollTop(y), 120);
         });
       });
       return outer;
@@ -1729,10 +1765,13 @@ export default function PedidosPage() {
 
   React.useEffect(() => {
     if (!uiHydrated || !ordersEverNonEmptyRef.current) return;
+    if (Date.now() < suppressOrderPruneUntilRef.current) return;
     if (expandedSentId && !orders.some((o) => o.id === expandedSentId && o.status === 'sent')) {
+      console.log('[PEDIDOS_UI] reset reason', 'expanded_sent_order_missing_after_fetch');
       setExpandedSentId(null);
     }
     if (expandedHistoricoId && !orders.some((o) => o.id === expandedHistoricoId && o.status === 'received')) {
+      console.log('[PEDIDOS_UI] reset reason', 'expanded_historico_order_missing_after_fetch');
       setExpandedHistoricoId(null);
     }
   }, [uiHydrated, orders, expandedSentId, expandedHistoricoId]);
