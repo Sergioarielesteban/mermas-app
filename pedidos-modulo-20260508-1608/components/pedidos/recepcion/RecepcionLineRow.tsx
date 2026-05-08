@@ -214,15 +214,15 @@ function RecepcionLineRowInner({
   const lineSummary = React.useMemo(() => receptionBillingSummary(previewItem), [previewItem]);
 
   return (
-    <div className="space-y-0.5 rounded-lg bg-white p-1.5 ring-1 ring-zinc-200/85">
-      <p className="text-[13px] font-semibold leading-tight text-zinc-800">{lineDisplayName ?? item.productName}</p>
-      <p className="text-[11px] text-zinc-600">
+    <div className="space-y-1 rounded-lg bg-white p-2 ring-1 ring-zinc-200">
+      <p className="text-sm font-semibold leading-tight text-zinc-800">{lineDisplayName ?? item.productName}</p>
+      <p className="text-xs text-zinc-600">
         Pedido:{' '}
-        <span className="text-sm font-bold tabular-nums text-zinc-900 sm:text-base">
+        <span className="text-base font-bold tabular-nums text-zinc-900 sm:text-lg">
           {formatQuantityWithUnit(item.quantity, item.unit)}
         </span>
       </p>
-      <div className="rounded-md border border-zinc-200/80 bg-zinc-50/80 px-1.5 py-1 text-[10px] leading-snug text-zinc-700">
+      <div className="rounded-lg border border-zinc-200/90 bg-zinc-50 px-2 py-1.5 text-[11px] leading-snug text-zinc-700">
         <p className="font-semibold text-zinc-500">Resumen albarán</p>
         <p className="mt-0.5">
           <span className="font-semibold text-zinc-500">Pedido</span> {lineSummary.pedido}
@@ -344,11 +344,11 @@ function RecepcionLineRowInner({
           ) : null}
         </div>
       ) : (
-        <div className="rounded-md border border-emerald-400/45 bg-emerald-50/40 px-1.5 py-1.5">
-          <p className="text-[9px] font-bold uppercase tracking-wide text-emerald-900/90">Recepción (cantidad × precio)</p>
-          <div className="mt-1 grid min-w-0 grid-cols-3 items-end gap-x-1.5 gap-y-0.5">
+        <div className="rounded-lg border-2 border-emerald-500/40 bg-emerald-50/50 px-2 py-2">
+          <p className="text-[10px] font-bold uppercase tracking-wide text-emerald-900/90">Recepción (cantidad × precio)</p>
+          <div className="mt-1.5 grid min-w-0 grid-cols-3 items-end gap-x-2 gap-y-1">
             <div className="min-w-0">
-              <label className="mb-0.5 block text-[9px] font-semibold text-zinc-700">Cantidad real ({calcSuffix})</label>
+              <label className="mb-0.5 block text-[10px] font-semibold text-zinc-700">Cantidad real ({calcSuffix})</label>
               <input
                 type="text"
                 inputMode="decimal"
@@ -364,11 +364,11 @@ function RecepcionLineRowInner({
                   orderQtyFocusedRef.current = false;
                   commitReceivedOrderQtyInput(orderId, item.id, orderQtyText, priceText);
                 }}
-                className="h-7 w-full min-w-0 rounded-md border border-zinc-200 bg-white px-1 text-xs font-semibold tabular-nums text-zinc-900 outline-none"
+                className="h-8 w-full min-w-0 rounded-md border border-zinc-300 bg-white px-1.5 text-sm font-semibold tabular-nums text-zinc-900 outline-none"
               />
             </div>
             <div className="min-w-0">
-              <label className="mb-0.5 block text-[9px] font-semibold text-zinc-700">Precio real (€/{calcSuffix})</label>
+              <label className="mb-0.5 block text-[10px] font-semibold text-zinc-700">Precio real (€/{calcSuffix})</label>
               <input
                 type="text"
                 inputMode="decimal"
@@ -382,12 +382,12 @@ function RecepcionLineRowInner({
                   priceFocusedRef.current = false;
                   commitPriceInput(orderId, item.id, priceText);
                 }}
-                className="h-7 w-full min-w-0 rounded-md border border-zinc-200 bg-white px-1 text-xs font-semibold tabular-nums text-zinc-900 outline-none"
+                className="h-8 w-full min-w-0 rounded-md border border-zinc-300 bg-white px-1.5 text-sm font-semibold tabular-nums text-zinc-900 outline-none"
               />
             </div>
-            <div className="flex min-h-[2.85rem] min-w-0 flex-col justify-end rounded-md border border-emerald-300/60 bg-emerald-100/60 px-1 py-0.5">
-              <span className="text-[9px] font-semibold text-emerald-900/85">Sub</span>
-              <span className="text-right text-sm font-black leading-tight tabular-nums text-emerald-950 sm:text-base">
+            <div className="flex min-h-[3.15rem] min-w-0 flex-col justify-end rounded-md border border-emerald-300/70 bg-emerald-100/70 px-1.5 py-1">
+              <span className="text-[10px] font-semibold text-emerald-900/85">Sub</span>
+              <span className="text-right text-base font-black leading-tight tabular-nums text-emerald-950 sm:text-lg">
                 {previewItem.lineTotal.toFixed(2)} €
               </span>
             </div>
@@ -395,7 +395,7 @@ function RecepcionLineRowInner({
         </div>
       )}
       {billsByWeight ? (
-        <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-0.5 border-t border-zinc-100/90 pt-1">
+        <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-t border-zinc-100 pt-1.5">
           <div className="flex min-w-0 items-center gap-1.5">
             <label className="shrink-0 text-[11px] font-semibold text-zinc-600">
               Precio recibido (€/{unitPriceCatalogSuffix[item.unit]})
@@ -413,10 +413,10 @@ function RecepcionLineRowInner({
                 priceFocusedRef.current = false;
                 commitPriceInput(orderId, item.id, priceText);
               }}
-              className="h-7 w-[4.25rem] rounded-md border border-zinc-200 bg-white px-1 text-xs font-semibold tabular-nums text-zinc-900 outline-none"
+              className="h-8 w-[4.5rem] rounded-md border border-zinc-300 bg-white px-1.5 text-sm font-semibold tabular-nums text-zinc-900 outline-none"
             />
           </div>
-          <span className="shrink-0 text-[10px] text-zinc-700">
+          <span className="shrink-0 text-[11px] text-zinc-700">
             Subt:{' '}
             <span className="font-bold tabular-nums text-zinc-900">{previewItem.lineTotal.toFixed(2)} €</span>
           </span>

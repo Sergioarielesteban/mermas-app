@@ -45,11 +45,11 @@ export default function PedidosNuevoCatalogLine({ product: p, qty, lineTotal, su
   const su = p.recipeUnit != null ? unitPriceCatalogSuffix[p.recipeUnit] : null;
 
   return (
-    <div className="rounded-lg bg-zinc-50/90 p-2 ring-1 ring-zinc-200/85">
-      <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0">
-          <p className="text-[13px] font-semibold leading-tight text-zinc-800">{p.name}</p>
-          <p className="text-[11px] text-zinc-500">
+    <div className="rounded-xl bg-zinc-50 p-3 ring-1 ring-zinc-200">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-sm font-semibold text-zinc-800">{p.name}</p>
+          <p className="text-xs text-zinc-500">
             {dual && ppk != null ? (
               <>
                 {ppk.toFixed(2)} €/kg habitual · {eq != null ? `${eq} kg/${u} ref.` : ''}
@@ -77,13 +77,13 @@ export default function PedidosNuevoCatalogLine({ product: p, qty, lineTotal, su
             </p>
           ) : null}
         </div>
-        <p className="shrink-0 whitespace-nowrap text-[13px] font-bold tabular-nums text-zinc-900">{lineTotal.toFixed(2)} €</p>
+        <p className="shrink-0 whitespace-nowrap text-sm font-bold tabular-nums text-zinc-900">{lineTotal.toFixed(2)} €</p>
       </div>
-      <div className="mt-2 flex min-w-0 items-center justify-end gap-1.5">
+      <div className="mt-3 flex min-w-0 items-center justify-end gap-2">
         <button
           type="button"
           {...repeatDown}
-          className="grid h-9 w-9 shrink-0 touch-manipulation place-items-center rounded-full border border-zinc-200 bg-white text-base font-semibold leading-none text-zinc-700 active:bg-zinc-50"
+          className="grid h-10 w-10 shrink-0 touch-manipulation place-items-center rounded-full border border-zinc-300 bg-white text-lg font-semibold leading-none text-zinc-700 shadow-sm active:bg-zinc-50"
           aria-label={`Quitar una unidad de ${p.name}`}
         >
           {'\u2212'}
@@ -96,7 +96,7 @@ export default function PedidosNuevoCatalogLine({ product: p, qty, lineTotal, su
           enterKeyHint="done"
           autoComplete="off"
           aria-label={`Cantidad ${p.name}`}
-          className="h-9 min-w-[4.25rem] max-w-[6rem] flex-1 rounded-lg border border-zinc-200 bg-white px-1.5 text-center text-sm font-semibold text-zinc-900 outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+          className="h-10 min-w-[4.5rem] max-w-[6.5rem] flex-1 rounded-lg border border-zinc-300 bg-white px-2 text-center text-base font-semibold text-zinc-900 outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
           value={
             qty === 0 ? '' : unitAllowsDecimalOrderQuantity(p.unit) ? qty : Math.round(qty)
           }
@@ -105,7 +105,7 @@ export default function PedidosNuevoCatalogLine({ product: p, qty, lineTotal, su
         <button
           type="button"
           {...repeatUp}
-          className="grid h-9 w-9 shrink-0 touch-manipulation place-items-center rounded-full bg-[#D32F2F] text-base font-semibold leading-none text-white active:bg-[#B71C1C]"
+          className="grid h-10 w-10 shrink-0 touch-manipulation place-items-center rounded-full bg-[#D32F2F] text-lg font-semibold leading-none text-white shadow-sm active:bg-[#B71C1C]"
           aria-label={`Añadir una unidad de ${p.name}`}
         >
           +

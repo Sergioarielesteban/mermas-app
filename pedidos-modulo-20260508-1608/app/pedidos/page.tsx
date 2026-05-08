@@ -3308,7 +3308,7 @@ export default function PedidosPage() {
   }
 
   return (
-    <div className="space-y-1.5 sm:space-y-2">
+    <div className="space-y-2 sm:space-y-3">
       {showDeletedBanner ? (
         <div className="pointer-events-none fixed inset-0 z-[90] grid place-items-center bg-black/25 px-6">
           <div className="rounded-2xl bg-[#D32F2F] px-7 py-5 text-center shadow-2xl ring-2 ring-white/75">
@@ -3401,7 +3401,7 @@ export default function PedidosPage() {
 
       {avisoPedido === 'enviado' ? (
         <div
-          className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-950 ring-1 ring-emerald-100"
+          className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-950 shadow-sm ring-1 ring-emerald-100"
           role="status"
         >
           <div className="flex items-start justify-between gap-3">
@@ -3418,7 +3418,7 @@ export default function PedidosPage() {
       ) : null}
       {avisoPedido === 'borrador' ? (
         <div
-          className="rounded-xl border border-sky-200 bg-sky-50 px-3 py-2 text-sm font-semibold text-sky-950 ring-1 ring-sky-100"
+          className="rounded-2xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm font-semibold text-sky-950 shadow-sm ring-1 ring-sky-100"
           role="status"
         >
           <div className="flex items-start justify-between gap-3">
@@ -3435,7 +3435,7 @@ export default function PedidosPage() {
       ) : null}
       {avisoPedido === 'actualizado' ? (
         <div
-          className="rounded-xl border border-sky-200 bg-sky-50 px-3 py-2 text-sm font-semibold text-sky-950 ring-1 ring-sky-100"
+          className="rounded-2xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm font-semibold text-sky-950 shadow-sm ring-1 ring-sky-100"
           role="status"
         >
           <div className="flex items-start justify-between gap-3">
@@ -3453,39 +3453,24 @@ export default function PedidosPage() {
         </div>
       ) : null}
 
-      <section className="rounded-xl bg-white p-2.5 ring-1 ring-zinc-200/90">
-        <div className="grid grid-cols-2 gap-1 sm:grid-cols-4">
-          <Link
-            href="/pedidos/proveedores"
-            className="flex h-7 items-center justify-center rounded-lg border border-zinc-200 bg-white px-1.5 text-center text-[11px] font-semibold text-zinc-800 sm:h-8 sm:text-xs"
-          >
+      <section className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-zinc-200">
+        <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4">
+          <Link href="/pedidos/proveedores" className="flex h-8 items-center justify-center rounded-lg border border-zinc-300 bg-white px-2 text-center text-xs font-semibold text-zinc-700 sm:h-9 sm:text-sm">
             Proveedores
           </Link>
-          <Link
-            href="/pedidos/articulos"
-            className="flex h-7 items-center justify-center rounded-lg border border-zinc-200 bg-white px-1.5 text-center text-[11px] font-semibold text-zinc-800 sm:h-8 sm:text-xs"
-          >
+          <Link href="/pedidos/articulos" className="flex h-8 items-center justify-center rounded-lg border border-zinc-300 bg-white px-2 text-center text-xs font-semibold text-zinc-700 sm:h-9 sm:text-sm">
             Artículos
           </Link>
-          <Link
-            href="/pedidos/historial-mes"
-            className="flex h-7 items-center justify-center rounded-lg border border-zinc-200 bg-white px-1.5 text-center text-[11px] font-semibold text-zinc-800 sm:h-8 sm:text-xs"
-          >
+          <Link href="/pedidos/historial-mes" className="flex h-8 items-center justify-center rounded-lg border border-zinc-300 bg-white px-2 text-center text-xs font-semibold text-zinc-700 sm:h-9 sm:text-sm">
             Compras del mes
           </Link>
           <Link
             href="/pedidos/albaranes"
-            className="flex h-7 items-center justify-center rounded-lg border border-[#D32F2F]/30 bg-red-50/70 px-1.5 text-center text-[11px] font-semibold text-[#B91C1C] sm:h-8 sm:text-xs"
+            className="flex h-8 items-center justify-center rounded-lg border border-[#D32F2F]/25 bg-red-50/80 px-2 text-center text-xs font-semibold text-[#B91C1C] sm:h-9 sm:text-sm"
           >
             Albaranes
           </Link>
         </div>
-        <Link
-          href="/pedidos/recepcion"
-          className="mt-1.5 flex h-7 w-full items-center justify-center rounded-lg border border-zinc-200/90 bg-zinc-50/80 text-center text-[11px] font-medium text-zinc-700 sm:h-8 sm:text-xs"
-        >
-          Recepción · revisión de precios
-        </Link>
       </section>
 
       {reloadError ? (
@@ -3503,12 +3488,12 @@ export default function PedidosPage() {
       ) : null}
 
       {message ? (
-        <section className="rounded-xl bg-white p-3 text-sm text-zinc-700 ring-1 ring-zinc-200">{message}</section>
+        <section className="rounded-2xl bg-white p-4 text-sm text-zinc-700 ring-1 ring-zinc-200">{message}</section>
       ) : null}
 
       <Link
         href="/pedidos/nuevo"
-        className="flex min-h-[3.25rem] items-center justify-center rounded-xl bg-[#D32F2F] px-4 text-center text-base font-bold text-white shadow-sm ring-1 ring-[#D32F2F]/25 active:opacity-95 sm:min-h-[3.5rem] sm:text-lg"
+        className="flex min-h-[4.125rem] items-center justify-center rounded-2xl bg-[#D32F2F] px-5 text-center text-lg font-bold text-white shadow-md ring-1 ring-[#D32F2F]/20 sm:min-h-[4.5rem] sm:text-xl"
       >
         + Nuevo pedido
       </Link>
@@ -3516,46 +3501,50 @@ export default function PedidosPage() {
       <details
         id="pedidos-pendientes-entrega"
         className={[
-          'overflow-hidden rounded-2xl transition-colors duration-200',
+          'overflow-hidden rounded-3xl transition-all duration-300 ease-out',
           pendientesEntregaAccordionOpen
-            ? 'bg-white ring-1 ring-zinc-200 shadow-sm'
-            : 'bg-zinc-50/90 ring-1 ring-zinc-200/80 hover:bg-white',
+            ? 'bg-white shadow-lg shadow-zinc-200/60 ring-2 ring-zinc-900/5'
+            : 'bg-zinc-50/80 ring-1 ring-zinc-200/90 hover:bg-white hover:ring-zinc-300',
         ].join(' ')}
         open={pendientesEntregaAccordionOpen}
         onToggle={(e) => setPendientesEntregaAccordionOpen(e.currentTarget.open)}
       >
-        <summary className="flex w-full cursor-pointer list-none flex-col items-center px-3 py-1.5 text-center outline-none transition active:bg-zinc-50/50 focus-visible:ring-2 focus-visible:ring-[#D32F2F]/40 focus-visible:ring-offset-1 sm:px-4 [&::-webkit-details-marker]:hidden">
-          <span className="text-[9px] font-semibold uppercase tracking-[0.16em] text-zinc-400">Entrega</span>
-          <span className="mt-0.5 text-center text-sm font-semibold leading-tight tracking-tight text-zinc-900 sm:text-base">
+        <summary className="flex w-full cursor-pointer list-none flex-col items-center px-4 py-2 text-center outline-none transition active:bg-zinc-50/50 focus-visible:ring-2 focus-visible:ring-[#D32F2F]/40 focus-visible:ring-offset-2 sm:px-5 [&::-webkit-details-marker]:hidden">
+          <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-zinc-400">Entrega</span>
+          <span className="mt-0.5 text-center text-base font-semibold leading-tight tracking-tight text-zinc-900 sm:text-lg">
             Pendientes de entrega
           </span>
-          <span className={`mx-auto mt-0.5 w-14 ${CHEF_ONE_TAPER_LINE_CLASS}`} aria-hidden />
-          <span className="mt-0.5 text-base font-black tabular-nums text-zinc-900 sm:text-lg">{sentOrders.length}</span>
-          <span className="mt-0.5 flex flex-wrap items-center justify-center gap-x-1 text-[10px] text-zinc-500">
+          <span className={`mx-auto mt-1 w-16 ${CHEF_ONE_TAPER_LINE_CLASS}`} aria-hidden />
+          <span className="mt-1 text-lg font-black tabular-nums text-zinc-900 sm:text-xl">
+            {sentOrders.length}
+          </span>
+          <span className="mt-1 flex flex-wrap items-center justify-center gap-x-1.5 text-[11px] text-zinc-500">
             {sentOrders.length === 0 ? (
-              <span>Nada pendiente</span>
+              <span>Nada pendiente ahora</span>
             ) : (
               <>
                 <span>
-                  {`${sentOrders.length} enviado${sentOrders.length === 1 ? '' : 's'}`}
+                  {`${sentOrders.length} pedido${sentOrders.length === 1 ? '' : 's'} enviado${
+                    sentOrders.length === 1 ? '' : 's'
+                  }`}
                 </span>
-                <span className="text-zinc-300">·</span>
-                <span>IVA incl.</span>
+                <span className="text-zinc-400">·</span>
+                <span>IVA incl. en totales</span>
               </>
             )}
           </span>
-          <span className="mt-1 flex items-center gap-1 text-[10px] font-semibold text-[#D32F2F]">
+          <span className="mt-1.5 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-[#D32F2F]">
             {pendientesEntregaAccordionOpen ? 'Ocultar' : 'Ver pedidos'}
             <ChevronDown
               className={[
-                'h-3 w-3 transition-transform duration-200',
+                'h-3.5 w-3.5 transition-transform duration-300',
                 pendientesEntregaAccordionOpen ? 'rotate-180' : '',
               ].join(' ')}
               aria-hidden
             />
           </span>
         </summary>
-        <div className="space-y-1 border-t border-zinc-100/90 bg-gradient-to-b from-zinc-50/80 to-white px-1.5 pb-1.5 pt-1.5 sm:px-2">
+        <div className="space-y-1.5 border-t border-zinc-100 bg-gradient-to-b from-zinc-50/90 to-white px-2 pb-2 pt-2 sm:px-3">
           {sentOrders.length === 0 ? (
             <p className="py-4 text-center text-xs text-zinc-500">No hay pedidos enviados.</p>
           ) : null}
@@ -3583,15 +3572,15 @@ export default function PedidosPage() {
               'overflow-hidden rounded-lg transition-colors',
               sentBadge === 'incidencia'
                 ? detailOpen
-                  ? 'bg-red-50 ring-1 ring-red-400/80'
-                  : 'bg-red-50/85 ring-1 ring-red-300/70 hover:bg-red-50'
+                  ? 'bg-red-50 ring-1 ring-red-400/90'
+                  : 'bg-red-50/90 ring-1 ring-red-400/70 hover:bg-red-50'
                 : sentBadge === 'correcto'
                   ? detailOpen
-                    ? 'bg-emerald-50 ring-1 ring-emerald-500/70'
-                    : 'bg-emerald-50/85 ring-1 ring-emerald-400/55 hover:bg-emerald-50'
+                    ? 'bg-emerald-50 ring-1 ring-emerald-600/75'
+                    : 'bg-emerald-50/90 ring-1 ring-emerald-500/65 hover:bg-emerald-50'
                   : detailOpen
-                    ? 'bg-amber-50 ring-1 ring-amber-400/75'
-                    : 'bg-amber-50/85 ring-1 ring-amber-300/65 hover:bg-amber-50',
+                    ? 'bg-amber-50 ring-1 ring-amber-500/80'
+                    : 'bg-amber-50/90 ring-1 ring-amber-400/75 hover:bg-amber-50',
             ].join(' ');
             const badgeClass =
               sentBadge === 'incidencia'
@@ -3608,73 +3597,88 @@ export default function PedidosPage() {
                 type="button"
                 onClick={() => setExpandedSentId((prev) => (prev === order.id ? null : order.id))}
                 className={[
-                  'w-full px-2 py-1 text-left outline-none transition focus-visible:ring-2 focus-visible:ring-[#D32F2F]/35 focus-visible:ring-offset-1',
+                  'w-full px-2.5 py-1.5 text-left outline-none transition focus-visible:ring-2 focus-visible:ring-[#D32F2F]/35 focus-visible:ring-offset-1',
                   sentBadge === 'incidencia' ? 'active:bg-red-100/40' : sentBadge === 'correcto' ? 'active:bg-emerald-100/40' : 'active:bg-amber-100/40',
                 ].join(' ')}
                 aria-expanded={detailOpen}
               >
-                <div className="flex flex-col gap-0.5 sm:flex-row sm:items-start sm:justify-between sm:gap-2">
+                <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
                   <div className="min-w-0 flex-1">
-                    <div className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5">
-                      <p className="min-w-0 truncate text-sm font-bold text-zinc-900">{order.supplierName}</p>
+                    <div className="flex min-w-0 items-start justify-between gap-2">
+                      <p className="min-w-0 flex-1 truncate text-sm font-bold text-zinc-900">{order.supplierName}</p>
+                      {requesterName ? (
+                        <p
+                          className="shrink-0 max-w-[46%] truncate text-right text-[10px] font-medium leading-snug text-zinc-600 sm:max-w-[12rem] sm:text-[11px]"
+                          title={requesterName}
+                        >
+                          {requesterName}
+                        </p>
+                      ) : null}
+                    </div>
+                    <p className="text-[10px] text-zinc-500">
+                      Enviado{' '}
+                      <span className="font-medium text-zinc-700">
+                        {order.sentAt ? new Date(order.sentAt).toLocaleDateString('es-ES') : '—'}
+                      </span>
+                      {order.deliveryDate ? (
+                        <>
+                          <span className="text-zinc-400"> · </span>
+                          Entrega{' '}
+                          <span className="font-medium text-zinc-700">
+                            {new Date(`${order.deliveryDate}T00:00:00`).toLocaleDateString('es-ES')}
+                          </span>
+                        </>
+                      ) : null}
+                      {order.contentRevisedAfterSentAt ? (
+                        <span className="ml-1 text-[9px] font-bold uppercase text-amber-800"> · Modif. tras envío</span>
+                      ) : null}
+                    </p>
+                    <p className="mt-0.5 text-[9px] font-semibold uppercase tracking-wide text-zinc-500">
+                      Revisión precios:{' '}
+                      <span className={order.priceReviewArchivedAt ? 'text-emerald-700' : 'text-zinc-700'}>
+                        {order.priceReviewArchivedAt ? 'completada' : 'pendiente'}
+                      </span>
+                    </p>
+                  </div>
+                  <div
+                    className="shrink-0 text-right text-[10px] leading-tight tabular-nums text-zinc-600 sm:min-w-[7.5rem]"
+                    aria-label="Importes del pedido"
+                  >
+                    <div className="mb-1 flex flex-col items-end gap-1">
                       <span
                         className={[
-                          'shrink-0 rounded px-1 py-px text-[8px] font-bold uppercase tracking-wide text-white',
+                          'shrink-0 rounded px-1.5 py-0 text-[9px] font-black uppercase tracking-wide text-white',
                           badgeClass,
                         ].join(' ')}
                       >
                         {badgeLabel}
                       </span>
                     </div>
-                    {requesterName ? (
-                      <p className="truncate text-[9px] text-zinc-500" title={requesterName}>
-                        {requesterName}
-                      </p>
-                    ) : null}
-                    <p className="text-[10px] text-zinc-600">
-                      Env.{' '}
-                      <span className="font-medium text-zinc-800">
-                        {order.sentAt ? new Date(order.sentAt).toLocaleDateString('es-ES') : '—'}
-                      </span>
-                      {order.deliveryDate ? (
-                        <>
-                          <span className="text-zinc-300"> · </span>
-                          Ent.{' '}
-                          <span className="font-medium text-zinc-800">
-                            {new Date(`${order.deliveryDate}T00:00:00`).toLocaleDateString('es-ES')}
-                          </span>
-                        </>
-                      ) : null}
-                      {order.contentRevisedAfterSentAt ? (
-                        <span className="text-[9px] font-semibold text-amber-800"> · Modif.</span>
-                      ) : null}
-                    </p>
-                    <p className="text-[10px] text-zinc-500">
-                      Revisión:{' '}
-                      <span className={order.priceReviewArchivedAt ? 'font-semibold text-emerald-700' : 'font-semibold text-zinc-800'}>
-                        {order.priceReviewArchivedAt ? 'OK' : 'Pend.'}
-                      </span>
-                    </p>
-                  </div>
-                  <div className="shrink-0 text-right sm:min-w-[5.5rem]" aria-label="Importes del pedido">
-                    <p className="text-sm font-black tabular-nums text-zinc-950">{totals.total.toFixed(2)} €</p>
-                    <p className="text-[9px] text-zinc-400">IVA incl.</p>
-                    <p className="text-[9px] tabular-nums text-zinc-500">
-                      {totals.base.toFixed(2)} + {totals.vat.toFixed(2)}
-                    </p>
+                    <div className="flex justify-end gap-x-2">
+                      <span className="text-zinc-400">s/IVA</span>
+                      <span className="font-semibold text-zinc-900">{totals.base.toFixed(2)} €</span>
+                    </div>
+                    <div className="flex justify-end gap-x-2">
+                      <span className="text-zinc-400">IVA</span>
+                      <span className="font-semibold text-zinc-900">{totals.vat.toFixed(2)} €</span>
+                    </div>
+                    <div className="flex justify-end gap-x-2 border-t border-zinc-200/80 pt-0.5 font-black text-zinc-950">
+                      <span className="text-zinc-500">Total c/IVA</span>
+                      <span>{totals.total.toFixed(2)} €</span>
+                    </div>
                   </div>
                 </div>
                 <div
                   className={[
-                    'mt-0.5 flex items-center justify-center gap-0.5 border-t pt-0.5 text-[9px] font-semibold text-[#B91C1C]',
+                    'mt-1 flex items-center justify-center gap-1 border-t pt-1 text-[9px] font-semibold uppercase tracking-wide text-[#B91C1C]',
                     sentBadge === 'incidencia'
-                      ? 'border-red-200/35'
+                      ? 'border-red-200/40'
                       : sentBadge === 'correcto'
-                        ? 'border-emerald-200/35'
-                        : 'border-amber-200/45',
+                        ? 'border-emerald-200/40'
+                        : 'border-amber-200/50',
                   ].join(' ')}
                 >
-                  {detailOpen ? 'Ocultar líneas' : 'Líneas'}
+                  {detailOpen ? 'Ocultar líneas' : 'Ver líneas'}
                   <ChevronDown
                     className={['h-3 w-3 transition-transform', detailOpen ? 'rotate-180' : ''].join(' ')}
                     aria-hidden
@@ -3683,32 +3687,32 @@ export default function PedidosPage() {
               </button>
               <div
                 className={[
-                  'flex w-full items-center justify-end gap-1 border-t px-2 py-1',
+                  'flex w-full items-center justify-between border-t px-2.5 py-1 sm:px-3',
                   sentBadge === 'incidencia'
-                    ? 'border-red-200/60 bg-white/50'
+                    ? 'border-red-200/70 bg-white/60'
                     : sentBadge === 'correcto'
-                      ? 'border-emerald-200/60 bg-white/50'
-                      : 'border-amber-200/60 bg-white/50',
+                      ? 'border-emerald-200/70 bg-white/60'
+                      : 'border-amber-200/70 bg-white/60',
                 ].join(' ')}
               >
                 <Link
                   href={`/pedidos/nuevo?id=${encodeURIComponent(order.id)}`}
                   onClick={(e) => e.stopPropagation()}
-                  className="inline-flex h-9 min-w-[2.75rem] shrink-0 items-center justify-center gap-0.5 rounded-lg border border-zinc-200/90 bg-white px-2 text-[10px] font-semibold text-zinc-800 hover:bg-zinc-50 active:bg-zinc-100/80 sm:min-w-[4.5rem]"
+                  className="inline-flex min-h-[44px] min-w-[60px] shrink-0 items-center justify-center gap-0.5 rounded-md border border-zinc-200 bg-white px-2.5 text-[10px] font-semibold text-zinc-800 shadow-sm hover:bg-zinc-50 sm:min-w-[72px] sm:px-3"
                   title="Editar pedido"
                   aria-label="Editar pedido"
                 >
-                  <Pencil className="h-3.5 w-3.5 shrink-0 opacity-80" aria-hidden />
+                  <Pencil className="h-3.5 w-3.5 shrink-0" aria-hidden />
                   <span className="hidden sm:inline">Editar</span>
                 </Link>
                 <button
                   type="button"
                   onClick={() => sendWhatsappOrder(order)}
-                  className="inline-flex h-9 min-w-[2.75rem] shrink-0 items-center justify-center gap-0.5 rounded-lg border border-zinc-200/90 bg-white px-2 text-[10px] font-semibold text-[#166534] hover:bg-zinc-50 active:bg-zinc-100/80 sm:min-w-[4.5rem]"
+                  className="inline-flex min-h-[44px] min-w-[60px] shrink-0 items-center justify-center gap-0.5 rounded-md border border-zinc-200 bg-white px-2.5 text-[10px] font-semibold text-[#166534] shadow-sm hover:bg-zinc-50 sm:min-w-[72px] sm:px-3"
                   title="WhatsApp"
                   aria-label="Enviar pedido por WhatsApp"
                 >
-                  <MessageCircle className="h-3.5 w-3.5 shrink-0 opacity-80" aria-hidden />
+                  <MessageCircle className="h-3.5 w-3.5 shrink-0" aria-hidden />
                   <span className="hidden sm:inline">WA</span>
                 </button>
                 <button
@@ -3737,11 +3741,11 @@ export default function PedidosPage() {
                       })
                       .catch((err: Error) => setMessage(err.message));
                   }}
-                  className="inline-flex h-9 min-w-[2.75rem] shrink-0 items-center justify-center gap-0.5 rounded-lg border border-zinc-200/90 bg-white px-2 text-[10px] font-semibold text-[#B91C1C] hover:bg-red-50/60 active:bg-red-50 sm:min-w-[4.5rem]"
+                  className="inline-flex min-h-[44px] min-w-[60px] shrink-0 items-center justify-center gap-0.5 rounded-md border border-zinc-200 bg-white px-2.5 text-[10px] font-semibold text-[#B91C1C] shadow-sm hover:bg-zinc-50 sm:min-w-[72px] sm:px-3"
                   title="Eliminar pedido"
                   aria-label="Eliminar pedido"
                 >
-                  <Trash2 className="h-3.5 w-3.5 shrink-0 opacity-80" aria-hidden />
+                  <Trash2 className="h-3.5 w-3.5 shrink-0" aria-hidden />
                   <span className="hidden sm:inline">Borrar</span>
                 </button>
               </div>
@@ -4112,46 +4116,48 @@ export default function PedidosPage() {
       <details
         id="pedidos-historico-recibidos"
         className={[
-          'overflow-hidden rounded-2xl transition-colors duration-200',
+          'overflow-hidden rounded-3xl transition-all duration-300 ease-out',
           historicoRecibidosAccordionOpen
-            ? 'bg-white ring-1 ring-zinc-200 shadow-sm'
-            : 'bg-zinc-50/90 ring-1 ring-zinc-200/80 hover:bg-white',
+            ? 'bg-white shadow-lg shadow-zinc-200/60 ring-2 ring-zinc-900/5'
+            : 'bg-zinc-50/80 ring-1 ring-zinc-200/90 hover:bg-white hover:ring-zinc-300',
         ].join(' ')}
         open={historicoRecibidosAccordionOpen}
         onToggle={(e) => setHistoricoRecibidosAccordionOpen(e.currentTarget.open)}
       >
-        <summary className="flex w-full cursor-pointer list-none flex-col items-center px-3 py-1.5 text-center outline-none transition active:bg-zinc-50/50 focus-visible:ring-2 focus-visible:ring-[#D32F2F]/40 focus-visible:ring-offset-1 sm:px-4 [&::-webkit-details-marker]:hidden">
-          <span className="text-[9px] font-semibold uppercase tracking-[0.16em] text-zinc-400">Almacén</span>
-          <span className="mt-0.5 text-center text-sm font-semibold leading-tight tracking-tight text-zinc-900 sm:text-base">
+        <summary className="flex w-full cursor-pointer list-none flex-col items-center px-4 py-2 text-center outline-none transition active:bg-zinc-50/50 focus-visible:ring-2 focus-visible:ring-[#D32F2F]/40 focus-visible:ring-offset-2 sm:px-5 [&::-webkit-details-marker]:hidden">
+          <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-zinc-400">Almacén</span>
+          <span className="mt-0.5 text-center text-base font-semibold leading-tight tracking-tight text-zinc-900 sm:text-lg">
             Histórico recibidos
           </span>
-          <span className={`mx-auto mt-0.5 w-14 ${CHEF_ONE_TAPER_LINE_CLASS}`} aria-hidden />
-          <span className="mt-0.5 text-base font-black tabular-nums text-zinc-900 sm:text-lg">{receivedOrders.length}</span>
-          <span className="mt-0.5 flex flex-wrap items-center justify-center gap-x-1 text-[10px] text-zinc-500">
+          <span className={`mx-auto mt-1 w-16 ${CHEF_ONE_TAPER_LINE_CLASS}`} aria-hidden />
+          <span className="mt-1 text-lg font-black tabular-nums text-zinc-900 sm:text-xl">
+            {receivedOrders.length}
+          </span>
+          <span className="mt-1 flex flex-wrap items-center justify-center gap-x-1.5 text-[11px] text-zinc-500">
             {receivedOrders.length === 0 ? (
-              <span>Sin recibidos</span>
+              <span>Sin pedidos recibidos</span>
             ) : (
               <>
                 <span>
                   {receivedOrders.length} pedido{receivedOrders.length === 1 ? '' : 's'}
                 </span>
-                <span className="text-zinc-300">·</span>
-                <span>Por mes</span>
+                <span className="text-zinc-400">·</span>
+                <span>Agrupado por mes · verde OK · rojo incidencia</span>
               </>
             )}
           </span>
-          <span className="mt-1 flex items-center gap-1 text-[10px] font-semibold text-[#D32F2F]">
+          <span className="mt-1.5 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-[#D32F2F]">
             {historicoRecibidosAccordionOpen ? 'Ocultar' : 'Ver pedidos'}
             <ChevronDown
               className={[
-                'h-3 w-3 transition-transform duration-200',
+                'h-3.5 w-3.5 transition-transform duration-300',
                 historicoRecibidosAccordionOpen ? 'rotate-180' : '',
               ].join(' ')}
               aria-hidden
             />
           </span>
         </summary>
-        <div className="space-y-1.5 border-t border-zinc-100/90 bg-gradient-to-b from-zinc-50/80 to-white px-1.5 pb-1.5 pt-1.5 sm:px-2">
+        <div className="space-y-2 border-t border-zinc-100 bg-gradient-to-b from-zinc-50/90 to-white px-2 pb-2 pt-2 sm:px-3">
           {receivedOrders.length === 0 ? (
             <p className="py-4 text-center text-xs text-zinc-500">No hay pedidos recibidos.</p>
           ) : null}
@@ -4200,46 +4206,61 @@ export default function PedidosPage() {
                         type="button"
                         onClick={() => setExpandedHistoricoId((prev) => (prev === order.id ? null : order.id))}
                         className={[
-                          'w-full px-2 py-1 text-left outline-none transition focus-visible:ring-2 focus-visible:ring-[#D32F2F]/35 focus-visible:ring-offset-1',
+                          'w-full px-2.5 py-1.5 text-left outline-none transition focus-visible:ring-2 focus-visible:ring-[#D32F2F]/35 focus-visible:ring-offset-1',
                           needsAttention ? 'active:bg-red-100/40' : 'active:bg-emerald-100/40',
                         ].join(' ')}
                         aria-expanded={detailOpen}
                       >
-                        <div className="flex flex-col gap-0.5 sm:flex-row sm:items-start sm:justify-between sm:gap-2">
+                        <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
                           <div className="min-w-0 flex-1">
-                            <div className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5">
-                              <span className="truncate text-sm font-bold text-zinc-900">{order.supplierName}</span>
-                              <span
-                                className={[
-                                  'shrink-0 rounded px-1 py-px text-[8px] font-bold uppercase tracking-wide text-white',
-                                  needsAttention ? 'bg-red-600' : 'bg-emerald-600',
-                                ].join(' ')}
-                              >
-                                {needsAttention ? 'Incidencia' : 'Correcto'}
-                              </span>
+                            <div className="flex min-w-0 items-start justify-between gap-2">
+                              <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-0.5">
+                                <span className="truncate text-sm font-bold text-zinc-900">{order.supplierName}</span>
+                                <span
+                                  className={[
+                                    'shrink-0 rounded px-1.5 py-0 text-[9px] font-black uppercase tracking-wide text-white',
+                                    needsAttention ? 'bg-red-600' : 'bg-emerald-600',
+                                  ].join(' ')}
+                                >
+                                  {needsAttention ? 'Incidencia' : 'Correcto'}
+                                </span>
+                              </div>
+                              {requesterName ? (
+                                <p
+                                  className="shrink-0 max-w-[46%] truncate text-right text-[10px] font-medium leading-snug text-zinc-600 sm:max-w-[12rem] sm:text-[11px]"
+                                  title={requesterName}
+                                >
+                                  {requesterName}
+                                </p>
+                              ) : null}
                             </div>
-                            {requesterName ? (
-                              <p className="truncate text-[9px] text-zinc-500" title={requesterName}>
-                                {requesterName}
-                              </p>
-                            ) : null}
-                            <p className="text-[10px] text-zinc-600">
-                              Recib.{' '}
-                              <span className="font-medium text-zinc-800">
+                            <p className="text-[10px] text-zinc-500">
+                              Recibido{' '}
+                              <span className="font-medium text-zinc-700">
                                 {order.receivedAt ? new Date(order.receivedAt).toLocaleDateString('es-ES') : '—'}
                               </span>
                             </p>
                           </div>
-                          <div className="shrink-0 text-right sm:min-w-[5.5rem]" aria-label="Importes del pedido">
-                            <p className="text-sm font-black tabular-nums text-zinc-950">{totals.total.toFixed(2)} €</p>
-                            <p className="text-[9px] text-zinc-400">IVA incl.</p>
-                            <p className="text-[9px] tabular-nums text-zinc-500">
-                              {totals.base.toFixed(2)} + {totals.vat.toFixed(2)}
-                            </p>
+                          <div
+                            className="shrink-0 text-right text-[10px] leading-tight tabular-nums text-zinc-600 sm:min-w-[7.5rem]"
+                            aria-label="Importes del pedido"
+                          >
+                            <div className="flex justify-end gap-x-2">
+                              <span className="text-zinc-400">s/IVA</span>
+                              <span className="font-semibold text-zinc-900">{totals.base.toFixed(2)} €</span>
+                            </div>
+                            <div className="flex justify-end gap-x-2">
+                              <span className="text-zinc-400">IVA</span>
+                              <span className="font-semibold text-zinc-900">{totals.vat.toFixed(2)} €</span>
+                            </div>
+                            <div className="flex justify-end gap-x-2 border-t border-zinc-200/80 pt-0.5 font-black text-zinc-950">
+                              <span className="text-zinc-500">Total c/IVA</span>
+                              <span>{totals.total.toFixed(2)} €</span>
+                            </div>
                           </div>
                         </div>
-                        <div className="mt-0.5 flex items-center justify-center gap-0.5 border-t border-zinc-200/35 pt-0.5 text-[9px] font-semibold text-[#B91C1C]">
-                          {detailOpen ? 'Ocultar líneas' : 'Líneas'}
+                        <div className="mt-1 flex items-center justify-center gap-1 border-t border-zinc-200/40 pt-1 text-[9px] font-semibold uppercase tracking-wide text-[#B91C1C]">
+                          {detailOpen ? 'Ocultar líneas' : 'Ver líneas'}
                           <ChevronDown
                             className={['h-3 w-3 transition-transform', detailOpen ? 'rotate-180' : ''].join(' ')}
                             aria-hidden

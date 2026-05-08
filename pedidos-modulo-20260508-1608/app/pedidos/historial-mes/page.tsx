@@ -375,34 +375,34 @@ export default function PedidosHistorialMesPage() {
   }
 
   return (
-    <div className="min-w-0 space-y-2.5 overflow-x-hidden sm:space-y-3">
+    <div className="min-w-0 space-y-4 overflow-x-hidden">
       <section>
         <Link
           href="/pedidos"
-          className="inline-flex items-center gap-1 py-0.5 text-xs font-medium text-zinc-600 underline-offset-4 hover:text-zinc-900 hover:underline"
+          className="inline-flex h-9 items-center rounded-lg border border-zinc-300 bg-white px-3 text-sm font-semibold text-zinc-700"
         >
-          ← Pedidos
+          ← Atras
         </Link>
       </section>
 
-      <section className="flex flex-col gap-1.5 rounded-xl border border-zinc-200/90 bg-white px-2.5 py-2 ring-1 ring-zinc-100 sm:flex-row sm:items-center sm:justify-between sm:px-3 sm:py-2">
+      <section className="flex flex-col gap-2 rounded-xl border border-zinc-200/90 bg-white px-3 py-2.5 shadow-sm sm:flex-row sm:items-center sm:justify-between sm:px-4 sm:py-3">
         <h1 className="text-sm font-bold tracking-tight text-zinc-900 sm:text-base">Compras del mes</h1>
         <Link
           href="/pedidos/precios"
-          className="inline-flex h-8 shrink-0 items-center justify-center rounded-lg border border-zinc-200 bg-zinc-50/80 px-2.5 text-[11px] font-semibold text-zinc-800 transition hover:border-zinc-300 hover:bg-white sm:px-3 sm:text-xs"
+          className="inline-flex h-9 shrink-0 items-center justify-center rounded-lg border border-zinc-300 bg-zinc-50 px-3 text-xs font-semibold text-zinc-900 shadow-sm transition hover:border-zinc-400 hover:bg-white sm:h-9 sm:px-4"
         >
           Evolución de precios
         </Link>
       </section>
 
       {message ? (
-        <section className="rounded-xl bg-white p-3 text-sm text-[#B91C1C] ring-1 ring-zinc-200">{message}</section>
+        <section className="rounded-2xl bg-white p-4 text-sm text-[#B91C1C] ring-1 ring-zinc-200">{message}</section>
       ) : null}
 
-      <section className="min-w-0 rounded-2xl bg-white p-3 ring-1 ring-zinc-200/85 sm:p-4">
-        <div className="grid grid-cols-2 gap-2 border-b border-zinc-100 pb-3 sm:grid-cols-4">
-          <label className="text-[10px] font-medium text-zinc-500">
-            <span className="block uppercase tracking-wide text-zinc-400">Período</span>
+      <section className="min-w-0 rounded-3xl bg-white p-5 shadow-sm ring-1 ring-zinc-200/80">
+        <div className="grid grid-cols-1 gap-3 border-b border-zinc-100 pb-4 sm:grid-cols-4">
+          <label className="text-xs font-medium text-zinc-500">
+            <span className="block text-[10px] uppercase tracking-wider text-zinc-400">Período</span>
             <input
               type="month"
               value={month}
@@ -410,11 +410,11 @@ export default function PedidosHistorialMesPage() {
                 setMonth(e.target.value);
                 setExpandedSupplierId(null);
               }}
-              className="mt-0.5 h-9 w-full rounded-lg border border-zinc-200/90 bg-zinc-50 px-2 text-sm font-semibold text-zinc-900 outline-none focus:border-zinc-300 focus:bg-white focus:ring-1 focus:ring-zinc-200"
+              className="mt-1 h-11 w-full rounded-2xl border-0 bg-zinc-100 px-4 text-base font-semibold text-zinc-900 outline-none focus:ring-2 focus:ring-zinc-900/10"
             />
           </label>
-          <label className="text-[10px] font-medium text-zinc-500">
-            <span className="block uppercase tracking-wide text-zinc-400">Proveedor</span>
+          <label className="text-xs font-medium text-zinc-500">
+            <span className="block text-[10px] uppercase tracking-wider text-zinc-400">Proveedor</span>
             <select
               value={supplierFilter}
               onChange={(e) => {
@@ -422,7 +422,7 @@ export default function PedidosHistorialMesPage() {
                 setActiveWeek(null);
                 setExpandedSupplierId(null);
               }}
-              className="mt-0.5 h-9 w-full rounded-lg border border-zinc-200/90 bg-zinc-50 px-2 text-xs font-semibold text-zinc-900 outline-none focus:border-zinc-300 focus:bg-white focus:ring-1 focus:ring-zinc-200"
+              className="mt-1 h-11 w-full rounded-2xl border-0 bg-zinc-100 px-4 text-sm font-semibold text-zinc-900 outline-none focus:ring-2 focus:ring-zinc-900/10"
             >
               <option value="all">Todos</option>
               {monthlyBySupplier.map((s) => (
@@ -432,12 +432,12 @@ export default function PedidosHistorialMesPage() {
               ))}
             </select>
           </label>
-          <label className="text-[10px] font-medium text-zinc-500">
-            <span className="block uppercase tracking-wide text-zinc-400">Top N</span>
+          <label className="text-xs font-medium text-zinc-500">
+            <span className="block text-[10px] uppercase tracking-wider text-zinc-400">Top N</span>
             <select
               value={String(topN)}
               onChange={(e) => setTopN(Number(e.target.value))}
-              className="mt-0.5 h-9 w-full rounded-lg border border-zinc-200/90 bg-zinc-50 px-2 text-xs font-semibold text-zinc-900 outline-none focus:border-zinc-300 focus:bg-white focus:ring-1 focus:ring-zinc-200"
+              className="mt-1 h-11 w-full rounded-2xl border-0 bg-zinc-100 px-4 text-sm font-semibold text-zinc-900 outline-none focus:ring-2 focus:ring-zinc-900/10"
             >
               <option value="5">Top 5</option>
               <option value="10">Top 10</option>
@@ -445,8 +445,8 @@ export default function PedidosHistorialMesPage() {
               <option value="20">Top 20</option>
             </select>
           </label>
-          <label className="col-span-2 text-[10px] font-medium text-zinc-500 sm:col-span-1">
-            <span className="block uppercase tracking-wide text-zinc-400">Modo</span>
+          <label className="text-xs font-medium text-zinc-500">
+            <span className="block text-[10px] uppercase tracking-wider text-zinc-400">Modo</span>
             <select
               value={viewMode}
               onChange={(e) => {
@@ -454,76 +454,73 @@ export default function PedidosHistorialMesPage() {
                 setActiveWeek(null);
                 setExpandedSupplierId(null);
               }}
-              className="mt-0.5 h-9 w-full rounded-lg border border-zinc-200/90 bg-zinc-50 px-2 text-xs font-semibold text-zinc-900 outline-none focus:border-zinc-300 focus:bg-white focus:ring-1 focus:ring-zinc-200"
+              className="mt-1 h-11 w-full rounded-2xl border-0 bg-zinc-100 px-4 text-sm font-semibold text-zinc-900 outline-none focus:ring-2 focus:ring-zinc-900/10"
             >
               <option value="real">Real (recepción)</option>
               <option value="previsto">Previsto (entrega)</option>
             </select>
           </label>
         </div>
-        <p className="mt-2 text-[11px] leading-snug text-zinc-500">
+        <p className="mt-3 text-xs text-zinc-500">
           {viewMode === 'real'
-            ? 'Real: solo pedidos recibidos (entrada al local).'
-            : 'Previsto: recibidos por fecha real y pendientes por entrega prevista.'}
+            ? 'Modo real: solo cuenta pedidos ya recibidos (fecha de entrada al local).'
+            : 'Modo previsto: recibidos por fecha real y pendientes por fecha prevista de entrega.'}
         </p>
-        <div className="mt-2 flex flex-wrap gap-1.5">
+        <div className="mt-4 flex flex-wrap gap-2">
           <button
             type="button"
             onClick={downloadHistorialPdf}
-            className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-[#D32F2F] px-3 text-xs font-semibold text-white ring-1 ring-[#B91C1C]/30"
+            className="inline-flex h-10 items-center gap-2 rounded-xl bg-[#D32F2F] px-4 text-sm font-semibold text-white shadow-sm ring-1 ring-red-900/10"
           >
-            <Download className="h-3.5 w-3.5 shrink-0" aria-hidden />
+            <Download className="h-4 w-4 shrink-0" aria-hidden />
             Informe PDF completo
           </button>
         </div>
-        <div className="mt-3 grid min-w-0 grid-cols-2 gap-1.5 sm:grid-cols-3 lg:grid-cols-6">
-          <div className="rounded-xl bg-zinc-50 px-2 py-1.5 ring-1 ring-zinc-200/80">
-            <p className="text-[9px] font-semibold uppercase tracking-wide text-zinc-500">Total mes</p>
-            <p className="text-base font-black tabular-nums leading-tight text-zinc-900">{kpis.totalWithVat.toFixed(2)} €</p>
+        <div className="mt-4 grid min-w-0 grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+          <div className="rounded-2xl bg-zinc-50 px-3 py-2 ring-1 ring-zinc-200">
+            <p className="text-[10px] uppercase tracking-wide text-zinc-500">Total mes</p>
+            <p className="text-lg font-black tabular-nums text-zinc-900">{kpis.totalWithVat.toFixed(2)} €</p>
           </div>
-          <div className="rounded-xl bg-zinc-50 px-2 py-1.5 ring-1 ring-zinc-200/80">
-            <p className="text-[9px] font-semibold uppercase tracking-wide text-zinc-500">Base</p>
-            <p className="text-base font-black tabular-nums leading-tight text-zinc-900">{kpis.totalBase.toFixed(2)} €</p>
+          <div className="rounded-2xl bg-zinc-50 px-3 py-2 ring-1 ring-zinc-200">
+            <p className="text-[10px] uppercase tracking-wide text-zinc-500">Base</p>
+            <p className="text-lg font-black tabular-nums text-zinc-900">{kpis.totalBase.toFixed(2)} €</p>
           </div>
-          <div className="rounded-xl bg-zinc-50 px-2 py-1.5 ring-1 ring-zinc-200/80">
-            <p className="text-[9px] font-semibold uppercase tracking-wide text-zinc-500">IVA</p>
-            <p className="text-base font-black tabular-nums leading-tight text-zinc-900">{kpis.totalVat.toFixed(2)} €</p>
+          <div className="rounded-2xl bg-zinc-50 px-3 py-2 ring-1 ring-zinc-200">
+            <p className="text-[10px] uppercase tracking-wide text-zinc-500">IVA</p>
+            <p className="text-lg font-black tabular-nums text-zinc-900">{kpis.totalVat.toFixed(2)} €</p>
           </div>
-          <div className="rounded-xl bg-zinc-50 px-2 py-1.5 ring-1 ring-zinc-200/80">
-            <p className="text-[9px] font-semibold uppercase tracking-wide text-zinc-500">Pedidos</p>
-            <p className="text-base font-black tabular-nums leading-tight text-zinc-900">{kpis.orderCount}</p>
+          <div className="rounded-2xl bg-zinc-50 px-3 py-2 ring-1 ring-zinc-200">
+            <p className="text-[10px] uppercase tracking-wide text-zinc-500">Pedidos</p>
+            <p className="text-lg font-black tabular-nums text-zinc-900">{kpis.orderCount}</p>
           </div>
-          <div className="rounded-xl bg-zinc-50 px-2 py-1.5 ring-1 ring-zinc-200/80">
-            <p className="text-[9px] font-semibold uppercase tracking-wide text-zinc-500">Ticket medio</p>
-            <p className="text-base font-black tabular-nums leading-tight text-zinc-900">{kpis.avgTicket.toFixed(2)} €</p>
+          <div className="rounded-2xl bg-zinc-50 px-3 py-2 ring-1 ring-zinc-200">
+            <p className="text-[10px] uppercase tracking-wide text-zinc-500">Ticket medio</p>
+            <p className="text-lg font-black tabular-nums text-zinc-900">{kpis.avgTicket.toFixed(2)} €</p>
           </div>
-          <div className="rounded-xl bg-zinc-50 px-2 py-1.5 ring-1 ring-zinc-200/80">
-            <p className="text-[9px] font-semibold uppercase tracking-wide text-zinc-500">Vs mes ant.</p>
-            <p className="text-base font-black tabular-nums leading-tight text-zinc-900">
+          <div className="rounded-2xl bg-zinc-50 px-3 py-2 ring-1 ring-zinc-200">
+            <p className="text-[10px] uppercase tracking-wide text-zinc-500">Vs mes ant.</p>
+            <p className="text-lg font-black tabular-nums text-zinc-900">
               {kpis.deltaPct == null ? '—' : `${kpis.deltaPct >= 0 ? '+' : ''}${kpis.deltaPct.toFixed(1)}%`}
             </p>
           </div>
         </div>
 
-        <div className="mt-4 grid min-w-0 gap-3 lg:grid-cols-2">
-          <div className="min-w-0 rounded-xl border border-zinc-100/90 bg-zinc-50/70 p-3 ring-1 ring-zinc-100">
-            <p className="text-[11px] font-bold uppercase tracking-wide text-zinc-600">Top productos por gasto</p>
-            <div className="mt-2 space-y-1.5">
+        <div className="mt-5 grid min-w-0 gap-4 lg:grid-cols-2">
+          <div className="min-w-0 rounded-2xl border border-zinc-100 bg-zinc-50/80 p-4">
+            <p className="text-xs font-bold uppercase tracking-wide text-zinc-500">Top productos por gasto (mes)</p>
+            <div className="mt-3 space-y-2">
               {monthlyTopProducts.slice(0, topN).map((p) => (
-                <div key={p.productName} className="min-w-0 rounded-lg bg-white px-2 py-1.5 ring-1 ring-zinc-200/80">
-                  <div className="flex items-baseline justify-between gap-2">
-                    <p className="min-w-0 truncate text-[13px] font-semibold leading-tight text-zinc-900">{p.productName}</p>
-                    <p className="shrink-0 text-[13px] font-bold tabular-nums text-zinc-900">{p.spend.toFixed(2)} €</p>
+                <div key={p.productName} className="min-w-0 rounded-xl bg-white px-3 py-2 ring-1 ring-zinc-200">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="min-w-0 truncate text-sm font-semibold text-zinc-900">{p.productName}</p>
+                    <p className="shrink-0 text-sm font-black tabular-nums text-zinc-900">{p.spend.toFixed(2)} €</p>
                   </div>
-                  <div className="mt-0.5 flex items-center justify-between text-[10px] text-zinc-500">
+                  <div className="mt-1 flex items-center justify-between text-[11px] text-zinc-500">
                     <span>{formatQuantityWithUnit(p.qty, p.unit)}</span>
-                    <span className="tabular-nums text-zinc-600">{p.pct.toFixed(1)}%</span>
+                    <span>{p.pct.toFixed(1)}% del mes</span>
                   </div>
-                  <div className="mt-1 h-1 w-full overflow-hidden rounded-full bg-zinc-100">
-                    <div
-                      className="h-full rounded-full bg-[#D32F2F]/85"
-                      style={{ width: `${Math.min(100, p.pct)}%` }}
-                    />
+                  <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-zinc-200">
+                    <div className="h-full rounded-full bg-[#D32F2F]" style={{ width: `${Math.min(100, p.pct)}%` }} />
                   </div>
                 </div>
               ))}
@@ -532,19 +529,19 @@ export default function PedidosHistorialMesPage() {
               ) : null}
             </div>
           </div>
-          <div className="min-w-0 rounded-xl border border-zinc-100/90 bg-zinc-50/70 p-3 ring-1 ring-zinc-100">
-            <p className="text-[11px] font-bold uppercase tracking-wide text-zinc-600">Resumen semanal</p>
-            <div className="mt-2 flex flex-wrap gap-1.5">
+          <div className="min-w-0 rounded-2xl border border-zinc-100 bg-zinc-50/80 p-4">
+            <p className="text-xs font-bold uppercase tracking-wide text-zinc-500">Resumen semanal</p>
+            <div className="mt-3 flex flex-wrap gap-2">
               {weeklySummary.map((w) => (
                 <button
                   key={w.week}
                   type="button"
                   onClick={() => setActiveWeek((cur) => (cur === w.week ? null : w.week))}
                   className={[
-                    'rounded-md border px-2 py-1 text-[11px] font-semibold',
+                    'rounded-lg border px-3 py-1.5 text-xs font-semibold',
                     activeWeek === w.week
                       ? 'border-zinc-900 bg-zinc-900 text-white'
-                      : 'border-zinc-200 bg-white text-zinc-700',
+                      : 'border-zinc-300 bg-white text-zinc-700',
                   ].join(' ')}
                 >
                   Semana {w.week} · {w.total.toFixed(2)} €
@@ -569,12 +566,12 @@ export default function PedidosHistorialMesPage() {
           </div>
         </div>
 
-        <div className="mt-3 grid gap-3 lg:grid-cols-2">
-          <div className="min-w-0 rounded-xl border border-zinc-100/90 bg-zinc-50/70 p-3 ring-1 ring-zinc-100">
-            <p className="text-[11px] font-bold uppercase tracking-wide text-zinc-600">Top proveedores</p>
-            <div className="mt-2 space-y-1.5">
+        <div className="mt-4 grid gap-4 lg:grid-cols-2">
+          <div className="min-w-0 rounded-2xl border border-zinc-100 bg-zinc-50/80 p-4">
+            <p className="text-xs font-bold uppercase tracking-wide text-zinc-500">Top proveedores (rendimiento)</p>
+            <div className="mt-3 space-y-2">
               {supplierPerformance.slice(0, topN).map((s) => (
-                <div key={s.supplierId} className="min-w-0 rounded-lg bg-white px-2 py-1.5 ring-1 ring-zinc-200/80">
+                <div key={s.supplierId} className="min-w-0 rounded-xl bg-white px-3 py-2 ring-1 ring-zinc-200">
                   <div className="flex items-center justify-between gap-2">
                     <p className="min-w-0 truncate text-sm font-semibold text-zinc-900">{s.supplierName}</p>
                     <p className="shrink-0 text-sm font-black tabular-nums text-zinc-900">{s.spend.toFixed(2)} €</p>
@@ -593,33 +590,33 @@ export default function PedidosHistorialMesPage() {
               ) : null}
             </div>
           </div>
-          <div className="rounded-xl border border-zinc-100/90 bg-zinc-50/70 p-3 ring-1 ring-zinc-100">
-            <p className="text-[11px] font-bold uppercase tracking-wide text-zinc-600">Desvío pedido vs recepción</p>
-            <div className="mt-2 grid grid-cols-2 gap-1.5">
-              <div className="rounded-lg bg-white px-2 py-1.5 ring-1 ring-zinc-200/80">
-                <p className="text-[9px] uppercase tracking-wide text-zinc-500">Pedido (est.)</p>
-                <p className="text-base font-black tabular-nums text-zinc-900">{deviationKpis.requested.toFixed(2)} €</p>
+          <div className="rounded-2xl border border-zinc-100 bg-zinc-50/80 p-4">
+            <p className="text-xs font-bold uppercase tracking-wide text-zinc-500">Desvío pedido vs recepción</p>
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              <div className="rounded-xl bg-white px-3 py-2 ring-1 ring-zinc-200">
+                <p className="text-[10px] uppercase tracking-wide text-zinc-500">Pedido (estimado)</p>
+                <p className="text-lg font-black tabular-nums text-zinc-900">{deviationKpis.requested.toFixed(2)} €</p>
               </div>
-              <div className="rounded-lg bg-white px-2 py-1.5 ring-1 ring-zinc-200/80">
-                <p className="text-[9px] uppercase tracking-wide text-zinc-500">Recepción</p>
-                <p className="text-base font-black tabular-nums text-zinc-900">{deviationKpis.received.toFixed(2)} €</p>
+              <div className="rounded-xl bg-white px-3 py-2 ring-1 ring-zinc-200">
+                <p className="text-[10px] uppercase tracking-wide text-zinc-500">Recepción</p>
+                <p className="text-lg font-black tabular-nums text-zinc-900">{deviationKpis.received.toFixed(2)} €</p>
               </div>
-              <div className="rounded-lg bg-white px-2 py-1.5 ring-1 ring-zinc-200/80">
-                <p className="text-[9px] uppercase tracking-wide text-zinc-500">Desvío €</p>
-                <p className="text-base font-black tabular-nums text-zinc-900">{deviationKpis.deviationAbs.toFixed(2)} €</p>
+              <div className="rounded-xl bg-white px-3 py-2 ring-1 ring-zinc-200">
+                <p className="text-[10px] uppercase tracking-wide text-zinc-500">Desvío €</p>
+                <p className="text-lg font-black tabular-nums text-zinc-900">{deviationKpis.deviationAbs.toFixed(2)} €</p>
               </div>
-              <div className="rounded-lg bg-white px-2 py-1.5 ring-1 ring-zinc-200/80">
-                <p className="text-[9px] uppercase tracking-wide text-zinc-500">Desvío %</p>
-                <p className="text-base font-black tabular-nums text-zinc-900">{deviationKpis.deviationPct.toFixed(1)}%</p>
+              <div className="rounded-xl bg-white px-3 py-2 ring-1 ring-zinc-200">
+                <p className="text-[10px] uppercase tracking-wide text-zinc-500">Desvío %</p>
+                <p className="text-lg font-black tabular-nums text-zinc-900">{deviationKpis.deviationPct.toFixed(1)}%</p>
               </div>
             </div>
-            <p className="mt-2 text-xs text-zinc-600">
+            <p className="mt-3 text-sm text-zinc-600">
               Pedidos con incidencia: <span className="font-semibold text-zinc-900">{deviationKpis.incidents}</span> de{' '}
               <span className="font-semibold text-zinc-900">{deviationKpis.totalOrders}</span>
             </p>
           </div>
         </div>
-        <div className="mt-4 space-y-2.5">
+        <div className="mt-5 space-y-4">
           {displayedSuppliers.length === 0 ? (
             <p className="py-12 text-center text-sm text-zinc-500">No hay compras registradas en este mes.</p>
           ) : null}
@@ -629,10 +626,10 @@ export default function PedidosHistorialMesPage() {
               <div
                 key={supplier.supplierId}
                 className={[
-                  'overflow-hidden rounded-2xl transition-colors duration-200',
+                  'overflow-hidden rounded-3xl transition-all duration-300 ease-out',
                   open
-                    ? 'bg-white ring-1 ring-zinc-200 shadow-sm'
-                    : 'bg-zinc-50/85 ring-1 ring-zinc-200/85 hover:bg-white',
+                    ? 'bg-white shadow-lg shadow-zinc-200/60 ring-2 ring-zinc-900/5'
+                    : 'bg-zinc-50/80 ring-1 ring-zinc-200/90 hover:bg-white hover:ring-zinc-300',
                 ].join(' ')}
               >
                 <button
@@ -640,29 +637,29 @@ export default function PedidosHistorialMesPage() {
                   onClick={() =>
                     setExpandedSupplierId((id) => (id === supplier.supplierId ? null : supplier.supplierId))
                   }
-                  className="flex w-full flex-col items-center px-4 py-4 text-center outline-none active:bg-zinc-50/50 focus-visible:ring-2 focus-visible:ring-[#D32F2F]/40 focus-visible:ring-offset-1 sm:px-5 sm:py-5"
+                  className="flex w-full flex-col items-center px-6 py-8 text-center outline-none active:bg-zinc-50/50 focus-visible:ring-2 focus-visible:ring-[#D32F2F]/40 focus-visible:ring-offset-2"
                   aria-expanded={open}
                   id={`historial-proveedor-${supplier.supplierId}`}
                 >
-                  <span className="text-center text-lg font-semibold leading-tight tracking-tight text-zinc-900 sm:text-xl">
+                  <span className="text-center text-2xl font-semibold leading-[1.15] tracking-tight text-zinc-900 sm:text-[1.75rem] sm:leading-tight">
                     {supplier.supplierName}
                   </span>
                   <span
-                    className={`mx-auto mt-2 w-20 ${CHEF_ONE_TAPER_LINE_CLASS}`}
+                    className={`mx-auto mt-4 w-24 ${CHEF_ONE_TAPER_LINE_CLASS}`}
                     aria-hidden
                   />
-                  <span className="mt-2 flex items-center gap-1.5 text-[11px] text-zinc-500">
-                    <span className="tabular-nums font-semibold text-zinc-800">{supplier.totalWithVat.toFixed(2)} €</span>
-                    <span className="text-zinc-300">·</span>
+                  <span className="mt-4 flex items-center gap-1.5 text-xs text-zinc-500">
+                    <span className="tabular-nums">{supplier.totalWithVat.toFixed(2)} €</span>
+                    <span className="text-zinc-400">·</span>
                     <span>
                       {supplier.orderCount} pedido{supplier.orderCount === 1 ? '' : 's'} · IVA incl.
                     </span>
                   </span>
-                  <span className="mt-3 flex items-center gap-1.5 text-[10px] font-semibold text-[#D32F2F]">
-                    {open ? 'Ocultar productos' : 'Ver productos'}
+                  <span className="mt-5 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider text-[#D32F2F]">
+                    {open ? 'Ocultar productos' : 'Ver listado de productos'}
                     <ChevronDown
                       className={[
-                        'h-3.5 w-3.5 transition-transform duration-200',
+                        'h-4 w-4 transition-transform duration-300',
                         open ? 'rotate-180' : '',
                       ].join(' ')}
                       aria-hidden
@@ -674,21 +671,21 @@ export default function PedidosHistorialMesPage() {
                     id={`historial-productos-${supplier.supplierId}`}
                     role="region"
                     aria-labelledby={`historial-proveedor-${supplier.supplierId}`}
-                    className="border-t border-zinc-100 bg-gradient-to-b from-zinc-50/80 to-zinc-50/40 px-3 pb-3 pt-3 sm:px-4"
+                    className="border-t border-zinc-100 bg-gradient-to-b from-zinc-50/90 to-zinc-100/50 px-4 pb-5 pt-4 sm:px-6"
                   >
-                    <p className="mb-2 text-center text-[9px] font-semibold uppercase tracking-[0.14em] text-zinc-400">
+                    <p className="mb-4 text-center text-[10px] font-semibold uppercase tracking-[0.18em] text-zinc-400">
                       Productos · cantidades del mes
                     </p>
-                    <ul className="space-y-1.5">
+                    <ul className="space-y-2.5">
                       {supplier.products.map((product) => (
                         <li
                           key={`${supplier.supplierId}-${product.name}`}
-                          className="flex items-center justify-between gap-3 rounded-xl border border-zinc-100/90 bg-white px-3 py-2 ring-1 ring-zinc-100"
+                          className="flex items-center justify-between gap-4 rounded-2xl border border-zinc-100 bg-white px-4 py-3.5 shadow-sm"
                         >
-                          <span className="min-w-0 flex-1 text-left text-sm font-medium leading-snug text-zinc-800">
+                          <span className="min-w-0 flex-1 text-left text-[15px] font-medium leading-snug text-zinc-800">
                             {product.name}
                           </span>
-                          <span className="shrink-0 text-right text-sm font-semibold tabular-nums text-zinc-900">
+                          <span className="shrink-0 text-right text-[15px] font-semibold text-zinc-900">
                             {formatQuantityWithUnit(product.quantity, product.unit as Unit)}
                           </span>
                         </li>

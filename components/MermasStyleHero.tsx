@@ -20,9 +20,9 @@ type Props = {
  * Otros campos se ignoran (antes alimentaban variantes y textos bajo el banner).
  */
 export default function MermasStyleHero(p: Props) {
-  const { eyebrow, title, className = '' } = p;
+  const { eyebrow, title, className = '', micro } = p;
   const a = eyebrow?.trim();
   const b = title?.trim();
   const line = a && b ? `${a} · ${b}` : a || b || title;
-  return <ModuleHeader title={line} className={className} />;
+  return <ModuleHeader title={line} className={className} dense={Boolean(micro)} />;
 }

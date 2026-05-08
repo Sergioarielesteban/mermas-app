@@ -650,29 +650,29 @@ export default function RecepcionPedidosPage() {
     return <PedidosPremiaLockedScreen />;
   }
   return (
-    <div className="space-y-2.5 sm:space-y-3">
-      <section className="flex flex-wrap gap-1.5">
+    <div className="space-y-4">
+      <section className="flex flex-wrap gap-2">
         <Link
           href="/pedidos"
-          className="inline-flex items-center gap-1 py-0.5 text-xs font-medium text-zinc-600 underline-offset-4 hover:text-zinc-900 hover:underline"
+          className="inline-flex h-9 items-center rounded-lg border border-zinc-300 bg-white px-3 text-sm font-semibold text-zinc-700"
         >
-          ← Pedidos
+          ← Atras
         </Link>
         <Link
           href="/pedidos/albaranes"
-          className="inline-flex h-8 items-center rounded-lg border border-[#D32F2F]/25 bg-red-50/70 px-2.5 text-[11px] font-semibold text-[#B91C1C]"
+          className="inline-flex h-9 items-center rounded-lg border border-[#D32F2F]/25 bg-red-50/80 px-3 text-sm font-semibold text-[#B91C1C]"
         >
           Albaranes
         </Link>
       </section>
 
-      <section className="overflow-hidden rounded-xl bg-white ring-1 ring-zinc-200/90">
-        <div className="border-b border-zinc-100 bg-gradient-to-r from-zinc-50 to-zinc-50/50 px-3 py-2.5 text-center">
-          <h1 className="text-[11px] font-black uppercase tracking-[0.12em] text-zinc-800">
+      <section className="overflow-hidden rounded-2xl bg-white ring-1 ring-zinc-200">
+        <div className="border-b border-zinc-200 bg-gradient-to-r from-zinc-100 to-zinc-50 px-4 py-4 text-center">
+          <h1 className="text-sm font-black uppercase tracking-[0.14em] text-zinc-800">
             Pendientes de revisión de precios
           </h1>
         </div>
-        <div className="space-y-2 p-3 sm:p-3.5">
+        <div className="space-y-3 p-4">
           {message ? (
             <p className="rounded-xl bg-amber-50 px-3 py-2 text-center text-xs font-medium text-amber-950 ring-1 ring-amber-200/80">
               {message}
@@ -689,39 +689,40 @@ export default function RecepcionPedidosPage() {
             <div
               key={order.id}
               className={[
-                'rounded-lg p-2 ring-1',
-                orderIncidentMode ? 'bg-red-50 ring-1 ring-red-400/70' : 'bg-zinc-50/80 ring-zinc-200/90',
+                'rounded-xl p-2.5 ring-1',
+                orderIncidentMode ? 'bg-red-50 ring-2 ring-red-500 shadow-sm' : 'bg-zinc-50 ring-zinc-200',
               ].join(' ')}
             >
-              <div className="flex flex-col items-center px-1 pb-0.5 text-center">
+              <div className="flex flex-col items-center px-2 pb-1 text-center">
                 <p className="max-w-[96%] text-sm font-semibold leading-snug tracking-tight text-zinc-900">
                   {order.supplierName}
                 </p>
                 <span
-                  className={`mx-auto mt-1.5 w-16 ${CHEF_ONE_TAPER_LINE_CLASS}`}
+                  className={`mx-auto mt-2 w-20 ${CHEF_ONE_TAPER_LINE_CLASS}`}
                   aria-hidden
                 />
-                <p className="mt-1.5 text-[10px] font-medium uppercase tracking-[0.12em] text-zinc-400">
+                <p className="mt-2 text-[10px] font-medium uppercase tracking-[0.14em] text-zinc-400">
                   Pedido {new Date(order.createdAt).toLocaleDateString('es-ES')}
                 </p>
                 {order.status === 'received' ? (
-                  <p className="mt-1.5 max-w-[98%] rounded-md bg-amber-50 px-2 py-1 text-[10px] font-semibold leading-snug text-amber-950 ring-1 ring-amber-200/90">
-                    Falta cotejar precios con el albarán. Ajusta líneas y archiva abajo cuando revisado.
+                  <p className="mt-2 max-w-[95%] rounded-lg bg-amber-100 px-2 py-1.5 text-[10px] font-bold uppercase leading-snug tracking-wide text-amber-950 ring-1 ring-amber-300/80">
+                    Recibido desde Pedidos: falta cotejar precios. Ajusta aquí si el albarán no coincide; luego pulsa
+                    «revisado» para archivar en la parte inferior.
                   </p>
                 ) : null}
                 <button
                   type="button"
                   onClick={() => setExpandedPendingOrderId((id) => (id === order.id ? null : order.id))}
-                  className="mt-2 inline-flex items-center gap-1 rounded-md border border-zinc-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-zinc-700"
+                  className="mt-3 inline-flex items-center gap-2 rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-zinc-700"
                   aria-expanded={expanded}
                 >
-                  {expanded ? 'Ocultar' : 'Detalle'}
-                  <ChevronDown className={['h-3.5 w-3.5', expanded ? 'rotate-180' : ''].join(' ')} aria-hidden />
+                  {expanded ? 'Ocultar detalle' : 'Ver detalle'}
+                  <ChevronDown className={['h-4 w-4', expanded ? 'rotate-180' : ''].join(' ')} aria-hidden />
                 </button>
               </div>
               {expanded ? (
               <>
-              <div className="mt-1.5 space-y-1">
+              <div className="mt-2 space-y-1.5">
                 {order.items.map((item) => {
                   const sug = recepcionLineSuggestionByItemId.get(item.id) ?? {
                     value: null,

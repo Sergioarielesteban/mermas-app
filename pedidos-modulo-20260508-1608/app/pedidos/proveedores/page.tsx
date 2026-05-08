@@ -619,7 +619,7 @@ export default function ProveedoresPage() {
   };
 
   return (
-    <div className="mx-auto w-full max-w-2xl space-y-2.5">
+    <div className="mx-auto w-full max-w-2xl space-y-4">
       {showDeletedBanner ? (
         <div className="pointer-events-none fixed inset-0 z-[90] grid place-items-center bg-black/25 px-6">
           <div className="rounded-2xl bg-[#D32F2F] px-7 py-5 text-center shadow-2xl ring-2 ring-white/75">
@@ -627,26 +627,26 @@ export default function ProveedoresPage() {
           </div>
         </div>
       ) : null}
-      <div className="mb-0">
+      <div className="mb-0.5">
         <Link
           href="/pedidos"
-          className="inline-flex items-center gap-1 py-0.5 text-xs font-medium text-zinc-600 underline-offset-4 hover:text-zinc-900 hover:underline"
+          className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-zinc-200 bg-white px-3 text-sm font-medium text-zinc-800 shadow-sm"
         >
-          ← Pedidos
+          ← Atrás
         </Link>
       </div>
 
       {message ? (
-        <div className="rounded-xl border border-amber-200/80 bg-amber-50/90 px-3 py-2 text-sm text-amber-950 ring-1 ring-amber-100/80">
+        <div className="rounded-2xl border border-amber-200/80 bg-amber-50/90 px-4 py-2.5 text-sm text-amber-950 shadow-sm">
           {message}
         </div>
       ) : null}
 
-      <section className="rounded-xl border border-zinc-200/90 bg-white p-3 ring-1 ring-zinc-100 sm:p-3.5">
-        <h1 className="text-base font-bold tracking-tight text-zinc-900 sm:text-lg">Proveedores</h1>
-        <div className="mt-2 flex flex-col gap-1.5 sm:flex-row sm:flex-wrap sm:items-center">
+      <section className="rounded-2xl border border-zinc-200/80 bg-white p-4 shadow-sm sm:p-5" style={{ borderRadius: 16 }}>
+        <h1 className="text-lg font-bold tracking-tight text-zinc-900">Proveedores</h1>
+        <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
           <button
-            className="inline-flex h-9 min-w-0 flex-1 items-center justify-center gap-1.5 rounded-lg bg-[#D32F2F] px-3 text-sm font-semibold text-white transition hover:bg-[#B91C1C] active:opacity-95 sm:max-w-[14rem] sm:flex-none"
+            className="inline-flex h-10 min-w-0 flex-1 items-center justify-center gap-2 rounded-xl bg-[#D32F2F] px-4 text-sm font-semibold text-white shadow-sm transition hover:bg-[#B91C1C] sm:max-w-[14rem] sm:flex-none"
             type="button"
             onClick={() => {
               setMessage(null);
@@ -657,7 +657,7 @@ export default function ProveedoresPage() {
             <span>+ Nuevo proveedor</span>
           </button>
           <button
-            className="inline-flex h-9 min-w-0 flex-1 items-center justify-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-3 text-sm font-medium text-zinc-800 transition hover:bg-zinc-50 disabled:opacity-50 sm:max-w-[14rem] sm:flex-none"
+            className="inline-flex h-10 min-w-0 flex-1 items-center justify-center gap-2 rounded-xl border border-zinc-200 bg-white px-4 text-sm font-medium text-zinc-800 shadow-sm transition hover:bg-zinc-50 disabled:opacity-50 sm:max-w-[14rem] sm:flex-none"
             disabled={bulkImportBusy}
             type="button"
             onClick={importMissingSuppliersFromInventory}
@@ -666,9 +666,9 @@ export default function ProveedoresPage() {
             {bulkImportBusy ? 'Importando…' : 'Importar'}
           </button>
         </div>
-        <div className="relative mt-2">
+        <div className="relative mt-3">
           <Search
-            className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-zinc-400"
+            className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400"
             strokeWidth={2}
             aria-hidden
           />
@@ -676,35 +676,35 @@ export default function ProveedoresPage() {
             value={supplierCatalogQuery}
             onChange={(e) => setSupplierCatalogQuery(e.target.value)}
             placeholder="Buscar proveedor o artículo…"
-            className="h-9 w-full rounded-lg border border-zinc-200 bg-white pl-9 pr-2.5 text-sm text-zinc-900 outline-none placeholder:text-zinc-400 focus:border-zinc-300 focus:ring-1 focus:ring-zinc-200/80"
+            className="h-10 w-full rounded-xl border border-zinc-200 bg-zinc-50/50 pl-10 pr-3 text-sm text-zinc-900 outline-none placeholder:text-zinc-400 focus:border-zinc-300 focus:bg-white"
           />
         </div>
       </section>
 
       {visibleSuppliers.map((supplier) => (
-        <section key={supplier.id} className="overflow-hidden rounded-xl border border-zinc-200/90 bg-white ring-1 ring-zinc-100/80">
-          <div className="px-2.5 py-2 sm:px-3">
+        <section key={supplier.id} className="overflow-hidden rounded-2xl border border-zinc-200/80 bg-white shadow-sm">
+          <div className="px-3 py-2.5 sm:px-3.5 sm:py-3">
             <p className="truncate text-sm font-bold leading-tight text-zinc-900">{supplier.name}</p>
             <p className="mt-0.5 text-[11px] leading-tight text-zinc-500">Contacto: {supplier.contact || '—'}</p>
             <p className="mt-0.5 text-[10px] leading-tight text-zinc-500">
               Reparto: {formatDeliveryCycleSummary(supplier.deliveryCycleWeekdays ?? [])}
             </p>
-            <div className="mt-2 flex flex-wrap gap-1.5">
+            <div className="mt-2.5 flex flex-wrap gap-2">
               <button
                 type="button"
                 onClick={() => setExpandedSupplierId((id) => (id === supplier.id ? null : supplier.id))}
                 className={[
-                  'inline-flex flex-1 items-center justify-center gap-1 rounded-md px-2.5 py-1.5 text-[11px] font-medium sm:flex-none',
+                  'inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-[11px] font-bold uppercase tracking-wide sm:flex-none',
                   expandedSupplierId === supplier.id
-                    ? 'bg-zinc-100 text-zinc-900 ring-1 ring-zinc-200'
-                    : 'bg-white text-zinc-700 ring-1 ring-zinc-200/90 hover:bg-zinc-50',
+                    ? 'bg-zinc-200/90 text-zinc-900'
+                    : 'bg-[#D32F2F]/10 text-[#B91C1C] ring-1 ring-[#D32F2F]/25',
                 ].join(' ')}
                 aria-expanded={expandedSupplierId === supplier.id}
               >
-                <ListTree className="h-3.5 w-3.5 shrink-0 opacity-70" strokeWidth={2.25} />
+                <ListTree className="h-3.5 w-3.5 shrink-0" strokeWidth={2.25} />
                 {expandedSupplierId === supplier.id ? 'Ocultar' : 'Ver artículos'}
                 <ChevronRight
-                  className={['h-3.5 w-3.5 shrink-0 opacity-60 transition-transform', expandedSupplierId === supplier.id ? 'rotate-90' : ''].join(
+                  className={['h-3.5 w-3.5 shrink-0 transition-transform', expandedSupplierId === supplier.id ? 'rotate-90' : ''].join(
                     ' ',
                   )}
                   strokeWidth={2.25}
@@ -714,7 +714,7 @@ export default function ProveedoresPage() {
               <button
                 type="button"
                 onClick={() => openAddProductForSupplier(supplier.id)}
-                className="inline-flex flex-1 items-center justify-center gap-1 rounded-md border border-zinc-200 bg-white px-2.5 py-1.5 text-[11px] font-semibold text-zinc-800 sm:flex-none"
+                className="inline-flex flex-1 items-center justify-center gap-1 rounded-lg border border-zinc-300 bg-white px-3 py-2 text-[11px] font-semibold text-zinc-900 shadow-sm sm:flex-none"
               >
                 <Plus className="h-3.5 w-3.5 shrink-0" strokeWidth={2.5} />
                 + Añadir producto

@@ -161,9 +161,10 @@ export default function PedidosArticulosPage() {
   }
 
   return (
-    <div className="space-y-2 pb-5 sm:space-y-2.5 sm:pb-7">
+    <div className="space-y-2.5 pb-6 sm:space-y-3 sm:pb-8">
       <MermasStyleHero
-        micro
+        slim
+        className="!px-3 !py-1.5 sm:!px-4 sm:!py-2"
         eyebrow="Pedidos"
         title="Artículos base (master)"
       />
@@ -209,7 +210,7 @@ export default function PedidosArticulosPage() {
         <div className="rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-sm text-amber-950">{banner}</div>
       ) : null}
 
-      <section className="rounded-xl bg-white p-2 ring-1 ring-zinc-200/90 sm:p-2">
+      <section className="rounded-xl bg-white p-2 shadow-sm ring-1 ring-zinc-200 sm:p-2.5">
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
             <p className="text-[9px] font-bold uppercase leading-tight text-zinc-500">Listado</p>
@@ -309,7 +310,7 @@ export default function PedidosArticulosPage() {
                   : 'Nada coincide con el filtro o la búsqueda.'}
         </p>
       ) : (
-        <ul className="space-y-1.5">
+        <ul className="space-y-2">
           {filtered.map((a) => (
             <ArticleCard
               key={a.id}
@@ -404,9 +405,9 @@ function ArticleCard({
     const cup = a.costeUnitarioUso ?? a.costeMaster;
     return (
       <li className={['list-none', !a.activo ? 'opacity-60' : ''].join(' ')}>
-        <details className="group overflow-hidden rounded-xl border border-amber-200/80 bg-white ring-1 ring-amber-100/80">
-          <summary className="flex cursor-pointer list-none items-center gap-2 p-2 sm:gap-2.5 sm:p-2.5 [&::-webkit-details-marker]:hidden">
-            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-amber-100 text-amber-900">
+        <details className="group overflow-hidden rounded-2xl border border-amber-200/80 bg-white shadow-sm ring-1 ring-amber-100">
+          <summary className="flex cursor-pointer list-none items-center gap-2 p-2.5 sm:gap-3 sm:p-3 [&::-webkit-details-marker]:hidden">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-amber-100 text-amber-900">
               <ChefHat className="h-3.5 w-3.5" aria-hidden />
             </div>
             <div className="min-w-0 flex-1">
@@ -443,7 +444,7 @@ function ArticleCard({
                 e.stopPropagation();
                 void applyActivo(!a.activo);
               }}
-              className="shrink-0 rounded-md border border-zinc-200 bg-zinc-50/80 px-1.5 py-1 text-[10px] font-medium text-zinc-600 hover:bg-zinc-100 disabled:opacity-50 sm:text-[11px]"
+              className="shrink-0 rounded-lg border border-amber-300/80 bg-white px-2 py-1.5 text-[10px] font-bold text-amber-950 shadow-sm disabled:opacity-50 sm:text-[11px]"
             >
               {activoBusy ? '…' : a.activo ? 'Desactivar' : 'Activar'}
             </button>
@@ -558,9 +559,9 @@ function ArticleCard({
 
   return (
     <li className={['list-none', !a.activo ? 'opacity-60' : ''].join(' ')}>
-      <details className="group overflow-hidden rounded-xl border border-zinc-200/90 bg-white ring-1 ring-zinc-100/80">
-        <summary className="flex cursor-pointer list-none items-center gap-2 p-2 sm:gap-2.5 sm:p-2.5 [&::-webkit-details-marker]:hidden">
-          <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-indigo-100 text-indigo-800">
+      <details className="group overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm ring-1 ring-zinc-100">
+        <summary className="flex cursor-pointer list-none items-center gap-2 p-2.5 sm:gap-3 sm:p-3 [&::-webkit-details-marker]:hidden">
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-indigo-100 text-indigo-800">
             <Package className="h-3.5 w-3.5" aria-hidden />
           </div>
           <div className="min-w-0 flex-1">
@@ -597,7 +598,7 @@ function ArticleCard({
               e.stopPropagation();
               void applyActivo(!a.activo);
             }}
-            className="shrink-0 rounded-md border border-zinc-200 bg-zinc-50/80 px-1.5 py-1 text-[10px] font-medium text-zinc-600 hover:bg-zinc-100 disabled:opacity-50 sm:text-[11px]"
+            className="shrink-0 rounded-lg border border-zinc-300 bg-white px-2 py-1.5 text-[10px] font-bold text-zinc-900 shadow-sm disabled:opacity-50 sm:text-[11px]"
           >
             {activoBusy ? '…' : a.activo ? 'Desactivar' : 'Activar'}
           </button>

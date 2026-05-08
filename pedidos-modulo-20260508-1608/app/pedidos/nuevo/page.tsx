@@ -702,10 +702,10 @@ export default function NuevoPedidoPage() {
   }
 
   return (
-    <div className="space-y-2 sm:space-y-2.5">
+    <div className="space-y-3">
       {existingSentAt && editingId ? (
         <section
-          className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-950 ring-1 ring-amber-100"
+          className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs font-medium text-amber-950 shadow-sm ring-1 ring-amber-100"
           role="status"
         >
           <p>Este pedido ya fue enviado. Puedes modificarlo y volver a enviarlo.</p>
@@ -715,7 +715,7 @@ export default function NuevoPedidoPage() {
         </section>
       ) : null}
 
-      <section className="rounded-xl bg-white px-2.5 py-2 ring-1 ring-zinc-200/90 sm:px-3">
+      <section className="rounded-2xl bg-white px-3 py-2.5 ring-1 ring-zinc-200 sm:px-3.5 sm:py-3">
         <label className="text-[10px] font-extrabold uppercase tracking-wide text-zinc-500">Proveedor</label>
         {loadingSuppliers ? <p className="mt-1 text-[10px] font-semibold text-zinc-500">Cargando catálogo…</p> : null}
         <select
@@ -732,16 +732,16 @@ export default function NuevoPedidoPage() {
         </select>
       </section>
 
-      <section className="rounded-xl bg-white p-3 ring-1 ring-zinc-200/90">
-        <p className="text-center text-xs font-bold uppercase tracking-wide text-zinc-700">Catálogo</p>
-        <label className="mt-1.5 block text-[10px] font-semibold uppercase tracking-wide text-zinc-500">Buscar producto</label>
+      <section className="rounded-2xl bg-white p-4 ring-1 ring-zinc-200">
+        <p className="text-center text-sm font-bold text-zinc-800">CATALOGO</p>
+        <label className="mt-2 block text-xs font-semibold uppercase tracking-wide text-zinc-500">Buscar producto</label>
         <input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Buscar..."
-          className="mt-1.5 h-9 w-full rounded-lg border border-zinc-200 bg-white px-2.5 text-sm text-zinc-900 placeholder:text-zinc-500 outline-none focus:border-zinc-300 focus:ring-1 focus:ring-zinc-200/80"
+          className="mt-2 h-11 w-full rounded-xl border border-zinc-300 bg-white px-3 text-sm text-zinc-900 placeholder:text-zinc-500 outline-none"
         />
-        <div className="mt-1.5 space-y-1.5">
+        <div className="mt-2 space-y-2">
           {selectedSupplier && filteredProducts.length === 0 ? (
             <p className="text-sm text-zinc-500">Este proveedor no tiene productos activos. Revísalo en Proveedores.</p>
           ) : null}
@@ -766,8 +766,8 @@ export default function NuevoPedidoPage() {
         </div>
       </section>
 
-      <section className="rounded-xl bg-white p-3 ring-1 ring-zinc-200/90">
-        <label className="block text-[10px] font-semibold uppercase tracking-wide text-zinc-500">Notas</label>
+      <section className="rounded-2xl bg-white p-4 ring-1 ring-zinc-200">
+        <label className="mt-1 block text-xs font-semibold uppercase tracking-wide text-zinc-500">Notas</label>
         <textarea
           value={notes}
           onChange={(e) => setNotes(e.target.value)}
@@ -777,12 +777,12 @@ export default function NuevoPedidoPage() {
         />
       </section>
 
-      <section className="rounded-xl border border-zinc-200/90 bg-white p-2.5 ring-1 ring-zinc-100">
-        <p className="mb-2 text-[10px] leading-snug text-zinc-600">
+      <section className="rounded-2xl border border-zinc-200 bg-white p-3 shadow-sm ring-1 ring-zinc-100">
+        <p className="mb-3 text-[10px] leading-snug text-zinc-600">
           Pedido realizado por:{' '}
           <span className="font-bold text-zinc-900">{requesterResolvedName}</span>
         </p>
-        <div className="mb-2">
+        <div className="mb-3">
           <p className="text-[10px] font-extrabold uppercase tracking-wide text-zinc-500">Fecha de entrega</p>
           <div className="relative mt-1 w-full min-w-0">
             <input
@@ -834,22 +834,22 @@ export default function NuevoPedidoPage() {
             </p>
           ) : null}
         </div>
-        <div className="rounded-lg bg-zinc-50 p-1.5 ring-1 ring-zinc-200/90">
-          <div className="flex items-center justify-between text-xs text-zinc-700">
+        <div className="rounded-xl bg-zinc-50 p-2 ring-1 ring-zinc-200">
+          <div className="mt-1 flex items-center justify-between text-sm text-zinc-700">
             <span>Subtotal</span>
-            <span className="tabular-nums">{totalBase.toFixed(2)} €</span>
+            <span>{totalBase.toFixed(2)} €</span>
           </div>
-          <div className="mt-0.5 flex items-center justify-between text-xs text-zinc-700">
+          <div className="mt-1 flex items-center justify-between text-sm text-zinc-700">
             <span>IVA</span>
-            <span className="tabular-nums">{totalVat.toFixed(2)} €</span>
+            <span>{totalVat.toFixed(2)} €</span>
           </div>
-          <div className="mt-0.5 flex items-center justify-between text-sm font-black text-zinc-900">
+          <div className="mt-1 flex items-center justify-between text-base font-black text-zinc-900">
             <span>Total</span>
-            <span className="tabular-nums">{total.toFixed(2)} €</span>
+            <span>{total.toFixed(2)} €</span>
           </div>
         </div>
-        {message ? <p className="mt-1.5 text-sm text-[#B91C1C]">{message}</p> : null}
-        <div className="mt-1.5 grid grid-cols-3 gap-1.5">
+        {message ? <p className="mt-2 text-sm text-[#B91C1C]">{message}</p> : null}
+        <div className="mt-2 grid grid-cols-3 gap-2">
           <button
             type="button"
             onClick={() => {
@@ -859,21 +859,21 @@ export default function NuevoPedidoPage() {
                 router.push('/pedidos');
               })();
             }}
-            className="h-10 rounded-lg border border-zinc-200 bg-white text-xs font-bold text-zinc-700"
+            className="h-11 rounded-xl border border-zinc-300 bg-white text-sm font-bold text-zinc-700"
           >
             Cancelar
           </button>
           <button
             type="button"
             onClick={() => saveDraft('draft')}
-            className="h-10 rounded-lg bg-[#D32F2F] text-xs font-bold text-white"
+            className="h-11 rounded-xl bg-[#D32F2F] text-sm font-bold text-white"
           >
             {editingId ? 'Guardar cambios' : 'Guardar borrador'}
           </button>
           <button
             type="button"
             onClick={sendToWhatsappInOneStep}
-            className="inline-flex h-10 min-w-0 flex-col items-center justify-center gap-0.5 rounded-lg bg-[#25D366] px-1 py-0.5 text-[9px] font-semibold leading-tight text-white ring-1 ring-[#128C7E]/35 sm:flex-row sm:gap-1 sm:px-2 sm:text-[11px]"
+            className="inline-flex h-11 min-w-0 flex-col items-center justify-center gap-0.5 rounded-xl bg-[#25D366] px-1.5 py-1 text-[10px] font-semibold leading-tight text-white shadow-sm ring-1 ring-[#128C7E]/40 sm:flex-row sm:gap-1.5 sm:px-2.5 sm:text-xs"
             aria-label="Enviar pedido por WhatsApp"
           >
             <svg className="h-4 w-4 shrink-0 text-white" viewBox="0 0 24 24" aria-hidden>

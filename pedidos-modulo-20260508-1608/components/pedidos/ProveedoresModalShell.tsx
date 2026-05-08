@@ -35,9 +35,9 @@ export function ProveedoresModalShell({ open, title, onClose, children, allowClo
         onClick={() => allowClose && onClose()}
       />
       <div
-        className="relative z-[96] mx-auto flex max-h-[min(92dvh,800px)] w-full max-w-lg flex-col overflow-hidden rounded-t-2xl bg-white shadow-lg shadow-zinc-900/10 ring-1 ring-zinc-200/90 sm:max-w-xl sm:rounded-2xl"
+        className="relative z-[96] mx-auto flex max-h-[min(92dvh,800px)] w-full max-w-lg flex-col overflow-hidden rounded-t-2xl bg-white shadow-2xl ring-1 ring-zinc-200 sm:max-w-xl sm:rounded-2xl"
       >
-        <div className="flex shrink-0 items-center justify-between border-b border-zinc-100/90 bg-white px-3 py-2.5">
+        <div className="flex shrink-0 items-center justify-between border-b border-zinc-100 bg-white px-4 py-3">
           <h2 className="text-sm font-bold tracking-tight text-zinc-900">{title}</h2>
           <button
             type="button"
@@ -49,7 +49,7 @@ export function ProveedoresModalShell({ open, title, onClose, children, allowClo
             <X className="h-5 w-5" />
           </button>
         </div>
-        <div className="min-h-0 flex-1 space-y-2.5 overflow-y-auto overscroll-contain px-3 py-2.5">{children}</div>
+        <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain px-4 py-3">{children}</div>
       </div>
     </div>
   );
