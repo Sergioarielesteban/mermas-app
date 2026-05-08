@@ -4,11 +4,12 @@ import Link from 'next/link';
 import React from 'react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { AlertTriangle, Download, Lightbulb, Trash2, TrendingDown, TrendingUp } from 'lucide-react';
+import { AlertTriangle, Download, Lightbulb, Package, Trash2, TrendingDown, TrendingUp } from 'lucide-react';
 import {
+  Area,
   CartesianGrid,
+  ComposedChart,
   Line,
-  LineChart,
   ReferenceLine,
   ResponsiveContainer,
   Tooltip,
@@ -37,7 +38,35 @@ import {
   hasMixedComparisonUnits,
 } from '@/lib/price-evolution-dominant-unit';
 
-type WindowPreset = '30' | '90' | '365' | 'all';
+type WindowPreset = '30' | '60' | '90' | '365' | 'all';
+
+const CHART_PERIOD_PRESETS: { id: WindowPreset; label: string }[] = [
+  { id: '30', label: '30d' },
+  { id: '60', label: '60d' },
+  { id: '90', label: '90d' },
+  { id: '365', label: '12m' },
+  { id: 'all', label: 'Todo' },
+];
+
+function countReceptionPriceSteps(row: { points: PricePoint[] }): { up: number; down: number } {
+  const bills = row.points
+    .filter((p) => p.sortRank === 1)
+    .sort((a, b) => Date.parse(a.date) - Date.parse(b.date));
+  let up = 0;
+  let down = 0;
+  for (let i = 1; i < bills.length; i++) {
+    const d = bills[i]!.price - bills[i - 1]!.price;
+    if (d > 0.0001) up += 1;
+    else if (d < -0.0001) down += 1;
+  }
+  return { up, down };
+}
+
+function volatilityStabilityLabel(cv: number): string {
+  if (cv < 5) return 'Estabilidad alta';
+  if (cv < 12) return 'Estabilidad media';
+  return 'Alta volatilidad';
+}
 
 const PRECIOS_UI_STORAGE_KEY = 'chefone-precios-ui-v1';
 
@@ -444,13 +473,46 @@ type ActionRecommendation = {
   detail: string;
 };
 
+function ChartPeriodToolbar({
+  value,
+  onChange,
+}: {
+  value: WindowPreset;
+  onChange: (v: WindowPreset) => void;
+}) {
+  return (
+    <div className="flex flex-wrap gap-1">
+      {CHART_PERIOD_PRESETS.map(({ id, label }) => (
+        <button
+          key={id}
+          type="button"
+          onClick={() => onChange(id)}
+          className={[
+            'rounded-full px-2.5 py-1 text-[11px] font-semibold transition-colors',
+            value === id ? 'bg-[#D32F2F] text-white shadow-sm' : 'bg-zinc-100 text-zinc-600 hover:bg-zinc-200',
+          ].join(' ')}
+        >
+          {label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 function PriceEvolutionMiniChart({
   row,
   unitSwitcher,
+  chartPeriod,
 }: {
   row: PriceSummary;
   unitSwitcher?: { options: string[]; value: string; onChange: (u: string) => void } | null;
+  chartPeriod?: { value: WindowPreset; onChange: (v: WindowPreset) => void };
 }) {
+  const fillGradientId = React.useMemo(
+    () => `evofill-${row.key.replace(/[^a-zA-Z0-9]/g, '-')}`,
+    [row.key],
+  );
+
   const data = React.useMemo(() => {
     const asc = [...row.points].sort((a, b) => Date.parse(a.date) - Date.parse(b.date));
     const dayKeys = asc.map((p) => p.date.slice(0, 10));
@@ -472,35 +534,47 @@ function PriceEvolutionMiniChart({
 
   const unitShort = euroPerUnitShortLabel(row.displayUnit);
 
+  const unitControl =
+    unitSwitcher && unitSwitcher.options.length > 1 ? (
+      <div className="inline-flex rounded-full bg-white p-0.5 ring-1 ring-zinc-200/80">
+        {unitSwitcher.options.map((u) => {
+          const active = u === unitSwitcher.value;
+          return (
+            <button
+              key={u}
+              type="button"
+              onClick={() => unitSwitcher.onChange(u)}
+              className={[
+                'rounded-full px-2.5 py-1 text-[11px] font-semibold transition-colors',
+                active ? 'bg-zinc-900 text-white' : 'text-zinc-500 hover:text-zinc-800',
+              ].join(' ')}
+            >
+              {euroPerUnitShortLabel(u)}
+            </button>
+          );
+        })}
+      </div>
+    ) : (
+      <span className="rounded-full bg-zinc-50 px-2.5 py-1 text-[11px] font-semibold text-zinc-600 ring-1 ring-zinc-200/80">
+        {unitShort}
+      </span>
+    );
+
   if (data.length < 1) return null;
 
   if (data.length === 1) {
     const p = data[0]!;
     return (
-      <div className="mt-4 w-full min-w-0">
-        {unitSwitcher && unitSwitcher.options.length > 1 ? (
-          <div className="mb-3 flex justify-center">
-            <div className="inline-flex rounded-full bg-zinc-100/90 p-0.5 ring-1 ring-zinc-200/80">
-              {unitSwitcher.options.map((u) => {
-                const active = u === unitSwitcher.value;
-                return (
-                  <button
-                    key={u}
-                    type="button"
-                    onClick={() => unitSwitcher.onChange(u)}
-                    className={[
-                      'rounded-full px-2.5 py-1 text-[11px] font-semibold transition-colors',
-                      active ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-500 hover:text-zinc-800',
-                    ].join(' ')}
-                  >
-                    {euroPerUnitShortLabel(u)}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        ) : null}
-        <div className="flex min-h-[10rem] items-center justify-center rounded-2xl bg-gradient-to-b from-zinc-50/80 to-white px-3 py-8">
+      <div className="mt-2 w-full min-w-0">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          {chartPeriod ? (
+            <ChartPeriodToolbar value={chartPeriod.value} onChange={chartPeriod.onChange} />
+          ) : (
+            <span />
+          )}
+          {unitControl}
+        </div>
+        <div className="flex min-h-[10rem] items-center justify-center rounded-2xl bg-gradient-to-b from-red-50/40 to-white px-3 py-8 ring-1 ring-zinc-100">
           <div className="text-center">
             <p className="text-[11px] font-medium tracking-wide text-zinc-400">{p.dateLabel}</p>
             <p className="mt-2 text-2xl font-semibold tabular-nums tracking-tight text-zinc-900">
@@ -513,35 +587,25 @@ function PriceEvolutionMiniChart({
   }
 
   return (
-    <div className="mt-4 w-full min-w-0">
-      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-        {unitSwitcher && unitSwitcher.options.length > 1 ? (
-          <div className="inline-flex rounded-full bg-zinc-100/90 p-0.5 ring-1 ring-zinc-200/70">
-            {unitSwitcher.options.map((u) => {
-              const active = u === unitSwitcher.value;
-              return (
-                <button
-                  key={u}
-                  type="button"
-                  onClick={() => unitSwitcher.onChange(u)}
-                  className={[
-                    'rounded-full px-2.5 py-1 text-[11px] font-semibold transition-colors',
-                    active ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-500 hover:text-zinc-800',
-                  ].join(' ')}
-                >
-                  {euroPerUnitShortLabel(u)}
-                </button>
-              );
-            })}
-          </div>
+    <div className="mt-2 w-full min-w-0">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        {chartPeriod ? (
+          <ChartPeriodToolbar value={chartPeriod.value} onChange={chartPeriod.onChange} />
         ) : (
-          <span className="text-[11px] font-medium text-zinc-400">{unitShort}</span>
+          <span />
         )}
+        {unitControl}
       </div>
-      <div className="h-[min(52vw,14rem)] w-full min-h-[13rem] sm:h-64">
+      <div className="h-[min(56vw,15rem)] w-full min-h-[14rem] sm:h-72">
         <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={data} margin={{ top: 8, right: 4, left: -12, bottom: 4 }}>
-            <CartesianGrid strokeDasharray="4 8" stroke="#f4f4f5" vertical={false} />
+          <ComposedChart data={data} margin={{ top: 12, right: 6, left: -8, bottom: 6 }}>
+            <defs>
+              <linearGradient id={fillGradientId} x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="#D32F2F" stopOpacity={0.2} />
+                <stop offset="100%" stopColor="#D32F2F" stopOpacity={0} />
+              </linearGradient>
+            </defs>
+            <CartesianGrid strokeDasharray="3 8" stroke="#ececf0" vertical={false} />
             <XAxis
               dataKey="dateLabel"
               tick={{ fontSize: 10, fill: '#a1a1aa' }}
@@ -553,7 +617,7 @@ function PriceEvolutionMiniChart({
             />
             <YAxis
               tick={{ fontSize: 10, fill: '#a1a1aa' }}
-              width={44}
+              width={46}
               domain={['auto', 'auto']}
               axisLine={false}
               tickLine={false}
@@ -563,18 +627,18 @@ function PriceEvolutionMiniChart({
             <Tooltip
               content={({ active, payload }) => {
                 if (!active || !payload?.length) return null;
-                const p = payload[0]?.payload as {
+                const pl = payload[0]?.payload as {
                   dateLabel: string;
                   price: number;
                   kind: string;
                   supplier: string;
                 };
-                if (!p) return null;
+                if (!pl) return null;
                 return (
-                  <div className="rounded-xl border border-zinc-100 bg-white/95 px-3 py-2 text-xs shadow-lg backdrop-blur-sm">
-                    <p className="font-semibold text-zinc-900">{p.dateLabel}</p>
+                  <div className="rounded-xl border border-zinc-100 bg-white/98 px-3 py-2 text-xs shadow-lg">
+                    <p className="font-semibold text-zinc-900">{pl.dateLabel}</p>
                     <p className="tabular-nums text-[13px] text-zinc-900">
-                      {p.price.toFixed(2)} {unitShort}
+                      {pl.price.toFixed(2)} {unitShort}
                     </p>
                   </div>
                 );
@@ -582,28 +646,53 @@ function PriceEvolutionMiniChart({
             />
             <ReferenceLine
               y={row.weightedAvg}
-              stroke="#d4d4d8"
-              strokeDasharray="6 5"
-              strokeOpacity={0.95}
+              stroke="#a1a1aa"
+              strokeDasharray="5 5"
+              strokeOpacity={0.85}
+            />
+            <Area
+              type="monotone"
+              dataKey="price"
+              stroke="none"
+              fill={`url(#${fillGradientId})`}
+              isAnimationActive
             />
             <Line
               type="monotone"
               dataKey="price"
               name="Precio"
               stroke="#D32F2F"
-              strokeWidth={2.25}
+              strokeWidth={2.5}
               dot={(props: { cx?: number; cy?: number; payload?: { kind: string } }) => {
                 const { cx, cy, payload } = props;
                 if (cx == null || cy == null) return null;
                 const isAnchor = payload?.kind === 'Inicio';
-                const fill = isAnchor ? '#cbd5e1' : '#D32F2F';
-                const r = isAnchor ? 3.5 : 4;
+                const fill = isAnchor ? '#94a3b8' : '#D32F2F';
+                const r = isAnchor ? 3.5 : 4.5;
                 return <circle cx={cx} cy={cy} r={r} fill={fill} stroke="#fff" strokeWidth={2} />;
               }}
               activeDot={{ r: 7, stroke: '#fff', strokeWidth: 2, fill: '#D32F2F' }}
             />
-          </LineChart>
+          </ComposedChart>
         </ResponsiveContainer>
+      </div>
+      <div className="mt-3 flex flex-wrap items-center justify-center gap-x-5 gap-y-1.5 text-[10px] text-zinc-500">
+        <span className="inline-flex items-center gap-1.5">
+          <span className="h-2 w-2 shrink-0 rounded-full bg-slate-400" aria-hidden />
+          Precio inicial
+        </span>
+        <span className="inline-flex items-center gap-1.5">
+          <span className="h-0.5 w-6 shrink-0 border-t border-dashed border-zinc-400" aria-hidden />
+          PMP
+        </span>
+        <span className="inline-flex items-center gap-1.5">
+          <span className="h-0.5 w-6 shrink-0 bg-[#D32F2F]" aria-hidden />
+          Evolución
+        </span>
+        <span className="inline-flex items-center gap-1.5">
+          <span className="h-2 w-2 shrink-0 rounded-full bg-[#D32F2F]" aria-hidden />
+          Precio actual
+        </span>
       </div>
     </div>
   );
@@ -930,7 +1019,13 @@ export default function PedidosPreciosPage() {
           productSearch: string;
           unitChoiceByKey: Record<string, string>;
         }>;
-        if (o.windowPreset === '30' || o.windowPreset === '90' || o.windowPreset === '365' || o.windowPreset === 'all') {
+        if (
+          o.windowPreset === '30' ||
+          o.windowPreset === '60' ||
+          o.windowPreset === '90' ||
+          o.windowPreset === '365' ||
+          o.windowPreset === 'all'
+        ) {
           setWindowPreset(o.windowPreset);
         }
         if (typeof o.supplierFilter === 'string') setSupplierFilter(o.supplierFilter);
@@ -994,6 +1089,9 @@ export default function PedidosPreciosPage() {
     if (windowPreset === '30') {
       startMs = endMs - 30 * 86_400_000;
       label = 'Últimos 30 días';
+    } else if (windowPreset === '60') {
+      startMs = endMs - 60 * 86_400_000;
+      label = 'Últimos 60 días';
     } else if (windowPreset === '90') {
       startMs = endMs - 90 * 86_400_000;
       label = 'Últimos 90 días';
@@ -1688,8 +1786,8 @@ export default function PedidosPreciosPage() {
 
       <section className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-zinc-200/80 sm:p-5">
         <div className="flex flex-col gap-1 text-center sm:text-left">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-zinc-400">Pedidos</p>
-          <h1 className="text-xl font-semibold tracking-tight text-zinc-900">Evolución de precios</h1>
+          <p className="font-sans text-[10px] font-semibold uppercase tracking-[0.18em] text-zinc-400">Pedidos</p>
+          <h1 className="font-serif text-2xl font-normal tracking-tight text-zinc-900">Evolución de precio</h1>
         </div>
         {message ? <p className="pt-2 text-center text-sm text-[#B91C1C] sm:text-left">{message}</p> : null}
 
@@ -1700,6 +1798,7 @@ export default function PedidosPreciosPage() {
               {(
                 [
                   ['30', '30d'],
+                  ['60', '60d'],
                   ['90', '90d'],
                   ['365', '12m'],
                   ['all', 'Todo'],
@@ -1954,6 +2053,15 @@ export default function PedidosPreciosPage() {
           const trend = evolutionTrendKind(row);
           const eu = euroPerUnitShortLabel(row.displayUnit);
           const receptionCount = row.points.filter((p) => p.sortRank === 1).length;
+          const { up: refUp, down: refDown } = countReceptionPriceSteps(row);
+          const ahorroVsPmp =
+            row.impactMonthlyVsWap < 0 ? Math.round(Math.abs(row.impactMonthlyVsWap) * 100) / 100 : 0;
+          const deltaVsPmpEur = Math.round((row.current.price - row.weightedAvg) * 100) / 100;
+          const currentDateLabel = new Date(row.current.date).toLocaleDateString('es-ES', {
+            day: '2-digit',
+            month: 'short',
+            year: 'numeric',
+          });
           const unitSwitcher =
             row.showUnitSwitcher && row.alternativeUnits.length > 1
               ? {
@@ -1966,115 +2074,183 @@ export default function PedidosPreciosPage() {
                     })),
                 }
               : null;
-          const timelinePts = [...row.points]
-            .filter((p) => p.sortRank === 1)
-            .sort((a, b) => Date.parse(b.date) - Date.parse(a.date))
-            .slice(0, 14);
+          const historialRows = [...row.purchases].sort((a, b) => Date.parse(b.date) - Date.parse(a.date)).slice(0, 8);
           return (
             <article
               key={row.key}
               className={[
-                'overflow-hidden rounded-2xl bg-white ring-1',
-                alert ? 'ring-2 ring-amber-300/90 shadow-sm' : 'ring-zinc-200/90',
+                'overflow-hidden rounded-2xl bg-white shadow-sm ring-1',
+                alert ? 'ring-2 ring-amber-300/90' : 'ring-zinc-200/90',
               ].join(' ')}
             >
-              <div className="border-b border-zinc-100 px-4 pb-3 pt-4">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0 flex-1">
-                    <h2 className="text-[17px] font-semibold leading-snug tracking-tight text-zinc-900">{row.productName}</h2>
-                    <p className="mt-0.5 text-[13px] text-zinc-500">{row.supplierName}</p>
+              <div className="border-b border-zinc-100/90 px-4 pb-4 pt-4">
+                <div className="flex gap-3">
+                  <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-zinc-100 ring-1 ring-zinc-200/80">
+                    <Package className="h-7 w-7 text-zinc-400" aria-hidden />
                   </div>
-                  <div className="flex shrink-0 items-center gap-2">
-                    <span
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <h2 className="font-sans text-[15px] font-bold uppercase leading-snug tracking-wide text-zinc-900">
+                          {row.productName}
+                        </h2>
+                        <p className="mt-1 text-[12px] leading-snug text-zinc-500">{row.supplierName}</p>
+                      </div>
+                      <div className="flex shrink-0 items-start gap-1.5">
+                        {trend === 'up' ? (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-amber-950">
+                            <AlertTriangle className="h-3 w-3 shrink-0" aria-hidden />
+                            Subida
+                          </span>
+                        ) : trend === 'down' ? (
+                          <span className="inline-flex items-center rounded-full bg-emerald-50 px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-emerald-900">
+                            Bajada
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center rounded-full bg-zinc-100 px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-zinc-600">
+                            Estable
+                          </span>
+                        )}
+                        <button
+                          type="button"
+                          disabled={seriesEvolutionDeleteBusy}
+                          title="Borrar histórico de este producto"
+                          onClick={() => setSeriesDeleteContext({ key: row.key })}
+                          className="rounded-lg p-1.5 text-zinc-400 hover:bg-red-50 hover:text-[#B91C1C] disabled:opacity-40"
+                          aria-label="Borrar histórico de este producto"
+                        >
+                          <Trash2 className="h-5 w-5" aria-hidden />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
+                  <div className="rounded-2xl bg-white px-3 py-3 ring-1 ring-zinc-200/90">
+                    <p className="text-[11px] font-medium text-zinc-500">Precio actual</p>
+                    <p className="mt-1 font-sans text-2xl font-semibold tabular-nums tracking-tight text-zinc-900">
+                      {row.current.price.toFixed(2).replace('.', ',')} {eu}
+                    </p>
+                    <p className="mt-1 text-[11px] text-zinc-400">{currentDateLabel}</p>
+                  </div>
+                  <div className="rounded-2xl bg-white px-3 py-3 ring-1 ring-zinc-200/90">
+                    <p className="text-[11px] font-medium text-zinc-500">PMP</p>
+                    <p className="text-[10px] text-zinc-400">{windowLabel}</p>
+                    <p className="mt-1 font-sans text-2xl font-semibold tabular-nums tracking-tight text-zinc-900">
+                      {row.weightedAvg.toFixed(2).replace('.', ',')} {eu}
+                    </p>
+                    <p className="mt-1 text-[11px] text-zinc-400">
+                      {row.totalWeightedQty.toLocaleString('es-ES', { maximumFractionDigits: 2 })}{' '}
+                      {row.displayUnit} (ponderado)
+                    </p>
+                  </div>
+                  <div className="rounded-2xl bg-white px-3 py-3 ring-1 ring-zinc-200/90">
+                    <p className="text-[11px] font-medium text-zinc-500">Variación vs PMP</p>
+                    <p
                       className={[
-                        'rounded-full px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide',
-                        trend === 'up'
-                          ? 'bg-red-50 text-red-800'
-                          : trend === 'down'
-                            ? 'bg-emerald-50 text-emerald-800'
-                            : 'bg-zinc-100 text-zinc-600',
+                        'mt-1 font-sans text-2xl font-semibold tabular-nums tracking-tight',
+                        deltaVsPmpEur > 0 ? 'text-red-600' : deltaVsPmpEur < 0 ? 'text-emerald-600' : 'text-zinc-900',
                       ].join(' ')}
                     >
-                      {trend === 'up'
-                        ? `Subida ${row.deltaPct >= 0 ? '+' : ''}${row.deltaPct.toFixed(1)}%`
-                        : trend === 'down'
-                          ? `Bajada ${row.deltaPct.toFixed(1)}%`
-                          : 'Estable'}
-                    </span>
-                    {alert ? (
-                      <span className="hidden rounded-full bg-amber-100 px-2 py-1 text-[10px] font-bold uppercase text-amber-950 sm:inline-flex">
-                        <AlertTriangle className="mr-0.5 inline h-3 w-3" aria-hidden />
-                        {alertPct <= 0 ? 'Alerta' : `≥${alertPct}%`}
+                      {deltaVsPmpEur >= 0 ? '+' : ''}
+                      {deltaVsPmpEur.toFixed(2).replace('.', ',')} {eu}
+                    </p>
+                    <p className="mt-2">
+                      <span
+                        className={[
+                          'inline-flex rounded-full px-2 py-0.5 text-[11px] font-bold tabular-nums',
+                          row.deltaPct > 0
+                            ? 'bg-red-50 text-red-700 ring-1 ring-red-100'
+                            : row.deltaPct < 0
+                              ? 'bg-emerald-50 text-emerald-800 ring-1 ring-emerald-100'
+                              : 'bg-zinc-100 text-zinc-600',
+                        ].join(' ')}
+                      >
+                        {row.deltaPct >= 0 ? '+' : ''}
+                        {row.deltaPct.toFixed(1).replace('.', ',')}%
                       </span>
-                    ) : null}
-                    <button
-                      type="button"
-                      disabled={seriesEvolutionDeleteBusy}
-                      title="Borrar histórico de este producto"
-                      onClick={() => setSeriesDeleteContext({ key: row.key })}
-                      className="rounded-xl p-2 text-zinc-400 hover:bg-red-50 hover:text-[#B91C1C] disabled:opacity-40"
-                      aria-label="Borrar histórico de este producto"
-                    >
-                      <Trash2 className="h-5 w-5" aria-hidden />
-                    </button>
+                    </p>
                   </div>
                 </div>
-                <p className="mt-3 text-[14px] leading-relaxed text-zinc-800">
-                  <span className="font-semibold tabular-nums text-zinc-900">
-                    {row.current.price.toFixed(2)} {eu}
-                  </span>
-                  <span className="text-zinc-400"> · </span>
-                  <span className="text-zinc-600">
-                    PMP {row.weightedAvg.toFixed(2)} {eu}
-                  </span>
-                  <span className="text-zinc-400"> · </span>
-                  <span className={trend === 'up' ? 'font-medium text-red-700' : trend === 'down' ? 'font-medium text-emerald-700' : 'text-zinc-600'}>
-                    {row.deltaPct >= 0 ? '+' : ''}
-                    {row.deltaPct.toFixed(1)}%
-                  </span>
-                </p>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  <span className="rounded-full bg-zinc-50 px-2.5 py-1 text-[11px] font-medium text-zinc-700 ring-1 ring-zinc-100">
-                    Impacto{' '}
-                    <span className={row.impactMonthlyVsWap > 0 ? 'text-red-700' : row.impactMonthlyVsWap < 0 ? 'text-emerald-700' : ''}>
+
+                <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                  <div className="rounded-2xl bg-emerald-50/80 px-3 py-2.5 ring-1 ring-emerald-100/90">
+                    <p className="text-[10px] font-medium uppercase tracking-wide text-emerald-800/90">Impacto mensual</p>
+                    <p className="mt-0.5 font-sans text-lg font-semibold tabular-nums text-emerald-900">
                       {row.impactMonthlyVsWap >= 0 ? '+' : ''}
-                      {row.impactMonthlyVsWap.toFixed(2)} €/mes
-                    </span>
-                  </span>
-                  <span className="rounded-full bg-zinc-50 px-2.5 py-1 text-[11px] font-medium text-zinc-700 ring-1 ring-zinc-100">
-                    CV {row.volatilityCvPct.toFixed(1)}%
-                  </span>
-                  <span className="rounded-full bg-zinc-50 px-2.5 py-1 text-[11px] font-medium text-zinc-700 ring-1 ring-zinc-100">
-                    {receptionCount} recep.
-                  </span>
-                  {row.forecast30d != null ? (
-                    <span className="rounded-full bg-zinc-50 px-2.5 py-1 text-[11px] font-medium text-zinc-700 ring-1 ring-zinc-100">
-                      ~30d {row.forecast30d.toFixed(2)} {eu}
-                    </span>
-                  ) : null}
+                      {row.impactMonthlyVsWap.toFixed(2).replace('.', ',')} €
+                    </p>
+                    <p className="text-[10px] text-emerald-800/70">Si el ritmo se mantiene</p>
+                  </div>
+                  <div className="rounded-2xl bg-red-50/70 px-3 py-2.5 ring-1 ring-red-100/80">
+                    <p className="text-[10px] font-medium uppercase tracking-wide text-red-800/85">Ahorro vs PMP</p>
+                    <p className="mt-0.5 font-sans text-lg font-semibold tabular-nums text-red-800">
+                      {ahorroVsPmp.toFixed(2).replace('.', ',')} €
+                    </p>
+                    <p className="text-[10px] text-red-700/75">{ahorroVsPmp > 0 ? 'vs precio medio periodo' : 'No hay bajadas'}</p>
+                  </div>
+                  <div className="rounded-2xl bg-amber-50/90 px-3 py-2.5 ring-1 ring-amber-100/90">
+                    <p className="text-[10px] font-medium uppercase tracking-wide text-amber-900/90">Volatilidad (CV)</p>
+                    <p className="mt-0.5 font-sans text-lg font-semibold tabular-nums text-amber-950">
+                      {row.volatilityCvPct.toFixed(1).replace('.', ',')}%
+                    </p>
+                    <p className="text-[10px] text-amber-900/70">{volatilityStabilityLabel(row.volatilityCvPct)}</p>
+                  </div>
+                  <div className="rounded-2xl bg-zinc-50 px-3 py-2.5 ring-1 ring-zinc-200/90">
+                    <p className="text-[10px] font-medium uppercase tracking-wide text-zinc-500">Referencias</p>
+                    <p className="mt-0.5 font-sans text-lg font-semibold tabular-nums text-zinc-900">{receptionCount}</p>
+                    <p className="text-[10px] text-zinc-500">
+                      Suben {refUp} · Bajan {refDown}
+                    </p>
+                  </div>
                 </div>
               </div>
-              <div className="px-2 pb-2 pt-1 sm:px-4">
-                <PriceEvolutionMiniChart row={row} unitSwitcher={unitSwitcher} />
+
+              <div className="bg-zinc-50/50 px-3 pb-4 pt-3 sm:px-4">
+                <PriceEvolutionMiniChart
+                  row={row}
+                  unitSwitcher={unitSwitcher}
+                  chartPeriod={{ value: windowPreset, onChange: setWindowPreset }}
+                />
               </div>
-              {timelinePts.length > 0 ? (
-                <div className="border-t border-zinc-50 px-4 py-3">
-                  <p className="text-[11px] font-medium text-zinc-400">Historial</p>
-                  <ul className="mt-2 space-y-2">
-                    {timelinePts.map((p) => (
-                      <li
-                        key={`${row.key}-${p.itemId}`}
-                        className="flex items-baseline justify-between gap-3 text-[13px]"
-                      >
-                        <time className="shrink-0 text-zinc-500">
-                          {new Date(p.date).toLocaleDateString('es-ES', { day: '2-digit', month: 'short' })}
-                        </time>
-                        <span className="min-w-0 flex-1 truncate text-right font-medium tabular-nums text-zinc-900">
-                          {p.price.toFixed(2)} {euroPerUnitShortLabel(p.unit)}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
+
+              {historialRows.length > 0 ? (
+                <div className="border-t border-zinc-100 px-4 py-4">
+                  <h3 className="font-serif text-lg font-normal text-zinc-900">Historial de recepciones</h3>
+                  <div className="mt-3 overflow-x-auto rounded-xl ring-1 ring-zinc-200/80">
+                    <table className="w-full min-w-[280px] text-left text-[13px]">
+                      <thead>
+                        <tr className="border-b border-zinc-100 bg-zinc-50/90 text-[10px] font-bold uppercase tracking-wide text-zinc-500">
+                          <th className="px-3 py-2 font-sans">Fecha</th>
+                          <th className="px-3 py-2 font-sans">Cantidad</th>
+                          <th className="px-3 py-2 text-right font-sans">Precio</th>
+                          <th className="px-3 py-2 font-sans">Unidad</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {historialRows.map((pur, idx) => (
+                          <tr key={`${row.key}-h-${idx}`} className="border-b border-zinc-50 bg-white last:border-0">
+                            <td className="whitespace-nowrap px-3 py-2.5 text-zinc-700">
+                              {new Date(pur.date).toLocaleDateString('es-ES', {
+                                day: '2-digit',
+                                month: 'short',
+                                year: '2-digit',
+                              })}
+                            </td>
+                            <td className="px-3 py-2.5 text-zinc-700">{formatQuantityWithUnit(pur.qty, pur.unit)}</td>
+                            <td className="px-3 py-2.5 text-right tabular-nums font-medium text-zinc-900">
+                              {pur.price.toFixed(2).replace('.', ',')}
+                            </td>
+                            <td className="px-3 py-2.5 text-zinc-600">{pur.unit}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <p className="mt-3 rounded-xl bg-zinc-50 px-3 py-2 text-[11px] leading-relaxed text-zinc-500 ring-1 ring-zinc-100">
+                    Precios en {eu} según la unidad de comparación de esta referencia en el periodo.
+                  </p>
                 </div>
               ) : null}
             </article>
