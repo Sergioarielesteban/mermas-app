@@ -12,67 +12,14 @@ import {
   formatPpkInputDisplay,
   getDefaultReceivedKgNumeric,
   getDefaultReceivedOrderQtyNumeric,
-  parsePricePerKg,
   type EuroPerKgSuggestionSource,
 } from '@/lib/pedidos-recepcion-inputs';
-import { receptionPriceAlertFromPreview } from '@/lib/pedidos-reception-price-alert';
 import {
-  receptionBillsByWeight,
-  receptionCalculationUnit,
-  receptionLineTotals,
-  resolveReceivedQuantityForReceptionPreview,
-  resolveReceivedWeightKgForReceptionPreview,
-  type PedidoOrderItem,
-} from '@/lib/pedidos-supabase';
-
-function buildPreviewItem(
-  item: PedidoOrderItem,
-  kgText: string,
-  ppkText: string,
-  priceText: string,
-  orderQtyText: string,
-  supplierPpk: number | null,
-): PedidoOrderItem {
-  let pricePu = item.pricePerUnit;
-  const pr = priceText.trim().replace(',', '.');
-  if (pr !== '') {
-    const p = Number(pr);
-    if (Number.isFinite(p) && p >= 0) pricePu = Math.round(p * 100) / 100;
-  }
-
-  if (receptionBillsByWeight(item)) {
-    const kgForMerge: number | null = resolveReceivedWeightKgForReceptionPreview(item, kgText);
-
-    let ppkMerge: number | null = item.receivedPricePerKg ?? null;
-    if (item.unit !== 'kg') {
-      const st = parsePricePerKg(ppkText);
-      if (ppkText.trim() === '') ppkMerge = supplierPpk;
-      else if (st !== 'invalid' && st != null) ppkMerge = st;
-      else ppkMerge = item.receivedPricePerKg ?? supplierPpk;
-    }
-
-    const merged: PedidoOrderItem = {
-      ...item,
-      pricePerUnit: pricePu,
-      receivedWeightKg: kgForMerge,
-      ...(item.unit !== 'kg' ? { receivedPricePerKg: ppkMerge } : {}),
-    };
-
-    const { lineTotal, effectivePricePerUnit } = receptionLineTotals(merged);
-    return { ...merged, pricePerUnit: effectivePricePerUnit, lineTotal };
-  }
-
-  const qMerge = resolveReceivedQuantityForReceptionPreview(item, orderQtyText);
-  const merged: PedidoOrderItem = {
-    ...item,
-    pricePerUnit: pricePu,
-    receivedQuantity: qMerge,
-    receivedWeightKg: null,
-    receivedPricePerKg: null,
-  };
-  const { lineTotal, effectivePricePerUnit } = receptionLineTotals(merged);
-  return { ...merged, pricePerUnit: effectivePricePerUnit, lineTotal };
-}
+  formatReceptionPriceAlertSingleLine,
+  receptionPriceAlertFromPreview,
+} from '@/lib/pedidos-reception-price-alert';
+import { buildPedidoReceptionPreviewItem } from '@/lib/pedidos-reception-preview-item';
+import { receptionBillsByWeight, receptionCalculationUnit, type PedidoOrderItem } from '@/lib/pedidos-supabase';
 
 export type RecepcionLineRowProps = {
   orderId: string;
@@ -217,7 +164,14 @@ function RecepcionLineRowInner({
   }, [item.receivedPricePerKg, item.id, defaultPpk]);
 
   const previewItem = React.useMemo(
-    () => buildPreviewItem(item, kgText, ppkText, priceText, orderQtyText, defaultPpk),
+    () =>
+      buildPedidoReceptionPreviewItem(item, {
+        weightDraft: kgText,
+        ppkDraft: ppkText,
+        orderQtyDraft: orderQtyText,
+        priceDraft: priceText,
+        ppkSuggestion: defaultPpk,
+      }),
     [item, kgText, ppkText, priceText, orderQtyText, defaultPpk],
   );
 
@@ -400,19 +354,17 @@ function RecepcionLineRowInner({
                 className="h-7 w-full min-w-0 rounded-md border border-zinc-200 bg-white px-1 text-xs font-semibold tabular-nums text-zinc-900 outline-none"
               />
               {receptionPriceAlert ? (
-                <div
+                <p
                   className={[
-                    'mt-1 rounded-lg border px-2 py-1.5 text-[10px] leading-snug',
+                    'mt-1 rounded-lg border px-2 py-1.5 text-[10px] font-semibold leading-snug',
                     receptionPriceAlert.direction === 'up'
                       ? 'border-[#D32F2F]/22 bg-[#FFF7F7] text-[#7F1D1D]'
                       : 'border-emerald-600/20 bg-emerald-50/95 text-emerald-950',
                   ].join(' ')}
                   role="status"
                 >
-                  <p className="font-bold">{receptionPriceAlert.title}</p>
-                  <p className="mt-0.5 font-medium">{receptionPriceAlert.subtitle}</p>
-                  <p className="mt-0.5 font-semibold tabular-nums">{receptionPriceAlert.pctLabel}</p>
-                </div>
+                  {formatReceptionPriceAlertSingleLine(receptionPriceAlert)}
+                </p>
               ) : null}
             </div>
             <div className="flex min-h-[2.85rem] min-w-0 flex-col justify-end rounded-md border border-emerald-300/60 bg-emerald-100/60 px-1 py-0.5">
@@ -453,19 +405,17 @@ function RecepcionLineRowInner({
             </span>
           </div>
           {receptionPriceAlert ? (
-            <div
+            <p
               className={[
-                'rounded-lg border px-2 py-1.5 text-[10px] leading-snug',
+                'rounded-lg border px-2 py-1.5 text-[10px] font-semibold leading-snug',
                 receptionPriceAlert.direction === 'up'
                   ? 'border-[#D32F2F]/22 bg-[#FFF7F7] text-[#7F1D1D]'
                   : 'border-emerald-600/20 bg-emerald-50/95 text-emerald-950',
               ].join(' ')}
               role="status"
             >
-              <p className="font-bold">{receptionPriceAlert.title}</p>
-              <p className="mt-0.5 font-medium">{receptionPriceAlert.subtitle}</p>
-              <p className="mt-0.5 font-semibold tabular-nums">{receptionPriceAlert.pctLabel}</p>
-            </div>
+              {formatReceptionPriceAlertSingleLine(receptionPriceAlert)}
+            </p>
           ) : null}
         </div>
       ) : null}

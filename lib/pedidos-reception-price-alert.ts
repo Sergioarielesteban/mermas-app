@@ -23,6 +23,11 @@ export type ReceptionPriceAlertUi = {
   pctLabel: string;
 };
 
+/** Una sola línea tipo: «Subida de precio · Antes … · Ahora … · +50%». */
+export function formatReceptionPriceAlertSingleLine(alert: ReceptionPriceAlertUi): string {
+  return `${alert.title} · ${alert.subtitle} · ${alert.pctLabel}`;
+}
+
 function normalizeUnitKey(u: string): string {
   return u.trim().toLowerCase().replace(/\s+/g, '');
 }
@@ -102,10 +107,14 @@ export function receptionPriceAlertFromPreview(
   const before = `${formatMoneyEs(prev)}${unitBit}`;
   const now = `${formatMoneyEs(cur)}${unitBit}`;
   const pctRounded = Math.round(pct * 10) / 10;
-  const pctLabel = `${pctRounded >= 0 ? '+' : ''}${pctRounded.toLocaleString('es-ES', {
-    minimumFractionDigits: 1,
-    maximumFractionDigits: 1,
-  })}%`;
+  const pctInt = Math.round(pctRounded);
+  const pctLabel =
+    Math.abs(pctRounded - pctInt) < 1e-6
+      ? `${pctInt >= 0 ? '+' : ''}${pctInt}%`
+      : `${pctRounded >= 0 ? '+' : ''}${pctRounded.toLocaleString('es-ES', {
+          minimumFractionDigits: 1,
+          maximumFractionDigits: 1,
+        })}%`;
 
   if (delta > 0) {
     return {

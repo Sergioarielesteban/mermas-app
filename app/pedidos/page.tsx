@@ -50,6 +50,7 @@ import {
   deleteOrder,
   deletePurchaseOrderItemById,
   fetchAvgReceivedPricePerKgBySupplierProductIds,
+  fetchLastHistoricoComparableBySupplierProductIds,
   fetchLastReceivedPricePerKgBySupplierProductIds,
   fetchReceptionEuroPerKgHintsBySupplierProductIds,
   fetchSuppliersWithProducts,
@@ -79,6 +80,11 @@ import {
   formatKgInputDisplay,
   getDefaultReceivedOrderQtyNumeric,
 } from '@/lib/pedidos-recepcion-inputs';
+import { buildPedidoReceptionPreviewItem } from '@/lib/pedidos-reception-preview-item';
+import {
+  formatReceptionPriceAlertSingleLine,
+  receptionPriceAlertFromPreview,
+} from '@/lib/pedidos-reception-price-alert';
 import {
   createStaffMealRecord,
   fetchStaffMealWorkers,
@@ -1109,7 +1115,7 @@ export default function PedidosPage() {
     for (const o of orders) {
       if (o.status !== 'sent') continue;
       for (const it of o.items) {
-        if (receptionBillsByWeight(it) && it.supplierProductId) ids.add(it.supplierProductId);
+        if (it.supplierProductId) ids.add(it.supplierProductId);
       }
     }
     return [...ids];
@@ -1119,6 +1125,9 @@ export default function PedidosPage() {
   const receptionEuroByProductRef = React.useRef<Record<string, number>>({});
   const avgRecvEuroByProductRef = React.useRef<Record<string, number>>({});
   const receptionHintsByProductRef = React.useRef<Map<string, ReceptionEuroPerKgHints>>(new Map());
+  const historicoComparableByProductRef = React.useRef<
+    Map<string, { precio: number; unidad: string }>
+  >(new Map());
   const [sentReceptionHintsTick, setSentReceptionHintsTick] = React.useState(0);
 
   React.useEffect(() => {
@@ -1127,6 +1136,7 @@ export default function PedidosPage() {
       receptionEuroByProductRef.current = {};
       avgRecvEuroByProductRef.current = {};
       receptionHintsByProductRef.current = new Map();
+      historicoComparableByProductRef.current = new Map();
       setSentReceptionHintsTick((t) => t + 1);
       return;
     }
@@ -1138,12 +1148,14 @@ export default function PedidosPage() {
       fetchLastReceivedPricePerKgBySupplierProductIds(supabase, localId, ids),
       fetchAvgReceivedPricePerKgBySupplierProductIds(supabase, localId, ids),
       fetchReceptionEuroPerKgHintsBySupplierProductIds(supabase, localId, ids),
+      fetchLastHistoricoComparableBySupplierProductIds(supabase, localId, ids),
     ])
-      .then(([recvMap, avgMap, hintsMap]) => {
+      .then(([recvMap, avgMap, hintsMap, historicoMap]) => {
         if (cancelled) return;
         receptionEuroByProductRef.current = Object.fromEntries(recvMap);
         avgRecvEuroByProductRef.current = Object.fromEntries(avgMap);
         receptionHintsByProductRef.current = hintsMap;
+        historicoComparableByProductRef.current = historicoMap;
         setSentReceptionHintsTick((t) => t + 1);
       })
       .catch(() => {
@@ -1151,6 +1163,7 @@ export default function PedidosPage() {
         receptionEuroByProductRef.current = {};
         avgRecvEuroByProductRef.current = {};
         receptionHintsByProductRef.current = new Map();
+        historicoComparableByProductRef.current = new Map();
         setSentReceptionHintsTick((t) => t + 1);
       });
     return () => {
@@ -4221,6 +4234,25 @@ export default function PedidosPage() {
                       ppkSuggestion: ppkSug,
                       orderQtyDraft: orderQtyInputByItemId[item.id],
                     });
+                    const priceDraftForAlert =
+                      priceInputByItemId[item.id] !== undefined
+                        ? String(priceInputByItemId[item.id])
+                        : item.pricePerUnit.toFixed(2);
+                    const previewForPriceAlert = buildPedidoReceptionPreviewItem(item, {
+                      weightDraft: weightInputByItemId[item.id],
+                      ppkDraft: pricePerKgInputByItemId[item.id],
+                      orderQtyDraft: orderQtyInputByItemId[item.id],
+                      priceDraft: priceDraftForAlert,
+                      ppkSuggestion: ppkSug,
+                    });
+                    const lastHistoricoComparable =
+                      item.supplierProductId != null
+                        ? historicoComparableByProductRef.current.get(item.supplierProductId) ?? null
+                        : null;
+                    const receptionPriceAlertHome = receptionPriceAlertFromPreview(
+                      previewForPriceAlert,
+                      lastHistoricoComparable,
+                    );
                     return (
                       <div key={item.id} className="space-y-1 rounded-lg bg-white p-2 ring-1 ring-zinc-200">
                         <div className="flex items-start justify-between gap-2">
@@ -4499,6 +4531,19 @@ export default function PedidosPage() {
                             </>
                           )}
                         </div>
+                        {receptionPriceAlertHome ? (
+                          <p
+                            className={[
+                              'mt-1.5 rounded-lg border px-2 py-1.5 text-[10px] font-semibold leading-snug',
+                              receptionPriceAlertHome.direction === 'up'
+                                ? 'border-[#D32F2F]/22 bg-[#FFF7F7] text-[#7F1D1D]'
+                                : 'border-emerald-600/20 bg-emerald-50/95 text-emerald-950',
+                            ].join(' ')}
+                            role="status"
+                          >
+                            {formatReceptionPriceAlertSingleLine(receptionPriceAlertHome)}
+                          </p>
+                        ) : null}
                       </div>
                     );
                   })}
