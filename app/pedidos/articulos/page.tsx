@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { ESCANDALLO_USAGE_UNIT_PRESETS, validateEscandalloUsageUnitInput } from '@/lib/escandallo-ingredient-units';
-import { ChefHat, ChevronDown, GitCompare, History, LineChart, Package, Search, Star } from 'lucide-react';
+import { ChefHat, ChevronDown, GitCompare, History, LineChart, Search, Star } from 'lucide-react';
 import MermasStyleHero from '@/components/MermasStyleHero';
 import { useAuth } from '@/components/AuthProvider';
 import { computeCosteUnitarioUsoEur } from '@/lib/purchase-article-internal-cost';
@@ -402,55 +402,58 @@ function ArticleCard({
   if (isCc) {
     const uso = (a.unidadUso ?? a.unidadBase ?? '').trim() || '—';
     const cup = a.costeUnitarioUso ?? a.costeMaster;
+    const ccMeta = [
+      uso !== '—' ? uso : null,
+      a.centralCostSyncedAt ? `act. ${formatShortDate(a.centralCostSyncedAt)}` : null,
+    ]
+      .filter(Boolean)
+      .join(' · ');
     return (
       <li className={['list-none', !a.activo ? 'opacity-60' : ''].join(' ')}>
         <details className="group overflow-hidden rounded-xl border border-amber-200/80 bg-white ring-1 ring-amber-100/80">
-          <summary className="flex cursor-pointer list-none items-center gap-2 p-2 sm:gap-2.5 sm:p-2.5 [&::-webkit-details-marker]:hidden">
-            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-amber-100 text-amber-900">
-              <ChefHat className="h-3.5 w-3.5" aria-hidden />
-            </div>
+          <summary className="flex cursor-pointer list-none items-start gap-2 p-2 sm:p-2.5 [&::-webkit-details-marker]:hidden">
             <div className="min-w-0 flex-1">
-              <div className="flex flex-wrap items-center gap-1.5">
-                <span className="rounded bg-amber-200/90 px-1.5 py-0.5 text-[8px] font-black uppercase leading-none text-amber-950 sm:text-[9px]">
+              <div className="flex flex-wrap items-center gap-1">
+                <span className="rounded bg-amber-200/90 px-1 py-px text-[8px] font-bold uppercase text-amber-950">
                   Cocina Central
                 </span>
                 {!a.activo ? (
-                  <span className="rounded-full bg-zinc-200 px-2 py-0.5 text-[8px] font-bold uppercase leading-none text-zinc-700 sm:text-[9px]">
+                  <span className="rounded bg-zinc-200/90 px-1 py-px text-[8px] font-bold uppercase text-zinc-600">
                     Inactivo
                   </span>
                 ) : null}
               </div>
               <p
                 className={[
-                  'mt-0.5 line-clamp-2 text-sm font-bold leading-snug sm:text-base',
-                  a.activo ? 'text-zinc-900' : 'text-zinc-500',
+                  'mt-0.5 text-[15px] font-bold leading-snug tracking-tight sm:text-base',
+                  a.activo ? 'text-zinc-950' : 'text-zinc-500',
                 ].join(' ')}
               >
                 {a.nombre}
               </p>
-            </div>
-            <div className="shrink-0 text-right">
-              <p className="text-[8px] font-bold uppercase leading-tight text-zinc-500 sm:text-[9px]">Coste uso</p>
-              <p className="text-base font-black tabular-nums leading-tight text-zinc-900 sm:text-lg">
+              <p className="mt-0.5 text-sm font-semibold tabular-nums text-zinc-800">
                 {cup != null ? formatUnitPriceEur(roundMoney(cup), uso) : '—'}
               </p>
+              {ccMeta ? <p className="mt-1 text-[11px] text-zinc-500">{ccMeta}</p> : null}
             </div>
-            <button
-              type="button"
-              disabled={activoBusy || !localId || !supabaseOk}
-              onClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                void applyActivo(!a.activo);
-              }}
-              className="shrink-0 rounded-md border border-zinc-200 bg-zinc-50/80 px-1.5 py-1 text-[10px] font-medium text-zinc-600 hover:bg-zinc-100 disabled:opacity-50 sm:text-[11px]"
-            >
-              {activoBusy ? '…' : a.activo ? 'Desactivar' : 'Activar'}
-            </button>
-            <ChevronDown
-              className="h-4 w-4 shrink-0 text-zinc-400 transition group-open:rotate-180"
-              aria-hidden
-            />
+            <div className="flex shrink-0 flex-col items-end gap-1">
+              <button
+                type="button"
+                disabled={activoBusy || !localId || !supabaseOk}
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  void applyActivo(!a.activo);
+                }}
+                className="rounded border border-zinc-200/90 bg-white px-1.5 py-0.5 text-[9px] font-medium text-zinc-500 hover:bg-zinc-50 disabled:opacity-50"
+              >
+                {activoBusy ? '…' : a.activo ? 'Desactivar' : 'Activar'}
+              </button>
+              <ChevronDown
+                className="h-4 w-4 shrink-0 text-zinc-400 transition group-open:rotate-180"
+                aria-hidden
+              />
+            </div>
           </summary>
           <div className="space-y-2 border-t border-amber-100 bg-amber-50/30 px-3 pb-2.5 pt-2 sm:px-4 sm:pb-3">
             {activoErr ? (
@@ -555,56 +558,68 @@ function ArticleCard({
   };
 
   const nombreCompacto = (nombreVisibleProveedor || a.nombre).trim();
+  const unitCompra = (principalRefRow?.unit ?? a.unidadCompra ?? 'ud') as string;
+  const precioCompraLine =
+    compraUnitEur != null ? formatUnitPriceEur(roundMoney(compraUnitEur), unitCompra) : '—';
+  const factorMeta =
+    Number.isFinite(factorNum) && factorNum > 0
+      ? `${factorNum.toLocaleString('es-ES', { maximumFractionDigits: 4 })} ud`
+      : null;
+  const ivaMeta = a.ivaCompraPct != null ? `IVA ${a.ivaCompraPct}%` : null;
+  const usoMeta =
+    previewCosteUso != null ? `uso ${formatMoneyEur(roundMoney(previewCosteUso))}` : null;
+  const masterMeta = master != null ? `máster ${formatMoneyEur(roundMoney(master))}` : null;
+  const metaCompact = [factorMeta, ivaMeta, usoMeta, masterMeta].filter(Boolean).join(' · ');
 
   return (
     <li className={['list-none', !a.activo ? 'opacity-60' : ''].join(' ')}>
       <details className="group overflow-hidden rounded-xl border border-zinc-200/90 bg-white ring-1 ring-zinc-100/80">
-        <summary className="flex cursor-pointer list-none items-center gap-2 p-2 sm:gap-2.5 sm:p-2.5 [&::-webkit-details-marker]:hidden">
-          <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-indigo-100 text-indigo-800">
-            <Package className="h-3.5 w-3.5" aria-hidden />
-          </div>
+        <summary className="flex cursor-pointer list-none items-start gap-2 p-2 sm:p-2.5 [&::-webkit-details-marker]:hidden">
           <div className="min-w-0 flex-1">
-            <div className="flex flex-wrap items-center gap-1.5">
-              <span className="rounded bg-indigo-100 px-1.5 py-0.5 text-[8px] font-black uppercase leading-none text-indigo-900 sm:text-[9px]">
-                Artículo
-              </span>
+            <div className="flex flex-wrap items-center gap-1">
               {!a.activo ? (
-                <span className="rounded-full bg-zinc-200 px-2 py-0.5 text-[8px] font-bold uppercase leading-none text-zinc-700 sm:text-[9px]">
+                <span className="rounded bg-zinc-200/90 px-1 py-px text-[8px] font-bold uppercase text-zinc-600">
                   Inactivo
                 </span>
               ) : null}
+              <span className="text-[8px] font-semibold uppercase tracking-wide text-zinc-400">Artículo</span>
             </div>
             <p
               className={[
-                'mt-0.5 line-clamp-2 text-sm font-bold leading-snug sm:text-base',
-                a.activo ? 'text-zinc-900' : 'text-zinc-500',
+                'mt-0.5 text-[15px] font-bold leading-snug tracking-tight sm:text-base',
+                a.activo ? 'text-zinc-950' : 'text-zinc-500',
               ].join(' ')}
             >
               {nombreCompacto}
             </p>
+            <p className="mt-0.5 text-sm font-semibold tabular-nums text-zinc-800">{precioCompraLine}</p>
+            {metaCompact ? (
+              <p className="mt-1 line-clamp-2 text-[11px] leading-snug text-zinc-500">{metaCompact}</p>
+            ) : null}
+            {principalRefRow?.name ? (
+              <p className="mt-0.5 truncate text-[10px] text-zinc-400" title={principalRefRow.name}>
+                Ref. {principalRefRow.supplierName} · {principalRefRow.name}
+              </p>
+            ) : null}
           </div>
-          <div className="shrink-0 text-right">
-            <p className="text-[8px] font-bold uppercase leading-tight text-zinc-500 sm:text-[9px]">Máster</p>
-            <p className="text-base font-black tabular-nums leading-tight text-zinc-900 sm:text-lg">
-              {master != null ? formatMoneyEur(roundMoney(master)) : '—'}
-            </p>
+          <div className="flex shrink-0 flex-col items-end gap-1">
+            <button
+              type="button"
+              disabled={activoBusy || !localId || !supabaseOk}
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                void applyActivo(!a.activo);
+              }}
+              className="rounded border border-zinc-200/90 bg-white px-1.5 py-0.5 text-[9px] font-medium text-zinc-500 hover:bg-zinc-50 disabled:opacity-50"
+            >
+              {activoBusy ? '…' : a.activo ? 'Desactivar' : 'Activar'}
+            </button>
+            <ChevronDown
+              className="h-4 w-4 shrink-0 text-zinc-400 transition group-open:rotate-180"
+              aria-hidden
+            />
           </div>
-          <button
-            type="button"
-            disabled={activoBusy || !localId || !supabaseOk}
-            onClick={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              void applyActivo(!a.activo);
-            }}
-            className="shrink-0 rounded-md border border-zinc-200 bg-zinc-50/80 px-1.5 py-1 text-[10px] font-medium text-zinc-600 hover:bg-zinc-100 disabled:opacity-50 sm:text-[11px]"
-          >
-            {activoBusy ? '…' : a.activo ? 'Desactivar' : 'Activar'}
-          </button>
-          <ChevronDown
-            className="h-4 w-4 shrink-0 text-zinc-400 transition group-open:rotate-180"
-            aria-hidden
-          />
         </summary>
         <div className="space-y-2 border-t border-zinc-100 bg-zinc-50/40 px-3 pb-3 pt-2 sm:space-y-3 sm:px-4 sm:pb-4 sm:pt-2">
           {activoErr ? (

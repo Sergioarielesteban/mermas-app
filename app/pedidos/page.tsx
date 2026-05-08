@@ -558,14 +558,11 @@ export default function PedidosPage() {
         }
         if (st.openedSection === 'received') {
           setHistoricoRecibidosAccordionOpen(true);
-          setPendientesEntregaAccordionOpen(false);
-        } else if (st.openedSection === 'pending' || st.openedSection === 'sent') {
-          setPendientesEntregaAccordionOpen(true);
-          setHistoricoRecibidosAccordionOpen(false);
         } else {
-          setPendientesEntregaAccordionOpen(false);
           setHistoricoRecibidosAccordionOpen(false);
         }
+        /** «Pendientes de entrega» siempre inicia plegado (no restaurar apertura desde storage). */
+        setPendientesEntregaAccordionOpen(false);
         const primary = st.activeOrderId ?? st.expandedOrderIds[0] ?? null;
         if (st.openedSection === 'received') {
           setExpandedSentId(null);
@@ -577,8 +574,6 @@ export default function PedidosPage() {
           setExpandedSentId(null);
           setExpandedHistoricoId(null);
           if (primary) {
-            setPendientesEntregaAccordionOpen(true);
-            setHistoricoRecibidosAccordionOpen(false);
             setExpandedSentId(primary);
           }
         }
@@ -598,7 +593,7 @@ export default function PedidosPage() {
               setHistoricoMonthOpen((p) => ({ ...p, [ctx.historico_month_key!]: true }));
             }
           } else {
-            setPendientesEntregaAccordionOpen(true);
+            setPendientesEntregaAccordionOpen(false);
             setHistoricoRecibidosAccordionOpen(false);
             setExpandedHistoricoId(null);
             if (ctx.pedido_id) setExpandedSentId(ctx.pedido_id);
@@ -1910,8 +1905,8 @@ export default function PedidosPage() {
           normalized.includes('pedidos') ||
           normalized.includes('pedido'));
       if (openPendientesEntregaMatch) {
-        setPendientesEntregaAccordionOpen(true);
-        const msg = 'Listo: desplegado «Pendientes de entrega». Baja un poco para ver los pedidos.';
+        const msg =
+          'Listo: ahí tienes «Pendientes de entrega». Pulsa «Ver pedidos» para desplegar la lista.';
         setAssistantReply(msg);
         pushAssistantHistory(raw, msg);
         window.requestAnimationFrame(() => {
@@ -3480,12 +3475,6 @@ export default function PedidosPage() {
             Albaranes
           </Link>
         </div>
-        <Link
-          href="/pedidos/recepcion"
-          className="mt-1.5 flex h-7 w-full items-center justify-center rounded-lg border border-zinc-200/90 bg-zinc-50/80 text-center text-[11px] font-medium text-zinc-700 sm:h-8 sm:text-xs"
-        >
-          Recepción · revisión de precios
-        </Link>
       </section>
 
       {reloadError ? (
@@ -3516,7 +3505,7 @@ export default function PedidosPage() {
       <details
         id="pedidos-pendientes-entrega"
         className={[
-          'overflow-hidden rounded-2xl transition-colors duration-200',
+          'overflow-hidden rounded-2xl transition-[background-color,box-shadow] duration-200 ease-out',
           pendientesEntregaAccordionOpen
             ? 'bg-white ring-1 ring-zinc-200 shadow-sm'
             : 'bg-zinc-50/90 ring-1 ring-zinc-200/80 hover:bg-white',
@@ -3683,7 +3672,7 @@ export default function PedidosPage() {
               </button>
               <div
                 className={[
-                  'flex w-full items-center justify-end gap-1 border-t px-2 py-1',
+                  'grid w-full grid-cols-3 gap-1 border-t px-1 py-1.5',
                   sentBadge === 'incidencia'
                     ? 'border-red-200/60 bg-white/50'
                     : sentBadge === 'correcto'
@@ -3694,22 +3683,22 @@ export default function PedidosPage() {
                 <Link
                   href={`/pedidos/nuevo?id=${encodeURIComponent(order.id)}`}
                   onClick={(e) => e.stopPropagation()}
-                  className="inline-flex h-9 min-w-[2.75rem] shrink-0 items-center justify-center gap-0.5 rounded-lg border border-zinc-200/90 bg-white px-2 text-[10px] font-semibold text-zinc-800 hover:bg-zinc-50 active:bg-zinc-100/80 sm:min-w-[4.5rem]"
+                  className="flex min-h-[3.25rem] flex-col items-center justify-center gap-0.5 rounded-lg border border-zinc-200/90 bg-zinc-50/90 px-1 py-1 text-zinc-800 transition hover:bg-zinc-100 active:bg-zinc-100/80"
                   title="Editar pedido"
                   aria-label="Editar pedido"
                 >
-                  <Pencil className="h-3.5 w-3.5 shrink-0 opacity-80" aria-hidden />
-                  <span className="hidden sm:inline">Editar</span>
+                  <Pencil className="h-4 w-4 shrink-0 text-zinc-700" strokeWidth={2.25} aria-hidden />
+                  <span className="text-[9px] font-semibold leading-none text-zinc-600">Editar</span>
                 </Link>
                 <button
                   type="button"
                   onClick={() => sendWhatsappOrder(order)}
-                  className="inline-flex h-9 min-w-[2.75rem] shrink-0 items-center justify-center gap-0.5 rounded-lg border border-zinc-200/90 bg-white px-2 text-[10px] font-semibold text-[#166534] hover:bg-zinc-50 active:bg-zinc-100/80 sm:min-w-[4.5rem]"
+                  className="flex min-h-[3.25rem] flex-col items-center justify-center gap-0.5 rounded-lg border border-[#128C7E]/35 bg-[#25D366] px-1 py-1 text-white shadow-sm transition hover:bg-[#20BD5A] active:brightness-95"
                   title="WhatsApp"
                   aria-label="Enviar pedido por WhatsApp"
                 >
-                  <MessageCircle className="h-3.5 w-3.5 shrink-0 opacity-80" aria-hidden />
-                  <span className="hidden sm:inline">WA</span>
+                  <MessageCircle className="h-4 w-4 shrink-0" strokeWidth={2.25} aria-hidden />
+                  <span className="text-[9px] font-bold leading-none">WhatsApp</span>
                 </button>
                 <button
                   type="button"
@@ -3737,12 +3726,12 @@ export default function PedidosPage() {
                       })
                       .catch((err: Error) => setMessage(err.message));
                   }}
-                  className="inline-flex h-9 min-w-[2.75rem] shrink-0 items-center justify-center gap-0.5 rounded-lg border border-zinc-200/90 bg-white px-2 text-[10px] font-semibold text-[#B91C1C] hover:bg-red-50/60 active:bg-red-50 sm:min-w-[4.5rem]"
+                  className="flex min-h-[3.25rem] flex-col items-center justify-center gap-0.5 rounded-lg border border-rose-200/90 bg-rose-50/90 px-1 py-1 text-rose-900 transition hover:bg-rose-100/90 active:bg-rose-100"
                   title="Eliminar pedido"
                   aria-label="Eliminar pedido"
                 >
-                  <Trash2 className="h-3.5 w-3.5 shrink-0 opacity-80" aria-hidden />
-                  <span className="hidden sm:inline">Borrar</span>
+                  <Trash2 className="h-4 w-4 shrink-0 text-rose-700" strokeWidth={2.25} aria-hidden />
+                  <span className="text-[9px] font-semibold leading-none text-rose-800">Eliminar</span>
                 </button>
               </div>
               {expandedSentId === order.id ? (

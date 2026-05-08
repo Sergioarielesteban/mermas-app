@@ -734,12 +734,12 @@ export default function NuevoPedidoPage() {
 
       <section className="rounded-xl bg-white p-3 ring-1 ring-zinc-200/90">
         <p className="text-center text-xs font-bold uppercase tracking-wide text-zinc-700">Catálogo</p>
-        <label className="mt-1.5 block text-[10px] font-semibold uppercase tracking-wide text-zinc-500">Buscar producto</label>
+        <label className="mt-1 block text-[10px] font-semibold uppercase tracking-wide text-zinc-500">Buscar producto</label>
         <input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Buscar..."
-          className="mt-1.5 h-9 w-full rounded-lg border border-zinc-200 bg-white px-2.5 text-sm text-zinc-900 placeholder:text-zinc-500 outline-none focus:border-zinc-300 focus:ring-1 focus:ring-zinc-200/80"
+          className="mt-1 h-8 w-full rounded-lg border-0 bg-white px-2.5 text-sm text-zinc-900 shadow-inner shadow-zinc-200/70 ring-1 ring-zinc-200/85 placeholder:text-zinc-400 outline-none focus:ring-2 focus:ring-[#D32F2F]/20"
         />
         <div className="mt-1.5 space-y-1.5">
           {selectedSupplier && filteredProducts.length === 0 ? (
