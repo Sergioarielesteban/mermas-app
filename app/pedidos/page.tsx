@@ -3533,54 +3533,54 @@ export default function PedidosPage() {
         + Nuevo pedido
       </Link>
 
-      <section className="rounded-2xl bg-white/95 p-1 shadow-[0_1px_3px_rgba(0,0,0,0.05)] ring-1 ring-zinc-200/85">
-        <div className="grid grid-cols-2 gap-1 sm:grid-cols-4">
+      <section className="rounded-2xl bg-white/95 p-1.5 shadow-[0_1px_3px_rgba(0,0,0,0.05)] ring-1 ring-zinc-200/85 sm:p-2">
+        <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4 sm:gap-2">
           <Link
             href="/pedidos/proveedores"
             className={[
-              'flex min-h-[1.6rem] touch-manipulation items-center justify-center gap-1 rounded-xl px-2 py-1 text-center text-[10px] font-semibold transition active:scale-[0.99] sm:min-h-[1.75rem] sm:text-[11px]',
+              'flex min-h-[2.35rem] touch-manipulation items-center justify-center gap-1.5 rounded-xl px-2.5 py-2 text-center text-[11px] font-semibold transition active:scale-[0.99] sm:min-h-[2.6rem] sm:px-3 sm:py-2.5 sm:text-xs',
               pedidosNavActive('/pedidos/proveedores')
                 ? 'border border-[#D32F2F]/35 bg-[#FFF7F5] text-zinc-900 shadow-[0_1px_3px_rgba(211,47,47,0.1)] ring-1 ring-[#D32F2F]/20'
                 : 'border border-zinc-200/90 bg-white text-zinc-700 shadow-[inset_0_1px_0_rgba(255,255,255,0.92)]',
             ].join(' ')}
           >
-            <Building2 className="h-3 w-3 shrink-0 opacity-70" strokeWidth={2} aria-hidden />
+            <Building2 className="h-3.5 w-3.5 shrink-0 opacity-70 sm:h-4 sm:w-4" strokeWidth={2} aria-hidden />
             Proveedores
           </Link>
           <Link
             href="/pedidos/articulos"
             className={[
-              'flex min-h-[1.6rem] touch-manipulation items-center justify-center gap-1 rounded-xl px-2 py-1 text-center text-[10px] font-semibold transition active:scale-[0.99] sm:min-h-[1.75rem] sm:text-[11px]',
+              'flex min-h-[2.35rem] touch-manipulation items-center justify-center gap-1.5 rounded-xl px-2.5 py-2 text-center text-[11px] font-semibold transition active:scale-[0.99] sm:min-h-[2.6rem] sm:px-3 sm:py-2.5 sm:text-xs',
               pedidosNavActive('/pedidos/articulos')
                 ? 'border border-[#D32F2F]/35 bg-[#FFF7F5] text-zinc-900 shadow-[0_1px_3px_rgba(211,47,47,0.1)] ring-1 ring-[#D32F2F]/20'
                 : 'border border-zinc-200/90 bg-white text-zinc-700 shadow-[inset_0_1px_0_rgba(255,255,255,0.92)]',
             ].join(' ')}
           >
-            <Package className="h-3 w-3 shrink-0 opacity-70" strokeWidth={2} aria-hidden />
+            <Package className="h-3.5 w-3.5 shrink-0 opacity-70 sm:h-4 sm:w-4" strokeWidth={2} aria-hidden />
             Artículos
           </Link>
           <Link
             href="/pedidos/historial-mes"
             className={[
-              'flex min-h-[1.6rem] touch-manipulation items-center justify-center gap-1 rounded-xl px-2 py-1 text-center text-[10px] font-semibold leading-tight transition active:scale-[0.99] sm:min-h-[1.75rem] sm:text-[11px]',
+              'flex min-h-[2.35rem] touch-manipulation items-center justify-center gap-1.5 rounded-xl px-2.5 py-2 text-center text-[11px] font-semibold leading-tight transition active:scale-[0.99] sm:min-h-[2.6rem] sm:px-3 sm:py-2.5 sm:text-xs',
               pedidosNavActive('/pedidos/historial-mes')
                 ? 'border border-[#D32F2F]/35 bg-[#FFF7F5] text-zinc-900 shadow-[0_1px_3px_rgba(211,47,47,0.1)] ring-1 ring-[#D32F2F]/20'
                 : 'border border-zinc-200/90 bg-white text-zinc-700 shadow-[inset_0_1px_0_rgba(255,255,255,0.92)]',
             ].join(' ')}
           >
-            <LineChart className="h-3 w-3 shrink-0 opacity-70" strokeWidth={2} aria-hidden />
+            <LineChart className="h-3.5 w-3.5 shrink-0 opacity-70 sm:h-4 sm:w-4" strokeWidth={2} aria-hidden />
             Compras del mes
           </Link>
           <Link
             href="/pedidos/albaranes"
             className={[
-              'flex min-h-[1.6rem] touch-manipulation items-center justify-center gap-1 rounded-xl px-2 py-1 text-center text-[10px] font-semibold transition active:scale-[0.99] sm:min-h-[1.75rem] sm:text-[11px]',
+              'flex min-h-[2.35rem] touch-manipulation items-center justify-center gap-1.5 rounded-xl px-2.5 py-2 text-center text-[11px] font-semibold transition active:scale-[0.99] sm:min-h-[2.6rem] sm:px-3 sm:py-2.5 sm:text-xs',
               pedidosNavActive('/pedidos/albaranes')
                 ? 'border border-[#D32F2F]/40 bg-[#FFF0EE] text-zinc-900 shadow-[0_1px_3px_rgba(211,47,47,0.12)] ring-1 ring-[#D32F2F]/25'
                 : 'border border-[#D32F2F]/22 bg-[#FFF8F7] text-[#7F1D1D] shadow-[inset_0_1px_0_rgba(255,255,255,0.85)]',
             ].join(' ')}
           >
-            <FileText className="h-3 w-3 shrink-0 opacity-75" strokeWidth={2} aria-hidden />
+            <FileText className="h-3.5 w-3.5 shrink-0 opacity-75 sm:h-4 sm:w-4" strokeWidth={2} aria-hidden />
             Albaranes
           </Link>
         </div>
