@@ -1282,8 +1282,11 @@ async function fetchLastHistoricoComparablePrice(
 }
 
 /**
- * Al validar un albarán: actualiza catálogo y escribe `historico_precios` solo si el precio
- * comparable cambia respecto al último registro de histórico (o al baseline de catálogo si no hay filas).
+ * Registra el precio real comparable en `historico_precios` y actualiza `ultimo_precio_recibido`
+ * cuando cambia respecto al último histórico (o al precio base del catálogo como baseline).
+ *
+ * No modifica el precio base del catálogo (`pedido_supplier_products.price_per_unit`): ese valor solo
+ * debe cambiar desde la edición manual del artículo/proveedor (u opción explícita futura).
  */
 export async function updateSupplierProductPriceFromRecepcion(
   supabase: SupabaseClient,
@@ -1351,36 +1354,6 @@ export async function updateSupplierProductPriceFromRecepcion(
     }
     throw new Error(ins.error.message);
   }
-
-  const packRaw = row.units_per_pack != null ? Number(row.units_per_pack) : 1;
-  const unitsPerPack = Number.isFinite(packRaw) && packRaw > 0 ? packRaw : 1;
-  const recipeUnit: Unit | null =
-    unitsPerPack > 1 && row.recipe_unit != null && String(row.recipe_unit).trim() !== ''
-      ? (String(row.recipe_unit) as Unit)
-      : null;
-
-  let derivedPricePerBilling: number | undefined;
-  if (
-    row.billing_unit === 'kg' &&
-    row.billing_qty_per_order_unit != null &&
-    Number(row.billing_qty_per_order_unit) > 0
-  ) {
-    derivedPricePerBilling = Math.round((newP / Number(row.billing_qty_per_order_unit)) * 10000) / 10000;
-  }
-
-  await updateSupplierProduct(supabase, localId, supplierProductId, {
-    name: row.name,
-    unit: row.unit as Unit,
-    pricePerUnit: newP,
-    vatRate: Number(row.vat_rate ?? 0),
-    parStock: Number(row.par_stock ?? 0),
-    estimatedKgPerUnit: row.estimated_kg_per_unit != null ? Number(row.estimated_kg_per_unit) : null,
-    unitsPerPack,
-    recipeUnit,
-    lastPriceUpdatedAt: true,
-    priceUpdateOnly: true,
-    ...(derivedPricePerBilling != null ? { pricePerBillingUnit: derivedPricePerBilling } : {}),
-  });
 
   await updateSupplierProductLastReceivedPrice(supabase, localId, supplierProductId, newP, new Date().toISOString());
 
@@ -1460,21 +1433,6 @@ export async function commitPriceEvolutionFromReceivedOrderItem(
     receivedAt?: string | null;
   },
 ): Promise<{ changed: boolean }> {
-  console.log('[PRICE_EVOLUTION_DEBUG]', {
-    itemId: item.id,
-    supplierProductId: item.supplierProductId,
-    productName: item.productName,
-    pricePerUnit: item.pricePerUnit,
-    receivedPricePerKg: item.receivedPricePerKg,
-    receivedWeightKg: item.receivedWeightKg,
-    receivedQuantity: item.receivedQuantity,
-    unit: item.unit,
-    billingUnit: item.billingUnit,
-    billingQtyPerOrderUnit: item.billingQtyPerOrderUnit,
-    excludeFromPriceEvolution: item.excludeFromPriceEvolution,
-    incidentType: item.incidentType,
-  });
-
   if (!item.supplierProductId) return { changed: false };
   if (item.excludeFromPriceEvolution) return { changed: false };
   if (item.incidentType === 'missing') return { changed: false };

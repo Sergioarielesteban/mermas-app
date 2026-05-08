@@ -10,7 +10,8 @@ export type DeliveryNoteCatalogPriceSyncResult = {
 
 /**
  * Tras validar un albarán: si una línea enlaza a `pedido_supplier_products` y el precio comparable
- * difiere del último registrado en `historico_precios` (o del baseline de catálogo), actualiza catálogo + histórico.
+ * difiere del último registrado en `historico_precios` (o del baseline del precio base del catálogo),
+ * escribe histórico y último precio recibido — sin cambiar el precio base del catálogo.
  */
 export async function syncCatalogPricesFromValidatedDeliveryNote(
   supabase: SupabaseClient,
