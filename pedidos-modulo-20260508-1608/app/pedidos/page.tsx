@@ -536,6 +536,7 @@ export default function PedidosPage() {
     pedidosPageUiRestoreAttemptedRef.current = localId;
     try {
       const st = parsePedidosViewState(window.localStorage.getItem(PEDIDOS_VIEW_STATE_KEY), localId);
+      console.log('[PEDIDOS_UI] read', st);
       if (st) {
         const r = st.route;
         if (r && r.startsWith('/pedidos') && r !== window.location.pathname + window.location.search) {
@@ -585,6 +586,7 @@ export default function PedidosPage() {
         if (st.scrollY > 0) {
           scrollRestorePendingRef.current = st.scrollY;
         }
+        console.log('[PEDIDOS_UI] restore queued', { section: st.openedSection, activeOrderId: st.activeOrderId, scrollY: st.scrollY });
       } else {
         const ctx = parsePedidosPageUi(window.localStorage.getItem(pedidosPageUiStorageKey(localId)));
         if (ctx) {
@@ -1635,7 +1637,14 @@ export default function PedidosPage() {
         if (o?.status === 'sent') openedSection = 'pending';
         else if (o?.status === 'received') openedSection = 'received';
       }
-      const scrollY = Math.max(0, Math.round(window.scrollY));
+      // If a scroll restore is still pending (not yet applied), preserve it instead of
+      // overwriting with scrollY=0 (which happens because the RAF fires after this save).
+      const pendingScrollY = scrollRestorePendingRef.current;
+      const scrollY =
+        pendingScrollY != null && pendingScrollY > 0
+          ? pendingScrollY
+          : Math.max(0, Math.round(window.scrollY));
+      console.log('[PEDIDOS_UI] save', { openedSection, activeOrderId, scrollY });
       let historicoMonthKey: string | null = null;
       if (expandedHistoricoId) {
         const ho = orders.find((o) => o.id === expandedHistoricoId);
@@ -1721,11 +1730,20 @@ export default function PedidosPage() {
     if (!uiHydrated) return;
     const y = scrollRestorePendingRef.current;
     if (y == null || y <= 0) return;
+    // Don't attempt scroll until orders are in the DOM: without them the page is too
+    // short and scrollTo(y) is a no-op. This effect re-runs when orders.length changes,
+    // so the retry happens automatically once orders arrive from Supabase / session cache.
+    if (orders.length === 0) {
+      console.log('[PEDIDOS_UI] restore queued, waiting for orders', y);
+      return;
+    }
     scrollRestorePendingRef.current = null;
+    console.log('[PEDIDOS_UI] restore applied', { scrollY: y, expandedSentId, expandedHistoricoId });
     let inner = 0;
     const outer = requestAnimationFrame(() => {
       inner = requestAnimationFrame(() => {
         window.scrollTo({ top: y, behavior: 'auto' });
+        console.log('[PEDIDOS_UI] scroll restored', y);
       });
     });
     return () => {
@@ -1734,6 +1752,7 @@ export default function PedidosPage() {
     };
   }, [
     uiHydrated,
+    orders.length, // re-trigger when orders load so scroll is applied after DOM is ready
     pendientesEntregaAccordionOpen,
     historicoRecibidosAccordionOpen,
     expandedSentId,
@@ -1752,9 +1771,11 @@ export default function PedidosPage() {
   React.useEffect(() => {
     if (!uiHydrated || !ordersEverNonEmptyRef.current) return;
     if (expandedSentId && !orders.some((o) => o.id === expandedSentId && o.status === 'sent')) {
+      console.log('[PEDIDOS_UI] reset expandedSentId — order not in sent list', expandedSentId);
       setExpandedSentId(null);
     }
     if (expandedHistoricoId && !orders.some((o) => o.id === expandedHistoricoId && o.status === 'received')) {
+      console.log('[PEDIDOS_UI] reset expandedHistoricoId — order not in received list', expandedHistoricoId);
       setExpandedHistoricoId(null);
     }
   }, [uiHydrated, orders, expandedSentId, expandedHistoricoId]);

@@ -1,4 +1,5 @@
 import type { PedidosViewStateReceptionInputs } from '@/lib/pedidos-view-state';
+import { PEDIDOS_VIEW_STATE_KEY } from '@/lib/pedidos-view-state';
 import { readMainScrollTop } from '@/lib/pedidos-main-scroll';
 
 /**
@@ -191,6 +192,10 @@ export function clearPedidosUiStateOnlyWhenUserLeavesModule(): void {
     if (typeof window === 'undefined') return;
     console.log('[PEDIDOS_UI] clear (user left pedidos module)');
     window.sessionStorage.removeItem(CHEFONE_PEDIDOS_UI_STATE_KEY);
+    // Also clear localStorage so that on intentional re-entry we start clean.
+    // When the OS kills the tab (not an intentional exit), this function is never
+    // called and localStorage survives — allowing restoration on return.
+    window.localStorage.removeItem(PEDIDOS_VIEW_STATE_KEY);
   } catch {
     /* ignore */
   }

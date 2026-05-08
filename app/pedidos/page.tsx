@@ -559,8 +559,19 @@ export default function PedidosPage() {
           scrollY: sess.scrollY,
         });
       } else {
+        // sessionStorage is gone. Two possible reasons:
+        //   A) User intentionally left the module: clearPedidosUiStateOnlyWhenUserLeavesModule()
+        //      was called, which also clears localStorage → both empty → fresh start.
+        //   B) OS/browser killed the tab (e.g. iOS memory pressure): sessionStorage is dead
+        //      but localStorage survived (disk) → restore from localStorage.
         const st = parsePedidosViewState(window.localStorage.getItem(PEDIDOS_VIEW_STATE_KEY), localId);
         if (st) {
+          // Case B: OS killed the tab — restore full UI state from localStorage.
+          console.log('[PEDIDOS_UI] restore from localStorage fallback (OS tab kill)', {
+            openedSection: st.openedSection,
+            activeOrderId: st.activeOrderId,
+            scrollY: st.scrollY,
+          });
           const r = st.route;
           if (r && r.startsWith('/pedidos') && r !== route) {
             routerRef.current.replace(r, { scroll: false });
@@ -577,16 +588,51 @@ export default function PedidosPage() {
             setOrderQtyInputByItemId((prev) => ({ ...prev, ...(oqi ?? {}) }));
             setPricePerKgInputByItemId((prev) => ({ ...prev, ...ppi }));
           }
+          // Restore accordion and expanded pedido state.
+          if (st.openedSection === 'received') {
+            setHistoricoRecibidosAccordionOpen(true);
+            setPendientesEntregaAccordionOpen(false);
+          } else if (st.openedSection === 'pending' || st.openedSection === 'sent') {
+            setPendientesEntregaAccordionOpen(true);
+            setHistoricoRecibidosAccordionOpen(false);
+          } else {
+            setPendientesEntregaAccordionOpen(false);
+            setHistoricoRecibidosAccordionOpen(false);
+          }
+          const primary = st.activeOrderId ?? st.expandedOrderIds[0] ?? null;
+          if (st.openedSection === 'received') {
+            setExpandedSentId(null);
+            setExpandedHistoricoId(primary);
+          } else if (st.openedSection === 'pending' || st.openedSection === 'sent') {
+            setExpandedHistoricoId(null);
+            setExpandedSentId(primary);
+          } else {
+            setExpandedSentId(null);
+            setExpandedHistoricoId(null);
+            if (primary) {
+              setPendientesEntregaAccordionOpen(true);
+              setExpandedSentId(primary);
+            }
+          }
+          if (st.historicoMonthKey) {
+            setHistoricoMonthOpen({ [st.historicoMonthKey]: true });
+          }
+          if (st.scrollY > 0) {
+            scrollRestorePendingRef.current = st.scrollY;
+          }
+          // Give the order-prune effect time to see orders before clearing expanded IDs.
+          suppressOrderPruneUntilRef.current = Date.now() + 2000;
+        } else {
+          // Case A: intentional module exit (localStorage also cleared) → fresh start.
+          console.log('[PEDIDOS_UI] reset reason', 'no_valid_session_fresh_module_entry');
+          setPendientesEntregaAccordionOpen(false);
+          setHistoricoRecibidosAccordionOpen(false);
+          setExpandedSentId(null);
+          setExpandedHistoricoId(null);
+          setHistoricoMonthOpen({});
+          setIncidentOpenBySentOrderId({});
+          setQuickLineMarks({});
         }
-        console.log('[PEDIDOS_UI] reset reason', 'no_valid_session_fresh_module_entry');
-        /** Sin sesión de módulo: entrada limpia (p. ej. volver desde panel). No reabrir acordeones desde localStorage. */
-        setPendientesEntregaAccordionOpen(false);
-        setHistoricoRecibidosAccordionOpen(false);
-        setExpandedSentId(null);
-        setExpandedHistoricoId(null);
-        setHistoricoMonthOpen({});
-        setIncidentOpenBySentOrderId({});
-        setQuickLineMarks({});
       }
     } catch {
       /* ignore */
@@ -1610,8 +1656,8 @@ export default function PedidosPage() {
         : lleganHoy === 0
           ? 'Nada previsto para hoy'
           : lleganHoy === 1
-            ? '1 llega hoy'
-            : `${lleganHoy} llegan hoy`;
+            ? '1 pedido llega hoy'
+            : `${lleganHoy} pedidos llegan hoy`;
     return { lleganHoy, sub };
   }, [sentOrders]);
 
@@ -1659,7 +1705,11 @@ export default function PedidosPage() {
         if (o?.status === 'sent') openedSection = 'pending';
         else if (o?.status === 'received') openedSection = 'received';
       }
-      const scrollY = readMainScrollTop();
+      // If a scroll restore is still pending (RAF not fired yet), preserve it so the
+      // first save after hydration doesn't overwrite the restored position with 0.
+      const pendingScrollY = scrollRestorePendingRef.current;
+      const scrollY =
+        pendingScrollY != null && pendingScrollY > 0 ? pendingScrollY : readMainScrollTop();
       let historicoMonthKey: string | null = null;
       if (expandedHistoricoId) {
         const ho = orders.find((o) => o.id === expandedHistoricoId);
@@ -1780,35 +1830,35 @@ export default function PedidosPage() {
     if (!uiHydrated) return;
     const y = scrollRestorePendingRef.current;
     if (y == null || y <= 0) return;
-    const applyScroll = () => {
-      if (scrollRestorePendingRef.current !== y) return;
-      scrollRestorePendingRef.current = null;
-      const outer = requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          setMainScrollTop(y);
-          window.setTimeout(() => setMainScrollTop(y), 120);
-        });
-      });
-      return outer;
-    };
-    if (orders.length > 0) {
-      const outer = applyScroll();
-      return () => {
-        cancelAnimationFrame(outer ?? 0);
-      };
+    // Don't attempt scroll until orders are in the DOM: without them the page is too
+    // short and the scroll is a no-op. The effect re-runs when orders.length changes,
+    // so the retry is automatic once orders arrive from Supabase / session cache.
+    if (orders.length === 0) {
+      console.log('[PEDIDOS_UI] restore queued, waiting for orders', y);
+      return;
     }
-    const tid = window.setTimeout(() => {
-      applyScroll();
-    }, 480);
-    return () => window.clearTimeout(tid);
+    if (scrollRestorePendingRef.current !== y) return;
+    scrollRestorePendingRef.current = null;
+    console.log('[PEDIDOS_UI] restore applied', { scrollY: y, expandedSentId, expandedHistoricoId });
+    const outer = requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        setMainScrollTop(y);
+        // Second attempt covers slow-painting cases (e.g. image-heavy list).
+        window.setTimeout(() => setMainScrollTop(y), 120);
+        console.log('[PEDIDOS_UI] scroll restored', y);
+      });
+    });
+    return () => {
+      cancelAnimationFrame(outer);
+    };
   }, [
     uiHydrated,
+    orders.length, // re-trigger when orders load so scroll is applied after DOM is ready
     pendientesEntregaAccordionOpen,
     historicoRecibidosAccordionOpen,
     expandedSentId,
     expandedHistoricoId,
     historicoMonthOpen,
-    orders.length,
   ]);
 
   const ordersEverNonEmptyRef = React.useRef(false);
@@ -3633,12 +3683,9 @@ export default function PedidosPage() {
               </p>
               {pedidosResumenEntrega.lleganHoy > 0 ? (
                 <p className="mt-2 text-[0.8125rem] font-semibold leading-snug text-amber-700 sm:text-sm">
-                  <span className="mr-1 inline-block text-[1.05rem] leading-none" aria-hidden>
-                    📦
-                  </span>
                   {pedidosResumenEntrega.lleganHoy === 1
-                    ? '1 llega hoy'
-                    : `${pedidosResumenEntrega.lleganHoy} llegan hoy`}
+                    ? '1 pedido llega hoy'
+                    : `${pedidosResumenEntrega.lleganHoy} pedidos llegan hoy`}
                 </p>
               ) : (
                 <p className="mt-1.5 text-xs font-medium leading-snug text-zinc-600 sm:text-[13px]">
