@@ -824,32 +824,51 @@ export default function ProveedoresPage() {
                     </button>
                   </div>
                 </div>
-                <p className="pt-1 text-xs font-semibold text-zinc-600">
-                  Compra: {formatUnitPriceEur(p.pricePerUnit, unitPriceCatalogSuffix[p.unit])} · IVA{' '}
-                  {(p.vatRate * 100).toFixed(0)}%
-                  {(p.unitsPerPack ?? 1) > 1 ? (
-                    <>
-                      {' '}
-                      · Coste uso:{' '}
-                      {formatUnitPriceEur(
-                        p.pricePerUnit / (p.unitsPerPack ?? 1),
-                        unitPriceCatalogSuffix[p.recipeUnit ?? 'ud'],
-                      )}{' '}
-                      (×{p.unitsPerPack ?? 1} {unitPriceCatalogSuffix[p.recipeUnit ?? 'ud']}/
-                      {unitPriceCatalogSuffix[p.unit]})
-                    </>
+                <div className="pt-1 space-y-1.5">
+                  <div>
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-zinc-500">
+                      Precio base catálogo
+                    </p>
+                    <p className="text-base font-bold tabular-nums text-zinc-900">
+                      {formatUnitPriceEur(p.pricePerUnit, unitPriceCatalogSuffix[p.unit])}
+                    </p>
+                  </div>
+                  {p.ultimoPrecioRecibido != null &&
+                  Number.isFinite(p.ultimoPrecioRecibido) &&
+                  p.ultimoPrecioRecibido > 0 ? (
+                    <div className="rounded-md border border-dashed border-zinc-300/90 bg-zinc-100/50 px-2 py-1">
+                      <p className="text-[9px] font-semibold text-zinc-500">Último recibido</p>
+                      <p className="text-xs font-semibold tabular-nums text-zinc-600">
+                        {formatUnitPriceEur(p.ultimoPrecioRecibido, unitPriceCatalogSuffix[p.unit])}
+                      </p>
+                    </div>
                   ) : null}
-                  {supplierProductHasDistinctBilling(p) && p.billingUnit === 'kg' && p.pricePerBillingUnit != null
-                    ? ` · cobro ${formatUnitPriceEur(p.pricePerBillingUnit, 'kg')} (~${p.billingQtyPerOrderUnit ?? '—'} kg/${unitPriceCatalogSuffix[p.unit]})`
-                    : ''}
-                  {!supplierProductHasDistinctBilling(p) &&
-                  unitSupportsReceivedWeightKg(p.unit) &&
-                  p.estimatedKgPerUnit != null &&
-                  p.estimatedKgPerUnit > 0
-                    ? ` · ~${p.estimatedKgPerUnit} kg/${p.unit}`
-                    : ''}
-                  {(p.parStock ?? 0) > 0 ? ` · ref. sem. ${p.parStock} ${unitPriceCatalogSuffix[p.unit]}` : ''}
-                </p>
+                  <p className="text-[11px] leading-snug text-zinc-600">
+                    IVA {(p.vatRate * 100).toFixed(0)}%
+                    {(p.unitsPerPack ?? 1) > 1 ? (
+                      <>
+                        {' '}
+                        · Coste uso:{' '}
+                        {formatUnitPriceEur(
+                          p.pricePerUnit / (p.unitsPerPack ?? 1),
+                          unitPriceCatalogSuffix[p.recipeUnit ?? 'ud'],
+                        )}{' '}
+                        (×{p.unitsPerPack ?? 1} {unitPriceCatalogSuffix[p.recipeUnit ?? 'ud']}/
+                        {unitPriceCatalogSuffix[p.unit]})
+                      </>
+                    ) : null}
+                    {supplierProductHasDistinctBilling(p) && p.billingUnit === 'kg' && p.pricePerBillingUnit != null
+                      ? ` · cobro ${formatUnitPriceEur(p.pricePerBillingUnit, 'kg')} (~${p.billingQtyPerOrderUnit ?? '—'} kg/${unitPriceCatalogSuffix[p.unit]})`
+                      : ''}
+                    {!supplierProductHasDistinctBilling(p) &&
+                    unitSupportsReceivedWeightKg(p.unit) &&
+                    p.estimatedKgPerUnit != null &&
+                    p.estimatedKgPerUnit > 0
+                      ? ` · ~${p.estimatedKgPerUnit} kg/${p.unit}`
+                      : ''}
+                    {(p.parStock ?? 0) > 0 ? ` · ref. sem. ${p.parStock} ${unitPriceCatalogSuffix[p.unit]}` : ''}
+                  </p>
+                </div>
               </div>
               ))}
               </div>

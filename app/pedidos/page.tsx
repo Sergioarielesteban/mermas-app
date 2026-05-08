@@ -94,9 +94,16 @@ import {
   voidStaffMealRecord,
   type StaffMealWorker,
 } from '@/lib/comida-personal-supabase';
+import { parsePriceInput } from '@/lib/money-format';
 import { getPedidoDrafts } from '@/lib/pedidos-storage';
 import { getAppMainScrollElement, readMainScrollTop, setMainScrollTop } from '@/lib/pedidos-main-scroll';
-import { pedidosDiagEnabled, pedidosDiagLog, pedidosDiagUiSnap } from '@/lib/pedidos-page-diag';
+import {
+  pedidosDevUiError,
+  pedidosDevUiLog,
+  pedidosDiagEnabled,
+  pedidosDiagLog,
+  pedidosDiagUiSnap,
+} from '@/lib/pedidos-page-diag';
 import {
   CHEFONE_PEDIDOS_UI_STATE_KEY,
   loadPedidosUiState,
@@ -585,7 +592,7 @@ export default function PedidosPage() {
       });
       if (sess) {
         appliedValidSavedPedidosUiRef.current = true;
-        console.log('[PEDIDOS_UI] restore start', {
+        pedidosDevUiLog('[PEDIDOS_UI] restore start', {
           pendingExpanded: sess.pendingExpanded,
           expandedPedidoId: sess.expandedPedidoId,
           scrollY: sess.scrollY,
@@ -622,7 +629,7 @@ export default function PedidosPage() {
         if (sess.scrollY > 0) {
           scrollRestorePendingRef.current = sess.scrollY;
         }
-        console.log('[PEDIDOS_UI] restore applied', {
+        pedidosDevUiLog('[PEDIDOS_UI] restore applied', {
           pendingExpanded: sess.pendingExpanded,
           historyExpanded: sess.historyExpanded,
           expandedPedidoId: sess.expandedPedidoId,
@@ -643,7 +650,7 @@ export default function PedidosPage() {
         if (st) {
           appliedValidSavedPedidosUiRef.current = true;
           // Case B: OS killed the tab — restore full UI state from localStorage.
-          console.log('[PEDIDOS_UI] restore from localStorage fallback (OS tab kill)', {
+          pedidosDevUiLog('[PEDIDOS_UI] restore from localStorage fallback (OS tab kill)', {
             openedSection: st.openedSection,
             activeOrderId: st.activeOrderId,
             scrollY: st.scrollY,
@@ -708,7 +715,7 @@ export default function PedidosPage() {
         } else {
           // Case A: intentional module exit (localStorage also cleared) → fresh start.
           appliedValidSavedPedidosUiRef.current = false;
-          console.log('[PEDIDOS_UI] reset reason', 'no_valid_session_fresh_module_entry');
+          pedidosDevUiLog('[PEDIDOS_UI] reset reason', 'no_valid_session_fresh_module_entry');
           pedidosDiagLog('useLayoutEffect[hydrate] FRESH_MODULE_RESET', {
             action: 'setPendientes false, expanded null, clear incident/quickMarks/historicoMonth',
             withStack: true,
@@ -1051,10 +1058,10 @@ export default function PedidosPage() {
     }
     receptionLineDeleteInFlightRef.current = true;
     setReceptionLineActionBusy(true);
-    console.log('Deleting item:', lineId);
+    pedidosDevUiLog('Deleting item:', lineId);
     try {
       const response = await deletePurchaseOrderItemById(supabase, localId, lineId);
-      console.log('Delete response:', response);
+      pedidosDevUiLog('Delete response:', response);
       setReceptionLineAction(null);
       const id = line.id;
       setQuickLineMarks((prev) => {
@@ -1090,7 +1097,7 @@ export default function PedidosPage() {
       dispatchPedidosDataChanged();
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
-      console.error('Delete purchase_order_items failed:', err);
+      pedidosDevUiError('Delete purchase_order_items failed:', err);
       setMessage(
         msg ? `Error al eliminar producto: ${msg}` : 'Error al eliminar producto',
       );
@@ -2030,13 +2037,13 @@ export default function PedidosPage() {
     // short and the scroll is a no-op. The effect re-runs when orders.length changes,
     // so the retry is automatic once orders arrive from Supabase / session cache.
     if (orders.length === 0) {
-      console.log('[PEDIDOS_UI] restore queued, waiting for orders', y);
+      pedidosDevUiLog('[PEDIDOS_UI] restore queued, waiting for orders', y);
       pedidosDiagLog('useEffect[scrollRestore] WAIT_ORDERS', { y, ordersLength: 0 });
       return;
     }
     if (scrollRestorePendingRef.current !== y) return;
     scrollRestorePendingRef.current = null;
-    console.log('[PEDIDOS_UI] restore applied', { scrollY: y, expandedSentId, expandedHistoricoId });
+    pedidosDevUiLog('[PEDIDOS_UI] restore applied', { scrollY: y, expandedSentId, expandedHistoricoId });
     pedidosDiagLog('useEffect[scrollRestore] APPLY_SCROLL', {
       y,
       expandedSentId,
@@ -2048,7 +2055,7 @@ export default function PedidosPage() {
         setMainScrollTop(y);
         // Second attempt covers slow-painting cases (e.g. image-heavy list).
         window.setTimeout(() => setMainScrollTop(y), 120);
-        console.log('[PEDIDOS_UI] scroll restored', y);
+        pedidosDevUiLog('[PEDIDOS_UI] scroll restored', y);
       });
     });
     return () => {
@@ -2098,7 +2105,7 @@ export default function PedidosPage() {
       const inList = orders.some((o) => o.id === expandedSentId);
       const isSent = orders.some((o) => o.id === expandedSentId && o.status === 'sent');
       if (!inList) {
-        console.log('[PEDIDOS_UI] reset reason', 'expanded_sent_order_missing_after_fetch');
+        pedidosDevUiLog('[PEDIDOS_UI] reset reason', 'expanded_sent_order_missing_after_fetch');
         pedidosDiagLog('useEffect[orderPruneExpanded] CLEAR expandedSentId', {
           expandedSentId,
           reason: 'order id not in orders list',
@@ -2112,7 +2119,7 @@ export default function PedidosPage() {
           note: 'Restored trabajo: no forzar cierre mientras el pedido siga existiendo en lista.',
         });
       } else if (!isSent) {
-        console.log('[PEDIDOS_UI] reset reason', 'expanded_sent_order_missing_after_fetch');
+        pedidosDevUiLog('[PEDIDOS_UI] reset reason', 'expanded_sent_order_missing_after_fetch');
         pedidosDiagLog('useEffect[orderPruneExpanded] CLEAR expandedSentId', {
           expandedSentId,
           reason: 'order not in list as sent',
@@ -2125,7 +2132,7 @@ export default function PedidosPage() {
       const inList = orders.some((o) => o.id === expandedHistoricoId);
       const isReceived = orders.some((o) => o.id === expandedHistoricoId && o.status === 'received');
       if (!inList) {
-        console.log('[PEDIDOS_UI] reset reason', 'expanded_historico_order_missing_after_fetch');
+        pedidosDevUiLog('[PEDIDOS_UI] reset reason', 'expanded_historico_order_missing_after_fetch');
         pedidosDiagLog('useEffect[orderPruneExpanded] CLEAR expandedHistoricoId', {
           expandedHistoricoId,
           reason: 'order id not in orders list',
@@ -2139,7 +2146,7 @@ export default function PedidosPage() {
           note: 'Restored trabajo: no forzar cierre mientras el pedido siga existiendo en lista.',
         });
       } else if (!isReceived) {
-        console.log('[PEDIDOS_UI] reset reason', 'expanded_historico_order_missing_after_fetch');
+        pedidosDevUiLog('[PEDIDOS_UI] reset reason', 'expanded_historico_order_missing_after_fetch');
         pedidosDiagLog('useEffect[orderPruneExpanded] CLEAR expandedHistoricoId', {
           expandedHistoricoId,
           reason: 'order not in list as received',
@@ -4302,6 +4309,14 @@ export default function PedidosPage() {
                                 {formatQuantityWithUnit(item.quantity, item.unit)}
                               </span>
                             </p>
+                            {item.basePricePerUnit != null && Number.isFinite(item.basePricePerUnit) ? (
+                              <p className="mt-1 text-[10px] leading-tight text-zinc-600">
+                                <span className="font-semibold text-zinc-500">Precio pedido</span>{' '}
+                                <span className="font-semibold tabular-nums text-zinc-900">
+                                  {item.basePricePerUnit.toFixed(2)} €/{unitPriceCatalogSuffix[item.unit]}
+                                </span>
+                              </p>
+                            ) : null}
                           </div>
                           <div className="flex shrink-0 items-center gap-1.5">
                             <button
@@ -4371,7 +4386,7 @@ export default function PedidosPage() {
                                   </div>
                                   <div className="min-w-0">
                                     <label className="mb-0.5 block text-[10px] font-semibold text-zinc-700">
-                                      Precio real (€/kg)
+                                      Precio real recibido (€/kg)
                                     </label>
                                     <input
                                       type="text"
@@ -4405,7 +4420,7 @@ export default function PedidosPage() {
                               </div>
                               <div className="mt-2 flex flex-wrap items-end gap-x-2 gap-y-1">
                                 <label className="shrink-0 text-[10px] font-semibold text-zinc-700">
-                                  Precio (€/{unitPriceCatalogSuffix[item.unit]})
+                                  Precio real recibido (€/{unitPriceCatalogSuffix[item.unit]})
                                 </label>
                                 <input
                                   type="number"
@@ -4455,7 +4470,7 @@ export default function PedidosPage() {
                                       {item.unit !== 'kg' ? (
                                         <>
                                           <label className="mb-0.5 block text-[10px] font-semibold text-zinc-700">
-                                            Precio real (€/kg)
+                                            Precio real recibido (€/kg)
                                           </label>
                                           <input
                                             type="text"
@@ -4519,7 +4534,7 @@ export default function PedidosPage() {
                                     </div>
                                     <div className="min-w-0">
                                       <label className="mb-0.5 block text-[10px] font-semibold text-zinc-700">
-                                        Precio real (€/{calcSuffix})
+                                        Precio real recibido (€/{calcSuffix})
                                       </label>
                                       <input
                                         type="number"
@@ -4548,7 +4563,7 @@ export default function PedidosPage() {
                                 <div className="mt-2 flex flex-wrap items-end gap-x-3 gap-y-2">
                                   <div className="flex min-w-0 items-center gap-1.5">
                                     <label className="shrink-0 text-[10px] font-semibold text-zinc-700">
-                                      Precio ref. (€/{unitPriceCatalogSuffix[item.unit]})
+                                      Precio real recibido (€/{unitPriceCatalogSuffix[item.unit]})
                                     </label>
                                     <input
                                       type="number"
@@ -4569,6 +4584,28 @@ export default function PedidosPage() {
                             </>
                           )}
                         </div>
+                        {item.basePricePerUnit != null && Number.isFinite(item.basePricePerUnit)
+                          ? (() => {
+                              const raw = priceInputByItemId[item.id];
+                              const draft =
+                                raw !== undefined && String(raw).trim() !== ''
+                                  ? parsePriceInput(String(raw))
+                                  : item.pricePerUnit;
+                              if (draft == null || Math.abs(draft - item.basePricePerUnit) <= 0.005) {
+                                return null;
+                              }
+                              const base = item.basePricePerUnit;
+                              return (
+                                <p className="text-[10px] font-semibold leading-tight text-amber-900">
+                                  Diferencia: {draft >= base ? '+' : ''}
+                                  {(draft - base).toFixed(2)} € vs pedido
+                                  {base > 0
+                                    ? ` (${draft >= base ? '+' : ''}${(((draft - base) / base) * 100).toFixed(1)} %)`
+                                    : ''}
+                                </p>
+                              );
+                            })()
+                          : null}
                         {receptionPriceAlertHome ? (
                           <p
                             className={[

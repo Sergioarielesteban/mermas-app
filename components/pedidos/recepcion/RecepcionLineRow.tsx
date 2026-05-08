@@ -18,6 +18,7 @@ import {
   formatReceptionPriceAlertSingleLine,
   receptionPriceAlertFromPreview,
 } from '@/lib/pedidos-reception-price-alert';
+import { parsePriceInput } from '@/lib/money-format';
 import { buildPedidoReceptionPreviewItem } from '@/lib/pedidos-reception-preview-item';
 import { receptionBillsByWeight, receptionCalculationUnit, type PedidoOrderItem } from '@/lib/pedidos-supabase';
 
@@ -191,6 +192,14 @@ function RecepcionLineRowInner({
           {formatQuantityWithUnit(item.quantity, item.unit)}
         </span>
       </p>
+      {item.basePricePerUnit != null && Number.isFinite(item.basePricePerUnit) ? (
+        <p className="text-[11px] leading-tight text-zinc-600">
+          <span className="font-semibold text-zinc-500">Precio pedido</span>{' '}
+          <span className="font-semibold tabular-nums text-zinc-900">
+            {item.basePricePerUnit.toFixed(2)} €/{unitPriceCatalogSuffix[item.unit]}
+          </span>
+        </p>
+      ) : null}
       <div className="rounded-md border border-zinc-200/80 bg-zinc-50/80 px-1.5 py-1 text-[10px] leading-snug text-zinc-700">
         <p className="font-semibold text-zinc-500">Resumen albarán</p>
         <p className="mt-0.5">
@@ -222,32 +231,6 @@ function RecepcionLineRowInner({
             : ''}
         </p>
       ) : null}
-      <p className="text-[11px] leading-tight text-zinc-600">
-        {item.basePricePerUnit != null && Number.isFinite(item.basePricePerUnit) ? (
-          <>
-            <span className="font-semibold text-zinc-500">p/base</span>{' '}
-            <span className="font-semibold text-zinc-900">
-              {item.basePricePerUnit.toFixed(2)} €/{unitPriceCatalogSuffix[item.unit]}
-            </span>
-            <span className="mx-1 text-zinc-300">·</span>
-          </>
-        ) : null}
-        <span className="font-semibold text-zinc-500">p/alb</span>{' '}
-        <span className="font-bold text-zinc-900">
-          {item.pricePerUnit.toFixed(2)} €/{unitPriceCatalogSuffix[item.unit]}
-        </span>
-      </p>
-      {item.basePricePerUnit != null &&
-      Number.isFinite(item.basePricePerUnit) &&
-      Math.abs(item.pricePerUnit - item.basePricePerUnit) > 0.005 ? (
-        <p className="text-[10px] font-semibold leading-tight text-amber-900">
-          Δ {item.pricePerUnit >= item.basePricePerUnit ? '+' : ''}
-          {(item.pricePerUnit - item.basePricePerUnit).toFixed(2)} €
-          {item.basePricePerUnit > 0
-            ? ` (${item.pricePerUnit >= item.basePricePerUnit ? '+' : ''}${(((item.pricePerUnit - item.basePricePerUnit) / item.basePricePerUnit) * 100).toFixed(1)} %)`
-            : ''}
-        </p>
-      ) : null}
       {billsByWeight ? (
         <div className="space-y-0.5">
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
@@ -274,7 +257,7 @@ function RecepcionLineRowInner({
             </div>
             {item.unit !== 'kg' ? (
               <div className="flex items-center gap-1">
-                <label className="shrink-0 text-[11px] font-semibold text-zinc-600">€/kg</label>
+                <label className="shrink-0 text-[10px] font-semibold text-zinc-600">€/kg real</label>
                 <input
                   type="text"
                   inputMode="decimal"
@@ -307,7 +290,7 @@ function RecepcionLineRowInner({
                 previewItem.receivedWeightKg != null &&
                 previewItem.receivedWeightKg > 0
                   ? `Ref. ${previewItem.pricePerUnit.toFixed(2)} €/${unitPriceCatalogSuffix[item.unit]}`
-                  : 'El subtotal es kg reales (o estimados) × €/kg. Abajo, precio de referencia por envase.'}
+                  : 'El subtotal es kg reales (o estimados) × €/kg. Abajo, precio real recibido por envase.'}
               </p>
             </div>
           ) : null}
@@ -337,7 +320,9 @@ function RecepcionLineRowInner({
               />
             </div>
             <div className="min-w-0">
-              <label className="mb-0.5 block text-[9px] font-semibold text-zinc-700">Precio real (€/{calcSuffix})</label>
+              <label className="mb-0.5 block text-[9px] font-semibold text-zinc-700">
+                Precio real recibido (€/{calcSuffix})
+              </label>
               <input
                 type="text"
                 inputMode="decimal"
@@ -381,7 +366,7 @@ function RecepcionLineRowInner({
           <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-0.5">
             <div className="flex min-w-0 items-center gap-1.5">
               <label className="shrink-0 text-[11px] font-semibold text-zinc-600">
-                Precio recibido (€/{unitPriceCatalogSuffix[item.unit]})
+                Precio real recibido (€/{unitPriceCatalogSuffix[item.unit]})
               </label>
               <input
                 type="text"
@@ -419,6 +404,22 @@ function RecepcionLineRowInner({
           ) : null}
         </div>
       ) : null}
+      {item.basePricePerUnit != null && Number.isFinite(item.basePricePerUnit)
+        ? (() => {
+            const draft = parsePriceInput(priceText);
+            const base = item.basePricePerUnit;
+            if (draft == null || Math.abs(draft - base) <= 0.005) return null;
+            return (
+              <p className="text-[10px] font-semibold leading-tight text-amber-900">
+                Diferencia: {draft >= base ? '+' : ''}
+                {(draft - base).toFixed(2)} € vs pedido
+                {base > 0
+                  ? ` (${draft >= base ? '+' : ''}${(((draft - base) / base) * 100).toFixed(1)} %)`
+                  : ''}
+              </p>
+            );
+          })()
+        : null}
     </div>
   );
 }

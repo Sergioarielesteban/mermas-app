@@ -6,12 +6,26 @@
 const LS_KEY = 'CHEFONE_PEDIDOS_TRACE';
 
 export function pedidosDiagEnabled(): boolean {
+  if (process.env.NODE_ENV === 'production') return false;
   if (typeof window === 'undefined') return false;
   try {
     return window.localStorage.getItem(LS_KEY) === '1';
   } catch {
     return false;
   }
+}
+
+/** Logs de UI no críticos: solo en `development` (nunca en producción). */
+export function pedidosDevUiLog(...args: unknown[]): void {
+  if (process.env.NODE_ENV !== 'development') return;
+  // eslint-disable-next-line no-console
+  console.log(...args);
+}
+
+export function pedidosDevUiError(...args: unknown[]): void {
+  if (process.env.NODE_ENV !== 'development') return;
+  // eslint-disable-next-line no-console
+  console.error(...args);
 }
 
 function nowIso() {

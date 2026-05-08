@@ -674,7 +674,7 @@ function ArticleCard({
                     <dd>{principalRefRow?.unit ?? a.unidadCompra ?? '—'}</dd>
                   </div>
                   <div>
-                    <dt className="text-zinc-500">Precio compra actual</dt>
+                    <dt className="text-zinc-500">Último recibido (referencia)</dt>
                     <dd className="font-semibold tabular-nums">
                       {compraUnitEur != null ? formatMoneyEur(roundMoney(compraUnitEur)) : '—'}
                     </dd>
@@ -810,7 +810,7 @@ function ArticleCard({
                   </p>
                 </div>
                 <div className="text-left sm:text-right">
-                  <p className="text-[10px] font-bold uppercase text-zinc-500">Precio catálogo</p>
+                  <p className="text-[10px] font-bold uppercase text-zinc-500">Precio base catálogo</p>
                   <p className="text-lg font-black tabular-nums text-zinc-900">{formatUnitPriceEur(originRow.pricePerUnit, originRow.unit)}</p>
                   {master != null ? (
                     <p className="text-[11px] text-zinc-500">

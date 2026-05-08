@@ -103,7 +103,7 @@ type PriceSummary = {
   deltaPct: number;
   /** Unidad mostrada en gráficos/tablas (ud de catálogo o kg). */
   displayUnit: string;
-  /** Impacto mensual estimado si el ritmo de compra del periodo se mantiene: (actual − PMP) × (qty/mes). */
+  /** Impacto mensual estimado si el ritmo de compra del periodo se mantiene: (último recibido − PMP) × (qty/mes). */
   impactMonthlyVsWap: number;
   /** Coef. variación % entre precios albarán (últimos puntos). */
   volatilityCvPct: number;
@@ -676,22 +676,29 @@ function PriceEvolutionMiniChart({
           </ComposedChart>
         </ResponsiveContainer>
       </div>
-      <div className="mt-3 flex flex-wrap items-center justify-center gap-x-5 gap-y-1.5 text-[10px] text-zinc-500">
-        <span className="inline-flex items-center gap-1.5">
-          <span className="h-2 w-2 shrink-0 rounded-full bg-slate-400" aria-hidden />
-          Precio inicial
+      <div className="mt-3 flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-[10px] text-zinc-500">
+        <span className="inline-flex flex-col items-center gap-0.5">
+          <span className="inline-flex items-center gap-1.5">
+            <span className="h-2 w-2 shrink-0 rounded-full bg-slate-400" aria-hidden />
+            Precio inicial serie
+          </span>
         </span>
-        <span className="inline-flex items-center gap-1.5">
-          <span className="h-0.5 w-6 shrink-0 border-t border-dashed border-zinc-400" aria-hidden />
-          PMP
+        <span className="inline-flex flex-col items-center gap-0 text-center">
+          <span className="inline-flex items-center gap-1.5">
+            <span className="h-0.5 w-6 shrink-0 border-t border-dashed border-zinc-400" aria-hidden />
+            PMP
+          </span>
+          <span className="text-[9px] leading-tight text-zinc-400">Media ponderada del periodo</span>
         </span>
         <span className="inline-flex items-center gap-1.5">
           <span className="h-0.5 w-6 shrink-0 bg-[#D32F2F]" aria-hidden />
           Evolución
         </span>
-        <span className="inline-flex items-center gap-1.5">
-          <span className="h-2 w-2 shrink-0 rounded-full bg-[#D32F2F]" aria-hidden />
-          Precio actual
+        <span className="inline-flex flex-col items-center gap-0.5">
+          <span className="inline-flex items-center gap-1.5">
+            <span className="h-2 w-2 shrink-0 rounded-full bg-[#D32F2F]" aria-hidden />
+            Último recibido
+          </span>
         </span>
       </div>
     </div>
@@ -833,7 +840,11 @@ function drawExecutivePriceChart(
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(8);
   doc.setTextColor(...PDF_ZINC_900);
-  doc.text(`Precio inicial: ${opts.basePrice.toFixed(2)} € →  Actual: ${opts.currentPrice.toFixed(2)} €/${opts.unit}`, cx, cy + innerH + 36);
+  doc.text(
+    `Precio inicial serie: ${opts.basePrice.toFixed(2)} € → Último recibido: ${opts.currentPrice.toFixed(2)} €/${opts.unit}`,
+    cx,
+    cy + innerH + 36,
+  );
 
   return opts.y + opts.h;
 }
@@ -1514,9 +1525,9 @@ export default function PedidosPreciosPage() {
           'Producto',
           'Proveedor',
           'Ud',
-          'Base',
+          'Precio inicial serie',
           'PMP',
-          'Actual',
+          'Último recibido',
           'Δ €',
           'Δ %',
           'Impacto mes*',
@@ -1554,7 +1565,7 @@ export default function PedidosPreciosPage() {
             ? `Baja ${row.delta.toFixed(2)} €/${row.displayUnit} (${row.deltaPct.toFixed(2)}%)`
             : 'Sin cambio';
       const blockLines = [
-        `Base: ${row.base.price.toFixed(2)} €/${row.displayUnit} · Actual: ${row.current.price.toFixed(2)} €/${row.displayUnit}`,
+        `Precio inicial serie: ${row.base.price.toFixed(2)} €/${row.displayUnit} · Último recibido: ${row.current.price.toFixed(2)} €/${row.displayUnit}`,
         `PMP: ${row.weightedAvg.toFixed(2)} €/${row.displayUnit} · Cantidad periodo (ponderado): ${row.totalWeightedQty.toLocaleString('es-ES')}`,
         `Impacto mensual vs PMP: ${row.impactMonthlyVsWap >= 0 ? '+' : ''}${row.impactMonthlyVsWap.toFixed(2)} € · Volatilidad (CV): ${row.volatilityCvPct.toFixed(1)} %${
           row.forecast30d != null ? ` · Tendencia ~30d: ${row.forecast30d.toFixed(2)} €/${row.displayUnit}` : ''
@@ -1664,9 +1675,9 @@ export default function PedidosPreciosPage() {
       'Producto',
       'Proveedor linea',
       'Ud',
-      'Precio base',
+      'Precio base catálogo (inicio serie)',
       'PMP',
-      'Precio actual',
+      'Último recibido',
       'Delta EUR',
       'Delta %',
       'Impacto mensual vs PMP EUR',
@@ -2128,7 +2139,7 @@ export default function PedidosPreciosPage() {
 
                 <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
                   <div className="rounded-2xl bg-white px-3 py-3 ring-1 ring-zinc-200/90">
-                    <p className="text-[11px] font-medium text-zinc-500">Precio actual</p>
+                    <p className="text-[11px] font-medium text-zinc-500">Último recibido</p>
                     <p className="mt-1 font-sans text-2xl font-semibold tabular-nums tracking-tight text-zinc-900">
                       {row.current.price.toFixed(2).replace('.', ',')} {eu}
                     </p>
@@ -2136,6 +2147,7 @@ export default function PedidosPreciosPage() {
                   </div>
                   <div className="rounded-2xl bg-white px-3 py-3 ring-1 ring-zinc-200/90">
                     <p className="text-[11px] font-medium text-zinc-500">PMP</p>
+                    <p className="text-[10px] text-zinc-400">Media ponderada del periodo</p>
                     <p className="text-[10px] text-zinc-400">{windowLabel}</p>
                     <p className="mt-1 font-sans text-2xl font-semibold tabular-nums tracking-tight text-zinc-900">
                       {row.weightedAvg.toFixed(2).replace('.', ',')} {eu}

@@ -926,17 +926,16 @@ export default function RecepcionPedidosPage() {
                                   €/kg: {item.receivedPricePerKg.toFixed(4)}
                                 </p>
                               ) : null}
+                              {item.basePricePerUnit != null && Number.isFinite(item.basePricePerUnit) ? (
+                                <p className="text-[11px] leading-tight text-zinc-600">
+                                  <span className="font-semibold text-zinc-500">Precio pedido</span>{' '}
+                                  <span className="font-semibold text-zinc-900">
+                                    {item.basePricePerUnit.toFixed(2)} €/{unitPriceCatalogSuffix[item.unit]}
+                                  </span>
+                                </p>
+                              ) : null}
                               <p className="text-[11px] leading-tight text-zinc-600">
-                                {item.basePricePerUnit != null && Number.isFinite(item.basePricePerUnit) ? (
-                                  <>
-                                    <span className="font-semibold text-zinc-500">p/base</span>{' '}
-                                    <span className="font-semibold text-zinc-900">
-                                      {item.basePricePerUnit.toFixed(2)} €/{unitPriceCatalogSuffix[item.unit]}
-                                    </span>
-                                    <span className="mx-1 text-zinc-300">·</span>
-                                  </>
-                                ) : null}
-                                <span className="font-semibold text-zinc-500">p/alb</span>{' '}
+                                <span className="font-semibold text-zinc-500">Precio real recibido</span>{' '}
                                 <span className="font-bold text-zinc-900">
                                   {item.pricePerUnit.toFixed(2)} €/{unitPriceCatalogSuffix[item.unit]}
                                 </span>
@@ -945,9 +944,9 @@ export default function RecepcionPedidosPage() {
                               Number.isFinite(item.basePricePerUnit) &&
                               Math.abs(item.pricePerUnit - item.basePricePerUnit) > 0.005 ? (
                                 <p className="text-[10px] font-semibold leading-tight text-amber-900">
-                                  Δ{' '}
+                                  Diferencia:{' '}
                                   {item.pricePerUnit >= item.basePricePerUnit ? '+' : ''}
-                                  {(item.pricePerUnit - item.basePricePerUnit).toFixed(2)} €
+                                  {(item.pricePerUnit - item.basePricePerUnit).toFixed(2)} € vs pedido
                                   {item.basePricePerUnit > 0
                                     ? ` (${item.pricePerUnit >= item.basePricePerUnit ? '+' : ''}${((((item.pricePerUnit - item.basePricePerUnit) / item.basePricePerUnit) * 100)).toFixed(1)} %)`
                                     : ''}
