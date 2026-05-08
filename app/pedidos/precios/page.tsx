@@ -29,10 +29,17 @@ import {
   type PedidoSupplier,
 } from '@/lib/pedidos-supabase';
 import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
+import { isBrowser } from '@/lib/storage';
 import type { Unit } from '@/lib/types';
+import {
+  analyzeDominantDisplayUnits,
+  euroPerUnitShortLabel,
+  hasMixedComparisonUnits,
+} from '@/lib/price-evolution-dominant-unit';
 
-type PriceMode = 'unit' | 'per_kg';
 type WindowPreset = '30' | '90' | '365' | 'all';
+
+const PRECIOS_UI_STORAGE_KEY = 'chefone-precios-ui-v1';
 
 type PricePoint = {
   date: string;
@@ -81,6 +88,12 @@ type PriceSummary = {
   supplierProductId: string | null;
   /** En modo €/kg se usó precio por unidad de catálogo por no haber kg recibido/estimado. */
   usedPerKgUnitFallback?: boolean;
+  /** Fracción de recepciones en la unidad dominante (antes de elegir vista). */
+  dominantUnitShare: number;
+  /** Mostrar conmutador €/… solo si hay mezcla real de unidades de comparación. */
+  showUnitSwitcher: boolean;
+  /** Unidades alternativas ordenadas por frecuencia (para segmented). */
+  alternativeUnits: string[];
 };
 
 /** Filas de histórico de precios consideradas para la evolución. */
@@ -163,10 +176,6 @@ function escapeCsvCell(v: string): string {
   return v;
 }
 
-function labelCatalogPriceHistorySource(_source: CatalogPriceHistoryListRow['source']): string {
-  return 'Recepción';
-}
-
 /** Umbral 0 = cualquier subida respecto al primer precio en la ventana (mínimo movimiento). */
 function isPriceRiseAlert(row: PriceSummary, alertPct: number): boolean {
   if (row.delta <= 0) return false;
@@ -184,9 +193,9 @@ function buildPriceSummariesWithDiagnostics(
   historicoRows: CatalogPriceHistoryListRow[],
   windowStartMs: number,
   windowEndMs: number,
-  priceMode: PriceMode,
   supplierFilter: string,
   productInfoBySupplierProductId: ReadonlyMap<string, ProductInfo>,
+  unitOverrideByKey: ReadonlyMap<string, string>,
 ): {
   series: PriceSummary[];
   seriesCandidatesBeforeVariation: number;
@@ -203,7 +212,6 @@ function buildPriceSummariesWithDiagnostics(
     supplierProductId: string;
     historicoRows: CatalogPriceHistoryListRow[];
   };
-  const rawRows: EvolutionDebugRow[] = [];
   const map = new Map<string, Acc>();
 
   for (const r of historicoRows) {
@@ -212,30 +220,9 @@ function buildPriceSummariesWithDiagnostics(
     const info = productInfoBySupplierProductId.get(r.supplierProductId);
     const supplierFilteredOut = Boolean(supplierFilter && info && info.supplierId !== supplierFilter);
 
-    let discardReason: string | null = null;
-    if (!info) discardReason = 'producto no está en catálogo cargado';
-    else if (supplierFilteredOut) discardReason = 'filtrado por proveedor';
-    else if (!inWindow) discardReason = 'fecha fuera de rango';
-    else if (priceMode === 'per_kg' && r.displayUnit !== 'kg') discardReason = 'modo €/kg: unidad comparable no es kg';
-    else if (priceMode === 'unit' && r.displayUnit === 'kg') discardReason = 'modo €/ud: serie en €/kg (usar vista €/kg)';
+    if (!info || supplierFilteredOut || !inWindow) continue;
 
-    const key = info ? evolutionKeyFromSupplierProduct(info.supplierId, r.supplierProductId) : r.supplierProductId;
-
-    rawRows.push({
-      supplierId: info?.supplierId ?? '',
-      supplierName: info?.supplierName ?? '',
-      evolutionKey: key,
-      productName: info?.productName ?? '',
-      supplierProductId: r.supplierProductId,
-      historicoId: r.id,
-      createdAt: r.createdAt,
-      displayUnit: r.displayUnit,
-      includedInSeries: discardReason == null,
-      discardReason: discardReason == null ? null : discardReason,
-    });
-
-    if (discardReason != null || !info) continue;
-
+    const key = evolutionKeyFromSupplierProduct(info.supplierId, r.supplierProductId);
     const existing = map.get(key);
     const acc: Acc =
       existing ??
@@ -252,13 +239,55 @@ function buildPriceSummariesWithDiagnostics(
     map.set(key, acc);
   }
 
+  const chosenUnitByKey = new Map<string, string>();
+  for (const [, acc] of map) {
+    const analysis = analyzeDominantDisplayUnits(acc.historicoRows);
+    const override = unitOverrideByKey.get(acc.key);
+    const overrideOk = Boolean(override && acc.historicoRows.some((h) => h.displayUnit === override));
+    const chosen = overrideOk ? override! : analysis.primary;
+    chosenUnitByKey.set(acc.key, chosen);
+  }
+
+  const rawRows: EvolutionDebugRow[] = [];
+  for (const r of historicoRows) {
+    const t = Date.parse(r.createdAt);
+    const inWindow = Number.isFinite(t) && t >= windowStartMs && t <= windowEndMs;
+    const info = productInfoBySupplierProductId.get(r.supplierProductId);
+    const supplierFilteredOut = Boolean(supplierFilter && info && info.supplierId !== supplierFilter);
+    const key = info ? evolutionKeyFromSupplierProduct(info.supplierId, r.supplierProductId) : r.supplierProductId;
+    const chosen = chosenUnitByKey.get(key);
+
+    let discardReason: string | null = null;
+    if (!info) discardReason = 'producto no está en catálogo cargado';
+    else if (supplierFilteredOut) discardReason = 'filtrado por proveedor';
+    else if (!inWindow) discardReason = 'fecha fuera de rango';
+    else if (chosen != null && r.displayUnit !== chosen) discardReason = 'otra unidad de comparación (vista automática)';
+
+    rawRows.push({
+      supplierId: info?.supplierId ?? '',
+      supplierName: info?.supplierName ?? '',
+      evolutionKey: key,
+      productName: info?.productName ?? '',
+      supplierProductId: r.supplierProductId,
+      historicoId: r.id,
+      createdAt: r.createdAt,
+      displayUnit: r.displayUnit,
+      includedInSeries: discardReason == null,
+      discardReason: discardReason == null ? null : discardReason,
+    });
+  }
+
   const daysWindow = Math.max(1, (windowEndMs - windowStartMs) / 86_400_000);
   const monthsInWindow = Math.max(1, daysWindow / 30);
 
-  const seriesCandidates = Array.from(map.values())
-    .map((acc) => {
-      const sorted = [...acc.historicoRows].sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt));
-      const displayUnit = (sorted[0]?.displayUnit ?? 'ud') as string;
+  const seriesCandidates = Array.from(map.values()).flatMap((acc): PriceSummary[] => {
+      const analysis = analyzeDominantDisplayUnits(acc.historicoRows);
+      const chosen = chosenUnitByKey.get(acc.key) ?? analysis.primary;
+      const sorted = [...acc.historicoRows]
+        .filter((h) => h.displayUnit === chosen)
+        .sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt));
+      if (sorted.length === 0) return [];
+      const displayUnit = chosen;
       const points: PricePoint[] = [];
       const purchases: PurchaseRow[] = [];
       let wSum = 0;
@@ -318,27 +347,32 @@ function buildPriceSummariesWithDiagnostics(
       const forecast30d = forecastPriceLinear(billAsc, 30);
       const monthlyQty = wQty / monthsInWindow;
       const impactMonthlyVsWap = Math.round((currentPrice - weightedAvg) * monthlyQty * 100) / 100;
-      return {
-        key: acc.key,
-        productName: acc.productName,
-        points: [...orderedWithAnchor].reverse(),
-        purchases: purchasesSorted,
-        weightedAvg,
-        totalWeightedQty: wQty,
-        base,
-        current,
-        delta,
-        deltaPct,
-        displayUnit,
-        impactMonthlyVsWap,
-        volatilityCvPct,
-        forecast30d,
-        supplierId: acc.supplierId,
-        supplierName: acc.supplierName,
-        catalogUnit: acc.catalogUnit,
-        supplierProductId: acc.supplierProductId,
-        usedPerKgUnitFallback: false,
-      };
+      return [
+        {
+          key: acc.key,
+          productName: acc.productName,
+          points: [...orderedWithAnchor].reverse(),
+          purchases: purchasesSorted,
+          weightedAvg,
+          totalWeightedQty: wQty,
+          base,
+          current,
+          delta,
+          deltaPct,
+          displayUnit,
+          impactMonthlyVsWap,
+          volatilityCvPct,
+          forecast30d,
+          supplierId: acc.supplierId,
+          supplierName: acc.supplierName,
+          catalogUnit: acc.catalogUnit,
+          supplierProductId: acc.supplierProductId,
+          usedPerKgUnitFallback: false,
+          dominantUnitShare: analysis.share,
+          showUnitSwitcher: hasMixedComparisonUnits(analysis),
+          alternativeUnits: analysis.unitsOrdered,
+        },
+      ];
     })
     .sort((a, b) => a.productName.localeCompare(b.productName, 'es'));
 
@@ -374,17 +408,17 @@ function buildPriceSummaries(
   historicoRows: CatalogPriceHistoryListRow[],
   windowStartMs: number,
   windowEndMs: number,
-  priceMode: PriceMode,
   supplierFilter: string,
   productInfoBySupplierProductId: ReadonlyMap<string, ProductInfo>,
+  unitOverrideByKey: ReadonlyMap<string, string>,
 ): PriceSummary[] {
   return buildPriceSummariesWithDiagnostics(
     historicoRows,
     windowStartMs,
     windowEndMs,
-    priceMode,
     supplierFilter,
     productInfoBySupplierProductId,
+    unitOverrideByKey,
   ).series;
 }
 
@@ -410,7 +444,13 @@ type ActionRecommendation = {
   detail: string;
 };
 
-function PriceEvolutionMiniChart({ row }: { row: PriceSummary }) {
+function PriceEvolutionMiniChart({
+  row,
+  unitSwitcher,
+}: {
+  row: PriceSummary;
+  unitSwitcher?: { options: string[]; value: string; onChange: (u: string) => void } | null;
+}) {
   const data = React.useMemo(() => {
     const asc = [...row.points].sort((a, b) => Date.parse(a.date) - Date.parse(b.date));
     const dayKeys = asc.map((p) => p.date.slice(0, 10));
@@ -430,19 +470,42 @@ function PriceEvolutionMiniChart({ row }: { row: PriceSummary }) {
     });
   }, [row.points]);
 
+  const unitShort = euroPerUnitShortLabel(row.displayUnit);
+
   if (data.length < 1) return null;
 
   if (data.length === 1) {
     const p = data[0]!;
     return (
-      <div className="mt-3 w-full min-w-0">
-        <div className="flex min-h-[8rem] items-center justify-center rounded-lg bg-zinc-50 px-3 py-6 ring-1 ring-zinc-200">
+      <div className="mt-4 w-full min-w-0">
+        {unitSwitcher && unitSwitcher.options.length > 1 ? (
+          <div className="mb-3 flex justify-center">
+            <div className="inline-flex rounded-full bg-zinc-100/90 p-0.5 ring-1 ring-zinc-200/80">
+              {unitSwitcher.options.map((u) => {
+                const active = u === unitSwitcher.value;
+                return (
+                  <button
+                    key={u}
+                    type="button"
+                    onClick={() => unitSwitcher.onChange(u)}
+                    className={[
+                      'rounded-full px-2.5 py-1 text-[11px] font-semibold transition-colors',
+                      active ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-500 hover:text-zinc-800',
+                    ].join(' ')}
+                  >
+                    {euroPerUnitShortLabel(u)}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        ) : null}
+        <div className="flex min-h-[10rem] items-center justify-center rounded-2xl bg-gradient-to-b from-zinc-50/80 to-white px-3 py-8">
           <div className="text-center">
-            <p className="text-xs font-semibold text-zinc-500">{p.dateLabel}</p>
-            <p className="mt-1 text-lg font-black tabular-nums text-zinc-900">
-              {p.price.toFixed(2)} €/{row.displayUnit}
+            <p className="text-[11px] font-medium tracking-wide text-zinc-400">{p.dateLabel}</p>
+            <p className="mt-2 text-2xl font-semibold tabular-nums tracking-tight text-zinc-900">
+              {p.price.toFixed(2)} {unitShort}
             </p>
-            <p className="mt-0.5 text-[10px] text-zinc-500">{p.kind}</p>
           </div>
         </div>
       </div>
@@ -450,77 +513,98 @@ function PriceEvolutionMiniChart({ row }: { row: PriceSummary }) {
   }
 
   return (
-    <div className="mt-3 w-full min-w-0">
-      <div className="h-56 w-full min-h-[14rem] sm:h-60">
+    <div className="mt-4 w-full min-w-0">
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+        {unitSwitcher && unitSwitcher.options.length > 1 ? (
+          <div className="inline-flex rounded-full bg-zinc-100/90 p-0.5 ring-1 ring-zinc-200/70">
+            {unitSwitcher.options.map((u) => {
+              const active = u === unitSwitcher.value;
+              return (
+                <button
+                  key={u}
+                  type="button"
+                  onClick={() => unitSwitcher.onChange(u)}
+                  className={[
+                    'rounded-full px-2.5 py-1 text-[11px] font-semibold transition-colors',
+                    active ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-500 hover:text-zinc-800',
+                  ].join(' ')}
+                >
+                  {euroPerUnitShortLabel(u)}
+                </button>
+              );
+            })}
+          </div>
+        ) : (
+          <span className="text-[11px] font-medium text-zinc-400">{unitShort}</span>
+        )}
+      </div>
+      <div className="h-[min(52vw,14rem)] w-full min-h-[13rem] sm:h-64">
         <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={data} margin={{ top: 10, right: 10, left: 6, bottom: 8 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#e4e4e7" />
+          <LineChart data={data} margin={{ top: 8, right: 4, left: -12, bottom: 4 }}>
+            <CartesianGrid strokeDasharray="4 8" stroke="#f4f4f5" vertical={false} />
             <XAxis
               dataKey="dateLabel"
-              tick={{ fontSize: 9, fill: '#71717a' }}
+              tick={{ fontSize: 10, fill: '#a1a1aa' }}
+              axisLine={false}
+              tickLine={false}
               interval={data.length > 8 ? 'preserveStartEnd' : 0}
-              height={data.length > 8 ? 28 : 40}
-              tickMargin={6}
+              height={data.length > 8 ? 26 : 36}
+              tickMargin={8}
             />
             <YAxis
-              tick={{ fontSize: 10, fill: '#71717a' }}
-              width={52}
+              tick={{ fontSize: 10, fill: '#a1a1aa' }}
+              width={44}
               domain={['auto', 'auto']}
-              tickMargin={6}
+              axisLine={false}
+              tickLine={false}
+              tickMargin={4}
               tickFormatter={(v) => (typeof v === 'number' ? v.toFixed(2) : String(v))}
             />
-          <Tooltip
-            content={({ active, payload }) => {
-              if (!active || !payload?.length) return null;
-              const p = payload[0]?.payload as {
-                dateLabel: string;
-                price: number;
-                kind: string;
-                supplier: string;
-              };
-              if (!p) return null;
-              return (
-                <div className="rounded-lg border border-zinc-200 bg-white px-2.5 py-2 text-xs shadow-md">
-                  <p className="font-semibold text-zinc-900">{p.dateLabel}</p>
-                  <p className="text-zinc-600">{p.supplier}</p>
-                  <p className="tabular-nums text-zinc-900">
-                    {p.price.toFixed(2)} €/{row.displayUnit} · <span className="text-zinc-600">{p.kind}</span>
-                  </p>
-                </div>
-              );
-            }}
-          />
-          <ReferenceLine
-            y={row.weightedAvg}
-            stroke="#a1a1aa"
-            strokeDasharray="5 4"
-            label={{
-              value: 'PMP',
-              position: 'insideTopRight',
-              fill: '#71717a',
-              fontSize: 10,
-            }}
-          />
-          <Line
-            type="monotone"
-            dataKey="price"
-            name="Precio"
-            stroke="#D32F2F"
-            strokeWidth={2}
-            dot={(props: { cx?: number; cy?: number; payload?: { kind: string } }) => {
-              const { cx, cy, payload } = props;
-              if (cx == null || cy == null) return null;
-              const fill = payload?.kind === 'Inicio' ? '#94a3b8' : '#D32F2F';
-              return <circle cx={cx} cy={cy} r={4} fill={fill} stroke="#fff" strokeWidth={1} />;
-            }}
-            activeDot={{ r: 6, stroke: '#fff', strokeWidth: 2 }}
-          />
-        </LineChart>
-      </ResponsiveContainer>
+            <Tooltip
+              content={({ active, payload }) => {
+                if (!active || !payload?.length) return null;
+                const p = payload[0]?.payload as {
+                  dateLabel: string;
+                  price: number;
+                  kind: string;
+                  supplier: string;
+                };
+                if (!p) return null;
+                return (
+                  <div className="rounded-xl border border-zinc-100 bg-white/95 px-3 py-2 text-xs shadow-lg backdrop-blur-sm">
+                    <p className="font-semibold text-zinc-900">{p.dateLabel}</p>
+                    <p className="tabular-nums text-[13px] text-zinc-900">
+                      {p.price.toFixed(2)} {unitShort}
+                    </p>
+                  </div>
+                );
+              }}
+            />
+            <ReferenceLine
+              y={row.weightedAvg}
+              stroke="#d4d4d8"
+              strokeDasharray="6 5"
+              strokeOpacity={0.95}
+            />
+            <Line
+              type="monotone"
+              dataKey="price"
+              name="Precio"
+              stroke="#D32F2F"
+              strokeWidth={2.25}
+              dot={(props: { cx?: number; cy?: number; payload?: { kind: string } }) => {
+                const { cx, cy, payload } = props;
+                if (cx == null || cy == null) return null;
+                const isAnchor = payload?.kind === 'Inicio';
+                const fill = isAnchor ? '#cbd5e1' : '#D32F2F';
+                const r = isAnchor ? 3.5 : 4;
+                return <circle cx={cx} cy={cy} r={r} fill={fill} stroke="#fff" strokeWidth={2} />;
+              }}
+              activeDot={{ r: 7, stroke: '#fff', strokeWidth: 2, fill: '#D32F2F' }}
+            />
+          </LineChart>
+        </ResponsiveContainer>
       </div>
-      <p className="mt-3 rounded-lg bg-zinc-50 px-2.5 py-2 text-center text-[10px] leading-relaxed text-zinc-600 ring-1 ring-zinc-200/80">
-        Gris = referencia previa · Rojo = último precio · Línea gris = media del periodo
-      </p>
     </div>
   );
 }
@@ -792,10 +876,12 @@ export default function PedidosPreciosPage() {
   const hasPedidosEntry = canAccessPedidos(localCode, email, localName, localId);
   const canUse = canUsePedidosModule(localCode, email, localName, localId);
   const [message, setMessage] = React.useState<string | null>(null);
+  const [prefsHydrated, setPrefsHydrated] = React.useState(false);
   const [windowPreset, setWindowPreset] = React.useState<WindowPreset>('90');
   const [supplierFilter, setSupplierFilter] = React.useState<string>('');
   const [productSearch, setProductSearch] = React.useState('');
-  const [priceMode, setPriceMode] = React.useState<PriceMode>('unit');
+  /** Solo cuando hay mezcla real de unidades de comparación (clave = evolutionKey). */
+  const [unitChoiceByKey, setUnitChoiceByKey] = React.useState<Record<string, string>>({});
   const [alertPct, setAlertPct] = React.useState(0);
   const [supplierCatalog, setSupplierCatalog] = React.useState<PedidoSupplier[]>([]);
   const [catalogHistoryRows, setCatalogHistoryRows] = React.useState<CatalogPriceHistoryListRow[]>([]);
@@ -823,6 +909,58 @@ export default function PedidosPreciosPage() {
     }
     return m;
   }, [supplierCatalog]);
+
+  const unitOverrideMap = React.useMemo(
+    () => new Map<string, string>(Object.entries(unitChoiceByKey)),
+    [unitChoiceByKey],
+  );
+
+  React.useEffect(() => {
+    if (!isBrowser()) {
+      setPrefsHydrated(true);
+      return;
+    }
+    try {
+      const raw = localStorage.getItem(PRECIOS_UI_STORAGE_KEY);
+      if (raw) {
+        const o = JSON.parse(raw) as Partial<{
+          windowPreset: WindowPreset;
+          supplierFilter: string;
+          alertPct: number;
+          productSearch: string;
+          unitChoiceByKey: Record<string, string>;
+        }>;
+        if (o.windowPreset === '30' || o.windowPreset === '90' || o.windowPreset === '365' || o.windowPreset === 'all') {
+          setWindowPreset(o.windowPreset);
+        }
+        if (typeof o.supplierFilter === 'string') setSupplierFilter(o.supplierFilter);
+        if (typeof o.alertPct === 'number' && Number.isFinite(o.alertPct)) setAlertPct(o.alertPct);
+        if (typeof o.productSearch === 'string') setProductSearch(o.productSearch);
+        if (o.unitChoiceByKey && typeof o.unitChoiceByKey === 'object') setUnitChoiceByKey(o.unitChoiceByKey);
+      }
+    } catch {
+      /* ignore */
+    }
+    setPrefsHydrated(true);
+  }, []);
+
+  React.useEffect(() => {
+    if (!prefsHydrated || !isBrowser()) return;
+    try {
+      localStorage.setItem(
+        PRECIOS_UI_STORAGE_KEY,
+        JSON.stringify({
+          windowPreset,
+          supplierFilter,
+          alertPct,
+          productSearch,
+          unitChoiceByKey,
+        }),
+      );
+    } catch {
+      /* ignore */
+    }
+  }, [prefsHydrated, windowPreset, supplierFilter, alertPct, productSearch, unitChoiceByKey]);
 
   React.useEffect(() => {
     if (!localId || !canUse) return;
@@ -871,7 +1009,11 @@ export default function PedidosPreciosPage() {
 
   React.useEffect(() => {
     setDismissedSeriesKeys(new Set());
-  }, [windowPreset, priceMode, supplierFilter]);
+  }, [windowPreset, supplierFilter]);
+
+  React.useEffect(() => {
+    setUnitChoiceByKey({});
+  }, [supplierFilter]);
 
   React.useEffect(() => {
     if (!evolutionToast) return;
@@ -905,9 +1047,9 @@ export default function PedidosPreciosPage() {
       catalogHistoryRows,
       windowStartMs,
       windowEndMs,
-      priceMode,
       supplierFilter,
       productInfoBySupplierProductId,
+      unitOverrideMap,
     );
     return {
       series: d.series,
@@ -924,7 +1066,7 @@ export default function PedidosPreciosPage() {
     supplierFilter,
     windowStartMs,
     windowEndMs,
-    priceMode,
+    unitOverrideMap,
   ]);
 
   React.useEffect(() => {
@@ -933,7 +1075,7 @@ export default function PedidosPreciosPage() {
     console.log('[Evolución precios] Filtros:', {
       ventana: windowLabel,
       proveedor: supplierFilter || '(todos)',
-      modo: priceMode,
+      vista: 'automática por producto',
     });
     console.log('Registros evolución crudos:', evolutionDebug.rawRows);
     console.log('Registros agrupados por producto:', evolutionDebug.groupedRows);
@@ -942,7 +1084,7 @@ export default function PedidosPreciosPage() {
       antesFiltroVariacion: seriesCandidatesBeforeVariation,
       trasFiltro: series.length,
     });
-  }, [evolutionDebug, localId, windowLabel, supplierFilter, priceMode, series.length, seriesCandidatesBeforeVariation]);
+  }, [evolutionDebug, localId, windowLabel, supplierFilter, series.length, seriesCandidatesBeforeVariation]);
 
   const seriesAllSuppliers = React.useMemo(
     () =>
@@ -950,11 +1092,11 @@ export default function PedidosPreciosPage() {
         catalogHistoryRows,
         windowStartMs,
         windowEndMs,
-        priceMode,
         '',
         productInfoBySupplierProductId,
+        unitOverrideMap,
       ),
-    [catalogHistoryRows, productInfoBySupplierProductId, windowStartMs, windowEndMs, priceMode],
+    [catalogHistoryRows, productInfoBySupplierProductId, windowStartMs, windowEndMs, unitOverrideMap],
   );
 
   const seriesAllSuppliersVisible = React.useMemo(
@@ -1122,21 +1264,10 @@ export default function PedidosPreciosPage() {
     [seriesFilteredVisible],
   );
 
-  const trendLabel = (row: PriceSummary) => {
-    const u = row.displayUnit;
-    if (row.delta > 0) {
-      return `Sube +${row.delta.toFixed(2)} €/${u} (+${row.deltaPct.toFixed(2)}%)`;
-    }
-    if (row.delta < 0) {
-      return `Baja ${row.delta.toFixed(2)} €/${u} (${row.deltaPct.toFixed(2)}%)`;
-    }
-    return 'Sin cambio';
-  };
-
-  const trendClass = (row: PriceSummary) => {
-    if (row.delta > 0) return 'text-red-700';
-    if (row.delta < 0) return 'text-emerald-700';
-    return 'text-zinc-600';
+  const evolutionTrendKind = (row: PriceSummary): 'up' | 'down' | 'flat' => {
+    if (row.delta > 0.0001) return 'up';
+    if (row.delta < -0.0001) return 'down';
+    return 'flat';
   };
 
   const downloadReportPdf = React.useCallback(() => {
@@ -1170,7 +1301,7 @@ export default function PedidosPreciosPage() {
     doc.setTextColor(...PDF_ZINC_500);
     doc.text(localLabel, 40, 58);
     doc.text(
-      `${windowLabel} · ${priceMode === 'per_kg' ? 'Vista €/kg' : 'Vista €/ud'} · ${supplierLabel}`,
+      `${windowLabel} · Vista automática (unidad por producto) · ${supplierLabel}`,
       40,
       72,
       { maxWidth: pageW - 80 },
@@ -1409,7 +1540,6 @@ export default function PedidosPreciosPage() {
     localName,
     localCode,
     windowLabel,
-    priceMode,
     supplierFilter,
     supplierOptions,
     alertPct,
@@ -1427,7 +1557,7 @@ export default function PedidosPreciosPage() {
       ['Chef-One · Evolución de precios'],
       ['Local', (localName?.trim() || localCode || '').trim()],
       ['Ventana', windowLabel],
-      ['Modo', priceMode === 'per_kg' ? '€/kg' : '€/ud'],
+      ['Modo', 'Automático por producto'],
       ['Proveedor', supplierLabel],
       ['Búsqueda', productSearch.trim() || '—'],
       [],
@@ -1485,7 +1615,6 @@ export default function PedidosPreciosPage() {
     localName,
     localCode,
     windowLabel,
-    priceMode,
     supplierFilter,
     supplierOptions,
     productSearch,
@@ -1557,74 +1686,69 @@ export default function PedidosPreciosPage() {
         </Link>
       </section>
 
-      <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-zinc-200">
-        <p className="text-center text-[10px] font-bold uppercase tracking-[0.2em] text-zinc-500">Pedidos</p>
-        <h1 className="text-center text-lg font-black text-zinc-900">Evolución de precios</h1>
-        {message ? <p className="pt-2 text-center text-sm text-[#B91C1C]">{message}</p> : null}
+      <section className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-zinc-200/80 sm:p-5">
+        <div className="flex flex-col gap-1 text-center sm:text-left">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-zinc-400">Pedidos</p>
+          <h1 className="text-xl font-semibold tracking-tight text-zinc-900">Evolución de precios</h1>
+        </div>
+        {message ? <p className="pt-2 text-center text-sm text-[#B91C1C] sm:text-left">{message}</p> : null}
 
-        <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <div className="rounded-xl bg-zinc-50 p-3 ring-1 ring-zinc-200">
-            <label className="text-[10px] font-bold uppercase tracking-wide text-zinc-500">Periodo</label>
-            <select
-              value={windowPreset}
-              onChange={(e) => setWindowPreset(e.target.value as WindowPreset)}
-              className="mt-1 h-10 w-full rounded-lg border border-zinc-300 bg-white px-2 text-sm font-medium text-zinc-900"
-            >
-              <option value="30">Últimos 30 días</option>
-              <option value="90">Últimos 90 días</option>
-              <option value="365">Últimos 12 meses</option>
-              <option value="all">Todo el histórico</option>
-            </select>
-          </div>
-          <div className="rounded-xl bg-zinc-50 p-3 ring-1 ring-zinc-200">
-            <label className="text-[10px] font-bold uppercase tracking-wide text-zinc-500">Proveedor</label>
+        <div className="mt-4 flex flex-col gap-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="sr-only">Periodo</span>
+            <div className="inline-flex max-w-full rounded-full bg-zinc-100 p-0.5">
+              {(
+                [
+                  ['30', '30d'],
+                  ['90', '90d'],
+                  ['365', '12m'],
+                  ['all', 'Todo'],
+                ] as const
+              ).map(([val, label]) => (
+                <button
+                  key={val}
+                  type="button"
+                  onClick={() => setWindowPreset(val)}
+                  className={[
+                    'rounded-full px-3 py-1.5 text-[12px] font-semibold transition-colors',
+                    windowPreset === val ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-500 hover:text-zinc-800',
+                  ].join(' ')}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
             <select
               value={supplierFilter}
               onChange={(e) => setSupplierFilter(e.target.value)}
-              className="mt-1 h-10 w-full rounded-lg border border-zinc-300 bg-white px-2 text-sm font-medium text-zinc-900"
+              aria-label="Proveedor"
+              className="h-9 min-w-0 flex-1 rounded-full border-0 bg-zinc-100 px-3 text-[13px] font-medium text-zinc-900 ring-1 ring-zinc-200/80 sm:max-w-[14rem]"
             >
-              <option value="">Todos</option>
+              <option value="">Todos los proveedores</option>
               {supplierOptions.map(([id, name]) => (
                 <option key={id} value={id}>
                   {name}
                 </option>
               ))}
             </select>
-          </div>
-          <div className="rounded-xl bg-zinc-50 p-3 ring-1 ring-zinc-200">
-            <label className="text-[10px] font-bold uppercase tracking-wide text-zinc-500">Vista precio</label>
-            <select
-              value={priceMode}
-              onChange={(e) => setPriceMode(e.target.value as PriceMode)}
-              className="mt-1 h-10 w-full rounded-lg border border-zinc-300 bg-white px-2 text-sm font-medium text-zinc-900"
-            >
-              <option value="unit">€ por unidad de catálogo</option>
-              <option value="per_kg">€/kg (real o estimado)</option>
-            </select>
-          </div>
-          <div className="rounded-xl bg-zinc-50 p-3 ring-1 ring-zinc-200">
-            <label className="text-[10px] font-bold uppercase tracking-wide text-zinc-500">Umbral alerta subida %</label>
             <select
               value={String(alertPct)}
               onChange={(e) => setAlertPct(Number(e.target.value))}
-              className="mt-1 h-10 w-full rounded-lg border border-zinc-300 bg-white px-2 text-sm font-medium text-zinc-900"
+              aria-label="Umbral alerta subida"
+              className="h-9 shrink-0 rounded-full border-0 bg-zinc-100 px-2.5 text-[12px] font-medium text-zinc-800 ring-1 ring-zinc-200/80"
             >
-              <option value="0">Cualquier subida (mínimo)</option>
-              <option value="3">3 %</option>
-              <option value="5">5 %</option>
-              <option value="8">8 %</option>
-              <option value="10">10 %</option>
+              <option value="0">Alerta: mín.</option>
+              <option value="3">Alerta ≥3%</option>
+              <option value="5">Alerta ≥5%</option>
+              <option value="8">Alerta ≥8%</option>
+              <option value="10">Alerta ≥10%</option>
             </select>
           </div>
-        </div>
-
-        <div className="mt-3">
-          <label className="text-[10px] font-bold uppercase tracking-wide text-zinc-500">Buscar referencia</label>
           <input
             value={productSearch}
             onChange={(e) => setProductSearch(e.target.value)}
-            placeholder="Nombre de producto…"
-            className="mt-1 h-10 w-full rounded-xl border border-zinc-300 bg-white px-3 text-sm text-zinc-900 placeholder:text-zinc-400"
+            placeholder="Buscar referencia…"
+            className="h-10 w-full rounded-2xl border border-zinc-200 bg-zinc-50/80 px-4 text-[14px] text-zinc-900 placeholder:text-zinc-400 focus:border-zinc-300 focus:bg-white focus:outline-none focus:ring-2 focus:ring-zinc-200"
           />
         </div>
 
@@ -1646,125 +1770,96 @@ export default function PedidosPreciosPage() {
           </button>
         </div>
 
-        <div className="mt-6 rounded-xl border border-zinc-100 bg-zinc-50/60 p-4 ring-1 ring-zinc-100">
-          <p className="text-[10px] font-black uppercase tracking-wide text-zinc-500">Historial de recepción</p>
+        <div className="mt-6 rounded-2xl border border-zinc-100 bg-zinc-50/40 p-3 ring-1 ring-zinc-100">
+          <p className="text-[11px] font-semibold text-zinc-500">Historial de recepción</p>
           {catalogHistoryLoading ? (
-            <p className="mt-3 text-sm text-zinc-500">Cargando historial…</p>
+            <p className="mt-2 text-sm text-zinc-500">Cargando…</p>
           ) : catalogHistoryFiltered.length === 0 ? (
-            <p className="mt-3 text-sm text-zinc-500">Sin historial.</p>
+            <p className="mt-2 text-sm text-zinc-500">Sin historial.</p>
           ) : (
-            <div className="mt-3 overflow-x-auto rounded-lg ring-1 ring-zinc-200">
-              <table className="w-full min-w-[720px] text-left text-xs">
-                <thead className="bg-zinc-100 text-[10px] font-bold uppercase tracking-wide text-zinc-500">
-                  <tr>
-                    <th className="px-2 py-2">Fecha</th>
-                    <th className="px-2 py-2">Producto</th>
-                    <th className="px-2 py-2">Proveedor</th>
-                    <th className="px-2 py-2">Origen</th>
-                    <th className="px-2 py-2 text-right">Ant. → Nuevo</th>
-                    <th className="px-2 py-2 text-right">Δ %</th>
-                    <th className="w-12 px-2 py-2 text-right" aria-label="Acciones" />
-                  </tr>
-                </thead>
-                <tbody>
-                  {catalogHistoryFiltered.map((h) => {
-                    const info = productInfoBySupplierProductId.get(h.supplierProductId);
-                    return (
-                      <tr key={h.id} className="border-t border-zinc-100 bg-white">
-                        <td className="whitespace-nowrap px-2 py-2 text-zinc-700">
-                          {new Date(h.createdAt).toLocaleString('es-ES', {
-                            day: '2-digit',
-                            month: 'short',
-                            year: '2-digit',
-                            hour: '2-digit',
-                            minute: '2-digit',
-                          })}
-                        </td>
-                        <td className="max-w-[10rem] truncate px-2 py-2 font-medium text-zinc-900" title={info?.productName}>
-                          {info?.productName ?? h.supplierProductId.slice(0, 8) + '…'}
-                        </td>
-                        <td className="max-w-[8rem] truncate px-2 py-2 text-zinc-600" title={info?.supplierName}>
-                          {info?.supplierName ?? '—'}
-                        </td>
-                        <td className="px-2 py-2 text-zinc-600">{labelCatalogPriceHistorySource(h.source)}</td>
-                        <td className="whitespace-nowrap px-2 py-2 text-right tabular-nums text-zinc-800">
-                          {h.oldPricePerUnit.toFixed(2)} → {h.newPricePerUnit.toFixed(2)} €/{h.displayUnit}
-                        </td>
-                        <td className="whitespace-nowrap px-2 py-2 text-right tabular-nums text-zinc-700">
-                          {h.diferenciaPct != null && Number.isFinite(h.diferenciaPct)
-                            ? `${h.diferenciaPct >= 0 ? '+' : ''}${h.diferenciaPct.toFixed(2)} %`
-                            : '—'}
-                        </td>
-                        <td className="px-1 py-1 text-right">
-                          <button
-                            type="button"
-                            disabled={catalogHistoryDeleteBusy}
-                            onClick={() => setDeleteHistoryId(h.id)}
-                            className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-zinc-500 ring-1 ring-zinc-200 hover:bg-red-50 hover:text-red-800 disabled:opacity-50"
-                            aria-label="Eliminar"
-                            title="Eliminar este registro del histórico"
-                          >
-                            <Trash2 className="h-4 w-4" aria-hidden />
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+            <ul className="mt-2 max-h-52 divide-y divide-zinc-100 overflow-y-auto rounded-xl bg-white ring-1 ring-zinc-200/80">
+              {catalogHistoryFiltered.map((h) => {
+                const info = productInfoBySupplierProductId.get(h.supplierProductId);
+                return (
+                  <li key={h.id} className="flex items-start gap-2 px-3 py-2.5 text-[13px]">
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate font-medium text-zinc-900" title={info?.productName}>
+                        {info?.productName ?? h.supplierProductId.slice(0, 8) + '…'}
+                      </p>
+                      <p className="truncate text-[12px] text-zinc-500">{info?.supplierName ?? '—'}</p>
+                      <p className="mt-0.5 tabular-nums text-[12px] text-zinc-700">
+                        {h.oldPricePerUnit.toFixed(2)} → {h.newPricePerUnit.toFixed(2)} {euroPerUnitShortLabel(h.displayUnit)}
+                      </p>
+                    </div>
+                    <div className="flex shrink-0 flex-col items-end gap-1 text-right">
+                      <time className="whitespace-nowrap text-[11px] text-zinc-400">
+                        {new Date(h.createdAt).toLocaleString('es-ES', {
+                          day: '2-digit',
+                          month: 'short',
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        })}
+                      </time>
+                      <button
+                        type="button"
+                        disabled={catalogHistoryDeleteBusy}
+                        onClick={() => setDeleteHistoryId(h.id)}
+                        className="rounded-lg p-1.5 text-zinc-400 hover:bg-red-50 hover:text-red-700 disabled:opacity-50"
+                        aria-label="Eliminar"
+                      >
+                        <Trash2 className="h-4 w-4" aria-hidden />
+                      </button>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
           )}
         </div>
       </section>
 
-      <section className="rounded-2xl bg-gradient-to-br from-zinc-50 to-white p-4 ring-1 ring-zinc-200">
-        <p className="text-[10px] font-bold uppercase tracking-wide text-zinc-500">
-          Resumen · {windowLabel}
-          {priceMode === 'per_kg' ? ' · €/kg' : ' · €/ud'}
-        </p>
-        <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          <div className="rounded-xl bg-white p-4 shadow-sm ring-1 ring-zinc-100">
-            <p className="text-[11px] font-semibold text-zinc-500">Referencias con movimiento</p>
-            <p className="mt-1 text-2xl font-black tabular-nums text-zinc-900">{executiveKpis.n}</p>
-            <p className="mt-1 text-xs text-zinc-600">
-              Suben {executiveKpis.up} · Bajan {executiveKpis.down}
+      <section className="rounded-2xl bg-white p-3 ring-1 ring-zinc-200/80">
+        <p className="px-1 text-[11px] font-medium text-zinc-400">{windowLabel}</p>
+        <div className="mt-2 flex gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          <div className="min-w-[7.5rem] shrink-0 rounded-2xl bg-zinc-50 px-3 py-2 ring-1 ring-zinc-100">
+            <p className="text-[10px] font-medium uppercase tracking-wide text-zinc-400">Referencias</p>
+            <p className="text-lg font-semibold tabular-nums text-zinc-900">{executiveKpis.n}</p>
+            <p className="text-[11px] text-zinc-500">
+              ↑{executiveKpis.up} · ↓{executiveKpis.down}
             </p>
           </div>
-          <div className="rounded-xl bg-white p-4 shadow-sm ring-1 ring-zinc-100">
-            <p className="text-[11px] font-semibold text-zinc-500">Alertas de subida</p>
-            <p className="mt-1 flex items-center gap-2 text-2xl font-black tabular-nums text-amber-800">
+          <div className="min-w-[7.5rem] shrink-0 rounded-2xl bg-amber-50/80 px-3 py-2 ring-1 ring-amber-100/80">
+            <p className="text-[10px] font-medium uppercase tracking-wide text-amber-800/90">Alertas</p>
+            <p className="flex items-center gap-1 text-lg font-semibold tabular-nums text-amber-950">
               {executiveKpis.alertCount}
-              <AlertTriangle className="h-5 w-5 shrink-0" aria-hidden />
+              <AlertTriangle className="h-4 w-4 shrink-0 opacity-80" aria-hidden />
             </p>
-            <p className="mt-1 text-xs text-zinc-600">
-              {alertPct <= 0
-                ? 'Cualquier subida respecto al precio inicial de la serie en la ventana.'
-                : `≥ ${alertPct}% respecto al precio inicial en la ventana`}
-            </p>
+            <p className="text-[11px] text-amber-900/70">{alertPct <= 0 ? 'Cualquier subida' : `≥ ${alertPct}%`}</p>
           </div>
-          <div className="rounded-xl bg-white p-4 shadow-sm ring-1 ring-zinc-100">
-            <p className="text-[11px] font-semibold text-zinc-500">Δ % ponderado por volumen</p>
-            <p className="mt-1 text-2xl font-black tabular-nums text-zinc-900">
+          <div className="min-w-[8rem] shrink-0 rounded-2xl bg-zinc-50 px-3 py-2 ring-1 ring-zinc-100">
+            <p className="text-[10px] font-medium uppercase tracking-wide text-zinc-400">Δ % vol.</p>
+            <p className="text-lg font-semibold tabular-nums text-zinc-900">
               {executiveKpis.volWeightedDeltaPct >= 0 ? '+' : ''}
-              {executiveKpis.volWeightedDeltaPct.toFixed(2)} %
+              {executiveKpis.volWeightedDeltaPct.toFixed(1)}%
             </p>
-            <p className="mt-1 text-xs text-zinc-600">Media simple: {executiveKpis.avgDeltaPct >= 0 ? '+' : ''}{executiveKpis.avgDeltaPct.toFixed(2)} %</p>
+            <p className="text-[11px] text-zinc-500">
+              μ {executiveKpis.avgDeltaPct >= 0 ? '+' : ''}
+              {executiveKpis.avgDeltaPct.toFixed(1)}%
+            </p>
           </div>
-          <div className="rounded-xl bg-white p-4 shadow-sm ring-1 ring-red-100">
-            <p className="text-[11px] font-semibold text-red-800">Impacto mensual vs PMP (subidas)</p>
-            <p className="mt-1 flex items-center gap-2 text-2xl font-black tabular-nums text-red-700">
-              +{executiveKpis.impactUpMonthly.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €
-              <TrendingUp className="h-5 w-5 shrink-0" aria-hidden />
+          <div className="min-w-[8rem] shrink-0 rounded-2xl bg-red-50/70 px-3 py-2 ring-1 ring-red-100/80">
+            <p className="text-[10px] font-medium uppercase tracking-wide text-red-800/80">Impacto +€/mes</p>
+            <p className="flex items-center gap-1 text-lg font-semibold tabular-nums text-red-700">
+              +{executiveKpis.impactUpMonthly.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              <TrendingUp className="h-4 w-4 shrink-0 opacity-80" aria-hidden />
             </p>
-            <p className="mt-1 text-xs text-zinc-600">Si el ritmo de compra del periodo se mantiene</p>
           </div>
-          <div className="rounded-xl bg-white p-4 shadow-sm ring-1 ring-emerald-100">
-            <p className="text-[11px] font-semibold text-emerald-800">Ahorro mensual vs PMP (bajadas)</p>
-            <p className="mt-1 flex items-center gap-2 text-2xl font-black tabular-nums text-emerald-700">
-              {executiveKpis.impactDownMonthly.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €
-              <TrendingDown className="h-5 w-5 shrink-0" aria-hidden />
+          <div className="min-w-[8rem] shrink-0 rounded-2xl bg-emerald-50/70 px-3 py-2 ring-1 ring-emerald-100/80">
+            <p className="text-[10px] font-medium uppercase tracking-wide text-emerald-800/80">vs PMP −</p>
+            <p className="flex items-center gap-1 text-lg font-semibold tabular-nums text-emerald-800">
+              {executiveKpis.impactDownMonthly.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              <TrendingDown className="h-4 w-4 shrink-0 opacity-80" aria-hidden />
             </p>
-            <p className="mt-1 text-xs text-zinc-600">Valores negativos = menor coste que la media del periodo</p>
           </div>
         </div>
       </section>
@@ -1775,10 +1870,7 @@ export default function PedidosPreciosPage() {
             <Lightbulb className="h-5 w-5 text-amber-800" aria-hidden />
             <p className="text-sm font-black text-zinc-900">Recomendaciones automáticas</p>
           </div>
-            <p className="mt-1 text-xs text-zinc-600">
-              Basadas en impacto vs media del periodo, alertas de subida y huecos entre proveedores (misma ventana y modo
-              de vista).
-            </p>
+            <p className="mt-1 text-xs text-zinc-600">Impacto vs PMP, alertas y diferencias entre proveedores.</p>
           <ul className="mt-3 space-y-2">
             {actionRecommendations.map((rec) => (
               <li
@@ -1800,10 +1892,7 @@ export default function PedidosPreciosPage() {
       {benchmarksForUi.length > 0 ? (
         <section className="rounded-2xl bg-white p-4 ring-1 ring-zinc-200">
           <p className="text-sm font-black text-zinc-900">Mismo producto, varios proveedores</p>
-          <p className="mt-1 text-xs text-zinc-600">
-            Referencias con el mismo nombre y unidad de catálogo en la ventana; ordenadas por diferencia relativa entre el
-            proveedor más caro y el más barato.
-          </p>
+          <p className="mt-1 text-xs text-zinc-600">Misma referencia y unidad de catálogo; orden por hueco de precio.</p>
           <div className="mt-3 space-y-3">
             {benchmarksForUi.map((b) => (
               <div key={b.compareKey} className="rounded-xl bg-zinc-50 p-3 ring-1 ring-zinc-200">
@@ -1837,48 +1926,24 @@ export default function PedidosPreciosPage() {
 
       {impactRanking.length > 0 ? (
         <section className="rounded-2xl bg-white p-4 ring-1 ring-zinc-200">
-          <p className="text-sm font-black text-zinc-900">Ranking impacto económico (vs PMP)</p>
-          <p className="mt-1 text-xs text-zinc-600">
-            Referencias que más encarecen el mes si se mantiene el volumen y el precio actual frente al PMP de la ventana.
-          </p>
-          <div className="mt-3 overflow-x-auto rounded-xl ring-1 ring-zinc-100">
-            <table className="w-full min-w-[640px] text-left text-xs">
-              <thead className="bg-zinc-50 text-[10px] font-bold uppercase tracking-wide text-zinc-500">
-                <tr>
-                  <th className="px-3 py-2">#</th>
-                  <th className="px-3 py-2">Producto</th>
-                  <th className="px-3 py-2">Proveedor</th>
-                  <th className="px-3 py-2 text-right">Impacto €/mes</th>
-                  <th className="px-3 py-2 text-right">Δ %</th>
-                  <th className="px-3 py-2 text-right">PMP</th>
-                  <th className="px-3 py-2 text-right">Actual</th>
-                </tr>
-              </thead>
-              <tbody>
-                {impactRanking.map((row, idx) => (
-                  <tr key={row.key} className="border-t border-zinc-100">
-                    <td className="px-3 py-2 tabular-nums text-zinc-500">{idx + 1}</td>
-                    <td className="px-3 py-2 font-semibold text-zinc-900">{row.productName}</td>
-                    <td className="px-3 py-2 text-zinc-700">{row.supplierName}</td>
-                    <td className="px-3 py-2 text-right font-bold tabular-nums text-red-700">
-                      +{row.impactMonthlyVsWap.toFixed(2)} €
-                    </td>
-                    <td className="px-3 py-2 text-right tabular-nums text-zinc-700">+{row.deltaPct.toFixed(1)} %</td>
-                    <td className="px-3 py-2 text-right tabular-nums text-zinc-600">
-                      {row.weightedAvg.toFixed(2)} €/{row.displayUnit}
-                    </td>
-                    <td className="px-3 py-2 text-right tabular-nums text-zinc-900">
-                      {row.current.price.toFixed(2)} €/{row.displayUnit}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <p className="text-sm font-semibold text-zinc-900">Mayor impacto vs PMP</p>
+          <ul className="mt-3 divide-y divide-zinc-100">
+            {impactRanking.map((row, idx) => (
+              <li key={row.key} className="flex flex-wrap items-center gap-2 py-2.5 text-[13px] first:pt-0">
+                <span className="w-5 shrink-0 tabular-nums text-zinc-400">{idx + 1}</span>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate font-medium text-zinc-900">{row.productName}</p>
+                  <p className="truncate text-[12px] text-zinc-500">{row.supplierName}</p>
+                </div>
+                <span className="shrink-0 font-semibold tabular-nums text-red-600">+{row.impactMonthlyVsWap.toFixed(2)} €</span>
+                <span className="shrink-0 tabular-nums text-zinc-500">+{row.deltaPct.toFixed(1)}%</span>
+              </li>
+            ))}
+          </ul>
         </section>
       ) : null}
 
-      <section className="space-y-2">
+      <section className="space-y-4">
         {seriesFilteredVisible.length === 0 ? (
           <div className="rounded-2xl bg-white p-4 text-sm text-zinc-500 ring-1 ring-zinc-200">
             {emptyEvolutionSectionMessage}
@@ -1886,100 +1951,133 @@ export default function PedidosPreciosPage() {
         ) : null}
         {seriesFilteredVisible.map((row) => {
           const alert = isPriceRiseAlert(row, alertPct);
+          const trend = evolutionTrendKind(row);
+          const eu = euroPerUnitShortLabel(row.displayUnit);
+          const receptionCount = row.points.filter((p) => p.sortRank === 1).length;
+          const unitSwitcher =
+            row.showUnitSwitcher && row.alternativeUnits.length > 1
+              ? {
+                  options: row.alternativeUnits,
+                  value: row.displayUnit,
+                  onChange: (u: string) =>
+                    setUnitChoiceByKey((prev) => ({
+                      ...prev,
+                      [row.key]: u,
+                    })),
+                }
+              : null;
+          const timelinePts = [...row.points]
+            .filter((p) => p.sortRank === 1)
+            .sort((a, b) => Date.parse(b.date) - Date.parse(a.date))
+            .slice(0, 14);
           return (
-            <div
+            <article
               key={row.key}
               className={[
-                'rounded-2xl bg-white p-4 ring-1',
-                alert ? 'ring-2 ring-amber-400 shadow-sm' : 'ring-zinc-200',
+                'overflow-hidden rounded-2xl bg-white ring-1',
+                alert ? 'ring-2 ring-amber-300/90 shadow-sm' : 'ring-zinc-200/90',
               ].join(' ')}
             >
-              <div className="flex flex-wrap items-start justify-between gap-2">
-                <div className="min-w-0 flex-1 pr-1">
-                  <p className="text-sm font-black text-zinc-900">{row.productName}</p>
-                  <p className="text-[11px] text-zinc-500">Proveedor: {row.supplierName}</p>
-                  {row.usedPerKgUnitFallback ? (
-                    <p className="pt-0.5 text-[11px] text-zinc-500">
-                      Modo €/kg: sin peso, se muestra el precio por {row.catalogUnit} del catálogo.
-                    </p>
-                  ) : null}
+              <div className="border-b border-zinc-100 px-4 pb-3 pt-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0 flex-1">
+                    <h2 className="text-[17px] font-semibold leading-snug tracking-tight text-zinc-900">{row.productName}</h2>
+                    <p className="mt-0.5 text-[13px] text-zinc-500">{row.supplierName}</p>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-2">
+                    <span
+                      className={[
+                        'rounded-full px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide',
+                        trend === 'up'
+                          ? 'bg-red-50 text-red-800'
+                          : trend === 'down'
+                            ? 'bg-emerald-50 text-emerald-800'
+                            : 'bg-zinc-100 text-zinc-600',
+                      ].join(' ')}
+                    >
+                      {trend === 'up'
+                        ? `Subida ${row.deltaPct >= 0 ? '+' : ''}${row.deltaPct.toFixed(1)}%`
+                        : trend === 'down'
+                          ? `Bajada ${row.deltaPct.toFixed(1)}%`
+                          : 'Estable'}
+                    </span>
+                    {alert ? (
+                      <span className="hidden rounded-full bg-amber-100 px-2 py-1 text-[10px] font-bold uppercase text-amber-950 sm:inline-flex">
+                        <AlertTriangle className="mr-0.5 inline h-3 w-3" aria-hidden />
+                        {alertPct <= 0 ? 'Alerta' : `≥${alertPct}%`}
+                      </span>
+                    ) : null}
+                    <button
+                      type="button"
+                      disabled={seriesEvolutionDeleteBusy}
+                      title="Borrar histórico de este producto"
+                      onClick={() => setSeriesDeleteContext({ key: row.key })}
+                      className="rounded-xl p-2 text-zinc-400 hover:bg-red-50 hover:text-[#B91C1C] disabled:opacity-40"
+                      aria-label="Borrar histórico de este producto"
+                    >
+                      <Trash2 className="h-5 w-5" aria-hidden />
+                    </button>
+                  </div>
                 </div>
-                <div className="flex shrink-0 items-center gap-1.5 self-start">
-                  {alert ? (
-                    <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-950">
-                      <AlertTriangle className="h-3 w-3" aria-hidden />
-                      {alertPct <= 0 ? 'Subida' : `Alerta ≥${alertPct}%`}
+                <p className="mt-3 text-[14px] leading-relaxed text-zinc-800">
+                  <span className="font-semibold tabular-nums text-zinc-900">
+                    {row.current.price.toFixed(2)} {eu}
+                  </span>
+                  <span className="text-zinc-400"> · </span>
+                  <span className="text-zinc-600">
+                    PMP {row.weightedAvg.toFixed(2)} {eu}
+                  </span>
+                  <span className="text-zinc-400"> · </span>
+                  <span className={trend === 'up' ? 'font-medium text-red-700' : trend === 'down' ? 'font-medium text-emerald-700' : 'text-zinc-600'}>
+                    {row.deltaPct >= 0 ? '+' : ''}
+                    {row.deltaPct.toFixed(1)}%
+                  </span>
+                </p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <span className="rounded-full bg-zinc-50 px-2.5 py-1 text-[11px] font-medium text-zinc-700 ring-1 ring-zinc-100">
+                    Impacto{' '}
+                    <span className={row.impactMonthlyVsWap > 0 ? 'text-red-700' : row.impactMonthlyVsWap < 0 ? 'text-emerald-700' : ''}>
+                      {row.impactMonthlyVsWap >= 0 ? '+' : ''}
+                      {row.impactMonthlyVsWap.toFixed(2)} €/mes
+                    </span>
+                  </span>
+                  <span className="rounded-full bg-zinc-50 px-2.5 py-1 text-[11px] font-medium text-zinc-700 ring-1 ring-zinc-100">
+                    CV {row.volatilityCvPct.toFixed(1)}%
+                  </span>
+                  <span className="rounded-full bg-zinc-50 px-2.5 py-1 text-[11px] font-medium text-zinc-700 ring-1 ring-zinc-100">
+                    {receptionCount} recep.
+                  </span>
+                  {row.forecast30d != null ? (
+                    <span className="rounded-full bg-zinc-50 px-2.5 py-1 text-[11px] font-medium text-zinc-700 ring-1 ring-zinc-100">
+                      ~30d {row.forecast30d.toFixed(2)} {eu}
                     </span>
                   ) : null}
-                  <button
-                    type="button"
-                    disabled={seriesEvolutionDeleteBusy}
-                    title="Borrar histórico de este producto"
-                    onClick={() => {
-                      setSeriesDeleteContext({ key: row.key });
-                    }}
-                    className="flex min-h-11 min-w-11 items-center justify-center rounded-xl text-zinc-400 transition-colors hover:bg-red-50 hover:text-[#B91C1C] active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-zinc-400"
-                    aria-label="Borrar histórico de este producto"
-                  >
-                    <Trash2 className="h-5 w-5" aria-hidden />
-                  </button>
                 </div>
               </div>
-              <p className="pt-1 text-xs text-zinc-600">
-                Base: {row.base.price.toFixed(2)} €/{row.displayUnit} · Actual: {row.current.price.toFixed(2)} €/
-                {row.displayUnit}
-              </p>
-              <p className="pt-1 text-xs font-semibold text-zinc-800">
-                PMP:{' '}
-                <span className="tabular-nums">
-                  {row.weightedAvg.toFixed(2)} €/{row.displayUnit}
-                </span>{' '}
-                · Cantidad periodo (ponderado):{' '}
-                <span className="tabular-nums">{row.totalWeightedQty.toLocaleString('es-ES')}</span>
-                {priceMode === 'per_kg' && row.displayUnit === 'kg' ? ' kg' : ` ${row.displayUnit}`}
-              </p>
-              <p className="pt-1 text-xs text-zinc-600">
-                Impacto mensual vs PMP:{' '}
-                <span className={`font-bold tabular-nums ${row.impactMonthlyVsWap > 0 ? 'text-red-700' : row.impactMonthlyVsWap < 0 ? 'text-emerald-700' : 'text-zinc-800'}`}>
-                  {row.impactMonthlyVsWap >= 0 ? '+' : ''}
-                  {row.impactMonthlyVsWap.toFixed(2)} €
-                </span>
-                {' · '}
-                Volatilidad (CV):{' '}
-                <span className="font-semibold tabular-nums text-zinc-800">{row.volatilityCvPct.toFixed(1)} %</span>
-                {row.forecast30d != null ? (
-                  <>
-                    {' · '}
-                    Tendencia ~30d:{' '}
-                    <span className="font-semibold tabular-nums text-zinc-800">
-                      {row.forecast30d.toFixed(2)} €/{row.displayUnit}
-                    </span>
-                  </>
-                ) : null}
-              </p>
-              <p className={`pt-1 text-xs font-semibold ${trendClass(row)}`}>{trendLabel(row)}</p>
-              <p className="pt-2 text-[10px] font-bold uppercase tracking-wide text-zinc-500">Gráfico de evolución</p>
-              <PriceEvolutionMiniChart row={row} />
-              <p className="pt-5 text-[10px] font-bold uppercase tracking-wide text-zinc-500">Recepciones (histórico)</p>
-              <div className="mt-1.5 max-h-44 space-y-1 overflow-y-auto overflow-x-hidden rounded-lg bg-zinc-50 p-2 pb-3 ring-1 ring-zinc-200">
-                {row.purchases.map((pur, idx) => (
-                  <p key={`${row.key}-p-${idx}`} className="text-xs leading-snug text-zinc-600">
-                    {new Date(pur.date).toLocaleDateString('es-ES')} · {pur.supplier} ·{' '}
-                    {formatQuantityWithUnit(pur.qty, pur.unit)} · {pur.price.toFixed(2)} €/{pur.unit}
-                  </p>
-                ))}
+              <div className="px-2 pb-2 pt-1 sm:px-4">
+                <PriceEvolutionMiniChart row={row} unitSwitcher={unitSwitcher} />
               </div>
-              <p className="pt-2 text-[10px] font-bold uppercase tracking-wide text-zinc-500">Evolución precio</p>
-              <div className="mt-1 max-h-28 space-y-1 overflow-auto rounded-lg bg-zinc-50 p-2 ring-1 ring-zinc-200">
-                {row.points.slice(0, 12).map((point, idx) => (
-                  <p key={`${row.key}-${idx}`} className="text-xs text-zinc-600">
-                    {new Date(point.date).toLocaleDateString('es-ES')} · {point.supplier} · {point.price.toFixed(2)} €/
-                    {point.unit}
-                    {point.sortRank === 0 ? ' · (referencia previa)' : ''}
-                  </p>
-                ))}
-              </div>
-            </div>
+              {timelinePts.length > 0 ? (
+                <div className="border-t border-zinc-50 px-4 py-3">
+                  <p className="text-[11px] font-medium text-zinc-400">Historial</p>
+                  <ul className="mt-2 space-y-2">
+                    {timelinePts.map((p) => (
+                      <li
+                        key={`${row.key}-${p.itemId}`}
+                        className="flex items-baseline justify-between gap-3 text-[13px]"
+                      >
+                        <time className="shrink-0 text-zinc-500">
+                          {new Date(p.date).toLocaleDateString('es-ES', { day: '2-digit', month: 'short' })}
+                        </time>
+                        <span className="min-w-0 flex-1 truncate text-right font-medium tabular-nums text-zinc-900">
+                          {p.price.toFixed(2)} {euroPerUnitShortLabel(p.unit)}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+            </article>
           );
         })}
       </section>
