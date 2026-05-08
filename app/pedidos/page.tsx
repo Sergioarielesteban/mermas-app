@@ -87,6 +87,7 @@ import {
 } from '@/lib/comida-personal-supabase';
 import { getPedidoDrafts } from '@/lib/pedidos-storage';
 import { getAppMainScrollElement, readMainScrollTop, setMainScrollTop } from '@/lib/pedidos-main-scroll';
+import { pedidosDiagEnabled, pedidosDiagLog, pedidosDiagUiSnap } from '@/lib/pedidos-page-diag';
 import {
   CHEFONE_PEDIDOS_UI_STATE_KEY,
   loadPedidosUiState,
@@ -488,6 +489,10 @@ export default function PedidosPage() {
   const scrollPersistTimeoutRef = React.useRef<number | null>(null);
   /** Tras restaurar UI, no podar expanded* hasta que haya pasado (evita carrera con fetch inicial). */
   const suppressOrderPruneUntilRef = React.useRef(0);
+  /** Evita que el efecto de "cambio de local" ponga suppress a 0 en el primer attach o tras hydrate. */
+  const pruneSuppressLocalIdSeqRef = React.useRef<string | null | undefined>(undefined);
+  /** Diagnóstico: último snapshot serializado tras commit (activar con localStorage CHEFONE_PEDIDOS_TRACE=1). */
+  const traceCommitRef = React.useRef('');
 
   React.useEffect(() => {
     if (!avisoPedido) return;
@@ -499,19 +504,43 @@ export default function PedidosPage() {
 
   React.useLayoutEffect(() => {
     if (typeof window === 'undefined') return;
+    pedidosDiagLog('useLayoutEffect[hydrate] ENTER', {
+      localId: localId ?? null,
+      canUse,
+      avisoPedido: avisoPedido ?? null,
+      restoreAttemptedFor: pedidosPageUiRestoreAttemptedRef.current,
+      docVisibility: typeof document !== 'undefined' ? document.visibilityState : 'n/a',
+      beforeSnap: pedidosDiagUiSnap({
+        pendientesOpen: pendientesEntregaAccordionOpen,
+        historicoOpen: historicoRecibidosAccordionOpen,
+        expandedSentId,
+        expandedHistoricoId,
+        uiHydrated,
+        scrollPending: scrollRestorePendingRef.current,
+        suppressPruneUntil: suppressOrderPruneUntilRef.current,
+        visibility: typeof document !== 'undefined' ? document.visibilityState : undefined,
+      }),
+    });
     if (!localId || !canUse) {
+      pedidosDiagLog('useLayoutEffect[hydrate] BRANCH', { action: 'clear_refs_setUiHydrated_false', reason: '!localId || !canUse' });
       pedidosPageUiRestoreAttemptedRef.current = null;
       hasRestoredViewStateRef.current = false;
       setUiHydrated(false);
       return;
     }
     if (avisoPedido) {
+      pedidosDiagLog('useLayoutEffect[hydrate] BRANCH', { action: 'avisoPedido_skip_restore', avisoPedido });
       pedidosPageUiRestoreAttemptedRef.current = localId;
       hasRestoredViewStateRef.current = true;
       setUiHydrated(true);
       return;
     }
     if (pedidosPageUiRestoreAttemptedRef.current === localId) {
+      pedidosDiagLog('useLayoutEffect[hydrate] BRANCH', {
+        action: 'EARLY_RETURN_restore_already_attempted_same_localId',
+        note: 'No re-read sessionStorage; React state unchanged by this effect.',
+        withStack: true,
+      });
       setUiHydrated(true);
       return;
     }
@@ -521,12 +550,35 @@ export default function PedidosPage() {
       const route = pathname + window.location.search;
       const rawSess = window.sessionStorage.getItem(CHEFONE_PEDIDOS_UI_STATE_KEY);
       const sess = loadPedidosUiState(rawSess, localId, pathname);
+      pedidosDiagLog('useLayoutEffect[hydrate] STORAGE_READ', {
+        pathname,
+        route,
+        rawSessionLen: rawSess?.length ?? 0,
+        sessionParsed: Boolean(sess),
+        sessionSnapshot: sess
+          ? {
+              pendingExpanded: sess.pendingExpanded,
+              expandedPedidoId: sess.expandedPedidoId,
+              expandedHistoricoPedidoId: sess.expandedHistoricoPedidoId,
+              scrollY: sess.scrollY,
+              expandedLinesKeys: Object.keys(sess.expandedLinesByPedido ?? {}),
+            }
+          : null,
+      });
       if (sess) {
         console.log('[PEDIDOS_UI] restore start', {
           pendingExpanded: sess.pendingExpanded,
           expandedPedidoId: sess.expandedPedidoId,
           scrollY: sess.scrollY,
           pathname: sess.pathname,
+        });
+        pedidosDiagLog('useLayoutEffect[hydrate] APPLY_SESSION', {
+          writes: 'setPendientes/setHistoricoAccordion/setExpandedSent/setExpandedHistorico/incident/quickMarks/historicoMonth + suppress+scrollPending',
+          pendingExpanded: sess.pendingExpanded,
+          expandedPedidoId: sess.expandedPedidoId,
+          expandedHistoricoPedidoId: sess.expandedHistoricoPedidoId,
+          scrollY: sess.scrollY,
+          withStack: true,
         });
         if (sess.receptionInputs) {
           const {
@@ -558,6 +610,10 @@ export default function PedidosPage() {
           expandedHistoricoPedidoId: sess.expandedHistoricoPedidoId,
           scrollY: sess.scrollY,
         });
+        pedidosDiagLog('useLayoutEffect[hydrate] SESSION_APPLIED_SCHEDULED', {
+          suppressOrderPruneUntilSetTo: suppressOrderPruneUntilRef.current,
+          scrollRestorePendingRef: scrollRestorePendingRef.current,
+        });
       } else {
         // sessionStorage is gone. Two possible reasons:
         //   A) User intentionally left the module: clearPedidosUiStateOnlyWhenUserLeavesModule()
@@ -571,6 +627,13 @@ export default function PedidosPage() {
             openedSection: st.openedSection,
             activeOrderId: st.activeOrderId,
             scrollY: st.scrollY,
+          });
+          pedidosDiagLog('useLayoutEffect[hydrate] APPLY_LOCALSTORAGE_FALLBACK', {
+            openedSection: st.openedSection,
+            activeOrderId: st.activeOrderId,
+            expandedOrderIds: st.expandedOrderIds,
+            scrollY: st.scrollY,
+            withStack: true,
           });
           const r = st.route;
           if (r && r.startsWith('/pedidos') && r !== route) {
@@ -625,6 +688,10 @@ export default function PedidosPage() {
         } else {
           // Case A: intentional module exit (localStorage also cleared) → fresh start.
           console.log('[PEDIDOS_UI] reset reason', 'no_valid_session_fresh_module_entry');
+          pedidosDiagLog('useLayoutEffect[hydrate] FRESH_MODULE_RESET', {
+            action: 'setPendientes false, expanded null, clear incident/quickMarks/historicoMonth',
+            withStack: true,
+          });
           setPendientesEntregaAccordionOpen(false);
           setHistoricoRecibidosAccordionOpen(false);
           setExpandedSentId(null);
@@ -634,16 +701,53 @@ export default function PedidosPage() {
           setQuickLineMarks({});
         }
       }
-    } catch {
-      /* ignore */
+    } catch (err) {
+      pedidosDiagLog('useLayoutEffect[hydrate] CATCH', { error: String(err) });
     } finally {
       hasRestoredViewStateRef.current = true;
+      pedidosDiagLog('useLayoutEffect[hydrate] FINALLY', {
+        hasRestoredViewState: hasRestoredViewStateRef.current,
+        setUiHydrated_true: true,
+      });
       setUiHydrated(true);
     }
   }, [localId, canUse, avisoPedido]);
 
   React.useEffect(() => {
+    const current = localId ?? null;
+    const prev = pruneSuppressLocalIdSeqRef.current;
+    if (prev === undefined) {
+      pruneSuppressLocalIdSeqRef.current = current;
+      pedidosDiagLog('useEffect[resetSuppressOnLocalIdChange]', {
+        action: 'SKIP_FIRST_COMMIT',
+        localId: current,
+        note: 'Preserve suppressOrderPruneUntilRef set by useLayoutEffect[hydrate].',
+      });
+      return;
+    }
+    if (prev === current) return;
+    // Primer local real tras null: no pisar la ventana anti-poda del hydrate.
+    if (prev === null && current !== null) {
+      pruneSuppressLocalIdSeqRef.current = current;
+      pedidosDiagLog('useEffect[resetSuppressOnLocalIdChange]', {
+        action: 'SKIP_NULL_TO_LOCAL',
+        localId: current,
+        note: 'Initial local attach — keep suppress from hydrate.',
+      });
+      return;
+    }
+    pruneSuppressLocalIdSeqRef.current = current;
+    const suppressPrev = suppressOrderPruneUntilRef.current;
     suppressOrderPruneUntilRef.current = 0;
+    pedidosDiagLog('useEffect[resetSuppressOnLocalIdChange]', {
+      action: 'CLEAR_SUPPRESS',
+      effect: 'localId actually changed (tenant switch or logout)',
+      localIdBefore: prev,
+      localIdAfter: current,
+      suppressBefore: suppressPrev,
+      suppressAfter: suppressOrderPruneUntilRef.current,
+      withStack: true,
+    });
   }, [localId]);
 
   const scheduleIncidenciaRecepcionNotifyDebounced = React.useCallback(
@@ -1461,6 +1565,11 @@ export default function PedidosPage() {
                 : o,
             ),
           );
+          pedidosDiagLog('markOrderReceived.finally', {
+            orderId,
+            action: 'setExpandedSentId(null if was expanded)',
+            withStack: true,
+          });
           setExpandedSentId((id) => (id === orderId ? null : id));
           setMessage('Pedido marcado como recibido.');
           const supa = getSupabaseClient();
@@ -1684,8 +1793,26 @@ export default function PedidosPage() {
   );
 
   const persistPedidosViewState = React.useCallback(() => {
-    if (!hasRestoredViewStateRef.current || !localId || !canUse || !uiHydrated) return;
+    if (!hasRestoredViewStateRef.current) {
+      pedidosDiagLog('persistPedidosViewState SKIP', { reason: '!hasRestoredViewStateRef' });
+      return;
+    }
+    if (!localId || !canUse || !uiHydrated) {
+      pedidosDiagLog('persistPedidosViewState SKIP', {
+        reason: '!localId || !canUse || !uiHydrated',
+        localId: localId ?? null,
+        canUse,
+        uiHydrated,
+      });
+      return;
+    }
     if (typeof window === 'undefined') return;
+    pedidosDiagLog('persistPedidosViewState RUN', {
+      pendingExpanded: pendientesEntregaAccordionOpen,
+      expandedPedidoId: expandedSentId,
+      expandedHistoricoId,
+      scrollPendingBefore: scrollRestorePendingRef.current,
+    });
     try {
       const route = window.location.pathname + window.location.search;
       const activeOrderId = expandedSentId ?? expandedHistoricoId ?? null;
@@ -1777,15 +1904,42 @@ export default function PedidosPage() {
 
   React.useEffect(() => {
     if (!uiHydrated || !localId || !canUse) return;
+    pedidosDiagLog('useEffect[persistOnDeps] RUN', { trigger: 'uiHydrated|localId|canUse|persistPedidosViewState changed' });
     persistPedidosViewState();
   }, [uiHydrated, localId, canUse, persistPedidosViewState]);
 
   React.useEffect(() => {
     if (!localId || !canUse) return;
     const onVisibility = () => {
+      pedidosDiagLog('document.visibilitychange', {
+        state: document.visibilityState,
+        pendingExpanded: pendientesEntregaAccordionOpen,
+        expandedPedidoId: expandedSentId,
+        scrollPending: scrollRestorePendingRef.current,
+      });
       if (document.visibilityState === 'hidden') persistPedidosViewState();
       if (document.visibilityState === 'visible') {
         suppressOrderPruneUntilRef.current = Date.now() + 1600;
+        pedidosDiagLog('visibility visible: suppressOrderPrune extended', {
+          until: suppressOrderPruneUntilRef.current,
+        });
+        // PWA / multitarea: el scroll del <main> a veces vuelve a 0 al reactivar; re-aplica desde disco.
+        try {
+          const st = parsePedidosViewState(window.localStorage.getItem(PEDIDOS_VIEW_STATE_KEY), localId ?? null);
+          const y = st?.scrollY ?? 0;
+          const cur = readMainScrollTop();
+          if (y > 48 && cur < 56 && st?.route?.startsWith('/pedidos')) {
+            requestAnimationFrame(() => {
+              requestAnimationFrame(() => {
+                setMainScrollTop(y);
+                window.setTimeout(() => setMainScrollTop(y), 120);
+              });
+            });
+            pedidosDiagLog('visibility visible: scroll reapply from localStorage', { y, curBefore: cur });
+          }
+        } catch {
+          /* ignore */
+        }
       }
     };
     const onPageHide = () => {
@@ -1829,17 +1983,32 @@ export default function PedidosPage() {
   React.useEffect(() => {
     if (!uiHydrated) return;
     const y = scrollRestorePendingRef.current;
+    pedidosDiagLog('useEffect[scrollRestore] TICK', {
+      uiHydrated,
+      scrollPending: y,
+      ordersLength: orders.length,
+      pendingExpanded: pendientesEntregaAccordionOpen,
+      expandedPedidoId: expandedSentId,
+      docVisibility: typeof document !== 'undefined' ? document.visibilityState : 'n/a',
+    });
     if (y == null || y <= 0) return;
     // Don't attempt scroll until orders are in the DOM: without them the page is too
     // short and the scroll is a no-op. The effect re-runs when orders.length changes,
     // so the retry is automatic once orders arrive from Supabase / session cache.
     if (orders.length === 0) {
       console.log('[PEDIDOS_UI] restore queued, waiting for orders', y);
+      pedidosDiagLog('useEffect[scrollRestore] WAIT_ORDERS', { y, ordersLength: 0 });
       return;
     }
     if (scrollRestorePendingRef.current !== y) return;
     scrollRestorePendingRef.current = null;
     console.log('[PEDIDOS_UI] restore applied', { scrollY: y, expandedSentId, expandedHistoricoId });
+    pedidosDiagLog('useEffect[scrollRestore] APPLY_SCROLL', {
+      y,
+      expandedSentId,
+      expandedHistoricoId,
+      clearedScrollPendingRef: true,
+    });
     const outer = requestAnimationFrame(() => {
       requestAnimationFrame(() => {
         setMainScrollTop(y);
@@ -1870,17 +2039,73 @@ export default function PedidosPage() {
   }, [orders.length, localId]);
 
   React.useEffect(() => {
+    pedidosDiagLog('useEffect[orderPruneExpanded] TICK', {
+      uiHydrated,
+      ordersEverNonEmpty: ordersEverNonEmptyRef.current,
+      ordersLen: orders.length,
+      suppressUntil: suppressOrderPruneUntilRef.current,
+      now: Date.now(),
+      suppressActive: Date.now() < suppressOrderPruneUntilRef.current,
+      expandedSentId,
+      expandedHistoricoId,
+    });
     if (!uiHydrated || !ordersEverNonEmptyRef.current) return;
-    if (Date.now() < suppressOrderPruneUntilRef.current) return;
+    if (Date.now() < suppressOrderPruneUntilRef.current) {
+      pedidosDiagLog('useEffect[orderPruneExpanded] SKIP_SUPPRESS_WINDOW', {
+        until: suppressOrderPruneUntilRef.current,
+      });
+      return;
+    }
+    // Mientras orders está vacío (refetch / resume), no podar: `some` sería false y borraría UI buena.
+    if (orders.length === 0) return;
     if (expandedSentId && !orders.some((o) => o.id === expandedSentId && o.status === 'sent')) {
       console.log('[PEDIDOS_UI] reset reason', 'expanded_sent_order_missing_after_fetch');
+      pedidosDiagLog('useEffect[orderPruneExpanded] CLEAR expandedSentId', {
+        expandedSentId,
+        reason: 'order not in list as sent',
+        withStack: true,
+      });
       setExpandedSentId(null);
     }
     if (expandedHistoricoId && !orders.some((o) => o.id === expandedHistoricoId && o.status === 'received')) {
       console.log('[PEDIDOS_UI] reset reason', 'expanded_historico_order_missing_after_fetch');
+      pedidosDiagLog('useEffect[orderPruneExpanded] CLEAR expandedHistoricoId', {
+        expandedHistoricoId,
+        reason: 'order not in list as received',
+        withStack: true,
+      });
       setExpandedHistoricoId(null);
     }
   }, [uiHydrated, orders, expandedSentId, expandedHistoricoId]);
+
+  React.useEffect(() => {
+    const snap = JSON.stringify({
+      pendingExpanded: pendientesEntregaAccordionOpen,
+      historyExpanded: historicoRecibidosAccordionOpen,
+      expandedPedidoId: expandedSentId,
+      expandedHistoricoId,
+      uiHydrated,
+      ordersLen: orders.length,
+      scrollPending: scrollRestorePendingRef.current,
+      suppressUntil: suppressOrderPruneUntilRef.current,
+      vis: typeof document !== 'undefined' ? document.visibilityState : '?',
+    });
+    if (pedidosDiagEnabled() && traceCommitRef.current && traceCommitRef.current !== snap) {
+      pedidosDiagLog('POST_RENDER_STATE_DIFF', {
+        beforeJson: traceCommitRef.current,
+        afterJson: snap,
+        note: 'React committed new UI state; compare to find what changed between paints.',
+      });
+    }
+    traceCommitRef.current = snap;
+  }, [
+    pendientesEntregaAccordionOpen,
+    historicoRecibidosAccordionOpen,
+    expandedSentId,
+    expandedHistoricoId,
+    uiHydrated,
+    orders.length,
+  ]);
 
   const OIDO_CHEF_TTS_LS_KEY = 'oido-chef-tts-v1';
   const OIDO_CHEF_TTS_NATURAL_LS_KEY = 'oido-chef-tts-natural-v1';
