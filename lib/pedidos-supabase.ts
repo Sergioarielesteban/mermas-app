@@ -244,6 +244,8 @@ export type PedidoSupplierProduct = {
   billingQtyPerOrderUnit?: number | null;
   /** Precio habitual en `billingUnit` (p. ej. €/kg). */
   pricePerBillingUnit?: number | null;
+  /** Último precio unitario real recibido (referencia operativa). */
+  ultimoPrecioRecibido?: number | null;
 };
 
 export type PedidoSupplier = {
@@ -713,7 +715,7 @@ export async function fetchSuppliersWithProducts(supabase: SupabaseClient, local
   let productRows: unknown[] | null = null;
   {
     const selLegacy =
-      'id,supplier_id,article_id,name,unit,price_per_unit,units_per_pack,recipe_unit,vat_rate,par_stock,is_active,estimated_kg_per_unit';
+      'id,supplier_id,article_id,name,unit,price_per_unit,ultimo_precio_recibido,units_per_pack,recipe_unit,vat_rate,par_stock,is_active,estimated_kg_per_unit';
     const selBilling = `${selLegacy},billing_unit,billing_qty_per_order_unit,price_per_billing_unit`;
     const selBillingArticle = `${selBilling},purchase_articles(nombre,nombre_corto)`;
     const q = (selectStr: string) =>
@@ -793,6 +795,9 @@ export async function fetchSuppliersWithProducts(supabase: SupabaseClient, local
         : {}),
       ...(row.price_per_billing_unit != null && Number.isFinite(Number(row.price_per_billing_unit))
         ? { pricePerBillingUnit: Number(row.price_per_billing_unit) }
+        : {}),
+      ...(row.ultimo_precio_recibido != null && Number.isFinite(Number(row.ultimo_precio_recibido))
+        ? { ultimoPrecioRecibido: Number(row.ultimo_precio_recibido) }
         : {}),
     });
     bySupplier.set(row.supplier_id, list);

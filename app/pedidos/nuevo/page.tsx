@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import React from 'react';
 import { useAuth } from '@/components/AuthProvider';
@@ -20,12 +21,17 @@ import {
   weeklyParScaledToCoverageDays,
 } from '@/lib/pedidos-coverage';
 import PedidosNuevoCatalogLine from '@/components/PedidosNuevoCatalogLine';
+import PedidosUseTemplateSheet from '@/components/pedidos/PedidosUseTemplateSheet';
 import { buildPedidoWhatsappMessage } from '@/lib/pedidos-whatsapp-message';
 import { applyQuantityTapDelta, parseQuantityManualInput } from '@/lib/pedidos-order-quantity';
 import {
   readSuppliersSessionCache,
   writeSuppliersSessionCache,
 } from '@/lib/pedidos-session-cache';
+import {
+  fetchPedidoOrderTemplateDetail,
+  touchPedidoOrderTemplateUsed,
+} from '@/lib/pedidos-order-templates';
 import {
   fetchOrderById,
   fetchSuppliersWithProducts,
@@ -117,6 +123,8 @@ export default function NuevoPedidoPage() {
   const hasPedidosEntry = canAccessPedidos(localCode, email, localName, localId);
   const canUse = canUsePedidosModule(localCode, email, localName, localId);
   const editingId = searchParams.get('id');
+  const duplicateFrom = searchParams.get('duplicateFrom');
+  const templateIdParam = searchParams.get('templateId');
   const [suppliers, setSuppliers] = React.useState<PedidoSupplier[]>([]);
   const [supplierId, setSupplierId] = React.useState('');
   const [notes, setNotes] = React.useState('');
@@ -135,6 +143,23 @@ export default function NuevoPedidoPage() {
   const [editSourceItems, setEditSourceItems] = React.useState<PedidoOrderItem[] | null>(null);
   const [editBlockedReason, setEditBlockedReason] = React.useState<string | null>(null);
   const [hadContentRevisionFlag, setHadContentRevisionFlag] = React.useState(false);
+  const [useTemplateOpen, setUseTemplateOpen] = React.useState(false);
+  const [templateSummary, setTemplateSummary] = React.useState<{
+    loaded: number;
+    priceUp: number;
+    missingCatalog: number;
+  } | null>(null);
+
+  type BootstrapPedidoPayload = {
+    supplierId: string;
+    qty: QtyMap;
+    lines: Array<{ supplierProductId: string | null; quantity: number }>;
+    templateId?: string;
+    fromDuplicate?: boolean;
+  };
+  const bootstrapPedidoRef = React.useRef<BootstrapPedidoPayload | null>(null);
+  const bootstrapUrlKeyHandledRef = React.useRef<string | null>(null);
+  const bootstrapFetchInflightRef = React.useRef<string | null>(null);
 
   const clearBasketDraft = React.useCallback(() => {
     if (!localId) return;
@@ -162,6 +187,7 @@ export default function NuevoPedidoPage() {
     setHadContentRevisionFlag(false);
     setIsLoadedEdit(false);
     setSupplierId((sid) => suppliers[0]?.id ?? sid);
+    setTemplateSummary(null);
   }, [clearBasketDraft, suppliers]);
 
   const reloadSuppliers = React.useCallback(() => {
@@ -200,6 +226,7 @@ export default function NuevoPedidoPage() {
   /** Restaurar antes del paint para no pisar la cesta con el guardado/reconciliación del primer commit. */
   React.useLayoutEffect(() => {
     if (!canUse || !localId || editingId) return;
+    if (searchParams.get('templateId') || searchParams.get('duplicateFrom')) return;
     try {
       const raw = sessionStorage.getItem(basketSessionKey(localId));
       if (!raw) return;
@@ -218,7 +245,7 @@ export default function NuevoPedidoPage() {
     } catch {
       /* ignore */
     }
-  }, [canUse, localId, editingId]);
+  }, [canUse, localId, editingId, searchParams]);
 
   React.useEffect(() => {
     if (!canUse || !localId || editingId) return;
@@ -366,6 +393,111 @@ export default function NuevoPedidoPage() {
   }, [editingId, localId, orders]);
 
   React.useEffect(() => {
+    if (editingId) return;
+    if (!localId || !canUse) return;
+    const tid = templateIdParam;
+    const dup = duplicateFrom;
+    if (!tid && !dup) return;
+    const key = tid ? `t:${tid}` : `d:${dup}`;
+    if (bootstrapUrlKeyHandledRef.current === key) return;
+    if (bootstrapFetchInflightRef.current === key) return;
+    bootstrapFetchInflightRef.current = key;
+
+    let cancelled = false;
+    void (async () => {
+      if (tid) {
+        const detail = await fetchPedidoOrderTemplateDetail(getSupabaseClient(), localId, tid, isDemoMode());
+        if (cancelled) return;
+        if (!detail) {
+          setMessage('No se encontró la plantilla.');
+          bootstrapUrlKeyHandledRef.current = key;
+          bootstrapFetchInflightRef.current = null;
+          router.replace('/pedidos/nuevo');
+          return;
+        }
+        const qty: QtyMap = {};
+        for (const it of detail.items) {
+          if (it.supplierProductId) qty[it.supplierProductId] = it.quantity;
+        }
+        const lines = detail.items.map((i) => ({
+          supplierProductId: i.supplierProductId,
+          quantity: i.quantity,
+        }));
+        bootstrapPedidoRef.current = {
+          supplierId: detail.supplierId,
+          qty,
+          lines,
+          templateId: tid,
+        };
+        setSupplierId(detail.supplierId);
+        return;
+      }
+      if (dup) {
+        if (isDemoMode()) {
+          const src = orders.find((o) => o.id === dup) ?? null;
+          if (!src) {
+            if (!cancelled) {
+              setMessage('Pedido no encontrado para duplicar.');
+              bootstrapUrlKeyHandledRef.current = key;
+              bootstrapFetchInflightRef.current = null;
+              router.replace('/pedidos/nuevo');
+            }
+            return;
+          }
+          const qty: QtyMap = {};
+          for (const it of src.items) {
+            if (it.supplierProductId) qty[it.supplierProductId] = it.quantity;
+          }
+          const lines = src.items.map((i) => ({
+            supplierProductId: i.supplierProductId,
+            quantity: i.quantity,
+          }));
+          bootstrapPedidoRef.current = {
+            supplierId: src.supplierId,
+            qty,
+            lines,
+            fromDuplicate: true,
+          };
+          setSupplierId(src.supplierId);
+          return;
+        }
+        const supabase = getSupabaseClient();
+        if (!supabase) {
+          setMessage('Sin conexión.');
+          return;
+        }
+        const src = await fetchOrderById(supabase, localId, dup);
+        if (cancelled) return;
+        if (!src) {
+          setMessage('Pedido no encontrado para duplicar.');
+          bootstrapUrlKeyHandledRef.current = key;
+          bootstrapFetchInflightRef.current = null;
+          router.replace('/pedidos/nuevo');
+          return;
+        }
+        const qty: QtyMap = {};
+        for (const it of src.items) {
+          if (it.supplierProductId) qty[it.supplierProductId] = it.quantity;
+        }
+        const lines = src.items.map((i) => ({
+          supplierProductId: i.supplierProductId,
+          quantity: i.quantity,
+        }));
+        bootstrapPedidoRef.current = {
+          supplierId: src.supplierId,
+          qty,
+          lines,
+          fromDuplicate: true,
+        };
+        setSupplierId(src.supplierId);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [editingId, localId, canUse, templateIdParam, duplicateFrom, orders, router]);
+
+  React.useEffect(() => {
     setSearch('');
     if (editingId && !isLoadedEdit) return;
     /** Mientras el catálogo del proveedor no está cargado, no reconciliar: si no, prev queda {} y borra la cesta restaurada desde sessionStorage. */
@@ -378,6 +510,60 @@ export default function NuevoPedidoPage() {
       return next;
     });
   }, [supplierId, supplierProducts, editingId, isLoadedEdit]);
+
+  React.useEffect(() => {
+    const b = bootstrapPedidoRef.current;
+    if (!b) return;
+    if (editingId) return;
+    if (supplierId !== b.supplierId) return;
+    if (supplierProducts.length === 0) return;
+
+    setQtyByProductId((prev) => {
+      const next: QtyMap = {};
+      for (const product of supplierProducts) {
+        const t = b.qty[product.id];
+        next[product.id] = t != null && t > 0 ? t : prev[product.id] ?? 0;
+      }
+      return next;
+    });
+
+    const pmap = new Map(supplierProducts.map((x) => [x.id, x]));
+    let missing = 0;
+    let priceUp = 0;
+    let loaded = 0;
+    for (const line of b.lines) {
+      if (!line.supplierProductId) continue;
+      const p = pmap.get(line.supplierProductId);
+      if (!p) {
+        missing += 1;
+        continue;
+      }
+      loaded += 1;
+      const ult = p.ultimoPrecioRecibido;
+      if (ult != null && ult > 0 && p.pricePerUnit > ult * 1.02) priceUp += 1;
+    }
+
+    if (b.templateId) {
+      setTemplateSummary({ loaded, priceUp, missingCatalog: missing });
+      void touchPedidoOrderTemplateUsed(getSupabaseClient(), localId!, b.templateId, isDemoMode());
+    } else {
+      setTemplateSummary(null);
+    }
+
+    bootstrapPedidoRef.current = null;
+    const urlKey = templateIdParam ? `t:${templateIdParam}` : duplicateFrom ? `d:${duplicateFrom}` : null;
+    if (urlKey) bootstrapUrlKeyHandledRef.current = urlKey;
+    bootstrapFetchInflightRef.current = null;
+    router.replace('/pedidos/nuevo');
+  }, [
+    supplierId,
+    supplierProducts,
+    editingId,
+    router,
+    templateIdParam,
+    duplicateFrom,
+    localId,
+  ]);
 
   const setQtyFromInput = React.useCallback((productId: string, unit: PedidoOrderItem['unit'], raw: string) => {
     const parsed = parseQuantityManualInput(unit, raw);
@@ -715,6 +901,50 @@ export default function NuevoPedidoPage() {
         </section>
       ) : null}
 
+      {!editingId && templateSummary ? (
+        <section
+          className="rounded-xl border border-emerald-200/90 bg-emerald-50/90 px-3 py-2 text-[11px] leading-snug text-emerald-950 ring-1 ring-emerald-100"
+          role="status"
+        >
+          <p className="font-bold text-emerald-900">Plantilla aplicada</p>
+          <p className="mt-1 text-emerald-900/90">
+            <span className="font-semibold">{templateSummary.loaded}</span> productos en catálogo con cantidades.
+            {templateSummary.priceUp > 0 ? (
+              <>
+                {' '}
+                · <span className="font-semibold text-amber-800">{templateSummary.priceUp}</span> con precio catálogo por
+                encima del último recibido (&gt;2%).
+              </>
+            ) : null}
+            {templateSummary.missingCatalog > 0 ? (
+              <>
+                {' '}
+                · <span className="font-semibold text-rose-800">{templateSummary.missingCatalog}</span> no están activos
+                en catálogo (revisa proveedor).
+              </>
+            ) : null}
+          </p>
+        </section>
+      ) : null}
+
+      {!editingId ? (
+        <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:justify-between">
+          <Link
+            href="/pedidos"
+            className="inline-flex h-9 items-center justify-center rounded-lg border border-zinc-200 bg-white px-3 text-xs font-semibold text-zinc-700 shadow-sm hover:bg-zinc-50"
+          >
+            ← Pedidos
+          </Link>
+          <button
+            type="button"
+            onClick={() => setUseTemplateOpen(true)}
+            className="inline-flex h-9 items-center justify-center rounded-lg border border-[#D32F2F]/30 bg-[#FFF8F7] px-3 text-xs font-bold text-[#7F1D1D] shadow-sm ring-1 ring-[#D32F2F]/15 hover:bg-[#FFF0EE]"
+          >
+            Usar plantilla
+          </button>
+        </div>
+      ) : null}
+
       <section className="rounded-xl bg-white px-2.5 py-2 ring-1 ring-zinc-200/90 sm:px-3">
         <label className="text-[10px] font-extrabold uppercase tracking-wide text-zinc-500">Proveedor</label>
         {loadingSuppliers ? <p className="mt-1 text-[10px] font-semibold text-zinc-500">Cargando catálogo…</p> : null}
@@ -891,6 +1121,15 @@ export default function NuevoPedidoPage() {
           </button>
         </div>
       </section>
+
+      <PedidosUseTemplateSheet
+        open={useTemplateOpen}
+        onClose={() => setUseTemplateOpen(false)}
+        localId={localId}
+        onPick={(id) => {
+          router.push(`/pedidos/nuevo?templateId=${encodeURIComponent(id)}`);
+        }}
+      />
     </div>
   );
 }

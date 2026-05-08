@@ -14,6 +14,8 @@ import {
   Loader2,
   MessageCircle,
   Package,
+  Bookmark,
+  Copy,
   Pencil,
   Trash2,
   Truck,
@@ -26,6 +28,7 @@ import { usePedidosOrders } from '@/components/PedidosOrdersProvider';
 import { getSupabaseClient } from '@/lib/supabase-client';
 import MermasStyleHero from '@/components/MermasStyleHero';
 import PedidosAlbaranOcrModal from '@/components/PedidosAlbaranOcrModal';
+import PedidosSaveTemplateSheet from '@/components/pedidos/PedidosSaveTemplateSheet';
 import PedidosPremiaLockedScreen from '@/components/PedidosPremiaLockedScreen';
 import { dispatchPedidosDataChanged, usePedidosDataChangedListener } from '@/hooks/usePedidosDataChangedListener';
 import { canAccessPedidos, canUsePedidosModule } from '@/lib/pedidos-access';
@@ -450,6 +453,7 @@ export default function PedidosPage() {
 
   const [expandedSentId, setExpandedSentId] = React.useState<string | null>(null);
   const [ocrOrder, setOcrOrder] = React.useState<PedidoOrder | null>(null);
+  const [saveTemplateOrder, setSaveTemplateOrder] = React.useState<PedidoOrder | null>(null);
   const [expandedHistoricoId, setExpandedHistoricoId] = React.useState<string | null>(null);
   /** Plegado por mes (YYYY-MM) en histórico recibidos; sin entrada = mes actual según índice. */
   const [historicoMonthOpen, setHistoricoMonthOpen] = React.useState<Record<string, boolean>>({});
@@ -4159,6 +4163,40 @@ export default function PedidosPage() {
                   <MessageCircle className="h-4 w-4 shrink-0" strokeWidth={2.25} aria-hidden />
                   <span className="text-[9px] font-bold leading-none">WhatsApp</span>
                 </button>
+                <Link
+                  href={`/pedidos/nuevo?duplicateFrom=${encodeURIComponent(order.id)}`}
+                  onClick={(e) => e.stopPropagation()}
+                  className="flex min-h-[3.25rem] flex-col items-center justify-center gap-0.5 rounded-lg border border-zinc-200/90 bg-white px-1 py-1 text-zinc-800 shadow-sm transition hover:bg-zinc-50 active:bg-zinc-100/80"
+                  title="Duplicar como nuevo borrador"
+                  aria-label="Duplicar pedido"
+                >
+                  <Copy className="h-4 w-4 shrink-0 text-zinc-600" strokeWidth={2.25} aria-hidden />
+                  <span className="text-[9px] font-semibold leading-none text-zinc-700">Duplicar</span>
+                </Link>
+              </div>
+              <div
+                className={[
+                  'grid w-full grid-cols-2 gap-1 border-t px-1 pb-1.5 pt-0',
+                  sentBadge === 'incidencia'
+                    ? 'border-red-200/60 bg-white/50'
+                    : sentBadge === 'correcto'
+                      ? 'border-emerald-200/60 bg-white/50'
+                      : 'border-amber-200/60 bg-white/50',
+                ].join(' ')}
+              >
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setSaveTemplateOrder(order);
+                  }}
+                  className="flex min-h-[3.25rem] flex-col items-center justify-center gap-0.5 rounded-lg border border-[#D32F2F]/35 bg-[#FFF7F5] px-1 py-1 text-[#7F1D1D] shadow-sm transition hover:bg-[#FFF0EE] active:bg-[#FFE8E5]"
+                  title="Guardar como plantilla"
+                  aria-label="Guardar como plantilla"
+                >
+                  <Bookmark className="h-4 w-4 shrink-0 text-[#B91C1C]" strokeWidth={2.25} aria-hidden />
+                  <span className="text-[9px] font-bold leading-none">Plantilla</span>
+                </button>
                 <button
                   type="button"
                   onClick={async () => {
@@ -4894,6 +4932,16 @@ export default function PedidosPage() {
           ))}
         </div>
       </details>
+
+      <PedidosSaveTemplateSheet
+        open={saveTemplateOrder != null}
+        onClose={() => setSaveTemplateOrder(null)}
+        localId={localId}
+        userId={userId}
+        order={saveTemplateOrder}
+        supplierName={saveTemplateOrder?.supplierName ?? ''}
+        onSaved={() => setMessage('Plantilla guardada. Úsala desde Nuevo pedido → Usar plantilla.')}
+      />
 
       <PedidosAlbaranOcrModal
         order={ocrOrder}
