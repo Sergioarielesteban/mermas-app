@@ -15,6 +15,7 @@ import {
   parsePricePerKg,
   type EuroPerKgSuggestionSource,
 } from '@/lib/pedidos-recepcion-inputs';
+import { receptionPriceAlertFromPreview } from '@/lib/pedidos-reception-price-alert';
 import {
   receptionBillsByWeight,
   receptionCalculationUnit,
@@ -80,6 +81,10 @@ export type RecepcionLineRowProps = {
   lineDisplayName?: string;
   suggestedEuroPerKg: number | null;
   suggestionSource: EuroPerKgSuggestionSource | null;
+  /** Último precio comparable en `historico_precios` (misma unidad que evolución). */
+  lastHistoricoComparable?: { precio: number; unidad: string } | null;
+  /** Incrementa cuando el padre termina de cargar pistas/histórico (invalida React.memo). */
+  priceHintsVersion?: number;
   commitWeightInput: (orderId: string, itemId: string, rawKg: string, priceDraft?: string) => void;
   commitReceivedOrderQtyInput: (orderId: string, itemId: string, rawQty: string, priceDraft?: string) => void;
   commitPricePerKgInput: (orderId: string, itemId: string, raw: string) => void;
@@ -107,7 +112,10 @@ function recepcionLineRowPropsEqual(a: RecepcionLineRowProps, b: RecepcionLineRo
     x.billingUnit === y.billingUnit &&
     x.billingQtyPerOrderUnit === y.billingQtyPerOrderUnit &&
     a.suggestedEuroPerKg === b.suggestedEuroPerKg &&
-    a.suggestionSource === b.suggestionSource
+    a.suggestionSource === b.suggestionSource &&
+    a.lastHistoricoComparable?.precio === b.lastHistoricoComparable?.precio &&
+    a.lastHistoricoComparable?.unidad === b.lastHistoricoComparable?.unidad &&
+    (a.priceHintsVersion ?? 0) === (b.priceHintsVersion ?? 0)
   );
 }
 
@@ -117,6 +125,8 @@ function RecepcionLineRowInner({
   lineDisplayName,
   suggestedEuroPerKg,
   suggestionSource,
+  lastHistoricoComparable = null,
+  priceHintsVersion = 0,
   commitWeightInput,
   commitReceivedOrderQtyInput,
   commitPricePerKgInput,
@@ -212,6 +222,11 @@ function RecepcionLineRowInner({
   );
 
   const lineSummary = React.useMemo(() => receptionBillingSummary(previewItem), [previewItem]);
+
+  const receptionPriceAlert = React.useMemo(
+    () => receptionPriceAlertFromPreview(previewItem, lastHistoricoComparable),
+    [previewItem, lastHistoricoComparable, priceHintsVersion],
+  );
 
   return (
     <div className="space-y-0.5 rounded-lg bg-white p-1.5 ring-1 ring-zinc-200/85">
@@ -384,6 +399,21 @@ function RecepcionLineRowInner({
                 }}
                 className="h-7 w-full min-w-0 rounded-md border border-zinc-200 bg-white px-1 text-xs font-semibold tabular-nums text-zinc-900 outline-none"
               />
+              {receptionPriceAlert ? (
+                <div
+                  className={[
+                    'mt-1 rounded-lg border px-2 py-1.5 text-[10px] leading-snug',
+                    receptionPriceAlert.direction === 'up'
+                      ? 'border-[#D32F2F]/22 bg-[#FFF7F7] text-[#7F1D1D]'
+                      : 'border-emerald-600/20 bg-emerald-50/95 text-emerald-950',
+                  ].join(' ')}
+                  role="status"
+                >
+                  <p className="font-bold">{receptionPriceAlert.title}</p>
+                  <p className="mt-0.5 font-medium">{receptionPriceAlert.subtitle}</p>
+                  <p className="mt-0.5 font-semibold tabular-nums">{receptionPriceAlert.pctLabel}</p>
+                </div>
+              ) : null}
             </div>
             <div className="flex min-h-[2.85rem] min-w-0 flex-col justify-end rounded-md border border-emerald-300/60 bg-emerald-100/60 px-1 py-0.5">
               <span className="text-[9px] font-semibold text-emerald-900/85">Sub</span>
@@ -395,31 +425,48 @@ function RecepcionLineRowInner({
         </div>
       )}
       {billsByWeight ? (
-        <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-0.5 border-t border-zinc-100/90 pt-1">
-          <div className="flex min-w-0 items-center gap-1.5">
-            <label className="shrink-0 text-[11px] font-semibold text-zinc-600">
-              Precio recibido (€/{unitPriceCatalogSuffix[item.unit]})
-            </label>
-            <input
-              type="text"
-              inputMode="decimal"
-              autoComplete="off"
-              value={priceText}
-              onFocus={() => {
-                priceFocusedRef.current = true;
-              }}
-              onChange={(e) => setPriceText(e.target.value)}
-              onBlur={() => {
-                priceFocusedRef.current = false;
-                commitPriceInput(orderId, item.id, priceText);
-              }}
-              className="h-7 w-[4.25rem] rounded-md border border-zinc-200 bg-white px-1 text-xs font-semibold tabular-nums text-zinc-900 outline-none"
-            />
+        <div className="space-y-1 border-t border-zinc-100/90 pt-1">
+          <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-0.5">
+            <div className="flex min-w-0 items-center gap-1.5">
+              <label className="shrink-0 text-[11px] font-semibold text-zinc-600">
+                Precio recibido (€/{unitPriceCatalogSuffix[item.unit]})
+              </label>
+              <input
+                type="text"
+                inputMode="decimal"
+                autoComplete="off"
+                value={priceText}
+                onFocus={() => {
+                  priceFocusedRef.current = true;
+                }}
+                onChange={(e) => setPriceText(e.target.value)}
+                onBlur={() => {
+                  priceFocusedRef.current = false;
+                  commitPriceInput(orderId, item.id, priceText);
+                }}
+                className="h-7 w-[4.25rem] rounded-md border border-zinc-200 bg-white px-1 text-xs font-semibold tabular-nums text-zinc-900 outline-none"
+              />
+            </div>
+            <span className="shrink-0 text-[10px] text-zinc-700">
+              Subt:{' '}
+              <span className="font-bold tabular-nums text-zinc-900">{previewItem.lineTotal.toFixed(2)} €</span>
+            </span>
           </div>
-          <span className="shrink-0 text-[10px] text-zinc-700">
-            Subt:{' '}
-            <span className="font-bold tabular-nums text-zinc-900">{previewItem.lineTotal.toFixed(2)} €</span>
-          </span>
+          {receptionPriceAlert ? (
+            <div
+              className={[
+                'rounded-lg border px-2 py-1.5 text-[10px] leading-snug',
+                receptionPriceAlert.direction === 'up'
+                  ? 'border-[#D32F2F]/22 bg-[#FFF7F7] text-[#7F1D1D]'
+                  : 'border-emerald-600/20 bg-emerald-50/95 text-emerald-950',
+              ].join(' ')}
+              role="status"
+            >
+              <p className="font-bold">{receptionPriceAlert.title}</p>
+              <p className="mt-0.5 font-medium">{receptionPriceAlert.subtitle}</p>
+              <p className="mt-0.5 font-semibold tabular-nums">{receptionPriceAlert.pctLabel}</p>
+            </div>
+          ) : null}
         </div>
       ) : null}
     </div>

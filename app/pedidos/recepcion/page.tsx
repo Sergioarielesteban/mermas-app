@@ -22,6 +22,7 @@ import {
 import {
   billingQuantityForReceptionPrice,
   fetchAvgReceivedPricePerKgBySupplierProductIds,
+  fetchLastHistoricoComparableBySupplierProductIds,
   fetchLastReceivedPricePerKgBySupplierProductIds,
   fetchReceptionEuroPerKgHintsBySupplierProductIds,
   fetchSuppliersWithProducts,
@@ -153,13 +154,16 @@ export default function RecepcionPedidosPage() {
   const receptionEuroByProductRef = React.useRef<Record<string, number>>({});
   const avgRecvEuroByProductRef = React.useRef<Record<string, number>>({});
   const receptionHintsByProductRef = React.useRef<Map<string, ReceptionEuroPerKgHints>>(new Map());
+  const historicoComparableByProductRef = React.useRef<
+    Map<string, { precio: number; unidad: string }>
+  >(new Map());
   const [priceHintsTick, setPriceHintsTick] = React.useState(0);
 
   const supplierProductIdsForHints = React.useMemo(() => {
     const ids = new Set<string>();
     for (const o of pendingPriceReviewOrders) {
       for (const it of o.items) {
-        if (receptionBillsByWeight(it) && it.supplierProductId) ids.add(it.supplierProductId);
+        if (it.supplierProductId) ids.add(it.supplierProductId);
       }
     }
     return [...ids];
@@ -173,6 +177,7 @@ export default function RecepcionPedidosPage() {
       receptionEuroByProductRef.current = {};
       avgRecvEuroByProductRef.current = {};
       receptionHintsByProductRef.current = new Map();
+      historicoComparableByProductRef.current = new Map();
       setPriceHintsTick((t) => t + 1);
       return;
     }
@@ -184,12 +189,14 @@ export default function RecepcionPedidosPage() {
       fetchLastReceivedPricePerKgBySupplierProductIds(supabase, localId, ids),
       fetchAvgReceivedPricePerKgBySupplierProductIds(supabase, localId, ids),
       fetchReceptionEuroPerKgHintsBySupplierProductIds(supabase, localId, ids),
+      fetchLastHistoricoComparableBySupplierProductIds(supabase, localId, ids),
     ])
-      .then(([recvMap, avgMap, hintsMap]) => {
+      .then(([recvMap, avgMap, hintsMap, historicoMap]) => {
         if (cancelled) return;
         receptionEuroByProductRef.current = Object.fromEntries(recvMap);
         avgRecvEuroByProductRef.current = Object.fromEntries(avgMap);
         receptionHintsByProductRef.current = hintsMap;
+        historicoComparableByProductRef.current = historicoMap;
         setPriceHintsTick((t) => t + 1);
       })
       .catch(() => {
@@ -197,6 +204,7 @@ export default function RecepcionPedidosPage() {
         receptionEuroByProductRef.current = {};
         avgRecvEuroByProductRef.current = {};
         receptionHintsByProductRef.current = new Map();
+        historicoComparableByProductRef.current = new Map();
         setPriceHintsTick((t) => t + 1);
       });
     return () => {
@@ -727,6 +735,9 @@ export default function RecepcionPedidosPage() {
                     value: null,
                     source: null,
                   };
+                  const sid = item.supplierProductId;
+                  const lastHistorico =
+                    sid != null ? historicoComparableByProductRef.current.get(sid) ?? null : null;
                   return (
                     <RecepcionLineRow
                       key={item.id}
@@ -735,6 +746,8 @@ export default function RecepcionPedidosPage() {
                       lineDisplayName={orderLineDisplayName(item, catalogNameByProductId)}
                       suggestedEuroPerKg={sug.value}
                       suggestionSource={sug.source}
+                      lastHistoricoComparable={lastHistorico}
+                      priceHintsVersion={priceHintsTick}
                       commitWeightInput={commitWeightInput}
                       commitReceivedOrderQtyInput={commitReceivedOrderQtyInput}
                       commitPricePerKgInput={commitPricePerKgInput}

@@ -1381,34 +1381,12 @@ export async function updateSupplierProductPriceFromRecepcion(
 
   return { changed: true };
 }
-export async function commitPriceEvolutionFromReceivedOrderItem(
-  supabase: SupabaseClient,
-  localId: string,
-  item: PedidoOrderItem,
-  meta?: {
-    userId?: string | null;
-    receivedAt?: string | null;
-  },
-): Promise<{ changed: boolean }> {
-  console.log('[PRICE_EVOLUTION_DEBUG]', {
-    itemId: item.id,
-    supplierProductId: item.supplierProductId,
-    productName: item.productName,
-    pricePerUnit: item.pricePerUnit,
-    receivedPricePerKg: item.receivedPricePerKg,
-    receivedWeightKg: item.receivedWeightKg,
-    receivedQuantity: item.receivedQuantity,
-    unit: item.unit,
-    billingUnit: item.billingUnit,
-    billingQtyPerOrderUnit: item.billingQtyPerOrderUnit,
-    excludeFromPriceEvolution: item.excludeFromPriceEvolution,
-    incidentType: item.incidentType,
-  });
 
-  if (!item.supplierProductId) return { changed: false };
-  if (item.excludeFromPriceEvolution) return { changed: false };
-  if (item.incidentType === 'missing') return { changed: false };
-
+/**
+ * Precio en unidad de catálogo (mismo criterio que `commitPriceEvolutionFromReceivedOrderItem`)
+ * para evolución de precios y alertas inline en recepción.
+ */
+export function getOrderItemCatalogUnitPriceForEvolution(item: PedidoOrderItem): number | null {
   let nextCatalogPrice: number | null = null;
 
   if (receptionBillsByWeight(item)) {
@@ -1463,14 +1441,47 @@ export async function commitPriceEvolutionFromReceivedOrderItem(
     !Number.isFinite(nextCatalogPrice) ||
     nextCatalogPrice <= 0
   ) {
-    return { changed: false };
+    return null;
   }
+  return Math.round(nextCatalogPrice * 10000) / 10000;
+}
+
+export async function commitPriceEvolutionFromReceivedOrderItem(
+  supabase: SupabaseClient,
+  localId: string,
+  item: PedidoOrderItem,
+  meta?: {
+    userId?: string | null;
+    receivedAt?: string | null;
+  },
+): Promise<{ changed: boolean }> {
+  console.log('[PRICE_EVOLUTION_DEBUG]', {
+    itemId: item.id,
+    supplierProductId: item.supplierProductId,
+    productName: item.productName,
+    pricePerUnit: item.pricePerUnit,
+    receivedPricePerKg: item.receivedPricePerKg,
+    receivedWeightKg: item.receivedWeightKg,
+    receivedQuantity: item.receivedQuantity,
+    unit: item.unit,
+    billingUnit: item.billingUnit,
+    billingQtyPerOrderUnit: item.billingQtyPerOrderUnit,
+    excludeFromPriceEvolution: item.excludeFromPriceEvolution,
+    incidentType: item.incidentType,
+  });
+
+  if (!item.supplierProductId) return { changed: false };
+  if (item.excludeFromPriceEvolution) return { changed: false };
+  if (item.incidentType === 'missing') return { changed: false };
+
+  const nextCatalogPrice = getOrderItemCatalogUnitPriceForEvolution(item);
+  if (nextCatalogPrice == null) return { changed: false };
 
   return updateSupplierProductPriceFromRecepcion(
     supabase,
     localId,
     item.supplierProductId,
-    Math.round(nextCatalogPrice * 10000) / 10000,
+    nextCatalogPrice,
     {
       deliveryNoteId: null,
       receptionDate: meta?.receivedAt ?? new Date().toISOString(),
@@ -2149,6 +2160,56 @@ export async function fetchLastReceivedPricePerKgBySupplierProductIds(
     const v = Number(row.received_price_per_kg);
     if (!Number.isFinite(v) || v <= 0) continue;
     out.set(sid, Math.round(v * 10000) / 10000);
+  }
+  return out;
+}
+
+/** Último precio en unidad comparable desde `historico_precios` (misma base que evolución de precios). */
+export type HistoricoComparableLast = {
+  precio: number;
+  unidad: string;
+};
+
+/**
+ * Por producto de proveedor: última fila de histórico (precio_nuevo + unidad_comparacion).
+ * Si falta la tabla, devuelve mapa vacío (sin lanzar).
+ */
+export async function fetchLastHistoricoComparableBySupplierProductIds(
+  supabase: SupabaseClient,
+  localId: string,
+  supplierProductIds: string[],
+): Promise<Map<string, HistoricoComparableLast>> {
+  const out = new Map<string, HistoricoComparableLast>();
+  if (!supplierProductIds.length) return out;
+
+  const limit = Math.min(900, Math.max(120, supplierProductIds.length * 30));
+  const { data, error } = await supabase
+    .from('historico_precios')
+    .select('supplier_product_id,precio_nuevo,unidad_comparacion,created_at')
+    .eq('local_id', localId)
+    .in('supplier_product_id', supplierProductIds)
+    .order('created_at', { ascending: false })
+    .limit(limit);
+
+  if (error) {
+    if (isMissingHistoricoPreciosTableError(error.message)) return out;
+    throw new Error(error.message);
+  }
+
+  for (const row of (data ?? []) as Array<{
+    supplier_product_id: string | null;
+    precio_nuevo: number | string | null;
+    unidad_comparacion?: string | null;
+  }>) {
+    const sid = row.supplier_product_id != null ? String(row.supplier_product_id) : '';
+    if (!sid || out.has(sid)) continue;
+    const p = Number(row.precio_nuevo);
+    if (!Number.isFinite(p) || p <= 0) continue;
+    const u =
+      row.unidad_comparacion != null && String(row.unidad_comparacion).trim() !== ''
+        ? String(row.unidad_comparacion).trim()
+        : 'ud';
+    out.set(sid, { precio: Math.round(p * 10000) / 10000, unidad: u });
   }
   return out;
 }
