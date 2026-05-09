@@ -98,29 +98,6 @@ function QuickTile({ tile }: { tile: PanelTile }) {
   );
 }
 
-// ─── Fila de módulo (lista, sin subtítulo) ────────────────────────────────────
-function PanelModuleRow({ tile }: { tile: PanelTile }) {
-  const Icon = tile.Icon;
-  return (
-    <Link
-      href={panelHref(tile)}
-      className={[
-        'flex items-center gap-3 bg-white px-4 py-3 text-left antialiased outline-none select-none touch-manipulation transition-colors active:bg-zinc-50',
-        tile.blocked ? 'opacity-50' : '',
-      ].join(' ')}
-    >
-      <div className={[
-        'grid h-9 w-9 shrink-0 place-items-center rounded-xl',
-        tile.blocked ? 'bg-zinc-100 text-zinc-400' : 'bg-[#D32F2F]/10 text-[#D32F2F]',
-      ].join(' ')}>
-        <Icon className="h-4.5 w-4.5" strokeWidth={2} />
-      </div>
-      <p className="flex-1 text-[14px] font-semibold text-zinc-900">{tile.label}</p>
-      <ChevronRight className="h-4 w-4 shrink-0 text-zinc-300" strokeWidth={2.5} aria-hidden />
-    </Link>
-  );
-}
-
 // ─── Tarjeta destacada Pedidos (más suave) ────────────────────────────────────
 function PanelFeaturedPedidos({
   tile,
@@ -186,10 +163,7 @@ export default function PanelControlPage() {
   const escandallos: PanelTile = { id: 'escandallos', href: '/escandallos', label: 'Escandallos', sub: '', Icon: Calculator, blocked: !showEscandallos || isBlockedByPlan('escandallos') };
   const finanzasTile: PanelTile = { id: 'finanzas', href: '/finanzas', label: 'Finanzas', sub: '', Icon: BarChart3, blocked: isBlockedByPlan('finanzas') };
 
-  // ─── 4 accesos rápidos fijos ──────────────────────────────────────────────
-  const quickTiles: PanelTile[] = [mermas, produccion, appcc, checklist];
-
-  // ─── Lista completa de módulos ────────────────────────────────────────────
+  // ─── Lista completa de módulos (rejilla 4 columnas, mismo tile que antiguos accesos rápidos) ──
   let row3Right: PanelTile | null = null;
   if (canAccessComidaPersonal(role)) row3Right = consumoInterno;
   else if (showPedidosCocina) row3Right = pedirCentral;
@@ -249,30 +223,17 @@ export default function PanelControlPage() {
         {/* ── Pedidos destacado ───────────────────────────────────── */}
         {showPedidos && <PanelFeaturedPedidos tile={featuredPedidos} />}
 
-        {/* ── Accesos rápidos ─────────────────────────────────────── */}
+        {/* ── Módulos (rejilla 4×N, mismo diseño que los antiguos accesos rápidos) ── */}
         <div>
           <p className="mb-2.5 px-0.5 text-[11px] font-semibold uppercase tracking-widest text-zinc-400">
-            Accesos rápidos
-          </p>
-          <div className="flex justify-between rounded-2xl bg-white px-4 py-4 shadow-sm ring-1 ring-zinc-200/80">
-            {quickTiles.map(tile => (
-              <QuickTile key={tile.id} tile={tile} />
-            ))}
-          </div>
-        </div>
-
-        {/* ── Todos los módulos ────────────────────────────────────── */}
-        <div>
-          <p className="mb-2 px-0.5 text-[11px] font-semibold uppercase tracking-widest text-zinc-400">
             Módulos
           </p>
-          <div className="overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-zinc-200/80">
-            {allModules.map((tile, i) => (
-              <div key={tile.id}>
-                {i > 0 && <div className="mx-4 h-px bg-zinc-100" />}
-                <PanelModuleRow tile={tile} />
-              </div>
-            ))}
+          <div className="rounded-2xl bg-white px-3 py-4 shadow-sm ring-1 ring-zinc-200/80 sm:px-4">
+            <div className="grid grid-cols-4 justify-items-center gap-x-1 gap-y-5 sm:gap-x-2">
+              {allModules.map((tile) => (
+                <QuickTile key={tile.id} tile={tile} />
+              ))}
+            </div>
           </div>
         </div>
 
