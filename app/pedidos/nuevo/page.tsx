@@ -1,6 +1,17 @@
 'use client';
 
 import Link from 'next/link';
+import {
+  ArrowRight,
+  Clock,
+  Filter,
+  LayoutTemplate,
+  Package,
+  Search,
+  ShoppingCart,
+  Star,
+  TrendingUp,
+} from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import React from 'react';
 import { useAuth } from '@/components/AuthProvider';
@@ -20,7 +31,7 @@ import {
   suggestedOrderQuantityForPar,
   weeklyParScaledToCoverageDays,
 } from '@/lib/pedidos-coverage';
-import PedidosNuevoCatalogLine from '@/components/PedidosNuevoCatalogLine';
+import PedidosNuevoCatalogRow from '@/components/PedidosNuevoCatalogLine';
 import PedidosUseTemplateSheet from '@/components/pedidos/PedidosUseTemplateSheet';
 import { buildPedidoWhatsappMessage } from '@/lib/pedidos-whatsapp-message';
 import { applyQuantityTapDelta, parseQuantityManualInput } from '@/lib/pedidos-order-quantity';
@@ -306,6 +317,21 @@ export default function NuevoPedidoPage() {
     if (!deliveryDate.trim() || !selectedSupplier) return false;
     return (selectedSupplier.deliveryExceptionDates ?? []).includes(deliveryDate);
   }, [deliveryDate, selectedSupplier]);
+
+  const deliveryChipLabel = React.useMemo(() => {
+    if (!deliveryDate.trim()) return null;
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(deliveryDate.trim());
+    if (!m) return null;
+    const target = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const tNorm = new Date(target.getFullYear(), target.getMonth(), target.getDate());
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    if (tNorm.getTime() === tomorrow.getTime()) return 'Mañana';
+    if (tNorm.getTime() === today.getTime()) return 'Hoy';
+    return target.toLocaleDateString('es-ES', { weekday: 'short', day: 'numeric', month: 'short' });
+  }, [deliveryDate]);
 
   type CatalogTabId = 'favorites' | 'recent' | 'top' | 'all';
   /** Siempre «Todos» al abrir / cambiar proveedor (catálogo completo primero). */
@@ -708,6 +734,27 @@ export default function NuevoPedidoPage() {
     });
   }, []);
 
+  const handleCatalogDelta = React.useCallback(
+    (productId: string, unit: PedidoOrderItem['unit'], delta: number) => {
+      adjustQty(productId, unit, delta);
+    },
+    [adjustQty],
+  );
+
+  const handleCatalogManual = React.useCallback(
+    (productId: string, unit: PedidoOrderItem['unit'], raw: string) => {
+      setQtyFromInput(productId, unit, raw);
+    },
+    [setQtyFromInput],
+  );
+
+  const handleFavoriteToggle = React.useCallback(
+    (productId: string) => {
+      void toggleProductFavorite(productId);
+    },
+    [toggleProductFavorite],
+  );
+
   const existingByProductId = React.useMemo(() => {
     const map = new Map<string, PedidoOrderItem>();
     for (const item of editSourceItems ?? []) {
@@ -772,6 +819,15 @@ export default function NuevoPedidoPage() {
   const totalBase = items.reduce((acc, row) => acc + row.lineTotal, 0);
   const totalVat = items.reduce((acc, row) => acc + row.lineTotal * row.vatRate, 0);
   const total = totalBase + totalVat;
+
+  const totalUnitsOrdered = React.useMemo(() => {
+    let s = 0;
+    for (const p of supplierProducts) {
+      const q = qtyByProductId[p.id] ?? 0;
+      if (q > 0) s += q;
+    }
+    return s;
+  }, [supplierProducts, qtyByProductId]);
 
   const saveDraft = (nextStatus: 'draft' | 'sent' = 'draft') => {
     if (!selectedSupplier) {
@@ -1017,7 +1073,7 @@ export default function NuevoPedidoPage() {
   }
 
   return (
-    <div className="relative space-y-2 pb-[5.5rem] sm:space-y-2.5 sm:pb-24">
+    <div className="relative space-y-2 pb-[6.75rem] sm:space-y-2.5 sm:pb-[7.25rem]">
       {existingSentAt && editingId ? (
         <section
           className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-950 ring-1 ring-amber-100"
@@ -1057,31 +1113,57 @@ export default function NuevoPedidoPage() {
       ) : null}
 
       {!editingId ? (
-        <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center justify-between gap-2">
           <Link
             href="/pedidos"
-            className="inline-flex h-9 items-center justify-center rounded-lg border border-zinc-200 bg-white px-3 text-xs font-semibold text-zinc-700 shadow-sm hover:bg-zinc-50"
+            className="inline-flex h-10 items-center justify-center rounded-xl border border-zinc-200 bg-white px-3 text-xs font-semibold text-zinc-700 shadow-sm hover:bg-zinc-50"
           >
             ← Pedidos
           </Link>
-          <button
-            type="button"
-            onClick={() => setUseTemplateOpen(true)}
-            className="inline-flex h-9 items-center justify-center rounded-lg border border-[#D32F2F]/30 bg-[#FFF8F7] px-3 text-xs font-bold text-[#7F1D1D] shadow-sm ring-1 ring-[#D32F2F]/15 hover:bg-[#FFF0EE]"
-          >
-            Usar plantilla
-          </button>
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={() =>
+                document.getElementById('pedido-nuevo-acciones')?.scrollIntoView({
+                  behavior: 'smooth',
+                  block: 'start',
+                })
+              }
+              className="inline-flex h-10 w-10 items-center justify-center rounded-full text-[#25D366] hover:bg-emerald-50"
+              aria-label="Ir a enviar por WhatsApp"
+            >
+              <svg className="h-6 w-6" viewBox="0 0 24 24" aria-hidden>
+                <path
+                  fill="currentColor"
+                  d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.435 9.884-9.881 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"
+                />
+              </svg>
+            </button>
+            <button
+              type="button"
+              onClick={() => setUseTemplateOpen(true)}
+              className="inline-flex h-10 items-center justify-center rounded-xl border border-[#E30613]/35 bg-[#FFF8F7] px-3 text-xs font-bold text-[#7F1D1D] shadow-sm ring-1 ring-[#E30613]/15 hover:bg-[#FFF0EE]"
+            >
+              Plantilla
+            </button>
+          </div>
         </div>
       ) : null}
 
-      <section className="rounded-xl bg-white px-2.5 py-2 ring-1 ring-zinc-200/90 sm:px-3">
-        <label className="text-[10px] font-extrabold uppercase tracking-wide text-zinc-500">Proveedor</label>
-        {loadingSuppliers ? <p className="mt-1 text-[10px] font-semibold text-zinc-500">Cargando catálogo…</p> : null}
+      <section className="rounded-2xl bg-white p-3 shadow-sm ring-1 ring-zinc-200/85">
+        <label htmlFor="pedido-nuevo-proveedor" className="sr-only">
+          Proveedor
+        </label>
+        {loadingSuppliers ? <p className="text-[11px] font-semibold text-zinc-500">Cargando catálogo…</p> : null}
         <select
+          id="pedido-nuevo-proveedor"
           value={supplierId}
           disabled={Boolean(existingSentAt && existingOrderId)}
           onChange={(e) => setSupplierId(e.target.value)}
-          className="mt-1 h-9 w-full rounded-lg border border-zinc-300 bg-white px-2.5 text-sm font-medium text-zinc-900 outline-none disabled:cursor-not-allowed disabled:bg-zinc-100 disabled:text-zinc-500"
+          className="mt-1 w-full cursor-pointer appearance-none truncate rounded-xl border border-zinc-200 bg-white bg-[length:1rem] bg-[position:right_0.65rem_center] bg-no-repeat py-2.5 pl-3 pr-10 text-lg font-bold leading-tight text-zinc-900 outline-none disabled:cursor-not-allowed disabled:bg-zinc-100 disabled:text-zinc-500"
+          style={{
+            backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2371717a'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'/%3E%3C/svg%3E")`,
+          }}
         >
           {suppliers.map((s) => (
             <option key={s.id} value={s.id}>
@@ -1089,48 +1171,76 @@ export default function NuevoPedidoPage() {
             </option>
           ))}
         </select>
+        {deliveryDate.trim() && deliveryChipLabel ? (
+          <p className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-zinc-500">
+            <span>
+              Entrega:{' '}
+              <span className="font-semibold text-zinc-700">{deliveryChipLabel}</span>
+            </span>
+          </p>
+        ) : (
+          <p className="mt-2 text-[11px] text-zinc-400">Define la fecha de entrega más abajo para ver la cobertura.</p>
+        )}
       </section>
 
-      <section className="rounded-xl bg-white p-2.5 ring-1 ring-zinc-200/90 sm:p-3">
+      <section className="overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-zinc-200/85">
         {selectedSupplier && supplierProducts.length > 0 ? (
-          <div className="-mx-0.5 flex gap-0 overflow-x-auto border-b border-zinc-200/90 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          <div className="flex gap-2 overflow-x-auto px-3 pb-2 pt-3 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             {(
               [
-                ['all', '📦 Todos'],
-                ['favorites', '⭐ Favoritos'],
-                ['recent', '🕘 Últimos'],
-                ['top', '📈 Más usados'],
+                ['favorites', 'Favoritos', Star],
+                ['recent', 'Últimos', Clock],
+                ['top', 'Más usados', TrendingUp],
+                ['all', 'Todos', Package],
               ] as const
-            ).map(([id, label]) => (
+            ).map(([id, label, Icon]) => (
               <button
                 key={id}
                 type="button"
                 onClick={() => setCatalogTab(id)}
                 className={[
-                  'shrink-0 whitespace-nowrap border-b-2 px-2.5 py-2 text-[11px] font-semibold transition-colors active:opacity-90 sm:px-3',
+                  'inline-flex shrink-0 items-center gap-1 rounded-full border px-3 py-1.5 text-[11px] font-semibold transition-colors active:opacity-90',
                   catalogTab === id
-                    ? 'border-[#D32F2F] text-[#D32F2F]'
-                    : 'border-transparent text-zinc-500 hover:text-zinc-800',
+                    ? 'border-[#E30613] bg-[#FFF5F5] text-[#E30613] shadow-sm'
+                    : 'border-zinc-200 bg-white text-zinc-600 hover:border-zinc-300 hover:bg-zinc-50',
                 ].join(' ')}
               >
+                <Icon className="h-3.5 w-3.5 shrink-0" strokeWidth={2} aria-hidden />
                 {label}
               </button>
             ))}
           </div>
         ) : null}
-        <label className="mt-2 block text-[10px] font-semibold uppercase tracking-wide text-zinc-500">Buscar producto</label>
-        <input
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Buscar producto…"
-          className="mt-1 h-8 w-full rounded-lg border-0 bg-white px-2.5 text-sm text-zinc-900 shadow-inner shadow-zinc-200/70 ring-1 ring-zinc-200/85 placeholder:text-zinc-400 outline-none focus:ring-2 focus:ring-[#D32F2F]/20"
-        />
-        <div className="mt-1.5 space-y-1.5">
+        <div className="px-3 pb-3">
+          <div className="flex gap-2">
+            <div className="relative min-w-0 flex-1">
+              <Search
+                className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400"
+                aria-hidden
+              />
+              <input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Buscar producto…"
+                className="h-10 w-full rounded-xl border-0 bg-zinc-50 py-2 pl-10 pr-3 text-sm text-zinc-900 shadow-inner shadow-zinc-100 ring-1 ring-zinc-200/80 placeholder:text-zinc-400 outline-none focus:ring-2 focus:ring-[#E30613]/20"
+              />
+            </div>
+            <button
+              type="button"
+              className="inline-flex shrink-0 items-center gap-1 rounded-xl border border-zinc-200 bg-white px-3 py-2 text-[11px] font-semibold text-zinc-700 shadow-sm hover:bg-zinc-50"
+              aria-label="Filtros (próximamente)"
+            >
+              <Filter className="h-4 w-4" aria-hidden />
+              <span className="hidden sm:inline">Filtros</span>
+            </button>
+          </div>
+        </div>
+        <div className="divide-y divide-zinc-100 border-t border-zinc-100">
           {selectedSupplier && supplierProducts.length === 0 ? (
-            <p className="text-sm text-zinc-500">Este proveedor no tiene productos activos. Revísalo en Proveedores.</p>
+            <p className="px-3 py-4 text-sm text-zinc-500">Este proveedor no tiene productos activos. Revísalo en Proveedores.</p>
           ) : null}
           {selectedSupplier && supplierProducts.length > 0 && displayedProducts.length === 0 ? (
-            <p className="rounded-lg border border-dashed border-zinc-200 bg-zinc-50/90 px-2.5 py-2 text-center text-[12px] leading-snug text-zinc-600">
+            <p className="mx-3 my-3 rounded-lg border border-dashed border-zinc-200 bg-zinc-50/90 px-2.5 py-2 text-center text-[12px] leading-snug text-zinc-600">
               {catalogTab === 'favorites'
                 ? 'Sin favoritos. Abre «Todos» y pulsa la estrella.'
                 : catalogTab === 'recent'
@@ -1150,28 +1260,20 @@ export default function NuevoPedidoPage() {
             const suggestedQty = segmentTarget != null ? suggestedOrderQuantityForPar(p.unit, segmentTarget) : null;
             const sig = catalogSignals.lastReceptionByProductId[p.id];
             return (
-              <PedidosNuevoCatalogLine
+              <PedidosNuevoCatalogRow
                 key={p.id}
                 product={p}
                 qty={qty}
                 lineTotal={lineTotal}
                 suggestedQty={coverageDays != null && suggestedQty != null ? suggestedQty : null}
-                onDelta={(d) => adjustQty(p.id, p.unit, d)}
-                onManual={(raw) => setQtyFromInput(p.id, p.unit, raw)}
-                repeatFromReception={
-                  sig
-                    ? {
-                        qty: sig.lastQty,
-                        atIso: sig.lastAt,
-                        unitPrice: sig.lastReceivedUnitPrice,
-                      }
-                    : undefined
-                }
-                favoriteToggle={{
-                  isFavorite: Boolean(userId && favoriteIds.has(p.id)),
-                  onToggle: () => void toggleProductFavorite(p.id),
-                  disabled: !userId,
-                }}
+                receptionQty={sig?.lastQty}
+                receptionAtIso={sig?.lastAt}
+                receptionUnitPrice={sig?.lastReceivedUnitPrice}
+                isFavorite={Boolean(userId && favoriteIds.has(p.id))}
+                favoriteDisabled={!userId}
+                onAdjustDelta={handleCatalogDelta}
+                onManualChange={handleCatalogManual}
+                onFavoriteToggle={handleFavoriteToggle}
               />
             );
           })}
@@ -1308,22 +1410,63 @@ export default function NuevoPedidoPage() {
       </section>
 
       <div className="pointer-events-none fixed inset-x-0 bottom-0 z-40 flex justify-center pb-[env(safe-area-inset-bottom)]">
-        <div className="pointer-events-auto flex w-full max-w-lg items-center gap-2 border-t border-zinc-200/90 bg-white/95 px-3 py-2 shadow-[0_-8px_28px_rgba(0,0,0,0.07)] backdrop-blur-md">
-          <div className="min-w-0 flex-1">
-            <p className="text-[10px] font-semibold uppercase tracking-wide text-zinc-500">Resumen</p>
-            <p className="truncate text-[12px] font-bold tabular-nums text-zinc-900">
-              {items.length} líneas · {total.toFixed(2)} € <span className="font-medium text-zinc-500">c/IVA</span>
-            </p>
+        <div className="pointer-events-auto w-full max-w-lg border-t border-zinc-200/90 bg-white/95 shadow-[0_-8px_28px_rgba(0,0,0,0.07)] backdrop-blur-md">
+          <div className="flex items-center gap-1.5 px-2.5 py-2 sm:gap-2 sm:px-3">
+            <div className="relative flex min-w-0 flex-1 items-center gap-2">
+              <div className="relative shrink-0">
+                <ShoppingCart className="h-6 w-6 text-zinc-700" aria-hidden />
+                {totalUnitsOrdered > 0 ? (
+                  <span className="absolute -right-1.5 -top-1 flex h-[1.125rem] min-w-[1.125rem] items-center justify-center rounded-full bg-[#E30613] px-1 text-[9px] font-bold leading-none text-white shadow-sm">
+                    {totalUnitsOrdered > 99 ? '99+' : totalUnitsOrdered}
+                  </span>
+                ) : null}
+              </div>
+              <div className="min-w-0">
+                <p className="text-[11px] font-bold leading-tight text-zinc-900">
+                  <span className="tabular-nums">{items.length}</span> líneas{' '}
+                  <span className="font-black tabular-nums text-zinc-950">· {totalBase.toFixed(2)} €</span>
+                </p>
+                <p className="text-[9px] font-medium leading-tight text-zinc-500">
+                  Sin IVA · {totalUnitsOrdered} uds · pedido activo
+                </p>
+              </div>
+            </div>
+            {!editingId ? (
+              <>
+                <button
+                  type="button"
+                  onClick={() => sendToWhatsappInOneStep()}
+                  className="flex h-11 w-11 shrink-0 touch-manipulation items-center justify-center rounded-xl bg-[#25D366] text-white shadow-sm ring-1 ring-[#128C7E]/30 transition-transform duration-100 active:scale-95"
+                  aria-label="Enviar pedido por WhatsApp"
+                >
+                  <svg className="h-5 w-5" viewBox="0 0 24 24" aria-hidden>
+                    <path
+                      fill="currentColor"
+                      d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.435 9.884-9.881 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"
+                    />
+                  </svg>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setUseTemplateOpen(true)}
+                  className="flex h-11 w-11 shrink-0 touch-manipulation items-center justify-center rounded-xl border border-[#E30613]/35 bg-[#FFF8F7] text-[#B91C1C] shadow-sm ring-1 ring-[#E30613]/12 transition-transform duration-100 active:scale-95"
+                  aria-label="Usar plantilla de pedido"
+                >
+                  <LayoutTemplate className="h-5 w-5" strokeWidth={2} aria-hidden />
+                </button>
+              </>
+            ) : null}
+            <button
+              type="button"
+              onClick={() =>
+                document.getElementById('pedido-nuevo-acciones')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+              }
+              className="inline-flex h-11 shrink-0 touch-manipulation items-center gap-1 rounded-full bg-[#E30613] px-3.5 text-[12px] font-bold text-white shadow-md ring-1 ring-[#E30613]/20 transition-transform duration-100 active:scale-[0.97] sm:px-4"
+            >
+              Continuar
+              <ArrowRight className="h-4 w-4" aria-hidden />
+            </button>
           </div>
-          <button
-            type="button"
-            onClick={() =>
-              document.getElementById('pedido-nuevo-acciones')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-            }
-            className="flex shrink-0 items-center gap-1 rounded-full bg-zinc-900 px-3 py-2 text-[11px] font-bold text-white shadow-sm active:scale-[0.98]"
-          >
-            Continuar
-          </button>
         </div>
       </div>
 

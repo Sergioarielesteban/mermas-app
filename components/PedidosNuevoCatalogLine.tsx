@@ -1,44 +1,26 @@
 'use client';
 
-import { Star } from 'lucide-react';
+import { ChevronRight, Star } from 'lucide-react';
 import React from 'react';
-import { useRepeatPress } from '@/hooks/useRepeatPress';
+import { usePedidosStepperHold } from '@/hooks/usePedidosStepperHold';
 import { formatQuantityWithUnit, unitPriceCatalogSuffix } from '@/lib/pedidos-format';
 import { supplierProductHasDistinctBilling, type PedidoSupplierProduct } from '@/lib/pedidos-supabase';
+import { parseQuantityManualInput } from '@/lib/pedidos-order-quantity';
 import { unitAllowsDecimalOrderQuantity } from '@/lib/pedidos-units';
+import type { Unit } from '@/lib/types';
 
 function shortUnitChip(unit: string): string {
   const u = unit.toLowerCase();
-  if (u === 'paquete') return 'PAQ.';
-  if (u === 'caja') return 'CAJ.';
-  if (u === 'bolsa') return 'BOL.';
-  if (u === 'racion') return 'RAC.';
-  if (u === 'docena') return 'DOC.';
+  if (u === 'paquete') return 'paq.';
+  if (u === 'caja') return 'caja';
+  if (u === 'bolsa') return 'bolsa';
+  if (u === 'racion') return 'ración';
+  if (u === 'docena') return 'doc.';
   if (u === 'litro') return 'L';
-  if (u === 'ml') return 'ML';
-  if (u === 'g') return 'G';
-  return unit.toUpperCase();
+  if (u === 'ml') return 'ml';
+  if (u === 'g') return 'g';
+  return unit.toLowerCase();
 }
-
-export type PedidosNuevoCatalogLineProps = {
-  product: PedidoSupplierProduct;
-  qty: number;
-  lineTotal: number;
-  suggestedQty: number | null;
-  onDelta: (delta: number) => void;
-  onManual: (raw: string) => void;
-  /** Última recepción registrada (referencia; no modifica precio catálogo). */
-  repeatFromReception?: {
-    qty: number;
-    atIso: string;
-    unitPrice: number;
-  };
-  favoriteToggle?: {
-    isFavorite: boolean;
-    onToggle: () => void;
-    disabled?: boolean;
-  };
-};
 
 function shortDateEs(iso: string): string {
   try {
@@ -50,145 +32,558 @@ function shortDateEs(iso: string): string {
   }
 }
 
-export default function PedidosNuevoCatalogLine({
+/** Visualización de cantidad siempre visible (incluido 0). */
+function formatQtyDisplay(qty: number, unit: Unit): string {
+  if (unitAllowsDecimalOrderQuantity(unit)) {
+    return qty.toLocaleString('es-ES', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+  }
+  return String(Math.max(0, Math.round(qty)));
+}
+
+export type PedidosNuevoCatalogLineProps = {
+  product: PedidoSupplierProduct;
+  qty: number;
+  lineTotal: number;
+  suggestedQty: number | null;
+  onDelta: (delta: number) => void;
+  onManual: (raw: string) => void;
+  receptionQty?: number;
+  receptionAtIso?: string;
+  receptionUnitPrice?: number;
+  /** Estrella: solo pasar si hay usuario (productId evita closures nuevos por línea). */
+  favoriteProductId?: string;
+  isFavorite?: boolean;
+  favoriteDisabled?: boolean;
+  onFavoriteToggle?: (productId: string) => void;
+};
+
+function PedidosNuevoCatalogLineInner({
   product: p,
   qty,
   lineTotal,
   suggestedQty,
   onDelta,
   onManual,
-  repeatFromReception,
-  favoriteToggle,
+  receptionQty,
+  receptionAtIso,
+  receptionUnitPrice,
+  favoriteProductId,
+  isFavorite,
+  favoriteDisabled,
+  onFavoriteToggle,
 }: PedidosNuevoCatalogLineProps) {
   const u = unitPriceCatalogSuffix[p.unit];
-  const repeatUp = useRepeatPress(() => onDelta(1));
-  const repeatDown = useRepeatPress(() => onDelta(-1));
+  const hold = usePedidosStepperHold(onDelta, {
+    delayBeforeRepeatMs: 400,
+    slowIntervalMs: 96,
+    fastIntervalMs: 68,
+    accelAfterMs: 780,
+    slowStep: 1,
+    fastStep: 5,
+  });
+
+  const [editingQty, setEditingQty] = React.useState(false);
+  const [draftQty, setDraftQty] = React.useState('');
+  /** Atajos +5/+10/+20 o −5/−10/−20; null = cerrado. */
+  const [popoverShortcuts, setPopoverShortcuts] = React.useState<null | { bulkSign: 1 | -1 }>(null);
+  const inputRef = React.useRef<HTMLInputElement>(null);
+  const stepperShellRef = React.useRef<HTMLDivElement>(null);
+  const idleCloseRef = React.useRef<number | null>(null);
+  const longPressPlusRef = React.useRef<number | null>(null);
+  const longPressMinusRef = React.useRef<number | null>(null);
+  const holdRedTimerRef = React.useRef<number | null>(null);
+  /** Cantidad en rojo durante incremento/decremento continuo (mock “mantener pulsado”). */
+  const [qtyHoldHighlight, setQtyHoldHighlight] = React.useState(false);
+
+  const LONG_PRESS_MS = 320;
+  const IDLE_CLOSE_MS = 2600;
+  /** Alineado con delayBeforeRepeatMs del hook: modo repetición = highlight rojo. */
+  const HOLD_RED_DELAY_MS = 400;
+
+  const clearIdleClose = React.useCallback(() => {
+    if (idleCloseRef.current != null) {
+      window.clearTimeout(idleCloseRef.current);
+      idleCloseRef.current = null;
+    }
+  }, []);
+
+  const scheduleIdleClose = React.useCallback(() => {
+    clearIdleClose();
+    idleCloseRef.current = window.setTimeout(() => {
+      idleCloseRef.current = null;
+      setPopoverShortcuts(null);
+    }, IDLE_CLOSE_MS);
+  }, [clearIdleClose]);
+
+  const clearLongPressTimers = React.useCallback(() => {
+    if (longPressPlusRef.current != null) {
+      window.clearTimeout(longPressPlusRef.current);
+      longPressPlusRef.current = null;
+    }
+    if (longPressMinusRef.current != null) {
+      window.clearTimeout(longPressMinusRef.current);
+      longPressMinusRef.current = null;
+    }
+  }, []);
+
+  const clearHoldRed = React.useCallback(() => {
+    if (holdRedTimerRef.current != null) {
+      window.clearTimeout(holdRedTimerRef.current);
+      holdRedTimerRef.current = null;
+    }
+    setQtyHoldHighlight(false);
+  }, []);
+
+  const scheduleHoldRed = React.useCallback(() => {
+    clearHoldRed();
+    holdRedTimerRef.current = window.setTimeout(() => {
+      holdRedTimerRef.current = null;
+      setQtyHoldHighlight(true);
+    }, HOLD_RED_DELAY_MS);
+  }, [clearHoldRed]);
+
+  /** Abre atajos tras long-press: detiene el hold para que no sigan saltando cantidades con el popover abierto. */
+  const openShortcutsFromHold = React.useCallback(
+    (bulkSign: 1 | -1) => {
+      hold.onHoldPointerEnd();
+      clearHoldRed();
+      setPopoverShortcuts({ bulkSign });
+      scheduleIdleClose();
+    },
+    [clearHoldRed, hold, scheduleIdleClose],
+  );
+
+  const closeShortcuts = React.useCallback(() => {
+    clearIdleClose();
+    setPopoverShortcuts(null);
+  }, [clearIdleClose]);
+
+  React.useEffect(() => {
+    return () => {
+      clearIdleClose();
+      clearLongPressTimers();
+      clearHoldRed();
+    };
+  }, [clearHoldRed, clearIdleClose, clearLongPressTimers]);
+
+  React.useEffect(() => {
+    if (!popoverShortcuts) return;
+    const onDoc = (ev: PointerEvent) => {
+      const el = stepperShellRef.current;
+      if (!el?.contains(ev.target as Node)) closeShortcuts();
+    };
+    const onKey = (ev: KeyboardEvent) => {
+      if (ev.key === 'Escape') closeShortcuts();
+    };
+    document.addEventListener('pointerdown', onDoc, true);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('pointerdown', onDoc, true);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [popoverShortcuts, closeShortcuts]);
+
   const dual = supplierProductHasDistinctBilling(p) && p.billingUnit === 'kg';
   const eq = p.billingQtyPerOrderUnit ?? p.estimatedKgPerUnit;
   const estKg =
     dual && qty > 0 && eq != null && eq > 0 ? Math.round(qty * eq * 1000) / 1000 : null;
   const ppk = dual && p.pricePerBillingUnit != null ? p.pricePerBillingUnit : null;
   const pack = p.unitsPerPack > 0 ? p.unitsPerPack : 1;
+  const packLabel =
+    pack > 1 ? `${shortUnitChip(p.unit)} · ${Math.round(pack)} u` : shortUnitChip(p.unit);
   const internalUseTotal =
     pack > 1 && p.recipeUnit != null && qty > 0
       ? Math.round(qty * pack * 10000) / 10000
       : null;
   const su = p.recipeUnit != null ? unitPriceCatalogSuffix[p.recipeUnit] : null;
-  const showSubtotal = qty > 0;
+
   const priceLine =
     dual && ppk != null
       ? `${ppk.toFixed(2)} €/kg${eq != null ? ` · ${eq} kg/${u}` : ''}`
       : `${p.pricePerUnit.toFixed(2)} €/${u}`;
+
+  const hasReception =
+    receptionQty != null &&
+    receptionAtIso != null &&
+    receptionUnitPrice != null &&
+    Number.isFinite(receptionUnitPrice);
+
   const lastRecvCatalog =
-    repeatFromReception == null &&
+    !hasReception &&
     p.ultimoPrecioRecibido != null &&
     Number.isFinite(p.ultimoPrecioRecibido) &&
     p.ultimoPrecioRecibido > 0
       ? `${p.ultimoPrecioRecibido.toFixed(2)} €/${u}`
       : null;
 
+  React.useEffect(() => {
+    if (!editingQty) return;
+    inputRef.current?.focus();
+    inputRef.current?.select?.();
+  }, [editingQty]);
+
+  const beginEditQty = React.useCallback(() => {
+    closeShortcuts();
+    setDraftQty(formatQtyDisplay(qty, p.unit));
+    setEditingQty(true);
+  }, [closeShortcuts, qty, p.unit]);
+
+  const applyBulk = React.useCallback(
+    (n: 1 | 5 | 10 | 20, sign: 1 | -1) => {
+      onDelta(sign * n);
+      closeShortcuts();
+    },
+    [onDelta, closeShortcuts],
+  );
+
+  const commitDraft = React.useCallback(() => {
+    const raw = draftQty.trim() === '' ? '0' : draftQty;
+    const parsed = parseQuantityManualInput(p.unit, raw);
+    onManual(parsed === null ? '0' : String(parsed));
+    setEditingQty(false);
+  }, [draftQty, onManual, p.unit]);
+
+  const handleFavoriteClick = React.useCallback(
+    (e: React.MouseEvent) => {
+      e.stopPropagation();
+      if (favoriteDisabled || !favoriteProductId || !onFavoriteToggle) return;
+      onFavoriteToggle(favoriteProductId);
+    },
+    [favoriteDisabled, favoriteProductId, onFavoriteToggle],
+  );
+
+  const lineTotalDisplay =
+    qty > 0 ? (
+      <span className="text-[14px] font-bold tabular-nums tracking-tight text-zinc-900 transition-colors duration-150">
+        {lineTotal.toFixed(2)} €
+      </span>
+    ) : (
+      <span className="text-[13px] font-semibold tabular-nums text-zinc-400 transition-colors duration-150">0,00 €</span>
+    );
+
+  const thumbInitial = p.name.trim().charAt(0).toUpperCase() || '·';
+  const minusDisabled = qty <= 0;
+  const stepperActive = qty > 0;
+
   return (
-    <div className="rounded-xl bg-white py-1 px-1.5 shadow-sm shadow-zinc-200/40 ring-1 ring-zinc-200/70">
-      <div className="flex items-start gap-1.5">
-        {favoriteToggle ? (
-          <button
-            type="button"
-            disabled={favoriteToggle.disabled}
-            onClick={(e) => {
-              e.stopPropagation();
-              if (favoriteToggle.disabled) return;
-              favoriteToggle.onToggle();
-            }}
-            className={[
-              'mt-0.5 grid h-9 w-9 shrink-0 touch-manipulation place-items-center rounded-xl transition-colors active:scale-[0.97]',
-              favoriteToggle.disabled ? 'cursor-not-allowed opacity-35' : '',
-              favoriteToggle.isFavorite ? 'text-amber-500' : 'text-zinc-300 hover:text-zinc-400',
-            ].join(' ')}
-            aria-label={favoriteToggle.isFavorite ? 'Quitar de favoritos' : 'Añadir a favoritos'}
-            aria-pressed={favoriteToggle.isFavorite}
+    <div
+      className={[
+        'px-2.5 transition-colors duration-200 sm:px-3',
+        isFavorite ? 'bg-[#FFF9F9]' : 'bg-white',
+      ].join(' ')}
+    >
+      <div className="flex items-start gap-1.5 py-1.5 sm:gap-2 sm:py-2">
+        <div className="flex shrink-0 items-start gap-0.5">
+          {favoriteProductId != null && onFavoriteToggle ? (
+            <button
+              type="button"
+              disabled={favoriteDisabled}
+              onClick={handleFavoriteClick}
+              className={[
+                'mt-0.5 grid h-9 w-9 touch-manipulation place-items-center rounded-xl transition-[transform,background-color] duration-150 active:scale-95',
+                favoriteDisabled ? 'cursor-not-allowed opacity-35' : '',
+                isFavorite
+                  ? 'bg-[#E30613]/12 text-[#E30613] ring-2 ring-[#E30613]/20'
+                  : 'bg-zinc-50 text-zinc-400 ring-1 ring-zinc-200/90 hover:bg-zinc-100 hover:text-zinc-500',
+              ].join(' ')}
+              aria-label={isFavorite ? 'Quitar de favoritos' : 'Añadir a favoritos'}
+              aria-pressed={Boolean(isFavorite)}
+            >
+              <Star
+                className="h-[1.15rem] w-[1.15rem]"
+                strokeWidth={isFavorite ? 0 : 1.6}
+                fill={isFavorite ? 'currentColor' : 'none'}
+              />
+            </button>
+          ) : null}
+          <div
+            className="relative mt-0.5 h-10 w-10 shrink-0 overflow-hidden rounded-lg bg-zinc-100 ring-1 ring-zinc-200/80 transition-shadow duration-150"
+            aria-hidden
           >
-            <Star
-              className="h-[1.125rem] w-[1.125rem]"
-              strokeWidth={favoriteToggle.isFavorite ? 0 : 1.35}
-              fill={favoriteToggle.isFavorite ? 'currentColor' : 'none'}
-            />
-          </button>
-        ) : null}
-        <div className="min-w-0 flex-1">
-          <p className="text-[13px] font-semibold leading-snug text-zinc-900">{p.name}</p>
-          <p className="mt-0.5 text-[10px] font-medium uppercase tracking-wide text-zinc-400">{shortUnitChip(p.unit)}</p>
-          <p className="mt-0.5 text-[11px] font-medium tabular-nums text-zinc-700">{priceLine}</p>
-          {repeatFromReception ? (
-            <p className="mt-0.5 text-[10px] leading-snug text-zinc-500">
-              Último pedido ·{' '}
-              <span className="font-medium text-zinc-700">
-                {formatQuantityWithUnit(repeatFromReception.qty, p.unit)}
-              </span>
-              {shortDateEs(repeatFromReception.atIso) ? (
-                <> · {shortDateEs(repeatFromReception.atIso)}</>
+            <span className="flex h-full w-full items-center justify-center text-[13px] font-bold uppercase text-zinc-400">
+              {thumbInitial}
+            </span>
+          </div>
+        </div>
+
+        <div className="min-w-0 flex-1 pt-0.5">
+          <p className="line-clamp-2 text-[13px] font-bold leading-[1.25] text-zinc-900 [overflow-wrap:anywhere]">{p.name}</p>
+          <p className="mt-0 text-[11px] leading-tight text-zinc-500">{packLabel}</p>
+          {hasReception ? (
+            <p className="mt-0 text-[11px] font-semibold tabular-nums leading-tight text-[#E30613]">
+              Último: {receptionUnitPrice!.toFixed(2)} €/{u}
+              {shortDateEs(receptionAtIso!) ? (
+                <span className="font-normal text-zinc-500"> · {shortDateEs(receptionAtIso!)}</span>
               ) : null}
-              {' · '}
-              <span className="font-semibold tabular-nums text-[#D32F2F]">
-                {repeatFromReception.unitPrice.toFixed(2)} €/{u}
-              </span>
             </p>
           ) : lastRecvCatalog ? (
-            <p className="mt-0.5 text-[10px] tabular-nums text-zinc-500">
-              Último: <span className="font-semibold text-[#D32F2F]">{lastRecvCatalog}</span>
+            <p className="mt-0 text-[11px] font-semibold tabular-nums leading-tight text-[#E30613]">
+              Último: {lastRecvCatalog}
             </p>
-          ) : null}
+          ) : (
+            <p className="mt-0 text-[11px] font-medium tabular-nums leading-tight text-zinc-500">{priceLine}</p>
+          )}
+
           {qty > 0 && dual && ppk != null && estKg != null ? (
-            <p className="mt-0.5 text-[10px] text-zinc-500">
+            <p className="mt-0.5 text-[10px] leading-tight text-zinc-500">
               Est. {estKg} kg · {lineTotal.toFixed(2)} €
             </p>
           ) : null}
           {qty > 0 && internalUseTotal != null && su != null ? (
-            <p className="mt-0.5 text-[10px] text-zinc-500">
+            <p className="mt-0 text-[10px] leading-tight text-zinc-500">
               Uso: {internalUseTotal.toLocaleString('es-ES', { maximumFractionDigits: 4 })} {su}
             </p>
           ) : null}
           {suggestedQty != null ? (
-            <p className="mt-0.5 text-[10px] font-medium text-zinc-600">
+            <p className="mt-0 text-[10px] font-medium leading-tight text-zinc-600">
               Tramo: {formatQuantityWithUnit(suggestedQty, p.unit)}
             </p>
           ) : null}
         </div>
-        {showSubtotal ? (
-          <p className="shrink-0 self-start pt-0.5 text-[13px] font-bold tabular-nums text-zinc-900">
-            {lineTotal.toFixed(2)} €
-          </p>
-        ) : null}
-      </div>
-      <div className="mt-1 flex min-w-0 items-center gap-2">
-        <button
-          type="button"
-          {...repeatDown}
-          className="grid h-10 w-10 shrink-0 touch-manipulation place-items-center rounded-xl border border-zinc-200 bg-white text-lg font-semibold leading-none text-zinc-800 shadow-sm active:bg-zinc-100"
-          aria-label={`Quitar una unidad de ${p.name}`}
-        >
-          {'\u2212'}
-        </button>
-        <input
-          type="number"
-          min={0}
-          step={unitAllowsDecimalOrderQuantity(p.unit) ? 0.01 : 1}
-          inputMode="decimal"
-          enterKeyHint="done"
-          autoComplete="off"
-          aria-label={`Cantidad ${p.name}`}
-          className="h-10 min-w-[3.25rem] flex-1 rounded-xl border-0 bg-white px-2 text-center text-[15px] font-semibold tabular-nums text-zinc-900 shadow-inner shadow-zinc-200/80 ring-1 ring-zinc-200/90 outline-none focus:ring-2 focus:ring-[#D32F2F]/25 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-          value={qty === 0 ? '' : unitAllowsDecimalOrderQuantity(p.unit) ? qty : Math.round(qty)}
-          onChange={(e) => onManual(e.target.value)}
-        />
-        <button
-          type="button"
-          {...repeatUp}
-          className="grid h-10 w-10 shrink-0 touch-manipulation place-items-center rounded-xl bg-[#D32F2F] text-lg font-semibold leading-none text-white shadow-sm active:bg-[#B71C1C]"
-          aria-label={`Añadir una unidad de ${p.name}`}
-        >
-          +
-        </button>
+
+        <div className="flex shrink-0 items-center gap-1 sm:gap-1.5">
+          <div className="relative shrink-0" ref={stepperShellRef}>
+            <div
+              className={[
+                'inline-flex min-h-[2.75rem] min-w-0 touch-manipulation items-center rounded-2xl border bg-white py-0.5 pl-0.5 pr-0.5 transition-[box-shadow,border-color] duration-150 sm:min-h-[2.875rem]',
+                stepperActive
+                  ? 'border-zinc-200/95 shadow-[0_2px_12px_rgba(0,0,0,0.08)]'
+                  : 'border-[#E8E8E8] shadow-none',
+              ].join(' ')}
+            >
+              <button
+                type="button"
+                disabled={minusDisabled}
+                tabIndex={-1}
+                onPointerDown={(e) => {
+                  if (minusDisabled) return;
+                  scheduleHoldRed();
+                  hold.onMinusPointerDown(e);
+                  clearLongPressTimers();
+                  longPressMinusRef.current = window.setTimeout(() => {
+                    longPressMinusRef.current = null;
+                    openShortcutsFromHold(-1);
+                  }, LONG_PRESS_MS);
+                }}
+                onPointerUp={() => {
+                  clearHoldRed();
+                  clearLongPressTimers();
+                  hold.onHoldPointerEnd();
+                }}
+                onPointerCancel={() => {
+                  clearHoldRed();
+                  clearLongPressTimers();
+                  hold.onHoldPointerEnd();
+                }}
+                onPointerLeave={() => {
+                  clearHoldRed();
+                  clearLongPressTimers();
+                  hold.onHoldPointerEnd();
+                }}
+                className={[
+                  'grid h-11 min-w-[2.75rem] shrink-0 touch-manipulation select-none place-items-center rounded-[0.65rem] text-xl font-bold leading-none transition-[transform,background-color,color] duration-100 active:scale-[0.97]',
+                  minusDisabled
+                    ? 'cursor-not-allowed text-zinc-300'
+                    : 'text-zinc-800 active:bg-[#E30613]/12 active:text-[#B8050F]',
+                ].join(' ')}
+                aria-label={`Quitar una unidad de ${p.name}`}
+              >
+                −
+              </button>
+              {editingQty ? (
+                <input
+                  ref={inputRef}
+                  type="text"
+                  inputMode={unitAllowsDecimalOrderQuantity(p.unit) ? 'decimal' : 'numeric'}
+                  enterKeyHint="done"
+                  autoComplete="off"
+                  aria-label={`Cantidad ${p.name}`}
+                  value={draftQty}
+                  onChange={(e) => setDraftQty(e.target.value)}
+                  onBlur={commitDraft}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      commitDraft();
+                    }
+                  }}
+                  className="h-11 w-[3.75rem] min-w-[3rem] border-0 bg-transparent px-0.5 text-center text-[18px] font-bold tabular-nums tracking-tight text-zinc-900 outline-none ring-0 transition-colors duration-150"
+                />
+              ) : (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    beginEditQty();
+                  }}
+                  className={[
+                    'flex min-h-11 min-w-[3rem] touch-manipulation items-center justify-center px-1.5 text-center text-[18px] font-bold tabular-nums tracking-tight outline-none transition-colors duration-100 active:opacity-90 sm:min-w-[3.25rem]',
+                    qtyHoldHighlight
+                      ? 'text-[#E30613]'
+                      : qty > 0
+                        ? 'text-zinc-900'
+                        : 'text-zinc-400',
+                  ].join(' ')}
+                  aria-label={`Editar cantidad de ${p.name}`}
+                >
+                  {formatQtyDisplay(qty, p.unit)}
+                </button>
+              )}
+              <button
+                type="button"
+                tabIndex={-1}
+                onPointerDown={(e) => {
+                  scheduleHoldRed();
+                  hold.onPlusPointerDown(e);
+                  clearLongPressTimers();
+                  longPressPlusRef.current = window.setTimeout(() => {
+                    longPressPlusRef.current = null;
+                    openShortcutsFromHold(1);
+                  }, LONG_PRESS_MS);
+                }}
+                onPointerUp={() => {
+                  clearHoldRed();
+                  clearLongPressTimers();
+                  hold.onHoldPointerEnd();
+                }}
+                onPointerCancel={() => {
+                  clearHoldRed();
+                  clearLongPressTimers();
+                  hold.onHoldPointerEnd();
+                }}
+                onPointerLeave={() => {
+                  clearHoldRed();
+                  clearLongPressTimers();
+                  hold.onHoldPointerEnd();
+                }}
+                className="grid h-11 min-w-[2.75rem] shrink-0 touch-manipulation select-none place-items-center rounded-[0.65rem] bg-[#E30613] text-xl font-bold leading-none text-white shadow-[0_1px_4px_rgba(227,6,19,0.35)] transition-[transform,background-color,filter] duration-100 active:scale-[0.97] active:bg-[#C50511]"
+                aria-label={`Añadir una unidad de ${p.name}`}
+              >
+                +
+              </button>
+            </div>
+
+            {popoverShortcuts ? (
+              <div
+                role="dialog"
+                aria-label="Atajos de cantidad"
+                className="absolute right-0 top-full z-[70] mt-1.5 w-[11.25rem] max-w-[calc(100vw-2rem)] origin-top rounded-xl border border-zinc-200/90 bg-white p-2 shadow-[0_12px_40px_rgba(0,0,0,0.12)]"
+                onClick={() => scheduleIdleClose()}
+              >
+                <div className="grid grid-cols-3 gap-1.5">
+                  {([1, 5, 10] as const).map((n) => {
+                    const s = popoverShortcuts.bulkSign;
+                    const label = s > 0 ? `+${n}` : `−${n}`;
+                    return (
+                      <button
+                        key={n}
+                        type="button"
+                        onClick={() => applyBulk(n, s)}
+                        className="grid min-h-11 min-w-0 touch-manipulation place-items-center rounded-lg border border-zinc-200/95 bg-white px-1 py-2 text-[13px] font-bold tabular-nums text-zinc-900 shadow-sm transition-[transform,background-color] duration-100 active:scale-[0.97] active:bg-zinc-50"
+                      >
+                        {label}
+                      </button>
+                    );
+                  })}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => applyBulk(20, popoverShortcuts.bulkSign)}
+                  className="mt-2 grid min-h-10 w-full touch-manipulation place-items-center rounded-lg border border-dashed border-zinc-300/95 bg-zinc-50/80 text-[12px] font-bold tabular-nums text-zinc-800 transition-[transform,background-color] duration-100 active:scale-[0.99] active:bg-zinc-100"
+                >
+                  {popoverShortcuts.bulkSign > 0 ? '+20' : '−20'}
+                </button>
+              </div>
+            ) : null}
+          </div>
+
+          <div className="flex min-w-[3.75rem] flex-col items-end justify-center text-right">{lineTotalDisplay}</div>
+          <ChevronRight className="mt-0.5 h-[1.125rem] w-[1.125rem] shrink-0 text-zinc-300" aria-hidden />
+        </div>
       </div>
     </div>
   );
 }
+
+function propsEqual(a: PedidosNuevoCatalogLineProps, b: PedidosNuevoCatalogLineProps): boolean {
+  if (a.product !== b.product) return false;
+  if (a.qty !== b.qty) return false;
+  if (a.lineTotal !== b.lineTotal) return false;
+  if (a.suggestedQty !== b.suggestedQty) return false;
+  if (a.receptionQty !== b.receptionQty) return false;
+  if (a.receptionAtIso !== b.receptionAtIso) return false;
+  if (a.receptionUnitPrice !== b.receptionUnitPrice) return false;
+  if (a.favoriteProductId !== b.favoriteProductId) return false;
+  if (a.isFavorite !== b.isFavorite) return false;
+  if (a.favoriteDisabled !== b.favoriteDisabled) return false;
+  if (a.onDelta !== b.onDelta) return false;
+  if (a.onManual !== b.onManual) return false;
+  if (a.onFavoriteToggle !== b.onFavoriteToggle) return false;
+  return true;
+}
+
+const PedidosNuevoCatalogLineMemo = React.memo(PedidosNuevoCatalogLineInner, propsEqual);
+
+export type PedidosNuevoCatalogRowProps = {
+  product: PedidoSupplierProduct;
+  qty: number;
+  lineTotal: number;
+  suggestedQty: number | null;
+  receptionQty?: number;
+  receptionAtIso?: string;
+  receptionUnitPrice?: number;
+  isFavorite: boolean;
+  favoriteDisabled: boolean;
+  onAdjustDelta: (productId: string, unit: Unit, delta: number) => void;
+  onManualChange: (productId: string, unit: Unit, raw: string) => void;
+  onFavoriteToggle: (productId: string) => void;
+};
+
+/**
+ * Fila de catálogo con callbacks estables hacia el padre; envuelve la línea memoizada para evitar
+ * re-render en cada toque de +/− en otras filas.
+ */
+export const PedidosNuevoCatalogRow = React.memo(function PedidosNuevoCatalogRow({
+  product,
+  qty,
+  lineTotal,
+  suggestedQty,
+  receptionQty,
+  receptionAtIso,
+  receptionUnitPrice,
+  isFavorite,
+  favoriteDisabled,
+  onAdjustDelta,
+  onManualChange,
+  onFavoriteToggle,
+}: PedidosNuevoCatalogRowProps) {
+  const onDelta = React.useCallback(
+    (d: number) => onAdjustDelta(product.id, product.unit, d),
+    [onAdjustDelta, product.id, product.unit],
+  );
+  const onManual = React.useCallback(
+    (raw: string) => onManualChange(product.id, product.unit, raw),
+    [onManualChange, product.id, product.unit],
+  );
+
+  return (
+    <PedidosNuevoCatalogLineMemo
+      product={product}
+      qty={qty}
+      lineTotal={lineTotal}
+      suggestedQty={suggestedQty}
+      onDelta={onDelta}
+      onManual={onManual}
+      receptionQty={receptionQty}
+      receptionAtIso={receptionAtIso}
+      receptionUnitPrice={receptionUnitPrice}
+      favoriteProductId={product.id}
+      isFavorite={isFavorite}
+      favoriteDisabled={favoriteDisabled}
+      onFavoriteToggle={onFavoriteToggle}
+    />
+  );
+});
+
+export default PedidosNuevoCatalogRow;
