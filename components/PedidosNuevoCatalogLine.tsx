@@ -265,7 +265,6 @@ function PedidosNuevoCatalogLineInner({
     extraHintParts.push(`Tramo: ${formatQuantityWithUnit(suggestedQty, p.unit)}`);
   }
 
-  const thumbInitial = p.name.trim().charAt(0).toUpperCase() || '·';
   const minusDisabled = qty <= 0;
   const stepperActive = qty > 0;
 
@@ -276,43 +275,33 @@ function PedidosNuevoCatalogLineInner({
         isFavorite ? 'bg-[#FFF9F9]' : 'bg-white',
       ].join(' ')}
     >
-      <div className="flex items-start gap-1 py-1 sm:gap-1.5">
-        <div className="flex shrink-0 items-start gap-2">
-          {favoriteProductId != null && onFavoriteToggle ? (
-            <button
-              type="button"
-              disabled={favoriteDisabled}
-              onClick={handleFavoriteClick}
-              className={[
-                'grid h-8 w-8 shrink-0 touch-manipulation place-items-center rounded-lg transition-[transform,background-color] duration-150 active:scale-95',
-                favoriteDisabled ? 'cursor-not-allowed opacity-35' : '',
-                isFavorite
-                  ? 'bg-[#E30613]/12 text-[#E30613] ring-2 ring-[#E30613]/20'
-                  : 'bg-zinc-50 text-zinc-400 ring-1 ring-zinc-200/90 hover:bg-zinc-100 hover:text-zinc-500',
-              ].join(' ')}
-              aria-label={isFavorite ? 'Quitar de favoritos' : 'Añadir a favoritos'}
-              aria-pressed={Boolean(isFavorite)}
-            >
-              <Star
-                className="h-4 w-4"
-                strokeWidth={isFavorite ? 0 : 1.6}
-                fill={isFavorite ? 'currentColor' : 'none'}
-              />
-            </button>
-          ) : null}
-          <div
-            className="relative h-9 w-9 shrink-0 overflow-hidden rounded-md bg-zinc-100 ring-1 ring-zinc-200/80 transition-shadow duration-150"
-            aria-hidden
+      <div className="flex items-start gap-1.5 py-1 sm:gap-2">
+        {favoriteProductId != null && onFavoriteToggle ? (
+          <button
+            type="button"
+            disabled={favoriteDisabled}
+            onClick={handleFavoriteClick}
+            className={[
+              'grid h-5 w-5 shrink-0 touch-manipulation place-items-center rounded transition-[transform,background-color,color] duration-150 active:scale-95',
+              favoriteDisabled ? 'cursor-not-allowed opacity-35' : '',
+              isFavorite
+                ? 'text-[#E30613] hover:bg-[#E30613]/8'
+                : 'text-zinc-400 hover:bg-zinc-100/90 hover:text-zinc-500',
+            ].join(' ')}
+            aria-label={isFavorite ? 'Quitar de favoritos' : 'Añadir a favoritos'}
+            aria-pressed={Boolean(isFavorite)}
           >
-            <span className="flex h-full w-full items-center justify-center text-[12px] font-bold uppercase text-zinc-400">
-              {thumbInitial}
-            </span>
-          </div>
-        </div>
+            <Star
+              className="h-2.5 w-2.5"
+              strokeWidth={isFavorite ? 0 : 1.35}
+              fill={isFavorite ? 'currentColor' : 'none'}
+            />
+          </button>
+        ) : null}
 
         <div className="flex min-w-0 flex-1 items-start gap-2 sm:gap-2.5">
           <div className="min-w-0 flex-1">
-            <p className="line-clamp-2 text-[13px] font-bold leading-snug text-zinc-900 [overflow-wrap:anywhere]">
+            <p className="line-clamp-2 text-[13px] font-medium leading-snug tracking-tight text-zinc-900 [overflow-wrap:anywhere]">
               {p.name}
             </p>
             <p className="mt-px text-[11px] leading-snug text-zinc-500">
@@ -342,7 +331,7 @@ function PedidosNuevoCatalogLineInner({
             <div className="relative shrink-0" ref={stepperShellRef}>
               <div
                 className={[
-                  'inline-flex min-h-[2.5rem] min-w-0 touch-manipulation items-stretch overflow-hidden rounded-full border bg-white transition-[box-shadow,border-color] duration-150',
+                  'inline-flex h-10 min-h-10 max-h-10 min-w-0 touch-manipulation items-stretch overflow-hidden rounded-full border bg-white transition-[box-shadow,border-color] duration-150',
                   stepperActive
                     ? 'border-zinc-200/90 shadow-[0_1px_6px_rgba(0,0,0,0.05)]'
                     : 'border-zinc-200/70 shadow-none',
@@ -378,7 +367,7 @@ function PedidosNuevoCatalogLineInner({
                     hold.onHoldPointerEnd();
                   }}
                   className={[
-                    'grid min-h-[2.5rem] min-w-[2.5rem] shrink-0 touch-manipulation select-none place-items-center bg-white text-lg font-semibold leading-none tracking-tight transition-colors duration-100',
+                    'grid h-10 min-h-10 max-h-10 min-w-[2.25rem] max-w-[2.25rem] shrink-0 touch-manipulation select-none place-items-center bg-white text-lg font-semibold leading-none tracking-tight transition-colors duration-100',
                     minusDisabled
                       ? 'cursor-not-allowed text-zinc-300'
                       : 'text-zinc-500 active:bg-zinc-100',
@@ -387,7 +376,7 @@ function PedidosNuevoCatalogLineInner({
                 >
                   −
                 </button>
-                <div className="flex min-h-[2.5rem] min-w-[2.65rem] flex-1 items-center justify-center bg-white px-0.5 sm:min-w-[2.85rem]">
+                <div className="flex h-10 min-h-10 max-h-10 w-[3rem] min-w-[3rem] max-w-[3rem] shrink-0 items-center justify-center overflow-hidden bg-white px-0.5 sm:w-[3.1rem] sm:min-w-[3.1rem] sm:max-w-[3.1rem]">
                   {editingQty ? (
                     <input
                       ref={inputRef}
@@ -405,7 +394,7 @@ function PedidosNuevoCatalogLineInner({
                           commitDraft();
                         }
                       }}
-                      className="h-full w-full min-w-[2.5rem] border-0 bg-transparent text-center text-[16px] font-bold tabular-nums tracking-tight text-zinc-900 outline-none ring-0 transition-colors duration-150"
+                      className="box-border h-10 min-h-10 max-h-10 w-full min-w-0 border-0 bg-transparent py-0 text-center text-[16px] font-semibold tabular-nums leading-none tracking-tight text-zinc-900 outline-none ring-0 transition-colors duration-150 [-webkit-appearance:none] appearance-none"
                     />
                   ) : (
                     <button
@@ -416,7 +405,7 @@ function PedidosNuevoCatalogLineInner({
                         beginEditQty();
                       }}
                       className={[
-                        'flex h-full w-full touch-manipulation items-center justify-center px-1 text-center text-[16px] font-bold tabular-nums tracking-tight outline-none transition-colors duration-100 active:bg-zinc-50',
+                        'box-border flex h-10 min-h-10 max-h-10 w-full min-w-0 touch-manipulation items-center justify-center px-0.5 text-center text-[16px] font-semibold tabular-nums leading-none tracking-tight outline-none transition-colors duration-100 active:bg-zinc-50',
                         qtyHoldHighlight
                           ? 'text-[#E30613]'
                           : qty > 0
@@ -456,7 +445,7 @@ function PedidosNuevoCatalogLineInner({
                     clearLongPressTimers();
                     hold.onHoldPointerEnd();
                   }}
-                  className="grid min-h-[2.5rem] min-w-[2.5rem] shrink-0 touch-manipulation select-none place-items-center bg-white text-lg font-bold leading-none tracking-tight text-[#E30613] transition-colors duration-100 active:bg-[#FFF0F0]"
+                  className="grid h-10 min-h-10 max-h-10 min-w-[2.25rem] max-w-[2.25rem] shrink-0 touch-manipulation select-none place-items-center bg-white text-lg font-bold leading-none tracking-tight text-[#E30613] transition-colors duration-100 active:bg-[#FFF0F0]"
                   aria-label={`Añadir una unidad de ${p.name}`}
                 >
                   +
