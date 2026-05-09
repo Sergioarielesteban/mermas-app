@@ -15,7 +15,6 @@ import {
   MessageCircle,
   Package,
   Bookmark,
-  Copy,
   Pencil,
   Trash2,
   Truck,
@@ -4260,7 +4259,7 @@ export default function PedidosPage() {
             />
           </div>
         </summary>
-        <div className="space-y-1 border-t border-zinc-100/90 bg-gradient-to-b from-zinc-50/80 to-white px-1.5 pb-1.5 pt-1.5 sm:px-2">
+        <div className="space-y-2.5 border-t border-zinc-100/90 bg-gradient-to-b from-zinc-50/80 to-white px-1.5 pb-1.5 pt-1.5 sm:px-2">
           {sentOrders.length === 0 ? (
             <p className="py-4 text-center text-xs text-zinc-500">No hay pedidos enviados.</p>
           ) : null}
@@ -4409,16 +4408,36 @@ export default function PedidosPage() {
                   <MessageCircle className="h-3.5 w-3.5 shrink-0" strokeWidth={2.25} aria-hidden />
                   <span className="text-[7px] font-bold leading-none">WA</span>
                 </button>
-                <Link
-                  href={`/pedidos/nuevo?duplicateFrom=${encodeURIComponent(order.id)}`}
-                  onClick={(e) => e.stopPropagation()}
-                  className="flex min-h-[2.15rem] flex-col items-center justify-center gap-px rounded-md border border-zinc-200/90 bg-white px-0.5 py-0.5 text-zinc-800 shadow-sm transition hover:bg-zinc-50 active:bg-zinc-100/80"
-                  title="Duplicar como nuevo borrador"
-                  aria-label="Duplicar pedido"
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    const willOpen = expandedSentId !== order.id;
+                    setExpandedSentId((prev) => (prev === order.id ? null : order.id));
+                    if (willOpen) {
+                      window.requestAnimationFrame(() => {
+                        document.getElementById(`pedido-sent-detalle-${order.id}`)?.scrollIntoView({
+                          behavior: 'smooth',
+                          block: 'nearest',
+                        });
+                      });
+                    }
+                  }}
+                  className={[
+                    'flex min-h-[2.15rem] flex-col items-center justify-center gap-px rounded-md border px-0.5 py-0.5 shadow-sm transition active:scale-[0.98]',
+                    detailOpen
+                      ? 'border-[#7F1D1D] bg-[#B91C1C] text-white ring-1 ring-[#7F1D1D]/40 hover:bg-[#A31818] active:brightness-95'
+                      : 'border-[#D32F2F] bg-[#D32F2F] text-white ring-1 ring-[#B91C1C]/30 hover:bg-[#C02A2A] active:brightness-95',
+                  ].join(' ')}
+                  title={detailOpen ? 'Ocultar líneas del pedido' : 'Ver líneas del pedido'}
+                  aria-label={detailOpen ? 'Ocultar detalle del pedido' : 'Ver detalle del pedido'}
+                  aria-pressed={detailOpen}
                 >
-                  <Copy className="h-3.5 w-3.5 shrink-0 text-zinc-600" strokeWidth={2.25} aria-hidden />
-                  <span className="text-[7px] font-semibold leading-none text-zinc-700">Copiar</span>
-                </Link>
+                  <List className="h-3.5 w-3.5 shrink-0 text-white" strokeWidth={2.5} aria-hidden />
+                  <span className="max-w-[3.35rem] text-center text-[7px] font-bold leading-tight text-white">
+                    {detailOpen ? 'Ocultar' : 'Ver detalle'}
+                  </span>
+                </button>
                 <button
                   type="button"
                   onClick={(e) => {
@@ -4467,7 +4486,10 @@ export default function PedidosPage() {
                 </button>
               </div>
               {expandedSentId === order.id ? (
-                <div className="mt-1 space-y-1.5 px-1 pb-28 pt-1 text-left">
+                <div
+                  id={`pedido-sent-detalle-${order.id}`}
+                  className="mt-1 space-y-1.5 px-1 pb-28 pt-1 text-left scroll-mt-4"
+                >
                   {order.notes?.trim() ? (
                     <div className="rounded-lg border border-amber-200 bg-amber-50/90 px-2.5 py-2">
                       <p className="text-[10px] font-bold uppercase tracking-wide text-amber-900/80">Notas del pedido</p>

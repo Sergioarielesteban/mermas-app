@@ -136,9 +136,19 @@ export default function AppFrame({ children }: { children: React.ReactNode }) {
     );
   }
 
-  /** Nueva pestaña de impresión puede hidratar email unos ms después: no dejar pantalla en blanco. */
+  /** Sin sesión en rutas protegidas: la redirect a /login puede tardar un frame — nunca devolver null (pantalla en blanco). */
   if (!email && !isLogin && !isOnboarding && !isPrecio && !isProduccionEtiquetasPrint) {
-    return null;
+    return (
+      <main className="flex min-h-[100dvh] flex-col items-center justify-center gap-3 bg-white px-6 text-center">
+        <p className="text-sm font-medium text-zinc-600">Redirigiendo al acceso…</p>
+        <a
+          href="/login"
+          className="text-sm font-semibold text-[#D32F2F] underline underline-offset-2"
+        >
+          Ir a iniciar sesión
+        </a>
+      </main>
+    );
   }
 
   if (isTerminalFichaje) {
