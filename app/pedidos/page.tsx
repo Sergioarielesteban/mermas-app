@@ -19,8 +19,12 @@ import {
   Pencil,
   Trash2,
   Truck,
+  CheckCircle2,
+  AlertTriangle,
+  TrendingUp,
 } from 'lucide-react';
 import React from 'react';
+import PedidosRecepcionSwipeRow from '@/components/pedidos/recepcion/PedidosRecepcionSwipeRow';
 import { OIDO_CHEF_START_VOICE_EVENT, OIDO_CHEF_VOICE_NAV_FLAG } from '@/components/BottomNav';
 import { useAuth } from '@/components/AuthProvider';
 import { CHEF_ONE_TAPER_LINE_CLASS } from '@/components/ChefOneGlowLine';
@@ -34,6 +38,7 @@ import { dispatchPedidosDataChanged, usePedidosDataChangedListener } from '@/hoo
 import { canAccessPedidos, canUsePedidosModule } from '@/lib/pedidos-access';
 import {
   formatIncidentLine,
+  estimatedOrderLineSubtotal,
   formatQuantityWithUnit,
   lineSubtotalForOrderListDisplay,
   orderItemHasIncident,
@@ -318,6 +323,18 @@ function liveSentOrderTotals(
   return { base, vat, total: base + vat };
 }
 
+/** Total pedido original estimado (precio base × cantidad), con IVA — para comparar con recepción en vivo. */
+function estimatedOrderTotalsWithVat(order: PedidoOrder): { base: number; vat: number; total: number } {
+  let base = 0;
+  let vat = 0;
+  for (const item of order.items) {
+    const sub = estimatedOrderLineSubtotal(item);
+    base += sub;
+    vat += sub * (item.vatRate ?? 0);
+  }
+  return { base, vat, total: base + vat };
+}
+
 function normalizeText(input: string): string {
   return input
     .toLowerCase()
@@ -409,6 +426,7 @@ export default function PedidosPage() {
     orders,
     setOrders,
     reloadOrders,
+    reloadOrdersAsync,
     reloadError,
     releasePinOrderId,
     registerDeletedOrderId,
@@ -926,10 +944,15 @@ export default function PedidosPage() {
       });
   };
 
-  const quickReceiveItem = (orderId: string, line: PedidoOrder['items'][number], markOk: boolean) => {
-    if (!localId) return;
+  const quickReceiveItem = (
+    orderId: string,
+    line: PedidoOrder['items'][number],
+    markOk: boolean,
+    opts?: { skipReload?: boolean },
+  ): Promise<void> => {
+    if (!localId) return Promise.resolve();
     const supabase = getSupabaseClient();
-    if (!supabase) return;
+    if (!supabase) return Promise.resolve();
     const orderForNotify = orders.find((o) => o.id === orderId);
     const itemId = line.id;
     const nextReceived = markOk ? line.quantity : 0;
@@ -1025,7 +1048,7 @@ export default function PedidosPage() {
       }
     };
 
-    void Promise.all([
+    return Promise.all([
       updateOrderItemReceived(supabase, localId, itemId, nextReceived),
       updateOrderItemIncident(supabase, localId, itemId, markOk ? { type: null, notes: '' } : { type: 'missing', notes: 'No recibido' }),
     ])
@@ -1034,13 +1057,36 @@ export default function PedidosPage() {
         if (!markOk && orderForNotify) {
           scheduleIncidenciaRecepcionNotifyDebounced(orderForNotify);
         }
-        return reloadOrders();
+        if (opts?.skipReload) return;
+        return reloadOrdersAsync();
       })
-      .then(() => dispatchPedidosDataChanged())
+      .then(() => {
+        if (opts?.skipReload) return;
+        dispatchPedidosDataChanged();
+      })
       .catch((err: Error) => {
-        void reloadOrders();
+        void reloadOrdersAsync();
         setMessage(err.message);
       });
+  };
+
+  const markAllSentLinesReceiveOk = (orderId: string) => {
+    void (async () => {
+      const ord = ordersRef.current.find((o) => o.id === orderId);
+      if (!ord?.items.length) return;
+      try {
+        for (let i = 0; i < ord.items.length; i++) {
+          const item = ord.items[i];
+          await quickReceiveItem(orderId, item, true, {
+            skipReload: i < ord.items.length - 1,
+          });
+        }
+        await reloadOrdersAsync();
+        dispatchPedidosDataChanged();
+      } catch {
+        void reloadOrdersAsync();
+      }
+    })();
   };
 
   const removeReceptionLineFromSentOrder = async (orderId: string, lineId: string) => {
@@ -3446,7 +3492,8 @@ export default function PedidosPage() {
     const reviewed = Boolean(order.priceReviewArchivedAt);
     const showExpandHint = opts?.showExpandHint ?? false;
     return (
-      <div className="mt-1.5 space-y-1.5 border-t border-zinc-200/70 pt-1.5 text-left">
+      <div className="sticky bottom-2 z-40 mt-3 w-full max-w-lg touch-manipulation rounded-2xl border border-zinc-200/90 bg-white/95 px-2.5 py-2 shadow-[0_-10px_40px_rgba(0,0,0,0.12)] ring-1 ring-zinc-100/90 backdrop-blur-md supports-[padding:max(0px)]:pb-[max(10px,env(safe-area-inset-bottom))]">
+        <div className="space-y-1.5 text-left">
         {showExpandHint ? (
           <p className="text-center text-[11px] leading-snug text-zinc-600">
             Toca el recuadro del proveedor para desplegar líneas, marcar ✓/✗ y rellenar kg/precio recibido aquí mismo.
@@ -3459,15 +3506,12 @@ export default function PedidosPage() {
               onClick={() => {
                 void commitSentOrderAsReceived(order.id);
               }}
-              className="flex w-full flex-col items-center justify-center gap-0.5 rounded-2xl bg-gradient-to-b from-[#4ADE80] to-[#16A34A] py-2 text-center text-[11px] font-black uppercase leading-tight tracking-wide text-white shadow-md shadow-emerald-900/20 ring-1 ring-white/25 transition active:scale-[0.99] disabled:opacity-90"
+              className="flex w-full min-h-[3rem] flex-col items-center justify-center gap-0.5 rounded-2xl bg-gradient-to-b from-[#4ADE80] to-[#16A34A] py-2.5 text-center text-[12px] font-black uppercase leading-tight tracking-[0.06em] text-white shadow-lg shadow-emerald-900/25 ring-2 ring-white/30 transition active:scale-[0.99] disabled:opacity-90"
             >
               {receivingOrderId === order.id ? (
-                <span>Recibido</span>
+                <span>Guardando…</span>
               ) : (
-                <>
-                  <span>Marcar como</span>
-                  <span>recibido</span>
-                </>
+                <span>Validar recepción</span>
               )}
             </button>
             <button
@@ -3534,6 +3578,7 @@ export default function PedidosPage() {
             ) : null}
           </>
         )}
+        </div>
       </div>
     );
   };
@@ -4123,12 +4168,8 @@ export default function PedidosPage() {
                       </span>
                     </p>
                   </div>
-                  <div className="shrink-0 text-right sm:min-w-[5.5rem]" aria-label="Importes del pedido">
-                    <p className="text-sm font-black tabular-nums text-zinc-950">{totals.total.toFixed(2)} €</p>
-                    <p className="text-[9px] text-zinc-400">IVA incl.</p>
-                    <p className="text-[9px] tabular-nums text-zinc-500">
-                      {totals.base.toFixed(2)} + {totals.vat.toFixed(2)}
-                    </p>
+                  <div className="shrink-0 text-right text-[9px] font-medium leading-tight text-zinc-400 sm:min-w-[4.5rem]">
+                    Totales abajo
                   </div>
                 </div>
                 <div
@@ -4150,7 +4191,7 @@ export default function PedidosPage() {
               </button>
               <div
                 className={[
-                  'grid w-full grid-cols-3 gap-1 border-t px-1 py-1.5',
+                  'grid w-full grid-cols-5 gap-0.5 border-t px-0.5 py-1',
                   sentBadge === 'incidencia'
                     ? 'border-red-200/60 bg-white/50'
                     : sentBadge === 'correcto'
@@ -4161,56 +4202,45 @@ export default function PedidosPage() {
                 <Link
                   href={`/pedidos/nuevo?id=${encodeURIComponent(order.id)}`}
                   onClick={(e) => e.stopPropagation()}
-                  className="flex min-h-[3.25rem] flex-col items-center justify-center gap-0.5 rounded-lg border border-zinc-200/90 bg-zinc-50/90 px-1 py-1 text-zinc-800 transition hover:bg-zinc-100 active:bg-zinc-100/80"
+                  className="flex min-h-[2.35rem] flex-col items-center justify-center gap-px rounded-md border border-zinc-200/90 bg-zinc-50/90 px-0.5 py-0.5 text-zinc-800 transition hover:bg-zinc-100 active:bg-zinc-100/80"
                   title="Editar pedido"
                   aria-label="Editar pedido"
                 >
-                  <Pencil className="h-4 w-4 shrink-0 text-zinc-700" strokeWidth={2.25} aria-hidden />
-                  <span className="text-[9px] font-semibold leading-none text-zinc-600">Editar</span>
+                  <Pencil className="h-3.5 w-3.5 shrink-0 text-zinc-700" strokeWidth={2.25} aria-hidden />
+                  <span className="text-[7px] font-semibold leading-none text-zinc-600">Editar</span>
                 </Link>
                 <button
                   type="button"
                   onClick={() => sendWhatsappOrder(order)}
-                  className="flex min-h-[3.25rem] flex-col items-center justify-center gap-0.5 rounded-lg border border-[#128C7E]/35 bg-[#25D366] px-1 py-1 text-white shadow-sm transition hover:bg-[#20BD5A] active:brightness-95"
+                  className="flex min-h-[2.35rem] flex-col items-center justify-center gap-px rounded-md border border-[#128C7E]/35 bg-[#25D366] px-0.5 py-0.5 text-white shadow-sm transition hover:bg-[#20BD5A] active:brightness-95"
                   title="WhatsApp"
                   aria-label="Enviar pedido por WhatsApp"
                 >
-                  <MessageCircle className="h-4 w-4 shrink-0" strokeWidth={2.25} aria-hidden />
-                  <span className="text-[9px] font-bold leading-none">WhatsApp</span>
+                  <MessageCircle className="h-3.5 w-3.5 shrink-0" strokeWidth={2.25} aria-hidden />
+                  <span className="text-[7px] font-bold leading-none">WA</span>
                 </button>
                 <Link
                   href={`/pedidos/nuevo?duplicateFrom=${encodeURIComponent(order.id)}`}
                   onClick={(e) => e.stopPropagation()}
-                  className="flex min-h-[3.25rem] flex-col items-center justify-center gap-0.5 rounded-lg border border-zinc-200/90 bg-white px-1 py-1 text-zinc-800 shadow-sm transition hover:bg-zinc-50 active:bg-zinc-100/80"
+                  className="flex min-h-[2.35rem] flex-col items-center justify-center gap-px rounded-md border border-zinc-200/90 bg-white px-0.5 py-0.5 text-zinc-800 shadow-sm transition hover:bg-zinc-50 active:bg-zinc-100/80"
                   title="Duplicar como nuevo borrador"
                   aria-label="Duplicar pedido"
                 >
-                  <Copy className="h-4 w-4 shrink-0 text-zinc-600" strokeWidth={2.25} aria-hidden />
-                  <span className="text-[9px] font-semibold leading-none text-zinc-700">Duplicar</span>
+                  <Copy className="h-3.5 w-3.5 shrink-0 text-zinc-600" strokeWidth={2.25} aria-hidden />
+                  <span className="text-[7px] font-semibold leading-none text-zinc-700">Copiar</span>
                 </Link>
-              </div>
-              <div
-                className={[
-                  'grid w-full grid-cols-2 gap-1 border-t px-1 pb-1.5 pt-0',
-                  sentBadge === 'incidencia'
-                    ? 'border-red-200/60 bg-white/50'
-                    : sentBadge === 'correcto'
-                      ? 'border-emerald-200/60 bg-white/50'
-                      : 'border-amber-200/60 bg-white/50',
-                ].join(' ')}
-              >
                 <button
                   type="button"
                   onClick={(e) => {
                     e.stopPropagation();
                     setSaveTemplateOrder(order);
                   }}
-                  className="flex min-h-[3.25rem] flex-col items-center justify-center gap-0.5 rounded-lg border border-[#D32F2F]/35 bg-[#FFF7F5] px-1 py-1 text-[#7F1D1D] shadow-sm transition hover:bg-[#FFF0EE] active:bg-[#FFE8E5]"
+                  className="flex min-h-[2.35rem] flex-col items-center justify-center gap-px rounded-md border border-[#D32F2F]/35 bg-[#FFF7F5] px-0.5 py-0.5 text-[#7F1D1D] shadow-sm transition hover:bg-[#FFF0EE] active:bg-[#FFE8E5]"
                   title="Guardar como plantilla"
                   aria-label="Guardar como plantilla"
                 >
-                  <Bookmark className="h-4 w-4 shrink-0 text-[#B91C1C]" strokeWidth={2.25} aria-hidden />
-                  <span className="text-[9px] font-bold leading-none">Plantilla</span>
+                  <Bookmark className="h-3.5 w-3.5 shrink-0 text-[#B91C1C]" strokeWidth={2.25} aria-hidden />
+                  <span className="text-[7px] font-bold leading-none">Plant.</span>
                 </button>
                 <button
                   type="button"
@@ -4238,25 +4268,16 @@ export default function PedidosPage() {
                       })
                       .catch((err: Error) => setMessage(err.message));
                   }}
-                  className="flex min-h-[3.25rem] flex-col items-center justify-center gap-0.5 rounded-lg border border-rose-200/90 bg-rose-50/90 px-1 py-1 text-rose-900 transition hover:bg-rose-100/90 active:bg-rose-100"
+                  className="flex min-h-[2.35rem] flex-col items-center justify-center gap-px rounded-md border border-rose-200/90 bg-rose-50/90 px-0.5 py-0.5 text-rose-900 transition hover:bg-rose-100/90 active:bg-rose-100"
                   title="Eliminar pedido"
                   aria-label="Eliminar pedido"
                 >
-                  <Trash2 className="h-4 w-4 shrink-0 text-rose-700" strokeWidth={2.25} aria-hidden />
-                  <span className="text-[9px] font-semibold leading-none text-rose-800">Eliminar</span>
+                  <Trash2 className="h-3.5 w-3.5 shrink-0 text-rose-700" strokeWidth={2.25} aria-hidden />
+                  <span className="text-[7px] font-semibold leading-none text-rose-800">Borrar</span>
                 </button>
               </div>
               {expandedSentId === order.id ? (
-                <div className="mt-1 space-y-1.5 px-1 pb-1 pt-1 text-left">
-                  <div className="rounded-lg border border-[#D32F2F]/30 bg-white px-2 py-1 ring-1 ring-[#D32F2F]/12 shadow-sm">
-                    <button
-                      type="button"
-                      onClick={() => setOcrOrder(order)}
-                      className="w-full rounded-md border border-[#D32F2F]/45 bg-[#D32F2F]/10 py-1.5 text-center text-[10px] font-black uppercase tracking-wide text-[#B91C1C] transition active:scale-[0.99]"
-                    >
-                      Escanear albarán
-                    </button>
-                  </div>
+                <div className="mt-1 space-y-1.5 px-1 pb-28 pt-1 text-left">
                   {order.notes?.trim() ? (
                     <div className="rounded-lg border border-amber-200 bg-amber-50/90 px-2.5 py-2">
                       <p className="text-[10px] font-bold uppercase tracking-wide text-amber-900/80">Notas del pedido</p>
@@ -4269,6 +4290,79 @@ export default function PedidosPage() {
                       {new Date(`${order.deliveryDate}T00:00:00`).toLocaleDateString('es-ES')}
                     </p>
                   ) : null}
+                  {(() => {
+                    const tLive = liveSentOrderTotals(
+                      order,
+                      weightInputByItemId,
+                      pricePerKgInputByItemId,
+                      orderQtyInputByItemId,
+                      sentOrderPpkSuggestionByItemId,
+                    );
+                    const tEst = estimatedOrderTotalsWithVat(order);
+                    const impact = tLive.total - tEst.total;
+                    let nOk = 0;
+                    let nBad = 0;
+                    for (const it of order.items) {
+                      const m = quickLineMarks[it.id];
+                      const serverOk =
+                        it.receivedQuantity >= it.quantity && it.quantity > 0 && !it.incidentType;
+                      const ok = m === 'ok' || (m === undefined && serverOk);
+                      const bad = m === 'bad' || (m === undefined && Boolean(it.incidentType));
+                      if (ok) nOk++;
+                      if (bad) nBad++;
+                    }
+                    return (
+                      <div className="mb-1 space-y-1">
+                        <div className="grid grid-cols-4 gap-1 rounded-lg bg-white/95 px-1 py-1 ring-1 ring-zinc-200/85 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
+                          <div className="flex flex-col items-center gap-px py-0.5 text-center">
+                            <List className="h-3.5 w-3.5 text-zinc-400" strokeWidth={2.25} aria-hidden />
+                            <span className="text-[14px] font-black tabular-nums leading-none text-zinc-900">
+                              {order.items.length}
+                            </span>
+                            <span className="text-[7px] font-bold uppercase tracking-wide text-zinc-500">Líneas</span>
+                          </div>
+                          <div className="flex flex-col items-center gap-px py-0.5 text-center">
+                            <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" strokeWidth={2.25} aria-hidden />
+                            <span className="text-[14px] font-black tabular-nums leading-none text-emerald-800">{nOk}</span>
+                            <span className="text-[7px] font-bold uppercase tracking-wide text-emerald-700/90">Ok</span>
+                          </div>
+                          <div className="flex flex-col items-center gap-px py-0.5 text-center">
+                            <AlertTriangle className="h-3.5 w-3.5 text-orange-600" strokeWidth={2.25} aria-hidden />
+                            <span className="text-[14px] font-black tabular-nums leading-none text-orange-900">{nBad}</span>
+                            <span className="text-[7px] font-bold uppercase tracking-wide text-orange-800/90">Incid.</span>
+                          </div>
+                          <div className="flex flex-col items-center gap-px py-0.5 text-center">
+                            <TrendingUp
+                              className={[
+                                'h-3.5 w-3.5',
+                                impact >= 0 ? 'text-[#B91C1C]' : 'text-emerald-700',
+                              ].join(' ')}
+                              strokeWidth={2.25}
+                              aria-hidden
+                            />
+                            <span
+                              className={[
+                                'text-[12px] font-black tabular-nums leading-none',
+                                impact >= 0 ? 'text-[#991B1B]' : 'text-emerald-800',
+                              ].join(' ')}
+                            >
+                              {impact >= 0 ? '+' : '−'}
+                              {Math.abs(impact).toFixed(2)} €
+                            </span>
+                            <span className="text-[7px] font-bold uppercase tracking-wide text-zinc-500">vs pedido</span>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => markAllSentLinesReceiveOk(order.id)}
+                          className="flex w-full touch-manipulation items-center justify-center gap-2 rounded-xl border border-emerald-400/50 bg-gradient-to-b from-emerald-50 to-emerald-100/90 py-2 text-[10px] font-black uppercase tracking-wide text-emerald-950 shadow-sm ring-1 ring-emerald-300/45 transition active:scale-[0.99]"
+                        >
+                          <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-700" strokeWidth={2.25} aria-hidden />
+                          Marcar todo correcto
+                        </button>
+                      </div>
+                    );
+                  })()}
                   {order.items.map((item) => {
                     const mark = quickLineMarks[item.id];
                     const isOk =
@@ -4320,64 +4414,108 @@ export default function PedidosPage() {
                           );
                         })()
                       : 0;
+                    const summaryTone = isBad
+                      ? 'bg-orange-50/55 ring-orange-200/55'
+                      : isOk
+                        ? 'bg-emerald-50/45 ring-emerald-200/45'
+                        : 'bg-zinc-50/40 ring-zinc-200/70';
                     return (
-                      <div key={item.id} className="space-y-1 rounded-xl bg-white p-1.5 ring-1 ring-zinc-200/90 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="min-w-0 flex-1">
-                            <p className="text-sm font-semibold leading-tight text-zinc-900">{lineLabel(item)}</p>
-                            <p className="mt-0.5 text-xs text-zinc-600">
-                              Pedido:{' '}
-                              <span className="text-base font-bold tabular-nums text-zinc-900 sm:text-lg">
-                                {formatQuantityWithUnit(item.quantity, item.unit)}
-                              </span>
-                            </p>
-                            {item.basePricePerUnit != null && Number.isFinite(item.basePricePerUnit) ? (
-                              <p className="mt-1 text-[10px] leading-tight text-zinc-600">
-                                <span className="font-semibold text-zinc-500">Precio pedido</span>{' '}
-                                <span className="font-semibold tabular-nums text-zinc-900">
-                                  {item.basePricePerUnit.toFixed(2)} €/{unitPriceCatalogSuffix[item.unit]}
+                      <div key={item.id} className="space-y-1">
+                        <PedidosRecepcionSwipeRow
+                          onSwipeRight={() => {
+                            const serverOk =
+                              item.receivedQuantity >= item.quantity &&
+                              item.quantity > 0 &&
+                              !item.incidentType;
+                            if (mark === 'ok' || (mark === undefined && serverOk)) {
+                              clearQuickReceive(order.id, item);
+                              return;
+                            }
+                            void quickReceiveItem(order.id, item, true);
+                          }}
+                          onSwipeLeft={() => void quickReceiveItem(order.id, item, false)}
+                        >
+                          <div className={['rounded-xl p-1 ring-1 pr-1', summaryTone].join(' ')}>
+                            <div className="flex items-start gap-2">
+                              <div className="min-w-0 flex-1">
+                                <p className="text-[13px] font-semibold leading-snug text-zinc-900 [overflow-wrap:anywhere]">
+                                  {lineLabel(item)}
+                                </p>
+                                <p className="mt-0.5 text-[10px] leading-tight text-zinc-500">
+                                  Pedido {formatQuantityWithUnit(item.quantity, item.unit)}
+                                  {item.basePricePerUnit != null && Number.isFinite(item.basePricePerUnit)
+                                    ? ` · ${item.basePricePerUnit.toFixed(2)} €/${unitPriceCatalogSuffix[item.unit]}`
+                                    : ''}
+                                </p>
+                              </div>
+                              <div className="flex shrink-0 flex-col items-end gap-0.5">
+                                <span
+                                  className={[
+                                    'rounded px-1 py-px text-[8px] font-black uppercase tracking-wide text-white',
+                                    isBad ? 'bg-orange-600' : isOk ? 'bg-emerald-600' : 'bg-zinc-400',
+                                  ].join(' ')}
+                                >
+                                  {isBad ? 'Incidencia' : isOk ? 'Ok' : 'Pend.'}
                                 </span>
-                              </p>
-                            ) : null}
+                                <span className="text-[13px] font-black tabular-nums text-emerald-950">
+                                  {liveSub.toFixed(2)} €
+                                </span>
+                              </div>
+                            </div>
+                            <p className="mt-0.5 text-center text-[8px] font-medium leading-tight text-zinc-400">
+                              Desliza → OK · ← incidencia
+                            </p>
                           </div>
-                          <div className="flex shrink-0 items-center gap-1.5">
-                            <button
-                              type="button"
-                              onClick={() => setReceptionLineAction({ orderId: order.id, itemId: item.id })}
-                              className={[
-                                'grid h-7 w-7 place-items-center rounded-full border text-sm font-black',
-                                isBad ? 'border-[#B91C1C] bg-[#B91C1C] text-white' : 'border-zinc-300 bg-white text-zinc-400',
-                              ].join(' ')}
-                              title="Qué hacer con esta línea (incidencia o eliminar)"
-                              aria-label="Opciones de línea de recepción"
-                            >
-                              {'\u2715'}
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                const serverOk =
-                                  item.receivedQuantity >= item.quantity &&
-                                  item.quantity > 0 &&
-                                  !item.incidentType;
-                                if (mark === 'ok' || (mark === undefined && serverOk)) {
-                                  clearQuickReceive(order.id, item);
-                                  return;
-                                }
-                                quickReceiveItem(order.id, item, true);
-                              }}
-                              className={[
-                                'grid h-7 w-7 place-items-center rounded-full border text-sm font-black',
-                                isOk ? 'border-[#16A34A] bg-[#16A34A] text-white' : 'border-zinc-300 bg-white text-zinc-400',
-                              ].join(' ')}
-                              title="Recibido OK (toca otra vez para quitar)"
-                              aria-label="Recibido OK"
-                            >
-                              {'\u2713'}
-                            </button>
-                          </div>
-                        </div>
-                        <div className="space-y-1 text-[11px] leading-snug text-zinc-700">
+                        </PedidosRecepcionSwipeRow>
+                          <div className="rounded-xl border border-zinc-200/85 bg-white p-1.5 ring-1 ring-zinc-100 shadow-sm">
+                            <div className="mb-1 flex items-center justify-between gap-2 border-b border-zinc-100/90 pb-1">
+                              <span className="text-[9px] font-bold uppercase tracking-wide text-zinc-400">
+                                Detalle recepción
+                              </span>
+                              <div className="flex shrink-0 items-center gap-1">
+                                <button
+                                  type="button"
+                                  data-no-swipe
+                                  onClick={() => setReceptionLineAction({ orderId: order.id, itemId: item.id })}
+                                  className={[
+                                    'grid h-7 w-7 place-items-center rounded-full border text-sm font-black',
+                                    isBad
+                                      ? 'border-[#B91C1C] bg-[#B91C1C] text-white'
+                                      : 'border-zinc-300 bg-white text-zinc-400',
+                                  ].join(' ')}
+                                  title="Qué hacer con esta línea (incidencia o eliminar)"
+                                  aria-label="Opciones de línea de recepción"
+                                >
+                                  {'\u2715'}
+                                </button>
+                                <button
+                                  type="button"
+                                  data-no-swipe
+                                  onClick={() => {
+                                    const serverOk =
+                                      item.receivedQuantity >= item.quantity &&
+                                      item.quantity > 0 &&
+                                      !item.incidentType;
+                                    if (mark === 'ok' || (mark === undefined && serverOk)) {
+                                      clearQuickReceive(order.id, item);
+                                      return;
+                                    }
+                                    void quickReceiveItem(order.id, item, true);
+                                  }}
+                                  className={[
+                                    'grid h-7 w-7 place-items-center rounded-full border text-sm font-black',
+                                    isOk
+                                      ? 'border-[#16A34A] bg-[#16A34A] text-white'
+                                      : 'border-zinc-300 bg-white text-zinc-400',
+                                  ].join(' ')}
+                                  title="Recibido OK (toca otra vez para quitar)"
+                                  aria-label="Recibido OK"
+                                >
+                                  {'\u2713'}
+                                </button>
+                              </div>
+                            </div>
+                            <div className="space-y-1 text-[11px] leading-snug text-zinc-700">
                           {isDualKgReception ? (
                             <>
                               <div className={RECEPTION_BLOCK_WRAP}>
@@ -4631,9 +4769,19 @@ export default function PedidosPage() {
                             {formatReceptionPriceAlertSingleLine(receptionPriceAlertHome)}
                           </p>
                         ) : null}
+                          </div>
                       </div>
                     );
                   })}
+                  <div className="rounded-lg border border-[#D32F2F]/30 bg-white px-2 py-1 ring-1 ring-[#D32F2F]/12 shadow-sm">
+                    <button
+                      type="button"
+                      onClick={() => setOcrOrder(order)}
+                      className="w-full rounded-md border border-[#D32F2F]/45 bg-[#D32F2F]/10 py-1.5 text-center text-[10px] font-black uppercase tracking-wide text-[#B91C1C] transition active:scale-[0.99]"
+                    >
+                      Escanear albarán
+                    </button>
+                  </div>
                   {(() => {
                     const tLive = liveSentOrderTotals(
                       order,
@@ -4643,24 +4791,24 @@ export default function PedidosPage() {
                       sentOrderPpkSuggestionByItemId,
                     );
                     return (
-                      <div className="mt-1.5 border-t border-zinc-200/90 bg-white px-1.5 py-2 sm:px-2">
-                        <p className="mb-1.5 text-center text-[9px] font-bold uppercase tracking-wide text-zinc-500">
-                          Resumen final
+                      <div
+                        className="mt-2 rounded-xl border border-zinc-200/90 bg-zinc-50/90 px-2.5 py-2.5 ring-1 ring-zinc-100 shadow-sm sm:px-3"
+                        aria-label="Total del albarán según cantidades y precios de recepción"
+                      >
+                        <p className="mb-2 text-center text-[10px] font-black uppercase tracking-wide text-zinc-600">
+                          Total albarán (revisión)
                         </p>
-                        <div
-                          className="shrink-0 text-right text-[10px] leading-tight tabular-nums text-zinc-600 sm:min-w-[7.5rem]"
-                          aria-label="Resumen económico actual del pedido"
-                        >
-                          <div className="flex justify-end gap-x-2">
-                            <span className="text-zinc-400">s/IVA</span>
+                        <div className="space-y-1.5 text-[11px] tabular-nums text-zinc-800">
+                          <div className="flex items-center justify-between gap-3">
+                            <span className="text-zinc-500">Neto (base imponible)</span>
                             <span className="font-semibold text-zinc-900">{tLive.base.toFixed(2)} €</span>
                           </div>
-                          <div className="flex justify-end gap-x-2">
-                            <span className="text-zinc-400">IVA</span>
+                          <div className="flex items-center justify-between gap-3">
+                            <span className="text-zinc-500">IVA</span>
                             <span className="font-semibold text-zinc-900">{tLive.vat.toFixed(2)} €</span>
                           </div>
-                          <div className="flex justify-end gap-x-2 border-t border-zinc-200/80 pt-0.5 font-black text-zinc-950">
-                            <span className="text-zinc-500">Total c/IVA</span>
+                          <div className="flex items-center justify-between gap-3 border-t border-zinc-200/90 pt-2 text-[13px] font-black text-zinc-950">
+                            <span className="text-zinc-700">Total bruto (con IVA)</span>
                             <span>{tLive.total.toFixed(2)} €</span>
                           </div>
                         </div>
