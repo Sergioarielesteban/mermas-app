@@ -1301,7 +1301,17 @@ export default function NuevoPedidoPage() {
         </p>
         <div className="mb-2">
           <p className="text-[10px] font-extrabold uppercase tracking-wide text-zinc-500">Fecha de entrega</p>
-          <div className="relative mt-1 w-full min-w-0">
+          <div
+            className={[
+              'relative mt-1 flex min-h-[2.75rem] w-full min-w-0 items-center rounded-xl border bg-white transition-[border-color,box-shadow]',
+              deliveryDateFieldError
+                ? 'border-red-400 bg-red-50/90 shadow-[inset_0_0_0_1px_rgba(248,113,113,0.35)]'
+                : [
+                    'border-zinc-300 shadow-[0_1px_2px_rgba(0,0,0,0.04)]',
+                    'focus-within:border-zinc-400 focus-within:shadow-[0_0_0_3px_rgba(24,24,27,0.06),0_1px_2px_rgba(0,0,0,0.04)]',
+                  ].join(' '),
+            ].join(' ')}
+          >
             <input
               id="pedido-nuevo-fecha-entrega"
               type="date"
@@ -1314,13 +1324,13 @@ export default function NuevoPedidoPage() {
               }}
               aria-label="Fecha de entrega del pedido"
               className={[
-                'box-border h-10 w-full min-w-0 rounded-lg border px-2.5 text-sm font-medium outline-none focus:border-[#D32F2F] focus:ring-2 focus:ring-[#D32F2F]/25',
-                deliveryDateFieldError ? 'border-red-400 bg-red-50/90' : 'border-zinc-300 bg-white',
+                'relative z-[1] box-border min-h-[2.75rem] w-full min-w-0 flex-1 cursor-pointer rounded-xl border-0 bg-transparent px-3 py-2 pr-10 text-sm font-medium outline-none ring-0 [color-scheme:light]',
+                '[&::-webkit-calendar-picker-indicator]:cursor-pointer [&::-webkit-calendar-picker-indicator]:opacity-55 [&::-webkit-calendar-picker-indicator]:hover:opacity-90',
                 deliveryDate ? 'text-zinc-900' : 'text-transparent',
               ].join(' ')}
             />
             {!deliveryDate ? (
-              <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-sm text-zinc-500">
+              <span className="pointer-events-none absolute left-3 top-1/2 z-0 max-w-[calc(100%-3rem)] -translate-y-1/2 truncate text-sm text-zinc-500">
                 Elegir fecha
               </span>
             ) : null}
