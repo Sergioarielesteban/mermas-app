@@ -1,6 +1,6 @@
 'use client';
 
-import { ChevronRight, Star } from 'lucide-react';
+import { Star } from 'lucide-react';
 import React from 'react';
 import { usePedidosStepperHold } from '@/hooks/usePedidosStepperHold';
 import { formatQuantityWithUnit, unitPriceCatalogSuffix } from '@/lib/pedidos-format';
@@ -252,14 +252,18 @@ function PedidosNuevoCatalogLineInner({
     [favoriteDisabled, favoriteProductId, onFavoriteToggle],
   );
 
-  const lineTotalDisplay =
-    qty > 0 ? (
-      <span className="text-[14px] font-bold tabular-nums tracking-tight text-zinc-900 transition-colors duration-150">
-        {lineTotal.toFixed(2)} €
-      </span>
-    ) : (
-      <span className="text-[13px] font-semibold tabular-nums text-zinc-400 transition-colors duration-150">0,00 €</span>
+  const extraHintParts: string[] = [];
+  if (qty > 0 && dual && ppk != null && estKg != null) {
+    extraHintParts.push(`Est. ${estKg} kg · ${lineTotal.toFixed(2)} €`);
+  }
+  if (qty > 0 && internalUseTotal != null && su != null) {
+    extraHintParts.push(
+      `Uso: ${internalUseTotal.toLocaleString('es-ES', { maximumFractionDigits: 4 })} ${su}`,
     );
+  }
+  if (suggestedQty != null) {
+    extraHintParts.push(`Tramo: ${formatQuantityWithUnit(suggestedQty, p.unit)}`);
+  }
 
   const thumbInitial = p.name.trim().charAt(0).toUpperCase() || '·';
   const minusDisabled = qty <= 0;
@@ -268,19 +272,19 @@ function PedidosNuevoCatalogLineInner({
   return (
     <div
       className={[
-        'px-2.5 transition-colors duration-200 sm:px-3',
+        'px-2 transition-colors duration-200 sm:px-2.5',
         isFavorite ? 'bg-[#FFF9F9]' : 'bg-white',
       ].join(' ')}
     >
-      <div className="flex items-start gap-1.5 py-1.5 sm:gap-2 sm:py-2">
-        <div className="flex shrink-0 items-start gap-0.5">
+      <div className="flex items-start gap-1 py-1 sm:gap-1.5">
+        <div className="flex shrink-0 items-start gap-2">
           {favoriteProductId != null && onFavoriteToggle ? (
             <button
               type="button"
               disabled={favoriteDisabled}
               onClick={handleFavoriteClick}
               className={[
-                'mt-0.5 grid h-9 w-9 touch-manipulation place-items-center rounded-xl transition-[transform,background-color] duration-150 active:scale-95',
+                'grid h-8 w-8 shrink-0 touch-manipulation place-items-center rounded-lg transition-[transform,background-color] duration-150 active:scale-95',
                 favoriteDisabled ? 'cursor-not-allowed opacity-35' : '',
                 isFavorite
                   ? 'bg-[#E30613]/12 text-[#E30613] ring-2 ring-[#E30613]/20'
@@ -290,216 +294,209 @@ function PedidosNuevoCatalogLineInner({
               aria-pressed={Boolean(isFavorite)}
             >
               <Star
-                className="h-[1.15rem] w-[1.15rem]"
+                className="h-4 w-4"
                 strokeWidth={isFavorite ? 0 : 1.6}
                 fill={isFavorite ? 'currentColor' : 'none'}
               />
             </button>
           ) : null}
           <div
-            className="relative mt-0.5 h-10 w-10 shrink-0 overflow-hidden rounded-lg bg-zinc-100 ring-1 ring-zinc-200/80 transition-shadow duration-150"
+            className="relative h-9 w-9 shrink-0 overflow-hidden rounded-md bg-zinc-100 ring-1 ring-zinc-200/80 transition-shadow duration-150"
             aria-hidden
           >
-            <span className="flex h-full w-full items-center justify-center text-[13px] font-bold uppercase text-zinc-400">
+            <span className="flex h-full w-full items-center justify-center text-[12px] font-bold uppercase text-zinc-400">
               {thumbInitial}
             </span>
           </div>
         </div>
 
-        <div className="min-w-0 flex-1 pt-0.5">
-          <p className="line-clamp-2 text-[13px] font-bold leading-[1.25] text-zinc-900 [overflow-wrap:anywhere]">{p.name}</p>
-          <p className="mt-0 text-[11px] leading-tight text-zinc-500">{packLabel}</p>
-          {hasReception ? (
-            <p className="mt-0 text-[11px] font-semibold tabular-nums leading-tight text-[#E30613]">
-              Último: {receptionUnitPrice!.toFixed(2)} €/{u}
-              {shortDateEs(receptionAtIso!) ? (
-                <span className="font-normal text-zinc-500"> · {shortDateEs(receptionAtIso!)}</span>
-              ) : null}
+        <div className="flex min-w-0 flex-1 items-start gap-2 sm:gap-2.5">
+          <div className="min-w-0 flex-1">
+            <p className="line-clamp-2 text-[13px] font-bold leading-snug text-zinc-900 [overflow-wrap:anywhere]">
+              {p.name}
             </p>
-          ) : lastRecvCatalog ? (
-            <p className="mt-0 text-[11px] font-semibold tabular-nums leading-tight text-[#E30613]">
-              Último: {lastRecvCatalog}
-            </p>
-          ) : (
-            <p className="mt-0 text-[11px] font-medium tabular-nums leading-tight text-zinc-500">{priceLine}</p>
-          )}
-
-          {qty > 0 && dual && ppk != null && estKg != null ? (
-            <p className="mt-0.5 text-[10px] leading-tight text-zinc-500">
-              Est. {estKg} kg · {lineTotal.toFixed(2)} €
-            </p>
-          ) : null}
-          {qty > 0 && internalUseTotal != null && su != null ? (
-            <p className="mt-0 text-[10px] leading-tight text-zinc-500">
-              Uso: {internalUseTotal.toLocaleString('es-ES', { maximumFractionDigits: 4 })} {su}
-            </p>
-          ) : null}
-          {suggestedQty != null ? (
-            <p className="mt-0 text-[10px] font-medium leading-tight text-zinc-600">
-              Tramo: {formatQuantityWithUnit(suggestedQty, p.unit)}
-            </p>
-          ) : null}
-        </div>
-
-        <div className="flex shrink-0 items-center gap-1 sm:gap-1.5">
-          <div className="relative shrink-0" ref={stepperShellRef}>
-            <div
-              className={[
-                'inline-flex min-h-[2.75rem] min-w-0 touch-manipulation items-center rounded-2xl border bg-white py-0.5 pl-0.5 pr-0.5 transition-[box-shadow,border-color] duration-150 sm:min-h-[2.875rem]',
-                stepperActive
-                  ? 'border-zinc-200/95 shadow-[0_2px_12px_rgba(0,0,0,0.08)]'
-                  : 'border-[#E8E8E8] shadow-none',
-              ].join(' ')}
-            >
-              <button
-                type="button"
-                disabled={minusDisabled}
-                tabIndex={-1}
-                onPointerDown={(e) => {
-                  if (minusDisabled) return;
-                  scheduleHoldRed();
-                  hold.onMinusPointerDown(e);
-                  clearLongPressTimers();
-                  longPressMinusRef.current = window.setTimeout(() => {
-                    longPressMinusRef.current = null;
-                    openShortcutsFromHold(-1);
-                  }, LONG_PRESS_MS);
-                }}
-                onPointerUp={() => {
-                  clearHoldRed();
-                  clearLongPressTimers();
-                  hold.onHoldPointerEnd();
-                }}
-                onPointerCancel={() => {
-                  clearHoldRed();
-                  clearLongPressTimers();
-                  hold.onHoldPointerEnd();
-                }}
-                onPointerLeave={() => {
-                  clearHoldRed();
-                  clearLongPressTimers();
-                  hold.onHoldPointerEnd();
-                }}
-                className={[
-                  'grid h-11 min-w-[2.75rem] shrink-0 touch-manipulation select-none place-items-center rounded-[0.65rem] text-xl font-bold leading-none transition-[transform,background-color,color] duration-100 active:scale-[0.97]',
-                  minusDisabled
-                    ? 'cursor-not-allowed text-zinc-300'
-                    : 'text-zinc-800 active:bg-[#E30613]/12 active:text-[#B8050F]',
-                ].join(' ')}
-                aria-label={`Quitar una unidad de ${p.name}`}
-              >
-                −
-              </button>
-              {editingQty ? (
-                <input
-                  ref={inputRef}
-                  type="text"
-                  inputMode={unitAllowsDecimalOrderQuantity(p.unit) ? 'decimal' : 'numeric'}
-                  enterKeyHint="done"
-                  autoComplete="off"
-                  aria-label={`Cantidad ${p.name}`}
-                  value={draftQty}
-                  onChange={(e) => setDraftQty(e.target.value)}
-                  onBlur={commitDraft}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault();
-                      commitDraft();
-                    }
-                  }}
-                  className="h-11 w-[3.75rem] min-w-[3rem] border-0 bg-transparent px-0.5 text-center text-[18px] font-bold tabular-nums tracking-tight text-zinc-900 outline-none ring-0 transition-colors duration-150"
-                />
+            <p className="mt-px text-[11px] leading-snug text-zinc-500">
+              <span className="text-zinc-500">{packLabel}</span>
+              <span className="text-zinc-400"> · </span>
+              {hasReception ? (
+                <>
+                  <span className="font-semibold tabular-nums text-[#E30613]">
+                    Último: {receptionUnitPrice!.toFixed(2)} €/{u}
+                  </span>
+                  {shortDateEs(receptionAtIso!) ? (
+                    <span className="font-normal text-zinc-500"> · {shortDateEs(receptionAtIso!)}</span>
+                  ) : null}
+                </>
+              ) : lastRecvCatalog ? (
+                <span className="font-semibold tabular-nums text-[#E30613]">Último: {lastRecvCatalog}</span>
               ) : (
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    beginEditQty();
-                  }}
-                  className={[
-                    'flex min-h-11 min-w-[3rem] touch-manipulation items-center justify-center px-1.5 text-center text-[18px] font-bold tabular-nums tracking-tight outline-none transition-colors duration-100 active:opacity-90 sm:min-w-[3.25rem]',
-                    qtyHoldHighlight
-                      ? 'text-[#E30613]'
-                      : qty > 0
-                        ? 'text-zinc-900'
-                        : 'text-zinc-400',
-                  ].join(' ')}
-                  aria-label={`Editar cantidad de ${p.name}`}
-                >
-                  {formatQtyDisplay(qty, p.unit)}
-                </button>
+                <span className="font-semibold tabular-nums text-[#E30613]">{priceLine}</span>
               )}
-              <button
-                type="button"
-                tabIndex={-1}
-                onPointerDown={(e) => {
-                  scheduleHoldRed();
-                  hold.onPlusPointerDown(e);
-                  clearLongPressTimers();
-                  longPressPlusRef.current = window.setTimeout(() => {
-                    longPressPlusRef.current = null;
-                    openShortcutsFromHold(1);
-                  }, LONG_PRESS_MS);
-                }}
-                onPointerUp={() => {
-                  clearHoldRed();
-                  clearLongPressTimers();
-                  hold.onHoldPointerEnd();
-                }}
-                onPointerCancel={() => {
-                  clearHoldRed();
-                  clearLongPressTimers();
-                  hold.onHoldPointerEnd();
-                }}
-                onPointerLeave={() => {
-                  clearHoldRed();
-                  clearLongPressTimers();
-                  hold.onHoldPointerEnd();
-                }}
-                className="grid h-11 min-w-[2.75rem] shrink-0 touch-manipulation select-none place-items-center rounded-[0.65rem] bg-[#E30613] text-xl font-bold leading-none text-white shadow-[0_1px_4px_rgba(227,6,19,0.35)] transition-[transform,background-color,filter] duration-100 active:scale-[0.97] active:bg-[#C50511]"
-                aria-label={`Añadir una unidad de ${p.name}`}
-              >
-                +
-              </button>
-            </div>
-
-            {popoverShortcuts ? (
-              <div
-                role="dialog"
-                aria-label="Atajos de cantidad"
-                className="absolute right-0 top-full z-[70] mt-1.5 w-[11.25rem] max-w-[calc(100vw-2rem)] origin-top rounded-xl border border-zinc-200/90 bg-white p-2 shadow-[0_12px_40px_rgba(0,0,0,0.12)]"
-                onClick={() => scheduleIdleClose()}
-              >
-                <div className="grid grid-cols-3 gap-1.5">
-                  {([1, 5, 10] as const).map((n) => {
-                    const s = popoverShortcuts.bulkSign;
-                    const label = s > 0 ? `+${n}` : `−${n}`;
-                    return (
-                      <button
-                        key={n}
-                        type="button"
-                        onClick={() => applyBulk(n, s)}
-                        className="grid min-h-11 min-w-0 touch-manipulation place-items-center rounded-lg border border-zinc-200/95 bg-white px-1 py-2 text-[13px] font-bold tabular-nums text-zinc-900 shadow-sm transition-[transform,background-color] duration-100 active:scale-[0.97] active:bg-zinc-50"
-                      >
-                        {label}
-                      </button>
-                    );
-                  })}
-                </div>
-                <button
-                  type="button"
-                  onClick={() => applyBulk(20, popoverShortcuts.bulkSign)}
-                  className="mt-2 grid min-h-10 w-full touch-manipulation place-items-center rounded-lg border border-dashed border-zinc-300/95 bg-zinc-50/80 text-[12px] font-bold tabular-nums text-zinc-800 transition-[transform,background-color] duration-100 active:scale-[0.99] active:bg-zinc-100"
-                >
-                  {popoverShortcuts.bulkSign > 0 ? '+20' : '−20'}
-                </button>
-              </div>
+            </p>
+            {extraHintParts.length > 0 ? (
+              <p className="mt-px truncate text-[10px] leading-tight text-zinc-500">{extraHintParts.join(' · ')}</p>
             ) : null}
           </div>
 
-          <div className="flex min-w-[3.75rem] flex-col items-end justify-center text-right">{lineTotalDisplay}</div>
-          <ChevronRight className="mt-0.5 h-[1.125rem] w-[1.125rem] shrink-0 text-zinc-300" aria-hidden />
+          <div className="flex shrink-0 items-center self-start pt-0.5">
+            <div className="relative shrink-0" ref={stepperShellRef}>
+              <div
+                className={[
+                  'inline-flex min-h-[2.5rem] min-w-0 touch-manipulation items-stretch overflow-hidden rounded-full border bg-white transition-[box-shadow,border-color] duration-150',
+                  stepperActive
+                    ? 'border-zinc-200/90 shadow-[0_1px_6px_rgba(0,0,0,0.05)]'
+                    : 'border-zinc-200/70 shadow-none',
+                ].join(' ')}
+              >
+                <button
+                  type="button"
+                  disabled={minusDisabled}
+                  tabIndex={-1}
+                  onPointerDown={(e) => {
+                    if (minusDisabled) return;
+                    scheduleHoldRed();
+                    hold.onMinusPointerDown(e);
+                    clearLongPressTimers();
+                    longPressMinusRef.current = window.setTimeout(() => {
+                      longPressMinusRef.current = null;
+                      openShortcutsFromHold(-1);
+                    }, LONG_PRESS_MS);
+                  }}
+                  onPointerUp={() => {
+                    clearHoldRed();
+                    clearLongPressTimers();
+                    hold.onHoldPointerEnd();
+                  }}
+                  onPointerCancel={() => {
+                    clearHoldRed();
+                    clearLongPressTimers();
+                    hold.onHoldPointerEnd();
+                  }}
+                  onPointerLeave={() => {
+                    clearHoldRed();
+                    clearLongPressTimers();
+                    hold.onHoldPointerEnd();
+                  }}
+                  className={[
+                    'grid min-h-[2.5rem] min-w-[2.5rem] shrink-0 touch-manipulation select-none place-items-center bg-white text-lg font-semibold leading-none tracking-tight transition-colors duration-100',
+                    minusDisabled
+                      ? 'cursor-not-allowed text-zinc-300'
+                      : 'text-zinc-500 active:bg-zinc-100',
+                  ].join(' ')}
+                  aria-label={`Quitar una unidad de ${p.name}`}
+                >
+                  −
+                </button>
+                <div className="flex min-h-[2.5rem] min-w-[2.65rem] flex-1 items-center justify-center bg-white px-0.5 sm:min-w-[2.85rem]">
+                  {editingQty ? (
+                    <input
+                      ref={inputRef}
+                      type="text"
+                      inputMode={unitAllowsDecimalOrderQuantity(p.unit) ? 'decimal' : 'numeric'}
+                      enterKeyHint="done"
+                      autoComplete="off"
+                      aria-label={`Cantidad ${p.name}`}
+                      value={draftQty}
+                      onChange={(e) => setDraftQty(e.target.value)}
+                      onBlur={commitDraft}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          commitDraft();
+                        }
+                      }}
+                      className="h-full w-full min-w-[2.5rem] border-0 bg-transparent text-center text-[16px] font-bold tabular-nums tracking-tight text-zinc-900 outline-none ring-0 transition-colors duration-150"
+                    />
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        beginEditQty();
+                      }}
+                      className={[
+                        'flex h-full w-full touch-manipulation items-center justify-center px-1 text-center text-[16px] font-bold tabular-nums tracking-tight outline-none transition-colors duration-100 active:bg-zinc-50',
+                        qtyHoldHighlight
+                          ? 'text-[#E30613]'
+                          : qty > 0
+                            ? 'text-zinc-900'
+                            : 'text-zinc-400',
+                      ].join(' ')}
+                      aria-label={`Editar cantidad de ${p.name}`}
+                    >
+                      {formatQtyDisplay(qty, p.unit)}
+                    </button>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  tabIndex={-1}
+                  onPointerDown={(e) => {
+                    scheduleHoldRed();
+                    hold.onPlusPointerDown(e);
+                    clearLongPressTimers();
+                    longPressPlusRef.current = window.setTimeout(() => {
+                      longPressPlusRef.current = null;
+                      openShortcutsFromHold(1);
+                    }, LONG_PRESS_MS);
+                  }}
+                  onPointerUp={() => {
+                    clearHoldRed();
+                    clearLongPressTimers();
+                    hold.onHoldPointerEnd();
+                  }}
+                  onPointerCancel={() => {
+                    clearHoldRed();
+                    clearLongPressTimers();
+                    hold.onHoldPointerEnd();
+                  }}
+                  onPointerLeave={() => {
+                    clearHoldRed();
+                    clearLongPressTimers();
+                    hold.onHoldPointerEnd();
+                  }}
+                  className="grid min-h-[2.5rem] min-w-[2.5rem] shrink-0 touch-manipulation select-none place-items-center bg-white text-lg font-bold leading-none tracking-tight text-[#E30613] transition-colors duration-100 active:bg-[#FFF0F0]"
+                  aria-label={`Añadir una unidad de ${p.name}`}
+                >
+                  +
+                </button>
+              </div>
+
+              {popoverShortcuts ? (
+                <div
+                  role="dialog"
+                  aria-label="Atajos de cantidad"
+                  className="absolute right-0 top-full z-[70] mt-1 w-[11.25rem] max-w-[calc(100vw-2rem)] origin-top rounded-xl border border-zinc-200/90 bg-white p-1.5 shadow-[0_12px_40px_rgba(0,0,0,0.12)]"
+                  onClick={() => scheduleIdleClose()}
+                >
+                  <div className="grid grid-cols-3 gap-1.5">
+                    {([1, 5, 10] as const).map((n) => {
+                      const s = popoverShortcuts.bulkSign;
+                      const label = s > 0 ? `+${n}` : `−${n}`;
+                      return (
+                        <button
+                          key={n}
+                          type="button"
+                          onClick={() => applyBulk(n, s)}
+                          className="grid min-h-10 min-w-0 touch-manipulation place-items-center rounded-lg border border-zinc-200/95 bg-white px-1 py-1.5 text-[13px] font-bold tabular-nums text-zinc-900 shadow-sm transition-[transform,background-color] duration-100 active:scale-[0.97] active:bg-zinc-50"
+                        >
+                          {label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => applyBulk(20, popoverShortcuts.bulkSign)}
+                    className="mt-1.5 grid min-h-9 w-full touch-manipulation place-items-center rounded-lg border border-dashed border-zinc-300/95 bg-zinc-50/80 text-[12px] font-bold tabular-nums text-zinc-800 transition-[transform,background-color] duration-100 active:scale-[0.99] active:bg-zinc-100"
+                  >
+                    {popoverShortcuts.bulkSign > 0 ? '+20' : '−20'}
+                  </button>
+                </div>
+              ) : null}
+            </div>
+          </div>
         </div>
       </div>
     </div>

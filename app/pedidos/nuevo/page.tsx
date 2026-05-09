@@ -1185,7 +1185,7 @@ export default function NuevoPedidoPage() {
 
       <section className="overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-zinc-200/85">
         {selectedSupplier && supplierProducts.length > 0 ? (
-          <div className="flex gap-2 overflow-x-auto px-3 pb-2 pt-3 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          <div className="flex gap-0.5 overflow-x-auto border-b border-zinc-100 px-2 pt-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:px-3">
             {(
               [
                 ['favorites', 'Favoritos', Star],
@@ -1199,10 +1199,10 @@ export default function NuevoPedidoPage() {
                 type="button"
                 onClick={() => setCatalogTab(id)}
                 className={[
-                  'inline-flex shrink-0 items-center gap-1 rounded-full border px-3 py-1.5 text-[11px] font-semibold transition-colors active:opacity-90',
+                  'inline-flex shrink-0 items-center gap-1 border-b-2 px-2.5 pb-2.5 pt-1 text-[11px] font-semibold transition-colors active:opacity-90 sm:px-3',
                   catalogTab === id
-                    ? 'border-[#E30613] bg-[#FFF5F5] text-[#E30613] shadow-sm'
-                    : 'border-zinc-200 bg-white text-zinc-600 hover:border-zinc-300 hover:bg-zinc-50',
+                    ? 'border-[#E30613] text-[#E30613]'
+                    : 'border-transparent text-zinc-500 hover:text-zinc-700',
                 ].join(' ')}
               >
                 <Icon className="h-3.5 w-3.5 shrink-0" strokeWidth={2} aria-hidden />
@@ -1211,7 +1211,7 @@ export default function NuevoPedidoPage() {
             ))}
           </div>
         ) : null}
-        <div className="px-3 pb-3">
+        <div className="px-3 pb-2">
           <div className="flex gap-2">
             <div className="relative min-w-0 flex-1">
               <Search
