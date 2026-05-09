@@ -100,6 +100,9 @@ function PedidosNuevoCatalogLineInner({
   /** Alineado con delayBeforeRepeatMs del hook: modo repetición = highlight rojo. */
   const HOLD_RED_DELAY_MS = 400;
 
+  /** Popover ±1/±5… solo en viewport ≥ sm; en móvil queda recortado por overflow del listado. */
+  const [holdShortcutsEnabled, setHoldShortcutsEnabled] = React.useState(false);
+
   const clearIdleClose = React.useCallback(() => {
     if (idleCloseRef.current != null) {
       window.clearTimeout(idleCloseRef.current);
@@ -159,12 +162,24 @@ function PedidosNuevoCatalogLineInner({
   }, [clearIdleClose]);
 
   React.useEffect(() => {
+    if (!holdShortcutsEnabled) closeShortcuts();
+  }, [holdShortcutsEnabled, closeShortcuts]);
+
+  React.useEffect(() => {
     return () => {
       clearIdleClose();
       clearLongPressTimers();
       clearHoldRed();
     };
   }, [clearHoldRed, clearIdleClose, clearLongPressTimers]);
+
+  React.useEffect(() => {
+    const mq = window.matchMedia('(min-width: 640px)');
+    const sync = () => setHoldShortcutsEnabled(mq.matches);
+    sync();
+    mq.addEventListener('change', sync);
+    return () => mq.removeEventListener('change', sync);
+  }, []);
 
   React.useEffect(() => {
     if (!popoverShortcuts) return;
@@ -346,10 +361,12 @@ function PedidosNuevoCatalogLineInner({
                     scheduleHoldRed();
                     hold.onMinusPointerDown(e);
                     clearLongPressTimers();
-                    longPressMinusRef.current = window.setTimeout(() => {
-                      longPressMinusRef.current = null;
-                      openShortcutsFromHold(-1);
-                    }, LONG_PRESS_MS);
+                    if (holdShortcutsEnabled) {
+                      longPressMinusRef.current = window.setTimeout(() => {
+                        longPressMinusRef.current = null;
+                        openShortcutsFromHold(-1);
+                      }, LONG_PRESS_MS);
+                    }
                   }}
                   onPointerUp={() => {
                     clearHoldRed();
@@ -425,10 +442,12 @@ function PedidosNuevoCatalogLineInner({
                     scheduleHoldRed();
                     hold.onPlusPointerDown(e);
                     clearLongPressTimers();
-                    longPressPlusRef.current = window.setTimeout(() => {
-                      longPressPlusRef.current = null;
-                      openShortcutsFromHold(1);
-                    }, LONG_PRESS_MS);
+                    if (holdShortcutsEnabled) {
+                      longPressPlusRef.current = window.setTimeout(() => {
+                        longPressPlusRef.current = null;
+                        openShortcutsFromHold(1);
+                      }, LONG_PRESS_MS);
+                    }
                   }}
                   onPointerUp={() => {
                     clearHoldRed();
