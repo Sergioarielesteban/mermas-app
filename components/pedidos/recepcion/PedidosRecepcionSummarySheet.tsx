@@ -104,7 +104,7 @@ export default function PedidosRecepcionSummarySheet({ open, onClose, payload }:
       <div
         id="pedidos-recepcion-summary-sheet"
         className={[
-          'relative flex max-h-[92vh] flex-col rounded-t-[1.35rem] bg-zinc-50 shadow-[0_-12px_48px_rgba(0,0,0,0.18)] transition-transform duration-300 ease-out print:max-h-none print:rounded-none print:shadow-none',
+          'relative flex max-h-[min(92vh,100dvh)] min-h-0 w-full flex-col overflow-hidden rounded-t-[1.35rem] bg-zinc-50 shadow-[0_-12px_48px_rgba(0,0,0,0.18)] transition-transform duration-300 ease-out print:max-h-none print:rounded-none print:shadow-none',
           open ? 'translate-y-0' : 'translate-y-full print:translate-y-0',
         ].join(' ')}
       >
@@ -151,7 +151,7 @@ export default function PedidosRecepcionSummarySheet({ open, onClose, payload }:
 
         <div
           id="pedidos-recepcion-summary-print"
-          className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-2.5 pb-28 pt-2 sm:px-3 print:overflow-visible print:pb-4"
+          className="min-h-0 flex-1 touch-pan-y overflow-y-auto overscroll-y-contain px-2.5 pb-3 pt-2 [-webkit-overflow-scrolling:touch] sm:px-3 print:overflow-visible print:pb-4"
         >
           <div className="rounded-xl border border-emerald-200/80 bg-white px-2.5 py-2 shadow-sm ring-1 ring-emerald-100/80">
             <div className="flex items-center justify-between gap-2">
@@ -338,7 +338,7 @@ export default function PedidosRecepcionSummarySheet({ open, onClose, payload }:
           </section>
         </div>
 
-        <footer className="pointer-events-auto absolute bottom-0 left-0 right-0 border-t border-zinc-200/90 bg-white/95 px-2.5 pb-[max(12px,env(safe-area-inset-bottom))] pt-2 shadow-[0_-8px_30px_rgba(0,0,0,0.06)] backdrop-blur-md print:static print:border-0 print:shadow-none">
+        <footer className="shrink-0 border-t border-zinc-200/90 bg-white/95 px-2.5 pb-[max(12px,env(safe-area-inset-bottom))] pt-2 shadow-[0_-8px_30px_rgba(0,0,0,0.06)] backdrop-blur-md print:static print:border-0 print:shadow-none">
           <div className="mx-auto flex max-w-lg flex-col gap-2">
             <div className="grid grid-cols-2 gap-2">
               <button

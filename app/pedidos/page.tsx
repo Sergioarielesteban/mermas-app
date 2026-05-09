@@ -9,6 +9,7 @@ import {
   ChevronDown,
   ChevronRight,
   FileText,
+  LayoutTemplate,
   LineChart,
   List,
   Loader2,
@@ -16,6 +17,7 @@ import {
   Package,
   Bookmark,
   Pencil,
+  Plus,
   Trash2,
   Truck,
   CheckCircle2,
@@ -27,11 +29,11 @@ import React from 'react';
 import PedidosRecepcionSummarySheet from '@/components/pedidos/recepcion/PedidosRecepcionSummarySheet';
 import PedidosRecepcionSwipeRow from '@/components/pedidos/recepcion/PedidosRecepcionSwipeRow';
 import { OIDO_CHEF_START_VOICE_EVENT, OIDO_CHEF_VOICE_NAV_FLAG } from '@/components/BottomNav';
+import MermasStyleHero from '@/components/MermasStyleHero';
 import { useAuth } from '@/components/AuthProvider';
 import { CHEF_ONE_TAPER_LINE_CLASS } from '@/components/ChefOneGlowLine';
 import { usePedidosOrders } from '@/components/PedidosOrdersProvider';
 import { getSupabaseClient } from '@/lib/supabase-client';
-import MermasStyleHero from '@/components/MermasStyleHero';
 import PedidosAlbaranOcrModal from '@/components/PedidosAlbaranOcrModal';
 import PedidosSaveTemplateSheet from '@/components/pedidos/PedidosSaveTemplateSheet';
 import PedidosPremiaLockedScreen from '@/components/PedidosPremiaLockedScreen';
@@ -72,7 +74,6 @@ import {
   resolveReceivedWeightKgForReceptionPreview,
   reopenReceivedOrderToSent,
   setOrderStatus,
-  setOrderPriceReviewArchived,
   orderItemHasDistinctBilling,
   updateOrderItemIncident,
   updateOrderItemReceived,
@@ -1840,34 +1841,6 @@ export default function PedidosPage() {
       }
     },
     [localId],
-  );
-
-  const setSentOrderPriceReviewed = React.useCallback(
-    (orderId: string, reviewed: boolean) => {
-      if (!localId) return;
-      const supabase = getSupabaseClient();
-      if (!supabase) return;
-      const optimisticTs = reviewed ? new Date().toISOString() : undefined;
-      setOrders((prev) =>
-        prev.map((o) =>
-          o.id === orderId ? { ...o, priceReviewArchivedAt: optimisticTs } : o,
-        ),
-      );
-      void setOrderPriceReviewArchived(supabase, localId, orderId, reviewed)
-        .then(() => {
-          setMessage(
-            reviewed
-              ? 'Revisión de precios marcada como completada.'
-              : 'Revisión de precios reabierta.',
-          );
-          dispatchPedidosDataChanged();
-        })
-        .catch((err: Error) => {
-          void reloadOrders();
-          setMessage(err.message);
-        });
-    },
-    [localId, reloadOrders, setOrders],
   );
 
   React.useEffect(() => {
@@ -3681,7 +3654,6 @@ export default function PedidosPage() {
       return m === 'bad' || (m === undefined && Boolean(item.incidentType));
     });
     const incidentOpen = Boolean(incidentOpenBySentOrderId[order.id]);
-    const reviewed = Boolean(order.priceReviewArchivedAt);
     const showExpandHint = opts?.showExpandHint ?? false;
     return (
       <div className="sticky bottom-2 z-40 mt-3 w-full max-w-lg touch-manipulation rounded-2xl border border-zinc-200/90 bg-white/95 px-2.5 py-2 shadow-[0_-10px_40px_rgba(0,0,0,0.12)] ring-1 ring-zinc-100/90 backdrop-blur-md supports-[padding:max(0px)]:pb-[max(10px,env(safe-area-inset-bottom))]">
@@ -3698,7 +3670,7 @@ export default function PedidosPage() {
               onClick={() => {
                 void commitSentOrderAsReceived(order.id);
               }}
-              className="flex w-full min-h-[3rem] flex-col items-center justify-center gap-0.5 rounded-2xl bg-gradient-to-b from-[#4ADE80] to-[#16A34A] py-2.5 text-center text-[12px] font-black uppercase leading-tight tracking-[0.06em] text-white shadow-lg shadow-emerald-900/25 ring-2 ring-white/30 transition active:scale-[0.99] disabled:opacity-90"
+              className="flex h-12 w-full shrink-0 items-center justify-center rounded-2xl bg-gradient-to-b from-[#4ADE80] to-[#16A34A] px-3 text-center text-[12px] font-black uppercase leading-tight tracking-[0.06em] text-white shadow-lg shadow-emerald-900/25 ring-2 ring-inset ring-white/25 transition active:scale-[0.99] disabled:opacity-90"
             >
               {receivingOrderId === order.id ? (
                 <span>Guardando…</span>
@@ -3708,26 +3680,12 @@ export default function PedidosPage() {
             </button>
             <button
               type="button"
-              onClick={() => setSentOrderPriceReviewed(order.id, !reviewed)}
-              className={[
-                'w-full rounded-lg px-3 py-2 text-center text-xs font-bold transition active:scale-[0.99]',
-                reviewed
-                  ? 'bg-emerald-100 text-emerald-800 ring-1 ring-emerald-300'
-                  : 'bg-zinc-200 text-zinc-700',
-              ].join(' ')}
-            >
-              {reviewed
-                ? 'Revisión de precios: completada (tocar para reabrir)'
-                : 'Marcar revisión de precios como completada'}
-            </button>
-            <button
-              type="button"
               onClick={() => toggleSentIncidentPanel(order)}
               className={[
-                'w-full rounded-lg px-3 py-2 text-center text-xs font-bold transition',
+                'flex h-12 w-full shrink-0 items-center justify-center rounded-2xl px-3 text-center text-[12px] font-black uppercase tracking-[0.06em] transition active:scale-[0.99]',
                 incidentOpen || hasAnyBad
-                  ? 'bg-[#B91C1C] text-white active:scale-[0.99]'
-                  : 'bg-zinc-200 text-zinc-600 active:scale-[0.99]',
+                  ? 'bg-[#B91C1C] text-white ring-2 ring-inset ring-[#7F1D1D]/40'
+                  : 'bg-zinc-200 text-zinc-700 ring-2 ring-inset ring-zinc-400/35',
               ].join(' ')}
             >
               {incidentOpen ? 'Ocultar incidencia' : 'Incidencia'}
@@ -4069,7 +4027,45 @@ export default function PedidosPage() {
         })()
       ) : null}
 
-      <MermasStyleHero micro title="Pedidos y recepción" />
+      <header className="rounded-2xl border border-zinc-200/85 bg-[#FAFAF9] px-3 py-2.5 ring-1 ring-zinc-100/90 sm:px-4 sm:py-3">
+        <div className="flex min-w-0 items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h1 className="text-xl font-bold tracking-tight text-zinc-900">Pedidos</h1>
+            <p className="mt-0.5 text-[13px] leading-snug text-zinc-500">Compras y recepción</p>
+          </div>
+        </div>
+        <nav className="mt-3 grid grid-cols-3 gap-2 sm:mt-3.5 sm:gap-2.5" aria-label="Acciones rápidas de pedidos">
+          <Link
+            href="/pedidos/nuevo"
+            className="group flex min-h-[2.75rem] touch-manipulation flex-col items-center justify-center gap-1 rounded-xl border border-[#D32F2F]/28 bg-white px-2 py-2 text-center shadow-[0_1px_2px_rgba(0,0,0,0.04)] ring-1 ring-[#D32F2F]/12 transition active:scale-[0.98]"
+          >
+            <span className="flex h-7 w-7 items-center justify-center rounded-full bg-[#D32F2F]/10 text-[#B91C1C] ring-1 ring-[#D32F2F]/15 transition group-active:bg-[#D32F2F]/14">
+              <Plus className="h-4 w-4" strokeWidth={2.5} aria-hidden />
+            </span>
+            <span className="text-[11px] font-semibold leading-tight text-zinc-900">Nuevo pedido</span>
+          </Link>
+          <Link
+            href="/pedidos/recepcion"
+            className="group flex min-h-[2.75rem] touch-manipulation flex-col items-center justify-center gap-1 rounded-xl border border-zinc-200/90 bg-white px-2 py-2 text-center shadow-[inset_0_1px_0_rgba(255,255,255,0.96)] ring-1 ring-zinc-100/90 transition active:scale-[0.98]"
+          >
+            <span className="flex h-7 w-7 items-center justify-center rounded-full bg-[#D32F2F]/[0.08] text-[#B91C1C] ring-1 ring-[#D32F2F]/12">
+              <Truck className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
+            </span>
+            <span className="text-[11px] font-semibold leading-tight text-zinc-800">Recibir pedido</span>
+          </Link>
+          <Link
+            href="/pedidos/nuevo"
+            title="Crear desde plantilla: en la siguiente pantalla, elige «Plantilla»."
+            aria-label="Plantillas: abrir nuevo pedido para elegir plantilla"
+            className="group flex min-h-[2.75rem] touch-manipulation flex-col items-center justify-center gap-1 rounded-xl border border-zinc-200/90 bg-white px-2 py-2 text-center shadow-[inset_0_1px_0_rgba(255,255,255,0.96)] ring-1 ring-zinc-100/90 transition active:scale-[0.98]"
+          >
+            <span className="flex h-7 w-7 items-center justify-center rounded-full bg-[#D32F2F]/[0.08] text-[#B91C1C] ring-1 ring-[#D32F2F]/12">
+              <LayoutTemplate className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
+            </span>
+            <span className="text-[11px] font-semibold leading-tight text-zinc-800">Plantillas</span>
+          </Link>
+        </nav>
+      </header>
 
       {avisoPedido === 'enviado' ? (
         <div
@@ -4124,13 +4120,6 @@ export default function PedidosPage() {
           </div>
         </div>
       ) : null}
-
-      <Link
-        href="/pedidos/nuevo"
-        className="flex min-h-[3.25rem] items-center justify-center rounded-xl bg-[#D32F2F] px-4 text-center text-base font-bold text-white shadow-sm ring-1 ring-[#D32F2F]/25 active:opacity-95 sm:min-h-[3.5rem] sm:text-lg"
-      >
-        + Nuevo pedido
-      </Link>
 
       <section className="rounded-2xl bg-white/95 p-1.5 shadow-[0_1px_3px_rgba(0,0,0,0.05)] ring-1 ring-zinc-200/85 sm:p-2">
         <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4 sm:gap-2">
@@ -4502,79 +4491,6 @@ export default function PedidosPage() {
                       {new Date(`${order.deliveryDate}T00:00:00`).toLocaleDateString('es-ES')}
                     </p>
                   ) : null}
-                  {(() => {
-                    const tLive = liveSentOrderTotals(
-                      order,
-                      weightInputByItemId,
-                      pricePerKgInputByItemId,
-                      orderQtyInputByItemId,
-                      sentOrderPpkSuggestionByItemId,
-                    );
-                    const tEst = estimatedOrderTotalsWithVat(order);
-                    const impact = tLive.total - tEst.total;
-                    let nOk = 0;
-                    let nBad = 0;
-                    for (const it of order.items) {
-                      const m = quickLineMarks[it.id];
-                      const serverOk =
-                        it.receivedQuantity >= it.quantity && it.quantity > 0 && !it.incidentType;
-                      const ok = m === 'ok' || (m === undefined && serverOk);
-                      const bad = m === 'bad' || (m === undefined && Boolean(it.incidentType));
-                      if (ok) nOk++;
-                      if (bad) nBad++;
-                    }
-                    return (
-                      <div className="mb-1 space-y-1">
-                        <div className="grid grid-cols-4 gap-1 rounded-lg bg-white/95 px-1 py-1 ring-1 ring-zinc-200/85 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
-                          <div className="flex flex-col items-center gap-px py-0.5 text-center">
-                            <List className="h-3.5 w-3.5 text-zinc-400" strokeWidth={2.25} aria-hidden />
-                            <span className="text-[14px] font-black tabular-nums leading-none text-zinc-900">
-                              {order.items.length}
-                            </span>
-                            <span className="text-[7px] font-bold uppercase tracking-wide text-zinc-500">Líneas</span>
-                          </div>
-                          <div className="flex flex-col items-center gap-px py-0.5 text-center">
-                            <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" strokeWidth={2.25} aria-hidden />
-                            <span className="text-[14px] font-black tabular-nums leading-none text-emerald-800">{nOk}</span>
-                            <span className="text-[7px] font-bold uppercase tracking-wide text-emerald-700/90">Ok</span>
-                          </div>
-                          <div className="flex flex-col items-center gap-px py-0.5 text-center">
-                            <AlertTriangle className="h-3.5 w-3.5 text-orange-600" strokeWidth={2.25} aria-hidden />
-                            <span className="text-[14px] font-black tabular-nums leading-none text-orange-900">{nBad}</span>
-                            <span className="text-[7px] font-bold uppercase tracking-wide text-orange-800/90">Incid.</span>
-                          </div>
-                          <div className="flex flex-col items-center gap-px py-0.5 text-center">
-                            <TrendingUp
-                              className={[
-                                'h-3.5 w-3.5',
-                                impact >= 0 ? 'text-[#B91C1C]' : 'text-emerald-700',
-                              ].join(' ')}
-                              strokeWidth={2.25}
-                              aria-hidden
-                            />
-                            <span
-                              className={[
-                                'text-[12px] font-black tabular-nums leading-none',
-                                impact >= 0 ? 'text-[#991B1B]' : 'text-emerald-800',
-                              ].join(' ')}
-                            >
-                              {impact >= 0 ? '+' : '−'}
-                              {Math.abs(impact).toFixed(2)} €
-                            </span>
-                            <span className="text-[7px] font-bold uppercase tracking-wide text-zinc-500">vs pedido</span>
-                          </div>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => markAllSentLinesReceiveOk(order.id)}
-                          className="flex w-full touch-manipulation items-center justify-center gap-2 rounded-xl border border-emerald-400/50 bg-gradient-to-b from-emerald-50 to-emerald-100/90 py-2 text-[10px] font-black uppercase tracking-wide text-emerald-950 shadow-sm ring-1 ring-emerald-300/45 transition active:scale-[0.99]"
-                        >
-                          <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-700" strokeWidth={2.25} aria-hidden />
-                          Marcar todo correcto
-                        </button>
-                      </div>
-                    );
-                  })()}
                   {order.items.map((item) => {
                     const mark = quickLineMarks[item.id];
                     const isOk =
@@ -4985,6 +4901,79 @@ export default function PedidosPage() {
                       </div>
                     );
                   })}
+                  {(() => {
+                    const tLive = liveSentOrderTotals(
+                      order,
+                      weightInputByItemId,
+                      pricePerKgInputByItemId,
+                      orderQtyInputByItemId,
+                      sentOrderPpkSuggestionByItemId,
+                    );
+                    const tEst = estimatedOrderTotalsWithVat(order);
+                    const impact = tLive.total - tEst.total;
+                    let nOk = 0;
+                    let nBad = 0;
+                    for (const it of order.items) {
+                      const m = quickLineMarks[it.id];
+                      const serverOk =
+                        it.receivedQuantity >= it.quantity && it.quantity > 0 && !it.incidentType;
+                      const ok = m === 'ok' || (m === undefined && serverOk);
+                      const bad = m === 'bad' || (m === undefined && Boolean(it.incidentType));
+                      if (ok) nOk++;
+                      if (bad) nBad++;
+                    }
+                    return (
+                      <div className="mt-1 space-y-1 border-t border-zinc-200/70 pt-2">
+                        <div className="grid grid-cols-4 gap-1 rounded-lg bg-white/95 px-1 py-1 ring-1 ring-zinc-200/85 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
+                          <div className="flex flex-col items-center gap-px py-0.5 text-center">
+                            <List className="h-3.5 w-3.5 text-zinc-400" strokeWidth={2.25} aria-hidden />
+                            <span className="text-[14px] font-black tabular-nums leading-none text-zinc-900">
+                              {order.items.length}
+                            </span>
+                            <span className="text-[7px] font-bold uppercase tracking-wide text-zinc-500">Líneas</span>
+                          </div>
+                          <div className="flex flex-col items-center gap-px py-0.5 text-center">
+                            <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" strokeWidth={2.25} aria-hidden />
+                            <span className="text-[14px] font-black tabular-nums leading-none text-emerald-800">{nOk}</span>
+                            <span className="text-[7px] font-bold uppercase tracking-wide text-emerald-700/90">Ok</span>
+                          </div>
+                          <div className="flex flex-col items-center gap-px py-0.5 text-center">
+                            <AlertTriangle className="h-3.5 w-3.5 text-orange-600" strokeWidth={2.25} aria-hidden />
+                            <span className="text-[14px] font-black tabular-nums leading-none text-orange-900">{nBad}</span>
+                            <span className="text-[7px] font-bold uppercase tracking-wide text-orange-800/90">Incid.</span>
+                          </div>
+                          <div className="flex flex-col items-center gap-px py-0.5 text-center">
+                            <TrendingUp
+                              className={[
+                                'h-3.5 w-3.5',
+                                impact >= 0 ? 'text-[#B91C1C]' : 'text-emerald-700',
+                              ].join(' ')}
+                              strokeWidth={2.25}
+                              aria-hidden
+                            />
+                            <span
+                              className={[
+                                'text-[12px] font-black tabular-nums leading-none',
+                                impact >= 0 ? 'text-[#991B1B]' : 'text-emerald-800',
+                              ].join(' ')}
+                            >
+                              {impact >= 0 ? '+' : '−'}
+                              {Math.abs(impact).toFixed(2)} €
+                            </span>
+                            <span className="text-[7px] font-bold uppercase tracking-wide text-zinc-500">vs pedido</span>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => markAllSentLinesReceiveOk(order.id)}
+                          className="flex w-full touch-manipulation items-center justify-center gap-2 rounded-xl border border-emerald-400/50 bg-gradient-to-b from-emerald-50 to-emerald-100/90 py-2 text-[10px] font-black uppercase tracking-wide text-emerald-950 shadow-sm ring-1 ring-emerald-300/45 transition active:scale-[0.99]"
+                        >
+                          <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-700" strokeWidth={2.25} aria-hidden />
+                          Marcar todo correcto
+                        </button>
+                      </div>
+                    );
+                  })()}
                   <div className="rounded-lg border border-[#D32F2F]/30 bg-white px-2 py-1 ring-1 ring-[#D32F2F]/12 shadow-sm">
                     <button
                       type="button"
