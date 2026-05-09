@@ -4285,7 +4285,7 @@ export default function PedidosPage() {
                 : 'pendiente';
             const detailOpen = expandedSentId === order.id;
             const cardShell = [
-              'overflow-hidden rounded-md transition-colors',
+              'overflow-hidden rounded-lg transition-colors',
               sentBadge === 'incidencia'
                 ? detailOpen
                   ? 'bg-red-50 ring-1 ring-red-400/80'
@@ -4317,18 +4317,18 @@ export default function PedidosPage() {
                 type="button"
                 onClick={() => setExpandedSentId((prev) => (prev === order.id ? null : order.id))}
                 className={[
-                  'w-full px-1.5 py-0.5 text-left outline-none transition focus-visible:ring-2 focus-visible:ring-[#D32F2F]/35 focus-visible:ring-offset-1',
+                  'w-full px-2 py-1.5 text-left outline-none transition focus-visible:ring-2 focus-visible:ring-[#D32F2F]/35 focus-visible:ring-offset-1',
                   sentBadge === 'incidencia' ? 'active:bg-red-100/40' : sentBadge === 'correcto' ? 'active:bg-emerald-100/40' : 'active:bg-amber-100/40',
                 ].join(' ')}
                 aria-expanded={detailOpen}
               >
-                <div className="flex flex-col gap-px">
-                  <div className="flex min-w-0 items-start justify-between gap-1.5">
-                    <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-1 gap-y-px">
+                <div className="flex flex-col gap-0.5">
+                  <div className="flex min-w-0 items-start justify-between gap-2">
+                    <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-1.5 gap-y-0.5">
                       <p className="min-w-0 truncate text-[13px] font-bold leading-tight text-zinc-900">{order.supplierName}</p>
                       <span
                         className={[
-                          'shrink-0 rounded px-1 py-px text-[7px] font-bold uppercase tracking-wide text-white',
+                          'shrink-0 rounded px-1 py-px text-[8px] font-bold uppercase tracking-wide text-white',
                           badgeClass,
                         ].join(' ')}
                       >
@@ -4337,14 +4337,14 @@ export default function PedidosPage() {
                     </div>
                     {requesterName ? (
                       <p
-                        className="max-w-[45%] shrink-0 truncate text-right text-[9px] font-semibold leading-tight text-zinc-600"
+                        className="max-w-[45%] shrink-0 truncate text-right text-[10px] font-semibold leading-snug text-zinc-600"
                         title={requesterName}
                       >
                         {requesterName}
                       </p>
                     ) : null}
                   </div>
-                  <p className="line-clamp-2 text-[9px] leading-snug text-zinc-600">
+                  <p className="line-clamp-2 text-[10px] leading-snug text-zinc-600">
                     <span className="font-medium text-zinc-700">
                       Env. {order.sentAt ? new Date(order.sentAt).toLocaleDateString('es-ES') : '—'}
                     </span>
@@ -4364,7 +4364,7 @@ export default function PedidosPage() {
                 </div>
                 <div
                   className={[
-                    'mt-0.5 flex items-center justify-center gap-0.5 border-t pt-px text-[8px] font-semibold text-[#B91C1C]',
+                    'mt-1 flex items-center justify-center gap-0.5 border-t pt-1 text-[9px] font-semibold text-[#B91C1C]',
                     sentBadge === 'incidencia'
                       ? 'border-red-200/35'
                       : sentBadge === 'correcto'
@@ -4374,14 +4374,14 @@ export default function PedidosPage() {
                 >
                   {detailOpen ? 'Ocultar líneas' : 'Líneas'}
                   <ChevronDown
-                    className={['h-2.5 w-2.5 transition-transform', detailOpen ? 'rotate-180' : ''].join(' ')}
+                    className={['h-3 w-3 transition-transform', detailOpen ? 'rotate-180' : ''].join(' ')}
                     aria-hidden
                   />
                 </div>
               </button>
               <div
                 className={[
-                  'grid w-full grid-cols-5 gap-0.5 border-t px-0.5 py-0.5',
+                  'grid w-full grid-cols-5 gap-0.5 border-t px-0.5 py-1',
                   sentBadge === 'incidencia'
                     ? 'border-red-200/60 bg-white/50'
                     : sentBadge === 'correcto'
@@ -4392,7 +4392,7 @@ export default function PedidosPage() {
                 <Link
                   href={`/pedidos/nuevo?id=${encodeURIComponent(order.id)}`}
                   onClick={(e) => e.stopPropagation()}
-                  className="flex min-h-[2rem] flex-col items-center justify-center gap-px rounded-md border border-zinc-200/90 bg-zinc-50/90 px-0.5 py-0.5 text-zinc-800 transition hover:bg-zinc-100 active:bg-zinc-100/80"
+                  className="flex min-h-[2.15rem] flex-col items-center justify-center gap-px rounded-md border border-zinc-200/90 bg-zinc-50/90 px-0.5 py-0.5 text-zinc-800 transition hover:bg-zinc-100 active:bg-zinc-100/80"
                   title="Editar pedido"
                   aria-label="Editar pedido"
                 >
@@ -4402,7 +4402,7 @@ export default function PedidosPage() {
                 <button
                   type="button"
                   onClick={() => sendWhatsappOrder(order)}
-                  className="flex min-h-[2rem] flex-col items-center justify-center gap-px rounded-md border border-[#128C7E]/35 bg-[#25D366] px-0.5 py-0.5 text-white shadow-sm transition hover:bg-[#20BD5A] active:brightness-95"
+                  className="flex min-h-[2.15rem] flex-col items-center justify-center gap-px rounded-md border border-[#128C7E]/35 bg-[#25D366] px-0.5 py-0.5 text-white shadow-sm transition hover:bg-[#20BD5A] active:brightness-95"
                   title="WhatsApp"
                   aria-label="Enviar pedido por WhatsApp"
                 >
@@ -4412,7 +4412,7 @@ export default function PedidosPage() {
                 <Link
                   href={`/pedidos/nuevo?duplicateFrom=${encodeURIComponent(order.id)}`}
                   onClick={(e) => e.stopPropagation()}
-                  className="flex min-h-[2rem] flex-col items-center justify-center gap-px rounded-md border border-zinc-200/90 bg-white px-0.5 py-0.5 text-zinc-800 shadow-sm transition hover:bg-zinc-50 active:bg-zinc-100/80"
+                  className="flex min-h-[2.15rem] flex-col items-center justify-center gap-px rounded-md border border-zinc-200/90 bg-white px-0.5 py-0.5 text-zinc-800 shadow-sm transition hover:bg-zinc-50 active:bg-zinc-100/80"
                   title="Duplicar como nuevo borrador"
                   aria-label="Duplicar pedido"
                 >
@@ -4425,7 +4425,7 @@ export default function PedidosPage() {
                     e.stopPropagation();
                     setSaveTemplateOrder(order);
                   }}
-                  className="flex min-h-[2rem] flex-col items-center justify-center gap-px rounded-md border border-[#D32F2F]/35 bg-[#FFF7F5] px-0.5 py-0.5 text-[#7F1D1D] shadow-sm transition hover:bg-[#FFF0EE] active:bg-[#FFE8E5]"
+                  className="flex min-h-[2.15rem] flex-col items-center justify-center gap-px rounded-md border border-[#D32F2F]/35 bg-[#FFF7F5] px-0.5 py-0.5 text-[#7F1D1D] shadow-sm transition hover:bg-[#FFF0EE] active:bg-[#FFE8E5]"
                   title="Guardar como plantilla"
                   aria-label="Guardar como plantilla"
                 >
@@ -4458,7 +4458,7 @@ export default function PedidosPage() {
                       })
                       .catch((err: Error) => setMessage(err.message));
                   }}
-                  className="flex min-h-[2rem] flex-col items-center justify-center gap-px rounded-md border border-rose-200/90 bg-rose-50/90 px-0.5 py-0.5 text-rose-900 transition hover:bg-rose-100/90 active:bg-rose-100"
+                  className="flex min-h-[2.15rem] flex-col items-center justify-center gap-px rounded-md border border-rose-200/90 bg-rose-50/90 px-0.5 py-0.5 text-rose-900 transition hover:bg-rose-100/90 active:bg-rose-100"
                   title="Eliminar pedido"
                   aria-label="Eliminar pedido"
                 >
@@ -5087,7 +5087,7 @@ export default function PedidosPage() {
                   />
                 </span>
               </summary>
-              <div className="space-y-1 border-t border-zinc-100 bg-zinc-50/40 px-1 pb-1 pt-1">
+              <div className="space-y-1.5 border-t border-zinc-100 bg-zinc-50/40 px-1.5 pb-1.5 pt-1.5">
                 {monthOrders.map((order) => {
                   const needsAttention = receivedOrderHasAttention(order);
                   const incidentFooterText = historicoIncidentFooterText(order, catalogNameByProductId);
@@ -5113,7 +5113,7 @@ export default function PedidosPage() {
                     <div
                       key={order.id}
                       className={[
-                        'overflow-hidden rounded-md transition-colors',
+                        'overflow-hidden rounded-lg transition-colors',
                         needsAttention
                           ? detailOpen
                             ? 'bg-red-50 ring-1 ring-red-400/90'
@@ -5127,18 +5127,18 @@ export default function PedidosPage() {
                         type="button"
                         onClick={() => setExpandedHistoricoId((prev) => (prev === order.id ? null : order.id))}
                         className={[
-                          'w-full px-1 py-px text-left outline-none transition focus-visible:ring-2 focus-visible:ring-[#D32F2F]/35 focus-visible:ring-offset-1',
+                          'w-full px-2 py-1.5 text-left outline-none transition focus-visible:ring-2 focus-visible:ring-[#D32F2F]/35 focus-visible:ring-offset-1',
                           needsAttention ? 'active:bg-red-100/40' : 'active:bg-emerald-100/40',
                         ].join(' ')}
                         aria-expanded={detailOpen}
                       >
-                        <div className="flex items-start justify-between gap-1.5">
-                          <div className="min-w-0 flex-1 space-y-0">
-                            <div className="flex flex-wrap items-center gap-x-1 gap-y-px">
-                              <span className="truncate text-[12px] font-bold leading-none text-zinc-900">{order.supplierName}</span>
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0 flex-1 space-y-0.5">
+                            <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
+                              <span className="truncate text-[13px] font-bold leading-tight text-zinc-900">{order.supplierName}</span>
                               <span
                                 className={[
-                                  'shrink-0 rounded px-1 py-px text-[7px] font-bold uppercase tracking-wide text-white',
+                                  'shrink-0 rounded px-1 py-px text-[8px] font-bold uppercase tracking-wide text-white',
                                   needsAttention ? 'bg-red-600' : 'bg-emerald-600',
                                 ].join(' ')}
                               >
@@ -5147,22 +5147,22 @@ export default function PedidosPage() {
                               {showSumBadges ? (
                                 <span className="flex flex-wrap items-center gap-0.5">
                                   {badgeClean ? (
-                                    <span className="rounded px-1 py-px text-[6px] font-black uppercase tracking-wide text-emerald-900 ring-1 ring-emerald-200/80 bg-emerald-100">
+                                    <span className="rounded px-1 py-px text-[7px] font-black uppercase tracking-wide text-emerald-900 ring-1 ring-emerald-200/80 bg-emerald-100">
                                       OK
                                     </span>
                                   ) : null}
                                   {!badgeClean && sumMeta && sumMeta.lineasIncidencia > 0 ? (
-                                    <span className="rounded px-1 py-px text-[6px] font-black uppercase tracking-wide text-orange-950 ring-1 ring-orange-200/75 bg-orange-100">
+                                    <span className="rounded px-1 py-px text-[7px] font-black uppercase tracking-wide text-orange-950 ring-1 ring-orange-200/75 bg-orange-100">
                                       Incid.
                                     </span>
                                   ) : null}
                                   {!badgeClean && sumMeta && sumMeta.alertasSubidaCount > 0 ? (
-                                    <span className="rounded px-1 py-px text-[6px] font-black uppercase tracking-wide text-rose-950 ring-1 ring-rose-200/75 bg-rose-100">
+                                    <span className="rounded px-1 py-px text-[7px] font-black uppercase tracking-wide text-rose-950 ring-1 ring-rose-200/75 bg-rose-100">
                                       Subidas
                                     </span>
                                   ) : null}
                                   {!badgeClean && sumMeta && diffSig ? (
-                                    <span className="rounded px-1 py-px text-[6px] font-black uppercase tracking-wide text-zinc-800 ring-1 ring-zinc-200/90 bg-zinc-100">
+                                    <span className="rounded px-1 py-px text-[7px] font-black uppercase tracking-wide text-zinc-800 ring-1 ring-zinc-200/90 bg-zinc-100">
                                       Δ €
                                     </span>
                                   ) : null}
@@ -5170,7 +5170,7 @@ export default function PedidosPage() {
                               ) : null}
                             </div>
                             <p
-                              className="truncate text-[8px] leading-tight text-zinc-600"
+                              className="truncate text-[10px] leading-snug text-zinc-600"
                               title={
                                 receiverDisplayName
                                   ? `Recib. ${
@@ -5191,24 +5191,24 @@ export default function PedidosPage() {
                               ) : null}
                             </p>
                           </div>
-                          <div className="shrink-0 text-right leading-none" aria-label="Importes del pedido">
-                            <p className="text-[11px] font-black tabular-nums text-zinc-950">{totals.total.toFixed(2)} €</p>
-                            <p className="mt-px text-[7px] tabular-nums leading-none text-zinc-500">
-                              {totals.base.toFixed(2)}+{totals.vat.toFixed(2)} IVA
+                          <div className="shrink-0 text-right leading-tight" aria-label="Importes del pedido">
+                            <p className="text-sm font-black tabular-nums text-zinc-950">{totals.total.toFixed(2)} €</p>
+                            <p className="mt-0.5 text-[9px] tabular-nums leading-snug text-zinc-500">
+                              {totals.base.toFixed(2)} + {totals.vat.toFixed(2)} IVA
                             </p>
                           </div>
                         </div>
-                        <div className="mt-px flex items-center justify-center gap-0.5 border-t border-zinc-200/25 pt-px text-[7px] font-semibold text-[#B91C1C]">
+                        <div className="mt-1 flex items-center justify-center gap-0.5 border-t border-zinc-200/35 pt-1 text-[9px] font-semibold text-[#B91C1C]">
                           {detailOpen ? 'Ocultar líneas' : 'Líneas'}
                           <ChevronDown
-                            className={['h-2.5 w-2.5 transition-transform', detailOpen ? 'rotate-180' : ''].join(' ')}
+                            className={['h-3 w-3 transition-transform', detailOpen ? 'rotate-180' : ''].join(' ')}
                             aria-hidden
                           />
                         </div>
                       </button>
                       <div
                         className={[
-                          'flex flex-wrap items-center justify-end gap-px border-t px-1 py-px',
+                          'flex flex-wrap items-center justify-end gap-1 border-t px-2 py-1',
                           needsAttention ? 'border-red-200/70 bg-white/60' : 'border-emerald-200/70 bg-white/60',
                         ].join(' ')}
                       >
@@ -5219,7 +5219,7 @@ export default function PedidosPage() {
                             void openRecepcionSummaryFromDb(order.id);
                           }}
                           disabled={receptionSummaryLoadingId === order.id}
-                          className="flex items-center gap-px rounded border border-[#D32F2F]/30 bg-white px-1 py-px text-[8px] font-semibold leading-none text-[#B91C1C] shadow-sm disabled:opacity-60"
+                          className="flex items-center gap-0.5 rounded border border-[#D32F2F]/30 bg-white px-1.5 py-1 text-[10px] font-semibold text-[#B91C1C] shadow-sm disabled:opacity-60"
                         >
                           {receptionSummaryLoadingId === order.id ? (
                             <Loader2 className="h-3 w-3 animate-spin" aria-hidden />
@@ -5248,7 +5248,7 @@ export default function PedidosPage() {
                                 .catch((err: Error) => setMessage(err.message));
                             })();
                           }}
-                          className="rounded border border-zinc-300 bg-white px-1 py-px text-center text-[8px] font-semibold leading-none text-zinc-800"
+                          className="rounded border border-zinc-300 bg-white px-1.5 py-1 text-center text-[10px] font-semibold text-zinc-800"
                         >
                           A enviados
                         </button>
@@ -5280,7 +5280,7 @@ export default function PedidosPage() {
                               })
                               .catch((err: Error) => setMessage(err.message));
                           }}
-                          className="rounded border border-zinc-300 bg-white px-1 py-px text-center text-[8px] font-semibold leading-none text-[#B91C1C]"
+                          className="rounded border border-zinc-300 bg-white px-1.5 py-1 text-center text-[10px] font-semibold text-[#B91C1C]"
                         >
                           Eliminar
                         </button>
@@ -5288,19 +5288,19 @@ export default function PedidosPage() {
                       {expandedHistoricoId === order.id ? (
                         <div
                           className={[
-                            'space-y-px border-t px-1 pb-1 pt-1 text-left',
+                            'space-y-1.5 border-t px-2 pb-2 pt-2 text-left',
                             needsAttention
                               ? 'border-red-200/60 bg-red-50/40'
                               : 'border-emerald-200/60 bg-emerald-50/35',
                           ].join(' ')}
                         >
-                          <p className="mb-px text-center text-[7px] font-semibold uppercase tracking-[0.12em] text-zinc-400">
+                          <p className="mb-0.5 text-center text-[9px] font-semibold uppercase tracking-[0.12em] text-zinc-400">
                             Líneas
                           </p>
                           {order.notes?.trim() ? (
-                            <div className="rounded border border-zinc-200/90 bg-white px-1 py-px">
-                              <p className="text-[7px] font-bold uppercase tracking-wide text-zinc-500">Notas</p>
-                              <p className="text-[9px] leading-tight text-zinc-800">{order.notes.trim()}</p>
+                            <div className="rounded border border-zinc-200/90 bg-white px-2 py-1.5">
+                              <p className="text-[9px] font-bold uppercase tracking-wide text-zinc-500">Notas</p>
+                              <p className="mt-0.5 text-[11px] leading-snug text-zinc-800">{order.notes.trim()}</p>
                             </div>
                           ) : null}
                           {order.items.map((item) => {
@@ -5325,12 +5325,12 @@ export default function PedidosPage() {
                             return (
                               <div
                                 key={item.id}
-                                className="rounded border border-zinc-200/80 bg-white/95 px-1 py-px shadow-sm"
+                                className="rounded-md border border-zinc-200/80 bg-white/95 px-2 py-1.5 shadow-sm"
                               >
-                                <div className="flex items-start gap-1">
+                                <div className="flex items-start gap-1.5">
                                   <span
                                     className={[
-                                      'mt-px grid h-3.5 w-3.5 shrink-0 place-items-center rounded-full border text-[8px] font-black leading-none',
+                                      'mt-0.5 grid h-4 w-4 shrink-0 place-items-center rounded-full border text-[9px] font-black leading-none',
                                       isOk
                                         ? 'border-emerald-600 bg-emerald-600 text-white'
                                         : isBad
@@ -5343,15 +5343,15 @@ export default function PedidosPage() {
                                     {isOk ? '\u2713' : isBad ? '\u2715' : '\u00B7'}
                                   </span>
                                   <div className="min-w-0 flex-1">
-                                    <div className="flex items-baseline justify-between gap-1">
-                                      <p className="min-w-0 truncate text-[9px] font-semibold leading-tight text-zinc-900">
+                                    <div className="flex items-baseline justify-between gap-1.5">
+                                      <p className="min-w-0 truncate text-[11px] font-semibold leading-snug text-zinc-900">
                                         {lineLabel(item)}
                                       </p>
-                                      <span className="shrink-0 text-[9px] font-bold tabular-nums text-zinc-900">
+                                      <span className="shrink-0 text-[11px] font-bold tabular-nums text-zinc-900">
                                         {lineSub.toFixed(2)} €
                                       </span>
                                     </div>
-                                    <p className="truncate text-[7px] leading-tight text-zinc-500" title={detalleLinea}>
+                                    <p className="mt-0.5 truncate text-[9px] leading-snug text-zinc-500" title={detalleLinea}>
                                       {detalleLinea}
                                       {histSummary.precioEquivCatalogo ? (
                                         <span className="text-zinc-400"> · {histSummary.precioEquivCatalogo}</span>
@@ -5363,9 +5363,9 @@ export default function PedidosPage() {
                             );
                           })}
                           {needsAttention && incidentFooterText ? (
-                            <div className="rounded border border-red-200 bg-red-50/70 px-1 py-px text-left">
-                              <p className="text-[7px] font-bold uppercase tracking-wide text-red-800">Incidencia</p>
-                              <p className="text-[9px] leading-tight text-zinc-800 whitespace-pre-wrap">
+                            <div className="rounded-md border border-red-200 bg-red-50/70 px-2 py-1.5 text-left">
+                              <p className="text-[9px] font-bold uppercase tracking-wide text-red-800">Incidencia</p>
+                              <p className="mt-0.5 text-[10px] leading-snug text-zinc-800 whitespace-pre-wrap">
                                 {incidentFooterText}
                               </p>
                             </div>
