@@ -22,8 +22,10 @@ import {
   CheckCircle2,
   AlertTriangle,
   TrendingUp,
+  Eye,
 } from 'lucide-react';
 import React from 'react';
+import PedidosRecepcionSummarySheet from '@/components/pedidos/recepcion/PedidosRecepcionSummarySheet';
 import PedidosRecepcionSwipeRow from '@/components/pedidos/recepcion/PedidosRecepcionSwipeRow';
 import { OIDO_CHEF_START_VOICE_EVENT, OIDO_CHEF_VOICE_NAV_FLAG } from '@/components/BottomNav';
 import { useAuth } from '@/components/AuthProvider';
@@ -99,6 +101,21 @@ import {
   voidStaffMealRecord,
   type StaffMealWorker,
 } from '@/lib/comida-personal-supabase';
+import {
+  buildPedidosRecepcionSummaryPayload,
+  type PedidosRecepcionSummaryPayload,
+} from '@/lib/pedidos-recepcion-summary-build';
+import {
+  loadRecepcionSummaryLocal,
+  metaFromSummaryPayload,
+  persistRecepcionSummaryLocal,
+} from '@/lib/pedidos-recepcion-summary-storage';
+import {
+  fetchPedidosReceptionSummaryMetaBatch,
+  fetchPedidosReceptionSummaryPayload,
+  savePedidosReceptionSummary,
+  type PedidosReceptionSummaryMeta,
+} from '@/lib/pedidos-recepcion-summary-supabase';
 import { parsePriceInput } from '@/lib/money-format';
 import { getPedidoDrafts } from '@/lib/pedidos-storage';
 import { getAppMainScrollElement, readMainScrollTop, setMainScrollTop } from '@/lib/pedidos-main-scroll';
@@ -494,6 +511,14 @@ export default function PedidosPage() {
   const [historicoRecibidosAccordionOpen, setHistoricoRecibidosAccordionOpen] = React.useState(false);
   /** Feedback visual al marcar recibido (el merge con réplica ya no revierte el estado). */
   const [receivingOrderId, setReceivingOrderId] = React.useState<string | null>(null);
+  /** Resumen inteligente slide-up tras validar recepción (solo UI). */
+  const [recepcionSummaryPayload, setRecepcionSummaryPayload] =
+    React.useState<PedidosRecepcionSummaryPayload | null>(null);
+  const [recepcionSummaryOpen, setRecepcionSummaryOpen] = React.useState(false);
+  const [receptionSummaryMetaByOrderId, setReceptionSummaryMetaByOrderId] = React.useState<
+    Record<string, PedidosReceptionSummaryMeta>
+  >({});
+  const [receptionSummaryLoadingId, setReceptionSummaryLoadingId] = React.useState<string | null>(null);
   /** Marca visual por línea (varias a la vez); evita que un refetch parcial “borre” el estado al ir recibiendo. */
   const [quickLineMarks, setQuickLineMarks] = React.useState<Record<string, 'ok' | 'bad'>>({});
   /** Línea de recepción (X): modal eliminar vs incidencia (ids para no retener refs obsoletas). */
@@ -1273,6 +1298,33 @@ export default function PedidosPage() {
     return m;
   }, [orders, sentReceptionHintsTick]);
 
+  /** Snapshot para el resumen inteligente en el instante de validar (evita deps enormes en commit). */
+  const recepcionSummaryInputsRef = React.useRef({
+    weightInputByItemId: {} as Record<string, string>,
+    pricePerKgInputByItemId: {} as Record<string, string>,
+    orderQtyInputByItemId: {} as Record<string, string>,
+    priceInputByItemId: {} as Record<string, string>,
+    quickLineMarks: {} as Record<string, 'ok' | 'bad'>,
+    sentOrderPpkSuggestionByItemId: new Map<string, number | null>(),
+  });
+  React.useEffect(() => {
+    recepcionSummaryInputsRef.current = {
+      weightInputByItemId,
+      pricePerKgInputByItemId,
+      orderQtyInputByItemId,
+      priceInputByItemId,
+      quickLineMarks,
+      sentOrderPpkSuggestionByItemId: new Map(sentOrderPpkSuggestionByItemId),
+    };
+  }, [
+    weightInputByItemId,
+    pricePerKgInputByItemId,
+    orderQtyInputByItemId,
+    priceInputByItemId,
+    quickLineMarks,
+    sentOrderPpkSuggestionByItemId,
+  ]);
+
   const setLocalUnitPrice = React.useCallback(
     (orderId: string, itemId: string, rawValue: string) => {
       const parsed = Number(rawValue.replace(',', '.'));
@@ -1667,6 +1719,43 @@ export default function PedidosPage() {
           });
           setExpandedSentId((id) => (id === orderId ? null : id));
           setMessage('Pedido marcado como recibido.');
+          try {
+            const inputs = recepcionSummaryInputsRef.current;
+            const summaryPayload = buildPedidosRecepcionSummaryPayload({
+              order: snap,
+              completedAtIso: nowIso,
+              userDisplayName: actorLabel(displayName, loginUsername),
+              weightInputByItemId: inputs.weightInputByItemId,
+              pricePerKgInputByItemId: inputs.pricePerKgInputByItemId,
+              orderQtyInputByItemId: inputs.orderQtyInputByItemId,
+              priceInputByItemId: inputs.priceInputByItemId,
+              sentOrderPpkSuggestionByItemId: inputs.sentOrderPpkSuggestionByItemId,
+              quickLineMarks: inputs.quickLineMarks,
+              catalogNameByProductId,
+              historicoComparableByProductId: historicoComparableByProductRef.current,
+            });
+            setRecepcionSummaryPayload(summaryPayload);
+            requestAnimationFrame(() => setRecepcionSummaryOpen(true));
+            if (localId) {
+              persistRecepcionSummaryLocal(localId, summaryPayload);
+            }
+            setReceptionSummaryMetaByOrderId((prev) => ({
+              ...prev,
+              [snap.id]: metaFromSummaryPayload(summaryPayload),
+            }));
+            const supSave = getSupabaseClient();
+            if (supSave && localId) {
+              void savePedidosReceptionSummary(supSave, localId, snap.supplierId, summaryPayload).catch((err) => {
+                setMessage(
+                  `Resumen guardado en este dispositivo. Sincronización servidor: ${
+                    err instanceof Error ? err.message : 'error'
+                  }. Si es la primera vez, ejecuta en Supabase el SQL «supabase-pedidos-reception-summaries.sql».`,
+                );
+              });
+            }
+          } catch {
+            /* el resumen es solo UI; no bloquear recepción */
+          }
           const supa = getSupabaseClient();
           if (supa && localId) {
             void notifyPedidoRecibido(supa, {
@@ -1695,6 +1784,7 @@ export default function PedidosPage() {
         .finally(() => setReceivingOrderId((id) => (id === orderId ? null : id)));
     },
     [
+      catalogNameByProductId,
       dispatchPedidosDataChanged,
       displayName,
       flushOrderReceptionDrafts,
@@ -1706,6 +1796,51 @@ export default function PedidosPage() {
       setOrders,
       userId,
     ],
+  );
+
+  const closeRecepcionSummary = React.useCallback(() => {
+    setRecepcionSummaryOpen(false);
+    window.setTimeout(() => setRecepcionSummaryPayload(null), 320);
+  }, []);
+
+  const openRecepcionSummaryFromDb = React.useCallback(
+    async (orderId: string) => {
+      if (!localId) {
+        setMessage('Sesión sin local: no se puede abrir el resumen.');
+        return;
+      }
+      setReceptionSummaryLoadingId(orderId);
+      try {
+        const supabase = getSupabaseClient();
+        let payload =
+          supabase != null
+            ? await fetchPedidosReceptionSummaryPayload(supabase, localId, orderId)
+            : null;
+        if (!payload) {
+          payload = loadRecepcionSummaryLocal(localId, orderId);
+        }
+        if (!payload) {
+          setMessage(
+            'No hay resumen guardado para este pedido en servidor ni en este dispositivo. Valida de nuevo la recepción o ejecuta la migración SQL en Supabase.',
+          );
+          return;
+        }
+        setRecepcionSummaryPayload(payload);
+        requestAnimationFrame(() => setRecepcionSummaryOpen(true));
+      } catch (err) {
+        const fallback = loadRecepcionSummaryLocal(localId, orderId);
+        if (fallback) {
+          setRecepcionSummaryPayload(fallback);
+          requestAnimationFrame(() => setRecepcionSummaryOpen(true));
+          setMessage(null);
+        } else {
+          setMessage(err instanceof Error ? err.message : 'No se pudo cargar el resumen.');
+        }
+      } finally {
+        setReceptionSummaryLoadingId(null);
+      }
+    },
+    [localId],
   );
 
   const setSentOrderPriceReviewed = React.useCallback(
@@ -1880,6 +2015,64 @@ export default function PedidosPage() {
     const label = d.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
     return `Última entrada: ${label}`;
   }, [receivedOrders]);
+
+  const receivedSummaryIdsKey = React.useMemo(
+    () =>
+      receivedOrders
+        .map((o) => o.id)
+        .sort()
+        .join(','),
+    [receivedOrders],
+  );
+
+  React.useEffect(() => {
+    if (!localId || !canUse) return;
+    if (receivedOrders.length === 0) {
+      setReceptionSummaryMetaByOrderId({});
+      return;
+    }
+    const supabase = getSupabaseClient();
+    if (!supabase) return;
+    let cancelled = false;
+    const ids = receivedOrders.map((o) => o.id);
+    void fetchPedidosReceptionSummaryMetaBatch(supabase, localId, ids)
+      .then((map) => {
+        if (cancelled) return;
+        const next: Record<string, PedidosReceptionSummaryMeta> = {};
+        map.forEach((v, k) => {
+          next[k] = v;
+        });
+        for (const o of receivedOrders) {
+          const existing = next[o.id];
+          const localPayload = loadRecepcionSummaryLocal(localId, o.id);
+          const localReceiver = localPayload?.userDisplayName?.trim();
+          if (existing) {
+            if (!existing.receiverDisplayName && localReceiver) {
+              next[o.id] = { ...existing, receiverDisplayName: localReceiver };
+            }
+            continue;
+          }
+          if (localPayload) {
+            next[o.id] = metaFromSummaryPayload(localPayload);
+          }
+        }
+        setReceptionSummaryMetaByOrderId(next);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        const next: Record<string, PedidosReceptionSummaryMeta> = {};
+        for (const o of receivedOrders) {
+          const localPayload = loadRecepcionSummaryLocal(localId, o.id);
+          if (localPayload) {
+            next[o.id] = metaFromSummaryPayload(localPayload);
+          }
+        }
+        setReceptionSummaryMetaByOrderId(next);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [localId, canUse, receivedOrders, receivedSummaryIdsKey]);
 
   const pathname = usePathname();
   const pedidosNavActive = React.useCallback(
@@ -3788,7 +3981,7 @@ export default function PedidosPage() {
   }
 
   return (
-    <div className="space-y-2 sm:space-y-2.5">
+    <div className="space-y-1.5 sm:space-y-2">
       {showDeletedBanner ? (
         <div className="pointer-events-none fixed inset-0 z-[90] grid place-items-center bg-black/25 px-6">
           <div className="rounded-2xl bg-[#D32F2F] px-7 py-5 text-center shadow-2xl ring-2 ring-white/75">
@@ -4014,7 +4207,7 @@ export default function PedidosPage() {
       <details
         id="pedidos-pendientes-entrega"
         className={[
-          'relative overflow-hidden rounded-2xl bg-white transition-[box-shadow,background-color] duration-200 ease-out',
+          'relative overflow-hidden rounded-xl bg-white transition-[box-shadow,background-color] duration-200 ease-out',
           pendientesEntregaAccordionOpen
             ? 'shadow-[0_4px_20px_rgba(0,0,0,0.07)] ring-1 ring-zinc-200/95'
             : 'shadow-[0_2px_14px_rgba(0,0,0,0.06)] ring-1 ring-zinc-200/85 hover:shadow-[0_4px_18px_rgba(0,0,0,0.08)]',
@@ -4023,48 +4216,48 @@ export default function PedidosPage() {
         onToggle={(e) => setPendientesEntregaAccordionOpen(e.currentTarget.open)}
       >
         <summary className="relative flex w-full cursor-pointer list-none flex-col outline-none transition-colors focus-visible:ring-2 focus-visible:ring-[#D32F2F]/40 focus-visible:ring-offset-2 [&::-webkit-details-marker]:hidden">
-          <div className="relative flex gap-3 px-3.5 pb-2 pt-3.5 pl-4 sm:px-4 sm:pt-4">
+          <div className="relative flex items-start gap-2.5 px-3 py-2.5 pl-3 sm:px-3.5">
             <span
-              className="absolute bottom-12 left-0 top-3 w-[3px] rounded-r-full bg-gradient-to-b from-amber-400 via-amber-500 to-orange-500 sm:bottom-14"
+              className="absolute inset-y-2 left-0 w-[2.5px] rounded-r-full bg-gradient-to-b from-amber-400 via-amber-500 to-orange-500"
               aria-hidden
             />
-            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[#D32F2F]/[0.09] ring-1 ring-[#D32F2F]/18 sm:h-12 sm:w-12">
-              <Truck className="h-5 w-5 text-[#D32F2F] sm:h-[1.35rem] sm:w-[1.35rem]" strokeWidth={1.85} aria-hidden />
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#D32F2F]/[0.09] ring-1 ring-[#D32F2F]/18">
+              <Truck className="h-4 w-4 text-[#D32F2F]" strokeWidth={1.85} aria-hidden />
             </div>
             <div className="min-w-0 flex-1 text-left">
-              <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-amber-600">ENTREGA</p>
-              <p className="mt-1 text-lg font-bold leading-tight tracking-tight text-zinc-900 sm:text-xl">
+              <div className="flex items-start justify-between gap-2">
+                <p className="text-[9px] font-bold uppercase tracking-[0.12em] text-amber-600">Entrega</p>
+                <ChevronRight
+                  className={[
+                    'mt-0.5 h-3.5 w-3.5 shrink-0 text-zinc-400 transition-transform duration-200',
+                    pendientesEntregaAccordionOpen ? 'rotate-90' : '',
+                  ].join(' ')}
+                  aria-hidden
+                />
+              </div>
+              <p className="mt-0.5 text-[15px] font-bold leading-snug tracking-tight text-zinc-900 sm:text-base">
                 {sentOrders.length === 0
                   ? 'Sin pedidos pendientes'
                   : `${sentOrders.length} pedido${sentOrders.length === 1 ? '' : 's'} pendiente${sentOrders.length === 1 ? '' : 's'}`}
               </p>
               {pedidosResumenEntrega.lleganHoy > 0 ? (
-                <p className="mt-2 text-[0.8125rem] font-semibold leading-snug text-amber-700 sm:text-sm">
+                <p className="mt-1 text-[11px] font-semibold leading-snug text-amber-700">
                   {pedidosResumenEntrega.lleganHoy === 1
                     ? '1 pedido llega hoy'
                     : `${pedidosResumenEntrega.lleganHoy} pedidos llegan hoy`}
                 </p>
               ) : (
-                <p className="mt-1.5 text-xs font-medium leading-snug text-zinc-600 sm:text-[13px]">
-                  {pedidosResumenEntrega.sub}
-                </p>
+                <p className="mt-1 text-[11px] font-medium leading-snug text-zinc-600">{pedidosResumenEntrega.sub}</p>
               )}
             </div>
           </div>
-          <div className="flex items-center justify-between gap-2 border-t border-zinc-100/95 bg-zinc-50/50 px-3.5 py-2.5 sm:px-4">
-            <span className="flex min-w-0 items-center gap-2 text-xs font-bold text-[#D32F2F] sm:text-[13px]">
-              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[#D32F2F]/12 ring-1 ring-[#D32F2F]/12">
-                <List className="h-3.5 w-3.5 text-[#D32F2F]" strokeWidth={2.25} aria-hidden />
+          <div className="flex items-center justify-between gap-2 border-t border-zinc-100/95 bg-zinc-50/50 px-3 py-1.5 sm:px-3.5">
+            <span className="flex min-w-0 items-center gap-1.5 text-[11px] font-bold text-[#D32F2F]">
+              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-[#D32F2F]/12 ring-1 ring-[#D32F2F]/10">
+                <List className="h-3 w-3 text-[#D32F2F]" strokeWidth={2.25} aria-hidden />
               </span>
               {pendientesEntregaAccordionOpen ? 'Ocultar' : 'Ver pedidos'}
             </span>
-            <ChevronRight
-              className={[
-                'h-4 w-4 shrink-0 text-zinc-400 transition-transform duration-200',
-                pendientesEntregaAccordionOpen ? 'rotate-90' : '',
-              ].join(' ')}
-              aria-hidden
-            />
           </div>
         </summary>
         <div className="space-y-1 border-t border-zinc-100/90 bg-gradient-to-b from-zinc-50/80 to-white px-1.5 pb-1.5 pt-1.5 sm:px-2">
@@ -4113,7 +4306,11 @@ export default function PedidosPage() {
                   : 'bg-amber-500';
             const badgeLabel =
               sentBadge === 'incidencia' ? 'Incidencia' : sentBadge === 'correcto' ? 'Correcto' : 'Pendiente';
-            const requesterName = getPedidoRequesterDisplayName(order);
+            const requesterName =
+              getPedidoRequesterDisplayName(order) ??
+              (order.createdBy && userId && order.createdBy === userId
+                ? actorLabel(displayName, loginUsername)
+                : null);
             return (
             <div key={order.id} className={cardShell}>
               <button
@@ -4125,9 +4322,9 @@ export default function PedidosPage() {
                 ].join(' ')}
                 aria-expanded={detailOpen}
               >
-                <div className="flex flex-col gap-0.5 sm:flex-row sm:items-start sm:justify-between sm:gap-2">
-                  <div className="min-w-0 flex-1">
-                    <div className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5">
+                <div className="flex flex-col gap-0.5">
+                  <div className="flex min-w-0 items-start justify-between gap-2">
+                    <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-1.5 gap-y-0.5">
                       <p className="min-w-0 truncate text-sm font-bold text-zinc-900">{order.supplierName}</p>
                       <span
                         className={[
@@ -4139,38 +4336,38 @@ export default function PedidosPage() {
                       </span>
                     </div>
                     {requesterName ? (
-                      <p className="truncate text-[9px] text-zinc-500" title={requesterName}>
+                      <p
+                        className="max-w-[min(11rem,52%)] shrink-0 truncate text-right text-[10px] font-semibold leading-tight text-zinc-700"
+                        title={requesterName}
+                      >
                         {requesterName}
                       </p>
                     ) : null}
-                    <p className="text-[10px] text-zinc-600">
-                      Env.{' '}
-                      <span className="font-medium text-zinc-800">
-                        {order.sentAt ? new Date(order.sentAt).toLocaleDateString('es-ES') : '—'}
-                      </span>
-                      {order.deliveryDate ? (
-                        <>
-                          <span className="text-zinc-300"> · </span>
-                          Ent.{' '}
-                          <span className="font-medium text-zinc-800">
-                            {new Date(`${order.deliveryDate}T00:00:00`).toLocaleDateString('es-ES')}
-                          </span>
-                        </>
-                      ) : null}
-                      {order.contentRevisedAfterSentAt ? (
-                        <span className="text-[9px] font-semibold text-amber-800"> · Modif.</span>
-                      ) : null}
-                    </p>
-                    <p className="text-[10px] text-zinc-500">
-                      Revisión:{' '}
-                      <span className={order.priceReviewArchivedAt ? 'font-semibold text-emerald-700' : 'font-semibold text-zinc-800'}>
-                        {order.priceReviewArchivedAt ? 'OK' : 'Pend.'}
-                      </span>
-                    </p>
                   </div>
-                  <div className="shrink-0 text-right text-[9px] font-medium leading-tight text-zinc-400 sm:min-w-[4.5rem]">
-                    Totales abajo
-                  </div>
+                  <p className="text-[10px] text-zinc-600">
+                    Env.{' '}
+                    <span className="font-medium text-zinc-800">
+                      {order.sentAt ? new Date(order.sentAt).toLocaleDateString('es-ES') : '—'}
+                    </span>
+                    {order.deliveryDate ? (
+                      <>
+                        <span className="text-zinc-300"> · </span>
+                        Ent.{' '}
+                        <span className="font-medium text-zinc-800">
+                          {new Date(`${order.deliveryDate}T00:00:00`).toLocaleDateString('es-ES')}
+                        </span>
+                      </>
+                    ) : null}
+                    {order.contentRevisedAfterSentAt ? (
+                      <span className="text-[9px] font-semibold text-amber-800"> · Modif.</span>
+                    ) : null}
+                  </p>
+                  <p className="text-[10px] text-zinc-500">
+                    Revisión:{' '}
+                    <span className={order.priceReviewArchivedAt ? 'font-semibold text-emerald-700' : 'font-semibold text-zinc-800'}>
+                      {order.priceReviewArchivedAt ? 'OK' : 'Pend.'}
+                    </span>
+                  </p>
                 </div>
                 <div
                   className={[
@@ -4827,7 +5024,7 @@ export default function PedidosPage() {
       <details
         id="pedidos-historico-recibidos"
         className={[
-          'relative overflow-hidden rounded-2xl bg-white transition-[box-shadow] duration-200',
+          'relative overflow-hidden rounded-xl bg-white transition-[box-shadow] duration-200',
           historicoRecibidosAccordionOpen
             ? 'shadow-[0_4px_20px_rgba(0,0,0,0.07)] ring-1 ring-zinc-200/95'
             : 'shadow-[0_2px_14px_rgba(0,0,0,0.06)] ring-1 ring-zinc-200/85 hover:shadow-[0_4px_18px_rgba(0,0,0,0.08)]',
@@ -4836,41 +5033,43 @@ export default function PedidosPage() {
         onToggle={(e) => setHistoricoRecibidosAccordionOpen(e.currentTarget.open)}
       >
         <summary className="relative flex w-full cursor-pointer list-none flex-col outline-none transition-colors focus-visible:ring-2 focus-visible:ring-[#D32F2F]/40 focus-visible:ring-offset-2 [&::-webkit-details-marker]:hidden">
-          <div className="relative flex gap-3 px-3.5 pb-2 pt-3.5 pl-4 sm:px-4 sm:pt-4">
+          <div className="relative flex items-start gap-2.5 px-3 py-2.5 pl-3 sm:px-3.5">
             <span
-              className="absolute bottom-12 left-0 top-3 w-[3px] rounded-r-full bg-gradient-to-b from-[#D32F2F]/55 via-[#D32F2F] to-[#B91C1C]/90 sm:bottom-14"
+              className="absolute inset-y-2 left-0 w-[2.5px] rounded-r-full bg-gradient-to-b from-[#D32F2F]/55 via-[#D32F2F] to-[#B91C1C]/90"
               aria-hidden
             />
-            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[#D32F2F]/[0.09] ring-1 ring-[#D32F2F]/18 sm:h-12 sm:w-12">
-              <Package className="h-5 w-5 text-[#D32F2F] sm:h-[1.35rem] sm:w-[1.35rem]" strokeWidth={1.85} aria-hidden />
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#D32F2F]/[0.09] ring-1 ring-[#D32F2F]/18">
+              <Package className="h-4 w-4 text-[#D32F2F]" strokeWidth={1.85} aria-hidden />
             </div>
             <div className="min-w-0 flex-1 text-left">
-              <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#B91C1C]">ALMACÉN</p>
-              <p className="mt-1 text-lg font-bold leading-tight tracking-tight text-zinc-900 sm:text-xl">
+              <div className="flex items-start justify-between gap-2">
+                <p className="text-[9px] font-bold uppercase tracking-[0.12em] text-[#B91C1C]">Almacén</p>
+                <ChevronRight
+                  className={[
+                    'mt-0.5 h-3.5 w-3.5 shrink-0 text-zinc-400 transition-transform duration-200',
+                    historicoRecibidosAccordionOpen ? 'rotate-90' : '',
+                  ].join(' ')}
+                  aria-hidden
+                />
+              </div>
+              <p className="mt-0.5 text-[15px] font-bold leading-snug tracking-tight text-zinc-900 sm:text-base">
                 {receivedOrders.length === 0
                   ? 'Sin pedidos recibidos'
                   : `${receivedOrders.length} pedido${receivedOrders.length === 1 ? '' : 's'} recibido${receivedOrders.length === 1 ? '' : 's'}`}
               </p>
-              <p className="mt-1.5 flex items-center gap-1.5 text-xs font-medium leading-snug text-zinc-600 sm:text-[13px]">
+              <p className="mt-1 flex items-center gap-1.5 text-[11px] font-medium leading-snug text-zinc-600">
                 <span className="h-1 w-1 shrink-0 rounded-full bg-[#D32F2F]/70" aria-hidden />
                 {historicoUltimaEntradaLine}
               </p>
             </div>
           </div>
-          <div className="flex items-center justify-between gap-2 border-t border-zinc-100/95 bg-zinc-50/50 px-3.5 py-2.5 sm:px-4">
-            <span className="flex min-w-0 items-center gap-2 text-xs font-bold text-[#D32F2F] sm:text-[13px]">
-              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[#D32F2F]/12 ring-1 ring-[#D32F2F]/12">
-                <BarChart2 className="h-3.5 w-3.5 text-[#D32F2F]" strokeWidth={2.25} aria-hidden />
+          <div className="flex items-center justify-between gap-2 border-t border-zinc-100/95 bg-zinc-50/50 px-3 py-1.5 sm:px-3.5">
+            <span className="flex min-w-0 items-center gap-1.5 text-[11px] font-bold text-[#D32F2F]">
+              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-[#D32F2F]/12 ring-1 ring-[#D32F2F]/10">
+                <BarChart2 className="h-3 w-3 text-[#D32F2F]" strokeWidth={2.25} aria-hidden />
               </span>
               {historicoRecibidosAccordionOpen ? 'Ocultar' : 'Ver historial'}
             </span>
-            <ChevronRight
-              className={[
-                'h-4 w-4 shrink-0 text-zinc-400 transition-transform duration-200',
-                historicoRecibidosAccordionOpen ? 'rotate-90' : '',
-              ].join(' ')}
-              aria-hidden
-            />
           </div>
         </summary>
         <div className="space-y-1.5 border-t border-zinc-100/90 bg-gradient-to-b from-zinc-50/80 to-white px-1.5 pb-1.5 pt-1.5 sm:px-2">
@@ -4903,7 +5102,22 @@ export default function PedidosPage() {
                   const incidentFooterText = historicoIncidentFooterText(order, catalogNameByProductId);
                   const detailOpen = expandedHistoricoId === order.id;
                   const totals = totalsWithVatForOrderListDisplay(order);
-                  const requesterName = getPedidoRequesterDisplayName(order);
+                  const sumMeta = receptionSummaryMetaByOrderId[order.id];
+                  const receiverSummaryLabel = sumMeta?.receiverDisplayName?.trim();
+                  const receiverDisplayName =
+                    (receiverSummaryLabel && receiverSummaryLabel.length > 0 ? receiverSummaryLabel : null) ??
+                    getPedidoRequesterDisplayName(order) ??
+                    (order.createdBy && userId && order.createdBy === userId
+                      ? actorLabel(displayName, loginUsername)
+                      : null);
+                  const badgeClean =
+                    sumMeta &&
+                    sumMeta.hasSnapshot &&
+                    sumMeta.lineasIncidencia === 0 &&
+                    sumMeta.alertasSubidaCount === 0 &&
+                    Math.abs(sumMeta.diferenciaEur) < 0.02;
+                  const showSumBadges = sumMeta?.hasSnapshot;
+                  const diffSig = sumMeta ? Math.abs(sumMeta.diferenciaEur) >= 0.02 : false;
                   return (
                     <div
                       key={order.id}
@@ -4940,10 +5154,29 @@ export default function PedidosPage() {
                                 {needsAttention ? 'Incidencia' : 'Correcto'}
                               </span>
                             </div>
-                            {requesterName ? (
-                              <p className="truncate text-[9px] text-zinc-500" title={requesterName}>
-                                {requesterName}
-                              </p>
+                            {showSumBadges ? (
+                              <div className="mt-0.5 flex flex-wrap items-center gap-0.5">
+                                {badgeClean ? (
+                                  <span className="rounded px-1 py-px text-[7px] font-black uppercase tracking-wide text-emerald-900 ring-1 ring-emerald-200/80 bg-emerald-100">
+                                    OK
+                                  </span>
+                                ) : null}
+                                {!badgeClean && sumMeta && sumMeta.lineasIncidencia > 0 ? (
+                                  <span className="rounded px-1 py-px text-[7px] font-black uppercase tracking-wide text-orange-950 ring-1 ring-orange-200/75 bg-orange-100">
+                                    Incid.
+                                  </span>
+                                ) : null}
+                                {!badgeClean && sumMeta && sumMeta.alertasSubidaCount > 0 ? (
+                                  <span className="rounded px-1 py-px text-[7px] font-black uppercase tracking-wide text-rose-950 ring-1 ring-rose-200/75 bg-rose-100">
+                                    Subidas
+                                  </span>
+                                ) : null}
+                                {!badgeClean && sumMeta && diffSig ? (
+                                  <span className="rounded px-1 py-px text-[7px] font-black uppercase tracking-wide text-zinc-800 ring-1 ring-zinc-200/90 bg-zinc-100">
+                                    Δ €
+                                  </span>
+                                ) : null}
+                              </div>
                             ) : null}
                             <p className="text-[10px] text-zinc-600">
                               Recib.{' '}
@@ -4952,7 +5185,18 @@ export default function PedidosPage() {
                               </span>
                             </p>
                           </div>
-                          <div className="shrink-0 text-right sm:min-w-[5.5rem]" aria-label="Importes del pedido">
+                          <div
+                            className="flex max-w-[min(16rem,55%)] shrink-0 flex-col items-end gap-0.5 text-right sm:min-w-[5.5rem]"
+                            aria-label="Importes del pedido"
+                          >
+                            {receiverDisplayName ? (
+                              <p
+                                className="w-full max-w-full truncate text-[10px] font-semibold leading-tight text-zinc-700"
+                                title={receiverDisplayName}
+                              >
+                                {receiverDisplayName}
+                              </p>
+                            ) : null}
                             <p className="text-sm font-black tabular-nums text-zinc-950">{totals.total.toFixed(2)} €</p>
                             <p className="text-[9px] text-zinc-400">IVA incl.</p>
                             <p className="text-[9px] tabular-nums text-zinc-500">
@@ -4974,6 +5218,22 @@ export default function PedidosPage() {
                           needsAttention ? 'border-red-200/70 bg-white/60' : 'border-emerald-200/70 bg-white/60',
                         ].join(' ')}
                       >
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            void openRecepcionSummaryFromDb(order.id);
+                          }}
+                          disabled={receptionSummaryLoadingId === order.id}
+                          className="flex items-center gap-0.5 rounded border border-[#D32F2F]/30 bg-white px-1.5 py-0.5 text-[10px] font-semibold text-[#B91C1C] shadow-sm disabled:opacity-60"
+                        >
+                          {receptionSummaryLoadingId === order.id ? (
+                            <Loader2 className="h-3 w-3 animate-spin" aria-hidden />
+                          ) : (
+                            <Eye className="h-3 w-3" strokeWidth={2.25} aria-hidden />
+                          )}
+                          Ver resumen
+                        </button>
                         <button
                           type="button"
                           onClick={() => {
@@ -5149,6 +5409,14 @@ export default function PedidosPage() {
           setMessage('Albarán OCR guardado. Revisa cantidades y precios en el pedido.');
         }}
       />
+
+      {recepcionSummaryPayload ? (
+        <PedidosRecepcionSummarySheet
+          open={recepcionSummaryOpen}
+          onClose={closeRecepcionSummary}
+          payload={recepcionSummaryPayload}
+        />
+      ) : null}
     </div>
   );
 }

@@ -310,6 +310,8 @@ export type PedidoOrder = {
   contentRevisedAfterSentAt?: string;
   /** Quién creó o envió el pedido (columna opcional usuario_nombre y/o perfil por created_by). */
   usuarioNombre?: string;
+  /** UUID autenticación (columna `created_by` en purchase_orders); opcional en UI. */
+  createdBy?: string | null;
   /** Alias por si el API expone otro nombre de columna en el futuro. */
   responsableNombre?: string;
   createdByName?: string;
@@ -471,6 +473,14 @@ function isMissingContentRevisedAfterSentColumnError(message: string): boolean {
   );
 }
 
+function isMissingUsuarioNombreColumnError(message: string): boolean {
+  const m = message.toLowerCase();
+  return (
+    m.includes('usuario_nombre') &&
+    (m.includes('column') || m.includes('schema cache') || m.includes('does not exist'))
+  );
+}
+
 function trimRequesterLabel(value: string | null | undefined): string | null {
   if (value == null) return null;
   const t = String(value).trim();
@@ -531,11 +541,11 @@ export function getPedidoRequesterDisplayName(order: PedidoOrder): string | null
 }
 
 const PURCHASE_ORDER_HEADER_SEL_WITH_REVISION =
-  'id,supplier_id,status,notes,created_at,sent_at,received_at,delivery_date,price_review_archived_at,updated_at,content_revised_after_sent_at,created_by,pedido_suppliers(name,contact)';
+  'id,supplier_id,status,notes,created_at,sent_at,received_at,delivery_date,price_review_archived_at,updated_at,content_revised_after_sent_at,created_by,usuario_nombre,pedido_suppliers(name,contact)';
 const PURCHASE_ORDER_HEADER_SEL_WITH_UPDATED =
-  'id,supplier_id,status,notes,created_at,sent_at,received_at,delivery_date,price_review_archived_at,updated_at,created_by,pedido_suppliers(name,contact)';
+  'id,supplier_id,status,notes,created_at,sent_at,received_at,delivery_date,price_review_archived_at,updated_at,created_by,usuario_nombre,pedido_suppliers(name,contact)';
 const PURCHASE_ORDER_HEADER_SEL_LEGACY =
-  'id,supplier_id,status,notes,created_at,sent_at,received_at,delivery_date,price_review_archived_at,created_by,pedido_suppliers(name,contact)';
+  'id,supplier_id,status,notes,created_at,sent_at,received_at,delivery_date,price_review_archived_at,created_by,usuario_nombre,pedido_suppliers(name,contact)';
 
 async function runPurchaseOrderHeaderQuery(
   supabase: SupabaseClient,
@@ -548,12 +558,20 @@ async function runPurchaseOrderHeaderQuery(
     q = apply(q);
     return q.order('created_at', { ascending: false });
   };
-  let res = await runSel(PURCHASE_ORDER_HEADER_SEL_WITH_REVISION);
+  const runSelResilient = async (sel: string) => {
+    let r = await runSel(sel);
+    if (r.error && isMissingUsuarioNombreColumnError(r.error.message)) {
+      const stripped = sel.replace(',usuario_nombre', '');
+      if (stripped !== sel) r = await runSel(stripped);
+    }
+    return r;
+  };
+  let res = await runSelResilient(PURCHASE_ORDER_HEADER_SEL_WITH_REVISION);
   if (res.error && isMissingContentRevisedAfterSentColumnError(res.error.message)) {
-    res = await runSel(PURCHASE_ORDER_HEADER_SEL_WITH_UPDATED);
+    res = await runSelResilient(PURCHASE_ORDER_HEADER_SEL_WITH_UPDATED);
   }
   if (res.error && isMissingPurchaseOrdersUpdatedAtColumnError(res.error.message)) {
-    res = await runSel(PURCHASE_ORDER_HEADER_SEL_LEGACY);
+    res = await runSelResilient(PURCHASE_ORDER_HEADER_SEL_LEGACY);
   }
   if (res.error) throw new Error(res.error.message);
   return (res.data ?? []) as OrderRow[];
@@ -681,6 +699,7 @@ function buildPedidoOrdersFromRows(
         const requester = requesterLabelForOrderRow(row, profileByUserId);
         return requester ? { usuarioNombre: requester } : {};
       })()),
+      ...(row.created_by ? { createdBy: row.created_by } : {}),
       items,
       total: Math.round(
         items.reduce((acc, item) => acc + item.lineTotal + item.lineTotal * Number(item.vatRate ?? 0), 0) * 100,
