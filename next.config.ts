@@ -1,4 +1,9 @@
+import path from "path";
+import { fileURLToPath } from "url";
 import type { NextConfig } from "next";
+
+/** Raíz real del repo (evita que Turbopack use otro lockfile, p. ej. en el directorio home). */
+const turbopackRoot = path.dirname(fileURLToPath(import.meta.url));
 
 const nextConfig: NextConfig = {
   images: {
@@ -9,6 +14,9 @@ const nextConfig: NextConfig = {
   // Evita errores EMFILE en desarrollo usando sondeo en lugar de demasiados file watchers nativos.
   watchOptions: {
     pollIntervalMs: 1000,
+  },
+  turbopack: {
+    root: turbopackRoot,
   },
 };
 

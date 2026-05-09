@@ -3981,7 +3981,7 @@ export default function PedidosPage() {
   }
 
   return (
-    <div className="space-y-1.5 sm:space-y-2">
+    <div className="space-y-2 sm:space-y-2.5">
       {showDeletedBanner ? (
         <div className="pointer-events-none fixed inset-0 z-[90] grid place-items-center bg-black/25 px-6">
           <div className="rounded-2xl bg-[#D32F2F] px-7 py-5 text-center shadow-2xl ring-2 ring-white/75">
@@ -4207,7 +4207,7 @@ export default function PedidosPage() {
       <details
         id="pedidos-pendientes-entrega"
         className={[
-          'relative overflow-hidden rounded-xl bg-white transition-[box-shadow,background-color] duration-200 ease-out',
+          'relative overflow-hidden rounded-2xl bg-white transition-[box-shadow,background-color] duration-200 ease-out',
           pendientesEntregaAccordionOpen
             ? 'shadow-[0_4px_20px_rgba(0,0,0,0.07)] ring-1 ring-zinc-200/95'
             : 'shadow-[0_2px_14px_rgba(0,0,0,0.06)] ring-1 ring-zinc-200/85 hover:shadow-[0_4px_18px_rgba(0,0,0,0.08)]',
@@ -4216,48 +4216,48 @@ export default function PedidosPage() {
         onToggle={(e) => setPendientesEntregaAccordionOpen(e.currentTarget.open)}
       >
         <summary className="relative flex w-full cursor-pointer list-none flex-col outline-none transition-colors focus-visible:ring-2 focus-visible:ring-[#D32F2F]/40 focus-visible:ring-offset-2 [&::-webkit-details-marker]:hidden">
-          <div className="relative flex items-start gap-2.5 px-3 py-2.5 pl-3 sm:px-3.5">
+          <div className="relative flex gap-3 px-3.5 pb-2 pt-3.5 pl-4 sm:px-4 sm:pt-4">
             <span
-              className="absolute inset-y-2 left-0 w-[2.5px] rounded-r-full bg-gradient-to-b from-amber-400 via-amber-500 to-orange-500"
+              className="absolute bottom-12 left-0 top-3 w-[3px] rounded-r-full bg-gradient-to-b from-amber-400 via-amber-500 to-orange-500 sm:bottom-14"
               aria-hidden
             />
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#D32F2F]/[0.09] ring-1 ring-[#D32F2F]/18">
-              <Truck className="h-4 w-4 text-[#D32F2F]" strokeWidth={1.85} aria-hidden />
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[#D32F2F]/[0.09] ring-1 ring-[#D32F2F]/18 sm:h-12 sm:w-12">
+              <Truck className="h-5 w-5 text-[#D32F2F] sm:h-[1.35rem] sm:w-[1.35rem]" strokeWidth={1.85} aria-hidden />
             </div>
             <div className="min-w-0 flex-1 text-left">
-              <div className="flex items-start justify-between gap-2">
-                <p className="text-[9px] font-bold uppercase tracking-[0.12em] text-amber-600">Entrega</p>
-                <ChevronRight
-                  className={[
-                    'mt-0.5 h-3.5 w-3.5 shrink-0 text-zinc-400 transition-transform duration-200',
-                    pendientesEntregaAccordionOpen ? 'rotate-90' : '',
-                  ].join(' ')}
-                  aria-hidden
-                />
-              </div>
-              <p className="mt-0.5 text-[15px] font-bold leading-snug tracking-tight text-zinc-900 sm:text-base">
+              <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-amber-600">ENTREGA</p>
+              <p className="mt-1 text-lg font-bold leading-tight tracking-tight text-zinc-900 sm:text-xl">
                 {sentOrders.length === 0
                   ? 'Sin pedidos pendientes'
                   : `${sentOrders.length} pedido${sentOrders.length === 1 ? '' : 's'} pendiente${sentOrders.length === 1 ? '' : 's'}`}
               </p>
               {pedidosResumenEntrega.lleganHoy > 0 ? (
-                <p className="mt-1 text-[11px] font-semibold leading-snug text-amber-700">
+                <p className="mt-2 text-[0.8125rem] font-semibold leading-snug text-amber-700 sm:text-sm">
                   {pedidosResumenEntrega.lleganHoy === 1
                     ? '1 pedido llega hoy'
                     : `${pedidosResumenEntrega.lleganHoy} pedidos llegan hoy`}
                 </p>
               ) : (
-                <p className="mt-1 text-[11px] font-medium leading-snug text-zinc-600">{pedidosResumenEntrega.sub}</p>
+                <p className="mt-1.5 text-xs font-medium leading-snug text-zinc-600 sm:text-[13px]">
+                  {pedidosResumenEntrega.sub}
+                </p>
               )}
             </div>
           </div>
-          <div className="flex items-center justify-between gap-2 border-t border-zinc-100/95 bg-zinc-50/50 px-3 py-1.5 sm:px-3.5">
-            <span className="flex min-w-0 items-center gap-1.5 text-[11px] font-bold text-[#D32F2F]">
-              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-[#D32F2F]/12 ring-1 ring-[#D32F2F]/10">
-                <List className="h-3 w-3 text-[#D32F2F]" strokeWidth={2.25} aria-hidden />
+          <div className="flex items-center justify-between gap-2 border-t border-zinc-100/95 bg-zinc-50/50 px-3.5 py-2.5 sm:px-4">
+            <span className="flex min-w-0 items-center gap-2 text-xs font-bold text-[#D32F2F] sm:text-[13px]">
+              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[#D32F2F]/12 ring-1 ring-[#D32F2F]/12">
+                <List className="h-3.5 w-3.5 text-[#D32F2F]" strokeWidth={2.25} aria-hidden />
               </span>
               {pendientesEntregaAccordionOpen ? 'Ocultar' : 'Ver pedidos'}
             </span>
+            <ChevronRight
+              className={[
+                'h-4 w-4 shrink-0 text-zinc-400 transition-transform duration-200',
+                pendientesEntregaAccordionOpen ? 'rotate-90' : '',
+              ].join(' ')}
+              aria-hidden
+            />
           </div>
         </summary>
         <div className="space-y-1 border-t border-zinc-100/90 bg-gradient-to-b from-zinc-50/80 to-white px-1.5 pb-1.5 pt-1.5 sm:px-2">
@@ -4285,7 +4285,7 @@ export default function PedidosPage() {
                 : 'pendiente';
             const detailOpen = expandedSentId === order.id;
             const cardShell = [
-              'overflow-hidden rounded-lg transition-colors',
+              'overflow-hidden rounded-md transition-colors',
               sentBadge === 'incidencia'
                 ? detailOpen
                   ? 'bg-red-50 ring-1 ring-red-400/80'
@@ -4317,18 +4317,18 @@ export default function PedidosPage() {
                 type="button"
                 onClick={() => setExpandedSentId((prev) => (prev === order.id ? null : order.id))}
                 className={[
-                  'w-full px-2 py-1 text-left outline-none transition focus-visible:ring-2 focus-visible:ring-[#D32F2F]/35 focus-visible:ring-offset-1',
+                  'w-full px-1.5 py-0.5 text-left outline-none transition focus-visible:ring-2 focus-visible:ring-[#D32F2F]/35 focus-visible:ring-offset-1',
                   sentBadge === 'incidencia' ? 'active:bg-red-100/40' : sentBadge === 'correcto' ? 'active:bg-emerald-100/40' : 'active:bg-amber-100/40',
                 ].join(' ')}
                 aria-expanded={detailOpen}
               >
-                <div className="flex flex-col gap-0.5">
-                  <div className="flex min-w-0 items-start justify-between gap-2">
-                    <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-1.5 gap-y-0.5">
-                      <p className="min-w-0 truncate text-sm font-bold text-zinc-900">{order.supplierName}</p>
+                <div className="flex flex-col gap-px">
+                  <div className="flex min-w-0 items-start justify-between gap-1.5">
+                    <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-1 gap-y-px">
+                      <p className="min-w-0 truncate text-[13px] font-bold leading-tight text-zinc-900">{order.supplierName}</p>
                       <span
                         className={[
-                          'shrink-0 rounded px-1 py-px text-[8px] font-bold uppercase tracking-wide text-white',
+                          'shrink-0 rounded px-1 py-px text-[7px] font-bold uppercase tracking-wide text-white',
                           badgeClass,
                         ].join(' ')}
                       >
@@ -4337,33 +4337,26 @@ export default function PedidosPage() {
                     </div>
                     {requesterName ? (
                       <p
-                        className="max-w-[min(11rem,52%)] shrink-0 truncate text-right text-[10px] font-semibold leading-tight text-zinc-700"
+                        className="max-w-[45%] shrink-0 truncate text-right text-[9px] font-semibold leading-tight text-zinc-600"
                         title={requesterName}
                       >
                         {requesterName}
                       </p>
                     ) : null}
                   </div>
-                  <p className="text-[10px] text-zinc-600">
-                    Env.{' '}
-                    <span className="font-medium text-zinc-800">
-                      {order.sentAt ? new Date(order.sentAt).toLocaleDateString('es-ES') : '—'}
+                  <p className="line-clamp-2 text-[9px] leading-snug text-zinc-600">
+                    <span className="font-medium text-zinc-700">
+                      Env. {order.sentAt ? new Date(order.sentAt).toLocaleDateString('es-ES') : '—'}
                     </span>
                     {order.deliveryDate ? (
                       <>
-                        <span className="text-zinc-300"> · </span>
-                        Ent.{' '}
-                        <span className="font-medium text-zinc-800">
-                          {new Date(`${order.deliveryDate}T00:00:00`).toLocaleDateString('es-ES')}
-                        </span>
+                        {' '}
+                        · Ent. {new Date(`${order.deliveryDate}T00:00:00`).toLocaleDateString('es-ES')}
                       </>
                     ) : null}
-                    {order.contentRevisedAfterSentAt ? (
-                      <span className="text-[9px] font-semibold text-amber-800"> · Modif.</span>
-                    ) : null}
-                  </p>
-                  <p className="text-[10px] text-zinc-500">
-                    Revisión:{' '}
+                    {order.contentRevisedAfterSentAt ? <span className="font-semibold text-amber-800"> · Modif.</span> : null}
+                    {' · '}
+                    Rev.{' '}
                     <span className={order.priceReviewArchivedAt ? 'font-semibold text-emerald-700' : 'font-semibold text-zinc-800'}>
                       {order.priceReviewArchivedAt ? 'OK' : 'Pend.'}
                     </span>
@@ -4371,7 +4364,7 @@ export default function PedidosPage() {
                 </div>
                 <div
                   className={[
-                    'mt-0.5 flex items-center justify-center gap-0.5 border-t pt-0.5 text-[9px] font-semibold text-[#B91C1C]',
+                    'mt-0.5 flex items-center justify-center gap-0.5 border-t pt-px text-[8px] font-semibold text-[#B91C1C]',
                     sentBadge === 'incidencia'
                       ? 'border-red-200/35'
                       : sentBadge === 'correcto'
@@ -4381,14 +4374,14 @@ export default function PedidosPage() {
                 >
                   {detailOpen ? 'Ocultar líneas' : 'Líneas'}
                   <ChevronDown
-                    className={['h-3 w-3 transition-transform', detailOpen ? 'rotate-180' : ''].join(' ')}
+                    className={['h-2.5 w-2.5 transition-transform', detailOpen ? 'rotate-180' : ''].join(' ')}
                     aria-hidden
                   />
                 </div>
               </button>
               <div
                 className={[
-                  'grid w-full grid-cols-5 gap-0.5 border-t px-0.5 py-1',
+                  'grid w-full grid-cols-5 gap-0.5 border-t px-0.5 py-0.5',
                   sentBadge === 'incidencia'
                     ? 'border-red-200/60 bg-white/50'
                     : sentBadge === 'correcto'
@@ -4399,7 +4392,7 @@ export default function PedidosPage() {
                 <Link
                   href={`/pedidos/nuevo?id=${encodeURIComponent(order.id)}`}
                   onClick={(e) => e.stopPropagation()}
-                  className="flex min-h-[2.35rem] flex-col items-center justify-center gap-px rounded-md border border-zinc-200/90 bg-zinc-50/90 px-0.5 py-0.5 text-zinc-800 transition hover:bg-zinc-100 active:bg-zinc-100/80"
+                  className="flex min-h-[2rem] flex-col items-center justify-center gap-px rounded-md border border-zinc-200/90 bg-zinc-50/90 px-0.5 py-0.5 text-zinc-800 transition hover:bg-zinc-100 active:bg-zinc-100/80"
                   title="Editar pedido"
                   aria-label="Editar pedido"
                 >
@@ -4409,7 +4402,7 @@ export default function PedidosPage() {
                 <button
                   type="button"
                   onClick={() => sendWhatsappOrder(order)}
-                  className="flex min-h-[2.35rem] flex-col items-center justify-center gap-px rounded-md border border-[#128C7E]/35 bg-[#25D366] px-0.5 py-0.5 text-white shadow-sm transition hover:bg-[#20BD5A] active:brightness-95"
+                  className="flex min-h-[2rem] flex-col items-center justify-center gap-px rounded-md border border-[#128C7E]/35 bg-[#25D366] px-0.5 py-0.5 text-white shadow-sm transition hover:bg-[#20BD5A] active:brightness-95"
                   title="WhatsApp"
                   aria-label="Enviar pedido por WhatsApp"
                 >
@@ -4419,7 +4412,7 @@ export default function PedidosPage() {
                 <Link
                   href={`/pedidos/nuevo?duplicateFrom=${encodeURIComponent(order.id)}`}
                   onClick={(e) => e.stopPropagation()}
-                  className="flex min-h-[2.35rem] flex-col items-center justify-center gap-px rounded-md border border-zinc-200/90 bg-white px-0.5 py-0.5 text-zinc-800 shadow-sm transition hover:bg-zinc-50 active:bg-zinc-100/80"
+                  className="flex min-h-[2rem] flex-col items-center justify-center gap-px rounded-md border border-zinc-200/90 bg-white px-0.5 py-0.5 text-zinc-800 shadow-sm transition hover:bg-zinc-50 active:bg-zinc-100/80"
                   title="Duplicar como nuevo borrador"
                   aria-label="Duplicar pedido"
                 >
@@ -4432,7 +4425,7 @@ export default function PedidosPage() {
                     e.stopPropagation();
                     setSaveTemplateOrder(order);
                   }}
-                  className="flex min-h-[2.35rem] flex-col items-center justify-center gap-px rounded-md border border-[#D32F2F]/35 bg-[#FFF7F5] px-0.5 py-0.5 text-[#7F1D1D] shadow-sm transition hover:bg-[#FFF0EE] active:bg-[#FFE8E5]"
+                  className="flex min-h-[2rem] flex-col items-center justify-center gap-px rounded-md border border-[#D32F2F]/35 bg-[#FFF7F5] px-0.5 py-0.5 text-[#7F1D1D] shadow-sm transition hover:bg-[#FFF0EE] active:bg-[#FFE8E5]"
                   title="Guardar como plantilla"
                   aria-label="Guardar como plantilla"
                 >
@@ -4465,7 +4458,7 @@ export default function PedidosPage() {
                       })
                       .catch((err: Error) => setMessage(err.message));
                   }}
-                  className="flex min-h-[2.35rem] flex-col items-center justify-center gap-px rounded-md border border-rose-200/90 bg-rose-50/90 px-0.5 py-0.5 text-rose-900 transition hover:bg-rose-100/90 active:bg-rose-100"
+                  className="flex min-h-[2rem] flex-col items-center justify-center gap-px rounded-md border border-rose-200/90 bg-rose-50/90 px-0.5 py-0.5 text-rose-900 transition hover:bg-rose-100/90 active:bg-rose-100"
                   title="Eliminar pedido"
                   aria-label="Eliminar pedido"
                 >
@@ -5024,7 +5017,7 @@ export default function PedidosPage() {
       <details
         id="pedidos-historico-recibidos"
         className={[
-          'relative overflow-hidden rounded-xl bg-white transition-[box-shadow] duration-200',
+          'relative overflow-hidden rounded-2xl bg-white transition-[box-shadow] duration-200',
           historicoRecibidosAccordionOpen
             ? 'shadow-[0_4px_20px_rgba(0,0,0,0.07)] ring-1 ring-zinc-200/95'
             : 'shadow-[0_2px_14px_rgba(0,0,0,0.06)] ring-1 ring-zinc-200/85 hover:shadow-[0_4px_18px_rgba(0,0,0,0.08)]',
@@ -5033,43 +5026,41 @@ export default function PedidosPage() {
         onToggle={(e) => setHistoricoRecibidosAccordionOpen(e.currentTarget.open)}
       >
         <summary className="relative flex w-full cursor-pointer list-none flex-col outline-none transition-colors focus-visible:ring-2 focus-visible:ring-[#D32F2F]/40 focus-visible:ring-offset-2 [&::-webkit-details-marker]:hidden">
-          <div className="relative flex items-start gap-2.5 px-3 py-2.5 pl-3 sm:px-3.5">
+          <div className="relative flex gap-3 px-3.5 pb-2 pt-3.5 pl-4 sm:px-4 sm:pt-4">
             <span
-              className="absolute inset-y-2 left-0 w-[2.5px] rounded-r-full bg-gradient-to-b from-[#D32F2F]/55 via-[#D32F2F] to-[#B91C1C]/90"
+              className="absolute bottom-12 left-0 top-3 w-[3px] rounded-r-full bg-gradient-to-b from-[#D32F2F]/55 via-[#D32F2F] to-[#B91C1C]/90 sm:bottom-14"
               aria-hidden
             />
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#D32F2F]/[0.09] ring-1 ring-[#D32F2F]/18">
-              <Package className="h-4 w-4 text-[#D32F2F]" strokeWidth={1.85} aria-hidden />
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[#D32F2F]/[0.09] ring-1 ring-[#D32F2F]/18 sm:h-12 sm:w-12">
+              <Package className="h-5 w-5 text-[#D32F2F] sm:h-[1.35rem] sm:w-[1.35rem]" strokeWidth={1.85} aria-hidden />
             </div>
             <div className="min-w-0 flex-1 text-left">
-              <div className="flex items-start justify-between gap-2">
-                <p className="text-[9px] font-bold uppercase tracking-[0.12em] text-[#B91C1C]">Almacén</p>
-                <ChevronRight
-                  className={[
-                    'mt-0.5 h-3.5 w-3.5 shrink-0 text-zinc-400 transition-transform duration-200',
-                    historicoRecibidosAccordionOpen ? 'rotate-90' : '',
-                  ].join(' ')}
-                  aria-hidden
-                />
-              </div>
-              <p className="mt-0.5 text-[15px] font-bold leading-snug tracking-tight text-zinc-900 sm:text-base">
+              <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#B91C1C]">ALMACÉN</p>
+              <p className="mt-1 text-lg font-bold leading-tight tracking-tight text-zinc-900 sm:text-xl">
                 {receivedOrders.length === 0
                   ? 'Sin pedidos recibidos'
                   : `${receivedOrders.length} pedido${receivedOrders.length === 1 ? '' : 's'} recibido${receivedOrders.length === 1 ? '' : 's'}`}
               </p>
-              <p className="mt-1 flex items-center gap-1.5 text-[11px] font-medium leading-snug text-zinc-600">
+              <p className="mt-1.5 flex items-center gap-1.5 text-xs font-medium leading-snug text-zinc-600 sm:text-[13px]">
                 <span className="h-1 w-1 shrink-0 rounded-full bg-[#D32F2F]/70" aria-hidden />
                 {historicoUltimaEntradaLine}
               </p>
             </div>
           </div>
-          <div className="flex items-center justify-between gap-2 border-t border-zinc-100/95 bg-zinc-50/50 px-3 py-1.5 sm:px-3.5">
-            <span className="flex min-w-0 items-center gap-1.5 text-[11px] font-bold text-[#D32F2F]">
-              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-[#D32F2F]/12 ring-1 ring-[#D32F2F]/10">
-                <BarChart2 className="h-3 w-3 text-[#D32F2F]" strokeWidth={2.25} aria-hidden />
+          <div className="flex items-center justify-between gap-2 border-t border-zinc-100/95 bg-zinc-50/50 px-3.5 py-2.5 sm:px-4">
+            <span className="flex min-w-0 items-center gap-2 text-xs font-bold text-[#D32F2F] sm:text-[13px]">
+              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[#D32F2F]/12 ring-1 ring-[#D32F2F]/12">
+                <BarChart2 className="h-3.5 w-3.5 text-[#D32F2F]" strokeWidth={2.25} aria-hidden />
               </span>
               {historicoRecibidosAccordionOpen ? 'Ocultar' : 'Ver historial'}
             </span>
+            <ChevronRight
+              className={[
+                'h-4 w-4 shrink-0 text-zinc-400 transition-transform duration-200',
+                historicoRecibidosAccordionOpen ? 'rotate-90' : '',
+              ].join(' ')}
+              aria-hidden
+            />
           </div>
         </summary>
         <div className="space-y-1.5 border-t border-zinc-100/90 bg-gradient-to-b from-zinc-50/80 to-white px-1.5 pb-1.5 pt-1.5 sm:px-2">
@@ -5096,7 +5087,7 @@ export default function PedidosPage() {
                   />
                 </span>
               </summary>
-              <div className="space-y-1.5 border-t border-zinc-100 bg-zinc-50/40 px-1.5 pb-1.5 pt-1.5">
+              <div className="space-y-1 border-t border-zinc-100 bg-zinc-50/40 px-1 pb-1 pt-1">
                 {monthOrders.map((order) => {
                   const needsAttention = receivedOrderHasAttention(order);
                   const incidentFooterText = historicoIncidentFooterText(order, catalogNameByProductId);
@@ -5122,7 +5113,7 @@ export default function PedidosPage() {
                     <div
                       key={order.id}
                       className={[
-                        'overflow-hidden rounded-lg transition-colors',
+                        'overflow-hidden rounded-md transition-colors',
                         needsAttention
                           ? detailOpen
                             ? 'bg-red-50 ring-1 ring-red-400/90'
@@ -5136,85 +5127,88 @@ export default function PedidosPage() {
                         type="button"
                         onClick={() => setExpandedHistoricoId((prev) => (prev === order.id ? null : order.id))}
                         className={[
-                          'w-full px-2 py-1 text-left outline-none transition focus-visible:ring-2 focus-visible:ring-[#D32F2F]/35 focus-visible:ring-offset-1',
+                          'w-full px-1 py-px text-left outline-none transition focus-visible:ring-2 focus-visible:ring-[#D32F2F]/35 focus-visible:ring-offset-1',
                           needsAttention ? 'active:bg-red-100/40' : 'active:bg-emerald-100/40',
                         ].join(' ')}
                         aria-expanded={detailOpen}
                       >
-                        <div className="flex flex-col gap-0.5 sm:flex-row sm:items-start sm:justify-between sm:gap-2">
-                          <div className="min-w-0 flex-1">
-                            <div className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5">
-                              <span className="truncate text-sm font-bold text-zinc-900">{order.supplierName}</span>
+                        <div className="flex items-start justify-between gap-1.5">
+                          <div className="min-w-0 flex-1 space-y-0">
+                            <div className="flex flex-wrap items-center gap-x-1 gap-y-px">
+                              <span className="truncate text-[12px] font-bold leading-none text-zinc-900">{order.supplierName}</span>
                               <span
                                 className={[
-                                  'shrink-0 rounded px-1 py-px text-[8px] font-bold uppercase tracking-wide text-white',
+                                  'shrink-0 rounded px-1 py-px text-[7px] font-bold uppercase tracking-wide text-white',
                                   needsAttention ? 'bg-red-600' : 'bg-emerald-600',
                                 ].join(' ')}
                               >
                                 {needsAttention ? 'Incidencia' : 'Correcto'}
                               </span>
+                              {showSumBadges ? (
+                                <span className="flex flex-wrap items-center gap-0.5">
+                                  {badgeClean ? (
+                                    <span className="rounded px-1 py-px text-[6px] font-black uppercase tracking-wide text-emerald-900 ring-1 ring-emerald-200/80 bg-emerald-100">
+                                      OK
+                                    </span>
+                                  ) : null}
+                                  {!badgeClean && sumMeta && sumMeta.lineasIncidencia > 0 ? (
+                                    <span className="rounded px-1 py-px text-[6px] font-black uppercase tracking-wide text-orange-950 ring-1 ring-orange-200/75 bg-orange-100">
+                                      Incid.
+                                    </span>
+                                  ) : null}
+                                  {!badgeClean && sumMeta && sumMeta.alertasSubidaCount > 0 ? (
+                                    <span className="rounded px-1 py-px text-[6px] font-black uppercase tracking-wide text-rose-950 ring-1 ring-rose-200/75 bg-rose-100">
+                                      Subidas
+                                    </span>
+                                  ) : null}
+                                  {!badgeClean && sumMeta && diffSig ? (
+                                    <span className="rounded px-1 py-px text-[6px] font-black uppercase tracking-wide text-zinc-800 ring-1 ring-zinc-200/90 bg-zinc-100">
+                                      Δ €
+                                    </span>
+                                  ) : null}
+                                </span>
+                              ) : null}
                             </div>
-                            {showSumBadges ? (
-                              <div className="mt-0.5 flex flex-wrap items-center gap-0.5">
-                                {badgeClean ? (
-                                  <span className="rounded px-1 py-px text-[7px] font-black uppercase tracking-wide text-emerald-900 ring-1 ring-emerald-200/80 bg-emerald-100">
-                                    OK
-                                  </span>
-                                ) : null}
-                                {!badgeClean && sumMeta && sumMeta.lineasIncidencia > 0 ? (
-                                  <span className="rounded px-1 py-px text-[7px] font-black uppercase tracking-wide text-orange-950 ring-1 ring-orange-200/75 bg-orange-100">
-                                    Incid.
-                                  </span>
-                                ) : null}
-                                {!badgeClean && sumMeta && sumMeta.alertasSubidaCount > 0 ? (
-                                  <span className="rounded px-1 py-px text-[7px] font-black uppercase tracking-wide text-rose-950 ring-1 ring-rose-200/75 bg-rose-100">
-                                    Subidas
-                                  </span>
-                                ) : null}
-                                {!badgeClean && sumMeta && diffSig ? (
-                                  <span className="rounded px-1 py-px text-[7px] font-black uppercase tracking-wide text-zinc-800 ring-1 ring-zinc-200/90 bg-zinc-100">
-                                    Δ €
-                                  </span>
-                                ) : null}
-                              </div>
-                            ) : null}
-                            <p className="text-[10px] text-zinc-600">
+                            <p
+                              className="truncate text-[8px] leading-tight text-zinc-600"
+                              title={
+                                receiverDisplayName
+                                  ? `Recib. ${
+                                      order.receivedAt ? new Date(order.receivedAt).toLocaleDateString('es-ES') : '—'
+                                    } · ${receiverDisplayName}`
+                                  : undefined
+                              }
+                            >
                               Recib.{' '}
                               <span className="font-medium text-zinc-800">
                                 {order.receivedAt ? new Date(order.receivedAt).toLocaleDateString('es-ES') : '—'}
                               </span>
+                              {receiverDisplayName ? (
+                                <>
+                                  {' '}
+                                  · <span className="font-medium text-zinc-700">{receiverDisplayName}</span>
+                                </>
+                              ) : null}
                             </p>
                           </div>
-                          <div
-                            className="flex max-w-[min(16rem,55%)] shrink-0 flex-col items-end gap-0.5 text-right sm:min-w-[5.5rem]"
-                            aria-label="Importes del pedido"
-                          >
-                            {receiverDisplayName ? (
-                              <p
-                                className="w-full max-w-full truncate text-[10px] font-semibold leading-tight text-zinc-700"
-                                title={receiverDisplayName}
-                              >
-                                {receiverDisplayName}
-                              </p>
-                            ) : null}
-                            <p className="text-sm font-black tabular-nums text-zinc-950">{totals.total.toFixed(2)} €</p>
-                            <p className="text-[9px] text-zinc-400">IVA incl.</p>
-                            <p className="text-[9px] tabular-nums text-zinc-500">
-                              {totals.base.toFixed(2)} + {totals.vat.toFixed(2)}
+                          <div className="shrink-0 text-right leading-none" aria-label="Importes del pedido">
+                            <p className="text-[11px] font-black tabular-nums text-zinc-950">{totals.total.toFixed(2)} €</p>
+                            <p className="mt-px text-[7px] tabular-nums leading-none text-zinc-500">
+                              {totals.base.toFixed(2)}+{totals.vat.toFixed(2)} IVA
                             </p>
                           </div>
                         </div>
-                        <div className="mt-0.5 flex items-center justify-center gap-0.5 border-t border-zinc-200/35 pt-0.5 text-[9px] font-semibold text-[#B91C1C]">
+                        <div className="mt-px flex items-center justify-center gap-0.5 border-t border-zinc-200/25 pt-px text-[7px] font-semibold text-[#B91C1C]">
                           {detailOpen ? 'Ocultar líneas' : 'Líneas'}
                           <ChevronDown
-                            className={['h-3 w-3 transition-transform', detailOpen ? 'rotate-180' : ''].join(' ')}
+                            className={['h-2.5 w-2.5 transition-transform', detailOpen ? 'rotate-180' : ''].join(' ')}
                             aria-hidden
                           />
                         </div>
                       </button>
                       <div
                         className={[
-                          'flex flex-wrap items-center justify-end gap-1 border-t px-2 py-1',
+                          'flex flex-wrap items-center justify-end gap-px border-t px-1 py-px',
                           needsAttention ? 'border-red-200/70 bg-white/60' : 'border-emerald-200/70 bg-white/60',
                         ].join(' ')}
                       >
@@ -5225,7 +5219,7 @@ export default function PedidosPage() {
                             void openRecepcionSummaryFromDb(order.id);
                           }}
                           disabled={receptionSummaryLoadingId === order.id}
-                          className="flex items-center gap-0.5 rounded border border-[#D32F2F]/30 bg-white px-1.5 py-0.5 text-[10px] font-semibold text-[#B91C1C] shadow-sm disabled:opacity-60"
+                          className="flex items-center gap-px rounded border border-[#D32F2F]/30 bg-white px-1 py-px text-[8px] font-semibold leading-none text-[#B91C1C] shadow-sm disabled:opacity-60"
                         >
                           {receptionSummaryLoadingId === order.id ? (
                             <Loader2 className="h-3 w-3 animate-spin" aria-hidden />
@@ -5254,7 +5248,7 @@ export default function PedidosPage() {
                                 .catch((err: Error) => setMessage(err.message));
                             })();
                           }}
-                          className="rounded border border-zinc-300 bg-white px-1.5 py-0.5 text-center text-[10px] font-semibold text-zinc-800"
+                          className="rounded border border-zinc-300 bg-white px-1 py-px text-center text-[8px] font-semibold leading-none text-zinc-800"
                         >
                           A enviados
                         </button>
@@ -5286,7 +5280,7 @@ export default function PedidosPage() {
                               })
                               .catch((err: Error) => setMessage(err.message));
                           }}
-                          className="rounded border border-zinc-300 bg-white px-1.5 py-0.5 text-center text-[10px] font-semibold text-[#B91C1C]"
+                          className="rounded border border-zinc-300 bg-white px-1 py-px text-center text-[8px] font-semibold leading-none text-[#B91C1C]"
                         >
                           Eliminar
                         </button>
@@ -5294,19 +5288,19 @@ export default function PedidosPage() {
                       {expandedHistoricoId === order.id ? (
                         <div
                           className={[
-                            'space-y-1.5 border-t px-2 pb-2 pt-1.5 text-left',
+                            'space-y-px border-t px-1 pb-1 pt-1 text-left',
                             needsAttention
                               ? 'border-red-200/60 bg-red-50/40'
                               : 'border-emerald-200/60 bg-emerald-50/35',
                           ].join(' ')}
                         >
-                          <p className="text-center text-[9px] font-semibold uppercase tracking-[0.14em] text-zinc-400">
+                          <p className="mb-px text-center text-[7px] font-semibold uppercase tracking-[0.12em] text-zinc-400">
                             Líneas
                           </p>
                           {order.notes?.trim() ? (
-                            <div className="rounded border border-zinc-200/90 bg-white px-2 py-1">
-                              <p className="text-[9px] font-bold uppercase tracking-wide text-zinc-500">Notas</p>
-                              <p className="mt-0.5 text-[11px] leading-snug text-zinc-800">{order.notes.trim()}</p>
+                            <div className="rounded border border-zinc-200/90 bg-white px-1 py-px">
+                              <p className="text-[7px] font-bold uppercase tracking-wide text-zinc-500">Notas</p>
+                              <p className="text-[9px] leading-tight text-zinc-800">{order.notes.trim()}</p>
                             </div>
                           ) : null}
                           {order.items.map((item) => {
@@ -5315,18 +5309,28 @@ export default function PedidosPage() {
                             const isOk = !inc && item.receivedQuantity >= item.quantity && item.quantity > 0;
                             const histSummary = receptionBillingSummary(item);
                             const lineSub = lineSubtotalForOrderListDisplay(item);
+                            const pedidoTxt = formatQuantityWithUnit(item.quantity, item.unit);
+                            const detalleLinea = [
+                              `Ped. ${pedidoTxt}`,
+                              histSummary.recibido ? `Rec. ${histSummary.recibido}` : null,
+                              histSummary.precioAplicado ? histSummary.precioAplicado : null,
+                              receptionBillsByWeight(item) &&
+                              item.receivedWeightKg != null &&
+                              item.receivedWeightKg > 0
+                                ? `${item.receivedWeightKg.toFixed(2)} kg`
+                                : null,
+                            ]
+                              .filter(Boolean)
+                              .join(' · ');
                             return (
                               <div
                                 key={item.id}
-                                className="rounded-md border border-zinc-200/90 bg-white px-2 py-1 shadow-sm"
+                                className="rounded border border-zinc-200/80 bg-white/95 px-1 py-px shadow-sm"
                               >
-                                <div className="flex items-start justify-between gap-2">
-                                  <p className="min-w-0 flex-1 text-[11px] font-bold leading-tight text-zinc-900">
-                                    {lineLabel(item)}
-                                  </p>
+                                <div className="flex items-start gap-1">
                                   <span
                                     className={[
-                                      'grid h-5 w-5 shrink-0 place-items-center rounded-full border text-[10px] font-black leading-none',
+                                      'mt-px grid h-3.5 w-3.5 shrink-0 place-items-center rounded-full border text-[8px] font-black leading-none',
                                       isOk
                                         ? 'border-emerald-600 bg-emerald-600 text-white'
                                         : isBad
@@ -5338,43 +5342,30 @@ export default function PedidosPage() {
                                   >
                                     {isOk ? '\u2713' : isBad ? '\u2715' : '\u00B7'}
                                   </span>
+                                  <div className="min-w-0 flex-1">
+                                    <div className="flex items-baseline justify-between gap-1">
+                                      <p className="min-w-0 truncate text-[9px] font-semibold leading-tight text-zinc-900">
+                                        {lineLabel(item)}
+                                      </p>
+                                      <span className="shrink-0 text-[9px] font-bold tabular-nums text-zinc-900">
+                                        {lineSub.toFixed(2)} €
+                                      </span>
+                                    </div>
+                                    <p className="truncate text-[7px] leading-tight text-zinc-500" title={detalleLinea}>
+                                      {detalleLinea}
+                                      {histSummary.precioEquivCatalogo ? (
+                                        <span className="text-zinc-400"> · {histSummary.precioEquivCatalogo}</span>
+                                      ) : null}
+                                    </p>
+                                  </div>
                                 </div>
-                                <div className="mt-1 grid grid-cols-1 gap-x-2 gap-y-0.5 text-[10px] leading-snug text-zinc-600 sm:grid-cols-2">
-                                  <p>
-                                    <span className="font-semibold text-zinc-500">Pedido</span>{' '}
-                                    {formatQuantityWithUnit(item.quantity, item.unit)}
-                                  </p>
-                                  <p>
-                                    <span className="font-semibold text-zinc-500">Recibido</span> {histSummary.recibido}
-                                  </p>
-                                  <p className="sm:col-span-2">
-                                    <span className="font-semibold text-zinc-500">Precio</span> {histSummary.precioAplicado}
-                                    {histSummary.precioEquivCatalogo ? (
-                                      <span className="text-zinc-500"> · {histSummary.precioEquivCatalogo}</span>
-                                    ) : null}
-                                  </p>
-                                  <p className="sm:col-span-2 flex flex-wrap items-baseline justify-between gap-1 border-t border-zinc-100 pt-0.5">
-                                    <span className="font-semibold text-zinc-500">Subtotal línea</span>
-                                    <span className="font-bold tabular-nums text-zinc-900">{lineSub.toFixed(2)} €</span>
-                                  </p>
-                                </div>
-                                {receptionBillsByWeight(item) &&
-                                item.receivedWeightKg != null &&
-                                item.receivedWeightKg > 0 ? (
-                                  <p className="mt-0.5 text-[10px] text-zinc-600">
-                                    Báscula:{' '}
-                                    <span className="font-semibold text-zinc-800">
-                                      {item.receivedWeightKg.toFixed(3)} kg
-                                    </span>
-                                  </p>
-                                ) : null}
                               </div>
                             );
                           })}
                           {needsAttention && incidentFooterText ? (
-                            <div className="rounded-md border border-red-200 bg-red-50/70 px-2 py-1.5 text-left ring-1 ring-red-100/80">
-                              <p className="text-[9px] font-bold uppercase tracking-wide text-red-800">Incidencia</p>
-                              <p className="mt-0.5 text-[10px] leading-snug text-zinc-800 whitespace-pre-wrap">
+                            <div className="rounded border border-red-200 bg-red-50/70 px-1 py-px text-left">
+                              <p className="text-[7px] font-bold uppercase tracking-wide text-red-800">Incidencia</p>
+                              <p className="text-[9px] leading-tight text-zinc-800 whitespace-pre-wrap">
                                 {incidentFooterText}
                               </p>
                             </div>
