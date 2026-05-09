@@ -20,7 +20,12 @@ import {
 } from '@/lib/pedidos-reception-price-alert';
 import { parsePriceInput } from '@/lib/money-format';
 import { buildPedidoReceptionPreviewItem } from '@/lib/pedidos-reception-preview-item';
-import { receptionBillsByWeight, receptionCalculationUnit, type PedidoOrderItem } from '@/lib/pedidos-supabase';
+import {
+  receptionBillsByWeight,
+  receptionCalculationUnit,
+  resolveReceivedQuantityForReceptionPreview,
+  type PedidoOrderItem,
+} from '@/lib/pedidos-supabase';
 
 export type RecepcionLineRowProps = {
   orderId: string;
@@ -183,66 +188,71 @@ function RecepcionLineRowInner({
     [previewItem, lastHistoricoComparable, priceHintsVersion],
   );
 
+  const draftPriceUi = parsePriceInput(priceText) ?? item.pricePerUnit;
+  const recvQtyForDiff = !billsByWeight
+    ? resolveReceivedQuantityForReceptionPreview({ ...item, pricePerUnit: draftPriceUi }, orderQtyText)
+    : null;
+  const qtyDeltaUi = recvQtyForDiff != null ? recvQtyForDiff - item.quantity : 0;
+
+  const orderSubtitle =
+    item.basePricePerUnit != null && Number.isFinite(item.basePricePerUnit)
+      ? `Pedido: ${formatQuantityWithUnit(item.quantity, item.unit)} · ${item.basePricePerUnit.toFixed(2)} €/${unitPriceCatalogSuffix[item.unit]}`
+      : `Pedido: ${formatQuantityWithUnit(item.quantity, item.unit)}`;
+
+  const hasIncident = Boolean(item.incidentType || item.incidentNotes?.trim());
+  const shellTone = hasIncident
+    ? 'ring-amber-300/55 bg-amber-50/35 border-amber-100/80'
+    : receptionPriceAlert?.direction === 'up'
+      ? 'ring-orange-200/70 bg-white border-orange-100/60'
+      : 'ring-emerald-200/45 bg-white border-emerald-100/50';
+
+  /** Menos “caja”: relieve suave en bloque único; inputs sin doble recuadro. */
+  const inputCls =
+    'h-7 min-w-0 rounded-md bg-white px-1.5 text-[12px] font-semibold tabular-nums text-zinc-900 shadow-[inset_0_1px_2px_rgba(0,0,0,0.05)] outline-none ring-1 ring-zinc-200/55 transition-shadow focus:ring-2 focus:ring-[#D32F2F]/28';
+
+  const blockCls = 'mt-1 rounded-lg bg-zinc-50/55 p-1 ring-1 ring-zinc-100/85';
+
+  const subCls =
+    'ml-auto flex min-w-[4.75rem] shrink-0 flex-col items-end justify-end rounded-md bg-emerald-50/90 px-1.5 py-0.5 ring-1 ring-emerald-200/35';
+
   return (
-    <div className="space-y-0.5 rounded-lg bg-white p-1.5 ring-1 ring-zinc-200/85">
-      <p className="text-[13px] font-semibold leading-tight text-zinc-800">{lineDisplayName ?? item.productName}</p>
-      <p className="text-[11px] text-zinc-600">
-        Pedido:{' '}
-        <span className="text-sm font-bold tabular-nums text-zinc-900 sm:text-base">
-          {formatQuantityWithUnit(item.quantity, item.unit)}
-        </span>
-      </p>
-      {item.basePricePerUnit != null && Number.isFinite(item.basePricePerUnit) ? (
-        <p className="text-[11px] leading-tight text-zinc-600">
-          <span className="font-semibold text-zinc-500">Precio pedido</span>{' '}
-          <span className="font-semibold tabular-nums text-zinc-900">
-            {item.basePricePerUnit.toFixed(2)} €/{unitPriceCatalogSuffix[item.unit]}
-          </span>
+    <div className={['rounded-xl border p-1 shadow-[0_1px_3px_rgba(0,0,0,0.04)]', shellTone].join(' ')}>
+      <div className="min-w-0">
+        <p className="text-[12px] font-semibold leading-snug text-zinc-900 [overflow-wrap:anywhere]">
+          {lineDisplayName ?? item.productName}
         </p>
-      ) : null}
-      <div className="rounded-md border border-zinc-200/80 bg-zinc-50/80 px-1.5 py-1 text-[10px] leading-snug text-zinc-700">
-        <p className="font-semibold text-zinc-500">Resumen albarán</p>
-        <p className="mt-0.5">
-          <span className="font-semibold text-zinc-500">Pedido</span> {lineSummary.pedido}
-        </p>
-        <p>
-          <span className="font-semibold text-zinc-500">Recibido</span> {lineSummary.recibido}
-        </p>
-        <p>
-          <span className="font-semibold text-zinc-500">Precio aplicado</span> {lineSummary.precioAplicado}
-        </p>
-        {lineSummary.precioEquivCatalogo ? (
-          <p className="text-[10px] text-zinc-600">{lineSummary.precioEquivCatalogo}</p>
-        ) : null}
-        <p>
-          <span className="font-semibold text-zinc-500">Total línea</span>{' '}
-          <span className="font-bold tabular-nums text-zinc-900">{lineSummary.totalLinea}</span>
+        <p className="mt-px text-[10px] leading-tight text-zinc-500">{orderSubtitle}</p>
+        <p className="mt-0.5 text-[9px] leading-tight text-zinc-500">
+          <span className="font-medium text-zinc-400">Albarán</span> {lineSummary.pedido}
+          <span className="text-zinc-300"> · </span>
+          {lineSummary.recibido}
+          <span className="text-zinc-300"> · </span>
+          <span className="tabular-nums text-zinc-600">{lineSummary.totalLinea}</span>
         </p>
       </div>
       {billsByWeight &&
       item.unit !== 'kg' &&
       item.estimatedKgPerUnit != null &&
       item.estimatedKgPerUnit > 0 ? (
-        <p className="text-[11px] leading-tight text-zinc-600">
-          Est. {(item.quantity * item.estimatedKgPerUnit).toFixed(2)} kg (
-          {item.estimatedKgPerUnit.toFixed(2)} kg/{item.unit})
+        <p className="mt-0.5 text-[9px] leading-tight text-zinc-500">
+          Est. {(item.quantity * item.estimatedKgPerUnit).toFixed(2)} kg · {item.estimatedKgPerUnit.toFixed(2)} kg/{item.unit}
           {item.receivedQuantity > 0
             ? ` · recib.: ${(item.receivedQuantity * item.estimatedKgPerUnit).toFixed(2)} kg`
             : ''}
         </p>
       ) : null}
       {billsByWeight ? (
-        <div className="space-y-0.5">
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-            <div className="flex items-center gap-1">
-              <label className="shrink-0 text-[11px] font-semibold text-zinc-600">Cantidad real ({calcSuffix})</label>
+        <div className={blockCls}>
+          <div className="flex flex-wrap items-end gap-x-2 gap-y-0.5">
+            <div className="flex min-w-[4.25rem] flex-col gap-px">
+              <span className="text-[8px] font-semibold uppercase tracking-wide text-zinc-400">{calcSuffix}</span>
               <input
                 type="text"
                 inputMode="decimal"
                 autoComplete="off"
                 autoCorrect="off"
                 placeholder="0,00"
-                title="Peso en báscula; por defecto el estimado del pedido"
+                title="Peso en báscula"
                 value={kgText}
                 onFocus={() => {
                   kgFocusedRef.current = true;
@@ -252,19 +262,19 @@ function RecepcionLineRowInner({
                   kgFocusedRef.current = false;
                   commitWeightInput(orderId, item.id, kgText, priceText);
                 }}
-                className="h-7 w-[4.25rem] max-w-[5.25rem] shrink-0 rounded-md border border-zinc-300 bg-white px-1 py-0.5 text-xs font-semibold text-zinc-900 outline-none sm:w-[5.25rem] sm:max-w-[5.5rem]"
+                className={`${inputCls} w-[4.5rem] shrink-0`}
               />
             </div>
             {item.unit !== 'kg' ? (
-              <div className="flex items-center gap-1">
-                <label className="shrink-0 text-[10px] font-semibold text-zinc-600">€/kg real</label>
+              <div className="flex min-w-[3.75rem] flex-col gap-px">
+                <span className="text-[8px] font-semibold uppercase tracking-wide text-zinc-400">€/kg</span>
                 <input
                   type="text"
                   inputMode="decimal"
                   autoComplete="off"
                   autoCorrect="off"
                   placeholder=""
-                  title="€/kg reales; subtotal = kg × €/kg"
+                  title="€/kg reales"
                   value={ppkText}
                   onFocus={() => {
                     ppkFocusedRef.current = true;
@@ -274,33 +284,71 @@ function RecepcionLineRowInner({
                     ppkFocusedRef.current = false;
                     commitPricePerKgInput(orderId, item.id, ppkText);
                   }}
-                  className="h-7 w-14 max-w-[5.5rem] shrink-0 rounded-md border border-zinc-300 bg-white px-1 py-0.5 text-xs font-semibold text-zinc-900 outline-none sm:w-[5rem]"
+                  className={`${inputCls} w-[4rem] shrink-0`}
                 />
               </div>
             ) : null}
+            <div className={subCls}>
+              <span className="text-[8px] font-medium uppercase tracking-wide text-emerald-900/75">Subtotal</span>
+              <span className="text-[14px] font-black tabular-nums leading-none text-emerald-950">
+                {previewItem.lineTotal.toFixed(2)} €
+              </span>
+            </div>
           </div>
           {item.unit !== 'kg' ? (
-            <div className="space-y-0.5 text-[10px] leading-tight text-zinc-500">
+            <p className="mt-0.5 text-[8px] leading-tight text-zinc-400">
               {suggestionSource ? (
-                <p className="text-zinc-600">{euroPerKgSuggestionHint(suggestionSource)}</p>
+                <span className="text-zinc-500">{euroPerKgSuggestionHint(suggestionSource)} · </span>
               ) : null}
-              <p>
+              <span>
                 {previewItem.receivedPricePerKg != null &&
                 previewItem.receivedPricePerKg > 0 &&
                 previewItem.receivedWeightKg != null &&
                 previewItem.receivedWeightKg > 0
                   ? `Ref. ${previewItem.pricePerUnit.toFixed(2)} €/${unitPriceCatalogSuffix[item.unit]}`
-                  : 'El subtotal es kg reales (o estimados) × €/kg. Abajo, precio real recibido por envase.'}
-              </p>
+                  : 'kg × €/kg; precio por ud. debajo'}
+              </span>
+            </p>
+          ) : null}
+          <div className="mt-1 flex flex-wrap items-end gap-x-2 gap-y-0.5 border-t border-zinc-200/40 pt-1">
+            <div className="flex min-w-0 flex-1 flex-col gap-px sm:max-w-[9.5rem]">
+              <span className="text-[8px] font-semibold uppercase tracking-wide text-zinc-400">
+                €/{unitPriceCatalogSuffix[item.unit]}
+              </span>
+              <input
+                type="text"
+                inputMode="decimal"
+                autoComplete="off"
+                value={priceText}
+                onFocus={() => {
+                  priceFocusedRef.current = true;
+                }}
+                onChange={(e) => setPriceText(e.target.value)}
+                onBlur={() => {
+                  priceFocusedRef.current = false;
+                  commitPriceInput(orderId, item.id, priceText);
+                }}
+                className={`${inputCls} w-full max-w-[7.5rem]`}
+              />
             </div>
+          </div>
+          {receptionPriceAlert ? (
+            <p
+              className={[
+                'mt-1 text-[10px] font-medium leading-snug',
+                receptionPriceAlert.direction === 'up' ? 'text-[#9f1239]' : 'text-emerald-900',
+              ].join(' ')}
+              role="status"
+            >
+              {formatReceptionPriceAlertSingleLine(receptionPriceAlert)}
+            </p>
           ) : null}
         </div>
       ) : (
-        <div className="rounded-md border border-emerald-400/45 bg-emerald-50/40 px-1.5 py-1.5">
-          <p className="text-[9px] font-bold uppercase tracking-wide text-emerald-900/90">Recepción (cantidad × precio)</p>
-          <div className="mt-1 grid min-w-0 grid-cols-3 items-end gap-x-1.5 gap-y-0.5">
-            <div className="min-w-0">
-              <label className="mb-0.5 block text-[9px] font-semibold text-zinc-700">Cantidad real ({calcSuffix})</label>
+        <div className={blockCls}>
+          <div className="flex flex-wrap items-end gap-x-2 gap-y-0.5">
+            <div className="flex min-w-[4.75rem] flex-1 flex-col gap-px">
+              <span className="text-[8px] font-semibold uppercase tracking-wide text-zinc-400">Cantidad</span>
               <input
                 type="text"
                 inputMode="decimal"
@@ -316,13 +364,11 @@ function RecepcionLineRowInner({
                   orderQtyFocusedRef.current = false;
                   commitReceivedOrderQtyInput(orderId, item.id, orderQtyText, priceText);
                 }}
-                className="h-7 w-full min-w-0 rounded-md border border-zinc-200 bg-white px-1 text-xs font-semibold tabular-nums text-zinc-900 outline-none"
+                className={`${inputCls} w-full min-w-0`}
               />
             </div>
-            <div className="min-w-0">
-              <label className="mb-0.5 block text-[9px] font-semibold text-zinc-700">
-                Precio real recibido (€/{calcSuffix})
-              </label>
+            <div className="flex min-w-[4.75rem] flex-1 flex-col gap-px">
+              <span className="text-[8px] font-semibold uppercase tracking-wide text-zinc-400">€/{calcSuffix}</span>
               <input
                 type="text"
                 inputMode="decimal"
@@ -336,66 +382,27 @@ function RecepcionLineRowInner({
                   priceFocusedRef.current = false;
                   commitPriceInput(orderId, item.id, priceText);
                 }}
-                className="h-7 w-full min-w-0 rounded-md border border-zinc-200 bg-white px-1 text-xs font-semibold tabular-nums text-zinc-900 outline-none"
+                className={`${inputCls} w-full min-w-0`}
               />
-              {receptionPriceAlert ? (
-                <p
-                  className={[
-                    'mt-1 rounded-lg border px-2 py-1.5 text-[10px] font-semibold leading-snug',
-                    receptionPriceAlert.direction === 'up'
-                      ? 'border-[#D32F2F]/22 bg-[#FFF7F7] text-[#7F1D1D]'
-                      : 'border-emerald-600/20 bg-emerald-50/95 text-emerald-950',
-                  ].join(' ')}
-                  role="status"
-                >
-                  {formatReceptionPriceAlertSingleLine(receptionPriceAlert)}
-                </p>
-              ) : null}
             </div>
-            <div className="flex min-h-[2.85rem] min-w-0 flex-col justify-end rounded-md border border-emerald-300/60 bg-emerald-100/60 px-1 py-0.5">
-              <span className="text-[9px] font-semibold text-emerald-900/85">Sub</span>
-              <span className="text-right text-sm font-black leading-tight tabular-nums text-emerald-950 sm:text-base">
+            <div className={subCls}>
+              <span className="text-[8px] font-medium uppercase tracking-wide text-emerald-900/75">Subtotal</span>
+              <span className="text-[14px] font-black tabular-nums leading-none text-emerald-950">
                 {previewItem.lineTotal.toFixed(2)} €
               </span>
             </div>
           </div>
-        </div>
-      )}
-      {billsByWeight ? (
-        <div className="space-y-1 border-t border-zinc-100/90 pt-1">
-          <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-0.5">
-            <div className="flex min-w-0 items-center gap-1.5">
-              <label className="shrink-0 text-[11px] font-semibold text-zinc-600">
-                Precio real recibido (€/{unitPriceCatalogSuffix[item.unit]})
-              </label>
-              <input
-                type="text"
-                inputMode="decimal"
-                autoComplete="off"
-                value={priceText}
-                onFocus={() => {
-                  priceFocusedRef.current = true;
-                }}
-                onChange={(e) => setPriceText(e.target.value)}
-                onBlur={() => {
-                  priceFocusedRef.current = false;
-                  commitPriceInput(orderId, item.id, priceText);
-                }}
-                className="h-7 w-[4.25rem] rounded-md border border-zinc-200 bg-white px-1 text-xs font-semibold tabular-nums text-zinc-900 outline-none"
-              />
-            </div>
-            <span className="shrink-0 text-[10px] text-zinc-700">
-              Subt:{' '}
-              <span className="font-bold tabular-nums text-zinc-900">{previewItem.lineTotal.toFixed(2)} €</span>
-            </span>
-          </div>
+          {Math.abs(qtyDeltaUi) > 1e-6 ? (
+            <p className="mt-0.5 text-[9px] font-medium text-orange-800/95">
+              Dif. cantidad: {qtyDeltaUi > 0 ? '+' : '−'}
+              {formatQuantityWithUnit(Math.abs(qtyDeltaUi), item.unit)}
+            </p>
+          ) : null}
           {receptionPriceAlert ? (
             <p
               className={[
-                'rounded-lg border px-2 py-1.5 text-[10px] font-semibold leading-snug',
-                receptionPriceAlert.direction === 'up'
-                  ? 'border-[#D32F2F]/22 bg-[#FFF7F7] text-[#7F1D1D]'
-                  : 'border-emerald-600/20 bg-emerald-50/95 text-emerald-950',
+                'mt-0.5 text-[10px] font-medium leading-snug',
+                receptionPriceAlert.direction === 'up' ? 'text-[#9f1239]' : 'text-emerald-900',
               ].join(' ')}
               role="status"
             >
@@ -403,7 +410,7 @@ function RecepcionLineRowInner({
             </p>
           ) : null}
         </div>
-      ) : null}
+      )}
       {item.basePricePerUnit != null && Number.isFinite(item.basePricePerUnit)
         ? (() => {
             const draft = parsePriceInput(priceText);
