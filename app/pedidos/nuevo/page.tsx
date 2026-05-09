@@ -33,6 +33,15 @@ import {
   touchPedidoOrderTemplateUsed,
 } from '@/lib/pedidos-order-templates';
 import {
+  EMPTY_CATALOG_SIGNALS,
+  fetchCatalogSignals,
+  type CatalogSignals,
+} from '@/lib/pedidos-nuevo-catalog-stats';
+import {
+  fetchSupplierProductFavoriteIdSet,
+  setSupplierProductFavorite,
+} from '@/lib/pedidos-supplier-favorites';
+import {
   fetchOrderById,
   fetchSuppliersWithProducts,
   saveOrder,
@@ -41,6 +50,7 @@ import {
   type PedidoOrderItem,
   type PedidoOrder,
   type PedidoSupplier,
+  type PedidoSupplierProduct,
 } from '@/lib/pedidos-supabase';
 import { notifyPedidoEnviado } from '@/services/notifications';
 import { normalizeWhatsappPhone, openWhatsAppMessage } from '@/lib/whatsapp';
@@ -297,16 +307,135 @@ export default function NuevoPedidoPage() {
     return (selectedSupplier.deliveryExceptionDates ?? []).includes(deliveryDate);
   }, [deliveryDate, selectedSupplier]);
 
+  type CatalogTabId = 'favorites' | 'recent' | 'top' | 'all';
+  /** Siempre «Todos» al abrir / cambiar proveedor (catálogo completo primero). */
+  const [catalogTab, setCatalogTab] = React.useState<CatalogTabId>('all');
+  const [favoriteIds, setFavoriteIds] = React.useState<Set<string>>(() => new Set());
+  const [catalogSignals, setCatalogSignals] = React.useState<CatalogSignals>(EMPTY_CATALOG_SIGNALS);
+  React.useEffect(() => {
+    setCatalogTab('all');
+    setFavoriteIds(new Set());
+    setCatalogSignals(EMPTY_CATALOG_SIGNALS);
+  }, [supplierId]);
+
+  /** Favoritos y señales (últimos / más usados) solo del proveedor seleccionado — mismo ámbito que `supplierProducts`. */
+  React.useEffect(() => {
+    if (!localId || !supplierId || !canUse) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const supabase = getSupabaseClient();
+        const [fav, signals] = await Promise.all([
+          fetchSupplierProductFavoriteIdSet(supabase, localId, userId, supplierId),
+          fetchCatalogSignals(supabase, localId, supplierId),
+        ]);
+        if (cancelled) return;
+        setFavoriteIds(fav);
+        setCatalogSignals(signals);
+      } catch {
+        if (!cancelled) {
+          setFavoriteIds(new Set());
+          setCatalogSignals(EMPTY_CATALOG_SIGNALS);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [localId, supplierId, canUse, userId]);
+
   const qSearch = search.trim().toLowerCase();
-  const filteredProducts = supplierProducts
-    .filter((p) => {
+
+  const mostOrderedIndex = React.useMemo(
+    () => new Map(catalogSignals.mostOrdered30d.map((r, i) => [r.supplierProductId, i])),
+    [catalogSignals.mostOrdered30d],
+  );
+  const recentIndex = React.useMemo(
+    () => new Map(catalogSignals.recentProductIds.map((id, i) => [id, i])),
+    [catalogSignals.recentProductIds],
+  );
+
+  const displayedProducts = React.useMemo(() => {
+    const match = (p: PedidoSupplierProduct) => {
       if (!qSearch) return true;
       if (p.name.toLowerCase().includes(qSearch)) return true;
       if (p.articleMasterName?.toLowerCase().includes(qSearch)) return true;
       if (p.articleAliasInterno?.toLowerCase().includes(qSearch)) return true;
       return false;
-    })
-    .sort((a, b) => a.name.localeCompare(b.name, 'es'));
+    };
+    const base = supplierProducts.filter(match);
+
+    const sortSmartHabitual = (rows: PedidoSupplierProduct[]) =>
+      [...rows].sort((a, b) => {
+        const fa = favoriteIds.has(a.id) ? 0 : 1;
+        const fb = favoriteIds.has(b.id) ? 0 : 1;
+        if (fa !== fb) return fa - fb;
+        const ma = mostOrderedIndex.get(a.id) ?? 9999;
+        const mb = mostOrderedIndex.get(b.id) ?? 9999;
+        if (ma !== mb) return ma - mb;
+        const ra = recentIndex.get(a.id) ?? 9999;
+        const rb = recentIndex.get(b.id) ?? 9999;
+        if (ra !== rb) return ra - rb;
+        return a.name.localeCompare(b.name, 'es');
+      });
+
+    if (catalogTab === 'all') {
+      if (qSearch) return [...base].sort((a, b) => a.name.localeCompare(b.name, 'es'));
+      return sortSmartHabitual(base);
+    }
+    if (catalogTab === 'favorites') {
+      return base.filter((p) => favoriteIds.has(p.id)).sort((a, b) => a.name.localeCompare(b.name, 'es'));
+    }
+    if (catalogTab === 'recent') {
+      const orderMap = new Map(catalogSignals.recentProductIds.map((id, i) => [id, i]));
+      return base
+        .filter((p) => orderMap.has(p.id))
+        .sort((a, b) => (orderMap.get(a.id) ?? 0) - (orderMap.get(b.id) ?? 0));
+    }
+    const orderMap = new Map(catalogSignals.mostOrdered30d.map((r, i) => [r.supplierProductId, i]));
+    return base
+      .filter((p) => orderMap.has(p.id))
+      .sort((a, b) => (orderMap.get(a.id) ?? 0) - (orderMap.get(b.id) ?? 0));
+  }, [
+    supplierProducts,
+    qSearch,
+    catalogTab,
+    favoriteIds,
+    catalogSignals,
+    mostOrderedIndex,
+    recentIndex,
+  ]);
+
+  const toggleProductFavorite = React.useCallback(
+    async (supplierProductId: string) => {
+      if (!localId || !userId) {
+        setMessage('Inicia sesión para usar favoritos.');
+        window.setTimeout(() => setMessage(null), 3200);
+        return;
+      }
+      if (!supplierId) return;
+      const supabase = getSupabaseClient();
+      const next = !favoriteIds.has(supplierProductId);
+      setFavoriteIds((prev) => {
+        const n = new Set(prev);
+        if (next) n.add(supplierProductId);
+        else n.delete(supplierProductId);
+        return n;
+      });
+      try {
+        await setSupplierProductFavorite(supabase, localId, userId, supplierId, supplierProductId, next);
+      } catch (e) {
+        setFavoriteIds((prev) => {
+          const n = new Set(prev);
+          if (next) n.delete(supplierProductId);
+          else n.add(supplierProductId);
+          return n;
+        });
+        setMessage(e instanceof Error ? e.message : 'No se pudo guardar el favorito.');
+      }
+    },
+    [localId, userId, supplierId, favoriteIds],
+  );
 
   React.useEffect(() => {
     if (!editingId) {
@@ -888,7 +1017,7 @@ export default function NuevoPedidoPage() {
   }
 
   return (
-    <div className="space-y-2 sm:space-y-2.5">
+    <div className="relative space-y-2 pb-[5.5rem] sm:space-y-2.5 sm:pb-24">
       {existingSentAt && editingId ? (
         <section
           className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-950 ring-1 ring-amber-100"
@@ -962,25 +1091,64 @@ export default function NuevoPedidoPage() {
         </select>
       </section>
 
-      <section className="rounded-xl bg-white p-3 ring-1 ring-zinc-200/90">
-        <p className="text-center text-xs font-bold uppercase tracking-wide text-zinc-700">Catálogo</p>
-        <label className="mt-1 block text-[10px] font-semibold uppercase tracking-wide text-zinc-500">Buscar producto</label>
+      <section className="rounded-xl bg-white p-2.5 ring-1 ring-zinc-200/90 sm:p-3">
+        {selectedSupplier && supplierProducts.length > 0 ? (
+          <div className="-mx-0.5 flex gap-0 overflow-x-auto border-b border-zinc-200/90 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            {(
+              [
+                ['all', '📦 Todos'],
+                ['favorites', '⭐ Favoritos'],
+                ['recent', '🕘 Últimos'],
+                ['top', '📈 Más usados'],
+              ] as const
+            ).map(([id, label]) => (
+              <button
+                key={id}
+                type="button"
+                onClick={() => setCatalogTab(id)}
+                className={[
+                  'shrink-0 whitespace-nowrap border-b-2 px-2.5 py-2 text-[11px] font-semibold transition-colors active:opacity-90 sm:px-3',
+                  catalogTab === id
+                    ? 'border-[#D32F2F] text-[#D32F2F]'
+                    : 'border-transparent text-zinc-500 hover:text-zinc-800',
+                ].join(' ')}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        ) : null}
+        <label className="mt-2 block text-[10px] font-semibold uppercase tracking-wide text-zinc-500">Buscar producto</label>
         <input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Buscar..."
+          placeholder="Buscar producto…"
           className="mt-1 h-8 w-full rounded-lg border-0 bg-white px-2.5 text-sm text-zinc-900 shadow-inner shadow-zinc-200/70 ring-1 ring-zinc-200/85 placeholder:text-zinc-400 outline-none focus:ring-2 focus:ring-[#D32F2F]/20"
         />
         <div className="mt-1.5 space-y-1.5">
-          {selectedSupplier && filteredProducts.length === 0 ? (
+          {selectedSupplier && supplierProducts.length === 0 ? (
             <p className="text-sm text-zinc-500">Este proveedor no tiene productos activos. Revísalo en Proveedores.</p>
           ) : null}
-          {filteredProducts.map((p) => {
+          {selectedSupplier && supplierProducts.length > 0 && displayedProducts.length === 0 ? (
+            <p className="rounded-lg border border-dashed border-zinc-200 bg-zinc-50/90 px-2.5 py-2 text-center text-[12px] leading-snug text-zinc-600">
+              {catalogTab === 'favorites'
+                ? 'Sin favoritos. Abre «Todos» y pulsa la estrella.'
+                : catalogTab === 'recent'
+                  ? 'Sin recepciones recientes con este proveedor.'
+                  : catalogTab === 'top'
+                    ? 'Sin datos de pedidos en los últimos 30 días.'
+                    : qSearch
+                      ? 'Ningún producto coincide con la búsqueda.'
+                      : 'Sin productos que mostrar.'}
+            </p>
+          ) : null}
+          {displayedProducts.map((p) => {
             const qty = qtyByProductId[p.id] ?? 0;
             const lineTotal = Math.round(qty * p.pricePerUnit * 100) / 100;
             const segmentTarget =
               coverageDays != null ? weeklyParScaledToCoverageDays(p.parStock ?? 0, coverageDays) : null;
             const suggestedQty = segmentTarget != null ? suggestedOrderQuantityForPar(p.unit, segmentTarget) : null;
+            const sig = catalogSignals.lastReceptionByProductId[p.id];
             return (
               <PedidosNuevoCatalogLine
                 key={p.id}
@@ -990,6 +1158,20 @@ export default function NuevoPedidoPage() {
                 suggestedQty={coverageDays != null && suggestedQty != null ? suggestedQty : null}
                 onDelta={(d) => adjustQty(p.id, p.unit, d)}
                 onManual={(raw) => setQtyFromInput(p.id, p.unit, raw)}
+                repeatFromReception={
+                  sig
+                    ? {
+                        qty: sig.lastQty,
+                        atIso: sig.lastAt,
+                        unitPrice: sig.lastReceivedUnitPrice,
+                      }
+                    : undefined
+                }
+                favoriteToggle={{
+                  isFavorite: Boolean(userId && favoriteIds.has(p.id)),
+                  onToggle: () => void toggleProductFavorite(p.id),
+                  disabled: !userId,
+                }}
               />
             );
           })}
@@ -1007,7 +1189,10 @@ export default function NuevoPedidoPage() {
         />
       </section>
 
-      <section className="rounded-xl border border-zinc-200/90 bg-white p-2.5 ring-1 ring-zinc-100">
+      <section
+        id="pedido-nuevo-acciones"
+        className="rounded-xl border border-zinc-200/90 bg-white p-2.5 ring-1 ring-zinc-100 scroll-mt-24"
+      >
         <p className="mb-2 text-[10px] leading-snug text-zinc-600">
           Pedido realizado por:{' '}
           <span className="font-bold text-zinc-900">{requesterResolvedName}</span>
@@ -1121,6 +1306,26 @@ export default function NuevoPedidoPage() {
           </button>
         </div>
       </section>
+
+      <div className="pointer-events-none fixed inset-x-0 bottom-0 z-40 flex justify-center pb-[env(safe-area-inset-bottom)]">
+        <div className="pointer-events-auto flex w-full max-w-lg items-center gap-2 border-t border-zinc-200/90 bg-white/95 px-3 py-2 shadow-[0_-8px_28px_rgba(0,0,0,0.07)] backdrop-blur-md">
+          <div className="min-w-0 flex-1">
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-zinc-500">Resumen</p>
+            <p className="truncate text-[12px] font-bold tabular-nums text-zinc-900">
+              {items.length} líneas · {total.toFixed(2)} € <span className="font-medium text-zinc-500">c/IVA</span>
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() =>
+              document.getElementById('pedido-nuevo-acciones')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+            }
+            className="flex shrink-0 items-center gap-1 rounded-full bg-zinc-900 px-3 py-2 text-[11px] font-bold text-white shadow-sm active:scale-[0.98]"
+          >
+            Continuar
+          </button>
+        </div>
+      </div>
 
       <PedidosUseTemplateSheet
         open={useTemplateOpen}
