@@ -88,6 +88,8 @@ export function getDemoPedidoSuppliers(): PedidoSupplier[] {
       contact: '+34600000001',
       deliveryCycleWeekdays: [1, 3, 5],
       deliveryExceptionDates: [],
+      /** Demo: pedido mínimo sin IVA para probar badges en la barra inferior. */
+      minimumOrderEuro: 150,
       products: [
         {
           id: 'demo-sp-1',

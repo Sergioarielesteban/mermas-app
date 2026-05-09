@@ -16,6 +16,12 @@ type Props = {
   order: PedidoOrder | null;
   supplierName: string;
   onSaved?: () => void;
+  /**
+   * Pedido persistido en BD: enlazar plantilla a ese `purchase_orders.id`.
+   * `null` = borrador aún no guardado (no enviar UUID ficticio a Supabase).
+   * Omitir = usar `order.id` (flujo desde lista de pedidos).
+   */
+  linkedOrderId?: string | null;
 };
 
 export default function PedidosSaveTemplateSheet({
@@ -26,6 +32,7 @@ export default function PedidosSaveTemplateSheet({
   order,
   supplierName,
   onSaved,
+  linkedOrderId,
 }: Props) {
   const [name, setName] = React.useState('');
   const [category, setCategory] = React.useState('');
@@ -76,7 +83,7 @@ export default function PedidosSaveTemplateSheet({
           category: category.trim() || null,
           localLabel: localLabel.trim() || null,
           isFavorite: favorite,
-          sourceOrderId: order.id,
+          sourceOrderId: linkedOrderId !== undefined ? linkedOrderId : order.id,
           items,
         },
         isDemoMode(),

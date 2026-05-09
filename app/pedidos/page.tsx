@@ -368,7 +368,7 @@ function matchAssistantSingleTopicNav(normalized: string): { href: string; messa
   if (!n) return null;
   const exact: Record<string, { href: string; message: string }> = {
     proveedores: { href: '/pedidos/proveedores', message: 'Abriendo Proveedores…' },
-    recepcion: { href: '/pedidos/recepcion', message: 'Abriendo Recepción…' },
+    recepcion: { href: '/pedidos?recibir=hoy', message: 'Abriendo pedidos con entrega hoy…' },
     albaranes: { href: '/pedidos/albaranes', message: 'Abriendo Albaranes…' },
     albaran: { href: '/pedidos/albaranes', message: 'Abriendo Albaranes…' },
     precios: { href: '/pedidos/precios', message: 'Abriendo Precios…' },
@@ -549,6 +549,8 @@ export default function PedidosPage() {
   const searchParams = useSearchParams();
   const oidoStandalone = searchParams.get('oido') === '1';
   const avisoPedido = searchParams.get('pedido');
+  /** Lista ENTREGA filtrada a fecha de entrega = hoy (enlace «Recibir pedido»). */
+  const recibirEntregaHoy = searchParams.get('recibir') === 'hoy';
   const [uiHydrated, setUiHydrated] = React.useState(false);
   const pedidosPageUiRestoreAttemptedRef = React.useRef<string | null>(null);
   const scrollRestorePendingRef = React.useRef<number | null>(null);
@@ -1916,6 +1918,39 @@ export default function PedidosPage() {
       return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
     });
   }, [orders]);
+
+  const sentOrdersEntregaVista = React.useMemo(() => {
+    if (!recibirEntregaHoy) return sentOrders;
+    const now = new Date();
+    const todayKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    return sentOrders.filter((o) => {
+      const raw = (o.deliveryDate?.trim() || o.createdAt.slice(0, 10)).slice(0, 10);
+      return raw === todayKey;
+    });
+  }, [sentOrders, recibirEntregaHoy]);
+
+  const recibirHoyScrollDoneRef = React.useRef(false);
+  React.useEffect(() => {
+    if (!recibirEntregaHoy) {
+      recibirHoyScrollDoneRef.current = false;
+      return;
+    }
+    setPendientesEntregaAccordionOpen(true);
+    if (recibirHoyScrollDoneRef.current) return;
+    recibirHoyScrollDoneRef.current = true;
+    const id = window.requestAnimationFrame(() => {
+      document.getElementById('pedidos-pendientes-entrega')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+    return () => window.cancelAnimationFrame(id);
+  }, [recibirEntregaHoy]);
+
+  React.useEffect(() => {
+    if (!recibirEntregaHoy || expandedSentId == null) return;
+    if (!sentOrdersEntregaVista.some((o) => o.id === expandedSentId)) {
+      setExpandedSentId(null);
+    }
+  }, [recibirEntregaHoy, expandedSentId, sentOrdersEntregaVista]);
+
   const receivedOrders = React.useMemo(
     () => orders.filter((row) => row.status === 'received'),
     [orders],
@@ -2607,7 +2642,8 @@ export default function PedidosPage() {
         if (n.includes('proveedor')) return '/pedidos/proveedores';
         if (n.includes('articulo')) return '/pedidos/articulos';
         if (n.includes('calendario') || (n.includes('entrega') && n.includes('calendario'))) return '/pedidos/calendario';
-        if (n.includes('recepcion') || n.includes('albaran')) return '/pedidos/recepcion';
+        if (n.includes('albaran')) return '/pedidos/albaranes';
+        if (n.includes('recepcion')) return '/pedidos?recibir=hoy';
         if ((n.includes('compras') && n.includes('mes')) || (n.includes('historial') && n.includes('mes')))
           return '/pedidos/historial-mes';
         if (
@@ -4045,7 +4081,7 @@ export default function PedidosPage() {
             <span className="text-[11px] font-semibold leading-tight text-zinc-900">Nuevo pedido</span>
           </Link>
           <Link
-            href="/pedidos/recepcion"
+            href="/pedidos?recibir=hoy"
             className="group flex min-h-[2.75rem] touch-manipulation flex-col items-center justify-center gap-1 rounded-xl border border-zinc-200/90 bg-white px-2 py-2 text-center shadow-[inset_0_1px_0_rgba(255,255,255,0.96)] ring-1 ring-zinc-100/90 transition active:scale-[0.98]"
           >
             <span className="flex h-7 w-7 items-center justify-center rounded-full bg-[#D32F2F]/[0.08] text-[#B91C1C] ring-1 ring-[#D32F2F]/12">
@@ -4213,13 +4249,31 @@ export default function PedidosPage() {
               <Truck className="h-5 w-5 text-[#D32F2F] sm:h-[1.35rem] sm:w-[1.35rem]" strokeWidth={1.85} aria-hidden />
             </div>
             <div className="min-w-0 flex-1 text-left">
-              <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-amber-600">ENTREGA</p>
-              <p className="mt-1 text-lg font-bold leading-tight tracking-tight text-zinc-900 sm:text-xl">
-                {sentOrders.length === 0
-                  ? 'Sin pedidos pendientes'
-                  : `${sentOrders.length} pedido${sentOrders.length === 1 ? '' : 's'} pendiente${sentOrders.length === 1 ? '' : 's'}`}
+              <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-amber-600">
+                {recibirEntregaHoy ? 'ENTREGA · HOY' : 'ENTREGA'}
               </p>
-              {pedidosResumenEntrega.lleganHoy > 0 ? (
+              <p className="mt-1 text-lg font-bold leading-tight tracking-tight text-zinc-900 sm:text-xl">
+                {recibirEntregaHoy
+                  ? sentOrdersEntregaVista.length === 0
+                    ? 'Nada para recibir hoy'
+                    : `${sentOrdersEntregaVista.length} pedido${sentOrdersEntregaVista.length === 1 ? '' : 's'} con entrega hoy`
+                  : sentOrders.length === 0
+                    ? 'Sin pedidos pendientes'
+                    : `${sentOrders.length} pedido${sentOrders.length === 1 ? '' : 's'} pendiente${sentOrders.length === 1 ? '' : 's'}`}
+              </p>
+              {recibirEntregaHoy ? (
+                sentOrdersEntregaVista.length === 0 ? (
+                  <p className="mt-1.5 text-xs font-medium leading-snug text-zinc-600 sm:text-[13px]">
+                    {sentOrders.length === 0
+                      ? 'Sin pedidos enviados.'
+                      : 'Ningún envío con fecha de entrega para hoy.'}
+                  </p>
+                ) : (
+                  <p className="mt-2 text-[0.8125rem] font-semibold leading-snug text-amber-700 sm:text-sm">
+                    Solo pedidos con entrega prevista para hoy.
+                  </p>
+                )
+              ) : pedidosResumenEntrega.lleganHoy > 0 ? (
                 <p className="mt-2 text-[0.8125rem] font-semibold leading-snug text-amber-700 sm:text-sm">
                   {pedidosResumenEntrega.lleganHoy === 1
                     ? '1 pedido llega hoy'
@@ -4249,10 +4303,16 @@ export default function PedidosPage() {
           </div>
         </summary>
         <div className="space-y-2.5 border-t border-zinc-100/90 bg-gradient-to-b from-zinc-50/80 to-white px-1.5 pb-1.5 pt-1.5 sm:px-2">
-          {sentOrders.length === 0 ? (
-            <p className="py-4 text-center text-xs text-zinc-500">No hay pedidos enviados.</p>
+          {sentOrdersEntregaVista.length === 0 ? (
+            <p className="py-4 text-center text-xs text-zinc-500">
+              {sentOrders.length === 0
+                ? 'No hay pedidos enviados.'
+                : recibirEntregaHoy
+                  ? 'Ningún pedido con entrega prevista para hoy.'
+                  : 'No hay pedidos enviados.'}
+            </p>
           ) : null}
-          {sentOrders.map((order) => {
+          {sentOrdersEntregaVista.map((order) => {
             const totals = totalsWithVatForOrderListDisplay(order);
             const hasAnyBad = order.items.some((item) => {
               const m = quickLineMarks[item.id];

@@ -256,6 +256,8 @@ export type PedidoSupplier = {
   deliveryCycleWeekdays: number[];
   /** Fechas puntuales válidas de reparto (ej. festivo mueve Jue→Mié): YYYY-MM-DD. */
   deliveryExceptionDates: string[];
+  /** Pedido mínimo referencia en € sin IVA (columna opcional `minimum_order_euro`). */
+  minimumOrderEuro?: number | null;
   products: PedidoSupplierProduct[];
 };
 
@@ -344,7 +346,16 @@ type SupplierRow = {
   contact: string;
   is_active?: boolean | null;
   delivery_cycle_weekdays?: number[] | null;
+  minimum_order_euro?: number | string | null;
 };
+
+function isMissingSupabaseColumn(message: string, columnName: string): boolean {
+  const m = message.toLowerCase();
+  const col = columnName.toLowerCase();
+  return (
+    (m.includes('column') || m.includes('schema cache') || m.includes('does not exist')) && m.includes(col)
+  );
+}
 type SupplierDeliveryExceptionRow = {
   supplier_id: string;
   delivery_date: string;
@@ -720,7 +731,10 @@ export type FetchOrdersOptions = {
 export async function fetchSuppliersWithProducts(supabase: SupabaseClient, localId: string) {
   const querySuppliers = async (sel: string) =>
     supabase.from('pedido_suppliers').select(sel).eq('local_id', localId).order('name');
-  let supplierRes = await querySuppliers('id,name,contact,is_active,delivery_cycle_weekdays');
+  let supplierRes = await querySuppliers('id,name,contact,is_active,delivery_cycle_weekdays,minimum_order_euro');
+  if (supplierRes.error && isMissingSupabaseColumn(supplierRes.error.message, 'minimum_order_euro')) {
+    supplierRes = await querySuppliers('id,name,contact,is_active,delivery_cycle_weekdays');
+  }
   if (supplierRes.error) {
     const m = supplierRes.error.message.toLowerCase();
     const missingActive =
@@ -837,6 +851,11 @@ export async function fetchSuppliersWithProducts(supabase: SupabaseClient, local
       contact: row.contact ?? '',
       deliveryCycleWeekdays: normalizeDeliveryCycleWeekdays(row.delivery_cycle_weekdays),
       deliveryExceptionDates: normalizeDeliveryExceptionDates(exBySupplier.get(row.id) ?? []),
+      ...(row.minimum_order_euro != null &&
+      Number.isFinite(Number(row.minimum_order_euro)) &&
+      Number(row.minimum_order_euro) > 0
+        ? { minimumOrderEuro: Number(row.minimum_order_euro) }
+        : {}),
       products: bySupplier.get(row.id) ?? [],
     }));
   return suppliers;

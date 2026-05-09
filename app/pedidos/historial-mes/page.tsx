@@ -7,7 +7,6 @@ import {
   ArrowDownRight,
   ArrowUpRight,
   BarChart3,
-  ChevronRight,
   ClipboardList,
   Download,
   FileText,
@@ -55,7 +54,6 @@ export default function PedidosHistorialMesPage() {
   const [activeWeek, setActiveWeek] = React.useState<number | null>(null);
   const [supplierFilter, setSupplierFilter] = React.useState<'all' | string>('all');
   const [topN, setTopN] = React.useState(10);
-  const [alertsExpanded, setAlertsExpanded] = React.useState(false);
   const [filtersOpen, setFiltersOpen] = React.useState(false);
 
   const accountingOrders = React.useMemo(
@@ -391,6 +389,12 @@ export default function PedidosHistorialMesPage() {
     };
   }, [supplierPerformance]);
 
+  /** Suma del gasto por proveedor (misma base que cada fila de `supplierPerformance`). */
+  const totalGastoProveedoresMes = React.useMemo(
+    () => supplierPerformance.reduce((acc, s) => acc + s.spend, 0),
+    [supplierPerformance],
+  );
+
   type PurchaseAlertItem = {
     id: string;
     tone: 'amber' | 'rose';
@@ -435,7 +439,7 @@ export default function PedidosHistorialMesPage() {
     const topBySpend = supplierPerformance[0];
     if (topBySpend && totalSpend > 0) {
       const pct = (topBySpend.spend / totalSpend) * 100;
-      if (pct >= 40) {
+      if (pct >= 35) {
         list.push({
           id: `conc-${topBySpend.supplierId}`,
           tone: 'amber',
@@ -618,8 +622,8 @@ export default function PedidosHistorialMesPage() {
         <section className="rounded-xl bg-white p-3 text-sm text-[#B91C1C] ring-1 ring-zinc-200">{message}</section>
       ) : null}
 
-      <section className="min-w-0 rounded-2xl bg-white p-3 ring-1 ring-zinc-200/85 sm:p-4">
-        <div className="grid grid-cols-2 gap-2 border-b border-zinc-100 pb-3 sm:grid-cols-3">
+      <section className="rounded-xl border border-zinc-200/90 bg-white px-2.5 py-2.5 ring-1 ring-zinc-100 sm:px-3 sm:py-3">
+        <div className="grid grid-cols-2 gap-2 border-b border-zinc-100 pb-2.5 sm:grid-cols-3">
           <label className="text-[10px] font-medium text-zinc-500">
             <span className="block uppercase tracking-wide text-zinc-400">Período</span>
             <input
@@ -710,12 +714,18 @@ export default function PedidosHistorialMesPage() {
             Informe PDF completo
           </button>
         </div>
+      </section>
 
-        <div className="mt-3 grid min-w-0 grid-cols-3 gap-1.5">
-          <div className="relative overflow-hidden rounded-lg bg-gradient-to-b from-zinc-50 to-white px-2 py-1.5 ring-1 ring-zinc-200/75">
+      <section
+        className="rounded-xl border border-zinc-200/85 bg-white px-2.5 py-2 ring-1 ring-zinc-100 sm:px-3 sm:py-2.5"
+        aria-label="Indicadores del mes"
+      >
+        <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-zinc-400">Resumen del período</p>
+        <div className="grid min-w-0 grid-cols-2 gap-1.5 sm:gap-2">
+          <div className="relative overflow-hidden rounded-lg bg-gradient-to-b from-zinc-50 to-white px-2 py-1 ring-1 ring-zinc-200/75">
             <ShoppingCart className="absolute right-1.5 top-1.5 h-3.5 w-3.5 text-[#C62828]/90" aria-hidden />
             <p className="pr-6 text-[8px] font-semibold uppercase tracking-wide text-zinc-500">Total mes</p>
-            <p className="text-sm font-bold tabular-nums leading-tight text-zinc-900">{kpis.totalWithVat.toFixed(2)} €</p>
+            <p className="text-[13px] font-bold tabular-nums leading-tight text-zinc-900">{kpis.totalWithVat.toFixed(2)} €</p>
             <p className="text-[9px] text-zinc-500">IVA incl.</p>
             {kpis.deltaPct != null && compareMonthLabel ? (
               <p
@@ -733,24 +743,24 @@ export default function PedidosHistorialMesPage() {
               </p>
             ) : null}
           </div>
-          <div className="relative overflow-hidden rounded-lg bg-gradient-to-b from-zinc-50 to-white px-2 py-1.5 ring-1 ring-zinc-200/75">
+          <div className="relative overflow-hidden rounded-lg bg-gradient-to-b from-zinc-50 to-white px-2 py-1 ring-1 ring-zinc-200/75">
             <FileText className="absolute right-1.5 top-1.5 h-3.5 w-3.5 text-amber-600/90" aria-hidden />
             <p className="pr-6 text-[8px] font-semibold uppercase tracking-wide text-zinc-500">Base</p>
-            <p className="text-sm font-bold tabular-nums leading-tight text-zinc-900">{kpis.totalBase.toFixed(2)} €</p>
+            <p className="text-[13px] font-bold tabular-nums leading-tight text-zinc-900">{kpis.totalBase.toFixed(2)} €</p>
             <p className="text-[9px] text-zinc-500">Sin IVA</p>
           </div>
-          <div className="relative overflow-hidden rounded-lg bg-gradient-to-b from-zinc-50 to-white px-2 py-1.5 ring-1 ring-zinc-200/75">
+          <div className="relative overflow-hidden rounded-lg bg-gradient-to-b from-zinc-50 to-white px-2 py-1 ring-1 ring-zinc-200/75">
             <Receipt className="absolute right-1.5 top-1.5 h-3.5 w-3.5 text-emerald-600/85" aria-hidden />
             <p className="pr-6 text-[8px] font-semibold uppercase tracking-wide text-zinc-500">IVA</p>
-            <p className="text-sm font-bold tabular-nums leading-tight text-zinc-900">{kpis.totalVat.toFixed(2)} €</p>
+            <p className="text-[13px] font-bold tabular-nums leading-tight text-zinc-900">{kpis.totalVat.toFixed(2)} €</p>
             <p className="text-[9px] tabular-nums text-zinc-500">
               {kpis.vatOverBasePct > 0 ? `${kpis.vatOverBasePct.toFixed(2)}% s/ base` : '—'}
             </p>
           </div>
-          <div className="relative overflow-hidden rounded-lg bg-gradient-to-b from-zinc-50 to-white px-2 py-1.5 ring-1 ring-zinc-200/75">
+          <div className="relative overflow-hidden rounded-lg bg-gradient-to-b from-zinc-50 to-white px-2 py-1 ring-1 ring-zinc-200/75">
             <ClipboardList className="absolute right-1.5 top-1.5 h-3.5 w-3.5 text-sky-600/90" aria-hidden />
             <p className="pr-6 text-[8px] font-semibold uppercase tracking-wide text-zinc-500">Pedidos</p>
-            <p className="text-sm font-bold tabular-nums leading-tight text-zinc-900">{kpis.orderCount}</p>
+            <p className="text-[13px] font-bold tabular-nums leading-tight text-zinc-900">{kpis.orderCount}</p>
             <p className="text-[9px] text-zinc-500">En el período</p>
             {compareMonthLabel ? (
               <p
@@ -764,10 +774,10 @@ export default function PedidosHistorialMesPage() {
               </p>
             ) : null}
           </div>
-          <div className="relative overflow-hidden rounded-lg bg-gradient-to-b from-zinc-50 to-white px-2 py-1.5 ring-1 ring-zinc-200/75">
+          <div className="relative overflow-hidden rounded-lg bg-gradient-to-b from-zinc-50 to-white px-2 py-1 ring-1 ring-zinc-200/75">
             <BarChart3 className="absolute right-1.5 top-1.5 h-3.5 w-3.5 text-violet-600/85" aria-hidden />
             <p className="pr-6 text-[8px] font-semibold uppercase tracking-wide text-zinc-500">Ticket medio</p>
-            <p className="text-sm font-bold tabular-nums leading-tight text-zinc-900">{kpis.avgTicket.toFixed(2)} €</p>
+            <p className="text-[13px] font-bold tabular-nums leading-tight text-zinc-900">{kpis.avgTicket.toFixed(2)} €</p>
             <p className="text-[9px] text-zinc-500">Por pedido</p>
             {kpis.deltaTicketPct != null && compareMonthLabel ? (
               <p
@@ -783,7 +793,7 @@ export default function PedidosHistorialMesPage() {
           </div>
           <div
             className={[
-              'relative overflow-hidden rounded-lg px-2 py-1.5 ring-1',
+              'relative overflow-hidden rounded-lg px-2 py-1 ring-1',
               kpis.deltaPct != null && kpis.deltaPct <= 0
                 ? 'bg-emerald-50/50 ring-emerald-200/70'
                 : kpis.deltaPct != null && kpis.deltaPct > 0
@@ -801,7 +811,7 @@ export default function PedidosHistorialMesPage() {
             <p className="pr-6 text-[8px] font-semibold uppercase tracking-wide text-zinc-600">Vs mes ant.</p>
             <p
               className={[
-                'text-sm font-bold tabular-nums leading-tight',
+                'text-[13px] font-bold tabular-nums leading-tight',
                 kpis.deltaPct == null
                   ? 'text-zinc-800'
                   : kpis.deltaPct <= 0
@@ -821,98 +831,108 @@ export default function PedidosHistorialMesPage() {
             )}
           </div>
         </div>
+      </section>
 
-        <div className="mt-4 rounded-xl border border-amber-200/40 bg-gradient-to-br from-amber-50/35 via-white to-rose-50/25 p-3 ring-1 ring-amber-100/60">
-          <div className="flex flex-wrap items-start justify-between gap-2">
-            <div className="flex min-w-0 items-center gap-2">
-              <Sparkles className="h-4 w-4 shrink-0 text-amber-600/90" aria-hidden />
-              <div>
-                <h2 className="text-[11px] font-bold uppercase tracking-wide text-zinc-800">Alertas de compra</h2>
-                <p className="text-[10px] text-zinc-500">Desliza para ver todas · vs. mes anterior y riesgos.</p>
-              </div>
-            </div>
-            {purchaseAlerts.length > 3 ? (
-              <button
-                type="button"
-                onClick={() => setAlertsExpanded((e) => !e)}
-                className="shrink-0 text-[11px] font-semibold text-[#B91C1C] underline-offset-2 hover:underline"
-              >
-                {alertsExpanded ? 'Ocultar' : `Ver todas (${purchaseAlerts.length})`}
-              </button>
-            ) : null}
-          </div>
-          {purchaseAlerts.length === 0 ? (
-            <p className="mt-2.5 text-xs text-zinc-600">Sin alertas destacadas en este filtro.</p>
-          ) : (
-            <>
-              <div className="mt-2.5 -mx-1 flex gap-2 overflow-x-auto overflow-y-hidden overscroll-x-contain px-1 pb-1 pt-0.5 [-webkit-overflow-scrolling:touch] [scrollbar-width:thin] snap-x snap-mandatory">
-                {purchaseAlerts.map((a) => (
-                  <div
-                    key={a.id}
-                    className={[
-                      'min-w-[min(82vw,260px)] max-w-[280px] flex-shrink-0 snap-start rounded-xl px-3 py-2.5 shadow-sm ring-1',
-                      a.tone === 'rose'
-                        ? 'bg-white/90 ring-rose-200/60'
-                        : 'bg-white/90 ring-amber-200/55',
-                    ].join(' ')}
+      <section
+        className="mt-3 rounded-xl border border-zinc-200/85 bg-white px-2.5 py-2.5 ring-1 ring-zinc-100 sm:px-3 sm:py-3"
+        aria-label="Total de compras por proveedor"
+      >
+        <h2 className="text-xs font-bold uppercase tracking-[0.08em] text-zinc-800">Total por proveedor</h2>
+        <p className="mt-0.5 text-[10px] text-zinc-500">
+          Cuánto lleva gastado cada proveedor este período (IVA incl., mismo criterio que el resto de la pantalla).
+        </p>
+        {supplierPerformance.length === 0 ? (
+          <p className="mt-2 text-[11px] text-zinc-500">Sin compras por proveedor en este filtro.</p>
+        ) : (
+          <>
+            <ul className="mt-2 divide-y divide-zinc-100 rounded-xl border border-zinc-200/75 bg-zinc-50/50 ring-1 ring-zinc-100/85">
+              {supplierPerformance.map((s) => {
+                const pctDelTotal =
+                  totalGastoProveedoresMes > 0 ? (s.spend / totalGastoProveedoresMes) * 100 : 0;
+                return (
+                  <li
+                    key={s.supplierId}
+                    className="flex min-w-0 items-center justify-between gap-2 px-2.5 py-1.5 first:rounded-t-[0.65rem] last:rounded-b-[0.65rem] sm:px-3 sm:py-2"
                   >
-                    <div className="flex items-start justify-between gap-2">
-                      <span
-                        className={[
-                          'inline-flex rounded-full px-2 py-0.5 text-[8px] font-bold uppercase tracking-wide',
-                          a.tone === 'rose'
-                            ? 'bg-rose-100/90 text-rose-900'
-                            : 'bg-amber-100/90 text-amber-950',
-                        ].join(' ')}
-                      >
-                        {a.tag}
-                      </span>
-                      <AlertTriangle
-                        className={[
-                          'h-3.5 w-3.5 shrink-0 opacity-75',
-                          a.tone === 'rose' ? 'text-rose-600' : 'text-amber-600',
-                        ].join(' ')}
-                        aria-hidden
-                      />
+                    <p className="min-w-0 truncate text-[12px] font-semibold text-zinc-900" title={s.supplierName}>
+                      {s.supplierName}
+                    </p>
+                    <div className="shrink-0 text-right leading-tight">
+                      <p className="text-[13px] font-bold tabular-nums text-zinc-900">{s.spend.toFixed(2)} €</p>
+                      <p className="text-[9px] font-medium tabular-nums text-zinc-500">
+                        {totalGastoProveedoresMes > 0 ? `${pctDelTotal.toFixed(1)}% del total mes` : '—'}
+                      </p>
                     </div>
-                    <p className="mt-2 line-clamp-2 text-[12px] font-bold leading-snug text-zinc-900">{a.title}</p>
-                    <div className="mt-1.5 space-y-0.5">
-                      {a.lines.map((line, li) => (
-                        <p key={`${a.id}-ln-${li}`} className="text-[10px] leading-snug text-zinc-600">
-                          {line}
-                        </p>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
-              {alertsExpanded ? (
-                <ul className="mt-2 grid gap-1.5 sm:grid-cols-2">
-                  {purchaseAlerts.map((a) => (
-                    <li
-                      key={`${a.id}-full`}
+                  </li>
+                );
+              })}
+            </ul>
+            <p className="mt-2 text-[10px] tabular-nums text-zinc-500">
+              <span className="font-semibold text-zinc-700">{supplierPerformance.length}</span> proveedor
+              {supplierPerformance.length === 1 ? '' : 'es'} · suma{' '}
+              <span className="font-semibold text-zinc-800">{totalGastoProveedoresMes.toFixed(2)} €</span>
+            </p>
+          </>
+        )}
+      </section>
+
+      <section
+        className="mt-3 rounded-xl border border-amber-200/45 bg-gradient-to-br from-amber-50/50 via-white to-rose-50/35 px-2.5 py-2 ring-1 ring-amber-100/65 sm:px-3 sm:py-2.5"
+        aria-label="Alertas de compra"
+      >
+        <div className="flex items-center justify-between gap-2">
+          <div>
+            <h2 className="text-xs font-bold uppercase tracking-[0.1em] text-zinc-800">Alertas de compra</h2>
+            <p className="text-[10px] text-zinc-500">Subidas, gasto, concentración, desvíos e incidencias.</p>
+          </div>
+          <Sparkles className="h-4 w-4 shrink-0 text-amber-600/85" aria-hidden />
+        </div>
+        {purchaseAlerts.length === 0 ? (
+          <p className="mt-2 text-[11px] text-zinc-600">Sin alertas destacadas en este filtro.</p>
+        ) : (
+          <ul className="mt-2 max-h-[min(52vh,22rem)] space-y-1.5 overflow-y-auto overscroll-contain pr-0.5 [-webkit-overflow-scrolling:touch]">
+            {purchaseAlerts.map((a) => (
+              <li
+                key={a.id}
+                className={[
+                  'flex gap-2 rounded-lg px-2 py-1.5 ring-1',
+                  a.tone === 'rose'
+                    ? 'bg-white/95 ring-rose-200/55 shadow-[0_1px_2px_rgba(0,0,0,0.03)]'
+                    : 'bg-white/95 ring-amber-200/50 shadow-[0_1px_2px_rgba(0,0,0,0.03)]',
+                ].join(' ')}
+              >
+                <AlertTriangle
+                  className={[
+                    'mt-0.5 h-3.5 w-3.5 shrink-0',
+                    a.tone === 'rose' ? 'text-rose-600/90' : 'text-amber-600/90',
+                  ].join(' ')}
+                  aria-hidden
+                />
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                    <span
                       className={[
-                        'rounded-lg px-2.5 py-2 ring-1',
+                        'inline-flex rounded-full px-1.5 py-px text-[8px] font-bold uppercase tracking-wide',
                         a.tone === 'rose'
-                          ? 'bg-rose-50/50 ring-rose-200/50'
-                          : 'bg-amber-50/40 ring-amber-200/45',
+                          ? 'bg-rose-100/95 text-rose-900 ring-1 ring-rose-200/60'
+                          : 'bg-amber-100/95 text-amber-950 ring-1 ring-amber-200/55',
                       ].join(' ')}
                     >
-                      <span className="text-[9px] font-bold text-zinc-700">{a.tag}</span>
-                      <p className="text-[11px] font-semibold text-zinc-900">{a.title}</p>
-                      <p className="text-[10px] text-zinc-600">{a.lines.join(' · ')}</p>
-                    </li>
-                  ))}
-                </ul>
-              ) : null}
-            </>
-          )}
-        </div>
+                      {a.tag}
+                    </span>
+                    <p className="min-w-0 flex-1 truncate text-[11px] font-bold leading-snug text-zinc-900">{a.title}</p>
+                  </div>
+                  <p className="mt-0.5 text-[10px] leading-snug text-zinc-600">{a.lines.join(' · ')}</p>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
 
-        <div className="mt-4 grid min-w-0 gap-3 lg:grid-cols-2 lg:items-start">
-        <div className="min-w-0 rounded-xl border border-zinc-100/90 bg-zinc-50/70 p-3 ring-1 ring-zinc-100">
-          <h2 className="text-[11px] font-bold uppercase tracking-wide text-zinc-700">Top productos por gasto</h2>
-          <p className="mt-0.5 text-[10px] text-zinc-500">Productos críticos por importe (IVA incl.).</p>
+      <section className="mt-3 min-w-0 rounded-xl border border-zinc-200/85 bg-white px-2.5 py-2.5 ring-1 ring-zinc-100 sm:px-3 sm:py-3">
+          <h2 className="text-xs font-bold uppercase tracking-[0.08em] text-zinc-800">Top productos por gasto</h2>
+          <p className="mt-0.5 text-[10px] text-zinc-500">Mayor impacto en compras del período (IVA incl.).</p>
           <div className="mt-2 space-y-1.5">
             {monthlyTopProducts.slice(0, topN).map((p, idx) => {
               const rank = idx + 1;
@@ -976,10 +996,9 @@ export default function PedidosHistorialMesPage() {
                             {mom.toFixed(1)}%
                           </span>
                         )}
-                        <span className="shrink-0 tabular-nums text-[9px] text-zinc-400">{p.pct.toFixed(1)}%</span>
-                        <ChevronRight className="h-3.5 w-3.5 shrink-0 text-zinc-300" aria-hidden />
+                        <span className="shrink-0 tabular-nums text-[9px] text-zinc-400">{p.pct.toFixed(1)}% mes</span>
                       </div>
-                      <p className="mt-0.5 text-[9px] tabular-nums text-zinc-400">del gasto del mes</p>
+                      <p className="mt-0.5 text-[9px] tabular-nums text-zinc-400">Participación sobre el gasto del período</p>
                     </div>
                   </div>
                 </div>
@@ -989,18 +1008,19 @@ export default function PedidosHistorialMesPage() {
               <p className="text-sm text-zinc-500">Sin productos con gasto en este mes.</p>
             ) : null}
           </div>
-        </div>
+      </section>
 
-        <div className="mt-3 min-w-0 rounded-xl border border-zinc-100/90 bg-zinc-50/70 p-3 ring-1 ring-zinc-100 lg:mt-0">
-          <h2 className="text-[11px] font-bold uppercase tracking-wide text-zinc-700">Mayor subida de precio</h2>
-          <p className="mt-0.5 text-[10px] text-zinc-500">Precio unitario medio ponderado vs. mes anterior (misma lógica operativa).</p>
-          <div className="mt-2 space-y-1.5">
-            {topProductsByUnitPriceIncrease.slice(0, Math.min(10, topN)).map((p) => (
+      <section className="mt-3 min-w-0 rounded-xl border border-zinc-200/85 bg-white px-2.5 py-2.5 ring-1 ring-zinc-100 sm:px-3 sm:py-3">
+          <h2 className="text-xs font-bold uppercase tracking-[0.08em] text-zinc-800">Mayor subida de precio</h2>
+          <p className="mt-0.5 text-[10px] text-zinc-500">Precio unitario medio ponderado vs. mes anterior.</p>
+          <div className="mt-2 space-y-1">
+            {topProductsByUnitPriceIncrease.slice(0, Math.min(10, topN)).map((p, idx) => (
               <div
                 key={p.name}
-                className="flex min-w-0 items-center justify-between gap-2 rounded-lg bg-white px-2 py-1.5 ring-1 ring-zinc-200/70"
+                className="flex min-w-0 items-center gap-2 rounded-lg border border-zinc-100/95 bg-zinc-50/40 px-2 py-1.5 ring-1 ring-zinc-100/90"
               >
-                <p className="min-w-0 truncate text-[12px] font-semibold text-zinc-900" title={p.name}>
+                <span className="w-6 shrink-0 text-center text-[10px] font-black tabular-nums text-zinc-400">{idx + 1}</span>
+                <p className="min-w-0 flex-1 truncate text-[11px] font-semibold text-zinc-900" title={p.name}>
                   {p.name}
                 </p>
                 <div className="shrink-0 text-right leading-tight">
@@ -1015,61 +1035,53 @@ export default function PedidosHistorialMesPage() {
               </div>
             ))}
             {topProductsByUnitPriceIncrease.length === 0 ? (
-              <p className="text-sm text-zinc-500">Sin subidas relevantes vs. el mes anterior.</p>
+              <p className="text-[11px] text-zinc-500">Sin subidas relevantes vs. el mes anterior.</p>
             ) : null}
           </div>
-        </div>
-        </div>
+      </section>
 
-        <div className="mt-4 min-w-0 rounded-xl border border-zinc-100/90 bg-zinc-50/70 p-3 ring-1 ring-zinc-100">
-          <h2 className="text-[11px] font-bold uppercase tracking-wide text-zinc-700">Top proveedores</h2>
-          <p className="mt-0.5 text-[10px] text-zinc-500">Desliza · gasto, pedidos, incidencias y desvío.</p>
+      <section className="mt-3 min-w-0 rounded-xl border border-zinc-200/85 bg-white px-2.5 py-2.5 ring-1 ring-zinc-100 sm:px-3 sm:py-3">
+          <h2 className="text-xs font-bold uppercase tracking-[0.08em] text-zinc-800">Top proveedores</h2>
+          <p className="mt-0.5 text-[10px] text-zinc-500">Gasto, pedidos, incidencias y desviación pedido / recepción.</p>
           {supplierPerformance.length === 0 ? (
-            <p className="mt-2 text-sm text-zinc-500">Sin datos de proveedores en este mes.</p>
+            <p className="mt-2 text-[11px] text-zinc-500">Sin datos de proveedores en este mes.</p>
           ) : (
-            <div className="mt-2 -mx-1 flex gap-2 overflow-x-auto overflow-y-hidden overscroll-x-contain px-1 pb-1 pt-0.5 [-webkit-overflow-scrolling:touch] [scrollbar-width:thin] snap-x snap-mandatory">
+            <div className="mt-2 divide-y divide-zinc-100 rounded-xl border border-zinc-200/80 bg-zinc-50/30 ring-1 ring-zinc-100/90">
               {(() => {
                 const maxSp = supplierPerformance[0]?.spend ?? 1;
-                return supplierPerformance.slice(0, topN).map((s) => (
-                  <div
-                    key={s.supplierId}
-                    className="min-w-[min(78vw,220px)] max-w-[240px] flex-shrink-0 snap-start rounded-xl bg-white px-3 py-2.5 shadow-sm ring-1 ring-zinc-200/75"
-                  >
-                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-zinc-100 to-zinc-50 text-[11px] font-black text-zinc-600 ring-1 ring-zinc-200/80">
-                      {s.supplierName.slice(0, 1).toUpperCase()}
+                return supplierPerformance.slice(0, topN).map((s, i) => (
+                  <div key={s.supplierId} className="flex min-w-0 items-center gap-2 px-2.5 py-2 sm:gap-3 sm:px-3">
+                    <span className="w-5 shrink-0 text-center text-[10px] font-black tabular-nums text-zinc-400">{i + 1}</span>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-[12px] font-bold leading-tight text-zinc-900">{s.supplierName}</p>
+                      <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] text-zinc-500">
+                        <span>{s.orderCount} ped.</span>
+                        <span
+                          className={[
+                            'font-semibold tabular-nums',
+                            s.incidencePct >= 15 ? 'text-rose-700' : s.incidencePct > 0 ? 'text-amber-800' : 'text-emerald-700',
+                          ].join(' ')}
+                        >
+                          {s.incidencePct.toFixed(0)}% incid.
+                        </span>
+                        <span className="tabular-nums text-zinc-600">Δ {s.deviation.toFixed(0)} €</span>
+                      </div>
                     </div>
-                    <p className="mt-2 line-clamp-2 text-[12px] font-bold leading-tight text-zinc-900" title={s.supplierName}>
-                      {s.supplierName}
-                    </p>
-                    <p className="mt-1 text-[13px] font-black tabular-nums text-zinc-900">{s.spend.toFixed(2)} €</p>
-                    <p className="text-[10px] text-zinc-500">{s.orderCount} pedidos</p>
-                    <div className="mt-2 flex items-center justify-between gap-2">
-                      <span
-                        className={[
-                          'rounded-full px-2 py-0.5 text-[9px] font-bold tabular-nums',
-                          s.incidencePct >= 15
-                            ? 'bg-rose-100 text-rose-800'
-                            : s.incidencePct > 0
-                              ? 'bg-amber-100 text-amber-900'
-                              : 'bg-emerald-100 text-emerald-800',
-                        ].join(' ')}
-                      >
-                        {s.incidencePct.toFixed(0)}% incid.
-                      </span>
-                      <span className="text-[10px] font-semibold tabular-nums text-zinc-600">Δ {s.deviation.toFixed(0)} €</span>
-                    </div>
-                    <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-zinc-100">
-                      <div
-                        className="h-full rounded-full bg-[#D32F2F]/80"
-                        style={{ width: `${maxSp > 0 ? Math.min(100, (s.spend / maxSp) * 100) : 0}%` }}
-                      />
+                    <div className="shrink-0 text-right">
+                      <p className="text-[13px] font-black tabular-nums text-zinc-900">{s.spend.toFixed(2)} €</p>
+                      <div className="mt-1 ml-auto h-1 w-14 overflow-hidden rounded-full bg-zinc-200/80">
+                        <div
+                          className="h-full rounded-full bg-[#D32F2F]/78"
+                          style={{ width: `${maxSp > 0 ? Math.min(100, (s.spend / maxSp) * 100) : 0}%` }}
+                        />
+                      </div>
                     </div>
                   </div>
                 ));
               })()}
             </div>
           )}
-        </div>
+      </section>
 
         <div
           className="mt-3 flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5 rounded-xl border border-zinc-200/70 bg-zinc-100/50 px-3 py-2 text-[10px] text-zinc-700 ring-1 ring-zinc-100"
@@ -1093,9 +1105,9 @@ export default function PedidosHistorialMesPage() {
           </span>
         </div>
 
-        <div className="mt-3 min-w-0">
-          <div className="rounded-xl border border-zinc-100/90 bg-zinc-50/70 p-3 ring-1 ring-zinc-100">
-            <p className="text-[11px] font-bold uppercase tracking-wide text-zinc-600">Resumen semanal</p>
+        <section className="mt-3 min-w-0 rounded-xl border border-zinc-200/85 bg-white px-2.5 py-2.5 ring-1 ring-zinc-100 sm:px-3 sm:py-3">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-[0.08em] text-zinc-700">Resumen semanal</p>
             <div className="mt-2 flex flex-wrap gap-1.5">
               {weeklySummary.map((w) => (
                 <button
@@ -1129,14 +1141,14 @@ export default function PedidosHistorialMesPage() {
               <p className="mt-2 text-[11px] text-zinc-500">Toca una semana para el detalle.</p>
             )}
           </div>
-        </div>
+        </section>
 
-        <div className="mt-4 rounded-xl border border-zinc-200/80 bg-zinc-50/40 p-3 ring-1 ring-zinc-100">
+        <section className="mt-3 rounded-xl border border-zinc-200/80 bg-zinc-50/50 px-2.5 py-2.5 ring-1 ring-zinc-100 sm:px-3 sm:py-3">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <h2 className="text-[11px] font-bold uppercase tracking-wide text-zinc-700">Evolución de precios</h2>
+              <h2 className="text-xs font-bold uppercase tracking-[0.08em] text-zinc-700">Evolución de precios</h2>
               <p className="mt-0.5 max-w-md text-[10px] leading-snug text-zinc-500">
-                Herramienta avanzada: curvas, histórico y comparativas fuera de este resumen mensual.
+                Análisis avanzado: curvas, histórico y comparativas (fuera de este resumen).
               </p>
             </div>
             <Link
@@ -1146,8 +1158,7 @@ export default function PedidosHistorialMesPage() {
               Abrir análisis
             </Link>
           </div>
-        </div>
-      </section>
+        </section>
     </div>
   );
 }

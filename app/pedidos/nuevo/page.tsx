@@ -1,17 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import {
-  ArrowRight,
-  Clock,
-  Filter,
-  LayoutTemplate,
-  Package,
-  Search,
-  ShoppingCart,
-  Star,
-  TrendingUp,
-} from 'lucide-react';
+import { Clock, Filter, Package, Search, Star, TrendingUp } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import React from 'react';
 import { useAuth } from '@/components/AuthProvider';
@@ -32,6 +22,8 @@ import {
   weeklyParScaledToCoverageDays,
 } from '@/lib/pedidos-coverage';
 import PedidosNuevoCatalogRow from '@/components/PedidosNuevoCatalogLine';
+import PedidosNuevoStickyDock from '@/components/pedidos/PedidosNuevoStickyDock';
+import PedidosSaveTemplateSheet from '@/components/pedidos/PedidosSaveTemplateSheet';
 import PedidosUseTemplateSheet from '@/components/pedidos/PedidosUseTemplateSheet';
 import { buildPedidoWhatsappMessage } from '@/lib/pedidos-whatsapp-message';
 import { applyQuantityTapDelta, parseQuantityManualInput } from '@/lib/pedidos-order-quantity';
@@ -165,6 +157,7 @@ export default function NuevoPedidoPage() {
   const [editBlockedReason, setEditBlockedReason] = React.useState<string | null>(null);
   const [hadContentRevisionFlag, setHadContentRevisionFlag] = React.useState(false);
   const [useTemplateOpen, setUseTemplateOpen] = React.useState(false);
+  const [saveTemplateOpen, setSaveTemplateOpen] = React.useState(false);
   const [templateSummary, setTemplateSummary] = React.useState<{
     loaded: number;
     priceUp: number;
@@ -820,6 +813,36 @@ export default function NuevoPedidoPage() {
   const totalVat = items.reduce((acc, row) => acc + row.lineTotal * row.vatRate, 0);
   const total = totalBase + totalVat;
 
+  const supplierMinimumEuro = selectedSupplier?.minimumOrderEuro ?? null;
+
+  const templateSheetOrder = React.useMemo((): PedidoOrder | null => {
+    if (!selectedSupplier || items.length === 0) return null;
+    const lineTotalSum =
+      Math.round(items.reduce((s, i) => s + i.lineTotal + i.lineTotal * i.vatRate, 0) * 100) / 100;
+    return {
+      id: existingOrderId ?? 'borrador-local',
+      supplierId: selectedSupplier.id,
+      supplierName: selectedSupplier.name,
+      supplierContact: selectedSupplier.contact,
+      status: 'draft',
+      notes: notes.trim(),
+      createdAt: existingCreatedAt ?? new Date().toISOString(),
+      deliveryDate: deliveryDate || undefined,
+      items,
+      total: lineTotalSum,
+      usuarioNombre: requesterResolvedName,
+    };
+  }, [selectedSupplier, items, notes, existingOrderId, existingCreatedAt, deliveryDate, requesterResolvedName]);
+
+  const scrollToPedidoAcciones = React.useCallback(() => {
+    document.getElementById('pedido-nuevo-acciones')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, []);
+
+  const scrollToCatalogoNuevo = React.useCallback(() => {
+    document.getElementById('pedido-nuevo-catalogo')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    window.setTimeout(() => document.getElementById('pedido-nuevo-buscar')?.focus(), 280);
+  }, []);
+
   const totalUnitsOrdered = React.useMemo(() => {
     let s = 0;
     for (const p of supplierProducts) {
@@ -1073,7 +1096,7 @@ export default function NuevoPedidoPage() {
   }
 
   return (
-    <div className="relative space-y-2 pb-[6.75rem] sm:space-y-2.5 sm:pb-[7.25rem]">
+    <div className="relative space-y-2 pb-[5.85rem] sm:space-y-2.5 sm:pb-[6.35rem]">
       {existingSentAt && editingId ? (
         <section
           className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-950 ring-1 ring-amber-100"
@@ -1183,7 +1206,10 @@ export default function NuevoPedidoPage() {
         )}
       </section>
 
-      <section className="overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-zinc-200/85">
+      <section
+        id="pedido-nuevo-catalogo"
+        className="overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-zinc-200/85"
+      >
         {selectedSupplier && supplierProducts.length > 0 ? (
           <div className="flex gap-0.5 overflow-x-auto border-b border-zinc-100 px-2 pt-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:px-3">
             {(
@@ -1219,6 +1245,7 @@ export default function NuevoPedidoPage() {
                 aria-hidden
               />
               <input
+                id="pedido-nuevo-buscar"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Buscar producto…"
@@ -1419,66 +1446,33 @@ export default function NuevoPedidoPage() {
         </div>
       </section>
 
-      <div className="pointer-events-none fixed inset-x-0 bottom-0 z-40 flex justify-center pb-[env(safe-area-inset-bottom)]">
-        <div className="pointer-events-auto w-full max-w-lg border-t border-zinc-200/90 bg-white/95 shadow-[0_-8px_28px_rgba(0,0,0,0.07)] backdrop-blur-md">
-          <div className="flex items-center gap-1.5 px-2.5 py-2 sm:gap-2 sm:px-3">
-            <div className="relative flex min-w-0 flex-1 items-center gap-2">
-              <div className="relative shrink-0">
-                <ShoppingCart className="h-6 w-6 text-zinc-700" aria-hidden />
-                {totalUnitsOrdered > 0 ? (
-                  <span className="absolute -right-1.5 -top-1 flex h-[1.125rem] min-w-[1.125rem] items-center justify-center rounded-full bg-[#E30613] px-1 text-[9px] font-bold leading-none text-white shadow-sm">
-                    {totalUnitsOrdered > 99 ? '99+' : totalUnitsOrdered}
-                  </span>
-                ) : null}
-              </div>
-              <div className="min-w-0">
-                <p className="text-[11px] font-bold leading-tight text-zinc-900">
-                  <span className="tabular-nums">{items.length}</span> líneas{' '}
-                  <span className="font-black tabular-nums text-zinc-950">· {totalBase.toFixed(2)} €</span>
-                </p>
-                <p className="text-[9px] font-medium leading-tight text-zinc-500">
-                  Sin IVA · {totalUnitsOrdered} uds · pedido activo
-                </p>
-              </div>
-            </div>
-            {!editingId ? (
-              <>
-                <button
-                  type="button"
-                  onClick={() => sendToWhatsappInOneStep()}
-                  className="flex h-11 w-11 shrink-0 touch-manipulation items-center justify-center rounded-xl bg-[#25D366] text-white shadow-sm ring-1 ring-[#128C7E]/30 transition-transform duration-100 active:scale-95"
-                  aria-label="Enviar pedido por WhatsApp"
-                >
-                  <svg className="h-5 w-5" viewBox="0 0 24 24" aria-hidden>
-                    <path
-                      fill="currentColor"
-                      d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.435 9.884-9.881 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"
-                    />
-                  </svg>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setUseTemplateOpen(true)}
-                  className="flex h-11 w-11 shrink-0 touch-manipulation items-center justify-center rounded-xl border border-[#E30613]/35 bg-[#FFF8F7] text-[#B91C1C] shadow-sm ring-1 ring-[#E30613]/12 transition-transform duration-100 active:scale-95"
-                  aria-label="Usar plantilla de pedido"
-                >
-                  <LayoutTemplate className="h-5 w-5" strokeWidth={2} aria-hidden />
-                </button>
-              </>
-            ) : null}
-            <button
-              type="button"
-              onClick={() =>
-                document.getElementById('pedido-nuevo-acciones')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-              }
-              className="inline-flex h-11 shrink-0 touch-manipulation items-center gap-1 rounded-full bg-[#E30613] px-3.5 text-[12px] font-bold text-white shadow-md ring-1 ring-[#E30613]/20 transition-transform duration-100 active:scale-[0.97] sm:px-4"
-            >
-              Continuar
-              <ArrowRight className="h-4 w-4" aria-hidden />
-            </button>
-          </div>
-        </div>
-      </div>
+      <PedidosNuevoStickyDock
+        isEmpty={items.length === 0}
+        linesCount={items.length}
+        unitsCount={totalUnitsOrdered}
+        subtotalNoVat={totalBase}
+        vatAmount={totalVat}
+        totalWithVat={total}
+        minimumOrderEuro={supplierMinimumEuro}
+        notes={notes}
+        onNotesChange={setNotes}
+        onContinue={scrollToPedidoAcciones}
+        onWhatsApp={sendToWhatsappInOneStep}
+        onTemplate={() => setUseTemplateOpen(true)}
+        onSaveTemplate={() => setSaveTemplateOpen(true)}
+        showQuickActions={!editingId}
+        onEmptyCatalogCta={scrollToCatalogoNuevo}
+      />
+
+      <PedidosSaveTemplateSheet
+        open={Boolean(saveTemplateOpen && templateSheetOrder)}
+        onClose={() => setSaveTemplateOpen(false)}
+        localId={localId}
+        userId={userId}
+        order={templateSheetOrder}
+        supplierName={selectedSupplier?.name ?? ''}
+        linkedOrderId={existingOrderId}
+      />
 
       <PedidosUseTemplateSheet
         open={useTemplateOpen}
