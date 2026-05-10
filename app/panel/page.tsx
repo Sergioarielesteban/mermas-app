@@ -66,6 +66,29 @@ function useGreeting() {
   return 'Buenas noches';
 }
 
+/** Primer nombre o alias para el saludo (perfil → usuario acceso → email). */
+function shortNameForGreeting(
+  displayName: string | null,
+  loginUsername: string | null,
+  email: string | null,
+): string | null {
+  const dn = displayName?.trim();
+  if (dn) {
+    const first = dn.split(/\s+/)[0]!;
+    return first.length ? first.charAt(0).toUpperCase() + first.slice(1).toLowerCase() : null;
+  }
+  const lu = loginUsername?.trim();
+  if (lu) {
+    return lu.charAt(0).toUpperCase() + lu.slice(1).toLowerCase();
+  }
+  const local = email?.split('@')[0]?.trim();
+  if (local) {
+    const seg = local.split(/[._-]/)[0] ?? local;
+    if (seg.length) return seg.charAt(0).toUpperCase() + seg.slice(1).toLowerCase();
+  }
+  return null;
+}
+
 function useDateLabel() {
   return new Intl.DateTimeFormat('es-ES', {
     weekday: 'long',
@@ -127,11 +150,26 @@ function PanelFeaturedPedidos({
 }
 
 export default function PanelControlPage() {
-  const { localCode, localName, localId, email, profileRole, profileReady, isCentralKitchen, plan } = useAuth();
+  const {
+    localCode,
+    localName,
+    localId,
+    email,
+    displayName,
+    loginUsername,
+    profileRole,
+    profileReady,
+    isCentralKitchen,
+    plan,
+  } = useAuth();
   const role = profileRole ?? 'staff';
   const emoji = useDailyEmoji();
   const greeting = useGreeting();
   const dateLabel = useDateLabel();
+  const greetingLine = React.useMemo(() => {
+    const who = shortNameForGreeting(displayName, loginUsername, email);
+    return who ? `${greeting}, ${who}` : greeting;
+  }, [greeting, displayName, loginUsername, email]);
 
   const isBlockedByPlan = React.useCallback(
     (module: PlanModule) => {
@@ -201,7 +239,7 @@ export default function PanelControlPage() {
         <div className="rounded-xl bg-white px-3 py-2 shadow-sm ring-1 ring-zinc-200/80">
           <div className="flex items-center justify-between gap-2">
             <p className="min-w-0 truncate text-[15px] font-bold tracking-tight text-zinc-900">
-              {greeting} {emoji}
+              {greetingLine} {emoji}
             </p>
             <p className="shrink-0 text-right text-[11px] capitalize leading-none text-zinc-400">{dateLabel}</p>
           </div>
