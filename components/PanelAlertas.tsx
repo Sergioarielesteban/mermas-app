@@ -11,7 +11,11 @@ import {
 import { fetchOrders } from '@/lib/pedidos-supabase';
 import type { AppccSlot } from '@/lib/appcc-supabase';
 import { computeCutoffForToday, isOrderDayToday } from '@/lib/pedidos-order-agenda-engine';
-import { fetchOrderSchedulesForLocal, fetchSupplierNamesMap } from '@/lib/pedidos-order-agenda-supabase';
+import {
+  fetchOrderSchedulesForLocal,
+  fetchReviewItemsForLocal,
+  fetchSupplierNamesMap,
+} from '@/lib/pedidos-order-agenda-supabase';
 import { usePedidosDataChangedListener } from '@/hooks/usePedidosDataChangedListener';
 
 type Alerta = {
@@ -45,6 +49,7 @@ export default function PanelAlertas({
   showPedidos?: boolean;
 }) {
   const [alertas, setAlertas] = useState<Alerta[]>([]);
+  const [agendaAlDiaMicro, setAgendaAlDiaMicro] = useState(false);
   const [cargando, setCargando] = useState(true);
 
   const cargarAlertas = useCallback(async () => {
@@ -97,18 +102,22 @@ export default function PanelAlertas({
     if (showPedidos) {
       try {
         const now = new Date();
-        const [schedulesMap, namesMap] = await Promise.all([
+        const [schedulesMap, namesMap, reviewBySupplier] = await Promise.all([
           fetchOrderSchedulesForLocal(sb, localId),
           fetchSupplierNamesMap(sb, localId),
+          fetchReviewItemsForLocal(sb, localId),
         ]);
 
         type AgendaSort = { supplierId: string; texto: string; urgente: boolean; order: number; name: string };
         const agendaPending: AgendaSort[] = [];
+        let suppliersAgendaHoy = 0;
 
         for (const [supplierId, schedule] of schedulesMap) {
           if (!schedule.enabled || !isOrderDayToday(schedule, now)) continue;
           const computed = computeCutoffForToday(schedule, ordersRecent, supplierId, now);
-          if (!computed || computed.status === 'enviado') continue;
+          if (!computed) continue;
+          suppliersAgendaHoy++;
+          if (computed.status === 'enviado') continue;
 
           const name = namesMap.get(supplierId) ?? 'Proveedor';
           let texto: string;
@@ -141,9 +150,25 @@ export default function PanelAlertas({
             urgente: row.urgente,
           });
         }
+
+        let reviewItemsAgendaHoy = 0;
+        for (const [supplierId, schedule] of schedulesMap) {
+          if (!schedule.enabled || !isOrderDayToday(schedule, now)) continue;
+          for (const it of reviewBySupplier.get(supplierId) ?? []) {
+            if (it.enabled) reviewItemsAgendaHoy++;
+          }
+        }
+
+        setAgendaAlDiaMicro(
+          suppliersAgendaHoy > 0 &&
+            agendaPending.length === 0 &&
+            reviewItemsAgendaHoy === 0,
+        );
       } catch {
-        // silencioso
+        setAgendaAlDiaMicro(false);
       }
+    } else {
+      setAgendaAlDiaMicro(false);
     }
 
     // ── Alertas de pedidos esperados hoy ───────────────────────
@@ -174,6 +199,7 @@ export default function PanelAlertas({
   useEffect(() => {
     if (!localId) {
       setAlertas([]);
+      setAgendaAlDiaMicro(false);
       setCargando(false);
       return;
     }
@@ -193,10 +219,21 @@ export default function PanelAlertas({
     void cargarAlertas();
   }, Boolean(localId));
 
-  if (cargando || alertas.length === 0) return null;
+  if (cargando || (alertas.length === 0 && !agendaAlDiaMicro)) return null;
 
   return (
     <div className="flex flex-col gap-2">
+      {agendaAlDiaMicro ? (
+        <section
+          className="rounded-xl border border-emerald-200/60 bg-emerald-50/35 px-2.5 py-1.5 shadow-sm ring-1 ring-emerald-100/50"
+          aria-live="polite"
+        >
+          <p className="text-[11px] font-semibold leading-tight text-emerald-900">Agenda al día</p>
+          <p className="mt-0.5 text-[10px] leading-snug text-emerald-800/85">
+            Todos los pedidos programados están enviados.
+          </p>
+        </section>
+      ) : null}
       {alertas.map(a => (
         <Link
           key={a.id}

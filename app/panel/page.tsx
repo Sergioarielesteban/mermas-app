@@ -109,19 +109,19 @@ function PanelFeaturedPedidos({
     <Link
       href={tile.blocked ? '/planes' : tile.href}
       className={[
-        'flex items-center gap-3.5 rounded-2xl px-4 py-3.5 text-left antialiased outline-none select-none touch-manipulation shadow-sm transition-transform active:scale-[0.99]',
+        'flex items-center gap-2.5 rounded-xl px-3 py-2 text-left antialiased outline-none select-none touch-manipulation shadow-sm transition-transform active:scale-[0.99]',
         'bg-gradient-to-br from-zinc-700 to-zinc-800',
         tile.blocked ? 'opacity-50' : '',
       ].join(' ')}
     >
-      <div className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-white/10 ring-1 ring-white/10">
-        <Icon className="h-5 w-5 text-[#ef6060]" strokeWidth={2} />
+      <div className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-white/10 ring-1 ring-white/10">
+        <Icon className="h-4 w-4 text-[#ef6060]" strokeWidth={2} />
       </div>
       <div className="min-w-0 flex-1">
-        <p className="text-[15px] font-bold leading-tight tracking-tight text-white">{tile.label}</p>
-        <p className="mt-0.5 text-[12px] text-zinc-400">{tile.sub}</p>
+        <p className="text-[14px] font-bold leading-tight tracking-tight text-white">{tile.label}</p>
+        <p className="mt-0.5 text-[11px] leading-snug text-zinc-400">{tile.sub}</p>
       </div>
-      <ChevronRight className="h-5 w-5 shrink-0 text-[#ef6060]" strokeWidth={2.25} aria-hidden />
+      <ChevronRight className="h-4 w-4 shrink-0 text-[#ef6060]" strokeWidth={2.25} aria-hidden />
     </Link>
   );
 }
@@ -193,24 +193,17 @@ export default function PanelControlPage() {
   const pedidosBlocked = !showPedidos || isBlockedByPlan('pedidos');
   const featuredPedidos = { href: '/pedidos', label: 'Pedidos', sub: 'Proveedores y recepción', Icon: ShoppingCart, blocked: pedidosBlocked };
 
-  const displayName = localName ?? localCode ?? '';
-
   return (
     <div className="-mx-4 min-h-screen bg-[#f5f5f7] pb-12 pt-3 sm:-mx-5 sm:px-5 md:-mx-6 md:px-6">
       <div className="mx-auto max-w-full space-y-3 px-4 sm:max-w-2xl sm:px-0 md:max-w-4xl">
 
-        {/* ── Saludo ─────────────────────────────────────────────── */}
-        <div className="rounded-2xl bg-white px-4 py-3.5 shadow-sm ring-1 ring-zinc-200/80">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-[17px] font-bold tracking-tight text-zinc-900">
-                {greeting} {emoji}
-              </p>
-              {displayName && (
-                <p className="mt-0.5 text-[13px] font-medium text-zinc-400">{displayName}</p>
-              )}
-            </div>
-            <p className="text-right text-[11px] capitalize text-zinc-400">{dateLabel}</p>
+        {/* ── Saludo (una línea: saludo + fecha) ───────────────────── */}
+        <div className="rounded-xl bg-white px-3 py-2 shadow-sm ring-1 ring-zinc-200/80">
+          <div className="flex items-center justify-between gap-2">
+            <p className="min-w-0 truncate text-[15px] font-bold tracking-tight text-zinc-900">
+              {greeting} {emoji}
+            </p>
+            <p className="shrink-0 text-right text-[11px] capitalize leading-none text-zinc-400">{dateLabel}</p>
           </div>
         </div>
 
@@ -220,14 +213,16 @@ export default function PanelControlPage() {
         {/* ── Checklist guiado (si aplica) ───────────────────────── */}
         <ProductoGuiadoChecklist />
 
-        {/* ── Pedidos destacado ───────────────────────────────────── */}
-        {showPedidos && <PanelFeaturedPedidos tile={featuredPedidos} />}
-
         {/* ── Módulos (rejilla 4×N, mismo diseño que los antiguos accesos rápidos) ── */}
         <div>
-          <p className="mb-2.5 px-0.5 text-[11px] font-semibold uppercase tracking-widest text-zinc-400">
+          <p className="mb-2 px-0.5 text-[11px] font-semibold uppercase tracking-widest text-zinc-400">
             Módulos
           </p>
+          {showPedidos ? (
+            <div className="mb-2">
+              <PanelFeaturedPedidos tile={featuredPedidos} />
+            </div>
+          ) : null}
           <div className="rounded-2xl bg-white px-3 py-4 shadow-sm ring-1 ring-zinc-200/80 sm:px-4">
             <div className="grid grid-cols-4 justify-items-center gap-x-1 gap-y-5 sm:gap-x-2">
               {allModules.map((tile) => (
