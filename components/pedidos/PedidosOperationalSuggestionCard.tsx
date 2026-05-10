@@ -5,10 +5,10 @@ import React from 'react';
 import type { OperationalSuggestion, OperationalSuggestionKind } from '@/lib/pedidos-operational-suggestions';
 
 /** Altura fija chip-card (no cambiar sin revisar carrusel). */
-export const SUGGESTION_CARD_HEIGHT_PX = 64;
+export const SUGGESTION_CARD_HEIGHT_PX = 72;
 
 function KindIcon({ kind }: { kind: OperationalSuggestionKind }) {
-  const cls = 'h-2.5 w-2.5 shrink-0 text-[#D32F2F]';
+  const cls = 'h-3 w-3 shrink-0 text-[#D32F2F]';
   switch (kind) {
     case 'pair':
       return <Link2 className={cls} strokeWidth={2} aria-hidden />;
@@ -37,19 +37,19 @@ export default React.memo(function PedidosOperationalSuggestionCard({
   return (
     <div
       className={[
-        'flex h-16 w-full min-w-0 gap-1.5 rounded-lg border border-zinc-200/80 bg-[#FAFAF9] px-1.5 py-1 shadow-sm ring-1 ring-zinc-100/80 transition-opacity duration-150',
+        'flex h-[72px] w-full min-w-0 gap-2 rounded-lg border border-zinc-200/80 bg-[#FAFAF9] px-2 py-1.5 shadow-sm ring-1 ring-zinc-100/80 transition-opacity duration-150',
         disabled ? 'opacity-60' : '',
       ].join(' ')}
     >
       <div className="flex shrink-0 items-center self-center">
-        <div className="grid h-5 w-5 place-items-center rounded-md bg-white ring-1 ring-zinc-200/70">
+        <div className="grid h-6 w-6 place-items-center rounded-md bg-white ring-1 ring-zinc-200/70">
           <KindIcon kind={suggestion.kind} />
         </div>
       </div>
 
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col justify-center gap-0.5">
-        <div className="flex min-w-0 items-center gap-0.5">
-          <p className="line-clamp-1 min-w-0 flex-1 text-[10px] font-semibold leading-tight text-zinc-900">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col justify-center gap-1">
+        <div className="flex min-w-0 items-center gap-1">
+          <p className="line-clamp-1 min-w-0 flex-1 text-[12px] font-semibold leading-snug text-zinc-900">
             {suggestion.title}
           </p>
           <button
@@ -58,15 +58,15 @@ export default React.memo(function PedidosOperationalSuggestionCard({
               e.stopPropagation();
               onDismiss();
             }}
-            className="grid h-5 w-5 shrink-0 place-items-center rounded-md text-zinc-400 transition-colors hover:bg-zinc-100/90 hover:text-zinc-600"
+            className="grid h-6 w-6 shrink-0 place-items-center rounded-md text-zinc-400 transition-colors hover:bg-zinc-100/90 hover:text-zinc-600"
             aria-label="Ocultar sugerencia"
           >
-            <X className="h-2.5 w-2.5" strokeWidth={2.5} aria-hidden />
+            <X className="h-3 w-3" strokeWidth={2.5} aria-hidden />
           </button>
         </div>
 
-        <div className="flex min-w-0 items-center gap-1">
-          <p className="line-clamp-1 min-w-0 flex-1 text-[9px] leading-tight text-zinc-500">
+        <div className="flex min-w-0 items-center gap-1.5">
+          <p className="line-clamp-1 min-w-0 flex-1 text-[11px] leading-snug text-zinc-600">
             {suggestion.subtitle?.trim() ? suggestion.subtitle : '\u00a0'}
           </p>
           <button
@@ -74,7 +74,7 @@ export default React.memo(function PedidosOperationalSuggestionCard({
             disabled={disabled}
             onClick={onAdd}
             className={[
-              'shrink-0 rounded-full px-2 py-0.5 text-[9px] font-bold leading-none transition-transform duration-150 active:scale-[0.98]',
+              'shrink-0 rounded-full px-2.5 py-1 text-[11px] font-bold leading-none transition-transform duration-150 active:scale-[0.98]',
               disabled
                 ? 'cursor-not-allowed bg-zinc-100 text-zinc-400'
                 : 'bg-[#E30613] text-white shadow-sm ring-1 ring-[#E30613]/20 hover:bg-[#c70510]',

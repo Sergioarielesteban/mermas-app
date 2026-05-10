@@ -182,7 +182,7 @@ export default React.memo(function PedidosOperationalSuggestions({
       aria-live="polite"
     >
       <div className="px-3 pb-0.5">
-        <p className="text-[9px] font-semibold uppercase tracking-[0.12em] text-zinc-400">Sugerencias</p>
+        <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-zinc-400">Sugerencias</p>
       </div>
 
       <div className="px-3">
