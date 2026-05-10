@@ -144,7 +144,7 @@ export default React.memo(function PedidosTemporalInsightStrip({ patterns, hidde
       {showLearningOnly ? (
         <p className="mt-1.5 text-[10px] leading-snug text-zinc-500">{patterns.learningMessage}</p>
       ) : (
-        <div className="mt-1.5 grid grid-cols-3 gap-1 sm:gap-1.5">
+        <div className="mt-2 grid grid-cols-1 gap-2 sm:mt-1.5 sm:grid-cols-3 sm:gap-1.5">
           {slots.map((slot) => {
             const Icon = slot.icon;
             const ins = slot.insight;
@@ -152,23 +152,25 @@ export default React.memo(function PedidosTemporalInsightStrip({ patterns, hidde
             return (
               <div
                 key={slot.key}
-                className="flex min-w-0 flex-col rounded-lg border border-zinc-200/90 bg-white px-1 py-1 shadow-sm ring-1 ring-zinc-100/80 sm:px-1.5 sm:py-1.5"
+                className="flex min-h-[5.75rem] min-w-0 flex-col justify-between rounded-xl border border-zinc-200/90 bg-white px-3 py-2.5 shadow-sm ring-1 ring-zinc-100/80 sm:min-h-[6.25rem] sm:rounded-lg sm:px-2 sm:py-2"
               >
-                <div className="flex items-center gap-0.5 text-zinc-400">
-                  <Icon className="h-3 w-3 shrink-0 text-[#E30613]" strokeWidth={2} aria-hidden />
-                  <span className="truncate text-[8px] font-bold uppercase tracking-wide text-zinc-500">{slot.label}</span>
+                <div className="flex items-center gap-1 text-zinc-400">
+                  <Icon className="h-4 w-4 shrink-0 text-[#E30613] sm:h-3 sm:w-3" strokeWidth={2} aria-hidden />
+                  <span className="truncate text-[11px] font-bold uppercase tracking-wide text-zinc-600 sm:text-[8px] sm:text-zinc-500">
+                    {slot.label}
+                  </span>
                 </div>
                 {ins ? (
                   <>
-                    <p className="mt-0.5 line-clamp-3 min-h-[2.25rem] text-[8px] font-semibold leading-snug text-zinc-900 sm:min-h-[2.5rem] sm:text-[10px]">
+                    <p className="mt-1 line-clamp-4 text-[12px] font-semibold leading-snug text-zinc-900 sm:mt-0.5 sm:line-clamp-3 sm:text-[10px]">
                       {ins.headline}
                     </p>
-                    <p className="mt-0.5 line-clamp-2 text-[8px] leading-snug text-zinc-500">
+                    <p className="mt-1 line-clamp-2 text-[11px] leading-snug text-zinc-500 sm:mt-0.5 sm:text-[9px]">
                       {sub ?? 'Según histórico reciente'}
                     </p>
                   </>
                 ) : (
-                  <p className="mt-0.5 text-[8px] leading-snug text-zinc-400">Sin señal clara aún</p>
+                  <p className="mt-1 text-[11px] leading-snug text-zinc-400 sm:mt-0.5 sm:text-[8px]">Sin señal clara aún</p>
                 )}
               </div>
             );

@@ -1252,8 +1252,9 @@ export default function NuevoPedidoPage() {
                 value={supplierId}
                 disabled={Boolean(existingSentAt && existingOrderId)}
                 onChange={(e) => setSupplierId(e.target.value)}
-                className="w-full cursor-pointer appearance-none truncate rounded-xl border border-zinc-200 bg-white bg-[length:0.95rem] bg-[position:right_0.55rem_center] bg-no-repeat py-2 pl-2.5 pr-9 text-center text-[15px] font-bold leading-tight text-zinc-900 shadow-sm outline-none ring-1 ring-zinc-100/80 disabled:cursor-not-allowed disabled:bg-zinc-100 disabled:text-zinc-500"
+                className="w-full cursor-pointer appearance-none truncate rounded-xl border border-zinc-200 bg-white bg-[length:0.95rem] bg-[position:right_0.65rem_center] bg-no-repeat py-2.5 pl-10 pr-10 text-center text-[15px] font-bold leading-tight text-zinc-900 shadow-sm outline-none ring-1 ring-zinc-100/80 [text-align-last:center] disabled:cursor-not-allowed disabled:bg-zinc-100 disabled:text-zinc-500"
                 style={{
+                  textAlign: 'center',
                   backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2371717a'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'/%3E%3C/svg%3E")`,
                 }}
               >
@@ -1283,8 +1284,9 @@ export default function NuevoPedidoPage() {
               value={supplierId}
               disabled={Boolean(existingSentAt && existingOrderId)}
               onChange={(e) => setSupplierId(e.target.value)}
-              className="w-full cursor-pointer appearance-none truncate rounded-xl border border-zinc-200 bg-white bg-[length:1rem] bg-[position:right_0.65rem_center] bg-no-repeat py-2 pl-3 pr-10 text-center text-[15px] font-bold leading-tight text-zinc-900 outline-none disabled:cursor-not-allowed disabled:bg-zinc-100 disabled:text-zinc-500"
+              className="w-full cursor-pointer appearance-none truncate rounded-xl border border-zinc-200 bg-white bg-[length:1rem] bg-[position:right_0.65rem_center] bg-no-repeat py-2.5 pl-10 pr-10 text-center text-[15px] font-bold leading-tight text-zinc-900 outline-none [text-align-last:center] disabled:cursor-not-allowed disabled:bg-zinc-100 disabled:text-zinc-500"
               style={{
+                textAlign: 'center',
                 backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2371717a'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'/%3E%3C/svg%3E")`,
               }}
             >
