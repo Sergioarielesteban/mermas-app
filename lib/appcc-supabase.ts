@@ -47,6 +47,59 @@ export const APPCC_UNIT_TYPE_LABEL: Record<AppccUnitType, string> = {
   congelador: 'Congelador',
 };
 
+/**
+ * Turnos que se registran en la UI diaria (coincide con `TEMP_REGISTRO_SLOTS` en temperaturas).
+ * «tarde» solo existe por lecturas antiguas en BD.
+ */
+export const APPCC_REGISTRO_SLOTS_DIARIO: readonly AppccSlot[] = ['manana', 'noche'];
+
+/** Hora local Europe/Madrid para la fecha dada (panel / alertas alineados con el día operativo). */
+export function madridHourMinute(from: Date = new Date()): { hour: number; minute: number; totalMin: number } {
+  const parts = new Intl.DateTimeFormat('en', {
+    timeZone: 'Europe/Madrid',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+    hourCycle: 'h23',
+  }).formatToParts(from);
+  const hour = Number(parts.find((p) => p.type === 'hour')?.value ?? '0');
+  const minute = Number(parts.find((p) => p.type === 'minute')?.value ?? '0');
+  const totalMin = hour * 60 + minute;
+  return { hour, minute, totalMin };
+}
+
+/**
+ * Turnos con registro incompleto (al menos un equipo sin lectura) que ya deberían haberse hecho
+ * según la hora en Madrid — misma base que la página de temperaturas.
+ */
+export function getDueTemperatureRegistrationSlots(
+  units: AppccColdUnitRow[],
+  readings: AppccReadingRow[],
+  now: Date = new Date(),
+): AppccSlot[] {
+  if (units.length === 0) return [];
+  const bySlotMap = readingsByUnitAndSlot(readings);
+  const pending = new Set<AppccSlot>();
+  for (const unit of units) {
+    for (const slot of APPCC_REGISTRO_SLOTS_DIARIO) {
+      if (!bySlotMap.get(`${unit.id}:${slot}`)) pending.add(slot);
+    }
+  }
+  if (pending.size === 0) return [];
+
+  const { hour, totalMin } = madridHourMinute(now);
+
+  const mananaDue =
+    pending.has('manana') && (totalMin >= 11 * 60 || (hour >= 0 && hour < 2));
+  const nocheDue =
+    pending.has('noche') && (totalMin >= 23 * 60 || (hour >= 0 && hour < 2));
+
+  const out: AppccSlot[] = [];
+  if (mananaDue) out.push('manana');
+  if (nocheDue) out.push('noche');
+  return out;
+}
+
 /** Día civil en Europe/Madrid (YYYY-MM-DD). */
 export function madridDateKey(d: Date = new Date()): string {
   return new Intl.DateTimeFormat('en-CA', {

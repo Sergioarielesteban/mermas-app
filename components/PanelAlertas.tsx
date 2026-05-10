@@ -7,9 +7,9 @@ import {
   fetchAppccColdUnits,
   fetchAppccReadingsForDate,
   appccTemperaturasOperationalDateKey,
+  getDueTemperatureRegistrationSlots,
 } from '@/lib/appcc-supabase';
 import { fetchOrders } from '@/lib/pedidos-supabase';
-import type { AppccSlot } from '@/lib/appcc-supabase';
 import { computeCutoffForToday, isOrderDayToday } from '@/lib/pedidos-order-agenda-engine';
 import {
   fetchOrderSchedulesForLocal,
@@ -27,26 +27,16 @@ type Alerta = {
   urgente: boolean;
 };
 
-function getSlotActual(): AppccSlot | null {
-  const h = new Date().getHours();
-  const m = new Date().getMinutes();
-  const totalMin = h * 60 + m;
-  // Mañana: avisa si pasan de las 11:00 sin registro
-  if (totalMin >= 11 * 60 && totalMin < 15 * 60) return 'manana';
-  // Tarde: avisa si pasan de las 16:00 sin registro
-  if (totalMin >= 16 * 60 && totalMin < 22 * 60) return 'tarde';
-  // Noche: avisa si pasan de las 23:00 sin registro
-  if (totalMin >= 23 * 60) return 'noche';
-  return null;
-}
-
 export default function PanelAlertas({
   localId,
   showPedidos = true,
+  /** En la home operativa las temperaturas se muestran en el cuadrado «Temperaturas» (no duplicar banners). */
+  hideTemperaturaAlerts = false,
 }: {
   localId: string;
   /** Misma condición que el acceso al módulo Pedidos en el panel (agenda + cortes). */
   showPedidos?: boolean;
+  hideTemperaturaAlerts?: boolean;
 }) {
   const [alertas, setAlertas] = useState<Alerta[]>([]);
   const [agendaAlDiaMicro, setAgendaAlDiaMicro] = useState(false);
@@ -66,36 +56,34 @@ export default function PanelAlertas({
       ordersRecent = [];
     }
 
-    // ── Alertas de temperatura ──────────────────────────────────
-    try {
-      const slotActual = getSlotActual();
-      if (slotActual) {
+    // ── Alertas de temperatura (mañana/noche, hora Madrid; mismo criterio que /appcc/temperaturas) ──
+    if (!hideTemperaturaAlerts) {
+      try {
         const [units, readings] = await Promise.all([
           fetchAppccColdUnits(sb, localId),
           fetchAppccReadingsForDate(sb, localId, appccTemperaturasOperationalDateKey()),
         ]);
 
         if (units.length > 0) {
-          const registradoEsteSlot = readings.some(r => r.slot === slotActual);
-          if (!registradoEsteSlot) {
-            const labels: Record<AppccSlot, string> = {
-              manana: 'de mañana',
-              tarde: 'de tarde',
-              noche: 'de cierre',
-            };
+          const dueSlots = getDueTemperatureRegistrationSlots(units, readings);
+          for (const slot of dueSlots) {
+            const texto =
+              slot === 'manana'
+                ? 'Temperatura de la mañana sin registrar'
+                : 'Temperatura de la noche sin registrar';
             nuevas.push({
-              id: `temp-${slotActual}`,
+              id: `temp-${slot}`,
               tipo: 'temperatura',
               icono: '🌡️',
-              texto: `Temperaturas ${labels[slotActual]} sin registrar`,
+              texto,
               href: '/appcc/temperaturas',
-              urgente: slotActual === 'noche',
+              urgente: slot === 'noche',
             });
           }
         }
+      } catch {
+        // silencioso — no bloquear el panel si falla
       }
-    } catch {
-      // silencioso — no bloquear el panel si falla
     }
 
     // ── Agenda operativa (mismo criterio que /pedidos: visible hasta enviar el pedido) ──
@@ -194,7 +182,7 @@ export default function PanelAlertas({
 
     setAlertas(nuevas);
     setCargando(false);
-  }, [localId, showPedidos]);
+  }, [localId, showPedidos, hideTemperaturaAlerts]);
 
   useEffect(() => {
     if (!localId) {

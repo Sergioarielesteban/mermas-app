@@ -21,23 +21,16 @@ import { getModuleAccess } from '@/lib/canAccessModule';
 import type { PlanModule } from '@/lib/planPermissions';
 import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
 import { fetchOrders } from '@/lib/pedidos-supabase';
+import type { AppccSlot } from '@/lib/appcc-supabase';
+import { fetchAppccFryers, fetchOilEventsForDate } from '@/lib/appcc-aceite-supabase';
 import {
   appccTemperaturasOperationalDateKey,
   fetchAppccColdUnits,
   fetchAppccReadingsForDate,
+  getDueTemperatureRegistrationSlots,
+  madridDateKey,
 } from '@/lib/appcc-supabase';
-import type { AppccSlot } from '@/lib/appcc-supabase';
 import { buildPanelGreetingParts } from '@/lib/panel-greeting';
-
-function slotActualTemperatura(): AppccSlot | null {
-  const h = new Date().getHours();
-  const m = new Date().getMinutes();
-  const totalMin = h * 60 + m;
-  if (totalMin >= 11 * 60 && totalMin < 15 * 60) return 'manana';
-  if (totalMin >= 16 * 60 && totalMin < 22 * 60) return 'tarde';
-  if (totalMin >= 23 * 60) return 'noche';
-  return null;
-}
 
 export default function OperationalDayHome() {
   const {
@@ -84,23 +77,45 @@ export default function OperationalDayHome() {
 
   const [kpi, setKpi] = React.useState<{
     pedidosHoy: number | null;
-    tempPendientes: number | null;
+    tempDueSlots: AppccSlot[];
+    /** Freidoras activas (para saber si aplica revisar aceite). */
+    oilFryersActive: number;
+    /** Al menos un cambio o filtrado registrado hoy (día civil Madrid, como el registro de aceite). */
+    oilHadEventToday: boolean;
     loading: boolean;
-  }>({ pedidosHoy: null, tempPendientes: null, loading: true });
+  }>({
+    pedidosHoy: null,
+    tempDueSlots: [],
+    oilFryersActive: 0,
+    oilHadEventToday: false,
+    loading: true,
+  });
 
   React.useEffect(() => {
     if (!localId || !isSupabaseEnabled() || !getSupabaseClient()) {
-      setKpi({ pedidosHoy: null, tempPendientes: null, loading: false });
+      setKpi({
+        pedidosHoy: null,
+        tempDueSlots: [],
+        oilFryersActive: 0,
+        oilHadEventToday: false,
+        loading: false,
+      });
       return;
     }
     const sb = getSupabaseClient()!;
     let cancelled = false;
-    setKpi((s) => ({ ...s, loading: true }));
+    let firstFetch = true;
 
     const run = async () => {
+      if (firstFetch) {
+        setKpi((s) => ({ ...s, loading: true }));
+        firstFetch = false;
+      }
       const hoyISO = new Date().toISOString().slice(0, 10);
       let pedidosHoy = 0;
-      let tempPendientes = 0;
+      let tempDueSlots: AppccSlot[] = [];
+      let oilFryersActive = 0;
+      let oilHadEventToday = false;
       try {
         if (showPedidos) {
           const orders = await fetchOrders(sb, localId, { recentDays: 14 });
@@ -110,28 +125,33 @@ export default function OperationalDayHome() {
         pedidosHoy = 0;
       }
       try {
-        const slot = slotActualTemperatura();
-        if (slot) {
-          const [units, readings] = await Promise.all([
-            fetchAppccColdUnits(sb, localId),
-            fetchAppccReadingsForDate(sb, localId, appccTemperaturasOperationalDateKey()),
-          ]);
-          if (units.length > 0) {
-            const ok = readings.some((r) => r.slot === slot);
-            if (!ok) tempPendientes = 1;
-          }
+        const oilDateKey = madridDateKey();
+        const [units, readings, fryers, oilEvents] = await Promise.all([
+          fetchAppccColdUnits(sb, localId),
+          fetchAppccReadingsForDate(sb, localId, appccTemperaturasOperationalDateKey()),
+          fetchAppccFryers(sb, localId),
+          fetchOilEventsForDate(sb, localId, oilDateKey),
+        ]);
+        oilFryersActive = fryers.length;
+        oilHadEventToday = oilEvents.length > 0;
+        if (units.length > 0) {
+          tempDueSlots = getDueTemperatureRegistrationSlots(units, readings);
         }
       } catch {
-        tempPendientes = 0;
+        tempDueSlots = [];
+        oilFryersActive = 0;
+        oilHadEventToday = false;
       }
       if (!cancelled) {
-        setKpi({ pedidosHoy, tempPendientes, loading: false });
+        setKpi({ pedidosHoy, tempDueSlots, oilFryersActive, oilHadEventToday, loading: false });
       }
     };
 
     void run();
+    const tick = window.setInterval(() => void run(), 60_000);
     return () => {
       cancelled = true;
+      window.clearInterval(tick);
     };
   }, [localId, showPedidos]);
 
@@ -154,28 +174,76 @@ export default function OperationalDayHome() {
   };
 
   const tempNeeds =
-    kpi.tempPendientes != null && kpi.tempPendientes > 0 && !isBlockedByPlan('appcc');
+    kpi.tempDueSlots.length > 0 && !isBlockedByPlan('appcc');
+
+  const tempAlertLines =
+    tempNeeds && !kpi.loading
+      ? kpi.tempDueSlots.map((slot) => ({
+          text: slot === 'manana' ? 'Mañana sin registrar' : 'Noche sin registrar',
+          tone: slot === 'noche' ? ('red' as const) : ('amber' as const),
+        }))
+      : undefined;
+
+  const tempBlocked = isBlockedByPlan('appcc');
+  const tempPanelTone: 'neutral' | 'danger' | 'success' =
+    tempBlocked || kpi.loading ? 'neutral' : tempNeeds ? 'danger' : 'success';
 
   const priorityTemp = {
     title: 'Temperaturas',
-    sub: tempNeeds ? 'Pendiente este turno' : 'Al día',
+    sub: kpi.loading
+      ? 'Cargando…'
+      : tempAlertLines && tempAlertLines.length > 0
+        ? ''
+        : tempNeeds
+          ? 'Pendiente'
+          : 'Al día',
     badge: tempNeeds ? ('PEND.' as const) : null,
-    badgeClass: 'bg-amber-100 text-amber-900 ring-amber-200',
+    badgeClass:
+      tempPanelTone === 'danger'
+        ? 'bg-red-200 text-red-950 ring-red-300'
+        : 'bg-emerald-100 text-emerald-900 ring-emerald-200',
     iconBg: 'bg-amber-100 text-amber-800',
     href: '/appcc/temperaturas',
-    blocked: isBlockedByPlan('appcc'),
+    blocked: tempBlocked,
     Icon: Thermometer,
+    alertLines: tempAlertLines,
+    panelTone: tempPanelTone,
   };
+
+  const aceiteBlocked = isBlockedByPlan('appcc');
+  const aceiteNeedsReview =
+    !aceiteBlocked &&
+    !kpi.loading &&
+    kpi.oilFryersActive > 0 &&
+    !kpi.oilHadEventToday;
+
+  const aceitePanelTone: 'neutral' | 'danger' | 'success' =
+    aceiteBlocked || kpi.loading ? 'neutral' : aceiteNeedsReview ? 'danger' : 'success';
 
   const priorityAceite = {
     title: 'Aceites',
-    sub: isBlockedByPlan('appcc') ? 'No disponible' : 'Freidoras',
-    badge: isBlockedByPlan('appcc') ? null : ('REVISAR' as const),
-    badgeClass: 'bg-emerald-100 text-emerald-900 ring-emerald-200',
+    sub: aceiteBlocked
+      ? 'No disponible'
+      : kpi.loading
+        ? 'Cargando…'
+        : kpi.oilFryersActive === 0
+          ? 'Sin freidoras activas'
+          : kpi.oilHadEventToday
+            ? 'Al día'
+            : 'Freidoras — falta registro hoy',
+    badge:
+      aceiteBlocked || kpi.loading || kpi.oilFryersActive === 0 || kpi.oilHadEventToday
+        ? null
+        : ('REVISAR' as const),
+    badgeClass:
+      aceitePanelTone === 'danger'
+        ? 'bg-red-200 text-red-950 ring-red-300'
+        : 'bg-emerald-100 text-emerald-900 ring-emerald-200',
     iconBg: 'bg-emerald-100 text-emerald-800',
     href: '/appcc/aceite/registro',
-    blocked: isBlockedByPlan('appcc'),
+    blocked: aceiteBlocked,
     Icon: Droplets,
+    panelTone: aceitePanelTone,
   };
 
   const priorityProduccion = {
@@ -203,7 +271,7 @@ export default function OperationalDayHome() {
 
       {localId ? (
         <section id="panel-alertas" className="scroll-mt-28">
-          <PanelAlertas localId={localId} showPedidos={showPedidos} />
+          <PanelAlertas localId={localId} showPedidos={showPedidos} hideTemperaturaAlerts />
         </section>
       ) : null}
 
@@ -289,7 +357,9 @@ function PriorityCard(props: {
   );
 }
 
-/** Dos cuadrados iguales en una fila (Temperaturas | Aceites). */
+type SquareAlertLine = { text: string; tone: 'amber' | 'red' };
+
+/** Dos cuadrados iguales en una fila (Temperaturas | Aceites): verde = ok, rojo = falta algo. */
 function PrioritySquareCard(props: {
   title: string;
   sub: string;
@@ -299,22 +369,79 @@ function PrioritySquareCard(props: {
   href: string;
   blocked?: boolean;
   Icon: LucideIcon;
+  /** Avisos compactos dentro del cuadrado (temperaturas mañana/noche). */
+  alertLines?: SquareAlertLine[];
+  /** Verde «Al día», rojo pendiente, neutro cargando / bloqueado. */
+  panelTone?: 'neutral' | 'danger' | 'success';
 }) {
-  const { title, sub, badge, badgeClass, iconBg, href, blocked, Icon } = props;
+  const { title, sub, badge, badgeClass, iconBg, href, blocked, Icon, alertLines, panelTone = 'neutral' } = props;
+  const hasAlerts = alertLines && alertLines.length > 0;
+  const danger = panelTone === 'danger';
+  const success = panelTone === 'success';
+
+  const shellClass =
+    danger
+      ? 'border border-red-300/90 bg-red-50 shadow-sm ring-2 ring-red-300/70'
+      : success
+        ? 'border border-emerald-300/90 bg-emerald-50 shadow-sm ring-2 ring-emerald-300/70'
+        : 'bg-white shadow-sm ring-1 ring-zinc-200/80';
+
+  const iconShellClass = danger
+    ? 'bg-red-100 text-red-700 ring-red-200/80'
+    : success
+      ? 'bg-emerald-100 text-emerald-700 ring-emerald-200/80'
+      : [iconBg, 'ring-white/60'].join(' ');
+
+  const titleClass = danger ? 'text-red-950' : success ? 'text-emerald-950' : 'text-zinc-900';
+
+  const subClass =
+    danger && !hasAlerts
+      ? 'text-[10px] font-medium leading-snug text-red-800'
+      : success
+        ? 'text-[10px] leading-snug text-emerald-800'
+        : 'text-[10px] leading-snug text-zinc-500';
+
+  const chevronClass = danger ? 'text-red-400' : success ? 'text-emerald-500' : 'text-zinc-300';
+
   return (
     <Link
       href={blocked ? '/planes' : href}
       className={[
-        'relative flex min-h-[118px] flex-col items-center justify-between rounded-2xl bg-white p-2.5 pt-3 shadow-sm ring-1 ring-zinc-200/80 transition-transform active:scale-[0.99] sm:min-h-[126px]',
+        'relative flex min-h-[118px] flex-col items-center justify-between rounded-2xl p-2.5 pt-3 transition-transform active:scale-[0.99] sm:min-h-[126px]',
+        shellClass,
         blocked ? 'opacity-60' : '',
       ].join(' ')}
     >
       <div className="flex w-full flex-col items-center text-center">
-        <div className={['grid h-9 w-9 place-items-center rounded-xl ring-1 ring-white/60', iconBg].join(' ')}>
+        <div className={['grid h-9 w-9 place-items-center rounded-xl ring-1', iconShellClass].join(' ')}>
           <Icon className="h-4 w-4" aria-hidden />
         </div>
-        <p className="mt-1.5 font-serif text-[13px] font-normal leading-tight text-zinc-900">{title}</p>
-        <p className="mt-0.5 line-clamp-2 text-[10px] leading-snug text-zinc-500">{sub}</p>
+        <p className={['mt-1.5 font-serif text-[13px] font-normal leading-tight', titleClass].join(' ')}>
+          {title}
+        </p>
+        {hasAlerts ? (
+          <div className="mt-1 flex w-full flex-col gap-0.5 px-0.5">
+            {alertLines!.map((line, idx) => (
+              <p
+                key={`${line.tone}-${idx}-${line.text}`}
+                className={[
+                  'rounded-md px-1.5 py-0.5 text-[9px] font-semibold leading-tight ring-1',
+                  danger
+                    ? line.tone === 'red'
+                      ? 'bg-red-100/90 text-red-900 ring-red-200'
+                      : 'bg-white/90 text-red-900 ring-red-200/80'
+                    : line.tone === 'red'
+                      ? 'bg-red-50 text-red-800 ring-red-100'
+                      : 'bg-amber-50 text-amber-900 ring-amber-100',
+                ].join(' ')}
+              >
+                {line.text}
+              </p>
+            ))}
+          </div>
+        ) : (
+          <p className={['mt-0.5 line-clamp-2', subClass].join(' ')}>{sub}</p>
+        )}
       </div>
       <div className="flex w-full items-center justify-between px-0.5 pb-px pt-1.5">
         {badge ? (
@@ -329,7 +456,7 @@ function PrioritySquareCard(props: {
         ) : (
           <span />
         )}
-        <ChevronRight className="h-3.5 w-3.5 shrink-0 text-zinc-300" aria-hidden />
+        <ChevronRight className={['h-3.5 w-3.5 shrink-0', chevronClass].join(' ')} aria-hidden />
       </div>
     </Link>
   );
