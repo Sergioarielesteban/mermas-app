@@ -174,21 +174,21 @@ export default React.memo(function PedidosOperationalSuggestions({
 
   return (
     <div
-      className="border-b border-zinc-100/90 bg-gradient-to-b from-[#FFF9F9]/60 to-transparent px-0 py-1"
+      className="border-b border-zinc-100/80 bg-gradient-to-b from-[#FFF9F9]/50 to-transparent px-0 py-0.5"
       aria-live="polite"
     >
-      <div className="px-3 pb-0.5">
-        <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-zinc-400">Recordatorios</p>
+      <div className="px-2.5 pb-0 sm:px-3">
+        <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-zinc-400">Recordatorios</p>
       </div>
 
-      <div className="px-3">
+      <div className="px-2.5 sm:px-3">
         <ul
           ref={scrollerRef}
           onScroll={onScrollerScroll}
           onPointerDown={onScrollerPointerDown}
           onTouchStart={onScrollerPointerDown}
           className={[
-            'flex w-full gap-0 overflow-x-auto overscroll-x-contain px-0 pb-0.5',
+            'flex w-full gap-0 overflow-x-auto overscroll-x-contain px-0 pb-0',
             'snap-x snap-mandatory',
             '[-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden',
             'touch-pan-x',
@@ -220,14 +220,14 @@ export default React.memo(function PedidosOperationalSuggestions({
       </div>
 
       {suggestions.length > 1 ? (
-        <div className="flex justify-center gap-0.5 px-3 pt-0.5 pb-0.5">
+        <div className="flex justify-center gap-0.5 px-2.5 pt-0 pb-0.5 sm:px-3">
           {suggestions.map((s, i) => (
             <button
               key={s.id}
               type="button"
               className={[
-                'h-1 w-1 rounded-full p-0 transition-all duration-200',
-                i === activeDot ? 'scale-105 bg-[#E30613]' : 'bg-zinc-300/85',
+                'h-0.5 w-0.5 rounded-full p-0 transition-all duration-200',
+                i === activeDot ? 'scale-110 bg-[#E30613]' : 'bg-zinc-300/80',
               ].join(' ')}
               aria-label={`Ir a recordatorio ${i + 1}`}
               onClick={() => {

@@ -1,11 +1,12 @@
 'use client';
 
 import Link from 'next/link';
-import { Clock, Filter, Package, Search, Sparkles, Star, TrendingUp } from 'lucide-react';
+import { Filter, Package, Search, Sparkles, Star, TrendingUp } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import React from 'react';
 import { usePedidosOperationalSuggestions } from '@/hooks/usePedidosOperationalSuggestions';
 import { useSuggestedOrder } from '@/hooks/useSuggestedOrder';
+import { useTemporalPatterns } from '@/hooks/useTemporalPatterns';
 import { useAuth } from '@/components/AuthProvider';
 import { usePedidosOrders } from '@/components/PedidosOrdersProvider';
 import { getDemoPedidoSuppliers } from '@/lib/demo-dataset';
@@ -28,6 +29,7 @@ import PedidosNuevoCatalogRow from '@/components/PedidosNuevoCatalogLine';
 import PedidosNuevoStickyDock from '@/components/pedidos/PedidosNuevoStickyDock';
 import PedidosSaveTemplateSheet from '@/components/pedidos/PedidosSaveTemplateSheet';
 import PedidosSuggestedOrderSheet from '@/components/pedidos/PedidosSuggestedOrderSheet';
+import PedidosTemporalInsightStrip from '@/components/pedidos/PedidosTemporalInsightStrip';
 import PedidosUseTemplateSheet from '@/components/pedidos/PedidosUseTemplateSheet';
 import { buildPedidoWhatsappMessage } from '@/lib/pedidos-whatsapp-message';
 import { applyQuantityTapDelta, parseQuantityManualInput } from '@/lib/pedidos-order-quantity';
@@ -305,6 +307,13 @@ export default function NuevoPedidoPage() {
     deliveryExceptionDates: selectedSupplier?.deliveryExceptionDates,
   });
 
+  const temporalPatterns = useTemporalPatterns({
+    localId,
+    supplierId,
+    supplierProducts,
+    orders,
+  });
+
   React.useEffect(() => {
     setSuggestedOrderOpen(false);
   }, [supplierId]);
@@ -379,7 +388,7 @@ export default function NuevoPedidoPage() {
     return target.toLocaleDateString('es-ES', { weekday: 'short', day: 'numeric', month: 'short' });
   }, [deliveryDate]);
 
-  type CatalogTabId = 'favorites' | 'recent' | 'top' | 'all';
+  type CatalogTabId = 'favorites' | 'top' | 'all';
   /** Siempre «Todos» al abrir / cambiar proveedor (catálogo completo primero). */
   const [catalogTab, setCatalogTab] = React.useState<CatalogTabId>('all');
   const [favoriteIds, setFavoriteIds] = React.useState<Set<string>>(() => new Set());
@@ -457,12 +466,6 @@ export default function NuevoPedidoPage() {
     }
     if (catalogTab === 'favorites') {
       return base.filter((p) => favoriteIds.has(p.id)).sort((a, b) => a.name.localeCompare(b.name, 'es'));
-    }
-    if (catalogTab === 'recent') {
-      const orderMap = new Map(catalogSignals.recentProductIds.map((id, i) => [id, i]));
-      return base
-        .filter((p) => orderMap.has(p.id))
-        .sort((a, b) => (orderMap.get(a.id) ?? 0) - (orderMap.get(b.id) ?? 0));
     }
     const orderMap = new Map(catalogSignals.mostOrdered30d.map((r, i) => [r.supplierProductId, i]));
     return base
@@ -1160,7 +1163,7 @@ export default function NuevoPedidoPage() {
   }
 
   return (
-    <div className="relative space-y-2 pb-[5.85rem] sm:space-y-2.5 sm:pb-[6.35rem]">
+    <div className="relative space-y-1.5 pb-[5.85rem] sm:space-y-2 sm:pb-[6.35rem]">
       {existingSentAt && editingId ? (
         <section
           className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-950 ring-1 ring-amber-100"
@@ -1200,106 +1203,115 @@ export default function NuevoPedidoPage() {
       ) : null}
 
       {!editingId ? (
-        <div className="flex items-center justify-between gap-2">
-          <Link
-            href="/pedidos"
-            className="inline-flex h-10 items-center justify-center rounded-xl border border-zinc-200 bg-white px-3 text-xs font-semibold text-zinc-700 shadow-sm hover:bg-zinc-50"
-          >
-            ← Pedidos
-          </Link>
-          <div className="flex items-center gap-1">
-            {hasSuggestion ? (
+        <section className="overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-zinc-200/85">
+          <div className="flex items-center justify-between gap-2 border-b border-zinc-100 px-2 py-2 sm:px-3">
+            <Link
+              href="/pedidos"
+              className="inline-flex min-h-9 min-w-9 items-center justify-center rounded-lg text-sm font-semibold text-zinc-700 hover:bg-zinc-50"
+            >
+              ←
+            </Link>
+            <div className="flex shrink-0 items-center gap-0.5">
               <button
                 type="button"
-                onClick={() => setSuggestedOrderOpen(true)}
-                className="inline-flex h-10 items-center gap-1 rounded-xl border border-zinc-200 bg-white px-2.5 text-[11px] font-semibold text-zinc-700 shadow-sm hover:bg-zinc-50 sm:px-3"
+                onClick={() =>
+                  document.getElementById('pedido-nuevo-acciones')?.scrollIntoView({
+                    behavior: 'smooth',
+                    block: 'start',
+                  })
+                }
+                className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[#25D366] hover:bg-emerald-50"
+                aria-label="Ir a enviar por WhatsApp"
               >
-                <Sparkles className="h-3.5 w-3.5 shrink-0 text-[#E30613]" strokeWidth={2} aria-hidden />
-                <span className="max-w-[7.5rem] truncate sm:max-w-none">Pedido sugerido</span>
+                <svg className="h-6 w-6" viewBox="0 0 24 24" aria-hidden>
+                  <path
+                    fill="currentColor"
+                    d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.435 9.884-9.881 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"
+                  />
+                </svg>
               </button>
-            ) : null}
-            <button
-              type="button"
-              onClick={() =>
-                document.getElementById('pedido-nuevo-acciones')?.scrollIntoView({
-                  behavior: 'smooth',
-                  block: 'start',
-                })
-              }
-              className="inline-flex h-10 w-10 items-center justify-center rounded-full text-[#25D366] hover:bg-emerald-50"
-              aria-label="Ir a enviar por WhatsApp"
-            >
-              <svg className="h-6 w-6" viewBox="0 0 24 24" aria-hidden>
-                <path
-                  fill="currentColor"
-                  d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.435 9.884-9.881 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"
-                />
-              </svg>
-            </button>
-            <button
-              type="button"
-              onClick={() => setUseTemplateOpen(true)}
-              className="inline-flex h-10 items-center justify-center rounded-xl border border-[#E30613]/35 bg-[#FFF8F7] px-3 text-xs font-bold text-[#7F1D1D] shadow-sm ring-1 ring-[#E30613]/15 hover:bg-[#FFF0EE]"
-            >
-              Plantilla
-            </button>
+              <button
+                type="button"
+                onClick={() => setUseTemplateOpen(true)}
+                className="inline-flex h-9 shrink-0 items-center justify-center rounded-xl border border-[#E30613]/35 bg-[#FFF8F7] px-2.5 text-[11px] font-bold text-[#7F1D1D] shadow-sm ring-1 ring-[#E30613]/15 hover:bg-[#FFF0EE] sm:px-3"
+              >
+                Plantilla
+              </button>
+            </div>
           </div>
-        </div>
-      ) : null}
-
-      <section className="rounded-2xl bg-white p-3 shadow-sm ring-1 ring-zinc-200/85">
-        <label htmlFor="pedido-nuevo-proveedor" className="sr-only">
-          Proveedor
-        </label>
-        {loadingSuppliers ? <p className="text-[11px] font-semibold text-zinc-500">Cargando catálogo…</p> : null}
-        <select
-          id="pedido-nuevo-proveedor"
-          value={supplierId}
-          disabled={Boolean(existingSentAt && existingOrderId)}
-          onChange={(e) => setSupplierId(e.target.value)}
-          className="mt-1 w-full cursor-pointer appearance-none truncate rounded-xl border border-zinc-200 bg-white bg-[length:1rem] bg-[position:right_0.65rem_center] bg-no-repeat py-2.5 pl-3 pr-10 text-lg font-bold leading-tight text-zinc-900 outline-none disabled:cursor-not-allowed disabled:bg-zinc-100 disabled:text-zinc-500"
-          style={{
-            backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2371717a'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'/%3E%3C/svg%3E")`,
-          }}
-        >
-          {suppliers.map((s) => (
-            <option key={s.id} value={s.id}>
-              {s.name}
-            </option>
-          ))}
-        </select>
-        {deliveryDate.trim() && deliveryChipLabel ? (
-          <p className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-zinc-500">
-            <span>
-              Entrega:{' '}
-              <span className="font-semibold text-zinc-700">{deliveryChipLabel}</span>
-            </span>
-          </p>
-        ) : (
-          <p className="mt-2 text-[11px] text-zinc-400">Define la fecha de entrega más abajo para ver la cobertura.</p>
-        )}
-        {editingId && hasSuggestion && selectedSupplier ? (
-          <button
-            type="button"
-            onClick={() => setSuggestedOrderOpen(true)}
-            className="mt-2 inline-flex w-full items-center justify-center gap-1.5 rounded-xl border border-zinc-200 bg-[#FAFAF9] py-2.5 text-xs font-semibold text-zinc-800 shadow-sm ring-1 ring-zinc-100/80 hover:bg-zinc-50 sm:w-auto sm:px-4"
-          >
-            <Sparkles className="h-4 w-4 shrink-0 text-[#E30613]" strokeWidth={2} aria-hidden />
-            Pedido sugerido
-          </button>
-        ) : null}
-      </section>
+          <div className="bg-[#FAFAF9] px-3 pb-2.5 pt-2.5">
+            <label htmlFor="pedido-nuevo-proveedor" className="sr-only">
+              Proveedor
+            </label>
+            {loadingSuppliers ? (
+              <p className="mb-2 text-center text-[10px] font-semibold text-zinc-500">Cargando catálogo…</p>
+            ) : null}
+            <div className="mx-auto w-full max-w-lg">
+              <select
+                id="pedido-nuevo-proveedor"
+                value={supplierId}
+                disabled={Boolean(existingSentAt && existingOrderId)}
+                onChange={(e) => setSupplierId(e.target.value)}
+                className="w-full cursor-pointer appearance-none truncate rounded-xl border border-zinc-200 bg-white bg-[length:0.95rem] bg-[position:right_0.55rem_center] bg-no-repeat py-2 pl-2.5 pr-9 text-center text-[15px] font-bold leading-tight text-zinc-900 shadow-sm outline-none ring-1 ring-zinc-100/80 disabled:cursor-not-allowed disabled:bg-zinc-100 disabled:text-zinc-500"
+                style={{
+                  backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2371717a'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'/%3E%3C/svg%3E")`,
+                }}
+              >
+                {suppliers.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            {deliveryDate.trim() && deliveryChipLabel ? (
+              <p className="mt-1.5 text-center text-[10px] text-zinc-500">
+                Entrega: <span className="font-semibold text-zinc-700">{deliveryChipLabel}</span>
+              </p>
+            ) : null}
+          </div>
+        </section>
+      ) : (
+        <section className="rounded-2xl bg-white p-2.5 shadow-sm ring-1 ring-zinc-200/85">
+          <label htmlFor="pedido-nuevo-proveedor-edit" className="sr-only">
+            Proveedor
+          </label>
+          {loadingSuppliers ? <p className="text-[11px] font-semibold text-zinc-500">Cargando catálogo…</p> : null}
+          <div className="mx-auto mt-1 w-full max-w-lg">
+            <select
+              id="pedido-nuevo-proveedor-edit"
+              value={supplierId}
+              disabled={Boolean(existingSentAt && existingOrderId)}
+              onChange={(e) => setSupplierId(e.target.value)}
+              className="w-full cursor-pointer appearance-none truncate rounded-xl border border-zinc-200 bg-white bg-[length:1rem] bg-[position:right_0.65rem_center] bg-no-repeat py-2 pl-3 pr-10 text-center text-[15px] font-bold leading-tight text-zinc-900 outline-none disabled:cursor-not-allowed disabled:bg-zinc-100 disabled:text-zinc-500"
+              style={{
+                backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2371717a'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'/%3E%3C/svg%3E")`,
+              }}
+            >
+              {suppliers.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          {deliveryDate.trim() && deliveryChipLabel ? (
+            <p className="mt-2 text-center text-[11px] text-zinc-500">
+              Entrega: <span className="font-semibold text-zinc-700">{deliveryChipLabel}</span>
+            </p>
+          ) : null}
+        </section>
+      )}
 
       <section
         id="pedido-nuevo-catalogo"
         className="overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-zinc-200/85"
       >
         {selectedSupplier && supplierProducts.length > 0 ? (
-          <div className="flex gap-0.5 overflow-x-auto border-b border-zinc-100 px-2 pt-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:px-3">
+          <div className="flex items-end gap-0 overflow-x-auto border-b border-zinc-100 px-1.5 pt-1.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:px-2.5">
             {(
               [
                 ['favorites', 'Favoritos', Star],
-                ['recent', 'Últimos', Clock],
                 ['top', 'Más usados', TrendingUp],
                 ['all', 'Todos', Package],
               ] as const
@@ -1309,49 +1321,64 @@ export default function NuevoPedidoPage() {
                 type="button"
                 onClick={() => setCatalogTab(id)}
                 className={[
-                  'inline-flex shrink-0 items-center gap-1 border-b-2 px-2.5 pb-2.5 pt-1 text-[11px] font-semibold transition-colors active:opacity-90 sm:px-3',
+                  'inline-flex shrink-0 items-center gap-0.5 border-b-2 px-2 pb-2 pt-0.5 text-[10px] font-semibold transition-colors active:opacity-90 sm:gap-1 sm:px-2.5 sm:text-[11px]',
                   catalogTab === id
                     ? 'border-[#E30613] text-[#E30613]'
                     : 'border-transparent text-zinc-500 hover:text-zinc-700',
                 ].join(' ')}
               >
-                <Icon className="h-3.5 w-3.5 shrink-0" strokeWidth={2} aria-hidden />
+                <Icon className="h-3 w-3 shrink-0 sm:h-3.5 sm:w-3.5" strokeWidth={2} aria-hidden />
                 {label}
               </button>
             ))}
+            {hasSuggestion ? (
+              <button
+                type="button"
+                onClick={() => setSuggestedOrderOpen(true)}
+                className="inline-flex shrink-0 items-center gap-0.5 border-b-2 border-transparent px-2 pb-2 pt-0.5 text-[10px] font-semibold text-[#E30613] transition-colors hover:text-[#c50512] active:opacity-90 sm:gap-1 sm:px-2.5 sm:text-[11px]"
+              >
+                <Sparkles className="h-3 w-3 shrink-0 sm:h-3.5 sm:w-3.5" strokeWidth={2} aria-hidden />
+                Pedido sugerido
+              </button>
+            ) : null}
           </div>
         ) : null}
-        <div className="px-3 pb-2">
-          <div className="flex gap-2">
-            <div className="relative min-w-0 flex-1">
-              <Search
-                className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400"
-                aria-hidden
-              />
-              <input
-                id="pedido-nuevo-buscar"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Buscar producto…"
-                className="h-10 w-full rounded-xl border-0 bg-zinc-50 py-2 pl-10 pr-3 text-sm text-zinc-900 shadow-inner shadow-zinc-100 ring-1 ring-zinc-200/80 placeholder:text-zinc-400 outline-none focus:ring-2 focus:ring-[#E30613]/20"
-              />
-            </div>
-            <button
-              type="button"
-              className="inline-flex shrink-0 items-center gap-1 rounded-xl border border-zinc-200 bg-white px-3 py-2 text-[11px] font-semibold text-zinc-700 shadow-sm hover:bg-zinc-50"
-              aria-label="Filtros (próximamente)"
-            >
-              <Filter className="h-4 w-4" aria-hidden />
-              <span className="hidden sm:inline">Filtros</span>
-            </button>
-          </div>
-        </div>
+        {selectedSupplier && supplierProducts.length > 0 ? (
+          <PedidosTemporalInsightStrip patterns={temporalPatterns} hidden={search.trim().length > 0} />
+        ) : null}
         {selectedSupplier && supplierProducts.length > 0 ? (
           <PedidosOperationalSuggestions
             suggestions={operationalSuggestions}
             onDismiss={recordOperationalDismiss}
             interactionEpoch={suggestionCarouselEpoch}
           />
+        ) : null}
+        {selectedSupplier && supplierProducts.length > 0 ? (
+          <div className="border-b border-zinc-100 bg-white px-2.5 pb-1.5 pt-1.5 sm:px-3">
+            <div className="flex gap-1.5">
+              <div className="relative min-w-0 flex-1">
+                <Search
+                  className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-zinc-400"
+                  aria-hidden
+                />
+                <input
+                  id="pedido-nuevo-buscar"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Buscar producto…"
+                  className="h-9 w-full rounded-lg border-0 bg-zinc-50 py-1.5 pl-9 pr-2.5 text-[13px] text-zinc-900 shadow-inner shadow-zinc-100 ring-1 ring-zinc-200/70 placeholder:text-zinc-400 outline-none focus:ring-2 focus:ring-[#E30613]/20"
+                />
+              </div>
+              <button
+                type="button"
+                className="inline-flex h-9 shrink-0 items-center gap-0.5 rounded-lg border border-zinc-200 bg-white px-2 text-[10px] font-semibold text-zinc-700 shadow-sm hover:bg-zinc-50 sm:gap-1 sm:px-2.5 sm:text-[11px]"
+                aria-label="Filtros (próximamente)"
+              >
+                <Filter className="h-3.5 w-3.5 sm:h-4 sm:w-4" aria-hidden />
+                <span className="hidden sm:inline">Filtros</span>
+              </button>
+            </div>
+          </div>
         ) : null}
         <div className="divide-y divide-zinc-100 border-t border-zinc-100">
           {selectedSupplier && supplierProducts.length === 0 ? (
@@ -1361,13 +1388,11 @@ export default function NuevoPedidoPage() {
             <p className="mx-3 my-3 rounded-lg border border-dashed border-zinc-200 bg-zinc-50/90 px-2.5 py-2 text-center text-[12px] leading-snug text-zinc-600">
               {catalogTab === 'favorites'
                 ? 'Sin favoritos. Abre «Todos» y pulsa la estrella.'
-                : catalogTab === 'recent'
-                  ? 'Sin recepciones recientes con este proveedor.'
-                  : catalogTab === 'top'
-                    ? 'Sin datos de pedidos en los últimos 30 días.'
-                    : qSearch
-                      ? 'Ningún producto coincide con la búsqueda.'
-                      : 'Sin productos que mostrar.'}
+                : catalogTab === 'top'
+                  ? 'Sin datos de pedidos en los últimos 30 días.'
+                  : qSearch
+                    ? 'Ningún producto coincide con la búsqueda.'
+                    : 'Sin productos que mostrar.'}
             </p>
           ) : null}
           {displayedProducts.map((p) => {
@@ -1580,6 +1605,7 @@ export default function NuevoPedidoPage() {
         result={suggestedOrderResult}
         hasExistingQuantities={hasExistingSuggestedBasketQty}
         onApply={applySuggestedOrder}
+        temporalPatterns={temporalPatterns}
       />
     </div>
   );
