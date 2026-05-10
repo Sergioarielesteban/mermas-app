@@ -38,6 +38,13 @@ import {
   type PedidoSupplier,
   type PedidoSupplierProduct,
 } from '@/lib/pedidos-supabase';
+import { formatCutoffHm } from '@/lib/pedidos-order-agenda-engine';
+import {
+  fetchReviewItemsForSupplier,
+  fetchScheduleForSupplier,
+  replaceReviewItemsForSupplier,
+  upsertOrderSchedule,
+} from '@/lib/pedidos-order-agenda-supabase';
 import { PEDIDOS_SUPPLIERS_FROM_INVENTORY } from '@/lib/pedidos-inventory-import';
 import { PEDIDO_ORDER_UNITS, PEDIDO_RECIPE_UNITS } from '@/lib/pedidos-units';
 import type { Unit } from '@/lib/types';
@@ -205,6 +212,63 @@ export default function ProveedoresPage() {
   const [exceptionInputBySupplier, setExceptionInputBySupplier] = React.useState<Record<string, string>>({});
   const [productDrafts, setProductDrafts] = React.useState<Record<string, ProductDraft>>({});
   const [bulkImportBusy, setBulkImportBusy] = React.useState(false);
+
+  const [agendaEnabled, setAgendaEnabled] = React.useState(false);
+  const [agendaOrderDays, setAgendaOrderDays] = React.useState<number[]>([]);
+  const [agendaCutoff, setAgendaCutoff] = React.useState('13:00');
+  const [agendaReminder, setAgendaReminder] = React.useState(30);
+  const [agendaDeliveryDays, setAgendaDeliveryDays] = React.useState<number[]>([]);
+  const [agendaReviews, setAgendaReviews] = React.useState<Array<{ supplierProductId: string | null; name: string }>>(
+    [],
+  );
+  const [agendaReviewPick, setAgendaReviewPick] = React.useState('');
+
+  React.useEffect(() => {
+    if (!editingSupplierId || !localId) return;
+    const supabase = getSupabaseClient();
+    if (!supabase) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const [sch, rev] = await Promise.all([
+          fetchScheduleForSupplier(supabase, localId, editingSupplierId),
+          fetchReviewItemsForSupplier(supabase, localId, editingSupplierId),
+        ]);
+        if (cancelled) return;
+        if (sch) {
+          setAgendaEnabled(sch.enabled);
+          setAgendaOrderDays([...(sch.order_weekdays ?? [])]);
+          setAgendaCutoff(formatCutoffHm(sch.cutoff_time));
+          setAgendaReminder(sch.reminder_minutes_before ?? 30);
+          setAgendaDeliveryDays(sch.delivery_weekdays != null ? [...sch.delivery_weekdays] : []);
+        } else {
+          setAgendaEnabled(false);
+          setAgendaOrderDays([]);
+          setAgendaCutoff('13:00');
+          setAgendaReminder(30);
+          setAgendaDeliveryDays([]);
+        }
+        setAgendaReviews(
+          rev
+            .filter((r) => r.enabled)
+            .map((r) => ({
+              supplierProductId: r.supplier_product_id,
+              name: r.product_name_snapshot.trim() || 'Producto',
+            })),
+        );
+        setAgendaReviewPick('');
+      } catch {
+        if (!cancelled) {
+          setAgendaEnabled(false);
+          setAgendaOrderDays([]);
+          setAgendaReviews([]);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [editingSupplierId, localId]);
 
   const applySupplierRows = React.useCallback((rows: PedidoSupplier[]) => {
     setSuppliers(rows);
@@ -465,13 +529,34 @@ export default function ProveedoresPage() {
     if (!name) return setMessage('El nombre del proveedor no puede estar vacío.');
     const supabase = getSupabaseClient();
     if (!supabase) return setMessage('Supabase no disponible en esta sesión.');
+    if (agendaEnabled && agendaOrderDays.length === 0) {
+      return setMessage('Agenda: elige al menos un día de pedido o desactiva la agenda.');
+    }
+
     void updateSupplier(supabase, localId, supplierId, {
       name: normalizeUpper(name),
       contact: draft?.contact ?? '',
       deliveryCycleWeekdays: draft?.deliveryCycleWeekdays ?? [],
       deliveryExceptionDates: draft?.deliveryExceptionDates ?? [],
     })
-      .then(() => {
+      .then(async () => {
+        await upsertOrderSchedule(supabase, localId, supplierId, {
+          enabled: agendaEnabled,
+          orderWeekdays: agendaOrderDays,
+          cutoffTime: agendaCutoff,
+          reminderMinutesBefore: Math.min(1440, Math.max(0, agendaReminder)),
+          deliveryWeekdays: agendaDeliveryDays.length > 0 ? agendaDeliveryDays : null,
+        });
+        await replaceReviewItemsForSupplier(
+          supabase,
+          localId,
+          supplierId,
+          agendaReviews.map((r) => ({
+            supplierProductId: r.supplierProductId,
+            productNameSnapshot: r.name.trim() || 'Producto',
+            enabled: true,
+          })),
+        );
         setEditingSupplierId(null);
         setMessage('Proveedor actualizado.');
         reload();
@@ -1221,6 +1306,166 @@ export default function ProveedoresPage() {
                   <p className="mt-2 text-[10px] text-zinc-500">Sin excepciones guardadas.</p>
                 )}
               </div>
+
+              <details className="rounded-xl border border-zinc-200 bg-white ring-1 ring-zinc-100/80 [&_summary::-webkit-details-marker]:hidden">
+                <summary className="cursor-pointer list-none px-3 py-2 text-[12px] font-bold text-zinc-800">
+                  Agenda de pedido <span className="font-normal text-zinc-500">(opcional)</span>
+                </summary>
+                <div className="space-y-3 border-t border-zinc-100 px-3 pb-3 pt-2">
+                  <label className="flex cursor-pointer items-center gap-2 text-[12px] font-semibold text-zinc-800">
+                    <input
+                      type="checkbox"
+                      checked={agendaEnabled}
+                      onChange={(e) => setAgendaEnabled(e.target.checked)}
+                      className="h-4 w-4 rounded border-zinc-400"
+                    />
+                    Activar agenda para este proveedor
+                  </label>
+                  <div>
+                    <p className="text-[11px] font-semibold text-zinc-700">Días para hacer el pedido</p>
+                    <p className="mt-0.5 text-[10px] text-zinc-500">
+                      Solo esos días aparecerá en «Agenda de hoy» con la hora límite.
+                    </p>
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {DELIVERY_DAY_CHIPS.map(({ day, label }) => {
+                        const sel = agendaOrderDays.includes(day);
+                        return (
+                          <button
+                            key={`ag-${day}`}
+                            type="button"
+                            onClick={() =>
+                              setAgendaOrderDays((prev) => {
+                                const s = new Set(prev);
+                                if (s.has(day)) s.delete(day);
+                                else s.add(day);
+                                return [...s].sort((a, b) => a - b);
+                              })
+                            }
+                            className={[
+                              'h-8 min-w-[2rem] rounded-lg px-2 text-xs font-bold',
+                              sel
+                                ? 'bg-[#E30613] text-white ring-1 ring-[#c50512]'
+                                : 'border border-zinc-300 bg-white text-zinc-700',
+                            ].join(' ')}
+                          >
+                            {label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <p className="text-[11px] font-semibold text-zinc-700">Hora límite</p>
+                      <input
+                        type="time"
+                        value={agendaCutoff}
+                        onChange={(e) => setAgendaCutoff(e.target.value)}
+                        className="mt-1 h-10 w-full rounded-xl border border-zinc-300 bg-white px-2 text-sm text-zinc-900 outline-none"
+                      />
+                    </div>
+                    <div>
+                      <p className="text-[11px] font-semibold text-zinc-700">Aviso antes (min)</p>
+                      <input
+                        type="number"
+                        min={0}
+                        max={1440}
+                        value={agendaReminder}
+                        onChange={(e) => setAgendaReminder(Number(e.target.value))}
+                        className="mt-1 h-10 w-full rounded-xl border border-zinc-300 bg-white px-2 text-sm text-zinc-900 outline-none"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <p className="text-[11px] font-semibold text-zinc-700">Días de entrega (referencia)</p>
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {DELIVERY_DAY_CHIPS.map(({ day, label }) => {
+                        const sel = agendaDeliveryDays.includes(day);
+                        return (
+                          <button
+                            key={`dl-${day}`}
+                            type="button"
+                            onClick={() =>
+                              setAgendaDeliveryDays((prev) => {
+                                const s = new Set(prev);
+                                if (s.has(day)) s.delete(day);
+                                else s.add(day);
+                                return [...s].sort((a, b) => a - b);
+                              })
+                            }
+                            className={[
+                              'h-8 min-w-[2rem] rounded-lg px-2 text-xs font-bold',
+                              sel
+                                ? 'bg-emerald-600 text-white ring-1 ring-emerald-700'
+                                : 'border border-zinc-300 bg-white text-zinc-700',
+                            ].join(' ')}
+                          >
+                            {label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                  <div>
+                    <p className="text-[11px] font-semibold text-zinc-700">Productos a revisar antes de pedir</p>
+                    <p className="mt-0.5 text-[10px] text-zinc-500">
+                      Solo recordatorio visual; no añade líneas al pedido.
+                    </p>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      <select
+                        value={agendaReviewPick}
+                        onChange={(e) => setAgendaReviewPick(e.target.value)}
+                        className="h-10 min-w-0 flex-1 rounded-xl border border-zinc-300 bg-white px-2 text-sm text-zinc-900 outline-none"
+                      >
+                        <option value="">Elegir del catálogo…</option>
+                        {editSup.products
+                          .filter((p) => p.isActive !== false)
+                          .map((p) => (
+                            <option key={p.id} value={p.id}>
+                              {p.name}
+                            </option>
+                          ))}
+                      </select>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (!agendaReviewPick) return;
+                          const p = editSup.products.find((x) => x.id === agendaReviewPick);
+                          if (!p) return;
+                          if (agendaReviews.some((r) => r.supplierProductId === p.id)) return;
+                          setAgendaReviews((prev) => [...prev, { supplierProductId: p.id, name: p.name }]);
+                          setAgendaReviewPick('');
+                        }}
+                        className="h-10 shrink-0 rounded-xl border border-zinc-300 bg-white px-3 text-xs font-semibold text-zinc-800"
+                      >
+                        Añadir
+                      </button>
+                    </div>
+                    {agendaReviews.length > 0 ? (
+                      <ul className="mt-2 space-y-1">
+                        {agendaReviews.map((r, idx) => (
+                          <li
+                            key={`${r.supplierProductId ?? 'x'}-${idx}`}
+                            className="flex items-center justify-between gap-2 rounded-lg border border-zinc-100 bg-zinc-50/90 px-2 py-1 text-[12px]"
+                          >
+                            <span className="min-w-0 truncate font-medium text-zinc-900">{r.name}</span>
+                            <button
+                              type="button"
+                              className="shrink-0 text-[11px] font-semibold text-[#B91C1C]"
+                              onClick={() => setAgendaReviews((prev) => prev.filter((_, i) => i !== idx))}
+                            >
+                              Quitar
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="mt-2 text-[10px] text-zinc-500">Sin productos marcados.</p>
+                    )}
+                  </div>
+                </div>
+              </details>
+
               <button
                 type="button"
                 onClick={() => saveSupplierChanges(editSup.id)}

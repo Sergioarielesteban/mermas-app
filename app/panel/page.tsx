@@ -215,7 +215,7 @@ export default function PanelControlPage() {
         </div>
 
         {/* ── Alertas inteligentes ────────────────────────────────── */}
-        {localId && <PanelAlertas localId={localId} />}
+        {localId && <PanelAlertas localId={localId} showPedidos={showPedidos} />}
 
         {/* ── Checklist guiado (si aplica) ───────────────────────── */}
         <ProductoGuiadoChecklist />

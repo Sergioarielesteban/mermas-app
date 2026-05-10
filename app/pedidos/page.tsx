@@ -33,6 +33,8 @@ import MermasStyleHero from '@/components/MermasStyleHero';
 import { useAuth } from '@/components/AuthProvider';
 import { CHEF_ONE_TAPER_LINE_CLASS } from '@/components/ChefOneGlowLine';
 import { usePedidosOrders } from '@/components/PedidosOrdersProvider';
+import PedidosAgendaTodayCard from '@/components/pedidos/PedidosAgendaTodayCard';
+import { useOrderAgendaToday } from '@/hooks/useOrderAgendaToday';
 import { getSupabaseClient } from '@/lib/supabase-client';
 import PedidosAlbaranOcrModal from '@/components/PedidosAlbaranOcrModal';
 import PedidosSaveTemplateSheet from '@/components/pedidos/PedidosSaveTemplateSheet';
@@ -450,6 +452,7 @@ export default function PedidosPage() {
     registerPendingReceivedOrder,
     clearPendingReceivedOrder,
   } = usePedidosOrders();
+  const agenda = useOrderAgendaToday({ localId: localId ?? null, orders });
   /** Última lista de pedidos (p. ej. eliminar línea: no depender de cerrar del modal por IDs obsoletos tras Realtime). */
   const ordersRef = React.useRef(orders);
   ordersRef.current = orders;
@@ -4102,6 +4105,16 @@ export default function PedidosPage() {
           </Link>
         </nav>
       </header>
+
+      {canUse && localId && agenda.showCard ? (
+        <PedidosAgendaTodayCard
+          loading={agenda.loading}
+          cutoffRows={agenda.cutoffRows}
+          reviewRows={agenda.reviewRows}
+          localId={localId}
+          onMarkedReview={agenda.refresh}
+        />
+      ) : null}
 
       {avisoPedido === 'enviado' ? (
         <div

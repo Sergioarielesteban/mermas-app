@@ -7,6 +7,7 @@ import React from 'react';
 import { usePedidosOperationalSuggestions } from '@/hooks/usePedidosOperationalSuggestions';
 import { useSuggestedOrder } from '@/hooks/useSuggestedOrder';
 import { useTemporalPatterns } from '@/hooks/useTemporalPatterns';
+import { usePedidosSupplierAgendaBanner } from '@/hooks/usePedidosSupplierAgendaBanner';
 import { useAuth } from '@/components/AuthProvider';
 import { usePedidosOrders } from '@/components/PedidosOrdersProvider';
 import { getDemoPedidoSuppliers } from '@/lib/demo-dataset';
@@ -146,6 +147,11 @@ export default function NuevoPedidoPage() {
   const templateIdParam = searchParams.get('templateId');
   const [suppliers, setSuppliers] = React.useState<PedidoSupplier[]>([]);
   const [supplierId, setSupplierId] = React.useState('');
+  const supplierAgendaBanner = usePedidosSupplierAgendaBanner({
+    localId,
+    supplierId,
+    orders,
+  });
   const [notes, setNotes] = React.useState('');
   const [search, setSearch] = React.useState('');
   const [qtyByProductId, setQtyByProductId] = React.useState<QtyMap>({});
@@ -1304,6 +1310,36 @@ export default function NuevoPedidoPage() {
           ) : null}
         </section>
       )}
+
+      {selectedSupplier && supplierAgendaBanner ? (
+        <div className="space-y-1.5">
+          {supplierAgendaBanner.cutoffLine ? (
+            <div
+              className={[
+                'rounded-xl border px-3 py-2 text-[11px] leading-snug shadow-sm ring-1',
+                supplierAgendaBanner.cutoffTone === 'danger'
+                  ? 'border-red-200/90 bg-red-50/90 text-red-950 ring-red-100'
+                  : supplierAgendaBanner.cutoffTone === 'warn'
+                    ? 'border-amber-200/90 bg-amber-50/90 text-amber-950 ring-amber-100'
+                    : 'border-zinc-200/90 bg-zinc-50/90 text-zinc-800 ring-zinc-100',
+              ].join(' ')}
+              role="status"
+            >
+              {supplierAgendaBanner.cutoffLine}
+            </div>
+          ) : null}
+          {supplierAgendaBanner.reviewNames.length > 0 ? (
+            <div className="rounded-xl border border-zinc-200/90 bg-white px-3 py-2 text-[11px] leading-snug shadow-sm ring-1 ring-zinc-100/85">
+              <p className="font-semibold text-zinc-700">Revisa antes de enviar</p>
+              <ul className="mt-1 list-disc space-y-0.5 pl-4 text-zinc-600">
+                {supplierAgendaBanner.reviewNames.slice(0, 8).map((name, idx) => (
+                  <li key={`${idx}-${name}`}>{name}</li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
 
       <section
         id="pedido-nuevo-catalogo"

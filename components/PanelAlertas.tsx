@@ -1,20 +1,22 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { getSupabaseClient } from '@/lib/supabase-client';
 import {
   fetchAppccColdUnits,
   fetchAppccReadingsForDate,
-  madridDateKey,
   appccTemperaturasOperationalDateKey,
 } from '@/lib/appcc-supabase';
 import { fetchOrders } from '@/lib/pedidos-supabase';
 import type { AppccSlot } from '@/lib/appcc-supabase';
+import { computeCutoffForToday, isOrderDayToday } from '@/lib/pedidos-order-agenda-engine';
+import { fetchOrderSchedulesForLocal, fetchSupplierNamesMap } from '@/lib/pedidos-order-agenda-supabase';
+import { usePedidosDataChangedListener } from '@/hooks/usePedidosDataChangedListener';
 
 type Alerta = {
   id: string;
-  tipo: 'pedido' | 'temperatura';
+  tipo: 'pedido' | 'temperatura' | 'agenda';
   icono: string;
   texto: string;
   href: string;
@@ -34,22 +36,30 @@ function getSlotActual(): AppccSlot | null {
   return null;
 }
 
-export default function PanelAlertas({ localId }: { localId: string }) {
+export default function PanelAlertas({
+  localId,
+  showPedidos = true,
+}: {
+  localId: string;
+  /** Misma condición que el acceso al módulo Pedidos en el panel (agenda + cortes). */
+  showPedidos?: boolean;
+}) {
   const [alertas, setAlertas] = useState<Alerta[]>([]);
   const [cargando, setCargando] = useState(true);
 
-  useEffect(() => {
-    if (!localId) { setCargando(false); return; }
-    cargarAlertas();
-  }, [localId]);
-
-  const cargarAlertas = async () => {
+  const cargarAlertas = useCallback(async () => {
     const sb = getSupabaseClient();
     if (!sb) { setCargando(false); return; }
 
     const nuevas: Alerta[] = [];
-    const hoy = madridDateKey();
     const hoyISO = new Date().toISOString().slice(0, 10);
+
+    let ordersRecent: Awaited<ReturnType<typeof fetchOrders>> = [];
+    try {
+      ordersRecent = await fetchOrders(sb, localId, { recentDays: 14 });
+    } catch {
+      ordersRecent = [];
+    }
 
     // ── Alertas de temperatura ──────────────────────────────────
     try {
@@ -83,10 +93,62 @@ export default function PanelAlertas({ localId }: { localId: string }) {
       // silencioso — no bloquear el panel si falla
     }
 
+    // ── Agenda operativa (mismo criterio que /pedidos: visible hasta enviar el pedido) ──
+    if (showPedidos) {
+      try {
+        const now = new Date();
+        const [schedulesMap, namesMap] = await Promise.all([
+          fetchOrderSchedulesForLocal(sb, localId),
+          fetchSupplierNamesMap(sb, localId),
+        ]);
+
+        type AgendaSort = { supplierId: string; texto: string; urgente: boolean; order: number; name: string };
+        const agendaPending: AgendaSort[] = [];
+
+        for (const [supplierId, schedule] of schedulesMap) {
+          if (!schedule.enabled || !isOrderDayToday(schedule, now)) continue;
+          const computed = computeCutoffForToday(schedule, ordersRecent, supplierId, now);
+          if (!computed || computed.status === 'enviado') continue;
+
+          const name = namesMap.get(supplierId) ?? 'Proveedor';
+          let texto: string;
+          let urgente = false;
+          let order = 4;
+          if (computed.status === 'vencido') {
+            texto = `Hora límite pasada (${computed.cutoffLabel}). Si aún no pediste a ${name}, hazlo cuanto antes.`;
+            urgente = true;
+            order = 0;
+          } else if (computed.status === 'vence_pronto') {
+            texto = `Queda poco para el corte (${computed.cutoffLabel}). Revisa el pedido a ${name}.`;
+            order = 1;
+          } else {
+            texto = `Hoy toca pedir a ${name} antes de las ${computed.cutoffLabel}.`;
+            order = 2;
+          }
+          agendaPending.push({ supplierId, texto, urgente, order, name });
+        }
+
+        agendaPending.sort(
+          (a, b) => a.order - b.order || a.name.localeCompare(b.name, 'es'),
+        );
+        for (const row of agendaPending) {
+          nuevas.push({
+            id: `agenda-${row.supplierId}`,
+            tipo: 'agenda',
+            icono: '📋',
+            texto: row.texto,
+            href: `/pedidos/nuevo?supplierId=${encodeURIComponent(row.supplierId)}`,
+            urgente: row.urgente,
+          });
+        }
+      } catch {
+        // silencioso
+      }
+    }
+
     // ── Alertas de pedidos esperados hoy ───────────────────────
     try {
-      const orders = await fetchOrders(sb, localId, { recentDays: 7 });
-      const pedidosHoy = orders.filter(
+      const pedidosHoy = ordersRecent.filter(
         o => o.status === 'sent' && o.deliveryDate === hoyISO,
       );
       if (pedidosHoy.length > 0) {
@@ -107,7 +169,29 @@ export default function PanelAlertas({ localId }: { localId: string }) {
 
     setAlertas(nuevas);
     setCargando(false);
-  };
+  }, [localId, showPedidos]);
+
+  useEffect(() => {
+    if (!localId) {
+      setAlertas([]);
+      setCargando(false);
+      return;
+    }
+    setCargando(true);
+    void cargarAlertas();
+  }, [localId, showPedidos, cargarAlertas]);
+
+  useEffect(() => {
+    if (!localId) return;
+    const id = window.setInterval(() => {
+      void cargarAlertas();
+    }, 60_000);
+    return () => window.clearInterval(id);
+  }, [localId, cargarAlertas]);
+
+  usePedidosDataChangedListener(() => {
+    void cargarAlertas();
+  }, Boolean(localId));
 
   if (cargando || alertas.length === 0) return null;
 
