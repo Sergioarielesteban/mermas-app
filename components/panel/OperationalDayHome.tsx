@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import React from 'react';
 import type { LucideIcon } from 'lucide-react';
-import { ChevronRight, Droplets, Factory, ShoppingCart, Thermometer } from 'lucide-react';
+import { CalendarDays, ChevronRight, Droplets, Factory, ShoppingCart, Thermometer } from 'lucide-react';
 import { useAuth } from '@/components/AuthProvider';
 import PanelAlertas from '@/components/PanelAlertas';
 import ProductoGuiadoChecklist from '@/components/ProductoGuiadoChecklist';
@@ -261,7 +261,23 @@ export default function OperationalDayHome() {
             <PrioritySquareCard {...priorityTemp} />
             <PrioritySquareCard {...priorityAceite} />
           </div>
-          <PriorityCard {...priorityProduccion} />
+          <PriorityCard {...priorityProduccion} layout="shorter" />
+
+          {localId && !isBlockedByPlan('personal') ? (
+            <div id="panel-horarios" className="scroll-mt-28 pt-1">
+              <Link
+                href="/personal"
+                className="flex min-h-0 items-center gap-2 rounded-xl bg-sky-50 px-2.5 py-2 text-left shadow-sm ring-1 ring-sky-200 transition-transform active:scale-[0.99]"
+              >
+                <CalendarDays className="h-4 w-4 shrink-0 text-sky-700" aria-hidden />
+                <div className="min-w-0 flex-1">
+                  <p className="text-[12px] font-semibold leading-snug text-sky-950">Horarios</p>
+                  <p className="text-[10px] leading-snug text-sky-900/85">Turnos, fichajes y equipo</p>
+                </div>
+                <span className="text-[11px] font-bold shrink-0 text-sky-600">→</span>
+              </Link>
+            </div>
+          ) : null}
         </div>
       </section>
 
@@ -286,26 +302,38 @@ function PriorityCard(props: {
   href: string;
   blocked?: boolean;
   Icon: LucideIcon;
+  /** ~10 % menos alto (p. ej. Producción de hoy). */
+  layout?: 'default' | 'shorter';
 }) {
-  const { title, sub, lines, badge, badgeClass, iconBg, href, blocked, Icon } = props;
+  const { title, sub, lines, badge, badgeClass, iconBg, href, blocked, Icon, layout = 'default' } = props;
+  const short = layout === 'shorter';
   return (
     <Link
       href={blocked ? '/planes' : href}
       className={[
-        'flex items-stretch gap-3 rounded-3xl bg-white p-3.5 shadow-sm ring-1 ring-zinc-200/80 transition-transform active:scale-[0.99]',
+        'flex items-stretch rounded-3xl bg-white shadow-sm ring-1 ring-zinc-200/80 transition-transform active:scale-[0.99]',
+        short ? 'gap-2.5 p-3' : 'gap-3 p-3.5',
         blocked ? 'opacity-60' : '',
       ].join(' ')}
     >
-      <div className={['grid h-12 w-12 shrink-0 place-items-center rounded-2xl ring-1 ring-white/60', iconBg].join(' ')}>
-        <Icon className="h-6 w-6" aria-hidden />
+      <div
+        className={[
+          'grid shrink-0 place-items-center rounded-2xl ring-1 ring-white/60',
+          short ? 'h-11 w-11' : 'h-12 w-12',
+          iconBg,
+        ].join(' ')}
+      >
+        <Icon className={short ? 'h-5 w-5' : 'h-6 w-6'} aria-hidden />
       </div>
       <div className="min-w-0 flex-1">
-        <p className="font-serif text-[16px] font-normal leading-tight text-zinc-900">{title}</p>
-        <p className="mt-0.5 text-[12px] text-zinc-500">{sub}</p>
+        <p className={['font-serif font-normal leading-tight text-zinc-900', short ? 'text-[15px]' : 'text-[16px]'].join(' ')}>
+          {title}
+        </p>
+        <p className={['text-zinc-500', short ? 'mt-px text-[11px]' : 'mt-0.5 text-[12px]'].join(' ')}>{sub}</p>
         {lines.length > 0 ? (
-          <ul className="mt-2 space-y-0.5">
+          <ul className={short ? 'mt-1.5 space-y-0.5' : 'mt-2 space-y-0.5'}>
             {lines.map((line) => (
-              <li key={line} className="text-[11px] text-zinc-600">
+              <li key={line} className={short ? 'text-[10px] text-zinc-600' : 'text-[11px] text-zinc-600'}>
                 · {line}
               </li>
             ))}
@@ -316,7 +344,8 @@ function PriorityCard(props: {
         {badge ? (
           <span
             className={[
-              'rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide ring-1',
+              'rounded-full font-bold uppercase tracking-wide ring-1',
+              short ? 'px-1.5 py-px text-[8px]' : 'px-2 py-0.5 text-[9px]',
               badgeClass ?? 'bg-zinc-100 text-zinc-700 ring-zinc-200',
             ].join(' ')}
           >
@@ -325,7 +354,7 @@ function PriorityCard(props: {
         ) : (
           <span />
         )}
-        <ChevronRight className="h-5 w-5 text-zinc-300" aria-hidden />
+        <ChevronRight className={short ? 'h-4 w-4 text-zinc-300' : 'h-5 w-5 text-zinc-300'} aria-hidden />
       </div>
     </Link>
   );
@@ -347,18 +376,19 @@ function PrioritySquareCard(props: {
     <Link
       href={blocked ? '/planes' : href}
       className={[
-        'relative flex min-h-[118px] flex-col items-center justify-between rounded-2xl bg-white p-2.5 pt-3 shadow-sm ring-1 ring-zinc-200/80 transition-transform active:scale-[0.99] sm:min-h-[126px]',
+        // ~20 % menos alto que 118px / 126px → ~94px / 101px
+        'relative flex min-h-[94px] flex-col items-center justify-between rounded-2xl bg-white p-2 pt-2.5 shadow-sm ring-1 ring-zinc-200/80 transition-transform active:scale-[0.99] sm:min-h-[101px]',
         blocked ? 'opacity-60' : '',
       ].join(' ')}
     >
       <div className="flex w-full flex-col items-center text-center">
-        <div className={['grid h-9 w-9 place-items-center rounded-xl ring-1 ring-white/60', iconBg].join(' ')}>
-          <Icon className="h-4 w-4" aria-hidden />
+        <div className={['grid h-8 w-8 place-items-center rounded-lg ring-1 ring-white/60', iconBg].join(' ')}>
+          <Icon className="h-3.5 w-3.5" aria-hidden />
         </div>
-        <p className="mt-1.5 font-serif text-[13px] font-normal leading-tight text-zinc-900">{title}</p>
-        <p className="mt-0.5 line-clamp-2 text-[10px] leading-snug text-zinc-500">{sub}</p>
+        <p className="mt-1 font-serif text-[12px] font-normal leading-tight text-zinc-900">{title}</p>
+        <p className="mt-0.5 line-clamp-2 text-[9px] leading-snug text-zinc-500">{sub}</p>
       </div>
-      <div className="flex w-full items-center justify-between px-0.5 pb-px pt-1.5">
+      <div className="flex w-full items-center justify-between px-0.5 pb-px pt-1">
         {badge ? (
           <span
             className={[
