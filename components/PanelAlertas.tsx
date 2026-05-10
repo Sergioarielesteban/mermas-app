@@ -30,13 +30,10 @@ type Alerta = {
 export default function PanelAlertas({
   localId,
   showPedidos = true,
-  /** En la home operativa las temperaturas se muestran en el cuadrado «Temperaturas» (no duplicar banners). */
-  hideTemperaturaAlerts = false,
 }: {
   localId: string;
   /** Misma condición que el acceso al módulo Pedidos en el panel (agenda + cortes). */
   showPedidos?: boolean;
-  hideTemperaturaAlerts?: boolean;
 }) {
   const [alertas, setAlertas] = useState<Alerta[]>([]);
   const [agendaAlDiaMicro, setAgendaAlDiaMicro] = useState(false);
@@ -57,33 +54,31 @@ export default function PanelAlertas({
     }
 
     // ── Alertas de temperatura (mañana/noche, hora Madrid; mismo criterio que /appcc/temperaturas) ──
-    if (!hideTemperaturaAlerts) {
-      try {
-        const [units, readings] = await Promise.all([
-          fetchAppccColdUnits(sb, localId),
-          fetchAppccReadingsForDate(sb, localId, appccTemperaturasOperationalDateKey()),
-        ]);
+    try {
+      const [units, readings] = await Promise.all([
+        fetchAppccColdUnits(sb, localId),
+        fetchAppccReadingsForDate(sb, localId, appccTemperaturasOperationalDateKey()),
+      ]);
 
-        if (units.length > 0) {
-          const dueSlots = getDueTemperatureRegistrationSlots(units, readings);
-          for (const slot of dueSlots) {
-            const texto =
-              slot === 'manana'
-                ? 'Temperatura de la mañana sin registrar'
-                : 'Temperatura de la noche sin registrar';
-            nuevas.push({
-              id: `temp-${slot}`,
-              tipo: 'temperatura',
-              icono: '🌡️',
-              texto,
-              href: '/appcc/temperaturas',
-              urgente: slot === 'noche',
-            });
-          }
+      if (units.length > 0) {
+        const dueSlots = getDueTemperatureRegistrationSlots(units, readings);
+        for (const slot of dueSlots) {
+          const texto =
+            slot === 'manana'
+              ? 'Temperatura de la mañana sin registrar'
+              : 'Temperatura de la noche sin registrar';
+          nuevas.push({
+            id: `temp-${slot}`,
+            tipo: 'temperatura',
+            icono: '🌡️',
+            texto,
+            href: '/appcc/temperaturas',
+            urgente: slot === 'noche',
+          });
         }
-      } catch {
-        // silencioso — no bloquear el panel si falla
       }
+    } catch {
+      // silencioso — no bloquear el panel si falla
     }
 
     // ── Agenda operativa (mismo criterio que /pedidos: visible hasta enviar el pedido) ──
@@ -182,7 +177,7 @@ export default function PanelAlertas({
 
     setAlertas(nuevas);
     setCargando(false);
-  }, [localId, showPedidos, hideTemperaturaAlerts]);
+  }, [localId, showPedidos]);
 
   useEffect(() => {
     if (!localId) {
@@ -210,14 +205,14 @@ export default function PanelAlertas({
   if (cargando || (alertas.length === 0 && !agendaAlDiaMicro)) return null;
 
   return (
-    <div className="flex flex-col gap-2">
+    <div className="flex flex-col gap-1.5">
       {agendaAlDiaMicro ? (
         <section
-          className="rounded-xl border border-emerald-200/60 bg-emerald-50/35 px-2.5 py-1.5 shadow-sm ring-1 ring-emerald-100/50"
+          className="rounded-lg border border-emerald-200/60 bg-emerald-50/35 px-2 py-1 shadow-sm ring-1 ring-emerald-100/50"
           aria-live="polite"
         >
-          <p className="text-[11px] font-semibold leading-tight text-emerald-900">Agenda al día</p>
-          <p className="mt-0.5 text-[10px] leading-snug text-emerald-800/85">
+          <p className="text-[10px] font-semibold leading-tight text-emerald-900">Agenda al día</p>
+          <p className="mt-0.5 text-[9px] leading-snug text-emerald-800/85">
             Todos los pedidos programados están enviados.
           </p>
         </section>
@@ -227,23 +222,25 @@ export default function PanelAlertas({
           key={a.id}
           href={a.href}
           className={[
-            'flex items-center gap-3 rounded-2xl px-4 py-3 text-left antialiased outline-none select-none touch-manipulation transition-transform active:scale-[0.99] ring-1',
-            a.urgente
-              ? 'bg-red-50 ring-red-200'
-              : 'bg-amber-50 ring-amber-200',
+            'flex min-h-0 items-center gap-2 rounded-xl px-2.5 py-2 text-left antialiased outline-none select-none touch-manipulation transition-transform active:scale-[0.99] ring-1',
+            a.urgente ? 'bg-red-50 ring-red-200' : 'bg-amber-50 ring-amber-200',
           ].join(' ')}
         >
-          <span className="text-xl shrink-0">{a.icono}</span>
-          <p className={[
-            'flex-1 text-[13px] font-semibold leading-tight',
-            a.urgente ? 'text-red-700' : 'text-amber-800',
-          ].join(' ')}>
+          <span className="text-base leading-none shrink-0">{a.icono}</span>
+          <p
+            className={[
+              'flex-1 text-[12px] font-semibold leading-snug',
+              a.urgente ? 'text-red-700' : 'text-amber-800',
+            ].join(' ')}
+          >
             {a.texto}
           </p>
-          <span className={[
-            'text-xs font-bold shrink-0',
-            a.urgente ? 'text-red-500' : 'text-amber-500',
-          ].join(' ')}>
+          <span
+            className={[
+              'text-[11px] font-bold shrink-0',
+              a.urgente ? 'text-red-500' : 'text-amber-500',
+            ].join(' ')}
+          >
             →
           </span>
         </Link>
