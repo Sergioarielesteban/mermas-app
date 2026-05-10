@@ -8,12 +8,9 @@ import type { CatalogSignals } from '@/lib/pedidos-nuevo-catalog-stats';
 import {
   buildReceptionHistoriesFromPedidoOrders,
   buildStockRiskSuggestions,
-  normalizeSuggestedOrderQty,
   STOCK_RISK_LOOKBACK_DAYS,
 } from '@/lib/pedidos-stock-estimado';
-import { PEDIDO_ORDER_UNITS } from '@/lib/pedidos-units';
 import type { PedidoOrder, PedidoSupplierProduct } from '@/lib/pedidos-supabase';
-import type { Unit } from '@/lib/types';
 import {
   loadSuggestionFeedback,
   suggestionFeedbackMultiplier,
@@ -36,18 +33,10 @@ export type OperationalSuggestion = {
   productIds: string[];
   /** Prioridad base antes de feedback (mayor = más relevante). */
   baseScore: number;
-  /** Unidades a sumar al pulsar Añadir (p. ej. stock estimado); si falta, +1 por producto. */
-  addQuantity?: number;
-  /** Texto del botón Añadir en la tarjeta. */
-  addCtaLabel?: string;
   /** Layout riesgo estimado: 2ª y 3ª línea (nombre + descripción), como el mock de stock. */
   riskProductName?: string;
   riskDescription?: string;
 };
-
-function unitLabelShort(unit: Unit): string {
-  return PEDIDO_ORDER_UNITS.find((u) => u.value === unit)?.label ?? unit;
-}
 
 const HISTORY_MS = 160 * 86_400_000;
 const MS_DAY = 86_400_000;
@@ -339,13 +328,6 @@ export function computeOperationalSuggestions(
     if (!productById.has(pid)) continue;
     if ((qtyByProductId[pid] ?? 0) > 0) continue;
 
-    const p = productById.get(pid)!;
-    const unit = p.unit as Unit;
-    const addQ =
-      e.suggestedQuantity != null && e.suggestedQuantity > 0
-        ? normalizeSuggestedOrderQty(unit, e.suggestedQuantity)
-        : undefined;
-
     const baseScore =
       e.level === 'muy_probable_falta' ? 96 : e.level === 'posible_falta' ? 84 : 73;
 
@@ -357,8 +339,6 @@ export function computeOperationalSuggestions(
       riskDescription: e.description,
       productIds: [pid],
       baseScore,
-      addQuantity: addQ,
-      addCtaLabel: addQ != null ? `Añadir ${addQ} ${unitLabelShort(unit)}` : undefined,
     });
   }
 

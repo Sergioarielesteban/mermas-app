@@ -5,7 +5,6 @@ import { Clock, Filter, Package, Search, Star, TrendingUp } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import React from 'react';
 import { usePedidosOperationalSuggestions } from '@/hooks/usePedidosOperationalSuggestions';
-import type { OperationalSuggestion } from '@/lib/pedidos-operational-suggestions';
 import { useAuth } from '@/components/AuthProvider';
 import { usePedidosOrders } from '@/components/PedidosOrdersProvider';
 import { getDemoPedidoSuppliers } from '@/lib/demo-dataset';
@@ -736,7 +735,7 @@ export default function NuevoPedidoPage() {
     });
   }, []);
 
-  const { suggestions: operationalSuggestions, recordAdd: recordOperationalAdd, recordDismiss: recordOperationalDismiss } =
+  const { suggestions: operationalSuggestions, recordDismiss: recordOperationalDismiss } =
     usePedidosOperationalSuggestions({
       localId,
       supplierId,
@@ -746,25 +745,6 @@ export default function NuevoPedidoPage() {
       catalogSignals,
       searchActive: search.trim().length > 0,
     });
-
-  const handleOperationalSuggestionApply = React.useCallback(
-    (suggestion: OperationalSuggestion) => {
-      recordOperationalAdd(suggestion.id);
-      for (const pid of suggestion.productIds) {
-        const p = supplierProducts.find((x) => x.id === pid);
-        if (!p) continue;
-        const delta =
-          suggestion.kind === 'stock_risk' &&
-          suggestion.productIds.length === 1 &&
-          suggestion.addQuantity != null &&
-          suggestion.addQuantity > 0
-            ? suggestion.addQuantity
-            : 1;
-        adjustQty(pid, p.unit, delta);
-      }
-    },
-    [recordOperationalAdd, supplierProducts, adjustQty],
-  );
 
   const handleCatalogDelta = React.useCallback(
     (productId: string, unit: PedidoOrderItem['unit'], delta: number) => {
@@ -1304,9 +1284,7 @@ export default function NuevoPedidoPage() {
         {selectedSupplier && supplierProducts.length > 0 ? (
           <PedidosOperationalSuggestions
             suggestions={operationalSuggestions}
-            onApply={handleOperationalSuggestionApply}
             onDismiss={recordOperationalDismiss}
-            applyingId={null}
             interactionEpoch={suggestionCarouselEpoch}
           />
         ) : null}

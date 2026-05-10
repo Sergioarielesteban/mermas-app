@@ -46,17 +46,13 @@ function slideWidth(el: HTMLUListElement | null): number {
 
 export type PedidosOperationalSuggestionsProps = {
   suggestions: OperationalSuggestion[];
-  onApply: (suggestion: OperationalSuggestion) => void;
   onDismiss: (suggestionId: string) => void;
-  applyingId: string | null;
   interactionEpoch?: number;
 };
 
 export default React.memo(function PedidosOperationalSuggestions({
   suggestions,
-  onApply,
   onDismiss,
-  applyingId,
   interactionEpoch = 0,
 }: PedidosOperationalSuggestionsProps) {
   const scrollerRef = React.useRef<HTMLUListElement | null>(null);
@@ -182,7 +178,7 @@ export default React.memo(function PedidosOperationalSuggestions({
       aria-live="polite"
     >
       <div className="px-3 pb-0.5">
-        <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-zinc-400">Sugerencias</p>
+        <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-zinc-400">Recordatorios</p>
       </div>
 
       <div className="px-3">
@@ -213,11 +209,6 @@ export default React.memo(function PedidosOperationalSuggestions({
             >
               <PedidosOperationalSuggestionCard
                 suggestion={s}
-                disabled={applyingId === s.id}
-                onAdd={() => {
-                  markInteraction();
-                  onApply(s);
-                }}
                 onDismiss={() => {
                   markInteraction();
                   onDismiss(s.id);
@@ -238,7 +229,7 @@ export default React.memo(function PedidosOperationalSuggestions({
                 'h-1 w-1 rounded-full p-0 transition-all duration-200',
                 i === activeDot ? 'scale-105 bg-[#E30613]' : 'bg-zinc-300/85',
               ].join(' ')}
-              aria-label={`Ir a sugerencia ${i + 1}`}
+              aria-label={`Ir a recordatorio ${i + 1}`}
               onClick={() => {
                 markInteraction();
                 scrollToIndex(i);
@@ -249,8 +240,8 @@ export default React.memo(function PedidosOperationalSuggestions({
       ) : null}
 
       <span className="sr-only">
-        Carrusel de sugerencias, {suggestions.length} elementos, ancho completo del catálogo. Las tarjetas compactas
-        miden unos {SUGGESTION_CARD_HEIGHT_PX} píxeles de alto; las de riesgo de falta estimado son más altas.
+        Carrusel de recordatorios, {suggestions.length} elementos, ancho completo del catálogo. Cada tarjeta mide{' '}
+        {SUGGESTION_CARD_HEIGHT_PX} píxeles de alto.
       </span>
     </div>
   );
