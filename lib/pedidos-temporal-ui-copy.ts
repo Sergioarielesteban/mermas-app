@@ -22,7 +22,7 @@ export function maturityProgressCaption(level: InsightMaturityLevel): string {
     case 2:
       return 'Ya podemos sugerir cantidades habituales.';
     case 3:
-      return 'Detectamos patrones semanales y tendencias recientes.';
+      return 'Estamos detectando tus patrones semanales y tendencias recientes.';
     case 4:
       return 'Cobertura estimada más alineada con tus entregas.';
     case 5:
@@ -33,3 +33,7 @@ export function maturityProgressCaption(level: InsightMaturityLevel): string {
       return 'Chef One sigue aprendiendo de tu operativa.';
   }
 }
+
+/** Línea fija bajo la descripción del nivel (stepper). */
+export const MATURITY_FOOTER_HINT =
+  'Cuanto más uses Chef One, mejores serán las sugerencias.';

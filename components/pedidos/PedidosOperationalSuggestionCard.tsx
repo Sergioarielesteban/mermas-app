@@ -1,6 +1,6 @@
 'use client';
 
-import { AlertTriangle, CalendarClock, Link2, Package, Sparkles, X } from 'lucide-react';
+import { AlertTriangle, CalendarClock, Package, Sparkles, X } from 'lucide-react';
 import React from 'react';
 import type { OperationalSuggestion, OperationalSuggestionKind } from '@/lib/pedidos-operational-suggestions';
 
@@ -10,8 +10,6 @@ export const SUGGESTION_CARD_HEIGHT_PX = 76;
 function KindIcon({ kind }: { kind: OperationalSuggestionKind }) {
   const cls = 'h-2.5 w-2.5 shrink-0 text-[#D32F2F]';
   switch (kind) {
-    case 'pair':
-      return <Link2 className={cls} strokeWidth={2} aria-hidden />;
     case 'weekly_pattern':
       return <CalendarClock className={cls} strokeWidth={2} aria-hidden />;
     case 'rhythm_low':

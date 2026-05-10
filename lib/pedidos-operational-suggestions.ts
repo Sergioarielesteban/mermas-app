@@ -20,7 +20,6 @@ import {
 
 export type OperationalSuggestionKind =
   | 'frequency'
-  | 'pair'
   | 'weekly_pattern'
   | 'rhythm_low'
   | 'stock_risk';
@@ -176,64 +175,6 @@ export function computeOperationalSuggestions(
             : 'Producto habitual en tus pedidos.',
         productIds: [pid],
         baseScore: 58,
-      });
-    }
-  }
-
-  // ── Pares que suelen ir juntos ────────────────────────────────────────────
-  const pairCounts = new Map<string, number>();
-  for (const o of relevant) {
-    const ids = [
-      ...new Set(
-        o.items.filter((i) => i.supplierProductId && i.quantity > 0).map((i) => String(i.supplierProductId)),
-      ),
-    ]
-      .filter((id) => productById.has(id))
-      .sort();
-    for (let i = 0; i < ids.length; i++) {
-      for (let j = i + 1; j < ids.length; j++) {
-        const key = `${ids[i]}::${ids[j]}`;
-        pairCounts.set(key, (pairCounts.get(key) ?? 0) + 1);
-      }
-    }
-  }
-
-  let bestPair: { a: string; b: string; n: number } | null = null;
-  for (const [key, n] of pairCounts) {
-    if (n < 2) continue;
-    const [a, b] = key.split('::');
-    if (!a || !b || !productById.has(a) || !productById.has(b)) continue;
-    if (!bestPair || n > bestPair.n) bestPair = { a, b, n };
-  }
-
-  if (bestPair) {
-    const { a, b, n } = bestPair;
-    const qa = qtyByProductId[a] ?? 0;
-    const qb = qtyByProductId[b] ?? 0;
-    const na = productName(productById, a);
-    const nb = productName(productById, b);
-
-    if (qa <= 0 && qb <= 0) {
-      candidates.push({
-        id: `pair:${supplierId}:${a}:${b}`,
-        kind: 'pair',
-        title: `Sueles pedir ${na} junto con ${nb}`,
-        subtitle: `Coinciden en ${n} pedidos recientes.`,
-        productIds: [a, b],
-        baseScore: 68,
-      });
-    } else if ((qa > 0 && qb <= 0) || (qb > 0 && qa <= 0)) {
-      const missing = qa <= 0 ? a : b;
-      const present = qa > 0 ? a : b;
-      const missingName = productName(productById, missing);
-      const presentName = productName(productById, present);
-      candidates.push({
-        id: `pair1:${supplierId}:${present}:${missing}`,
-        kind: 'pair',
-        title: `Sueles juntar ${presentName} con ${missingName}`,
-        subtitle: 'Falta en este pedido.',
-        productIds: [missing],
-        baseScore: 96,
       });
     }
   }

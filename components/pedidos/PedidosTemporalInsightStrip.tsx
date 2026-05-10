@@ -1,9 +1,13 @@
 'use client';
 
-import { CalendarClock, Sunset, TrendingUp } from 'lucide-react';
+import { CalendarClock, Check, Info, Sunset, TrendingUp } from 'lucide-react';
 import React from 'react';
 import type { TemporalInsight, TemporalInsightKind, TemporalPatternsResult } from '@/lib/pedidos-temporal-patterns';
-import { INSIGHT_MATURITY_TOOLTIP, maturityProgressCaption } from '@/lib/pedidos-temporal-ui-copy';
+import {
+  INSIGHT_MATURITY_TOOLTIP,
+  MATURITY_FOOTER_HINT,
+  maturityProgressCaption,
+} from '@/lib/pedidos-temporal-ui-copy';
 
 type SlotKey = 'weekly' | 'trend' | 'weekend';
 
@@ -64,26 +68,51 @@ type Props = {
   hidden?: boolean;
 };
 
-function MaturitySteps({ level }: { level: number }) {
+/** Stepper horizontal: completados (check verde), actual (círculo rojo), futuros (borde gris). */
+function MaturityStepper({ level }: { level: number }) {
   const steps = [1, 2, 3, 4, 5, 6];
   return (
-    <div className="flex items-center gap-0.5 sm:gap-1" aria-hidden>
-      {steps.map((n) => (
-        <div key={n} className="flex min-w-0 flex-1 flex-col items-center gap-0.5">
+    <div
+      className="flex min-h-[2.75rem] w-full items-center"
+      role="img"
+      aria-label={`Nivel de patrones ${level} de 6`}
+    >
+      {steps.map((n, idx) => (
+        <React.Fragment key={n}>
+          {idx > 0 ? (
+            <div
+              className={[
+                'h-0.5 min-w-[6px] flex-1 rounded-full',
+                idx < level ? 'bg-emerald-500' : 'bg-zinc-200',
+              ].join(' ')}
+              aria-hidden
+            />
+          ) : null}
           <div
             className={[
-              'h-1 w-full rounded-full',
-              n < level ? 'bg-emerald-400/75' : n === level ? 'bg-white' : 'bg-white/25',
+              'relative z-[1] grid h-9 w-9 shrink-0 place-items-center rounded-full text-[11px] font-bold tabular-nums shadow-sm sm:h-10 sm:w-10 sm:text-[12px]',
+              n < level
+                ? 'bg-emerald-500 text-white ring-2 ring-white'
+                : n === level
+                  ? 'bg-[#E30613] text-white ring-2 ring-[#E30613]/20'
+                  : 'border-2 border-zinc-300 bg-white text-zinc-400',
             ].join(' ')}
-          />
-          <span className={`text-[8px] font-bold tabular-nums ${n === level ? 'text-white' : 'text-white/55'}`}>{n}</span>
-        </div>
+          >
+            {n < level ? (
+              <Check className="h-4 w-4 sm:h-[18px] sm:w-[18px]" strokeWidth={2.5} aria-hidden />
+            ) : (
+              <span aria-hidden>{n}</span>
+            )}
+          </div>
+        </React.Fragment>
       ))}
     </div>
   );
 }
 
 export default React.memo(function PedidosTemporalInsightStrip({ patterns, hidden }: Props) {
+  const [helpOpen, setHelpOpen] = React.useState(false);
+
   if (hidden) return null;
 
   const hasInsights = patterns.displayInsights.length > 0;
@@ -115,30 +144,58 @@ export default React.memo(function PedidosTemporalInsightStrip({ patterns, hidde
     },
   ];
 
+  const tooltipLines = INSIGHT_MATURITY_TOOLTIP.split('\n');
+
   return (
-    <div className="border-b border-zinc-100/85 bg-gradient-to-b from-[#FAFAF9] to-white px-2 py-1.5 sm:px-3">
-      <div className="flex items-start justify-between gap-2">
-        <div>
-          <div className="flex flex-wrap items-baseline gap-x-1.5 gap-y-0">
-            <span className="text-[9px] font-bold uppercase tracking-[0.16em] text-zinc-500">Patterns</span>
-            <span
-              className="cursor-help text-[9px] font-semibold tabular-nums text-zinc-400 underline decoration-dotted decoration-zinc-300 underline-offset-2"
-              title={INSIGHT_MATURITY_TOOLTIP}
-            >
-              · nivel {level}/6
-            </span>
-          </div>
-          <p className="mt-0.5 line-clamp-2 text-[9px] leading-snug text-zinc-500 sm:text-[10px]">
-            {maturityProgressCaption(level)}
+    <div className="border-b border-zinc-100/85 bg-gradient-to-b from-[#FAFAF9] to-white px-3 py-3 sm:px-4">
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-1.5">
+          <p className="truncate text-[13px] font-bold tracking-tight text-zinc-800 sm:text-sm">
+            PATRONES · nivel {level}/6
           </p>
+          <span
+            className="inline-flex shrink-0 text-zinc-400"
+            title={INSIGHT_MATURITY_TOOLTIP}
+          >
+            <Info className="h-4 w-4" strokeWidth={2} aria-hidden />
+            <span className="sr-only">Información sobre niveles de patrones</span>
+          </span>
         </div>
+        <button
+          type="button"
+          className="shrink-0 text-[12px] font-semibold text-[#E30613] underline-offset-2 hover:underline"
+          aria-expanded={helpOpen}
+          aria-controls="patrones-niveles-ayuda"
+          onClick={() => setHelpOpen((v) => !v)}
+        >
+          ¿Qué significa?
+        </button>
       </div>
 
-      <div
-        className="mt-1.5 rounded-lg bg-gradient-to-r from-[#c50512] to-[#E30613] px-1.5 py-1.5 shadow-inner shadow-black/10 ring-1 ring-black/5"
-        title={INSIGHT_MATURITY_TOOLTIP}
-      >
-        <MaturitySteps level={level} />
+      {helpOpen ? (
+        <div
+          id="patrones-niveles-ayuda"
+          className="mt-2 rounded-xl border border-zinc-200/90 bg-white px-3 py-2.5 text-[11px] leading-snug text-zinc-600 shadow-sm ring-1 ring-zinc-100/80"
+          role="region"
+        >
+          <ul className="list-none space-y-1.5">
+            {tooltipLines.map((line, i) => (
+              <li key={i}>{line.trim()}</li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
+      <div className="mt-4 rounded-xl bg-white/90 px-1 py-2 ring-1 ring-zinc-100/90 sm:px-2">
+        <MaturityStepper level={level} />
+      </div>
+
+      <div className="mt-3 space-y-1 text-[12px] leading-snug text-zinc-800 sm:text-[13px]">
+        <p>
+          <span className="font-semibold text-zinc-900">Nivel {level}:</span>{' '}
+          <span className="text-zinc-700">{maturityProgressCaption(level)}</span>
+        </p>
+        <p className="text-zinc-600">{MATURITY_FOOTER_HINT}</p>
       </div>
 
       {showLearningOnly ? (
