@@ -27,6 +27,7 @@ import {
   fetchAppccReadingsForDate,
 } from '@/lib/appcc-supabase';
 import type { AppccSlot } from '@/lib/appcc-supabase';
+import { buildPanelGreetingParts } from '@/lib/panel-greeting';
 
 function slotActualTemperatura(): AppccSlot | null {
   const h = new Date().getHours();
@@ -44,11 +45,23 @@ export default function OperationalDayHome() {
     localName,
     localId,
     email,
+    displayName,
+    loginUsername,
     profileRole,
     profileReady,
     plan,
     isCentralKitchen,
   } = useAuth();
+
+  const greeting = React.useMemo(
+    () => buildPanelGreetingParts(displayName, loginUsername, email),
+    [displayName, loginUsername, email],
+  );
+  const dateLabel = new Intl.DateTimeFormat('es-ES', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+  }).format(new Date());
 
   const role = profileRole ?? 'staff';
 
@@ -179,6 +192,15 @@ export default function OperationalDayHome() {
 
   return (
     <div className="space-y-4 pb-2">
+      <div className="rounded-xl bg-white px-3 py-2 shadow-sm ring-1 ring-zinc-200/80">
+        <div className="flex items-center justify-between gap-2">
+          <p className="min-w-0 truncate text-[15px] font-bold tracking-tight text-zinc-900">
+            {greeting.text} {greeting.emoji}
+          </p>
+          <p className="shrink-0 text-right text-[11px] capitalize leading-none text-zinc-400">{dateLabel}</p>
+        </div>
+      </div>
+
       {localId ? (
         <section id="panel-alertas" className="scroll-mt-28">
           <PanelAlertas localId={localId} showPedidos={showPedidos} />

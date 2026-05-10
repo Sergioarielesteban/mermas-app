@@ -51,7 +51,6 @@ import {
 } from '@/lib/app-role-permissions';
 import { getModuleAccess } from '@/lib/canAccessModule';
 import { APP_MODULE_HOME, getAppNavBreadcrumb, getParentRoute } from '@/lib/app-navigation';
-import { buildPanelGreetingParts } from '@/lib/panel-greeting';
 
 type NavItemLink = {
   href?: string;
@@ -243,11 +242,6 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const showPedidos = canAccessPedidos(localCode, email, localName, localId);
 
   const title = useMemo(() => titleForPath(pathname), [pathname]);
-  const isPanelHome = pathname === '/panel';
-  const panelGreeting = useMemo(
-    () => (isPanelHome ? buildPanelGreetingParts(displayName, loginUsername, email) : null),
-    [isPanelHome, displayName, loginUsername, email],
-  );
 
   const [drawerQuery, setDrawerQuery] = useState('');
 
@@ -464,32 +458,14 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             <Menu className="h-6 w-6" />
           </button>
           <div className="min-w-0 flex-1 pr-1">
-            {panelGreeting ? (
-              <>
-                <p className="line-clamp-2 text-sm font-extrabold leading-tight tracking-tight text-white sm:line-clamp-1">
-                  <span>{panelGreeting.text}</span>{' '}
-                  <span aria-hidden className="inline-block">
-                    {panelGreeting.emoji}
-                  </span>
-                </p>
-                {localId && localLabel ? (
-                  <p className="line-clamp-1 text-[10px] font-semibold uppercase tracking-wider text-white/85">
-                    {localLabel}
-                  </p>
-                ) : null}
-              </>
-            ) : (
-              <>
-                <h1 className="line-clamp-2 text-sm font-extrabold uppercase leading-tight tracking-wide text-white sm:line-clamp-1">
-                  {title}
-                </h1>
-                {localId && localLabel ? (
-                  <p className="line-clamp-1 text-[10px] font-semibold uppercase tracking-wider text-white/85">
-                    {localLabel}
-                  </p>
-                ) : null}
-              </>
-            )}
+            <h1 className="line-clamp-2 text-sm font-extrabold uppercase leading-tight tracking-wide text-white sm:line-clamp-1">
+              {title}
+            </h1>
+            {localId && localLabel ? (
+              <p className="line-clamp-1 text-[10px] font-semibold uppercase tracking-wider text-white/85">
+                {localLabel}
+              </p>
+            ) : null}
           </div>
           <NotificationBell />
           <button
@@ -554,7 +530,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             <p className="mt-1.5 text-[0.9375rem] font-semibold leading-tight text-zinc-900">
               {localLabel ?? 'Chef One'}
             </p>
-            <p className="text-[10px] font-medium uppercase tracking-wide text-zinc-400">Local principal</p>
+            <p className="text-[10px] font-medium uppercase tracking-wide text-zinc-400">Gestión operativa</p>
           </div>
         </div>
 
