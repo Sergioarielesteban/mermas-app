@@ -7,12 +7,12 @@ import PedidosOperationalSuggestionCard, {
 } from '@/components/pedidos/PedidosOperationalSuggestionCard';
 import type { OperationalSuggestion } from '@/lib/pedidos-operational-suggestions';
 
-const CARD_GAP_PX = 8;
+const CARD_GAP_PX = 6;
 const SCROLL_STEP = SUGGESTION_CARD_WIDTH_PX + CARD_GAP_PX;
-/** Solo auto-avanza si el usuario lleva esto sin interactuar. */
-const AUTO_IDLE_MS = 6000;
-/** Intervalo entre intentos de avance (suave, no invasivo). */
-const AUTO_TICK_MS = 5500;
+/** Inactividad antes de permitir auto-avance (poco agresivo). */
+const AUTO_IDLE_MS = 9000;
+/** Intervalo entre avances automáticos (suave). */
+const AUTO_TICK_MS = 8000;
 
 export type PedidosOperationalSuggestionsProps = {
   suggestions: OperationalSuggestion[];
@@ -118,20 +118,20 @@ export default React.memo(function PedidosOperationalSuggestions({
 
   return (
     <div
-      className="border-b border-zinc-100/90 bg-gradient-to-b from-[#FFF9F9]/70 to-transparent px-0 py-1.5"
+      className="border-b border-zinc-100/90 bg-gradient-to-b from-[#FFF9F9]/60 to-transparent px-0 py-1"
       aria-live="polite"
     >
-      <div className="flex items-center justify-between px-3 pb-1">
-        <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-400">Sugerencias</p>
+      <div className="flex items-center justify-between px-3 pb-0.5">
+        <p className="text-[9px] font-semibold uppercase tracking-[0.12em] text-zinc-400">Sugerencias</p>
         {suggestions.length > 1 ? (
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-0.5">
             {suggestions.map((s, i) => (
               <button
                 key={s.id}
                 type="button"
                 className={[
-                  'h-1.5 w-1.5 rounded-full p-0 transition-all duration-200',
-                  i === activeDot ? 'scale-110 bg-[#E30613]' : 'bg-zinc-300/90',
+                  'h-1 w-1 rounded-full p-0 transition-all duration-200',
+                  i === activeDot ? 'scale-105 bg-[#E30613]' : 'bg-zinc-300/85',
                 ].join(' ')}
                 aria-label={`Ir a sugerencia ${i + 1}`}
                 onClick={() => {
@@ -150,7 +150,7 @@ export default React.memo(function PedidosOperationalSuggestions({
         onPointerDown={onScrollerPointerDown}
         onTouchStart={onScrollerPointerDown}
         className={[
-          'flex snap-x snap-mandatory gap-2 overflow-x-auto scroll-smooth px-3 pb-1',
+          'flex snap-x snap-mandatory gap-1.5 overflow-x-auto scroll-smooth px-3 pb-0.5',
           '[-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden',
           'touch-pan-x',
         ].join(' ')}
