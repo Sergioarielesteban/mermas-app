@@ -753,7 +753,14 @@ export default function NuevoPedidoPage() {
       for (const pid of suggestion.productIds) {
         const p = supplierProducts.find((x) => x.id === pid);
         if (!p) continue;
-        adjustQty(pid, p.unit, 1);
+        const delta =
+          suggestion.kind === 'stock_risk' &&
+          suggestion.productIds.length === 1 &&
+          suggestion.addQuantity != null &&
+          suggestion.addQuantity > 0
+            ? suggestion.addQuantity
+            : 1;
+        adjustQty(pid, p.unit, delta);
       }
     },
     [recordOperationalAdd, supplierProducts, adjustQty],

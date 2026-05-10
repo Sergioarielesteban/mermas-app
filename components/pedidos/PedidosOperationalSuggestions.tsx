@@ -249,8 +249,8 @@ export default React.memo(function PedidosOperationalSuggestions({
       ) : null}
 
       <span className="sr-only">
-        Carrusel de sugerencias, {suggestions.length} elementos, altura de tarjeta {SUGGESTION_CARD_HEIGHT_PX}px, ancho
-        completo del catálogo
+        Carrusel de sugerencias, {suggestions.length} elementos, ancho completo del catálogo. Las tarjetas compactas
+        miden unos {SUGGESTION_CARD_HEIGHT_PX} píxeles de alto; las de riesgo de falta estimado son más altas.
       </span>
     </div>
   );

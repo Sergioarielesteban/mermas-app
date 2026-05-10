@@ -5,14 +5,27 @@
  */
 
 import type { CatalogSignals } from '@/lib/pedidos-nuevo-catalog-stats';
+import {
+  buildReceptionHistoriesFromPedidoOrders,
+  buildStockRiskSuggestions,
+  normalizeSuggestedOrderQty,
+  STOCK_RISK_LOOKBACK_DAYS,
+} from '@/lib/pedidos-stock-estimado';
+import { PEDIDO_ORDER_UNITS } from '@/lib/pedidos-units';
 import type { PedidoOrder, PedidoSupplierProduct } from '@/lib/pedidos-supabase';
+import type { Unit } from '@/lib/types';
 import {
   loadSuggestionFeedback,
   suggestionFeedbackMultiplier,
   type SuggestionFeedbackMap,
 } from '@/lib/pedidos-suggestion-feedback';
 
-export type OperationalSuggestionKind = 'frequency' | 'pair' | 'weekly_pattern' | 'rhythm_low';
+export type OperationalSuggestionKind =
+  | 'frequency'
+  | 'pair'
+  | 'weekly_pattern'
+  | 'rhythm_low'
+  | 'stock_risk';
 
 export type OperationalSuggestion = {
   id: string;
@@ -23,7 +36,18 @@ export type OperationalSuggestion = {
   productIds: string[];
   /** Prioridad base antes de feedback (mayor = más relevante). */
   baseScore: number;
+  /** Unidades a sumar al pulsar Añadir (p. ej. stock estimado); si falta, +1 por producto. */
+  addQuantity?: number;
+  /** Texto del botón Añadir en la tarjeta. */
+  addCtaLabel?: string;
+  /** Layout riesgo estimado: 2ª y 3ª línea (nombre + descripción), como el mock de stock. */
+  riskProductName?: string;
+  riskDescription?: string;
 };
+
+function unitLabelShort(unit: Unit): string {
+  return PEDIDO_ORDER_UNITS.find((u) => u.value === unit)?.label ?? unit;
+}
 
 const HISTORY_MS = 160 * 86_400_000;
 const MS_DAY = 86_400_000;
@@ -275,7 +299,7 @@ export function computeOperationalSuggestions(
     }
   }
 
-  // ── “Stock bajo” estimado: habitual en top 30d pero lleva sin pedirse ─────
+  // ── Habitual en top 30d pero lleva sin pedirse (sin hablar de «stock real») ─
   const topIds = new Set(catalogSignals.mostOrdered30d.slice(0, 12).map((r) => r.supplierProductId));
   for (const pid of topIds) {
     if (!productById.has(pid)) continue;
@@ -291,10 +315,50 @@ export function computeOperationalSuggestions(
     candidates.push({
       id: `low:${supplierId}:${pid}`,
       kind: 'rhythm_low',
-      title: `Stock estimado bajo en ${nm}`,
-      subtitle: `Muy pedido últimamente; hace ~${Math.round(daysSince)} días que no entra.`,
+      title: `Revisa ${nm}`,
+      subtitle: `Muy pedido últimamente; hace ~${Math.round(daysSince)} días que no lo incluyes.`,
       productIds: [pid],
       baseScore: 48,
+    });
+  }
+
+  // ── Riesgo de falta estimado (recepciones reales, mismo proveedor) ────────
+  const receptionHistories = buildReceptionHistoriesFromPedidoOrders(
+    orders,
+    supplierId,
+    supplierProducts,
+    now,
+    STOCK_RISK_LOOKBACK_DAYS,
+  );
+  const stockEstimates = buildStockRiskSuggestions(receptionHistories, {
+    minScore: 0.9,
+    maxSuggestions: 3,
+  });
+  for (const e of stockEstimates) {
+    const pid = e.supplierProductId;
+    if (!productById.has(pid)) continue;
+    if ((qtyByProductId[pid] ?? 0) > 0) continue;
+
+    const p = productById.get(pid)!;
+    const unit = p.unit as Unit;
+    const addQ =
+      e.suggestedQuantity != null && e.suggestedQuantity > 0
+        ? normalizeSuggestedOrderQty(unit, e.suggestedQuantity)
+        : undefined;
+
+    const baseScore =
+      e.level === 'muy_probable_falta' ? 96 : e.level === 'posible_falta' ? 84 : 73;
+
+    candidates.push({
+      id: `stock:${supplierId}:${pid}`,
+      kind: 'stock_risk',
+      title: e.label,
+      riskProductName: e.productName,
+      riskDescription: e.description,
+      productIds: [pid],
+      baseScore,
+      addQuantity: addQ,
+      addCtaLabel: addQ != null ? `Añadir ${addQ} ${unitLabelShort(unit)}` : undefined,
     });
   }
 
