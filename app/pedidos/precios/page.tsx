@@ -4,7 +4,17 @@ import Link from 'next/link';
 import React from 'react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { AlertTriangle, Download, Lightbulb, Package, Trash2, TrendingDown, TrendingUp } from 'lucide-react';
+import {
+  AlertTriangle,
+  Download,
+  History,
+  Lightbulb,
+  Package,
+  Trash2,
+  TrendingDown,
+  TrendingUp,
+  X,
+} from 'lucide-react';
 import {
   Area,
   CartesianGrid,
@@ -980,6 +990,7 @@ export default function PedidosPreciosPage() {
   const [catalogHistoryRows, setCatalogHistoryRows] = React.useState<CatalogPriceHistoryListRow[]>([]);
   const [catalogHistoryLoading, setCatalogHistoryLoading] = React.useState(false);
   const [catalogHistoryDeleteBusy, setCatalogHistoryDeleteBusy] = React.useState(false);
+  const [catalogHistoryOpen, setCatalogHistoryOpen] = React.useState(false);
   const [deleteHistoryId, setDeleteHistoryId] = React.useState<string | null>(null);
   const [dismissedSeriesKeys, setDismissedSeriesKeys] = React.useState(() => new Set<string>());
   const [seriesDeleteContext, setSeriesDeleteContext] = React.useState<{
@@ -1187,6 +1198,15 @@ export default function PedidosPreciosPage() {
       trasFiltro: series.length,
     });
   }, [evolutionDebug, localId, windowLabel, supplierFilter, series.length, seriesCandidatesBeforeVariation]);
+
+  React.useEffect(() => {
+    if (!catalogHistoryOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setCatalogHistoryOpen(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [catalogHistoryOpen]);
 
   const seriesAllSuppliers = React.useMemo(
     () =>
@@ -1871,57 +1891,21 @@ export default function PedidosPreciosPage() {
             <Download className="h-3.5 w-3.5" aria-hidden />
             CSV (Excel)
           </button>
-        </div>
-
-        <div className="mt-3 border-t border-zinc-100 pt-2.5">
-          <p className="text-[9px] font-semibold uppercase tracking-wide text-zinc-400">Historial de recepción</p>
-          {catalogHistoryLoading ? (
-            <p className="mt-1 text-[11px] text-zinc-500">Cargando…</p>
-          ) : catalogHistoryFiltered.length === 0 ? (
-            <p className="mt-1 text-[11px] text-zinc-500">Sin historial.</p>
-          ) : (
-            <ul className="mt-1.5 max-h-[min(38vh,10.5rem)] divide-y divide-zinc-100 overflow-y-auto [-webkit-overflow-scrolling:touch]">
-              {catalogHistoryFiltered.map((h) => {
-                const info = productInfoBySupplierProductId.get(h.supplierProductId);
-                return (
-                  <li key={h.id} className="flex items-start gap-2 py-1.5 text-[11px] first:pt-0">
-                    <div className="min-w-0 flex-1">
-                      <p
-                        className="truncate font-semibold uppercase leading-snug tracking-wide text-zinc-900"
-                        title={info?.productName}
-                      >
-                        {info?.productName ?? h.supplierProductId.slice(0, 8) + '…'}
-                      </p>
-                      <p className="truncate text-[10px] text-zinc-500">{info?.supplierName ?? '—'}</p>
-                      <p className="mt-0.5 tabular-nums text-[10px] leading-tight text-zinc-700">
-                        {h.oldPricePerUnit.toFixed(2)} → {h.newPricePerUnit.toFixed(2)}{' '}
-                        {euroPerUnitShortLabel(h.displayUnit)}
-                      </p>
-                    </div>
-                    <div className="flex shrink-0 flex-col items-end gap-0.5">
-                      <time className="whitespace-nowrap text-[10px] text-zinc-400">
-                        {new Date(h.createdAt).toLocaleString('es-ES', {
-                          day: '2-digit',
-                          month: 'short',
-                          hour: '2-digit',
-                          minute: '2-digit',
-                        })}
-                      </time>
-                      <button
-                        type="button"
-                        disabled={catalogHistoryDeleteBusy}
-                        onClick={() => setDeleteHistoryId(h.id)}
-                        className="rounded-md p-1 text-zinc-400 hover:bg-red-50 hover:text-red-700 disabled:opacity-50"
-                        aria-label="Eliminar"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" aria-hidden />
-                      </button>
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
+          <button
+            type="button"
+            onClick={() => setCatalogHistoryOpen(true)}
+            className="inline-flex h-8 max-w-full items-center gap-1 rounded-lg border border-zinc-300 bg-white pl-2 pr-2 text-xs font-semibold text-zinc-800 sm:gap-1.5 sm:px-2.5"
+            aria-expanded={catalogHistoryOpen}
+            aria-haspopup="dialog"
+          >
+            <History className="h-3.5 w-3.5 shrink-0 text-zinc-600" aria-hidden />
+            <span className="truncate">Historial</span>
+            {catalogHistoryFiltered.length > 0 ? (
+              <span className="shrink-0 rounded-full bg-zinc-100 px-1.5 py-px text-[10px] font-bold tabular-nums text-zinc-600">
+                {catalogHistoryFiltered.length}
+              </span>
+            ) : null}
+          </button>
         </div>
       </section>
 
@@ -2069,6 +2053,11 @@ export default function PedidosPreciosPage() {
             month: 'short',
             year: 'numeric',
           });
+          const baseDateLabel = new Date(row.base.date).toLocaleDateString('es-ES', {
+            day: '2-digit',
+            month: 'short',
+            year: 'numeric',
+          });
           const unitSwitcher =
             row.showUnitSwitcher && row.alternativeUnits.length > 1
               ? {
@@ -2133,7 +2122,17 @@ export default function PedidosPreciosPage() {
                   </div>
                 </div>
 
-                <div className="mt-3 grid grid-cols-3 gap-1.5">
+                <div className="mt-3 grid grid-cols-2 gap-1.5 sm:grid-cols-4">
+                  <div
+                    className="rounded-xl bg-zinc-50/90 px-2 py-2 ring-1 ring-zinc-200/80"
+                    title="Precio base del pedido al inicio de la serie (referencia)."
+                  >
+                    <p className="text-[9px] font-semibold uppercase tracking-wide text-zinc-500">Base</p>
+                    <p className="mt-0.5 truncate font-sans text-[15px] font-semibold tabular-nums leading-tight tracking-tight text-zinc-900 sm:text-base">
+                      {row.base.price.toFixed(2).replace('.', ',')} {eu}
+                    </p>
+                    <p className="mt-0.5 truncate text-[9px] text-zinc-400">{baseDateLabel}</p>
+                  </div>
                   <div className="rounded-xl bg-zinc-50/90 px-2 py-2 ring-1 ring-zinc-200/80">
                     <p className="text-[9px] font-semibold uppercase tracking-wide text-zinc-500">Último</p>
                     <p className="mt-0.5 truncate font-sans text-[15px] font-semibold tabular-nums leading-tight tracking-tight text-zinc-900 sm:text-base">
@@ -2259,6 +2258,90 @@ export default function PedidosPreciosPage() {
           );
         })}
       </section>
+
+      {catalogHistoryOpen ? (
+        <div className="fixed inset-0 z-[90] flex items-end justify-center sm:items-center sm:p-4">
+          <button
+            type="button"
+            className="absolute inset-0 bg-black/40"
+            aria-label="Cerrar historial"
+            onClick={() => {
+              if (!catalogHistoryDeleteBusy) setCatalogHistoryOpen(false);
+            }}
+          />
+          <div
+            className="relative z-10 flex max-h-[min(88vh,34rem)] w-full max-w-lg flex-col rounded-t-2xl bg-white shadow-2xl ring-1 ring-zinc-200/90 sm:max-h-[min(82vh,30rem)] sm:rounded-2xl"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="catalog-history-title"
+          >
+            <div className="flex shrink-0 items-center justify-between gap-2 border-b border-zinc-100 px-4 py-3">
+              <p id="catalog-history-title" className="font-serif text-base font-normal text-zinc-900">
+                Historial de recepción
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  if (!catalogHistoryDeleteBusy) setCatalogHistoryOpen(false);
+                }}
+                className="rounded-lg p-2 text-zinc-500 hover:bg-zinc-100 hover:text-zinc-800"
+                aria-label="Cerrar"
+              >
+                <X className="h-5 w-5" aria-hidden />
+              </button>
+            </div>
+            <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-4 pt-2">
+              {catalogHistoryLoading ? (
+                <p className="py-4 text-center text-sm text-zinc-500">Cargando…</p>
+              ) : catalogHistoryFiltered.length === 0 ? (
+                <p className="py-4 text-center text-sm text-zinc-500">Sin historial en esta selección.</p>
+              ) : (
+                <ul className="divide-y divide-zinc-100">
+                  {catalogHistoryFiltered.map((h) => {
+                    const info = productInfoBySupplierProductId.get(h.supplierProductId);
+                    return (
+                      <li key={h.id} className="flex items-start gap-2 py-2 text-[11px] first:pt-0">
+                        <div className="min-w-0 flex-1">
+                          <p
+                            className="truncate font-semibold uppercase leading-snug tracking-wide text-zinc-900"
+                            title={info?.productName}
+                          >
+                            {info?.productName ?? h.supplierProductId.slice(0, 8) + '…'}
+                          </p>
+                          <p className="truncate text-[10px] text-zinc-500">{info?.supplierName ?? '—'}</p>
+                          <p className="mt-0.5 tabular-nums text-[10px] leading-tight text-zinc-700">
+                            {h.oldPricePerUnit.toFixed(2)} → {h.newPricePerUnit.toFixed(2)}{' '}
+                            {euroPerUnitShortLabel(h.displayUnit)}
+                          </p>
+                        </div>
+                        <div className="flex shrink-0 flex-col items-end gap-0.5">
+                          <time className="whitespace-nowrap text-[10px] text-zinc-400">
+                            {new Date(h.createdAt).toLocaleString('es-ES', {
+                              day: '2-digit',
+                              month: 'short',
+                              hour: '2-digit',
+                              minute: '2-digit',
+                            })}
+                          </time>
+                          <button
+                            type="button"
+                            disabled={catalogHistoryDeleteBusy}
+                            onClick={() => setDeleteHistoryId(h.id)}
+                            className="rounded-md p-1 text-zinc-400 hover:bg-red-50 hover:text-red-700 disabled:opacity-50"
+                            aria-label="Eliminar"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" aria-hidden />
+                          </button>
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {deleteHistoryId != null ? (
         <div className="fixed inset-0 z-[100] flex items-end justify-center p-4 sm:items-center">
