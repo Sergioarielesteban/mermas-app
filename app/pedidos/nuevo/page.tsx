@@ -161,6 +161,8 @@ export default function NuevoPedidoPage() {
   const [hadContentRevisionFlag, setHadContentRevisionFlag] = React.useState(false);
   const [useTemplateOpen, setUseTemplateOpen] = React.useState(false);
   const [saveTemplateOpen, setSaveTemplateOpen] = React.useState(false);
+  /** Pausa auto-avance del carrusel de sugerencias al interactuar con buscador/cantidades/notas. */
+  const [suggestionCarouselEpoch, setSuggestionCarouselEpoch] = React.useState(0);
   const [templateSummary, setTemplateSummary] = React.useState<{
     loaded: number;
     priceUp: number;
@@ -282,6 +284,10 @@ export default function NuevoPedidoPage() {
   }, [canUse, localId, editingId, supplierId, qtyByProductId, notes, deliveryDate]);
 
   usePedidosDataChangedListener(reloadSuppliers, Boolean(hasPedidosEntry && canUse));
+
+  React.useEffect(() => {
+    setSuggestionCarouselEpoch((n) => n + 1);
+  }, [search, qtyByProductId, notes]);
 
   const selectedSupplier = suppliers.find((s) => s.id === supplierId) ?? null;
   const supplierProducts = React.useMemo(() => selectedSupplier?.products ?? [], [selectedSupplier]);
@@ -1294,6 +1300,7 @@ export default function NuevoPedidoPage() {
             onApply={handleOperationalSuggestionApply}
             onDismiss={recordOperationalDismiss}
             applyingId={null}
+            interactionEpoch={suggestionCarouselEpoch}
           />
         ) : null}
         <div className="divide-y divide-zinc-100 border-t border-zinc-100">
