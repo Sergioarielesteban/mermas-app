@@ -565,8 +565,8 @@ function PriceEvolutionMiniChart({
   if (data.length === 1) {
     const p = data[0]!;
     return (
-      <div className="mt-2 w-full min-w-0">
-        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+      <div className="mt-1.5 w-full min-w-0">
+        <div className="mb-2 flex flex-wrap items-center justify-between gap-1.5">
           {chartPeriod ? (
             <ChartPeriodToolbar value={chartPeriod.value} onChange={chartPeriod.onChange} />
           ) : (
@@ -574,10 +574,10 @@ function PriceEvolutionMiniChart({
           )}
           {unitControl}
         </div>
-        <div className="flex min-h-[10rem] items-center justify-center rounded-2xl bg-gradient-to-b from-red-50/40 to-white px-3 py-8 ring-1 ring-zinc-100">
+        <div className="flex min-h-[7rem] items-center justify-center rounded-xl bg-gradient-to-b from-red-50/40 to-white px-2 py-5 ring-1 ring-zinc-100">
           <div className="text-center">
-            <p className="text-[11px] font-medium tracking-wide text-zinc-400">{p.dateLabel}</p>
-            <p className="mt-2 text-2xl font-semibold tabular-nums tracking-tight text-zinc-900">
+            <p className="text-[10px] font-medium tracking-wide text-zinc-400">{p.dateLabel}</p>
+            <p className="mt-1.5 text-xl font-semibold tabular-nums tracking-tight text-zinc-900">
               {p.price.toFixed(2)} {unitShort}
             </p>
           </div>
@@ -587,8 +587,8 @@ function PriceEvolutionMiniChart({
   }
 
   return (
-    <div className="mt-2 w-full min-w-0">
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+    <div className="mt-1.5 w-full min-w-0">
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-1.5">
         {chartPeriod ? (
           <ChartPeriodToolbar value={chartPeriod.value} onChange={chartPeriod.onChange} />
         ) : (
@@ -596,9 +596,9 @@ function PriceEvolutionMiniChart({
         )}
         {unitControl}
       </div>
-      <div className="h-[min(56vw,15rem)] w-full min-h-[14rem] sm:h-72">
+      <div className="h-[min(44vw,11.5rem)] w-full min-h-[11rem] sm:h-52">
         <ResponsiveContainer width="100%" height="100%">
-          <ComposedChart data={data} margin={{ top: 12, right: 6, left: -8, bottom: 6 }}>
+          <ComposedChart data={data} margin={{ top: 8, right: 4, left: -10, bottom: 2 }}>
             <defs>
               <linearGradient id={fillGradientId} x1="0" y1="0" x2="0" y2="1">
                 <stop offset="0%" stopColor="#D32F2F" stopOpacity={0.2} />
@@ -608,16 +608,16 @@ function PriceEvolutionMiniChart({
             <CartesianGrid strokeDasharray="3 8" stroke="#ececf0" vertical={false} />
             <XAxis
               dataKey="dateLabel"
-              tick={{ fontSize: 10, fill: '#a1a1aa' }}
+              tick={{ fontSize: 9, fill: '#a1a1aa' }}
               axisLine={false}
               tickLine={false}
               interval={data.length > 8 ? 'preserveStartEnd' : 0}
-              height={data.length > 8 ? 26 : 36}
-              tickMargin={8}
+              height={data.length > 8 ? 22 : 28}
+              tickMargin={4}
             />
             <YAxis
-              tick={{ fontSize: 10, fill: '#a1a1aa' }}
-              width={46}
+              tick={{ fontSize: 9, fill: '#a1a1aa' }}
+              width={40}
               domain={['auto', 'auto']}
               axisLine={false}
               tickLine={false}
@@ -676,29 +676,22 @@ function PriceEvolutionMiniChart({
           </ComposedChart>
         </ResponsiveContainer>
       </div>
-      <div className="mt-3 flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-[10px] text-zinc-500">
-        <span className="inline-flex flex-col items-center gap-0.5">
-          <span className="inline-flex items-center gap-1.5">
-            <span className="h-2 w-2 shrink-0 rounded-full bg-slate-400" aria-hidden />
-            Precio inicial serie
-          </span>
+      <div className="mt-1.5 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-[9px] text-zinc-500">
+        <span className="inline-flex items-center gap-1">
+          <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-slate-400" aria-hidden />
+          Inicio
         </span>
-        <span className="inline-flex flex-col items-center gap-0 text-center">
-          <span className="inline-flex items-center gap-1.5">
-            <span className="h-0.5 w-6 shrink-0 border-t border-dashed border-zinc-400" aria-hidden />
-            PMP
-          </span>
-          <span className="text-[9px] leading-tight text-zinc-400">Media ponderada del periodo</span>
+        <span className="inline-flex items-center gap-1">
+          <span className="h-px w-4 shrink-0 border-t border-dashed border-zinc-400" aria-hidden />
+          PMP
         </span>
-        <span className="inline-flex items-center gap-1.5">
-          <span className="h-0.5 w-6 shrink-0 bg-[#D32F2F]" aria-hidden />
-          Evolución
+        <span className="inline-flex items-center gap-1">
+          <span className="h-px w-4 shrink-0 bg-[#D32F2F]" aria-hidden />
+          Serie
         </span>
-        <span className="inline-flex flex-col items-center gap-0.5">
-          <span className="inline-flex items-center gap-1.5">
-            <span className="h-2 w-2 shrink-0 rounded-full bg-[#D32F2F]" aria-hidden />
-            Último recibido
-          </span>
+        <span className="inline-flex items-center gap-1">
+          <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[#D32F2F]" aria-hidden />
+          Último
         </span>
       </div>
     </div>
@@ -1782,27 +1775,27 @@ export default function PedidosPreciosPage() {
   }
 
   return (
-    <div className="space-y-4 overflow-x-hidden">
-      <section className="flex flex-wrap gap-2">
-        <Link href="/pedidos" className="inline-flex h-9 items-center rounded-lg border border-zinc-300 bg-white px-3 text-sm font-semibold text-zinc-700">
+    <div className="space-y-3 overflow-x-hidden">
+      <section className="flex flex-wrap gap-1.5">
+        <Link href="/pedidos" className="inline-flex h-8 items-center rounded-lg border border-zinc-300 bg-white px-2.5 text-xs font-semibold text-zinc-700">
           ← Atras
         </Link>
         <Link
           href="/pedidos/historial-mes"
-          className="inline-flex h-9 items-center rounded-lg border border-zinc-300 bg-white px-3 text-sm font-semibold text-zinc-700"
+          className="inline-flex h-8 items-center rounded-lg border border-zinc-300 bg-white px-2.5 text-xs font-semibold text-zinc-700"
         >
           Compras del mes
         </Link>
       </section>
 
-      <section className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-zinc-200/80 sm:p-5">
-        <div className="flex flex-col gap-1 text-center sm:text-left">
-          <p className="font-sans text-[10px] font-semibold uppercase tracking-[0.18em] text-zinc-400">Pedidos</p>
-          <h1 className="font-serif text-2xl font-normal tracking-tight text-zinc-900">Evolución de precio</h1>
+      <section className="rounded-2xl bg-white p-3 shadow-sm ring-1 ring-zinc-200/80 sm:p-4">
+        <div className="flex flex-col gap-0.5 text-center sm:text-left">
+          <p className="font-sans text-[9px] font-semibold uppercase tracking-[0.16em] text-zinc-400">Pedidos</p>
+          <h1 className="font-serif text-xl font-normal tracking-tight text-zinc-900">Evolución de precio</h1>
         </div>
-        {message ? <p className="pt-2 text-center text-sm text-[#B91C1C] sm:text-left">{message}</p> : null}
+        {message ? <p className="pt-1.5 text-center text-sm text-[#B91C1C] sm:text-left">{message}</p> : null}
 
-        <div className="mt-4 flex flex-col gap-3">
+        <div className="mt-3 flex flex-col gap-2.5">
           <div className="flex flex-wrap items-center gap-2">
             <span className="sr-only">Periodo</span>
             <div className="inline-flex max-w-full rounded-full bg-zinc-100 p-0.5">
@@ -1858,51 +1851,55 @@ export default function PedidosPreciosPage() {
             value={productSearch}
             onChange={(e) => setProductSearch(e.target.value)}
             placeholder="Buscar referencia…"
-            className="h-10 w-full rounded-2xl border border-zinc-200 bg-zinc-50/80 px-4 text-[14px] text-zinc-900 placeholder:text-zinc-400 focus:border-zinc-300 focus:bg-white focus:outline-none focus:ring-2 focus:ring-zinc-200"
+            className="h-9 w-full rounded-xl border border-zinc-200 bg-zinc-50/80 px-3 text-[13px] text-zinc-900 placeholder:text-zinc-400 focus:border-zinc-300 focus:bg-white focus:outline-none focus:ring-2 focus:ring-zinc-200"
           />
         </div>
 
-        <div className="mt-4 flex flex-wrap gap-2">
+        <div className="mt-3 flex flex-wrap items-center gap-2">
           <button
             type="button"
             onClick={downloadReportPdf}
-            className="inline-flex h-10 items-center gap-2 rounded-xl bg-[#D32F2F] px-4 text-sm font-semibold text-white"
+            className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-[#D32F2F] px-3 text-xs font-semibold text-white"
           >
             Informe PDF
           </button>
           <button
             type="button"
             onClick={downloadCsv}
-            className="inline-flex h-10 items-center gap-2 rounded-xl border border-zinc-300 bg-white px-4 text-sm font-semibold text-zinc-800"
+            className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-zinc-300 bg-white px-3 text-xs font-semibold text-zinc-800"
           >
-            <Download className="h-4 w-4" aria-hidden />
+            <Download className="h-3.5 w-3.5" aria-hidden />
             CSV (Excel)
           </button>
         </div>
 
-        <div className="mt-6 rounded-2xl border border-zinc-100 bg-zinc-50/40 p-3 ring-1 ring-zinc-100">
-          <p className="text-[11px] font-semibold text-zinc-500">Historial de recepción</p>
+        <div className="mt-3 border-t border-zinc-100 pt-2.5">
+          <p className="text-[9px] font-semibold uppercase tracking-wide text-zinc-400">Historial de recepción</p>
           {catalogHistoryLoading ? (
-            <p className="mt-2 text-sm text-zinc-500">Cargando…</p>
+            <p className="mt-1 text-[11px] text-zinc-500">Cargando…</p>
           ) : catalogHistoryFiltered.length === 0 ? (
-            <p className="mt-2 text-sm text-zinc-500">Sin historial.</p>
+            <p className="mt-1 text-[11px] text-zinc-500">Sin historial.</p>
           ) : (
-            <ul className="mt-2 max-h-52 divide-y divide-zinc-100 overflow-y-auto rounded-xl bg-white ring-1 ring-zinc-200/80">
+            <ul className="mt-1.5 max-h-[min(38vh,10.5rem)] divide-y divide-zinc-100 overflow-y-auto [-webkit-overflow-scrolling:touch]">
               {catalogHistoryFiltered.map((h) => {
                 const info = productInfoBySupplierProductId.get(h.supplierProductId);
                 return (
-                  <li key={h.id} className="flex items-start gap-2 px-3 py-2.5 text-[13px]">
+                  <li key={h.id} className="flex items-start gap-2 py-1.5 text-[11px] first:pt-0">
                     <div className="min-w-0 flex-1">
-                      <p className="truncate font-medium text-zinc-900" title={info?.productName}>
+                      <p
+                        className="truncate font-semibold uppercase leading-snug tracking-wide text-zinc-900"
+                        title={info?.productName}
+                      >
                         {info?.productName ?? h.supplierProductId.slice(0, 8) + '…'}
                       </p>
-                      <p className="truncate text-[12px] text-zinc-500">{info?.supplierName ?? '—'}</p>
-                      <p className="mt-0.5 tabular-nums text-[12px] text-zinc-700">
-                        {h.oldPricePerUnit.toFixed(2)} → {h.newPricePerUnit.toFixed(2)} {euroPerUnitShortLabel(h.displayUnit)}
+                      <p className="truncate text-[10px] text-zinc-500">{info?.supplierName ?? '—'}</p>
+                      <p className="mt-0.5 tabular-nums text-[10px] leading-tight text-zinc-700">
+                        {h.oldPricePerUnit.toFixed(2)} → {h.newPricePerUnit.toFixed(2)}{' '}
+                        {euroPerUnitShortLabel(h.displayUnit)}
                       </p>
                     </div>
-                    <div className="flex shrink-0 flex-col items-end gap-1 text-right">
-                      <time className="whitespace-nowrap text-[11px] text-zinc-400">
+                    <div className="flex shrink-0 flex-col items-end gap-0.5">
+                      <time className="whitespace-nowrap text-[10px] text-zinc-400">
                         {new Date(h.createdAt).toLocaleString('es-ES', {
                           day: '2-digit',
                           month: 'short',
@@ -1914,10 +1911,10 @@ export default function PedidosPreciosPage() {
                         type="button"
                         disabled={catalogHistoryDeleteBusy}
                         onClick={() => setDeleteHistoryId(h.id)}
-                        className="rounded-lg p-1.5 text-zinc-400 hover:bg-red-50 hover:text-red-700 disabled:opacity-50"
+                        className="rounded-md p-1 text-zinc-400 hover:bg-red-50 hover:text-red-700 disabled:opacity-50"
                         aria-label="Eliminar"
                       >
-                        <Trash2 className="h-4 w-4" aria-hidden />
+                        <Trash2 className="h-3.5 w-3.5" aria-hidden />
                       </button>
                     </div>
                   </li>
@@ -1928,65 +1925,64 @@ export default function PedidosPreciosPage() {
         </div>
       </section>
 
-      <section className="rounded-2xl bg-white p-3 ring-1 ring-zinc-200/80">
-        <p className="px-1 text-[11px] font-medium text-zinc-400">{windowLabel}</p>
-        <div className="mt-2 flex gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-          <div className="min-w-[7.5rem] shrink-0 rounded-2xl bg-zinc-50 px-3 py-2 ring-1 ring-zinc-100">
-            <p className="text-[10px] font-medium uppercase tracking-wide text-zinc-400">Referencias</p>
-            <p className="text-lg font-semibold tabular-nums text-zinc-900">{executiveKpis.n}</p>
-            <p className="text-[11px] text-zinc-500">
+      <section className="rounded-xl bg-white p-2.5 ring-1 ring-zinc-200/80">
+        <p className="px-0.5 text-[10px] font-medium text-zinc-400">{windowLabel}</p>
+        <div className="mt-1.5 grid grid-cols-2 gap-1.5 sm:grid-cols-3 lg:grid-cols-5">
+          <div className="rounded-xl bg-zinc-50 px-2 py-1.5 ring-1 ring-zinc-100">
+            <p className="text-[9px] font-medium uppercase tracking-wide text-zinc-400">Referencias</p>
+            <p className="text-sm font-semibold tabular-nums text-zinc-900">{executiveKpis.n}</p>
+            <p className="text-[10px] leading-tight text-zinc-500">
               ↑{executiveKpis.up} · ↓{executiveKpis.down}
             </p>
           </div>
-          <div className="min-w-[7.5rem] shrink-0 rounded-2xl bg-amber-50/80 px-3 py-2 ring-1 ring-amber-100/80">
-            <p className="text-[10px] font-medium uppercase tracking-wide text-amber-800/90">Alertas</p>
-            <p className="flex items-center gap-1 text-lg font-semibold tabular-nums text-amber-950">
+          <div className="rounded-xl bg-amber-50/80 px-2 py-1.5 ring-1 ring-amber-100/80">
+            <p className="text-[9px] font-medium uppercase tracking-wide text-amber-800/90">Alertas</p>
+            <p className="flex items-center gap-1 text-sm font-semibold tabular-nums text-amber-950">
               {executiveKpis.alertCount}
-              <AlertTriangle className="h-4 w-4 shrink-0 opacity-80" aria-hidden />
+              <AlertTriangle className="h-3.5 w-3.5 shrink-0 opacity-80" aria-hidden />
             </p>
-            <p className="text-[11px] text-amber-900/70">{alertPct <= 0 ? 'Cualquier subida' : `≥ ${alertPct}%`}</p>
+            <p className="text-[10px] leading-tight text-amber-900/70">{alertPct <= 0 ? 'Cualquier subida' : `≥ ${alertPct}%`}</p>
           </div>
-          <div className="min-w-[8rem] shrink-0 rounded-2xl bg-zinc-50 px-3 py-2 ring-1 ring-zinc-100">
-            <p className="text-[10px] font-medium uppercase tracking-wide text-zinc-400">Δ % vol.</p>
-            <p className="text-lg font-semibold tabular-nums text-zinc-900">
+          <div className="rounded-xl bg-zinc-50 px-2 py-1.5 ring-1 ring-zinc-100">
+            <p className="text-[9px] font-medium uppercase tracking-wide text-zinc-400">Δ % vol.</p>
+            <p className="text-sm font-semibold tabular-nums text-zinc-900">
               {executiveKpis.volWeightedDeltaPct >= 0 ? '+' : ''}
               {executiveKpis.volWeightedDeltaPct.toFixed(1)}%
             </p>
-            <p className="text-[11px] text-zinc-500">
+            <p className="text-[10px] leading-tight text-zinc-500">
               μ {executiveKpis.avgDeltaPct >= 0 ? '+' : ''}
               {executiveKpis.avgDeltaPct.toFixed(1)}%
             </p>
           </div>
-          <div className="min-w-[8rem] shrink-0 rounded-2xl bg-red-50/70 px-3 py-2 ring-1 ring-red-100/80">
-            <p className="text-[10px] font-medium uppercase tracking-wide text-red-800/80">Impacto +€/mes</p>
-            <p className="flex items-center gap-1 text-lg font-semibold tabular-nums text-red-700">
+          <div className="rounded-xl bg-red-50/70 px-2 py-1.5 ring-1 ring-red-100/80">
+            <p className="text-[9px] font-medium uppercase tracking-wide text-red-800/80">Impacto +€/mes</p>
+            <p className="flex items-center gap-1 text-sm font-semibold tabular-nums text-red-700">
               +{executiveKpis.impactUpMonthly.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-              <TrendingUp className="h-4 w-4 shrink-0 opacity-80" aria-hidden />
+              <TrendingUp className="h-3.5 w-3.5 shrink-0 opacity-80" aria-hidden />
             </p>
           </div>
-          <div className="min-w-[8rem] shrink-0 rounded-2xl bg-emerald-50/70 px-3 py-2 ring-1 ring-emerald-100/80">
-            <p className="text-[10px] font-medium uppercase tracking-wide text-emerald-800/80">vs PMP −</p>
-            <p className="flex items-center gap-1 text-lg font-semibold tabular-nums text-emerald-800">
+          <div className="rounded-xl bg-emerald-50/70 px-2 py-1.5 ring-1 ring-emerald-100/80 sm:col-span-2 lg:col-span-1">
+            <p className="text-[9px] font-medium uppercase tracking-wide text-emerald-800/80">vs PMP −</p>
+            <p className="flex items-center gap-1 text-sm font-semibold tabular-nums text-emerald-800">
               {executiveKpis.impactDownMonthly.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-              <TrendingDown className="h-4 w-4 shrink-0 opacity-80" aria-hidden />
+              <TrendingDown className="h-3.5 w-3.5 shrink-0 opacity-80" aria-hidden />
             </p>
           </div>
         </div>
       </section>
 
       {actionRecommendations.length > 0 ? (
-        <section className="rounded-2xl border border-amber-200/80 bg-amber-50/50 p-4 ring-1 ring-amber-100">
-          <div className="flex items-center gap-2">
-            <Lightbulb className="h-5 w-5 text-amber-800" aria-hidden />
-            <p className="text-sm font-black text-zinc-900">Recomendaciones automáticas</p>
+        <section className="rounded-xl border border-amber-200/80 bg-amber-50/50 p-3 ring-1 ring-amber-100">
+          <div className="flex items-center gap-1.5">
+            <Lightbulb className="h-4 w-4 text-amber-800" aria-hidden />
+            <p className="text-xs font-bold text-zinc-900">Recomendaciones automáticas</p>
           </div>
-            <p className="mt-1 text-xs text-zinc-600">Impacto vs PMP, alertas y diferencias entre proveedores.</p>
-          <ul className="mt-3 space-y-2">
+          <ul className="mt-2 space-y-1.5">
             {actionRecommendations.map((rec) => (
               <li
                 key={rec.id}
                 className={[
-                  'rounded-xl px-3 py-2 text-xs ring-1',
+                  'rounded-lg px-2.5 py-1.5 text-[11px] ring-1',
                   rec.priority === 'high'
                     ? 'bg-white font-medium text-zinc-900 ring-red-200/80'
                     : 'bg-white/90 text-zinc-800 ring-zinc-200',
@@ -2000,12 +1996,12 @@ export default function PedidosPreciosPage() {
       ) : null}
 
       {benchmarksForUi.length > 0 ? (
-        <section className="rounded-2xl bg-white p-4 ring-1 ring-zinc-200">
-          <p className="text-sm font-black text-zinc-900">Mismo producto, varios proveedores</p>
-          <p className="mt-1 text-xs text-zinc-600">Misma referencia y unidad de catálogo; orden por hueco de precio.</p>
-          <div className="mt-3 space-y-3">
+        <section className="rounded-xl bg-white p-3 ring-1 ring-zinc-200">
+          <p className="text-xs font-bold text-zinc-900">Mismo producto, varios proveedores</p>
+          <p className="mt-0.5 text-[10px] text-zinc-600">Misma referencia y unidad de catálogo; orden por hueco de precio.</p>
+          <div className="mt-2 space-y-2">
             {benchmarksForUi.map((b) => (
-              <div key={b.compareKey} className="rounded-xl bg-zinc-50 p-3 ring-1 ring-zinc-200">
+              <div key={b.compareKey} className="rounded-lg bg-zinc-50 p-2.5 ring-1 ring-zinc-200">
                 <div className="flex flex-wrap items-baseline justify-between gap-2">
                   <p className="text-sm font-bold text-zinc-900">
                     {b.productName}{' '}
@@ -2035,11 +2031,11 @@ export default function PedidosPreciosPage() {
       ) : null}
 
       {impactRanking.length > 0 ? (
-        <section className="rounded-2xl bg-white p-4 ring-1 ring-zinc-200">
-          <p className="text-sm font-semibold text-zinc-900">Mayor impacto vs PMP</p>
-          <ul className="mt-3 divide-y divide-zinc-100">
+        <section className="rounded-xl bg-white p-3 ring-1 ring-zinc-200">
+          <p className="text-xs font-semibold text-zinc-900">Mayor impacto vs PMP</p>
+          <ul className="mt-2 divide-y divide-zinc-100">
             {impactRanking.map((row, idx) => (
-              <li key={row.key} className="flex flex-wrap items-center gap-2 py-2.5 text-[13px] first:pt-0">
+              <li key={row.key} className="flex flex-wrap items-center gap-2 py-2 text-[12px] first:pt-0">
                 <span className="w-5 shrink-0 tabular-nums text-zinc-400">{idx + 1}</span>
                 <div className="min-w-0 flex-1">
                   <p className="truncate font-medium text-zinc-900">{row.productName}</p>
@@ -2090,24 +2086,24 @@ export default function PedidosPreciosPage() {
             <article
               key={row.key}
               className={[
-                'overflow-hidden rounded-2xl bg-white shadow-sm ring-1',
+                'overflow-hidden rounded-xl bg-white shadow-sm ring-1',
                 alert ? 'ring-2 ring-amber-300/90' : 'ring-zinc-200/90',
               ].join(' ')}
             >
-              <div className="border-b border-zinc-100/90 px-4 pb-4 pt-4">
-                <div className="flex gap-3">
-                  <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-zinc-100 ring-1 ring-zinc-200/80">
-                    <Package className="h-7 w-7 text-zinc-400" aria-hidden />
+              <div className="border-b border-zinc-100/90 px-3 pb-3 pt-3 sm:px-3.5">
+                <div className="flex gap-2.5">
+                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-zinc-100 ring-1 ring-zinc-200/80">
+                    <Package className="h-5 w-5 text-zinc-400" aria-hidden />
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">
-                        <h2 className="font-sans text-[15px] font-bold uppercase leading-snug tracking-wide text-zinc-900">
+                        <h2 className="font-sans text-[13px] font-bold uppercase leading-snug tracking-wide text-zinc-900">
                           {row.productName}
                         </h2>
-                        <p className="mt-1 text-[12px] leading-snug text-zinc-500">{row.supplierName}</p>
+                        <p className="mt-0.5 text-[11px] leading-snug text-zinc-500">{row.supplierName}</p>
                       </div>
-                      <div className="flex shrink-0 items-start gap-1.5">
+                      <div className="flex shrink-0 items-start gap-1">
                         {trend === 'up' ? (
                           <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-amber-950">
                             <AlertTriangle className="h-3 w-3 shrink-0" aria-hidden />
@@ -2127,51 +2123,48 @@ export default function PedidosPreciosPage() {
                           disabled={seriesEvolutionDeleteBusy}
                           title="Borrar histórico de este producto"
                           onClick={() => setSeriesDeleteContext({ key: row.key })}
-                          className="rounded-lg p-1.5 text-zinc-400 hover:bg-red-50 hover:text-[#B91C1C] disabled:opacity-40"
+                          className="rounded-lg p-1 text-zinc-400 hover:bg-red-50 hover:text-[#B91C1C] disabled:opacity-40"
                           aria-label="Borrar histórico de este producto"
                         >
-                          <Trash2 className="h-5 w-5" aria-hidden />
+                          <Trash2 className="h-4 w-4" aria-hidden />
                         </button>
                       </div>
                     </div>
                   </div>
                 </div>
 
-                <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
-                  <div className="rounded-2xl bg-white px-3 py-3 ring-1 ring-zinc-200/90">
-                    <p className="text-[11px] font-medium text-zinc-500">Último recibido</p>
-                    <p className="mt-1 font-sans text-2xl font-semibold tabular-nums tracking-tight text-zinc-900">
+                <div className="mt-3 grid grid-cols-3 gap-1.5">
+                  <div className="rounded-xl bg-zinc-50/90 px-2 py-2 ring-1 ring-zinc-200/80">
+                    <p className="text-[9px] font-semibold uppercase tracking-wide text-zinc-500">Último</p>
+                    <p className="mt-0.5 truncate font-sans text-[15px] font-semibold tabular-nums leading-tight tracking-tight text-zinc-900 sm:text-base">
                       {row.current.price.toFixed(2).replace('.', ',')} {eu}
                     </p>
-                    <p className="mt-1 text-[11px] text-zinc-400">{currentDateLabel}</p>
+                    <p className="mt-0.5 truncate text-[9px] text-zinc-400">{currentDateLabel}</p>
                   </div>
-                  <div className="rounded-2xl bg-white px-3 py-3 ring-1 ring-zinc-200/90">
-                    <p className="text-[11px] font-medium text-zinc-500">PMP</p>
-                    <p className="text-[10px] text-zinc-400">Media ponderada del periodo</p>
-                    <p className="text-[10px] text-zinc-400">{windowLabel}</p>
-                    <p className="mt-1 font-sans text-2xl font-semibold tabular-nums tracking-tight text-zinc-900">
+                  <div className="rounded-xl bg-zinc-50/90 px-2 py-2 ring-1 ring-zinc-200/80">
+                    <p className="text-[9px] font-semibold uppercase tracking-wide text-zinc-500">PMP</p>
+                    <p className="mt-0.5 truncate font-sans text-[15px] font-semibold tabular-nums leading-tight tracking-tight text-zinc-900 sm:text-base">
                       {row.weightedAvg.toFixed(2).replace('.', ',')} {eu}
                     </p>
-                    <p className="mt-1 text-[11px] text-zinc-400">
-                      {row.totalWeightedQty.toLocaleString('es-ES', { maximumFractionDigits: 2 })}{' '}
-                      {row.displayUnit} (ponderado)
+                    <p className="mt-0.5 truncate text-[9px] text-zinc-400">
+                      {row.totalWeightedQty.toLocaleString('es-ES', { maximumFractionDigits: 1 })} {row.displayUnit}
                     </p>
                   </div>
-                  <div className="rounded-2xl bg-white px-3 py-3 ring-1 ring-zinc-200/90">
-                    <p className="text-[11px] font-medium text-zinc-500">Variación vs PMP</p>
+                  <div className="rounded-xl bg-zinc-50/90 px-2 py-2 ring-1 ring-zinc-200/80">
+                    <p className="text-[9px] font-semibold uppercase tracking-wide text-zinc-500">Variación</p>
                     <p
                       className={[
-                        'mt-1 font-sans text-2xl font-semibold tabular-nums tracking-tight',
+                        'mt-0.5 truncate font-sans text-[15px] font-semibold tabular-nums leading-tight tracking-tight sm:text-base',
                         deltaVsPmpEur > 0 ? 'text-red-600' : deltaVsPmpEur < 0 ? 'text-emerald-600' : 'text-zinc-900',
                       ].join(' ')}
                     >
                       {deltaVsPmpEur >= 0 ? '+' : ''}
                       {deltaVsPmpEur.toFixed(2).replace('.', ',')} {eu}
                     </p>
-                    <p className="mt-2">
+                    <p className="mt-0.5">
                       <span
                         className={[
-                          'inline-flex rounded-full px-2 py-0.5 text-[11px] font-bold tabular-nums',
+                          'inline-flex rounded-full px-1.5 py-px text-[9px] font-bold tabular-nums',
                           row.deltaPct > 0
                             ? 'bg-red-50 text-red-700 ring-1 ring-red-100'
                             : row.deltaPct < 0
@@ -2186,40 +2179,40 @@ export default function PedidosPreciosPage() {
                   </div>
                 </div>
 
-                <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
-                  <div className="rounded-2xl bg-emerald-50/80 px-3 py-2.5 ring-1 ring-emerald-100/90">
-                    <p className="text-[10px] font-medium uppercase tracking-wide text-emerald-800/90">Impacto mensual</p>
-                    <p className="mt-0.5 font-sans text-lg font-semibold tabular-nums text-emerald-900">
+                <div className="mt-2.5 grid grid-cols-2 gap-1.5">
+                  <div className="rounded-xl bg-emerald-50/80 px-2 py-1.5 ring-1 ring-emerald-100/90">
+                    <p className="text-[9px] font-medium uppercase tracking-wide text-emerald-800/90">Impacto mensual</p>
+                    <p className="mt-0.5 font-sans text-sm font-semibold tabular-nums text-emerald-900">
                       {row.impactMonthlyVsWap >= 0 ? '+' : ''}
                       {row.impactMonthlyVsWap.toFixed(2).replace('.', ',')} €
                     </p>
-                    <p className="text-[10px] text-emerald-800/70">Si el ritmo se mantiene</p>
+                    <p className="text-[9px] leading-tight text-emerald-800/70">Ritmo actual</p>
                   </div>
-                  <div className="rounded-2xl bg-red-50/70 px-3 py-2.5 ring-1 ring-red-100/80">
-                    <p className="text-[10px] font-medium uppercase tracking-wide text-red-800/85">Ahorro vs PMP</p>
-                    <p className="mt-0.5 font-sans text-lg font-semibold tabular-nums text-red-800">
+                  <div className="rounded-xl bg-red-50/70 px-2 py-1.5 ring-1 ring-red-100/80">
+                    <p className="text-[9px] font-medium uppercase tracking-wide text-red-800/85">Ahorro vs PMP</p>
+                    <p className="mt-0.5 font-sans text-sm font-semibold tabular-nums text-red-800">
                       {ahorroVsPmp.toFixed(2).replace('.', ',')} €
                     </p>
-                    <p className="text-[10px] text-red-700/75">{ahorroVsPmp > 0 ? 'vs precio medio periodo' : 'No hay bajadas'}</p>
+                    <p className="text-[9px] leading-tight text-red-700/75">{ahorroVsPmp > 0 ? 'vs medio periodo' : '—'}</p>
                   </div>
-                  <div className="rounded-2xl bg-amber-50/90 px-3 py-2.5 ring-1 ring-amber-100/90">
-                    <p className="text-[10px] font-medium uppercase tracking-wide text-amber-900/90">Volatilidad (CV)</p>
-                    <p className="mt-0.5 font-sans text-lg font-semibold tabular-nums text-amber-950">
+                  <div className="rounded-xl bg-amber-50/90 px-2 py-1.5 ring-1 ring-amber-100/90">
+                    <p className="text-[9px] font-medium uppercase tracking-wide text-amber-900/90">Volatilidad</p>
+                    <p className="mt-0.5 font-sans text-sm font-semibold tabular-nums text-amber-950">
                       {row.volatilityCvPct.toFixed(1).replace('.', ',')}%
                     </p>
-                    <p className="text-[10px] text-amber-900/70">{volatilityStabilityLabel(row.volatilityCvPct)}</p>
+                    <p className="truncate text-[9px] text-amber-900/70">{volatilityStabilityLabel(row.volatilityCvPct)}</p>
                   </div>
-                  <div className="rounded-2xl bg-zinc-50 px-3 py-2.5 ring-1 ring-zinc-200/90">
-                    <p className="text-[10px] font-medium uppercase tracking-wide text-zinc-500">Referencias</p>
-                    <p className="mt-0.5 font-sans text-lg font-semibold tabular-nums text-zinc-900">{receptionCount}</p>
-                    <p className="text-[10px] text-zinc-500">
-                      Suben {refUp} · Bajan {refDown}
+                  <div className="rounded-xl bg-zinc-50 px-2 py-1.5 ring-1 ring-zinc-200/90">
+                    <p className="text-[9px] font-medium uppercase tracking-wide text-zinc-500">Referencias</p>
+                    <p className="mt-0.5 font-sans text-sm font-semibold tabular-nums text-zinc-900">{receptionCount}</p>
+                    <p className="text-[9px] text-zinc-500">
+                      ↑{refUp} · ↓{refDown}
                     </p>
                   </div>
                 </div>
               </div>
 
-              <div className="bg-zinc-50/50 px-3 pb-4 pt-3 sm:px-4">
+              <div className="bg-zinc-50/40 px-2.5 pb-2.5 pt-2 sm:px-3">
                 <PriceEvolutionMiniChart
                   row={row}
                   unitSwitcher={unitSwitcher}
@@ -2228,41 +2221,38 @@ export default function PedidosPreciosPage() {
               </div>
 
               {historialRows.length > 0 ? (
-                <div className="border-t border-zinc-100 px-4 py-4">
-                  <h3 className="font-serif text-lg font-normal text-zinc-900">Historial de recepciones</h3>
-                  <div className="mt-3 overflow-x-auto rounded-xl ring-1 ring-zinc-200/80">
-                    <table className="w-full min-w-[280px] text-left text-[13px]">
+                <div className="border-t border-zinc-100 px-3 py-2.5">
+                  <h3 className="font-serif text-sm font-normal text-zinc-900">Historial de recepciones</h3>
+                  <div className="mt-2 overflow-x-auto rounded-lg border border-zinc-200/80 bg-white">
+                    <table className="w-full min-w-[260px] text-left text-[11px]">
                       <thead>
-                        <tr className="border-b border-zinc-100 bg-zinc-50/90 text-[10px] font-bold uppercase tracking-wide text-zinc-500">
-                          <th className="px-3 py-2 font-sans">Fecha</th>
-                          <th className="px-3 py-2 font-sans">Cantidad</th>
-                          <th className="px-3 py-2 text-right font-sans">Precio</th>
-                          <th className="px-3 py-2 font-sans">Unidad</th>
+                        <tr className="border-b border-zinc-100 bg-zinc-50/95 text-[9px] font-bold uppercase tracking-wide text-zinc-500">
+                          <th className="px-2 py-1.5 font-sans">Fecha</th>
+                          <th className="px-2 py-1.5 font-sans">Cantidad</th>
+                          <th className="px-2 py-1.5 text-right font-sans">Precio</th>
+                          <th className="px-2 py-1.5 font-sans">Ud.</th>
                         </tr>
                       </thead>
                       <tbody>
                         {historialRows.map((pur, idx) => (
-                          <tr key={`${row.key}-h-${idx}`} className="border-b border-zinc-50 bg-white last:border-0">
-                            <td className="whitespace-nowrap px-3 py-2.5 text-zinc-700">
+                          <tr key={`${row.key}-h-${idx}`} className="border-b border-zinc-50 last:border-0">
+                            <td className="whitespace-nowrap px-2 py-1.5 text-zinc-700">
                               {new Date(pur.date).toLocaleDateString('es-ES', {
                                 day: '2-digit',
                                 month: 'short',
                                 year: '2-digit',
                               })}
                             </td>
-                            <td className="px-3 py-2.5 text-zinc-700">{formatQuantityWithUnit(pur.qty, pur.unit)}</td>
-                            <td className="px-3 py-2.5 text-right tabular-nums font-medium text-zinc-900">
+                            <td className="px-2 py-1.5 text-zinc-700">{formatQuantityWithUnit(pur.qty, pur.unit)}</td>
+                            <td className="px-2 py-1.5 text-right tabular-nums font-medium text-zinc-900">
                               {pur.price.toFixed(2).replace('.', ',')}
                             </td>
-                            <td className="px-3 py-2.5 text-zinc-600">{pur.unit}</td>
+                            <td className="px-2 py-1.5 text-zinc-600">{pur.unit}</td>
                           </tr>
                         ))}
                       </tbody>
                     </table>
                   </div>
-                  <p className="mt-3 rounded-xl bg-zinc-50 px-3 py-2 text-[11px] leading-relaxed text-zinc-500 ring-1 ring-zinc-100">
-                    Precios en {eu} según la unidad de comparación de esta referencia en el periodo.
-                  </p>
                 </div>
               ) : null}
             </article>
