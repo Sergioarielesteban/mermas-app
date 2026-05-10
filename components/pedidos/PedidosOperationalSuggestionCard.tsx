@@ -4,8 +4,7 @@ import { CalendarClock, Link2, Package, Sparkles, X } from 'lucide-react';
 import React from 'react';
 import type { OperationalSuggestion, OperationalSuggestionKind } from '@/lib/pedidos-operational-suggestions';
 
-/** Chip-card compacta: debe coincidir con SCROLL_STEP en el carrusel. */
-export const SUGGESTION_CARD_WIDTH_PX = 236;
+/** Altura fija chip-card (no cambiar sin revisar carrusel). */
 export const SUGGESTION_CARD_HEIGHT_PX = 64;
 
 function KindIcon({ kind }: { kind: OperationalSuggestionKind }) {
@@ -38,7 +37,7 @@ export default React.memo(function PedidosOperationalSuggestionCard({
   return (
     <div
       className={[
-        'flex h-16 w-[236px] shrink-0 gap-1.5 rounded-lg border border-zinc-200/80 bg-[#FAFAF9] px-1.5 py-1 shadow-sm ring-1 ring-zinc-100/80 transition-opacity duration-150',
+        'flex h-16 w-full min-w-0 gap-1.5 rounded-lg border border-zinc-200/80 bg-[#FAFAF9] px-1.5 py-1 shadow-sm ring-1 ring-zinc-100/80 transition-opacity duration-150',
         disabled ? 'opacity-60' : '',
       ].join(' ')}
     >

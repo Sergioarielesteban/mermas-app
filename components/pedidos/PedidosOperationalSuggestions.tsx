@@ -3,23 +3,52 @@
 import React from 'react';
 import PedidosOperationalSuggestionCard, {
   SUGGESTION_CARD_HEIGHT_PX,
-  SUGGESTION_CARD_WIDTH_PX,
 } from '@/components/pedidos/PedidosOperationalSuggestionCard';
 import type { OperationalSuggestion } from '@/lib/pedidos-operational-suggestions';
 
-const CARD_GAP_PX = 6;
-const SCROLL_STEP = SUGGESTION_CARD_WIDTH_PX + CARD_GAP_PX;
-/** Inactividad antes de permitir auto-avance (poco agresivo). */
-const AUTO_IDLE_MS = 9000;
-/** Intervalo entre avances automáticos (suave). */
-const AUTO_TICK_MS = 8000;
+/** Entre avances automáticos (3–4 s). */
+const AUTO_TICK_MS = 3500;
+/** Sin interacción antes de reanudar auto-avance (4–5 s). */
+const AUTO_IDLE_MS = 4500;
+/** Duración del desplazamiento horizontal programático (suave, no brusco). */
+const SCROLL_ANIM_MS = 720;
+
+function easeOutCubic(t: number) {
+  return 1 - (1 - t) ** 3;
+}
+
+function animateScrollLeft(
+  el: HTMLElement,
+  targetLeft: number,
+  durationMs: number,
+  onComplete?: () => void,
+) {
+  const from = el.scrollLeft;
+  const delta = targetLeft - from;
+  if (Math.abs(delta) < 0.5) {
+    onComplete?.();
+    return;
+  }
+  const start = performance.now();
+  const tick = (now: number) => {
+    const t = Math.min(1, (now - start) / durationMs);
+    el.scrollLeft = from + delta * easeOutCubic(t);
+    if (t < 1) requestAnimationFrame(tick);
+    else onComplete?.();
+  };
+  requestAnimationFrame(tick);
+}
+
+function slideWidth(el: HTMLUListElement | null): number {
+  if (!el) return 0;
+  return el.clientWidth;
+}
 
 export type PedidosOperationalSuggestionsProps = {
   suggestions: OperationalSuggestion[];
   onApply: (suggestion: OperationalSuggestion) => void;
   onDismiss: (suggestionId: string) => void;
   applyingId: string | null;
-  /** Incrementar al escribir en buscador o cambiar cantidades (pausa auto-avance). */
   interactionEpoch?: number;
 };
 
@@ -35,6 +64,7 @@ export default React.memo(function PedidosOperationalSuggestions({
   const lastInteractionRef = React.useRef(0);
   const [activeDot, setActiveDot] = React.useState(0);
   const [reducedMotion, setReducedMotion] = React.useState(false);
+  const [, bumpResize] = React.useState(0);
 
   React.useEffect(() => {
     const mq = window.matchMedia('(prefers-reduced-motion: reduce)');
@@ -63,9 +93,11 @@ export default React.memo(function PedidosOperationalSuggestions({
   const updateActiveFromScroll = React.useCallback(() => {
     const el = scrollerRef.current;
     if (!el || suggestions.length === 0) return;
+    const w = slideWidth(el);
+    if (w <= 0) return;
     const idx = Math.min(
       suggestions.length - 1,
-      Math.max(0, Math.round(el.scrollLeft / SCROLL_STEP)),
+      Math.max(0, Math.round(el.scrollLeft / w)),
     );
     setActiveDot(idx);
   }, [suggestions.length]);
@@ -74,18 +106,42 @@ export default React.memo(function PedidosOperationalSuggestions({
     updateActiveFromScroll();
   }, [suggestions, updateActiveFromScroll]);
 
-  const scrollToIndex = React.useCallback((index: number) => {
+  React.useLayoutEffect(() => {
     const el = scrollerRef.current;
-    if (!el) return;
-    const clamped = Math.max(0, Math.min(suggestions.length - 1, index));
-    autoScrollRef.current = true;
-    el.scrollTo({ left: clamped * SCROLL_STEP, behavior: 'smooth' });
-    window.setTimeout(() => {
-      autoScrollRef.current = false;
-    }, 750);
-  }, [suggestions.length]);
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(() => {
+      bumpResize((n) => n + 1);
+      updateActiveFromScroll();
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [updateActiveFromScroll]);
 
-  /** Auto-avance 1 tarjeta si hay inactividad; desactivado con prefers-reduced-motion. */
+  const scrollToIndex = React.useCallback(
+    (index: number) => {
+      const el = scrollerRef.current;
+      if (!el) return;
+      const w = slideWidth(el);
+      if (w <= 0) return;
+      const clamped = Math.max(0, Math.min(suggestions.length - 1, index));
+      const target = clamped * w;
+      autoScrollRef.current = true;
+      if (reducedMotion) {
+        el.scrollLeft = target;
+        window.setTimeout(() => {
+          autoScrollRef.current = false;
+        }, 50);
+        return;
+      }
+      animateScrollLeft(el, target, SCROLL_ANIM_MS, () => {
+        window.setTimeout(() => {
+          autoScrollRef.current = false;
+        }, 80);
+      });
+    },
+    [reducedMotion, suggestions.length],
+  );
+
   React.useEffect(() => {
     if (reducedMotion || suggestions.length <= 1) return;
 
@@ -93,13 +149,17 @@ export default React.memo(function PedidosOperationalSuggestions({
       if (Date.now() - lastInteractionRef.current < AUTO_IDLE_MS) return;
       const el = scrollerRef.current;
       if (!el) return;
-      const idx = Math.round(el.scrollLeft / SCROLL_STEP);
+      const w = slideWidth(el);
+      if (w <= 0) return;
+      const idx = Math.round(el.scrollLeft / w);
       const next = (idx + 1) % suggestions.length;
+      const target = next * w;
       autoScrollRef.current = true;
-      el.scrollTo({ left: next * SCROLL_STEP, behavior: 'smooth' });
-      window.setTimeout(() => {
-        autoScrollRef.current = false;
-      }, 750);
+      animateScrollLeft(el, target, SCROLL_ANIM_MS, () => {
+        window.setTimeout(() => {
+          autoScrollRef.current = false;
+        }, 80);
+      });
     }, AUTO_TICK_MS);
 
     return () => window.clearInterval(id);
@@ -121,72 +181,76 @@ export default React.memo(function PedidosOperationalSuggestions({
       className="border-b border-zinc-100/90 bg-gradient-to-b from-[#FFF9F9]/60 to-transparent px-0 py-1"
       aria-live="polite"
     >
-      <div className="flex items-center justify-between px-3 pb-0.5">
+      <div className="px-3 pb-0.5">
         <p className="text-[9px] font-semibold uppercase tracking-[0.12em] text-zinc-400">Sugerencias</p>
-        {suggestions.length > 1 ? (
-          <div className="flex items-center gap-0.5">
-            {suggestions.map((s, i) => (
-              <button
-                key={s.id}
-                type="button"
-                className={[
-                  'h-1 w-1 rounded-full p-0 transition-all duration-200',
-                  i === activeDot ? 'scale-105 bg-[#E30613]' : 'bg-zinc-300/85',
-                ].join(' ')}
-                aria-label={`Ir a sugerencia ${i + 1}`}
-                onClick={() => {
-                  markInteraction();
-                  scrollToIndex(i);
-                }}
-              />
-            ))}
-          </div>
-        ) : null}
       </div>
 
-      <ul
-        ref={scrollerRef}
-        onScroll={onScrollerScroll}
-        onPointerDown={onScrollerPointerDown}
-        onTouchStart={onScrollerPointerDown}
-        className={[
-          'flex snap-x snap-mandatory gap-1.5 overflow-x-auto scroll-smooth px-3 pb-0.5',
-          '[-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden',
-          'touch-pan-x',
-        ].join(' ')}
-        style={{
-          WebkitOverflowScrolling: 'touch',
-        }}
-      >
-        {suggestions.map((s) => (
-          <li
-            key={s.id}
-            style={{
-              flex: '0 0 auto',
-              scrollSnapAlign: 'start',
-              scrollSnapStop: 'always',
-            }}
-            className="snap-start"
-          >
-            <PedidosOperationalSuggestionCard
-              suggestion={s}
-              disabled={applyingId === s.id}
-              onAdd={() => {
-                markInteraction();
-                onApply(s);
+      <div className="px-3">
+        <ul
+          ref={scrollerRef}
+          onScroll={onScrollerScroll}
+          onPointerDown={onScrollerPointerDown}
+          onTouchStart={onScrollerPointerDown}
+          className={[
+            'flex w-full gap-0 overflow-x-auto overscroll-x-contain px-0 pb-0.5',
+            'snap-x snap-mandatory',
+            '[-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden',
+            'touch-pan-x',
+          ].join(' ')}
+          style={{
+            WebkitOverflowScrolling: 'touch',
+          }}
+        >
+          {suggestions.map((s) => (
+            <li
+              key={s.id}
+              className="w-full min-w-full shrink-0 snap-start snap-always"
+              style={{
+                flex: '0 0 100%',
+                scrollSnapAlign: 'start',
+                scrollSnapStop: 'always',
               }}
-              onDismiss={() => {
+            >
+              <PedidosOperationalSuggestionCard
+                suggestion={s}
+                disabled={applyingId === s.id}
+                onAdd={() => {
+                  markInteraction();
+                  onApply(s);
+                }}
+                onDismiss={() => {
+                  markInteraction();
+                  onDismiss(s.id);
+                }}
+              />
+            </li>
+          ))}
+        </ul>
+      </div>
+
+      {suggestions.length > 1 ? (
+        <div className="flex justify-center gap-0.5 px-3 pt-0.5 pb-0.5">
+          {suggestions.map((s, i) => (
+            <button
+              key={s.id}
+              type="button"
+              className={[
+                'h-1 w-1 rounded-full p-0 transition-all duration-200',
+                i === activeDot ? 'scale-105 bg-[#E30613]' : 'bg-zinc-300/85',
+              ].join(' ')}
+              aria-label={`Ir a sugerencia ${i + 1}`}
+              onClick={() => {
                 markInteraction();
-                onDismiss(s.id);
+                scrollToIndex(i);
               }}
             />
-          </li>
-        ))}
-      </ul>
+          ))}
+        </div>
+      ) : null}
 
       <span className="sr-only">
-        Carrusel de sugerencias, {suggestions.length} elementos, tarjetas de {SUGGESTION_CARD_WIDTH_PX}×
-        {SUGGESTION_CARD_HEIGHT_PX} px
+        Carrusel de sugerencias, {suggestions.length} elementos, altura de tarjeta {SUGGESTION_CARD_HEIGHT_PX}px, ancho
+        completo del catálogo
       </span>
     </div>
   );
