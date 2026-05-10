@@ -1,0 +1,314 @@
+'use client';
+
+import Link from 'next/link';
+import React from 'react';
+import type { LucideIcon } from 'lucide-react';
+import { ChevronRight, Droplets, Factory, ShoppingCart, Thermometer } from 'lucide-react';
+import { useAuth } from '@/components/AuthProvider';
+import PanelAlertas from '@/components/PanelAlertas';
+import ProductoGuiadoChecklist from '@/components/ProductoGuiadoChecklist';
+import {
+  canAccessChat,
+  canAccessComidaPersonal,
+  canAccessEscandallos,
+  canAccessFinanzas,
+  canAccessInventario,
+  canAccessPedidosByRole,
+} from '@/lib/app-role-permissions';
+import { canAccessCocinaCentralModule, canPlaceCentralSupplyOrder } from '@/lib/cocina-central-permissions';
+import { canAccessPedidos } from '@/lib/pedidos-access';
+import { getModuleAccess } from '@/lib/canAccessModule';
+import type { PlanModule } from '@/lib/planPermissions';
+import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
+import { fetchOrders } from '@/lib/pedidos-supabase';
+import {
+  appccTemperaturasOperationalDateKey,
+  fetchAppccColdUnits,
+  fetchAppccReadingsForDate,
+} from '@/lib/appcc-supabase';
+import type { AppccSlot } from '@/lib/appcc-supabase';
+
+function slotActualTemperatura(): AppccSlot | null {
+  const h = new Date().getHours();
+  const m = new Date().getMinutes();
+  const totalMin = h * 60 + m;
+  if (totalMin >= 11 * 60 && totalMin < 15 * 60) return 'manana';
+  if (totalMin >= 16 * 60 && totalMin < 22 * 60) return 'tarde';
+  if (totalMin >= 23 * 60) return 'noche';
+  return null;
+}
+
+export default function OperationalDayHome() {
+  const {
+    localCode,
+    localName,
+    localId,
+    email,
+    profileRole,
+    profileReady,
+    plan,
+    isCentralKitchen,
+  } = useAuth();
+
+  const role = profileRole ?? 'staff';
+
+  const isBlockedByPlan = React.useCallback(
+    (module: PlanModule) => {
+      if (!profileReady || !profileRole) return false;
+      return !getModuleAccess({ plan, role: profileRole }, module).allowed;
+    },
+    [plan, profileReady, profileRole],
+  );
+
+  const showCocinaCentral = canAccessCocinaCentralModule(profileRole);
+  const showPedidos = canAccessPedidos(localCode, email, localName, localId) && canAccessPedidosByRole(role);
+  const showPedidosCocina = canPlaceCentralSupplyOrder(isCentralKitchen, localId);
+  const showFinanzas = showPedidos && canAccessFinanzas(role);
+  const showEscandallos = canAccessEscandallos(role);
+  const showInventario = canAccessInventario(role);
+  const showChat = canAccessChat(role);
+  const showComidaPersonal = canAccessComidaPersonal(role);
+
+  const [kpi, setKpi] = React.useState<{
+    pedidosHoy: number | null;
+    tempPendientes: number | null;
+    loading: boolean;
+  }>({ pedidosHoy: null, tempPendientes: null, loading: true });
+
+  React.useEffect(() => {
+    if (!localId || !isSupabaseEnabled() || !getSupabaseClient()) {
+      setKpi({ pedidosHoy: null, tempPendientes: null, loading: false });
+      return;
+    }
+    const sb = getSupabaseClient()!;
+    let cancelled = false;
+    setKpi((s) => ({ ...s, loading: true }));
+
+    const run = async () => {
+      const hoyISO = new Date().toISOString().slice(0, 10);
+      let pedidosHoy = 0;
+      let tempPendientes = 0;
+      try {
+        if (showPedidos) {
+          const orders = await fetchOrders(sb, localId, { recentDays: 14 });
+          pedidosHoy = orders.filter((o) => o.status === 'sent' && o.deliveryDate === hoyISO).length;
+        }
+      } catch {
+        pedidosHoy = 0;
+      }
+      try {
+        const slot = slotActualTemperatura();
+        if (slot) {
+          const [units, readings] = await Promise.all([
+            fetchAppccColdUnits(sb, localId),
+            fetchAppccReadingsForDate(sb, localId, appccTemperaturasOperationalDateKey()),
+          ]);
+          if (units.length > 0) {
+            const ok = readings.some((r) => r.slot === slot);
+            if (!ok) tempPendientes = 1;
+          }
+        }
+      } catch {
+        tempPendientes = 0;
+      }
+      if (!cancelled) {
+        setKpi({ pedidosHoy, tempPendientes, loading: false });
+      }
+    };
+
+    void run();
+    return () => {
+      cancelled = true;
+    };
+  }, [localId, showPedidos]);
+
+  const pedidosLleganHoy = kpi.pedidosHoy ?? 0;
+
+  const priorityPedidos = {
+    title: 'Pedidos que llegan hoy',
+    sub: kpi.loading
+      ? 'Cargando…'
+      : pedidosLleganHoy === 0
+        ? 'Nada previsto para recepción hoy'
+        : `${pedidosLleganHoy} pedido${pedidosLleganHoy === 1 ? '' : 's'} con llegada hoy`,
+    lines: [] as string[],
+    badge: pedidosLleganHoy > 0 ? ('HOY' as const) : null,
+    badgeClass: 'bg-red-100 text-red-800 ring-red-200',
+    iconBg: 'bg-red-100 text-red-700',
+    href: '/pedidos',
+    blocked: !showPedidos || isBlockedByPlan('pedidos'),
+    Icon: ShoppingCart,
+  };
+
+  const tempNeeds =
+    kpi.tempPendientes != null && kpi.tempPendientes > 0 && !isBlockedByPlan('appcc');
+
+  const priorityTemp = {
+    title: 'Temperaturas',
+    sub: tempNeeds ? 'Pendiente este turno' : 'Al día',
+    badge: tempNeeds ? ('PEND.' as const) : null,
+    badgeClass: 'bg-amber-100 text-amber-900 ring-amber-200',
+    iconBg: 'bg-amber-100 text-amber-800',
+    href: '/appcc/temperaturas',
+    blocked: isBlockedByPlan('appcc'),
+    Icon: Thermometer,
+  };
+
+  const priorityAceite = {
+    title: 'Aceites',
+    sub: isBlockedByPlan('appcc') ? 'No disponible' : 'Freidoras',
+    badge: isBlockedByPlan('appcc') ? null : ('REVISAR' as const),
+    badgeClass: 'bg-emerald-100 text-emerald-900 ring-emerald-200',
+    iconBg: 'bg-emerald-100 text-emerald-800',
+    href: '/appcc/aceite/registro',
+    blocked: isBlockedByPlan('appcc'),
+    Icon: Droplets,
+  };
+
+  const priorityProduccion = {
+    title: 'Producción de hoy',
+    sub: isBlockedByPlan('produccion') ? 'Disponible en plan superior' : 'Plan del día y elaboraciones',
+    lines: isBlockedByPlan('produccion') ? [] : ['Consulta tareas en Producción'],
+    badge: isBlockedByPlan('produccion') ? null : ('EN CURSO' as const),
+    badgeClass: 'bg-sky-100 text-sky-900 ring-sky-200',
+    iconBg: 'bg-sky-100 text-sky-800',
+    href: '/produccion',
+    blocked: isBlockedByPlan('produccion'),
+    Icon: Factory,
+  };
+
+  return (
+    <div className="space-y-4 pb-2">
+      {localId ? (
+        <section id="panel-alertas" className="scroll-mt-28">
+          <PanelAlertas localId={localId} showPedidos={showPedidos} />
+        </section>
+      ) : null}
+
+      <ProductoGuiadoChecklist />
+
+      <section id="panel-prioridades" className="scroll-mt-28">
+        <p className="mb-2 px-0.5 font-sans text-[11px] font-semibold uppercase tracking-[0.14em] text-zinc-400">
+          Prioridades
+        </p>
+        <div className="space-y-3">
+          <PriorityCard {...priorityPedidos} />
+          <div className="grid grid-cols-2 gap-1.5">
+            <PrioritySquareCard {...priorityTemp} />
+            <PrioritySquareCard {...priorityAceite} />
+          </div>
+          <PriorityCard {...priorityProduccion} />
+        </div>
+      </section>
+
+      {(showFinanzas || showPedidosCocina || showCocinaCentral || showInventario || showEscandallos || showChat || showComidaPersonal) && (
+        <section className="rounded-2xl border border-dashed border-zinc-200/90 bg-zinc-50/50 px-3 py-2 text-center">
+          <p className="text-[11px] text-zinc-500">
+            Más herramientas en el menú <span className="font-semibold text-zinc-700">☰</span>
+          </p>
+        </section>
+      )}
+    </div>
+  );
+}
+
+function PriorityCard(props: {
+  title: string;
+  sub: string;
+  lines: string[];
+  badge: string | null;
+  badgeClass?: string;
+  iconBg: string;
+  href: string;
+  blocked?: boolean;
+  Icon: LucideIcon;
+}) {
+  const { title, sub, lines, badge, badgeClass, iconBg, href, blocked, Icon } = props;
+  return (
+    <Link
+      href={blocked ? '/planes' : href}
+      className={[
+        'flex items-stretch gap-3 rounded-3xl bg-white p-3.5 shadow-sm ring-1 ring-zinc-200/80 transition-transform active:scale-[0.99]',
+        blocked ? 'opacity-60' : '',
+      ].join(' ')}
+    >
+      <div className={['grid h-12 w-12 shrink-0 place-items-center rounded-2xl ring-1 ring-white/60', iconBg].join(' ')}>
+        <Icon className="h-6 w-6" aria-hidden />
+      </div>
+      <div className="min-w-0 flex-1">
+        <p className="font-serif text-[16px] font-normal leading-tight text-zinc-900">{title}</p>
+        <p className="mt-0.5 text-[12px] text-zinc-500">{sub}</p>
+        {lines.length > 0 ? (
+          <ul className="mt-2 space-y-0.5">
+            {lines.map((line) => (
+              <li key={line} className="text-[11px] text-zinc-600">
+                · {line}
+              </li>
+            ))}
+          </ul>
+        ) : null}
+      </div>
+      <div className="flex shrink-0 flex-col items-end justify-between gap-1">
+        {badge ? (
+          <span
+            className={[
+              'rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide ring-1',
+              badgeClass ?? 'bg-zinc-100 text-zinc-700 ring-zinc-200',
+            ].join(' ')}
+          >
+            {badge}
+          </span>
+        ) : (
+          <span />
+        )}
+        <ChevronRight className="h-5 w-5 text-zinc-300" aria-hidden />
+      </div>
+    </Link>
+  );
+}
+
+/** Dos cuadrados iguales en una fila (Temperaturas | Aceites). */
+function PrioritySquareCard(props: {
+  title: string;
+  sub: string;
+  badge: string | null;
+  badgeClass?: string;
+  iconBg: string;
+  href: string;
+  blocked?: boolean;
+  Icon: LucideIcon;
+}) {
+  const { title, sub, badge, badgeClass, iconBg, href, blocked, Icon } = props;
+  return (
+    <Link
+      href={blocked ? '/planes' : href}
+      className={[
+        'relative flex min-h-[118px] flex-col items-center justify-between rounded-2xl bg-white p-2.5 pt-3 shadow-sm ring-1 ring-zinc-200/80 transition-transform active:scale-[0.99] sm:min-h-[126px]',
+        blocked ? 'opacity-60' : '',
+      ].join(' ')}
+    >
+      <div className="flex w-full flex-col items-center text-center">
+        <div className={['grid h-9 w-9 place-items-center rounded-xl ring-1 ring-white/60', iconBg].join(' ')}>
+          <Icon className="h-4 w-4" aria-hidden />
+        </div>
+        <p className="mt-1.5 font-serif text-[13px] font-normal leading-tight text-zinc-900">{title}</p>
+        <p className="mt-0.5 line-clamp-2 text-[10px] leading-snug text-zinc-500">{sub}</p>
+      </div>
+      <div className="flex w-full items-center justify-between px-0.5 pb-px pt-1.5">
+        {badge ? (
+          <span
+            className={[
+              'rounded-full px-1 py-px text-[7px] font-bold uppercase tracking-wide ring-1',
+              badgeClass ?? 'bg-zinc-100 text-zinc-700 ring-zinc-200',
+            ].join(' ')}
+          >
+            {badge}
+          </span>
+        ) : (
+          <span />
+        )}
+        <ChevronRight className="h-3.5 w-3.5 shrink-0 text-zinc-300" aria-hidden />
+      </div>
+    </Link>
+  );
+}

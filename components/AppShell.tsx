@@ -5,25 +5,30 @@ import { usePathname, useRouter } from 'next/navigation';
 import React, { useCallback, useMemo, useState } from 'react';
 import {
   BarChart3,
-  Calculator,
   BookOpen,
+  Building2,
+  Calculator,
   CalendarDays,
   ChefHat,
   ClipboardList,
+  Droplets,
   Factory,
+  KeyRound,
   ListChecks,
+  Lock,
   LogOut,
   Menu,
   MessageCircle,
-  ShieldCheck,
-  UtensilsCrossed,
-  X,
-  KeyRound,
-  RefreshCcw,
-  ShoppingCart,
   Package,
-  Lock,
+  RefreshCcw,
+  Search,
+  ShieldCheck,
+  ShoppingCart,
   Soup,
+  Thermometer,
+  UtensilsCrossed,
+  Users,
+  X,
 } from 'lucide-react';
 import { useAuth } from '@/components/AuthProvider';
 import { canAccessCocinaCentralModule, canPlaceCentralSupplyOrder } from '@/lib/cocina-central-permissions';
@@ -46,8 +51,8 @@ import {
 } from '@/lib/app-role-permissions';
 import { getModuleAccess } from '@/lib/canAccessModule';
 import { APP_MODULE_HOME, getAppNavBreadcrumb, getParentRoute } from '@/lib/app-navigation';
+import { buildPanelGreetingParts } from '@/lib/panel-greeting';
 
-type NavItemNote = { kind: 'note'; text: string };
 type NavItemLink = {
   href?: string;
   label: string;
@@ -56,9 +61,49 @@ type NavItemLink = {
   blocked?: boolean;
   blockedText?: string;
 };
-type NavItem = NavItemNote | NavItemLink;
 
-const NAV_ITEMS: NavItem[] = [{ href: '/dashboard', label: 'Mermas', Icon: BookOpen }];
+type NavSectionGroup = { heading: string; items: NavItemLink[] };
+
+/** Activo en drawer: compara ruta base (sin hash). */
+function navEntryIsActive(pathname: string | null, entryHref: string): boolean {
+  const base = entryHref.split('#')[0] ?? entryHref;
+  if (base === '/panel') return pathname === '/panel';
+  if (base === '/dashboard') return pathname === '/dashboard' || pathname === '/';
+  if (base === '/appcc/temperaturas') {
+    return pathname === '/appcc/temperaturas' || pathname?.startsWith('/appcc/temperaturas/') === true;
+  }
+  if (base === '/appcc/aceite/registro') {
+    return pathname?.startsWith('/appcc/aceite') === true;
+  }
+  if (base === '/appcc') return pathname === '/appcc' || pathname?.startsWith('/appcc/') === true;
+  if (base === '/checklist') return pathname === '/checklist' || pathname?.startsWith('/checklist/') === true;
+  if (base === '/produccion') return pathname === '/produccion' || pathname?.startsWith('/produccion/') === true;
+  if (base === '/escandallos') return pathname === '/escandallos' || pathname?.startsWith('/escandallos/') === true;
+  if (base === '/cuenta/seguridad') return pathname === '/cuenta/seguridad' || pathname?.startsWith('/cuenta/') === true;
+  if (base === '/cocina-central') return pathname === '/cocina-central' || pathname?.startsWith('/cocina-central/') === true;
+  if (base === '/pedidos-cocina') {
+    return pathname === '/pedidos-cocina' || pathname?.startsWith('/pedidos-cocina/') === true;
+  }
+  if (base === '/superadmin/locales') {
+    return pathname === '/superadmin/locales' || pathname?.startsWith('/superadmin/locales/') === true;
+  }
+  if (base === '/pedidos') return pathname === '/pedidos' || pathname?.startsWith('/pedidos/') === true;
+  if (base === '/finanzas') return pathname === '/finanzas' || pathname?.startsWith('/finanzas/') === true;
+  if (base === '/servicio') return pathname === '/servicio' || pathname?.startsWith('/servicio/') === true;
+  if (base === '/inventario') return pathname === '/inventario' || pathname?.startsWith('/inventario/') === true;
+  if (base === '/personal/mi') {
+    return pathname === '/personal/mi' || pathname?.startsWith('/personal/mi/') === true;
+  }
+  if (base === '/personal') {
+    if (pathname?.startsWith('/personal/mi')) return false;
+    return pathname === '/personal' || pathname?.startsWith('/personal/') === true;
+  }
+  if (base === '/comida-personal') {
+    return pathname === '/comida-personal' || pathname?.startsWith('/comida-personal/') === true;
+  }
+  if (base === '/chat') return pathname === '/chat' || pathname?.startsWith('/chat/') === true;
+  return pathname === base || pathname?.startsWith(`${base}/`) === true;
+}
 
 function titleForPath(pathname: string | null) {
   if (!pathname) return 'Mermas';
@@ -198,69 +243,135 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const showPedidos = canAccessPedidos(localCode, email, localName, localId);
 
   const title = useMemo(() => titleForPath(pathname), [pathname]);
-  const navItems = useMemo<NavItem[]>(() => {
+  const isPanelHome = pathname === '/panel';
+  const panelGreeting = useMemo(
+    () => (isPanelHome ? buildPanelGreetingParts(displayName, loginUsername, email) : null),
+    [isPanelHome, displayName, loginUsername, email],
+  );
+
+  const [drawerQuery, setDrawerQuery] = useState('');
+
+  const navSections = useMemo((): NavSectionGroup[] => {
     const role = profileRole ?? 'staff';
     const isBlockedByPlan = (module: Parameters<typeof getModuleAccess>[1]) => {
       if (!profileReady || !profileRole) return false;
       return !getModuleAccess({ plan, role: profileRole }, module).allowed;
     };
-    const core: NavItem[] = showPedidos && canAccessPedidosByRole(role)
-      ? [...NAV_ITEMS, { href: '/pedidos', label: 'Pedidos', Icon: ShoppingCart, blocked: isBlockedByPlan('pedidos') }]
-      : [...NAV_ITEMS];
-    const finanzas: NavItem[] =
-      showPedidos && canAccessFinanzas(role)
-        ? [{
-            href: '/finanzas',
-            label: 'Finanzas',
-            Icon: BarChart3,
-            blocked: isBlockedByPlan('finanzas'),
-            blockedText: 'Disponible en plan superior',
-          }]
-        : [];
-    const mid: NavItem[] = [
-      { href: '/appcc', label: 'APPCC', Icon: ShieldCheck, blocked: isBlockedByPlan('appcc') },
-      { href: '/checklist', label: 'Check list', Icon: ListChecks, blocked: isBlockedByPlan('checklist') },
-      { href: '/servicio', label: 'Servicio', Icon: Soup, blocked: isBlockedByPlan('servicio') },
+
+    const sections: NavSectionGroup[] = [];
+
+    sections.push({
+      heading: 'Operativa',
+      items: [
+        { href: '/panel', label: 'Agenda del día', Icon: CalendarDays },
+        { href: '/dashboard', label: 'Mermas', Icon: BookOpen },
+      ],
+    });
+
+    const gestion: NavItemLink[] = [];
+    if (showPedidos && canAccessPedidosByRole(role)) {
+      gestion.push({ href: '/pedidos', label: 'Pedidos', Icon: ShoppingCart, blocked: isBlockedByPlan('pedidos') });
+    }
+    gestion.push(
       { href: '/produccion', label: 'Producción', Icon: Factory, blocked: isBlockedByPlan('produccion') },
-    ];
-    const inv: NavItem[] = canAccessInventario(role)
-      ? [{ href: '/inventario', label: 'Inventario', Icon: ClipboardList, blocked: isBlockedByPlan('inventario') }]
-      : [];
-    const esc: NavItem[] = canAccessEscandallos(role)
-      ? [{ href: '/escandallos', label: 'Escandallos', Icon: Calculator, blocked: isBlockedByPlan('escandallos') }]
-      : [];
-    /** Comida + personal justo tras producción (flujo cocina / turno). */
-    const comidaYHorarios: NavItem[] = [
-      ...(canAccessComidaPersonal(role)
-        ? [{ href: '/comida-personal', label: 'Consumo interno', Icon: UtensilsCrossed, blocked: isBlockedByPlan('comida_personal') }]
-        : []),
+      { href: '/servicio', label: 'Servicio', Icon: Soup, blocked: isBlockedByPlan('servicio') },
+    );
+    if (canAccessInventario(role)) {
+      gestion.push({ href: '/inventario', label: 'Inventario', Icon: ClipboardList, blocked: isBlockedByPlan('inventario') });
+    }
+    if (canAccessEscandallos(role)) {
+      gestion.push({ href: '/escandallos', label: 'Escandallos', Icon: Calculator, blocked: isBlockedByPlan('escandallos') });
+    }
+    if (showPedidos && canAccessFinanzas(role)) {
+      gestion.push({
+        href: '/finanzas',
+        label: 'Finanzas',
+        Icon: BarChart3,
+        blocked: isBlockedByPlan('finanzas'),
+        blockedText: 'Disponible en plan superior',
+      });
+    }
+    if (gestion.length) sections.push({ heading: 'Gestión', items: gestion });
+
+    sections.push({
+      heading: 'Control',
+      items: [
+        { href: '/appcc', label: 'APPCC', Icon: ShieldCheck, blocked: isBlockedByPlan('appcc') },
+        { href: '/checklist', label: 'Check list', Icon: ListChecks, blocked: isBlockedByPlan('checklist') },
+        { href: '/appcc/temperaturas', label: 'Temperaturas', Icon: Thermometer, blocked: isBlockedByPlan('appcc') },
+        { href: '/appcc/aceite/registro', label: 'Aceites', Icon: Droplets, blocked: isBlockedByPlan('appcc') },
+      ],
+    });
+
+    const personal: NavItemLink[] = [
       { href: '/personal', label: 'Horarios', Icon: CalendarDays, blocked: isBlockedByPlan('personal') },
     ];
-    const chat: NavItem[] =
-      canAccessChat(role) ? [{ href: '/chat', label: 'Chat', Icon: MessageCircle, blocked: isBlockedByPlan('chat') }] : [];
-    const cuenta: NavItem[] = canAccessCuentaSeguridad(role)
-      ? [{ href: '/cuenta/seguridad', label: 'Cuenta y seguridad', Icon: KeyRound }]
-      : [];
-    const cocina: NavItem[] =
-      showCocinaCentral && canAccessCocinaCentral(role)
-        ? [{ href: '/cocina-central', label: 'Cocina central', Icon: ChefHat, blocked: isBlockedByPlan('cocina_central') }]
-        : [];
-    const pedirCentral: NavItem[] = showPedidosCocina
-      ? [{ href: '/pedidos-cocina', label: 'Pedir a central', Icon: Package }]
-      : [];
-    return [
-      ...core,
-      ...finanzas,
-      ...mid,
-      ...comidaYHorarios,
-      ...inv,
-      ...esc,
-      ...chat,
-      ...cuenta,
-      ...cocina,
-      ...pedirCentral,
-    ];
-  }, [showPedidos, showPedidosCocina, showCocinaCentral, profileReady, profileRole, plan]);
+    if (canAccessComidaPersonal(role)) {
+      personal.push({
+        href: '/comida-personal',
+        label: 'Consumo interno',
+        Icon: UtensilsCrossed,
+        blocked: isBlockedByPlan('comida_personal'),
+      });
+    }
+    personal.push({
+      href: '/personal/mi',
+      label: 'Equipo',
+      Icon: Users,
+      blocked: isBlockedByPlan('personal'),
+    });
+    if (canAccessChat(role)) {
+      personal.push({ href: '/chat', label: 'Chat', Icon: MessageCircle, blocked: isBlockedByPlan('chat') });
+    }
+    sections.push({ heading: 'Personal', items: personal });
+
+    const central: NavItemLink[] = [];
+    if (showCocinaCentral && canAccessCocinaCentral(role)) {
+      central.push({
+        href: '/cocina-central',
+        label: 'Cocina central',
+        Icon: ChefHat,
+        blocked: isBlockedByPlan('cocina_central'),
+      });
+    }
+    if (showPedidosCocina) {
+      central.push({ href: '/pedidos-cocina', label: 'Pedir a central', Icon: Package });
+    }
+    if (isSuperadmin) {
+      central.push({ href: '/superadmin/locales', label: 'Multi-local', Icon: Building2 });
+    }
+    if (central.length) sections.push({ heading: 'Central', items: central });
+
+    const cuentaItems: NavItemLink[] = [];
+    if (canAccessCuentaSeguridad(role)) {
+      cuentaItems.push({ href: '/cuenta/seguridad', label: 'Ajustes', Icon: KeyRound });
+    }
+    if (cuentaItems.length) sections.push({ heading: 'Cuenta', items: cuentaItems });
+
+    return sections;
+  }, [
+    showPedidos,
+    showPedidosCocina,
+    showCocinaCentral,
+    profileReady,
+    profileRole,
+    plan,
+    isSuperadmin,
+  ]);
+
+  const filteredNavSections = useMemo(() => {
+    const q = drawerQuery.trim().toLowerCase();
+    if (!q) return navSections;
+    return navSections
+      .map((section) => ({
+        ...section,
+        items: section.items.filter(
+          (item) =>
+            item.label.toLowerCase().includes(q) || section.heading.toLowerCase().includes(q),
+        ),
+      }))
+      .filter((s) => s.items.length > 0);
+  }, [navSections, drawerQuery]);
 
   const confirmAndLogout = () => setConfirmLogoutOpen(true);
 
@@ -353,14 +464,32 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             <Menu className="h-6 w-6" />
           </button>
           <div className="min-w-0 flex-1 pr-1">
-            <h1 className="line-clamp-2 text-sm font-extrabold uppercase leading-tight tracking-wide text-white sm:line-clamp-1">
-              {title}
-            </h1>
-            {localId && localLabel ? (
-              <p className="line-clamp-1 text-[10px] font-semibold uppercase tracking-wider text-white/85">
-                {localLabel}
-              </p>
-            ) : null}
+            {panelGreeting ? (
+              <>
+                <p className="line-clamp-2 text-sm font-extrabold leading-tight tracking-tight text-white sm:line-clamp-1">
+                  <span>{panelGreeting.text}</span>{' '}
+                  <span aria-hidden className="inline-block">
+                    {panelGreeting.emoji}
+                  </span>
+                </p>
+                {localId && localLabel ? (
+                  <p className="line-clamp-1 text-[10px] font-semibold uppercase tracking-wider text-white/85">
+                    {localLabel}
+                  </p>
+                ) : null}
+              </>
+            ) : (
+              <>
+                <h1 className="line-clamp-2 text-sm font-extrabold uppercase leading-tight tracking-wide text-white sm:line-clamp-1">
+                  {title}
+                </h1>
+                {localId && localLabel ? (
+                  <p className="line-clamp-1 text-[10px] font-semibold uppercase tracking-wider text-white/85">
+                    {localLabel}
+                  </p>
+                ) : null}
+              </>
+            )}
           </div>
           <NotificationBell />
           <button
@@ -415,93 +544,91 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               <X className="h-[17px] w-[17px]" />
             </button>
           </div>
-          <div className="px-2 pb-1.5 text-center">
+          <div className="px-3 pb-2 text-center">
             <div
               className="mx-auto flex min-h-0 max-h-[70px] w-full items-center justify-center overflow-hidden p-0"
               aria-hidden
             >
               <Logo variant="sidebar" className="select-none drop-shadow-sm" alt="" role="presentation" />
             </div>
-            <p className="mb-2 mt-1 text-[0.8125rem] font-semibold leading-tight tracking-wide text-zinc-600">
-              Gestión operativa
+            <p className="mt-1.5 text-[0.9375rem] font-semibold leading-tight text-zinc-900">
+              {localLabel ?? 'Chef One'}
             </p>
+            <p className="text-[10px] font-medium uppercase tracking-wide text-zinc-400">Local principal</p>
           </div>
         </div>
 
-        <nav className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-2 pb-3 pt-1">
-          {navItems.map((item) => {
-            if ('kind' in item && item.kind === 'note') {
-              return (
-                <p
-                  key={item.text}
-                  className="mx-1 mb-2 rounded-xl bg-amber-50/90 px-3 py-2 text-[11px] font-medium leading-snug text-amber-950 ring-1 ring-amber-100"
-                >
-                  {item.text}
-                </p>
-              );
-            }
-            const entry = item as NavItemLink;
-            const Icon = entry.Icon;
-            if (entry.comingSoon || !entry.href) {
-              return (
-                <div
-                  key={entry.label}
-                  className="flex w-full items-center justify-between gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold text-zinc-500 ring-1 ring-zinc-200"
-                >
-                  <span className="flex items-center gap-3">
-                    <Icon className="h-5 w-5" />
-                    <span className="min-w-0 truncate">{entry.label}</span>
-                  </span>
-                  <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-zinc-500">
-                    Próximamente
-                  </span>
-                </div>
-              );
-            }
-            const isActive =
-              entry.href === '/dashboard'
-                ? pathname === '/dashboard' || pathname === '/'
-                : entry.href === '/appcc'
-                  ? pathname === '/appcc' || pathname?.startsWith('/appcc/')
-                  : entry.href === '/checklist'
-                    ? pathname === '/checklist' || pathname?.startsWith('/checklist/')
-                    : entry.href === '/produccion'
-                      ? pathname === '/produccion' || pathname?.startsWith('/produccion/')
-                      : entry.href === '/escandallos'
-                        ? pathname === '/escandallos' || pathname?.startsWith('/escandallos/')
-                        : entry.href === '/cuenta/seguridad'
-                          ? pathname === '/cuenta/seguridad' || pathname?.startsWith('/cuenta/')
-                          : entry.href === '/cocina-central'
-                            ? pathname === '/cocina-central' || pathname?.startsWith('/cocina-central/')
-                            : pathname === entry.href || pathname?.startsWith(`${entry.href}/`);
-            const targetHref = entry.blocked ? '/planes' : entry.href;
+        <div className="shrink-0 border-b border-zinc-100 px-3 pb-3 pt-1">
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
+            <input
+              type="search"
+              value={drawerQuery}
+              onChange={(e) => setDrawerQuery(e.target.value)}
+              placeholder="Buscar módulo, producto, pedido…"
+              className="w-full rounded-xl border border-zinc-200 bg-white py-2 pl-9 pr-3 text-[13px] text-zinc-900 placeholder:text-zinc-400 focus:border-zinc-300 focus:outline-none focus:ring-2 focus:ring-zinc-200"
+              aria-label="Buscar en el menú"
+            />
+          </div>
+        </div>
 
-            return (
-              <Link
-                key={entry.href}
-                href={targetHref}
-                onClick={() => setOpen(false)}
-                className={[
-                  'flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-[0.9375rem] font-semibold leading-snug transition-all',
-                  entry.blocked ? 'opacity-55' : '',
-                  isActive
-                    ? 'bg-[#D32F2F]/10 text-[#D32F2F] shadow-sm ring-1 ring-[#D32F2F]/25'
-                    : 'text-zinc-800 hover:bg-zinc-100',
-                ].join(' ')}
-              >
-                <Icon className="h-[1.35rem] w-[1.35rem] shrink-0" />
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate">{entry.label}</span>
-                  {entry.blocked ? (
-                    <span className="block text-[10px] font-semibold uppercase tracking-wide text-zinc-500">
-                      {entry.blockedText ?? 'Disponible en plan superior'}
-                    </span>
-                  ) : null}
-                </span>
-                {entry.blocked ? <Lock className="h-4 w-4 shrink-0 text-zinc-500" /> : null}
-              </Link>
-            );
-          })}
+        <nav className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-2 pb-3 pt-2">
+          {filteredNavSections.map((section) => (
+            <div key={section.heading} className="mb-4">
+              <p className="mb-1.5 px-3 text-[10px] font-bold uppercase tracking-[0.14em] text-zinc-400">
+                {section.heading}
+              </p>
+              <div className="space-y-0.5">
+                {section.items.map((entry) => {
+                  const Icon = entry.Icon;
+                  if (entry.comingSoon || !entry.href) {
+                    return (
+                      <div
+                        key={`${section.heading}-${entry.label}`}
+                        className="flex w-full items-center justify-between gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold text-zinc-500 ring-1 ring-zinc-200"
+                      >
+                        <span className="flex items-center gap-3">
+                          <Icon className="h-5 w-5" />
+                          <span className="min-w-0 truncate">{entry.label}</span>
+                        </span>
+                        <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-zinc-500">
+                          Próximamente
+                        </span>
+                      </div>
+                    );
+                  }
+                  const isActive = navEntryIsActive(pathname, entry.href);
+                  const targetHref = entry.blocked ? '/planes' : entry.href;
+
+                  return (
+                    <Link
+                      key={`${section.heading}-${entry.href}`}
+                      href={targetHref}
+                      onClick={() => setOpen(false)}
+                      className={[
+                        'flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-[0.9375rem] font-semibold leading-snug transition-all',
+                        entry.blocked ? 'opacity-55' : '',
+                        isActive
+                          ? 'bg-[#D32F2F]/10 text-[#D32F2F] shadow-sm ring-1 ring-[#D32F2F]/25'
+                          : 'text-zinc-800 hover:bg-zinc-100',
+                      ].join(' ')}
+                    >
+                      <Icon className="h-[1.35rem] w-[1.35rem] shrink-0" />
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate">{entry.label}</span>
+                        {entry.blocked ? (
+                          <span className="block text-[10px] font-semibold uppercase tracking-wide text-zinc-500">
+                            {entry.blockedText ?? 'Disponible en plan superior'}
+                          </span>
+                        ) : null}
+                      </span>
+                      {entry.blocked ? <Lock className="h-4 w-4 shrink-0 text-zinc-500" /> : null}
+                    </Link>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
         </nav>
 
         <div className="shrink-0 px-3 pb-2 pt-1.5">
