@@ -2,7 +2,23 @@
 
 import Link from 'next/link';
 import React from 'react';
-import { ChevronRight, ListTree, Plus, Search, Upload } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
+import {
+  Beef,
+  CalendarDays,
+  ChevronRight,
+  Coffee,
+  Droplets,
+  Fish,
+  Milk,
+  Package,
+  Phone,
+  Plus,
+  Search,
+  Snowflake,
+  Sparkles,
+  Truck,
+} from 'lucide-react';
 import { ProveedoresModalShell } from '@/components/pedidos/ProveedoresModalShell';
 import { useAuth } from '@/components/AuthProvider';
 import { appConfirm } from '@/lib/app-dialog-bridge';
@@ -45,18 +61,8 @@ import {
   replaceReviewItemsForSupplier,
   upsertOrderSchedule,
 } from '@/lib/pedidos-order-agenda-supabase';
-import { PEDIDOS_SUPPLIERS_FROM_INVENTORY } from '@/lib/pedidos-inventory-import';
 import { PEDIDO_ORDER_UNITS, PEDIDO_RECIPE_UNITS } from '@/lib/pedidos-units';
 import type { Unit } from '@/lib/types';
-
-const PREFERRED_CONTACT_BY_SUPPLIER: Record<string, string> = {
-  ROMEU: '699446517',
-  'CARNES ROMEU': '699446517',
-  ASSOLIM: '622915421',
-  TGT: '695292301',
-  'CASA VALLES': '629111218',
-  FERRER: '696248973',
-};
 
 const DEFAULT_SUPPLIER_CONTACT = '622915421';
 
@@ -66,6 +72,20 @@ function normalizeUpper(value: string) {
 
 function normalizeMatch(value: string) {
   return normalizeUpper(value).normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+}
+
+/** Icono suave por nombre (heurística simple; sin datos extra). */
+function pickSupplierListIcon(name: string): LucideIcon {
+  const n = normalizeMatch(name);
+  if (/CARN|ROME|TERN|BOVI|VACU/.test(n)) return Beef;
+  if (/PESC|MARIS|PESC/.test(n)) return Fish;
+  if (/BEB|REFRE|ZUMO|AGUA/.test(n)) return Droplets;
+  if (/CAFE|CAFÉ/.test(n)) return Coffee;
+  if (/CONG|HELAD|NEVER/.test(n)) return Snowflake;
+  if (/LACT|QUES|LECH|YOG/.test(n)) return Milk;
+  if (/LIMP|LAV|DETER/.test(n)) return Sparkles;
+  if (/TRANS|LOGIS/.test(n)) return Truck;
+  return Package;
 }
 
 function normalizeUnit(raw: string): Unit {
@@ -211,7 +231,6 @@ export default function ProveedoresPage() {
   >({});
   const [exceptionInputBySupplier, setExceptionInputBySupplier] = React.useState<Record<string, string>>({});
   const [productDrafts, setProductDrafts] = React.useState<Record<string, ProductDraft>>({});
-  const [bulkImportBusy, setBulkImportBusy] = React.useState(false);
 
   const [agendaEnabled, setAgendaEnabled] = React.useState(false);
   const [agendaOrderDays, setAgendaOrderDays] = React.useState<number[]>([]);
@@ -376,77 +395,6 @@ export default function ProveedoresPage() {
         dispatchPedidosDataChanged();
       })
       .catch((err: Error) => setMessage(err.message));
-  };
-
-  const importMissingSuppliersFromInventory = () => {
-    if (!localId) return setMessage('Perfil del local no cargado. Cierra sesión y vuelve a entrar.');
-    const supabase = getSupabaseClient();
-    if (!supabase) return setMessage('Supabase no disponible en esta sesión.');
-    if (bulkImportBusy) return;
-
-    void (async () => {
-      setBulkImportBusy(true);
-      setMessage(null);
-      try {
-        let providersCreated = 0;
-        let productsCreated = 0;
-        const latestSuppliers = await fetchSuppliersWithProducts(supabase, localId);
-        const suppliersByName = new Map(
-          latestSuppliers.map((s) => [normalizeMatch(s.name), s] as const),
-        );
-
-        for (const [supplierName, seedProducts] of Object.entries(PEDIDOS_SUPPLIERS_FROM_INVENTORY)) {
-          const key = normalizeMatch(supplierName);
-          let supplier = suppliersByName.get(key) ?? null;
-          if (!supplier) {
-            const created = await createSupplier(
-              supabase,
-              localId,
-              supplierName,
-              PREFERRED_CONTACT_BY_SUPPLIER[normalizeUpper(supplierName)] ?? DEFAULT_SUPPLIER_CONTACT,
-            );
-            supplier = {
-              id: created.id,
-              name: created.name,
-              contact: created.contact ?? '',
-              deliveryCycleWeekdays: normalizeDeliveryCycleWeekdays(
-                (created as { delivery_cycle_weekdays?: number[] | null }).delivery_cycle_weekdays,
-              ),
-              deliveryExceptionDates: [],
-              products: [],
-            };
-            suppliersByName.set(key, supplier);
-            providersCreated += 1;
-          }
-
-          const existingProducts = new Set(supplier.products.map((p) => normalizeMatch(p.name)));
-          for (const seed of seedProducts) {
-            const pKey = normalizeMatch(seed.name);
-            if (existingProducts.has(pKey)) continue;
-            await createSupplierProduct(supabase, localId, supplier.id, {
-              name: seed.name,
-              unit: normalizeUnit(seed.unitRaw),
-              pricePerUnit: seed.pricePerUnit,
-              vatRate: 0.21,
-              parStock: 0,
-              estimatedKgPerUnit: null,
-            });
-            existingProducts.add(pKey);
-            productsCreated += 1;
-          }
-        }
-
-        setMessage(
-          `Importación completada. Proveedores nuevos: ${providersCreated}. Productos nuevos: ${productsCreated}.`,
-        );
-        reload();
-        dispatchPedidosDataChanged();
-      } catch (err) {
-        setMessage(err instanceof Error ? err.message : 'No se pudo importar proveedores/artículos.');
-      } finally {
-        setBulkImportBusy(false);
-      }
-    })();
   };
 
   const saveSupplierProduct = () => {
@@ -704,7 +652,7 @@ export default function ProveedoresPage() {
   };
 
   return (
-    <div className="mx-auto w-full max-w-2xl space-y-2.5">
+    <div className="mx-auto w-full max-w-2xl space-y-2">
       {showDeletedBanner ? (
         <div className="pointer-events-none fixed inset-0 z-[90] grid place-items-center bg-black/25 px-6">
           <div className="rounded-2xl bg-[#D32F2F] px-7 py-5 text-center shadow-2xl ring-2 ring-white/75">
@@ -727,33 +675,26 @@ export default function ProveedoresPage() {
         </div>
       ) : null}
 
-      <section className="rounded-xl border border-zinc-200/90 bg-white p-3 ring-1 ring-zinc-100 sm:p-3.5">
-        <h1 className="text-base font-bold tracking-tight text-zinc-900 sm:text-lg">Proveedores</h1>
-        <div className="mt-2 flex flex-col gap-1.5 sm:flex-row sm:flex-wrap sm:items-center">
-          <button
-            className="inline-flex h-9 min-w-0 flex-1 items-center justify-center gap-1.5 rounded-lg bg-[#D32F2F] px-3 text-sm font-semibold text-white transition hover:bg-[#B91C1C] active:opacity-95 sm:max-w-[14rem] sm:flex-none"
-            type="button"
-            onClick={() => {
-              setMessage(null);
-              setNewSupplierOpen(true);
-            }}
-          >
-            <Plus className="h-4 w-4 shrink-0" />
-            <span>+ Nuevo proveedor</span>
-          </button>
-          <button
-            className="inline-flex h-9 min-w-0 flex-1 items-center justify-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-3 text-sm font-medium text-zinc-800 transition hover:bg-zinc-50 disabled:opacity-50 sm:max-w-[14rem] sm:flex-none"
-            disabled={bulkImportBusy}
-            type="button"
-            onClick={importMissingSuppliersFromInventory}
-          >
-            <Upload className="h-4 w-4 shrink-0" />
-            {bulkImportBusy ? 'Importando…' : 'Importar'}
-          </button>
-        </div>
-        <div className="relative mt-2">
+      <section className="rounded-xl border border-zinc-200/90 bg-white p-3 ring-1 ring-zinc-100 sm:p-4">
+        <h1 className="text-lg font-bold tracking-tight text-zinc-900">Proveedores</h1>
+        <p className="mt-0.5 text-[11px] leading-snug text-zinc-500">Gestiona contactos y artículos</p>
+        <button
+          type="button"
+          className="mt-3 flex h-12 w-full touch-manipulation items-center gap-3 rounded-xl bg-[#D32F2F] px-3 shadow-sm ring-1 ring-[#D32F2F]/20 transition active:scale-[0.99] active:bg-[#B91C1C]"
+          onClick={() => {
+            setMessage(null);
+            setNewSupplierOpen(true);
+          }}
+        >
+          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-white/15 ring-1 ring-white/25">
+            <Plus className="h-5 w-5 text-white" strokeWidth={2.5} aria-hidden />
+          </span>
+          <span className="min-w-0 flex-1 text-center text-[15px] font-bold text-white">Nuevo proveedor</span>
+          <ChevronRight className="h-5 w-5 shrink-0 text-white/90" strokeWidth={2.25} aria-hidden />
+        </button>
+        <div className="relative mt-3">
           <Search
-            className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-zinc-400"
+            className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400"
             strokeWidth={2}
             aria-hidden
           />
@@ -761,55 +702,51 @@ export default function ProveedoresPage() {
             value={supplierCatalogQuery}
             onChange={(e) => setSupplierCatalogQuery(e.target.value)}
             placeholder="Buscar proveedor o artículo…"
-            className="h-9 w-full rounded-lg border border-zinc-200 bg-white pl-9 pr-2.5 text-sm text-zinc-900 outline-none placeholder:text-zinc-400 focus:border-zinc-300 focus:ring-1 focus:ring-zinc-200/80"
+            className="h-10 w-full rounded-xl border border-zinc-200/90 bg-zinc-50/50 pl-10 pr-3 text-sm text-zinc-900 outline-none placeholder:text-zinc-400 focus:border-zinc-300 focus:bg-white focus:ring-2 focus:ring-zinc-200/60"
           />
         </div>
       </section>
 
-      {visibleSuppliers.map((supplier) => (
-        <section key={supplier.id} className="overflow-hidden rounded-xl border border-zinc-200/90 bg-white ring-1 ring-zinc-100/80">
-          <div className="px-2.5 py-2 sm:px-3">
-            <p className="truncate text-sm font-bold leading-tight text-zinc-900">{supplier.name}</p>
-            <p className="mt-0.5 text-[11px] leading-tight text-zinc-500">Contacto: {supplier.contact || '—'}</p>
-            <p className="mt-0.5 text-[10px] leading-tight text-zinc-500">
-              Reparto: {formatDeliveryCycleSummary(supplier.deliveryCycleWeekdays ?? [])}
-            </p>
-            <div className="mt-2 flex flex-wrap gap-1.5">
-              <button
-                type="button"
-                onClick={() => setExpandedSupplierId((id) => (id === supplier.id ? null : supplier.id))}
-                className={[
-                  'inline-flex flex-1 items-center justify-center gap-1 rounded-md px-2.5 py-1.5 text-[11px] font-medium sm:flex-none',
-                  expandedSupplierId === supplier.id
-                    ? 'bg-zinc-100 text-zinc-900 ring-1 ring-zinc-200'
-                    : 'bg-white text-zinc-700 ring-1 ring-zinc-200/90 hover:bg-zinc-50',
-                ].join(' ')}
-                aria-expanded={expandedSupplierId === supplier.id}
-              >
-                <ListTree className="h-3.5 w-3.5 shrink-0 opacity-70" strokeWidth={2.25} />
-                {expandedSupplierId === supplier.id ? 'Ocultar' : 'Ver artículos'}
-                <ChevronRight
-                  className={['h-3.5 w-3.5 shrink-0 opacity-60 transition-transform', expandedSupplierId === supplier.id ? 'rotate-90' : ''].join(
-                    ' ',
-                  )}
-                  strokeWidth={2.25}
-                  aria-hidden
-                />
-              </button>
-              <button
-                type="button"
-                onClick={() => openAddProductForSupplier(supplier.id)}
-                className="inline-flex flex-1 items-center justify-center gap-1 rounded-md border border-zinc-200 bg-white px-2.5 py-1.5 text-[11px] font-semibold text-zinc-800 sm:flex-none"
-              >
-                <Plus className="h-3.5 w-3.5 shrink-0" strokeWidth={2.5} />
-                + Añadir producto
-              </button>
-            </div>
-          </div>
+      {visibleSuppliers.map((supplier) => {
+        const SupplierIcon = pickSupplierListIcon(supplier.name);
+        const isOpen = expandedSupplierId === supplier.id;
+        return (
+        <section key={supplier.id} className="overflow-hidden rounded-xl border border-zinc-200/90 bg-white shadow-[0_1px_2px_rgba(0,0,0,0.04)] ring-1 ring-zinc-100/80">
+          <button
+            type="button"
+            className="flex w-full touch-manipulation items-start gap-2.5 px-3 py-2.5 text-left transition-colors active:bg-zinc-50/90 sm:gap-3 sm:py-2"
+            onClick={() => setExpandedSupplierId((id) => (id === supplier.id ? null : supplier.id))}
+            aria-expanded={isOpen}
+          >
+            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-[#D32F2F]/[0.07] ring-1 ring-[#D32F2F]/12" aria-hidden>
+              <SupplierIcon className="h-[18px] w-[18px] text-[#C62828]" strokeWidth={2} />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-[13px] font-bold leading-tight tracking-tight text-zinc-900">{supplier.name}</span>
+              <span className="mt-1 flex items-center gap-1.5 text-[11px] leading-tight text-zinc-500">
+                <Phone className="h-3 w-3 shrink-0 text-zinc-400" strokeWidth={2} aria-hidden />
+                <span className="min-w-0 truncate">{supplier.contact || '—'}</span>
+              </span>
+              <span className="mt-0.5 flex items-start gap-1.5 text-[10px] leading-snug text-zinc-500">
+                <CalendarDays className="mt-0.5 h-3 w-3 shrink-0 text-zinc-400" strokeWidth={2} aria-hidden />
+                <span>{formatDeliveryCycleSummary(supplier.deliveryCycleWeekdays ?? [])}</span>
+              </span>
+            </span>
+            <span className="flex shrink-0 flex-col items-end justify-center gap-1 self-stretch pl-1">
+              <span className="rounded-full bg-[#FFF7F5] px-2 py-0.5 text-[10px] font-semibold text-[#B91C1C] ring-1 ring-[#D32F2F]/15">
+                Ver artículos
+              </span>
+              <ChevronRight
+                className={['h-4 w-4 text-zinc-400 transition-transform', isOpen ? 'rotate-90' : ''].join(' ')}
+                strokeWidth={2.25}
+                aria-hidden
+              />
+            </span>
+          </button>
 
-          {expandedSupplierId === supplier.id ? (
-            <div className="border-t border-zinc-100 px-4 pb-4 pt-3">
-              <div className="mb-2 flex items-center gap-2">
+          {isOpen ? (
+            <div className="border-t border-zinc-100 px-3 pb-3 pt-2.5 sm:px-4 sm:pb-4 sm:pt-3">
+              <div className="mb-2 flex flex-wrap items-center gap-1.5">
                 <button
                   type="button"
                   onClick={() => {
@@ -836,6 +773,13 @@ export default function ProveedoresPage() {
                 </button>
                 <button
                   type="button"
+                  onClick={() => openAddProductForSupplier(supplier.id)}
+                  className="rounded-lg border border-[#D32F2F]/35 bg-[#FFF7F5] px-2 py-1 text-xs font-semibold text-[#B91C1C] ring-1 ring-[#D32F2F]/15"
+                >
+                  Añadir producto
+                </button>
+                <button
+                  type="button"
                   onClick={() => removeSupplier(supplier.id, supplier.name)}
                   className="rounded-lg border border-[#B91C1C] bg-white px-2 py-1 text-xs font-semibold text-[#B91C1C]"
                 >
@@ -843,11 +787,11 @@ export default function ProveedoresPage() {
                 </button>
               </div>
 
-              <div className="mt-3 space-y-2">
+              <div className="mt-2 space-y-1.5">
             {[...supplier.products]
               .sort((a, b) => a.name.localeCompare(b.name, 'es'))
               .map((p) => (
-              <div key={p.id} className="rounded-lg border border-zinc-100/80 bg-zinc-50/80 px-2.5 py-1.5">
+              <div key={p.id} className="rounded-lg border border-zinc-100/80 bg-zinc-50/80 px-2 py-1.5">
                 <div className="flex items-center justify-between gap-2">
                   <p className="text-sm font-medium leading-tight text-zinc-800">{p.name}</p>
                   <div className="flex items-center gap-1.5">
@@ -960,7 +904,8 @@ export default function ProveedoresPage() {
             </div>
           ) : null}
         </section>
-      ))}
+      );
+      })}
 
       {suppliers.length > 0 && visibleSuppliers.length === 0 ? (
         <p className="rounded-2xl border border-zinc-200 bg-zinc-50 px-4 py-6 text-center text-sm text-zinc-600">

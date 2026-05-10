@@ -20,7 +20,7 @@ export async function notifyPedidoEnviado(
   await safeCreateNotification(supabase, {
     localId: ctx.localId,
     type: 'pedido_enviado' satisfies NotificationEventType,
-    title: 'Pedido enviado',
+    title: 'Chef-One · Pedido enviado',
     message: `${ctx.actorName} ha enviado el pedido a ${ctx.supplierName}`,
     createdBy: ctx.userId,
     entityType: 'purchase_order',

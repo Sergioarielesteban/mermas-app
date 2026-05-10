@@ -112,7 +112,9 @@ export function useNotifications(localId: string | null, userId: string | null, 
             const fromSelf =
               mapped.createdBy != null && Boolean(userId) && mapped.createdBy === userId;
             if (!fromSelf) {
-              showSystemNotification(mapped.title, mapped.message, { tag: `chef-one-${mapped.id}` });
+              void showSystemNotification(mapped.title, mapped.message, {
+                tag: `chef-one-${mapped.id}`,
+              }).catch(() => {});
               setUnreadCount((c) => c + 1);
             }
             const item: NotificationWithRead = { ...mapped, readAt: null };

@@ -4,6 +4,7 @@ export default function manifest(): MetadataRoute.Manifest {
   return {
     name: 'Chef-One',
     short_name: 'Chef-One',
+    lang: 'es',
     description: 'Gestión operativa para restaurantes',
     /** Al abrir desde el icono instalado: entra a la app, no a la landing pública en `/`. */
     start_url: '/login',
