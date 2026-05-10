@@ -4,6 +4,8 @@ import Link from 'next/link';
 import { Clock, Filter, Package, Search, Star, TrendingUp } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import React from 'react';
+import { usePedidosOperationalSuggestions } from '@/hooks/usePedidosOperationalSuggestions';
+import type { OperationalSuggestion } from '@/lib/pedidos-operational-suggestions';
 import { useAuth } from '@/components/AuthProvider';
 import { usePedidosOrders } from '@/components/PedidosOrdersProvider';
 import { getDemoPedidoSuppliers } from '@/lib/demo-dataset';
@@ -21,6 +23,7 @@ import {
   suggestedOrderQuantityForPar,
   weeklyParScaledToCoverageDays,
 } from '@/lib/pedidos-coverage';
+import PedidosOperationalSuggestions from '@/components/pedidos/PedidosOperationalSuggestions';
 import PedidosNuevoCatalogRow from '@/components/PedidosNuevoCatalogLine';
 import PedidosNuevoStickyDock from '@/components/pedidos/PedidosNuevoStickyDock';
 import PedidosSaveTemplateSheet from '@/components/pedidos/PedidosSaveTemplateSheet';
@@ -727,6 +730,29 @@ export default function NuevoPedidoPage() {
     });
   }, []);
 
+  const { suggestions: operationalSuggestions, recordAdd: recordOperationalAdd, recordDismiss: recordOperationalDismiss } =
+    usePedidosOperationalSuggestions({
+      localId,
+      supplierId,
+      orders,
+      supplierProducts,
+      qtyByProductId,
+      catalogSignals,
+      searchActive: search.trim().length > 0,
+    });
+
+  const handleOperationalSuggestionApply = React.useCallback(
+    (suggestion: OperationalSuggestion) => {
+      recordOperationalAdd(suggestion.id);
+      for (const pid of suggestion.productIds) {
+        const p = supplierProducts.find((x) => x.id === pid);
+        if (!p) continue;
+        adjustQty(pid, p.unit, 1);
+      }
+    },
+    [recordOperationalAdd, supplierProducts, adjustQty],
+  );
+
   const handleCatalogDelta = React.useCallback(
     (productId: string, unit: PedidoOrderItem['unit'], delta: number) => {
       adjustQty(productId, unit, delta);
@@ -1262,6 +1288,14 @@ export default function NuevoPedidoPage() {
             </button>
           </div>
         </div>
+        {selectedSupplier && supplierProducts.length > 0 ? (
+          <PedidosOperationalSuggestions
+            suggestions={operationalSuggestions}
+            onApply={handleOperationalSuggestionApply}
+            onDismiss={recordOperationalDismiss}
+            applyingId={null}
+          />
+        ) : null}
         <div className="divide-y divide-zinc-100 border-t border-zinc-100">
           {selectedSupplier && supplierProducts.length === 0 ? (
             <p className="px-3 py-4 text-sm text-zinc-500">Este proveedor no tiene productos activos. Revísalo en Proveedores.</p>
