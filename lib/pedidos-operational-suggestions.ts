@@ -11,6 +11,7 @@ import {
   STOCK_RISK_LOOKBACK_DAYS,
 } from '@/lib/pedidos-stock-estimado';
 import type { PedidoOrder, PedidoSupplierProduct } from '@/lib/pedidos-supabase';
+import { arithmeticMean } from '@/lib/pedidos-historial-stats';
 import {
   loadSuggestionFeedback,
   suggestionFeedbackMultiplier,
@@ -81,11 +82,6 @@ export type ComputeOperationalSuggestionsInput = {
   feedback?: SuggestionFeedbackMap;
 };
 
-function mean(nums: number[]): number {
-  if (nums.length === 0) return 0;
-  return nums.reduce((a, b) => a + b, 0) / nums.length;
-}
-
 /**
  * Devuelve hasta `maxCount` sugerencias ordenadas por prioridad final (base × feedback).
  */
@@ -148,7 +144,7 @@ export function computeOperationalSuggestions(
     dates.sort((a, b) => a - b);
     const gaps: number[] = [];
     for (let i = 1; i < dates.length; i++) gaps.push(dates[i]! - dates[i - 1]!);
-    const avgGapDays = mean(gaps) / MS_DAY;
+    const avgGapDays = arithmeticMean(gaps) / MS_DAY;
     const last = dates[dates.length - 1]!;
     const daysSince = (nowMs - last) / MS_DAY;
     const q = qtyByProductId[pid] ?? 0;

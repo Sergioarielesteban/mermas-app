@@ -1,10 +1,11 @@
 'use client';
 
 import Link from 'next/link';
-import { Clock, Filter, Package, Search, Star, TrendingUp } from 'lucide-react';
+import { Clock, Filter, Package, Search, Sparkles, Star, TrendingUp } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import React from 'react';
 import { usePedidosOperationalSuggestions } from '@/hooks/usePedidosOperationalSuggestions';
+import { useSuggestedOrder } from '@/hooks/useSuggestedOrder';
 import { useAuth } from '@/components/AuthProvider';
 import { usePedidosOrders } from '@/components/PedidosOrdersProvider';
 import { getDemoPedidoSuppliers } from '@/lib/demo-dataset';
@@ -26,6 +27,7 @@ import PedidosOperationalSuggestions from '@/components/pedidos/PedidosOperation
 import PedidosNuevoCatalogRow from '@/components/PedidosNuevoCatalogLine';
 import PedidosNuevoStickyDock from '@/components/pedidos/PedidosNuevoStickyDock';
 import PedidosSaveTemplateSheet from '@/components/pedidos/PedidosSaveTemplateSheet';
+import PedidosSuggestedOrderSheet from '@/components/pedidos/PedidosSuggestedOrderSheet';
 import PedidosUseTemplateSheet from '@/components/pedidos/PedidosUseTemplateSheet';
 import { buildPedidoWhatsappMessage } from '@/lib/pedidos-whatsapp-message';
 import { applyQuantityTapDelta, parseQuantityManualInput } from '@/lib/pedidos-order-quantity';
@@ -160,6 +162,7 @@ export default function NuevoPedidoPage() {
   const [hadContentRevisionFlag, setHadContentRevisionFlag] = React.useState(false);
   const [useTemplateOpen, setUseTemplateOpen] = React.useState(false);
   const [saveTemplateOpen, setSaveTemplateOpen] = React.useState(false);
+  const [suggestedOrderOpen, setSuggestedOrderOpen] = React.useState(false);
   /** Pausa auto-avance del carrusel de sugerencias al interactuar con buscador/cantidades/notas. */
   const [suggestionCarouselEpoch, setSuggestionCarouselEpoch] = React.useState(0);
   const [templateSummary, setTemplateSummary] = React.useState<{
@@ -286,10 +289,52 @@ export default function NuevoPedidoPage() {
 
   React.useEffect(() => {
     setSuggestionCarouselEpoch((n) => n + 1);
-  }, [search, qtyByProductId, notes]);
+  }, [search, qtyByProductId, notes, deliveryDate]);
 
   const selectedSupplier = suppliers.find((s) => s.id === supplierId) ?? null;
   const supplierProducts = React.useMemo(() => selectedSupplier?.products ?? [], [selectedSupplier]);
+
+  const { result: suggestedOrderResult, hasSuggestion } = useSuggestedOrder({
+    localId,
+    supplierId,
+    supplierName: selectedSupplier?.name ?? '',
+    supplierProducts,
+    orders,
+    deliveryDateYmd: deliveryDate,
+    deliveryCycleWeekdays: selectedSupplier?.deliveryCycleWeekdays,
+    deliveryExceptionDates: selectedSupplier?.deliveryExceptionDates,
+  });
+
+  React.useEffect(() => {
+    setSuggestedOrderOpen(false);
+  }, [supplierId]);
+
+  const hasExistingSuggestedBasketQty = React.useMemo(
+    () => Object.values(qtyByProductId).some((q) => q > 0),
+    [qtyByProductId],
+  );
+
+  const applySuggestedOrder = React.useCallback(
+    (mode: 'fill_gaps' | 'replace') => {
+      if (!suggestedOrderResult.ok) return;
+      setQtyByProductId((prev) => {
+        const next = { ...prev };
+        for (const line of suggestedOrderResult.lines) {
+          if (mode === 'fill_gaps') {
+            const cur = next[line.supplierProductId] ?? 0;
+            if (cur > 0) continue;
+            next[line.supplierProductId] = line.suggestedQty;
+          } else {
+            next[line.supplierProductId] = line.suggestedQty;
+          }
+        }
+        return next;
+      });
+      setSuggestedOrderOpen(false);
+      setSuggestionCarouselEpoch((e) => e + 1);
+    },
+    [suggestedOrderResult],
+  );
 
   const coverageDays = React.useMemo(() => {
     if (!deliveryDate.trim() || !selectedSupplier) return null;
@@ -1163,6 +1208,16 @@ export default function NuevoPedidoPage() {
             ← Pedidos
           </Link>
           <div className="flex items-center gap-1">
+            {hasSuggestion ? (
+              <button
+                type="button"
+                onClick={() => setSuggestedOrderOpen(true)}
+                className="inline-flex h-10 items-center gap-1 rounded-xl border border-zinc-200 bg-white px-2.5 text-[11px] font-semibold text-zinc-700 shadow-sm hover:bg-zinc-50 sm:px-3"
+              >
+                <Sparkles className="h-3.5 w-3.5 shrink-0 text-[#E30613]" strokeWidth={2} aria-hidden />
+                <span className="max-w-[7.5rem] truncate sm:max-w-none">Pedido sugerido</span>
+              </button>
+            ) : null}
             <button
               type="button"
               onClick={() =>
@@ -1223,6 +1278,16 @@ export default function NuevoPedidoPage() {
         ) : (
           <p className="mt-2 text-[11px] text-zinc-400">Define la fecha de entrega más abajo para ver la cobertura.</p>
         )}
+        {editingId && hasSuggestion && selectedSupplier ? (
+          <button
+            type="button"
+            onClick={() => setSuggestedOrderOpen(true)}
+            className="mt-2 inline-flex w-full items-center justify-center gap-1.5 rounded-xl border border-zinc-200 bg-[#FAFAF9] py-2.5 text-xs font-semibold text-zinc-800 shadow-sm ring-1 ring-zinc-100/80 hover:bg-zinc-50 sm:w-auto sm:px-4"
+          >
+            <Sparkles className="h-4 w-4 shrink-0 text-[#E30613]" strokeWidth={2} aria-hidden />
+            Pedido sugerido
+          </button>
+        ) : null}
       </section>
 
       <section
@@ -1507,6 +1572,14 @@ export default function NuevoPedidoPage() {
         onPick={(id) => {
           router.push(`/pedidos/nuevo?templateId=${encodeURIComponent(id)}`);
         }}
+      />
+
+      <PedidosSuggestedOrderSheet
+        open={suggestedOrderOpen}
+        onClose={() => setSuggestedOrderOpen(false)}
+        result={suggestedOrderResult}
+        hasExistingQuantities={hasExistingSuggestedBasketQty}
+        onApply={applySuggestedOrder}
       />
     </div>
   );

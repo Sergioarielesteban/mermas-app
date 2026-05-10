@@ -3,7 +3,7 @@
  * Usa pedidos marcados como recibidos y las cantidades registradas en línea.
  */
 
-import { unitAllowsDecimalOrderQuantity } from '@/lib/pedidos-units';
+import { medianPositive, roundOrderQtyFromHistory } from '@/lib/pedidos-historial-stats';
 import type { PedidoOrder, PedidoOrderItem, PedidoSupplierProduct } from '@/lib/pedidos-supabase';
 import type { Unit } from '@/lib/types';
 
@@ -39,33 +39,16 @@ export type StockEstimate = {
 
 export const STOCK_RISK_LOOKBACK_DAYS = 90;
 
-/** Cantidad a sumar al pedido (catálogo / recepción). */
+/** Cantidad mínima 1 si el histórico no da valor útil (contexto recepción). */
 export function normalizeSuggestedOrderQty(unit: Unit, raw: number): number {
-  if (!Number.isFinite(raw) || raw <= 0) return 1;
-  if (unitAllowsDecimalOrderQuantity(unit)) return Math.max(0.01, Math.round(raw * 100) / 100);
-  return Math.max(1, Math.round(raw));
+  const r = roundOrderQtyFromHistory(unit, raw);
+  return r > 0 ? r : 1;
 }
 
 function daysBetweenChronological(from: Date, to: Date): number {
   const ms = to.getTime() - from.getTime();
   if (!Number.isFinite(ms) || ms < 0) return 0;
   return Math.floor(ms / MS_DAY);
-}
-
-function average(values: number[]): number | null {
-  const valid = values.filter((v) => Number.isFinite(v) && v > 0);
-  if (!valid.length) return null;
-  return valid.reduce((sum, v) => sum + v, 0) / valid.length;
-}
-
-function median(values: number[]): number | null {
-  const valid = values.filter((v) => Number.isFinite(v) && v > 0).sort((a, b) => a - b);
-  if (!valid.length) return null;
-  const mid = Math.floor(valid.length / 2);
-  if (valid.length % 2 === 0) {
-    return (valid[mid - 1]! + valid[mid]!) / 2;
-  }
-  return valid[mid]!;
 }
 
 function calculateAverageIntervalDays(dates: string[]): number | null {
@@ -80,7 +63,7 @@ function calculateAverageIntervalDays(dates: string[]): number | null {
     if (diff > 0) intervals.push(diff);
   }
   if (intervals.length === 0) return null;
-  return median(intervals);
+  return medianPositive(intervals);
 }
 
 function getRiskLevel(score: number | null): StockRiskLevel {
@@ -121,8 +104,7 @@ function calculateSuggestedQuantity(history: ProductReceptionHistory): number | 
     return history.lastReceivedQuantity;
   }
   if (history.receivedQuantities?.length) {
-    const a = average(history.receivedQuantities);
-    return a != null && a > 0 ? Math.round(a) : null;
+    return medianPositive(history.receivedQuantities);
   }
   return null;
 }
