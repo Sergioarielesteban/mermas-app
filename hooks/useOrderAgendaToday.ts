@@ -154,12 +154,29 @@ export function useOrderAgendaToday(params: { localId: string | null; orders: Pe
     return { cutoffRows: cutoffs, reviewRows: reviews };
   }, [schedules, reviewBySupplier, orders, supplierNames, localId, now]);
 
-  const showCard = loading || cutoffRows.length > 0 || reviewRows.length > 0;
+  const pendingCutoffRows = React.useMemo(
+    () => cutoffRows.filter((r) => r.statusLabel !== 'enviado'),
+    [cutoffRows],
+  );
+
+  /** Sin pendientes de corte pero sí pedidos del día ya enviados (lista vacía de acciones). */
+  const showAgendaAlDiaMicro = React.useMemo(() => {
+    if (loading) return false;
+    return cutoffRows.length > 0 && pendingCutoffRows.length === 0 && reviewRows.length === 0;
+  }, [loading, cutoffRows.length, pendingCutoffRows.length, reviewRows.length]);
+
+  const showCard =
+    loading ||
+    pendingCutoffRows.length > 0 ||
+    reviewRows.length > 0 ||
+    showAgendaAlDiaMicro;
 
   return {
     loading,
     cutoffRows,
+    pendingCutoffRows,
     reviewRows,
+    showAgendaAlDiaMicro,
     showCard,
     refresh,
   };

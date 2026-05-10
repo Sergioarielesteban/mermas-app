@@ -9,7 +9,6 @@ import {
   ChevronDown,
   ChevronRight,
   FileText,
-  LayoutTemplate,
   LineChart,
   List,
   Loader2,
@@ -4093,15 +4092,15 @@ export default function PedidosPage() {
             <span className="text-[11px] font-semibold leading-tight text-zinc-800">Recibir pedido</span>
           </Link>
           <Link
-            href="/pedidos/nuevo"
-            title="Crear desde plantilla: en la siguiente pantalla, elige «Plantilla»."
-            aria-label="Plantillas: abrir nuevo pedido para elegir plantilla"
+            href="/pedidos/historial-mes"
+            title="Histórico y compras del mes"
+            aria-label="Abrir compras del mes"
             className="group flex min-h-[2.75rem] touch-manipulation flex-col items-center justify-center gap-1 rounded-xl border border-zinc-200/90 bg-white px-2 py-2 text-center shadow-[inset_0_1px_0_rgba(255,255,255,0.96)] ring-1 ring-zinc-100/90 transition active:scale-[0.98]"
           >
             <span className="flex h-7 w-7 items-center justify-center rounded-full bg-[#D32F2F]/[0.08] text-[#B91C1C] ring-1 ring-[#D32F2F]/12">
-              <LayoutTemplate className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
+              <LineChart className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
             </span>
-            <span className="text-[11px] font-semibold leading-tight text-zinc-800">Plantillas</span>
+            <span className="text-[11px] font-semibold leading-tight text-zinc-800">Compras del mes</span>
           </Link>
         </nav>
       </header>
@@ -4109,8 +4108,9 @@ export default function PedidosPage() {
       {canUse && localId && agenda.showCard ? (
         <PedidosAgendaTodayCard
           loading={agenda.loading}
-          cutoffRows={agenda.cutoffRows}
+          cutoffRows={agenda.pendingCutoffRows}
           reviewRows={agenda.reviewRows}
+          showAgendaAlDiaMicro={agenda.showAgendaAlDiaMicro}
           localId={localId}
           onMarkedReview={agenda.refresh}
         />
@@ -4197,16 +4197,16 @@ export default function PedidosPage() {
             Artículos
           </Link>
           <Link
-            href="/pedidos/historial-mes"
+            href="/pedidos/precios"
             className={[
               'flex min-h-[2.35rem] touch-manipulation items-center justify-center gap-1.5 rounded-xl px-2.5 py-2 text-center text-[11px] font-semibold leading-tight transition active:scale-[0.99] sm:min-h-[2.6rem] sm:px-3 sm:py-2.5 sm:text-xs',
-              pedidosNavActive('/pedidos/historial-mes')
+              pedidosNavActive('/pedidos/precios')
                 ? 'border border-[#D32F2F]/35 bg-[#FFF7F5] text-zinc-900 shadow-[0_1px_3px_rgba(211,47,47,0.1)] ring-1 ring-[#D32F2F]/20'
                 : 'border border-zinc-200/90 bg-white text-zinc-700 shadow-[inset_0_1px_0_rgba(255,255,255,0.92)]',
             ].join(' ')}
           >
-            <LineChart className="h-3.5 w-3.5 shrink-0 opacity-70 sm:h-4 sm:w-4" strokeWidth={2} aria-hidden />
-            Compras del mes
+            <TrendingUp className="h-3.5 w-3.5 shrink-0 opacity-70 sm:h-4 sm:w-4" strokeWidth={2} aria-hidden />
+            Evolución de precios
           </Link>
           <Link
             href="/pedidos/albaranes"
