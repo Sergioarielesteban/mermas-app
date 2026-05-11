@@ -21,6 +21,8 @@
 
 import React from 'react';
 import ProductoGuiadoChecklist from '@/components/ProductoGuiadoChecklist';
+import ChefOneAssistantSheet from '@/components/panel/ChefOneAssistantSheet';
+import PanelAssistantCard from '@/components/panel/PanelAssistantCard';
 import PanelCriticalAlerts from '@/components/panel/PanelCriticalAlerts';
 import PanelCustomizeButton from '@/components/panel/PanelCustomizeButton';
 import PanelCustomizeSheet from '@/components/panel/PanelCustomizeSheet';
@@ -94,6 +96,7 @@ export default function OperationalDayHome() {
 function OperationalDayHomeInner() {
   const panel = usePanelConfig();
   const [customizeOpen, setCustomizeOpen] = React.useState(false);
+  const [assistantOpen, setAssistantOpen] = React.useState(false);
 
   // Permite abrir el sheet desde fuera (p. ej. menú hamburguesa) vía evento.
   React.useEffect(() => {
@@ -108,6 +111,9 @@ function OperationalDayHomeInner() {
       <PanelGreetingBlock />
 
       <PanelCriticalAlerts visibleBlockIds={panel.visibleBlockIds} />
+
+      <PanelAssistantCard onOpen={() => setAssistantOpen(true)} />
+      <ChefOneAssistantSheet open={assistantOpen} onClose={() => setAssistantOpen(false)} />
 
       <ProductoGuiadoChecklist />
 
