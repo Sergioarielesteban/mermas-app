@@ -24,6 +24,15 @@ export async function uploadDeliveryNoteOriginal(
   return { storagePath, mimeType: file.type || 'application/octet-stream', fileName: file.name };
 }
 
+/** Limpia el archivo del bucket. Idempotente: ignora errores si no existía. */
+export async function removeDeliveryNoteOriginal(
+  supabase: SupabaseClient,
+  storagePath: string,
+): Promise<void> {
+  if (!storagePath) return;
+  await supabase.storage.from(BUCKET).remove([storagePath]).catch(() => {});
+}
+
 /** URL firmada para visor (bucket privado). */
 export async function createDeliveryNoteSignedUrl(
   supabase: SupabaseClient,

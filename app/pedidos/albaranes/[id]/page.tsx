@@ -17,7 +17,6 @@ import {
   Archive,
   PlusCircle,
 } from 'lucide-react';
-import MermasStyleHero from '@/components/MermasStyleHero';
 import { useAuth } from '@/components/AuthProvider';
 import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
 import PedidosPremiaLockedScreen from '@/components/PedidosPremiaLockedScreen';
@@ -131,6 +130,54 @@ function normalizeDraftCompare(d: DeliveryNoteItemDraft): string {
     matchStatus: d.matchStatus ?? null,
     notes: (d.notes ?? '').trim(),
   });
+}
+
+function KpiCell({
+  label,
+  value,
+  tone = 'zinc',
+}: {
+  label: string;
+  value: string;
+  tone?: 'zinc' | 'amber';
+}) {
+  const toneClasses =
+    tone === 'amber'
+      ? 'bg-amber-50 ring-amber-200 text-amber-900'
+      : 'bg-zinc-50 ring-zinc-200 text-zinc-900';
+  return (
+    <div className={`rounded-2xl px-2.5 py-2 ring-1 ${toneClasses}`}>
+      <p className="text-[9.5px] font-bold uppercase tracking-wide opacity-80">{label}</p>
+      <p className="mt-0.5 text-[15px] font-black tabular-nums leading-tight">{value}</p>
+    </div>
+  );
+}
+
+function KvRow({
+  label,
+  value,
+  mono,
+  num,
+}: {
+  label: string;
+  value: string;
+  mono?: boolean;
+  num?: boolean;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-2 rounded-xl bg-white px-3 py-2 ring-1 ring-zinc-200">
+      <dt className="text-[10.5px] font-bold uppercase tracking-wide text-zinc-500">{label}</dt>
+      <dd
+        className={[
+          'text-[12.5px] font-semibold text-zinc-900',
+          mono ? 'font-mono' : '',
+          num ? 'tabular-nums' : '',
+        ].join(' ')}
+      >
+        {value}
+      </dd>
+    </div>
+  );
 }
 
 function StatusStepper({ status }: { status: DeliveryNoteStatus }) {
@@ -650,117 +697,214 @@ export default function AlbaranDetallePage() {
 
   const statusVis = deliveryNoteStatusVisual(note.status);
   const headerTotal = parseOpt(totalAmount);
+  const linesSum = accountingPreview?.computedLinesTotal ?? null;
+  const isClosed = note.status === 'validated' || note.status === 'archived';
+  const showStepper = !isClosed;
+
+  // Próxima acción sugerida — un único CTA según el estado real.
+  type NextAction =
+    | { kind: 'save'; label: string }
+    | { kind: 'confirm'; label: string }
+    | { kind: 'link'; label: string }
+    | { kind: 'review-lines'; label: string }
+    | { kind: 'incidents'; label: string }
+    | { kind: 'none'; label: string };
+
+  const nextAction: NextAction = (() => {
+    if (note.status === 'validated') return { kind: 'none', label: 'Albarán validado' };
+    if (note.status === 'archived') return { kind: 'none', label: 'Albarán archivado' };
+    if (linesDirty) return { kind: 'save', label: 'Guardar cambios' };
+    if (openIncidents.length > 0)
+      return { kind: 'incidents', label: `Resolver ${openIncidents.length} incidencia${openIncidents.length === 1 ? '' : 's'}` };
+    if (!order) return { kind: 'link', label: 'Vincular con un pedido' };
+    if (items.length === 0) return { kind: 'review-lines', label: 'Revisa o añade líneas' };
+    return { kind: 'confirm', label: 'Confirmar albarán' };
+  })();
 
   return (
     <div className="space-y-4 pb-28 sm:pb-12">
-      <MermasStyleHero
-        slim
-        eyebrow="Albarán"
-        title={supplierName || 'Detalle'}
-        description={`Nº ${deliveryNoteNumber || '—'}${deliveryDate ? ` · ${new Date(`${deliveryDate}T12:00:00`).toLocaleDateString('es-ES')}` : ''}`}
-      />
+      {/* HEADER COMPACTO */}
+      <header className="flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-[10px] font-bold uppercase tracking-wide text-zinc-500">Albarán</p>
+          <h1 className="truncate text-[22px] font-black leading-tight text-zinc-900">
+            {supplierName || 'Detalle'}
+          </h1>
+          <p className="mt-0.5 truncate text-[11.5px] text-zinc-500">
+            Nº <span className="font-mono">{deliveryNoteNumber || '—'}</span>
+            {deliveryDate
+              ? ` · ${new Date(`${deliveryDate}T12:00:00`).toLocaleDateString('es-ES')}`
+              : ''}
+          </p>
+        </div>
+        <Link
+          href="/pedidos/albaranes"
+          className="shrink-0 text-[12px] font-semibold text-zinc-500 hover:text-zinc-900"
+        >
+          ← Bandeja
+        </Link>
+      </header>
 
-      <div className={`rounded-2xl bg-white p-4 shadow-sm ring-1 ring-zinc-200 sm:p-5 ${statusVis.borderClass}`}>
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-          <div>
-            <p className="text-[10px] font-black uppercase text-zinc-500">Estado</p>
-            <div className="mt-2 flex flex-wrap items-center gap-2">
-              <span className={`inline-flex rounded-full px-3 py-1 text-xs font-black uppercase tracking-wide ${statusVis.chipClass}`}>
-                {statusVis.label}
-              </span>
-              {order ? (
-                <span className="rounded-lg bg-zinc-100 px-2 py-1 text-[11px] font-bold text-zinc-700">Pedido vinculado</span>
-              ) : (
-                <span className="rounded-lg bg-amber-50 px-2 py-1 text-[11px] font-bold text-amber-900 ring-1 ring-amber-200">
-                  Sin pedido
-                </span>
-              )}
-              {openIncidents.length > 0 ? (
-                <span className="inline-flex items-center gap-1 rounded-lg bg-red-100 px-2 py-1 text-[11px] font-black text-red-900">
-                  <AlertTriangle className="h-3.5 w-3.5" aria-hidden />
-                  {openIncidents.length} abierta{openIncidents.length === 1 ? '' : 's'}
-                </span>
+      {/* HERO DE ESTADO */}
+      <section className="rounded-3xl border border-zinc-200 bg-white p-4 shadow-sm sm:p-5">
+        <div className="flex flex-wrap items-center gap-2">
+          <span
+            className={`inline-flex rounded-full px-3 py-1 text-[10.5px] font-black uppercase tracking-wide ${statusVis.chipClass}`}
+          >
+            {statusVis.label}
+          </span>
+          {order ? (
+            <span className="inline-flex items-center gap-1 rounded-full bg-sky-50 px-2.5 py-1 text-[10.5px] font-black text-sky-900 ring-1 ring-sky-200">
+              <Link2 className="h-3 w-3" aria-hidden /> Pedido vinculado
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2.5 py-1 text-[10.5px] font-black text-amber-900 ring-1 ring-amber-200">
+              <Link2Off className="h-3 w-3" aria-hidden /> Sin pedido
+            </span>
+          )}
+          {openIncidents.length > 0 ? (
+            <span className="inline-flex items-center gap-1 rounded-full bg-red-50 px-2.5 py-1 text-[10.5px] font-black text-red-800 ring-1 ring-red-200">
+              <AlertTriangle className="h-3 w-3" aria-hidden /> {openIncidents.length} incidencia
+              {openIncidents.length === 1 ? '' : 's'}
+            </span>
+          ) : null}
+        </div>
+
+        {showStepper ? <StatusStepper status={note.status} /> : null}
+
+        {/* KPI strip horizontal */}
+        <div className="mt-3 grid grid-cols-4 gap-2">
+          <KpiCell label="Líneas" value={String(items.length)} />
+          <KpiCell
+            label="Total"
+            value={headerTotal != null ? `${headerTotal.toFixed(2)} €` : '—'}
+          />
+          <KpiCell
+            label="Σ líneas"
+            value={linesSum != null ? `${linesSum.toFixed(2)} €` : '—'}
+          />
+          <KpiCell
+            label="Desajustes"
+            value={order ? String(mismatchCount) : '—'}
+            tone={order && mismatchCount > 0 ? 'amber' : 'zinc'}
+          />
+        </div>
+
+        {/* Próxima acción */}
+        {nextAction.kind !== 'none' ? (
+          <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-[11.5px] font-semibold text-zinc-500">
+              Próximo paso ·{' '}
+              <span className="text-zinc-800">{nextAction.label}</span>
+            </p>
+            <div className="flex gap-2">
+              {nextAction.kind === 'save' ? (
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => void saveAll()}
+                  className="inline-flex h-10 items-center gap-2 rounded-2xl bg-zinc-900 px-4 text-[13px] font-black text-white shadow-md disabled:opacity-50"
+                >
+                  <Save className="h-4 w-4" aria-hidden /> Guardar cambios
+                </button>
+              ) : null}
+              {nextAction.kind === 'confirm' ? (
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => void confirmAlbaran()}
+                  className="inline-flex h-10 items-center gap-2 rounded-2xl bg-emerald-600 px-4 text-[13px] font-black text-white shadow-md disabled:opacity-50"
+                >
+                  <ShieldCheck className="h-4 w-4" aria-hidden /> Confirmar
+                </button>
+              ) : null}
+              {nextAction.kind === 'link' ? (
+                <a
+                  href="#vincular"
+                  className="inline-flex h-10 items-center gap-2 rounded-2xl bg-[#D32F2F] px-4 text-[13px] font-black text-white shadow-md"
+                >
+                  <Link2 className="h-4 w-4" aria-hidden /> Vincular
+                </a>
+              ) : null}
+              {nextAction.kind === 'incidents' ? (
+                <a
+                  href="#incidencias"
+                  className="inline-flex h-10 items-center gap-2 rounded-2xl bg-red-600 px-4 text-[13px] font-black text-white shadow-md"
+                >
+                  <AlertTriangle className="h-4 w-4" aria-hidden /> Revisar
+                </a>
+              ) : null}
+              {nextAction.kind === 'review-lines' ? (
+                <a
+                  href="#lineas"
+                  className="inline-flex h-10 items-center gap-2 rounded-2xl bg-zinc-900 px-4 text-[13px] font-black text-white shadow-md"
+                >
+                  <PlusCircle className="h-4 w-4" aria-hidden /> Líneas
+                </a>
               ) : null}
             </div>
-            <StatusStepper status={note.status} />
           </div>
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-3">
-            <div className="rounded-xl bg-zinc-50 px-3 py-2 ring-1 ring-zinc-100">
-              <p className="text-[9px] font-bold uppercase text-zinc-500">Líneas</p>
-              <p className="text-lg font-black tabular-nums text-zinc-900">{items.length}</p>
-            </div>
-            <div className="rounded-xl bg-zinc-50 px-3 py-2 ring-1 ring-zinc-100">
-              <p className="text-[9px] font-bold uppercase text-zinc-500">Total cabecera</p>
-              <p className="text-lg font-black tabular-nums text-zinc-900">
-                {headerTotal != null ? `${headerTotal.toFixed(2)} €` : '—'}
-              </p>
-            </div>
-            <div className="rounded-xl bg-zinc-50 px-3 py-2 ring-1 ring-zinc-100">
-              <p className="text-[9px] font-bold uppercase text-zinc-500">Σ líneas</p>
-              <p className="text-lg font-black tabular-nums text-zinc-900">
-                {accountingPreview?.computedLinesTotal != null ? `${accountingPreview.computedLinesTotal.toFixed(2)} €` : '—'}
-              </p>
-            </div>
-            <div className="rounded-xl bg-zinc-50 px-3 py-2 ring-1 ring-zinc-100">
-              <p className="text-[9px] font-bold uppercase text-zinc-500">Desajustes</p>
-              <p className="text-lg font-black tabular-nums text-amber-800">{order ? mismatchCount : '—'}</p>
-            </div>
+        ) : (
+          <div className="mt-4 flex items-center justify-between gap-2">
+            <p className="text-[11.5px] font-semibold text-emerald-700">{nextAction.label}</p>
+            {note.status === 'validated' ? (
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => void setStatus('archived')}
+                className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-zinc-200 bg-white px-3 text-[12px] font-bold text-zinc-700"
+              >
+                <Archive className="h-3.5 w-3.5" aria-hidden /> Archivar
+              </button>
+            ) : null}
           </div>
-        </div>
-      </div>
-
-      <div className="hidden flex-wrap gap-2 sm:flex">
-        <button
-          type="button"
-          disabled={busy}
-          onClick={() => void saveAll()}
-          className="inline-flex h-10 items-center gap-2 rounded-xl bg-zinc-900 px-3 text-sm font-bold text-white disabled:opacity-50"
-        >
-          <Save className="h-4 w-4" aria-hidden />
-          Guardar todo
-        </button>
-        <button
-          type="button"
-          disabled={busy}
-          onClick={() => void confirmAlbaran()}
-          className="inline-flex h-10 items-center gap-2 rounded-xl bg-emerald-600 px-3 text-sm font-bold text-white disabled:opacity-50"
-        >
-          <ShieldCheck className="h-4 w-4" aria-hidden />
-          Confirmar albarán
-        </button>
-        <button
-          type="button"
-          disabled={busy}
-          onClick={() => void setStatus('archived')}
-          className="inline-flex h-10 items-center gap-2 rounded-xl border border-zinc-300 bg-zinc-100 px-3 text-sm font-bold text-zinc-800 disabled:opacity-50"
-        >
-          <Archive className="h-4 w-4" aria-hidden />
-          Archivar
-        </button>
-      </div>
+        )}
+      </section>
 
       {banner ? (
-        <div className="rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-800">{banner}</div>
+        <div className="rounded-2xl border border-zinc-200 bg-white px-3 py-2.5 text-[13px] font-semibold text-zinc-800 shadow-sm">
+          {banner}
+        </div>
       ) : null}
 
       {order && linesDirty ? (
-        <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950">
-          Hay cambios en las líneas sin guardar. La tabla <strong>pedido vs albarán</strong> usa los datos guardados; guarda
-          antes de confiar en la comparación o en &quot;Generar incidencias&quot;.
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-[12.5px] text-amber-950">
+          Hay cambios en las líneas sin guardar. La comparación contra el pedido se basa en lo guardado — guarda antes de
+          confiar en los desajustes o en &quot;Generar incidencias&quot;.
         </div>
       ) : null}
 
-      {/* Pedido vs albarán — prioridad revisión */}
-      <section className={`rounded-2xl bg-white p-4 shadow-sm ring-1 ring-zinc-200 sm:p-5 ${order ? 'ring-2 ring-sky-100' : ''}`}>
-        <h2 className="flex flex-wrap items-center gap-2 text-xs font-black uppercase tracking-wide text-zinc-500">
-          <Link2 className="h-4 w-4 shrink-0 text-sky-600" aria-hidden />
-          Pedido vs albarán
-        </h2>
+      {/* Pedido vs albarán */}
+      <section
+        id="vincular"
+        className="rounded-3xl border border-zinc-200 bg-white p-4 shadow-sm sm:p-5"
+      >
+        <div className="flex items-start gap-3">
+          <div
+            className={[
+              'flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl ring-1',
+              order
+                ? 'bg-sky-50 text-sky-700 ring-sky-200'
+                : 'bg-zinc-100 text-zinc-500 ring-zinc-200',
+            ].join(' ')}
+          >
+            <Link2 className="h-5 w-5" aria-hidden />
+          </div>
+          <div className="min-w-0 flex-1">
+            <h2 className="text-[15px] font-black text-zinc-900">Pedido vs albarán</h2>
+            <p className="text-[12px] text-zinc-500">
+              {order
+                ? 'Comparación línea a línea con el pedido vinculado.'
+                : 'Vincula con un pedido para detectar diferencias automáticamente.'}
+            </p>
+          </div>
+        </div>
+
         <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-end">
           <select
             value={linkOrderId}
             onChange={(e) => setLinkOrderId(e.target.value)}
-            className="min-h-[44px] w-full rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm font-semibold sm:min-w-[16rem] sm:flex-1"
+            className="min-h-[44px] w-full rounded-2xl border border-zinc-200 bg-white px-3 py-2.5 text-[13.5px] font-semibold sm:min-w-[16rem] sm:flex-1"
           >
             <option value="">— Sin pedido —</option>
             {ordersPick.slice(0, 120).map((o) => (
@@ -774,16 +918,16 @@ export default function AlbaranDetallePage() {
               type="button"
               disabled={busy || !linkOrderId}
               onClick={() => void applyLinkOrder()}
-              className="min-h-[44px] flex-1 rounded-xl bg-[#D32F2F] px-4 py-2.5 text-sm font-black text-white disabled:opacity-50 sm:flex-none"
+              className="min-h-[44px] flex-1 rounded-2xl bg-[#D32F2F] px-4 text-[13px] font-black text-white shadow-md disabled:opacity-50 sm:flex-none"
             >
-              Vincular y emparejar
+              {order ? 'Re-emparejar' : 'Vincular y emparejar'}
             </button>
             {order ? (
               <button
                 type="button"
                 disabled={busy}
                 onClick={() => void unlinkOrder()}
-                className="inline-flex min-h-[44px] items-center justify-center gap-1 rounded-xl border border-zinc-300 bg-zinc-50 px-3 py-2 text-sm font-bold text-zinc-800"
+                className="inline-flex min-h-[44px] items-center justify-center gap-1 rounded-2xl border border-zinc-200 bg-white px-3 text-[13px] font-bold text-zinc-700"
               >
                 <Link2Off className="h-4 w-4" aria-hidden />
                 Desvincular
@@ -794,9 +938,8 @@ export default function AlbaranDetallePage() {
 
         {order ? (
           <>
-            <p className="mt-3 text-xs text-zinc-600">
-              Cada fila: cantidades y precios del pedido frente a la línea del albarán emparejada. Los deltas ayudan a revisar
-              rápido en móvil.
+            <p className="mt-3 text-[11.5px] text-zinc-500">
+              Cada fila: cantidades y precios del pedido frente a la línea del albarán emparejada.
             </p>
             {/* Móvil: tarjetas */}
             <ul className="mt-4 space-y-3 sm:hidden">
@@ -933,31 +1076,43 @@ export default function AlbaranDetallePage() {
               disabled={busy || linesDirty}
               onClick={() => void runCompareIncidents()}
               title={linesDirty ? 'Guarda las líneas antes' : undefined}
-              className="mt-3 inline-flex min-h-[44px] items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-950 disabled:opacity-50"
+              className="mt-3 inline-flex min-h-[44px] items-center gap-2 rounded-2xl border border-amber-200 bg-amber-50 px-3 text-[12.5px] font-black text-amber-950 disabled:opacity-50"
             >
               <FileWarning className="h-4 w-4" aria-hidden />
               Generar incidencias desde diferencias
             </button>
           </>
         ) : (
-          <p className="mt-3 text-sm text-zinc-600">Vincula un pedido enviado o recibido para ver la comparación línea a línea.</p>
+          <div className="mt-3 rounded-2xl border border-dashed border-zinc-300 bg-zinc-50/50 px-3 py-4 text-center">
+            <p className="text-[12.5px] text-zinc-600">
+              Sin pedido vinculado · la comparación aparecerá aquí cuando emparejes el albarán con un pedido.
+            </p>
+          </div>
         )}
       </section>
 
       {/* Líneas */}
-      <section className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-zinc-200 sm:p-5">
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-          <h2 className="text-xs font-black uppercase tracking-wide text-zinc-500">Líneas del albarán</h2>
+      <section
+        id="lineas"
+        className="rounded-3xl border border-zinc-200 bg-white p-4 shadow-sm sm:p-5"
+      >
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h2 className="text-[15px] font-black text-zinc-900">Líneas del albarán</h2>
+            <p className="mt-0.5 text-[11.5px] text-zinc-500">
+              {items.length} línea{items.length === 1 ? '' : 's'} · revisa producto, cantidad y precio.
+            </p>
+          </div>
           {linesDirty ? (
-            <span className="text-[11px] font-black uppercase text-amber-800">Borrador · sin guardar</span>
+            <span className="shrink-0 rounded-full bg-amber-100 px-2.5 py-1 text-[10px] font-black uppercase tracking-wide text-amber-900 ring-1 ring-amber-200">
+              Sin guardar
+            </span>
           ) : (
-            <span className="text-[11px] font-bold text-emerald-700">Guardado</span>
+            <span className="shrink-0 rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-black uppercase tracking-wide text-emerald-800 ring-1 ring-emerald-200">
+              Guardado
+            </span>
           )}
         </div>
-        <p className="mt-2 text-xs text-zinc-600">
-          Revisa y corrige producto, cantidad y precio antes de guardar. El OCR puede fallar: puedes editar o añadir líneas a
-          mano.
-        </p>
         <div className="mt-3 hidden overflow-x-auto rounded-xl border border-zinc-100 sm:block">
           <table className="min-w-full text-left text-xs">
             <thead className="bg-zinc-50 text-[10px] font-black uppercase text-zinc-500">
@@ -1118,7 +1273,7 @@ export default function AlbaranDetallePage() {
         <button
           type="button"
           onClick={() => setLineDrafts((d) => [...d, newEmptyLine()])}
-          className="mt-3 inline-flex items-center gap-1 text-sm font-bold text-[#D32F2F]"
+          className="mt-3 inline-flex h-10 items-center gap-1.5 rounded-2xl border border-dashed border-zinc-300 bg-white px-3 text-[13px] font-black text-[#D32F2F]"
         >
           <PlusCircle className="h-4 w-4" aria-hidden />
           Añadir línea
@@ -1126,60 +1281,161 @@ export default function AlbaranDetallePage() {
         <div className="mt-4 flex flex-col gap-2 sm:flex-row">
           <button
             type="button"
-            disabled={busy}
-            onClick={() => void saveLines()}
-            className="inline-flex min-h-[44px] flex-1 items-center justify-center gap-2 rounded-xl border border-zinc-300 bg-white py-3 text-sm font-black text-zinc-900 disabled:opacity-50"
+            disabled={busy || !linesDirty}
+            onClick={() => void saveAll()}
+            className="inline-flex min-h-[44px] flex-1 items-center justify-center gap-2 rounded-2xl bg-zinc-900 px-4 text-[13.5px] font-black text-white shadow-md disabled:opacity-40"
           >
             <Save className="h-4 w-4" aria-hidden />
-            Solo líneas
+            Guardar cambios
           </button>
           <button
             type="button"
             disabled={busy}
-            onClick={() => void saveAll()}
-            className="inline-flex min-h-[44px] flex-1 items-center justify-center gap-2 rounded-xl bg-zinc-900 py-3 text-sm font-black text-white disabled:opacity-50"
+            onClick={() => void saveLines()}
+            className="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-2xl border border-zinc-200 bg-white px-4 text-[12.5px] font-bold text-zinc-700"
+            title="Guarda solo las líneas, sin tocar la cabecera"
           >
-            <Save className="h-4 w-4" aria-hidden />
-            Guardar cabecera + líneas
+            Solo líneas
           </button>
         </div>
       </section>
 
       {/* Incidencias */}
-      <section className="rounded-2xl border border-red-100 bg-red-50/50 p-4 shadow-sm ring-1 ring-red-100/80 sm:p-5">
-        <h2 className="flex items-center gap-2 text-xs font-black uppercase tracking-wide text-red-900">
-          <AlertTriangle className="h-4 w-4" aria-hidden />
-          Incidencias
-        </h2>
-        <div className="mt-3 flex flex-wrap gap-2">
-          {(
-            [
-              ['open', 'Abiertas', openIncidents.length],
-              ['resolved', 'Resueltas', incidents.filter((i) => i.status === 'resolved').length],
-              ['all', 'Todas', incidents.length],
-            ] as const
-          ).map(([key, lab, count]) => (
-            <button
-              key={key}
-              type="button"
-              onClick={() => setIncidentTab(key)}
-              className={[
-                'min-h-[40px] rounded-xl px-3 py-2 text-xs font-black uppercase',
-                incidentTab === key ? 'bg-red-600 text-white shadow' : 'bg-white text-red-900 ring-1 ring-red-200',
-              ].join(' ')}
-            >
-              {lab} ({count})
-            </button>
-          ))}
+      <section
+        id="incidencias"
+        className={[
+          'rounded-3xl border p-4 shadow-sm sm:p-5',
+          openIncidents.length > 0
+            ? 'border-red-200 bg-red-50/40'
+            : 'border-zinc-200 bg-white',
+        ].join(' ')}
+      >
+        <div className="flex items-start gap-3">
+          <div
+            className={[
+              'flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl ring-1',
+              openIncidents.length > 0
+                ? 'bg-red-100 text-red-700 ring-red-200'
+                : incidents.length > 0
+                  ? 'bg-emerald-50 text-emerald-700 ring-emerald-200'
+                  : 'bg-zinc-100 text-zinc-500 ring-zinc-200',
+            ].join(' ')}
+          >
+            {openIncidents.length > 0 ? (
+              <AlertTriangle className="h-5 w-5" aria-hidden />
+            ) : incidents.length > 0 ? (
+              <CheckCircle2 className="h-5 w-5" aria-hidden />
+            ) : (
+              <ShieldCheck className="h-5 w-5" aria-hidden />
+            )}
+          </div>
+          <div className="min-w-0 flex-1">
+            <h2 className="text-[15px] font-black text-zinc-900">Incidencias</h2>
+            <p className="text-[12px] text-zinc-500">
+              {openIncidents.length === 0
+                ? incidents.length === 0
+                  ? 'Sin incidencias detectadas.'
+                  : `${incidents.length} resueltas · todo en orden.`
+                : `${openIncidents.length} abiertas · ${incidents.length - openIncidents.length} resueltas`}
+            </p>
+          </div>
         </div>
 
-        <div className="mt-4 rounded-2xl bg-white p-3 ring-1 ring-red-100 sm:p-4">
-          <p className="text-[10px] font-black uppercase text-zinc-500">Nueva incidencia manual</p>
-          <div className="mt-2 grid gap-2 sm:grid-cols-2">
+        {incidents.length > 0 ? (
+          <div className="mt-3 inline-flex overflow-hidden rounded-2xl border border-zinc-200 bg-white p-0.5">
+            {(
+              [
+                ['open', 'Abiertas', openIncidents.length],
+                ['resolved', 'Resueltas', incidents.filter((i) => i.status === 'resolved').length],
+                ['all', 'Todas', incidents.length],
+              ] as const
+            ).map(([key, lab, count]) => {
+              const active = incidentTab === key;
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => setIncidentTab(key)}
+                  className={[
+                    'rounded-xl px-3 py-1.5 text-[11.5px] font-black uppercase tracking-wide transition',
+                    active ? 'bg-zinc-900 text-white shadow-sm' : 'text-zinc-500',
+                  ].join(' ')}
+                >
+                  {lab} <span className="opacity-70">({count})</span>
+                </button>
+              );
+            })}
+          </div>
+        ) : null}
+
+        {filteredIncidents.length === 0 ? (
+          <p className="mt-3 text-[12.5px] text-zinc-500">
+            {incidents.length === 0
+              ? 'No se han generado incidencias en este albarán.'
+              : 'No hay incidencias en esta vista.'}
+          </p>
+        ) : (
+          <ul className="mt-3 space-y-2">
+            {filteredIncidents.map((inc) => (
+              <li
+                key={inc.id}
+                className={[
+                  'rounded-2xl p-3 ring-1',
+                  inc.status === 'open' ? 'bg-white ring-red-200' : 'bg-white ring-zinc-200',
+                ].join(' ')}
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <p className="text-[10px] font-black uppercase tracking-wide text-zinc-500">
+                    {DELIVERY_NOTE_INCIDENT_LABEL[inc.incidentType]}
+                  </p>
+                  <span
+                    className={[
+                      'rounded-full px-2 py-0.5 text-[9.5px] font-black uppercase tracking-wide',
+                      inc.status === 'open'
+                        ? 'bg-red-100 text-red-800'
+                        : 'bg-emerald-50 text-emerald-800',
+                    ].join(' ')}
+                  >
+                    {inc.status === 'open' ? 'Abierta' : 'Resuelta'}
+                  </span>
+                </div>
+                <p className="mt-1 text-[13px] text-zinc-800">{inc.description}</p>
+                {inc.resolutionComment ? (
+                  <p className="mt-1 text-[11px] text-zinc-500">{inc.resolutionComment}</p>
+                ) : null}
+                {inc.status === 'open' ? (
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => {
+                      setResolveModalId(inc.id);
+                      setResolveComment('');
+                    }}
+                    className="mt-2 inline-flex h-8 items-center gap-1 rounded-full bg-emerald-50 px-2.5 text-[11px] font-black text-emerald-800 ring-1 ring-emerald-200"
+                  >
+                    <CheckCircle2 className="h-3.5 w-3.5" aria-hidden />
+                    Marcar resuelta
+                  </button>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        )}
+
+        {/* Nueva incidencia manual — siempre disponible, en bloque secundario */}
+        <details className="mt-4 group rounded-2xl border border-dashed border-zinc-300 bg-white p-3">
+          <summary className="flex cursor-pointer list-none items-center justify-between text-[12px] font-black uppercase tracking-wide text-zinc-600">
+            Añadir incidencia manual
+            <ChevronDown
+              className="h-4 w-4 text-zinc-400 transition group-open:rotate-180"
+              aria-hidden
+            />
+          </summary>
+          <div className="mt-3 grid gap-2 sm:grid-cols-2">
             <select
               value={manualIncType}
               onChange={(e) => setManualIncType(e.target.value as DeliveryNoteIncidentType)}
-              className="min-h-[44px] rounded-lg border border-zinc-200 px-3 text-sm"
+              className="min-h-[44px] rounded-xl border border-zinc-200 px-3 text-[13px] sm:col-span-2"
             >
               {INCIDENT_TYPES.map((t) => (
                 <option key={t} value={t}>
@@ -1190,241 +1446,255 @@ export default function AlbaranDetallePage() {
             <input
               value={manualIncDesc}
               onChange={(e) => setManualIncDesc(e.target.value)}
-              placeholder="Descripción breve"
-              className="min-h-[44px] rounded-lg border border-zinc-200 px-3 text-sm sm:col-span-2"
+              placeholder="Descripción breve…"
+              className="min-h-[44px] rounded-xl border border-zinc-200 px-3 text-[13px] sm:col-span-2"
             />
           </div>
           <button
             type="button"
             disabled={busy || !manualIncDesc.trim()}
             onClick={() => void addManualIncident()}
-            className="mt-2 min-h-[44px] rounded-xl bg-red-600 px-4 py-2 text-sm font-black text-white disabled:opacity-50"
+            className="mt-2 inline-flex min-h-[40px] items-center gap-1.5 rounded-2xl bg-red-600 px-4 text-[12.5px] font-black text-white shadow-md disabled:opacity-40"
           >
-            Registrar
+            <AlertTriangle className="h-3.5 w-3.5" aria-hidden /> Registrar
           </button>
-        </div>
-
-        {filteredIncidents.length === 0 ? (
-          <p className="mt-4 text-sm text-zinc-600">No hay incidencias en esta vista.</p>
-        ) : (
-          <ul className="mt-4 space-y-2">
-            {filteredIncidents.map((inc) => (
-              <li
-                key={inc.id}
-                className={[
-                  'rounded-xl p-3 ring-1',
-                  inc.status === 'open' ? 'bg-white ring-red-200' : 'bg-zinc-50/80 ring-zinc-200',
-                ].join(' ')}
-              >
-                <p className="text-[10px] font-black uppercase text-red-800">{DELIVERY_NOTE_INCIDENT_LABEL[inc.incidentType]}</p>
-                <p className="mt-1 text-sm text-zinc-800">{inc.description}</p>
-                <p className="mt-1 text-[11px] text-zinc-500">
-                  {inc.status === 'open' ? (
-                    <span className="font-bold text-red-700">Abierta</span>
-                  ) : (
-                    <span className="font-bold text-emerald-700">Resuelta</span>
-                  )}
-                  {inc.resolutionComment ? ` · ${inc.resolutionComment}` : ''}
-                </p>
-                {inc.status === 'open' ? (
-                  <button
-                    type="button"
-                    disabled={busy}
-                    onClick={() => {
-                      setResolveModalId(inc.id);
-                      setResolveComment('');
-                    }}
-                    className="mt-2 inline-flex min-h-[40px] items-center gap-1 text-xs font-bold text-emerald-700"
-                  >
-                    <CheckCircle2 className="h-3.5 w-3.5" aria-hidden />
-                    Marcar resuelta…
-                  </button>
-                ) : null}
-              </li>
-            ))}
-          </ul>
-        )}
+        </details>
       </section>
 
-      {/* Cabecera — colapsable en móvil */}
-      <section className="rounded-2xl bg-white shadow-sm ring-1 ring-zinc-200">
-        <button
-          type="button"
-          onClick={() => setHeaderExpanded((v) => !v)}
-          className="flex w-full min-h-[48px] items-center justify-between gap-2 p-4 text-left sm:pointer-events-none sm:min-h-0 sm:cursor-default sm:p-5 sm:pb-0"
-        >
-          <h2 className="text-xs font-black uppercase tracking-wide text-zinc-500">Cabecera e importes</h2>
+      {/* Cabecera e importes */}
+      <details
+        className="group rounded-3xl border border-zinc-200 bg-white p-4 shadow-sm open:shadow-md sm:p-5"
+        open={headerExpanded}
+        onToggle={(e) => setHeaderExpanded((e.target as HTMLDetailsElement).open)}
+      >
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-2">
+          <div className="min-w-0">
+            <h2 className="text-[15px] font-black text-zinc-900">Cabecera e importes</h2>
+            <p className="text-[12px] text-zinc-500">Proveedor, número, fecha y totales.</p>
+          </div>
           <ChevronDown
-            className={`h-5 w-5 text-zinc-400 transition sm:hidden ${headerExpanded ? 'rotate-180' : ''}`}
+            className="h-5 w-5 text-zinc-400 transition group-open:rotate-180"
             aria-hidden
           />
-        </button>
-        <div className={`px-4 pb-4 sm:block ${headerExpanded ? 'block' : 'hidden'} sm:p-5 sm:pt-3`}>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div className="sm:col-span-2">
-              <label className="text-[10px] font-bold text-zinc-500">Proveedor</label>
-              <input
-                value={supplierName}
-                onChange={(e) => setSupplierName(e.target.value)}
-                className="mt-1 min-h-[44px] w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm"
-              />
-            </div>
-            <div>
-              <label className="text-[10px] font-bold text-zinc-500">Nº albarán</label>
-              <input
-                value={deliveryNoteNumber}
-                onChange={(e) => setDeliveryNoteNumber(e.target.value)}
-                className="mt-1 min-h-[44px] w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm font-mono"
-              />
-            </div>
-            <div>
-              <label className="text-[10px] font-bold text-zinc-500">Fecha</label>
-              <input
-                type="date"
-                value={deliveryDate}
-                onChange={(e) => setDeliveryDate(e.target.value)}
-                className="mt-1 min-h-[44px] w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm"
-              />
-            </div>
-            <div>
-              <label className="text-[10px] font-bold text-zinc-500">Subtotal</label>
-              <input
-                value={subtotal}
-                onChange={(e) => setSubtotal(e.target.value)}
-                className="mt-1 min-h-[44px] w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm tabular-nums"
-                inputMode="decimal"
-              />
-            </div>
-            <div>
-              <label className="text-[10px] font-bold text-zinc-500">IVA</label>
-              <input
-                value={taxAmount}
-                onChange={(e) => setTaxAmount(e.target.value)}
-                className="mt-1 min-h-[44px] w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm tabular-nums"
-                inputMode="decimal"
-              />
-            </div>
-            <div>
-              <label className="text-[10px] font-bold text-zinc-500">Total</label>
-              <input
-                value={totalAmount}
-                onChange={(e) => setTotalAmount(e.target.value)}
-                className="mt-1 min-h-[44px] w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm tabular-nums"
-                inputMode="decimal"
-              />
-            </div>
-            <div className="sm:col-span-2">
-              <label className="text-[10px] font-bold text-zinc-500">Observaciones</label>
-              <textarea
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                rows={2}
-                className="mt-1 w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm"
-              />
-            </div>
+        </summary>
+        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+          <div className="sm:col-span-2">
+            <label className="text-[10px] font-bold uppercase tracking-wide text-zinc-500">Proveedor</label>
+            <input
+              value={supplierName}
+              onChange={(e) => setSupplierName(e.target.value)}
+              className="mt-1 min-h-[44px] w-full rounded-xl border border-zinc-200 px-3 py-2 text-[13.5px]"
+            />
           </div>
-          <button
-            type="button"
-            disabled={busy}
-            onClick={() => void saveHeader()}
-            className="mt-4 inline-flex min-h-[44px] items-center gap-2 rounded-xl bg-zinc-900 px-4 py-2 text-sm font-bold text-white disabled:opacity-50"
-          >
-            <Save className="h-4 w-4" aria-hidden />
-            Guardar solo cabecera
-          </button>
+          <div>
+            <label className="text-[10px] font-bold uppercase tracking-wide text-zinc-500">Nº albarán</label>
+            <input
+              value={deliveryNoteNumber}
+              onChange={(e) => setDeliveryNoteNumber(e.target.value)}
+              className="mt-1 min-h-[44px] w-full rounded-xl border border-zinc-200 px-3 py-2 text-[13.5px] font-mono"
+            />
+          </div>
+          <div>
+            <label className="text-[10px] font-bold uppercase tracking-wide text-zinc-500">Fecha</label>
+            <input
+              type="date"
+              value={deliveryDate}
+              onChange={(e) => setDeliveryDate(e.target.value)}
+              className="mt-1 min-h-[44px] w-full rounded-xl border border-zinc-200 px-3 py-2 text-[13.5px]"
+            />
+          </div>
+          <div>
+            <label className="text-[10px] font-bold uppercase tracking-wide text-zinc-500">Subtotal</label>
+            <input
+              value={subtotal}
+              onChange={(e) => setSubtotal(e.target.value)}
+              className="mt-1 min-h-[44px] w-full rounded-xl border border-zinc-200 px-3 py-2 text-[13.5px] tabular-nums"
+              inputMode="decimal"
+            />
+          </div>
+          <div>
+            <label className="text-[10px] font-bold uppercase tracking-wide text-zinc-500">IVA</label>
+            <input
+              value={taxAmount}
+              onChange={(e) => setTaxAmount(e.target.value)}
+              className="mt-1 min-h-[44px] w-full rounded-xl border border-zinc-200 px-3 py-2 text-[13.5px] tabular-nums"
+              inputMode="decimal"
+            />
+          </div>
+          <div>
+            <label className="text-[10px] font-bold uppercase tracking-wide text-zinc-500">Total</label>
+            <input
+              value={totalAmount}
+              onChange={(e) => setTotalAmount(e.target.value)}
+              className="mt-1 min-h-[44px] w-full rounded-xl border border-zinc-200 px-3 py-2 text-[13.5px] tabular-nums"
+              inputMode="decimal"
+            />
+          </div>
+          <div className="sm:col-span-2">
+            <label className="text-[10px] font-bold uppercase tracking-wide text-zinc-500">Observaciones</label>
+            <textarea
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              rows={2}
+              className="mt-1 w-full rounded-xl border border-zinc-200 px-3 py-2 text-[13.5px]"
+            />
+          </div>
         </div>
-      </section>
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => void saveHeader()}
+          className="mt-4 inline-flex min-h-[44px] items-center gap-2 rounded-2xl bg-zinc-900 px-4 text-[13px] font-black text-white shadow-md disabled:opacity-40"
+        >
+          <Save className="h-4 w-4" aria-hidden />
+          Guardar cabecera
+        </button>
+      </details>
 
-      {/* Contabilidad / informes (vista previa) */}
+      {/* Documento original */}
+      <details className="group rounded-3xl border border-zinc-200 bg-white p-4 shadow-sm open:shadow-md sm:p-5">
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-2">
+          <div className="min-w-0">
+            <h2 className="text-[15px] font-black text-zinc-900">Documento original</h2>
+            <p className="text-[12px] text-zinc-500">PDF o imagen subida del albarán.</p>
+          </div>
+          <ChevronDown
+            className="h-5 w-5 text-zinc-400 transition group-open:rotate-180"
+            aria-hidden
+          />
+        </summary>
+        {docUrl ? (
+          <div className="mt-3 space-y-2">
+            <a
+              href={docUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex h-9 items-center gap-1.5 rounded-full bg-[#D32F2F]/10 px-3 text-[12px] font-black text-[#D32F2F] ring-1 ring-[#D32F2F]/20"
+            >
+              Abrir en pestaña nueva
+            </a>
+            {note.originalMimeType?.includes('pdf') ? (
+              <iframe
+                title="PDF"
+                src={docUrl}
+                className="mt-2 h-[min(55vh,480px)] w-full rounded-2xl border border-zinc-200 sm:h-[min(70vh,520px)]"
+              />
+            ) : (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={docUrl}
+                alt="Albarán"
+                className="mt-2 max-h-[360px] w-full rounded-2xl border border-zinc-200 object-contain sm:max-h-[480px]"
+              />
+            )}
+          </div>
+        ) : (
+          <p className="mt-2 text-[12.5px] text-zinc-500">Sin archivo adjunto.</p>
+        )}
+      </details>
+
+      {/* Datos contables — sólo si hay preview */}
       {accountingPreview ? (
-        <details className="rounded-2xl bg-zinc-50 p-4 ring-1 ring-zinc-200">
-          <summary className="flex cursor-pointer list-none items-center gap-2 text-xs font-black uppercase text-zinc-600">
-            <Calculator className="h-4 w-4" aria-hidden />
-            Datos para informes contables (vista previa)
+        <details className="group rounded-3xl border border-zinc-200 bg-zinc-50/60 p-4 shadow-sm open:bg-white open:shadow-md sm:p-5">
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-2">
+            <div className="flex min-w-0 items-center gap-2">
+              <Calculator className="h-4 w-4 shrink-0 text-zinc-500" aria-hidden />
+              <h2 className="text-[14px] font-black text-zinc-700">Datos para informes contables</h2>
+            </div>
+            <ChevronDown
+              className="h-5 w-5 text-zinc-400 transition group-open:rotate-180"
+              aria-hidden
+            />
           </summary>
-          <dl className="mt-3 grid gap-2 text-sm sm:grid-cols-2">
-            <div>
-              <dt className="text-[10px] font-bold uppercase text-zinc-500">Periodo (mes entrega)</dt>
-              <dd className="font-mono font-semibold text-zinc-900">{accountingPreview.bookkeepingMonth ?? '—'}</dd>
-            </div>
-            <div>
-              <dt className="text-[10px] font-bold uppercase text-zinc-500">Moneda</dt>
-              <dd className="font-semibold text-zinc-900">{accountingPreview.currency}</dd>
-            </div>
-            <div>
-              <dt className="text-[10px] font-bold uppercase text-zinc-500">Total cabecera</dt>
-              <dd className="tabular-nums font-semibold text-zinc-900">
-                {accountingPreview.headerTotal != null ? `${accountingPreview.headerTotal.toFixed(2)}` : '—'}
-              </dd>
-            </div>
-            <div>
-              <dt className="text-[10px] font-bold uppercase text-zinc-500">Suma líneas (qty × precio)</dt>
-              <dd className="tabular-nums font-semibold text-zinc-900">
-                {accountingPreview.computedLinesTotal != null ? `${accountingPreview.computedLinesTotal.toFixed(2)}` : '—'}
-              </dd>
-            </div>
-            <div>
-              <dt className="text-[10px] font-bold uppercase text-zinc-500">Estado</dt>
-              <dd className="font-semibold text-zinc-900">{DELIVERY_NOTE_STATUS_LABEL[accountingPreview.status]}</dd>
-            </div>
-            <div>
-              <dt className="text-[10px] font-bold uppercase text-zinc-500">Pedido relacionado</dt>
-              <dd className="font-mono text-xs font-semibold text-zinc-900">{accountingPreview.relatedOrderId ?? '—'}</dd>
-            </div>
+          <dl className="mt-3 grid gap-2 text-[13px] sm:grid-cols-2">
+            <KvRow label="Periodo (mes entrega)" value={accountingPreview.bookkeepingMonth ?? '—'} mono />
+            <KvRow label="Moneda" value={accountingPreview.currency} />
+            <KvRow
+              label="Total cabecera"
+              value={
+                accountingPreview.headerTotal != null
+                  ? `${accountingPreview.headerTotal.toFixed(2)}`
+                  : '—'
+              }
+              num
+            />
+            <KvRow
+              label="Suma líneas"
+              value={
+                accountingPreview.computedLinesTotal != null
+                  ? `${accountingPreview.computedLinesTotal.toFixed(2)}`
+                  : '—'
+              }
+              num
+            />
+            <KvRow label="Estado" value={DELIVERY_NOTE_STATUS_LABEL[accountingPreview.status]} />
+            <KvRow label="Pedido relacionado" value={accountingPreview.relatedOrderId ?? '—'} mono />
           </dl>
-          <p className="mt-2 text-[11px] text-zinc-500">
-            Estructura pensada para exportación CSV/PDF futura: clave de mes, importes de cabecera vs suma de líneas, vínculo a
-            pedido.
+          <p className="mt-2 text-[10.5px] text-zinc-500">
+            Estructura pensada para exportación CSV/PDF: clave de mes, importes y vínculo a pedido.
           </p>
         </details>
       ) : null}
 
-      {/* Documento — menos scroll en móvil */}
-      <details className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-zinc-200 open:ring-sky-200" open={false}>
-        <summary className="cursor-pointer text-xs font-black uppercase text-zinc-500">Documento original</summary>
-        {docUrl ? (
-          <div className="mt-3 space-y-2">
-            <a href={docUrl} target="_blank" rel="noreferrer" className="text-sm font-bold text-[#D32F2F] underline">
-              Abrir en pestaña nueva
-            </a>
-            {note.originalMimeType?.includes('pdf') ? (
-              <iframe title="PDF" src={docUrl} className="mt-2 h-[min(55vh,480px)] w-full rounded-xl border border-zinc-200 sm:h-[min(70vh,520px)]" />
-            ) : (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={docUrl} alt="Albarán" className="mt-2 max-h-[360px] w-full rounded-xl border border-zinc-200 object-contain sm:max-h-[480px]" />
-            )}
-          </div>
-        ) : (
-          <p className="mt-2 text-sm text-zinc-500">Sin archivo.</p>
-        )}
-      </details>
-
       {ocrPreview ? (
-        <details className="rounded-2xl bg-zinc-50 p-4 ring-1 ring-zinc-200">
-          <summary className="cursor-pointer text-xs font-bold text-zinc-600">Texto OCR (referencia)</summary>
-          <pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap text-[11px] text-zinc-700">{ocrPreview}</pre>
+        <details className="group rounded-3xl border border-zinc-200 bg-zinc-50/60 p-4 shadow-sm open:bg-white sm:p-5">
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-2">
+            <h2 className="text-[13px] font-black text-zinc-600">Texto OCR (referencia)</h2>
+            <ChevronDown
+              className="h-5 w-5 text-zinc-400 transition group-open:rotate-180"
+              aria-hidden
+            />
+          </summary>
+          <pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap rounded-xl bg-white p-3 text-[11px] text-zinc-700 ring-1 ring-zinc-200">
+            {ocrPreview}
+          </pre>
         </details>
       ) : null}
 
-      {/* Barra fija móvil */}
-      <div className="fixed bottom-0 left-0 right-0 z-40 flex gap-2 border-t border-zinc-200 bg-white/95 px-3 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-[0_-4px_24px_rgba(0,0,0,0.08)] backdrop-blur sm:hidden">
-        <button
-          type="button"
-          disabled={busy}
-          onClick={() => void saveAll()}
-          className="h-12 flex-1 rounded-xl bg-zinc-900 text-sm font-black text-white disabled:opacity-50"
-        >
-          Guardar
-        </button>
-        <button
-          type="button"
-          disabled={busy}
-          onClick={() => void confirmAlbaran()}
-          className="h-12 flex-1 rounded-xl bg-emerald-600 text-sm font-black text-white disabled:opacity-50"
-        >
-          Confirmar
-        </button>
-      </div>
+      {/* Barra fija móvil + escritorio compacto */}
+      {!isClosed ? (
+        <div className="fixed bottom-0 left-0 right-0 z-40 flex gap-2 border-t border-zinc-200 bg-white/95 px-3 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-[0_-4px_24px_rgba(0,0,0,0.08)] backdrop-blur">
+          <button
+            type="button"
+            disabled={busy || !linesDirty}
+            onClick={() => void saveAll()}
+            className="h-12 flex-1 rounded-2xl bg-zinc-900 text-[13.5px] font-black text-white shadow-md disabled:opacity-30"
+          >
+            {linesDirty ? 'Guardar' : 'Sin cambios'}
+          </button>
+          <button
+            type="button"
+            disabled={busy || linesDirty}
+            onClick={() => void confirmAlbaran()}
+            className="h-12 flex-1 rounded-2xl bg-emerald-600 text-[13.5px] font-black text-white shadow-md disabled:opacity-30"
+            title={linesDirty ? 'Guarda los cambios antes' : undefined}
+          >
+            Confirmar
+          </button>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => void setStatus('archived')}
+            className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-zinc-200 bg-white text-zinc-600 shadow-sm"
+            aria-label="Archivar"
+            title="Archivar"
+          >
+            <Archive className="h-4 w-4" aria-hidden />
+          </button>
+        </div>
+      ) : (
+        <div className="fixed bottom-0 left-0 right-0 z-40 flex items-center justify-between gap-2 border-t border-zinc-200 bg-white/95 px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-[0_-4px_24px_rgba(0,0,0,0.08)] backdrop-blur">
+          <p className="text-[12.5px] font-semibold text-zinc-700">
+            {note.status === 'validated' ? 'Albarán validado' : 'Albarán archivado'}
+          </p>
+          <Link
+            href="/pedidos/albaranes"
+            className="inline-flex h-10 items-center rounded-2xl border border-zinc-200 bg-white px-4 text-[12.5px] font-black text-zinc-700"
+          >
+            Volver a bandeja
+          </Link>
+        </div>
+      )}
 
       {resolveModalId ? (
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/45 p-4 sm:items-center" role="dialog" aria-modal>

@@ -442,6 +442,24 @@ export async function insertDeliveryNote(
   return mapNote(data as NoteRow);
 }
 
+/**
+ * Borrado físico de un albarán. Las tablas hijas (items, incidents, ocr_runs) tienen
+ * `on delete cascade`, así que no hace falta tocarlas. El archivo del Storage debe
+ * borrarse aparte por quien llame.
+ */
+export async function deleteDeliveryNote(
+  supabase: SupabaseClient,
+  localId: string,
+  noteId: string,
+): Promise<void> {
+  const { error } = await supabase
+    .from('delivery_notes')
+    .delete()
+    .eq('local_id', localId)
+    .eq('id', noteId);
+  if (error) throw new Error(error.message);
+}
+
 export type DeliveryNotePatch = Partial<{
   supplierId: string | null;
   supplierName: string;
