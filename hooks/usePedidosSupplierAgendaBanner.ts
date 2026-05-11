@@ -4,6 +4,7 @@ import React from 'react';
 import { getSupabaseClient } from '@/lib/supabase-client';
 import {
   computeCutoffForToday,
+  formatCutoffHm,
   isOrderDayToday,
   type PedidoSupplierOrderScheduleRow,
 } from '@/lib/pedidos-order-agenda-engine';
@@ -58,6 +59,16 @@ export function usePedidosSupplierAgendaBanner(params: {
     if (!schedule?.enabled) return null;
     const now = new Date();
     if (!isOrderDayToday(schedule, now)) return null;
+
+    if (schedule.agendaMode === 'review') {
+      const hm = formatCutoffHm(schedule.cutoffTime);
+      return {
+        cutoffLine: `Referencia de corte hoy: antes de las ${hm}.`,
+        cutoffTone: 'neutral',
+        reviewNames:
+          reviewLabels.length > 0 ? reviewLabels : ['Revisa el catálogo antes de pedir si necesitas algo.'],
+      };
+    }
 
     const computed = computeCutoffForToday(schedule, orders, supplierId, now);
     if (!computed || computed.status === 'enviado') {

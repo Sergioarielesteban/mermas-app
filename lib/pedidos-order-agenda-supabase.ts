@@ -3,7 +3,7 @@
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js';
-import type { PedidoSupplierOrderScheduleRow } from '@/lib/pedidos-order-agenda-engine';
+import type { PedidoAgendaMode, PedidoSupplierOrderScheduleRow } from '@/lib/pedidos-order-agenda-engine';
 
 export type PedidoSupplierOrderScheduleDb = {
   id: string;
@@ -14,6 +14,7 @@ export type PedidoSupplierOrderScheduleDb = {
   cutoff_time: string;
   reminder_minutes_before: number;
   delivery_weekdays: number[] | null;
+  agenda_mode?: string | null;
 };
 
 export type PedidoSupplierReviewItemDb = {
@@ -26,6 +27,10 @@ export type PedidoSupplierReviewItemDb = {
   sort_order: number;
 };
 
+function parseAgendaMode(raw: string | null | undefined): PedidoAgendaMode {
+  return raw === 'review' ? 'review' : 'mandatory';
+}
+
 function rowToSchedule(row: PedidoSupplierOrderScheduleDb): PedidoSupplierOrderScheduleRow & { id: string } {
   return {
     id: row.id,
@@ -34,6 +39,7 @@ function rowToSchedule(row: PedidoSupplierOrderScheduleDb): PedidoSupplierOrderS
     cutoffTime: row.cutoff_time,
     reminderMinutesBefore: row.reminder_minutes_before ?? 30,
     deliveryWeekdays: row.delivery_weekdays != null ? [...row.delivery_weekdays] : null,
+    agendaMode: parseAgendaMode(row.agenda_mode),
   };
 }
 
@@ -45,7 +51,7 @@ export async function fetchScheduleForSupplier(
   const { data, error } = await supabase
     .from('pedido_supplier_order_schedules')
     .select(
-      'id,local_id,supplier_id,enabled,order_weekdays,cutoff_time,reminder_minutes_before,delivery_weekdays',
+      'id,local_id,supplier_id,enabled,order_weekdays,cutoff_time,reminder_minutes_before,delivery_weekdays,agenda_mode',
     )
     .eq('local_id', localId)
     .eq('supplier_id', supplierId)
@@ -101,7 +107,7 @@ export async function fetchOrderSchedulesForLocal(
   const { data, error } = await supabase
     .from('pedido_supplier_order_schedules')
     .select(
-      'id,local_id,supplier_id,enabled,order_weekdays,cutoff_time,reminder_minutes_before,delivery_weekdays',
+      'id,local_id,supplier_id,enabled,order_weekdays,cutoff_time,reminder_minutes_before,delivery_weekdays,agenda_mode',
     )
     .eq('local_id', localId);
 
@@ -118,6 +124,11 @@ export async function fetchOrderSchedulesForLocal(
     m.set(row.supplier_id, rowToSchedule(row));
   }
   return m;
+}
+
+/** Serializa modo agenda para Supabase. */
+function agendaModeForDb(mode: PedidoAgendaMode): string {
+  return mode === 'review' ? 'review' : 'mandatory';
 }
 
 export async function fetchReviewItemsForLocal(
@@ -167,6 +178,7 @@ export async function upsertOrderSchedule(
         input.deliveryWeekdays != null && input.deliveryWeekdays.length > 0
           ? input.deliveryWeekdays
           : null,
+      agenda_mode: agendaModeForDb(input.agendaMode),
       updated_at: new Date().toISOString(),
     },
     { onConflict: 'local_id,supplier_id' },

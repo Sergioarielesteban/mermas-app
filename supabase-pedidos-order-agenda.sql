@@ -13,6 +13,9 @@ create table if not exists public.pedido_supplier_order_schedules (
     check (reminder_minutes_before >= 0 and reminder_minutes_before <= 1440),
   /** Días de entrega opcional (referencia; puede quedar vacío). */
   delivery_weekdays smallint[] null,
+  /** mandatory = corte obligatorio; review = solo checklist «Revisar proveedores». */
+  agenda_mode text not null default 'mandatory'
+    check (agenda_mode in ('mandatory', 'review')),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   unique (local_id, supplier_id)

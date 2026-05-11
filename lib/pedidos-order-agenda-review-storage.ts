@@ -22,3 +22,10 @@ export function markReviewItemDone(localId: string, ymd: string, reviewItemId: s
     /* ignore */
   }
 }
+
+/** Marca todos los ítems de revisión del proveedor para ese día (checklist por proveedor). */
+export function markSupplierReviewItemsDone(localId: string, ymd: string, reviewItemIds: string[]) {
+  for (const id of reviewItemIds) {
+    markReviewItemDone(localId, ymd, id);
+  }
+}

@@ -54,7 +54,7 @@ import {
   type PedidoSupplier,
   type PedidoSupplierProduct,
 } from '@/lib/pedidos-supabase';
-import { formatCutoffHm } from '@/lib/pedidos-order-agenda-engine';
+import { formatCutoffHm, type PedidoAgendaMode } from '@/lib/pedidos-order-agenda-engine';
 import {
   fetchReviewItemsForSupplier,
   fetchScheduleForSupplier,
@@ -241,6 +241,7 @@ export default function ProveedoresPage() {
     [],
   );
   const [agendaReviewPick, setAgendaReviewPick] = React.useState('');
+  const [agendaMode, setAgendaMode] = React.useState<PedidoAgendaMode>('mandatory');
 
   React.useEffect(() => {
     if (!editingSupplierId || !localId) return;
@@ -260,12 +261,14 @@ export default function ProveedoresPage() {
           setAgendaCutoff(formatCutoffHm(sch.cutoff_time));
           setAgendaReminder(sch.reminder_minutes_before ?? 30);
           setAgendaDeliveryDays(sch.delivery_weekdays != null ? [...sch.delivery_weekdays] : []);
+          setAgendaMode(sch.agenda_mode === 'review' ? 'review' : 'mandatory');
         } else {
           setAgendaEnabled(false);
           setAgendaOrderDays([]);
           setAgendaCutoff('13:00');
           setAgendaReminder(30);
           setAgendaDeliveryDays([]);
+          setAgendaMode('mandatory');
         }
         setAgendaReviews(
           rev
@@ -281,6 +284,7 @@ export default function ProveedoresPage() {
           setAgendaEnabled(false);
           setAgendaOrderDays([]);
           setAgendaReviews([]);
+          setAgendaMode('mandatory');
         }
       }
     })();
@@ -494,6 +498,7 @@ export default function ProveedoresPage() {
           cutoffTime: agendaCutoff,
           reminderMinutesBefore: Math.min(1440, Math.max(0, agendaReminder)),
           deliveryWeekdays: agendaDeliveryDays.length > 0 ? agendaDeliveryDays : null,
+          agendaMode,
         });
         await replaceReviewItemsForSupplier(
           supabase,
@@ -1266,10 +1271,48 @@ export default function ProveedoresPage() {
                     />
                     Activar agenda para este proveedor
                   </label>
+                  {agendaEnabled ? (
+                    <div className="rounded-xl border border-zinc-100 bg-zinc-50/90 px-2.5 py-2 ring-1 ring-zinc-100/80">
+                      <p className="text-[11px] font-semibold text-zinc-800">Tipo en «Agenda de hoy»</p>
+                      <p className="mt-0.5 text-[10px] leading-snug text-zinc-500">
+                        Obligatorio: bloque rojo con hora límite. Solo revisar: checklist con la misma hora como referencia.
+                      </p>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setAgendaMode('mandatory')}
+                          className={[
+                            'min-h-[2.25rem] flex-1 touch-manipulation rounded-xl px-2 py-1.5 text-center text-[11px] font-bold leading-snug ring-1 transition-colors',
+                            agendaMode === 'mandatory'
+                              ? 'bg-[#E30613] text-white ring-[#c50512]'
+                              : 'border border-zinc-200 bg-white text-zinc-700 ring-zinc-100',
+                          ].join(' ')}
+                        >
+                          Obligatorio
+                          <span className="mt-0.5 block text-[9px] font-semibold opacity-90">Hora límite</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setAgendaMode('review')}
+                          className={[
+                            'min-h-[2.25rem] flex-1 touch-manipulation rounded-xl px-2 py-1.5 text-center text-[11px] font-bold leading-snug ring-1 transition-colors',
+                            agendaMode === 'review'
+                              ? 'bg-amber-600 text-white ring-amber-700'
+                              : 'border border-zinc-200 bg-white text-zinc-700 ring-zinc-100',
+                          ].join(' ')}
+                        >
+                          Solo revisar
+                          <span className="mt-0.5 block text-[9px] font-semibold opacity-90">Checklist</span>
+                        </button>
+                      </div>
+                    </div>
+                  ) : null}
                   <div>
                     <p className="text-[11px] font-semibold text-zinc-700">Días para hacer el pedido</p>
                     <p className="mt-0.5 text-[10px] text-zinc-500">
-                      Solo esos días aparecerá en «Agenda de hoy» con la hora límite.
+                      {agendaMode === 'review'
+                        ? 'Esos días aparecerá en «Revisar proveedores» (sin hora límite obligatoria).'
+                        : 'Solo esos días aparecerá en «Agenda de hoy» con la hora límite.'}
                     </p>
                     <div className="mt-2 flex flex-wrap gap-1.5">
                       {DELIVERY_DAY_CHIPS.map(({ day, label }) => {
@@ -1299,27 +1342,37 @@ export default function ProveedoresPage() {
                       })}
                     </div>
                   </div>
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className={agendaMode === 'mandatory' ? 'grid grid-cols-2 gap-2' : ''}>
                     <div>
-                      <p className="text-[11px] font-semibold text-zinc-700">Hora límite</p>
+                      <p className="text-[11px] font-semibold text-zinc-700">
+                        Hora límite{agendaMode === 'review' ? ' (referencia)' : ''}
+                      </p>
                       <input
                         type="time"
                         value={agendaCutoff}
                         onChange={(e) => setAgendaCutoff(e.target.value)}
                         className="mt-1 h-10 w-full rounded-xl border border-zinc-300 bg-white px-2 text-sm text-zinc-900 outline-none"
                       />
+                      {agendaMode === 'review' ? (
+                        <p className="mt-1 text-[10px] leading-snug text-zinc-500">
+                          Se muestra en «Revisar proveedores» como guía de corte; el checklist reduce ruido cuando ya
+                          miraste el proveedor.
+                        </p>
+                      ) : null}
                     </div>
-                    <div>
-                      <p className="text-[11px] font-semibold text-zinc-700">Aviso antes (min)</p>
-                      <input
-                        type="number"
-                        min={0}
-                        max={1440}
-                        value={agendaReminder}
-                        onChange={(e) => setAgendaReminder(Number(e.target.value))}
-                        className="mt-1 h-10 w-full rounded-xl border border-zinc-300 bg-white px-2 text-sm text-zinc-900 outline-none"
-                      />
-                    </div>
+                    {agendaMode === 'mandatory' ? (
+                      <div>
+                        <p className="text-[11px] font-semibold text-zinc-700">Aviso antes (min)</p>
+                        <input
+                          type="number"
+                          min={0}
+                          max={1440}
+                          value={agendaReminder}
+                          onChange={(e) => setAgendaReminder(Number(e.target.value))}
+                          className="mt-1 h-10 w-full rounded-xl border border-zinc-300 bg-white px-2 text-sm text-zinc-900 outline-none"
+                        />
+                      </div>
+                    ) : null}
                   </div>
                   <div>
                     <p className="text-[11px] font-semibold text-zinc-700">Días de entrega (referencia)</p>

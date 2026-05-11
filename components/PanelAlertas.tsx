@@ -9,51 +9,32 @@ import {
   appccTemperaturasOperationalDateKey,
   getDueTemperatureRegistrationSlots,
 } from '@/lib/appcc-supabase';
-import { fetchOrders } from '@/lib/pedidos-supabase';
-import { computeCutoffForToday, isOrderDayToday } from '@/lib/pedidos-order-agenda-engine';
-import {
-  fetchOrderSchedulesForLocal,
-  fetchReviewItemsForLocal,
-  fetchSupplierNamesMap,
-} from '@/lib/pedidos-order-agenda-supabase';
-import { usePedidosDataChangedListener } from '@/hooks/usePedidosDataChangedListener';
-
 type Alerta = {
   id: string;
-  tipo: 'pedido' | 'temperatura' | 'agenda';
+  tipo: 'temperatura';
   icono: string;
   texto: string;
   href: string;
   urgente: boolean;
 };
 
-export default function PanelAlertas({
-  localId,
-  showPedidos = true,
-}: {
-  localId: string;
-  /** Misma condición que el acceso al módulo Pedidos en el panel (agenda + cortes). */
-  showPedidos?: boolean;
-}) {
+/**
+ * Alertas operativas del panel (solo temperaturas pendientes).
+ * Pedidos con entrega hoy van en la tarjeta «Pedidos que llegan hoy» (sin duplicar en banner).
+ */
+export default function PanelAlertas({ localId }: { localId: string }) {
   const [alertas, setAlertas] = useState<Alerta[]>([]);
-  const [agendaAlDiaMicro, setAgendaAlDiaMicro] = useState(false);
   const [cargando, setCargando] = useState(true);
 
   const cargarAlertas = useCallback(async () => {
     const sb = getSupabaseClient();
-    if (!sb) { setCargando(false); return; }
-
-    const nuevas: Alerta[] = [];
-    const hoyISO = new Date().toISOString().slice(0, 10);
-
-    let ordersRecent: Awaited<ReturnType<typeof fetchOrders>> = [];
-    try {
-      ordersRecent = await fetchOrders(sb, localId, { recentDays: 14 });
-    } catch {
-      ordersRecent = [];
+    if (!sb) {
+      setCargando(false);
+      return;
     }
 
-    // ── Alertas de temperatura (mañana/noche, hora Madrid; mismo criterio que /appcc/temperaturas) ──
+    const nuevas: Alerta[] = [];
+
     try {
       const [units, readings] = await Promise.all([
         fetchAppccColdUnits(sb, localId),
@@ -78,117 +59,22 @@ export default function PanelAlertas({
         }
       }
     } catch {
-      // silencioso — no bloquear el panel si falla
-    }
-
-    // ── Agenda operativa (mismo criterio que /pedidos: visible hasta enviar el pedido) ──
-    if (showPedidos) {
-      try {
-        const now = new Date();
-        const [schedulesMap, namesMap, reviewBySupplier] = await Promise.all([
-          fetchOrderSchedulesForLocal(sb, localId),
-          fetchSupplierNamesMap(sb, localId),
-          fetchReviewItemsForLocal(sb, localId),
-        ]);
-
-        type AgendaSort = { supplierId: string; texto: string; urgente: boolean; order: number; name: string };
-        const agendaPending: AgendaSort[] = [];
-        let suppliersAgendaHoy = 0;
-
-        for (const [supplierId, schedule] of schedulesMap) {
-          if (!schedule.enabled || !isOrderDayToday(schedule, now)) continue;
-          const computed = computeCutoffForToday(schedule, ordersRecent, supplierId, now);
-          if (!computed) continue;
-          suppliersAgendaHoy++;
-          if (computed.status === 'enviado') continue;
-
-          const name = namesMap.get(supplierId) ?? 'Proveedor';
-          let texto: string;
-          let urgente = false;
-          let order = 4;
-          if (computed.status === 'vencido') {
-            texto = `Hora límite pasada (${computed.cutoffLabel}). Si aún no pediste a ${name}, hazlo cuanto antes.`;
-            urgente = true;
-            order = 0;
-          } else if (computed.status === 'vence_pronto') {
-            texto = `Queda poco para el corte (${computed.cutoffLabel}). Revisa el pedido a ${name}.`;
-            order = 1;
-          } else {
-            texto = `Hoy toca pedir a ${name} antes de las ${computed.cutoffLabel}.`;
-            order = 2;
-          }
-          agendaPending.push({ supplierId, texto, urgente, order, name });
-        }
-
-        agendaPending.sort(
-          (a, b) => a.order - b.order || a.name.localeCompare(b.name, 'es'),
-        );
-        for (const row of agendaPending) {
-          nuevas.push({
-            id: `agenda-${row.supplierId}`,
-            tipo: 'agenda',
-            icono: '📋',
-            texto: row.texto,
-            href: `/pedidos/nuevo?supplierId=${encodeURIComponent(row.supplierId)}`,
-            urgente: row.urgente,
-          });
-        }
-
-        let reviewItemsAgendaHoy = 0;
-        for (const [supplierId, schedule] of schedulesMap) {
-          if (!schedule.enabled || !isOrderDayToday(schedule, now)) continue;
-          for (const it of reviewBySupplier.get(supplierId) ?? []) {
-            if (it.enabled) reviewItemsAgendaHoy++;
-          }
-        }
-
-        setAgendaAlDiaMicro(
-          suppliersAgendaHoy > 0 &&
-            agendaPending.length === 0 &&
-            reviewItemsAgendaHoy === 0,
-        );
-      } catch {
-        setAgendaAlDiaMicro(false);
-      }
-    } else {
-      setAgendaAlDiaMicro(false);
-    }
-
-    // ── Alertas de pedidos esperados hoy ───────────────────────
-    try {
-      const pedidosHoy = ordersRecent.filter(
-        o => o.status === 'sent' && o.deliveryDate === hoyISO,
-      );
-      if (pedidosHoy.length > 0) {
-        nuevas.push({
-          id: 'pedidos-hoy',
-          tipo: 'pedido',
-          icono: '📦',
-          texto: pedidosHoy.length === 1
-            ? 'Hoy llega 1 pedido pendiente de recepción'
-            : `Hoy llegan ${pedidosHoy.length} pedidos pendientes de recepción`,
-          href: '/pedidos',
-          urgente: false,
-        });
-      }
-    } catch {
-      // silencioso
+      /* silencioso */
     }
 
     setAlertas(nuevas);
     setCargando(false);
-  }, [localId, showPedidos]);
+  }, [localId]);
 
   useEffect(() => {
     if (!localId) {
       setAlertas([]);
-      setAgendaAlDiaMicro(false);
       setCargando(false);
       return;
     }
     setCargando(true);
     void cargarAlertas();
-  }, [localId, showPedidos, cargarAlertas]);
+  }, [localId, cargarAlertas]);
 
   useEffect(() => {
     if (!localId) return;
@@ -198,26 +84,11 @@ export default function PanelAlertas({
     return () => window.clearInterval(id);
   }, [localId, cargarAlertas]);
 
-  usePedidosDataChangedListener(() => {
-    void cargarAlertas();
-  }, Boolean(localId));
-
-  if (cargando || (alertas.length === 0 && !agendaAlDiaMicro)) return null;
+  if (cargando || alertas.length === 0) return null;
 
   return (
     <div className="flex flex-col gap-1.5">
-      {agendaAlDiaMicro ? (
-        <section
-          className="rounded-lg border border-emerald-200/60 bg-emerald-50/35 px-2 py-1 shadow-sm ring-1 ring-emerald-100/50"
-          aria-live="polite"
-        >
-          <p className="text-[10px] font-semibold leading-tight text-emerald-900">Agenda al día</p>
-          <p className="mt-0.5 text-[9px] leading-snug text-emerald-800/85">
-            Todos los pedidos programados están enviados.
-          </p>
-        </section>
-      ) : null}
-      {alertas.map(a => (
+      {alertas.map((a) => (
         <Link
           key={a.id}
           href={a.href}

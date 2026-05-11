@@ -7,12 +7,16 @@ import type { PedidoOrder } from '@/lib/pedidos-supabase';
 
 export type AgendaCutoffUiStatus = 'pendiente' | 'enviado' | 'vence_pronto' | 'vencido';
 
+/** mandatory = corte en bloque obligatorio; review = solo checklist «Revisar proveedores». */
+export type PedidoAgendaMode = 'mandatory' | 'review';
+
 export type PedidoSupplierOrderScheduleRow = {
   enabled: boolean;
   orderWeekdays: number[];
   cutoffTime: string;
   reminderMinutesBefore: number;
   deliveryWeekdays: number[] | null;
+  agendaMode: PedidoAgendaMode;
 };
 
 export function todayYmdLocal(d: Date): string {

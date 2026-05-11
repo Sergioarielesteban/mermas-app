@@ -35,6 +35,7 @@ export function generateDueSupplierReminders(input: {
 
   for (const [supplierId, schedule] of schedules) {
     if (!schedule.enabled) continue;
+    if (schedule.agendaMode === 'review') continue;
     const computed = computeCutoffForToday(schedule, orders, supplierId, now);
     if (!computed || computed.status === 'enviado') continue;
 

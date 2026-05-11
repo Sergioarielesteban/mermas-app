@@ -145,6 +145,8 @@ export default function NuevoPedidoPage() {
   const editingId = searchParams.get('id');
   const duplicateFrom = searchParams.get('duplicateFrom');
   const templateIdParam = searchParams.get('templateId');
+  /** Deep link desde agenda / enlaces: abrir catálogo de ese proveedor (no el primero alfabético). */
+  const supplierIdFromUrl = searchParams.get('supplierId');
   const [suppliers, setSuppliers] = React.useState<PedidoSupplier[]>([]);
   const [supplierId, setSupplierId] = React.useState('');
   const supplierAgendaBanner = usePedidosSupplierAgendaBanner({
@@ -199,6 +201,19 @@ export default function NuevoPedidoPage() {
     }
   }, [localId]);
 
+  const pickSupplierForRows = React.useCallback(
+    (rows: PedidoSupplier[], previousId: string) => {
+      if (supplierIdFromUrl && rows.some((s) => s.id === supplierIdFromUrl)) {
+        return supplierIdFromUrl;
+      }
+      if (previousId && rows.some((s) => s.id === previousId)) {
+        return previousId;
+      }
+      return rows[0]?.id ?? '';
+    },
+    [supplierIdFromUrl],
+  );
+
   const resetPedidoFormAfterSuccess = React.useCallback(() => {
     clearBasketDraft();
     setNotes('');
@@ -224,7 +239,7 @@ export default function NuevoPedidoPage() {
     if (isDemoMode()) {
       const rows = getDemoPedidoSuppliers();
       setSuppliers(rows);
-      setSupplierId((prev) => prev || rows[0]?.id || '');
+      setSupplierId((prev) => pickSupplierForRows(rows, prev));
       setLoadingSuppliers(false);
       return;
     }
@@ -235,27 +250,28 @@ export default function NuevoPedidoPage() {
     void fetchSuppliersWithProducts(supabase, lid)
       .then((rows) => {
         setSuppliers(rows);
-        setSupplierId((prev) => prev || rows[0]?.id || '');
+        setSupplierId((prev) => pickSupplierForRows(rows, prev));
         writeSuppliersSessionCache(lid, rows);
       })
       .catch((err: Error) => setMessage(err.message))
       .finally(() => setLoadingSuppliers(false));
-  }, [canUse, localId]);
+  }, [canUse, localId, pickSupplierForRows]);
 
   React.useEffect(() => {
     if (!canUse || !localId) return;
     const cached = readSuppliersSessionCache(localId);
     if (cached !== null) {
       setSuppliers(cached);
-      setSupplierId((prev) => prev || cached[0]?.id || '');
+      setSupplierId((prev) => pickSupplierForRows(cached, prev));
     }
     reloadSuppliers();
-  }, [canUse, localId, reloadSuppliers]);
+  }, [canUse, localId, reloadSuppliers, pickSupplierForRows]);
 
   /** Restaurar antes del paint para no pisar la cesta con el guardado/reconciliación del primer commit. */
   React.useLayoutEffect(() => {
     if (!canUse || !localId || editingId) return;
     if (searchParams.get('templateId') || searchParams.get('duplicateFrom')) return;
+    const urlSupplier = searchParams.get('supplierId');
     try {
       const raw = sessionStorage.getItem(basketSessionKey(localId));
       if (!raw) return;
@@ -265,8 +281,9 @@ export default function NuevoPedidoPage() {
         notes?: string;
         deliveryDate?: string;
       };
-      if (parsed.supplierId) setSupplierId(parsed.supplierId);
-      if (parsed.qtyByProductId && typeof parsed.qtyByProductId === 'object') {
+      // Si la URL fuerza un proveedor (p. ej. agenda), no restaurar otro proveedor ni cantidades de otro catálogo.
+      if (parsed.supplierId && !urlSupplier) setSupplierId(parsed.supplierId);
+      if (parsed.qtyByProductId && typeof parsed.qtyByProductId === 'object' && !urlSupplier) {
         setQtyByProductId(parsed.qtyByProductId);
       }
       if (typeof parsed.notes === 'string') setNotes(parsed.notes);
@@ -275,6 +292,28 @@ export default function NuevoPedidoPage() {
       /* ignore */
     }
   }, [canUse, localId, editingId, searchParams]);
+
+  const prevSupplierIdFromUrlRef = React.useRef<string | null>(null);
+
+  /** Al cambiar el proveedor en la URL (p. ej. de un enlace a otro), vaciar cantidades del catálogo anterior. */
+  React.useEffect(() => {
+    if (!supplierIdFromUrl) {
+      prevSupplierIdFromUrlRef.current = null;
+      return;
+    }
+    const prev = prevSupplierIdFromUrlRef.current;
+    if (prev !== null && prev !== supplierIdFromUrl) {
+      setQtyByProductId({});
+    }
+    prevSupplierIdFromUrlRef.current = supplierIdFromUrl;
+  }, [supplierIdFromUrl]);
+
+  /** Sincronizar proveedor con ?supplierId= cuando ya tenemos la lista cargada (incl. navegación cliente sin refetch). */
+  React.useEffect(() => {
+    if (!supplierIdFromUrl || suppliers.length === 0) return;
+    if (!suppliers.some((s) => s.id === supplierIdFromUrl)) return;
+    setSupplierId(supplierIdFromUrl);
+  }, [supplierIdFromUrl, suppliers]);
 
   React.useEffect(() => {
     if (!canUse || !localId || editingId) return;

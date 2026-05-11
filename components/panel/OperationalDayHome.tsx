@@ -6,6 +6,8 @@ import type { LucideIcon } from 'lucide-react';
 import { CalendarDays, ChevronRight, Droplets, Factory, ShoppingCart, Thermometer } from 'lucide-react';
 import { useAuth } from '@/components/AuthProvider';
 import PanelAlertas from '@/components/PanelAlertas';
+import PedidosAgendaTodayCard from '@/components/pedidos/PedidosAgendaTodayCard';
+import { useOrderAgendaToday } from '@/hooks/useOrderAgendaToday';
 import ProductoGuiadoChecklist from '@/components/ProductoGuiadoChecklist';
 import {
   canAccessChat,
@@ -21,6 +23,7 @@ import { getModuleAccess } from '@/lib/canAccessModule';
 import type { PlanModule } from '@/lib/planPermissions';
 import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
 import { fetchOrders } from '@/lib/pedidos-supabase';
+import type { PedidoOrder } from '@/lib/pedidos-supabase';
 import type { AppccSlot } from '@/lib/appcc-supabase';
 import { fetchAppccFryers, fetchOilEventsForDate } from '@/lib/appcc-aceite-supabase';
 import {
@@ -31,6 +34,7 @@ import {
   madridDateKey,
 } from '@/lib/appcc-supabase';
 import { buildPanelGreetingParts } from '@/lib/panel-greeting';
+import { usePedidosDataChangedListener } from '@/hooks/usePedidosDataChangedListener';
 
 export default function OperationalDayHome() {
   const {
@@ -91,8 +95,29 @@ export default function OperationalDayHome() {
     loading: true,
   });
 
+  const [pedidosOrdersAgenda, setPedidosOrdersAgenda] = React.useState<PedidoOrder[]>([]);
+
+  const agenda = useOrderAgendaToday({
+    localId: localId ?? null,
+    orders: pedidosOrdersAgenda,
+  });
+
+  const reloadPedidosOrdersOnly = React.useCallback(async () => {
+    const sb = getSupabaseClient();
+    if (!sb || !localId || !showPedidos) return;
+    try {
+      const orders = await fetchOrders(sb, localId, { recentDays: 14 });
+      setPedidosOrdersAgenda(orders);
+    } catch {
+      /* silencioso */
+    }
+  }, [localId, showPedidos]);
+
+  usePedidosDataChangedListener(reloadPedidosOrdersOnly, Boolean(localId && showPedidos));
+
   React.useEffect(() => {
     if (!localId || !isSupabaseEnabled() || !getSupabaseClient()) {
+      setPedidosOrdersAgenda([]);
       setKpi({
         pedidosHoy: null,
         tempDueSlots: [],
@@ -111,7 +136,8 @@ export default function OperationalDayHome() {
         setKpi((s) => ({ ...s, loading: true }));
         firstFetch = false;
       }
-      const hoyISO = new Date().toISOString().slice(0, 10);
+      /** Misma clave que `delivery_date` en BD: día civil Europe/Madrid (no UTC). */
+      const hoyMadrid = madridDateKey();
       let pedidosHoy = 0;
       let tempDueSlots: AppccSlot[] = [];
       let oilFryersActive = 0;
@@ -119,10 +145,18 @@ export default function OperationalDayHome() {
       try {
         if (showPedidos) {
           const orders = await fetchOrders(sb, localId, { recentDays: 14 });
-          pedidosHoy = orders.filter((o) => o.status === 'sent' && o.deliveryDate === hoyISO).length;
+          setPedidosOrdersAgenda(orders);
+          pedidosHoy = orders.filter((o) => {
+            if (o.status !== 'sent') return false;
+            const d = (o.deliveryDate?.trim() ?? '').slice(0, 10);
+            return d.length >= 10 && d === hoyMadrid;
+          }).length;
+        } else {
+          setPedidosOrdersAgenda([]);
         }
       } catch {
         pedidosHoy = 0;
+        setPedidosOrdersAgenda([]);
       }
       try {
         const oilDateKey = madridDateKey();
@@ -165,10 +199,10 @@ export default function OperationalDayHome() {
         ? 'Nada previsto para recepción hoy'
         : `${pedidosLleganHoy} pedido${pedidosLleganHoy === 1 ? '' : 's'} con llegada hoy`,
     lines: [] as string[],
-    badge: pedidosLleganHoy > 0 ? ('HOY' as const) : null,
+    badge: pedidosLleganHoy > 0 ? String(pedidosLleganHoy) : null,
     badgeClass: 'bg-red-100 text-red-800 ring-red-200',
     iconBg: 'bg-red-100 text-red-700',
-    href: '/pedidos',
+    href: '/pedidos?recibir=hoy',
     blocked: !showPedidos || isBlockedByPlan('pedidos'),
     Icon: ShoppingCart,
   };
@@ -243,9 +277,23 @@ export default function OperationalDayHome() {
         </div>
       </div>
 
+      {localId && showPedidos && agenda.showCard ? (
+        <section id="panel-agenda-pedidos" className="scroll-mt-28">
+          <PedidosAgendaTodayCard
+            loading={agenda.loading}
+            mandatoryRows={agenda.mandatoryRows}
+            reviewSupplierGroups={agenda.reviewSupplierGroups}
+            showAgendaCompletadaMicro={agenda.showAgendaCompletadaMicro}
+            localId={localId}
+            ymd={agenda.ymd}
+            onAgendaAction={agenda.refresh}
+          />
+        </section>
+      ) : null}
+
       {localId ? (
         <section id="panel-alertas" className="scroll-mt-28">
-          <PanelAlertas localId={localId} showPedidos={showPedidos} />
+          <PanelAlertas localId={localId} />
         </section>
       ) : null}
 

@@ -14,9 +14,7 @@ import {
   Loader2,
   MessageCircle,
   Package,
-  Bookmark,
   Pencil,
-  Plus,
   Trash2,
   Truck,
   CheckCircle2,
@@ -36,7 +34,6 @@ import PedidosAgendaTodayCard from '@/components/pedidos/PedidosAgendaTodayCard'
 import { useOrderAgendaToday } from '@/hooks/useOrderAgendaToday';
 import { getSupabaseClient } from '@/lib/supabase-client';
 import PedidosAlbaranOcrModal from '@/components/PedidosAlbaranOcrModal';
-import PedidosSaveTemplateSheet from '@/components/pedidos/PedidosSaveTemplateSheet';
 import PedidosPremiaLockedScreen from '@/components/PedidosPremiaLockedScreen';
 import { dispatchPedidosDataChanged, usePedidosDataChangedListener } from '@/hooks/usePedidosDataChangedListener';
 import { canAccessPedidos, canUsePedidosModule } from '@/lib/pedidos-access';
@@ -505,7 +502,6 @@ export default function PedidosPage() {
 
   const [expandedSentId, setExpandedSentId] = React.useState<string | null>(null);
   const [ocrOrder, setOcrOrder] = React.useState<PedidoOrder | null>(null);
-  const [saveTemplateOrder, setSaveTemplateOrder] = React.useState<PedidoOrder | null>(null);
   const [expandedHistoricoId, setExpandedHistoricoId] = React.useState<string | null>(null);
   /** Plegado por mes (YYYY-MM) en histórico recibidos; sin entrada = mes actual según índice. */
   const [historicoMonthOpen, setHistoricoMonthOpen] = React.useState<Record<string, boolean>>({});
@@ -553,6 +549,8 @@ export default function PedidosPage() {
   const avisoPedido = searchParams.get('pedido');
   /** Lista ENTREGA filtrada a fecha de entrega = hoy (enlace «Recibir pedido»). */
   const recibirEntregaHoy = searchParams.get('recibir') === 'hoy';
+  /** Panel / alertas: abrir lista de pedidos enviados pendientes de recepción y hacer scroll. */
+  const deepLinkPendientesEntrega = searchParams.get('pendientes') === '1';
   const [uiHydrated, setUiHydrated] = React.useState(false);
   const pedidosPageUiRestoreAttemptedRef = React.useRef<string | null>(null);
   const scrollRestorePendingRef = React.useRef<number | null>(null);
@@ -1923,8 +1921,7 @@ export default function PedidosPage() {
 
   const sentOrdersEntregaVista = React.useMemo(() => {
     if (!recibirEntregaHoy) return sentOrders;
-    const now = new Date();
-    const todayKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    const todayKey = madridDateKey();
     return sentOrders.filter((o) => {
       const raw = (o.deliveryDate?.trim() || o.createdAt.slice(0, 10)).slice(0, 10);
       return raw === todayKey;
@@ -1945,6 +1942,21 @@ export default function PedidosPage() {
     });
     return () => window.cancelAnimationFrame(id);
   }, [recibirEntregaHoy]);
+
+  const pendientesDeepScrollDoneRef = React.useRef(false);
+  React.useEffect(() => {
+    if (!deepLinkPendientesEntrega) {
+      pendientesDeepScrollDoneRef.current = false;
+      return;
+    }
+    setPendientesEntregaAccordionOpen(true);
+    if (pendientesDeepScrollDoneRef.current) return;
+    pendientesDeepScrollDoneRef.current = true;
+    const id = window.requestAnimationFrame(() => {
+      document.getElementById('pedidos-pendientes-entrega')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+    return () => window.cancelAnimationFrame(id);
+  }, [deepLinkPendientesEntrega]);
 
   React.useEffect(() => {
     if (!recibirEntregaHoy || expandedSentId == null) return;
@@ -4066,41 +4078,72 @@ export default function PedidosPage() {
       ) : null}
 
       <header className="rounded-2xl border border-zinc-200/85 bg-[#FAFAF9] px-3 py-2.5 ring-1 ring-zinc-100/90 sm:px-4 sm:py-3">
-        <div className="flex min-w-0 items-start justify-between gap-3">
-          <div className="min-w-0">
-            <h1 className="text-xl font-bold tracking-tight text-zinc-900">Pedidos</h1>
-            <p className="mt-0.5 text-[13px] leading-snug text-zinc-500">Compras y recepción</p>
+        <nav className="space-y-2 sm:space-y-2.5" aria-label="Secciones del módulo Pedidos">
+          <div className="grid grid-cols-2 gap-2 sm:gap-2.5">
+            <Link
+              href="/pedidos/proveedores"
+              className={[
+                'flex min-h-[2.35rem] touch-manipulation items-center justify-center gap-1.5 rounded-xl px-2.5 py-2 text-center text-[11px] font-semibold transition active:scale-[0.99] sm:min-h-[2.6rem] sm:px-3 sm:py-2.5 sm:text-xs',
+                pedidosNavActive('/pedidos/proveedores')
+                  ? 'border border-[#D32F2F]/35 bg-[#FFF7F5] text-zinc-900 shadow-[0_1px_3px_rgba(211,47,47,0.1)] ring-1 ring-[#D32F2F]/20'
+                  : 'border border-zinc-200/90 bg-white text-zinc-700 shadow-[inset_0_1px_0_rgba(255,255,255,0.92)]',
+              ].join(' ')}
+            >
+              <Building2 className="h-3.5 w-3.5 shrink-0 opacity-70 sm:h-4 sm:w-4" strokeWidth={2} aria-hidden />
+              Proveedores
+            </Link>
+            <Link
+              href="/pedidos/articulos"
+              className={[
+                'flex min-h-[2.35rem] touch-manipulation items-center justify-center gap-1.5 rounded-xl px-2.5 py-2 text-center text-[11px] font-semibold transition active:scale-[0.99] sm:min-h-[2.6rem] sm:px-3 sm:py-2.5 sm:text-xs',
+                pedidosNavActive('/pedidos/articulos')
+                  ? 'border border-[#D32F2F]/35 bg-[#FFF7F5] text-zinc-900 shadow-[0_1px_3px_rgba(211,47,47,0.1)] ring-1 ring-[#D32F2F]/20'
+                  : 'border border-zinc-200/90 bg-white text-zinc-700 shadow-[inset_0_1px_0_rgba(255,255,255,0.92)]',
+              ].join(' ')}
+            >
+              <Package className="h-3.5 w-3.5 shrink-0 opacity-70 sm:h-4 sm:w-4" strokeWidth={2} aria-hidden />
+              Artículos
+            </Link>
           </div>
-        </div>
-        <nav className="mt-3 grid grid-cols-3 gap-2 sm:mt-3.5 sm:gap-2.5" aria-label="Acciones rápidas de pedidos">
+          <div className="grid grid-cols-2 gap-2 sm:gap-2.5">
+            <Link
+              href="/pedidos/precios"
+              className={[
+                'flex min-h-[2.35rem] touch-manipulation items-center justify-center gap-1.5 rounded-xl px-2.5 py-2 text-center text-[11px] font-semibold leading-tight transition active:scale-[0.99] sm:min-h-[2.6rem] sm:px-3 sm:py-2.5 sm:text-xs',
+                pedidosNavActive('/pedidos/precios')
+                  ? 'border border-[#D32F2F]/35 bg-[#FFF7F5] text-zinc-900 shadow-[0_1px_3px_rgba(211,47,47,0.1)] ring-1 ring-[#D32F2F]/20'
+                  : 'border border-zinc-200/90 bg-white text-zinc-700 shadow-[inset_0_1px_0_rgba(255,255,255,0.92)]',
+              ].join(' ')}
+            >
+              <TrendingUp className="h-3.5 w-3.5 shrink-0 opacity-70 sm:h-4 sm:w-4" strokeWidth={2} aria-hidden />
+              Evolución de precio
+            </Link>
+            <Link
+              href="/pedidos/historial-mes"
+              title="Histórico y compras del mes"
+              aria-label="Abrir compras del mes"
+              className={[
+                'flex min-h-[2.35rem] touch-manipulation items-center justify-center gap-1.5 rounded-xl px-2.5 py-2 text-center text-[11px] font-semibold transition active:scale-[0.99] sm:min-h-[2.6rem] sm:px-3 sm:py-2.5 sm:text-xs',
+                pedidosNavActive('/pedidos/historial-mes')
+                  ? 'border border-[#D32F2F]/35 bg-[#FFF7F5] text-zinc-900 shadow-[0_1px_3px_rgba(211,47,47,0.1)] ring-1 ring-[#D32F2F]/20'
+                  : 'border border-zinc-200/90 bg-white text-zinc-700 shadow-[inset_0_1px_0_rgba(255,255,255,0.92)]',
+              ].join(' ')}
+            >
+              <LineChart className="h-3.5 w-3.5 shrink-0 opacity-70 sm:h-4 sm:w-4" strokeWidth={2} aria-hidden />
+              Compras del mes
+            </Link>
+          </div>
           <Link
-            href="/pedidos/nuevo"
-            className="group flex min-h-[2.75rem] touch-manipulation flex-col items-center justify-center gap-1 rounded-xl border border-[#D32F2F]/28 bg-white px-2 py-2 text-center shadow-[0_1px_2px_rgba(0,0,0,0.04)] ring-1 ring-[#D32F2F]/12 transition active:scale-[0.98]"
+            href="/pedidos/albaranes"
+            className={[
+              'flex w-full min-h-[2.35rem] touch-manipulation items-center justify-center gap-1.5 rounded-xl px-2.5 py-2 text-center text-[11px] font-semibold transition active:scale-[0.99] sm:min-h-[2.6rem] sm:px-3 sm:py-2.5 sm:text-xs',
+              pedidosNavActive('/pedidos/albaranes')
+                ? 'border border-[#D32F2F]/40 bg-[#FFF0EE] text-zinc-900 shadow-[0_1px_3px_rgba(211,47,47,0.12)] ring-1 ring-[#D32F2F]/25'
+                : 'border border-[#D32F2F]/22 bg-[#FFF8F7] text-[#7F1D1D] shadow-[inset_0_1px_0_rgba(255,255,255,0.85)]',
+            ].join(' ')}
           >
-            <span className="flex h-7 w-7 items-center justify-center rounded-full bg-[#D32F2F]/10 text-[#B91C1C] ring-1 ring-[#D32F2F]/15 transition group-active:bg-[#D32F2F]/14">
-              <Plus className="h-4 w-4" strokeWidth={2.5} aria-hidden />
-            </span>
-            <span className="text-[11px] font-semibold leading-tight text-zinc-900">Nuevo pedido</span>
-          </Link>
-          <Link
-            href="/pedidos?recibir=hoy"
-            className="group flex min-h-[2.75rem] touch-manipulation flex-col items-center justify-center gap-1 rounded-xl border border-zinc-200/90 bg-white px-2 py-2 text-center shadow-[inset_0_1px_0_rgba(255,255,255,0.96)] ring-1 ring-zinc-100/90 transition active:scale-[0.98]"
-          >
-            <span className="flex h-7 w-7 items-center justify-center rounded-full bg-[#D32F2F]/[0.08] text-[#B91C1C] ring-1 ring-[#D32F2F]/12">
-              <Truck className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
-            </span>
-            <span className="text-[11px] font-semibold leading-tight text-zinc-800">Recibir pedido</span>
-          </Link>
-          <Link
-            href="/pedidos/historial-mes"
-            title="Histórico y compras del mes"
-            aria-label="Abrir compras del mes"
-            className="group flex min-h-[2.75rem] touch-manipulation flex-col items-center justify-center gap-1 rounded-xl border border-zinc-200/90 bg-white px-2 py-2 text-center shadow-[inset_0_1px_0_rgba(255,255,255,0.96)] ring-1 ring-zinc-100/90 transition active:scale-[0.98]"
-          >
-            <span className="flex h-7 w-7 items-center justify-center rounded-full bg-[#D32F2F]/[0.08] text-[#B91C1C] ring-1 ring-[#D32F2F]/12">
-              <LineChart className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
-            </span>
-            <span className="text-[11px] font-semibold leading-tight text-zinc-800">Compras del mes</span>
+            <FileText className="h-3.5 w-3.5 shrink-0 opacity-75 sm:h-4 sm:w-4" strokeWidth={2} aria-hidden />
+            Albaranes
           </Link>
         </nav>
       </header>
@@ -4108,11 +4151,12 @@ export default function PedidosPage() {
       {canUse && localId && agenda.showCard ? (
         <PedidosAgendaTodayCard
           loading={agenda.loading}
-          cutoffRows={agenda.pendingCutoffRows}
-          reviewRows={agenda.reviewRows}
-          showAgendaAlDiaMicro={agenda.showAgendaAlDiaMicro}
+          mandatoryRows={agenda.mandatoryRows}
+          reviewSupplierGroups={agenda.reviewSupplierGroups}
+          showAgendaCompletadaMicro={agenda.showAgendaCompletadaMicro}
           localId={localId}
-          onMarkedReview={agenda.refresh}
+          ymd={agenda.ymd}
+          onAgendaAction={agenda.refresh}
         />
       ) : null}
 
@@ -4169,59 +4213,6 @@ export default function PedidosPage() {
           </div>
         </div>
       ) : null}
-
-      <section className="rounded-2xl bg-white/95 p-1.5 shadow-[0_1px_3px_rgba(0,0,0,0.05)] ring-1 ring-zinc-200/85 sm:p-2">
-        <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4 sm:gap-2">
-          <Link
-            href="/pedidos/proveedores"
-            className={[
-              'flex min-h-[2.35rem] touch-manipulation items-center justify-center gap-1.5 rounded-xl px-2.5 py-2 text-center text-[11px] font-semibold transition active:scale-[0.99] sm:min-h-[2.6rem] sm:px-3 sm:py-2.5 sm:text-xs',
-              pedidosNavActive('/pedidos/proveedores')
-                ? 'border border-[#D32F2F]/35 bg-[#FFF7F5] text-zinc-900 shadow-[0_1px_3px_rgba(211,47,47,0.1)] ring-1 ring-[#D32F2F]/20'
-                : 'border border-zinc-200/90 bg-white text-zinc-700 shadow-[inset_0_1px_0_rgba(255,255,255,0.92)]',
-            ].join(' ')}
-          >
-            <Building2 className="h-3.5 w-3.5 shrink-0 opacity-70 sm:h-4 sm:w-4" strokeWidth={2} aria-hidden />
-            Proveedores
-          </Link>
-          <Link
-            href="/pedidos/articulos"
-            className={[
-              'flex min-h-[2.35rem] touch-manipulation items-center justify-center gap-1.5 rounded-xl px-2.5 py-2 text-center text-[11px] font-semibold transition active:scale-[0.99] sm:min-h-[2.6rem] sm:px-3 sm:py-2.5 sm:text-xs',
-              pedidosNavActive('/pedidos/articulos')
-                ? 'border border-[#D32F2F]/35 bg-[#FFF7F5] text-zinc-900 shadow-[0_1px_3px_rgba(211,47,47,0.1)] ring-1 ring-[#D32F2F]/20'
-                : 'border border-zinc-200/90 bg-white text-zinc-700 shadow-[inset_0_1px_0_rgba(255,255,255,0.92)]',
-            ].join(' ')}
-          >
-            <Package className="h-3.5 w-3.5 shrink-0 opacity-70 sm:h-4 sm:w-4" strokeWidth={2} aria-hidden />
-            Artículos
-          </Link>
-          <Link
-            href="/pedidos/precios"
-            className={[
-              'flex min-h-[2.35rem] touch-manipulation items-center justify-center gap-1.5 rounded-xl px-2.5 py-2 text-center text-[11px] font-semibold leading-tight transition active:scale-[0.99] sm:min-h-[2.6rem] sm:px-3 sm:py-2.5 sm:text-xs',
-              pedidosNavActive('/pedidos/precios')
-                ? 'border border-[#D32F2F]/35 bg-[#FFF7F5] text-zinc-900 shadow-[0_1px_3px_rgba(211,47,47,0.1)] ring-1 ring-[#D32F2F]/20'
-                : 'border border-zinc-200/90 bg-white text-zinc-700 shadow-[inset_0_1px_0_rgba(255,255,255,0.92)]',
-            ].join(' ')}
-          >
-            <TrendingUp className="h-3.5 w-3.5 shrink-0 opacity-70 sm:h-4 sm:w-4" strokeWidth={2} aria-hidden />
-            Evolución de precios
-          </Link>
-          <Link
-            href="/pedidos/albaranes"
-            className={[
-              'flex min-h-[2.35rem] touch-manipulation items-center justify-center gap-1.5 rounded-xl px-2.5 py-2 text-center text-[11px] font-semibold transition active:scale-[0.99] sm:min-h-[2.6rem] sm:px-3 sm:py-2.5 sm:text-xs',
-              pedidosNavActive('/pedidos/albaranes')
-                ? 'border border-[#D32F2F]/40 bg-[#FFF0EE] text-zinc-900 shadow-[0_1px_3px_rgba(211,47,47,0.12)] ring-1 ring-[#D32F2F]/25'
-                : 'border border-[#D32F2F]/22 bg-[#FFF8F7] text-[#7F1D1D] shadow-[inset_0_1px_0_rgba(255,255,255,0.85)]',
-            ].join(' ')}
-          >
-            <FileText className="h-3.5 w-3.5 shrink-0 opacity-75 sm:h-4 sm:w-4" strokeWidth={2} aria-hidden />
-            Albaranes
-          </Link>
-        </div>
-      </section>
 
       {reloadError ? (
         <section className="rounded-2xl border border-red-200 bg-red-50 p-3 text-sm text-red-900">
@@ -4315,7 +4306,7 @@ export default function PedidosPage() {
             />
           </div>
         </summary>
-        <div className="space-y-2.5 border-t border-zinc-100/90 bg-gradient-to-b from-zinc-50/80 to-white px-1.5 pb-1.5 pt-1.5 sm:px-2">
+        <div className="space-y-4 border-t border-zinc-100/90 bg-gradient-to-b from-zinc-50/80 to-white px-1.5 pb-2.5 pt-2.5 sm:px-2">
           {sentOrdersEntregaVista.length === 0 ? (
             <p className="py-4 text-center text-xs text-zinc-500">
               {sentOrders.length === 0
@@ -4378,12 +4369,12 @@ export default function PedidosPage() {
                 type="button"
                 onClick={() => setExpandedSentId((prev) => (prev === order.id ? null : order.id))}
                 className={[
-                  'w-full px-2 py-1.5 text-left outline-none transition focus-visible:ring-2 focus-visible:ring-[#D32F2F]/35 focus-visible:ring-offset-1',
+                  'w-full px-3 py-3.5 text-left outline-none transition focus-visible:ring-2 focus-visible:ring-[#D32F2F]/35 focus-visible:ring-offset-1 sm:px-3.5 sm:py-4',
                   sentBadge === 'incidencia' ? 'active:bg-red-100/40' : sentBadge === 'correcto' ? 'active:bg-emerald-100/40' : 'active:bg-amber-100/40',
                 ].join(' ')}
                 aria-expanded={detailOpen}
               >
-                <div className="flex flex-col gap-0.5">
+                <div className="flex flex-col gap-2">
                   <div className="flex min-w-0 items-start justify-between gap-2">
                     <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-1.5 gap-y-0.5">
                       <p className="min-w-0 truncate text-[13px] font-bold leading-tight text-zinc-900">{order.supplierName}</p>
@@ -4425,24 +4416,24 @@ export default function PedidosPage() {
                 </div>
                 <div
                   className={[
-                    'mt-1 flex items-center justify-center gap-0.5 border-t pt-1 text-[9px] font-semibold text-[#B91C1C]',
+                    'mt-3 flex items-center justify-center gap-1 rounded-lg border-t px-2 py-2.5 text-[11px] font-bold tracking-wide text-zinc-800 sm:text-xs',
                     sentBadge === 'incidencia'
-                      ? 'border-red-200/35'
+                      ? 'border-red-200/45 bg-red-50/90'
                       : sentBadge === 'correcto'
-                        ? 'border-emerald-200/35'
-                        : 'border-amber-200/45',
+                        ? 'border-emerald-200/45 bg-emerald-50/90'
+                        : 'border-amber-200/55 bg-amber-50/95',
                   ].join(' ')}
                 >
-                  {detailOpen ? 'Ocultar líneas' : 'Líneas'}
+                  <span className="select-none">{detailOpen ? 'Ocultar detalles' : 'Detalles'}</span>
                   <ChevronDown
-                    className={['h-3 w-3 transition-transform', detailOpen ? 'rotate-180' : ''].join(' ')}
+                    className={['h-4 w-4 shrink-0 text-zinc-600 transition-transform', detailOpen ? 'rotate-180' : ''].join(' ')}
                     aria-hidden
                   />
                 </div>
               </button>
               <div
                 className={[
-                  'grid w-full grid-cols-5 gap-0.5 border-t px-0.5 py-1',
+                  'grid w-full grid-cols-3 gap-1.5 border-t px-1.5 py-2',
                   sentBadge === 'incidencia'
                     ? 'border-red-200/60 bg-white/50'
                     : sentBadge === 'correcto'
@@ -4453,65 +4444,22 @@ export default function PedidosPage() {
                 <Link
                   href={`/pedidos/nuevo?id=${encodeURIComponent(order.id)}`}
                   onClick={(e) => e.stopPropagation()}
-                  className="flex min-h-[2.15rem] flex-col items-center justify-center gap-px rounded-md border border-zinc-200/90 bg-zinc-50/90 px-0.5 py-0.5 text-zinc-800 transition hover:bg-zinc-100 active:bg-zinc-100/80"
+                  className="flex min-h-[1.875rem] flex-col items-center justify-center gap-px rounded-md border border-zinc-200/90 bg-zinc-50/90 px-0.5 py-0.5 text-zinc-800 transition hover:bg-zinc-100 active:bg-zinc-100/80"
                   title="Editar pedido"
                   aria-label="Editar pedido"
                 >
-                  <Pencil className="h-3.5 w-3.5 shrink-0 text-zinc-700" strokeWidth={2.25} aria-hidden />
-                  <span className="text-[7px] font-semibold leading-none text-zinc-600">Editar</span>
+                  <Pencil className="h-3 w-3 shrink-0 text-zinc-700" strokeWidth={2.25} aria-hidden />
+                  <span className="text-[6.5px] font-semibold leading-none text-zinc-600">Editar</span>
                 </Link>
                 <button
                   type="button"
                   onClick={() => sendWhatsappOrder(order)}
-                  className="flex min-h-[2.15rem] flex-col items-center justify-center gap-px rounded-md border border-[#128C7E]/35 bg-[#25D366] px-0.5 py-0.5 text-white shadow-sm transition hover:bg-[#20BD5A] active:brightness-95"
+                  className="flex min-h-[1.875rem] flex-col items-center justify-center gap-px rounded-md border border-[#128C7E]/35 bg-[#25D366] px-0.5 py-0.5 text-white shadow-sm transition hover:bg-[#20BD5A] active:brightness-95"
                   title="WhatsApp"
                   aria-label="Enviar pedido por WhatsApp"
                 >
-                  <MessageCircle className="h-3.5 w-3.5 shrink-0" strokeWidth={2.25} aria-hidden />
-                  <span className="text-[7px] font-bold leading-none">WA</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    const willOpen = expandedSentId !== order.id;
-                    setExpandedSentId((prev) => (prev === order.id ? null : order.id));
-                    if (willOpen) {
-                      window.requestAnimationFrame(() => {
-                        document.getElementById(`pedido-sent-detalle-${order.id}`)?.scrollIntoView({
-                          behavior: 'smooth',
-                          block: 'nearest',
-                        });
-                      });
-                    }
-                  }}
-                  className={[
-                    'flex min-h-[2.15rem] flex-col items-center justify-center gap-px rounded-md border px-0.5 py-0.5 shadow-sm transition active:scale-[0.98]',
-                    detailOpen
-                      ? 'border-[#7F1D1D] bg-[#B91C1C] text-white ring-1 ring-[#7F1D1D]/40 hover:bg-[#A31818] active:brightness-95'
-                      : 'border-[#D32F2F] bg-[#D32F2F] text-white ring-1 ring-[#B91C1C]/30 hover:bg-[#C02A2A] active:brightness-95',
-                  ].join(' ')}
-                  title={detailOpen ? 'Ocultar líneas del pedido' : 'Ver líneas del pedido'}
-                  aria-label={detailOpen ? 'Ocultar detalle del pedido' : 'Ver detalle del pedido'}
-                  aria-pressed={detailOpen}
-                >
-                  <List className="h-3.5 w-3.5 shrink-0 text-white" strokeWidth={2.5} aria-hidden />
-                  <span className="max-w-[3.35rem] text-center text-[7px] font-bold leading-tight text-white">
-                    {detailOpen ? 'Ocultar' : 'Ver detalle'}
-                  </span>
-                </button>
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setSaveTemplateOrder(order);
-                  }}
-                  className="flex min-h-[2.15rem] flex-col items-center justify-center gap-px rounded-md border border-[#D32F2F]/35 bg-[#FFF7F5] px-0.5 py-0.5 text-[#7F1D1D] shadow-sm transition hover:bg-[#FFF0EE] active:bg-[#FFE8E5]"
-                  title="Guardar como plantilla"
-                  aria-label="Guardar como plantilla"
-                >
-                  <Bookmark className="h-3.5 w-3.5 shrink-0 text-[#B91C1C]" strokeWidth={2.25} aria-hidden />
-                  <span className="text-[7px] font-bold leading-none">Plant.</span>
+                  <MessageCircle className="h-3 w-3 shrink-0" strokeWidth={2.25} aria-hidden />
+                  <span className="text-[6.5px] font-bold leading-none">WA</span>
                 </button>
                 <button
                   type="button"
@@ -4539,12 +4487,12 @@ export default function PedidosPage() {
                       })
                       .catch((err: Error) => setMessage(err.message));
                   }}
-                  className="flex min-h-[2.15rem] flex-col items-center justify-center gap-px rounded-md border border-rose-200/90 bg-rose-50/90 px-0.5 py-0.5 text-rose-900 transition hover:bg-rose-100/90 active:bg-rose-100"
+                  className="flex min-h-[1.875rem] flex-col items-center justify-center gap-px rounded-md border border-rose-200/90 bg-rose-50/90 px-0.5 py-0.5 text-rose-900 transition hover:bg-rose-100/90 active:bg-rose-100"
                   title="Eliminar pedido"
                   aria-label="Eliminar pedido"
                 >
-                  <Trash2 className="h-3.5 w-3.5 shrink-0 text-rose-700" strokeWidth={2.25} aria-hidden />
-                  <span className="text-[7px] font-semibold leading-none text-rose-800">Borrar</span>
+                  <Trash2 className="h-3 w-3 shrink-0 text-rose-700" strokeWidth={2.25} aria-hidden />
+                  <span className="text-[6.5px] font-semibold leading-none text-rose-800">Borrar</span>
                 </button>
               </div>
               {expandedSentId === order.id ? (
@@ -5464,16 +5412,6 @@ export default function PedidosPage() {
           ))}
         </div>
       </details>
-
-      <PedidosSaveTemplateSheet
-        open={saveTemplateOrder != null}
-        onClose={() => setSaveTemplateOrder(null)}
-        localId={localId}
-        userId={userId}
-        order={saveTemplateOrder}
-        supplierName={saveTemplateOrder?.supplierName ?? ''}
-        onSaved={() => setMessage('Plantilla guardada. Úsala desde Nuevo pedido → Usar plantilla.')}
-      />
 
       <PedidosAlbaranOcrModal
         order={ocrOrder}

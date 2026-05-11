@@ -4,6 +4,7 @@ import React from 'react';
 import { getSupabaseClient } from '@/lib/supabase-client';
 import {
   computeCutoffForToday,
+  formatCutoffHm,
   isOrderDayToday,
   todayYmdLocal,
   type PedidoSupplierOrderScheduleRow,
@@ -15,6 +16,8 @@ import {
   type PedidoSupplierReviewItemDb,
 } from '@/lib/pedidos-order-agenda-supabase';
 import { isReviewItemMarkedDone } from '@/lib/pedidos-order-agenda-review-storage';
+import { isMandatoryOmitted } from '@/lib/pedidos-order-agenda-mandatory-omit-storage';
+import { virtualSupplierReviewItemId } from '@/lib/pedidos-order-agenda-virtual-review';
 import { usePedidosDataChangedListener } from '@/hooks/usePedidosDataChangedListener';
 import type { PedidoOrder } from '@/lib/pedidos-supabase';
 
@@ -34,6 +37,17 @@ export type AgendaReviewRow = {
   label: string;
   href: string;
   done: boolean;
+};
+
+/** Revisiones agrupadas por proveedor (checklist); no se mezclan con cortes obligatorios en UI. */
+export type AgendaReviewSupplierGroup = {
+  supplierId: string;
+  supplierName: string;
+  itemIds: string[];
+  href: string;
+  allDone: boolean;
+  /** Hora límite configurada en agenda (también en modo «solo revisar»). */
+  cutoffLabel: string | null;
 };
 
 export function useOrderAgendaToday(params: { localId: string | null; orders: PedidoOrder[] }) {
@@ -95,13 +109,15 @@ export function useOrderAgendaToday(params: { localId: string | null; orders: Pe
 
   const now = React.useMemo(() => new Date(), [reloadEpoch, timeTick, orders.length]);
 
+  const ymd = React.useMemo(() => todayYmdLocal(now), [now]);
+
   const { cutoffRows, reviewRows } = React.useMemo(() => {
-    const ymd = todayYmdLocal(now);
     const cutoffs: AgendaCutoffRow[] = [];
     const reviews: AgendaReviewRow[] = [];
 
     for (const [supplierId, schedule] of schedules) {
       if (!schedule.enabled || !isOrderDayToday(schedule, now)) continue;
+      if (schedule.agendaMode === 'review') continue;
 
       const computed = computeCutoffForToday(schedule, orders, supplierId, now);
       if (!computed) continue;
@@ -143,40 +159,121 @@ export function useOrderAgendaToday(params: { localId: string | null; orders: Pe
           supplierName: name,
           label,
           href: `/pedidos/nuevo?supplierId=${encodeURIComponent(supplierId)}`,
-          done: isReviewItemMarkedDone(localId, ymd, it.id),
+          done: localId ? isReviewItemMarkedDone(localId, ymd, it.id) : false,
         });
       }
+    }
+
+    for (const [supplierId, schedule] of schedules) {
+      if (!schedule.enabled || !isOrderDayToday(schedule, now)) continue;
+      if (schedule.agendaMode !== 'review') continue;
+      const name = supplierNames.get(supplierId) ?? 'Proveedor';
+      const vid = virtualSupplierReviewItemId(supplierId);
+      reviews.push({
+        id: vid,
+        supplierId,
+        supplierName: name,
+        label: 'Revisar si necesitas pedir',
+        href: `/pedidos/nuevo?supplierId=${encodeURIComponent(supplierId)}`,
+        done: localId ? isReviewItemMarkedDone(localId, ymd, vid) : false,
+      });
     }
 
     cutoffs.sort((a, b) => a.cutoffLabel.localeCompare(b.cutoffLabel));
     reviews.sort((a, b) => a.supplierName.localeCompare(b.supplierName) || a.label.localeCompare(b.label));
 
     return { cutoffRows: cutoffs, reviewRows: reviews };
-  }, [schedules, reviewBySupplier, orders, supplierNames, localId, now]);
+  }, [schedules, reviewBySupplier, orders, supplierNames, localId, ymd]);
 
   const pendingCutoffRows = React.useMemo(
     () => cutoffRows.filter((r) => r.statusLabel !== 'enviado'),
     [cutoffRows],
   );
 
-  /** Sin pendientes de corte pero sí pedidos del día ya enviados (lista vacía de acciones). */
-  const showAgendaAlDiaMicro = React.useMemo(() => {
+  /** Obligatorios hoy: sin omisión manual. */
+  const mandatoryRows = React.useMemo(() => {
+    if (!localId) return pendingCutoffRows;
+    return pendingCutoffRows.filter((r) => !isMandatoryOmitted(localId, ymd, r.supplierId));
+  }, [pendingCutoffRows, localId, ymd, reloadEpoch]);
+
+  const mandatorySupplierIdSet = React.useMemo(
+    () => new Set(mandatoryRows.map((r) => r.supplierId)),
+    [mandatoryRows],
+  );
+
+  /**
+   * Proveedores con ítems de revisión que NO tienen aún corte obligatorio pendiente en agenda
+   * (evita duplicar el mismo proveedor en ambos bloques).
+   */
+  const reviewSupplierGroups = React.useMemo((): AgendaReviewSupplierGroup[] => {
+    const bySup = new Map<
+      string,
+      { supplierName: string; ids: string[]; href: string }
+    >();
+    for (const r of reviewRows) {
+      if (mandatorySupplierIdSet.has(r.supplierId)) continue;
+      const prev = bySup.get(r.supplierId);
+      const href = `/pedidos/nuevo?supplierId=${encodeURIComponent(r.supplierId)}`;
+      if (!prev) {
+        bySup.set(r.supplierId, {
+          supplierName: r.supplierName,
+          ids: [r.id],
+          href,
+        });
+      } else {
+        prev.ids.push(r.id);
+      }
+    }
+    const out: AgendaReviewSupplierGroup[] = [];
+    for (const [supplierId, v] of bySup) {
+      const itemIds = v.ids;
+      const allDone =
+        localId != null && itemIds.length > 0 && itemIds.every((id) => isReviewItemMarkedDone(localId, ymd, id));
+      const sch = schedules.get(supplierId);
+      const cutoffLabel =
+        sch && sch.enabled && isOrderDayToday(sch, now) ? formatCutoffHm(sch.cutoffTime) : null;
+      out.push({
+        supplierId,
+        supplierName: v.supplierName,
+        itemIds,
+        href: v.href,
+        allDone,
+        cutoffLabel,
+      });
+    }
+    out.sort((a, b) => a.supplierName.localeCompare(b.supplierName, 'es'));
+    return out;
+  }, [reviewRows, mandatorySupplierIdSet, localId, ymd, reloadEpoch, schedules, now]);
+
+  const hasPendingReviews = React.useMemo(
+    () => reviewSupplierGroups.some((g) => !g.allDone),
+    [reviewSupplierGroups],
+  );
+
+  /** Todo resuelto: sin cortes pendientes (tras omitir/enviar) y sin revisiones pendientes. */
+  const showAgendaCompletadaMicro = React.useMemo(() => {
     if (loading) return false;
-    return cutoffRows.length > 0 && pendingCutoffRows.length === 0 && reviewRows.length === 0;
-  }, [loading, cutoffRows.length, pendingCutoffRows.length, reviewRows.length]);
+    const hadAgendaScope =
+      cutoffRows.length > 0 || reviewRows.length > 0;
+    if (!hadAgendaScope) return false;
+    return mandatoryRows.length === 0 && !hasPendingReviews;
+  }, [loading, cutoffRows.length, reviewRows.length, mandatoryRows.length, hasPendingReviews]);
 
   const showCard =
     loading ||
-    pendingCutoffRows.length > 0 ||
-    reviewRows.length > 0 ||
-    showAgendaAlDiaMicro;
+    mandatoryRows.length > 0 ||
+    hasPendingReviews ||
+    showAgendaCompletadaMicro;
 
   return {
     loading,
+    ymd,
     cutoffRows,
     pendingCutoffRows,
+    mandatoryRows,
     reviewRows,
-    showAgendaAlDiaMicro,
+    reviewSupplierGroups,
+    showAgendaCompletadaMicro,
     showCard,
     refresh,
   };
