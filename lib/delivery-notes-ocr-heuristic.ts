@@ -1,5 +1,5 @@
 /**
- * Extracción heurística desde texto OCR (Textract) sin pedido asociado.
+ * Extracción heurística desde texto OCR (Document AI) sin pedido asociado.
  * Siempre revisar en UI; no sustituye validación humana.
  */
 

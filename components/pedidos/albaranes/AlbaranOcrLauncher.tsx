@@ -4,8 +4,7 @@
  * Flujo OCR unificado de albaranes.
  *
  * Único punto de entrada para crear un `delivery_note` a partir de cámara / archivo:
- * - Reutiliza `runAlbaranOcr` (engine compartido cliente ↔ servidor).
- * - Reutiliza la heurística `parseDeliveryNoteHeaderFromOcr` / `parseDeliveryNoteLinesFromOcr`.
+ * - OCR: Document AI + Gemini vía POST /api/ocr/process (único motor).
  * - Crea la fila en `delivery_notes`, sube el original, registra el OCR run y persiste líneas.
  * - Si `relatedOrderId` viene seteado (entrada desde la recepción de un pedido), se vincula
  *   automáticamente desde el momento de creación.
@@ -20,15 +19,10 @@
 
 import { useRouter } from 'next/navigation';
 import React from 'react';
-import { Camera, FileUp, Loader2, ScanLine, X } from 'lucide-react';
+import { Camera, FileUp, Loader2, ScanLine, Sparkles, X } from 'lucide-react';
 import { useAuth } from '@/components/AuthProvider';
 import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
-import { compressImageFileToJpeg, runAlbaranOcr } from '@/lib/pedidos-albaran-ocr';
-import {
-  parseDeliveryNoteHeaderFromOcr,
-  parseDeliveryNoteLinesFromOcr,
-  parseYmdFromGuess,
-} from '@/lib/delivery-notes-ocr-heuristic';
+import { compressImageFileToJpeg } from '@/lib/pedidos-albaran-ocr';
 import {
   insertDeliveryNote,
   insertDeliveryNoteOcrRun,
@@ -37,7 +31,24 @@ import {
   type DeliveryNoteItemDraft,
 } from '@/lib/delivery-notes-supabase';
 import { uploadDeliveryNoteOriginal } from '@/lib/delivery-notes-storage';
+import { runAlbaranOcrProcess } from '@/lib/ocr/client-process';
+import type { AlbaranOcrPayload, AlbaranOcrUnit } from '@/lib/ocr/types-document';
 import type { Unit } from '@/lib/types';
+
+// Mapeo OCR-unit → Unit del catálogo. Se usa solo para volcar líneas al draft
+// (la unidad final la corregirá el usuario en el detalle si hace falta).
+const OCR_UNIT_TO_UNIT: Record<AlbaranOcrUnit, Unit> = {
+  kg: 'kg',
+  ud: 'ud',
+  caja: 'caja',
+  bolsa: 'bolsa',
+  paquete: 'paquete',
+  bandeja: 'bandeja',
+  racion: 'racion',
+  g: 'kg',
+  l: 'ud',
+  ml: 'ud',
+};
 
 type LauncherMode = 'sheet' | 'inline';
 
@@ -146,60 +157,75 @@ export default function AlbaranOcrLauncher({
         const uploaded = await uploadDeliveryNoteOriginal(supabase, localId, note.id, file);
 
         const isPdf = file.type.includes('pdf') || file.name.toLowerCase().endsWith('.pdf');
-        let ocrText = '';
-        let ocrStatus: 'ok' | 'partial' | 'failed' | 'skipped' = 'skipped';
+        const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+        if (sessionError || !sessionData.session?.access_token) {
+          throw new Error('Sesión no válida. Vuelve a iniciar sesión.');
+        }
+        const accessToken = sessionData.session.access_token;
         const t0 = Date.now();
 
+        setPhase({ kind: 'ocr' });
+        let bodyBlob: Blob;
+        let bodyName = file.name;
         if (!isPdf && file.type.startsWith('image/')) {
           setPhase({ kind: 'compress' });
-          const blob = await compressImageFileToJpeg(file);
-
+          bodyBlob = await compressImageFileToJpeg(file);
+          bodyName = file.name.replace(/\.[^.]+$/, '') + '.jpg';
           setPhase({ kind: 'ocr' });
-          const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
-          if (sessionError || !sessionData.session?.access_token) {
-            throw new Error('Sesión no válida. Vuelve a iniciar sesión.');
-          }
-          try {
-            ocrText = await runAlbaranOcr(blob, sessionData.session.access_token);
-            ocrStatus = ocrText.trim().length > 40 ? 'ok' : 'partial';
-          } catch (e) {
-            ocrText = e instanceof Error ? e.message : 'OCR fallido';
-            ocrStatus = 'failed';
-          }
-          await insertDeliveryNoteOcrRun(supabase, localId, note.id, ocrText || '', {
-            errorMessage: ocrStatus === 'failed' ? ocrText : null,
-            durationMs: Date.now() - t0,
-            createdBy: userId ?? null,
-          });
         } else {
-          await insertDeliveryNoteOcrRun(
-            supabase,
-            localId,
-            note.id,
-            'PDF almacenado. OCR síncrono no aplicado.',
-            {
-              errorMessage: null,
-              durationMs: null,
-              createdBy: userId ?? null,
-            },
-          );
+          bodyBlob = file;
         }
 
-        setPhase({ kind: 'parse' });
-        const header = isPdf
-          ? parseDeliveryNoteHeaderFromOcr('')
-          : parseDeliveryNoteHeaderFromOcr(ocrText);
-        const linesParsed = isPdf ? [] : parseDeliveryNoteLinesFromOcr(ocrText);
-        const ymd = parseYmdFromGuess(header.dateGuess);
+        const res = await runAlbaranOcrProcess({
+          blobOrFile: bodyBlob,
+          accessToken,
+          relatedOrderId: relatedOrderId ?? undefined,
+          fileName: bodyName,
+        });
 
-        const drafts: DeliveryNoteItemDraft[] = linesParsed.map((l) => ({
-          supplierProductName: l.supplierProductName,
-          quantity: l.quantity,
-          unit: l.unit as Unit,
-          unitPrice: l.unitPrice,
-          lineSubtotal: l.lineSubtotal,
-          matchStatus: 'not_applicable',
-        }));
+        if (!res.ok) {
+          const hint =
+            res.error === 'ocr_provider_not_configured' || res.status === 503
+              ? 'Configura en Vercel: GOOGLE_CLOUD_PROJECT_ID, GOOGLE_DOCUMENT_AI_LOCATION, GOOGLE_DOCUMENT_AI_PROCESSOR_ID, GOOGLE_SERVICE_ACCOUNT_JSON y GEMINI_API_KEY.'
+              : res.reason || res.error;
+          throw new Error(hint);
+        }
+
+        const payload: AlbaranOcrPayload = res.payload;
+        const ocrText = payload.ocrText || '';
+        const ocrStatus: 'ok' | 'partial' =
+          ocrText.trim().length > 40 && payload.lines.length > 0 ? 'ok' : 'partial';
+
+        await insertDeliveryNoteOcrRun(supabase, localId, note.id, ocrText, {
+          errorMessage: null,
+          durationMs: Date.now() - t0,
+          createdBy: userId ?? null,
+        });
+
+        setPhase({ kind: 'parse' });
+
+        const drafts: DeliveryNoteItemDraft[] = payload.lines
+          .filter((l) => (l.description || '').trim().length > 0)
+          .map<DeliveryNoteItemDraft>((l) => ({
+            supplierProductName: l.description,
+            quantity: l.quantity ?? 0,
+            unit: l.unit ? OCR_UNIT_TO_UNIT[l.unit] : 'ud',
+            unitPrice: l.unitPrice ?? 0,
+            lineSubtotal: l.lineTotal ?? null,
+            matchStatus: 'not_applicable',
+          }));
+        const supplierName = payload.supplier.name?.trim() || 'Proveedor';
+        const deliveryNumber = payload.document.number;
+        const ymd = payload.document.date;
+        const taxAmount = payload.totals.taxAmount;
+        const totalAmount = payload.totals.total;
+        const warnings = [
+          ...payload.warnings,
+          ...payload.lines.flatMap((l, i) => l.warnings.map((w) => `Línea ${i + 1}: ${w}`)),
+        ];
+        const notesSummary = [payload.observations.trim(), warnings.length ? `Avisos OCR: ${warnings.slice(0, 6).join(' · ')}` : '']
+          .filter(Boolean)
+          .join('\n');
 
         if (drafts.length > 0) {
           await replaceDeliveryNoteItems(supabase, localId, note.id, drafts);
@@ -207,25 +233,19 @@ export default function AlbaranOcrLauncher({
 
         setPhase({ kind: 'persist' });
         await updateDeliveryNote(supabase, localId, note.id, {
-          supplierName: header.supplierGuess.trim() || 'Proveedor',
-          deliveryNoteNumber: header.numberGuess || note.deliveryNoteNumber,
+          supplierName,
+          deliveryNoteNumber: deliveryNumber || note.deliveryNoteNumber,
           deliveryDate: ymd,
           subtotal: null,
-          taxAmount: header.taxGuess,
-          totalAmount: header.totalGuess,
+          taxAmount,
+          totalAmount,
           ocrStatus,
-          sourceType: isPdf ? 'manual' : ocrText ? 'ocr' : 'manual',
+          sourceType: 'ocr',
           originalStoragePath: uploaded.storagePath,
           originalMimeType: uploaded.mimeType,
           originalFileName: uploaded.fileName,
-          notes: isPdf
-            ? 'PDF almacenado. Revisa proveedor, fecha y líneas a mano en el detalle.'
-            : '',
-          status: isPdf
-            ? 'pending_review'
-            : ocrStatus === 'ok' || ocrStatus === 'partial'
-              ? 'ocr_read'
-              : 'pending_review',
+          notes: notesSummary,
+          status: ocrStatus === 'ok' || ocrStatus === 'partial' ? 'ocr_read' : 'pending_review',
         });
 
         setPhase({ kind: 'done' });
@@ -275,10 +295,13 @@ export default function AlbaranOcrLauncher({
           <h2 className="text-[16px] font-black text-zinc-900">Escanear albarán</h2>
           <p className="text-[13px] text-zinc-600">Recepción rápida con OCR</p>
           <ul className="mt-2 space-y-0.5 text-[11px] text-zinc-500">
-            <li>· Extrae líneas y precios automáticamente</li>
+            <li>· Extrae líneas, precios e IVA automáticamente</li>
             <li>· Detecta diferencias contra el pedido</li>
             <li>· Vincula con el pedido cuando coincide</li>
           </ul>
+          <div className="mt-2 inline-flex items-center gap-1 rounded-full bg-zinc-100 px-2 py-0.5 text-[10px] font-bold text-zinc-700">
+            <Sparkles className="h-3 w-3" aria-hidden /> Document AI + Gemini
+          </div>
         </div>
         {mode === 'sheet' && onClose ? (
           <button

@@ -47,7 +47,7 @@ Reducir fricción operativa en cocina y dirección: **menos papel, menos Excel**
 | Hosting       | **Vercel** (implícito)                                                                                    | `vercel.json` (crons); `NEXT_PUBLIC_SITE_URL` para metadata            |
 | PWA           | **Web App Manifest + SW**                                                                                 | `app/manifest.ts`, `public/sw.js` vía `PwaRegister`                    |
 | Tiempo real   | **Supabase Realtime**                                                                                     | Canales por `localId` en varios módulos (ver sección Datos)            |
-| Otros         | **qrcode**, **jspdf**, **AWS Textract** (OCR pedidos/albaranes), **html5-qrcode**, **recharts**, **xlsx** | Según dependencias en `package.json`                                   |
+| Otros         | **qrcode**, **jspdf**, **Google Document AI** (OCR albaranes), **html5-qrcode**, **recharts**, **xlsx** | Según dependencias en `package.json`                                   |
 
 
 ### App Router
@@ -355,7 +355,7 @@ Definidos en `lib/profile-app-role` / `AuthProvider` como `**admin` | `manager` 
 ## Objetivos futuros (roadmap orientativo)
 
 - **IA integrada**: asistentes sobre datos operativos (resúmenes, alertas); respetar privacidad y coste.
-- **OCR**: ya hay dependencia Textract y flujos de albarán en pedidos; ampliar calidad y feedback en UI.
+- **OCR**: Google Document AI + Gemini en albaranes; ampliar calidad y feedback en UI.
 - **Voice assistant**: comandos manos libres en cocina (integración futura).
 - **Forecasting**: predicción de compra/producción desde histórico pedidos y mermas.
 - **Automatizaciones**: reglas (ej. avisos WhatsApp — ya hay cron en `vercel.json`).

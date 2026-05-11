@@ -1,5 +1,5 @@
 /**
- * Contrato estable de salida OCR (independiente del proveedor AWS/Google/Azure/…).
+ * Contrato estable de salida OCR (Document AI).
  */
 export type NormalizedOcrItem = {
   description: string;
@@ -16,7 +16,7 @@ export type NormalizedOcrTotals = {
 };
 
 export type NormalizedOCRResult = {
-  /** Identificador lógico (p. ej. textract, google_vision). */
+  /** Identificador lógico (p. ej. document-ai). */
   provider: string;
   rawText?: string;
   supplierHint?: string | null;

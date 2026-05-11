@@ -1,5 +1,6 @@
 /**
- * OCR de albaranes (genérico). Proveedor según OCR_PROVIDER (p. ej. textract).
+ * OCR de albarán (imagen/PDF): solo Google Document AI → texto plano.
+ * Interpretación estructurada + Gemini: POST /api/ocr/process.
  */
 import { handlePedidosOcrPost } from '@/lib/ocr/post-handler';
 

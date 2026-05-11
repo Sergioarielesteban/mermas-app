@@ -573,7 +573,7 @@ export async function insertDeliveryNoteOcrRun(
   const { error } = await supabase.from('delivery_note_ocr_runs').insert({
     local_id: localId,
     delivery_note_id: noteId,
-    provider: 'textract',
+    provider: 'document_ai',
     raw_text: rawText,
     error_message: opts?.errorMessage ?? null,
     duration_ms: opts?.durationMs ?? null,

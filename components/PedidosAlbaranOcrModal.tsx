@@ -4,7 +4,7 @@ import React from 'react';
 import { ScanLine, X } from 'lucide-react';
 import { useAuth } from '@/components/AuthProvider';
 import { getSupabaseClient } from '@/lib/supabase-client';
-import { compressImageFileToJpeg, runAlbaranOcrViaTextract } from '@/lib/pedidos-albaran-ocr';
+import { compressImageFileToJpeg, runAlbaranOcr } from '@/lib/pedidos-albaran-ocr';
 import { uploadPedidoAlbaranAttachment } from '@/lib/pedidos-albaran-storage';
 import { buildAlbaranSuggestionsFromOcr, type AlbaranOcrLineSuggestion } from '@/lib/pedidos-albaran-suggest';
 import { applyAlbaranOcrPatches, type AlbaranOcrApplyPatch, type PedidoOrder } from '@/lib/pedidos-supabase';
@@ -70,8 +70,8 @@ export default function PedidosAlbaranOcrModal({ order, open, onClose, onApplied
       }
       const blob = await compressImageFileToJpeg(file);
       setJpegBlob(blob);
-      setPhase('Leyendo albarán con Textract…');
-      const text = await runAlbaranOcrViaTextract(blob, sessionData.session.access_token);
+      setPhase('Leyendo albarán (Document AI)…');
+      const text = await runAlbaranOcr(blob, sessionData.session.access_token);
       setOcrText(text);
       const sug = buildAlbaranSuggestionsFromOcr(text, order.items);
       setSuggestions(sug);

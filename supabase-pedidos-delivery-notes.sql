@@ -114,7 +114,7 @@ create table if not exists public.delivery_note_ocr_runs (
   id uuid primary key default gen_random_uuid(),
   local_id uuid not null references public.locals(id) on delete restrict,
   delivery_note_id uuid not null references public.delivery_notes(id) on delete cascade,
-  provider text not null default 'textract',
+  provider text not null default 'document_ai',
   raw_text text not null default '',
   error_message text,
   duration_ms int,

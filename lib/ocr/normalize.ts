@@ -1,10 +1,10 @@
 import type { NormalizedOCRResult } from '@/lib/ocr/types';
-import type { TextractRawOutput } from '@/lib/ocr/providers/textract';
+import type { DocumentAiResult } from '@/lib/ocr/providers/document-ai';
 
-/** Mapea salida cruda de Textract al contrato normalizado (heurísticas de líneas = fase posterior si aplica). */
-export function normalizeTextractRaw(raw: TextractRawOutput): NormalizedOCRResult {
+/** Mapea salida de Document AI al contrato normalizado (líneas estructuradas = fase Gemini en /api/ocr/process). */
+export function normalizeDocumentAiRaw(raw: DocumentAiResult): NormalizedOCRResult {
   return {
-    provider: 'textract',
+    provider: 'document-ai',
     rawText: raw.plainText,
     supplierHint: null,
     documentDate: null,

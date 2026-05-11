@@ -44,11 +44,13 @@ export async function compressImageFileToJpeg(
 }
 
 /**
- * OCR de albarán vía API neutra (`/api/pedidos/ocr`). El proveedor (Textract u otro) vive solo en el servidor.
+ * OCR de albarán vía `/api/pedidos/ocr` — solo Google Document AI en servidor.
  */
 export async function runAlbaranOcr(blob: Blob, accessToken: string): Promise<string> {
   const form = new FormData();
   form.append('image', blob, 'albaran.jpg');
+  const mime = typeof blob.type === 'string' && blob.type ? blob.type : 'image/jpeg';
+  form.append('mimeType', mime);
   const res = await fetch('/api/pedidos/ocr', {
     method: 'POST',
     headers: { Authorization: `Bearer ${accessToken}` },
@@ -79,9 +81,4 @@ export async function runAlbaranOcr(blob: Blob, accessToken: string): Promise<st
   const t = typeof rec.text === 'string' ? rec.text : '';
   if (t.length > 0) return t;
   return typeof rec.result?.rawText === 'string' ? rec.result.rawText : '';
-}
-
-/** @deprecated Usar `runAlbaranOcr` (misma firma). */
-export async function runAlbaranOcrViaTextract(blob: Blob, accessToken: string): Promise<string> {
-  return runAlbaranOcr(blob, accessToken);
 }
