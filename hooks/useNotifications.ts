@@ -14,7 +14,17 @@ import {
 import { canUserSeeNotification } from '@/services/notifications/visibility';
 import { notificationIsForUser } from '@/services/notifications/audience';
 
-export function useNotifications(localId: string | null, userId: string | null, userRole: ProfileAppRole | null) {
+export function useNotifications(
+  localId: string | null,
+  userId: string | null,
+  userRole: ProfileAppRole | null,
+  /**
+   * Sufijo opcional para el canal de Realtime. Útil cuando se usa el hook desde
+   * varios componentes a la vez (p. ej. la campanita del shell + el panel),
+   * porque Supabase no permite dos suscripciones con el mismo nombre de canal.
+   */
+  channelKey?: string,
+) {
   const [items, setItems] = useState<NotificationWithRead[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -87,8 +97,11 @@ export function useNotifications(localId: string | null, userId: string | null, 
   useEffect(() => {
     if (!localId || !userId || !supabaseOk) return;
     const supabase = getSupabaseClient()!;
+    const channelName = channelKey
+      ? `notifications-local-${localId}-${channelKey}`
+      : `notifications-local-${localId}`;
     const ch = supabase
-      .channel(`notifications-local-${localId}`)
+      .channel(channelName)
       .on(
         'postgres_changes',
         {
@@ -131,7 +144,7 @@ export function useNotifications(localId: string | null, userId: string | null, 
     return () => {
       void supabase.removeChannel(ch);
     };
-  }, [localId, userId, supabaseOk, readClearedBefore, userRole]);
+  }, [localId, userId, supabaseOk, readClearedBefore, userRole, channelKey]);
 
   const markRead = useCallback(
     async (notificationId: string) => {
