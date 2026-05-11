@@ -99,10 +99,10 @@ export default React.memo(function PedidosAgendaTodayCard({
   const mandatoryShown = mandatoryExpanded ? mandatoryRows : mandatoryRows.slice(0, MANDATORY_PREVIEW);
 
   return (
-    <section className="space-y-3">
+    <section className="space-y-2">
       {hasMandatory ? (
         <div className={`space-y-0 ${AGENDA_CARD_SHELL}`}>
-          <div className="flex items-center justify-between gap-2 bg-white px-3 py-1.5">
+          <div className="flex items-center justify-between gap-2 bg-white px-2.5 py-1">
             <div className="flex min-w-0 flex-1 items-center gap-1.5">
               <AlarmClock className="h-3.5 w-3.5 shrink-0" strokeWidth={2} aria-hidden style={{ color: BRAND_RED }} />
               <h2 className="truncate text-[11px] font-bold uppercase tracking-wide text-zinc-600">
@@ -134,13 +134,13 @@ export default React.memo(function PedidosAgendaTodayCard({
               </button>
             ) : null}
           </div>
-          <p className="border-b border-zinc-100 bg-white px-3 pb-1 pt-0.5 text-[10px] leading-snug text-zinc-500">
+          <p className="border-b border-zinc-100 bg-white px-2.5 pb-0.5 pt-0 text-[9px] leading-tight text-zinc-500">
             Completa el pedido antes de la hora límite
           </p>
 
           <ul className="divide-y divide-zinc-100 bg-white">
             {mandatoryShown.map((row) => (
-              <li key={row.supplierId} className="flex items-stretch gap-1.5 px-3 py-1">
+              <li key={row.supplierId} className="flex items-stretch gap-1 px-2.5 py-0.5">
                 {localId ? (
                   <button
                     type="button"
@@ -152,29 +152,31 @@ export default React.memo(function PedidosAgendaTodayCard({
                       markMandatoryOmitted(localId, ymd, row.supplierId);
                       onAgendaAction?.();
                     }}
-                    className="grid h-9 w-9 shrink-0 touch-manipulation place-items-center self-center rounded-md border border-zinc-200/90 bg-white active:scale-[0.98]"
+                    className="grid h-7 w-7 shrink-0 touch-manipulation place-items-center self-center rounded border border-zinc-200/90 bg-white active:scale-[0.98]"
                   >
-                    <span className="h-3.5 w-3.5 rounded border-2 border-zinc-300 bg-white" aria-hidden />
+                    <span className="h-3 w-3 rounded border-2 border-zinc-300 bg-white" aria-hidden />
                   </button>
                 ) : null}
                 <Link
                   href={row.href}
                   title={`Pedido a ${row.supplierName}`}
                   aria-label={`Abrir pedido y catálogo de ${row.supplierName}, antes de las ${row.cutoffLabel}`}
-                  className="flex min-h-[2.35rem] min-w-0 flex-1 touch-manipulation items-center gap-2 py-1 text-left outline-none active:bg-zinc-50/80"
+                  className="flex min-h-0 min-w-0 flex-1 touch-manipulation items-center gap-1.5 py-0.5 text-left outline-none active:bg-zinc-50/80"
                 >
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate font-serif text-[14px] font-normal text-zinc-900">{row.supplierName}</span>
-                    <span className="block text-[10px] leading-snug text-zinc-500">Entrega habitual</span>
+                    <span className="block truncate font-serif text-[13px] font-normal leading-tight text-zinc-900">
+                      {row.supplierName}
+                    </span>
+                    <span className="block text-[9px] leading-tight text-zinc-500">Entrega habitual</span>
                   </span>
                   <span
-                    className="shrink-0 text-[12px] font-bold tabular-nums leading-none"
+                    className="shrink-0 text-[11px] font-bold tabular-nums leading-none"
                     style={{ color: BRAND_RED }}
                   >
                     antes {row.cutoffLabel}
                   </span>
-                  <Eye className="h-3.5 w-3.5 shrink-0 opacity-80" strokeWidth={2} aria-hidden style={{ color: BRAND_RED }} />
-                  <ChevronRight className="h-4 w-4 shrink-0 text-zinc-300" aria-hidden />
+                  <Eye className="h-3 w-3 shrink-0 opacity-80" strokeWidth={2} aria-hidden style={{ color: BRAND_RED }} />
+                  <ChevronRight className="h-3.5 w-3.5 shrink-0 text-zinc-300" aria-hidden />
                 </Link>
               </li>
             ))}
@@ -188,7 +190,7 @@ export default React.memo(function PedidosAgendaTodayCard({
             type="button"
             onClick={() => setReviewSectionOpen((o) => !o)}
             className={[
-              'flex w-full touch-manipulation items-center justify-between gap-2 bg-white px-3 py-1.5 text-left',
+              'flex w-full touch-manipulation items-center justify-between gap-2 bg-white px-2.5 py-1 text-left',
               reviewSectionOpen ? 'border-b border-zinc-100' : '',
             ].join(' ')}
           >
@@ -219,17 +221,17 @@ export default React.memo(function PedidosAgendaTodayCard({
 
           {reviewSectionOpen ? (
             <>
-              <p className="border-b border-zinc-100 bg-white px-3 pb-1 pt-0.5 text-[10px] leading-snug text-zinc-500">
+              <p className="border-b border-zinc-100 bg-white px-2.5 pb-0.5 pt-0 text-[9px] leading-tight text-zinc-500">
                 Revisa si necesitas algo de estos proveedores
               </p>
               <ul className="divide-y divide-zinc-100 bg-white">
                 {hasReviewCompletedOnly ? (
-                  <li className="px-3 py-2 text-center text-[10px] text-zinc-600">
+                  <li className="px-2.5 py-1.5 text-center text-[9px] text-zinc-600">
                     Todo revisado por hoy
                   </li>
                 ) : null}
                 {pendingReviewGroups.map((g) => (
-                  <li key={g.supplierId} className="flex items-stretch gap-1.5 px-3 py-1">
+                  <li key={g.supplierId} className="flex items-stretch gap-1 px-2.5 py-0.5">
                     {localId ? (
                       <button
                         type="button"
@@ -241,31 +243,31 @@ export default React.memo(function PedidosAgendaTodayCard({
                           markSupplierReviewItemsDone(localId, ymd, g.itemIds);
                           onAgendaAction?.();
                         }}
-                        className="grid h-9 w-9 shrink-0 touch-manipulation place-items-center self-center rounded-md border border-zinc-200/90 bg-white active:scale-[0.98]"
+                        className="grid h-7 w-7 shrink-0 touch-manipulation place-items-center self-center rounded border border-zinc-200/90 bg-white active:scale-[0.98]"
                       >
-                        <span className="h-3.5 w-3.5 rounded border-2 border-zinc-300 bg-white" aria-hidden />
+                        <span className="h-3 w-3 rounded border-2 border-zinc-300 bg-white" aria-hidden />
                       </button>
                     ) : null}
                     <Link
                       href={g.href}
-                      className="flex min-h-[2.35rem] min-w-0 flex-1 touch-manipulation items-center gap-2 py-1 text-left outline-none active:bg-zinc-50/80"
+                      className="flex min-h-0 min-w-0 flex-1 touch-manipulation items-center gap-1.5 py-0.5 text-left outline-none active:bg-zinc-50/80"
                     >
                       <span className="min-w-0 flex-1">
-                        <span className="block truncate font-serif text-[14px] font-normal text-zinc-900">
+                        <span className="block truncate font-serif text-[13px] font-normal leading-tight text-zinc-900">
                           {g.supplierName}
                         </span>
-                        <span className="block text-[10px] leading-snug text-zinc-500">Reparto diario</span>
+                        <span className="block text-[9px] leading-tight text-zinc-500">Reparto diario</span>
                       </span>
                       {g.cutoffLabel ? (
                         <span
-                          className="shrink-0 text-[12px] font-bold tabular-nums leading-none"
+                          className="shrink-0 text-[11px] font-bold tabular-nums leading-none"
                           style={{ color: ACCENT_ORANGE }}
                         >
                           antes {g.cutoffLabel}
                         </span>
                       ) : null}
-                      <Eye className="h-3.5 w-3.5 shrink-0 text-amber-600/70" strokeWidth={2} aria-hidden />
-                      <ChevronRight className="h-4 w-4 shrink-0 text-zinc-300" aria-hidden />
+                      <Eye className="h-3 w-3 shrink-0 text-amber-600/70" strokeWidth={2} aria-hidden />
+                      <ChevronRight className="h-3.5 w-3.5 shrink-0 text-zinc-300" aria-hidden />
                     </Link>
                   </li>
                 ))}
@@ -276,7 +278,7 @@ export default React.memo(function PedidosAgendaTodayCard({
                   <button
                     type="button"
                     onClick={() => setShowCompletedReviews((v) => !v)}
-                    className="flex w-full touch-manipulation items-center justify-center gap-1 border-t border-zinc-100 bg-zinc-50/70 py-1.5 text-[11px] font-semibold text-amber-900/90"
+                    className="flex w-full touch-manipulation items-center justify-center gap-1 border-t border-zinc-100 bg-zinc-50/70 py-1 text-[10px] font-semibold text-amber-900/90"
                   >
                     Ver {completedReviewGroups.length} revisado{completedReviewGroups.length === 1 ? '' : 's'}
                     {showCompletedReviews ? (
@@ -291,10 +293,10 @@ export default React.memo(function PedidosAgendaTodayCard({
                         <li key={g.supplierId}>
                           <Link
                             href={g.href}
-                            className="flex touch-manipulation items-center gap-2 px-3 py-1.5 opacity-90"
+                            className="flex touch-manipulation items-center gap-1.5 px-2.5 py-1 opacity-90"
                           >
-                            <span className="grid h-7 w-7 shrink-0 place-items-center rounded-md bg-emerald-50 text-emerald-600">
-                              <Check className="h-3.5 w-3.5" strokeWidth={2.5} aria-hidden />
+                            <span className="grid h-6 w-6 shrink-0 place-items-center rounded-md bg-emerald-50 text-emerald-600">
+                              <Check className="h-3 w-3" strokeWidth={2.5} aria-hidden />
                             </span>
                             <span className="min-w-0 flex-1">
                               <span className="block truncate text-[12px] text-zinc-600">{g.supplierName}</span>
