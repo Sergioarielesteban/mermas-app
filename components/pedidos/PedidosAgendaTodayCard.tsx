@@ -42,8 +42,9 @@ export default React.memo(function PedidosAgendaTodayCard({
   ymd,
   onAgendaAction,
 }: PedidosAgendaTodayCardProps) {
+  const [mandatorySectionOpen, setMandatorySectionOpen] = React.useState(false);
   const [mandatoryExpanded, setMandatoryExpanded] = React.useState(false);
-  const [reviewSectionOpen, setReviewSectionOpen] = React.useState(true);
+  const [reviewSectionOpen, setReviewSectionOpen] = React.useState(false);
   const [showCompletedReviews, setShowCompletedReviews] = React.useState(false);
 
   React.useEffect(() => {
@@ -102,12 +103,20 @@ export default React.memo(function PedidosAgendaTodayCard({
     <section className="space-y-2">
       {hasMandatory ? (
         <div className={`space-y-0 ${AGENDA_CARD_SHELL}`}>
-          <div className="flex items-center justify-between gap-2 bg-white px-2.5 py-1">
+          <button
+            type="button"
+            onClick={() => setMandatorySectionOpen((o) => !o)}
+            className={[
+              'flex min-h-[4rem] w-full touch-manipulation items-center justify-between gap-2 bg-white px-3 py-3.5 text-left sm:min-h-[4.5rem] sm:py-4',
+              mandatorySectionOpen ? 'border-b border-zinc-100' : '',
+            ].join(' ')}
+            aria-expanded={mandatorySectionOpen}
+          >
             <div className="flex min-w-0 flex-1 items-center gap-1.5">
-              <AlarmClock className="h-3.5 w-3.5 shrink-0" strokeWidth={2} aria-hidden style={{ color: BRAND_RED }} />
-              <h2 className="truncate text-[11px] font-bold uppercase tracking-wide text-zinc-600">
+              <AlarmClock className="h-4 w-4 shrink-0" strokeWidth={2} aria-hidden style={{ color: BRAND_RED }} />
+              <span className="truncate text-[11px] font-bold uppercase tracking-wide text-zinc-600">
                 Pedidos obligatorios hoy
-              </h2>
+              </span>
               <span
                 className="shrink-0 rounded-full px-1.5 py-px text-[10px] font-bold leading-none text-white"
                 style={{ backgroundColor: BRAND_RED }}
@@ -115,72 +124,89 @@ export default React.memo(function PedidosAgendaTodayCard({
                 {mandatoryRows.length}
               </span>
             </div>
-            {mandatoryOverflow && !mandatoryExpanded ? (
-              <button
-                type="button"
-                onClick={() => setMandatoryExpanded(true)}
-                className="shrink-0 touch-manipulation text-[11px] font-semibold"
-                style={{ color: BRAND_RED }}
-              >
-                Ver todos &gt;
-              </button>
-            ) : mandatoryOverflow && mandatoryExpanded ? (
-              <button
-                type="button"
-                onClick={() => setMandatoryExpanded(false)}
-                className="shrink-0 touch-manipulation text-[10px] font-semibold text-zinc-500"
-              >
-                Ver menos
-              </button>
-            ) : null}
-          </div>
-          <p className="border-b border-zinc-100 bg-white px-2.5 pb-0.5 pt-0 text-[9px] leading-tight text-zinc-500">
-            Completa el pedido antes de la hora límite
-          </p>
+            {mandatorySectionOpen ? (
+              <ChevronUp className="h-4 w-4 shrink-0 text-red-600/85" aria-hidden />
+            ) : (
+              <ChevronDown className="h-4 w-4 shrink-0 text-red-600/85" aria-hidden />
+            )}
+          </button>
 
-          <ul className="divide-y divide-zinc-100 bg-white">
-            {mandatoryShown.map((row) => (
-              <li key={row.supplierId} className="flex items-stretch gap-1 px-2.5 py-0.5">
-                {localId ? (
+          {mandatorySectionOpen ? (
+            <>
+              <div className="flex items-start justify-between gap-2 border-b border-zinc-100 bg-white px-2.5 pb-0.5 pt-0">
+                <p className="min-w-0 flex-1 text-[9px] leading-tight text-zinc-500">
+                  Completa el pedido antes de la hora límite
+                </p>
+                {mandatoryOverflow && !mandatoryExpanded ? (
                   <button
                     type="button"
-                    role="checkbox"
-                    aria-checked={false}
-                    title="No pedir hoy"
-                    aria-label={`Omitir pedido obligatorio de ${row.supplierName} hoy`}
-                    onClick={() => {
-                      markMandatoryOmitted(localId, ymd, row.supplierId);
-                      onAgendaAction?.();
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setMandatoryExpanded(true);
                     }}
-                    className="grid h-7 w-7 shrink-0 touch-manipulation place-items-center self-center rounded border border-zinc-200/90 bg-white active:scale-[0.98]"
-                  >
-                    <span className="h-3 w-3 rounded border-2 border-zinc-300 bg-white" aria-hidden />
-                  </button>
-                ) : null}
-                <Link
-                  href={row.href}
-                  title={`Pedido a ${row.supplierName}`}
-                  aria-label={`Abrir pedido y catálogo de ${row.supplierName}, antes de las ${row.cutoffLabel}`}
-                  className="flex min-h-0 min-w-0 flex-1 touch-manipulation items-center gap-1.5 py-0.5 text-left outline-none active:bg-zinc-50/80"
-                >
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate font-serif text-[13px] font-normal leading-tight text-zinc-900">
-                      {row.supplierName}
-                    </span>
-                    <span className="block text-[9px] leading-tight text-zinc-500">Entrega habitual</span>
-                  </span>
-                  <span
-                    className="shrink-0 text-[11px] font-bold tabular-nums leading-none"
+                    className="shrink-0 touch-manipulation text-[10px] font-semibold"
                     style={{ color: BRAND_RED }}
                   >
-                    antes {row.cutoffLabel}
-                  </span>
-                  <Eye className="h-3 w-3 shrink-0 opacity-80" strokeWidth={2} aria-hidden style={{ color: BRAND_RED }} />
-                  <ChevronRight className="h-3.5 w-3.5 shrink-0 text-zinc-300" aria-hidden />
-                </Link>
-              </li>
-            ))}
-          </ul>
+                    Ver todos &gt;
+                  </button>
+                ) : mandatoryOverflow && mandatoryExpanded ? (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setMandatoryExpanded(false);
+                    }}
+                    className="shrink-0 touch-manipulation text-[10px] font-semibold text-zinc-500"
+                  >
+                    Ver menos
+                  </button>
+                ) : null}
+              </div>
+
+              <ul className="divide-y divide-zinc-100 bg-white">
+                {mandatoryShown.map((row) => (
+                  <li key={row.supplierId} className="flex items-stretch gap-1 px-2.5 py-0.5">
+                    {localId ? (
+                      <button
+                        type="button"
+                        role="checkbox"
+                        aria-checked={false}
+                        title="No pedir hoy"
+                        aria-label={`Omitir pedido obligatorio de ${row.supplierName} hoy`}
+                        onClick={() => {
+                          markMandatoryOmitted(localId, ymd, row.supplierId);
+                          onAgendaAction?.();
+                        }}
+                        className="grid h-7 w-7 shrink-0 touch-manipulation place-items-center self-center rounded border border-zinc-200/90 bg-white active:scale-[0.98]"
+                      >
+                        <span className="h-3 w-3 rounded border-2 border-zinc-300 bg-white" aria-hidden />
+                      </button>
+                    ) : null}
+                    <Link
+                      href={row.href}
+                      title={`Pedido a ${row.supplierName}`}
+                      aria-label={`Abrir pedido y catálogo de ${row.supplierName}, antes de las ${row.cutoffLabel}`}
+                      className="flex min-h-0 min-w-0 flex-1 touch-manipulation items-center gap-1.5 py-0.5 text-left outline-none active:bg-zinc-50/80"
+                    >
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate font-serif text-[13px] font-normal leading-tight text-zinc-900">
+                          {row.supplierName}
+                        </span>
+                      </span>
+                      <span
+                        className="shrink-0 text-[11px] font-bold tabular-nums leading-none"
+                        style={{ color: BRAND_RED }}
+                      >
+                        antes {row.cutoffLabel}
+                      </span>
+                      <Eye className="h-3 w-3 shrink-0 opacity-80" strokeWidth={2} aria-hidden style={{ color: BRAND_RED }} />
+                      <ChevronRight className="h-3.5 w-3.5 shrink-0 text-zinc-300" aria-hidden />
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </>
+          ) : null}
         </div>
       ) : null}
 
@@ -190,14 +216,14 @@ export default React.memo(function PedidosAgendaTodayCard({
             type="button"
             onClick={() => setReviewSectionOpen((o) => !o)}
             className={[
-              'flex w-full touch-manipulation items-center justify-between gap-2 bg-white px-2.5 py-1 text-left',
+              'flex min-h-[4rem] w-full touch-manipulation items-center justify-between gap-2 bg-white px-3 py-3.5 text-left sm:min-h-[4.5rem] sm:py-4',
               reviewSectionOpen ? 'border-b border-zinc-100' : '',
             ].join(' ')}
           >
             <div className="flex min-w-0 flex-1 items-center gap-1.5">
-              <Eye className="h-3.5 w-3.5 shrink-0" strokeWidth={2} aria-hidden style={{ color: ACCENT_ORANGE }} />
+              <Eye className="h-4 w-4 shrink-0" strokeWidth={2} aria-hidden style={{ color: ACCENT_ORANGE }} />
               <span className="truncate text-[11px] font-bold uppercase tracking-wide text-zinc-600">
-                Revisar proveedores
+                Revisión diaria de proveedores
               </span>
               {pendingReviewGroups.length > 0 ? (
                 <span
@@ -213,9 +239,9 @@ export default React.memo(function PedidosAgendaTodayCard({
               )}
             </div>
             {reviewSectionOpen ? (
-              <ChevronUp className="h-3.5 w-3.5 shrink-0 text-amber-600/80" aria-hidden />
+              <ChevronUp className="h-4 w-4 shrink-0 text-amber-600/80" aria-hidden />
             ) : (
-              <ChevronDown className="h-3.5 w-3.5 shrink-0 text-amber-600/80" aria-hidden />
+              <ChevronDown className="h-4 w-4 shrink-0 text-amber-600/80" aria-hidden />
             )}
           </button>
 
@@ -256,7 +282,6 @@ export default React.memo(function PedidosAgendaTodayCard({
                         <span className="block truncate font-serif text-[13px] font-normal leading-tight text-zinc-900">
                           {g.supplierName}
                         </span>
-                        <span className="block text-[9px] leading-tight text-zinc-500">Reparto diario</span>
                       </span>
                       {g.cutoffLabel ? (
                         <span
