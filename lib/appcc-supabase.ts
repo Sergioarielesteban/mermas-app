@@ -89,10 +89,16 @@ export function getDueTemperatureRegistrationSlots(
 
   const { hour, totalMin } = madridHourMinute(now);
 
+  // Horas (Europe/Madrid) a partir de las que avisamos de falta de registro.
+  // - Mañana: desde 06:00.
+  // - Noche : desde 22:00.
+  // Entre 00:00 y 01:59 todavía estamos en el día operativo anterior
+  // (rollover a las 02:00), por lo que mantenemos ambos avisos activos.
+  const inPreviousOperationalWindow = hour >= 0 && hour < 2;
   const mananaDue =
-    pending.has('manana') && (totalMin >= 11 * 60 || (hour >= 0 && hour < 2));
+    pending.has('manana') && (totalMin >= 6 * 60 || inPreviousOperationalWindow);
   const nocheDue =
-    pending.has('noche') && (totalMin >= 23 * 60 || (hour >= 0 && hour < 2));
+    pending.has('noche') && (totalMin >= 22 * 60 || inPreviousOperationalWindow);
 
   const out: AppccSlot[] = [];
   if (mananaDue) out.push('manana');
