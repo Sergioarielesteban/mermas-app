@@ -74,7 +74,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     const prev = normalizeHistory(body.history);
     const history: AssistantChatTurn[] = [...prev, { role: 'user', text: message }];
 
-    const context = buildAssistantContext(auth.localId);
+    const context = await buildAssistantContext(auth.localId, message);
     const contextJson = JSON.stringify(context);
 
     let reply = '';
