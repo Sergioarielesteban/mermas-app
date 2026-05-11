@@ -30,11 +30,14 @@ import { usePanelConfig } from '@/hooks/usePanelConfig';
 import { PANEL_BLOCK_BY_ID, type PanelBlockId } from '@/lib/panel/panel-blocks';
 
 /**
- * Construcción visual del panel: primero todos los bloques `large` en el orden
- * que el usuario haya definido, y al final un mosaico tipo iOS con TODOS los
- * `small` empacados en filas de 3 (sin huecos). El orden relativo entre smalls
- * se preserva. Esto evita que un bloque pequeño aislado deje espacio vacío al
- * intercalarse entre dos grandes.
+ * Construcción visual del panel:
+ *  - Los bloques `large` se renderizan en su orden absoluto.
+ *  - Los `small` se mantienen siempre con su tamaño cuadrado (1/3 de ancho)
+ *    y se empacan TODOS juntos en filas de 3, sin huecos.
+ *  - El "mosaico" de smalls aparece en la posición del PRIMER small en el
+ *    orden del usuario. Así, arrastrando cualquier small hacia arriba o
+ *    abajo, el bloque de smalls se mueve al sitio elegido, manteniendo el
+ *    orden interno entre ellos.
  */
 type PanelRow =
   | { kind: 'large'; id: PanelBlockId }
@@ -43,20 +46,40 @@ type PanelRow =
 const SMALL_PER_ROW = 3;
 
 function buildRows(visibleBlockIds: readonly PanelBlockId[]): PanelRow[] {
-  const larges: PanelBlockId[] = [];
   const smalls: PanelBlockId[] = [];
+  const firstSmallIndex = visibleBlockIds.findIndex((id) => {
+    const meta = PANEL_BLOCK_BY_ID[id];
+    return meta?.size === 'small';
+  });
+
   for (const id of visibleBlockIds) {
     const meta = PANEL_BLOCK_BY_ID[id];
-    if (!meta) continue;
-    if (meta.size === 'large') larges.push(id);
-    else smalls.push(id);
+    if (meta?.size === 'small') smalls.push(id);
   }
 
   const rows: PanelRow[] = [];
-  for (const id of larges) rows.push({ kind: 'large', id });
-  for (let i = 0; i < smalls.length; i += SMALL_PER_ROW) {
-    rows.push({ kind: 'small-row', ids: smalls.slice(i, i + SMALL_PER_ROW) });
-  }
+  let smallsRendered = false;
+  const renderSmalls = () => {
+    if (smallsRendered) return;
+    for (let i = 0; i < smalls.length; i += SMALL_PER_ROW) {
+      rows.push({ kind: 'small-row', ids: smalls.slice(i, i + SMALL_PER_ROW) });
+    }
+    smallsRendered = true;
+  };
+
+  visibleBlockIds.forEach((id, idx) => {
+    const meta = PANEL_BLOCK_BY_ID[id];
+    if (!meta) return;
+    if (meta.size === 'large') {
+      rows.push({ kind: 'large', id });
+    } else if (idx === firstSmallIndex) {
+      renderSmalls();
+    }
+    // Los otros smalls se ignoran porque ya están renderizados dentro del
+    // mosaico en la posición del primer small.
+  });
+  // Por seguridad, si quedaron smalls sin renderizar (no debería ocurrir).
+  renderSmalls();
   return rows;
 }
 
@@ -95,11 +118,10 @@ function OperationalDayHomeInner() {
             if (!Renderer) return null;
             return <Renderer key={row.id} />;
           }
+          // Las filas siempre usan grid-cols-3 para mantener el tamaño cuadrado
+          // pequeño y consistente, aunque la última fila tenga menos de 3 ítems.
           return (
-            <div
-              key={`small-row-${index}`}
-              className="grid grid-cols-3 gap-1.5 sm:gap-2"
-            >
+            <div key={`small-row-${index}`} className="grid grid-cols-3 gap-1.5 sm:gap-2">
               {row.ids.map((id) => {
                 const Renderer = PANEL_BLOCK_RENDERERS[id];
                 if (!Renderer) return null;

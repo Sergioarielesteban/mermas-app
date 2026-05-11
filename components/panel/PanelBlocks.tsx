@@ -225,21 +225,22 @@ function BlockPedidosAgenda() {
 function BlockPedidosLleganHoy() {
   const { kpi, perms } = usePanelData();
   const pedidosLleganHoy = kpi.pedidosHoy ?? 0;
+  const blocked = !perms.showPedidos || perms.isBlockedByPlan('pedidos');
   return (
-    <PriorityRowCard
-      title="Pedidos que llegan hoy"
+    <PrioritySquareCard
+      title="Recibir pedidos de hoy"
       sub={
         kpi.loading
           ? 'Cargando…'
           : pedidosLleganHoy === 0
-            ? 'Nada previsto para recepción hoy'
-            : `${pedidosLleganHoy} pedido${pedidosLleganHoy === 1 ? '' : 's'} con llegada hoy`
+            ? 'Nada previsto'
+            : `${pedidosLleganHoy} llegada${pedidosLleganHoy === 1 ? '' : 's'}`
       }
       badge={pedidosLleganHoy > 0 ? String(pedidosLleganHoy) : null}
-      badgeClass="bg-red-100 text-red-800 ring-red-200"
+      badgeClass="bg-red-600 text-white ring-red-500"
       iconBg="bg-red-100 text-red-700"
       href="/pedidos?recibir=hoy"
-      blocked={!perms.showPedidos || perms.isBlockedByPlan('pedidos')}
+      blocked={blocked}
       Icon={ShoppingCart}
     />
   );

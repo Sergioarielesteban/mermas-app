@@ -77,10 +77,10 @@ export const PANEL_BLOCKS: readonly PanelBlockMeta[] = [
   },
   {
     id: 'pedidos-llegan-hoy',
-    title: 'Pedidos que llegan hoy',
+    title: 'Recibir pedidos de hoy',
     short: 'Recepciones previstas para hoy',
     category: 'operativa',
-    size: 'large',
+    size: 'small',
     defaultEnabled: true,
     requiresPlanModule: 'pedidos',
     requiresPermission: 'pedidos',
@@ -222,15 +222,15 @@ export const PANEL_BLOCK_BY_ID: Readonly<Record<PanelBlockId, PanelBlockMeta>> =
 
 /**
  * Orden por defecto cuando el usuario no ha personalizado nada.
- * Los bloques `small` consecutivos se renderizan como mosaico de 3 columnas,
- * por eso agrupamos temperaturas/aceites/horarios juntos al final.
+ * Los bloques `small` consecutivos se renderizan como mosaico de 3 columnas
+ * (ver `OperationalDayHome.buildRows`).
  */
 export const DEFAULT_PANEL_ORDER: readonly PanelBlockId[] = [
   'pedidos-agenda',
   'pedidos-llegan-hoy',
-  'produccion',
   'temperaturas',
   'aceites',
+  'produccion',
   'horarios',
 ];
 
