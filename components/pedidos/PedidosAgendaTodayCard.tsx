@@ -7,6 +7,7 @@ import {
   ChevronDown,
   ChevronRight,
   ChevronUp,
+  ClipboardList,
   Eye,
 } from 'lucide-react';
 import React from 'react';
@@ -29,10 +30,16 @@ const MANDATORY_PREVIEW = 3;
 const BRAND_RED = '#D32F2F';
 const ACCENT_ORANGE = '#EA580C';
 
-/** Mismo acabado que el saludo del panel y `PanelAlertas`: `rounded-xl` + ring (sin sangrar a ancho completo). */
+/** Mismo acabado que el resto de tarjetas grandes del panel (PriorityRowCard). */
 const AGENDA_CARD_SHELL =
-  'overflow-hidden rounded-xl bg-white shadow-sm ring-1 ring-zinc-200/80';
+  'overflow-hidden rounded-3xl bg-white shadow-sm ring-1 ring-zinc-200/80';
 
+/**
+ * Una sola tarjeta "Gestión de pedidos para hoy" que agrupa, al desplegarse,
+ * los Pedidos obligatorios y la Revisión diaria de proveedores. Mantiene el
+ * mismo lenguaje visual que el resto del panel (cards blancas, rings suaves,
+ * tipografía mixta sans + serif, badges redondos).
+ */
 export default React.memo(function PedidosAgendaTodayCard({
   loading,
   mandatoryRows,
@@ -42,9 +49,8 @@ export default React.memo(function PedidosAgendaTodayCard({
   ymd,
   onAgendaAction,
 }: PedidosAgendaTodayCardProps) {
-  const [mandatorySectionOpen, setMandatorySectionOpen] = React.useState(false);
+  const [open, setOpen] = React.useState(false);
   const [mandatoryExpanded, setMandatoryExpanded] = React.useState(false);
-  const [reviewSectionOpen, setReviewSectionOpen] = React.useState(false);
   const [showCompletedReviews, setShowCompletedReviews] = React.useState(false);
 
   React.useEffect(() => {
@@ -64,8 +70,10 @@ export default React.memo(function PedidosAgendaTodayCard({
   if (loading) {
     return (
       <section>
-        <div className={`px-3 py-1.5 ${AGENDA_CARD_SHELL}`}>
-          <p className="text-[9px] font-semibold uppercase tracking-wide text-zinc-400">Agenda de hoy</p>
+        <div className={`px-3 py-2.5 ${AGENDA_CARD_SHELL}`}>
+          <p className="text-[9px] font-semibold uppercase tracking-wide text-zinc-400">
+            Gestión de pedidos para hoy
+          </p>
           <p className="mt-0.5 text-[11px] text-zinc-500">Cargando…</p>
         </div>
       </section>
@@ -82,7 +90,7 @@ export default React.memo(function PedidosAgendaTodayCard({
           <span className="mr-1 text-emerald-600" aria-hidden>
             ✓
           </span>
-          Agenda completada
+          Agenda de pedidos completada
         </p>
       </section>
     );
@@ -96,73 +104,90 @@ export default React.memo(function PedidosAgendaTodayCard({
 
   if (!hasMandatory && !hasReviewSection) return null;
 
+  const totalPending = mandatoryRows.length + pendingReviewGroups.length;
+  const allDone = totalPending === 0;
   const mandatoryOverflow = mandatoryRows.length > MANDATORY_PREVIEW;
   const mandatoryShown = mandatoryExpanded ? mandatoryRows : mandatoryRows.slice(0, MANDATORY_PREVIEW);
 
   return (
-    <section className="space-y-2">
-      {hasMandatory ? (
-        <div className={`space-y-0 ${AGENDA_CARD_SHELL}`}>
-          <button
-            type="button"
-            onClick={() => setMandatorySectionOpen((o) => !o)}
+    <section className={AGENDA_CARD_SHELL} id="panel-agenda-pedidos">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+        className={[
+          'flex min-h-[4rem] w-full touch-manipulation items-center justify-between gap-2 bg-white px-3 py-3.5 text-left sm:min-h-[4.5rem] sm:py-4',
+          open ? 'border-b border-zinc-100' : '',
+        ].join(' ')}
+      >
+        <div className="flex min-w-0 flex-1 items-center gap-3">
+          <span
             className={[
-              'flex min-h-[4rem] w-full touch-manipulation items-center justify-between gap-2 bg-white px-3 py-3.5 text-left sm:min-h-[4.5rem] sm:py-4',
-              mandatorySectionOpen ? 'border-b border-zinc-100' : '',
+              'grid h-12 w-12 shrink-0 place-items-center rounded-2xl ring-1 ring-white/60',
+              allDone ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700',
             ].join(' ')}
-            aria-expanded={mandatorySectionOpen}
           >
-            <div className="flex min-w-0 flex-1 items-center gap-1.5">
-              <AlarmClock className="h-4 w-4 shrink-0" strokeWidth={2} aria-hidden style={{ color: BRAND_RED }} />
-              <span className="truncate text-[11px] font-bold uppercase tracking-wide text-zinc-600">
-                Pedidos obligatorios hoy
-              </span>
-              <span
-                className="shrink-0 rounded-full px-1.5 py-px text-[10px] font-bold leading-none text-white"
-                style={{ backgroundColor: BRAND_RED }}
-              >
-                {mandatoryRows.length}
-              </span>
-            </div>
-            {mandatorySectionOpen ? (
-              <ChevronUp className="h-4 w-4 shrink-0 text-red-600/85" aria-hidden />
-            ) : (
-              <ChevronDown className="h-4 w-4 shrink-0 text-red-600/85" aria-hidden />
-            )}
-          </button>
+            <ClipboardList className="h-6 w-6" strokeWidth={2} aria-hidden />
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="font-serif text-[16px] font-normal leading-tight text-zinc-900">
+              Gestión de pedidos para hoy
+            </p>
+            <p className="mt-0.5 text-[12px] leading-snug text-zinc-500">
+              {allDone
+                ? 'Todo en orden'
+                : `${mandatoryRows.length} obligatorio${mandatoryRows.length === 1 ? '' : 's'}` +
+                  ` · ${pendingReviewGroups.length} por revisar`}
+            </p>
+          </div>
+        </div>
+        <div className="flex shrink-0 flex-col items-end justify-between gap-1 self-stretch py-0.5">
+          {allDone ? (
+            <span className="grid h-5 w-5 place-items-center rounded-full bg-emerald-100 text-emerald-700 ring-1 ring-emerald-200/80">
+              <Check className="h-3 w-3" strokeWidth={2.5} aria-hidden />
+            </span>
+          ) : (
+            <span
+              className="rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-white ring-1"
+              style={{ backgroundColor: BRAND_RED, borderColor: BRAND_RED }}
+            >
+              {totalPending}
+            </span>
+          )}
+          {open ? (
+            <ChevronUp className="h-5 w-5 text-zinc-300" aria-hidden />
+          ) : (
+            <ChevronDown className="h-5 w-5 text-zinc-300" aria-hidden />
+          )}
+        </div>
+      </button>
 
-          {mandatorySectionOpen ? (
-            <>
-              <div className="flex items-start justify-between gap-2 border-b border-zinc-100 bg-white px-2.5 pb-0.5 pt-0">
-                <p className="min-w-0 flex-1 text-[9px] leading-tight text-zinc-500">
-                  Completa el pedido antes de la hora límite
-                </p>
-                {mandatoryOverflow && !mandatoryExpanded ? (
+      {open ? (
+        <div>
+          {hasMandatory ? (
+            <SubSection
+              tone="red"
+              icon={<AlarmClock className="h-3.5 w-3.5" strokeWidth={2} style={{ color: BRAND_RED }} aria-hidden />}
+              title="Obligatorios"
+              count={mandatoryRows.length}
+              countColor={BRAND_RED}
+              hint="Completa el pedido antes de la hora límite"
+              extra={
+                mandatoryOverflow ? (
                   <button
                     type="button"
                     onClick={(e) => {
                       e.stopPropagation();
-                      setMandatoryExpanded(true);
+                      setMandatoryExpanded((v) => !v);
                     }}
                     className="shrink-0 touch-manipulation text-[10px] font-semibold"
                     style={{ color: BRAND_RED }}
                   >
-                    Ver todos &gt;
+                    {mandatoryExpanded ? 'Ver menos' : 'Ver todos >'}
                   </button>
-                ) : mandatoryOverflow && mandatoryExpanded ? (
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setMandatoryExpanded(false);
-                    }}
-                    className="shrink-0 touch-manipulation text-[10px] font-semibold text-zinc-500"
-                  >
-                    Ver menos
-                  </button>
-                ) : null}
-              </div>
-
+                ) : null
+              }
+            >
               <ul className="divide-y divide-zinc-100 bg-white">
                 {mandatoryShown.map((row) => (
                   <li key={row.supplierId} className="flex items-stretch gap-1 px-2.5 py-0.5">
@@ -199,104 +224,73 @@ export default React.memo(function PedidosAgendaTodayCard({
                       >
                         antes {row.cutoffLabel}
                       </span>
-                      <Eye className="h-3 w-3 shrink-0 opacity-80" strokeWidth={2} aria-hidden style={{ color: BRAND_RED }} />
+                      <Eye
+                        className="h-3 w-3 shrink-0 opacity-80"
+                        strokeWidth={2}
+                        aria-hidden
+                        style={{ color: BRAND_RED }}
+                      />
                       <ChevronRight className="h-3.5 w-3.5 shrink-0 text-zinc-300" aria-hidden />
                     </Link>
                   </li>
                 ))}
               </ul>
-            </>
+            </SubSection>
           ) : null}
-        </div>
-      ) : null}
 
-      {hasReviewSection ? (
-        <div className={AGENDA_CARD_SHELL}>
-          <button
-            type="button"
-            onClick={() => setReviewSectionOpen((o) => !o)}
-            className={[
-              'flex min-h-[4rem] w-full touch-manipulation items-center justify-between gap-2 bg-white px-3 py-3.5 text-left sm:min-h-[4.5rem] sm:py-4',
-              reviewSectionOpen ? 'border-b border-zinc-100' : '',
-            ].join(' ')}
-          >
-            <div className="flex min-w-0 flex-1 items-center gap-1.5">
-              <Eye className="h-4 w-4 shrink-0" strokeWidth={2} aria-hidden style={{ color: ACCENT_ORANGE }} />
-              <span className="truncate text-[11px] font-bold uppercase tracking-wide text-zinc-600">
-                Revisión diaria de proveedores
-              </span>
-              {pendingReviewGroups.length > 0 ? (
-                <span
-                  className="shrink-0 rounded-full px-1.5 py-px text-[10px] font-bold leading-none text-white"
-                  style={{ backgroundColor: ACCENT_ORANGE }}
-                >
-                  {pendingReviewGroups.length}
-                </span>
-              ) : (
-                <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-emerald-100 text-emerald-700 ring-1 ring-emerald-200/80">
-                  <Check className="h-3 w-3" strokeWidth={2.5} aria-hidden />
-                </span>
-              )}
-            </div>
-            {reviewSectionOpen ? (
-              <ChevronUp className="h-4 w-4 shrink-0 text-amber-600/80" aria-hidden />
-            ) : (
-              <ChevronDown className="h-4 w-4 shrink-0 text-amber-600/80" aria-hidden />
-            )}
-          </button>
-
-          {reviewSectionOpen ? (
-            <>
-              <p className="border-b border-zinc-100 bg-white px-2.5 pb-0.5 pt-0 text-[9px] leading-tight text-zinc-500">
-                Revisa si necesitas algo de estos proveedores
-              </p>
-              <ul className="divide-y divide-zinc-100 bg-white">
-                {hasReviewCompletedOnly ? (
-                  <li className="px-2.5 py-1.5 text-center text-[9px] text-zinc-600">
-                    Todo revisado por hoy
-                  </li>
-                ) : null}
-                {pendingReviewGroups.map((g) => (
-                  <li key={g.supplierId} className="flex items-stretch gap-1 px-2.5 py-0.5">
-                    {localId ? (
-                      <button
-                        type="button"
-                        role="checkbox"
-                        aria-checked={false}
-                        title="Marcar como revisado"
-                        aria-label={`Marcar ${g.supplierName} como revisado`}
-                        onClick={() => {
-                          markSupplierReviewItemsDone(localId, ymd, g.itemIds);
-                          onAgendaAction?.();
-                        }}
-                        className="grid h-7 w-7 shrink-0 touch-manipulation place-items-center self-center rounded border border-zinc-200/90 bg-white active:scale-[0.98]"
-                      >
-                        <span className="h-3 w-3 rounded border-2 border-zinc-300 bg-white" aria-hidden />
-                      </button>
-                    ) : null}
-                    <Link
-                      href={g.href}
-                      className="flex min-h-0 min-w-0 flex-1 touch-manipulation items-center gap-1.5 py-0.5 text-left outline-none active:bg-zinc-50/80"
-                    >
-                      <span className="min-w-0 flex-1">
-                        <span className="block truncate font-serif text-[13px] font-normal leading-tight text-zinc-900">
-                          {g.supplierName}
-                        </span>
-                      </span>
-                      {g.cutoffLabel ? (
-                        <span
-                          className="shrink-0 text-[11px] font-bold tabular-nums leading-none"
-                          style={{ color: ACCENT_ORANGE }}
+          {hasReviewSection ? (
+            <SubSection
+              tone="amber"
+              icon={<Eye className="h-3.5 w-3.5" strokeWidth={2} style={{ color: ACCENT_ORANGE }} aria-hidden />}
+              title="Revisión diaria"
+              count={pendingReviewGroups.length}
+              countColor={ACCENT_ORANGE}
+              hint={hasReviewCompletedOnly ? 'Todo revisado por hoy' : 'Revisa si necesitas algo de estos proveedores'}
+            >
+              {!hasReviewCompletedOnly ? (
+                <ul className="divide-y divide-zinc-100 bg-white">
+                  {pendingReviewGroups.map((g) => (
+                    <li key={g.supplierId} className="flex items-stretch gap-1 px-2.5 py-0.5">
+                      {localId ? (
+                        <button
+                          type="button"
+                          role="checkbox"
+                          aria-checked={false}
+                          title="Marcar como revisado"
+                          aria-label={`Marcar ${g.supplierName} como revisado`}
+                          onClick={() => {
+                            markSupplierReviewItemsDone(localId, ymd, g.itemIds);
+                            onAgendaAction?.();
+                          }}
+                          className="grid h-7 w-7 shrink-0 touch-manipulation place-items-center self-center rounded border border-zinc-200/90 bg-white active:scale-[0.98]"
                         >
-                          antes {g.cutoffLabel}
-                        </span>
+                          <span className="h-3 w-3 rounded border-2 border-zinc-300 bg-white" aria-hidden />
+                        </button>
                       ) : null}
-                      <Eye className="h-3 w-3 shrink-0 text-amber-600/70" strokeWidth={2} aria-hidden />
-                      <ChevronRight className="h-3.5 w-3.5 shrink-0 text-zinc-300" aria-hidden />
-                    </Link>
-                  </li>
-                ))}
-              </ul>
+                      <Link
+                        href={g.href}
+                        className="flex min-h-0 min-w-0 flex-1 touch-manipulation items-center gap-1.5 py-0.5 text-left outline-none active:bg-zinc-50/80"
+                      >
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate font-serif text-[13px] font-normal leading-tight text-zinc-900">
+                            {g.supplierName}
+                          </span>
+                        </span>
+                        {g.cutoffLabel ? (
+                          <span
+                            className="shrink-0 text-[11px] font-bold tabular-nums leading-none"
+                            style={{ color: ACCENT_ORANGE }}
+                          >
+                            antes {g.cutoffLabel}
+                          </span>
+                        ) : null}
+                        <Eye className="h-3 w-3 shrink-0 text-amber-600/70" strokeWidth={2} aria-hidden />
+                        <ChevronRight className="h-3.5 w-3.5 shrink-0 text-zinc-300" aria-hidden />
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
 
               {completedReviewGroups.length > 0 ? (
                 <>
@@ -340,10 +334,67 @@ export default React.memo(function PedidosAgendaTodayCard({
                   ) : null}
                 </>
               ) : null}
-            </>
+            </SubSection>
           ) : null}
         </div>
       ) : null}
     </section>
   );
 });
+
+/* ────────────────────────────────────────────────────────────────────────── */
+/*  Sub-sección dentro del acordeón unificado                                 */
+/* ────────────────────────────────────────────────────────────────────────── */
+
+function SubSection({
+  tone,
+  icon,
+  title,
+  count,
+  countColor,
+  hint,
+  extra,
+  children,
+}: {
+  tone: 'red' | 'amber';
+  icon: React.ReactNode;
+  title: string;
+  count: number;
+  countColor: string;
+  hint?: string;
+  extra?: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  const toneBg = tone === 'red' ? 'bg-red-50/40' : 'bg-amber-50/40';
+  return (
+    <div className="border-t border-zinc-100">
+      <div className={['flex items-center justify-between gap-2 px-3 py-1.5', toneBg].join(' ')}>
+        <div className="flex min-w-0 flex-1 items-center gap-1.5">
+          {icon}
+          <span className="truncate text-[9.5px] font-bold uppercase tracking-[0.08em] text-zinc-700">
+            {title}
+          </span>
+          {count > 0 ? (
+            <span
+              className="shrink-0 rounded-full px-1.5 py-px text-[9px] font-bold leading-none text-white"
+              style={{ backgroundColor: countColor }}
+            >
+              {count}
+            </span>
+          ) : (
+            <span className="grid h-4 w-4 shrink-0 place-items-center rounded-full bg-emerald-100 text-emerald-700 ring-1 ring-emerald-200/80">
+              <Check className="h-2.5 w-2.5" strokeWidth={2.5} aria-hidden />
+            </span>
+          )}
+        </div>
+        {extra}
+      </div>
+      {hint ? (
+        <p className="border-b border-zinc-100 bg-white px-3 pb-1 pt-0.5 text-[9.5px] leading-tight text-zinc-500">
+          {hint}
+        </p>
+      ) : null}
+      {children}
+    </div>
+  );
+}
