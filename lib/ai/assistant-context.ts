@@ -1,9 +1,9 @@
 /**
- * Construye el contexto operativo modular para el asistente Chef One.
+ * Construye el contexto operativo para el asistente Chef One.
  *
- * Fase actual: datos de ejemplo (`dataSource: 'mock'`) con la forma definitiva.
- * Integración futura: sustituir cada bloque por consultas reales y poner
- * `dataSource: 'live'` sin cambiar la forma de los objetos.
+ * Estado actual: sin integración de datos reales. Cada bloque devuelve
+ * estructura vacía con dataSource 'live' para que el asistente no invente datos.
+ * Integración futura: reemplazar cada sección con consultas reales a Supabase.
  */
 
 import { madridDateKey } from '@/lib/appcc-supabase';
@@ -18,7 +18,7 @@ function ymdToday(): string {
 }
 
 /**
- * @param localId UUID del local (obligatorio en producción; en mock solo metadato).
+ * @param localId UUID del local.
  */
 export function buildAssistantContext(localId: string): ChefOneAssistantOperationalContext {
   const operationalDayYmd = ymdToday();
@@ -28,109 +28,58 @@ export function buildAssistantContext(localId: string): ChefOneAssistantOperatio
     meta: {
       generatedAt,
       localId,
-      dataSource: 'mock',
+      dataSource: 'live',
       operationalDayYmd,
     },
     pedidos: {
-      pendientesRecepcion: [
-        {
-          orderId: 'ord_mock_1',
-          supplierName: 'Proveedor ejemplo',
-          deliveryDateYmd: operationalDayYmd,
-          status: 'sent',
-          lineCount: 8,
-        },
-      ],
-      pedidosLleganHoy: [
-        {
-          orderId: 'ord_mock_2',
-          supplierName: 'Distribuidora ejemplo',
-          windowLabel: 'Mañana',
-        },
-      ],
-      obligatoriosHoyPendientes: [{ cutoffLabel: '12:00', pendingCount: 1 }],
+      pendientesRecepcion: [],
+      pedidosLleganHoy: [],
+      obligatoriosHoyPendientes: [],
     },
     albaranes: {
-      pendientesRevision: 2,
-      muestra: [
-        {
-          deliveryNoteId: 'dn_mock_1',
-          supplierName: 'ASSOLIM',
-          status: 'pending_review',
-          incidentCount: 0,
-        },
-        {
-          deliveryNoteId: 'dn_mock_2',
-          supplierName: 'FERRER',
-          status: 'ocr_read',
-          incidentCount: 1,
-        },
-      ],
+      pendientesRevision: 0,
+      muestra: [],
     },
     precios: {
-      subidasMes: [
-        {
-          productName: 'Lechuga iceberg',
-          supplierName: 'Verduras SL',
-          deltaPct: 8.5,
-          lastPrice: 2.45,
-        },
-      ],
+      subidasMes: [],
     },
     incidencias: {
-      abiertas: [
-        {
-          id: 'inc_mock_1',
-          tipo: 'recepcion',
-          titulo: 'Paleta con embalaje dañado',
-          desdeYmd: operationalDayYmd,
-        },
-      ],
+      abiertas: [],
     },
     appcc: {
-      cámarasPendientesRegistro: [
-        { unitId: 'cam_mock_1', label: 'Cámara 2', slot: 'mañana' },
-      ],
-      aceitesHoyPendientes: 1,
+      cámarasPendientesRegistro: [],
+      aceitesHoyPendientes: 0,
     },
     fichajes: {
-      sinFicharHoy: [{ staffId: 'st_mock_1', displayName: 'Ejemplo persona', expectedShift: '09:00–15:00' }],
+      sinFicharHoy: [],
     },
     horarios: {
-      alertasHoy: [{ id: 'hr_mock_1', mensaje: 'Turno cocina sin cubrir (revisar plantilla)' }],
+      alertasHoy: [],
     },
     mermas: {
-      topProductosMes: [
-        { productName: 'Pan barra', kgOud: 12.4, euroEstimado: 48.2 },
-        { productName: 'Tomate pera', kgOud: 6.1, euroEstimado: 22.0 },
-      ],
+      topProductosMes: [],
     },
     inventario: {
-      bajoPar: [{ articleName: 'Aceite oliva 5L', ubicacion: 'Almacén seco' }],
+      bajoPar: [],
     },
     produccion: {
-      planesHoy: [{ planId: 'pr_mock_1', nombre: 'Mise en place comida', estado: 'pendiente' }],
+      planesHoy: [],
     },
     tareas: {
-      checklistPendientes: [{ id: 'tsk_mock_1', titulo: 'Cierre cocina — checklist' }],
+      checklistPendientes: [],
     },
     limpieza: {
-      tareasPendientesHoy: [{ id: 'cln_mock_1', area: 'Sala', titulo: 'Aseo barra' }],
+      tareasPendientesHoy: [],
     },
     proveedores: {
-      revisionDiariaPendiente: true,
-      muestraRevision: [
-        { supplierId: 'sup_mock_1', nombre: 'Carnes del norte', motivo: 'Precio fuera de rango' },
-      ],
+      revisionDiariaPendiente: false,
+      muestraRevision: [],
     },
     escandallos: {
-      recetasSinCosteActualizado: [{ id: 'esc_mock_1', nombre: 'Salsa romesco' }],
+      recetasSinCosteActualizado: [],
     },
     finanzas: {
-      resumenMes: {
-        comprasEuroEstimado: 18420.5,
-        nota: 'Cifra orientativa hasta conectar contabilidad detallada.',
-      },
+      resumenMes: { comprasEuroEstimado: null, nota: null },
     },
   };
 }
