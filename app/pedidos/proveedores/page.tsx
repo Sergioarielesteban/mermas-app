@@ -751,7 +751,7 @@ export default function ProveedoresPage() {
 
           {isOpen ? (
             <div className="border-t border-zinc-100 px-3 pb-3 pt-2.5 sm:px-4 sm:pb-4 sm:pt-3">
-              <div className="mb-2 flex flex-wrap items-center gap-1.5">
+              <div className="mb-3 grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
                 <button
                   type="button"
                   onClick={() => {
@@ -772,21 +772,21 @@ export default function ProveedoresPage() {
                     }));
                     setEditingSupplierId(supplier.id);
                   }}
-                  className="rounded-lg border border-zinc-300 bg-white px-2 py-1 text-xs font-semibold text-zinc-700"
+                  className="h-9 rounded-full border border-zinc-200 bg-white px-3 text-[12px] font-bold text-zinc-700 shadow-sm active:scale-[0.98]"
                 >
                   {editingSupplierId === supplier.id ? 'Cerrar' : 'Editar proveedor'}
                 </button>
                 <button
                   type="button"
                   onClick={() => openAddProductForSupplier(supplier.id)}
-                  className="rounded-lg border border-[#D32F2F]/35 bg-[#FFF7F5] px-2 py-1 text-xs font-semibold text-[#B91C1C] ring-1 ring-[#D32F2F]/15"
+                  className="h-9 rounded-full border border-[#D32F2F]/25 bg-[#FFF7F5] px-3 text-[12px] font-bold text-[#B91C1C] shadow-sm ring-1 ring-[#D32F2F]/10 active:scale-[0.98]"
                 >
                   Añadir producto
                 </button>
                 <button
                   type="button"
                   onClick={() => removeSupplier(supplier.id, supplier.name)}
-                  className="rounded-lg border border-[#B91C1C] bg-white px-2 py-1 text-xs font-semibold text-[#B91C1C]"
+                  className="h-9 rounded-full border border-[#D32F2F]/25 bg-white px-3 text-[12px] font-bold text-[#B91C1C] shadow-sm active:scale-[0.98]"
                 >
                   Eliminar proveedor
                 </button>
@@ -796,10 +796,18 @@ export default function ProveedoresPage() {
             {[...supplier.products]
               .sort((a, b) => a.name.localeCompare(b.name, 'es'))
               .map((p) => (
-              <div key={p.id} className="rounded-lg border border-zinc-100/80 bg-zinc-50/80 px-2 py-1.5">
-                <div className="flex items-center justify-between gap-2">
-                  <p className="text-sm font-medium leading-tight text-zinc-800">{p.name}</p>
-                  <div className="flex items-center gap-1.5">
+              <div key={p.id} className="rounded-2xl border border-zinc-200/80 bg-white px-3 py-3 shadow-[0_1px_2px_rgba(0,0,0,0.035)] ring-1 ring-zinc-100/70">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0 flex-1">
+                    <p className="line-clamp-2 text-[15px] font-black leading-[1.12] tracking-tight text-zinc-950">{p.name}</p>
+                    <div className="mt-2 flex flex-wrap items-end gap-x-2 gap-y-1">
+                      <p className="text-[22px] font-black leading-none tracking-tight text-zinc-950 tabular-nums">
+                        {formatUnitPriceEur(p.pricePerUnit, unitPriceCatalogSuffix[p.unit])}
+                      </p>
+                      <span className="pb-0.5 text-[10px] font-bold uppercase tracking-[0.12em] text-zinc-400">catálogo</span>
+                    </div>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-1.5">
                     <button
                       type="button"
                       onClick={() => {
@@ -845,63 +853,47 @@ export default function ProveedoresPage() {
                         }));
                         setEditingProductId(p.id);
                       }}
-                      className="rounded-lg border border-zinc-300 bg-white px-2 py-1 text-xs font-semibold text-zinc-700"
+                      className="h-8 rounded-full border border-zinc-200 bg-zinc-50 px-3 text-[12px] font-bold text-zinc-700 shadow-sm active:scale-[0.98]"
                     >
                       {editingProductId === p.id ? 'Cerrar' : 'Editar'}
                     </button>
                     <button
                       type="button"
                       onClick={() => disableProduct(p.id)}
-                      className="rounded-lg border border-[#B91C1C] bg-white px-2 py-1 text-xs font-semibold text-[#B91C1C]"
+                      className="h-8 rounded-full border border-[#D32F2F]/25 bg-[#FFF7F5] px-3 text-[12px] font-bold text-[#B91C1C] shadow-sm active:scale-[0.98]"
                     >
                       Desactivar
                     </button>
                   </div>
                 </div>
-                <div className="pt-1 space-y-1.5">
-                  <div>
-                    <p className="text-[10px] font-semibold uppercase tracking-wide text-zinc-500">
-                      Precio base catálogo
-                    </p>
-                    <p className="text-base font-bold tabular-nums text-zinc-900">
-                      {formatUnitPriceEur(p.pricePerUnit, unitPriceCatalogSuffix[p.unit])}
-                    </p>
-                  </div>
+                <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[11px] font-semibold leading-snug text-zinc-500">
+                  <span className="rounded-full bg-zinc-50 px-2 py-1 ring-1 ring-zinc-200/80">IVA {(p.vatRate * 100).toFixed(0)}%</span>
                   {p.ultimoPrecioRecibido != null &&
                   Number.isFinite(p.ultimoPrecioRecibido) &&
                   p.ultimoPrecioRecibido > 0 ? (
-                    <div className="rounded-md border border-dashed border-zinc-300/90 bg-zinc-100/50 px-2 py-1">
-                      <p className="text-[9px] font-semibold text-zinc-500">Último recibido</p>
-                      <p className="text-xs font-semibold tabular-nums text-zinc-600">
-                        {formatUnitPriceEur(p.ultimoPrecioRecibido, unitPriceCatalogSuffix[p.unit])}
-                      </p>
-                    </div>
+                    <span className="rounded-full bg-zinc-50 px-2 py-1 ring-1 ring-zinc-200/80">
+                      Últ. recibido {formatUnitPriceEur(p.ultimoPrecioRecibido, unitPriceCatalogSuffix[p.unit])}
+                    </span>
                   ) : null}
-                  <p className="text-[11px] leading-snug text-zinc-600">
-                    IVA {(p.vatRate * 100).toFixed(0)}%
-                    {(p.unitsPerPack ?? 1) > 1 ? (
-                      <>
-                        {' '}
-                        · Coste uso:{' '}
-                        {formatUnitPriceEur(
-                          p.pricePerUnit / (p.unitsPerPack ?? 1),
-                          unitPriceCatalogSuffix[p.recipeUnit ?? 'ud'],
-                        )}{' '}
-                        (×{p.unitsPerPack ?? 1} {unitPriceCatalogSuffix[p.recipeUnit ?? 'ud']}/
-                        {unitPriceCatalogSuffix[p.unit]})
-                      </>
-                    ) : null}
-                    {supplierProductHasDistinctBilling(p) && p.billingUnit === 'kg' && p.pricePerBillingUnit != null
-                      ? ` · cobro ${formatUnitPriceEur(p.pricePerBillingUnit, 'kg')} (~${p.billingQtyPerOrderUnit ?? '—'} kg/${unitPriceCatalogSuffix[p.unit]})`
-                      : ''}
-                    {!supplierProductHasDistinctBilling(p) &&
-                    unitSupportsReceivedWeightKg(p.unit) &&
-                    p.estimatedKgPerUnit != null &&
-                    p.estimatedKgPerUnit > 0
-                      ? ` · ~${p.estimatedKgPerUnit} kg/${p.unit}`
-                      : ''}
-                    {(p.parStock ?? 0) > 0 ? ` · ref. sem. ${p.parStock} ${unitPriceCatalogSuffix[p.unit]}` : ''}
-                  </p>
+                  {(p.unitsPerPack ?? 1) > 1 ? (
+                    <span className="rounded-full bg-zinc-50 px-2 py-1 ring-1 ring-zinc-200/80">
+                      Coste uso {formatUnitPriceEur(p.pricePerUnit / (p.unitsPerPack ?? 1), unitPriceCatalogSuffix[p.recipeUnit ?? 'ud'])}
+                    </span>
+                  ) : null}
+                  {supplierProductHasDistinctBilling(p) && p.billingUnit === 'kg' && p.pricePerBillingUnit != null ? (
+                    <span className="rounded-full bg-zinc-50 px-2 py-1 ring-1 ring-zinc-200/80">
+                      Cobro {formatUnitPriceEur(p.pricePerBillingUnit, 'kg')} · ~{p.billingQtyPerOrderUnit ?? '—'} kg/{unitPriceCatalogSuffix[p.unit]}
+                    </span>
+                  ) : null}
+                  {!supplierProductHasDistinctBilling(p) &&
+                  unitSupportsReceivedWeightKg(p.unit) &&
+                  p.estimatedKgPerUnit != null &&
+                  p.estimatedKgPerUnit > 0 ? (
+                    <span className="rounded-full bg-zinc-50 px-2 py-1 ring-1 ring-zinc-200/80">~{p.estimatedKgPerUnit} kg/{p.unit}</span>
+                  ) : null}
+                  {(p.parStock ?? 0) > 0 ? (
+                    <span className="rounded-full bg-zinc-50 px-2 py-1 ring-1 ring-zinc-200/80">Ref. sem. {p.parStock} {unitPriceCatalogSuffix[p.unit]}</span>
+                  ) : null}
                 </div>
               </div>
               ))}
@@ -1098,7 +1090,7 @@ export default function ProveedoresPage() {
           title="Editar proveedor"
           onClose={() => setEditingSupplierId(null)}
         >
-<div className="mt-3 grid grid-cols-1 gap-2 rounded-xl border border-zinc-200 bg-zinc-50 p-3">
+<div className="mt-3 grid grid-cols-1 gap-3 rounded-2xl border border-zinc-200/80 bg-[#FAFAF8] p-3 shadow-sm ring-1 ring-zinc-100/80">
               <input
                 value={supplierDrafts[editSup.id]?.name ?? ''}
                 onChange={(e) =>
@@ -1467,9 +1459,9 @@ export default function ProveedoresPage() {
               <button
                 type="button"
                 onClick={() => saveSupplierChanges(editSup.id)}
-                className="h-10 rounded-xl bg-[#2563EB] px-3 text-sm font-bold text-white"
+                className="h-11 rounded-2xl bg-[#D32F2F] px-3 text-sm font-black text-white shadow-sm shadow-[#D32F2F]/15 active:scale-[0.99]"
               >
-                Guardar cambios proveedor
+                Guardar cambios
               </button>
             </div>
 
@@ -1495,7 +1487,7 @@ export default function ProveedoresPage() {
                 title="Editar producto"
                 onClose={() => setEditingProductId(null)}
               >
-                  <div className="mt-2 grid grid-cols-1 gap-2 rounded-lg border border-zinc-200 bg-white p-2">
+                  <div className="mt-3 grid grid-cols-1 gap-3 rounded-2xl border border-zinc-200/80 bg-[#FAFAF8] p-3 shadow-sm ring-1 ring-zinc-100/80">
                     <input
                       value={productDrafts[editP.id]?.name ?? ''}
                       onChange={(e) =>
@@ -1737,9 +1729,9 @@ export default function ProveedoresPage() {
                     <button
                       type="button"
                       onClick={() => saveProductChanges(editP.id)}
-                      className="h-9 rounded-lg bg-[#2563EB] px-3 text-sm font-bold text-white"
+                      className="h-9 rounded-lg bg-[#D32F2F] px-3 text-sm font-bold text-white"
                     >
-                      Guardar cambios producto
+                      Guardar cambios
                     </button>
                   </div>
 
