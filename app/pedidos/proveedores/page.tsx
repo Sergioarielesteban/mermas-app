@@ -12,11 +12,15 @@ import {
   Fish,
   Milk,
   Package,
+  PackagePlus,
   Phone,
   Plus,
+  PencilLine,
   Search,
+  Power,
   Snowflake,
   Sparkles,
+  Trash2,
   Truck,
 } from 'lucide-react';
 import { ProveedoresModalShell } from '@/components/pedidos/ProveedoresModalShell';
@@ -148,6 +152,88 @@ const DELIVERY_DAY_CHIPS: { day: number; label: string }[] = [
   { day: 0, label: 'D' },
 ];
 
+function SoftField({ className = '', ...props }: React.InputHTMLAttributes<HTMLInputElement>) {
+  return (
+    <input
+      {...props}
+      className={[
+        'h-11 w-full rounded-2xl border border-zinc-200/80 bg-zinc-50/70 px-3 text-sm text-zinc-900 outline-none transition',
+        'placeholder:text-zinc-400 focus:border-zinc-300 focus:bg-white focus:ring-4 focus:ring-zinc-900/5',
+        className,
+      ].join(' ')}
+    />
+  );
+}
+
+function SoftSelect({ className = '', ...props }: React.SelectHTMLAttributes<HTMLSelectElement>) {
+  return (
+    <select
+      {...props}
+      className={[
+        'h-11 w-full rounded-2xl border border-zinc-200/80 bg-zinc-50/70 px-3 text-sm text-zinc-900 outline-none transition',
+        'focus:border-zinc-300 focus:bg-white focus:ring-4 focus:ring-zinc-900/5',
+        className,
+      ].join(' ')}
+    />
+  );
+}
+
+function ToolbarButton({
+  icon: Icon,
+  label,
+  tone = 'neutral',
+  className = '',
+  ...props
+}: React.ButtonHTMLAttributes<HTMLButtonElement> & {
+  icon: LucideIcon;
+  label: string;
+  tone?: 'neutral' | 'danger';
+}) {
+  return (
+    <button
+      {...props}
+      className={[
+        'inline-flex h-8 items-center gap-1.5 rounded-full px-2.5 text-[12px] font-medium transition active:scale-[0.99]',
+        tone === 'danger'
+          ? 'border border-rose-200/80 bg-rose-50/80 text-rose-700 shadow-sm'
+          : 'border border-zinc-200/80 bg-white text-zinc-700 shadow-sm',
+        className,
+      ].join(' ')}
+    >
+      <Icon className="h-3.5 w-3.5" strokeWidth={2.25} />
+      <span>{label}</span>
+    </button>
+  );
+}
+
+function MiniIconButton({
+  icon: Icon,
+  label,
+  tone = 'neutral',
+  className = '',
+  ...props
+}: React.ButtonHTMLAttributes<HTMLButtonElement> & {
+  icon: LucideIcon;
+  label: string;
+  tone?: 'neutral' | 'danger';
+}) {
+  return (
+    <button
+      {...props}
+      aria-label={label}
+      className={[
+        'grid h-8 w-8 place-items-center rounded-full border transition active:scale-[0.98]',
+        tone === 'danger'
+          ? 'border-rose-200 bg-rose-50 text-rose-700'
+          : 'border-zinc-200 bg-white text-zinc-600',
+        className,
+      ].join(' ')}
+    >
+      <Icon className="h-3.5 w-3.5" strokeWidth={2.25} />
+    </button>
+  );
+}
+
 function findProductContext(
   list: PedidoSupplier[],
   productId: string,
@@ -200,11 +286,6 @@ export default function ProveedoresPage() {
   const [newSupplierName, setNewSupplierName] = React.useState('');
   const [newSupplierContact, setNewSupplierContact] = React.useState('');
   const [addProductOpen, setAddProductOpen] = React.useState(false);
-  React.useEffect(() => {
-    if (!newSupplierOpen) return;
-    setNewSupplierName('');
-    setNewSupplierContact('');
-  }, [newSupplierOpen]);
   const [productSupplierId, setProductSupplierId] = React.useState('');
   const [productName, setProductName] = React.useState('');
   const [productUnit, setProductUnit] = React.useState<Unit>('ud');
@@ -364,8 +445,8 @@ export default function ProveedoresPage() {
   React.useEffect(() => {
     if (!canUse || !localId) return;
     const cached = readSuppliersSessionCache(localId);
-    if (cached !== null) applySupplierRows(cached);
-    reload();
+    if (cached !== null) setTimeout(() => applySupplierRows(cached), 0);
+    setTimeout(() => reload(), 0);
   }, [applySupplierRows, canUse, localId, reload]);
 
   usePedidosDataChangedListener(reload, Boolean(hasPedidosEntry && canUse));
@@ -620,17 +701,6 @@ export default function ProveedoresPage() {
     })();
   };
 
-  if (!hasPedidosEntry) {
-    return (
-      <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-zinc-200">
-        <p className="text-sm font-black text-zinc-900">Modulo no habilitado</p>
-        <p className="pt-1 text-sm text-zinc-600">Pedidos esta disponible para los locales de Mataro y Premia.</p>
-      </section>
-    );
-  }
-  if (!canUse) {
-    return <PedidosPremiaLockedScreen />;
-  }
   const editSup =
     editingSupplierId != null
       ? (suppliers.find((s) => s.id === editingSupplierId) ?? null)
@@ -656,8 +726,20 @@ export default function ProveedoresPage() {
     setAddProductOpen(true);
   };
 
+  if (!hasPedidosEntry) {
+    return (
+      <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-zinc-200">
+        <p className="text-sm font-black text-zinc-900">Modulo no habilitado</p>
+        <p className="pt-1 text-sm text-zinc-600">Pedidos esta disponible para los locales de Mataro y Premia.</p>
+      </section>
+    );
+  }
+  if (!canUse) {
+    return <PedidosPremiaLockedScreen />;
+  }
+
   return (
-    <div className="mx-auto w-full max-w-2xl space-y-2">
+    <div className="mx-auto w-full max-w-3xl space-y-3">
       {showDeletedBanner ? (
         <div className="pointer-events-none fixed inset-0 z-[90] grid place-items-center bg-black/25 px-6">
           <div className="rounded-2xl bg-[#D32F2F] px-7 py-5 text-center shadow-2xl ring-2 ring-white/75">
@@ -665,10 +747,10 @@ export default function ProveedoresPage() {
           </div>
         </div>
       ) : null}
-      <div className="mb-0">
+      <div className="mb-1">
         <Link
           href="/pedidos"
-          className="inline-flex items-center gap-1 py-0.5 text-xs font-medium text-zinc-600 underline-offset-4 hover:text-zinc-900 hover:underline"
+          className="inline-flex items-center gap-1 py-0.5 text-xs font-medium text-zinc-500 underline-offset-4 hover:text-zinc-900 hover:underline"
         >
           ← Pedidos
         </Link>
@@ -680,22 +762,41 @@ export default function ProveedoresPage() {
         </div>
       ) : null}
 
-      <section className="rounded-xl border border-zinc-200/90 bg-white p-3 ring-1 ring-zinc-100 sm:p-4">
-        <h1 className="text-lg font-bold tracking-tight text-zinc-900">Proveedores</h1>
-        <p className="mt-0.5 text-[11px] leading-snug text-zinc-500">Gestiona contactos y artículos</p>
+      <section className="rounded-[20px] border border-zinc-200/80 bg-white/95 p-3 shadow-[0_10px_30px_rgba(15,23,42,0.04)] ring-1 ring-zinc-100/80 sm:p-4">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h1 className="text-[18px] font-semibold tracking-tight text-zinc-950">Proveedores</h1>
+            <p className="mt-0.5 text-[11px] leading-snug text-zinc-500">
+              Contactos y catálogo, con densidad pensada para escaneo rápido.
+            </p>
+          </div>
+          <button
+            type="button"
+            className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full border border-[#D32F2F]/20 bg-[#FFF5F5] px-3 text-[12px] font-medium text-[#B91C1C] shadow-sm transition active:scale-[0.99]"
+            onClick={() => {
+              setMessage(null);
+              setNewSupplierName('');
+              setNewSupplierContact('');
+              setNewSupplierOpen(true);
+            }}
+          >
+            <Plus className="h-3.5 w-3.5" strokeWidth={2.5} />
+            Nuevo proveedor
+          </button>
+        </div>
         <button
           type="button"
-          className="mt-3 flex h-12 w-full touch-manipulation items-center gap-3 rounded-xl bg-[#D32F2F] px-3 shadow-sm ring-1 ring-[#D32F2F]/20 transition active:scale-[0.99] active:bg-[#B91C1C]"
+          className="mt-3 flex h-11 w-full touch-manipulation items-center gap-2.5 rounded-2xl bg-[#D32F2F] px-3 shadow-[0_10px_20px_rgba(211,47,47,0.12)] ring-1 ring-[#D32F2F]/15 transition active:scale-[0.99] active:bg-[#B91C1C]"
           onClick={() => {
             setMessage(null);
             setNewSupplierOpen(true);
           }}
         >
-          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-white/15 ring-1 ring-white/25">
-            <Plus className="h-5 w-5 text-white" strokeWidth={2.5} aria-hidden />
+          <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-white/15 ring-1 ring-white/20">
+            <Plus className="h-4 w-4 text-white" strokeWidth={2.5} aria-hidden />
           </span>
-          <span className="min-w-0 flex-1 text-center text-[15px] font-bold text-white">Nuevo proveedor</span>
-          <ChevronRight className="h-5 w-5 shrink-0 text-white/90" strokeWidth={2.25} aria-hidden />
+          <span className="min-w-0 flex-1 text-center text-[14px] font-semibold text-white">Nuevo proveedor</span>
+          <ChevronRight className="h-4 w-4 shrink-0 text-white/85" strokeWidth={2.25} aria-hidden />
         </button>
         <div className="relative mt-3">
           <Search
@@ -707,7 +808,7 @@ export default function ProveedoresPage() {
             value={supplierCatalogQuery}
             onChange={(e) => setSupplierCatalogQuery(e.target.value)}
             placeholder="Buscar proveedor o artículo…"
-            className="h-10 w-full rounded-xl border border-zinc-200/90 bg-zinc-50/50 pl-10 pr-3 text-sm text-zinc-900 outline-none placeholder:text-zinc-400 focus:border-zinc-300 focus:bg-white focus:ring-2 focus:ring-zinc-200/60"
+            className="h-10 w-full rounded-2xl border border-zinc-200/80 bg-zinc-50/60 pl-10 pr-3 text-sm text-zinc-900 outline-none placeholder:text-zinc-400 focus:border-zinc-300 focus:bg-white focus:ring-4 focus:ring-zinc-900/5"
           />
         </div>
       </section>
@@ -716,18 +817,18 @@ export default function ProveedoresPage() {
         const SupplierIcon = pickSupplierListIcon(supplier.name);
         const isOpen = expandedSupplierId === supplier.id;
         return (
-        <section key={supplier.id} className="overflow-hidden rounded-xl border border-zinc-200/90 bg-white shadow-[0_1px_2px_rgba(0,0,0,0.04)] ring-1 ring-zinc-100/80">
+        <section key={supplier.id} className="overflow-hidden rounded-[20px] border border-zinc-200/80 bg-white shadow-[0_10px_24px_rgba(15,23,42,0.045)] ring-1 ring-zinc-100/70">
           <button
             type="button"
-            className="flex w-full touch-manipulation items-start gap-2.5 px-3 py-2.5 text-left transition-colors active:bg-zinc-50/90 sm:gap-3 sm:py-2"
+            className="flex w-full touch-manipulation items-start gap-3 px-3 py-2.5 text-left transition-colors active:bg-zinc-50/80 sm:gap-3.5 sm:px-4 sm:py-3"
             onClick={() => setExpandedSupplierId((id) => (id === supplier.id ? null : supplier.id))}
             aria-expanded={isOpen}
           >
-            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-[#D32F2F]/[0.07] ring-1 ring-[#D32F2F]/12" aria-hidden>
-              <SupplierIcon className="h-[18px] w-[18px] text-[#C62828]" strokeWidth={2} />
+            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-2xl bg-[#D32F2F]/[0.06] ring-1 ring-[#D32F2F]/10" aria-hidden>
+              <SupplierIcon className="h-[17px] w-[17px] text-[#C62828]" strokeWidth={2} />
             </span>
             <span className="min-w-0 flex-1">
-              <span className="block truncate text-[13px] font-bold leading-tight tracking-tight text-zinc-900">{supplier.name}</span>
+              <span className="block truncate text-[14px] font-semibold leading-tight tracking-tight text-zinc-950">{supplier.name}</span>
               <span className="mt-1 flex items-center gap-1.5 text-[11px] leading-tight text-zinc-500">
                 <Phone className="h-3 w-3 shrink-0 text-zinc-400" strokeWidth={2} aria-hidden />
                 <span className="min-w-0 truncate">{supplier.contact || '—'}</span>
@@ -738,7 +839,7 @@ export default function ProveedoresPage() {
               </span>
             </span>
             <span className="flex shrink-0 flex-col items-end justify-center gap-1 self-stretch pl-1">
-              <span className="rounded-full bg-[#FFF7F5] px-2 py-0.5 text-[10px] font-semibold text-[#B91C1C] ring-1 ring-[#D32F2F]/15">
+              <span className="rounded-full bg-[#FFF7F5] px-2 py-0.5 text-[10px] font-medium text-[#B91C1C] ring-1 ring-[#D32F2F]/15">
                 Ver artículos
               </span>
               <ChevronRight
@@ -751,9 +852,10 @@ export default function ProveedoresPage() {
 
           {isOpen ? (
             <div className="border-t border-zinc-100 px-3 pb-3 pt-2.5 sm:px-4 sm:pb-4 sm:pt-3">
-              <div className="mb-3 grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
-                <button
-                  type="button"
+              <div className="flex flex-wrap items-center gap-2">
+                <ToolbarButton
+                  icon={PencilLine}
+                  label={editingSupplierId === supplier.id ? 'Cerrar' : 'Editar'}
                   onClick={() => {
                     if (editingSupplierId === supplier.id) {
                       setEditingSupplierId(null);
@@ -772,42 +874,74 @@ export default function ProveedoresPage() {
                     }));
                     setEditingSupplierId(supplier.id);
                   }}
-                  className="h-9 rounded-full border border-zinc-200 bg-white px-3 text-[12px] font-bold text-zinc-700 shadow-sm active:scale-[0.98]"
-                >
-                  {editingSupplierId === supplier.id ? 'Cerrar' : 'Editar proveedor'}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => openAddProductForSupplier(supplier.id)}
-                  className="h-9 rounded-full border border-[#D32F2F]/25 bg-[#FFF7F5] px-3 text-[12px] font-bold text-[#B91C1C] shadow-sm ring-1 ring-[#D32F2F]/10 active:scale-[0.98]"
-                >
-                  Añadir producto
-                </button>
-                <button
-                  type="button"
+                />
+                <ToolbarButton icon={PackagePlus} label="Producto" onClick={() => openAddProductForSupplier(supplier.id)} />
+                <ToolbarButton
+                  icon={Trash2}
+                  label="Eliminar"
+                  tone="danger"
                   onClick={() => removeSupplier(supplier.id, supplier.name)}
-                  className="h-9 rounded-full border border-[#D32F2F]/25 bg-white px-3 text-[12px] font-bold text-[#B91C1C] shadow-sm active:scale-[0.98]"
-                >
-                  Eliminar proveedor
-                </button>
+                />
               </div>
 
-              <div className="mt-2 space-y-1.5">
+              <div className="mt-3 space-y-2">
             {[...supplier.products]
               .sort((a, b) => a.name.localeCompare(b.name, 'es'))
               .map((p) => (
-              <div key={p.id} className="rounded-2xl border border-zinc-200/80 bg-white px-3 py-3 shadow-[0_1px_2px_rgba(0,0,0,0.035)] ring-1 ring-zinc-100/70">
+              <div key={p.id} className="rounded-[18px] border border-zinc-200/80 bg-white px-3 py-2.5 shadow-[0_8px_20px_rgba(15,23,42,0.035)] ring-1 ring-zinc-100/70">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0 flex-1">
-                    <p className="line-clamp-2 text-[15px] font-black leading-[1.12] tracking-tight text-zinc-950">{p.name}</p>
-                    <div className="mt-2 flex flex-wrap items-end gap-x-2 gap-y-1">
-                      <p className="text-[22px] font-black leading-none tracking-tight text-zinc-950 tabular-nums">
+                    <div className="flex items-start gap-2">
+                      <span className="mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-xl bg-zinc-50 text-zinc-500 ring-1 ring-zinc-200/70" aria-hidden>
+                        <Package className="h-3.5 w-3.5" />
+                      </span>
+                      <div className="min-w-0">
+                        <p className="truncate text-[13px] font-semibold leading-tight tracking-tight text-zinc-950">{p.name}</p>
+                        <div className="mt-0.5 flex flex-wrap items-center gap-2 text-[10px] text-zinc-500">
+                          <span className="rounded-full bg-zinc-50 px-1.5 py-0.5 ring-1 ring-zinc-200/70">catálogo</span>
+                          {p.unitsPerPack && p.unitsPerPack > 1 ? (
+                            <span className="rounded-full bg-zinc-50 px-1.5 py-0.5 ring-1 ring-zinc-200/70">
+                              x{p.unitsPerPack} {unitPriceCatalogSuffix[p.recipeUnit ?? 'ud']}
+                            </span>
+                          ) : null}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="mt-2 pl-9">
+                      <p className="text-[18px] font-semibold leading-none tracking-tight text-zinc-950 tabular-nums">
                         {formatUnitPriceEur(p.pricePerUnit, unitPriceCatalogSuffix[p.unit])}
                       </p>
-                      <span className="pb-0.5 text-[10px] font-bold uppercase tracking-[0.12em] text-zinc-400">catálogo</span>
+                      <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[10px] font-medium text-zinc-500">
+                        <span className="rounded-full bg-zinc-50 px-2 py-0.5 ring-1 ring-zinc-200/70">IVA {(p.vatRate * 100).toFixed(0)}%</span>
+                        {p.ultimoPrecioRecibido != null &&
+                        Number.isFinite(p.ultimoPrecioRecibido) &&
+                        p.ultimoPrecioRecibido > 0 ? (
+                          <span className="rounded-full bg-zinc-50 px-2 py-0.5 ring-1 ring-zinc-200/70">
+                            Últ. recepción {formatUnitPriceEur(p.ultimoPrecioRecibido, unitPriceCatalogSuffix[p.unit])}
+                          </span>
+                        ) : null}
+                        {supplierProductHasDistinctBilling(p) && p.billingUnit === 'kg' && p.pricePerBillingUnit != null ? (
+                          <span className="rounded-full bg-zinc-50 px-2 py-0.5 ring-1 ring-zinc-200/70">
+                            {formatUnitPriceEur(p.pricePerBillingUnit, 'kg')} · ~{p.billingQtyPerOrderUnit ?? '—'} kg/{unitPriceCatalogSuffix[p.unit]}
+                          </span>
+                        ) : null}
+                        {!supplierProductHasDistinctBilling(p) &&
+                        unitSupportsReceivedWeightKg(p.unit) &&
+                        p.estimatedKgPerUnit != null &&
+                        p.estimatedKgPerUnit > 0 ? (
+                          <span className="rounded-full bg-zinc-50 px-2 py-0.5 ring-1 ring-zinc-200/70">
+                            ~{p.estimatedKgPerUnit} kg/{p.unit}
+                          </span>
+                        ) : null}
+                        {(p.parStock ?? 0) > 0 ? (
+                          <span className="rounded-full bg-zinc-50 px-2 py-0.5 ring-1 ring-zinc-200/70">
+                            Ref. sem. {p.parStock}
+                          </span>
+                        ) : null}
+                      </div>
                     </div>
                   </div>
-                  <div className="flex shrink-0 items-center gap-1.5">
+                  <div className="flex shrink-0 items-center gap-1">
                     <button
                       type="button"
                       onClick={() => {
@@ -853,47 +987,20 @@ export default function ProveedoresPage() {
                         }));
                         setEditingProductId(p.id);
                       }}
-                      className="h-8 rounded-full border border-zinc-200 bg-zinc-50 px-3 text-[12px] font-bold text-zinc-700 shadow-sm active:scale-[0.98]"
+                      className="inline-flex h-8 items-center gap-1 rounded-full border border-zinc-200 bg-zinc-50 px-2.5 text-[11px] font-medium text-zinc-700 shadow-sm active:scale-[0.98]"
                     >
+                      <PencilLine className="h-3.5 w-3.5" strokeWidth={2.25} />
                       {editingProductId === p.id ? 'Cerrar' : 'Editar'}
                     </button>
                     <button
                       type="button"
                       onClick={() => disableProduct(p.id)}
-                      className="h-8 rounded-full border border-[#D32F2F]/25 bg-[#FFF7F5] px-3 text-[12px] font-bold text-[#B91C1C] shadow-sm active:scale-[0.98]"
+                      className="inline-flex h-8 items-center gap-1 rounded-full border border-rose-200 bg-rose-50 px-2.5 text-[11px] font-medium text-rose-700 shadow-sm active:scale-[0.98]"
                     >
+                      <Power className="h-3.5 w-3.5" strokeWidth={2.25} />
                       Desactivar
                     </button>
                   </div>
-                </div>
-                <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[11px] font-semibold leading-snug text-zinc-500">
-                  <span className="rounded-full bg-zinc-50 px-2 py-1 ring-1 ring-zinc-200/80">IVA {(p.vatRate * 100).toFixed(0)}%</span>
-                  {p.ultimoPrecioRecibido != null &&
-                  Number.isFinite(p.ultimoPrecioRecibido) &&
-                  p.ultimoPrecioRecibido > 0 ? (
-                    <span className="rounded-full bg-zinc-50 px-2 py-1 ring-1 ring-zinc-200/80">
-                      Últ. recibido {formatUnitPriceEur(p.ultimoPrecioRecibido, unitPriceCatalogSuffix[p.unit])}
-                    </span>
-                  ) : null}
-                  {(p.unitsPerPack ?? 1) > 1 ? (
-                    <span className="rounded-full bg-zinc-50 px-2 py-1 ring-1 ring-zinc-200/80">
-                      Coste uso {formatUnitPriceEur(p.pricePerUnit / (p.unitsPerPack ?? 1), unitPriceCatalogSuffix[p.recipeUnit ?? 'ud'])}
-                    </span>
-                  ) : null}
-                  {supplierProductHasDistinctBilling(p) && p.billingUnit === 'kg' && p.pricePerBillingUnit != null ? (
-                    <span className="rounded-full bg-zinc-50 px-2 py-1 ring-1 ring-zinc-200/80">
-                      Cobro {formatUnitPriceEur(p.pricePerBillingUnit, 'kg')} · ~{p.billingQtyPerOrderUnit ?? '—'} kg/{unitPriceCatalogSuffix[p.unit]}
-                    </span>
-                  ) : null}
-                  {!supplierProductHasDistinctBilling(p) &&
-                  unitSupportsReceivedWeightKg(p.unit) &&
-                  p.estimatedKgPerUnit != null &&
-                  p.estimatedKgPerUnit > 0 ? (
-                    <span className="rounded-full bg-zinc-50 px-2 py-1 ring-1 ring-zinc-200/80">~{p.estimatedKgPerUnit} kg/{p.unit}</span>
-                  ) : null}
-                  {(p.parStock ?? 0) > 0 ? (
-                    <span className="rounded-full bg-zinc-50 px-2 py-1 ring-1 ring-zinc-200/80">Ref. sem. {p.parStock} {unitPriceCatalogSuffix[p.unit]}</span>
-                  ) : null}
                 </div>
               </div>
               ))}
@@ -915,29 +1022,29 @@ export default function ProveedoresPage() {
         title="Nuevo proveedor"
         onClose={() => setNewSupplierOpen(false)}
       >
-        <div className="grid grid-cols-1 gap-2">
+        <div className="grid grid-cols-1 gap-2.5">
           <div>
-            <label className="text-xs font-semibold text-zinc-600">Nombre comercial</label>
-            <input
+            <label className="text-[10px] font-medium uppercase tracking-[0.16em] text-zinc-400">Nombre comercial</label>
+            <SoftField
               value={newSupplierName}
               onChange={(e) => setNewSupplierName(e.target.value)}
               placeholder="Ej. MAKRO"
-              className="mt-1 h-10 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm text-zinc-900 placeholder:text-zinc-400"
+              className="mt-1"
             />
           </div>
           <div>
-            <label className="text-xs font-semibold text-zinc-600">Contacto (tel. o email)</label>
-            <input
+            <label className="text-[10px] font-medium uppercase tracking-[0.16em] text-zinc-400">Contacto (tel. o email)</label>
+            <SoftField
               value={newSupplierContact}
               onChange={(e) => setNewSupplierContact(e.target.value)}
               placeholder="Opcional"
-              className="mt-1 h-10 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm text-zinc-900 placeholder:text-zinc-400"
+              className="mt-1"
             />
           </div>
           <button
             type="button"
             onClick={createNewSupplier}
-            className="h-10 w-full rounded-xl bg-[#D32F2F] text-sm font-bold text-white"
+            className="h-10 w-full rounded-2xl bg-[#D32F2F] text-sm font-semibold text-white shadow-[0_10px_20px_rgba(211,47,47,0.12)]"
           >
             Guardar proveedor
           </button>
@@ -949,18 +1056,17 @@ export default function ProveedoresPage() {
         title="Añadir producto"
         onClose={() => setAddProductOpen(false)}
       >
-        <div className="mt-2 grid grid-cols-1 gap-2">
-          <p className="rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2.5 text-sm font-semibold text-zinc-900">
+        <div className="mt-1 grid grid-cols-1 gap-2.5">
+          <p className="rounded-2xl border border-zinc-200/70 bg-zinc-50/80 px-3 py-2.5 text-sm font-medium text-zinc-900">
             {suppliers.find((s) => s.id === productSupplierId)?.name ?? 'Proveedor'}
           </p>
-          <input
+          <SoftField
             value={productName}
             onChange={(e) => setProductName(e.target.value)}
             placeholder="Nombre producto"
-            className="h-10 rounded-xl border border-zinc-300 bg-white px-3 text-sm text-zinc-900 placeholder:text-zinc-500 outline-none"
           />
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-            <select
+            <SoftSelect
               value={productUnit}
               onChange={(e) => {
                 const u = e.target.value as Unit;
@@ -971,37 +1077,34 @@ export default function ProveedoresPage() {
                   setProductPricePerKg('');
                 }
               }}
-              className="h-10 rounded-xl border border-zinc-300 bg-white px-3 text-sm text-zinc-900 outline-none"
             >
               {PEDIDO_ORDER_UNITS.map((o) => (
                 <option key={o.value} value={o.value}>
                   {o.label}
                 </option>
               ))}
-            </select>
+            </SoftSelect>
             {productDualKgBilling && unitSupportsReceivedWeightKg(productUnit) && productUnit !== 'kg' ? (
-              <div className="flex h-10 items-center rounded-xl border border-zinc-200 bg-zinc-50 px-3 text-sm font-semibold text-zinc-800">
+              <div className="flex h-11 items-center rounded-2xl border border-zinc-200/70 bg-zinc-50/80 px-3 text-sm font-medium text-zinc-800">
                 {dualNewProductDerivedPrice != null
                   ? `${formatUnitPriceEur(dualNewProductDerivedPrice, unitPriceCatalogSuffix[productUnit])} (derivado)`
                   : '— (equiv. × €/kg)'}
               </div>
             ) : (
-              <input
+              <SoftField
                 value={productPrice}
                 onChange={(e) => setProductPrice(e.target.value)}
                 placeholder="Precio por unidad de pedido"
-                className="h-10 rounded-xl border border-zinc-300 bg-white px-3 text-sm text-zinc-900 placeholder:text-zinc-500 outline-none"
               />
             )}
-            <input
+            <SoftField
               value={productVat}
               onChange={(e) => setProductVat(e.target.value)}
               placeholder="IVA (0,21)"
-              className="h-10 rounded-xl border border-zinc-300 bg-white px-3 text-sm text-zinc-900 placeholder:text-zinc-500 outline-none"
             />
           </div>
           {unitSupportsReceivedWeightKg(productUnit) && productUnit !== 'kg' ? (
-            <label className="flex cursor-pointer items-center gap-2 text-sm text-zinc-800">
+            <label className="flex cursor-pointer items-center gap-2 text-[12px] text-zinc-700">
               <input
                 type="checkbox"
                 checked={productDualKgBilling}
@@ -1016,67 +1119,62 @@ export default function ProveedoresPage() {
           ) : null}
           {productDualKgBilling && unitSupportsReceivedWeightKg(productUnit) && productUnit !== 'kg' ? (
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-              <input
+              <SoftField
                 value={productEquivKg}
                 onChange={(e) => setProductEquivKg(e.target.value)}
                 placeholder={`Kg por ${unitPriceCatalogSuffix[productUnit]} (estimado)`}
-                className="h-10 rounded-xl border border-zinc-300 bg-white px-3 text-sm text-zinc-900 placeholder:text-zinc-500 outline-none"
               />
-              <input
+              <SoftField
                 value={productPricePerKg}
                 onChange={(e) => setProductPricePerKg(e.target.value)}
                 placeholder="€/kg habitual"
-                className="h-10 rounded-xl border border-zinc-300 bg-white px-3 text-sm text-zinc-900 placeholder:text-zinc-500 outline-none"
               />
             </div>
           ) : null}
-          <input
+          <SoftField
             value={productUnitsPerPack}
             onChange={(e) => setProductUnitsPerPack(e.target.value)}
             placeholder="Unidades de uso interno por 1 unidad de pedido (ej. 12 huevos/docena)"
             title="Ej. 12 si pides por docenas y el uso interno es por huevo (ud); 180 si 1 caja = 180 ud. 1 = el precio ya es por esa unidad de pedido."
-            className="h-10 rounded-xl border border-zinc-300 bg-white px-3 text-sm text-zinc-900 placeholder:text-zinc-500 outline-none"
           />
           {parseUnitsPerPack(productUnitsPerPack) != null && parseUnitsPerPack(productUnitsPerPack)! > 1 ? (
             <div>
-              <label className="text-xs font-semibold text-zinc-600">Unidad de uso interna (escandallo / coste)</label>
-              <select
+              <label className="text-[10px] font-medium uppercase tracking-[0.16em] text-zinc-400">Unidad de uso interna (escandallo / coste)</label>
+              <SoftSelect
                 value={productRecipeUnit}
                 onChange={(e) => setProductRecipeUnit(e.target.value as Unit)}
-                className="mt-1 h-10 w-full rounded-xl border border-zinc-300 bg-white px-3 text-sm text-zinc-900 outline-none"
+                className="mt-1"
               >
                 {PEDIDO_RECIPE_UNITS.map((o) => (
                   <option key={o.value} value={o.value}>
                     {o.label}
                   </option>
                 ))}
-              </select>
+              </SoftSelect>
             </div>
           ) : null}
-          <p className="text-xs text-zinc-500">
+          <p className="text-[11px] leading-snug text-zinc-500">
             La unidad de pedido (selector de arriba) es la que ves al hacer el pedido al proveedor. El precio es por esa
             unidad salvo «cobro por kg». Si 1 docena / 1 caja equivale a varias unidades internas (huevos, piezas), indica
             el factor y la unidad de uso interna.
           </p>
-          <input
+          <SoftField
             value={productParWeekly}
             onChange={(e) => setProductParWeekly(e.target.value)}
             placeholder="Consumo ref. semanal (opcional, misma unidad que el pedido)"
             title="Para sugerencias en Nuevo pedido: necesidad aproximada en 7 días; el sistema la reparte según días hasta el siguiente reparto."
-            className="h-10 rounded-xl border border-zinc-300 bg-white px-3 text-sm text-zinc-900 placeholder:text-zinc-500 outline-none"
           />
           {unitSupportsReceivedWeightKg(productUnit) && !productDualKgBilling ? (
-            <input
+            <SoftField
               value={productEstimatedKg}
               onChange={(e) => setProductEstimatedKg(e.target.value)}
               placeholder="Kg estimados por envase — bandeja/caja (opcional)"
-              className="h-10 rounded-xl border border-zinc-300 bg-white px-3 text-sm text-zinc-900 placeholder:text-zinc-500 outline-none"
             />
           ) : null}
           <button
             type="button"
             onClick={saveSupplierProduct}
-            className="h-10 rounded-xl bg-[#D32F2F] px-3 text-sm font-bold text-white"
+            className="h-10 rounded-2xl bg-[#D32F2F] px-3 text-sm font-semibold text-white shadow-[0_10px_20px_rgba(211,47,47,0.12)]"
           >
             Guardar producto
           </button>
@@ -1090,8 +1188,8 @@ export default function ProveedoresPage() {
           title="Editar proveedor"
           onClose={() => setEditingSupplierId(null)}
         >
-<div className="mt-3 grid grid-cols-1 gap-3 rounded-2xl border border-zinc-200/80 bg-[#FAFAF8] p-3 shadow-sm ring-1 ring-zinc-100/80">
-              <input
+          <div className="grid grid-cols-1 gap-3 rounded-[22px] border border-zinc-200/70 bg-white/70 p-3 shadow-[0_10px_24px_rgba(15,23,42,0.04)] ring-1 ring-zinc-100/70">
+              <SoftField
                 value={supplierDrafts[editSup.id]?.name ?? ''}
                 onChange={(e) =>
                   setSupplierDrafts((prev) => ({
@@ -1108,9 +1206,8 @@ export default function ProveedoresPage() {
                   }))
                 }
                 placeholder="Nombre proveedor"
-                className="h-10 rounded-xl border border-zinc-300 bg-white px-3 text-sm text-zinc-900 placeholder:text-zinc-500 outline-none"
               />
-              <input
+              <SoftField
                 value={supplierDrafts[editSup.id]?.contact ?? ''}
                 onChange={(e) =>
                   setSupplierDrafts((prev) => ({
@@ -1127,10 +1224,9 @@ export default function ProveedoresPage() {
                   }))
                 }
                 placeholder="Telefono o email de contacto"
-                className="h-10 rounded-xl border border-zinc-300 bg-white px-3 text-sm text-zinc-900 placeholder:text-zinc-500 outline-none"
               />
               <div>
-                <p className="text-[11px] font-semibold text-zinc-700">Días de reparto</p>
+                <p className="text-[10px] font-medium uppercase tracking-[0.16em] text-zinc-400">Días de reparto</p>
                 <p className="mt-0.5 text-[10px] text-zinc-500">
                   Ninguno marcado = objetivo semanal completo (7 días). Marca 2 días (ej. L y J) para tramos Lun–Mié y
                   Jue–Dom en Nuevo pedido.
@@ -1177,18 +1273,17 @@ export default function ProveedoresPage() {
                 </div>
               </div>
               <div>
-                <p className="text-[11px] font-semibold text-zinc-700">Excepciones de reparto (festivos)</p>
+                <p className="text-[10px] font-medium uppercase tracking-[0.16em] text-zinc-400">Excepciones de reparto (festivos)</p>
                 <p className="mt-0.5 text-[10px] text-zinc-500">
                   Si una semana cambia el día (ej. jueves festivo → miércoles), añádelo aquí.
                 </p>
                 <div className="mt-2 flex items-center gap-2">
-                  <input
+                  <SoftField
                     type="date"
                     value={exceptionInputBySupplier[editSup.id] ?? ''}
                     onChange={(e) =>
                       setExceptionInputBySupplier((prev) => ({ ...prev, [editSup.id]: e.target.value }))
                     }
-                    className="h-9 flex-1 rounded-lg border border-zinc-300 bg-white px-2 text-sm text-zinc-900 outline-none"
                   />
                   <button
                     type="button"
@@ -1213,7 +1308,7 @@ export default function ProveedoresPage() {
                       });
                       setExceptionInputBySupplier((prev) => ({ ...prev, [editSup.id]: '' }));
                     }}
-                    className="h-9 rounded-lg border border-zinc-300 bg-white px-3 text-xs font-semibold text-zinc-700"
+                    className="h-9 rounded-full border border-zinc-200 bg-white px-3 text-xs font-medium text-zinc-700 shadow-sm"
                   >
                     Añadir
                   </button>
@@ -1249,12 +1344,12 @@ export default function ProveedoresPage() {
                 )}
               </div>
 
-              <details className="rounded-xl border border-zinc-200 bg-white ring-1 ring-zinc-100/80 [&_summary::-webkit-details-marker]:hidden">
-                <summary className="cursor-pointer list-none px-3 py-2 text-[12px] font-bold text-zinc-800">
+              <details className="rounded-[18px] border border-zinc-200/70 bg-white/80 ring-1 ring-zinc-100/80 [&_summary::-webkit-details-marker]:hidden">
+                <summary className="cursor-pointer list-none px-3 py-2 text-[12px] font-medium text-zinc-800">
                   Agenda de pedido <span className="font-normal text-zinc-500">(opcional)</span>
                 </summary>
                 <div className="space-y-3 border-t border-zinc-100 px-3 pb-3 pt-2">
-                  <label className="flex cursor-pointer items-center gap-2 text-[12px] font-semibold text-zinc-800">
+                  <label className="flex cursor-pointer items-center gap-2 text-[12px] font-medium text-zinc-800">
                     <input
                       type="checkbox"
                       checked={agendaEnabled}
@@ -1264,8 +1359,8 @@ export default function ProveedoresPage() {
                     Activar agenda para este proveedor
                   </label>
                   {agendaEnabled ? (
-                    <div className="rounded-xl border border-zinc-100 bg-zinc-50/90 px-2.5 py-2 ring-1 ring-zinc-100/80">
-                      <p className="text-[11px] font-semibold text-zinc-800">Tipo en «Agenda de hoy»</p>
+                    <div className="rounded-[18px] border border-zinc-100 bg-zinc-50/70 px-2.5 py-2 ring-1 ring-zinc-100/80">
+                      <p className="text-[10px] font-medium uppercase tracking-[0.16em] text-zinc-400">Tipo en «Agenda de hoy»</p>
                       <p className="mt-0.5 text-[10px] leading-snug text-zinc-500">
                         Obligatorio: bloque rojo con hora límite. Solo revisar: checklist con la misma hora como referencia.
                       </p>
@@ -1274,7 +1369,7 @@ export default function ProveedoresPage() {
                           type="button"
                           onClick={() => setAgendaMode('mandatory')}
                           className={[
-                            'min-h-[2.25rem] flex-1 touch-manipulation rounded-xl px-2 py-1.5 text-center text-[11px] font-bold leading-snug ring-1 transition-colors',
+                          'min-h-[2.25rem] flex-1 touch-manipulation rounded-2xl px-2 py-1.5 text-center text-[11px] font-medium leading-snug ring-1 transition-colors',
                             agendaMode === 'mandatory'
                               ? 'bg-[#E30613] text-white ring-[#c50512]'
                               : 'border border-zinc-200 bg-white text-zinc-700 ring-zinc-100',
@@ -1287,7 +1382,7 @@ export default function ProveedoresPage() {
                           type="button"
                           onClick={() => setAgendaMode('review')}
                           className={[
-                            'min-h-[2.25rem] flex-1 touch-manipulation rounded-xl px-2 py-1.5 text-center text-[11px] font-bold leading-snug ring-1 transition-colors',
+                          'min-h-[2.25rem] flex-1 touch-manipulation rounded-2xl px-2 py-1.5 text-center text-[11px] font-medium leading-snug ring-1 transition-colors',
                             agendaMode === 'review'
                               ? 'bg-amber-600 text-white ring-amber-700'
                               : 'border border-zinc-200 bg-white text-zinc-700 ring-zinc-100',
@@ -1300,7 +1395,7 @@ export default function ProveedoresPage() {
                     </div>
                   ) : null}
                   <div>
-                    <p className="text-[11px] font-semibold text-zinc-700">Días para hacer el pedido</p>
+                    <p className="text-[10px] font-medium uppercase tracking-[0.16em] text-zinc-400">Días para hacer el pedido</p>
                     <p className="mt-0.5 text-[10px] text-zinc-500">
                       {agendaMode === 'review'
                         ? 'Esos días aparecerá en «Revisar proveedores» (sin hora límite obligatoria).'
@@ -1339,11 +1434,11 @@ export default function ProveedoresPage() {
                       <p className="text-[11px] font-semibold text-zinc-700">
                         Hora límite{agendaMode === 'review' ? ' (referencia)' : ''}
                       </p>
-                      <input
+                      <SoftField
                         type="time"
                         value={agendaCutoff}
                         onChange={(e) => setAgendaCutoff(e.target.value)}
-                        className="mt-1 h-10 w-full rounded-xl border border-zinc-300 bg-white px-2 text-sm text-zinc-900 outline-none"
+                        className="mt-1"
                       />
                       {agendaMode === 'review' ? (
                         <p className="mt-1 text-[10px] leading-snug text-zinc-500">
@@ -1355,19 +1450,19 @@ export default function ProveedoresPage() {
                     {agendaMode === 'mandatory' ? (
                       <div>
                         <p className="text-[11px] font-semibold text-zinc-700">Aviso antes (min)</p>
-                        <input
+                        <SoftField
                           type="number"
                           min={0}
                           max={1440}
                           value={agendaReminder}
                           onChange={(e) => setAgendaReminder(Number(e.target.value))}
-                          className="mt-1 h-10 w-full rounded-xl border border-zinc-300 bg-white px-2 text-sm text-zinc-900 outline-none"
+                          className="mt-1"
                         />
                       </div>
                     ) : null}
                   </div>
                   <div>
-                    <p className="text-[11px] font-semibold text-zinc-700">Días de entrega (referencia)</p>
+                    <p className="text-[10px] font-medium uppercase tracking-[0.16em] text-zinc-400">Días de entrega (referencia)</p>
                     <div className="mt-2 flex flex-wrap gap-1.5">
                       {DELIVERY_DAY_CHIPS.map(({ day, label }) => {
                         const sel = agendaDeliveryDays.includes(day);
@@ -1397,15 +1492,14 @@ export default function ProveedoresPage() {
                     </div>
                   </div>
                   <div>
-                    <p className="text-[11px] font-semibold text-zinc-700">Productos a revisar antes de pedir</p>
+                    <p className="text-[10px] font-medium uppercase tracking-[0.16em] text-zinc-400">Productos a revisar antes de pedir</p>
                     <p className="mt-0.5 text-[10px] text-zinc-500">
                       Solo recordatorio visual; no añade líneas al pedido.
                     </p>
                     <div className="mt-2 flex flex-wrap gap-2">
-                      <select
+                      <SoftSelect
                         value={agendaReviewPick}
                         onChange={(e) => setAgendaReviewPick(e.target.value)}
-                        className="h-10 min-w-0 flex-1 rounded-xl border border-zinc-300 bg-white px-2 text-sm text-zinc-900 outline-none"
                       >
                         <option value="">Elegir del catálogo…</option>
                         {editSup.products
@@ -1415,7 +1509,7 @@ export default function ProveedoresPage() {
                               {p.name}
                             </option>
                           ))}
-                      </select>
+                      </SoftSelect>
                       <button
                         type="button"
                         onClick={() => {
@@ -1426,7 +1520,7 @@ export default function ProveedoresPage() {
                           setAgendaReviews((prev) => [...prev, { supplierProductId: p.id, name: p.name }]);
                           setAgendaReviewPick('');
                         }}
-                        className="h-10 shrink-0 rounded-xl border border-zinc-300 bg-white px-3 text-xs font-semibold text-zinc-800"
+                        className="h-10 shrink-0 rounded-full border border-zinc-200 bg-white px-3 text-xs font-medium text-zinc-800 shadow-sm"
                       >
                         Añadir
                       </button>
@@ -1436,7 +1530,7 @@ export default function ProveedoresPage() {
                         {agendaReviews.map((r, idx) => (
                           <li
                             key={`${r.supplierProductId ?? 'x'}-${idx}`}
-                            className="flex items-center justify-between gap-2 rounded-lg border border-zinc-100 bg-zinc-50/90 px-2 py-1 text-[12px]"
+                            className="flex items-center justify-between gap-2 rounded-full border border-zinc-100 bg-zinc-50/80 px-2 py-1 text-[12px]"
                           >
                             <span className="min-w-0 truncate font-medium text-zinc-900">{r.name}</span>
                             <button
@@ -1459,7 +1553,7 @@ export default function ProveedoresPage() {
               <button
                 type="button"
                 onClick={() => saveSupplierChanges(editSup.id)}
-                className="h-11 rounded-2xl bg-[#D32F2F] px-3 text-sm font-black text-white shadow-sm shadow-[#D32F2F]/15 active:scale-[0.99]"
+                className="h-11 rounded-2xl bg-[#D32F2F] px-3 text-sm font-semibold text-white shadow-[0_10px_20px_rgba(211,47,47,0.12)] active:scale-[0.99]"
               >
                 Guardar cambios
               </button>
@@ -1487,8 +1581,8 @@ export default function ProveedoresPage() {
                 title="Editar producto"
                 onClose={() => setEditingProductId(null)}
               >
-                  <div className="mt-3 grid grid-cols-1 gap-3 rounded-2xl border border-zinc-200/80 bg-[#FAFAF8] p-3 shadow-sm ring-1 ring-zinc-100/80">
-                    <input
+                  <div className="grid grid-cols-1 gap-3 rounded-[22px] border border-zinc-200/70 bg-white/70 p-3 shadow-[0_10px_24px_rgba(15,23,42,0.04)] ring-1 ring-zinc-100/70">
+                    <SoftField
                       value={productDrafts[editP.id]?.name ?? ''}
                       onChange={(e) =>
                         setProductDrafts((prev) => ({
@@ -1509,10 +1603,9 @@ export default function ProveedoresPage() {
                         }))
                       }
                       placeholder="Nombre producto"
-                      className="h-9 rounded-lg border border-zinc-300 bg-white px-3 text-sm text-zinc-900 placeholder:text-zinc-500 outline-none"
                     />
                     <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-                      <select
+                      <SoftSelect
                         value={productDrafts[editP.id]?.unit ?? 'ud'}
                         onChange={(e) => {
                           const nextU = e.target.value as Unit;
@@ -1527,22 +1620,21 @@ export default function ProveedoresPage() {
                             },
                           }));
                         }}
-                        className="h-9 rounded-lg border border-zinc-300 bg-white px-3 text-sm text-zinc-900 outline-none"
                       >
                         {PEDIDO_ORDER_UNITS.map((o) => (
                           <option key={o.value} value={o.value}>
                             {o.label}
                           </option>
                         ))}
-                      </select>
+                      </SoftSelect>
                       {editDual ? (
-                        <div className="flex h-9 items-center rounded-lg border border-zinc-200 bg-zinc-50 px-3 text-xs font-semibold text-zinc-800">
+                        <div className="flex h-11 items-center rounded-2xl border border-zinc-200/70 bg-zinc-50/80 px-3 text-xs font-medium text-zinc-800">
                           {editDerived != null
                             ? `${formatUnitPriceEur(editDerived, unitPriceCatalogSuffix[u])} (derivado)`
                             : '— (equiv. × €/kg)'}
                         </div>
                       ) : (
-                        <input
+                        <SoftField
                           value={productDrafts[editP.id]?.price ?? ''}
                           onChange={(e) =>
                             setProductDrafts((prev) => ({
@@ -1554,10 +1646,9 @@ export default function ProveedoresPage() {
                             }))
                           }
                           placeholder="Precio unidad"
-                          className="h-9 rounded-lg border border-zinc-300 bg-white px-3 text-sm text-zinc-900 placeholder:text-zinc-500 outline-none"
                         />
                       )}
-                      <input
+                      <SoftField
                         value={productDrafts[editP.id]?.vatRate ?? ''}
                         onChange={(e) =>
                           setProductDrafts((prev) => ({
@@ -1578,11 +1669,10 @@ export default function ProveedoresPage() {
                           }))
                         }
                         placeholder="IVA (0,21)"
-                        className="h-9 rounded-lg border border-zinc-300 bg-white px-3 text-sm text-zinc-900 placeholder:text-zinc-500 outline-none"
                       />
                     </div>
                     {unitSupportsReceivedWeightKg(u) && u !== 'kg' ? (
-                      <label className="flex cursor-pointer items-center gap-2 text-xs text-zinc-800">
+                      <label className="flex cursor-pointer items-center gap-2 text-[12px] text-zinc-700">
                         <input
                           type="checkbox"
                           checked={productDrafts[editP.id]?.dualKgBilling === true}
@@ -1603,7 +1693,7 @@ export default function ProveedoresPage() {
                     ) : null}
                     {editDual ? (
                       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                        <input
+                        <SoftField
                           value={productDrafts[editP.id]?.equivKg ?? ''}
                           onChange={(e) =>
                             setProductDrafts((prev) => ({
@@ -1615,9 +1705,8 @@ export default function ProveedoresPage() {
                             }))
                           }
                           placeholder={`Kg por ${unitPriceCatalogSuffix[u]} (estimado)`}
-                          className="h-9 rounded-lg border border-zinc-300 bg-white px-3 text-sm text-zinc-900 placeholder:text-zinc-500 outline-none"
                         />
-                        <input
+                        <SoftField
                           value={productDrafts[editP.id]?.pricePerKg ?? ''}
                           onChange={(e) =>
                             setProductDrafts((prev) => ({
@@ -1629,11 +1718,10 @@ export default function ProveedoresPage() {
                             }))
                           }
                           placeholder="€/kg habitual"
-                          className="h-9 rounded-lg border border-zinc-300 bg-white px-3 text-sm text-zinc-900 placeholder:text-zinc-500 outline-none"
                         />
                       </div>
                     ) : null}
-                    <input
+                    <SoftField
                       value={productDrafts[editP.id]?.parWeekly ?? ''}
                       onChange={(e) =>
                         setProductDrafts((prev) => ({
@@ -1654,9 +1742,8 @@ export default function ProveedoresPage() {
                         }))
                       }
                       placeholder="Consumo ref. semanal (opcional)"
-                      className="h-9 rounded-lg border border-zinc-300 bg-white px-3 text-sm text-zinc-900 placeholder:text-zinc-500 outline-none"
                     />
-                    <input
+                    <SoftField
                       value={productDrafts[editP.id]?.unitsPerPack ?? '1'}
                       onChange={(e) =>
                         setProductDrafts((prev) => ({
@@ -1677,11 +1764,10 @@ export default function ProveedoresPage() {
                         }))
                       }
                       placeholder="Piezas por envase (receta)"
-                      className="h-9 rounded-lg border border-zinc-300 bg-white px-3 text-sm text-zinc-900 placeholder:text-zinc-500 outline-none"
                     />
                     {parseUnitsPerPack(productDrafts[editP.id]?.unitsPerPack ?? '1') != null &&
                     parseUnitsPerPack(productDrafts[editP.id]?.unitsPerPack ?? '1')! > 1 ? (
-                      <select
+                      <SoftSelect
                         value={productDrafts[editP.id]?.recipeUnit ?? 'ud'}
                         onChange={(e) =>
                           setProductDrafts((prev) => ({
@@ -1701,17 +1787,16 @@ export default function ProveedoresPage() {
                             },
                           }))
                         }
-                        className="h-9 rounded-lg border border-zinc-300 bg-white px-3 text-sm text-zinc-900 outline-none"
                       >
                         {PEDIDO_RECIPE_UNITS.map((o) => (
                           <option key={o.value} value={o.value}>
                             {o.label}
                           </option>
                         ))}
-                      </select>
+                      </SoftSelect>
                     ) : null}
                     {!editDual && unitSupportsReceivedWeightKg(productDrafts[editP.id]?.unit ?? editP.unit) ? (
-                      <input
+                      <SoftField
                         value={productDrafts[editP.id]?.estimatedKg ?? ''}
                         onChange={(e) =>
                           setProductDrafts((prev) => ({
@@ -1723,13 +1808,12 @@ export default function ProveedoresPage() {
                           }))
                         }
                         placeholder="Kg estimados por envase (opcional)"
-                        className="h-9 rounded-lg border border-zinc-300 bg-white px-3 text-sm text-zinc-900 placeholder:text-zinc-500 outline-none"
                       />
                     ) : null}
                     <button
                       type="button"
                       onClick={() => saveProductChanges(editP.id)}
-                      className="h-9 rounded-lg bg-[#D32F2F] px-3 text-sm font-bold text-white"
+                      className="h-10 rounded-2xl bg-[#D32F2F] px-3 text-sm font-semibold text-white shadow-[0_10px_20px_rgba(211,47,47,0.12)]"
                     >
                       Guardar cambios
                     </button>
