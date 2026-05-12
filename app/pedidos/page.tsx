@@ -4100,7 +4100,7 @@ export default function PedidosPage() {
             <Link
               href="/pedidos/proveedores"
               className={[
-                'group flex min-h-[5.2rem] flex-col justify-between rounded-[20px] border p-3 text-left transition active:scale-[0.99]',
+                'group flex min-h-[3.4rem] flex-col justify-between rounded-[20px] border px-3 py-2 text-left transition active:scale-[0.99] sm:min-h-[4.1rem] sm:py-2.5',
                 pedidosNavActive('/pedidos/proveedores')
                   ? 'border-[#D32F2F]/18 bg-[#FFF7F5] shadow-[0_4px_16px_rgba(211,47,47,0.08)] ring-1 ring-[#D32F2F]/10'
                   : 'border-zinc-200/80 bg-white shadow-[0_2px_10px_rgba(0,0,0,0.04)] ring-1 ring-zinc-200/70',
@@ -4121,7 +4121,7 @@ export default function PedidosPage() {
             <Link
               href="/pedidos/articulos"
               className={[
-                'group flex min-h-[5.2rem] flex-col justify-between rounded-[20px] border p-3 text-left transition active:scale-[0.99]',
+                'group flex min-h-[3.4rem] flex-col justify-between rounded-[20px] border px-3 py-2 text-left transition active:scale-[0.99] sm:min-h-[4.1rem] sm:py-2.5',
                 pedidosNavActive('/pedidos/articulos')
                   ? 'border-[#D32F2F]/18 bg-[#FFF7F5] shadow-[0_4px_16px_rgba(211,47,47,0.08)] ring-1 ring-[#D32F2F]/10'
                   : 'border-zinc-200/80 bg-white shadow-[0_2px_10px_rgba(0,0,0,0.04)] ring-1 ring-zinc-200/70',
@@ -4144,7 +4144,7 @@ export default function PedidosPage() {
             <Link
               href="/pedidos/precios"
               className={[
-                'group flex min-h-[5.2rem] flex-col justify-between rounded-[20px] border p-3 text-left transition active:scale-[0.99]',
+                'group flex min-h-[3.4rem] flex-col justify-between rounded-[20px] border px-3 py-2 text-left transition active:scale-[0.99] sm:min-h-[4.1rem] sm:py-2.5',
                 pedidosNavActive('/pedidos/precios')
                   ? 'border-[#D32F2F]/18 bg-[#FFF7F5] shadow-[0_4px_16px_rgba(211,47,47,0.08)] ring-1 ring-[#D32F2F]/10'
                   : 'border-zinc-200/80 bg-white shadow-[0_2px_10px_rgba(0,0,0,0.04)] ring-1 ring-zinc-200/70',
@@ -4167,7 +4167,7 @@ export default function PedidosPage() {
               title="Histórico y compras del mes"
               aria-label="Abrir compras del mes"
               className={[
-                'group flex min-h-[5.2rem] flex-col justify-between rounded-[20px] border p-3 text-left transition active:scale-[0.99]',
+                'group flex min-h-[3.4rem] flex-col justify-between rounded-[20px] border px-3 py-2 text-left transition active:scale-[0.99] sm:min-h-[4.1rem] sm:py-2.5',
                 pedidosNavActive('/pedidos/historial-mes')
                   ? 'border-[#D32F2F]/18 bg-[#FFF7F5] shadow-[0_4px_16px_rgba(211,47,47,0.08)] ring-1 ring-[#D32F2F]/10'
                   : 'border-zinc-200/80 bg-white shadow-[0_2px_10px_rgba(0,0,0,0.04)] ring-1 ring-zinc-200/70',
@@ -4189,7 +4189,7 @@ export default function PedidosPage() {
           <Link
             href="/pedidos/albaranes"
             className={[
-              'group flex min-h-[5rem] w-full items-center gap-3 rounded-[20px] border p-3 text-left transition active:scale-[0.99]',
+              'group flex min-h-[3.75rem] w-full items-center gap-3 rounded-[20px] border px-3 py-2 text-left transition active:scale-[0.99] sm:min-h-[4.5rem] sm:py-2.5',
               pedidosNavActive('/pedidos/albaranes')
                 ? 'border-[#D32F2F]/18 bg-[#FFF0EE] shadow-[0_4px_16px_rgba(211,47,47,0.08)] ring-1 ring-[#D32F2F]/10'
                 : 'border-zinc-200/80 bg-white shadow-[0_2px_10px_rgba(0,0,0,0.04)] ring-1 ring-zinc-200/70',
