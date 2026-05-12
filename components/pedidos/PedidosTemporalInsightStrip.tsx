@@ -137,6 +137,7 @@ function MaturityStepper({ level }: { level: number }) {
 
 export default React.memo(function PedidosTemporalInsightStrip({ patterns, hidden }: Props) {
   const [helpOpen, setHelpOpen] = React.useState(false);
+  const [collapsed, setCollapsed] = React.useState(true);
 
   if (hidden) return null;
 
@@ -173,28 +174,34 @@ export default React.memo(function PedidosTemporalInsightStrip({ patterns, hidde
 
   return (
     <div className="border-b border-zinc-100/85 bg-gradient-to-b from-[#FAFAF9] to-white px-3 py-3 sm:px-4">
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex min-w-0 items-center gap-1.5">
+      <div className="flex items-center justify-between gap-2">
+        <button
+          type="button"
+          onClick={() => setCollapsed((v) => !v)}
+          className="inline-flex min-w-0 flex-1 items-center gap-1.5 text-left"
+          aria-expanded={!collapsed}
+          aria-controls="patrones-contenido"
+        >
           <p className="truncate text-[13px] font-bold tracking-tight text-zinc-800 sm:text-sm">
             PATRONES · nivel {level}/6
           </p>
-          <span
-            className="inline-flex shrink-0 text-zinc-400"
-            title={INSIGHT_MATURITY_TOOLTIP}
-          >
+          <span className="inline-flex shrink-0 text-zinc-400" title={INSIGHT_MATURITY_TOOLTIP}>
             <Info className="h-4 w-4" strokeWidth={2} aria-hidden />
             <span className="sr-only">Información sobre niveles de patrones</span>
           </span>
-        </div>
-        <button
-          type="button"
-          className="shrink-0 text-[12px] font-semibold text-[#E30613] underline-offset-2 hover:underline"
-          aria-expanded={helpOpen}
-          aria-controls="patrones-niveles-ayuda"
-          onClick={() => setHelpOpen((v) => !v)}
-        >
-          ¿Qué significa?
+          <span className="shrink-0 text-[11px] font-semibold text-zinc-500">{collapsed ? 'Mostrar' : 'Ocultar'}</span>
         </button>
+        <div className="shrink-0">
+          <button
+            type="button"
+            className="text-[12px] font-semibold text-[#E30613] underline-offset-2 hover:underline"
+            aria-expanded={helpOpen}
+            aria-controls="patrones-niveles-ayuda"
+            onClick={() => setHelpOpen((v) => !v)}
+          >
+            ¿Qué significa?
+          </button>
+        </div>
       </div>
 
       {helpOpen ? (
@@ -211,64 +218,68 @@ export default React.memo(function PedidosTemporalInsightStrip({ patterns, hidde
         </div>
       ) : null}
 
-      <div className="mt-4 rounded-xl bg-white/90 px-1 py-2 ring-1 ring-zinc-100/90 sm:px-2">
-        <MaturityStepper level={level} />
-      </div>
+      {!collapsed ? (
+        <div id="patrones-contenido">
+          <div className="mt-4 rounded-xl bg-white/90 px-1 py-2 ring-1 ring-zinc-100/90 sm:px-2">
+            <MaturityStepper level={level} />
+          </div>
 
-      <div className="mt-3 space-y-1 text-[12px] leading-snug text-zinc-800 sm:text-[13px]">
-        <p>
-          <span className="font-semibold text-zinc-900">Nivel {level}:</span>{' '}
-          <span className="text-zinc-700">{maturityProgressCaption(level)}</span>
-        </p>
-        <p className="text-zinc-600">{MATURITY_FOOTER_HINT}</p>
-      </div>
+          <div className="mt-3 space-y-1 text-[12px] leading-snug text-zinc-800 sm:text-[13px]">
+            <p>
+              <span className="font-semibold text-zinc-900">Nivel {level}:</span>{' '}
+              <span className="text-zinc-700">{maturityProgressCaption(level)}</span>
+            </p>
+            <p className="text-zinc-600">{MATURITY_FOOTER_HINT}</p>
+          </div>
 
-      {showLearningOnly ? (
-        <p className="mt-1.5 text-[10px] leading-snug text-zinc-500">{patterns.learningMessage}</p>
-      ) : (
-        <ul
-          className={[
-            'mt-2 flex w-full gap-0 overflow-x-auto overscroll-x-contain px-0 pb-0',
-            'snap-x snap-mandatory',
-            '[-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden',
-            'touch-pan-x',
-          ].join(' ')}
-          style={{ WebkitOverflowScrolling: 'touch' }}
-        >
-          {slots.map((slot) => {
-            const Icon = slot.icon;
-            const ins = slot.insight;
-            const sub = ins ? miniMetric(ins.headline) : null;
-            return (
-              <li
-                key={slot.key}
-                className="w-full min-w-full shrink-0 snap-start snap-always"
-                style={{ flex: '0 0 100%', scrollSnapAlign: 'start', scrollSnapStop: 'always' }}
-              >
-                <div className="flex h-[44px] min-w-0 items-center gap-2 rounded-xl border border-zinc-200/90 bg-white px-3 shadow-sm ring-1 ring-zinc-100/80">
-                  <div className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-[#FFF5F5] ring-1 ring-[#E30613]/12">
-                    <Icon className="h-3.5 w-3.5 text-[#E30613]" strokeWidth={2} aria-hidden />
-                  </div>
-                  <span className="shrink-0 text-[10px] font-bold uppercase tracking-wide text-zinc-500">
-                    {slot.label}
-                  </span>
-                  {ins ? (
-                    <p className="min-w-0 flex-1 truncate text-[12px] font-semibold leading-none text-zinc-900">
-                      {ins.headline}
-                    </p>
-                  ) : (
-                    <p className="min-w-0 flex-1 truncate text-[11px] text-zinc-400">Sin señal clara aún</p>
-                  )}
-                  <span className="shrink-0 text-[10px] text-zinc-500">{sub ?? 'Histórico'}</span>
-                </div>
-              </li>
-            );
-          })}
-        </ul>
-      )}
+          {showLearningOnly ? (
+            <p className="mt-1.5 text-[10px] leading-snug text-zinc-500">{patterns.learningMessage}</p>
+          ) : (
+            <ul
+              className={[
+                'mt-2 flex w-full gap-0 overflow-x-auto overscroll-x-contain px-0 pb-0',
+                'snap-x snap-mandatory',
+                '[-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden',
+                'touch-pan-x',
+              ].join(' ')}
+              style={{ WebkitOverflowScrolling: 'touch' }}
+            >
+              {slots.map((slot) => {
+                const Icon = slot.icon;
+                const ins = slot.insight;
+                const sub = ins ? miniMetric(ins.headline) : null;
+                return (
+                  <li
+                    key={slot.key}
+                    className="w-full min-w-full shrink-0 snap-start snap-always"
+                    style={{ flex: '0 0 100%', scrollSnapAlign: 'start', scrollSnapStop: 'always' }}
+                  >
+                    <div className="flex h-[44px] min-w-0 items-center gap-2 rounded-xl border border-zinc-200/90 bg-white px-3 shadow-sm ring-1 ring-zinc-100/80">
+                      <div className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-[#FFF5F5] ring-1 ring-[#E30613]/12">
+                        <Icon className="h-3.5 w-3.5 text-[#E30613]" strokeWidth={2} aria-hidden />
+                      </div>
+                      <span className="shrink-0 text-[10px] font-bold uppercase tracking-wide text-zinc-500">
+                        {slot.label}
+                      </span>
+                      {ins ? (
+                        <p className="min-w-0 flex-1 truncate text-[12px] font-semibold leading-none text-zinc-900">
+                          {ins.headline}
+                        </p>
+                      ) : (
+                        <p className="min-w-0 flex-1 truncate text-[11px] text-zinc-400">Sin señal clara aún</p>
+                      )}
+                      <span className="shrink-0 text-[10px] text-zinc-500">{sub ?? 'Histórico'}</span>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
 
-      {hasInsights && patterns.learningMessage ? (
-        <p className="mt-1.5 text-[9px] leading-snug text-zinc-400">{patterns.learningMessage}</p>
+          {hasInsights && patterns.learningMessage ? (
+            <p className="mt-1.5 text-[9px] leading-snug text-zinc-400">{patterns.learningMessage}</p>
+          ) : null}
+        </div>
       ) : null}
 
       <span className="sr-only">{INSIGHT_MATURITY_TOOLTIP}</span>

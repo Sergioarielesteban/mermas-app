@@ -7,7 +7,6 @@ import React from 'react';
 import { usePedidosOperationalSuggestions } from '@/hooks/usePedidosOperationalSuggestions';
 import { useSuggestedOrder } from '@/hooks/useSuggestedOrder';
 import { useTemporalPatterns } from '@/hooks/useTemporalPatterns';
-import { usePedidosSupplierAgendaBanner } from '@/hooks/usePedidosSupplierAgendaBanner';
 import { useAuth } from '@/components/AuthProvider';
 import { usePedidosOrders } from '@/components/PedidosOrdersProvider';
 import { getDemoPedidoSuppliers } from '@/lib/demo-dataset';
@@ -187,11 +186,6 @@ export default function NuevoPedidoPage() {
   const suppressNextSupplierResetRef = React.useRef(false);
   const [suppliers, setSuppliers] = React.useState<PedidoSupplier[]>([]);
   const [supplierId, setSupplierId] = React.useState('');
-  const supplierAgendaBanner = usePedidosSupplierAgendaBanner({
-    localId,
-    supplierId,
-    orders,
-  });
   const [notes, setNotes] = React.useState('');
   const [search, setSearch] = React.useState('');
   const [qtyByProductId, setQtyByProductId] = React.useState<QtyMap>({});
@@ -1458,24 +1452,6 @@ export default function NuevoPedidoPage() {
                 ))}
               </select>
             </div>
-            <button
-              type="button"
-              onClick={openDeliveryDateEditor}
-              className={[
-                'mt-1.5 inline-flex w-full items-center justify-between gap-2 rounded-lg border px-2.5 py-1.5 text-left shadow-sm ring-1',
-                deliveryDate.trim()
-                  ? 'border-zinc-200 bg-white text-zinc-700 ring-zinc-100'
-                  : 'border-[#E30613]/30 bg-[#FFF5F5] text-[#B42318] ring-[#E30613]/10',
-              ].join(' ')}
-            >
-              <span className="inline-flex min-w-0 items-center gap-1.5">
-                <CalendarDays className="h-3.5 w-3.5 shrink-0" aria-hidden />
-                <span className="truncate text-[11px] font-semibold">
-                  {deliveryDate.trim() && deliveryChipLabel ? `Entrega: ${deliveryChipLabel}` : 'Falta fecha de entrega'}
-                </span>
-              </span>
-              <span className="text-[10px] font-semibold text-zinc-500">Editar</span>
-            </button>
           </div>
         </section>
       ) : (
@@ -1503,56 +1479,8 @@ export default function NuevoPedidoPage() {
               ))}
             </select>
           </div>
-          <button
-            type="button"
-            onClick={openDeliveryDateEditor}
-            className={[
-              'mt-2 inline-flex w-full items-center justify-between gap-2 rounded-lg border px-2.5 py-1.5 text-left shadow-sm ring-1',
-              deliveryDate.trim()
-                ? 'border-zinc-200 bg-white text-zinc-700 ring-zinc-100'
-                : 'border-[#E30613]/30 bg-[#FFF5F5] text-[#B42318] ring-[#E30613]/10',
-            ].join(' ')}
-          >
-            <span className="inline-flex min-w-0 items-center gap-1.5">
-              <CalendarDays className="h-3.5 w-3.5 shrink-0" aria-hidden />
-              <span className="truncate text-[11px] font-semibold">
-                {deliveryDate.trim() && deliveryChipLabel ? `Entrega: ${deliveryChipLabel}` : 'Falta fecha de entrega'}
-              </span>
-            </span>
-            <span className="text-[10px] font-semibold text-zinc-500">Editar</span>
-          </button>
         </section>
       )}
-
-      {selectedSupplier && supplierAgendaBanner ? (
-        <div className="space-y-1.5">
-          {supplierAgendaBanner.cutoffLine ? (
-            <div
-              className={[
-                'rounded-xl border px-3 py-2 text-[11px] leading-snug shadow-sm ring-1',
-                supplierAgendaBanner.cutoffTone === 'danger'
-                  ? 'border-red-200/90 bg-red-50/90 text-red-950 ring-red-100'
-                  : supplierAgendaBanner.cutoffTone === 'warn'
-                    ? 'border-amber-200/90 bg-amber-50/90 text-amber-950 ring-amber-100'
-                    : 'border-zinc-200/90 bg-zinc-50/90 text-zinc-800 ring-zinc-100',
-              ].join(' ')}
-              role="status"
-            >
-              {supplierAgendaBanner.cutoffLine}
-            </div>
-          ) : null}
-          {supplierAgendaBanner.reviewNames.length > 0 ? (
-            <div className="rounded-xl border border-zinc-200/90 bg-white px-3 py-2 text-[11px] leading-snug shadow-sm ring-1 ring-zinc-100/85">
-              <p className="font-semibold text-zinc-700">Revisa antes de enviar</p>
-              <ul className="mt-1 list-disc space-y-0.5 pl-4 text-zinc-600">
-                {supplierAgendaBanner.reviewNames.slice(0, 8).map((name, idx) => (
-                  <li key={`${idx}-${name}`}>{name}</li>
-                ))}
-              </ul>
-            </div>
-          ) : null}
-        </div>
-      ) : null}
 
       <section
         id="pedido-nuevo-catalogo"
@@ -1629,6 +1557,24 @@ export default function NuevoPedidoPage() {
                 <span className="hidden sm:inline">Filtros</span>
               </button>
             </div>
+            <button
+              type="button"
+              onClick={openDeliveryDateEditor}
+              className={[
+                'mt-1.5 inline-flex h-8 w-full items-center justify-between gap-2 rounded-lg border px-2.5 text-left shadow-sm ring-1',
+                deliveryDate.trim()
+                  ? 'border-zinc-200 bg-white text-zinc-700 ring-zinc-100'
+                  : 'border-[#E30613]/30 bg-[#FFF5F5] text-[#B42318] ring-[#E30613]/10',
+              ].join(' ')}
+            >
+              <span className="inline-flex min-w-0 items-center gap-1.5">
+                <CalendarDays className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                <span className="truncate text-[11px] font-semibold">
+                  {deliveryDate.trim() && deliveryChipLabel ? `Entrega: ${deliveryChipLabel}` : 'Falta fecha de entrega'}
+                </span>
+              </span>
+              <span className="text-[10px] font-semibold text-zinc-500">Editar</span>
+            </button>
           </div>
         ) : null}
         <div className="divide-y divide-zinc-100 border-t border-zinc-100">
