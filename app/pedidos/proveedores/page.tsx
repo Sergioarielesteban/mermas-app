@@ -714,11 +714,32 @@ export default function ProveedoresPage() {
     const raw = supplierCatalogQuery.trim();
     if (!raw) return sorted;
     const q = normalizeMatch(raw);
-    return sorted.filter((s) => {
+    const filtered = sorted.filter((s) => {
       if (normalizeMatch(s.name).includes(q)) return true;
       return s.products.some((p) => normalizeMatch(p.name).includes(q));
     });
+    return filtered.sort((a, b) => {
+      const aSupplierHit = normalizeMatch(a.name).includes(q);
+      const bSupplierHit = normalizeMatch(b.name).includes(q);
+      const aProductHit = a.products.some((p) => normalizeMatch(p.name).includes(q));
+      const bProductHit = b.products.some((p) => normalizeMatch(p.name).includes(q));
+      if (aProductHit !== bProductHit) return aProductHit ? -1 : 1;
+      if (aSupplierHit !== bSupplierHit) return aSupplierHit ? -1 : 1;
+      return a.name.localeCompare(b.name, 'es');
+    });
   }, [suppliers, supplierCatalogQuery]);
+
+  React.useEffect(() => {
+    const raw = supplierCatalogQuery.trim();
+    if (!raw) return;
+    const q = normalizeMatch(raw);
+    const directSupplier = suppliers.find((s) => normalizeMatch(s.name).includes(q));
+    const directProductSupplier = suppliers.find((s) => s.products.some((p) => normalizeMatch(p.name).includes(q)));
+    const target = directSupplier ?? directProductSupplier;
+    if (!target) return;
+    const t = window.setTimeout(() => setExpandedSupplierId(target.id), 0);
+    return () => window.clearTimeout(t);
+  }, [supplierCatalogQuery, suppliers]);
 
   const openAddProductForSupplier = (supplierId: string) => {
     setMessage(null);
@@ -772,7 +793,7 @@ export default function ProveedoresPage() {
           </div>
           <button
             type="button"
-            className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full border border-[#D32F2F]/20 bg-[#FFF5F5] px-3 text-[12px] font-medium text-[#B91C1C] shadow-sm transition active:scale-[0.99]"
+            className="hidden h-9 shrink-0 items-center gap-1.5 rounded-full border border-[#D32F2F]/20 bg-[#FFF5F5] px-3 text-[12px] font-medium text-[#B91C1C] shadow-sm transition active:scale-[0.99] sm:inline-flex"
             onClick={() => {
               setMessage(null);
               setNewSupplierName('');
@@ -798,7 +819,7 @@ export default function ProveedoresPage() {
           <span className="min-w-0 flex-1 text-center text-[14px] font-semibold text-white">Nuevo proveedor</span>
           <ChevronRight className="h-4 w-4 shrink-0 text-white/85" strokeWidth={2.25} aria-hidden />
         </button>
-        <div className="relative mt-3">
+        <div className="relative mt-2.5">
           <Search
             className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400"
             strokeWidth={2}
@@ -889,117 +910,117 @@ export default function ProveedoresPage() {
               .sort((a, b) => a.name.localeCompare(b.name, 'es'))
               .map((p) => (
               <div key={p.id} className="rounded-[18px] border border-zinc-200/80 bg-white px-3 py-2.5 shadow-[0_8px_20px_rgba(15,23,42,0.035)] ring-1 ring-zinc-100/70">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-start gap-2">
-                      <span className="mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-xl bg-zinc-50 text-zinc-500 ring-1 ring-zinc-200/70" aria-hidden>
-                        <Package className="h-3.5 w-3.5" />
-                      </span>
-                      <div className="min-w-0">
-                        <p className="truncate text-[13px] font-semibold leading-tight tracking-tight text-zinc-950">{p.name}</p>
-                        <div className="mt-0.5 flex flex-wrap items-center gap-2 text-[10px] text-zinc-500">
-                          <span className="rounded-full bg-zinc-50 px-1.5 py-0.5 ring-1 ring-zinc-200/70">catálogo</span>
-                          {p.unitsPerPack && p.unitsPerPack > 1 ? (
-                            <span className="rounded-full bg-zinc-50 px-1.5 py-0.5 ring-1 ring-zinc-200/70">
-                              x{p.unitsPerPack} {unitPriceCatalogSuffix[p.recipeUnit ?? 'ud']}
-                            </span>
-                          ) : null}
+                <div className="flex flex-col gap-2">
+                  <div className="flex items-start gap-2.5">
+                    <span className="mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-xl bg-zinc-50 text-zinc-500 ring-1 ring-zinc-200/70" aria-hidden>
+                      <Package className="h-3.5 w-3.5" />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-start justify-between gap-2">
+                        <p className="min-w-0 flex-1 truncate text-[13px] font-semibold leading-tight tracking-tight text-zinc-950">
+                          {p.name}
+                        </p>
+                        <div className="flex shrink-0 items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (editingProductId === p.id) {
+                                setEditingProductId(null);
+                                return;
+                              }
+                              setProductDrafts((prev) => ({
+                                ...prev,
+                                [p.id]: {
+                                  name: prev[p.id]?.name ?? p.name,
+                                  unit: prev[p.id]?.unit ?? p.unit,
+                                  price: prev[p.id]?.price ?? formatDecimalInputEs(p.pricePerUnit, 2),
+                                  vatRate: prev[p.id]?.vatRate ?? formatDecimalInputEs(p.vatRate ?? 0, 2),
+                                  estimatedKg:
+                                    prev[p.id]?.estimatedKg ??
+                                    (!supplierProductHasDistinctBilling(p) &&
+                                    unitSupportsReceivedWeightKg(p.unit) &&
+                                    p.estimatedKgPerUnit != null &&
+                                    p.estimatedKgPerUnit > 0
+                                      ? formatDecimalInputEs(p.estimatedKgPerUnit, 4)
+                                      : ''),
+                                  unitsPerPack:
+                                    prev[p.id]?.unitsPerPack ?? String((p.unitsPerPack ?? 1) >= 1 ? (p.unitsPerPack ?? 1) : 1),
+                                  recipeUnit: prev[p.id]?.recipeUnit ?? (p.recipeUnit ?? 'ud'),
+                                  parWeekly:
+                                    prev[p.id]?.parWeekly ??
+                                    ((p.parStock ?? 0) > 0 ? String(p.parStock) : ''),
+                                  dualKgBilling:
+                                    prev[p.id]?.dualKgBilling ??
+                                    (supplierProductHasDistinctBilling(p) && p.billingUnit === 'kg'),
+                                  equivKg:
+                                    prev[p.id]?.equivKg ??
+                                    (supplierProductHasDistinctBilling(p) && p.billingQtyPerOrderUnit != null
+                                      ? formatDecimalInputEs(p.billingQtyPerOrderUnit, 4)
+                                      : ''),
+                                  pricePerKg:
+                                    prev[p.id]?.pricePerKg ??
+                                    (supplierProductHasDistinctBilling(p) && p.pricePerBillingUnit != null
+                                      ? formatDecimalInputEs(p.pricePerBillingUnit, 4)
+                                      : ''),
+                                },
+                              }));
+                              setEditingProductId(p.id);
+                            }}
+                            className="grid h-8 w-8 place-items-center rounded-full border border-zinc-200 bg-white text-zinc-600 shadow-sm active:scale-[0.98]"
+                          >
+                            <PencilLine className="h-3.5 w-3.5" strokeWidth={2.25} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => disableProduct(p.id)}
+                            className="grid h-8 w-8 place-items-center rounded-full border border-rose-200 bg-rose-50 text-rose-700 shadow-sm active:scale-[0.98]"
+                          >
+                            <Power className="h-3.5 w-3.5" strokeWidth={2.25} />
+                          </button>
                         </div>
                       </div>
-                    </div>
-                    <div className="mt-2 pl-9">
-                      <p className="text-[18px] font-semibold leading-none tracking-tight text-zinc-950 tabular-nums">
-                        {formatUnitPriceEur(p.pricePerUnit, unitPriceCatalogSuffix[p.unit])}
-                      </p>
-                      <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[10px] font-medium text-zinc-500">
-                        <span className="rounded-full bg-zinc-50 px-2 py-0.5 ring-1 ring-zinc-200/70">IVA {(p.vatRate * 100).toFixed(0)}%</span>
-                        {p.ultimoPrecioRecibido != null &&
-                        Number.isFinite(p.ultimoPrecioRecibido) &&
-                        p.ultimoPrecioRecibido > 0 ? (
-                          <span className="rounded-full bg-zinc-50 px-2 py-0.5 ring-1 ring-zinc-200/70">
-                            Últ. recepción {formatUnitPriceEur(p.ultimoPrecioRecibido, unitPriceCatalogSuffix[p.unit])}
-                          </span>
-                        ) : null}
-                        {supplierProductHasDistinctBilling(p) && p.billingUnit === 'kg' && p.pricePerBillingUnit != null ? (
-                          <span className="rounded-full bg-zinc-50 px-2 py-0.5 ring-1 ring-zinc-200/70">
-                            {formatUnitPriceEur(p.pricePerBillingUnit, 'kg')} · ~{p.billingQtyPerOrderUnit ?? '—'} kg/{unitPriceCatalogSuffix[p.unit]}
-                          </span>
-                        ) : null}
-                        {!supplierProductHasDistinctBilling(p) &&
-                        unitSupportsReceivedWeightKg(p.unit) &&
-                        p.estimatedKgPerUnit != null &&
-                        p.estimatedKgPerUnit > 0 ? (
-                          <span className="rounded-full bg-zinc-50 px-2 py-0.5 ring-1 ring-zinc-200/70">
-                            ~{p.estimatedKgPerUnit} kg/{p.unit}
-                          </span>
-                        ) : null}
-                        {(p.parStock ?? 0) > 0 ? (
-                          <span className="rounded-full bg-zinc-50 px-2 py-0.5 ring-1 ring-zinc-200/70">
-                            Ref. sem. {p.parStock}
+                      <div className="mt-0.5 flex flex-wrap items-center gap-2 text-[10px] text-zinc-500">
+                        <span className="rounded-full bg-zinc-50 px-1.5 py-0.5 ring-1 ring-zinc-200/70">catálogo</span>
+                        {p.unitsPerPack && p.unitsPerPack > 1 ? (
+                          <span className="rounded-full bg-zinc-50 px-1.5 py-0.5 ring-1 ring-zinc-200/70">
+                            x{p.unitsPerPack} {unitPriceCatalogSuffix[p.recipeUnit ?? 'ud']}
                           </span>
                         ) : null}
                       </div>
                     </div>
                   </div>
-                  <div className="flex shrink-0 items-center gap-1">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (editingProductId === p.id) {
-                          setEditingProductId(null);
-                          return;
-                        }
-                        setProductDrafts((prev) => ({
-                          ...prev,
-                          [p.id]: {
-                            name: prev[p.id]?.name ?? p.name,
-                            unit: prev[p.id]?.unit ?? p.unit,
-                            price: prev[p.id]?.price ?? formatDecimalInputEs(p.pricePerUnit, 2),
-                            vatRate: prev[p.id]?.vatRate ?? formatDecimalInputEs(p.vatRate ?? 0, 2),
-                            estimatedKg:
-                              prev[p.id]?.estimatedKg ??
-                              (!supplierProductHasDistinctBilling(p) &&
-                              unitSupportsReceivedWeightKg(p.unit) &&
-                              p.estimatedKgPerUnit != null &&
-                              p.estimatedKgPerUnit > 0
-                                ? formatDecimalInputEs(p.estimatedKgPerUnit, 4)
-                                : ''),
-                            unitsPerPack:
-                              prev[p.id]?.unitsPerPack ?? String((p.unitsPerPack ?? 1) >= 1 ? (p.unitsPerPack ?? 1) : 1),
-                            recipeUnit: prev[p.id]?.recipeUnit ?? (p.recipeUnit ?? 'ud'),
-                            parWeekly:
-                              prev[p.id]?.parWeekly ??
-                              ((p.parStock ?? 0) > 0 ? String(p.parStock) : ''),
-                            dualKgBilling:
-                              prev[p.id]?.dualKgBilling ??
-                              (supplierProductHasDistinctBilling(p) && p.billingUnit === 'kg'),
-                            equivKg:
-                              prev[p.id]?.equivKg ??
-                              (supplierProductHasDistinctBilling(p) && p.billingQtyPerOrderUnit != null
-                                ? formatDecimalInputEs(p.billingQtyPerOrderUnit, 4)
-                                : ''),
-                            pricePerKg:
-                              prev[p.id]?.pricePerKg ??
-                              (supplierProductHasDistinctBilling(p) && p.pricePerBillingUnit != null
-                                ? formatDecimalInputEs(p.pricePerBillingUnit, 4)
-                                : ''),
-                          },
-                        }));
-                        setEditingProductId(p.id);
-                      }}
-                      className="inline-flex h-8 items-center gap-1 rounded-full border border-zinc-200 bg-zinc-50 px-2.5 text-[11px] font-medium text-zinc-700 shadow-sm active:scale-[0.98]"
-                    >
-                      <PencilLine className="h-3.5 w-3.5" strokeWidth={2.25} />
-                      {editingProductId === p.id ? 'Cerrar' : 'Editar'}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => disableProduct(p.id)}
-                      className="inline-flex h-8 items-center gap-1 rounded-full border border-rose-200 bg-rose-50 px-2.5 text-[11px] font-medium text-rose-700 shadow-sm active:scale-[0.98]"
-                    >
-                      <Power className="h-3.5 w-3.5" strokeWidth={2.25} />
-                      Desactivar
-                    </button>
+                  <div className="pl-9">
+                    <p className="whitespace-nowrap text-[17px] font-semibold leading-none tracking-tight text-zinc-950 tabular-nums sm:text-[18px]">
+                      {formatUnitPriceEur(p.pricePerUnit, unitPriceCatalogSuffix[p.unit])}
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-1.5 pl-9 text-[10px] font-medium text-zinc-500">
+                    <span className="rounded-full bg-zinc-50 px-2 py-0.5 ring-1 ring-zinc-200/70">IVA {(p.vatRate * 100).toFixed(0)}%</span>
+                    {p.ultimoPrecioRecibido != null &&
+                    Number.isFinite(p.ultimoPrecioRecibido) &&
+                    p.ultimoPrecioRecibido > 0 ? (
+                      <span className="rounded-full bg-zinc-50 px-2 py-0.5 ring-1 ring-zinc-200/70">
+                        Últ. recepción {formatUnitPriceEur(p.ultimoPrecioRecibido, unitPriceCatalogSuffix[p.unit])}
+                      </span>
+                    ) : null}
+                    {supplierProductHasDistinctBilling(p) && p.billingUnit === 'kg' && p.pricePerBillingUnit != null ? (
+                      <span className="rounded-full bg-zinc-50 px-2 py-0.5 ring-1 ring-zinc-200/70">
+                        {formatUnitPriceEur(p.pricePerBillingUnit, 'kg')} · ~{p.billingQtyPerOrderUnit ?? '—'} kg/{unitPriceCatalogSuffix[p.unit]}
+                      </span>
+                    ) : null}
+                    {!supplierProductHasDistinctBilling(p) &&
+                    unitSupportsReceivedWeightKg(p.unit) &&
+                    p.estimatedKgPerUnit != null &&
+                    p.estimatedKgPerUnit > 0 ? (
+                      <span className="rounded-full bg-zinc-50 px-2 py-0.5 ring-1 ring-zinc-200/70">
+                        ~{p.estimatedKgPerUnit} kg/{p.unit}
+                      </span>
+                    ) : null}
+                    {(p.parStock ?? 0) > 0 ? (
+                      <span className="rounded-full bg-zinc-50 px-2 py-0.5 ring-1 ring-zinc-200/70">
+                        Ref. sem. {p.parStock}
+                      </span>
+                    ) : null}
                   </div>
                 </div>
               </div>
