@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { Filter, Package, Search, Sparkles, Star, TrendingUp } from 'lucide-react';
+import { CalendarDays, Filter, Package, Search, Sparkles, Star, TrendingUp } from 'lucide-react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import React from 'react';
 import { usePedidosOperationalSuggestions } from '@/hooks/usePedidosOperationalSuggestions';
@@ -94,6 +94,7 @@ type NuevoPedidoOperationalState = {
 };
 
 const basketSessionKey = (localId: string) => `chefone_pedidos_basket:${localId}`;
+const JS_DAY_TO_CONSUMPTION_DAY = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'] as const;
 
 /**
  * Quién solicita el pedido: perfil (`full_name` / vinculación empleado), alias de sesión, email y fallback.
@@ -1078,6 +1079,22 @@ export default function NuevoPedidoPage() {
   const scrollToPedidoAcciones = React.useCallback(() => {
     document.getElementById('pedido-nuevo-acciones')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }, []);
+  const focusDeliveryDateInput = React.useCallback(() => {
+    const el = document.getElementById('pedido-nuevo-fecha-entrega') as HTMLInputElement | null;
+    if (!el) return;
+    el.focus({ preventScroll: true });
+    if (typeof el.showPicker === 'function') {
+      try {
+        el.showPicker();
+      } catch {
+        // ignore
+      }
+    }
+  }, []);
+  const openDeliveryDateEditor = React.useCallback(() => {
+    scrollToPedidoAcciones();
+    window.setTimeout(() => focusDeliveryDateInput(), 280);
+  }, [focusDeliveryDateInput, scrollToPedidoAcciones]);
 
   const scrollToCatalogoNuevo = React.useCallback(() => {
     document.getElementById('pedido-nuevo-catalogo')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -1105,6 +1122,7 @@ export default function NuevoPedidoPage() {
     if (!deliveryDate.trim()) {
       setDeliveryDateFieldError(true);
       setMessage(null);
+      openDeliveryDateEditor();
       return;
     }
     if (!localId) {
@@ -1200,6 +1218,7 @@ export default function NuevoPedidoPage() {
     if (!deliveryDate.trim()) {
       setDeliveryDateFieldError(true);
       setMessage(null);
+      openDeliveryDateEditor();
       return;
     }
     const phone = normalizeWhatsappPhone(selectedSupplier.contact);
@@ -1439,11 +1458,24 @@ export default function NuevoPedidoPage() {
                 ))}
               </select>
             </div>
-            {deliveryDate.trim() && deliveryChipLabel ? (
-              <p className="mt-1.5 text-center text-[10px] text-zinc-500">
-                Entrega: <span className="font-semibold text-zinc-700">{deliveryChipLabel}</span>
-              </p>
-            ) : null}
+            <button
+              type="button"
+              onClick={openDeliveryDateEditor}
+              className={[
+                'mt-1.5 inline-flex w-full items-center justify-between gap-2 rounded-lg border px-2.5 py-1.5 text-left shadow-sm ring-1',
+                deliveryDate.trim()
+                  ? 'border-zinc-200 bg-white text-zinc-700 ring-zinc-100'
+                  : 'border-[#E30613]/30 bg-[#FFF5F5] text-[#B42318] ring-[#E30613]/10',
+              ].join(' ')}
+            >
+              <span className="inline-flex min-w-0 items-center gap-1.5">
+                <CalendarDays className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                <span className="truncate text-[11px] font-semibold">
+                  {deliveryDate.trim() && deliveryChipLabel ? `Entrega: ${deliveryChipLabel}` : 'Falta fecha de entrega'}
+                </span>
+              </span>
+              <span className="text-[10px] font-semibold text-zinc-500">Editar</span>
+            </button>
           </div>
         </section>
       ) : (
@@ -1471,11 +1503,24 @@ export default function NuevoPedidoPage() {
               ))}
             </select>
           </div>
-          {deliveryDate.trim() && deliveryChipLabel ? (
-            <p className="mt-2 text-center text-[11px] text-zinc-500">
-              Entrega: <span className="font-semibold text-zinc-700">{deliveryChipLabel}</span>
-            </p>
-          ) : null}
+          <button
+            type="button"
+            onClick={openDeliveryDateEditor}
+            className={[
+              'mt-2 inline-flex w-full items-center justify-between gap-2 rounded-lg border px-2.5 py-1.5 text-left shadow-sm ring-1',
+              deliveryDate.trim()
+                ? 'border-zinc-200 bg-white text-zinc-700 ring-zinc-100'
+                : 'border-[#E30613]/30 bg-[#FFF5F5] text-[#B42318] ring-[#E30613]/10',
+            ].join(' ')}
+          >
+            <span className="inline-flex min-w-0 items-center gap-1.5">
+              <CalendarDays className="h-3.5 w-3.5 shrink-0" aria-hidden />
+              <span className="truncate text-[11px] font-semibold">
+                {deliveryDate.trim() && deliveryChipLabel ? `Entrega: ${deliveryChipLabel}` : 'Falta fecha de entrega'}
+              </span>
+            </span>
+            <span className="text-[10px] font-semibold text-zinc-500">Editar</span>
+          </button>
         </section>
       )}
 
@@ -1604,8 +1649,21 @@ export default function NuevoPedidoPage() {
           {displayedProducts.map((p) => {
             const qty = qtyByProductId[p.id] ?? 0;
             const lineTotal = Math.round(qty * p.pricePerUnit * 100) / 100;
+            const planTodayKey = JS_DAY_TO_CONSUMPTION_DAY[new Date().getDay()];
+            const advancedSegment =
+              p.consumptionPlan?.mode === 'advanced'
+                ? (p.consumptionPlan.segments ?? []).find((segment) => segment.order_day === planTodayKey)
+                : null;
+            const advancedTargetQty =
+              advancedSegment && Number.isFinite(advancedSegment.target_quantity)
+                ? Math.max(0, Number(advancedSegment.target_quantity))
+                : null;
             const segmentTarget =
-              coverageDays != null ? weeklyParScaledToCoverageDays(p.parStock ?? 0, coverageDays) : null;
+              advancedTargetQty != null
+                ? advancedTargetQty
+                : coverageDays != null
+                  ? weeklyParScaledToCoverageDays(p.parStock ?? 0, coverageDays)
+                  : null;
             const suggestedQty = segmentTarget != null ? suggestedOrderQuantityForPar(p.unit, segmentTarget) : null;
             const sig = catalogSignals.lastReceptionByProductId[p.id];
             return (
@@ -1784,6 +1842,9 @@ export default function NuevoPedidoPage() {
         onSaveTemplate={() => setSaveTemplateOpen(true)}
         showQuickActions={!editingId}
         onEmptyCatalogCta={scrollToCatalogoNuevo}
+        deliveryDateLabel={deliveryDate.trim() && deliveryChipLabel ? deliveryChipLabel : 'Fecha'}
+        deliveryDateMissing={!deliveryDate.trim()}
+        onDeliveryDateTap={openDeliveryDateEditor}
       />
 
       <PedidosSaveTemplateSheet

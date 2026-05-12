@@ -47,6 +47,10 @@ import {
 } from '@/lib/pedidos-session-cache';
 import {
   createSupplier,
+  type PedidoConsumptionPlan,
+  type PedidoConsumptionPlanMode,
+  type PedidoConsumptionPlanSegment,
+  type PedidoConsumptionWeekday,
   createSupplierProduct,
   deleteSupplier,
   fetchSuppliersWithProducts,
@@ -151,6 +155,28 @@ const DELIVERY_DAY_CHIPS: { day: number; label: string }[] = [
   { day: 6, label: 'S' },
   { day: 0, label: 'D' },
 ];
+
+const CONSUMPTION_WEEKDAYS: Array<{ value: PedidoConsumptionWeekday; short: string; label: string }> = [
+  { value: 'monday', short: 'L', label: 'Lunes' },
+  { value: 'tuesday', short: 'M', label: 'Martes' },
+  { value: 'wednesday', short: 'X', label: 'Miércoles' },
+  { value: 'thursday', short: 'J', label: 'Jueves' },
+  { value: 'friday', short: 'V', label: 'Viernes' },
+  { value: 'saturday', short: 'S', label: 'Sábado' },
+  { value: 'sunday', short: 'D', label: 'Domingo' },
+];
+
+function weekdayLabel(day: PedidoConsumptionWeekday): string {
+  return CONSUMPTION_WEEKDAYS.find((d) => d.value === day)?.label ?? day;
+}
+
+function formatCoversDaysText(days: PedidoConsumptionWeekday[]): string {
+  if (days.length === 0) return 'Este pedido cubrirá el consumo del día indicado.';
+  const labels = days.map(weekdayLabel);
+  if (labels.length === 1) return `Este pedido cubrirá el consumo de ${labels[0]}.`;
+  if (labels.length === 2) return `Este pedido cubrirá el consumo de ${labels[0]} y ${labels[1]}.`;
+  return `Este pedido cubrirá el consumo de ${labels.slice(0, -1).join(', ')} y ${labels[labels.length - 1]}.`;
+}
 
 function SoftField({ className = '', ...props }: React.InputHTMLAttributes<HTMLInputElement>) {
   return (
@@ -258,6 +284,12 @@ type ProductDraft = {
   dualKgBilling?: boolean;
   equivKg?: string;
   pricePerKg?: string;
+  consumptionMode?: PedidoConsumptionPlanMode;
+  consumptionSegments?: Array<{
+    orderDay: PedidoConsumptionWeekday;
+    coversDays: PedidoConsumptionWeekday[];
+    targetQuantity: string;
+  }>;
 };
 
 const EMPTY_PRODUCT_DRAFT: ProductDraft = {
@@ -272,6 +304,8 @@ const EMPTY_PRODUCT_DRAFT: ProductDraft = {
   dualKgBilling: false,
   equivKg: '',
   pricePerKg: '',
+  consumptionMode: 'simple',
+  consumptionSegments: [],
 };
 
 export default function ProveedoresPage() {
@@ -417,6 +451,15 @@ export default function ProveedoresPage() {
               supplierProductHasDistinctBilling(p) && p.pricePerBillingUnit != null
                 ? formatDecimalInputEs(p.pricePerBillingUnit, 4)
                 : '',
+            consumptionMode: p.consumptionPlan?.mode === 'advanced' ? 'advanced' : 'simple',
+            consumptionSegments:
+              p.consumptionPlan?.mode === 'advanced'
+                ? (p.consumptionPlan.segments ?? []).map((seg) => ({
+                    orderDay: seg.order_day,
+                    coversDays: [...(seg.covers_days ?? [])],
+                    targetQuantity: formatDecimalInputEs(seg.target_quantity ?? 0, 2),
+                  }))
+                : [],
           };
         }
       }
@@ -643,12 +686,34 @@ export default function ProveedoresPage() {
     const supabase = getSupabaseClient();
     if (!supabase) return setMessage('Supabase no disponible en esta sesión.');
     const parW = parseParWeekly(draft.parWeekly ?? '');
+    const mode: PedidoConsumptionPlanMode = draft.consumptionMode === 'advanced' ? 'advanced' : 'simple';
+    const segmentsSource = draft.consumptionSegments ?? [];
+    const segments: PedidoConsumptionPlanSegment[] = [];
+    for (const seg of segmentsSource) {
+      const qtyRaw = parsePriceInput(seg.targetQuantity ?? '');
+      if (qtyRaw == null) continue;
+      if (qtyRaw < 0) return setMessage('Plan de consumo: la cantidad objetivo no puede ser negativa.');
+      const covers = [...new Set(seg.coversDays ?? [])].filter((d): d is PedidoConsumptionWeekday =>
+        CONSUMPTION_WEEKDAYS.some((x) => x.value === d),
+      );
+      segments.push({
+        order_day: seg.orderDay,
+        covers_days: covers,
+        target_quantity: Math.round(qtyRaw * 100) / 100,
+      });
+    }
+    const consumptionPlan: PedidoConsumptionPlan = {
+      mode,
+      weekly_reference: Math.max(0, Math.round(parW * 100) / 100),
+      segments: mode === 'advanced' ? segments : [],
+    };
     void updateSupplierProduct(supabase, localId, productId, {
       name: normalizeUpper(name),
       unit: draft.unit,
       pricePerUnit,
       vatRate,
       parStock: parW,
+      consumptionPlan,
       estimatedKgPerUnit,
       unitsPerPack: pack,
       recipeUnit: pack > 1 ? draft.recipeUnit : null,
@@ -957,13 +1022,25 @@ export default function ProveedoresPage() {
                                     (supplierProductHasDistinctBilling(p) && p.billingQtyPerOrderUnit != null
                                       ? formatDecimalInputEs(p.billingQtyPerOrderUnit, 4)
                                       : ''),
-                                  pricePerKg:
-                                    prev[p.id]?.pricePerKg ??
-                                    (supplierProductHasDistinctBilling(p) && p.pricePerBillingUnit != null
-                                      ? formatDecimalInputEs(p.pricePerBillingUnit, 4)
-                                      : ''),
-                                },
-                              }));
+                            pricePerKg:
+                              prev[p.id]?.pricePerKg ??
+                              (supplierProductHasDistinctBilling(p) && p.pricePerBillingUnit != null
+                                ? formatDecimalInputEs(p.pricePerBillingUnit, 4)
+                                : ''),
+                            consumptionMode:
+                              prev[p.id]?.consumptionMode ??
+                              (p.consumptionPlan?.mode === 'advanced' ? 'advanced' : 'simple'),
+                            consumptionSegments:
+                              prev[p.id]?.consumptionSegments ??
+                              (p.consumptionPlan?.mode === 'advanced'
+                                ? (p.consumptionPlan.segments ?? []).map((seg) => ({
+                                    orderDay: seg.order_day,
+                                    coversDays: [...(seg.covers_days ?? [])],
+                                    targetQuantity: formatDecimalInputEs(seg.target_quantity ?? 0, 2),
+                                  }))
+                                : []),
+                          },
+                        }));
                               setEditingProductId(p.id);
                             }}
                             className="grid h-8 w-8 place-items-center rounded-full border border-zinc-200 bg-white text-zinc-600 shadow-sm active:scale-[0.98]"
@@ -1742,28 +1819,220 @@ export default function ProveedoresPage() {
                         />
                       </div>
                     ) : null}
-                    <SoftField
-                      value={productDrafts[editP.id]?.parWeekly ?? ''}
-                      onChange={(e) =>
-                        setProductDrafts((prev) => ({
-                          ...prev,
-                          [editP.id]: {
-                            ...(prev[editP.id] ?? {
-                              name: '',
-                              unit: 'ud',
-                              price: '',
-                              vatRate: '0',
-                              estimatedKg: '',
-                              unitsPerPack: '1',
-                              recipeUnit: 'ud' as Unit,
-                              parWeekly: '',
-                            }),
-                            parWeekly: e.target.value,
-                          },
-                        }))
-                      }
-                      placeholder="Consumo ref. semanal (opcional)"
-                    />
+                    <div className="rounded-2xl border border-zinc-200/75 bg-zinc-50/55 p-3 ring-1 ring-zinc-100/70">
+                      <p className="text-[10px] font-medium uppercase tracking-[0.16em] text-zinc-400">Plan de consumo</p>
+                      <p className="mt-1 text-[11px] leading-snug text-zinc-600">
+                        Cantidad total estimada que consumes a la semana de este producto.
+                      </p>
+                      <div className="mt-2">
+                        <label className="text-[10px] font-medium uppercase tracking-[0.16em] text-zinc-400">
+                          Consumo semanal de referencia
+                        </label>
+                        <div className="mt-1 grid grid-cols-[1fr_auto] items-center gap-2">
+                          <SoftField
+                            value={productDrafts[editP.id]?.parWeekly ?? ''}
+                            onChange={(e) =>
+                              setProductDrafts((prev) => ({
+                                ...prev,
+                                [editP.id]: {
+                                  ...(prev[editP.id] ?? { ...EMPTY_PRODUCT_DRAFT }),
+                                  parWeekly: e.target.value,
+                                },
+                              }))
+                            }
+                            placeholder="0"
+                          />
+                          <span className="rounded-full border border-zinc-200 bg-white px-2.5 py-1 text-[11px] text-zinc-600">
+                            {unitPriceCatalogSuffix[u]}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="mt-3 grid grid-cols-2 rounded-full border border-zinc-200 bg-white p-1">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setProductDrafts((prev) => ({
+                              ...prev,
+                              [editP.id]: {
+                                ...(prev[editP.id] ?? { ...EMPTY_PRODUCT_DRAFT }),
+                                consumptionMode: 'simple',
+                              },
+                            }))
+                          }
+                          className={[
+                            'h-8 rounded-full text-[11px] font-medium transition',
+                            (productDrafts[editP.id]?.consumptionMode ?? 'simple') === 'simple'
+                              ? 'bg-zinc-900 text-white'
+                              : 'text-zinc-600',
+                          ].join(' ')}
+                        >
+                          Simple automático
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setProductDrafts((prev) => ({
+                              ...prev,
+                              [editP.id]: {
+                                ...(prev[editP.id] ?? { ...EMPTY_PRODUCT_DRAFT }),
+                                consumptionMode: 'advanced',
+                              },
+                            }))
+                          }
+                          className={[
+                            'h-8 rounded-full text-[11px] font-medium transition',
+                            (productDrafts[editP.id]?.consumptionMode ?? 'simple') === 'advanced'
+                              ? 'bg-[#D32F2F] text-white'
+                              : 'text-zinc-600',
+                          ].join(' ')}
+                        >
+                          Avanzado manual
+                        </button>
+                      </div>
+
+                      {(productDrafts[editP.id]?.consumptionMode ?? 'simple') === 'advanced' ? (
+                        <div className="mt-3 space-y-2">
+                          {(productDrafts[editP.id]?.consumptionSegments ?? []).map((seg, segIdx) => (
+                            <div key={`${seg.orderDay}-${segIdx}`} className="rounded-2xl border border-zinc-200 bg-white p-2.5">
+                              <div className="flex items-start justify-between gap-2">
+                                <p className="text-[11px] font-medium text-zinc-800">Tramo {segIdx + 1}</p>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setProductDrafts((prev) => ({
+                                      ...prev,
+                                      [editP.id]: {
+                                        ...(prev[editP.id] ?? { ...EMPTY_PRODUCT_DRAFT }),
+                                        consumptionSegments: (prev[editP.id]?.consumptionSegments ?? []).filter((_, i) => i !== segIdx),
+                                      },
+                                    }))
+                                  }
+                                  className="text-[11px] font-medium text-rose-700"
+                                  aria-label="Eliminar tramo"
+                                >
+                                  Eliminar
+                                </button>
+                              </div>
+                              <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                                <div>
+                                  <label className="text-[10px] font-medium uppercase tracking-[0.16em] text-zinc-400">Día de pedido</label>
+                                  <SoftSelect
+                                    className="mt-1"
+                                    value={seg.orderDay}
+                                    onChange={(e) =>
+                                      setProductDrafts((prev) => ({
+                                        ...prev,
+                                        [editP.id]: {
+                                          ...(prev[editP.id] ?? { ...EMPTY_PRODUCT_DRAFT }),
+                                          consumptionSegments: (prev[editP.id]?.consumptionSegments ?? []).map((item, i) =>
+                                            i === segIdx ? { ...item, orderDay: e.target.value as PedidoConsumptionWeekday } : item,
+                                          ),
+                                        },
+                                      }))
+                                    }
+                                  >
+                                    {CONSUMPTION_WEEKDAYS.map((day) => (
+                                      <option key={day.value} value={day.value}>
+                                        {day.label}
+                                      </option>
+                                    ))}
+                                  </SoftSelect>
+                                </div>
+                                <div>
+                                  <label className="text-[10px] font-medium uppercase tracking-[0.16em] text-zinc-400">Cantidad objetivo</label>
+                                  <SoftField
+                                    className="mt-1"
+                                    value={seg.targetQuantity}
+                                    onChange={(e) =>
+                                      setProductDrafts((prev) => ({
+                                        ...prev,
+                                        [editP.id]: {
+                                          ...(prev[editP.id] ?? { ...EMPTY_PRODUCT_DRAFT }),
+                                          consumptionSegments: (prev[editP.id]?.consumptionSegments ?? []).map((item, i) =>
+                                            i === segIdx ? { ...item, targetQuantity: e.target.value } : item,
+                                          ),
+                                        },
+                                      }))
+                                    }
+                                    placeholder="0"
+                                  />
+                                </div>
+                              </div>
+                              <div className="mt-2">
+                                <p className="text-[10px] font-medium uppercase tracking-[0.16em] text-zinc-400">Cubre los días</p>
+                                <div className="mt-1 flex flex-wrap gap-1.5">
+                                  {CONSUMPTION_WEEKDAYS.map((day) => {
+                                    const selected = seg.coversDays.includes(day.value);
+                                    return (
+                                      <button
+                                        key={day.value}
+                                        type="button"
+                                        onClick={() =>
+                                          setProductDrafts((prev) => {
+                                            const rows = [...(prev[editP.id]?.consumptionSegments ?? [])];
+                                            const row = rows[segIdx];
+                                            if (!row) return prev;
+                                            const set = new Set(row.coversDays);
+                                            if (set.has(day.value)) set.delete(day.value);
+                                            else set.add(day.value);
+                                            rows[segIdx] = { ...row, coversDays: [...set] };
+                                            return {
+                                              ...prev,
+                                              [editP.id]: { ...(prev[editP.id] ?? { ...EMPTY_PRODUCT_DRAFT }), consumptionSegments: rows },
+                                            };
+                                          })
+                                        }
+                                        className={[
+                                          'h-7 min-w-[2rem] rounded-full px-2 text-[11px] font-medium',
+                                          selected ? 'bg-[#D32F2F] text-white' : 'border border-zinc-200 bg-zinc-50 text-zinc-600',
+                                        ].join(' ')}
+                                      >
+                                        {day.short}
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                                <p className="mt-2 text-[11px] leading-snug text-zinc-600">{formatCoversDaysText(seg.coversDays)}</p>
+                              </div>
+                            </div>
+                          ))}
+                          {(productDrafts[editP.id]?.consumptionSegments ?? []).length === 0 ? (
+                            <p className="rounded-xl border border-dashed border-zinc-200 bg-white px-3 py-2 text-[11px] text-zinc-500">
+                              Sin tramos avanzados. Añade uno para definir cantidades por día de pedido.
+                            </p>
+                          ) : null}
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setProductDrafts((prev) => ({
+                                ...prev,
+                                [editP.id]: {
+                                  ...(prev[editP.id] ?? { ...EMPTY_PRODUCT_DRAFT }),
+                                  consumptionSegments: [
+                                    ...(prev[editP.id]?.consumptionSegments ?? []),
+                                    { orderDay: 'monday', coversDays: [], targetQuantity: '' },
+                                  ],
+                                },
+                              }))
+                            }
+                            className="h-9 rounded-full border border-zinc-200 bg-white px-3 text-[12px] font-medium text-zinc-700 shadow-sm"
+                          >
+                            + Añadir tramo
+                          </button>
+                          <div className="rounded-xl border border-zinc-200 bg-white px-3 py-2 text-[11px] text-zinc-600">
+                            <p className="font-medium text-zinc-800">Cómo funciona</p>
+                            <p className="mt-1 leading-snug">
+                              El sistema generará automáticamente los pedidos en los días indicados y con las cantidades objetivo definidas.
+                            </p>
+                          </div>
+                        </div>
+                      ) : (
+                        <p className="mt-2 text-[11px] leading-snug text-zinc-500">
+                          El sistema reparte automáticamente el consumo semanal según los días de pedido del proveedor.
+                        </p>
+                      )}
+                    </div>
                     <SoftField
                       value={productDrafts[editP.id]?.unitsPerPack ?? '1'}
                       onChange={(e) =>

@@ -19,6 +19,7 @@ const WEEKDAY_LABEL: Record<number, string> = {
   5: 'viernes',
   6: 'sábado',
 };
+const JS_DAY_TO_CONSUMPTION_DAY = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'] as const;
 
 export const SUGGESTED_ORDER_WINDOWS_DAYS = [60, 90] as const;
 
@@ -243,6 +244,7 @@ function computeWithWindow(
   }
 
   const todayWd = now.getDay();
+  const todayPlanDay = JS_DAY_TO_CONSUMPTION_DAY[todayWd];
   const scored: SuggestedOrderLine[] = [];
 
   for (const [pid, agg] of aggs) {
@@ -268,7 +270,15 @@ function computeWithWindow(
     const consist = consistencyPoints(agg.quantities, rawMed);
 
     const score = frequencyScore + recencyScore + dayOfWeekScore + consist;
-    const suggestedQty = roundOrderQtyFromHistory(prod.unit, rawMed);
+    const advancedSegment =
+      prod.consumptionPlan?.mode === 'advanced'
+        ? (prod.consumptionPlan.segments ?? []).find((segment) => segment.order_day === todayPlanDay)
+        : null;
+    const advancedQty =
+      advancedSegment && Number.isFinite(advancedSegment.target_quantity)
+        ? roundOrderQtyFromHistory(prod.unit, Math.max(0, Number(advancedSegment.target_quantity)))
+        : null;
+    const suggestedQty = advancedQty != null && advancedQty > 0 ? advancedQty : roundOrderQtyFromHistory(prod.unit, rawMed);
     if (suggestedQty <= 0) continue;
 
     const unitPrice = prod.pricePerUnit;

@@ -4315,7 +4315,7 @@ export default function PedidosPage() {
               <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-amber-600">
                 {recibirEntregaHoy ? 'ENTREGA · HOY' : 'ENTREGA'}
               </p>
-              <p className="mt-1 font-serif text-[18px] leading-tight text-zinc-900 sm:text-[20px]">
+              <p className="mt-1 font-serif text-[19px] leading-tight text-zinc-900 sm:text-[21px]">
                 {recibirEntregaHoy
                   ? sentOrdersEntregaVista.length === 0
                     ? 'Nada para recibir hoy'
@@ -5127,7 +5127,7 @@ export default function PedidosPage() {
             </div>
             <div className="min-w-0 flex-1 text-left">
               <p className="font-serif text-[15px] leading-tight text-[#B91C1C]">ALMACÉN</p>
-              <p className="mt-1 font-serif text-[18px] leading-tight text-zinc-900 sm:text-[20px]">
+              <p className="mt-1 font-serif text-[19px] leading-tight text-zinc-900 sm:text-[21px]">
                 {receivedOrders.length === 0
                   ? 'Sin pedidos recibidos'
                   : `${receivedOrders.length} pedido${receivedOrders.length === 1 ? '' : 's'} recibido${receivedOrders.length === 1 ? '' : 's'}`}

@@ -246,6 +246,31 @@ export type PedidoSupplierProduct = {
   pricePerBillingUnit?: number | null;
   /** Último precio unitario real recibido (referencia operativa). */
   ultimoPrecioRecibido?: number | null;
+  /** Plan de consumo por producto/proveedor (override opcional para sugerencia operativa). */
+  consumptionPlan?: PedidoConsumptionPlan | null;
+};
+
+export type PedidoConsumptionWeekday =
+  | 'monday'
+  | 'tuesday'
+  | 'wednesday'
+  | 'thursday'
+  | 'friday'
+  | 'saturday'
+  | 'sunday';
+
+export type PedidoConsumptionPlanMode = 'simple' | 'advanced';
+
+export type PedidoConsumptionPlanSegment = {
+  order_day: PedidoConsumptionWeekday;
+  covers_days: PedidoConsumptionWeekday[];
+  target_quantity: number;
+};
+
+export type PedidoConsumptionPlan = {
+  mode: PedidoConsumptionPlanMode;
+  weekly_reference: number;
+  segments: PedidoConsumptionPlanSegment[];
 };
 
 export type PedidoSupplier = {
@@ -378,6 +403,7 @@ type SupplierProductRow = {
   billing_unit?: string | null;
   billing_qty_per_order_unit?: number | null;
   price_per_billing_unit?: number | null;
+  consumption_plan?: unknown;
   /** Join PostgREST opcional */
   purchase_articles?: { nombre?: string | null; nombre_corto?: string | null } | { nombre?: string | null; nombre_corto?: string | null }[] | null;
 };
@@ -432,6 +458,62 @@ function isMissingOrderItemBillingColumnsError(message: string): boolean {
     (m.includes('billing_unit') || m.includes('billing_qty_per_order_unit') || m.includes('price_per_billing_unit')) &&
     (m.includes('column') || m.includes('schema cache'))
   );
+}
+
+function isMissingConsumptionPlanColumnError(message: string): boolean {
+  const m = message.toLowerCase();
+  return (
+    (m.includes('column') || m.includes('schema cache') || m.includes('does not exist')) &&
+    m.includes('consumption_plan')
+  );
+}
+
+const CONSUMPTION_WEEKDAYS: PedidoConsumptionWeekday[] = [
+  'monday',
+  'tuesday',
+  'wednesday',
+  'thursday',
+  'friday',
+  'saturday',
+  'sunday',
+];
+
+function normalizeConsumptionWeekday(raw: unknown): PedidoConsumptionWeekday | null {
+  const v = String(raw ?? '').trim().toLowerCase();
+  return CONSUMPTION_WEEKDAYS.includes(v as PedidoConsumptionWeekday) ? (v as PedidoConsumptionWeekday) : null;
+}
+
+function normalizeConsumptionPlan(raw: unknown): PedidoConsumptionPlan | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const rec = raw as Record<string, unknown>;
+  const mode: PedidoConsumptionPlanMode = rec.mode === 'advanced' ? 'advanced' : 'simple';
+  const weeklyRaw = Number(rec.weekly_reference ?? 0);
+  const weekly_reference = Number.isFinite(weeklyRaw) && weeklyRaw > 0 ? Math.round(weeklyRaw * 100) / 100 : 0;
+  const segRaw = Array.isArray(rec.segments) ? rec.segments : [];
+  const segments: PedidoConsumptionPlanSegment[] = [];
+  for (const item of segRaw) {
+    if (!item || typeof item !== 'object') continue;
+    const row = item as Record<string, unknown>;
+    const orderDay = normalizeConsumptionWeekday(row.order_day);
+    if (!orderDay) continue;
+    const covers = Array.isArray(row.covers_days)
+      ? row.covers_days
+          .map((d) => normalizeConsumptionWeekday(d))
+          .filter((d): d is PedidoConsumptionWeekday => d != null)
+      : [];
+    const target = Number(row.target_quantity);
+    if (!Number.isFinite(target) || target < 0) continue;
+    segments.push({
+      order_day: orderDay,
+      covers_days: [...new Set(covers)],
+      target_quantity: Math.round(target * 100) / 100,
+    });
+  }
+  return {
+    mode,
+    weekly_reference,
+    segments,
+  };
 }
 
 function isMissingExcludeFromPriceEvolutionColumnError(message: string, code?: string): boolean {
@@ -557,15 +639,16 @@ const PURCHASE_ORDER_HEADER_SEL_WITH_UPDATED =
   'id,supplier_id,status,notes,created_at,sent_at,received_at,delivery_date,price_review_archived_at,updated_at,created_by,usuario_nombre,pedido_suppliers(name,contact)';
 const PURCHASE_ORDER_HEADER_SEL_LEGACY =
   'id,supplier_id,status,notes,created_at,sent_at,received_at,delivery_date,price_review_archived_at,created_by,usuario_nombre,pedido_suppliers(name,contact)';
+type PurchaseOrderHeaderQuery = ReturnType<ReturnType<SupabaseClient['from']>['select']>;
 
 async function runPurchaseOrderHeaderQuery(
   supabase: SupabaseClient,
   localId: string,
   /** Cadena PostgREST tras `.select().eq('local_id', …)` (tipado laxo por variantes del cliente). */
-  apply: (q: any) => any,
+  apply: (q: PurchaseOrderHeaderQuery) => PurchaseOrderHeaderQuery,
 ): Promise<OrderRow[]> {
   const runSel = async (sel: string) => {
-    let q: any = supabase.from('purchase_orders').select(sel).eq('local_id', localId);
+    let q = supabase.from('purchase_orders').select(sel).eq('local_id', localId) as PurchaseOrderHeaderQuery;
     q = apply(q);
     return q.order('created_at', { ascending: false });
   };
@@ -750,19 +833,26 @@ export async function fetchSuppliersWithProducts(supabase: SupabaseClient, local
     const selLegacy =
       'id,supplier_id,article_id,name,unit,price_per_unit,ultimo_precio_recibido,units_per_pack,recipe_unit,vat_rate,par_stock,is_active,estimated_kg_per_unit';
     const selBilling = `${selLegacy},billing_unit,billing_qty_per_order_unit,price_per_billing_unit`;
+    const selBillingPlan = `${selBilling},consumption_plan`;
+    const selBillingPlanArticle = `${selBillingPlan},purchase_articles(nombre,nombre_corto)`;
     const selBillingArticle = `${selBilling},purchase_articles(nombre,nombre_corto)`;
     const q = (selectStr: string) =>
       supabase.from('pedido_supplier_products').select(selectStr).eq('local_id', localId).eq('is_active', true).order('name');
-    let res = await q(selBillingArticle);
+    let res = await q(selBillingPlanArticle);
     if (res.error) {
-      if (isMissingOrderItemBillingColumnsError(res.error.message)) {
+      if (isMissingConsumptionPlanColumnError(res.error.message)) {
+        res = await q(selBillingArticle);
+      } else if (isMissingOrderItemBillingColumnsError(res.error.message)) {
         res = await q(selLegacy);
       } else {
-        res = await q(selBilling);
+        res = await q(selBillingPlan);
       }
     }
     if (res.error && isMissingOrderItemBillingColumnsError(res.error.message)) {
       res = await q(selLegacy);
+    }
+    if (res.error && isMissingConsumptionPlanColumnError(res.error.message)) {
+      res = await q(selBilling);
     }
     if (res.error) throw new Error(res.error.message);
     productRows = res.data ?? [];
@@ -831,6 +921,9 @@ export async function fetchSuppliersWithProducts(supabase: SupabaseClient, local
         : {}),
       ...(row.ultimo_precio_recibido != null && Number.isFinite(Number(row.ultimo_precio_recibido))
         ? { ultimoPrecioRecibido: Number(row.ultimo_precio_recibido) }
+        : {}),
+      ...(normalizeConsumptionPlan(row.consumption_plan) != null
+        ? { consumptionPlan: normalizeConsumptionPlan(row.consumption_plan) }
         : {}),
     });
     bySupplier.set(row.supplier_id, list);
@@ -1020,7 +1113,7 @@ function resolveSupplierProductBilling(input: {
 }
 
 const SUPPLIER_PRODUCT_SELECT_FULL =
-  'id,supplier_id,article_id,name,unit,price_per_unit,ultimo_precio_recibido,fecha_ultimo_precio,units_per_pack,recipe_unit,vat_rate,par_stock,is_active,estimated_kg_per_unit,billing_unit,billing_qty_per_order_unit,price_per_billing_unit';
+  'id,supplier_id,article_id,name,unit,price_per_unit,ultimo_precio_recibido,fecha_ultimo_precio,units_per_pack,recipe_unit,vat_rate,par_stock,is_active,estimated_kg_per_unit,billing_unit,billing_qty_per_order_unit,price_per_billing_unit,consumption_plan';
 const SUPPLIER_PRODUCT_SELECT_LEGACY =
   'id,supplier_id,article_id,name,unit,price_per_unit,units_per_pack,recipe_unit,vat_rate,par_stock,is_active,estimated_kg_per_unit';
 
@@ -1040,6 +1133,7 @@ export async function createSupplierProduct(
     billingUnit?: Unit | null;
     billingQtyPerOrderUnit?: number | null;
     pricePerBillingUnit?: number | null;
+    consumptionPlan?: PedidoConsumptionPlan | null;
   },
 ) {
   const bill = resolveSupplierProductBilling({
@@ -1069,6 +1163,7 @@ export async function createSupplierProduct(
     billing_unit: bill.billingUnit,
     billing_qty_per_order_unit: bill.billingQtyPerOrderUnit,
     price_per_billing_unit: bill.pricePerBillingUnit,
+    consumption_plan: input.consumptionPlan ?? null,
   };
   let data: SupplierProductRow | null = null;
   {
@@ -1076,9 +1171,16 @@ export async function createSupplierProduct(
     if (
       ins.error &&
       (isMissingOrderItemBillingColumnsError(ins.error.message) ||
-        isMissingSupplierProductLastReceivedColumnsError(ins.error.message))
+        isMissingSupplierProductLastReceivedColumnsError(ins.error.message) ||
+        isMissingConsumptionPlanColumnError(ins.error.message))
     ) {
-      const { billing_unit: _b, billing_qty_per_order_unit: _q, price_per_billing_unit: _p, ...legacyInsert } = insertRow;
+      const {
+        billing_unit: _b,
+        billing_qty_per_order_unit: _q,
+        price_per_billing_unit: _p,
+        consumption_plan: _c,
+        ...legacyInsert
+      } = insertRow;
       const ins2 = await supabase
         .from('pedido_supplier_products')
         .insert(legacyInsert)
@@ -1144,6 +1246,7 @@ export async function updateSupplierProduct(
     billingUnit?: Unit | null;
     billingQtyPerOrderUnit?: number | null;
     pricePerBillingUnit?: number | null;
+    consumptionPlan?: PedidoConsumptionPlan | null;
     /** Si viene de histórico de precios: actualizar solo €/ud y, si aplica, €/kg derivado. */
     priceUpdateOnly?: boolean;
   },
@@ -1181,6 +1284,7 @@ export async function updateSupplierProduct(
         billing_unit: bill!.billingUnit,
         billing_qty_per_order_unit: bill!.billingQtyPerOrderUnit,
         price_per_billing_unit: bill!.pricePerBillingUnit,
+        consumption_plan: input.consumptionPlan ?? null,
       };
   if (input.lastPriceUpdatedAt) {
     patch.last_price_update = new Date().toISOString();
@@ -1197,12 +1301,14 @@ export async function updateSupplierProduct(
     if (
       res.error &&
       (isMissingOrderItemBillingColumnsError(res.error.message) ||
-        isMissingSupplierProductLastReceivedColumnsError(res.error.message))
+        isMissingSupplierProductLastReceivedColumnsError(res.error.message) ||
+        isMissingConsumptionPlanColumnError(res.error.message))
     ) {
       const legacyPatch = { ...patch };
       delete legacyPatch.billing_unit;
       delete legacyPatch.billing_qty_per_order_unit;
       delete legacyPatch.price_per_billing_unit;
+      delete legacyPatch.consumption_plan;
       const res2 = await supabase
         .from('pedido_supplier_products')
         .update(legacyPatch)

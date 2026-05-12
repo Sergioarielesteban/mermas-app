@@ -22,33 +22,58 @@ const WEEKLY_KINDS = new Set<TemporalInsightKind>(['weekday_lift', 'weekend_rhyt
 const TREND_KINDS = new Set<TemporalInsightKind>(['recent_trend', 'vs_three_weeks_ago', 'drink_cluster_trend']);
 const WEEKEND_KINDS = new Set<TemporalInsightKind>(['weekend_rhythm', 'weekday_lift']);
 
-function pickInsight(list: TemporalInsight[], kinds: Set<TemporalInsightKind>): TemporalInsight | null {
-  for (const i of list) {
-    if (kinds.has(i.kind)) return i;
+function insightProductKey(insight: TemporalInsight): string {
+  const parts = insight.id.split(':');
+  if ((parts[0] === 'wl' || parts[0] === 'tr' || parts[0] === '3w') && parts[2]) return `p:${parts[2]}`;
+  if (parts[0] === 'wd' && parts[2]) return `p:${parts[2]}`;
+  return `k:${insight.kind}`;
+}
+
+function pickDistinctInsight(
+  list: TemporalInsight[],
+  kinds: Set<TemporalInsightKind>,
+  usedIds: Set<string>,
+  usedProducts: Set<string>,
+): TemporalInsight | null {
+  for (const insight of list) {
+    if (!kinds.has(insight.kind) || usedIds.has(insight.id)) continue;
+    const pKey = insightProductKey(insight);
+    if (usedProducts.has(pKey)) continue;
+    usedIds.add(insight.id);
+    usedProducts.add(pKey);
+    return insight;
   }
   return null;
 }
 
 function assignSlots(insights: TemporalInsight[]): { weekly: TemporalInsight | null; trend: TemporalInsight | null; finde: TemporalInsight | null } {
-  const used = new Set<string>();
-  let weekly = pickInsight(insights, WEEKLY_KINDS);
-  if (weekly) used.add(weekly.id);
-  let trend = insights.find((i) => TREND_KINDS.has(i.kind) && !used.has(i.id)) ?? null;
-  if (trend) used.add(trend.id);
+  const usedIds = new Set<string>();
+  const usedProducts = new Set<string>();
+  let weekly = pickDistinctInsight(insights, WEEKLY_KINDS, usedIds, usedProducts);
+  let trend = pickDistinctInsight(insights, TREND_KINDS, usedIds, usedProducts);
   let finde =
-    insights.find((i) => WEEKEND_KINDS.has(i.kind) && i.id !== weekly?.id && !used.has(i.id)) ??
-    insights.find((i) => !used.has(i.id)) ??
+    pickDistinctInsight(insights, WEEKEND_KINDS, usedIds, usedProducts) ??
+    insights.find((i) => {
+      if (usedIds.has(i.id)) return false;
+      const pKey = insightProductKey(i);
+      if (usedProducts.has(pKey)) return false;
+      usedIds.add(i.id);
+      usedProducts.add(pKey);
+      return true;
+    }) ??
     null;
 
-  if (!weekly && insights[0] && !used.has(insights[0].id)) {
+  if (!weekly && insights[0] && !usedIds.has(insights[0].id)) {
     weekly = insights[0];
-    used.add(weekly.id);
+    usedIds.add(weekly.id);
+    usedProducts.add(insightProductKey(weekly));
   }
-  if (!trend && insights[1] && !used.has(insights[1].id)) {
+  if (!trend && insights[1] && !usedIds.has(insights[1].id)) {
     trend = insights[1];
-    used.add(trend.id);
+    usedIds.add(trend.id);
+    usedProducts.add(insightProductKey(trend));
   }
-  if (!finde && insights[2] && !used.has(insights[2].id)) {
+  if (!finde && insights[2] && !usedIds.has(insights[2].id)) {
     finde = insights[2];
   }
 
@@ -201,38 +226,45 @@ export default React.memo(function PedidosTemporalInsightStrip({ patterns, hidde
       {showLearningOnly ? (
         <p className="mt-1.5 text-[10px] leading-snug text-zinc-500">{patterns.learningMessage}</p>
       ) : (
-        <div className="mt-2 grid grid-cols-1 gap-2 sm:mt-1.5 sm:grid-cols-3 sm:gap-1.5">
+        <ul
+          className={[
+            'mt-2 flex w-full gap-0 overflow-x-auto overscroll-x-contain px-0 pb-0',
+            'snap-x snap-mandatory',
+            '[-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden',
+            'touch-pan-x',
+          ].join(' ')}
+          style={{ WebkitOverflowScrolling: 'touch' }}
+        >
           {slots.map((slot) => {
             const Icon = slot.icon;
             const ins = slot.insight;
             const sub = ins ? miniMetric(ins.headline) : null;
             return (
-              <div
+              <li
                 key={slot.key}
-                className="flex min-h-[5.75rem] min-w-0 flex-col justify-between rounded-xl border border-zinc-200/90 bg-white px-3 py-2.5 shadow-sm ring-1 ring-zinc-100/80 sm:min-h-[6.25rem] sm:rounded-lg sm:px-2 sm:py-2"
+                className="w-full min-w-full shrink-0 snap-start snap-always"
+                style={{ flex: '0 0 100%', scrollSnapAlign: 'start', scrollSnapStop: 'always' }}
               >
-                <div className="flex items-center gap-1 text-zinc-400">
-                  <Icon className="h-4 w-4 shrink-0 text-[#E30613] sm:h-3 sm:w-3" strokeWidth={2} aria-hidden />
-                  <span className="truncate text-[11px] font-bold uppercase tracking-wide text-zinc-600 sm:text-[8px] sm:text-zinc-500">
+                <div className="flex h-[44px] min-w-0 items-center gap-2 rounded-xl border border-zinc-200/90 bg-white px-3 shadow-sm ring-1 ring-zinc-100/80">
+                  <div className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-[#FFF5F5] ring-1 ring-[#E30613]/12">
+                    <Icon className="h-3.5 w-3.5 text-[#E30613]" strokeWidth={2} aria-hidden />
+                  </div>
+                  <span className="shrink-0 text-[10px] font-bold uppercase tracking-wide text-zinc-500">
                     {slot.label}
                   </span>
-                </div>
-                {ins ? (
-                  <>
-                    <p className="mt-1 line-clamp-4 text-[12px] font-semibold leading-snug text-zinc-900 sm:mt-0.5 sm:line-clamp-3 sm:text-[10px]">
+                  {ins ? (
+                    <p className="min-w-0 flex-1 truncate text-[12px] font-semibold leading-none text-zinc-900">
                       {ins.headline}
                     </p>
-                    <p className="mt-1 line-clamp-2 text-[11px] leading-snug text-zinc-500 sm:mt-0.5 sm:text-[9px]">
-                      {sub ?? 'Según histórico reciente'}
-                    </p>
-                  </>
-                ) : (
-                  <p className="mt-1 text-[11px] leading-snug text-zinc-400 sm:mt-0.5 sm:text-[8px]">Sin señal clara aún</p>
-                )}
-              </div>
+                  ) : (
+                    <p className="min-w-0 flex-1 truncate text-[11px] text-zinc-400">Sin señal clara aún</p>
+                  )}
+                  <span className="shrink-0 text-[10px] text-zinc-500">{sub ?? 'Histórico'}</span>
+                </div>
+              </li>
             );
           })}
-        </div>
+        </ul>
       )}
 
       {hasInsights && patterns.learningMessage ? (
