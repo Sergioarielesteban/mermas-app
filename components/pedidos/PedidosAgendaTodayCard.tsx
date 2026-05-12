@@ -388,9 +388,9 @@ function MandatoryOrderRow({
       </div>
       <div
         className={[
-          'group relative flex min-h-[3.75rem] touch-pan-y items-center gap-2 rounded-2xl bg-red-50/55 px-2 py-1.5 ring-1 ring-red-100/90',
+          'group relative flex min-h-[3.75rem] touch-pan-y items-center gap-2 rounded-2xl bg-red-50 px-2 py-1.5 ring-1 ring-red-100/90',
           isDragging ? 'transition-none' : 'transition-transform duration-200 ease-out',
-          isCompleting ? 'opacity-80' : '',
+          isCompleting ? 'shadow-sm brightness-[0.98]' : '',
         ].join(' ')}
         style={{ transform: `translateX(${dragX}px)` }}
         onPointerDown={(event) => {
