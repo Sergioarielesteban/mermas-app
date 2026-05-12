@@ -7,8 +7,9 @@ import {
   ChevronDown,
   ChevronRight,
   ChevronUp,
-  ClipboardList,
+  ClipboardCheck,
   Eye,
+  Hand,
 } from 'lucide-react';
 import React from 'react';
 import type { AgendaCutoffRow, AgendaReviewSupplierGroup } from '@/hooks/useOrderAgendaToday';
@@ -25,21 +26,15 @@ export type PedidosAgendaTodayCardProps = {
   onAgendaAction?: () => void;
 };
 
-const MANDATORY_PREVIEW = 3;
+const MANDATORY_PREVIEW = 4;
+const REVIEW_PREVIEW = 4;
+const SWIPE_DONE_PX = 74;
 
 const BRAND_RED = '#D32F2F';
-const ACCENT_ORANGE = '#EA580C';
 
-/** Mismo acabado que el resto de tarjetas grandes del panel (PriorityRowCard). */
 const AGENDA_CARD_SHELL =
-  'overflow-hidden rounded-3xl bg-white shadow-sm ring-1 ring-zinc-200/80';
+  'overflow-hidden rounded-[1.65rem] bg-[#fffdf8] shadow-[0_16px_42px_rgba(24,24,27,0.08)] ring-1 ring-zinc-200/80';
 
-/**
- * Una sola tarjeta "Gestión de pedidos para hoy" que agrupa, al desplegarse,
- * los Pedidos obligatorios y la Revisión diaria de proveedores. Mantiene el
- * mismo lenguaje visual que el resto del panel (cards blancas, rings suaves,
- * tipografía mixta sans + serif, badges redondos).
- */
 export default React.memo(function PedidosAgendaTodayCard({
   loading,
   mandatoryRows,
@@ -51,11 +46,8 @@ export default React.memo(function PedidosAgendaTodayCard({
 }: PedidosAgendaTodayCardProps) {
   const [open, setOpen] = React.useState(false);
   const [mandatoryExpanded, setMandatoryExpanded] = React.useState(false);
+  const [reviewExpanded, setReviewExpanded] = React.useState(false);
   const [showCompletedReviews, setShowCompletedReviews] = React.useState(false);
-
-  React.useEffect(() => {
-    if (mandatoryRows.length <= MANDATORY_PREVIEW) setMandatoryExpanded(false);
-  }, [mandatoryRows.length]);
 
   const pendingReviewGroups = React.useMemo(
     () => reviewSupplierGroups.filter((g) => !g.allDone),
@@ -69,12 +61,12 @@ export default React.memo(function PedidosAgendaTodayCard({
 
   if (loading) {
     return (
-      <section>
-        <div className={`px-3 py-2.5 ${AGENDA_CARD_SHELL}`}>
-          <p className="text-[9px] font-semibold uppercase tracking-wide text-zinc-400">
+      <section className={AGENDA_CARD_SHELL} aria-live="polite">
+        <div className="px-4 py-3.5">
+          <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-zinc-400">
             Gestión de pedidos para hoy
           </p>
-          <p className="mt-0.5 text-[11px] text-zinc-500">Cargando…</p>
+          <p className="mt-1 font-serif text-[18px] leading-tight text-zinc-800">Preparando agenda...</p>
         </div>
       </section>
     );
@@ -83,318 +75,455 @@ export default React.memo(function PedidosAgendaTodayCard({
   if (showAgendaCompletadaMicro) {
     return (
       <section
-        className="overflow-hidden rounded-xl border border-emerald-100/80 bg-emerald-50/40 px-3 py-1.5 shadow-sm ring-1 ring-emerald-100/70"
+        className="overflow-hidden rounded-[1.35rem] border border-emerald-200/70 bg-emerald-50 px-4 py-3 shadow-sm"
         aria-live="polite"
       >
-        <p className="text-[11px] font-semibold leading-tight text-emerald-900">
-          <span className="mr-1 text-emerald-600" aria-hidden>
-            ✓
+        <div className="flex items-center gap-3">
+          <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-emerald-600 text-white shadow-sm">
+            <Check className="h-6 w-6" strokeWidth={2.5} aria-hidden />
           </span>
-          Agenda de pedidos completada
-        </p>
+          <div className="min-w-0">
+            <p className="font-serif text-[19px] leading-tight text-emerald-950">Todo al día</p>
+            <p className="mt-0.5 text-[12px] font-medium leading-snug text-emerald-800/80">
+              No quedan pedidos obligatorios ni revisiones pendientes.
+            </p>
+          </div>
+        </div>
       </section>
     );
   }
 
   const hasMandatory = mandatoryRows.length > 0;
-  const hasReviewCompletedOnly =
-    completedReviewGroups.length > 0 && pendingReviewGroups.length === 0;
-  const hasReviewSection =
-    pendingReviewGroups.length > 0 || completedReviewGroups.length > 0;
-
-  if (!hasMandatory && !hasReviewSection) return null;
+  const hasReview = pendingReviewGroups.length > 0 || completedReviewGroups.length > 0;
+  if (!hasMandatory && !hasReview) return null;
 
   const totalPending = mandatoryRows.length + pendingReviewGroups.length;
-  const allDone = totalPending === 0;
   const mandatoryOverflow = mandatoryRows.length > MANDATORY_PREVIEW;
+  const reviewOverflow = pendingReviewGroups.length > REVIEW_PREVIEW;
   const mandatoryShown = mandatoryExpanded ? mandatoryRows : mandatoryRows.slice(0, MANDATORY_PREVIEW);
+  const reviewShown = reviewExpanded ? pendingReviewGroups : pendingReviewGroups.slice(0, REVIEW_PREVIEW);
 
   return (
     <section className={AGENDA_CARD_SHELL} id="panel-agenda-pedidos">
       <button
         type="button"
-        onClick={() => setOpen((o) => !o)}
+        onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
         className={[
-          'flex min-h-[4rem] w-full touch-manipulation items-center justify-between gap-2 bg-white px-3 py-3.5 text-left sm:min-h-[4.5rem] sm:py-4',
-          open ? 'border-b border-zinc-100' : '',
+          'flex w-full touch-manipulation items-center justify-between gap-3 bg-gradient-to-br from-white via-[#fffaf1] to-[#fff4e5] px-4 py-3 text-left transition active:scale-[0.995]',
+          open ? 'border-b border-zinc-200/70' : '',
         ].join(' ')}
       >
         <div className="flex min-w-0 flex-1 items-center gap-3">
           <span
-            className={[
-              'grid h-12 w-12 shrink-0 place-items-center rounded-2xl ring-1 ring-white/60',
-              allDone ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700',
-            ].join(' ')}
+            className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl text-white shadow-sm"
+            style={{ backgroundColor: totalPending > 0 ? BRAND_RED : '#059669' }}
+            aria-hidden
           >
-            <ClipboardList className="h-6 w-6" strokeWidth={2} aria-hidden />
+            <span className="text-[16px] font-black leading-none tabular-nums">{totalPending}</span>
           </span>
           <div className="min-w-0 flex-1">
-            <p className="font-serif text-[16px] font-normal leading-tight text-zinc-900">
+            <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-zinc-500">
+              Pedidos de hoy
+            </p>
+            <h2 className="mt-0.5 truncate font-serif text-[19px] font-normal leading-tight text-zinc-950">
               Gestión de pedidos para hoy
-            </p>
-            <p className="mt-0.5 text-[12px] leading-snug text-zinc-500">
-              {allDone
-                ? 'Todo en orden'
-                : `${mandatoryRows.length} obligatorio${mandatoryRows.length === 1 ? '' : 's'}` +
-                  ` · ${pendingReviewGroups.length} por revisar`}
-            </p>
+            </h2>
           </div>
         </div>
-        <div className="flex shrink-0 flex-col items-end justify-between gap-1 self-stretch py-0.5">
-          {allDone ? (
-            <span className="grid h-5 w-5 place-items-center rounded-full bg-emerald-100 text-emerald-700 ring-1 ring-emerald-200/80">
-              <Check className="h-3 w-3" strokeWidth={2.5} aria-hidden />
+
+        <div className="flex shrink-0 items-center gap-2">
+          <div className="hidden items-center gap-1.5 sm:flex">
+            <span className="rounded-full bg-red-50 px-2 py-1 text-[10px] font-black text-red-700 ring-1 ring-red-100">
+              {mandatoryRows.length} oblig.
             </span>
-          ) : (
-            <span
-              className="rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-white ring-1"
-              style={{ backgroundColor: BRAND_RED, borderColor: BRAND_RED }}
-            >
-              {totalPending}
+            <span className="rounded-full bg-amber-50 px-2 py-1 text-[10px] font-black text-amber-800 ring-1 ring-amber-100">
+              {pendingReviewGroups.length} rev.
             </span>
-          )}
-          {open ? (
-            <ChevronUp className="h-5 w-5 text-zinc-300" aria-hidden />
-          ) : (
-            <ChevronDown className="h-5 w-5 text-zinc-300" aria-hidden />
-          )}
+          </div>
+          <span className="grid h-9 w-9 place-items-center rounded-2xl bg-white/80 text-zinc-500 ring-1 ring-zinc-200">
+            {open ? <ChevronUp className="h-5 w-5" aria-hidden /> : <ChevronDown className="h-5 w-5" aria-hidden />}
+          </span>
         </div>
       </button>
 
       {open ? (
-        <div>
-          {hasMandatory ? (
-            <SubSection
+        <div className="space-y-2.5 px-3 py-2.5">
+          <div className="grid grid-cols-2 gap-2 sm:hidden">
+            <MetricPill
               tone="red"
-              icon={<AlarmClock className="h-3.5 w-3.5" strokeWidth={2} style={{ color: BRAND_RED }} aria-hidden />}
-              title="Obligatorios"
-              count={mandatoryRows.length}
-              countColor={BRAND_RED}
-              hint="Completa el pedido antes de la hora límite"
-              extra={
-                mandatoryOverflow ? (
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setMandatoryExpanded((v) => !v);
-                    }}
-                    className="shrink-0 touch-manipulation text-[10px] font-semibold"
-                    style={{ color: BRAND_RED }}
-                  >
-                    {mandatoryExpanded ? 'Ver menos' : 'Ver todos >'}
-                  </button>
-                ) : null
-              }
-            >
-              <ul className="divide-y divide-zinc-100 bg-white">
-                {mandatoryShown.map((row) => (
-                  <li key={row.supplierId} className="flex items-stretch gap-1 px-2.5 py-0.5">
-                    {localId ? (
-                      <button
-                        type="button"
-                        role="checkbox"
-                        aria-checked={false}
-                        title="No pedir hoy"
-                        aria-label={`Omitir pedido obligatorio de ${row.supplierName} hoy`}
-                        onClick={() => {
-                          markMandatoryOmitted(localId, ymd, row.supplierId);
-                          onAgendaAction?.();
-                        }}
-                        className="grid h-7 w-7 shrink-0 touch-manipulation place-items-center self-center rounded border border-zinc-200/90 bg-white active:scale-[0.98]"
-                      >
-                        <span className="h-3 w-3 rounded border-2 border-zinc-300 bg-white" aria-hidden />
-                      </button>
-                    ) : null}
-                    <Link
-                      href={row.href}
-                      title={`Pedido a ${row.supplierName}`}
-                      aria-label={`Abrir pedido y catálogo de ${row.supplierName}, antes de las ${row.cutoffLabel}`}
-                      className="flex min-h-0 min-w-0 flex-1 touch-manipulation items-center gap-1.5 py-0.5 text-left outline-none active:bg-zinc-50/80"
-                    >
-                      <span className="min-w-0 flex-1">
-                        <span className="block truncate font-serif text-[13px] font-normal leading-tight text-zinc-900">
-                          {row.supplierName}
-                        </span>
-                      </span>
-                      <span
-                        className="shrink-0 text-[11px] font-bold tabular-nums leading-none"
-                        style={{ color: BRAND_RED }}
-                      >
-                        antes {row.cutoffLabel}
-                      </span>
-                      <Eye
-                        className="h-3 w-3 shrink-0 opacity-80"
-                        strokeWidth={2}
-                        aria-hidden
-                        style={{ color: BRAND_RED }}
-                      />
-                      <ChevronRight className="h-3.5 w-3.5 shrink-0 text-zinc-300" aria-hidden />
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            </SubSection>
-          ) : null}
-
-          {hasReviewSection ? (
-            <SubSection
+              label="Obligatorios"
+              value={mandatoryRows.length}
+              icon={<AlarmClock className="h-4 w-4" strokeWidth={2.25} aria-hidden />}
+            />
+            <MetricPill
               tone="amber"
-              icon={<Eye className="h-3.5 w-3.5" strokeWidth={2} style={{ color: ACCENT_ORANGE }} aria-hidden />}
-              title="Revisión diaria"
-              count={pendingReviewGroups.length}
-              countColor={ACCENT_ORANGE}
-              hint={hasReviewCompletedOnly ? 'Todo revisado por hoy' : 'Revisa si necesitas algo de estos proveedores'}
-            >
-              {!hasReviewCompletedOnly ? (
-                <ul className="divide-y divide-zinc-100 bg-white">
-                  {pendingReviewGroups.map((g) => (
-                    <li key={g.supplierId} className="flex items-stretch gap-1 px-2.5 py-0.5">
-                      {localId ? (
-                        <button
-                          type="button"
-                          role="checkbox"
-                          aria-checked={false}
-                          title="Marcar como revisado"
-                          aria-label={`Marcar ${g.supplierName} como revisado`}
-                          onClick={() => {
-                            markSupplierReviewItemsDone(localId, ymd, g.itemIds);
-                            onAgendaAction?.();
-                          }}
-                          className="grid h-7 w-7 shrink-0 touch-manipulation place-items-center self-center rounded border border-zinc-200/90 bg-white active:scale-[0.98]"
-                        >
-                          <span className="h-3 w-3 rounded border-2 border-zinc-300 bg-white" aria-hidden />
-                        </button>
-                      ) : null}
-                      <Link
-                        href={g.href}
-                        className="flex min-h-0 min-w-0 flex-1 touch-manipulation items-center gap-1.5 py-0.5 text-left outline-none active:bg-zinc-50/80"
-                      >
-                        <span className="min-w-0 flex-1">
-                          <span className="block truncate font-serif text-[13px] font-normal leading-tight text-zinc-900">
-                            {g.supplierName}
-                          </span>
-                        </span>
-                        {g.cutoffLabel ? (
-                          <span
-                            className="shrink-0 text-[11px] font-bold tabular-nums leading-none"
-                            style={{ color: ACCENT_ORANGE }}
-                          >
-                            antes {g.cutoffLabel}
-                          </span>
-                        ) : null}
-                        <Eye className="h-3 w-3 shrink-0 text-amber-600/70" strokeWidth={2} aria-hidden />
-                        <ChevronRight className="h-3.5 w-3.5 shrink-0 text-zinc-300" aria-hidden />
-                      </Link>
-                    </li>
-                  ))}
-                </ul>
-              ) : null}
+              label="Revisión diaria"
+              value={pendingReviewGroups.length}
+              icon={<Eye className="h-4 w-4" strokeWidth={2.25} aria-hidden />}
+            />
+          </div>
 
-              {completedReviewGroups.length > 0 ? (
-                <>
-                  <button
-                    type="button"
-                    onClick={() => setShowCompletedReviews((v) => !v)}
-                    className="flex w-full touch-manipulation items-center justify-center gap-1 border-t border-zinc-100 bg-zinc-50/70 py-1 text-[10px] font-semibold text-amber-900/90"
-                  >
-                    Ver {completedReviewGroups.length} revisado{completedReviewGroups.length === 1 ? '' : 's'}
-                    {showCompletedReviews ? (
-                      <ChevronUp className="h-3.5 w-3.5" aria-hidden />
-                    ) : (
-                      <ChevronDown className="h-3.5 w-3.5" aria-hidden />
-                    )}
-                  </button>
-                  {showCompletedReviews ? (
-                    <ul className="divide-y divide-zinc-100 bg-white">
-                      {completedReviewGroups.map((g) => (
-                        <li key={g.supplierId}>
-                          <Link
-                            href={g.href}
-                            className="flex touch-manipulation items-center gap-1.5 px-2.5 py-1 opacity-90"
-                          >
-                            <span className="grid h-6 w-6 shrink-0 place-items-center rounded-md bg-emerald-50 text-emerald-600">
-                              <Check className="h-3 w-3" strokeWidth={2.5} aria-hidden />
-                            </span>
-                            <span className="min-w-0 flex-1">
-                              <span className="block truncate text-[12px] text-zinc-600">{g.supplierName}</span>
-                              <span className="text-[9px] text-zinc-400">Revisado hoy</span>
-                            </span>
-                            {g.cutoffLabel ? (
-                              <span className="shrink-0 text-[10px] font-semibold tabular-nums text-amber-700/80">
-                                antes {g.cutoffLabel}
-                              </span>
-                            ) : null}
-                            <ChevronRight className="h-3.5 w-3.5 shrink-0 text-zinc-300" aria-hidden />
-                          </Link>
-                        </li>
-                      ))}
-                    </ul>
-                  ) : null}
-                </>
-              ) : null}
-            </SubSection>
-          ) : null}
+          <AgendaSection
+            tone="red"
+            title="Pedidos obligatorios"
+            count={mandatoryRows.length}
+            hint="Proveedores con corte real hoy"
+            emptyLabel="Sin obligatorios pendientes"
+            action={
+              mandatoryOverflow ? (
+                <button
+                  type="button"
+                  onClick={() => setMandatoryExpanded((v) => !v)}
+                  className="flex h-8 shrink-0 touch-manipulation items-center gap-1 rounded-full bg-red-50 px-2.5 text-[11px] font-bold text-red-700 ring-1 ring-red-100 active:scale-[0.98]"
+                >
+                  {mandatoryExpanded ? 'Menos' : `+${mandatoryRows.length - MANDATORY_PREVIEW}`}
+                  {mandatoryExpanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                </button>
+              ) : null
+            }
+          >
+            {mandatoryShown.map((row) => (
+              <MandatoryOrderRow
+                key={row.supplierId}
+                row={row}
+                localId={localId}
+                ymd={ymd}
+                onDone={onAgendaAction}
+              />
+            ))}
+          </AgendaSection>
+
+          <AgendaSection
+            tone="amber"
+            title="Revisión diaria"
+            count={pendingReviewGroups.length}
+            hint="Swipe a la derecha o toca el check"
+            emptyLabel={completedReviewGroups.length > 0 ? 'Todo revisado por hoy' : 'Sin revisiones pendientes'}
+            action={
+              reviewOverflow ? (
+                <button
+                  type="button"
+                  onClick={() => setReviewExpanded((v) => !v)}
+                  className="flex h-8 shrink-0 touch-manipulation items-center gap-1 rounded-full bg-amber-50 px-2.5 text-[11px] font-bold text-amber-800 ring-1 ring-amber-100 active:scale-[0.98]"
+                >
+                  {reviewExpanded ? 'Menos' : `+${pendingReviewGroups.length - REVIEW_PREVIEW}`}
+                  {reviewExpanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                </button>
+              ) : null
+            }
+          >
+            {reviewShown.map((group) => (
+              <ReviewSwipeRow
+                key={group.supplierId}
+                group={group}
+                localId={localId}
+                ymd={ymd}
+                onDone={onAgendaAction}
+              />
+            ))}
+
+            {completedReviewGroups.length > 0 ? (
+              <div className="pt-0.5">
+                <button
+                  type="button"
+                  onClick={() => setShowCompletedReviews((v) => !v)}
+                  className="flex h-9 w-full touch-manipulation items-center justify-center gap-1.5 rounded-2xl bg-zinc-100/80 text-[11px] font-bold text-zinc-600 active:scale-[0.99]"
+                >
+                  {showCompletedReviews ? 'Ocultar revisados' : `Ver revisados (${completedReviewGroups.length})`}
+                  {showCompletedReviews ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                </button>
+                {showCompletedReviews ? (
+                  <div className="mt-2 space-y-1.5">
+                    {completedReviewGroups.map((group) => (
+                      <CompletedReviewRow key={group.supplierId} group={group} />
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+          </AgendaSection>
         </div>
       ) : null}
     </section>
   );
 });
 
-/* ────────────────────────────────────────────────────────────────────────── */
-/*  Sub-sección dentro del acordeón unificado                                 */
-/* ────────────────────────────────────────────────────────────────────────── */
-
-function SubSection({
+function MetricPill({
   tone,
+  label,
+  value,
   icon,
+}: {
+  tone: 'red' | 'amber';
+  label: string;
+  value: number;
+  icon: React.ReactNode;
+}) {
+  const styles =
+    tone === 'red'
+      ? 'bg-red-50 text-red-800 ring-red-100'
+      : 'bg-amber-50 text-amber-900 ring-amber-100';
+
+  return (
+    <div className={['flex items-center gap-2 rounded-2xl px-3 py-2 ring-1', styles].join(' ')}>
+      <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-white/75">{icon}</span>
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-[10px] font-bold uppercase tracking-wide opacity-75">{label}</span>
+        <span className="block text-[18px] font-black leading-none tabular-nums">{value}</span>
+      </span>
+    </div>
+  );
+}
+
+function AgendaSection({
+  tone,
   title,
   count,
-  countColor,
   hint,
-  extra,
+  emptyLabel,
+  action,
   children,
 }: {
   tone: 'red' | 'amber';
-  icon: React.ReactNode;
   title: string;
   count: number;
-  countColor: string;
-  hint?: string;
-  extra?: React.ReactNode;
+  hint: string;
+  emptyLabel: string;
+  action?: React.ReactNode;
   children: React.ReactNode;
 }) {
-  const toneBg = tone === 'red' ? 'bg-red-50/40' : 'bg-amber-50/40';
+  const isRed = tone === 'red';
+  const iconClass = isRed ? 'bg-red-600 text-white' : 'bg-amber-500 text-white';
+  const labelClass = isRed ? 'text-red-800' : 'text-amber-900';
+
   return (
-    <div className="border-t border-zinc-100">
-      <div className={['flex items-center justify-between gap-2 px-3 py-1.5', toneBg].join(' ')}>
-        <div className="flex min-w-0 flex-1 items-center gap-1.5">
-          {icon}
-          <span className="truncate text-[9.5px] font-bold uppercase tracking-[0.08em] text-zinc-700">
-            {title}
+    <section className="rounded-[1.25rem] bg-white p-2 shadow-sm ring-1 ring-zinc-200/75">
+      <div className="flex items-center justify-between gap-2 px-1 pb-2">
+        <div className="flex min-w-0 items-center gap-2">
+          <span className={['grid h-9 w-9 shrink-0 place-items-center rounded-2xl', iconClass].join(' ')}>
+            {isRed ? <AlarmClock className="h-4.5 w-4.5" strokeWidth={2.25} /> : <ClipboardCheck className="h-4.5 w-4.5" strokeWidth={2.25} />}
           </span>
+          <div className="min-w-0">
+            <h3 className={['truncate font-serif text-[17px] font-normal leading-tight', labelClass].join(' ')}>
+              {title}
+            </h3>
+            <p className="truncate text-[11px] font-medium leading-tight text-zinc-500">{hint}</p>
+          </div>
           {count > 0 ? (
-            <span
-              className="shrink-0 rounded-full px-1.5 py-px text-[9px] font-bold leading-none text-white"
-              style={{ backgroundColor: countColor }}
-            >
+            <span className={['rounded-full px-2 py-0.5 text-[11px] font-black tabular-nums', isRed ? 'bg-red-50 text-red-700' : 'bg-amber-50 text-amber-800'].join(' ')}>
               {count}
             </span>
-          ) : (
-            <span className="grid h-4 w-4 shrink-0 place-items-center rounded-full bg-emerald-100 text-emerald-700 ring-1 ring-emerald-200/80">
-              <Check className="h-2.5 w-2.5" strokeWidth={2.5} aria-hidden />
-            </span>
-          )}
+          ) : null}
         </div>
-        {extra}
+        {action}
       </div>
-      {hint ? (
-        <p className="border-b border-zinc-100 bg-white px-3 pb-1 pt-0.5 text-[9.5px] leading-tight text-zinc-500">
-          {hint}
-        </p>
-      ) : null}
-      {children}
+
+      <div className="space-y-1.5">
+        {count > 0 ? children : <EmptySectionLabel tone={tone} label={emptyLabel} />}
+      </div>
+    </section>
+  );
+}
+
+function EmptySectionLabel({ tone, label }: { tone: 'red' | 'amber'; label: string }) {
+  return (
+    <div className={['flex min-h-[3rem] items-center gap-2 rounded-2xl px-3', tone === 'red' ? 'bg-red-50/45 text-red-800' : 'bg-amber-50/60 text-amber-900'].join(' ')}>
+      <Check className="h-4 w-4 shrink-0" strokeWidth={2.5} aria-hidden />
+      <span className="text-[12px] font-bold">{label}</span>
     </div>
+  );
+}
+
+function MandatoryOrderRow({
+  row,
+  localId,
+  ymd,
+  onDone,
+}: {
+  row: AgendaCutoffRow;
+  localId: string | null;
+  ymd: string;
+  onDone?: () => void;
+}) {
+  const statusClass =
+    row.statusTone === 'danger'
+      ? 'bg-red-600 text-white'
+      : row.statusTone === 'warn'
+        ? 'bg-orange-500 text-white'
+        : 'bg-red-50 text-red-700';
+
+  return (
+    <div className="group flex min-h-[3.75rem] items-center gap-2 rounded-2xl bg-red-50/55 px-2 py-1.5 ring-1 ring-red-100/90 transition-transform duration-200 active:scale-[0.99]">
+      {localId ? (
+        <button
+          type="button"
+          role="checkbox"
+          aria-checked={false}
+          title="No pedir hoy"
+          aria-label={`Omitir pedido obligatorio de ${row.supplierName} hoy`}
+          onClick={() => {
+            markMandatoryOmitted(localId, ymd, row.supplierId);
+            onDone?.();
+          }}
+          className="grid h-11 w-11 shrink-0 touch-manipulation place-items-center rounded-2xl bg-white text-red-600 shadow-sm ring-1 ring-red-200 transition duration-150 active:scale-95"
+        >
+          <Check className="h-6 w-6" strokeWidth={2.6} aria-hidden />
+        </button>
+      ) : null}
+
+      <Link
+        href={row.href}
+        title={`Pedido a ${row.supplierName}`}
+        aria-label={`Abrir pedido y catálogo de ${row.supplierName}, antes de las ${row.cutoffLabel}`}
+        className="flex min-w-0 flex-1 touch-manipulation items-center gap-2 rounded-xl px-1 py-1 outline-none"
+      >
+        <span className="min-w-0 flex-1">
+          <span className="block truncate font-serif text-[16px] leading-tight text-zinc-950">
+            {row.supplierName}
+          </span>
+          <span className="mt-0.5 block truncate text-[11px] font-semibold text-red-700/80">
+            Pedido obligatorio
+          </span>
+        </span>
+        <span className={['shrink-0 rounded-full px-2 py-1 text-[11px] font-black tabular-nums', statusClass].join(' ')}>
+          {row.statusTone === 'danger' ? 'vencido' : `antes ${row.cutoffLabel}`}
+        </span>
+        <ChevronRight className="h-4 w-4 shrink-0 text-red-500/70 transition-transform group-active:translate-x-0.5" aria-hidden />
+      </Link>
+    </div>
+  );
+}
+
+function ReviewSwipeRow({
+  group,
+  localId,
+  ymd,
+  onDone,
+}: {
+  group: AgendaReviewSupplierGroup;
+  localId: string | null;
+  ymd: string;
+  onDone?: () => void;
+}) {
+  const [dragX, setDragX] = React.useState(0);
+  const [isDragging, setIsDragging] = React.useState(false);
+  const [isCompleting, setIsCompleting] = React.useState(false);
+  const startXRef = React.useRef(0);
+  const draggedRef = React.useRef(false);
+
+  const complete = React.useCallback(() => {
+    if (!localId || isCompleting) return;
+    setIsCompleting(true);
+    setDragX(110);
+    window.setTimeout(() => {
+      markSupplierReviewItemsDone(localId, ymd, group.itemIds);
+      onDone?.();
+    }, 150);
+  }, [group.itemIds, isCompleting, localId, onDone, ymd]);
+
+  return (
+    <div className="relative overflow-hidden rounded-2xl bg-amber-500/95">
+      <div className="absolute inset-y-0 left-0 flex items-center gap-2 pl-4 text-white">
+        <Hand className="h-4 w-4" strokeWidth={2.25} aria-hidden />
+        <span className="text-[11px] font-black uppercase tracking-wide">Revisado</span>
+      </div>
+      <div
+        className={[
+          'relative flex min-h-[3.75rem] touch-pan-y items-center gap-2 rounded-2xl bg-amber-50 px-2 py-1.5 ring-1 ring-amber-100/90',
+          isDragging ? 'transition-none' : 'transition-transform duration-200 ease-out',
+          isCompleting ? 'opacity-80' : '',
+        ].join(' ')}
+        style={{ transform: `translateX(${dragX}px)` }}
+        onPointerDown={(event) => {
+          startXRef.current = event.clientX;
+          draggedRef.current = false;
+          setIsDragging(true);
+        }}
+        onPointerMove={(event) => {
+          if (!isDragging || !localId) return;
+          const next = Math.max(0, Math.min(116, event.clientX - startXRef.current));
+          if (next > 6) draggedRef.current = true;
+          setDragX(next);
+        }}
+        onPointerUp={() => {
+          if (!isDragging) return;
+          setIsDragging(false);
+          if (dragX >= SWIPE_DONE_PX) {
+            complete();
+          } else {
+            setDragX(0);
+          }
+        }}
+        onPointerCancel={() => {
+          setIsDragging(false);
+          setDragX(0);
+        }}
+      >
+        {localId ? (
+          <button
+            type="button"
+            role="checkbox"
+            aria-checked={false}
+            title="Marcar como revisado"
+            aria-label={`Marcar ${group.supplierName} como revisado`}
+            onClick={complete}
+            className="grid h-11 w-11 shrink-0 touch-manipulation place-items-center rounded-2xl bg-white text-amber-700 shadow-sm ring-1 ring-amber-200 transition duration-150 active:scale-95"
+          >
+            <Check className="h-6 w-6" strokeWidth={2.6} aria-hidden />
+          </button>
+        ) : null}
+
+        <Link
+          href={group.href}
+          onClick={(event) => {
+            if (draggedRef.current) event.preventDefault();
+          }}
+          className="flex min-w-0 flex-1 touch-manipulation items-center gap-2 rounded-xl px-1 py-1 outline-none"
+        >
+          <span className="min-w-0 flex-1">
+            <span className="block truncate font-serif text-[16px] leading-tight text-zinc-950">
+              {group.supplierName}
+            </span>
+            <span className="mt-0.5 block truncate text-[11px] font-semibold text-amber-800/85">
+              Revisar antes de pedir
+            </span>
+          </span>
+          {group.cutoffLabel ? (
+            <span className="shrink-0 rounded-full bg-white px-2 py-1 text-[11px] font-black text-amber-800 ring-1 ring-amber-100">
+              antes {group.cutoffLabel}
+            </span>
+          ) : null}
+          <ChevronRight className="h-4 w-4 shrink-0 text-amber-600/70" aria-hidden />
+        </Link>
+      </div>
+    </div>
+  );
+}
+
+function CompletedReviewRow({ group }: { group: AgendaReviewSupplierGroup }) {
+  return (
+    <Link
+      href={group.href}
+      className="flex min-h-[3rem] touch-manipulation items-center gap-2 rounded-2xl bg-emerald-50 px-3 py-2 ring-1 ring-emerald-100"
+    >
+      <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-emerald-600 text-white">
+        <Check className="h-4 w-4" strokeWidth={2.5} aria-hidden />
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block truncate font-serif text-[14px] leading-tight text-emerald-950">
+          {group.supplierName}
+        </span>
+        <span className="block text-[10px] font-bold uppercase tracking-wide text-emerald-700/75">
+          Revisado hoy
+        </span>
+      </span>
+      {group.cutoffLabel ? (
+        <span className="shrink-0 text-[11px] font-bold tabular-nums text-emerald-800/80">
+          {group.cutoffLabel}
+        </span>
+      ) : null}
+      <ChevronRight className="h-4 w-4 shrink-0 text-emerald-600/60" aria-hidden />
+    </Link>
   );
 }
