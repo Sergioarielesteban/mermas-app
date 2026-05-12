@@ -121,6 +121,28 @@ export function PanelDataProvider({ children }: { children: React.ReactNode }) {
   usePedidosDataChangedListener(reloadPedidosOrdersOnly, Boolean(localId && showPedidos));
 
   React.useEffect(() => {
+    if (!localId || !showPedidos) return;
+    const sb = getSupabaseClient();
+    if (!sb) return;
+    const channel = sb
+      .channel(`panel-pedidos-orders-rt:${localId}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'purchase_orders', filter: `local_id=eq.${localId}` },
+        () => void reloadPedidosOrdersOnly(),
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'purchase_order_items', filter: `local_id=eq.${localId}` },
+        () => void reloadPedidosOrdersOnly(),
+      )
+      .subscribe();
+    return () => {
+      void sb.removeChannel(channel);
+    };
+  }, [localId, reloadPedidosOrdersOnly, showPedidos]);
+
+  React.useEffect(() => {
     if (!localId || !isSupabaseEnabled() || !getSupabaseClient()) {
       setPedidosOrdersAgenda([]);
       setKpi({

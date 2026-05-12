@@ -15,6 +15,8 @@ import React from 'react';
 import type { AgendaCutoffRow, AgendaReviewSupplierGroup } from '@/hooks/useOrderAgendaToday';
 import { markMandatoryOmitted } from '@/lib/pedidos-order-agenda-mandatory-omit-storage';
 import { markSupplierReviewItemsDone } from '@/lib/pedidos-order-agenda-review-storage';
+import { markMandatoryOmittedShared, markSupplierReviewItemsDoneShared } from '@/lib/pedidos-order-agenda-supabase';
+import { getSupabaseClient } from '@/lib/supabase-client';
 
 export type PedidosAgendaTodayCardProps = {
   loading: boolean;
@@ -364,7 +366,18 @@ function MandatoryOrderRow({
           aria-label={`Omitir pedido obligatorio de ${row.supplierName} hoy`}
           onClick={() => {
             markMandatoryOmitted(localId, ymd, row.supplierId);
-            onDone?.();
+            const supabase = getSupabaseClient();
+            if (!supabase) {
+              onDone?.();
+              return;
+            }
+            void markMandatoryOmittedShared(supabase, localId, ymd, row.supplierId)
+              .catch(() => {
+                /* fallback local ya aplicado */
+              })
+              .finally(() => {
+                onDone?.();
+              });
           }}
           className="grid h-11 w-11 shrink-0 touch-manipulation place-items-center rounded-2xl bg-white text-red-600 shadow-sm ring-1 ring-red-200 transition duration-150 active:scale-95"
         >
@@ -418,9 +431,20 @@ function ReviewSwipeRow({
     setDragX(110);
     window.setTimeout(() => {
       markSupplierReviewItemsDone(localId, ymd, group.itemIds);
-      onDone?.();
+      const supabase = getSupabaseClient();
+      if (!supabase) {
+        onDone?.();
+        return;
+      }
+      void markSupplierReviewItemsDoneShared(supabase, localId, ymd, group.supplierId, group.itemIds)
+        .catch(() => {
+          /* fallback local ya aplicado */
+        })
+        .finally(() => {
+          onDone?.();
+        });
     }, 150);
-  }, [group.itemIds, isCompleting, localId, onDone, ymd]);
+  }, [group.itemIds, group.supplierId, isCompleting, localId, onDone, ymd]);
 
   return (
     <div className="relative overflow-hidden rounded-2xl bg-amber-500/95">

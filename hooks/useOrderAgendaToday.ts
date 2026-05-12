@@ -10,9 +10,11 @@ import {
   type PedidoSupplierOrderScheduleRow,
 } from '@/lib/pedidos-order-agenda-engine';
 import {
+  fetchAgendaDayActionsForLocal,
   fetchOrderSchedulesForLocal,
   fetchReviewItemsForLocal,
   fetchSupplierNamesMap,
+  type PedidoAgendaDayActions,
   type PedidoSupplierReviewItemDb,
 } from '@/lib/pedidos-order-agenda-supabase';
 import { isReviewItemMarkedDone } from '@/lib/pedidos-order-agenda-review-storage';
@@ -59,6 +61,10 @@ export function useOrderAgendaToday(params: { localId: string | null; orders: Pe
   const [reviewBySupplier, setReviewBySupplier] = React.useState<Map<string, PedidoSupplierReviewItemDb[]>>(
     () => new Map(),
   );
+  const [dayActions, setDayActions] = React.useState<PedidoAgendaDayActions>(() => ({
+    mandatoryOmittedSupplierIds: new Set(),
+    reviewDoneItemKeys: new Set(),
+  }));
   const [loading, setLoading] = React.useState(() => Boolean(localId));
   const [reloadEpoch, setReloadEpoch] = React.useState(0);
   const [timeTick, setTimeTick] = React.useState(0);
@@ -72,27 +78,32 @@ export function useOrderAgendaToday(params: { localId: string | null; orders: Pe
     if (!localId) {
       setSchedules(new Map());
       setReviewBySupplier(new Map());
+      setDayActions({ mandatoryOmittedSupplierIds: new Set(), reviewDoneItemKeys: new Set() });
       return;
     }
     const supabase = getSupabaseClient();
     if (!supabase) return;
     let cancelled = false;
+    const loadYmd = todayYmdLocal(new Date());
     setLoading(true);
     void Promise.all([
       fetchOrderSchedulesForLocal(supabase, localId),
       fetchReviewItemsForLocal(supabase, localId),
       fetchSupplierNamesMap(supabase, localId),
+      fetchAgendaDayActionsForLocal(supabase, localId, loadYmd),
     ])
-      .then(([sch, rev, names]) => {
+      .then(([sch, rev, names, actions]) => {
         if (cancelled) return;
         setSchedules(sch);
         setReviewBySupplier(rev);
         setSupplierNames(names);
+        setDayActions(actions);
       })
       .catch(() => {
         if (!cancelled) {
           setSchedules(new Map());
           setReviewBySupplier(new Map());
+          setDayActions({ mandatoryOmittedSupplierIds: new Set(), reviewDoneItemKeys: new Set() });
         }
       })
       .finally(() => {
@@ -106,6 +117,23 @@ export function useOrderAgendaToday(params: { localId: string | null; orders: Pe
   const refresh = React.useCallback(() => setReloadEpoch((n) => n + 1), []);
 
   usePedidosDataChangedListener(refresh, Boolean(localId));
+
+  React.useEffect(() => {
+    if (!localId) return;
+    const supabase = getSupabaseClient();
+    if (!supabase) return;
+    const channel = supabase
+      .channel(`pedidos-agenda-actions-rt:${localId}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'pedido_agenda_day_actions', filter: `local_id=eq.${localId}` },
+        refresh,
+      )
+      .subscribe();
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [localId, refresh]);
 
   const now = React.useMemo(() => new Date(), [reloadEpoch, timeTick, orders.length]);
 
@@ -159,7 +187,10 @@ export function useOrderAgendaToday(params: { localId: string | null; orders: Pe
           supplierName: name,
           label,
           href: `/pedidos/nuevo?supplierId=${encodeURIComponent(supplierId)}`,
-          done: localId ? isReviewItemMarkedDone(localId, ymd, it.id) : false,
+          done: localId
+            ? dayActions.reviewDoneItemKeys.has(`${supplierId}:${it.id}`) ||
+              isReviewItemMarkedDone(localId, ymd, it.id)
+            : false,
         });
       }
     }
@@ -175,7 +206,10 @@ export function useOrderAgendaToday(params: { localId: string | null; orders: Pe
         supplierName: name,
         label: 'Revisar si necesitas pedir',
         href: `/pedidos/nuevo?supplierId=${encodeURIComponent(supplierId)}`,
-        done: localId ? isReviewItemMarkedDone(localId, ymd, vid) : false,
+        done: localId
+          ? dayActions.reviewDoneItemKeys.has(`${supplierId}:${vid}`) ||
+            isReviewItemMarkedDone(localId, ymd, vid)
+          : false,
       });
     }
 
@@ -183,7 +217,7 @@ export function useOrderAgendaToday(params: { localId: string | null; orders: Pe
     reviews.sort((a, b) => a.supplierName.localeCompare(b.supplierName) || a.label.localeCompare(b.label));
 
     return { cutoffRows: cutoffs, reviewRows: reviews };
-  }, [schedules, reviewBySupplier, orders, supplierNames, localId, ymd]);
+  }, [schedules, reviewBySupplier, orders, supplierNames, localId, ymd, dayActions]);
 
   const pendingCutoffRows = React.useMemo(
     () => cutoffRows.filter((r) => r.statusLabel !== 'enviado'),
@@ -193,8 +227,10 @@ export function useOrderAgendaToday(params: { localId: string | null; orders: Pe
   /** Obligatorios hoy: sin omisión manual. */
   const mandatoryRows = React.useMemo(() => {
     if (!localId) return pendingCutoffRows;
-    return pendingCutoffRows.filter((r) => !isMandatoryOmitted(localId, ymd, r.supplierId));
-  }, [pendingCutoffRows, localId, ymd, reloadEpoch]);
+    return pendingCutoffRows.filter(
+      (r) => !dayActions.mandatoryOmittedSupplierIds.has(r.supplierId) && !isMandatoryOmitted(localId, ymd, r.supplierId),
+    );
+  }, [pendingCutoffRows, localId, ymd, dayActions]);
 
   const mandatorySupplierIdSet = React.useMemo(
     () => new Set(mandatoryRows.map((r) => r.supplierId)),
@@ -228,7 +264,13 @@ export function useOrderAgendaToday(params: { localId: string | null; orders: Pe
     for (const [supplierId, v] of bySup) {
       const itemIds = v.ids;
       const allDone =
-        localId != null && itemIds.length > 0 && itemIds.every((id) => isReviewItemMarkedDone(localId, ymd, id));
+        localId != null &&
+        itemIds.length > 0 &&
+        itemIds.every(
+          (id) =>
+            dayActions.reviewDoneItemKeys.has(`${supplierId}:${id}`) ||
+            isReviewItemMarkedDone(localId, ymd, id),
+        );
       const sch = schedules.get(supplierId);
       const cutoffLabel =
         sch && sch.enabled && isOrderDayToday(sch, now) ? formatCutoffHm(sch.cutoffTime) : null;
@@ -243,7 +285,7 @@ export function useOrderAgendaToday(params: { localId: string | null; orders: Pe
     }
     out.sort((a, b) => a.supplierName.localeCompare(b.supplierName, 'es'));
     return out;
-  }, [reviewRows, mandatorySupplierIdSet, localId, ymd, reloadEpoch, schedules, now]);
+  }, [reviewRows, mandatorySupplierIdSet, localId, ymd, schedules, now, dayActions]);
 
   const hasPendingReviews = React.useMemo(
     () => reviewSupplierGroups.some((g) => !g.allDone),

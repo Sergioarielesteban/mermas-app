@@ -41,8 +41,25 @@ create table if not exists public.pedido_supplier_review_items (
 create index if not exists idx_pedido_supplier_review_items_local_supplier
   on public.pedido_supplier_review_items(local_id, supplier_id);
 
+create table if not exists public.pedido_agenda_day_actions (
+  id uuid primary key default gen_random_uuid(),
+  local_id uuid not null references public.locals(id) on delete cascade,
+  action_date date not null,
+  supplier_id uuid not null references public.pedido_suppliers(id) on delete cascade,
+  action_type text not null
+    check (action_type in ('mandatory_omitted', 'review_done')),
+  review_item_key text not null default '',
+  created_by uuid default auth.uid(),
+  created_at timestamptz not null default now(),
+  unique (local_id, action_date, supplier_id, action_type, review_item_key)
+);
+
+create index if not exists idx_pedido_agenda_day_actions_local_date
+  on public.pedido_agenda_day_actions(local_id, action_date);
+
 alter table public.pedido_supplier_order_schedules enable row level security;
 alter table public.pedido_supplier_review_items enable row level security;
+alter table public.pedido_agenda_day_actions enable row level security;
 
 drop policy if exists "pedido supplier order schedules same local read" on public.pedido_supplier_order_schedules;
 create policy "pedido supplier order schedules same local read"
@@ -69,6 +86,21 @@ using (local_id = public.current_local_id());
 drop policy if exists "pedido supplier review items same local write" on public.pedido_supplier_review_items;
 create policy "pedido supplier review items same local write"
 on public.pedido_supplier_review_items
+for all
+to authenticated
+using (local_id = public.current_local_id())
+with check (local_id = public.current_local_id());
+
+drop policy if exists "pedido agenda day actions same local read" on public.pedido_agenda_day_actions;
+create policy "pedido agenda day actions same local read"
+on public.pedido_agenda_day_actions
+for select
+to authenticated
+using (local_id = public.current_local_id());
+
+drop policy if exists "pedido agenda day actions same local write" on public.pedido_agenda_day_actions;
+create policy "pedido agenda day actions same local write"
+on public.pedido_agenda_day_actions
 for all
 to authenticated
 using (local_id = public.current_local_id())

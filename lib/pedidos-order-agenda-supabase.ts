@@ -27,6 +27,19 @@ export type PedidoSupplierReviewItemDb = {
   sort_order: number;
 };
 
+export type PedidoAgendaDayActions = {
+  mandatoryOmittedSupplierIds: Set<string>;
+  reviewDoneItemKeys: Set<string>;
+};
+
+type PedidoAgendaDayActionDb = {
+  local_id: string;
+  action_date: string;
+  supplier_id: string;
+  action_type: 'mandatory_omitted' | 'review_done';
+  review_item_key: string;
+};
+
 function parseAgendaMode(raw: string | null | undefined): PedidoAgendaMode {
   return raw === 'review' ? 'review' : 'mandatory';
 }
@@ -158,6 +171,87 @@ export async function fetchReviewItemsForLocal(
     bySupplier.set(row.supplier_id, list);
   }
   return bySupplier;
+}
+
+export async function fetchAgendaDayActionsForLocal(
+  supabase: SupabaseClient,
+  localId: string,
+  ymd: string,
+): Promise<PedidoAgendaDayActions> {
+  const empty: PedidoAgendaDayActions = {
+    mandatoryOmittedSupplierIds: new Set(),
+    reviewDoneItemKeys: new Set(),
+  };
+
+  const { data, error } = await supabase
+    .from('pedido_agenda_day_actions')
+    .select('local_id,action_date,supplier_id,action_type,review_item_key')
+    .eq('local_id', localId)
+    .eq('action_date', ymd);
+
+  if (error) {
+    if (error.message?.includes('does not exist') || error.code === '42P01') return empty;
+    throw new Error(error.message);
+  }
+
+  const out: PedidoAgendaDayActions = {
+    mandatoryOmittedSupplierIds: new Set(),
+    reviewDoneItemKeys: new Set(),
+  };
+  for (const raw of data ?? []) {
+    const row = raw as PedidoAgendaDayActionDb;
+    if (row.action_type === 'mandatory_omitted') {
+      out.mandatoryOmittedSupplierIds.add(row.supplier_id);
+    } else if (row.action_type === 'review_done') {
+      out.reviewDoneItemKeys.add(`${row.supplier_id}:${row.review_item_key}`);
+    }
+  }
+  return out;
+}
+
+export async function markMandatoryOmittedShared(
+  supabase: SupabaseClient,
+  localId: string,
+  ymd: string,
+  supplierId: string,
+): Promise<void> {
+  const { error } = await supabase.from('pedido_agenda_day_actions').upsert(
+    {
+      local_id: localId,
+      action_date: ymd,
+      supplier_id: supplierId,
+      action_type: 'mandatory_omitted',
+      review_item_key: '',
+    },
+    { onConflict: 'local_id,action_date,supplier_id,action_type,review_item_key' },
+  );
+
+  if (error) throw new Error(error.message);
+}
+
+export async function markSupplierReviewItemsDoneShared(
+  supabase: SupabaseClient,
+  localId: string,
+  ymd: string,
+  supplierId: string,
+  reviewItemKeys: string[],
+): Promise<void> {
+  const uniqueKeys = [...new Set(reviewItemKeys.map((id) => id.trim()).filter(Boolean))];
+  if (uniqueKeys.length === 0) return;
+
+  const rows = uniqueKeys.map((reviewItemKey) => ({
+    local_id: localId,
+    action_date: ymd,
+    supplier_id: supplierId,
+    action_type: 'review_done',
+    review_item_key: reviewItemKey,
+  }));
+
+  const { error } = await supabase
+    .from('pedido_agenda_day_actions')
+    .upsert(rows, { onConflict: 'local_id,action_date,supplier_id,action_type,review_item_key' });
+
+  if (error) throw new Error(error.message);
 }
 
 export async function upsertOrderSchedule(
