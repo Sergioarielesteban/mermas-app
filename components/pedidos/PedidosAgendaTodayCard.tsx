@@ -128,7 +128,7 @@ export default React.memo(function PedidosAgendaTodayCard({
             <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-zinc-500">
               Pedidos de hoy
             </p>
-            <h2 className="mt-0.5 truncate font-serif text-[19px] font-normal leading-tight text-zinc-950">
+            <h2 className="mt-0.5 max-w-[13.5rem] text-wrap font-serif text-[18px] font-normal leading-[1.08] text-zinc-950 min-[390px]:max-w-none min-[390px]:text-[19px]">
               Gestión de pedidos para hoy
             </h2>
           </div>
@@ -355,55 +355,110 @@ function MandatoryOrderRow({
         ? 'bg-orange-500 text-white'
         : 'bg-red-50 text-red-700';
 
-  return (
-    <div className="group flex min-h-[3.75rem] items-center gap-2 rounded-2xl bg-red-50/55 px-2 py-1.5 ring-1 ring-red-100/90 transition-transform duration-200 active:scale-[0.99]">
-      {localId ? (
-        <button
-          type="button"
-          role="checkbox"
-          aria-checked={false}
-          title="No pedir hoy"
-          aria-label={`Omitir pedido obligatorio de ${row.supplierName} hoy`}
-          onClick={() => {
-            markMandatoryOmitted(localId, ymd, row.supplierId);
-            const supabase = getSupabaseClient();
-            if (!supabase) {
-              onDone?.();
-              return;
-            }
-            void markMandatoryOmittedShared(supabase, localId, ymd, row.supplierId)
-              .catch(() => {
-                /* fallback local ya aplicado */
-              })
-              .finally(() => {
-                onDone?.();
-              });
-          }}
-          className="grid h-11 w-11 shrink-0 touch-manipulation place-items-center rounded-2xl bg-white text-red-600 shadow-sm ring-1 ring-red-200 transition duration-150 active:scale-95"
-        >
-          <Check className="h-6 w-6" strokeWidth={2.6} aria-hidden />
-        </button>
-      ) : null}
+  const [dragX, setDragX] = React.useState(0);
+  const [isDragging, setIsDragging] = React.useState(false);
+  const [isCompleting, setIsCompleting] = React.useState(false);
+  const startXRef = React.useRef(0);
+  const draggedRef = React.useRef(false);
+  const draggingRef = React.useRef(false);
+  const completingRef = React.useRef(false);
 
-      <Link
-        href={row.href}
-        title={`Pedido a ${row.supplierName}`}
-        aria-label={`Abrir pedido y catálogo de ${row.supplierName}, antes de las ${row.cutoffLabel}`}
-        className="flex min-w-0 flex-1 touch-manipulation items-center gap-2 rounded-xl px-1 py-1 outline-none"
+  const complete = React.useCallback(() => {
+    if (!localId || completingRef.current) return;
+    completingRef.current = true;
+    setIsCompleting(true);
+    setDragX(110);
+    window.setTimeout(() => {
+      markMandatoryOmitted(localId, ymd, row.supplierId);
+      onDone?.();
+      const supabase = getSupabaseClient();
+      if (!supabase) return;
+      void markMandatoryOmittedShared(supabase, localId, ymd, row.supplierId)
+        .catch(() => {
+          /* fallback local ya aplicado */
+        });
+    }, 150);
+  }, [localId, onDone, row.supplierId, ymd]);
+
+  return (
+    <div className="relative overflow-hidden rounded-2xl bg-red-600/95">
+      <div className="absolute inset-y-0 left-0 flex items-center gap-2 pl-4 text-white">
+        <Hand className="h-4 w-4" strokeWidth={2.25} aria-hidden />
+        <span className="text-[11px] font-black uppercase tracking-wide">Omitir hoy</span>
+      </div>
+      <div
+        className={[
+          'group relative flex min-h-[3.75rem] touch-pan-y items-center gap-2 rounded-2xl bg-red-50/55 px-2 py-1.5 ring-1 ring-red-100/90',
+          isDragging ? 'transition-none' : 'transition-transform duration-200 ease-out',
+          isCompleting ? 'opacity-80' : '',
+        ].join(' ')}
+        style={{ transform: `translateX(${dragX}px)` }}
+        onPointerDown={(event) => {
+          startXRef.current = event.clientX;
+          draggedRef.current = false;
+          draggingRef.current = true;
+          setIsDragging(true);
+          event.currentTarget.setPointerCapture(event.pointerId);
+        }}
+        onPointerMove={(event) => {
+          if (!draggingRef.current || !localId) return;
+          const next = Math.max(0, Math.min(116, event.clientX - startXRef.current));
+          if (next > 6) draggedRef.current = true;
+          setDragX(next);
+        }}
+        onPointerUp={() => {
+          if (!draggingRef.current) return;
+          draggingRef.current = false;
+          setIsDragging(false);
+          if (dragX >= SWIPE_DONE_PX) {
+            complete();
+          } else {
+            setDragX(0);
+          }
+        }}
+        onPointerCancel={() => {
+          draggingRef.current = false;
+          setIsDragging(false);
+          setDragX(0);
+        }}
       >
-        <span className="min-w-0 flex-1">
-          <span className="block truncate font-serif text-[16px] leading-tight text-zinc-950">
-            {row.supplierName}
+        {localId ? (
+          <button
+            type="button"
+            role="checkbox"
+            aria-checked={false}
+            title="No pedir hoy"
+            aria-label={`Omitir pedido obligatorio de ${row.supplierName} hoy`}
+            onClick={complete}
+            className="grid h-11 w-11 shrink-0 touch-manipulation place-items-center rounded-2xl bg-white text-red-600 shadow-sm ring-1 ring-red-200 transition duration-150 active:scale-95"
+          >
+            <Check className="h-6 w-6" strokeWidth={2.6} aria-hidden />
+          </button>
+        ) : null}
+
+        <Link
+          href={row.href}
+          title={`Pedido a ${row.supplierName}`}
+          aria-label={`Abrir pedido y catálogo de ${row.supplierName}, antes de las ${row.cutoffLabel}`}
+          onClick={(event) => {
+            if (draggedRef.current) event.preventDefault();
+          }}
+          className="flex min-w-0 flex-1 touch-manipulation items-center gap-2 rounded-xl px-1 py-1 outline-none"
+        >
+          <span className="min-w-0 flex-1">
+            <span className="block truncate font-serif text-[16px] leading-tight text-zinc-950">
+              {row.supplierName}
+            </span>
+            <span className="mt-0.5 block truncate text-[11px] font-semibold text-red-700/80">
+              Pedido obligatorio
+            </span>
           </span>
-          <span className="mt-0.5 block truncate text-[11px] font-semibold text-red-700/80">
-            Pedido obligatorio
+          <span className={['shrink-0 rounded-full px-2 py-1 text-[11px] font-black tabular-nums', statusClass].join(' ')}>
+            {row.statusTone === 'danger' ? 'vencido' : `antes ${row.cutoffLabel}`}
           </span>
-        </span>
-        <span className={['shrink-0 rounded-full px-2 py-1 text-[11px] font-black tabular-nums', statusClass].join(' ')}>
-          {row.statusTone === 'danger' ? 'vencido' : `antes ${row.cutoffLabel}`}
-        </span>
-        <ChevronRight className="h-4 w-4 shrink-0 text-red-500/70 transition-transform group-active:translate-x-0.5" aria-hidden />
-      </Link>
+          <ChevronRight className="h-4 w-4 shrink-0 text-red-500/70 transition-transform group-active:translate-x-0.5" aria-hidden />
+        </Link>
+      </div>
     </div>
   );
 }
@@ -424,27 +479,25 @@ function ReviewSwipeRow({
   const [isCompleting, setIsCompleting] = React.useState(false);
   const startXRef = React.useRef(0);
   const draggedRef = React.useRef(false);
+  const draggingRef = React.useRef(false);
+  const completingRef = React.useRef(false);
 
   const complete = React.useCallback(() => {
-    if (!localId || isCompleting) return;
+    if (!localId || completingRef.current) return;
+    completingRef.current = true;
     setIsCompleting(true);
     setDragX(110);
     window.setTimeout(() => {
       markSupplierReviewItemsDone(localId, ymd, group.itemIds);
+      onDone?.();
       const supabase = getSupabaseClient();
-      if (!supabase) {
-        onDone?.();
-        return;
-      }
+      if (!supabase) return;
       void markSupplierReviewItemsDoneShared(supabase, localId, ymd, group.supplierId, group.itemIds)
         .catch(() => {
           /* fallback local ya aplicado */
-        })
-        .finally(() => {
-          onDone?.();
         });
     }, 150);
-  }, [group.itemIds, group.supplierId, isCompleting, localId, onDone, ymd]);
+  }, [group.itemIds, group.supplierId, localId, onDone, ymd]);
 
   return (
     <div className="relative overflow-hidden rounded-2xl bg-amber-500/95">
@@ -462,16 +515,19 @@ function ReviewSwipeRow({
         onPointerDown={(event) => {
           startXRef.current = event.clientX;
           draggedRef.current = false;
+          draggingRef.current = true;
           setIsDragging(true);
+          event.currentTarget.setPointerCapture(event.pointerId);
         }}
         onPointerMove={(event) => {
-          if (!isDragging || !localId) return;
+          if (!draggingRef.current || !localId) return;
           const next = Math.max(0, Math.min(116, event.clientX - startXRef.current));
           if (next > 6) draggedRef.current = true;
           setDragX(next);
         }}
         onPointerUp={() => {
-          if (!isDragging) return;
+          if (!draggingRef.current) return;
+          draggingRef.current = false;
           setIsDragging(false);
           if (dragX >= SWIPE_DONE_PX) {
             complete();
@@ -480,6 +536,7 @@ function ReviewSwipeRow({
           }
         }}
         onPointerCancel={() => {
+          draggingRef.current = false;
           setIsDragging(false);
           setDragX(0);
         }}

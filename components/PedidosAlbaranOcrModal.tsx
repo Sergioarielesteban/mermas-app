@@ -51,6 +51,10 @@ export default function PedidosAlbaranOcrModal({ order, open, onClose, onApplied
       setError('Selecciona una foto del albarán.');
       return;
     }
+    if (!file.type.startsWith('image/')) {
+      setError('Este botón solo procesa imágenes. Para PDF usa Pedidos > Albaranes > Escanear albarán.');
+      return;
+    }
     const supabase = getSupabaseClient();
     if (!supabase) {
       setError('Supabase no disponible.');

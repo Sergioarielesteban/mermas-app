@@ -6,6 +6,7 @@ import { requireAllowedSupabaseUser } from '@/lib/require-allowed-supabase-user'
 import { logCriticalAndGeneric } from '@/lib/server/api-safe';
 import { enforceRateLimitAuth } from '@/lib/server/security-rate-limit';
 import { runOcrFromImageBytes } from '@/lib/ocr/index';
+import { isDocumentAiConfigured } from '@/lib/ocr/providers/document-ai';
 
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 
@@ -36,6 +37,18 @@ export async function handlePedidosOcrPost(request: Request): Promise<NextRespon
     const rl = enforceRateLimitAuth(request, auth.userId, 'ocr');
     if (rl) return rl;
 
+    if (!isDocumentAiConfigured()) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: 'ocr_provider_not_configured',
+          reason:
+            'Faltan variables OCR: GOOGLE_CLOUD_PROJECT_ID, GOOGLE_DOCUMENT_AI_LOCATION, GOOGLE_DOCUMENT_AI_PROCESSOR_ID y GOOGLE_SERVICE_ACCOUNT_JSON.',
+        },
+        { status: 503 },
+      );
+    }
+
     const form = await request.formData();
     const image = form.get('image');
     if (!(image instanceof Blob)) {
@@ -55,6 +68,16 @@ export async function handlePedidosOcrPost(request: Request): Promise<NextRespon
     const text = result.rawText ?? '';
     return NextResponse.json({ ok: true, text, result });
   } catch (err) {
+    if (err instanceof Error && err.message.startsWith('document_ai_')) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: err.message,
+          reason: 'Document AI no pudo procesar el archivo. Revisa credenciales, región, processor y formato.',
+        },
+        { status: 502 },
+      );
+    }
     return logCriticalAndGeneric('POST /api/pedidos/ocr', err);
   }
 }

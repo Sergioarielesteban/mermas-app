@@ -64,8 +64,7 @@ export async function requireOidoChefAccess(request: Request, kind: OidoKind): P
     return { ok: false, message: 'Perfil incompleto para Oído Chef.', status: 403 };
   }
 
-  const roleEnv = process.env.OIDO_CHEF_ALLOWED_ROLES;
-  const allowedRoles = roleEnv ? parseCsv(roleEnv) : ['admin', 'manager'];
+  const allowedRoles = ['admin'];
   if (allowedRoles.length > 0 && !allowedRoles.includes(role)) {
     return { ok: false, message: 'Tu rol no tiene acceso a Oído Chef.', status: 403 };
   }

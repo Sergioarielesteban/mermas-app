@@ -437,6 +437,7 @@ export default function PedidosPage() {
   const { localCode, localName, localId, email, userId, displayName, loginUsername, profileRole } = useAuth();
   const hasPedidosEntry = canAccessPedidos(localCode, email, localName, localId);
   const canUse = canUsePedidosModule(localCode, email, localName, localId);
+  const canUseOidoChef = profileRole === 'admin';
   const {
     orders,
     setOrders,
@@ -3475,7 +3476,7 @@ export default function PedidosPage() {
         return;
       }
 
-      if (oidoChefAiEnabled) {
+      if (canUseOidoChef && oidoChefAiEnabled) {
         const supabaseAi = getSupabaseClient();
         if (supabaseAi) {
           const { data: sessionAi } = await supabaseAi.auth.getSession();
@@ -3514,6 +3515,7 @@ export default function PedidosPage() {
   }, [
     articleNombreByProductId,
     catalogNameByProductId,
+    canUseOidoChef,
     commitSentOrderAsReceived,
     localCode,
     localId,
@@ -3597,12 +3599,14 @@ export default function PedidosPage() {
   /** Enlaces antiguos a /pedidos#oido-chef: llevar a la pantalla dedicada del asistente. */
   React.useEffect(() => {
     if (typeof window === 'undefined') return;
+    if (!canUseOidoChef) return;
     if (searchParams.get('oido') === '1') return;
     if (window.location.hash !== '#oido-chef') return;
     router.replace('/pedidos?oido=1#oido-chef', { scroll: false });
-  }, [router, searchParams]);
+  }, [canUseOidoChef, router, searchParams]);
 
   const startAssistantVoice = React.useCallback(() => {
+    if (!canUseOidoChef) return;
     if (assistantListening || assistantVoiceBootRef.current) return;
     if (typeof window === 'undefined') return;
     const W = window as unknown as {
@@ -3650,7 +3654,7 @@ export default function PedidosPage() {
       assistantVoiceBootRef.current = false;
       setAssistantReply('No se pudo iniciar la escucha de voz.');
     }
-  }, [assistantListening, runAssistantCommandFromText]);
+  }, [assistantListening, canUseOidoChef, runAssistantCommandFromText]);
 
   const scheduleAssistantVoiceFromBottomNav = React.useCallback(() => {
     window.requestAnimationFrame(() => {
@@ -3663,12 +3667,17 @@ export default function PedidosPage() {
 
   React.useEffect(() => {
     if (searchParams.get('voz') !== '1') return;
+    if (!canUseOidoChef) {
+      router.replace('/pedidos', { scroll: false });
+      return;
+    }
     router.replace('/pedidos?oido=1', { scroll: false });
     scheduleAssistantVoiceFromBottomNav();
-  }, [router, scheduleAssistantVoiceFromBottomNav, searchParams]);
+  }, [canUseOidoChef, router, scheduleAssistantVoiceFromBottomNav, searchParams]);
 
   React.useEffect(() => {
     try {
+      if (!canUseOidoChef) return;
       if (window.sessionStorage.getItem(OIDO_CHEF_VOICE_NAV_FLAG) === '1') {
         window.sessionStorage.removeItem(OIDO_CHEF_VOICE_NAV_FLAG);
         scheduleAssistantVoiceFromBottomNav();
@@ -3676,13 +3685,14 @@ export default function PedidosPage() {
     } catch {
       // ignore
     }
-  }, [scheduleAssistantVoiceFromBottomNav]);
+  }, [canUseOidoChef, scheduleAssistantVoiceFromBottomNav]);
 
   React.useEffect(() => {
+    if (!canUseOidoChef) return;
     const onNavVoice = () => scheduleAssistantVoiceFromBottomNav();
     window.addEventListener(OIDO_CHEF_START_VOICE_EVENT, onNavVoice);
     return () => window.removeEventListener(OIDO_CHEF_START_VOICE_EVENT, onNavVoice);
-  }, [scheduleAssistantVoiceFromBottomNav]);
+  }, [canUseOidoChef, scheduleAssistantVoiceFromBottomNav]);
 
   const stopAssistantVoice = React.useCallback(() => {
     assistantRecognitionRef.current?.stop();
@@ -3982,7 +3992,14 @@ export default function PedidosPage() {
           description="Misma cuenta y datos que en Pedidos: aquí solo el asistente, para no saturar la lista de envíos."
         />
 
-        {assistantPanel}
+        {canUseOidoChef ? (
+          assistantPanel
+        ) : (
+          <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-zinc-200">
+            <p className="text-sm font-black text-zinc-900">Asistente solo para administradores</p>
+            <p className="pt-1 text-sm text-zinc-600">Oído Chef está desactivado para manager y staff.</p>
+          </section>
+        )}
       </div>
     );
   }

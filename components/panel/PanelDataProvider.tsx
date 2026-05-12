@@ -48,6 +48,7 @@ export type PanelDataContextValue = {
   /** Permisos resueltos para los bloques. */
   perms: {
     showPedidos: boolean;
+    canUseAssistant: boolean;
     isBlockedByPlan: (module: PlanModule) => boolean;
   };
   /** localId actual (puede ser null en sesiones sin local resuelto). */
@@ -74,6 +75,7 @@ export function PanelDataProvider({ children }: { children: React.ReactNode }) {
       canAccessPedidos(localCode, email, localName, localId) && canAccessPedidosByRole(role),
     [localCode, email, localName, localId, role],
   );
+  const canUseAssistant = profileRole === 'admin';
 
   const isBlockedByPlan = React.useCallback(
     (module: PlanModule) => {
@@ -220,10 +222,10 @@ export function PanelDataProvider({ children }: { children: React.ReactNode }) {
       kpi,
       agenda,
       chatUnreadCount,
-      perms: { showPedidos, isBlockedByPlan },
+      perms: { showPedidos, canUseAssistant, isBlockedByPlan },
       localId: localId ?? null,
     }),
-    [kpi, agenda, chatUnreadCount, showPedidos, isBlockedByPlan, localId],
+    [kpi, agenda, chatUnreadCount, showPedidos, canUseAssistant, isBlockedByPlan, localId],
   );
 
   return <PanelDataContext.Provider value={value}>{children}</PanelDataContext.Provider>;

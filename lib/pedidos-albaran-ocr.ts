@@ -6,11 +6,19 @@ export async function compressImageFileToJpeg(
   file: File,
   opts?: { maxLongEdge?: number; quality?: number; maxBytes?: number },
 ): Promise<Blob> {
+  if (!file.type.startsWith('image/')) {
+    throw new Error('Este flujo solo admite imágenes. Para PDF usa Pedidos > Albaranes > Escanear albarán.');
+  }
   const maxLongEdge = opts?.maxLongEdge ?? 1680;
   const quality = opts?.quality ?? 0.82;
   const maxBytes = opts?.maxBytes ?? 650_000;
 
-  const bitmap = await createImageBitmap(file);
+  let bitmap: ImageBitmap;
+  try {
+    bitmap = await createImageBitmap(file);
+  } catch {
+    throw new Error('No se pudo abrir la imagen. Prueba con JPG o PNG, o sube el documento desde Albaranes.');
+  }
   try {
     let w = bitmap.width;
     let h = bitmap.height;
@@ -76,6 +84,9 @@ export async function runAlbaranOcr(blob: Blob, accessToken: string): Promise<st
         : typeof rec?.error === 'string'
           ? rec.error
           : `HTTP ${res.status}`;
+    if (reason === 'ocr_provider_not_configured') {
+      throw new Error('OCR no configurado: faltan variables de Google Document AI en el servidor.');
+    }
     throw new Error(reason);
   }
   const t = typeof rec.text === 'string' ? rec.text : '';

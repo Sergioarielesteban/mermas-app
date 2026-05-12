@@ -11,7 +11,7 @@
 import { NextResponse } from 'next/server';
 import { buildAssistantContext } from '@/lib/ai/assistant-context';
 import { generateAssistantReply, type AssistantChatTurn } from '@/lib/ai/assistant-gemini';
-import { requireAllowedSupabaseUser } from '@/lib/require-allowed-supabase-user';
+import { requireProfileRoles } from '@/lib/require-allowed-supabase-user';
 import { readJsonBodyLimitedEx } from '@/lib/server/read-json-limited';
 import { logCriticalAndGeneric } from '@/lib/server/api-safe';
 import { enforceRateLimitAuth } from '@/lib/server/security-rate-limit';
@@ -52,7 +52,7 @@ function normalizeHistory(raw: unknown): AssistantChatTurn[] {
 
 export async function POST(request: Request): Promise<NextResponse> {
   try {
-    const auth = await requireAllowedSupabaseUser(request);
+    const auth = await requireProfileRoles(request, ['admin']);
     if (!auth.ok) {
       return NextResponse.json({ ok: false, error: 'Unauthorized' }, { status: auth.status });
     }

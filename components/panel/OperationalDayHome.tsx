@@ -27,7 +27,7 @@ import PanelCriticalAlerts from '@/components/panel/PanelCriticalAlerts';
 import PanelCustomizeButton from '@/components/panel/PanelCustomizeButton';
 import PanelCustomizeSheet from '@/components/panel/PanelCustomizeSheet';
 import { PANEL_BLOCK_RENDERERS, PanelGreetingBlock } from '@/components/panel/PanelBlocks';
-import { PanelDataProvider } from '@/components/panel/PanelDataProvider';
+import { PanelDataProvider, usePanelData } from '@/components/panel/PanelDataProvider';
 import { usePanelConfig } from '@/hooks/usePanelConfig';
 import { PANEL_BLOCK_BY_ID, type PanelBlockId } from '@/lib/panel/panel-blocks';
 
@@ -95,6 +95,7 @@ export default function OperationalDayHome() {
 
 function OperationalDayHomeInner() {
   const panel = usePanelConfig();
+  const { perms } = usePanelData();
   const [customizeOpen, setCustomizeOpen] = React.useState(false);
   const [assistantOpen, setAssistantOpen] = React.useState(false);
 
@@ -112,8 +113,12 @@ function OperationalDayHomeInner() {
 
       <PanelCriticalAlerts visibleBlockIds={panel.visibleBlockIds} />
 
-      <PanelAssistantCard onOpen={() => setAssistantOpen(true)} />
-      <ChefOneAssistantSheet open={assistantOpen} onClose={() => setAssistantOpen(false)} />
+      {perms.canUseAssistant ? (
+        <>
+          <PanelAssistantCard onOpen={() => setAssistantOpen(true)} />
+          <ChefOneAssistantSheet open={assistantOpen} onClose={() => setAssistantOpen(false)} />
+        </>
+      ) : null}
 
       <ProductoGuiadoChecklist />
 
