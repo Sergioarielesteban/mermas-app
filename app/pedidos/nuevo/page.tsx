@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { Filter, Package, Search, Sparkles, Star, TrendingUp } from 'lucide-react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import React from 'react';
 import { usePedidosOperationalSuggestions } from '@/hooks/usePedidosOperationalSuggestions';
 import { useSuggestedOrder } from '@/hooks/useSuggestedOrder';
@@ -39,6 +39,16 @@ import {
   writeSuppliersSessionCache,
 } from '@/lib/pedidos-session-cache';
 import {
+  attachOperationalScrollSave,
+  attachOperationalStateListeners,
+  clearPersistedScreenState,
+  makePersistedScreenStateKey,
+  readOperationalScrollY,
+  readPersistedScreenState,
+  restoreOperationalScrollY,
+  writePersistedScreenState,
+} from '@/lib/persisted-screen-state';
+import {
   fetchPedidoOrderTemplateDetail,
   touchPedidoOrderTemplateUsed,
 } from '@/lib/pedidos-order-templates';
@@ -66,6 +76,22 @@ import { notifyPedidoEnviado } from '@/services/notifications';
 import { normalizeWhatsappPhone, openWhatsAppMessage } from '@/lib/whatsapp';
 
 type QtyMap = Record<string, number>;
+type CatalogTabId = 'favorites' | 'top' | 'all';
+
+type NuevoPedidoOperationalState = {
+  pathname: string;
+  searchParams: string;
+  localId: string;
+  mode: string;
+  scrollY: number;
+  supplierId: string;
+  search: string;
+  catalogTab: CatalogTabId;
+  useTemplateOpen: boolean;
+  saveTemplateOpen: boolean;
+  suggestedOrderOpen: boolean;
+  deliveryDateFieldError: boolean;
+};
 
 const basketSessionKey = (localId: string) => `chefone_pedidos_basket:${localId}`;
 
@@ -113,6 +139,7 @@ function buildWhatsappDraftMessage(input: {
 export default function NuevoPedidoPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const pathname = usePathname();
   const { localCode, localName, localId, email, userId, displayName, loginUsername } = useAuth();
   const requesterResolvedName = React.useMemo(
     () => resolvePedidoRequesterDisplayName(displayName, loginUsername, email),
@@ -147,6 +174,16 @@ export default function NuevoPedidoPage() {
   const templateIdParam = searchParams.get('templateId');
   /** Deep link desde agenda / enlaces: abrir catálogo de ese proveedor (no el primero alfabético). */
   const supplierIdFromUrl = searchParams.get('supplierId');
+  const searchString = searchParams.toString();
+  const operationalMode = editingId ? `edit:${editingId}` : duplicateFrom ? `duplicate:${duplicateFrom}` : templateIdParam ? `template:${templateIdParam}` : 'create';
+  const operationalStateKey = React.useMemo(
+    () => makePersistedScreenStateKey('pedidos-nuevo', [localId ?? 'sin-local', operationalMode]),
+    [localId, operationalMode],
+  );
+  const pendingScrollRestoreRef = React.useRef<number | null>(null);
+  const restoredOperationalStateRef = React.useRef(false);
+  const canPersistOperationalStateRef = React.useRef(false);
+  const suppressNextSupplierResetRef = React.useRef(false);
   const [suppliers, setSuppliers] = React.useState<PedidoSupplier[]>([]);
   const [supplierId, setSupplierId] = React.useState('');
   const supplierAgendaBanner = usePedidosSupplierAgendaBanner({
@@ -196,6 +233,7 @@ export default function NuevoPedidoPage() {
     if (!localId) return;
     try {
       sessionStorage.removeItem(basketSessionKey(localId));
+      clearPersistedScreenState(makePersistedScreenStateKey('pedidos-nuevo', [localId, 'create']));
     } catch {
       /* ignore */
     }
@@ -433,7 +471,6 @@ export default function NuevoPedidoPage() {
     return target.toLocaleDateString('es-ES', { weekday: 'short', day: 'numeric', month: 'short' });
   }, [deliveryDate]);
 
-  type CatalogTabId = 'favorites' | 'top' | 'all';
   /** Siempre «Todos» al abrir / cambiar proveedor (catálogo completo primero). */
   const [catalogTab, setCatalogTab] = React.useState<CatalogTabId>('all');
   const [favoriteIds, setFavoriteIds] = React.useState<Set<string>>(() => new Set());
@@ -525,6 +562,94 @@ export default function NuevoPedidoPage() {
     mostOrderedIndex,
     recentIndex,
   ]);
+
+  const readOperationalState = React.useCallback(() => {
+    if (!localId) return null;
+    const state = readPersistedScreenState<NuevoPedidoOperationalState>(operationalStateKey);
+    if (!state || state.localId !== localId || state.pathname !== pathname || state.mode !== operationalMode) return null;
+    return state;
+  }, [localId, operationalMode, operationalStateKey, pathname]);
+
+  const saveOperationalState = React.useCallback(() => {
+    if (!canUse || !localId || !canPersistOperationalStateRef.current) return;
+    writePersistedScreenState<NuevoPedidoOperationalState>(operationalStateKey, {
+      pathname,
+      searchParams: searchString,
+      localId,
+      mode: operationalMode,
+      scrollY: readOperationalScrollY(),
+      supplierId,
+      search,
+      catalogTab,
+      useTemplateOpen,
+      saveTemplateOpen,
+      suggestedOrderOpen,
+      deliveryDateFieldError,
+    });
+  }, [
+    canUse,
+    catalogTab,
+    deliveryDateFieldError,
+    localId,
+    operationalMode,
+    operationalStateKey,
+    pathname,
+    saveTemplateOpen,
+    search,
+    searchString,
+    suggestedOrderOpen,
+    supplierId,
+    useTemplateOpen,
+  ]);
+
+  React.useLayoutEffect(() => {
+    if (restoredOperationalStateRef.current) return;
+    if (!canUse || !localId || suppliers.length === 0) return;
+    restoredOperationalStateRef.current = true;
+    const state = readOperationalState();
+    if (state) {
+      if (!supplierIdFromUrl && suppliers.some((s) => s.id === state.supplierId)) {
+        if (state.supplierId !== supplierId) suppressNextSupplierResetRef.current = true;
+        setSupplierId(state.supplierId);
+      }
+      setSearch(state.search);
+      setCatalogTab(state.catalogTab);
+      setUseTemplateOpen(state.useTemplateOpen);
+      setSaveTemplateOpen(state.saveTemplateOpen);
+      setSuggestedOrderOpen(state.suggestedOrderOpen);
+      setDeliveryDateFieldError(state.deliveryDateFieldError);
+      if (state.scrollY > 0) pendingScrollRestoreRef.current = state.scrollY;
+    }
+    canPersistOperationalStateRef.current = true;
+  }, [canUse, localId, readOperationalState, supplierId, supplierIdFromUrl, suppliers]);
+
+  React.useEffect(() => {
+    if (!pendingScrollRestoreRef.current || loadingSuppliers) return;
+    const y = pendingScrollRestoreRef.current;
+    pendingScrollRestoreRef.current = null;
+    restoreOperationalScrollY(y);
+  }, [displayedProducts.length, loadingSuppliers, supplierProducts.length]);
+
+  React.useEffect(
+    () =>
+      attachOperationalStateListeners({
+        save: saveOperationalState,
+        restore: () => {
+          const state = readOperationalState();
+          if (state?.scrollY && readOperationalScrollY() < 8) restoreOperationalScrollY(state.scrollY);
+        },
+      }),
+    [readOperationalState, saveOperationalState],
+  );
+
+  React.useEffect(
+    () => attachOperationalScrollSave(saveOperationalState, 180),
+    [saveOperationalState],
+  );
+
+  React.useEffect(() => {
+    saveOperationalState();
+  }, [saveOperationalState]);
 
   const toggleProductFavorite = React.useCallback(
     async (supplierProductId: string) => {
@@ -747,7 +872,11 @@ export default function NuevoPedidoPage() {
   }, [editingId, localId, canUse, templateIdParam, duplicateFrom, orders, router]);
 
   React.useEffect(() => {
-    setSearch('');
+    if (suppressNextSupplierResetRef.current) {
+      suppressNextSupplierResetRef.current = false;
+    } else {
+      setSearch('');
+    }
     if (editingId && !isLoadedEdit) return;
     /** Mientras el catálogo del proveedor no está cargado, no reconciliar: si no, prev queda {} y borra la cesta restaurada desde sessionStorage. */
     if (supplierProducts.length === 0) return;

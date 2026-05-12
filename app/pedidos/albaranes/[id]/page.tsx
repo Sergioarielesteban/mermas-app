@@ -1,8 +1,8 @@
 'use client';
 
 import Link from 'next/link';
-import { useParams } from 'next/navigation';
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { useParams, usePathname } from 'next/navigation';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useState } from 'react';
 import {
   AlertTriangle,
   Calculator,
@@ -58,6 +58,15 @@ import {
   type PedidoSupplier,
 } from '@/lib/pedidos-supabase';
 import { catalogNameByProductIdFromSuppliers, orderLineDisplayName } from '@/lib/pedidos-line-display-name';
+import {
+  attachOperationalScrollSave,
+  attachOperationalStateListeners,
+  makePersistedScreenStateKey,
+  readOperationalScrollY,
+  readPersistedScreenState,
+  restoreOperationalScrollY,
+  writePersistedScreenState,
+} from '@/lib/persisted-screen-state';
 import type { Unit } from '@/lib/types';
 
 const UNITS: { v: Unit; l: string }[] = [
@@ -81,6 +90,32 @@ const INCIDENT_TYPES: DeliveryNoteIncidentType[] = [
 ];
 
 type LineDraftRow = DeliveryNoteItemDraft & { _key: string };
+
+type AlbaranOperationalState = {
+  pathname: string;
+  localId: string;
+  noteId: string;
+  scrollY: number;
+  supplierName: string;
+  deliveryNoteNumber: string;
+  deliveryDate: string;
+  notes: string;
+  subtotal: string;
+  taxAmount: string;
+  totalAmount: string;
+  lineDrafts: LineDraftRow[];
+  linkOrderId: string;
+  headerExpanded: boolean;
+  documentExpanded: boolean;
+  accountingExpanded: boolean;
+  ocrExpanded: boolean;
+  manualIncidentExpanded: boolean;
+  incidentTab: 'open' | 'resolved' | 'all';
+  resolveModalId: string | null;
+  resolveComment: string;
+  manualIncType: DeliveryNoteIncidentType;
+  manualIncDesc: string;
+};
 
 function itemToDraft(i: DeliveryNoteItem): DeliveryNoteItemDraft {
   return {
@@ -241,6 +276,7 @@ function StatusStepper({ status }: { status: DeliveryNoteStatus }) {
 
 export default function AlbaranDetallePage() {
   const params = useParams();
+  const pathname = usePathname();
   const id = String(params.id ?? '');
   const { localCode, localName, localId, email, userId, profileReady } = useAuth();
   const hasPedidosEntry = canAccessPedidos(localCode, email, localName, localId);
@@ -269,6 +305,10 @@ export default function AlbaranDetallePage() {
   const [lineDrafts, setLineDrafts] = useState<LineDraftRow[]>([]);
 
   const [headerExpanded, setHeaderExpanded] = useState(false);
+  const [documentExpanded, setDocumentExpanded] = useState(false);
+  const [accountingExpanded, setAccountingExpanded] = useState(false);
+  const [ocrExpanded, setOcrExpanded] = useState(false);
+  const [manualIncidentExpanded, setManualIncidentExpanded] = useState(false);
   const [incidentTab, setIncidentTab] = useState<'open' | 'resolved' | 'all'>('open');
   const [resolveModalId, setResolveModalId] = useState<string | null>(null);
   const [resolveComment, setResolveComment] = useState('');
@@ -280,6 +320,101 @@ export default function AlbaranDetallePage() {
     () => catalogNameByProductIdFromSuppliers(catalogSuppliers),
     [catalogSuppliers],
   );
+  const operationalStateKey = useMemo(
+    () => makePersistedScreenStateKey('pedidos-albaran-detalle', [localId ?? 'sin-local', id]),
+    [id, localId],
+  );
+  const pendingScrollRestoreRef = React.useRef<number | null>(null);
+  const restoreCheckedRef = React.useRef(false);
+  const canPersistOperationalStateRef = React.useRef(false);
+
+  const applyOperationalState = useCallback((state: AlbaranOperationalState, onlyScroll = false) => {
+    if (onlyScroll) {
+      if (state.scrollY > 0 && readOperationalScrollY() < 8) restoreOperationalScrollY(state.scrollY);
+      return;
+    }
+    setSupplierName(state.supplierName);
+    setDeliveryNoteNumber(state.deliveryNoteNumber);
+    setDeliveryDate(state.deliveryDate);
+    setNotes(state.notes);
+    setSubtotal(state.subtotal);
+    setTaxAmount(state.taxAmount);
+    setTotalAmount(state.totalAmount);
+    if (Array.isArray(state.lineDrafts)) setLineDrafts(state.lineDrafts);
+    setLinkOrderId(state.linkOrderId);
+    setHeaderExpanded(state.headerExpanded);
+    setDocumentExpanded(Boolean(state.documentExpanded));
+    setAccountingExpanded(Boolean(state.accountingExpanded));
+    setOcrExpanded(Boolean(state.ocrExpanded));
+    setManualIncidentExpanded(Boolean(state.manualIncidentExpanded));
+    setIncidentTab(state.incidentTab);
+    setResolveModalId(state.resolveModalId);
+    setResolveComment(state.resolveComment);
+    setManualIncType(state.manualIncType);
+    setManualIncDesc(state.manualIncDesc);
+    if (state.scrollY > 0) pendingScrollRestoreRef.current = state.scrollY;
+  }, []);
+
+  const readOperationalState = useCallback(() => {
+    if (!localId) return null;
+    const state = readPersistedScreenState<AlbaranOperationalState>(operationalStateKey);
+    if (!state || state.localId !== localId || state.noteId !== id || state.pathname !== pathname) return null;
+    return state;
+  }, [id, localId, operationalStateKey, pathname]);
+
+  const saveOperationalState = useCallback(() => {
+    if (!localId || !note || !canPersistOperationalStateRef.current) return;
+    writePersistedScreenState<AlbaranOperationalState>(operationalStateKey, {
+      pathname,
+      localId,
+      noteId: id,
+      scrollY: readOperationalScrollY(),
+      supplierName,
+      deliveryNoteNumber,
+      deliveryDate,
+      notes,
+      subtotal,
+      taxAmount,
+      totalAmount,
+      lineDrafts,
+      linkOrderId,
+      headerExpanded,
+      documentExpanded,
+      accountingExpanded,
+      ocrExpanded,
+      manualIncidentExpanded,
+      incidentTab,
+      resolveModalId,
+      resolveComment,
+      manualIncType,
+      manualIncDesc,
+    });
+  }, [
+    accountingExpanded,
+    deliveryDate,
+    deliveryNoteNumber,
+    documentExpanded,
+    headerExpanded,
+    id,
+    incidentTab,
+    lineDrafts,
+    linkOrderId,
+    localId,
+    manualIncDesc,
+    manualIncType,
+    manualIncidentExpanded,
+    note,
+    notes,
+    ocrExpanded,
+    operationalStateKey,
+    pathname,
+    resolveComment,
+    resolveModalId,
+    subtotal,
+    supplierName,
+    taxAmount,
+    totalAmount,
+  ]);
 
   useEffect(() => {
     if (!localId || !supabaseOk) {
@@ -351,6 +486,42 @@ export default function AlbaranDetallePage() {
     if (!profileReady) return;
     void load();
   }, [profileReady, load]);
+
+  useLayoutEffect(() => {
+    if (restoreCheckedRef.current || loading || !note) return;
+    restoreCheckedRef.current = true;
+    const state = readOperationalState();
+    if (state) applyOperationalState(state);
+    canPersistOperationalStateRef.current = true;
+  }, [applyOperationalState, loading, note, readOperationalState]);
+
+  useEffect(() => {
+    if (!pendingScrollRestoreRef.current || loading) return;
+    const y = pendingScrollRestoreRef.current;
+    pendingScrollRestoreRef.current = null;
+    restoreOperationalScrollY(y);
+  }, [loading, lineDrafts.length, incidents.length]);
+
+  useEffect(
+    () =>
+      attachOperationalStateListeners({
+        save: saveOperationalState,
+        restore: () => {
+          const state = readOperationalState();
+          if (state) applyOperationalState(state, true);
+        },
+      }),
+    [applyOperationalState, readOperationalState, saveOperationalState],
+  );
+
+  useEffect(
+    () => attachOperationalScrollSave(saveOperationalState, 180),
+    [saveOperationalState],
+  );
+
+  useEffect(() => {
+    saveOperationalState();
+  }, [saveOperationalState]);
 
   const parseOpt = (raw: string): number | null => {
     const t = raw.trim().replace(',', '.');
@@ -1423,7 +1594,11 @@ export default function AlbaranDetallePage() {
         )}
 
         {/* Nueva incidencia manual — siempre disponible, en bloque secundario */}
-        <details className="mt-4 group rounded-2xl border border-dashed border-zinc-300 bg-white p-3">
+        <details
+          className="mt-4 group rounded-2xl border border-dashed border-zinc-300 bg-white p-3"
+          open={manualIncidentExpanded}
+          onToggle={(e) => setManualIncidentExpanded((e.currentTarget as HTMLDetailsElement).open)}
+        >
           <summary className="flex cursor-pointer list-none items-center justify-between text-[12px] font-black uppercase tracking-wide text-zinc-600">
             Añadir incidencia manual
             <ChevronDown
@@ -1552,7 +1727,11 @@ export default function AlbaranDetallePage() {
       </details>
 
       {/* Documento original */}
-      <details className="group rounded-3xl border border-zinc-200 bg-white p-4 shadow-sm open:shadow-md sm:p-5">
+      <details
+        className="group rounded-3xl border border-zinc-200 bg-white p-4 shadow-sm open:shadow-md sm:p-5"
+        open={documentExpanded}
+        onToggle={(e) => setDocumentExpanded((e.currentTarget as HTMLDetailsElement).open)}
+      >
         <summary className="flex cursor-pointer list-none items-center justify-between gap-2">
           <div className="min-w-0">
             <h2 className="text-[15px] font-black text-zinc-900">Documento original</h2>
@@ -1595,7 +1774,11 @@ export default function AlbaranDetallePage() {
 
       {/* Datos contables — sólo si hay preview */}
       {accountingPreview ? (
-        <details className="group rounded-3xl border border-zinc-200 bg-zinc-50/60 p-4 shadow-sm open:bg-white open:shadow-md sm:p-5">
+        <details
+          className="group rounded-3xl border border-zinc-200 bg-zinc-50/60 p-4 shadow-sm open:bg-white open:shadow-md sm:p-5"
+          open={accountingExpanded}
+          onToggle={(e) => setAccountingExpanded((e.currentTarget as HTMLDetailsElement).open)}
+        >
           <summary className="flex cursor-pointer list-none items-center justify-between gap-2">
             <div className="flex min-w-0 items-center gap-2">
               <Calculator className="h-4 w-4 shrink-0 text-zinc-500" aria-hidden />
@@ -1637,7 +1820,11 @@ export default function AlbaranDetallePage() {
       ) : null}
 
       {ocrPreview ? (
-        <details className="group rounded-3xl border border-zinc-200 bg-zinc-50/60 p-4 shadow-sm open:bg-white sm:p-5">
+        <details
+          className="group rounded-3xl border border-zinc-200 bg-zinc-50/60 p-4 shadow-sm open:bg-white sm:p-5"
+          open={ocrExpanded}
+          onToggle={(e) => setOcrExpanded((e.currentTarget as HTMLDetailsElement).open)}
+        >
           <summary className="flex cursor-pointer list-none items-center justify-between gap-2">
             <h2 className="text-[13px] font-black text-zinc-600">Texto OCR (referencia)</h2>
             <ChevronDown

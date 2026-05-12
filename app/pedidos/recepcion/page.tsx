@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useSearchParams } from 'next/navigation';
+import { usePathname, useSearchParams } from 'next/navigation';
 import React from 'react';
 import { ChevronDown } from 'lucide-react';
 import { useAuth } from '@/components/AuthProvider';
@@ -46,6 +46,15 @@ import {
   catalogNameByProductIdFromSuppliers,
   orderLineDisplayName,
 } from '@/lib/pedidos-line-display-name';
+import {
+  attachOperationalScrollSave,
+  attachOperationalStateListeners,
+  makePersistedScreenStateKey,
+  readOperationalScrollY,
+  readPersistedScreenState,
+  restoreOperationalScrollY,
+  writePersistedScreenState,
+} from '@/lib/persisted-screen-state';
 import { actorLabel, notifyIncidenciaRecepcionDeduped } from '@/services/notifications';
 
 function orderHasAnyIncident(order: PedidoOrder): boolean {
@@ -60,8 +69,22 @@ function draftIncidentNoteForOrder(order: PedidoOrder): string {
   return uniq.join(' · ');
 }
 
+type RecepcionOperationalState = {
+  pathname: string;
+  search: string;
+  localId: string;
+  scrollY: number;
+  expandedPendingOrderId: string | null;
+  archivedAccordionOpen: boolean;
+  expandedArchivedOrderId: string | null;
+  incidentOpenByOrderId: Record<string, boolean>;
+  incidentNoteByOrderId: Record<string, string>;
+  priceInputByItemId: Record<string, string>;
+};
+
 export default function RecepcionPedidosPage() {
   const searchParams = useSearchParams();
+  const pathname = usePathname();
   const { localCode, localName, localId, email, userId, displayName, loginUsername } = useAuth();
   const hasPedidosEntry = canAccessPedidos(localCode, email, localName, localId);
   const canUse = canUsePedidosModule(localCode, email, localName, localId);
@@ -115,7 +138,101 @@ export default function RecepcionPedidosPage() {
   const [archivedAccordionOpen, setArchivedAccordionOpen] = React.useState(true);
   const [expandedArchivedOrderId, setExpandedArchivedOrderId] = React.useState<string | null>(null);
   const focusOrderIdFromUrl = searchParams.get('orderId') ?? '';
+  const searchString = searchParams.toString();
   const focusOrderAppliedRef = React.useRef(false);
+  const restoredOperationalStateRef = React.useRef(false);
+  const pendingScrollRestoreRef = React.useRef<number | null>(null);
+  const operationalStateKey = React.useMemo(
+    () => makePersistedScreenStateKey('pedidos-recepcion', [localId ?? 'sin-local']),
+    [localId],
+  );
+  const receptionDraftPrefix = React.useMemo(
+    () => (localId ? `reception-draft:${localId}` : undefined),
+    [localId],
+  );
+
+  const buildOperationalState = React.useCallback(
+    (): RecepcionOperationalState | null => {
+      if (!localId) return null;
+      return {
+        pathname,
+        search: searchString,
+        localId,
+        scrollY: readOperationalScrollY(),
+        expandedPendingOrderId,
+        archivedAccordionOpen,
+        expandedArchivedOrderId,
+        incidentOpenByOrderId,
+        incidentNoteByOrderId,
+        priceInputByItemId: priceInputRef.current,
+      };
+    },
+    [
+      archivedAccordionOpen,
+      expandedArchivedOrderId,
+      expandedPendingOrderId,
+      incidentNoteByOrderId,
+      incidentOpenByOrderId,
+      localId,
+      pathname,
+      searchString,
+    ],
+  );
+
+  const saveOperationalState = React.useCallback(() => {
+    const state = buildOperationalState();
+    if (!state) return;
+    writePersistedScreenState(operationalStateKey, state);
+  }, [buildOperationalState, operationalStateKey]);
+
+  const restoreOperationalState = React.useCallback((onlyScroll = false) => {
+    if (!localId) return false;
+    const state = readPersistedScreenState<RecepcionOperationalState>(operationalStateKey);
+    if (!state || state.localId !== localId || state.pathname !== pathname) return false;
+    if (onlyScroll) {
+      if (state.scrollY > 0 && readOperationalScrollY() < 8) restoreOperationalScrollY(state.scrollY);
+      return true;
+    }
+    setExpandedPendingOrderId(state.expandedPendingOrderId);
+    setArchivedAccordionOpen(state.archivedAccordionOpen);
+    setExpandedArchivedOrderId(state.expandedArchivedOrderId);
+    setIncidentOpenByOrderId(state.incidentOpenByOrderId ?? {});
+    setIncidentNoteByOrderId(state.incidentNoteByOrderId ?? {});
+    setPriceInputByItemId(state.priceInputByItemId ?? {});
+    if (state.scrollY > 0) pendingScrollRestoreRef.current = state.scrollY;
+    restoredOperationalStateRef.current = true;
+    return true;
+  }, [localId, operationalStateKey, pathname]);
+
+  React.useLayoutEffect(() => {
+    if (restoredOperationalStateRef.current) return;
+    restoreOperationalState(false);
+  }, [restoreOperationalState]);
+
+  React.useEffect(() => {
+    if (!pendingScrollRestoreRef.current || orders.length === 0) return;
+    const y = pendingScrollRestoreRef.current;
+    pendingScrollRestoreRef.current = null;
+    restoreOperationalScrollY(y);
+  }, [orders.length]);
+
+  React.useEffect(
+    () =>
+      attachOperationalStateListeners({
+        save: saveOperationalState,
+        restore: () => restoreOperationalState(true),
+      }),
+    [restoreOperationalState, saveOperationalState],
+  );
+
+  React.useEffect(
+    () => attachOperationalScrollSave(saveOperationalState, 180),
+    [saveOperationalState],
+  );
+
+  React.useEffect(() => {
+    saveOperationalState();
+  }, [saveOperationalState]);
 
   React.useEffect(() => {
     focusOrderAppliedRef.current = false;
@@ -752,6 +869,9 @@ export default function RecepcionPedidosPage() {
                       commitReceivedOrderQtyInput={commitReceivedOrderQtyInput}
                       commitPricePerKgInput={commitPricePerKgInput}
                       commitPriceInput={commitPriceInput}
+                      draftStoragePrefix={
+                        receptionDraftPrefix ? `${receptionDraftPrefix}:${order.id}` : undefined
+                      }
                     />
                   );
                 })}

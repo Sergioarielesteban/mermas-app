@@ -42,6 +42,7 @@ export type RecepcionLineRowProps = {
   commitReceivedOrderQtyInput: (orderId: string, itemId: string, rawQty: string, priceDraft?: string) => void;
   commitPricePerKgInput: (orderId: string, itemId: string, raw: string) => void;
   commitPriceInput: (orderId: string, itemId: string, raw: string) => void;
+  draftStoragePrefix?: string;
 };
 
 function recepcionLineRowPropsEqual(a: RecepcionLineRowProps, b: RecepcionLineRowProps): boolean {
@@ -68,8 +69,38 @@ function recepcionLineRowPropsEqual(a: RecepcionLineRowProps, b: RecepcionLineRo
     a.suggestionSource === b.suggestionSource &&
     a.lastHistoricoComparable?.precio === b.lastHistoricoComparable?.precio &&
     a.lastHistoricoComparable?.unidad === b.lastHistoricoComparable?.unidad &&
-    (a.priceHintsVersion ?? 0) === (b.priceHintsVersion ?? 0)
+    (a.priceHintsVersion ?? 0) === (b.priceHintsVersion ?? 0) &&
+    a.draftStoragePrefix === b.draftStoragePrefix
   );
+}
+
+type ReceptionLineDraftState = {
+  kgText?: string;
+  orderQtyText?: string;
+  ppkText?: string;
+  priceText?: string;
+};
+
+function readReceptionLineDraft(key: string | null): ReceptionLineDraftState | null {
+  if (!key || typeof window === 'undefined') return null;
+  try {
+    const raw = window.sessionStorage.getItem(key);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as ReceptionLineDraftState;
+    if (!parsed || typeof parsed !== 'object') return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function writeReceptionLineDraft(key: string | null, draft: ReceptionLineDraftState): void {
+  if (!key || typeof window === 'undefined') return;
+  try {
+    window.sessionStorage.setItem(key, JSON.stringify(draft));
+  } catch {
+    /* ignore */
+  }
 }
 
 function RecepcionLineRowInner({
@@ -84,37 +115,54 @@ function RecepcionLineRowInner({
   commitReceivedOrderQtyInput,
   commitPricePerKgInput,
   commitPriceInput,
+  draftStoragePrefix,
 }: RecepcionLineRowProps) {
   const defaultPpk = suggestedEuroPerKg;
   const billsByWeight = receptionBillsByWeight(item);
   const calcU = receptionCalculationUnit(item);
   const calcSuffix = unitPriceCatalogSuffix[calcU];
+  const draftStorageKey = draftStoragePrefix ? `${draftStoragePrefix}:${item.id}` : null;
+  const initialDraftRef = React.useRef<ReceptionLineDraftState | null>(readReceptionLineDraft(draftStorageKey));
+  const draftDirtyRef = React.useRef(Boolean(initialDraftRef.current));
 
   const commitWeightRef = React.useRef(commitWeightInput);
   commitWeightRef.current = commitWeightInput;
 
   const [kgText, setKgText] = React.useState(() => {
+    const draft = initialDraftRef.current;
+    if (typeof draft?.kgText === 'string') return draft.kgText;
     const n = getDefaultReceivedKgNumeric(item);
     return n != null ? formatKgInputDisplay(n) : '';
   });
   const [orderQtyText, setOrderQtyText] = React.useState(() => {
+    const draft = initialDraftRef.current;
+    if (typeof draft?.orderQtyText === 'string') return draft.orderQtyText;
     const n = getDefaultReceivedOrderQtyNumeric(item);
     return formatKgInputDisplay(n);
   });
   const [ppkText, setPpkText] = React.useState(() => {
+    const draft = initialDraftRef.current;
+    if (typeof draft?.ppkText === 'string') return draft.ppkText;
     if (item.receivedPricePerKg != null && item.receivedPricePerKg > 0) {
       return formatPpkInputDisplay(item.receivedPricePerKg);
     }
     if (suggestedEuroPerKg != null) return formatPpkInputDisplay(suggestedEuroPerKg);
     return '';
   });
-  const [priceText, setPriceText] = React.useState(() => item.pricePerUnit.toFixed(2));
+  const [priceText, setPriceText] = React.useState(() => {
+    const draft = initialDraftRef.current;
+    if (typeof draft?.priceText === 'string') return draft.priceText;
+    return item.pricePerUnit.toFixed(2);
+  });
 
   const priceFocusedRef = React.useRef(false);
   const ppkFocusedRef = React.useRef(false);
   const kgFocusedRef = React.useRef(false);
   const orderQtyFocusedRef = React.useRef(false);
   const autoDefaultKgPersistedRef = React.useRef(false);
+  const markDraftDirty = React.useCallback(() => {
+    draftDirtyRef.current = true;
+  }, []);
 
   React.useEffect(() => {
     autoDefaultKgPersistedRef.current = false;
@@ -146,28 +194,58 @@ function RecepcionLineRowInner({
 
   React.useEffect(() => {
     if (priceFocusedRef.current) return;
+    if (typeof initialDraftRef.current?.priceText === 'string') return;
     setPriceText(item.pricePerUnit.toFixed(2));
   }, [item.pricePerUnit, item.id]);
 
   React.useEffect(() => {
     if (kgFocusedRef.current) return;
+    if (typeof initialDraftRef.current?.kgText === 'string') return;
     const n = getDefaultReceivedKgNumeric(item);
     setKgText(n != null ? formatKgInputDisplay(n) : '');
   }, [item.id, item.receivedWeightKg, item.quantity, item.estimatedKgPerUnit, item.unit, billsByWeight]);
 
   React.useEffect(() => {
     if (orderQtyFocusedRef.current) return;
+    if (typeof initialDraftRef.current?.orderQtyText === 'string') return;
     setOrderQtyText(formatKgInputDisplay(getDefaultReceivedOrderQtyNumeric(item)));
   }, [item.id, item.receivedQuantity, item.quantity, item.incidentType, billsByWeight]);
 
   React.useEffect(() => {
     if (ppkFocusedRef.current) return;
+    if (typeof initialDraftRef.current?.ppkText === 'string') return;
     if (item.receivedPricePerKg != null && item.receivedPricePerKg > 0) {
       setPpkText(formatPpkInputDisplay(item.receivedPricePerKg));
       return;
     }
     setPpkText(defaultPpk != null ? formatPpkInputDisplay(defaultPpk) : '');
   }, [item.receivedPricePerKg, item.id, defaultPpk]);
+
+  React.useEffect(() => {
+    const save = () =>
+      draftDirtyRef.current
+        ? writeReceptionLineDraft(draftStorageKey, {
+            kgText,
+            orderQtyText,
+            ppkText,
+            priceText,
+          })
+        : undefined;
+    save();
+    const onVisibility = () => {
+      if (document.visibilityState === 'hidden') save();
+    };
+    const onPageHide = () => save();
+    const onBeforeUnload = () => save();
+    document.addEventListener('visibilitychange', onVisibility);
+    window.addEventListener('pagehide', onPageHide);
+    window.addEventListener('beforeunload', onBeforeUnload);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibility);
+      window.removeEventListener('pagehide', onPageHide);
+      window.removeEventListener('beforeunload', onBeforeUnload);
+    };
+  }, [draftStorageKey, kgText, orderQtyText, ppkText, priceText]);
 
   const previewItem = React.useMemo(
     () =>
@@ -257,7 +335,10 @@ function RecepcionLineRowInner({
                 onFocus={() => {
                   kgFocusedRef.current = true;
                 }}
-                onChange={(e) => setKgText(e.target.value)}
+                onChange={(e) => {
+                  markDraftDirty();
+                  setKgText(e.target.value);
+                }}
                 onBlur={() => {
                   kgFocusedRef.current = false;
                   commitWeightInput(orderId, item.id, kgText, priceText);
@@ -279,7 +360,10 @@ function RecepcionLineRowInner({
                   onFocus={() => {
                     ppkFocusedRef.current = true;
                   }}
-                  onChange={(e) => setPpkText(e.target.value)}
+                  onChange={(e) => {
+                    markDraftDirty();
+                    setPpkText(e.target.value);
+                  }}
                   onBlur={() => {
                     ppkFocusedRef.current = false;
                     commitPricePerKgInput(orderId, item.id, ppkText);
@@ -323,7 +407,10 @@ function RecepcionLineRowInner({
                 onFocus={() => {
                   priceFocusedRef.current = true;
                 }}
-                onChange={(e) => setPriceText(e.target.value)}
+                onChange={(e) => {
+                  markDraftDirty();
+                  setPriceText(e.target.value);
+                }}
                 onBlur={() => {
                   priceFocusedRef.current = false;
                   commitPriceInput(orderId, item.id, priceText);
@@ -359,7 +446,10 @@ function RecepcionLineRowInner({
                 onFocus={() => {
                   orderQtyFocusedRef.current = true;
                 }}
-                onChange={(e) => setOrderQtyText(e.target.value)}
+                onChange={(e) => {
+                  markDraftDirty();
+                  setOrderQtyText(e.target.value);
+                }}
                 onBlur={() => {
                   orderQtyFocusedRef.current = false;
                   commitReceivedOrderQtyInput(orderId, item.id, orderQtyText, priceText);
@@ -377,7 +467,10 @@ function RecepcionLineRowInner({
                 onFocus={() => {
                   priceFocusedRef.current = true;
                 }}
-                onChange={(e) => setPriceText(e.target.value)}
+                onChange={(e) => {
+                  markDraftDirty();
+                  setPriceText(e.target.value);
+                }}
                 onBlur={() => {
                   priceFocusedRef.current = false;
                   commitPriceInput(orderId, item.id, priceText);
