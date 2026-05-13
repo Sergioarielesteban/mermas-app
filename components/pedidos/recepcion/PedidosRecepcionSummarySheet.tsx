@@ -292,7 +292,8 @@ export default function PedidosRecepcionSummarySheet({ open, onClose, payload }:
                           row.priceDeltaLabel.startsWith('−') ? 'text-emerald-800' : 'text-rose-700',
                         ].join(' ')}
                       >
-                        <span className="text-zinc-500">Subida:</span> <span className="tabular-nums">{row.priceDeltaLabel}</span>
+                        <span className="text-zinc-500">{row.priceDeltaLabel.startsWith('−') ? 'Bajada:' : 'Subida:'}</span>{' '}
+                        <span className="tabular-nums">{row.priceDeltaLabel}</span>
                       </p>
                     </div>
                     <div

@@ -4769,6 +4769,14 @@ export default function PedidosPage() {
                                       className={`${RECEPTION_FIELD_CLASS} w-full max-w-[8rem]`}
                                     />
                                   </div>
+                                  <div className={RECEPTION_SUBTOTAL_WRAP}>
+                                    <span className="text-[7px] font-medium uppercase tracking-[0.08em] text-emerald-900/70">
+                                      Subtotal
+                                    </span>
+                                    <span className="text-[12px] font-black tabular-nums leading-none text-emerald-950">
+                                      {liveSub.toFixed(2)} €
+                                    </span>
+                                  </div>
                                 </div>
                               </div>
                             </>
@@ -4857,14 +4865,6 @@ export default function PedidosPage() {
                                         onBlur={() => commitPriceInput(order.id, item.id)}
                                         className={`${RECEPTION_FIELD_CLASS} w-full max-w-[8rem]`}
                                       />
-                                    </div>
-                                    <div className={RECEPTION_SUBTOTAL_WRAP}>
-                                      <span className="text-[7px] font-medium uppercase tracking-[0.08em] text-emerald-900/70">
-                                        Subtotal
-                                      </span>
-                                      <span className="text-[12px] font-black tabular-nums leading-none text-emerald-950">
-                                        {liveSub.toFixed(2)} €
-                                      </span>
                                     </div>
                                   </div>
                                 </div>
