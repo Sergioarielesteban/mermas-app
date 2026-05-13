@@ -11,6 +11,7 @@ import {
   clearAppResumeState,
   isResumeEligiblePath,
   readAppResumeState,
+  shouldRestoreAppResumeRoute,
   writeAppResumeState,
 } from '@/lib/app-resume-state';
 import { readOperationalScrollY, restoreOperationalScrollY } from '@/lib/persisted-screen-state';
@@ -80,6 +81,22 @@ export default function AppFrame({ children }: { children: React.ReactNode }) {
     [isResumeEligibleCurrentPath, normalizedEmail, pathname],
   );
 
+  const restoreResumeRouteIfNeeded = React.useCallback(() => {
+    if (!normalizedEmail || typeof window === 'undefined') return false;
+    const saved = readAppResumeState(normalizedEmail);
+    if (!saved) return false;
+    if (!shouldRestoreAppResumeRoute(window.location.pathname, saved)) return false;
+    const currentHref = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+    if (saved.href === currentHref) return false;
+    try {
+      window.sessionStorage.setItem(APP_RESUME_SCROLL_RESTORE_FLAG, '1');
+    } catch {
+      /* ignore */
+    }
+    router.replace(saved.href, { scroll: false });
+    return true;
+  }, [normalizedEmail, router]);
+
   useEffect(() => {
     if (!normalizedEmail || !isResumeEligibleCurrentPath) return;
     saveResumePoint();
@@ -94,9 +111,17 @@ export default function AppFrame({ children }: { children: React.ReactNode }) {
         saveResumePoint();
         return;
       }
+      if (restoreResumeRouteIfNeeded()) return;
       restoreResumeScrollIfNeeded(false);
     };
-    const onPageShow = () => restoreResumeScrollIfNeeded(false);
+    const onPageShow = () => {
+      if (restoreResumeRouteIfNeeded()) return;
+      restoreResumeScrollIfNeeded(false);
+    };
+    const onFocus = () => {
+      if (restoreResumeRouteIfNeeded()) return;
+      restoreResumeScrollIfNeeded(false);
+    };
     const main = document.querySelector('main');
 
     if (main instanceof HTMLElement) main.addEventListener('scroll', saveSoon, { passive: true });
@@ -105,6 +130,7 @@ export default function AppFrame({ children }: { children: React.ReactNode }) {
     window.addEventListener('pagehide', saveResumePoint);
     window.addEventListener('beforeunload', saveResumePoint);
     window.addEventListener('pageshow', onPageShow);
+    window.addEventListener('focus', onFocus);
     document.addEventListener('visibilitychange', onVisibility);
 
     return () => {
@@ -115,11 +141,13 @@ export default function AppFrame({ children }: { children: React.ReactNode }) {
       window.removeEventListener('pagehide', saveResumePoint);
       window.removeEventListener('beforeunload', saveResumePoint);
       window.removeEventListener('pageshow', onPageShow);
+      window.removeEventListener('focus', onFocus);
       document.removeEventListener('visibilitychange', onVisibility);
     };
   }, [
     isResumeEligibleCurrentPath,
     normalizedEmail,
+    restoreResumeRouteIfNeeded,
     restoreResumeScrollIfNeeded,
     saveResumePoint,
   ]);
@@ -138,10 +166,14 @@ export default function AppFrame({ children }: { children: React.ReactNode }) {
       shouldRestore = false;
     }
     if (shouldRestore) {
-      window.setTimeout(() => restoreResumeScrollIfNeeded(true), 80);
-      window.setTimeout(() => restoreResumeScrollIfNeeded(true), 260);
+      window.setTimeout(() => {
+        if (!restoreResumeRouteIfNeeded()) restoreResumeScrollIfNeeded(true);
+      }, 80);
+      window.setTimeout(() => {
+        if (!restoreResumeRouteIfNeeded()) restoreResumeScrollIfNeeded(true);
+      }, 260);
     }
-  }, [isResumeEligibleCurrentPath, normalizedEmail, restoreResumeScrollIfNeeded]);
+  }, [isResumeEligibleCurrentPath, normalizedEmail, restoreResumeRouteIfNeeded, restoreResumeScrollIfNeeded]);
 
   useEffect(() => {
     if (loginFallbackTimerRef.current != null) {

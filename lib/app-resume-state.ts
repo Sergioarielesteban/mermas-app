@@ -2,6 +2,7 @@ export const APP_RESUME_STATE_KEY = 'chefone:app:resume-state:v1';
 export const APP_RESUME_SCROLL_RESTORE_FLAG = 'chefone:app:resume-scroll-restore';
 
 const APP_RESUME_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+const APP_RESUME_MODULE_RESET_GUARD_MS = 5 * 60 * 1000;
 
 export type AppResumeState = {
   v: 1;
@@ -12,6 +13,30 @@ export type AppResumeState = {
   email?: string | null;
   localId?: string | null;
 };
+
+function normalizePathname(pathname: string | null | undefined): string {
+  if (!pathname) return '/';
+  const clean = pathname.split('?')[0]?.split('#')[0] ?? '/';
+  if (clean === '/') return '/';
+  return clean.replace(/\/+$/, '') || '/';
+}
+
+function moduleRoot(pathname: string | null | undefined): string | null {
+  const clean = normalizePathname(pathname);
+  const [first] = clean.split('/').filter(Boolean);
+  return first ? `/${first}` : null;
+}
+
+function isModuleRootPath(pathname: string | null | undefined): boolean {
+  const root = moduleRoot(pathname);
+  return !!root && normalizePathname(pathname) === root;
+}
+
+function isDeeperPathInSameModule(currentPathname: string, savedPathname: string): boolean {
+  const currentRoot = moduleRoot(currentPathname);
+  const savedRoot = moduleRoot(savedPathname);
+  return !!currentRoot && currentRoot === savedRoot && normalizePathname(savedPathname) !== currentRoot;
+}
 
 export function isResumeEligiblePath(pathname: string | null | undefined): pathname is string {
   if (!pathname) return false;
@@ -58,11 +83,31 @@ export function readAppResumeState(email?: string | null): AppResumeState | null
   }
 }
 
+export function shouldRestoreAppResumeRoute(
+  currentPathname: string | null | undefined,
+  saved: AppResumeState | null | undefined,
+): boolean {
+  if (!saved) return false;
+  const current = normalizePathname(currentPathname);
+  if (!isResumeEligiblePath(current)) return false;
+  if (Date.now() - saved.updatedAt > APP_RESUME_MODULE_RESET_GUARD_MS) return false;
+  return isModuleRootPath(current) && isDeeperPathInSameModule(current, saved.pathname);
+}
+
 export function writeAppResumeState(payload: Omit<AppResumeState, 'v' | 'updatedAt'>): void {
   if (typeof window === 'undefined') return;
   const href = normalizeHref(payload.href);
   if (!href || !isResumeEligiblePath(payload.pathname)) return;
   try {
+    const existing = readAppResumeState(payload.email ?? null);
+    if (
+      shouldRestoreAppResumeRoute(payload.pathname, existing) &&
+      !href.includes('?') &&
+      !href.includes('#') &&
+      Math.max(0, payload.scrollY || 0) <= 16
+    ) {
+      return;
+    }
     window.localStorage.setItem(
       APP_RESUME_STATE_KEY,
       JSON.stringify({

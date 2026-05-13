@@ -589,6 +589,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const applySessionOrSignOut = (
       session: { user: { id: string; email?: string | null } } | null,
       error: { message?: string } | null,
+      opts?: { preserveVisualSessionOnMissingSession?: boolean },
     ) => {
       if (!isMounted) return;
       if (error && isInvalidRefreshTokenError(error.message)) {
@@ -608,6 +609,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           session.user.id === userIdRef.current;
         void loadProfileForUser(session.user.id, { soft: sameUser });
         return;
+      }
+      if (opts?.preserveVisualSessionOnMissingSession) {
+        const remembered = window.localStorage.getItem(AUTH_KEY)?.trim().toLowerCase() ?? null;
+        if (remembered && isAllowedEmail(remembered)) {
+          setEmail(remembered);
+          persistEmail(remembered);
+          if (!profileReadyRef.current) void restoreProfileFromCache();
+          setLoading(false);
+          setProfileReady(true);
+          return;
+        }
       }
       setUserId(null);
       clearProfile();
@@ -653,7 +665,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           const { data: ref, error: refErr } = await supabase.auth.refreshSession();
           if (!isMounted) return;
           if (ref.session) {
-            applySessionOrSignOut(ref.session, refErr);
+            applySessionOrSignOut(ref.session, refErr, { preserveVisualSessionOnMissingSession: true });
             return;
           }
         } catch {
@@ -661,7 +673,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
         const { data, error } = await supabase.auth.getSession();
         if (!isMounted) return;
-        applySessionOrSignOut(data.session ?? null, error);
+        applySessionOrSignOut(data.session ?? null, error, { preserveVisualSessionOnMissingSession: true });
       })();
     };
 
@@ -702,7 +714,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setLoading(false);
       // No volver a pedir `profiles` en cada refresco de token (p. ej. al volver a la app).
       if (event === 'TOKEN_REFRESHED') return;
-      void loadProfileForUser(session?.user?.id);
+      const sameUser =
+        profileReadyRef.current &&
+        userIdRef.current != null &&
+        session?.user?.id === userIdRef.current;
+      void loadProfileForUser(session?.user?.id, { soft: sameUser });
     });
 
     return () => {
