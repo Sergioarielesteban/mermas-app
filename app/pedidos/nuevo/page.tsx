@@ -93,7 +93,70 @@ type NuevoPedidoOperationalState = {
 };
 
 const basketSessionKey = (localId: string) => `chefone_pedidos_basket:${localId}`;
+const basketLocalKey = (localId: string) => `chefone_pedidos_basket_local:${localId}`;
 const JS_DAY_TO_CONSUMPTION_DAY = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'] as const;
+
+type StoredBasketDraft = {
+  v: 1;
+  updatedAt: number;
+  supplierId?: string;
+  qtyByProductId?: QtyMap;
+  notes?: string;
+  deliveryDate?: string;
+};
+
+function readStoredBasketDraft(localId: string): StoredBasketDraft | null {
+  if (typeof window === 'undefined') return null;
+  const tryRead = (storage: Storage, key: string): StoredBasketDraft | null => {
+    try {
+      const raw = storage.getItem(key);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw) as StoredBasketDraft;
+      if (!parsed || parsed.v !== 1 || typeof parsed.updatedAt !== 'number') return null;
+      return parsed;
+    } catch {
+      return null;
+    }
+  };
+
+  const fromSession = tryRead(sessionStorage, basketSessionKey(localId));
+  if (fromSession) return fromSession;
+  const fromLocal = tryRead(localStorage, basketLocalKey(localId));
+  if (fromLocal) {
+    try {
+      sessionStorage.setItem(basketSessionKey(localId), JSON.stringify(fromLocal));
+    } catch {
+      /* ignore */
+    }
+  }
+  return fromLocal;
+}
+
+function writeStoredBasketDraft(localId: string, draft: Omit<StoredBasketDraft, 'v' | 'updatedAt'>) {
+  if (typeof window === 'undefined') return;
+  const payload: StoredBasketDraft = {
+    v: 1,
+    updatedAt: Date.now(),
+    ...draft,
+  };
+  try {
+    const json = JSON.stringify(payload);
+    sessionStorage.setItem(basketSessionKey(localId), json);
+    localStorage.setItem(basketLocalKey(localId), json);
+  } catch {
+    /* ignore */
+  }
+}
+
+function clearStoredBasketDraft(localId: string) {
+  if (typeof window === 'undefined') return;
+  try {
+    sessionStorage.removeItem(basketSessionKey(localId));
+    localStorage.removeItem(basketLocalKey(localId));
+  } catch {
+    /* ignore */
+  }
+}
 
 /**
  * Quién solicita el pedido: perfil (`full_name` / vinculación empleado), alias de sesión, email y fallback.
@@ -212,6 +275,12 @@ export default function NuevoPedidoPage() {
     priceUp: number;
     missingCatalog: number;
   } | null>(null);
+  const basketDraftRef = React.useRef<Pick<StoredBasketDraft, 'supplierId' | 'qtyByProductId' | 'notes' | 'deliveryDate'>>({
+    supplierId: '',
+    qtyByProductId: {},
+    notes: '',
+    deliveryDate: '',
+  });
 
   type BootstrapPedidoPayload = {
     supplierId: string;
@@ -227,7 +296,7 @@ export default function NuevoPedidoPage() {
   const clearBasketDraft = React.useCallback(() => {
     if (!localId) return;
     try {
-      sessionStorage.removeItem(basketSessionKey(localId));
+      clearStoredBasketDraft(localId);
       clearPersistedScreenState(makePersistedScreenStateKey('pedidos-nuevo', [localId, 'create']));
     } catch {
       /* ignore */
@@ -306,14 +375,8 @@ export default function NuevoPedidoPage() {
     if (searchParams.get('templateId') || searchParams.get('duplicateFrom')) return;
     const urlSupplier = searchParams.get('supplierId');
     try {
-      const raw = sessionStorage.getItem(basketSessionKey(localId));
-      if (!raw) return;
-      const parsed = JSON.parse(raw) as {
-        supplierId?: string;
-        qtyByProductId?: QtyMap;
-        notes?: string;
-        deliveryDate?: string;
-      };
+      const parsed = readStoredBasketDraft(localId);
+      if (!parsed) return;
       // Si la URL fuerza un proveedor (p. ej. agenda), no restaurar otro proveedor ni cantidades de otro catálogo.
       if (parsed.supplierId && !urlSupplier) setSupplierId(parsed.supplierId);
       if (parsed.qtyByProductId && typeof parsed.qtyByProductId === 'object' && !urlSupplier) {
@@ -350,16 +413,19 @@ export default function NuevoPedidoPage() {
 
   React.useEffect(() => {
     if (!canUse || !localId || editingId) return;
+    basketDraftRef.current = {
+      supplierId,
+      qtyByProductId,
+      notes,
+      deliveryDate,
+    };
     try {
-      sessionStorage.setItem(
-        basketSessionKey(localId),
-        JSON.stringify({
-          supplierId,
-          qtyByProductId,
-          notes,
-          deliveryDate,
-        }),
-      );
+      writeStoredBasketDraft(localId, {
+        supplierId,
+        qtyByProductId,
+        notes,
+        deliveryDate,
+      });
     } catch {
       /* ignore */
     }
@@ -567,6 +633,10 @@ export default function NuevoPedidoPage() {
 
   const saveOperationalState = React.useCallback(() => {
     if (!canUse || !localId || !canPersistOperationalStateRef.current) return;
+    const basket = basketDraftRef.current;
+    if (!editingId) {
+      writeStoredBasketDraft(localId, basket);
+    }
     writePersistedScreenState<NuevoPedidoOperationalState>(operationalStateKey, {
       pathname,
       searchParams: searchString,
@@ -585,6 +655,7 @@ export default function NuevoPedidoPage() {
     canUse,
     catalogTab,
     deliveryDateFieldError,
+    editingId,
     localId,
     operationalMode,
     operationalStateKey,
