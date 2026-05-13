@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect } from 'react';
-import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import AppShell from '@/components/AppShell';
 import BottomNav, { BOTTOM_QUICK_ACTIONS_SCROLL_PADDING } from '@/components/BottomNav';
 import { useAuth } from '@/components/AuthProvider';
@@ -17,11 +17,9 @@ import { readOperationalScrollY, restoreOperationalScrollY } from '@/lib/persist
 
 export default function AppFrame({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const searchParams = useSearchParams();
   const router = useRouter();
   const { email, loading, localId } = useAuth();
   const normalizedEmail = email?.trim().toLowerCase() ?? null;
-  const searchString = searchParams.toString();
   const isLogin = pathname === '/login';
   /** Landing pública en `/` (sin sesión); la PWA usa `start_url` `/login` para no pasar por aquí al abrir el icono. */
   const isPublicHome = pathname === '/';
@@ -48,27 +46,30 @@ export default function AppFrame({ children }: { children: React.ReactNode }) {
 
   const effectiveLoading = loading && !forceUnlock;
   const isResumeEligibleCurrentPath = isResumeEligiblePath(pathname);
-  const currentHref = React.useMemo(() => {
-    const base = pathname ?? '/';
-    return `${base}${searchString ? `?${searchString}` : ''}`;
-  }, [pathname, searchString]);
 
   const saveResumePoint = React.useCallback(() => {
     if (!normalizedEmail || !isResumeEligibleCurrentPath || !pathname) return;
-    const hash = typeof window !== 'undefined' ? window.location.hash : '';
+    const href =
+      typeof window !== 'undefined'
+        ? `${window.location.pathname}${window.location.search}${window.location.hash}`
+        : pathname;
     writeAppResumeState({
-      href: `${currentHref}${hash}`,
+      href,
       pathname,
       scrollY: readOperationalScrollY(),
       email: normalizedEmail,
       localId: localId ?? null,
     });
-  }, [currentHref, isResumeEligibleCurrentPath, localId, normalizedEmail, pathname]);
+  }, [isResumeEligibleCurrentPath, localId, normalizedEmail, pathname]);
 
   const restoreResumeScrollIfNeeded = React.useCallback(
     (force = false) => {
       if (!normalizedEmail || !isResumeEligibleCurrentPath) return;
       const saved = readAppResumeState(normalizedEmail);
+      const currentHref =
+        typeof window !== 'undefined'
+          ? `${window.location.pathname}${window.location.search}`
+          : pathname ?? '/';
       if (!saved || saved.href.split('#')[0] !== currentHref) return;
       if (saved.scrollY <= 8) return;
       const current = readOperationalScrollY();
@@ -76,7 +77,7 @@ export default function AppFrame({ children }: { children: React.ReactNode }) {
         restoreOperationalScrollY(saved.scrollY);
       }
     },
-    [currentHref, isResumeEligibleCurrentPath, normalizedEmail],
+    [isResumeEligibleCurrentPath, normalizedEmail, pathname],
   );
 
   useEffect(() => {
