@@ -46,6 +46,15 @@ import {
   writeSuppliersSessionCache,
 } from '@/lib/pedidos-session-cache';
 import {
+  attachOperationalScrollSave,
+  attachOperationalStateListeners,
+  makePersistedScreenStateKey,
+  readOperationalScrollY,
+  readPersistedScreenState,
+  restoreOperationalScrollY,
+  writePersistedScreenState,
+} from '@/lib/persisted-screen-state';
+import {
   createSupplier,
   type PedidoConsumptionPlan,
   type PedidoConsumptionPlanMode,
@@ -308,6 +317,15 @@ const EMPTY_PRODUCT_DRAFT: ProductDraft = {
   consumptionSegments: [],
 };
 
+type ProveedoresUiState = {
+  expandedSupplierId: string | null;
+  editingSupplierId: string | null;
+  editingProductId: string | null;
+  supplierCatalogQuery: string;
+  scrollY: number;
+  editingProductDraft: ProductDraft | null;
+};
+
 export default function ProveedoresPage() {
   const { localCode, localName, localId, email } = useAuth();
   const hasPedidosEntry = canAccessPedidos(localCode, email, localName, localId);
@@ -334,9 +352,7 @@ export default function ProveedoresPage() {
   const [productPricePerKg, setProductPricePerKg] = React.useState('');
   const [editingSupplierId, setEditingSupplierId] = React.useState<string | null>(null);
   const [editingProductId, setEditingProductId] = React.useState<string | null>(null);
-  const [expandedSupplierId, setExpandedSupplierId] = React.useState<string | null>(() => { try { return localStorage.getItem('pedidos_expanded_supplier'); } catch { return null; } });
-  React.useEffect(() => { try { if (expandedSupplierId) localStorage.setItem('pedidos_expanded_supplier', expandedSupplierId); else localStorage.removeItem('pedidos_expanded_supplier'); } catch {} }, [expandedSupplierId]);
-  React.useEffect(() => { const handleScroll = () => { try { localStorage.setItem("pedidos_scroll", window.scrollY.toString()); } catch {} }; window.addEventListener("scroll", handleScroll); const saved = localStorage.getItem("pedidos_scroll"); if (saved) setTimeout(() => window.scrollTo(0, parseInt(saved)), 1500); return () => window.removeEventListener("scroll", handleScroll); }, []);
+  const [expandedSupplierId, setExpandedSupplierId] = React.useState<string | null>(null);
   const [supplierCatalogQuery, setSupplierCatalogQuery] = React.useState('');
   const [supplierDrafts, setSupplierDrafts] = React.useState<
     Record<
@@ -346,6 +362,83 @@ export default function ProveedoresPage() {
   >({});
   const [exceptionInputBySupplier, setExceptionInputBySupplier] = React.useState<Record<string, string>>({});
   const [productDrafts, setProductDrafts] = React.useState<Record<string, ProductDraft>>({});
+  const proveedoresUiHydratedForKeyRef = React.useRef<string | null>(null);
+  const proveedoresUiSkipInitialSaveRef = React.useRef(false);
+  const proveedoresUiKey = React.useMemo(
+    () => makePersistedScreenStateKey('pedidos-proveedores', [localId ?? 'sin-local']),
+    [localId],
+  );
+
+  const saveProveedoresUiState = React.useCallback(() => {
+    if (!localId || proveedoresUiHydratedForKeyRef.current !== proveedoresUiKey) return;
+    writePersistedScreenState<ProveedoresUiState>(
+      proveedoresUiKey,
+      {
+        expandedSupplierId,
+        editingSupplierId,
+        editingProductId,
+        supplierCatalogQuery,
+        scrollY: readOperationalScrollY(),
+        editingProductDraft: editingProductId ? productDrafts[editingProductId] ?? null : null,
+      },
+      { storage: 'local' },
+    );
+  }, [
+    editingProductId,
+    editingSupplierId,
+    expandedSupplierId,
+    localId,
+    productDrafts,
+    proveedoresUiKey,
+    supplierCatalogQuery,
+  ]);
+
+  React.useEffect(() => {
+    if (!localId || proveedoresUiHydratedForKeyRef.current === proveedoresUiKey) return;
+    const saved = readPersistedScreenState<ProveedoresUiState>(proveedoresUiKey, { storage: 'local' });
+    proveedoresUiHydratedForKeyRef.current = proveedoresUiKey;
+    if (!saved) return;
+    proveedoresUiSkipInitialSaveRef.current = true;
+    setExpandedSupplierId(saved.expandedSupplierId ?? null);
+    setEditingSupplierId(saved.editingSupplierId ?? null);
+    setEditingProductId(saved.editingProductId ?? null);
+    setSupplierCatalogQuery(saved.supplierCatalogQuery ?? '');
+    if (saved.editingProductId && saved.editingProductDraft) {
+      setProductDrafts((prev) => ({
+        ...prev,
+        [saved.editingProductId as string]: saved.editingProductDraft as ProductDraft,
+      }));
+    }
+    if (saved.scrollY > 0) {
+      window.setTimeout(() => restoreOperationalScrollY(saved.scrollY), 120);
+      window.setTimeout(() => restoreOperationalScrollY(saved.scrollY), 520);
+    }
+    window.setTimeout(() => {
+      proveedoresUiSkipInitialSaveRef.current = false;
+    }, 0);
+  }, [localId, proveedoresUiKey]);
+
+  React.useEffect(() => {
+    if (!localId || proveedoresUiHydratedForKeyRef.current !== proveedoresUiKey) return;
+    if (proveedoresUiSkipInitialSaveRef.current) return;
+    saveProveedoresUiState();
+  }, [localId, proveedoresUiKey, saveProveedoresUiState]);
+
+  React.useEffect(() => {
+    if (!localId) return;
+    const detachState = attachOperationalStateListeners({
+      save: saveProveedoresUiState,
+      restore: () => {
+        const saved = readPersistedScreenState<ProveedoresUiState>(proveedoresUiKey, { storage: 'local' });
+        if (saved?.scrollY && readOperationalScrollY() <= 8) restoreOperationalScrollY(saved.scrollY);
+      },
+    });
+    const detachScroll = attachOperationalScrollSave(saveProveedoresUiState);
+    return () => {
+      detachState();
+      detachScroll();
+    };
+  }, [localId, proveedoresUiKey, saveProveedoresUiState]);
 
   const [agendaEnabled, setAgendaEnabled] = React.useState(false);
   const [agendaOrderDays, setAgendaOrderDays] = React.useState<number[]>([]);
@@ -479,11 +572,14 @@ export default function ProveedoresPage() {
     void fetchSuppliersWithProducts(supabase, lid)
       .then((rows) => {
         applySupplierRows(rows);
-        setTimeout(() => { try { const s = localStorage.getItem("pedidos_scroll"); if (s) window.scrollTo({ top: parseInt(s), behavior: 'instant' }); } catch {} }, 300);
+        setTimeout(() => {
+          const saved = readPersistedScreenState<ProveedoresUiState>(proveedoresUiKey, { storage: 'local' });
+          if (saved?.scrollY && readOperationalScrollY() <= 8) restoreOperationalScrollY(saved.scrollY);
+        }, 300);
         writeSuppliersSessionCache(lid, rows);
       })
       .catch((err: Error) => setMessage(err.message));
-  }, [applySupplierRows, canUse, localId]);
+  }, [applySupplierRows, canUse, localId, proveedoresUiKey]);
 
   React.useEffect(() => {
     if (!canUse || !localId) return;

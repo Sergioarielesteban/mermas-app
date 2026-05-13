@@ -13,6 +13,7 @@ import {
   type SubscriptionProvider,
   type SubscriptionStatus,
 } from '@/lib/subscriptions-supabase';
+import { APP_RESUME_SCROLL_RESTORE_FLAG, APP_RESUME_STATE_KEY } from '@/lib/app-resume-state';
 
 export type { ProfileAppRole };
 
@@ -935,6 +936,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (typeof window !== 'undefined') {
           window.localStorage.removeItem(AUTH_KEY);
           window.localStorage.removeItem(PROFILE_CACHE_KEY);
+          window.localStorage.removeItem(APP_RESUME_STATE_KEY);
+          window.sessionStorage.removeItem(APP_RESUME_SCROLL_RESTORE_FLAG);
         }
       },
       loading,
@@ -972,4 +975,3 @@ export function useAuth() {
   if (!ctx) throw new Error('useAuth debe usarse dentro de AuthProvider');
   return ctx;
 }
-

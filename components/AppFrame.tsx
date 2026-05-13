@@ -1,16 +1,27 @@
 'use client';
 
 import React, { useEffect } from 'react';
-import { usePathname, useRouter } from 'next/navigation';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import AppShell from '@/components/AppShell';
 import BottomNav, { BOTTOM_QUICK_ACTIONS_SCROLL_PADDING } from '@/components/BottomNav';
 import { useAuth } from '@/components/AuthProvider';
 import Logo from '@/components/Logo';
+import {
+  APP_RESUME_SCROLL_RESTORE_FLAG,
+  clearAppResumeState,
+  isResumeEligiblePath,
+  readAppResumeState,
+  writeAppResumeState,
+} from '@/lib/app-resume-state';
+import { readOperationalScrollY, restoreOperationalScrollY } from '@/lib/persisted-screen-state';
 
 export default function AppFrame({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const router = useRouter();
-  const { email, loading } = useAuth();
+  const { email, loading, localId } = useAuth();
+  const normalizedEmail = email?.trim().toLowerCase() ?? null;
+  const searchString = searchParams.toString();
   const isLogin = pathname === '/login';
   /** Landing pública en `/` (sin sesión); la PWA usa `start_url` `/login` para no pasar por aquí al abrir el icono. */
   const isPublicHome = pathname === '/';
@@ -36,6 +47,100 @@ export default function AppFrame({ children }: { children: React.ReactNode }) {
   }, [loading]);
 
   const effectiveLoading = loading && !forceUnlock;
+  const isResumeEligibleCurrentPath = isResumeEligiblePath(pathname);
+  const currentHref = React.useMemo(() => {
+    const base = pathname ?? '/';
+    return `${base}${searchString ? `?${searchString}` : ''}`;
+  }, [pathname, searchString]);
+
+  const saveResumePoint = React.useCallback(() => {
+    if (!normalizedEmail || !isResumeEligibleCurrentPath || !pathname) return;
+    const hash = typeof window !== 'undefined' ? window.location.hash : '';
+    writeAppResumeState({
+      href: `${currentHref}${hash}`,
+      pathname,
+      scrollY: readOperationalScrollY(),
+      email: normalizedEmail,
+      localId: localId ?? null,
+    });
+  }, [currentHref, isResumeEligibleCurrentPath, localId, normalizedEmail, pathname]);
+
+  const restoreResumeScrollIfNeeded = React.useCallback(
+    (force = false) => {
+      if (!normalizedEmail || !isResumeEligibleCurrentPath) return;
+      const saved = readAppResumeState(normalizedEmail);
+      if (!saved || saved.href.split('#')[0] !== currentHref) return;
+      if (saved.scrollY <= 8) return;
+      const current = readOperationalScrollY();
+      if (force || current <= 8) {
+        restoreOperationalScrollY(saved.scrollY);
+      }
+    },
+    [currentHref, isResumeEligibleCurrentPath, normalizedEmail],
+  );
+
+  useEffect(() => {
+    if (!normalizedEmail || !isResumeEligibleCurrentPath) return;
+    saveResumePoint();
+
+    let scrollTimer: number | null = null;
+    const saveSoon = () => {
+      if (scrollTimer != null) window.clearTimeout(scrollTimer);
+      scrollTimer = window.setTimeout(saveResumePoint, 160);
+    };
+    const onVisibility = () => {
+      if (document.visibilityState === 'hidden') {
+        saveResumePoint();
+        return;
+      }
+      restoreResumeScrollIfNeeded(false);
+    };
+    const onPageShow = () => restoreResumeScrollIfNeeded(false);
+    const main = document.querySelector('main');
+
+    if (main instanceof HTMLElement) main.addEventListener('scroll', saveSoon, { passive: true });
+    window.addEventListener('scroll', saveSoon, { passive: true });
+    window.addEventListener('blur', saveResumePoint);
+    window.addEventListener('pagehide', saveResumePoint);
+    window.addEventListener('beforeunload', saveResumePoint);
+    window.addEventListener('pageshow', onPageShow);
+    document.addEventListener('visibilitychange', onVisibility);
+
+    return () => {
+      if (scrollTimer != null) window.clearTimeout(scrollTimer);
+      if (main instanceof HTMLElement) main.removeEventListener('scroll', saveSoon);
+      window.removeEventListener('scroll', saveSoon);
+      window.removeEventListener('blur', saveResumePoint);
+      window.removeEventListener('pagehide', saveResumePoint);
+      window.removeEventListener('beforeunload', saveResumePoint);
+      window.removeEventListener('pageshow', onPageShow);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
+  }, [
+    isResumeEligibleCurrentPath,
+    normalizedEmail,
+    restoreResumeScrollIfNeeded,
+    saveResumePoint,
+  ]);
+
+  useEffect(() => {
+    if (!normalizedEmail || !isResumeEligibleCurrentPath) return;
+    let shouldRestore = false;
+    try {
+      const navEntry = performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming | undefined;
+      shouldRestore =
+        window.sessionStorage.getItem(APP_RESUME_SCROLL_RESTORE_FLAG) === '1' ||
+        navEntry?.type === 'reload' ||
+        navEntry?.type === 'back_forward';
+      window.sessionStorage.removeItem(APP_RESUME_SCROLL_RESTORE_FLAG);
+    } catch {
+      shouldRestore = false;
+    }
+    if (shouldRestore) {
+      window.setTimeout(() => restoreResumeScrollIfNeeded(true), 80);
+      window.setTimeout(() => restoreResumeScrollIfNeeded(true), 260);
+    }
+  }, [isResumeEligibleCurrentPath, normalizedEmail, restoreResumeScrollIfNeeded]);
 
   useEffect(() => {
     if (loginFallbackTimerRef.current != null) {
@@ -44,7 +149,15 @@ export default function AppFrame({ children }: { children: React.ReactNode }) {
     }
     if (effectiveLoading) return;
     if (email && isPublicHome) {
-      router.replace('/panel');
+      const resume = readAppResumeState(normalizedEmail);
+      if (resume) {
+        try {
+          window.sessionStorage.setItem(APP_RESUME_SCROLL_RESTORE_FLAG, '1');
+        } catch {
+          /* ignore */
+        }
+      }
+      router.replace(resume?.href ?? '/panel');
       return;
     }
     if (!email && !isLogin && !isPublicHome && !isOnboarding && !isPrecio && !isProduccionEtiquetasPrint) {
@@ -58,7 +171,15 @@ export default function AppFrame({ children }: { children: React.ReactNode }) {
       return;
     }
     if (email && isLogin) {
-      router.replace('/panel');
+      const resume = readAppResumeState(normalizedEmail);
+      if (resume) {
+        try {
+          window.sessionStorage.setItem(APP_RESUME_SCROLL_RESTORE_FLAG, '1');
+        } catch {
+          /* ignore */
+        }
+      }
+      router.replace(resume?.href ?? '/panel');
     }
     return () => {
       if (loginFallbackTimerRef.current != null) {
@@ -75,6 +196,7 @@ export default function AppFrame({ children }: { children: React.ReactNode }) {
     isPrecio,
     isProduccionEtiquetasPrint,
     router,
+    normalizedEmail,
   ]);
 
   // /login y la landing en / no usan el shell de la app ni el bloqueo de "Cargando sesión".
@@ -109,6 +231,7 @@ export default function AppFrame({ children }: { children: React.ReactNode }) {
                     }
                   }
                   window.localStorage.removeItem('mermas_user_email');
+                  clearAppResumeState();
                   window.location.replace('/login');
                 }
               }}
@@ -190,4 +313,3 @@ export default function AppFrame({ children }: { children: React.ReactNode }) {
     </>
   );
 }
-
