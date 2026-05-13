@@ -328,12 +328,14 @@ export function buildPedidosRecepcionSummaryPayload(args: {
     let priceDeltaLabel = '—';
     let priceBaseLabel: string | undefined;
     let priceNewLabel: string | undefined;
+    if (baseRef > 0) {
+      priceBaseLabel = formatUnitPrice(baseRef);
+      priceNewLabel = formatUnitPrice(effPu);
+    }
     if (baseRef > 0 && Math.abs(effPu - baseRef) > 0.005) {
       const pct = ((effPu - baseRef) / baseRef) * 100;
       const pctStr =
         Math.abs(pct) >= 10 ? `${Math.round(pct)} %` : `${(Math.round(pct * 10) / 10).toLocaleString('es-ES')}%`;
-      priceBaseLabel = formatUnitPrice(baseRef);
-      priceNewLabel = formatUnitPrice(effPu);
       priceDeltaLabel = `${effPu >= baseRef ? '+' : '−'}${Math.abs(effPu - baseRef).toLocaleString('es-ES', {
         minimumFractionDigits: 2,
         maximumFractionDigits: 2,

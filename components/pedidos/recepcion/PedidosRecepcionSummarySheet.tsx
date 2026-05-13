@@ -292,6 +292,13 @@ export default function PedidosRecepcionSummarySheet({ open, onClose, payload }:
                           row.priceDeltaLabel.startsWith('−') ? 'text-emerald-800' : 'text-rose-700',
                         ].join(' ')}
                       >
+                        {row.priceBaseLabel ? (
+                          <>
+                            <span className="text-zinc-500">Base:</span>{' '}
+                            <span className="tabular-nums">{row.priceBaseLabel}</span>
+                            <span className="mx-1 text-zinc-400">·</span>
+                          </>
+                        ) : null}
                         <span className="text-zinc-500">{row.priceDeltaLabel.startsWith('−') ? 'Bajada:' : 'Subida:'}</span>{' '}
                         <span className="tabular-nums">{row.priceDeltaLabel}</span>
                       </p>
