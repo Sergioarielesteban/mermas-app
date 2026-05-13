@@ -234,6 +234,8 @@ export function buildPedidosRecepcionSummaryPayload(args: {
   const incidentCandidates: {
     name: string;
     qtyDeltaLabel: string;
+    priceBaseLabel?: string;
+    priceNewLabel?: string;
     priceDeltaLabel: string;
     impactEur: number;
     absImpact: number;

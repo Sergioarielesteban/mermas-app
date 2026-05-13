@@ -175,7 +175,7 @@ const RECEPTION_BLOCK_WRAP =
 const RECEPTION_FIELD_CLASS =
   'h-7 min-w-0 rounded-md bg-white px-1.5 text-[12px] font-semibold tabular-nums text-zinc-900 shadow-[inset_0_1px_2px_rgba(0,0,0,0.05)] outline-none ring-1 ring-zinc-200/55 transition-shadow focus:ring-2 focus:ring-[#D32F2F]/28';
 const RECEPTION_SUBTOTAL_WRAP =
-  'ml-auto flex min-w-[4.75rem] shrink-0 flex-col items-end justify-end rounded-md bg-emerald-50/90 px-1.5 py-0.5 ring-1 ring-emerald-200/35';
+  'ml-auto flex min-w-[4.1rem] shrink-0 flex-col items-end justify-center rounded-md bg-emerald-50/90 px-1 py-0.25 leading-none ring-1 ring-emerald-200/35';
 
 function buildWhatsappOrderMessage(
   order: PedidoOrder,
@@ -1096,25 +1096,6 @@ export default function PedidosPage() {
         void reloadOrdersAsync();
         setMessage(err.message);
       });
-  };
-
-  const markAllSentLinesReceiveOk = (orderId: string) => {
-    void (async () => {
-      const ord = ordersRef.current.find((o) => o.id === orderId);
-      if (!ord?.items.length) return;
-      try {
-        for (let i = 0; i < ord.items.length; i++) {
-          const item = ord.items[i];
-          await quickReceiveItem(orderId, item, true, {
-            skipReload: i < ord.items.length - 1,
-          });
-        }
-        await reloadOrdersAsync();
-        dispatchPedidosDataChanged();
-      } catch {
-        void reloadOrdersAsync();
-      }
-    })();
   };
 
   const removeReceptionLineFromSentOrder = async (orderId: string, lineId: string) => {
@@ -4665,9 +4646,6 @@ export default function PedidosPage() {
                                 >
                                   {isBad ? 'Incidencia' : isOk ? 'Ok' : 'Pend.'}
                                 </span>
-                                <span className="text-[13px] font-black tabular-nums text-emerald-950">
-                                  {liveSub.toFixed(2)} €
-                                </span>
                               </div>
                             </div>
                             <p className="mt-0.5 text-center text-[8px] font-medium leading-tight text-zinc-400">
@@ -4771,12 +4749,6 @@ export default function PedidosPage() {
                                       className={`${RECEPTION_FIELD_CLASS} w-full min-w-0`}
                                     />
                                   </div>
-                                  <div className={RECEPTION_SUBTOTAL_WRAP}>
-                                    <span className="text-[8px] font-medium uppercase tracking-wide text-emerald-900/75">Subtotal</span>
-                                    <span className="text-[14px] font-black tabular-nums leading-none text-emerald-950">
-                                      {liveSub.toFixed(2)} €
-                                    </span>
-                                  </div>
                                 </div>
                                 <div className="mt-1 flex flex-wrap items-end gap-x-2 gap-y-0.5 border-t border-zinc-200/40 pt-1">
                                   <div className="flex min-w-0 flex-1 flex-col gap-px sm:max-w-[10rem]">
@@ -4827,38 +4799,42 @@ export default function PedidosPage() {
                                       />
                                     </div>
                                     {item.unit !== 'kg' ? (
-                                      <div className="flex min-w-[4rem] flex-1 flex-col gap-px sm:max-w-[7.5rem]">
-                                        <span className="text-[8px] font-semibold uppercase tracking-wide text-zinc-400">
-                                          €/kg
-                                        </span>
-                                        <input
-                                          type="text"
-                                          inputMode="decimal"
-                                          autoComplete="off"
-                                          autoCorrect="off"
-                                          placeholder=""
-                                          value={
-                                            pricePerKgInputByItemId[item.id] ??
-                                            (item.receivedPricePerKg != null && item.receivedPricePerKg > 0
-                                              ? formatPpkInputDisplay(item.receivedPricePerKg)
-                                              : (() => {
-                                                  const s = sentOrderPpkSuggestionByItemId.get(item.id);
-                                                  return s != null && s > 0 ? formatPpkInputDisplay(s) : '';
-                                                })())
-                                          }
-                                          onChange={(e) =>
-                                            setPricePerKgInputByItemId((prev) => ({ ...prev, [item.id]: e.target.value }))
-                                          }
-                                          onBlur={() => commitPricePerKgBlur(order.id, item)}
-                                          className={`${RECEPTION_FIELD_CLASS} w-full min-w-0`}
-                                        />
-                                      </div>
+                                      <>
+                                        <div className="flex min-w-[4rem] flex-1 flex-col gap-px sm:max-w-[7.5rem]">
+                                          <span className="text-[8px] font-semibold uppercase tracking-wide text-zinc-400">
+                                            €/kg
+                                          </span>
+                                          <input
+                                            type="text"
+                                            inputMode="decimal"
+                                            autoComplete="off"
+                                            autoCorrect="off"
+                                            placeholder=""
+                                            value={
+                                              pricePerKgInputByItemId[item.id] ??
+                                              (item.receivedPricePerKg != null && item.receivedPricePerKg > 0
+                                                ? formatPpkInputDisplay(item.receivedPricePerKg)
+                                                : (() => {
+                                                    const s = sentOrderPpkSuggestionByItemId.get(item.id);
+                                                    return s != null && s > 0 ? formatPpkInputDisplay(s) : '';
+                                                  })())
+                                            }
+                                            onChange={(e) =>
+                                              setPricePerKgInputByItemId((prev) => ({ ...prev, [item.id]: e.target.value }))
+                                            }
+                                            onBlur={() => commitPricePerKgBlur(order.id, item)}
+                                            className={`${RECEPTION_FIELD_CLASS} w-full min-w-0`}
+                                          />
+                                        </div>
+                                      </>
                                     ) : (
                                       <div className="w-0 shrink-0" aria-hidden />
                                     )}
                                     <div className={RECEPTION_SUBTOTAL_WRAP}>
-                                      <span className="text-[8px] font-medium uppercase tracking-wide text-emerald-900/75">Subtotal</span>
-                                      <span className="text-[14px] font-black tabular-nums leading-none text-emerald-950">
+                                      <span className="text-[7px] font-medium uppercase tracking-[0.08em] text-emerald-900/70">
+                                        Subtotal
+                                      </span>
+                                      <span className="text-[12px] font-black tabular-nums leading-none text-emerald-950">
                                         {liveSub.toFixed(2)} €
                                       </span>
                                     </div>
@@ -4881,6 +4857,14 @@ export default function PedidosPage() {
                                         onBlur={() => commitPriceInput(order.id, item.id)}
                                         className={`${RECEPTION_FIELD_CLASS} w-full max-w-[8rem]`}
                                       />
+                                    </div>
+                                    <div className={RECEPTION_SUBTOTAL_WRAP}>
+                                      <span className="text-[7px] font-medium uppercase tracking-[0.08em] text-emerald-900/70">
+                                        Subtotal
+                                      </span>
+                                      <span className="text-[12px] font-black tabular-nums leading-none text-emerald-950">
+                                        {liveSub.toFixed(2)} €
+                                      </span>
                                     </div>
                                   </div>
                                 </div>
@@ -4922,21 +4906,23 @@ export default function PedidosPage() {
                                           setPriceInputByItemId((prev) => ({ ...prev, [item.id]: raw }));
                                           setLocalUnitPrice(order.id, item.id, raw);
                                         }}
-                                        onBlur={() => commitPriceInput(order.id, item.id)}
-                                        className={`${RECEPTION_FIELD_CLASS} w-full min-w-0`}
-                                      />
-                                    </div>
-                                    <div className={RECEPTION_SUBTOTAL_WRAP}>
-                                      <span className="text-[8px] font-medium uppercase tracking-wide text-emerald-900/75">Subtotal</span>
-                                      <span className="text-[14px] font-black tabular-nums leading-none text-emerald-950">
-                                        {liveSub.toFixed(2)} €
-                                      </span>
-                                    </div>
+                                      onBlur={() => commitPriceInput(order.id, item.id)}
+                                      className={`${RECEPTION_FIELD_CLASS} w-full min-w-0`}
+                                    />
                                   </div>
-                                  {Math.abs(qtyDeltaHome) > 1e-6 ? (
-                                    <p className="mt-0.5 text-[9px] font-medium text-orange-800/95">
-                                      Dif. cantidad: {qtyDeltaHome > 0 ? '+' : '−'}
-                                      {formatQuantityWithUnit(Math.abs(qtyDeltaHome), item.unit)}
+                                  <div className={RECEPTION_SUBTOTAL_WRAP}>
+                                    <span className="text-[7px] font-medium uppercase tracking-[0.08em] text-emerald-900/70">
+                                      Subtotal
+                                    </span>
+                                    <span className="text-[12px] font-black tabular-nums leading-none text-emerald-950">
+                                      {liveSub.toFixed(2)} €
+                                    </span>
+                                  </div>
+                                </div>
+                                {Math.abs(qtyDeltaHome) > 1e-6 ? (
+                                  <p className="mt-0.5 text-[9px] font-medium text-orange-800/95">
+                                    Dif. cantidad: {qtyDeltaHome > 0 ? '+' : '−'}
+                                    {formatQuantityWithUnit(Math.abs(qtyDeltaHome), item.unit)}
                                     </p>
                                   ) : null}
                                 </div>
@@ -5043,14 +5029,6 @@ export default function PedidosPage() {
                             <span className="text-[7px] font-bold uppercase tracking-wide text-zinc-500">vs pedido</span>
                           </div>
                         </div>
-                        <button
-                          type="button"
-                          onClick={() => markAllSentLinesReceiveOk(order.id)}
-                          className="flex w-full touch-manipulation items-center justify-center gap-2 rounded-xl border border-emerald-400/50 bg-gradient-to-b from-emerald-50 to-emerald-100/90 py-2 text-[10px] font-black uppercase tracking-wide text-emerald-950 shadow-sm ring-1 ring-emerald-300/45 transition active:scale-[0.99]"
-                        >
-                          <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-700" strokeWidth={2.25} aria-hidden />
-                          Marcar todo correcto
-                        </button>
                       </div>
                     );
                   })()}
