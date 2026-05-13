@@ -34,10 +34,6 @@ function formatMoney(n: number) {
   return n.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
-const DockBar = React.memo(function DockBar() {
-  return null;
-});
-
 const SummarySheet = React.memo(function SummarySheet({
   open,
   onClose,
@@ -227,30 +223,8 @@ export default React.memo(function PedidosNuevoStickyDock(props: PedidosNuevoSti
     onEmptyCatalogCta,
   } = props;
 
-  const handleSummaryTap = React.useCallback(() => {
-    if (isEmpty) return;
-    setSheetOpen(true);
-  }, [isEmpty]);
-
-  const handleEmptyCta = React.useCallback(() => {
-    onEmptyCatalogCta();
-  }, [onEmptyCatalogCta]);
-
   return (
     <>
-      <DockBar
-        isEmpty={isEmpty}
-        linesCount={linesCount}
-        unitsCount={unitsCount}
-        subtotalNoVat={subtotalNoVat}
-        minimumOrderEuro={minimumOrderEuro}
-        showQuickActions={showQuickActions}
-        onSummaryTap={handleSummaryTap}
-        onContinue={isEmpty ? handleEmptyCta : onContinue}
-        onWhatsApp={onWhatsApp}
-        onTemplate={onTemplate}
-      />
-
       <SummarySheet
         open={sheetOpen}
         onClose={() => setSheetOpen(false)}
