@@ -1123,22 +1123,25 @@ export default function NuevoPedidoPage() {
   const scrollToPedidoAcciones = React.useCallback(() => {
     document.getElementById('pedido-nuevo-acciones')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }, []);
-  const focusDeliveryDateInput = React.useCallback(() => {
-    const el = document.getElementById('pedido-nuevo-fecha-entrega-top') as HTMLInputElement | null;
-    if (!el) return;
-    el.focus({ preventScroll: true });
-    if (typeof el.showPicker === 'function') {
-      try {
-        el.showPicker();
-      } catch {
-        // ignore
-      }
-    }
-  }, []);
   const openDeliveryDateEditor = React.useCallback(() => {
-    document.getElementById('pedido-nuevo-catalogo')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    window.setTimeout(() => focusDeliveryDateInput(), 280);
-  }, [focusDeliveryDateInput]);
+    document.getElementById('pedido-nuevo-fecha-entrega-banner')?.scrollIntoView({
+      behavior: 'smooth',
+      block: 'center',
+    });
+    window.setTimeout(() => {
+      const el = document.getElementById('pedido-nuevo-fecha-entrega-top') as HTMLInputElement | null;
+      if (!el) return;
+      if (typeof el.showPicker === 'function') {
+        try {
+          el.showPicker();
+          return;
+        } catch {
+          // ignore
+        }
+      }
+      el.focus({ preventScroll: true });
+    }, 200);
+  }, []);
 
   const scrollToCatalogoNuevo = React.useCallback(() => {
     document.getElementById('pedido-nuevo-catalogo')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -1607,11 +1610,19 @@ export default function NuevoPedidoPage() {
                 <span className="hidden sm:inline">Filtros</span>
               </button>
             </div>
-            <button
-              type="button"
+            <div
+              id="pedido-nuevo-fecha-entrega-banner"
+              role="button"
+              tabIndex={0}
               onClick={openDeliveryDateEditor}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  openDeliveryDateEditor();
+                }
+              }}
               className={[
-                'mt-1.5 flex h-[2.625rem] w-full items-center justify-between gap-2 rounded-lg border px-2.5 text-left shadow-sm ring-1 transition-colors active:bg-zinc-50',
+                'relative mt-1.5 flex h-[2.35rem] w-full items-center justify-between gap-2 rounded-lg border px-2.5 text-left shadow-sm ring-1 transition-colors',
                 deliveryDate.trim()
                   ? 'border-zinc-200 bg-white text-zinc-800 ring-zinc-100'
                   : 'border-[#E30613]/25 bg-[#FFF5F5] text-[#B42318] ring-[#E30613]/10',
@@ -1635,18 +1646,28 @@ export default function NuevoPedidoPage() {
                 </span>
               </span>
               <span className="shrink-0 text-[10px] font-semibold text-zinc-500">Editar</span>
-            </button>
-            <input
-              id="pedido-nuevo-fecha-entrega-top"
-              type="date"
-              value={deliveryDate}
-              aria-label="Fecha de entrega del pedido"
-              onChange={(e) => {
-                setDeliveryDate(e.target.value);
-                setDeliveryDateFieldError(false);
-              }}
-              className="sr-only"
-            />
+              <input
+                id="pedido-nuevo-fecha-entrega-top"
+                type="date"
+                value={deliveryDate}
+                aria-label="Fecha de entrega del pedido"
+                onChange={(e) => {
+                  setDeliveryDate(e.target.value);
+                  setDeliveryDateFieldError(false);
+                }}
+                onClick={(e) => {
+                  const el = e.currentTarget;
+                  if (typeof el.showPicker === 'function') {
+                    try {
+                      el.showPicker();
+                    } catch {
+                      // ignore
+                    }
+                  }
+                }}
+                className="absolute inset-0 z-10 h-full w-full cursor-pointer appearance-none opacity-0"
+              />
+            </div>
           </div>
         ) : null}
         <div className="divide-y divide-zinc-100 border-t border-zinc-100">
