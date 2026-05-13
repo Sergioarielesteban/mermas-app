@@ -273,19 +273,31 @@ export default function PedidosRecepcionSummarySheet({ open, onClose, payload }:
                 {payload.incidentRows.map((row, idx) => (
                   <li
                     key={`${row.name}-${idx}`}
-                    className="flex items-start gap-2 rounded-lg border border-zinc-200/90 bg-white px-2 py-1.5 shadow-sm ring-1 ring-zinc-100/80"
+                    className="flex items-start gap-2 rounded-xl border border-zinc-200/90 bg-white px-2.5 py-2 shadow-sm ring-1 ring-zinc-100/80"
                   >
-                    <div className="min-w-0 flex-1">
+                    <div className="min-w-0 flex-1 space-y-1">
                       <p className="text-[12px] font-bold leading-snug text-zinc-900 [overflow-wrap:anywhere]">{row.name}</p>
-                      <p className="mt-0.5 text-[10px] text-zinc-600">
-                        <span className="font-semibold text-zinc-700">Cant.:</span> {row.qtyDeltaLabel}{' '}
-                        <span className="mx-1 text-zinc-300">·</span>
-                        <span className="font-semibold text-zinc-700">Precio:</span> {row.priceDeltaLabel}
+                      {row.priceBaseLabel && row.priceNewLabel ? (
+                        <p className="text-[11px] font-semibold leading-snug text-zinc-700">
+                          <span className="text-zinc-500">Precio base:</span>{' '}
+                          <span className="tabular-nums text-zinc-900">{row.priceBaseLabel}</span>{' '}
+                          <span className="mx-1 text-zinc-300">→</span>{' '}
+                          <span className="text-zinc-500">nuevo:</span>{' '}
+                          <span className="tabular-nums text-zinc-900">{row.priceNewLabel}</span>
+                        </p>
+                      ) : null}
+                      <p
+                        className={[
+                          'text-[11px] font-semibold leading-snug',
+                          row.priceDeltaLabel.startsWith('−') ? 'text-emerald-800' : 'text-rose-700',
+                        ].join(' ')}
+                      >
+                        <span className="text-zinc-500">Subida:</span> <span className="tabular-nums">{row.priceDeltaLabel}</span>
                       </p>
                     </div>
                     <div
                       className={[
-                        'shrink-0 rounded-md px-1.5 py-1 text-right text-[10px] font-black tabular-nums ring-1',
+                        'shrink-0 rounded-lg px-2 py-1.5 text-right text-[10px] font-black tabular-nums ring-1',
                         row.impactEur >= 0
                           ? 'bg-rose-50 text-[#991B1B] ring-rose-200/80'
                           : 'bg-emerald-50 text-emerald-900 ring-emerald-200/80',

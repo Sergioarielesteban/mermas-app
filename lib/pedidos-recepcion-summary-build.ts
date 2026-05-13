@@ -23,6 +23,8 @@ export type PedidosRecepcionSummaryTone = 'rose' | 'amber' | 'sky' | 'emerald';
 export type PedidosRecepcionSummaryIncidentRow = {
   name: string;
   qtyDeltaLabel: string;
+  priceBaseLabel?: string;
+  priceNewLabel?: string;
   priceDeltaLabel: string;
   impactEur: number;
 };
@@ -122,10 +124,12 @@ export function parsePedidosRecepcionSummaryPayload(raw: unknown): PedidosRecepc
     if (!isRecord(row)) continue;
     const name = typeof row.name === 'string' ? row.name : '';
     const qtyDeltaLabel = typeof row.qtyDeltaLabel === 'string' ? row.qtyDeltaLabel : '—';
+    const priceBaseLabel = typeof row.priceBaseLabel === 'string' ? row.priceBaseLabel : undefined;
+    const priceNewLabel = typeof row.priceNewLabel === 'string' ? row.priceNewLabel : undefined;
     const priceDeltaLabel = typeof row.priceDeltaLabel === 'string' ? row.priceDeltaLabel : '—';
     const impactEur = num(row.impactEur);
     if (impactEur == null) continue;
-    incidentRows.push({ name, qtyDeltaLabel, priceDeltaLabel, impactEur });
+    incidentRows.push({ name, qtyDeltaLabel, priceBaseLabel, priceNewLabel, priceDeltaLabel, impactEur });
   }
 
   const smartAlerts: PedidosRecepcionSummaryAlert[] = [];
@@ -311,26 +315,38 @@ export function buildPedidosRecepcionSummaryPayload(args: {
         qtyDeltaLabel = 'No recibido';
       }
 
-      const baseRef =
-        item.basePricePerUnit != null && Number.isFinite(item.basePricePerUnit)
-          ? item.basePricePerUnit
-          : item.pricePerUnit;
-      const effPu = preview.pricePerUnit;
-      let priceDeltaLabel = '—';
-      if (baseRef > 0 && Math.abs(effPu - baseRef) > 0.005) {
-        const pct = ((effPu - baseRef) / baseRef) * 100;
-        const pctStr =
-          Math.abs(pct) >= 10 ? `${Math.round(pct)} %` : `${(Math.round(pct * 10) / 10).toLocaleString('es-ES')}%`;
-        priceDeltaLabel = `${effPu >= baseRef ? '+' : '−'}${Math.abs(effPu - baseRef).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €/${unitPriceCatalogSuffix[receptionCalculationUnit(item)]} (${effPu >= baseRef ? '+' : ''}${pctStr})`;
-      }
+    const baseRef =
+      item.basePricePerUnit != null && Number.isFinite(item.basePricePerUnit)
+        ? item.basePricePerUnit
+        : item.pricePerUnit;
+    const effPu = preview.pricePerUnit;
+    const unitSuffix = unitPriceCatalogSuffix[receptionCalculationUnit(item)];
+    const formatUnitPrice = (n: number) =>
+      `${n.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €/${unitSuffix}`;
+    let priceDeltaLabel = '—';
+    let priceBaseLabel: string | undefined;
+    let priceNewLabel: string | undefined;
+    if (baseRef > 0 && Math.abs(effPu - baseRef) > 0.005) {
+      const pct = ((effPu - baseRef) / baseRef) * 100;
+      const pctStr =
+        Math.abs(pct) >= 10 ? `${Math.round(pct)} %` : `${(Math.round(pct * 10) / 10).toLocaleString('es-ES')}%`;
+      priceBaseLabel = formatUnitPrice(baseRef);
+      priceNewLabel = formatUnitPrice(effPu);
+      priceDeltaLabel = `${effPu >= baseRef ? '+' : '−'}${Math.abs(effPu - baseRef).toLocaleString('es-ES', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      })} €/${unitSuffix} (${effPu >= baseRef ? '+' : ''}${pctStr})`;
+    }
 
-      incidentCandidates.push({
-        name: orderLineDisplayName(item, catalogNameByProductId),
-        qtyDeltaLabel,
-        priceDeltaLabel,
-        impactEur: impact,
-        absImpact: Math.abs(impact),
-      });
+    incidentCandidates.push({
+      name: orderLineDisplayName(item, catalogNameByProductId),
+      qtyDeltaLabel,
+      priceBaseLabel,
+      priceNewLabel,
+      priceDeltaLabel,
+      impactEur: impact,
+      absImpact: Math.abs(impact),
+    });
     }
   }
 
@@ -338,6 +354,8 @@ export function buildPedidosRecepcionSummaryPayload(args: {
   const incidentRows: PedidosRecepcionSummaryIncidentRow[] = incidentCandidates.slice(0, 8).map((r) => ({
     name: r.name,
     qtyDeltaLabel: r.qtyDeltaLabel,
+    priceBaseLabel: r.priceBaseLabel,
+    priceNewLabel: r.priceNewLabel,
     priceDeltaLabel: r.priceDeltaLabel,
     impactEur: r.impactEur,
   }));
