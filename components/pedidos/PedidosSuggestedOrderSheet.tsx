@@ -7,7 +7,6 @@ import {
   suggestedConfidenceLabel,
   type SuggestedOrderResult,
 } from '@/lib/pedidos-suggested-order';
-import type { TemporalPatternsResult } from '@/lib/pedidos-temporal-patterns';
 import { PEDIDO_ORDER_UNITS } from '@/lib/pedidos-units';
 import type { Unit } from '@/lib/types';
 
@@ -34,8 +33,6 @@ type Props = {
   result: SuggestedOrderResult;
   hasExistingQuantities: boolean;
   onApply: (mode: ApplyMode) => void;
-  /** Patrones temporales (mismo proveedor/local); opcional. */
-  temporalPatterns?: TemporalPatternsResult | null;
 };
 
 export default function PedidosSuggestedOrderSheet({
@@ -44,7 +41,6 @@ export default function PedidosSuggestedOrderSheet({
   result,
   hasExistingQuantities,
   onApply,
-  temporalPatterns,
 }: Props) {
   if (!open) return null;
 
@@ -85,31 +81,6 @@ export default function PedidosSuggestedOrderSheet({
             <X className="h-5 w-5" />
           </button>
         </div>
-
-        {temporalPatterns &&
-        (temporalPatterns.displayInsights.length > 0 || temporalPatterns.learningMessage) ? (
-          <div className="shrink-0 border-b border-zinc-100 bg-[#FFFBFB] px-4 py-2.5">
-            <p className="text-[9px] font-bold uppercase tracking-[0.12em] text-zinc-400">
-              Patrones en el tiempo · nivel {temporalPatterns.maturityLevel}/6
-            </p>
-            {temporalPatterns.displayInsights.length > 0 ? (
-              <ul className="mt-1.5 space-y-1.5">
-                {temporalPatterns.displayInsights.slice(0, 3).map((ins) => (
-                  <li key={ins.id} className="text-[11px] leading-snug text-zinc-700">
-                    <span className="mr-1 font-semibold text-[#E30613]">•</span>
-                    {ins.headline}
-                    {ins.detail ? (
-                      <span className="mt-0.5 block text-[10px] font-normal text-zinc-500">{ins.detail}</span>
-                    ) : null}
-                  </li>
-                ))}
-              </ul>
-            ) : null}
-            {temporalPatterns.learningMessage ? (
-              <p className="mt-1.5 text-[10px] leading-snug text-zinc-500">{temporalPatterns.learningMessage}</p>
-            ) : null}
-          </div>
-        ) : null}
 
         {result.ok ? (
           <>

@@ -1,12 +1,11 @@
 'use client';
 
 import Link from 'next/link';
-import { CalendarDays, Filter, Package, Search, Sparkles, Star, TrendingUp } from 'lucide-react';
+import { CalendarDays, Filter, Package, Search, Sparkles } from 'lucide-react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import React from 'react';
 import { usePedidosOperationalSuggestions } from '@/hooks/usePedidosOperationalSuggestions';
 import { useSuggestedOrder } from '@/hooks/useSuggestedOrder';
-import { useTemporalPatterns } from '@/hooks/useTemporalPatterns';
 import { useAuth } from '@/components/AuthProvider';
 import { usePedidosOrders } from '@/components/PedidosOrdersProvider';
 import { getDemoPedidoSuppliers } from '@/lib/demo-dataset';
@@ -27,7 +26,6 @@ import PedidosNuevoCatalogRow from '@/components/PedidosNuevoCatalogLine';
 import PedidosNuevoStickyDock from '@/components/pedidos/PedidosNuevoStickyDock';
 import PedidosSaveTemplateSheet from '@/components/pedidos/PedidosSaveTemplateSheet';
 import PedidosSuggestedOrderSheet from '@/components/pedidos/PedidosSuggestedOrderSheet';
-import PedidosTemporalInsightStrip from '@/components/pedidos/PedidosTemporalInsightStrip';
 import PedidosUseTemplateSheet from '@/components/pedidos/PedidosUseTemplateSheet';
 import { buildPedidoWhatsappMessage } from '@/lib/pedidos-whatsapp-message';
 import { applyQuantityTapDelta, parseQuantityManualInput } from '@/lib/pedidos-order-quantity';
@@ -73,7 +71,7 @@ import { notifyPedidoEnviado } from '@/services/notifications';
 import { normalizeWhatsappPhone, openWhatsAppMessage } from '@/lib/whatsapp';
 
 type QtyMap = Record<string, number>;
-type CatalogTabId = 'favorites' | 'top' | 'all';
+type CatalogTabId = 'all';
 
 type NuevoPedidoOperationalState = {
   pathname: string;
@@ -449,13 +447,6 @@ export default function NuevoPedidoPage() {
     deliveryExceptionDates: selectedSupplier?.deliveryExceptionDates,
   });
 
-  const temporalPatterns = useTemporalPatterns({
-    localId,
-    supplierId,
-    supplierProducts,
-    orders,
-  });
-
   React.useEffect(() => {
     setSuggestedOrderOpen(false);
   }, [supplierId]);
@@ -521,7 +512,7 @@ export default function NuevoPedidoPage() {
     setCatalogSignals(EMPTY_CATALOG_SIGNALS);
   }, [supplierId]);
 
-  /** Favoritos y señales (últimos / más usados) solo del proveedor seleccionado — mismo ámbito que `supplierProducts`. */
+  /** Señales internas del catálogo del proveedor seleccionado para ordenar la vista. */
   React.useEffect(() => {
     if (!localId || !supplierId || !canUse) return;
     let cancelled = false;
@@ -582,23 +573,12 @@ export default function NuevoPedidoPage() {
         return a.name.localeCompare(b.name, 'es');
       });
 
-    if (catalogTab === 'all') {
-      if (qSearch) return [...base].sort((a, b) => a.name.localeCompare(b.name, 'es'));
-      return sortSmartHabitual(base);
-    }
-    if (catalogTab === 'favorites') {
-      return base.filter((p) => favoriteIds.has(p.id)).sort((a, b) => a.name.localeCompare(b.name, 'es'));
-    }
-    const orderMap = new Map(catalogSignals.mostOrdered30d.map((r, i) => [r.supplierProductId, i]));
-    return base
-      .filter((p) => orderMap.has(p.id))
-      .sort((a, b) => (orderMap.get(a.id) ?? 0) - (orderMap.get(b.id) ?? 0));
+    if (qSearch) return [...base].sort((a, b) => a.name.localeCompare(b.name, 'es'));
+    return sortSmartHabitual(base);
   }, [
     supplierProducts,
     qSearch,
-    catalogTab,
     favoriteIds,
-    catalogSignals,
     mostOrderedIndex,
     recentIndex,
   ]);
@@ -658,7 +638,7 @@ export default function NuevoPedidoPage() {
         setSupplierId(state.supplierId);
       }
       setSearch(state.search);
-      setCatalogTab(state.catalogTab);
+      setCatalogTab('all');
       setUseTemplateOpen(state.useTemplateOpen);
       setSaveTemplateOpen(state.saveTemplateOpen);
       setSuggestedOrderOpen(state.suggestedOrderOpen);
@@ -1444,40 +1424,13 @@ export default function NuevoPedidoPage() {
 
       {!editingId ? (
         <section className="overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-zinc-200/85">
-          <div className="flex items-center justify-between gap-2 border-b border-zinc-100 px-2 py-2 sm:px-3">
+          <div className="flex items-center border-b border-zinc-100 px-2 py-2 sm:px-3">
             <Link
               href="/pedidos"
               className="inline-flex min-h-9 min-w-9 items-center justify-center rounded-lg text-sm font-semibold text-zinc-700 hover:bg-zinc-50"
             >
               ←
             </Link>
-            <div className="flex shrink-0 items-center gap-0.5">
-              <button
-                type="button"
-                onClick={() =>
-                  document.getElementById('pedido-nuevo-acciones')?.scrollIntoView({
-                    behavior: 'smooth',
-                    block: 'start',
-                  })
-                }
-                className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[#25D366] hover:bg-emerald-50"
-                aria-label="Ir a enviar por WhatsApp"
-              >
-                <svg className="h-6 w-6" viewBox="0 0 24 24" aria-hidden>
-                  <path
-                    fill="currentColor"
-                    d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.435 9.884-9.881 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"
-                  />
-                </svg>
-              </button>
-              <button
-                type="button"
-                onClick={() => setUseTemplateOpen(true)}
-                className="inline-flex h-9 shrink-0 items-center justify-center rounded-xl border border-[#E30613]/35 bg-[#FFF8F7] px-2.5 text-[11px] font-bold text-[#7F1D1D] shadow-sm ring-1 ring-[#E30613]/15 hover:bg-[#FFF0EE] sm:px-3"
-              >
-                Plantilla
-              </button>
-            </div>
           </div>
           <div className="bg-[#FAFAF9] px-3 pb-2.5 pt-2.5">
             <label htmlFor="pedido-nuevo-proveedor" className="sr-only">
@@ -1541,42 +1494,30 @@ export default function NuevoPedidoPage() {
       >
         {selectedSupplier && supplierProducts.length > 0 ? (
           <div className="flex items-end gap-0 overflow-x-auto border-b border-zinc-100 px-1.5 pt-1.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:px-2.5">
-            {(
-              [
-                ['favorites', 'Favoritos', Star],
-                ['top', 'Más usados', TrendingUp],
-                ['all', 'Todos', Package],
-              ] as const
-            ).map(([id, label, Icon]) => (
-              <button
-                key={id}
-                type="button"
-                onClick={() => setCatalogTab(id)}
-                className={[
-                  'inline-flex shrink-0 items-center gap-0.5 border-b-2 px-2 pb-2 pt-0.5 text-[10px] font-semibold transition-colors active:opacity-90 sm:gap-1 sm:px-2.5 sm:text-[11px]',
-                  catalogTab === id
-                    ? 'border-[#E30613] text-[#E30613]'
-                    : 'border-transparent text-zinc-500 hover:text-zinc-700',
-                ].join(' ')}
-              >
-                <Icon className="h-3 w-3 shrink-0 sm:h-3.5 sm:w-3.5" strokeWidth={2} aria-hidden />
-                {label}
-              </button>
-            ))}
+            <button
+              type="button"
+              onClick={() => setCatalogTab('all')}
+              className={[
+                'inline-flex shrink-0 items-center gap-0.5 border-b-2 px-2 pb-1.5 pt-0.5 text-[10px] font-semibold transition-colors active:opacity-90 sm:gap-1 sm:px-2.5 sm:text-[11px]',
+                catalogTab === 'all'
+                  ? 'border-[#E30613] text-[#E30613]'
+                  : 'border-transparent text-zinc-500 hover:text-zinc-700',
+              ].join(' ')}
+            >
+              <Package className="h-3 w-3 shrink-0 sm:h-3.5 sm:w-3.5" strokeWidth={2} aria-hidden />
+              Todos
+            </button>
             {hasSuggestion ? (
               <button
                 type="button"
                 onClick={() => setSuggestedOrderOpen(true)}
-                className="inline-flex shrink-0 items-center gap-0.5 border-b-2 border-transparent px-2 pb-2 pt-0.5 text-[10px] font-semibold text-[#E30613] transition-colors hover:text-[#c50512] active:opacity-90 sm:gap-1 sm:px-2.5 sm:text-[11px]"
+                className="inline-flex shrink-0 items-center gap-0.5 border-b-2 border-transparent px-2 pb-1.5 pt-0.5 text-[10px] font-semibold text-[#E30613] transition-colors hover:text-[#c50512] active:opacity-90 sm:gap-1 sm:px-2.5 sm:text-[11px]"
               >
                 <Sparkles className="h-3 w-3 shrink-0 sm:h-3.5 sm:w-3.5" strokeWidth={2} aria-hidden />
                 Pedido sugerido
               </button>
             ) : null}
           </div>
-        ) : null}
-        {selectedSupplier && supplierProducts.length > 0 ? (
-          <PedidosTemporalInsightStrip patterns={temporalPatterns} hidden={search.trim().length > 0} />
         ) : null}
         {selectedSupplier && supplierProducts.length > 0 ? (
           <PedidosOperationalSuggestions
@@ -1676,13 +1617,7 @@ export default function NuevoPedidoPage() {
           ) : null}
           {selectedSupplier && supplierProducts.length > 0 && displayedProducts.length === 0 ? (
             <p className="mx-3 my-3 rounded-lg border border-dashed border-zinc-200 bg-zinc-50/90 px-2.5 py-2 text-center text-[12px] leading-snug text-zinc-600">
-              {catalogTab === 'favorites'
-                ? 'Sin favoritos. Abre «Todos» y pulsa la estrella.'
-                : catalogTab === 'top'
-                  ? 'Sin datos de pedidos en los últimos 30 días.'
-                  : qSearch
-                    ? 'Ningún producto coincide con la búsqueda.'
-                    : 'Sin productos que mostrar.'}
+              {qSearch ? 'Ningún producto coincide con la búsqueda.' : 'Sin productos que mostrar.'}
             </p>
           ) : null}
           {displayedProducts.map((p) => {
@@ -1846,7 +1781,6 @@ export default function NuevoPedidoPage() {
         result={suggestedOrderResult}
         hasExistingQuantities={hasExistingSuggestedBasketQty}
         onApply={applySuggestedOrder}
-        temporalPatterns={temporalPatterns}
       />
     </div>
   );
