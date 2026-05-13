@@ -277,15 +277,6 @@ export default function PedidosRecepcionSummarySheet({ open, onClose, payload }:
                   >
                     <div className="min-w-0 flex-1 space-y-1">
                       <p className="text-[12px] font-bold leading-snug text-zinc-900 [overflow-wrap:anywhere]">{row.name}</p>
-                      {row.priceBaseLabel && row.priceNewLabel ? (
-                        <p className="text-[11px] font-semibold leading-snug text-zinc-700">
-                          <span className="text-zinc-500">Precio base:</span>{' '}
-                          <span className="tabular-nums text-zinc-900">{row.priceBaseLabel}</span>{' '}
-                          <span className="mx-1 text-zinc-300">→</span>{' '}
-                          <span className="text-zinc-500">nuevo:</span>{' '}
-                          <span className="tabular-nums text-zinc-900">{row.priceNewLabel}</span>
-                        </p>
-                      ) : null}
                       <p
                         className={[
                           'text-[11px] font-semibold leading-snug',
