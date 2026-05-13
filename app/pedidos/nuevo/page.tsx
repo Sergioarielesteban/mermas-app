@@ -18,9 +18,7 @@ import PedidosPremiaLockedScreen from '@/components/PedidosPremiaLockedScreen';
 import { canAccessPedidos, canUsePedidosModule } from '@/lib/pedidos-access';
 import { dispatchPedidosDataChanged, usePedidosDataChangedListener } from '@/hooks/usePedidosDataChangedListener';
 import {
-  coverageDateRangeLabel,
   coverageDaysUntilNextDelivery,
-  isDeliveryDateOnConfiguredCycle,
   suggestedOrderQuantityForPar,
   weeklyParScaledToCoverageDays,
 } from '@/lib/pedidos-coverage';
@@ -496,25 +494,6 @@ export default function NuevoPedidoPage() {
       selectedSupplier.deliveryCycleWeekdays ?? [],
       selectedSupplier.deliveryExceptionDates ?? [],
     );
-  }, [deliveryDate, selectedSupplier]);
-
-  const coverageRangeLabel = React.useMemo(() => {
-    if (!deliveryDate.trim() || coverageDays == null) return null;
-    return coverageDateRangeLabel(deliveryDate, coverageDays);
-  }, [deliveryDate, coverageDays]);
-
-  const deliveryDayMismatch = React.useMemo(() => {
-    if (!deliveryDate.trim() || !selectedSupplier) return false;
-    return !isDeliveryDateOnConfiguredCycle(
-      deliveryDate,
-      selectedSupplier.deliveryCycleWeekdays ?? [],
-      selectedSupplier.deliveryExceptionDates ?? [],
-    );
-  }, [deliveryDate, selectedSupplier]);
-
-  const selectedDateIsException = React.useMemo(() => {
-    if (!deliveryDate.trim() || !selectedSupplier) return false;
-    return (selectedSupplier.deliveryExceptionDates ?? []).includes(deliveryDate);
   }, [deliveryDate, selectedSupplier]);
 
   const deliveryChipLabel = React.useMemo(() => {
@@ -1145,7 +1124,7 @@ export default function NuevoPedidoPage() {
     document.getElementById('pedido-nuevo-acciones')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }, []);
   const focusDeliveryDateInput = React.useCallback(() => {
-    const el = document.getElementById('pedido-nuevo-fecha-entrega') as HTMLInputElement | null;
+    const el = document.getElementById('pedido-nuevo-fecha-entrega-top') as HTMLInputElement | null;
     if (!el) return;
     el.focus({ preventScroll: true });
     if (typeof el.showPicker === 'function') {
@@ -1157,9 +1136,9 @@ export default function NuevoPedidoPage() {
     }
   }, []);
   const openDeliveryDateEditor = React.useCallback(() => {
-    scrollToPedidoAcciones();
+    document.getElementById('pedido-nuevo-catalogo')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     window.setTimeout(() => focusDeliveryDateInput(), 280);
-  }, [focusDeliveryDateInput, scrollToPedidoAcciones]);
+  }, [focusDeliveryDateInput]);
 
   const scrollToCatalogoNuevo = React.useCallback(() => {
     document.getElementById('pedido-nuevo-catalogo')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -1632,20 +1611,42 @@ export default function NuevoPedidoPage() {
               type="button"
               onClick={openDeliveryDateEditor}
               className={[
-                'mt-1.5 inline-flex h-8 w-full items-center justify-between gap-2 rounded-lg border px-2.5 text-left shadow-sm ring-1',
+                'mt-1.5 flex h-[2.625rem] w-full items-center justify-between gap-2 rounded-lg border px-2.5 text-left shadow-sm ring-1 transition-colors active:bg-zinc-50',
                 deliveryDate.trim()
-                  ? 'border-zinc-200 bg-white text-zinc-700 ring-zinc-100'
-                  : 'border-[#E30613]/30 bg-[#FFF5F5] text-[#B42318] ring-[#E30613]/10',
+                  ? 'border-zinc-200 bg-white text-zinc-800 ring-zinc-100'
+                  : 'border-[#E30613]/25 bg-[#FFF5F5] text-[#B42318] ring-[#E30613]/10',
               ].join(' ')}
             >
-              <span className="inline-flex min-w-0 items-center gap-1.5">
-                <CalendarDays className="h-3.5 w-3.5 shrink-0" aria-hidden />
-                <span className="truncate text-[11px] font-semibold">
-                  {deliveryDate.trim() && deliveryChipLabel ? `Entrega: ${deliveryChipLabel}` : 'Falta fecha de entrega'}
+              <span className="inline-flex min-w-0 items-center gap-2">
+                <span
+                  className={[
+                    'inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full ring-1',
+                    deliveryDate.trim()
+                      ? 'bg-white text-zinc-600 ring-zinc-200'
+                      : 'bg-white text-[#E30613] ring-[#E30613]/15',
+                  ].join(' ')}
+                >
+                  <CalendarDays className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
+                </span>
+                <span className="min-w-0">
+                  <span className="block truncate text-[11px] font-semibold">
+                    {deliveryDate.trim() && deliveryChipLabel ? `Entrega: ${deliveryChipLabel}` : 'Seleccionar fecha de entrega'}
+                  </span>
                 </span>
               </span>
-              <span className="text-[10px] font-semibold text-zinc-500">Editar</span>
+              <span className="shrink-0 text-[10px] font-semibold text-zinc-500">Editar</span>
             </button>
+            <input
+              id="pedido-nuevo-fecha-entrega-top"
+              type="date"
+              value={deliveryDate}
+              aria-label="Fecha de entrega del pedido"
+              onChange={(e) => {
+                setDeliveryDate(e.target.value);
+                setDeliveryDateFieldError(false);
+              }}
+              className="sr-only"
+            />
           </div>
         ) : null}
         <div className="divide-y divide-zinc-100 border-t border-zinc-100">
@@ -1723,68 +1724,6 @@ export default function NuevoPedidoPage() {
           Pedido realizado por:{' '}
           <span className="font-bold text-zinc-900">{requesterResolvedName}</span>
         </p>
-        <div className="mb-2">
-          <p className="text-[10px] font-extrabold uppercase tracking-wide text-zinc-500">Fecha de entrega</p>
-          <div
-            className={[
-              'relative mt-1 flex min-h-[2.75rem] w-full min-w-0 items-center rounded-xl border bg-white transition-[border-color,box-shadow]',
-              deliveryDateFieldError
-                ? 'border-red-400 bg-red-50/90 shadow-[inset_0_0_0_1px_rgba(248,113,113,0.35)]'
-                : [
-                    'border-zinc-300 shadow-[0_1px_2px_rgba(0,0,0,0.04)]',
-                    'focus-within:border-zinc-400 focus-within:shadow-[0_0_0_3px_rgba(24,24,27,0.06),0_1px_2px_rgba(0,0,0,0.04)]',
-                  ].join(' '),
-            ].join(' ')}
-          >
-            <input
-              id="pedido-nuevo-fecha-entrega"
-              type="date"
-              value={deliveryDate}
-              aria-invalid={deliveryDateFieldError}
-              aria-describedby={deliveryDateFieldError ? 'pedido-nuevo-fecha-entrega-aviso' : undefined}
-              onChange={(e) => {
-                setDeliveryDate(e.target.value);
-                setDeliveryDateFieldError(false);
-              }}
-              aria-label="Fecha de entrega del pedido"
-              className={[
-                'relative z-[1] box-border min-h-[2.75rem] w-full min-w-0 flex-1 cursor-pointer rounded-xl border-0 bg-transparent px-3 py-2 pr-10 text-sm font-medium outline-none ring-0 [color-scheme:light]',
-                '[&::-webkit-calendar-picker-indicator]:cursor-pointer [&::-webkit-calendar-picker-indicator]:opacity-55 [&::-webkit-calendar-picker-indicator]:hover:opacity-90',
-                deliveryDate ? 'text-zinc-900' : 'text-transparent',
-              ].join(' ')}
-            />
-            {!deliveryDate ? (
-              <span className="pointer-events-none absolute left-3 top-1/2 z-0 max-w-[calc(100%-3rem)] -translate-y-1/2 truncate text-sm text-zinc-500">
-                Elegir fecha
-              </span>
-            ) : null}
-          </div>
-          {deliveryDateFieldError ? (
-            <p id="pedido-nuevo-fecha-entrega-aviso" className="mt-1.5 text-xs font-semibold text-red-700">
-              Selecciona fecha de entrega para continuar
-            </p>
-          ) : null}
-          {selectedDateIsException ? (
-            <p className="mt-1.5 text-[10px] font-semibold text-emerald-700">
-              Fecha excepcional válida para este proveedor.
-            </p>
-          ) : null}
-          {coverageRangeLabel ? (
-            <div className="mt-2 rounded-lg border border-emerald-200 bg-emerald-50/90 px-2 py-1.5 text-[10px] text-emerald-950 ring-1 ring-emerald-100 sm:text-[11px]">
-              <p className="text-center font-bold uppercase tracking-wide text-emerald-900">Cobertura de este pedido</p>
-              <p className="mt-0.5 text-center font-medium capitalize leading-tight">{coverageRangeLabel}</p>
-            </div>
-          ) : deliveryDate.trim() !== '' ? null : (
-            <p className="mt-1.5 text-[10px] text-zinc-500">
-              Si eliges fecha verás aquí el tramo de cobertura y los objetivos por línea.
-            </p>
-          )}
-          {deliveryDayMismatch ? (
-            <p className="mt-1.5 text-[10px] font-semibold text-amber-800 sm:text-[11px]">
-              Esta fecha no es un día de reparto marcado para el proveedor. Revisa Proveedores o la fecha del albarán.
-            </p>
-          ) : null}
-        </div>
         <div className="rounded-lg bg-zinc-50 p-1.5 ring-1 ring-zinc-200/90">
           <div className="flex items-center justify-between text-xs text-zinc-700">
             <span>Subtotal</span>
@@ -1859,9 +1798,6 @@ export default function NuevoPedidoPage() {
         onSaveTemplate={() => setSaveTemplateOpen(true)}
         showQuickActions={!editingId}
         onEmptyCatalogCta={scrollToCatalogoNuevo}
-        deliveryDateLabel={deliveryDate.trim() && deliveryChipLabel ? deliveryChipLabel : 'Fecha'}
-        deliveryDateMissing={!deliveryDate.trim()}
-        onDeliveryDateTap={openDeliveryDateEditor}
       />
 
       <PedidosSaveTemplateSheet

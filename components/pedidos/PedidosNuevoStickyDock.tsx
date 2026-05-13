@@ -3,7 +3,6 @@
 import {
   ArrowRight,
   Bookmark,
-  CalendarDays,
   ChevronUp,
   LayoutTemplate,
   MessageCircle,
@@ -31,9 +30,6 @@ export type PedidosNuevoStickyDockProps = {
   showQuickActions: boolean;
   /** CTA cuando la cesta está vacía (p. ej. scroll al catálogo) */
   onEmptyCatalogCta: () => void;
-  deliveryDateLabel?: string | null;
-  deliveryDateMissing?: boolean;
-  onDeliveryDateTap?: () => void;
 };
 
 function formatMoney(n: number) {
@@ -47,9 +43,6 @@ const DockBar = React.memo(function DockBar({
   subtotalNoVat,
   minimumOrderEuro,
   showQuickActions,
-  deliveryDateLabel,
-  deliveryDateMissing,
-  onDeliveryDateTap,
   onSummaryTap,
   onContinue,
   onWhatsApp,
@@ -62,15 +55,14 @@ const DockBar = React.memo(function DockBar({
   | 'subtotalNoVat'
   | 'minimumOrderEuro'
   | 'showQuickActions'
-  | 'deliveryDateLabel'
-  | 'deliveryDateMissing'
-  | 'onDeliveryDateTap'
   | 'onContinue'
   | 'onWhatsApp'
   | 'onTemplate'
 > & {
   onSummaryTap: () => void;
 }) {
+  return null;
+
   const belowMinimum =
     minimumOrderEuro != null &&
     minimumOrderEuro > 0 &&
@@ -143,25 +135,6 @@ const DockBar = React.memo(function DockBar({
             </div>
 
             <div className="flex shrink-0 items-center gap-1">
-              {onDeliveryDateTap ? (
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onDeliveryDateTap();
-                  }}
-                  className={[
-                    'inline-flex h-10 items-center gap-1 rounded-xl border px-2 text-[10px] font-semibold shadow-sm ring-1 transition-transform duration-150 active:scale-[0.96]',
-                    deliveryDateMissing
-                      ? 'border-[#E30613]/35 bg-[#FFF5F5] text-[#B42318] ring-[#E30613]/15'
-                      : 'border-zinc-200 bg-white text-zinc-700 ring-zinc-100',
-                  ].join(' ')}
-                  aria-label="Editar fecha de entrega"
-                >
-                  <CalendarDays className="h-4 w-4" strokeWidth={2} aria-hidden />
-                  <span className="max-w-[5.5rem] truncate">{deliveryDateLabel?.trim() ? deliveryDateLabel : 'Fecha'}</span>
-                </button>
-              ) : null}
               {!isEmpty && showQuickActions ? (
                 <>
                   <button
@@ -256,9 +229,6 @@ const SummarySheet = React.memo(function SummarySheet({
   onTemplate,
   onSaveTemplate,
   showQuickActions,
-  deliveryDateLabel,
-  deliveryDateMissing,
-  onDeliveryDateTap,
 }: PedidosNuevoStickyDockProps & { open: boolean; onClose: () => void }) {
   if (!open) return null;
 
@@ -333,30 +303,6 @@ const SummarySheet = React.memo(function SummarySheet({
                   ? `Faltan ${formatMoney(gapEuro)} € para el pedido mínimo (${formatMoney(minimumOrderEuro)} € sin IVA).`
                   : 'Pedido mínimo alcanzado.'}
               </div>
-            ) : null}
-
-            {onDeliveryDateTap ? (
-              <button
-                type="button"
-                onClick={() => {
-                  onClose();
-                  onDeliveryDateTap();
-                }}
-                className={[
-                  'flex h-11 w-full touch-manipulation items-center justify-between rounded-xl border px-3 text-left text-[12px] font-semibold shadow-sm ring-1 transition-transform duration-150 active:scale-[0.99]',
-                  deliveryDateMissing
-                    ? 'border-[#E30613]/35 bg-[#FFF5F5] text-[#B42318] ring-[#E30613]/15'
-                    : 'border-zinc-200 bg-white text-zinc-700 ring-zinc-100',
-                ].join(' ')}
-              >
-                <span className="inline-flex min-w-0 items-center gap-2">
-                  <CalendarDays className="h-4 w-4 shrink-0" strokeWidth={2} aria-hidden />
-                  <span className="truncate">
-                    {deliveryDateMissing ? 'Falta fecha de entrega' : `Entrega: ${deliveryDateLabel?.trim() || 'Fecha'}`}
-                  </span>
-                </span>
-                <span className="shrink-0 text-[11px] font-bold text-zinc-500">Editar</span>
-              </button>
             ) : null}
 
             <div>
@@ -445,9 +391,6 @@ export default React.memo(function PedidosNuevoStickyDock(props: PedidosNuevoSti
     subtotalNoVat,
     minimumOrderEuro,
     showQuickActions,
-    deliveryDateLabel,
-    deliveryDateMissing,
-    onDeliveryDateTap,
     onContinue,
     onWhatsApp,
     onTemplate,
@@ -477,9 +420,6 @@ export default React.memo(function PedidosNuevoStickyDock(props: PedidosNuevoSti
         subtotalNoVat={subtotalNoVat}
         minimumOrderEuro={minimumOrderEuro}
         showQuickActions={showQuickActions}
-        deliveryDateLabel={deliveryDateLabel}
-        deliveryDateMissing={deliveryDateMissing}
-        onDeliveryDateTap={onDeliveryDateTap}
         onSummaryTap={handleSummaryTap}
         onContinue={isEmpty ? handleEmptyCta : onContinue}
         onWhatsApp={onWhatsApp}
@@ -504,9 +444,6 @@ export default React.memo(function PedidosNuevoStickyDock(props: PedidosNuevoSti
         onSaveTemplate={onSaveTemplate}
         showQuickActions={showQuickActions}
         onEmptyCatalogCta={onEmptyCatalogCta}
-        deliveryDateLabel={deliveryDateLabel}
-        deliveryDateMissing={deliveryDateMissing}
-        onDeliveryDateTap={onDeliveryDateTap}
       />
     </>
   );
