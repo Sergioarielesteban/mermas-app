@@ -22,7 +22,10 @@ import { usePedidosOrders } from '@/components/PedidosOrdersProvider';
 import PedidosPremiaLockedScreen from '@/components/PedidosPremiaLockedScreen';
 import { canAccessPedidos, canUsePedidosModule } from '@/lib/pedidos-access';
 import { formatQuantityWithUnit, totalsWithVatForOrderListDisplay } from '@/lib/pedidos-format';
-import { downloadPedidosHistorialComprasPdf } from '@/lib/pedidos-historial-compras-pdf';
+import {
+  downloadPedidosHistorialComprasDetailPdf,
+  downloadPedidosHistorialComprasExecutivePdf,
+} from '@/lib/pedidos-historial-compras-pdf';
 import type { PedidoOrder } from '@/lib/pedidos-supabase';
 import type { Unit } from '@/lib/types';
 
@@ -276,6 +279,56 @@ export default function PedidosHistorialMesPage() {
       }
     }
     return out.sort((a, b) => b.deltaPct - a.deltaPct).slice(0, topN);
+  }, [filteredMonthlyOrders, filteredPreviousMonthOrders, topN]);
+
+  const topProductsByUnitPriceDecrease = React.useMemo(() => {
+    type Agg = { qty: number; sumPxQty: number; unit: Unit };
+    const aggregate = (orderRows: PedidoOrder[]) => {
+      const m = new Map<string, Agg>();
+      for (const order of orderRows) {
+        for (const item of order.items) {
+          const qty = order.status === 'received' ? item.receivedQuantity : item.quantity;
+          const q = Math.max(0, qty);
+          if (q <= 0) continue;
+          const cur = m.get(item.productName) ?? { qty: 0, sumPxQty: 0, unit: item.unit as Unit };
+          cur.qty += q;
+          cur.sumPxQty += q * item.pricePerUnit;
+          m.set(item.productName, cur);
+        }
+      }
+      return m;
+    };
+    const nowM = aggregate(filteredMonthlyOrders);
+    const prevM = aggregate(filteredPreviousMonthOrders);
+    const out: {
+      name: string;
+      deltaPct: number;
+      deltaAbs: number;
+      unit: Unit;
+      prevAvg: number;
+      nowAvg: number;
+    }[] = [];
+    for (const [name, n] of nowM) {
+      if (n.qty <= 0) continue;
+      const nowAvg = n.sumPxQty / n.qty;
+      const p = prevM.get(name);
+      if (!p || p.qty <= 0) continue;
+      const prevAvg = p.sumPxQty / p.qty;
+      if (prevAvg <= 0) continue;
+      const deltaPct = ((nowAvg - prevAvg) / prevAvg) * 100;
+      const deltaAbs = nowAvg - prevAvg;
+      if (deltaPct <= -0.15 || deltaAbs <= -0.01) {
+        out.push({
+          name,
+          deltaPct: Math.round(deltaPct * 10) / 10,
+          deltaAbs: Math.round(deltaAbs * 100) / 100,
+          unit: n.unit,
+          prevAvg: Math.round(prevAvg * 100) / 100,
+          nowAvg: Math.round(nowAvg * 100) / 100,
+        });
+      }
+    }
+    return out.sort((a, b) => a.deltaPct - b.deltaPct).slice(0, topN);
   }, [filteredMonthlyOrders, filteredPreviousMonthOrders, topN]);
 
   const weeklySummary = React.useMemo(() => {
@@ -561,8 +614,8 @@ export default function PedidosHistorialMesPage() {
       ? 'Todos los proveedores'
       : monthlyBySupplier.find((s) => s.supplierId === supplierFilter)?.supplierName ?? '—';
 
-  const downloadHistorialPdf = React.useCallback(() => {
-    downloadPedidosHistorialComprasPdf({
+  const commonPdfInput = React.useMemo(
+    () => ({
       localLabel: (localName?.trim() || localCode || 'Local').trim(),
       monthIso: month,
       monthTitle,
@@ -574,20 +627,102 @@ export default function PedidosHistorialMesPage() {
       weeklySummary,
       supplierPerformance,
       deviationKpis,
-    });
+      priceChangesUp: topProductsByUnitPriceIncrease,
+      priceChangesDown: topProductsByUnitPriceDecrease,
+    }),
+    [
+      localName,
+      localCode,
+      month,
+      monthTitle,
+      viewModeLabel,
+      supplierFilterLabel,
+      filteredMonthlyOrders,
+      kpis,
+      monthlyTopProducts,
+      weeklySummary,
+      supplierPerformance,
+      deviationKpis,
+      topProductsByUnitPriceIncrease,
+      topProductsByUnitPriceDecrease,
+    ],
+  );
+
+  const downloadExecutivePdf = React.useCallback(() => {
+    downloadPedidosHistorialComprasExecutivePdf(commonPdfInput);
+  }, [commonPdfInput]);
+
+  const downloadDetailPdf = React.useCallback(() => {
+    downloadPedidosHistorialComprasDetailPdf(commonPdfInput);
+  }, [commonPdfInput]);
+
+  const downloadLinesCsv = React.useCallback(() => {
+    const rows: string[] = [];
+    rows.push(
+      [
+        'fecha',
+        'proveedor',
+        'estado',
+        'producto',
+        'unidad',
+        'cantidad',
+        'precio_unitario',
+        'iva_pct',
+        'linea_total_iva',
+        'incidencia',
+      ].join(','),
+    );
+    for (const o of filteredMonthlyOrders) {
+      const dt = (o.receivedAt ?? o.sentAt ?? o.createdAt).slice(0, 10);
+      const status = o.status === 'received' ? 'recibido' : 'enviado';
+      for (const it of o.items) {
+        const qty = o.status === 'received' ? it.receivedQuantity : it.quantity;
+        const base = Math.max(0, qty) * it.pricePerUnit;
+        const total = Math.round((base + base * it.vatRate) * 100) / 100;
+        const inc = it.incidentType ?? '';
+        const cols = [
+          dt,
+          o.supplierName,
+          status,
+          it.productName,
+          it.unit,
+          String(qty),
+          it.pricePerUnit.toFixed(4),
+          String(Math.round(it.vatRate * 100)),
+          total.toFixed(2),
+          inc,
+        ].map((v) => `"${String(v).replace(/"/g, '""')}"`);
+        rows.push(cols.join(','));
+      }
+    }
+    const blob = new Blob([rows.join('\n')], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `compras-mes-lineas-${month}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [filteredMonthlyOrders, month]);
+
+  const downloadSupplierRollupCsv = React.useCallback(() => {
+    const rows: string[] = [];
+    rows.push(['proveedor', 'producto', 'unidad', 'cantidad_mes'].join(','));
+    for (const s of monthlyBySupplier) {
+      for (const p of s.products) {
+        const cols = [s.supplierName, p.name, p.unit, String(p.quantity)].map((v) => `"${String(v).replace(/"/g, '""')}"`);
+        rows.push(cols.join(','));
+      }
+    }
+    const blob = new Blob([rows.join('\n')], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `compras-mes-detalle-${month}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
   }, [
-    localName,
-    localCode,
     month,
-    monthTitle,
-    viewModeLabel,
-    supplierFilterLabel,
-    filteredMonthlyOrders,
-    kpis,
-    monthlyTopProducts,
-    weeklySummary,
-    supplierPerformance,
-    deviationKpis,
+    monthlyBySupplier,
   ]);
 
   if (!hasPedidosEntry) {
@@ -707,11 +842,35 @@ export default function PedidosHistorialMesPage() {
         <div className="mt-2 flex flex-wrap gap-1.5">
           <button
             type="button"
-            onClick={downloadHistorialPdf}
+            onClick={downloadExecutivePdf}
             className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-[#D32F2F] px-3 text-xs font-semibold text-white ring-1 ring-[#B91C1C]/30"
           >
             <Download className="h-3.5 w-3.5 shrink-0" aria-hidden />
-            Informe PDF completo
+            Informe ejecutivo PDF
+          </button>
+          <button
+            type="button"
+            onClick={downloadDetailPdf}
+            className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-zinc-300 bg-white px-3 text-xs font-semibold text-zinc-800 ring-1 ring-zinc-200/70"
+          >
+            <FileText className="h-3.5 w-3.5 shrink-0" aria-hidden />
+            Detalle operativo PDF
+          </button>
+          <button
+            type="button"
+            onClick={downloadSupplierRollupCsv}
+            className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-zinc-300 bg-white px-3 text-xs font-semibold text-zinc-800 ring-1 ring-zinc-200/70"
+          >
+            <Download className="h-3.5 w-3.5 shrink-0" aria-hidden />
+            Detalle completo CSV
+          </button>
+          <button
+            type="button"
+            onClick={downloadLinesCsv}
+            className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-zinc-300 bg-white px-3 text-xs font-semibold text-zinc-800 ring-1 ring-zinc-200/70"
+          >
+            <Download className="h-3.5 w-3.5 shrink-0" aria-hidden />
+            Exportar líneas
           </button>
         </div>
       </section>
