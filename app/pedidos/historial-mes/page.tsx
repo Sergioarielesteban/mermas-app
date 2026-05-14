@@ -751,8 +751,18 @@ export default function PedidosHistorialMesPage() {
       </section>
 
       <section className="rounded-xl border border-zinc-200/90 bg-white px-2.5 py-2 ring-1 ring-zinc-100 sm:px-3 sm:py-2">
-        <h1 className="text-sm font-bold tracking-tight text-zinc-900 sm:text-base">Compras del mes</h1>
-        <p className="mt-0.5 text-[11px] leading-snug text-zinc-500">Centro de control · decisión rápida · vista operativa</p>
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h1 className="text-sm font-bold tracking-tight text-zinc-900 sm:text-base">Compras del mes</h1>
+            <p className="mt-0.5 text-[11px] leading-snug text-zinc-500">Centro de control · decisión rápida · vista operativa</p>
+          </div>
+          <Link
+            href="/pedidos/compras-producto"
+            className="shrink-0 rounded-full border border-[#D32F2F]/15 bg-[#FFF7F5] px-3 py-1.5 text-[11px] font-black text-[#C62828] shadow-[0_6px_18px_rgba(211,47,47,0.06)]"
+          >
+            Por producto
+          </Link>
+        </div>
       </section>
 
       {message ? (
