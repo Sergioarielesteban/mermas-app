@@ -172,11 +172,11 @@ import {
 
 /** Compact reception fields — visual parity with `RecepcionLineRow`. */
 const RECEPTION_BLOCK_WRAP =
-  'mt-1 rounded-lg bg-zinc-50/55 p-1 ring-1 ring-zinc-100/85';
+  'rounded-xl bg-zinc-50/55 p-1 ring-1 ring-zinc-100/90';
 const RECEPTION_FIELD_CLASS =
-  'h-7 min-w-0 rounded-md bg-white px-1.5 text-[12px] font-semibold tabular-nums text-zinc-900 shadow-[inset_0_1px_2px_rgba(0,0,0,0.05)] outline-none ring-1 ring-zinc-200/55 transition-shadow focus:ring-2 focus:ring-[#D32F2F]/28';
+  'h-7 min-w-0 rounded-lg bg-white px-2 text-[12px] font-semibold tabular-nums text-zinc-900 shadow-[inset_0_1px_2px_rgba(0,0,0,0.04)] outline-none ring-1 ring-zinc-200/65 transition-shadow focus:ring-2 focus:ring-[#D32F2F]/28';
 const RECEPTION_SUBTOTAL_WRAP =
-  'ml-auto flex min-w-[4.1rem] shrink-0 flex-col items-end justify-center rounded-md bg-emerald-50/90 px-1 py-0.25 leading-none ring-1 ring-emerald-200/35';
+  'ml-auto flex min-w-[4.35rem] shrink-0 flex-col items-end justify-center rounded-lg bg-emerald-50/95 px-1.5 py-0.5 leading-none ring-1 ring-emerald-200/45';
 
 function buildWhatsappOrderMessage(
   order: PedidoOrder,
@@ -568,6 +568,7 @@ export default function PedidosPage() {
 );
 
   const [expandedSentId, setExpandedSentId] = React.useState<string | null>(null);
+  const [sentOrderActionMenuOpenId, setSentOrderActionMenuOpenId] = React.useState<string | null>(null);
   const [ocrOrder, setOcrOrder] = React.useState<PedidoOrder | null>(null);
   const [expandedHistoricoId, setExpandedHistoricoId] = React.useState<string | null>(null);
   /** Plegado por mes (YYYY-MM) en histórico recibidos; sin entrada = mes actual según índice. */
@@ -3828,40 +3829,40 @@ export default function PedidosPage() {
     const incidentOpen = Boolean(incidentOpenBySentOrderId[order.id]);
     const showExpandHint = opts?.showExpandHint ?? false;
     return (
-      <div className="sticky bottom-2 z-40 mt-3 w-full max-w-lg touch-manipulation rounded-2xl border border-zinc-200/90 bg-white/95 px-2.5 py-2 shadow-[0_-10px_40px_rgba(0,0,0,0.12)] ring-1 ring-zinc-100/90 backdrop-blur-md supports-[padding:max(0px)]:pb-[max(10px,env(safe-area-inset-bottom))]">
-        <div className="space-y-1.5 text-left">
+      <div className="mt-2 w-full touch-manipulation rounded-2xl border border-zinc-200/85 bg-white px-2.5 py-2.5 shadow-[0_3px_14px_rgba(24,24,27,0.06)] ring-1 ring-zinc-100/80">
+        <div className="space-y-2 text-left">
         {showExpandHint ? (
           <p className="text-center text-[11px] leading-snug text-zinc-600">
-            Toca el recuadro del proveedor para desplegar líneas, marcar ✓/✗ y rellenar kg/precio recibido aquí mismo.
+            Toca el recuadro del proveedor para desplegar artículos, marcar ✓/✗ y rellenar kg/precio recibido aquí mismo.
           </p>
         ) : (
           <>
-            <button
-              type="button"
-              disabled={receivingOrderId === order.id}
-              onClick={() => {
-                void commitSentOrderAsReceived(order.id);
-              }}
-              className="flex h-12 w-full shrink-0 items-center justify-center rounded-2xl bg-gradient-to-b from-[#4ADE80] to-[#16A34A] px-3 text-center text-[12px] font-black uppercase leading-tight tracking-[0.06em] text-white shadow-lg shadow-emerald-900/25 ring-2 ring-inset ring-white/25 transition active:scale-[0.99] disabled:opacity-90"
-            >
-              {receivingOrderId === order.id ? (
-                <span>Guardando…</span>
-              ) : (
-                <span>Validar recepción</span>
-              )}
-            </button>
-            <button
-              type="button"
-              onClick={() => toggleSentIncidentPanel(order)}
-              className={[
-                'flex h-12 w-full shrink-0 items-center justify-center rounded-2xl px-3 text-center text-[12px] font-black uppercase tracking-[0.06em] transition active:scale-[0.99]',
-                incidentOpen || hasAnyBad
-                  ? 'bg-[#B91C1C] text-white ring-2 ring-inset ring-[#7F1D1D]/40'
-                  : 'bg-zinc-200 text-zinc-700 ring-2 ring-inset ring-zinc-400/35',
-              ].join(' ')}
-            >
-              {incidentOpen ? 'Ocultar incidencia' : 'Incidencia'}
-            </button>
+            <div className="grid grid-cols-[1fr_0.82fr] gap-2">
+              <button
+                type="button"
+                disabled={receivingOrderId === order.id}
+                onClick={() => {
+                  void commitSentOrderAsReceived(order.id);
+                }}
+                className="flex h-11 w-full shrink-0 items-center justify-center gap-2 rounded-2xl bg-gradient-to-b from-[#35C86F] to-[#0F9F52] px-3 text-center text-[11px] font-black uppercase leading-tight tracking-[0.055em] text-white shadow-[0_8px_18px_rgba(16,185,129,0.22)] ring-1 ring-inset ring-white/25 transition active:scale-[0.99] disabled:opacity-90"
+              >
+                <CheckCircle2 className="h-4 w-4 shrink-0" strokeWidth={2.4} aria-hidden />
+                {receivingOrderId === order.id ? <span>Guardando…</span> : <span>Validar</span>}
+              </button>
+              <button
+                type="button"
+                onClick={() => toggleSentIncidentPanel(order)}
+                className={[
+                  'flex h-11 w-full shrink-0 items-center justify-center gap-1.5 rounded-2xl px-2 text-center text-[10px] font-black uppercase tracking-[0.055em] transition active:scale-[0.99]',
+                  incidentOpen || hasAnyBad
+                    ? 'border border-[#B91C1C]/30 bg-[#B91C1C]/10 text-[#991B1B]'
+                    : 'border border-zinc-200 bg-zinc-50 text-zinc-600',
+                ].join(' ')}
+              >
+                <AlertTriangle className="h-3.5 w-3.5 shrink-0" strokeWidth={2.4} aria-hidden />
+                <span>{incidentOpen ? 'Ocultar' : 'Incidencia'}</span>
+              </button>
+            </div>
             {incidentOpen ? (
               <div className="space-y-2 rounded-xl bg-red-50 p-3 ring-1 ring-red-200">
                 <p className="text-[10px] font-bold uppercase tracking-wide text-red-900">
@@ -4511,18 +4512,18 @@ export default function PedidosPage() {
                 : 'pendiente';
             const detailOpen = expandedSentId === order.id;
             const cardShell = [
-              'overflow-hidden rounded-lg transition-colors',
+              'overflow-hidden rounded-2xl bg-white shadow-[0_4px_18px_rgba(24,24,27,0.055)] ring-1 transition-[box-shadow,transform,background-color] duration-200',
               sentBadge === 'incidencia'
                 ? detailOpen
-                  ? 'bg-red-50 ring-1 ring-red-400/80'
-                  : 'bg-red-50/85 ring-1 ring-red-300/70 hover:bg-red-50'
+                  ? 'ring-orange-300/80 shadow-[0_8px_24px_rgba(251,146,60,0.14)]'
+                  : 'ring-orange-200/80 hover:shadow-[0_8px_24px_rgba(251,146,60,0.12)]'
                 : sentBadge === 'correcto'
                   ? detailOpen
-                    ? 'bg-emerald-50 ring-1 ring-emerald-500/70'
-                    : 'bg-emerald-50/85 ring-1 ring-emerald-400/55 hover:bg-emerald-50'
+                    ? 'ring-emerald-300/80 shadow-[0_8px_24px_rgba(16,185,129,0.12)]'
+                    : 'ring-emerald-200/75 hover:shadow-[0_8px_24px_rgba(16,185,129,0.10)]'
                   : detailOpen
-                    ? 'bg-amber-50 ring-1 ring-amber-400/75'
-                    : 'bg-amber-50/85 ring-1 ring-amber-300/65 hover:bg-amber-50',
+                    ? 'ring-zinc-300/95 shadow-[0_8px_26px_rgba(24,24,27,0.08)]'
+                    : 'ring-zinc-200/90 hover:shadow-[0_8px_24px_rgba(24,24,27,0.08)]',
             ].join(' ');
             const badgeClass =
               sentBadge === 'incidencia'
@@ -4537,154 +4538,179 @@ export default function PedidosPage() {
               (order.createdBy && userId && order.createdBy === userId
                 ? actorLabel(displayName, loginUsername)
                 : null);
+            const sentDateLabel = order.sentAt ? new Date(order.sentAt).toLocaleDateString('es-ES') : '—';
+            const deliveryDateLabel = order.deliveryDate
+              ? new Date(`${order.deliveryDate}T00:00:00`).toLocaleDateString('es-ES')
+              : '—';
+            const menuOpen = sentOrderActionMenuOpenId === order.id;
             return (
             <div key={order.id} className={cardShell}>
-              <button
-                type="button"
-                onClick={() => setExpandedSentId((prev) => (prev === order.id ? null : order.id))}
-                className={[
-                  'w-full px-3 py-3.5 text-left outline-none transition focus-visible:ring-2 focus-visible:ring-[#D32F2F]/35 focus-visible:ring-offset-1 sm:px-3.5 sm:py-4',
-                  sentBadge === 'incidencia' ? 'active:bg-red-100/40' : sentBadge === 'correcto' ? 'active:bg-emerald-100/40' : 'active:bg-amber-100/40',
-                ].join(' ')}
-                aria-expanded={detailOpen}
-              >
-                <div className="flex flex-col gap-2">
-                  <div className="flex min-w-0 items-start justify-between gap-2">
-                    <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-1.5 gap-y-0.5">
-                      <p className="min-w-0 truncate text-[13px] font-bold leading-tight text-zinc-900">{order.supplierName}</p>
+              <div className="px-3 py-3 text-left sm:px-3.5">
+                <div className="flex min-w-0 items-start gap-2.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSentOrderActionMenuOpenId(null);
+                      setExpandedSentId((prev) => (prev === order.id ? null : order.id));
+                    }}
+                    className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-[#D32F2F]/[0.08] text-[12px] font-black uppercase text-[#B91C1C] ring-1 ring-[#D32F2F]/[0.14] transition active:scale-[0.98]"
+                    aria-label={detailOpen ? 'Ocultar detalles del pedido' : 'Ver detalles del pedido'}
+                    aria-expanded={detailOpen}
+                  >
+                    {supplierInitials(order.supplierName)}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSentOrderActionMenuOpenId(null);
+                      setExpandedSentId((prev) => (prev === order.id ? null : order.id));
+                    }}
+                    className="min-w-0 flex-1 text-left outline-none transition focus-visible:rounded-xl focus-visible:ring-2 focus-visible:ring-[#D32F2F]/25"
+                    aria-expanded={detailOpen}
+                  >
+                    <div className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5">
+                      <p className="min-w-0 truncate text-[14px] font-black leading-tight text-zinc-950">
+                        {order.supplierName}
+                      </p>
                       <span
                         className={[
-                          'shrink-0 rounded px-1 py-px text-[8px] font-bold uppercase tracking-wide text-white',
+                          'shrink-0 rounded-md px-1.5 py-0.5 text-[8px] font-black uppercase tracking-wide text-white shadow-sm',
                           badgeClass,
                         ].join(' ')}
                       >
                         {badgeLabel}
                       </span>
                     </div>
-                    {requesterName ? (
-                      <p
-                        className="max-w-[45%] shrink-0 truncate text-right text-[10px] font-semibold leading-snug text-zinc-600"
-                        title={requesterName}
-                      >
-                        {requesterName}
-                      </p>
-                    ) : null}
+                    <p className="mt-1 line-clamp-2 text-[10px] font-semibold leading-snug text-zinc-500">
+                      Env. {sentDateLabel} · Ent. {deliveryDateLabel} · Rev.{' '}
+                      <span className={order.priceReviewArchivedAt ? 'text-emerald-700' : 'text-zinc-700'}>
+                        {order.priceReviewArchivedAt ? 'OK' : 'Pend.'}
+                      </span>
+                      {order.contentRevisedAfterSentAt ? <span className="text-amber-700"> · Modif.</span> : null}
+                    </p>
+                  </button>
+
+                  <div className="flex shrink-0 items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => sendWhatsappOrder(order)}
+                      className="grid h-8 w-8 place-items-center rounded-full bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200/80 transition active:scale-[0.96]"
+                      title="Reenviar WhatsApp"
+                      aria-label="Reenviar pedido por WhatsApp"
+                    >
+                      <MessageCircle className="h-4 w-4" strokeWidth={2.25} aria-hidden />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSentOrderActionMenuOpenId((prev) => (prev === order.id ? null : order.id))}
+                      className="grid h-8 w-8 place-items-center rounded-full bg-white text-zinc-600 ring-1 ring-zinc-200 transition active:scale-[0.96]"
+                      title="Acciones"
+                      aria-label="Acciones del pedido"
+                      aria-expanded={menuOpen}
+                    >
+                      <span className="text-[18px] font-black leading-none">⋮</span>
+                    </button>
                   </div>
-                  <p className="line-clamp-2 text-[10px] leading-snug text-zinc-600">
-                    <span className="font-medium text-zinc-700">
-                      Env. {order.sentAt ? new Date(order.sentAt).toLocaleDateString('es-ES') : '—'}
-                    </span>
-                    {order.deliveryDate ? (
-                      <>
-                        {' '}
-                        · Ent. {new Date(`${order.deliveryDate}T00:00:00`).toLocaleDateString('es-ES')}
-                      </>
-                    ) : null}
-                    {order.contentRevisedAfterSentAt ? <span className="font-semibold text-amber-800"> · Modif.</span> : null}
-                    {' · '}
-                    Rev.{' '}
-                    <span className={order.priceReviewArchivedAt ? 'font-semibold text-emerald-700' : 'font-semibold text-zinc-800'}>
-                      {order.priceReviewArchivedAt ? 'OK' : 'Pend.'}
-                    </span>
+                </div>
+
+                <div className="mt-2.5 grid grid-cols-[minmax(0,1fr)_auto_minmax(5.25rem,1fr)] items-center gap-2 border-t border-zinc-100 pt-2">
+                  <p className="min-w-0 truncate text-[10px] font-semibold text-zinc-500">
+                    {requesterName ? `${requesterName} · ` : ''}
+                    {order.items.length} {order.items.length === 1 ? 'artículo' : 'artículos'}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSentOrderActionMenuOpenId(null);
+                      setExpandedSentId((prev) => (prev === order.id ? null : order.id));
+                    }}
+                    className="grid h-7 w-7 place-items-center rounded-full bg-zinc-50 text-zinc-700 ring-1 ring-zinc-200 transition active:scale-[0.96]"
+                    aria-label={detailOpen ? 'Ocultar detalles' : 'Mostrar detalles'}
+                  >
+                    <ChevronDown
+                      className={['h-4 w-4 transition-transform', detailOpen ? 'rotate-180' : ''].join(' ')}
+                      strokeWidth={2.25}
+                      aria-hidden
+                    />
+                  </button>
+                  <p className="shrink-0 text-right text-[15px] font-black tabular-nums text-emerald-700">
+                    {formatPedidosMoney(totals.total)}
                   </p>
                 </div>
-                <div
-                  className={[
-                    'mt-3 flex items-center justify-center gap-1 rounded-lg border-t px-2 py-2.5 text-[11px] font-bold tracking-wide text-zinc-800 sm:text-xs',
-                    sentBadge === 'incidencia'
-                      ? 'border-red-200/45 bg-red-50/90'
-                      : sentBadge === 'correcto'
-                        ? 'border-emerald-200/45 bg-emerald-50/90'
-                        : 'border-amber-200/55 bg-amber-50/95',
-                  ].join(' ')}
-                >
-                  <span className="select-none">{detailOpen ? 'Ocultar detalles' : 'Detalles'}</span>
-                  <ChevronDown
-                    className={['h-4 w-4 shrink-0 text-zinc-600 transition-transform', detailOpen ? 'rotate-180' : ''].join(' ')}
-                    aria-hidden
-                  />
-                </div>
-              </button>
-              <div
-                className={[
-                  'grid w-full grid-cols-3 gap-1.5 border-t px-1.5 py-2',
-                  sentBadge === 'incidencia'
-                    ? 'border-red-200/60 bg-white/50'
-                    : sentBadge === 'correcto'
-                      ? 'border-emerald-200/60 bg-white/50'
-                      : 'border-amber-200/60 bg-white/50',
-                ].join(' ')}
-              >
-                <Link
-                  href={`/pedidos/nuevo?id=${encodeURIComponent(order.id)}`}
-                  onClick={(e) => e.stopPropagation()}
-                  className="flex min-h-[1.875rem] flex-col items-center justify-center gap-px rounded-md border border-zinc-200/90 bg-zinc-50/90 px-0.5 py-0.5 text-zinc-800 transition hover:bg-zinc-100 active:bg-zinc-100/80"
-                  title="Editar pedido"
-                  aria-label="Editar pedido"
-                >
-                  <Pencil className="h-3 w-3 shrink-0 text-zinc-700" strokeWidth={2.25} aria-hidden />
-                  <span className="text-[6.5px] font-semibold leading-none text-zinc-600">Editar</span>
-                </Link>
-                <button
-                  type="button"
-                  onClick={() => sendWhatsappOrder(order)}
-                  className="flex min-h-[1.875rem] flex-col items-center justify-center gap-px rounded-md border border-[#128C7E]/35 bg-[#25D366] px-0.5 py-0.5 text-white shadow-sm transition hover:bg-[#20BD5A] active:brightness-95"
-                  title="WhatsApp"
-                  aria-label="Enviar pedido por WhatsApp"
-                >
-                  <MessageCircle className="h-3 w-3 shrink-0" strokeWidth={2.25} aria-hidden />
-                  <span className="text-[6.5px] font-bold leading-none">WA</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={async () => {
-                    if (!(await confirmDestructiveOperation(profileRole, '¿Confirmar eliminación de este pedido?'))) {
-                      return;
-                    }
-                    if (!localId) return;
-                    if (!(await appConfirm('¿Seguro que quieres eliminar este pedido?'))) return;
-                    const supabase = getSupabaseClient();
-                    if (!supabase) return;
-                    void deleteOrder(supabase, localId, order.id)
-                      .then(() => {
-                        registerDeletedOrderId(order.id);
-                        releasePinOrderId(order.id);
-                        setOrders((prev) => prev.filter((o) => o.id !== order.id));
-                        setMessage('Pedido enviado eliminado.');
-                        setShowDeletedBanner(true);
-                        if (deletedBannerTimeoutRef.current) window.clearTimeout(deletedBannerTimeoutRef.current);
-                        deletedBannerTimeoutRef.current = window.setTimeout(() => {
-                          setShowDeletedBanner(false);
-                          deletedBannerTimeoutRef.current = null;
-                        }, 1000);
-                        dispatchPedidosDataChanged();
-                      })
-                      .catch((err: Error) => setMessage(err.message));
-                  }}
-                  className="flex min-h-[1.875rem] flex-col items-center justify-center gap-px rounded-md border border-rose-200/90 bg-rose-50/90 px-0.5 py-0.5 text-rose-900 transition hover:bg-rose-100/90 active:bg-rose-100"
-                  title="Eliminar pedido"
-                  aria-label="Eliminar pedido"
-                >
-                  <Trash2 className="h-3 w-3 shrink-0 text-rose-700" strokeWidth={2.25} aria-hidden />
-                  <span className="text-[6.5px] font-semibold leading-none text-rose-800">Borrar</span>
-                </button>
+
+                {menuOpen ? (
+                  <div className="mt-2.5 grid grid-cols-3 gap-1.5 rounded-2xl bg-zinc-50/85 p-1.5 ring-1 ring-zinc-200/75">
+                    <Link
+                      href={`/pedidos/nuevo?id=${encodeURIComponent(order.id)}`}
+                      onClick={() => setSentOrderActionMenuOpenId(null)}
+                      className="flex min-h-[2.25rem] flex-col items-center justify-center gap-0.5 rounded-xl bg-white px-1 text-zinc-800 ring-1 ring-zinc-200/85 transition active:scale-[0.98]"
+                      title="Editar pedido"
+                      aria-label="Editar pedido"
+                    >
+                      <Pencil className="h-3.5 w-3.5 shrink-0 text-zinc-700" strokeWidth={2.25} aria-hidden />
+                      <span className="text-[7.5px] font-black leading-none text-zinc-600">Editar</span>
+                    </Link>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSentOrderActionMenuOpenId(null);
+                        sendWhatsappOrder(order);
+                      }}
+                      className="flex min-h-[2.25rem] flex-col items-center justify-center gap-0.5 rounded-xl bg-emerald-50 px-1 text-emerald-800 ring-1 ring-emerald-200/80 transition active:scale-[0.98]"
+                      title="WhatsApp"
+                      aria-label="Enviar pedido por WhatsApp"
+                    >
+                      <MessageCircle className="h-3.5 w-3.5 shrink-0" strokeWidth={2.25} aria-hidden />
+                      <span className="text-[7.5px] font-black leading-none">WhatsApp</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        setSentOrderActionMenuOpenId(null);
+                        if (!(await confirmDestructiveOperation(profileRole, '¿Confirmar eliminación de este pedido?'))) {
+                          return;
+                        }
+                        if (!localId) return;
+                        if (!(await appConfirm('¿Seguro que quieres eliminar este pedido?'))) return;
+                        const supabase = getSupabaseClient();
+                        if (!supabase) return;
+                        void deleteOrder(supabase, localId, order.id)
+                          .then(() => {
+                            registerDeletedOrderId(order.id);
+                            releasePinOrderId(order.id);
+                            setOrders((prev) => prev.filter((o) => o.id !== order.id));
+                            setMessage('Pedido enviado eliminado.');
+                            setShowDeletedBanner(true);
+                            if (deletedBannerTimeoutRef.current) window.clearTimeout(deletedBannerTimeoutRef.current);
+                            deletedBannerTimeoutRef.current = window.setTimeout(() => {
+                              setShowDeletedBanner(false);
+                              deletedBannerTimeoutRef.current = null;
+                            }, 1000);
+                            dispatchPedidosDataChanged();
+                          })
+                          .catch((err: Error) => setMessage(err.message));
+                      }}
+                      className="flex min-h-[2.25rem] flex-col items-center justify-center gap-0.5 rounded-xl bg-rose-50 px-1 text-rose-900 ring-1 ring-rose-200/80 transition active:scale-[0.98]"
+                      title="Eliminar pedido"
+                      aria-label="Eliminar pedido"
+                    >
+                      <Trash2 className="h-3.5 w-3.5 shrink-0 text-rose-700" strokeWidth={2.25} aria-hidden />
+                      <span className="text-[7.5px] font-black leading-none text-rose-800">Borrar</span>
+                    </button>
+                  </div>
+                ) : null}
               </div>
               {expandedSentId === order.id ? (
                 <div
                   id={`pedido-sent-detalle-${order.id}`}
-                  className="mt-1 space-y-1.5 px-1 pb-28 pt-1 text-left scroll-mt-4"
+                  className="space-y-2 border-t border-zinc-100 bg-[#FBFAF8]/80 px-1.5 pb-3 pt-2 text-left scroll-mt-4"
                 >
                   {order.notes?.trim() ? (
                     <div className="rounded-lg border border-amber-200 bg-amber-50/90 px-2.5 py-2">
                       <p className="text-[10px] font-bold uppercase tracking-wide text-amber-900/80">Notas del pedido</p>
                       <p className="mt-1 text-sm leading-relaxed text-amber-950">{order.notes.trim()}</p>
                     </div>
-                  ) : null}
-                  {order.deliveryDate ? (
-                    <p className="text-xs text-zinc-600">
-                      Entrega prevista:{' '}
-                      {new Date(`${order.deliveryDate}T00:00:00`).toLocaleDateString('es-ES')}
-                    </p>
                   ) : null}
                   {order.items.map((item) => {
                     const mark = quickLineMarks[item.id];
@@ -4738,10 +4764,14 @@ export default function PedidosPage() {
                         })()
                       : 0;
                     const summaryTone = isBad
-                      ? 'bg-orange-50/55 ring-orange-200/55'
+                      ? 'border-orange-200/75 bg-orange-50/65 ring-orange-200/70'
                       : isOk
-                        ? 'bg-emerald-50/45 ring-emerald-200/45'
-                        : 'bg-zinc-50/40 ring-zinc-200/70';
+                        ? 'border-emerald-200/75 bg-emerald-50/60 ring-emerald-200/70'
+                        : 'border-[#EFE4D7] bg-[#FFFDF8] ring-[#EFE4D7]/90';
+                    const orderedPriceLabel =
+                      item.basePricePerUnit != null && Number.isFinite(item.basePricePerUnit)
+                        ? `${item.basePricePerUnit.toFixed(2)} €/${unitPriceCatalogSuffix[item.unit]}`
+                        : null;
                     return (
                       <div key={item.id} className="space-y-1">
                         <PedidosRecepcionSwipeRow
@@ -4758,53 +4788,46 @@ export default function PedidosPage() {
                           }}
                           onSwipeLeft={() => void quickReceiveItem(order.id, item, false)}
                         >
-                          <div className={['rounded-xl p-1 ring-1 pr-1', summaryTone].join(' ')}>
-                            <div className="flex items-start gap-2">
-                              <div className="min-w-0 flex-1">
-                                <p className="text-[13px] font-semibold leading-snug text-zinc-900 [overflow-wrap:anywhere]">
-                                  {lineLabel(item)}
+                          <div
+                            className={[
+	                              'rounded-2xl border-l-[3px] px-2.5 py-1.5 ring-1 shadow-[0_2px_8px_rgba(24,24,27,0.035)]',
+	                              summaryTone,
+	                            ].join(' ')}
+	                          >
+	                            <div className="flex min-h-[2.25rem] items-center gap-2">
+	                              <div className="min-w-0 flex-1 self-center">
+	                                <p className="text-[12px] font-black leading-tight text-zinc-950 [overflow-wrap:anywhere]">
+	                                  {lineLabel(item)}
+	                                </p>
+	                              </div>
+	                              <div className="shrink-0 self-center text-right leading-tight">
+                                <p className="text-[10.5px] font-black tabular-nums text-zinc-700">
+                                  {formatQuantityWithUnit(item.quantity, item.unit)}
                                 </p>
-                                <p className="mt-0.5 text-[10px] leading-tight text-zinc-500">
-                                  Pedido {formatQuantityWithUnit(item.quantity, item.unit)}
-                                  {item.basePricePerUnit != null && Number.isFinite(item.basePricePerUnit)
-                                    ? ` · ${item.basePricePerUnit.toFixed(2)} €/${unitPriceCatalogSuffix[item.unit]}`
-                                    : ''}
-                                </p>
-                              </div>
-                              <div className="flex shrink-0 flex-col items-end gap-0.5">
-                                <span
-                                  className={[
-                                    'rounded px-1 py-px text-[8px] font-black uppercase tracking-wide text-white',
-                                    isBad ? 'bg-orange-600' : isOk ? 'bg-emerald-600' : 'bg-zinc-400',
-                                  ].join(' ')}
-                                >
-                                  {isBad ? 'Incidencia' : isOk ? 'Ok' : 'Pend.'}
-                                </span>
+                                {orderedPriceLabel ? (
+                                  <p className="mt-0.5 text-[8.5px] font-semibold tabular-nums text-zinc-500">
+                                    {orderedPriceLabel}
+                                  </p>
+                                ) : null}
                               </div>
                             </div>
-                            <p className="mt-0.5 text-center text-[8px] font-medium leading-tight text-zinc-400">
-                              Desliza → OK · ← incidencia
-                            </p>
                           </div>
                         </PedidosRecepcionSwipeRow>
-                          <div className="rounded-xl border border-zinc-200/85 bg-white p-1.5 ring-1 ring-zinc-100 shadow-sm">
-                            <div className="mb-1 flex items-center justify-between gap-2 border-b border-zinc-100/90 pb-1">
-                              <span className="text-[9px] font-bold uppercase tracking-wide text-zinc-400">
-                                Detalle recepción
-                              </span>
-                              <div className="flex shrink-0 items-center gap-1">
+	                          <div className="rounded-2xl border border-zinc-200/80 bg-white p-1.5 ring-1 ring-zinc-100 shadow-[0_2px_10px_rgba(24,24,27,0.04)]">
+	                            <div className="flex items-start gap-1.5">
+	                              <div className="order-2 flex shrink-0 items-center gap-1 pt-3">
                                 <button
                                   type="button"
                                   data-no-swipe
                                   onClick={() => setReceptionLineAction({ orderId: order.id, itemId: item.id })}
                                   className={[
-                                    'grid h-7 w-7 place-items-center rounded-full border text-sm font-black',
+	                                    'grid h-7 w-7 place-items-center rounded-xl border text-xs font-black transition active:scale-[0.96]',
                                     isBad
                                       ? 'border-[#B91C1C] bg-[#B91C1C] text-white'
                                       : 'border-zinc-300 bg-white text-zinc-400',
                                   ].join(' ')}
-                                  title="Qué hacer con esta línea (incidencia o eliminar)"
-                                  aria-label="Opciones de línea de recepción"
+	                                  title="Qué hacer con este artículo (incidencia o eliminar)"
+	                                  aria-label="Opciones de artículo de recepción"
                                 >
                                   {'\u2715'}
                                 </button>
@@ -4823,7 +4846,7 @@ export default function PedidosPage() {
                                     void quickReceiveItem(order.id, item, true);
                                   }}
                                   className={[
-                                    'grid h-7 w-7 place-items-center rounded-full border text-sm font-black',
+	                                    'grid h-7 w-7 place-items-center rounded-xl border text-xs font-black transition active:scale-[0.96]',
                                     isOk
                                       ? 'border-[#16A34A] bg-[#16A34A] text-white'
                                       : 'border-zinc-300 bg-white text-zinc-400',
@@ -4833,9 +4856,8 @@ export default function PedidosPage() {
                                 >
                                   {'\u2713'}
                                 </button>
-                              </div>
-                            </div>
-                            <div className="space-y-1 text-[11px] leading-snug text-zinc-700">
+	                              </div>
+		                              <div className="order-1 min-w-0 flex-1 space-y-0.5 text-[11px] leading-snug text-zinc-700">
                           {isDualKgReception ? (
                             <>
                               <div className={RECEPTION_BLOCK_WRAP}>
@@ -5063,8 +5085,9 @@ export default function PedidosPage() {
                               )}
                             </>
                           )}
-                        </div>
-                        {item.basePricePerUnit != null && Number.isFinite(item.basePricePerUnit)
+	                        </div>
+	                      </div>
+	                        {item.basePricePerUnit != null && Number.isFinite(item.basePricePerUnit)
                           ? (() => {
                               const raw = priceInputByItemId[item.id];
                               const draft =
@@ -5123,26 +5146,26 @@ export default function PedidosPage() {
                       if (bad) nBad++;
                     }
                     return (
-                      <div className="mt-1 space-y-1 border-t border-zinc-200/70 pt-2">
-                        <div className="grid grid-cols-4 gap-1 rounded-lg bg-white/95 px-1 py-1 ring-1 ring-zinc-200/85 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
-                          <div className="flex flex-col items-center gap-px py-0.5 text-center">
-                            <List className="h-3.5 w-3.5 text-zinc-400" strokeWidth={2.25} aria-hidden />
-                            <span className="text-[14px] font-black tabular-nums leading-none text-zinc-900">
-                              {order.items.length}
-                            </span>
-                            <span className="text-[7px] font-bold uppercase tracking-wide text-zinc-500">Líneas</span>
-                          </div>
-                          <div className="flex flex-col items-center gap-px py-0.5 text-center">
-                            <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" strokeWidth={2.25} aria-hidden />
-                            <span className="text-[14px] font-black tabular-nums leading-none text-emerald-800">{nOk}</span>
-                            <span className="text-[7px] font-bold uppercase tracking-wide text-emerald-700/90">Ok</span>
-                          </div>
-                          <div className="flex flex-col items-center gap-px py-0.5 text-center">
-                            <AlertTriangle className="h-3.5 w-3.5 text-orange-600" strokeWidth={2.25} aria-hidden />
-                            <span className="text-[14px] font-black tabular-nums leading-none text-orange-900">{nBad}</span>
-                            <span className="text-[7px] font-bold uppercase tracking-wide text-orange-800/90">Incid.</span>
-                          </div>
-                          <div className="flex flex-col items-center gap-px py-0.5 text-center">
+	                      <div className="mt-1 space-y-1 border-t border-zinc-200/70 pt-2">
+	                        <div className="grid grid-cols-4 gap-1 rounded-2xl bg-white px-1.5 py-1.5 ring-1 ring-zinc-200/85 shadow-[0_2px_10px_rgba(24,24,27,0.04)]">
+	                          <div className="flex flex-col items-center gap-px py-1 text-center">
+	                            <List className="h-3.5 w-3.5 text-zinc-400" strokeWidth={2.25} aria-hidden />
+	                            <span className="text-[14px] font-black tabular-nums leading-none text-zinc-900">
+	                              {order.items.length}
+	                            </span>
+	                            <span className="text-[7px] font-bold uppercase tracking-wide text-zinc-500">Artículos</span>
+	                          </div>
+	                          <div className="flex flex-col items-center gap-px border-l border-zinc-100 py-1 text-center">
+	                            <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" strokeWidth={2.25} aria-hidden />
+	                            <span className="text-[14px] font-black tabular-nums leading-none text-emerald-800">{nOk}</span>
+	                            <span className="text-[7px] font-bold uppercase tracking-wide text-emerald-700/90">Ok</span>
+	                          </div>
+	                          <div className="flex flex-col items-center gap-px border-l border-zinc-100 py-1 text-center">
+	                            <AlertTriangle className="h-3.5 w-3.5 text-orange-600" strokeWidth={2.25} aria-hidden />
+	                            <span className="text-[14px] font-black tabular-nums leading-none text-orange-900">{nBad}</span>
+	                            <span className="text-[7px] font-bold uppercase tracking-wide text-orange-800/90">Incid.</span>
+	                          </div>
+	                          <div className="flex flex-col items-center gap-px border-l border-zinc-100 py-1 text-center">
                             <TrendingUp
                               className={[
                                 'h-3.5 w-3.5',
@@ -5166,15 +5189,16 @@ export default function PedidosPage() {
                       </div>
                     );
                   })()}
-                  <div className="rounded-lg border border-[#D32F2F]/30 bg-white px-2 py-1 ring-1 ring-[#D32F2F]/12 shadow-sm">
-                    <button
-                      type="button"
-                      onClick={() => setOcrOrder(order)}
-                      className="w-full rounded-md border border-[#D32F2F]/45 bg-[#D32F2F]/10 py-1.5 text-center text-[10px] font-black uppercase tracking-wide text-[#B91C1C] transition active:scale-[0.99]"
-                    >
-                      Escanear albarán
-                    </button>
-                  </div>
+	                  <div className="rounded-2xl bg-white p-1.5 ring-1 ring-[#D32F2F]/20 shadow-[0_2px_10px_rgba(24,24,27,0.035)]">
+	                    <button
+	                      type="button"
+	                      onClick={() => setOcrOrder(order)}
+	                      className="flex h-10 w-full items-center justify-center gap-2 rounded-xl border border-[#D32F2F]/45 bg-white text-center text-[10px] font-black uppercase tracking-wide text-[#B91C1C] transition active:scale-[0.99]"
+	                    >
+	                      <FileText className="h-4 w-4" strokeWidth={2.25} aria-hidden />
+	                      Escanear albarán
+	                    </button>
+	                  </div>
                   {(() => {
                     const tLive = liveSentOrderTotals(
                       order,
@@ -5184,13 +5208,13 @@ export default function PedidosPage() {
                       sentOrderPpkSuggestionByItemId,
                     );
                     return (
-                      <div
-                        className="mt-2 rounded-xl border border-zinc-200/90 bg-zinc-50/90 px-2.5 py-2.5 ring-1 ring-zinc-100 shadow-sm sm:px-3"
-                        aria-label="Total del albarán según cantidades y precios de recepción"
-                      >
-                        <p className="mb-2 text-center text-[10px] font-black uppercase tracking-wide text-zinc-600">
-                          Total albarán (revisión)
-                        </p>
+	                      <div
+	                        className="mt-2 rounded-2xl border border-zinc-200/80 bg-white px-3 py-3 ring-1 ring-zinc-100 shadow-[0_2px_12px_rgba(24,24,27,0.045)] sm:px-3.5"
+	                        aria-label="Total del albarán según cantidades y precios de recepción"
+	                      >
+	                        <p className="mb-2.5 text-center text-[10px] font-black uppercase tracking-[0.08em] text-zinc-500">
+	                          Total albarán (revisión)
+	                        </p>
                         <div className="space-y-1.5 text-[11px] tabular-nums text-zinc-800">
                           <div className="flex items-center justify-between gap-3">
                             <span className="text-zinc-500">Neto (base imponible)</span>
