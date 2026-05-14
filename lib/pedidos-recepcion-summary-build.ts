@@ -14,6 +14,7 @@ import {
 import { orderLineDisplayName } from '@/lib/pedidos-line-display-name';
 import {
   receptionCalculationUnit,
+  receptionBillsByWeight,
   type PedidoOrder,
   type PedidoOrderItem,
 } from '@/lib/pedidos-supabase';
@@ -176,6 +177,27 @@ function formatMoney(n: number): string {
   return `${n.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`;
 }
 
+function pricePerKgComparable(item: PedidoOrderItem, pricePerUnit: number): number {
+  if (!receptionBillsByWeight(item)) return pricePerUnit;
+  if (item.unit === 'kg') return pricePerUnit;
+  if (item.billingUnit === 'kg' && item.pricePerBillingUnit != null && item.pricePerBillingUnit > 0) {
+    return item.pricePerBillingUnit;
+  }
+  if (item.billingUnit === 'kg' && item.billingQtyPerOrderUnit != null && item.billingQtyPerOrderUnit > 0) {
+    return pricePerUnit / item.billingQtyPerOrderUnit;
+  }
+  if (item.estimatedKgPerUnit != null && item.estimatedKgPerUnit > 0) {
+    return pricePerUnit / item.estimatedKgPerUnit;
+  }
+  return pricePerUnit;
+}
+
+function receptionPriceDisplayUnit(item: PedidoOrderItem): string {
+  if (item.unit === 'kg') return 'kg';
+  if (receptionBillsByWeight(item)) return 'kg';
+  return unitPriceCatalogSuffix[receptionCalculationUnit(item)];
+}
+
 function shortOrderLabel(order: PedidoOrder): string {
   const raw = order.id.replace(/-/g, '');
   return raw.length >= 8 ? `#${raw.slice(0, 8).toUpperCase()}` : `#${order.id.slice(0, 8)}`;
@@ -321,25 +343,41 @@ export function buildPedidosRecepcionSummaryPayload(args: {
       item.basePricePerUnit != null && Number.isFinite(item.basePricePerUnit)
         ? item.basePricePerUnit
         : item.pricePerUnit;
-    const effPu = preview.pricePerUnit;
-    const unitSuffix = unitPriceCatalogSuffix[receptionCalculationUnit(item)];
+    const effPu =
+      item.unit === 'kg'
+        ? preview.pricePerUnit
+        : preview.receivedPricePerKg != null && Number.isFinite(preview.receivedPricePerKg) && preview.receivedPricePerKg > 0
+          ? preview.receivedPricePerKg
+          : item.receivedPricePerKg != null && Number.isFinite(item.receivedPricePerKg) && item.receivedPricePerKg > 0
+            ? item.receivedPricePerKg
+            : item.pricePerBillingUnit != null && Number.isFinite(item.pricePerBillingUnit) && item.pricePerBillingUnit > 0
+              ? pricePerKgComparable(item, item.pricePerBillingUnit)
+              : null;
+    const comparableBase = pricePerKgComparable(item, baseRef);
+    const comparableNew =
+      effPu != null
+        ? item.unit === 'kg'
+          ? effPu
+          : pricePerKgComparable(item, effPu)
+        : null;
+    const comparableUnit = receptionPriceDisplayUnit(item);
     const formatUnitPrice = (n: number) =>
-      `${n.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €/${unitSuffix}`;
+      `${n.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €/${comparableUnit}`;
     let priceDeltaLabel = '—';
     let priceBaseLabel: string | undefined;
     let priceNewLabel: string | undefined;
-    if (baseRef > 0) {
-      priceBaseLabel = formatUnitPrice(baseRef);
-      priceNewLabel = formatUnitPrice(effPu);
+    if (baseRef > 0 && comparableNew != null && comparableNew > 0) {
+      priceBaseLabel = formatUnitPrice(comparableBase);
+      priceNewLabel = formatUnitPrice(comparableNew);
     }
-    if (baseRef > 0 && Math.abs(effPu - baseRef) > 0.005) {
-      const pct = ((effPu - baseRef) / baseRef) * 100;
+    if (baseRef > 0 && comparableNew != null && Math.abs(comparableNew - comparableBase) > 0.005) {
+      const pct = ((comparableNew - comparableBase) / comparableBase) * 100;
       const pctStr =
         Math.abs(pct) >= 10 ? `${Math.round(pct)} %` : `${(Math.round(pct * 10) / 10).toLocaleString('es-ES')}%`;
-      priceDeltaLabel = `${effPu >= baseRef ? '+' : '−'}${Math.abs(effPu - baseRef).toLocaleString('es-ES', {
+      priceDeltaLabel = `${comparableNew >= comparableBase ? '+' : '−'}${Math.abs(comparableNew - comparableBase).toLocaleString('es-ES', {
         minimumFractionDigits: 2,
         maximumFractionDigits: 2,
-      })} €/${unitSuffix} (${effPu >= baseRef ? '+' : ''}${pctStr})`;
+      })} €/${comparableUnit} (${comparableNew >= comparableBase ? '+' : ''}${pctStr})`;
     }
 
     incidentCandidates.push({

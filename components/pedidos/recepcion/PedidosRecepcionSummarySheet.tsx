@@ -6,7 +6,6 @@ import {
   AlertTriangle,
   ArrowRight,
   CheckCircle2,
-  ChevronRight,
   Lightbulb,
   Package,
   Printer,
@@ -277,22 +276,21 @@ export default function PedidosRecepcionSummarySheet({ open, onClose, payload }:
                   >
                     <div className="min-w-0 flex-1 space-y-1">
                       <p className="text-[12px] font-bold leading-snug text-zinc-900 [overflow-wrap:anywhere]">{row.name}</p>
-                      <p
-                        className={[
-                          'text-[11px] font-semibold leading-snug',
-                          row.priceDeltaLabel.startsWith('−') ? 'text-emerald-800' : 'text-rose-700',
-                        ].join(' ')}
-                      >
-                        {row.priceBaseLabel ? (
-                          <>
-                            <span className="text-zinc-500">Base:</span>{' '}
-                            <span className="tabular-nums">{row.priceBaseLabel}</span>
-                            <span className="mx-1 text-zinc-400">·</span>
-                          </>
+                      <div className="space-y-0.5 text-[11px] font-semibold leading-snug">
+                        {row.priceBaseLabel || row.priceNewLabel ? (
+                          <p className="text-zinc-600">
+                            <span className="text-zinc-500">Base</span>{' '}
+                            <span className="tabular-nums text-zinc-900">{row.priceBaseLabel ?? '—'}</span>
+                            <span className="mx-1 text-zinc-400">→</span>
+                            <span className="text-zinc-500">Ahora</span>{' '}
+                            <span className="tabular-nums text-zinc-900">{row.priceNewLabel ?? '—'}</span>
+                          </p>
                         ) : null}
-                        <span className="text-zinc-500">{row.priceDeltaLabel.startsWith('−') ? 'Bajada:' : 'Subida:'}</span>{' '}
-                        <span className="tabular-nums">{row.priceDeltaLabel}</span>
-                      </p>
+                        <p className={row.priceDeltaLabel.startsWith('−') ? 'text-emerald-800' : 'text-rose-700'}>
+                          <span className="text-zinc-500">{row.priceDeltaLabel.startsWith('−') ? 'Bajada' : 'Subida'}</span>{' '}
+                          <span className="tabular-nums">{row.priceDeltaLabel}</span>
+                        </p>
+                      </div>
                     </div>
                     <div
                       className={[
@@ -300,12 +298,11 @@ export default function PedidosRecepcionSummarySheet({ open, onClose, payload }:
                         row.impactEur >= 0
                           ? 'bg-rose-50 text-[#991B1B] ring-rose-200/80'
                           : 'bg-emerald-50 text-emerald-900 ring-emerald-200/80',
-                      ].join(' ')}
+                        ].join(' ')}
                     >
                       {row.impactEur >= 0 ? '+' : '−'}
                       {formatPedidosRecepcionSummaryMoney(Math.abs(row.impactEur))}
                     </div>
-                    <ChevronRight className="mt-0.5 h-4 w-4 shrink-0 text-zinc-300 print:hidden" aria-hidden />
                   </li>
                 ))}
               </ul>
