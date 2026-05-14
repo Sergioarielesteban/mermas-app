@@ -26,6 +26,7 @@ import {
   downloadPedidosHistorialComprasDetailPdf,
   downloadPedidosHistorialComprasExecutivePdf,
 } from '@/lib/pedidos-historial-compras-pdf';
+import { markPedidosUiSkipRestoreOnce } from '@/lib/pedidos-ui-session';
 import type { PedidoOrder } from '@/lib/pedidos-supabase';
 import type { Unit } from '@/lib/types';
 
@@ -742,6 +743,7 @@ export default function PedidosHistorialMesPage() {
       <section>
         <Link
           href="/pedidos"
+          onClick={markPedidosUiSkipRestoreOnce}
           className="inline-flex items-center gap-1 py-0.5 text-xs font-medium text-zinc-600 underline-offset-4 hover:text-zinc-900 hover:underline"
         >
           ← Pedidos

@@ -36,6 +36,7 @@ import {
   pickOcrPendingNotes,
   summarisePendingReason,
 } from '@/lib/delivery-notes-stats';
+import { markPedidosUiSkipRestoreOnce } from '@/lib/pedidos-ui-session';
 
 const STATUS_OPTIONS: (DeliveryNoteStatus | 'all')[] = [
   'all',
@@ -231,6 +232,7 @@ export default function PedidosAlbaranesPage() {
         </div>
         <Link
           href="/pedidos"
+          onClick={markPedidosUiSkipRestoreOnce}
           className="text-[12px] font-semibold text-zinc-500 hover:text-zinc-900"
         >
           ← Pedidos

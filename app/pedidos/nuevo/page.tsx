@@ -33,6 +33,7 @@ import {
   readSuppliersSessionCache,
   writeSuppliersSessionCache,
 } from '@/lib/pedidos-session-cache';
+import { markPedidosUiSkipRestoreOnce } from '@/lib/pedidos-ui-session';
 import {
   attachOperationalScrollSave,
   attachOperationalStateListeners,
@@ -1284,6 +1285,7 @@ export default function NuevoPedidoPage() {
       dispatchPedidosDataChanged();
       setMessage('Demo: pedido guardado como enviado (no se abre WhatsApp).');
       window.setTimeout(() => setMessage(null), 4000);
+      markPedidosUiSkipRestoreOnce();
       router.replace('/pedidos?pedido=enviado');
       return;
     }
@@ -1345,6 +1347,7 @@ export default function NuevoPedidoPage() {
         });
         openWhatsAppMessage(phone, whatsappMessage);
         dispatchPedidosDataChanged();
+        markPedidosUiSkipRestoreOnce();
         router.replace('/pedidos?pedido=enviado');
       })
       .catch((err: Error) => {
@@ -1427,6 +1430,7 @@ export default function NuevoPedidoPage() {
           <div className="flex items-center border-b border-zinc-100 px-2 py-2 sm:px-3">
             <Link
               href="/pedidos"
+              onClick={markPedidosUiSkipRestoreOnce}
               className="inline-flex min-h-9 min-w-9 items-center justify-center rounded-lg text-sm font-semibold text-zinc-700 hover:bg-zinc-50"
             >
               ←
@@ -1702,6 +1706,7 @@ export default function NuevoPedidoPage() {
               void (async () => {
                 if (!(await appConfirm('¿Cancelar pedido y vaciar cesta?'))) return;
                 resetPedidoFormAfterSuccess();
+                markPedidosUiSkipRestoreOnce();
                 router.push('/pedidos');
               })();
             }}

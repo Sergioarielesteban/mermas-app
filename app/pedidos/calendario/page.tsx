@@ -6,6 +6,7 @@ import { useAuth } from '@/components/AuthProvider';
 import { usePedidosOrders } from '@/components/PedidosOrdersProvider';
 import PedidosPremiaLockedScreen from '@/components/PedidosPremiaLockedScreen';
 import { canAccessPedidos, canUsePedidosModule } from '@/lib/pedidos-access';
+import { markPedidosUiSkipRestoreOnce } from '@/lib/pedidos-ui-session';
 import type { PedidoOrder } from '@/lib/pedidos-supabase';
 
 type CalendarGroup = { date: string; orders: PedidoOrder[] };
@@ -45,7 +46,11 @@ export default function PedidosCalendarioPage() {
   return (
     <div className="space-y-4">
       <section>
-        <Link href="/pedidos" className="inline-flex h-9 items-center rounded-lg border border-zinc-300 bg-white px-3 text-sm font-semibold text-zinc-700">
+        <Link
+          href="/pedidos"
+          onClick={markPedidosUiSkipRestoreOnce}
+          className="inline-flex h-9 items-center rounded-lg border border-zinc-300 bg-white px-3 text-sm font-semibold text-zinc-700"
+        >
           ← Atras
         </Link>
       </section>
@@ -78,4 +83,3 @@ export default function PedidosCalendarioPage() {
     </div>
   );
 }
-

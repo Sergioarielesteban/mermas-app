@@ -55,6 +55,7 @@ import {
   restoreOperationalScrollY,
   writePersistedScreenState,
 } from '@/lib/persisted-screen-state';
+import { markPedidosUiSkipRestoreOnce } from '@/lib/pedidos-ui-session';
 import { actorLabel, notifyIncidenciaRecepcionDeduped } from '@/services/notifications';
 
 function orderHasAnyIncident(order: PedidoOrder): boolean {
@@ -779,6 +780,7 @@ export default function RecepcionPedidosPage() {
       <section className="flex flex-wrap gap-1.5">
         <Link
           href="/pedidos"
+          onClick={markPedidosUiSkipRestoreOnce}
           className="inline-flex items-center gap-1 py-0.5 text-xs font-medium text-zinc-600 underline-offset-4 hover:text-zinc-900 hover:underline"
         >
           ← Pedidos

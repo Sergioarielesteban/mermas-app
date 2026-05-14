@@ -27,6 +27,7 @@ import {
   clearEscandalloWizardArticulosReturn,
   readEscandalloWizardArticulosReturn,
 } from '@/lib/escandallo-articulos-nav';
+import { markPedidosUiSkipRestoreOnce } from '@/lib/pedidos-ui-session';
 
 function formatShortDate(iso: string) {
   try {
@@ -163,6 +164,7 @@ export default function PedidosArticulosPage() {
           </div>
           <Link
             href="/pedidos"
+            onClick={markPedidosUiSkipRestoreOnce}
             className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-2xl bg-zinc-50 px-3 text-xs font-black text-zinc-700 ring-1 ring-zinc-200"
           >
             <ArrowLeft className="h-3.5 w-3.5" aria-hidden />

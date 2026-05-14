@@ -127,7 +127,7 @@ export function getParentRoute(pathname: string | null): string {
   if (path === APP_MODULE_HOME || path === '/' || path === '/login') return APP_MODULE_HOME;
 
   // —— Pedidos ——
-  if (path === '/pedidos/precios') return '/pedidos/historial-mes';
+  if (path === '/pedidos/precios') return '/pedidos';
   if (path.startsWith('/pedidos/albaranes/')) {
     if (path === '/pedidos/albaranes/nuevo') return '/pedidos/albaranes';
     return '/pedidos/albaranes';

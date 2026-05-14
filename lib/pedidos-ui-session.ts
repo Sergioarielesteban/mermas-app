@@ -1,6 +1,7 @@
 import type { PedidosViewStateReceptionInputs } from '@/lib/pedidos-view-state';
 import { PEDIDOS_VIEW_STATE_KEY } from '@/lib/pedidos-view-state';
 import { readMainScrollTop } from '@/lib/pedidos-main-scroll';
+import { markAppResumeModuleRootNavigationOnce } from '@/lib/app-resume-state';
 
 /**
  * Estado UI de /pedidos (sessionStorage). Se borra solo al salir del layout del módulo.
@@ -206,6 +207,7 @@ export function markPedidosUiSkipRestoreOnce(): void {
   try {
     if (typeof window === 'undefined') return;
     window.sessionStorage.setItem(CHEFONE_PEDIDOS_UI_SKIP_RESTORE_ONCE_KEY, '1');
+    markAppResumeModuleRootNavigationOnce();
   } catch {
     /* ignore */
   }

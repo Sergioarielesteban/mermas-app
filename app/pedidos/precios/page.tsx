@@ -47,6 +47,7 @@ import {
   euroPerUnitShortLabel,
   hasMixedComparisonUnits,
 } from '@/lib/price-evolution-dominant-unit';
+import { markPedidosUiSkipRestoreOnce } from '@/lib/pedidos-ui-session';
 
 type WindowPreset = '30' | '60' | '90' | '365' | 'all';
 
@@ -1797,7 +1798,11 @@ export default function PedidosPreciosPage() {
   return (
     <div className="space-y-3 overflow-x-hidden">
       <section className="flex flex-wrap gap-1.5">
-        <Link href="/pedidos" className="inline-flex h-8 items-center rounded-lg border border-zinc-300 bg-white px-2.5 text-xs font-semibold text-zinc-700">
+        <Link
+          href="/pedidos"
+          onClick={markPedidosUiSkipRestoreOnce}
+          className="inline-flex h-8 items-center rounded-lg border border-zinc-300 bg-white px-2.5 text-xs font-semibold text-zinc-700"
+        >
           ← Atras
         </Link>
         <Link
@@ -2442,4 +2447,3 @@ export default function PedidosPreciosPage() {
     </div>
   );
 }
-

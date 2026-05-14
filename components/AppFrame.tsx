@@ -9,6 +9,7 @@ import Logo from '@/components/Logo';
 import {
   APP_RESUME_SCROLL_RESTORE_FLAG,
   clearAppResumeState,
+  consumeAppResumeRouteRestoreSkipOnce,
   isResumeEligiblePath,
   readAppResumeState,
   shouldRestoreAppResumeRoute,
@@ -83,6 +84,7 @@ export default function AppFrame({ children }: { children: React.ReactNode }) {
 
   const restoreResumeRouteIfNeeded = React.useCallback(() => {
     if (!normalizedEmail || typeof window === 'undefined') return false;
+    if (consumeAppResumeRouteRestoreSkipOnce()) return false;
     const saved = readAppResumeState(normalizedEmail);
     if (!saved) return false;
     if (!shouldRestoreAppResumeRoute(window.location.pathname, saved)) return false;

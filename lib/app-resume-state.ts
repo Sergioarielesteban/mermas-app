@@ -1,5 +1,7 @@
 export const APP_RESUME_STATE_KEY = 'chefone:app:resume-state:v1';
 export const APP_RESUME_SCROLL_RESTORE_FLAG = 'chefone:app:resume-scroll-restore';
+export const APP_RESUME_ROUTE_RESTORE_SKIP_ONCE_FLAG = 'chefone:app:resume-route-restore-skip-once';
+export const APP_RESUME_FORCE_MODULE_ROOT_SAVE_ONCE_FLAG = 'chefone:app:resume-force-module-root-save-once';
 
 const APP_RESUME_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const APP_RESUME_MODULE_RESET_GUARD_MS = 5 * 60 * 1000;
@@ -94,13 +96,49 @@ export function shouldRestoreAppResumeRoute(
   return isModuleRootPath(current) && isDeeperPathInSameModule(current, saved.pathname);
 }
 
+function consumeForceModuleRootSaveOnce(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    const raw = window.sessionStorage.getItem(APP_RESUME_FORCE_MODULE_ROOT_SAVE_ONCE_FLAG);
+    if (raw !== '1') return false;
+    window.sessionStorage.removeItem(APP_RESUME_FORCE_MODULE_ROOT_SAVE_ONCE_FLAG);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function markAppResumeModuleRootNavigationOnce(): void {
+  if (typeof window === 'undefined') return;
+  try {
+    window.sessionStorage.setItem(APP_RESUME_ROUTE_RESTORE_SKIP_ONCE_FLAG, '1');
+    window.sessionStorage.setItem(APP_RESUME_FORCE_MODULE_ROOT_SAVE_ONCE_FLAG, '1');
+  } catch {
+    /* Best effort only. */
+  }
+}
+
+export function consumeAppResumeRouteRestoreSkipOnce(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    const raw = window.sessionStorage.getItem(APP_RESUME_ROUTE_RESTORE_SKIP_ONCE_FLAG);
+    if (raw !== '1') return false;
+    window.sessionStorage.removeItem(APP_RESUME_ROUTE_RESTORE_SKIP_ONCE_FLAG);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export function writeAppResumeState(payload: Omit<AppResumeState, 'v' | 'updatedAt'>): void {
   if (typeof window === 'undefined') return;
   const href = normalizeHref(payload.href);
   if (!href || !isResumeEligiblePath(payload.pathname)) return;
   try {
     const existing = readAppResumeState(payload.email ?? null);
+    const forceModuleRootSave = isModuleRootPath(payload.pathname) && consumeForceModuleRootSaveOnce();
     if (
+      !forceModuleRootSave &&
       shouldRestoreAppResumeRoute(payload.pathname, existing) &&
       !href.includes('?') &&
       !href.includes('#') &&
@@ -128,6 +166,8 @@ export function clearAppResumeState(): void {
   try {
     window.localStorage.removeItem(APP_RESUME_STATE_KEY);
     window.sessionStorage.removeItem(APP_RESUME_SCROLL_RESTORE_FLAG);
+    window.sessionStorage.removeItem(APP_RESUME_ROUTE_RESTORE_SKIP_ONCE_FLAG);
+    window.sessionStorage.removeItem(APP_RESUME_FORCE_MODULE_ROOT_SAVE_ONCE_FLAG);
   } catch {
     /* ignore */
   }
