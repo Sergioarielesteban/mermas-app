@@ -51,6 +51,7 @@ import {
 } from '@/lib/app-role-permissions';
 import { getModuleAccess } from '@/lib/canAccessModule';
 import { APP_MODULE_HOME, getAppNavBreadcrumb, getParentRoute } from '@/lib/app-navigation';
+import { markPedidosUiSkipRestoreOnce } from '@/lib/pedidos-ui-session';
 
 type NavItemLink = {
   href?: string;
@@ -370,11 +371,15 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const confirmAndLogout = () => setConfirmLogoutOpen(true);
 
   const goHierarchyBack = useCallback(() => {
-    router.push(getParentRoute(pathname));
+    const target = getParentRoute(pathname);
+    if (pathname?.startsWith('/pedidos') && target.startsWith('/pedidos')) {
+      markPedidosUiSkipRestoreOnce();
+    }
+    router.push(target, { scroll: false });
   }, [router, pathname]);
 
   const exitToModuleHome = useCallback(() => {
-    router.push(APP_MODULE_HOME);
+    router.push(APP_MODULE_HOME, { scroll: false });
   }, [router]);
 
   const navBreadcrumb = useMemo(() => getAppNavBreadcrumb(pathname), [pathname]);
@@ -728,4 +733,3 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     </div>
   );
 }
-

@@ -126,6 +126,7 @@ import {
 } from '@/lib/pedidos-page-diag';
 import {
   CHEFONE_PEDIDOS_UI_STATE_KEY,
+  consumePedidosUiSkipRestoreOnce,
   loadPedidosUiState,
   PEDIDOS_HOME_PATHNAME,
   savePedidosUiState,
@@ -604,6 +605,18 @@ export default function PedidosPage() {
       hasRestoredViewStateRef.current = false;
       appliedValidSavedPedidosUiRef.current = false;
       setUiHydrated(false);
+      return;
+    }
+    if (consumePedidosUiSkipRestoreOnce()) {
+      pedidosDiagLog('useLayoutEffect[hydrate] BRANCH', {
+        action: 'skip_restore_once',
+        reason: 'intentional back navigation from AppShell',
+        withStack: true,
+      });
+      pedidosPageUiRestoreAttemptedRef.current = localId;
+      hasRestoredViewStateRef.current = true;
+      appliedValidSavedPedidosUiRef.current = false;
+      setUiHydrated(true);
       return;
     }
     if (avisoPedido) {

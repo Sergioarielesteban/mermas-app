@@ -6,6 +6,7 @@ import { readMainScrollTop } from '@/lib/pedidos-main-scroll';
  * Estado UI de /pedidos (sessionStorage). Se borra solo al salir del layout del módulo.
  */
 export const CHEFONE_PEDIDOS_UI_STATE_KEY = 'chefone_pedidos_ui_state';
+export const CHEFONE_PEDIDOS_UI_SKIP_RESTORE_ONCE_KEY = 'chefone_pedidos_ui_skip_restore_once';
 
 const SESSION_TTL_MS = 24 * 60 * 60 * 1000;
 
@@ -201,6 +202,27 @@ export function clearPedidosUiStateOnlyWhenUserLeavesModule(): void {
   }
 }
 
+export function markPedidosUiSkipRestoreOnce(): void {
+  try {
+    if (typeof window === 'undefined') return;
+    window.sessionStorage.setItem(CHEFONE_PEDIDOS_UI_SKIP_RESTORE_ONCE_KEY, '1');
+  } catch {
+    /* ignore */
+  }
+}
+
+export function consumePedidosUiSkipRestoreOnce(): boolean {
+  try {
+    if (typeof window === 'undefined') return false;
+    const raw = window.sessionStorage.getItem(CHEFONE_PEDIDOS_UI_SKIP_RESTORE_ONCE_KEY);
+    if (raw !== '1') return false;
+    window.sessionStorage.removeItem(CHEFONE_PEDIDOS_UI_SKIP_RESTORE_ONCE_KEY);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /** @deprecated usar loadPedidosUiState */
 export function parsePedidosUiSessionState(
   raw: string | null,
@@ -211,4 +233,3 @@ export function parsePedidosUiSessionState(
   const pathname = normalizePathname(currentRoute.split('?')[0] ?? '');
   return loadPedidosUiState(raw, currentLocalId, pathname, now);
 }
-
