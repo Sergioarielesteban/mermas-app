@@ -945,30 +945,9 @@ export default function ProveedoresPage() {
       ) : null}
 
       <section className="rounded-[20px] border border-zinc-200/80 bg-white/95 p-3 shadow-[0_10px_30px_rgba(15,23,42,0.04)] ring-1 ring-zinc-100/80 sm:p-4">
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <h1 className="text-[18px] font-semibold tracking-tight text-zinc-950">Proveedores</h1>
-            <p className="mt-0.5 text-[11px] leading-snug text-zinc-500">
-              Contactos y catálogo, con densidad pensada para escaneo rápido.
-            </p>
-          </div>
-          <button
-            type="button"
-            className="hidden h-9 shrink-0 items-center gap-1.5 rounded-full border border-[#D32F2F]/20 bg-[#FFF5F5] px-3 text-[12px] font-medium text-[#B91C1C] shadow-sm transition active:scale-[0.99] sm:inline-flex"
-            onClick={() => {
-              setMessage(null);
-              setNewSupplierName('');
-              setNewSupplierContact('');
-              setNewSupplierOpen(true);
-            }}
-          >
-            <Plus className="h-3.5 w-3.5" strokeWidth={2.5} />
-            Nuevo proveedor
-          </button>
-        </div>
         <button
           type="button"
-          className="mt-3 flex h-11 w-full touch-manipulation items-center gap-2.5 rounded-2xl bg-[#D32F2F] px-3 shadow-[0_10px_20px_rgba(211,47,47,0.12)] ring-1 ring-[#D32F2F]/15 transition active:scale-[0.99] active:bg-[#B91C1C]"
+          className="flex h-11 w-full touch-manipulation items-center gap-2.5 rounded-2xl bg-[#D32F2F] px-3 shadow-[0_10px_20px_rgba(211,47,47,0.12)] ring-1 ring-[#D32F2F]/15 transition active:scale-[0.99] active:bg-[#B91C1C]"
           onClick={() => {
             setMessage(null);
             setNewSupplierOpen(true);
