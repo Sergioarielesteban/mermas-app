@@ -1,6 +1,5 @@
 'use client';
 
-import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
   AlertTriangle,
@@ -152,129 +151,18 @@ export default function PedidosRecepcionSummarySheet({ open, onClose, payload }:
           id="pedidos-recepcion-summary-print"
           className="min-h-0 flex-1 touch-pan-y overflow-y-auto overscroll-y-contain px-2.5 pb-3 pt-2 [-webkit-overflow-scrolling:touch] sm:px-3 print:overflow-visible print:pb-4"
         >
-          <div className="rounded-xl border border-emerald-200/80 bg-white px-2.5 py-2 shadow-sm ring-1 ring-emerald-100/80">
-            <div className="flex items-center justify-between gap-2">
-              <div className="flex items-center gap-2">
-                <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" strokeWidth={2.25} aria-hidden />
-                <div>
-                  <p className="text-[11px] font-bold text-emerald-900">Recepción validada</p>
-                  <p className="text-[10px] text-emerald-800/90">Listo para archivo operativo y seguimiento.</p>
-                </div>
-              </div>
-              <Link
-                href={`/pedidos/recepcion?orderId=${encodeURIComponent(payload.orderId)}`}
-                className="hidden shrink-0 rounded-lg border border-emerald-200/90 bg-emerald-50/90 px-2 py-1 text-[9px] font-bold uppercase tracking-wide text-emerald-900 sm:inline print:hidden"
-                onClick={onClose}
-              >
-                Ver ficha
-              </Link>
-            </div>
-          </div>
-
-          <div className="mt-2 grid grid-cols-2 gap-1.5 sm:grid-cols-4">
-            <KpiMini
-              icon={<Package className="h-3.5 w-3.5 text-zinc-500" aria-hidden />}
-              label="Líneas"
-              value={String(payload.lineCount)}
-            />
-            <KpiMini
-              icon={<CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" aria-hidden />}
-              label="Correctas"
-              value={`${payload.linesOk} · ${pctOk}%`}
-            />
-            <KpiMini
-              icon={<AlertTriangle className="h-3.5 w-3.5 text-orange-500" aria-hidden />}
-              label="Incidencias"
-              value={`${payload.linesIncidencia} · ${pctBad}%`}
-            />
-            <KpiMini
-              icon={
-                impactPositive ? (
-                  <TrendingUp className="h-3.5 w-3.5 text-[#B91C1C]" aria-hidden />
-                ) : (
-                  <TrendingDown className="h-3.5 w-3.5 text-emerald-700" aria-hidden />
-                )
-              }
-              label="Vs pedido"
-              value={`${impactPositive ? '+' : '−'}${formatPedidosRecepcionSummaryMoney(Math.abs(payload.diffEur))}`}
-              valueClassName={impactPositive ? 'text-[#991B1B]' : 'text-emerald-800'}
-            />
-          </div>
-
-          <section className="mt-2 rounded-xl border border-zinc-200/90 bg-white p-2 shadow-sm ring-1 ring-zinc-100/90">
-            <p className="text-[9px] font-black uppercase tracking-[0.14em] text-zinc-500">Impacto económico</p>
-            <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-[1fr_auto_1fr] sm:items-center">
-              <div>
-                <p className="text-[9px] font-semibold uppercase text-zinc-500">Pedido (previsto)</p>
-                <p className="text-sm font-black tabular-nums text-zinc-900">
-                  {formatPedidosRecepcionSummaryMoney(payload.originalTotals.total)}
-                </p>
-                <p className="text-[9px] text-zinc-500">IVA incl.</p>
-              </div>
-              <div
-                className={[
-                  'rounded-lg px-2 py-1.5 text-center text-[10px] font-black tabular-nums ring-1 sm:min-w-[6.5rem]',
-                  impactPositive
-                    ? 'bg-rose-50 text-[#991B1B] ring-rose-200/90'
-                    : 'bg-emerald-50 text-emerald-900 ring-emerald-200/90',
-                ].join(' ')}
-              >
-                Δ {impactPositive ? '+' : '−'}
-                {formatPedidosRecepcionSummaryMoney(Math.abs(payload.diffEur))}
-                {payload.diffPct != null ? (
-                  <span className="block text-[9px] font-bold opacity-90">
-                    ({payload.diffPct >= 0 ? '+' : ''}
-                    {payload.diffPct.toLocaleString('es-ES', { maximumFractionDigits: 2 })}%)
-                  </span>
-                ) : null}
-              </div>
-              <div className="sm:text-right">
-                <p className="text-[9px] font-semibold uppercase text-zinc-500">Recibido (real)</p>
-                <p className="text-sm font-black tabular-nums text-zinc-900">
-                  {formatPedidosRecepcionSummaryMoney(payload.receivedTotals.total)}
-                </p>
-                <p className="text-[9px] text-zinc-500">IVA incl.</p>
-              </div>
-            </div>
-            <div className="mt-2 space-y-1.5">
-              <div>
-                <div className="mb-0.5 flex items-center justify-between text-[8px] font-semibold uppercase tracking-wide text-zinc-500">
-                  <span>Pedido</span>
-                  <span className="tabular-nums text-zinc-600">{formatPedidosRecepcionSummaryMoney(payload.originalTotals.total)}</span>
-                </div>
-                <div className="h-2 overflow-hidden rounded-full bg-zinc-100">
-                  <div className="h-2 rounded-full bg-zinc-400" style={{ width: `${wOrig}%` }} />
-                </div>
-              </div>
-              <div>
-                <div className="mb-0.5 flex items-center justify-between text-[8px] font-semibold uppercase tracking-wide text-zinc-500">
-                  <span>Recibido</span>
-                  <span className="tabular-nums text-zinc-600">{formatPedidosRecepcionSummaryMoney(payload.receivedTotals.total)}</span>
-                </div>
-                <div className="h-2 overflow-hidden rounded-full bg-zinc-100">
-                  <div className="h-2 rounded-full bg-[#D32F2F]/80" style={{ width: `${wRec}%` }} />
-                </div>
-              </div>
-              <p className="text-[8px] font-medium text-zinc-400">
-                Barras normalizadas al mayor importe ({formatPedidosRecepcionSummaryMoney(maxTot)}). Neto pedido{' '}
-                {formatPedidosRecepcionSummaryMoney(payload.originalTotals.base)} · Neto recibido{' '}
-                {formatPedidosRecepcionSummaryMoney(payload.receivedTotals.base)}
-              </p>
-            </div>
-          </section>
-
           {payload.incidentRows.length > 0 ? (
-            <section className="mt-2">
+            <section>
               <p className="mb-1 px-0.5 text-[9px] font-black uppercase tracking-[0.14em] text-zinc-500">
-                Incidencias y desviaciones
+                Artículos revisados
               </p>
               <ul className="space-y-1">
                 {payload.incidentRows.map((row, idx) => (
                   <li
                     key={`${row.name}-${idx}`}
-                    className="flex items-start gap-2 rounded-xl border border-zinc-200/90 bg-white px-2.5 py-2 shadow-sm ring-1 ring-zinc-100/80"
+                    className="rounded-xl border border-zinc-200/90 bg-white px-2.5 py-2 shadow-sm ring-1 ring-zinc-100/80"
                   >
-                    <div className="min-w-0 flex-1 space-y-1">
+                    <div className="min-w-0 space-y-1">
                       <p className="text-[12px] font-bold leading-snug text-zinc-900 [overflow-wrap:anywhere]">{row.name}</p>
                       <div className="space-y-0.5 text-[11px] font-semibold leading-snug">
                         {row.priceBaseLabel || row.priceNewLabel ? (
@@ -292,22 +180,21 @@ export default function PedidosRecepcionSummarySheet({ open, onClose, payload }:
                         </p>
                       </div>
                     </div>
-                    <div
-                      className={[
-                        'shrink-0 rounded-lg px-2 py-1.5 text-right text-[10px] font-black tabular-nums ring-1',
-                        row.impactEur >= 0
-                          ? 'bg-rose-50 text-[#991B1B] ring-rose-200/80'
-                          : 'bg-emerald-50 text-emerald-900 ring-emerald-200/80',
-                        ].join(' ')}
-                    >
-                      {row.impactEur >= 0 ? '+' : '−'}
-                      {formatPedidosRecepcionSummaryMoney(Math.abs(row.impactEur))}
-                    </div>
                   </li>
                 ))}
               </ul>
             </section>
-          ) : null}
+          ) : (
+            <section className="rounded-xl border border-emerald-200/80 bg-white px-2.5 py-2 shadow-sm ring-1 ring-emerald-100/80">
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" strokeWidth={2.25} aria-hidden />
+                <div>
+                  <p className="text-[11px] font-bold text-emerald-900">Recepción sin desviaciones relevantes</p>
+                  <p className="text-[10px] text-emerald-800/90">No hay líneas que requieran revisión.</p>
+                </div>
+              </div>
+            </section>
+          )}
 
           {payload.smartAlerts.length > 0 ? (
             <section className="mt-2">
@@ -330,19 +217,96 @@ export default function PedidosRecepcionSummarySheet({ open, onClose, payload }:
             </section>
           ) : null}
 
-          <section className="mt-2 grid grid-cols-2 gap-1.5">
-            <FooterKpi
-              label="Ahorro / sobrecoste"
-              value={`${payload.diffEur >= 0 ? '+' : '−'}${formatPedidosRecepcionSummaryMoney(Math.abs(payload.diffEur))}`}
-              valueClass={payload.diffEur >= 0 ? 'text-[#991B1B]' : 'text-emerald-800'}
-            />
-            <FooterKpi
-              label="Impacto semanal"
-              value={payload.weeklyPurchasesHint ?? '—'}
-              sub="Comparativa global próximamente"
-            />
-            <FooterKpi label="Incidencias (líneas)" value={String(payload.productsWithIncidentCount)} />
-            <FooterKpi label="A monitorizar" value={String(payload.linesToMonitorCount)} />
+          <section className="mt-2 rounded-xl border border-zinc-200/90 bg-white p-2 shadow-sm ring-1 ring-zinc-100/90">
+            <p className="text-[9px] font-black uppercase tracking-[0.14em] text-zinc-500">Resumen del pedido</p>
+            <div className="mt-2 grid grid-cols-2 gap-1.5 sm:grid-cols-4">
+              <KpiMini
+                icon={<Package className="h-3.5 w-3.5 text-zinc-500" aria-hidden />}
+                label="Líneas"
+                value={String(payload.lineCount)}
+              />
+              <KpiMini
+                icon={<CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" aria-hidden />}
+                label="Correctas"
+                value={`${payload.linesOk} · ${pctOk}%`}
+              />
+              <KpiMini
+                icon={<AlertTriangle className="h-3.5 w-3.5 text-orange-500" aria-hidden />}
+                label="Incidencias"
+                value={`${payload.linesIncidencia} · ${pctBad}%`}
+              />
+              <KpiMini
+                icon={
+                  impactPositive ? (
+                    <TrendingUp className="h-3.5 w-3.5 text-[#B91C1C]" aria-hidden />
+                  ) : (
+                    <TrendingDown className="h-3.5 w-3.5 text-emerald-700" aria-hidden />
+                  )
+                }
+                label="Vs pedido"
+                value={`${impactPositive ? '+' : '−'}${formatPedidosRecepcionSummaryMoney(Math.abs(payload.diffEur))}`}
+                valueClassName={impactPositive ? 'text-[#991B1B]' : 'text-emerald-800'}
+              />
+            </div>
+
+            <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-[1fr_auto_1fr] sm:items-center">
+              <div>
+                <p className="text-[9px] font-semibold uppercase text-zinc-500">Pedido previsto</p>
+                <p className="text-sm font-black tabular-nums text-zinc-900">
+                  {formatPedidosRecepcionSummaryMoney(payload.originalTotals.total)}
+                </p>
+                <p className="text-[9px] text-zinc-500">IVA incl.</p>
+              </div>
+              <div
+                className={[
+                  'rounded-lg px-2 py-1.5 text-center text-[10px] font-black tabular-nums ring-1 sm:min-w-[6.5rem]',
+                  impactPositive
+                    ? 'bg-rose-50 text-[#991B1B] ring-rose-200/90'
+                    : 'bg-emerald-50 text-emerald-900 ring-emerald-200/90',
+                ].join(' ')}
+              >
+                {impactPositive ? '+' : '−'}
+                {formatPedidosRecepcionSummaryMoney(Math.abs(payload.diffEur))}
+                {payload.diffPct != null ? (
+                  <span className="block text-[9px] font-bold opacity-90">
+                    ({payload.diffPct >= 0 ? '+' : ''}
+                    {payload.diffPct.toLocaleString('es-ES', { maximumFractionDigits: 2 })}%)
+                  </span>
+                ) : null}
+              </div>
+              <div className="sm:text-right">
+                <p className="text-[9px] font-semibold uppercase text-zinc-500">Recibido real</p>
+                <p className="text-sm font-black tabular-nums text-zinc-900">
+                  {formatPedidosRecepcionSummaryMoney(payload.receivedTotals.total)}
+                </p>
+                <p className="text-[9px] text-zinc-500">IVA incl.</p>
+              </div>
+            </div>
+
+            <div className="mt-2 space-y-1.5">
+              <div>
+                <div className="mb-0.5 flex items-center justify-between text-[8px] font-semibold uppercase tracking-wide text-zinc-500">
+                  <span>Pedido</span>
+                  <span className="tabular-nums text-zinc-600">{formatPedidosRecepcionSummaryMoney(payload.originalTotals.total)}</span>
+                </div>
+                <div className="h-2 overflow-hidden rounded-full bg-zinc-100">
+                  <div className="h-2 rounded-full bg-zinc-400" style={{ width: `${wOrig}%` }} />
+                </div>
+              </div>
+              <div>
+                <div className="mb-0.5 flex items-center justify-between text-[8px] font-semibold uppercase tracking-wide text-zinc-500">
+                  <span>Recibido</span>
+                  <span className="tabular-nums text-zinc-600">{formatPedidosRecepcionSummaryMoney(payload.receivedTotals.total)}</span>
+                </div>
+                <div className="h-2 overflow-hidden rounded-full bg-zinc-100">
+                  <div className="h-2 rounded-full bg-[#D32F2F]/80" style={{ width: `${wRec}%` }} />
+                </div>
+              </div>
+              <p className="text-[8px] font-medium text-zinc-400">
+                Neto pedido {formatPedidosRecepcionSummaryMoney(payload.originalTotals.base)} · Neto recibido{' '}
+                {formatPedidosRecepcionSummaryMoney(payload.receivedTotals.base)}
+              </p>
+            </div>
           </section>
         </div>
 
@@ -403,26 +367,6 @@ function KpiMini({
       <p className={['mt-0.5 text-[12px] font-black tabular-nums leading-tight text-zinc-950', valueClassName].filter(Boolean).join(' ')}>
         {value}
       </p>
-    </div>
-  );
-}
-
-function FooterKpi({
-  label,
-  value,
-  sub,
-  valueClass,
-}: {
-  label: string;
-  value: string;
-  sub?: string;
-  valueClass?: string;
-}) {
-  return (
-    <div className="rounded-lg border border-zinc-200/85 bg-zinc-50/90 px-2 py-1.5 ring-1 ring-zinc-100/80">
-      <p className="text-[8px] font-bold uppercase tracking-wide text-zinc-500">{label}</p>
-      <p className={['mt-0.5 text-[11px] font-black tabular-nums text-zinc-900', valueClass].filter(Boolean).join(' ')}>{value}</p>
-      {sub ? <p className="mt-0.5 text-[8px] font-medium text-zinc-500">{sub}</p> : null}
     </div>
   );
 }

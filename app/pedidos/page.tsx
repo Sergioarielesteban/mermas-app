@@ -1615,11 +1615,11 @@ export default function PedidosPage() {
   );
 
   const flushOrderReceptionDrafts = React.useCallback(
-    async (order: PedidoOrder) => {
-      if (!localId) return;
+    async (order: PedidoOrder): Promise<PedidoOrder> => {
+      if (!localId) return order;
       const supabase = getSupabaseClient();
-      if (!supabase) return;
-      await Promise.all(
+      if (!supabase) return order;
+      const nextItems = await Promise.all(
         order.items.map(async (item) => {
           const price = getLinePrice(item);
           if (receptionBillsByWeight(item)) {
@@ -1658,11 +1658,13 @@ export default function PedidosPage() {
               parsedWeight,
             );
             await persistReceptionItemTotals(supabase, localId, merged);
-            void commitPriceEvolutionFromReceivedOrderItem(supabase, localId, merged, {
+            const { lineTotal, effectivePricePerUnit } = receptionLineTotals(merged);
+            const nextMerged: PedidoOrderItem = { ...merged, pricePerUnit: effectivePricePerUnit, lineTotal };
+            void commitPriceEvolutionFromReceivedOrderItem(supabase, localId, nextMerged, {
               userId,
               receivedAt: new Date().toISOString(),
             }).catch(() => {});
-            return;
+            return nextMerged;
           }
           const rawOq = orderQtyInputRef.current[item.id];
           const q = resolveReceivedQuantityForReceptionPreview({ ...item, pricePerUnit: price }, rawOq);
@@ -1674,12 +1676,16 @@ export default function PedidosPage() {
             receivedPricePerKg: null,
           };
           await persistReceptionItemTotals(supabase, localId, merged);
-          void commitPriceEvolutionFromReceivedOrderItem(supabase, localId, merged, {
+          const { lineTotal, effectivePricePerUnit } = receptionLineTotals(merged);
+          const nextMerged: PedidoOrderItem = { ...merged, pricePerUnit: effectivePricePerUnit, lineTotal };
+          void commitPriceEvolutionFromReceivedOrderItem(supabase, localId, nextMerged, {
             userId,
             receivedAt: new Date().toISOString(),
           }).catch(() => {});
+          return nextMerged;
         }),
       );
+      return { ...order, items: nextItems };
     },
     [catalogNameByProductId, getLinePrice, localId, resolvePpkForItemSnap, userId],
   );
@@ -1694,18 +1700,25 @@ export default function PedidosPage() {
       setMessage(null);
       setReceivingOrderId(orderId);
       return flushOrderReceptionDrafts(snap)
-        .then(() =>
+        .then((flushedSnap) =>
           setOrderStatus(supabase, localId, snap.id, 'received', new Date().toISOString(), {
             expectedUpdatedAt: snap.updatedAt,
-          }),
+          }).then(() => flushedSnap),
         )
-        .then(() => {
+        .then((flushedSnap) => {
           const nowIso = new Date().toISOString();
+          const receivedSnap: PedidoOrder = {
+            ...flushedSnap,
+            status: 'received',
+            receivedAt: nowIso,
+            priceReviewArchivedAt: undefined,
+            updatedAt: nowIso,
+          };
           registerPendingReceivedOrder(orderId, nowIso);
           setOrders((prev) =>
             prev.map((o) =>
               o.id === orderId
-                ? { ...o, status: 'received', receivedAt: nowIso, priceReviewArchivedAt: undefined, updatedAt: nowIso }
+                ? { ...o, ...receivedSnap }
                 : o,
             ),
           );
@@ -1719,7 +1732,7 @@ export default function PedidosPage() {
           try {
             const inputs = recepcionSummaryInputsRef.current;
             const summaryPayload = buildPedidosRecepcionSummaryPayload({
-              order: snap,
+              order: receivedSnap,
               completedAtIso: nowIso,
               userDisplayName: actorLabel(displayName, loginUsername),
               weightInputByItemId: inputs.weightInputByItemId,
@@ -1738,11 +1751,11 @@ export default function PedidosPage() {
             }
             setReceptionSummaryMetaByOrderId((prev) => ({
               ...prev,
-              [snap.id]: metaFromSummaryPayload(summaryPayload),
+              [receivedSnap.id]: metaFromSummaryPayload(summaryPayload),
             }));
             const supSave = getSupabaseClient();
             if (supSave && localId) {
-              void savePedidosReceptionSummary(supSave, localId, snap.supplierId, summaryPayload).catch((err) => {
+              void savePedidosReceptionSummary(supSave, localId, receivedSnap.supplierId, summaryPayload).catch((err) => {
                 setMessage(
                   `Resumen guardado en este dispositivo. Sincronización servidor: ${
                     err instanceof Error ? err.message : 'error'
@@ -1759,16 +1772,16 @@ export default function PedidosPage() {
               localId,
               userId,
               actorName: actorLabel(displayName, loginUsername),
-              supplierName: snap.supplierName,
-              orderId: snap.id,
+              supplierName: receivedSnap.supplierName,
+              orderId: receivedSnap.id,
             });
-            if (receivedOrderHasAttention(snap)) {
+            if (receivedOrderHasAttention(receivedSnap)) {
               notifyIncidenciaRecepcionDeduped(supa, {
                 localId,
                 userId,
                 actorName: actorLabel(displayName, loginUsername),
-                supplierName: snap.supplierName,
-                orderId: snap.id,
+                supplierName: receivedSnap.supplierName,
+                orderId: receivedSnap.id,
               });
             }
           }

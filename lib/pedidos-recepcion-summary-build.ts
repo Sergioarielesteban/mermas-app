@@ -177,19 +177,38 @@ function formatMoney(n: number): string {
   return `${n.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`;
 }
 
-function pricePerKgComparable(item: PedidoOrderItem, pricePerUnit: number): number {
-  if (!receptionBillsByWeight(item)) return pricePerUnit;
-  if (item.unit === 'kg') return pricePerUnit;
-  if (item.billingUnit === 'kg' && item.pricePerBillingUnit != null && item.pricePerBillingUnit > 0) {
+function positiveNumber(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0;
+}
+
+function kgPerOrderUnit(item: PedidoOrderItem): number | null {
+  if (positiveNumber(item.billingQtyPerOrderUnit)) return item.billingQtyPerOrderUnit;
+  if (positiveNumber(item.estimatedKgPerUnit)) return item.estimatedKgPerUnit;
+  return null;
+}
+
+function baseComparablePrice(item: PedidoOrderItem, basePricePerUnit: number): number | null {
+  if (!receptionBillsByWeight(item)) return basePricePerUnit;
+  if (item.unit === 'kg') return basePricePerUnit;
+  if (item.billingUnit === 'kg' && positiveNumber(item.pricePerBillingUnit)) {
     return item.pricePerBillingUnit;
   }
-  if (item.billingUnit === 'kg' && item.billingQtyPerOrderUnit != null && item.billingQtyPerOrderUnit > 0) {
-    return pricePerUnit / item.billingQtyPerOrderUnit;
+  const kg = kgPerOrderUnit(item);
+  if (kg != null && positiveNumber(basePricePerUnit)) return basePricePerUnit / kg;
+  return null;
+}
+
+function receivedComparablePrice(item: PedidoOrderItem, preview: PedidoOrderItem): number | null {
+  if (!receptionBillsByWeight(item)) return preview.pricePerUnit;
+  if (item.unit === 'kg') return preview.pricePerUnit;
+  if (positiveNumber(preview.receivedPricePerKg)) return preview.receivedPricePerKg;
+  if (positiveNumber(item.receivedPricePerKg)) return item.receivedPricePerKg;
+  if (item.billingUnit === 'kg' && positiveNumber(item.pricePerBillingUnit)) {
+    return item.pricePerBillingUnit;
   }
-  if (item.estimatedKgPerUnit != null && item.estimatedKgPerUnit > 0) {
-    return pricePerUnit / item.estimatedKgPerUnit;
-  }
-  return pricePerUnit;
+  const kg = kgPerOrderUnit(item);
+  if (kg != null && positiveNumber(preview.pricePerUnit)) return preview.pricePerUnit / kg;
+  return null;
 }
 
 function receptionPriceDisplayUnit(item: PedidoOrderItem): string {
@@ -343,34 +362,24 @@ export function buildPedidosRecepcionSummaryPayload(args: {
       item.basePricePerUnit != null && Number.isFinite(item.basePricePerUnit)
         ? item.basePricePerUnit
         : item.pricePerUnit;
-    const effPu =
-      item.unit === 'kg'
-        ? preview.pricePerUnit
-        : preview.receivedPricePerKg != null && Number.isFinite(preview.receivedPricePerKg) && preview.receivedPricePerKg > 0
-          ? preview.receivedPricePerKg
-          : item.receivedPricePerKg != null && Number.isFinite(item.receivedPricePerKg) && item.receivedPricePerKg > 0
-            ? item.receivedPricePerKg
-            : item.pricePerBillingUnit != null && Number.isFinite(item.pricePerBillingUnit) && item.pricePerBillingUnit > 0
-              ? pricePerKgComparable(item, item.pricePerBillingUnit)
-              : null;
-    const comparableBase = pricePerKgComparable(item, baseRef);
-    const comparableNew =
-      effPu != null
-        ? item.unit === 'kg'
-          ? effPu
-          : pricePerKgComparable(item, effPu)
-        : null;
+    const comparableBase = baseComparablePrice(item, baseRef);
+    const comparableNew = receivedComparablePrice(item, preview);
     const comparableUnit = receptionPriceDisplayUnit(item);
     const formatUnitPrice = (n: number) =>
       `${n.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €/${comparableUnit}`;
     let priceDeltaLabel = '—';
     let priceBaseLabel: string | undefined;
     let priceNewLabel: string | undefined;
-    if (baseRef > 0 && comparableNew != null && comparableNew > 0) {
+    if (comparableBase != null && comparableBase > 0 && comparableNew != null && comparableNew > 0) {
       priceBaseLabel = formatUnitPrice(comparableBase);
       priceNewLabel = formatUnitPrice(comparableNew);
     }
-    if (baseRef > 0 && comparableNew != null && Math.abs(comparableNew - comparableBase) > 0.005) {
+    if (
+      comparableBase != null &&
+      comparableBase > 0 &&
+      comparableNew != null &&
+      Math.abs(comparableNew - comparableBase) > 0.005
+    ) {
       const pct = ((comparableNew - comparableBase) / comparableBase) * 100;
       const pctStr =
         Math.abs(pct) >= 10 ? `${Math.round(pct)} %` : `${(Math.round(pct * 10) / 10).toLocaleString('es-ES')}%`;

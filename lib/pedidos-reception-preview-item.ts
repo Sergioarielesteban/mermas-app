@@ -36,11 +36,15 @@ export function buildPedidoReceptionPreviewItem(
 
     let ppkMerge: number | null = item.receivedPricePerKg ?? null;
     if (item.unit !== 'kg') {
-      const ppkText = opts.ppkDraft ?? '';
-      const st = parsePricePerKg(ppkText);
-      if (ppkText.trim() === '') ppkMerge = opts.ppkSuggestion;
-      else if (st !== 'invalid' && st != null) ppkMerge = st;
-      else ppkMerge = item.receivedPricePerKg ?? opts.ppkSuggestion;
+      if (opts.ppkDraft === undefined) {
+        ppkMerge = item.receivedPricePerKg ?? opts.ppkSuggestion;
+      } else {
+        const ppkText = opts.ppkDraft;
+        const st = parsePricePerKg(ppkText);
+        if (ppkText.trim() === '') ppkMerge = opts.ppkSuggestion ?? item.receivedPricePerKg ?? null;
+        else if (st !== 'invalid' && st != null) ppkMerge = st;
+        else ppkMerge = item.receivedPricePerKg ?? opts.ppkSuggestion;
+      }
     }
 
     const merged: PedidoOrderItem = {
