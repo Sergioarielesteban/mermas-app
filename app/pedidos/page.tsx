@@ -978,7 +978,6 @@ export default function PedidosPage() {
         }
         await updateOrderItemPrice(supabase, localId, itemId, resetPrice, 0);
       })
-      .then(() => dispatchPedidosDataChanged())
       .catch((err: Error) => {
         void reloadOrders();
         setMessage(err.message);
@@ -989,7 +988,6 @@ export default function PedidosPage() {
     orderId: string,
     line: PedidoOrder['items'][number],
     markOk: boolean,
-    opts?: { skipReload?: boolean },
   ): Promise<void> => {
     if (!localId) return Promise.resolve();
     const supabase = getSupabaseClient();
@@ -1098,12 +1096,7 @@ export default function PedidosPage() {
         if (!markOk && orderForNotify) {
           scheduleIncidenciaRecepcionNotifyDebounced(orderForNotify);
         }
-        if (opts?.skipReload) return;
-        return reloadOrdersAsync();
-      })
-      .then(() => {
-        if (opts?.skipReload) return;
-        dispatchPedidosDataChanged();
+        // La recepción rápida ya actualiza el estado local; recargar aquí recoloca líneas y produce saltos visuales.
       })
       .catch((err: Error) => {
         void reloadOrdersAsync();

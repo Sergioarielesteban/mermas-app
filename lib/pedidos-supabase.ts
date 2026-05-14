@@ -1940,6 +1940,23 @@ export type MergePedidoOrdersOptions = {
   >;
 };
 
+function keepVisibleItemOrder(
+  previousItems: PedidoOrderItem[],
+  freshItems: PedidoOrderItem[],
+): PedidoOrderItem[] {
+  if (previousItems.length === 0 || freshItems.length === 0) return freshItems;
+  const freshById = new Map(freshItems.map((item) => [item.id, item]));
+  const seen = new Set<string>();
+  const stable = previousItems.flatMap((item) => {
+    const fresh = freshById.get(item.id);
+    if (!fresh) return [];
+    seen.add(item.id);
+    return [fresh];
+  });
+  const added = freshItems.filter((item) => !seen.has(item.id));
+  return [...stable, ...added];
+}
+
 /**
  * Fusiona lista previa con la respuesta del servidor. Si pasas `pinUntilSeenOnServer`, esas ids se mantienen
  * en pantalla hasta que el servidor las devuelva; luego se eliminan del Set (mutación intencionada).
@@ -1962,10 +1979,13 @@ export function mergePedidoOrdersFromServer(
   const byId = new Map<string, PedidoOrder>();
   for (const row of server) {
     const prevRow = prev.find((p) => p.id === row.id);
+    const rowWithStableItems = prevRow
+      ? { ...row, items: keepVisibleItemOrder(prevRow.items, row.items) }
+      : row;
     let out: PedidoOrder =
-      prevRow?.priceReviewArchivedAt && row.priceReviewArchivedAt == null
-        ? { ...row, priceReviewArchivedAt: prevRow.priceReviewArchivedAt }
-        : row;
+      prevRow?.priceReviewArchivedAt && rowWithStableItems.priceReviewArchivedAt == null
+        ? { ...rowWithStableItems, priceReviewArchivedAt: prevRow.priceReviewArchivedAt }
+        : rowWithStableItems;
     const pend = pendingReceived?.get(out.id);
     // Pin de «marcar recibido»: si la lectura sigue en `sent` (réplica), forzar vista recibida hasta quitar el pin.
     if (pend && out.status === 'sent') {
@@ -2002,9 +2022,12 @@ export function upsertPedidoOrderInList(
   const tombstones = opts?.tombstoneIds;
   const pendingReceived = opts?.pendingReceivedById;
   const prevRow = prev.find((p) => p.id === fresh.id);
-  let out = fresh;
-  if (prevRow?.priceReviewArchivedAt && fresh.priceReviewArchivedAt == null) {
-    out = { ...fresh, priceReviewArchivedAt: prevRow.priceReviewArchivedAt };
+  const freshWithStableItems = prevRow
+    ? { ...fresh, items: keepVisibleItemOrder(prevRow.items, fresh.items) }
+    : fresh;
+  let out = freshWithStableItems;
+  if (prevRow?.priceReviewArchivedAt && freshWithStableItems.priceReviewArchivedAt == null) {
+    out = { ...freshWithStableItems, priceReviewArchivedAt: prevRow.priceReviewArchivedAt };
   }
   const pend = pendingReceived?.get(out.id);
   if (pend && out.status === 'sent') {
