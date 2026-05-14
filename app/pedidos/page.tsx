@@ -214,6 +214,71 @@ function receivedOrderHasAttention(order: PedidoOrder) {
   return order.items.some((item) => Boolean(item.incidentType) || Boolean(item.incidentNotes?.trim()));
 }
 
+function formatPedidosMoney(value: number) {
+  return `${value.toLocaleString('es-ES', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })} €`;
+}
+
+function receivedOrderTimestamp(order: PedidoOrder) {
+  const raw = order.receivedAt ?? order.createdAt;
+  const ts = new Date(raw).getTime();
+  return Number.isFinite(ts) ? ts : 0;
+}
+
+function localDateKey(date: Date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+
+function formatReceptionRelativeDay(ts: number) {
+  if (!Number.isFinite(ts) || ts <= 0) return '—';
+  const d = new Date(ts);
+  const now = new Date();
+  const today = localDateKey(now);
+  if (localDateKey(d) === today) return 'Hoy';
+  const yesterday = new Date(now);
+  yesterday.setDate(now.getDate() - 1);
+  if (localDateKey(d) === localDateKey(yesterday)) return 'Ayer';
+  return d.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
+}
+
+function daysSinceTimestamp(ts: number) {
+  if (!Number.isFinite(ts) || ts <= 0) return null;
+  const start = new Date(ts);
+  start.setHours(0, 0, 0, 0);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return Math.max(0, Math.floor((today.getTime() - start.getTime()) / 86_400_000));
+}
+
+function supplierInitials(name: string) {
+  const parts = name
+    .replace(/[^\p{L}\p{N}\s]/gu, ' ')
+    .split(/\s+/)
+    .filter(Boolean);
+  const text = (parts[0]?.[0] ?? '') + (parts[1]?.[0] ?? parts[0]?.[1] ?? '');
+  return text.toUpperCase() || 'PR';
+}
+
+type HistoricoProveedorRecibido = {
+  key: string;
+  supplierName: string;
+  orders: PedidoOrder[];
+  total: number;
+  lastTs: number;
+  hasAttention: boolean;
+};
+
+type HistoricoMesRecibido = {
+  key: string;
+  label: string;
+  orders: PedidoOrder[];
+  supplierGroups: HistoricoProveedorRecibido[];
+  total: number;
+  lastTs: number;
+};
+
 /** Pie del histórico: un solo texto si todas las líneas con incidencia coinciden; si no, una línea por producto. */
 function draftIncidentNoteForSentOrder(order: PedidoOrder, marks: Record<string, 'ok' | 'bad'>): string {
   const notes: string[] = [];
@@ -1976,30 +2041,77 @@ export default function PedidosPage() {
     [catalogNameByProductId],
   );
 
-  /** Histórico recibidos: mes (YYYY-MM) → pedidos, orden global por recepción descendente. */
-  const historicoReceivedByMonth = React.useMemo(() => {
+  /** Histórico recibidos: mes (YYYY-MM) → proveedor → pedidos, ordenado por gasto y última recepción. */
+  const historicoReceivedByMonth = React.useMemo<HistoricoMesRecibido[]>(() => {
     const sorted = [...receivedOrders].sort((a, b) => {
-      const at = a.receivedAt ? new Date(a.receivedAt).getTime() : new Date(a.createdAt).getTime();
-      const bt = b.receivedAt ? new Date(b.receivedAt).getTime() : new Date(b.createdAt).getTime();
-      return bt - at;
+      return receivedOrderTimestamp(b) - receivedOrderTimestamp(a);
     });
-    const byKey = new Map<string, PedidoOrder[]>();
+    const byKey = new Map<
+      string,
+      {
+        key: string;
+        label: string;
+        orders: PedidoOrder[];
+        supplierGroups: Map<string, HistoricoProveedorRecibido>;
+        total: number;
+        lastTs: number;
+      }
+    >();
     for (const o of sorted) {
       const d = o.receivedAt ? new Date(o.receivedAt) : new Date(o.createdAt);
       const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-      const list = byKey.get(key);
-      if (list) list.push(o);
-      else byKey.set(key, [o]);
-    }
-    const keys = [...byKey.keys()].sort((a, b) => b.localeCompare(a));
-    return keys.map((key) => {
-      const [y, mon] = key.split('-').map(Number);
-      const labelRaw = new Date(y, mon - 1, 1).toLocaleDateString('es-ES', {
+      const labelRaw = new Date(d.getFullYear(), d.getMonth(), 1).toLocaleDateString('es-ES', {
         month: 'long',
         year: 'numeric',
       });
       const label = labelRaw.charAt(0).toUpperCase() + labelRaw.slice(1);
-      return { key, label, orders: byKey.get(key)! };
+      const orderTotal = totalsWithVatForOrderListDisplay(o).total;
+      const ts = receivedOrderTimestamp(o);
+      let month = byKey.get(key);
+      if (!month) {
+        month = { key, label, orders: [], supplierGroups: new Map(), total: 0, lastTs: 0 };
+        byKey.set(key, month);
+      }
+      month.orders.push(o);
+      month.total += orderTotal;
+      month.lastTs = Math.max(month.lastTs, ts);
+
+      const supplierKey = o.supplierId || o.supplierName;
+      let supplier = month.supplierGroups.get(supplierKey);
+      if (!supplier) {
+        supplier = {
+          key: supplierKey,
+          supplierName: o.supplierName,
+          orders: [],
+          total: 0,
+          lastTs: 0,
+          hasAttention: false,
+        };
+        month.supplierGroups.set(supplierKey, supplier);
+      }
+      supplier.orders.push(o);
+      supplier.total += orderTotal;
+      supplier.lastTs = Math.max(supplier.lastTs, ts);
+      supplier.hasAttention = supplier.hasAttention || receivedOrderHasAttention(o);
+    }
+    const keys = [...byKey.keys()].sort((a, b) => b.localeCompare(a));
+    return keys.map((key) => {
+      const month = byKey.get(key)!;
+      const supplierGroups = [...month.supplierGroups.values()]
+        .map((supplier) => ({
+          ...supplier,
+          orders: [...supplier.orders].sort((a, b) => receivedOrderTimestamp(b) - receivedOrderTimestamp(a)),
+          total: Math.round(supplier.total * 100) / 100,
+        }))
+        .sort((a, b) => b.total - a.total || b.lastTs - a.lastTs || a.supplierName.localeCompare(b.supplierName));
+      return {
+        key,
+        label: month.label,
+        orders: month.orders,
+        supplierGroups,
+        total: Math.round(month.total * 100) / 100,
+        lastTs: month.lastTs,
+      };
     });
   }, [receivedOrders]);
 
@@ -3975,6 +4087,9 @@ export default function PedidosPage() {
     </section>
   );
 
+  const historicoMesPrincipal = historicoReceivedByMonth[0] ?? null;
+  const historicoProveedorPrincipal = historicoMesPrincipal?.supplierGroups[0] ?? null;
+
   if (oidoStandalone) {
     return (
       <div className="mx-auto max-w-md space-y-4 px-4 py-5">
@@ -5105,362 +5220,440 @@ export default function PedidosPage() {
       <details
         id="pedidos-historico-recibidos"
         className={[
-          'relative overflow-hidden rounded-2xl bg-white transition-[box-shadow] duration-200',
+          'relative overflow-hidden rounded-2xl bg-white transition-[box-shadow,background-color] duration-200',
           historicoRecibidosAccordionOpen
-            ? 'shadow-[0_4px_20px_rgba(0,0,0,0.07)] ring-1 ring-zinc-200/95'
-            : 'shadow-[0_2px_14px_rgba(0,0,0,0.06)] ring-1 ring-zinc-200/85 hover:shadow-[0_4px_18px_rgba(0,0,0,0.08)]',
+            ? 'shadow-[0_7px_26px_rgba(24,24,27,0.08)] ring-1 ring-zinc-200/95'
+            : 'shadow-[0_3px_16px_rgba(24,24,27,0.06)] ring-1 ring-zinc-200/85 hover:shadow-[0_7px_22px_rgba(24,24,27,0.08)]',
         ].join(' ')}
         open={historicoRecibidosAccordionOpen}
         onToggle={(e) => setHistoricoRecibidosAccordionOpen(e.currentTarget.open)}
       >
-        <summary className="relative flex w-full cursor-pointer list-none flex-col outline-none transition-colors focus-visible:ring-2 focus-visible:ring-[#D32F2F]/40 focus-visible:ring-offset-2 [&::-webkit-details-marker]:hidden">
-          <div className="relative flex gap-3 px-3.5 pb-2 pt-3.5 pl-4 sm:px-4 sm:pt-4">
+        <summary className="relative flex w-full cursor-pointer list-none flex-col outline-none transition-colors focus-visible:ring-2 focus-visible:ring-[#D32F2F]/35 focus-visible:ring-offset-2 [&::-webkit-details-marker]:hidden">
+          <div className="relative flex items-start gap-3 px-3.5 pb-3 pt-3.5 sm:px-4">
             <span
-              className="absolute bottom-12 left-0 top-3 w-[3px] rounded-r-full bg-gradient-to-b from-[#D32F2F]/55 via-[#D32F2F] to-[#B91C1C]/90 sm:bottom-14"
+              className="absolute bottom-3 left-0 top-3 w-[3px] rounded-r-full bg-gradient-to-b from-[#D32F2F]/65 via-[#D32F2F] to-[#9F1D1D]"
               aria-hidden
             />
-            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[#D32F2F]/[0.09] ring-1 ring-[#D32F2F]/18 sm:h-12 sm:w-12">
-              <Package className="h-5 w-5 text-[#D32F2F] sm:h-[1.35rem] sm:w-[1.35rem]" strokeWidth={1.85} aria-hidden />
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-[#D32F2F]/[0.08] ring-1 ring-[#D32F2F]/15">
+              <Package className="h-5 w-5 text-[#D32F2F]" strokeWidth={1.9} aria-hidden />
             </div>
             <div className="min-w-0 flex-1 text-left">
-              <p className="font-serif text-[15px] leading-tight text-[#B91C1C]">ALMACÉN</p>
-              <p className="mt-1 font-serif text-[19px] leading-tight text-zinc-900 sm:text-[21px]">
-                {receivedOrders.length === 0
-                  ? 'Sin pedidos recibidos'
-                  : `${receivedOrders.length} pedido${receivedOrders.length === 1 ? '' : 's'} recibido${receivedOrders.length === 1 ? '' : 's'}`}
-              </p>
-              <p className="mt-1.5 flex items-center gap-1.5 text-xs leading-snug text-zinc-600 sm:text-[13px]">
-                <span className="h-1 w-1 shrink-0 rounded-full bg-[#D32F2F]/70" aria-hidden />
-                {historicoUltimaEntradaLine}
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#B91C1C]">ALMACÉN</p>
+                  <p className="mt-1 font-serif text-[19px] leading-tight text-zinc-950 sm:text-[21px]">
+                    Historial y recepción operativa
+                  </p>
+                </div>
+                <ChevronRight
+                  className={[
+                    'mt-1 h-4 w-4 shrink-0 text-zinc-400 transition-transform duration-200',
+                    historicoRecibidosAccordionOpen ? 'rotate-90 text-[#D32F2F]' : '',
+                  ].join(' ')}
+                  aria-hidden
+                />
+              </div>
+              <div className="mt-2.5 grid grid-cols-3 gap-1.5">
+                <div className="rounded-xl bg-zinc-50 px-2 py-2 ring-1 ring-zinc-200/80">
+                  <p className="truncate text-[8px] font-black uppercase tracking-wide text-zinc-400">Mes</p>
+                  <p className="mt-1 truncate text-[11px] font-black uppercase tracking-wide text-zinc-900">
+                    {historicoMesPrincipal?.label ?? 'Sin entradas'}
+                  </p>
+                </div>
+                <div className="rounded-xl bg-zinc-50 px-2 py-2 ring-1 ring-zinc-200/80">
+                  <p className="truncate text-[8px] font-black uppercase tracking-wide text-zinc-400">Proveedores</p>
+                  <p className="mt-1 text-[13px] font-black tabular-nums text-zinc-900">
+                    {historicoMesPrincipal?.supplierGroups.length ?? 0}
+                  </p>
+                </div>
+                <div className="rounded-xl bg-[#D32F2F]/[0.045] px-2 py-2 ring-1 ring-[#D32F2F]/12">
+                  <p className="truncate text-[8px] font-black uppercase tracking-wide text-[#B91C1C]/60">Total mes</p>
+                  <p className="mt-1 truncate text-[12px] font-black tabular-nums text-[#7F1D1D]">
+                    {formatPedidosMoney(historicoMesPrincipal?.total ?? 0)}
+                  </p>
+                </div>
+              </div>
+              <p className="mt-2 flex min-w-0 items-center gap-1.5 text-[11px] font-medium leading-snug text-zinc-500">
+                <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" aria-hidden />
+                <span className="truncate">
+                  {historicoProveedorPrincipal
+                    ? `${historicoProveedorPrincipal.supplierName} lidera el mes · ${historicoUltimaEntradaLine}`
+                    : historicoUltimaEntradaLine}
+                </span>
               </p>
             </div>
           </div>
-          <div className="flex items-center justify-between gap-2 border-t border-zinc-100/95 bg-zinc-50/50 px-3.5 py-2.5 sm:px-4">
-            <span className="flex min-w-0 items-center gap-2 text-xs font-bold text-[#D32F2F] sm:text-[13px]">
-              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[#D32F2F]/12 ring-1 ring-[#D32F2F]/12">
-                <BarChart2 className="h-3.5 w-3.5 text-[#D32F2F]" strokeWidth={2.25} aria-hidden />
-              </span>
-              {historicoRecibidosAccordionOpen ? 'Ocultar' : 'Ver historial'}
-            </span>
-            <ChevronRight
-              className={[
-                'h-4 w-4 shrink-0 text-zinc-400 transition-transform duration-200',
-                historicoRecibidosAccordionOpen ? 'rotate-90' : '',
-              ].join(' ')}
-              aria-hidden
-            />
-          </div>
         </summary>
-        <div className="space-y-1.5 border-t border-zinc-100/90 bg-gradient-to-b from-zinc-50/80 to-white px-1.5 pb-1.5 pt-1.5 sm:px-2">
+        <div className="space-y-2 border-t border-zinc-100/90 bg-[#FAF8F5] px-1.5 pb-2 pt-2 sm:px-2">
           {receivedOrders.length === 0 ? (
-            <p className="py-4 text-center text-xs text-zinc-500">No hay pedidos recibidos.</p>
+            <div className="rounded-2xl border border-zinc-200 bg-white px-4 py-5 text-center shadow-sm">
+              <p className="font-serif text-base text-zinc-900">Sin recepciones registradas</p>
+              <p className="mt-1 text-xs text-zinc-500">Cuando cierres recepciones, se agruparán aquí por mes y proveedor.</p>
+            </div>
           ) : null}
-          {historicoReceivedByMonth.map(({ key: monthKey, label: monthLabel, orders: monthOrders }, monthIdx) => (
+          {historicoReceivedByMonth.map((month, monthIdx) => (
             <details
-              key={monthKey}
-              open={historicoMonthOpen[monthKey] ?? monthIdx === 0}
+              key={month.key}
+              open={historicoMonthOpen[month.key] ?? monthIdx === 0}
               onToggle={(e) => {
                 const el = e.currentTarget;
-                setHistoricoMonthOpen((p) => ({ ...p, [monthKey]: el.open }));
+                setHistoricoMonthOpen((p) => ({ ...p, [month.key]: el.open }));
               }}
-              className="group/month overflow-hidden rounded-xl border border-zinc-200/90 bg-white/70 ring-1 ring-zinc-100/80"
+              className="group/month overflow-hidden rounded-2xl border border-zinc-200/95 bg-white shadow-[0_2px_10px_rgba(24,24,27,0.04)] ring-1 ring-white"
             >
-              <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-2.5 py-1.5 text-left outline-none transition hover:bg-zinc-50/80 [&::-webkit-details-marker]:hidden">
-                <span className="text-xs font-bold capitalize text-zinc-900">{monthLabel}</span>
-                <span className="flex items-center gap-1.5 text-[10px] font-semibold tabular-nums text-zinc-500">
-                  {monthOrders.length}
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-3 text-left outline-none transition hover:bg-zinc-50/70 [&::-webkit-details-marker]:hidden">
+                <div className="flex min-w-0 items-center gap-2.5">
+                  <span className="grid h-9 w-9 shrink-0 place-items-center rounded-2xl bg-[#D32F2F]/[0.07] text-[#B91C1C] ring-1 ring-[#D32F2F]/14">
+                    <BarChart2 className="h-4 w-4" strokeWidth={2.1} aria-hidden />
+                  </span>
+                  <div className="min-w-0">
+                    <p className="truncate text-[13px] font-black uppercase tracking-wide text-zinc-950">{month.label}</p>
+                    <p className="mt-0.5 truncate text-[11px] font-medium text-zinc-500">
+                      {month.supplierGroups.length} proveedores · {formatPedidosMoney(month.total)}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex shrink-0 items-center gap-2 text-right">
+                  <div className="hidden sm:block">
+                    <p className="text-[10px] font-semibold text-zinc-400">Última recepción</p>
+                    <p className="text-[11px] font-black text-zinc-900">{formatReceptionRelativeDay(month.lastTs)}</p>
+                  </div>
                   <ChevronDown
-                    className="h-3.5 w-3.5 shrink-0 text-zinc-400 transition-transform group-open/month:rotate-180"
+                    className="h-4 w-4 text-zinc-400 transition-transform duration-200 group-open/month:rotate-180 group-open/month:text-[#D32F2F]"
                     aria-hidden
                   />
-                </span>
+                </div>
               </summary>
-              <div className="space-y-1.5 border-t border-zinc-100 bg-zinc-50/40 px-1.5 pb-1.5 pt-1.5">
-                {monthOrders.map((order) => {
-                  const needsAttention = receivedOrderHasAttention(order);
-                  const incidentFooterText = historicoIncidentFooterText(order, catalogNameByProductId);
-                  const detailOpen = expandedHistoricoId === order.id;
-                  const totals = totalsWithVatForOrderListDisplay(order);
-                  const sumMeta = receptionSummaryMetaByOrderId[order.id];
-                  const receiverSummaryLabel = sumMeta?.receiverDisplayName?.trim();
-                  const receiverDisplayName =
-                    (receiverSummaryLabel && receiverSummaryLabel.length > 0 ? receiverSummaryLabel : null) ??
-                    getPedidoRequesterDisplayName(order) ??
-                    (order.createdBy && userId && order.createdBy === userId
-                      ? actorLabel(displayName, loginUsername)
-                      : null);
-                  const badgeClean =
-                    sumMeta &&
-                    sumMeta.hasSnapshot &&
-                    sumMeta.lineasIncidencia === 0 &&
-                    sumMeta.alertasSubidaCount === 0 &&
-                    Math.abs(sumMeta.diferenciaEur) < 0.02;
-                  const showSumBadges = sumMeta?.hasSnapshot;
-                  const diffSig = sumMeta ? Math.abs(sumMeta.diferenciaEur) >= 0.02 : false;
+              <div className="space-y-1.5 border-t border-zinc-100 bg-zinc-50/45 p-1.5">
+                {month.supplierGroups.map((supplier, supplierIdx) => {
+                  const pct = month.total > 0 ? Math.min(100, Math.max(0, (supplier.total / month.total) * 100)) : 0;
+                  const incidentCount = supplier.orders.reduce((acc, order) => {
+                    const meta = receptionSummaryMetaByOrderId[order.id];
+                    if (meta?.hasSnapshot) return acc + meta.lineasIncidencia;
+                    return acc + (receivedOrderHasAttention(order) ? 1 : 0);
+                  }, 0);
+                  const priceAlertCount = supplier.orders.reduce(
+                    (acc, order) => acc + (receptionSummaryMetaByOrderId[order.id]?.alertasSubidaCount ?? 0),
+                    0,
+                  );
+                  const inactiveDays = daysSinceTimestamp(supplier.lastTs);
+                  const showInactiveBadge = monthIdx === 0 && inactiveDays != null && inactiveDays >= 14;
                   return (
-                    <div
-                      key={order.id}
-                      className={[
-                        'overflow-hidden rounded-lg transition-colors',
-                        needsAttention
-                          ? detailOpen
-                            ? 'bg-red-50 ring-1 ring-red-400/90'
-                            : 'bg-red-50/90 ring-1 ring-red-400/70 hover:bg-red-50'
-                          : detailOpen
-                            ? 'bg-emerald-50 ring-1 ring-emerald-600/75'
-                            : 'bg-emerald-50/90 ring-1 ring-emerald-500/65 hover:bg-emerald-50',
-                      ].join(' ')}
+                    <details
+                      key={supplier.key}
+                      className="group/supplier overflow-hidden rounded-xl border border-zinc-200/85 bg-white shadow-[0_1px_6px_rgba(24,24,27,0.04)] transition hover:border-zinc-300/80"
                     >
-                      <button
-                        type="button"
-                        onClick={() => setExpandedHistoricoId((prev) => (prev === order.id ? null : order.id))}
-                        className={[
-                          'w-full px-2 py-1.5 text-left outline-none transition focus-visible:ring-2 focus-visible:ring-[#D32F2F]/35 focus-visible:ring-offset-1',
-                          needsAttention ? 'active:bg-red-100/40' : 'active:bg-emerald-100/40',
-                        ].join(' ')}
-                        aria-expanded={detailOpen}
-                      >
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="min-w-0 flex-1 space-y-0.5">
-                            <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
-                              <span className="truncate text-[13px] font-bold leading-tight text-zinc-900">{order.supplierName}</span>
-                              <span
-                                className={[
-                                  'shrink-0 rounded px-1 py-px text-[8px] font-bold uppercase tracking-wide text-white',
-                                  needsAttention ? 'bg-red-600' : 'bg-emerald-600',
-                                ].join(' ')}
-                              >
-                                {needsAttention ? 'Incidencia' : 'Correcto'}
-                              </span>
-                              {showSumBadges ? (
-                                <span className="flex flex-wrap items-center gap-0.5">
-                                  {badgeClean ? (
-                                    <span className="rounded px-1 py-px text-[7px] font-black uppercase tracking-wide text-emerald-900 ring-1 ring-emerald-200/80 bg-emerald-100">
-                                      OK
-                                    </span>
-                                  ) : null}
-                                  {!badgeClean && sumMeta && sumMeta.lineasIncidencia > 0 ? (
-                                    <span className="rounded px-1 py-px text-[7px] font-black uppercase tracking-wide text-orange-950 ring-1 ring-orange-200/75 bg-orange-100">
-                                      Incid.
-                                    </span>
-                                  ) : null}
-                                  {!badgeClean && sumMeta && sumMeta.alertasSubidaCount > 0 ? (
-                                    <span className="rounded px-1 py-px text-[7px] font-black uppercase tracking-wide text-rose-950 ring-1 ring-rose-200/75 bg-rose-100">
-                                      Subidas
-                                    </span>
-                                  ) : null}
-                                  {!badgeClean && sumMeta && diffSig ? (
-                                    <span className="rounded px-1 py-px text-[7px] font-black uppercase tracking-wide text-zinc-800 ring-1 ring-zinc-200/90 bg-zinc-100">
-                                      Δ €
-                                    </span>
-                                  ) : null}
+                      <summary className="cursor-pointer list-none px-2.5 py-2.5 outline-none transition active:bg-zinc-50 [&::-webkit-details-marker]:hidden">
+                        <div className="flex items-center gap-2.5">
+                          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-zinc-50 text-[11px] font-black tracking-tight text-zinc-700 ring-1 ring-zinc-200">
+                            {supplierInitials(supplier.supplierName)}
+                          </span>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex min-w-0 items-center gap-1.5">
+                              <p className="truncate text-[13px] font-black leading-tight text-zinc-950">
+                                {supplier.supplierName}
+                              </p>
+                              {supplierIdx === 0 ? (
+                                <span className="shrink-0 rounded-md bg-[#D32F2F]/[0.08] px-1.5 py-0.5 text-[8px] font-black uppercase tracking-wide text-[#B91C1C] ring-1 ring-[#D32F2F]/12">
+                                  Mayor gasto
                                 </span>
                               ) : null}
                             </div>
-                            <p
-                              className="truncate text-[10px] leading-snug text-zinc-600"
-                              title={
-                                receiverDisplayName
-                                  ? `Recib. ${
-                                      order.receivedAt ? new Date(order.receivedAt).toLocaleDateString('es-ES') : '—'
-                                    } · ${receiverDisplayName}`
-                                  : undefined
-                              }
-                            >
-                              Recib.{' '}
-                              <span className="font-medium text-zinc-800">
-                                {order.receivedAt ? new Date(order.receivedAt).toLocaleDateString('es-ES') : '—'}
-                              </span>
-                              {receiverDisplayName ? (
-                                <>
-                                  {' '}
-                                  · <span className="font-medium text-zinc-700">{receiverDisplayName}</span>
-                                </>
+                            <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] font-medium text-zinc-500">
+                              <span>{supplier.orders.length} pedido{supplier.orders.length === 1 ? '' : 's'}</span>
+                              <span className="h-1 w-1 rounded-full bg-zinc-300" aria-hidden />
+                              <span className="font-black tabular-nums text-zinc-800">{formatPedidosMoney(supplier.total)}</span>
+                              <span className="h-1 w-1 rounded-full bg-zinc-300" aria-hidden />
+                              <span>Última: {formatReceptionRelativeDay(supplier.lastTs)}</span>
+                            </div>
+                            <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-zinc-100">
+                              <div
+                                className="h-full rounded-full bg-gradient-to-r from-[#D32F2F] to-[#E05B52]"
+                                style={{ width: `${pct}%` }}
+                              />
+                            </div>
+                            <div className="mt-1.5 flex flex-wrap gap-1">
+                              {incidentCount > 0 ? (
+                                <span className="rounded-md bg-orange-50 px-1.5 py-0.5 text-[8px] font-black uppercase tracking-wide text-orange-900 ring-1 ring-orange-200/70">
+                                  Incidencias
+                                </span>
                               ) : null}
-                            </p>
+                              {priceAlertCount > 0 ? (
+                                <span className="rounded-md bg-rose-50 px-1.5 py-0.5 text-[8px] font-black uppercase tracking-wide text-rose-900 ring-1 ring-rose-200/70">
+                                  Subidas
+                                </span>
+                              ) : null}
+                              {showInactiveBadge ? (
+                                <span className="rounded-md bg-zinc-100 px-1.5 py-0.5 text-[8px] font-black uppercase tracking-wide text-zinc-600 ring-1 ring-zinc-200">
+                                  Sin entrada {inactiveDays}d
+                                </span>
+                              ) : null}
+                            </div>
                           </div>
-                          <div className="shrink-0 text-right leading-tight" aria-label="Importes del pedido">
-                            <p className="text-sm font-black tabular-nums text-zinc-950">{totals.total.toFixed(2)} €</p>
-                            <p className="mt-0.5 text-[9px] tabular-nums leading-snug text-zinc-500">
-                              {totals.base.toFixed(2)} + {totals.vat.toFixed(2)} IVA
-                            </p>
-                          </div>
-                        </div>
-                        <div className="mt-1 flex items-center justify-center gap-0.5 border-t border-zinc-200/35 pt-1 text-[9px] font-semibold text-[#B91C1C]">
-                          {detailOpen ? 'Ocultar líneas' : 'Líneas'}
                           <ChevronDown
-                            className={['h-3 w-3 transition-transform', detailOpen ? 'rotate-180' : ''].join(' ')}
+                            className="h-4 w-4 shrink-0 text-zinc-300 transition-transform duration-200 group-open/supplier:rotate-180 group-open/supplier:text-[#D32F2F]"
                             aria-hidden
                           />
                         </div>
-                      </button>
-                      <div
-                        className={[
-                          'flex flex-wrap items-center justify-end gap-1 border-t px-2 py-1',
-                          needsAttention ? 'border-red-200/70 bg-white/60' : 'border-emerald-200/70 bg-white/60',
-                        ].join(' ')}
-                      >
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            void openRecepcionSummaryFromDb(order.id);
-                          }}
-                          disabled={receptionSummaryLoadingId === order.id}
-                          className="flex items-center gap-0.5 rounded border border-[#D32F2F]/30 bg-white px-1.5 py-1 text-[10px] font-semibold text-[#B91C1C] shadow-sm disabled:opacity-60"
-                        >
-                          {receptionSummaryLoadingId === order.id ? (
-                            <Loader2 className="h-3 w-3 animate-spin" aria-hidden />
-                          ) : (
-                            <Eye className="h-3 w-3" strokeWidth={2.25} aria-hidden />
-                          )}
-                          Ver resumen
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            void (async () => {
-                              if (!localId) return;
-                              const ok = await appConfirm(
-                                '¿Devolver este pedido a «Pendientes de entrega»? Volverá a la bandeja de revisión de precios (las líneas no se borran).',
-                              );
-                              if (!ok) return;
-                              const supabase = getSupabaseClient();
-                              if (!supabase) return;
-                              void reopenReceivedOrderToSent(supabase, localId, order.id)
-                                .then(() => {
-                                  clearPendingReceivedOrder(order.id);
-                                  setMessage('Pedido devuelto a enviados.');
-                                  dispatchPedidosDataChanged();
-                                })
-                                .catch((err: Error) => setMessage(err.message));
-                            })();
-                          }}
-                          className="rounded border border-zinc-300 bg-white px-1.5 py-1 text-center text-[10px] font-semibold text-zinc-800"
-                        >
-                          A enviados
-                        </button>
-                        <button
-                          type="button"
-                          onClick={async () => {
-                            if (
-                              !(await confirmDestructiveOperation(profileRole, '¿Confirmar eliminación de este pedido?'))
-                            ) {
-                              return;
-                            }
-                            if (!localId) return;
-                            if (!(await appConfirm('¿Seguro que quieres eliminar este pedido?'))) return;
-                            const supabase = getSupabaseClient();
-                            if (!supabase) return;
-                            void deleteOrder(supabase, localId, order.id)
-                              .then(() => {
-                                registerDeletedOrderId(order.id);
-                                releasePinOrderId(order.id);
-                                setOrders((prev) => prev.filter((o) => o.id !== order.id));
-                                setMessage('Pedido histórico eliminado.');
-                                setShowDeletedBanner(true);
-                                if (deletedBannerTimeoutRef.current) window.clearTimeout(deletedBannerTimeoutRef.current);
-                                deletedBannerTimeoutRef.current = window.setTimeout(() => {
-                                  setShowDeletedBanner(false);
-                                  deletedBannerTimeoutRef.current = null;
-                                }, 1000);
-                                dispatchPedidosDataChanged();
-                              })
-                              .catch((err: Error) => setMessage(err.message));
-                          }}
-                          className="rounded border border-zinc-300 bg-white px-1.5 py-1 text-center text-[10px] font-semibold text-[#B91C1C]"
-                        >
-                          Eliminar
-                        </button>
-                      </div>
-                      {expandedHistoricoId === order.id ? (
-                        <div
-                          className={[
-                            'space-y-1.5 border-t px-2 pb-2 pt-2 text-left',
-                            needsAttention
-                              ? 'border-red-200/60 bg-red-50/40'
-                              : 'border-emerald-200/60 bg-emerald-50/35',
-                          ].join(' ')}
-                        >
-                          <p className="mb-0.5 text-center text-[9px] font-semibold uppercase tracking-[0.12em] text-zinc-400">
-                            Líneas
-                          </p>
-                          {order.notes?.trim() ? (
-                            <div className="rounded border border-zinc-200/90 bg-white px-2 py-1.5">
-                              <p className="text-[9px] font-bold uppercase tracking-wide text-zinc-500">Notas</p>
-                              <p className="mt-0.5 text-[11px] leading-snug text-zinc-800">{order.notes.trim()}</p>
-                            </div>
-                          ) : null}
-                          {order.items.map((item) => {
-                            const inc = Boolean(item.incidentType) || Boolean(item.incidentNotes?.trim());
-                            const isBad = inc;
-                            const isOk = !inc && item.receivedQuantity >= item.quantity && item.quantity > 0;
-                            const histSummary = receptionBillingSummary(item);
-                            const lineSub = lineSubtotalForOrderListDisplay(item);
-                            const pedidoTxt = formatQuantityWithUnit(item.quantity, item.unit);
-                            const detalleLinea = [
-                              `Ped. ${pedidoTxt}`,
-                              histSummary.recibido ? `Rec. ${histSummary.recibido}` : null,
-                              histSummary.precioAplicado ? histSummary.precioAplicado : null,
-                              receptionBillsByWeight(item) &&
-                              item.receivedWeightKg != null &&
-                              item.receivedWeightKg > 0
-                                ? `${item.receivedWeightKg.toFixed(2)} kg`
-                                : null,
-                            ]
-                              .filter(Boolean)
-                              .join(' · ');
-                            return (
-                              <div
-                                key={item.id}
-                                className="rounded-md border border-zinc-200/80 bg-white/95 px-2 py-1.5 shadow-sm"
+                      </summary>
+                      <div className="space-y-1.5 border-t border-zinc-100 bg-[#FBFAF8] p-1.5">
+                        {supplier.orders.map((order) => {
+                          const needsAttention = receivedOrderHasAttention(order);
+                          const incidentFooterText = historicoIncidentFooterText(order, catalogNameByProductId);
+                          const detailOpen = expandedHistoricoId === order.id;
+                          const totals = totalsWithVatForOrderListDisplay(order);
+                          const sumMeta = receptionSummaryMetaByOrderId[order.id];
+                          const receiverSummaryLabel = sumMeta?.receiverDisplayName?.trim();
+                          const receiverDisplayName =
+                            (receiverSummaryLabel && receiverSummaryLabel.length > 0 ? receiverSummaryLabel : null) ??
+                            getPedidoRequesterDisplayName(order) ??
+                            (order.createdBy && userId && order.createdBy === userId
+                              ? actorLabel(displayName, loginUsername)
+                              : null);
+                          const badgeClean =
+                            sumMeta &&
+                            sumMeta.hasSnapshot &&
+                            sumMeta.lineasIncidencia === 0 &&
+                            sumMeta.alertasSubidaCount === 0 &&
+                            Math.abs(sumMeta.diferenciaEur) < 0.02;
+                          const showSumBadges = sumMeta?.hasSnapshot;
+                          const diffSig = sumMeta ? Math.abs(sumMeta.diferenciaEur) >= 0.02 : false;
+                          return (
+                            <div
+                              key={order.id}
+                              className={[
+                                'overflow-hidden rounded-lg bg-white ring-1 transition-colors',
+                                detailOpen
+                                  ? 'ring-[#D32F2F]/28 shadow-[0_2px_10px_rgba(24,24,27,0.05)]'
+                                  : 'ring-zinc-200/85',
+                              ].join(' ')}
+                            >
+                              <button
+                                type="button"
+                                onClick={() => setExpandedHistoricoId((prev) => (prev === order.id ? null : order.id))}
+                                className="w-full px-2.5 py-2 text-left outline-none transition active:bg-zinc-50 focus-visible:ring-2 focus-visible:ring-[#D32F2F]/30 focus-visible:ring-offset-1"
+                                aria-expanded={detailOpen}
                               >
-                                <div className="flex items-start gap-1.5">
-                                  <span
-                                    className={[
-                                      'mt-0.5 grid h-4 w-4 shrink-0 place-items-center rounded-full border text-[9px] font-black leading-none',
-                                      isOk
-                                        ? 'border-emerald-600 bg-emerald-600 text-white'
-                                        : isBad
-                                          ? 'border-red-600 bg-red-600 text-white'
-                                          : 'border-zinc-300 bg-white text-zinc-400',
-                                    ].join(' ')}
-                                    title={isOk ? 'Recibido OK' : isBad ? 'Incidencia' : 'Parcial'}
-                                    aria-hidden
-                                  >
-                                    {isOk ? '\u2713' : isBad ? '\u2715' : '\u00B7'}
-                                  </span>
+                                <div className="flex items-start justify-between gap-2">
                                   <div className="min-w-0 flex-1">
-                                    <div className="flex items-baseline justify-between gap-1.5">
-                                      <p className="min-w-0 truncate text-[11px] font-semibold leading-snug text-zinc-900">
-                                        {lineLabel(item)}
-                                      </p>
-                                      <span className="shrink-0 text-[11px] font-bold tabular-nums text-zinc-900">
-                                        {lineSub.toFixed(2)} €
+                                    <div className="flex flex-wrap items-center gap-1">
+                                      <span
+                                        className={[
+                                          'grid h-4 w-4 shrink-0 place-items-center rounded-full text-[9px] font-black leading-none',
+                                          needsAttention ? 'bg-orange-100 text-orange-800' : 'bg-emerald-100 text-emerald-700',
+                                        ].join(' ')}
+                                        aria-hidden
+                                      >
+                                        {needsAttention ? '!' : '✓'}
                                       </span>
-                                    </div>
-                                    <p className="mt-0.5 truncate text-[9px] leading-snug text-zinc-500" title={detalleLinea}>
-                                      {detalleLinea}
-                                      {histSummary.precioEquivCatalogo ? (
-                                        <span className="text-zinc-400"> · {histSummary.precioEquivCatalogo}</span>
+                                      <span className="truncate text-[11px] font-black leading-tight text-zinc-900">
+                                        {order.receivedAt
+                                          ? new Date(order.receivedAt).toLocaleDateString('es-ES', {
+                                              day: '2-digit',
+                                              month: 'short',
+                                            })
+                                          : 'Sin fecha'}
+                                      </span>
+                                      {showSumBadges ? (
+                                        <span className="flex flex-wrap items-center gap-0.5">
+                                          {badgeClean ? (
+                                            <span className="rounded px-1 py-px text-[7px] font-black uppercase tracking-wide text-emerald-900 ring-1 ring-emerald-200/80 bg-emerald-100">
+                                              OK
+                                            </span>
+                                          ) : null}
+                                          {!badgeClean && sumMeta && sumMeta.lineasIncidencia > 0 ? (
+                                            <span className="rounded px-1 py-px text-[7px] font-black uppercase tracking-wide text-orange-950 ring-1 ring-orange-200/75 bg-orange-100">
+                                              Incid.
+                                            </span>
+                                          ) : null}
+                                          {!badgeClean && sumMeta && sumMeta.alertasSubidaCount > 0 ? (
+                                            <span className="rounded px-1 py-px text-[7px] font-black uppercase tracking-wide text-rose-950 ring-1 ring-rose-200/75 bg-rose-100">
+                                              Subidas
+                                            </span>
+                                          ) : null}
+                                          {!badgeClean && sumMeta && diffSig ? (
+                                            <span className="rounded px-1 py-px text-[7px] font-black uppercase tracking-wide text-zinc-800 ring-1 ring-zinc-200/90 bg-zinc-100">
+                                              Δ €
+                                            </span>
+                                          ) : null}
+                                        </span>
                                       ) : null}
+                                    </div>
+                                    <p className="mt-0.5 truncate text-[10px] leading-snug text-zinc-500">
+                                      {receiverDisplayName ? `${receiverDisplayName} · ` : ''}
+                                      {order.items.length} línea{order.items.length === 1 ? '' : 's'}
                                     </p>
                                   </div>
+                                  <div className="shrink-0 text-right">
+                                    <p className="text-[13px] font-black tabular-nums leading-tight text-zinc-950">
+                                      {formatPedidosMoney(totals.total)}
+                                    </p>
+                                    <p className="mt-0.5 text-[9px] tabular-nums leading-tight text-zinc-400">
+                                      IVA incl.
+                                    </p>
+                                  </div>
+                                  <ChevronRight
+                                    className={[
+                                      'mt-0.5 h-3.5 w-3.5 shrink-0 text-zinc-300 transition-transform',
+                                      detailOpen ? 'rotate-90 text-[#D32F2F]' : '',
+                                    ].join(' ')}
+                                    aria-hidden
+                                  />
                                 </div>
-                              </div>
-                            );
-                          })}
-                          {needsAttention && incidentFooterText ? (
-                            <div className="rounded-md border border-red-200 bg-red-50/70 px-2 py-1.5 text-left">
-                              <p className="text-[9px] font-bold uppercase tracking-wide text-red-800">Incidencia</p>
-                              <p className="mt-0.5 text-[10px] leading-snug text-zinc-800 whitespace-pre-wrap">
-                                {incidentFooterText}
-                              </p>
+                              </button>
+                              {detailOpen ? (
+                                <div className="space-y-1.5 border-t border-zinc-100 bg-zinc-50/55 p-1.5 text-left">
+                                  <div className="grid grid-cols-3 gap-1">
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        void openRecepcionSummaryFromDb(order.id);
+                                      }}
+                                      disabled={receptionSummaryLoadingId === order.id}
+                                      className="flex min-h-8 items-center justify-center gap-1 rounded-lg border border-[#D32F2F]/25 bg-white px-1.5 text-[9px] font-black text-[#B91C1C] shadow-sm disabled:opacity-60"
+                                    >
+                                      {receptionSummaryLoadingId === order.id ? (
+                                        <Loader2 className="h-3 w-3 animate-spin" aria-hidden />
+                                      ) : (
+                                        <Eye className="h-3 w-3" strokeWidth={2.25} aria-hidden />
+                                      )}
+                                      Resumen
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        void (async () => {
+                                          if (!localId) return;
+                                          const ok = await appConfirm(
+                                            '¿Devolver este pedido a «Pendientes de entrega»? Volverá a la bandeja de revisión de precios (las líneas no se borran).',
+                                          );
+                                          if (!ok) return;
+                                          const supabase = getSupabaseClient();
+                                          if (!supabase) return;
+                                          void reopenReceivedOrderToSent(supabase, localId, order.id)
+                                            .then(() => {
+                                              clearPendingReceivedOrder(order.id);
+                                              setMessage('Pedido devuelto a enviados.');
+                                              dispatchPedidosDataChanged();
+                                            })
+                                            .catch((err: Error) => setMessage(err.message));
+                                        })();
+                                      }}
+                                      className="min-h-8 rounded-lg border border-zinc-200 bg-white px-1.5 text-[9px] font-black text-zinc-700 shadow-sm"
+                                    >
+                                      A enviados
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={async () => {
+                                        if (
+                                          !(await confirmDestructiveOperation(profileRole, '¿Confirmar eliminación de este pedido?'))
+                                        ) {
+                                          return;
+                                        }
+                                        if (!localId) return;
+                                        if (!(await appConfirm('¿Seguro que quieres eliminar este pedido?'))) return;
+                                        const supabase = getSupabaseClient();
+                                        if (!supabase) return;
+                                        void deleteOrder(supabase, localId, order.id)
+                                          .then(() => {
+                                            registerDeletedOrderId(order.id);
+                                            releasePinOrderId(order.id);
+                                            setOrders((prev) => prev.filter((o) => o.id !== order.id));
+                                            setMessage('Pedido histórico eliminado.');
+                                            setShowDeletedBanner(true);
+                                            if (deletedBannerTimeoutRef.current) window.clearTimeout(deletedBannerTimeoutRef.current);
+                                            deletedBannerTimeoutRef.current = window.setTimeout(() => {
+                                              setShowDeletedBanner(false);
+                                              deletedBannerTimeoutRef.current = null;
+                                            }, 1000);
+                                            dispatchPedidosDataChanged();
+                                          })
+                                          .catch((err: Error) => setMessage(err.message));
+                                      }}
+                                      className="min-h-8 rounded-lg border border-rose-200 bg-white px-1.5 text-[9px] font-black text-[#B91C1C] shadow-sm"
+                                    >
+                                      Eliminar
+                                    </button>
+                                  </div>
+                                  {order.notes?.trim() ? (
+                                    <div className="rounded-lg border border-zinc-200/90 bg-white px-2 py-1.5">
+                                      <p className="text-[9px] font-bold uppercase tracking-wide text-zinc-500">Notas</p>
+                                      <p className="mt-0.5 text-[11px] leading-snug text-zinc-800">{order.notes.trim()}</p>
+                                    </div>
+                                  ) : null}
+                                  <div className="space-y-1">
+                                    {order.items.map((item) => {
+                                      const inc = Boolean(item.incidentType) || Boolean(item.incidentNotes?.trim());
+                                      const isBad = inc;
+                                      const isOk = !inc && item.receivedQuantity >= item.quantity && item.quantity > 0;
+                                      const histSummary = receptionBillingSummary(item);
+                                      const lineSub = lineSubtotalForOrderListDisplay(item);
+                                      const pedidoTxt = formatQuantityWithUnit(item.quantity, item.unit);
+                                      const detalleLinea = [
+                                        `Ped. ${pedidoTxt}`,
+                                        histSummary.recibido ? `Rec. ${histSummary.recibido}` : null,
+                                        histSummary.precioAplicado ? histSummary.precioAplicado : null,
+                                      ]
+                                        .filter(Boolean)
+                                        .join(' · ');
+                                      return (
+                                        <div
+                                          key={item.id}
+                                          className="rounded-lg border border-zinc-200/75 bg-white px-2 py-1.5 shadow-sm"
+                                        >
+                                          <div className="flex items-start gap-1.5">
+                                            <span
+                                              className={[
+                                                'mt-0.5 grid h-4 w-4 shrink-0 place-items-center rounded-full text-[9px] font-black leading-none',
+                                                isOk
+                                                  ? 'bg-emerald-600 text-white'
+                                                  : isBad
+                                                    ? 'bg-red-600 text-white'
+                                                    : 'bg-zinc-100 text-zinc-400',
+                                              ].join(' ')}
+                                              title={isOk ? 'Recibido OK' : isBad ? 'Incidencia' : 'Parcial'}
+                                              aria-hidden
+                                            >
+                                              {isOk ? '\u2713' : isBad ? '\u2715' : '\u00B7'}
+                                            </span>
+                                            <div className="min-w-0 flex-1">
+                                              <div className="flex items-baseline justify-between gap-1.5">
+                                                <p className="min-w-0 truncate text-[11px] font-semibold leading-snug text-zinc-900">
+                                                  {lineLabel(item)}
+                                                </p>
+                                                <span className="shrink-0 text-[11px] font-bold tabular-nums text-zinc-900">
+                                                  {formatPedidosMoney(lineSub)}
+                                                </span>
+                                              </div>
+                                              <p className="mt-0.5 truncate text-[9px] leading-snug text-zinc-500" title={detalleLinea}>
+                                                {detalleLinea}
+                                                {histSummary.precioEquivCatalogo ? (
+                                                  <span className="text-zinc-400"> · {histSummary.precioEquivCatalogo}</span>
+                                                ) : null}
+                                              </p>
+                                            </div>
+                                          </div>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                  {needsAttention && incidentFooterText ? (
+                                    <div className="rounded-lg border border-orange-200 bg-orange-50/75 px-2 py-1.5 text-left">
+                                      <p className="text-[9px] font-bold uppercase tracking-wide text-orange-900">Incidencia</p>
+                                      <p className="mt-0.5 text-[10px] leading-snug text-zinc-800 whitespace-pre-wrap">
+                                        {incidentFooterText}
+                                      </p>
+                                    </div>
+                                  ) : null}
+                                </div>
+                              ) : null}
                             </div>
-                          ) : null}
-                        </div>
-                      ) : null}
-                    </div>
+                          );
+                        })}
+                      </div>
+                    </details>
                   );
                 })}
               </div>
