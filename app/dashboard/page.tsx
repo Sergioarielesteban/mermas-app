@@ -4,7 +4,17 @@ import Link from 'next/link';
 import React from 'react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { CalendarDays, Drumstick, FileBarChart2, TrendingDown, TrendingUp } from 'lucide-react';
+import {
+  CalendarDays,
+  Clock3,
+  Drumstick,
+  FileBarChart2,
+  RotateCcw,
+  Settings,
+  TrendingDown,
+  TrendingUp,
+  X,
+} from 'lucide-react';
 import {
   Bar,
   BarChart,
@@ -20,7 +30,13 @@ import MermasRegistrationForm from '@/components/MermasRegistrationForm';
 import { useAuth } from '@/components/AuthProvider';
 import { useMermasStore } from '@/components/MermasStoreProvider';
 import { canAccessMermasExecutiveAnalytics } from '@/lib/app-role-permissions';
-import { toBusinessDate } from '@/lib/business-day';
+import {
+  DEFAULT_OPERATIONAL_CUTOFF_TIME,
+  getOperationalDate,
+  readOperationalCutoffTime,
+  toBusinessDate,
+  writeOperationalCutoffTime,
+} from '@/lib/business-day';
 import {
   anomalyAlerts,
   highWasteAlerts,
@@ -42,6 +58,14 @@ const qty = (value: number) =>
     minimumFractionDigits: 0,
     maximumFractionDigits: 2,
   });
+
+function formatOperationalDateLabel(ymd: string) {
+  return new Date(`${ymd}T12:00:00`).toLocaleDateString('es-ES', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+  });
+}
 
 const motiveLabelMap: Record<string, string> = {
   'se-quemo': 'SE QUEMÓ',
@@ -278,15 +302,30 @@ export default function DashboardPage() {
   const showExecutive = canAccessMermasExecutiveAnalytics(profileRole);
   const isStaffOnly = profileRole === 'staff';
   const { products, mermas } = useMermasStore();
-  const t = totals(mermas);
-  const dataWeek = weekBars(mermas);
-  const dataTrend = monthTrend(mermas);
+  const [cutoffTime, setCutoffTime] = React.useState(() => readOperationalCutoffTime());
+  const [cutoffSheetOpen, setCutoffSheetOpen] = React.useState(false);
+  const [draftCutoffTime, setDraftCutoffTime] = React.useState(cutoffTime);
+  React.useEffect(() => {
+    const syncCutoff = () => setCutoffTime(readOperationalCutoffTime());
+    window.addEventListener('storage', syncCutoff);
+    window.addEventListener('chef-one:mermas-operational-cutoff-change', syncCutoff);
+    return () => {
+      window.removeEventListener('storage', syncCutoff);
+      window.removeEventListener('chef-one:mermas-operational-cutoff-change', syncCutoff);
+    };
+  }, []);
+  React.useEffect(() => {
+    setDraftCutoffTime(cutoffTime);
+  }, [cutoffTime]);
+  const t = totals(mermas, cutoffTime);
+  const dataWeek = weekBars(mermas, cutoffTime);
+  const dataTrend = monthTrend(mermas, cutoffTime);
   const dataTopQty = topByQuantity(mermas, products);
   const dataTopValue = topByValue(mermas, products);
-  const monthly = monthComparison(mermas);
-  const alerts = highWasteAlerts(mermas, products);
+  const monthly = monthComparison(mermas, cutoffTime);
+  const alerts = highWasteAlerts(mermas, products, 3, cutoffTime);
   const motives = topMotives(mermas);
-  const anomalies = anomalyAlerts(mermas, products);
+  const anomalies = anomalyAlerts(mermas, products, 3, cutoffTime);
   const [monthlyTarget, setMonthlyTarget] = React.useState<number>(() =>
     clampTarget(readStoredTarget(MONTHLY_TARGET_KEY, 500), MONTHLY_TARGET_BOUNDS.min, MONTHLY_TARGET_BOUNDS.max),
   );
@@ -328,14 +367,14 @@ export default function DashboardPage() {
     return () => window.removeEventListener('hashchange', scrollToForm);
   }, []);
 
-  const monthNow = toBusinessDate(new Date());
+  const monthNow = toBusinessDate(new Date(), cutoffTime);
   const monthlyMermas = mermas.filter((m) => {
-    const d = toBusinessDate(m.occurredAt);
+    const d = toBusinessDate(m.occurredAt, cutoffTime);
     return d.getFullYear() === monthNow.getFullYear() && d.getMonth() === monthNow.getMonth();
   });
   const monthlyTopValue = topByValue(monthlyMermas, products, 5);
   const monthlyMotives = topMotives(monthlyMermas, 5);
-  const monthlyAnomalies = anomalyAlerts(monthlyMermas, products, 5);
+  const monthlyAnomalies = anomalyAlerts(monthlyMermas, products, 5, cutoffTime);
   const daysInMonth = new Date(monthNow.getFullYear(), monthNow.getMonth() + 1, 0).getDate();
   const currentDayOfMonth = monthNow.getDate();
   const projectedMonth =
@@ -363,7 +402,7 @@ export default function DashboardPage() {
     [],
   );
 
-  const insights = React.useMemo(() => computeMermaInsights(mermas, products), [mermas, products]);
+  const insights = React.useMemo(() => computeMermaInsights(mermas, products, cutoffTime), [cutoffTime, mermas, products]);
 
   const mermasWithProduct = React.useMemo(
     () =>
@@ -379,12 +418,13 @@ export default function DashboardPage() {
       })),
     [mermas, products],
   );
+  const currentOperationalDayKey = getOperationalDate(new Date(), cutoffTime);
   const todayRows = React.useMemo(
     () =>
       mermasWithProduct
         .filter((m) => {
-          const today = toBusinessDate(new Date());
-          const d = toBusinessDate(m.occurredAt);
+          const today = toBusinessDate(new Date(), cutoffTime);
+          const d = toBusinessDate(m.occurredAt, cutoffTime);
           return (
             d.getFullYear() === today.getFullYear() &&
             d.getMonth() === today.getMonth() &&
@@ -393,10 +433,10 @@ export default function DashboardPage() {
         })
         .sort((a, b) => (a.occurredAt < b.occurredAt ? 1 : -1))
         .slice(0, 30),
-    [mermasWithProduct],
+    [cutoffTime, mermasWithProduct],
   );
 
-  const now = toBusinessDate(new Date());
+  const now = toBusinessDate(new Date(), cutoffTime);
   const weekStart = new Date(now);
   weekStart.setDate(now.getDate() - ((now.getDay() + 6) % 7));
   weekStart.setHours(0, 0, 0, 0);
@@ -405,7 +445,7 @@ export default function DashboardPage() {
   const previousWeekEnd = new Date(weekStart);
   previousWeekEnd.setMilliseconds(-1);
   const previousWeekTotal = mermas.reduce((acc, m) => {
-    const d = toBusinessDate(m.occurredAt);
+    const d = toBusinessDate(m.occurredAt, cutoffTime);
     if (d >= previousWeekStart && d <= previousWeekEnd) return acc + m.costEur;
     return acc;
   }, 0);
@@ -489,9 +529,151 @@ export default function DashboardPage() {
     doc.save(`informe-ejecutivo-${monthNow.toISOString().slice(0, 7)}.pdf`);
   };
 
+  const saveCutoff = () => {
+    const next = writeOperationalCutoffTime(draftCutoffTime);
+    setCutoffTime(next);
+    setCutoffSheetOpen(false);
+  };
+
+  const resetCutoff = () => {
+    setDraftCutoffTime(DEFAULT_OPERATIONAL_CUTOFF_TIME);
+  };
+
+  const cutoffSheet = cutoffSheetOpen ? (
+    <div className="fixed inset-0 z-[98] overflow-y-auto bg-black/35 px-3 py-6" onClick={() => setCutoffSheetOpen(false)}>
+      <div
+        className="mx-auto w-full max-w-md overflow-hidden rounded-[1.75rem] bg-[#FAF7F2] shadow-2xl ring-1 ring-black/10"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-start justify-between gap-3 border-b border-stone-200/80 bg-white px-5 py-4">
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#B91C1C]">Mermas</p>
+            <h2 className="mt-1 text-xl font-black text-zinc-950">Configuración día operativo</h2>
+          </div>
+          <button
+            type="button"
+            onClick={() => setCutoffSheetOpen(false)}
+            className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-zinc-100 text-zinc-600"
+            aria-label="Cerrar configuración"
+          >
+            <X className="h-5 w-5" aria-hidden />
+          </button>
+        </div>
+
+        <div className="space-y-3 p-4">
+          <section className="rounded-3xl bg-white p-4 shadow-sm ring-1 ring-stone-200/80">
+            <div className="flex items-start gap-3">
+              <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-[#D32F2F]/10 text-[#D32F2F]">
+                <Clock3 className="h-5 w-5" aria-hidden />
+              </span>
+              <div className="min-w-0 flex-1">
+                <h3 className="text-sm font-black text-zinc-950">Hora de corte del día operativo</h3>
+                <p className="mt-1 text-xs leading-relaxed text-zinc-500">
+                  Los registros realizados antes de esta hora se asignarán al día operativo anterior.
+                </p>
+              </div>
+            </div>
+            <label className="mt-4 block">
+              <span className="text-[10px] font-black uppercase tracking-[0.16em] text-zinc-500">Hora de corte</span>
+              <input
+                type="time"
+                value={draftCutoffTime}
+                onChange={(e) => setDraftCutoffTime(e.target.value)}
+                className="mt-2 h-16 w-full rounded-3xl border-0 bg-zinc-50 px-5 text-center text-3xl font-black tabular-nums text-zinc-950 shadow-inner shadow-zinc-100 outline-none ring-1 ring-zinc-200 focus:ring-4 focus:ring-[#D32F2F]/15"
+              />
+            </label>
+          </section>
+
+          <section className="rounded-3xl bg-white p-4 shadow-sm ring-1 ring-stone-200/80">
+            <h3 className="text-[11px] font-black uppercase tracking-[0.16em] text-zinc-500">
+              Ejemplos con corte a las {draftCutoffTime}
+            </h3>
+            <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+              {[
+                ['02:30', 'Día anterior', 'bg-red-50 text-red-700 ring-red-100'],
+                ['04:59', 'Día anterior', 'bg-red-50 text-red-700 ring-red-100'],
+                [draftCutoffTime, 'Día actual', 'bg-emerald-50 text-emerald-700 ring-emerald-100'],
+                ['23:45', 'Día actual', 'bg-emerald-50 text-emerald-700 ring-emerald-100'],
+              ].map(([time, label, cls]) => (
+                <div key={`${time}-${label}`} className={`rounded-2xl px-3 py-2.5 font-bold ring-1 ${cls}`}>
+                  <span className="block text-base font-black tabular-nums">{time}</span>
+                  <span>{label}</span>
+                </div>
+              ))}
+            </div>
+            <div className="mt-4 overflow-hidden rounded-2xl bg-zinc-100 ring-1 ring-zinc-200">
+              <div className="flex h-9 text-[10px] font-black uppercase tracking-wide">
+                <div className="flex w-1/4 items-center justify-center bg-red-100 text-red-700">00:00</div>
+                <div className="flex w-1/5 items-center justify-center bg-red-50 text-red-700">{draftCutoffTime}</div>
+                <div className="flex flex-1 items-center justify-center bg-emerald-50 text-emerald-700">23:59</div>
+              </div>
+              <div className="flex text-[10px] font-bold">
+                <span className="w-[45%] px-3 py-2 text-red-700">Día anterior</span>
+                <span className="flex-1 px-3 py-2 text-right text-emerald-700">Día actual</span>
+              </div>
+            </div>
+          </section>
+
+          <section className="rounded-3xl bg-amber-50 p-4 ring-1 ring-amber-200/80">
+            <p className="text-[10px] font-black uppercase tracking-[0.16em] text-amber-700">Recomendado</p>
+            <p className="mt-1 text-sm font-semibold leading-snug text-amber-950">
+              La mayoría de restaurantes usan cortes entre las 04:00 y las 06:00.
+            </p>
+          </section>
+
+          <div className="grid grid-cols-1 gap-2">
+            <button
+              type="button"
+              onClick={saveCutoff}
+              className="h-12 rounded-2xl bg-[#D32F2F] px-4 py-3 text-sm font-black uppercase tracking-wide text-white shadow-lg shadow-[#D32F2F]/20"
+            >
+              Guardar configuración
+            </button>
+            <button
+              type="button"
+              onClick={resetCutoff}
+              className="flex h-12 items-center justify-center gap-2 rounded-2xl bg-white text-sm font-black text-zinc-700 ring-1 ring-zinc-200"
+            >
+              <RotateCcw className="h-4 w-4" aria-hidden />
+              Restaurar valor por defecto ({DEFAULT_OPERATIONAL_CUTOFF_TIME})
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  ) : null;
+
+  const operationalBanner = (
+    <>
+      {cutoffSheet}
+      <button
+        type="button"
+        onClick={() => setCutoffSheetOpen(true)}
+        className="flex w-full items-center gap-3 rounded-[1.35rem] bg-white px-3.5 py-2.5 text-left shadow-sm ring-1 ring-[#D32F2F]/10"
+      >
+        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-2xl bg-[#D32F2F]/10 text-[#D32F2F] ring-1 ring-[#D32F2F]/15">
+          <Clock3 className="h-4 w-4" aria-hidden />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block text-[10px] font-black uppercase tracking-[0.16em] text-[#B91C1C]">Día operativo</span>
+          <span className="mt-0.5 block truncate text-sm font-black capitalize text-zinc-950">
+            {formatOperationalDateLabel(currentOperationalDayKey)}
+          </span>
+          <span className="mt-0.5 block truncate text-[11px] font-semibold text-zinc-500">
+            Corte a las {cutoffTime}
+          </span>
+        </span>
+        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-2xl bg-[#D32F2F]/10 text-[#D32F2F] ring-1 ring-[#D32F2F]/15">
+          <Settings className="h-4 w-4" aria-hidden />
+        </span>
+      </button>
+    </>
+  );
+
   if (isStaffOnly) {
     return (
       <div className="space-y-3">
+        {operationalBanner}
         <MermasRegistrationForm />
         <section className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-zinc-200">
           <h2 className="text-sm font-extrabold uppercase tracking-wide text-zinc-700">Mermas del día</h2>
@@ -554,6 +736,8 @@ export default function DashboardPage() {
           </div>
         </div>
       ) : null}
+
+      {operationalBanner}
 
       <MermasRegistrationForm />
 
@@ -641,7 +825,7 @@ export default function DashboardPage() {
                   openDetail(
                     `Detalle alerta: ${item.productName}`,
                     mermasWithProduct.filter((m) => {
-                      const d = toBusinessDate(m.occurredAt);
+                      const d = toBusinessDate(m.occurredAt, cutoffTime);
                       return m.productId === item.productId && d.getMonth() === monthNow.getMonth() && d.getFullYear() === monthNow.getFullYear();
                     }),
                   )
@@ -686,7 +870,7 @@ export default function DashboardPage() {
                   openDetail(
                     `Detalle anomalía: ${item.productName}`,
                     mermasWithProduct.filter((m) => {
-                      const d = toBusinessDate(m.occurredAt);
+                      const d = toBusinessDate(m.occurredAt, cutoffTime);
                       return m.productId === item.productId && d >= previousWeekStart;
                     }),
                   )
@@ -733,7 +917,7 @@ export default function DashboardPage() {
             openDetail(
               'Detalle Merma de Hoy',
               mermasWithProduct.filter((m) => {
-                const d = toBusinessDate(m.occurredAt);
+                const d = toBusinessDate(m.occurredAt, cutoffTime);
                 return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate();
               }),
             )
@@ -759,7 +943,7 @@ export default function DashboardPage() {
               {weeklyTrendFlat ? 'Sin cambio vs semana anterior' : `${weeklyTrendUp ? '↑' : '↓'} ${eur(Math.abs(weeklyDelta))} vs semana anterior`}
             </span>
           }
-          onClick={() => openDetail('Detalle Merma de la Semana', mermasWithProduct.filter((m) => toBusinessDate(m.occurredAt) >= weekStart))}
+          onClick={() => openDetail('Detalle Merma de la Semana', mermasWithProduct.filter((m) => toBusinessDate(m.occurredAt, cutoffTime) >= weekStart))}
         />
         <Card
           title="Merma del Mes"
@@ -784,7 +968,7 @@ export default function DashboardPage() {
             openDetail(
               'Detalle Merma del Mes',
               mermasWithProduct.filter((m) => {
-                const d = toBusinessDate(m.occurredAt);
+                const d = toBusinessDate(m.occurredAt, cutoffTime);
                 return d.getFullYear() === monthNow.getFullYear() && d.getMonth() === monthNow.getMonth();
               }),
             )
@@ -798,7 +982,7 @@ export default function DashboardPage() {
             openDetail(
               'Base de Proyección Mensual',
               mermasWithProduct.filter((m) => {
-                const d = toBusinessDate(m.occurredAt);
+                const d = toBusinessDate(m.occurredAt, cutoffTime);
                 return d.getFullYear() === monthNow.getFullYear() && d.getMonth() === monthNow.getMonth();
               }),
             )
@@ -1012,5 +1196,3 @@ export default function DashboardPage() {
     </div>
   );
 }
-
-

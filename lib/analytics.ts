@@ -35,8 +35,8 @@ export function normalizedCostForRecord(record: MermaRecord, pricePerUnit: numbe
   return looksShifted ? expected : recorded;
 }
 
-export function totals(mermas: MermaRecord[]) {
-  const now = toBusinessDate(new Date());
+export function totals(mermas: MermaRecord[], cutoffTime?: string) {
+  const now = toBusinessDate(new Date(), cutoffTime);
   const weekStart = startOfBusinessWeek(now);
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
 
@@ -45,7 +45,7 @@ export function totals(mermas: MermaRecord[]) {
   let month = 0;
 
   for (const m of mermas) {
-    const d = toBusinessDate(m.occurredAt);
+    const d = toBusinessDate(m.occurredAt, cutoffTime);
     if (isSameDay(d, now)) today += m.costEur;
     if (d >= weekStart) week += m.costEur;
     if (d >= monthStart) month += m.costEur;
@@ -53,13 +53,13 @@ export function totals(mermas: MermaRecord[]) {
   return { today, week, month };
 }
 
-export function weekBars(mermas: MermaRecord[]) {
+export function weekBars(mermas: MermaRecord[], cutoffTime?: string) {
   const values = Array.from({ length: 7 }, () => 0);
-  const now = toBusinessDate(new Date());
+  const now = toBusinessDate(new Date(), cutoffTime);
   const weekStart = startOfBusinessWeek(now);
 
   for (const m of mermas) {
-    const d = toBusinessDate(m.occurredAt);
+    const d = toBusinessDate(m.occurredAt, cutoffTime);
     if (d < weekStart) continue;
     const idx = toMondayIndex(d.getDay());
     values[idx] += m.costEur;
@@ -68,15 +68,15 @@ export function weekBars(mermas: MermaRecord[]) {
   return WEEK_DAYS.map((label, i) => ({ day: label, cost: Math.round(values[i] * 100) / 100 }));
 }
 
-export function monthTrend(mermas: MermaRecord[]) {
-  const now = toBusinessDate(new Date());
+export function monthTrend(mermas: MermaRecord[], cutoffTime?: string) {
+  const now = toBusinessDate(new Date(), cutoffTime);
   const year = now.getFullYear();
   const month = now.getMonth();
   const daysInMonth = new Date(year, month + 1, 0).getDate();
   const values = Array.from({ length: daysInMonth }, () => 0);
 
   for (const m of mermas) {
-    const d = toBusinessDate(m.occurredAt);
+    const d = toBusinessDate(m.occurredAt, cutoffTime);
     if (d.getFullYear() !== year || d.getMonth() !== month) continue;
     values[d.getDate() - 1] += m.costEur;
   }
@@ -118,8 +118,8 @@ export function topByValue(mermas: MermaRecord[], products: Product[], top = 5) 
     .slice(0, top);
 }
 
-export function monthComparison(mermas: MermaRecord[]) {
-  const now = toBusinessDate(new Date());
+export function monthComparison(mermas: MermaRecord[], cutoffTime?: string) {
+  const now = toBusinessDate(new Date(), cutoffTime);
   const currentY = now.getFullYear();
   const currentM = now.getMonth();
   const prevDate = new Date(currentY, currentM - 1, 1);
@@ -130,7 +130,7 @@ export function monthComparison(mermas: MermaRecord[]) {
   let previous = 0;
 
   for (const m of mermas) {
-    const d = toBusinessDate(m.occurredAt);
+    const d = toBusinessDate(m.occurredAt, cutoffTime);
     if (d.getFullYear() === currentY && d.getMonth() === currentM) current += m.costEur;
     if (d.getFullYear() === prevY && d.getMonth() === prevM) previous += m.costEur;
   }
@@ -153,14 +153,14 @@ export function monthComparison(mermas: MermaRecord[]) {
   };
 }
 
-export function highWasteAlerts(mermas: MermaRecord[], products: Product[], top = 3) {
-  const now = toBusinessDate(new Date());
+export function highWasteAlerts(mermas: MermaRecord[], products: Product[], top = 3, cutoffTime?: string) {
+  const now = toBusinessDate(new Date(), cutoffTime);
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
   const priceByProductId = new Map(products.map((p) => [p.id, p.pricePerUnit]));
   const map = new Map<string, { total: number; quantity: number }>();
 
   for (const m of mermas) {
-    const d = toBusinessDate(m.occurredAt);
+    const d = toBusinessDate(m.occurredAt, cutoffTime);
     if (d < monthStart) continue;
     const prev = map.get(m.productId) ?? { total: 0, quantity: 0 };
     prev.total += normalizedCostForRecord(m, priceByProductId.get(m.productId));
@@ -212,8 +212,8 @@ export function topMotives(mermas: MermaRecord[], top = 5) {
     .slice(0, top);
 }
 
-export function anomalyAlerts(mermas: MermaRecord[], products: Product[], top = 3) {
-  const now = toBusinessDate(new Date());
+export function anomalyAlerts(mermas: MermaRecord[], products: Product[], top = 3, cutoffTime?: string) {
+  const now = toBusinessDate(new Date(), cutoffTime);
   const currentStart = new Date(now);
   currentStart.setDate(now.getDate() - 7);
   const previousStart = new Date(now);
@@ -224,7 +224,7 @@ export function anomalyAlerts(mermas: MermaRecord[], products: Product[], top = 
   const previous = new Map<string, { cost: number; qty: number }>();
 
   for (const m of mermas) {
-    const d = toBusinessDate(m.occurredAt);
+    const d = toBusinessDate(m.occurredAt, cutoffTime);
     const fixedCost = normalizedCostForRecord(m, priceByProductId.get(m.productId));
     if (d >= currentStart) {
       const prev = current.get(m.productId) ?? { cost: 0, qty: 0 };
@@ -273,4 +273,3 @@ export function anomalyAlerts(mermas: MermaRecord[], products: Product[], top = 
     .sort((a, b) => (b.riskScore - a.riskScore) || (b.delta - a.delta))
     .slice(0, top);
 }
-

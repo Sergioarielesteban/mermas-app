@@ -4,6 +4,7 @@ import React, { useMemo, useState } from 'react';
 import Image from 'next/image';
 import { Camera, Check, ChevronDown, Search, Upload, X, Zap } from 'lucide-react';
 import { useMermasStore } from '@/components/MermasStoreProvider';
+import { localDateKey } from '@/lib/business-day';
 import type { MermaMotiveKey, MermaShift, Product } from '@/lib/types';
 
 /** Fila 1 de productos rápidos (3 ítems; orden fijo por nombre normalizado). */
@@ -91,7 +92,7 @@ function toNumberClamped(value: string, min: number, max: number, decimals = 2) 
 
 function nowParts() {
   const d = new Date();
-  const date = d.toISOString().slice(0, 10);
+  const date = localDateKey(d);
   const time = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
   return { date, time };
 }
@@ -99,15 +100,12 @@ function nowParts() {
 export default function MermasRegistrationForm() {
   const { products, mermas, addMerma } = useMermasStore();
   const motives = useMemo(() => MOTIVES, []);
-  const current = nowParts();
 
   const [productId, setProductId] = useState<string>('');
   const [quantity, setQuantity] = useState<number>(0);
   const [quantityInput, setQuantityInput] = useState<string>('0');
   const [motiveKey, setMotiveKey] = useState<MermaMotiveKey | null>(null);
   const [otherMotivoText, setOtherMotivoText] = useState('');
-  const [dateValue, setDateValue] = useState(current.date);
-  const [timeValue, setTimeValue] = useState(current.time);
   const [photoDataUrl, setPhotoDataUrl] = useState<string | null>(null);
   const [notes, setNotes] = useState<string>('');
   const [shift, setShift] = useState<MermaShift | null>(null);
@@ -194,12 +192,8 @@ export default function MermasRegistrationForm() {
       return;
     }
 
-    if (!dateValue || !timeValue) {
-      showValidationBanner('Completa fecha y hora');
-      return;
-    }
-
-    const occurredAt = new Date(`${dateValue}T${timeValue}:00`);
+    const savedAt = nowParts();
+    const occurredAt = new Date(`${savedAt.date}T${savedAt.time}:00`);
     if (Number.isNaN(occurredAt.getTime())) {
       showValidationBanner('Fecha u hora inválida');
       return;
@@ -230,15 +224,12 @@ export default function MermasRegistrationForm() {
       return;
     }
 
-    const now = nowParts();
     setQuantity(0);
     setQuantityInput('0');
     setMotiveKey(null);
     setOtherMotivoText('');
     setNotes('');
     setPhotoDataUrl(null);
-    setDateValue(now.date);
-    setTimeValue(now.time);
     setLastQtyAction(null);
     setShift(null);
     setOptionalUserLabel('');
@@ -548,29 +539,6 @@ export default function MermasRegistrationForm() {
               className="w-full resize-none rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-2 text-sm text-zinc-900 shadow-sm outline-none focus:border-[#D32F2F] focus:ring-2 focus:ring-[#D32F2F]/20"
               aria-label="Notas"
             />
-          </div>
-
-          <div className="rounded-2xl bg-white p-3 shadow-sm ring-1 ring-zinc-200">
-            <div className="mx-auto grid max-w-[17.5rem] grid-cols-2 gap-2">
-              <label className="mb-1 block text-[11px] font-semibold text-zinc-700">
-                Fecha
-                <input
-                  type="date"
-                  value={dateValue}
-                  onChange={(e) => setDateValue(e.target.value)}
-                  className="mt-1.5 h-8 w-full min-w-0 rounded-lg border border-zinc-200 bg-zinc-50 px-2 text-[11px] font-sans leading-none text-zinc-900 outline-none focus:border-[#D32F2F] focus:ring-2 focus:ring-[#D32F2F]/20"
-                />
-              </label>
-              <label className="mb-1 block text-[11px] font-semibold text-zinc-700">
-                Hora
-                <input
-                  type="time"
-                  value={timeValue}
-                  onChange={(e) => setTimeValue(e.target.value)}
-                  className="mt-1.5 h-8 w-full min-w-0 rounded-lg border border-zinc-200 bg-zinc-50 px-2 text-[11px] font-sans leading-none text-zinc-900 outline-none focus:border-[#D32F2F] focus:ring-2 focus:ring-[#D32F2F]/20"
-                />
-              </label>
-            </div>
           </div>
         </div>
       </form>

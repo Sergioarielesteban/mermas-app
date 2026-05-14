@@ -1,4 +1,5 @@
 import type { MermaRecord, Product } from '@/lib/types';
+import { toBusinessDate } from '@/lib/business-day';
 
 const WEEKDAYS = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'] as const;
 
@@ -7,7 +8,7 @@ export type MermaInsight = { id: string; text: string };
 /**
  * Recomendaciones suaves solo con patrón claro (suficientes registros + concentración).
  */
-export function computeMermaInsights(mermas: MermaRecord[], products: Product[]): MermaInsight[] {
+export function computeMermaInsights(mermas: MermaRecord[], products: Product[], cutoffTime?: string): MermaInsight[] {
   const productName = (id: string) => products.find((p) => p.id === id)?.name ?? 'Producto';
   const byProduct = new Map<string, MermaRecord[]>();
   for (const m of mermas) {
@@ -22,7 +23,7 @@ export function computeMermaInsights(mermas: MermaRecord[], products: Product[])
 
     const dayCounts = new Array(7).fill(0);
     for (const r of rows) {
-      dayCounts[new Date(r.occurredAt).getDay()]++;
+      dayCounts[toBusinessDate(r.occurredAt, cutoffTime).getDay()]++;
     }
     const total = rows.length;
     const max = Math.max(...dayCounts);
