@@ -24,6 +24,7 @@ import {
   Truck,
 } from 'lucide-react';
 import { ProveedoresModalShell } from '@/components/pedidos/ProveedoresModalShell';
+import { SupplierAvatar } from '@/components/pedidos/SupplierAvatar';
 import { useAuth } from '@/components/AuthProvider';
 import { appConfirm } from '@/lib/app-dialog-bridge';
 import { getSupabaseClient } from '@/lib/supabase-client';
@@ -83,6 +84,8 @@ import { PEDIDO_ORDER_UNITS, PEDIDO_RECIPE_UNITS } from '@/lib/pedidos-units';
 import type { Unit } from '@/lib/types';
 
 const DEFAULT_SUPPLIER_CONTACT = '622915421';
+const SUPPLIER_LOGO_BUCKET = 'pedido-supplier-logos';
+const SUPPLIER_LOGO_MAX_BYTES = 1_500_000;
 
 function normalizeUpper(value: string) {
   return value.trim().toUpperCase();
@@ -90,6 +93,45 @@ function normalizeUpper(value: string) {
 
 function normalizeMatch(value: string) {
   return normalizeUpper(value).normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+}
+
+function safeLogoFileName(name: string) {
+  const base = normalizeMatch(name).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+  return base || 'proveedor';
+}
+
+async function makeCompactLogoBlob(file: File): Promise<{ blob: Blob; extension: string; contentType: string }> {
+  if (file.type === 'image/svg+xml') {
+    if (file.size > SUPPLIER_LOGO_MAX_BYTES) throw new Error('El logo SVG es demasiado grande.');
+    return { blob: file, extension: 'svg', contentType: file.type };
+  }
+  if (file.size > 8_000_000) throw new Error('El logo es demasiado grande. Usa una imagen menor de 8 MB.');
+
+  const imageUrl = URL.createObjectURL(file);
+  try {
+    const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const el = new Image();
+      el.onload = () => resolve(el);
+      el.onerror = () => reject(new Error('No se pudo leer la imagen del logo.'));
+      el.src = imageUrl;
+    });
+    const maxSide = 512;
+    const scale = Math.min(1, maxSide / Math.max(img.naturalWidth || maxSide, img.naturalHeight || maxSide));
+    const width = Math.max(1, Math.round((img.naturalWidth || maxSide) * scale));
+    const height = Math.max(1, Math.round((img.naturalHeight || maxSide) * scale));
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) throw new Error('No se pudo preparar el logo.');
+    ctx.clearRect(0, 0, width, height);
+    ctx.drawImage(img, 0, 0, width, height);
+    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/webp', 0.82));
+    if (!blob) throw new Error('No se pudo optimizar el logo.');
+    return { blob, extension: 'webp', contentType: 'image/webp' };
+  } finally {
+    URL.revokeObjectURL(imageUrl);
+  }
 }
 
 /** Icono suave por nombre (heurística simple; sin datos extra). */
@@ -358,9 +400,10 @@ export default function ProveedoresPage() {
   const [supplierDrafts, setSupplierDrafts] = React.useState<
     Record<
       string,
-      { name: string; contact: string; deliveryCycleWeekdays: number[]; deliveryExceptionDates: string[] }
+      { name: string; contact: string; logoUrl?: string | null; deliveryCycleWeekdays: number[]; deliveryExceptionDates: string[] }
     >
   >({});
+  const [supplierLogoUploadingId, setSupplierLogoUploadingId] = React.useState<string | null>(null);
   const [exceptionInputBySupplier, setExceptionInputBySupplier] = React.useState<Record<string, string>>({});
   const [productDrafts, setProductDrafts] = React.useState<Record<string, ProductDraft>>({});
   const proveedoresUiHydratedForKeyRef = React.useRef<string | null>(null);
@@ -695,11 +738,54 @@ export default function ProveedoresPage() {
   };
 
 
+  const uploadSupplierLogo = async (supplier: PedidoSupplier, file: File | null) => {
+    if (!file) return;
+    if (!localId) return setMessage('Perfil del local no cargado. Cierra sesión y vuelve a entrar.');
+    if (!file.type.startsWith('image/')) return setMessage('El logo debe ser una imagen.');
+    const supabase = getSupabaseClient();
+    if (!supabase) return setMessage('Supabase no disponible en esta sesión.');
+    setSupplierLogoUploadingId(supplier.id);
+    setMessage(null);
+    try {
+      const compact = await makeCompactLogoBlob(file);
+      const path = `${localId}/${supplier.id}/${Date.now()}-${safeLogoFileName(supplier.name)}.${compact.extension}`;
+      const { error } = await supabase.storage.from(SUPPLIER_LOGO_BUCKET).upload(path, compact.blob, {
+        cacheControl: '31536000',
+        contentType: compact.contentType,
+        upsert: true,
+      });
+      if (error) throw new Error(error.message);
+      const { data } = supabase.storage.from(SUPPLIER_LOGO_BUCKET).getPublicUrl(path);
+      const publicUrl = data.publicUrl;
+      setSupplierDrafts((prev) => ({
+        ...prev,
+        [supplier.id]: {
+          name: prev[supplier.id]?.name ?? supplier.name,
+          contact: prev[supplier.id]?.contact ?? supplier.contact ?? '',
+          logoUrl: publicUrl,
+          deliveryCycleWeekdays: prev[supplier.id]?.deliveryCycleWeekdays ?? [...(supplier.deliveryCycleWeekdays ?? [])],
+          deliveryExceptionDates: prev[supplier.id]?.deliveryExceptionDates ?? [...(supplier.deliveryExceptionDates ?? [])],
+        },
+      }));
+      setMessage('Logo cargado. Guarda el proveedor para aplicarlo.');
+    } catch (err) {
+      setMessage(
+        err instanceof Error
+          ? `No se pudo subir el logo: ${err.message}`
+          : 'No se pudo subir el logo. Revisa el bucket pedido-supplier-logos.',
+      );
+    } finally {
+      setSupplierLogoUploadingId(null);
+    }
+  };
+
   const saveSupplierChanges = (supplierId: string) => {
     if (!localId) return setMessage('Perfil del local no cargado. Cierra sesión y vuelve a entrar.');
     const draft = supplierDrafts[supplierId];
+    const currentSupplier = suppliers.find((s) => s.id === supplierId);
     const name = draft?.name?.trim() ?? '';
     if (!name) return setMessage('El nombre del proveedor no puede estar vacío.');
+    const hasLogoDraft = draft != null && Object.prototype.hasOwnProperty.call(draft, 'logoUrl');
     const supabase = getSupabaseClient();
     if (!supabase) return setMessage('Supabase no disponible en esta sesión.');
     if (agendaEnabled && agendaOrderDays.length === 0) {
@@ -709,6 +795,9 @@ export default function ProveedoresPage() {
     void updateSupplier(supabase, localId, supplierId, {
       name: normalizeUpper(name),
       contact: draft?.contact ?? '',
+      ...(hasLogoDraft && (draft?.logoUrl ?? null) !== (currentSupplier?.logoUrl ?? null)
+        ? { logoUrl: draft?.logoUrl ?? null }
+        : {}),
       deliveryCycleWeekdays: draft?.deliveryCycleWeekdays ?? [],
       deliveryExceptionDates: draft?.deliveryExceptionDates ?? [],
     })
@@ -977,7 +1066,6 @@ export default function ProveedoresPage() {
       </section>
 
       {visibleSuppliers.map((supplier) => {
-        const SupplierIcon = pickSupplierListIcon(supplier.name);
         const isOpen = expandedSupplierId === supplier.id;
         return (
         <section key={supplier.id} className="overflow-hidden rounded-[18px] border border-zinc-200/75 bg-white shadow-[0_8px_22px_rgba(15,23,42,0.035)] ring-1 ring-zinc-100/70">
@@ -987,9 +1075,7 @@ export default function ProveedoresPage() {
             onClick={() => setExpandedSupplierId((id) => (id === supplier.id ? null : supplier.id))}
             aria-expanded={isOpen}
           >
-            <span className="grid h-8 w-8 shrink-0 place-items-center rounded-[14px] bg-[#D32F2F]/[0.06] ring-1 ring-[#D32F2F]/10" aria-hidden>
-              <SupplierIcon className="h-4 w-4 text-[#C62828]" strokeWidth={2} />
-            </span>
+            <SupplierAvatar name={supplier.name} logoUrl={supplier.logoUrl} className="h-8 w-8 rounded-[14px] text-[10px]" imageClassName="p-1" />
             <span className="min-w-0 flex-1">
               <span className="flex min-w-0 items-center gap-2">
                 <span className="truncate text-[14px] font-semibold leading-tight tracking-tight text-zinc-950">{supplier.name}</span>
@@ -1036,6 +1122,7 @@ export default function ProveedoresPage() {
                       [supplier.id]: {
                         name: prev[supplier.id]?.name ?? supplier.name,
                         contact: prev[supplier.id]?.contact ?? supplier.contact ?? '',
+                        logoUrl: prev[supplier.id]?.logoUrl ?? supplier.logoUrl ?? null,
                         deliveryCycleWeekdays:
                           prev[supplier.id]?.deliveryCycleWeekdays ?? [...(supplier.deliveryCycleWeekdays ?? [])],
                         deliveryExceptionDates:
@@ -1382,6 +1469,7 @@ export default function ProveedoresPage() {
                       ...(prev[editSup.id] ?? {
                         name: editSup.name,
                         contact: editSup.contact ?? '',
+                        logoUrl: editSup.logoUrl ?? null,
                         deliveryCycleWeekdays: [...(editSup.deliveryCycleWeekdays ?? [])],
                         deliveryExceptionDates: [...(editSup.deliveryExceptionDates ?? [])],
                       }),
@@ -1400,6 +1488,7 @@ export default function ProveedoresPage() {
                       ...(prev[editSup.id] ?? {
                         name: editSup.name,
                         contact: editSup.contact ?? '',
+                        logoUrl: editSup.logoUrl ?? null,
                         deliveryCycleWeekdays: [...(editSup.deliveryCycleWeekdays ?? [])],
                         deliveryExceptionDates: [...(editSup.deliveryExceptionDates ?? [])],
                       }),
@@ -1409,6 +1498,54 @@ export default function ProveedoresPage() {
                 }
                 placeholder="Telefono o email de contacto"
               />
+              <div className="flex items-center gap-2 rounded-[16px] border border-zinc-200/70 bg-zinc-50/70 px-2.5 py-2 ring-1 ring-zinc-100/70">
+                <SupplierAvatar
+                  name={supplierDrafts[editSup.id]?.name ?? editSup.name}
+                  logoUrl={supplierDrafts[editSup.id]?.logoUrl ?? editSup.logoUrl}
+                  className="h-9 w-9 rounded-[14px] text-[10px]"
+                  imageClassName="p-1.5"
+                />
+                <div className="min-w-0 flex-1">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-400">Logo proveedor</p>
+                  <p className="truncate text-[11px] text-zinc-500">
+                    {supplierLogoUploadingId === editSup.id ? 'Subiendo logo…' : 'PNG, JPG, WEBP o SVG'}
+                  </p>
+                </div>
+                {(supplierDrafts[editSup.id]?.logoUrl ?? editSup.logoUrl) ? (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setSupplierDrafts((prev) => ({
+                        ...prev,
+                        [editSup.id]: {
+                          name: prev[editSup.id]?.name ?? editSup.name,
+                          contact: prev[editSup.id]?.contact ?? editSup.contact ?? '',
+                          logoUrl: null,
+                          deliveryCycleWeekdays: prev[editSup.id]?.deliveryCycleWeekdays ?? [...(editSup.deliveryCycleWeekdays ?? [])],
+                          deliveryExceptionDates: prev[editSup.id]?.deliveryExceptionDates ?? [...(editSup.deliveryExceptionDates ?? [])],
+                        },
+                      }))
+                    }
+                    className="h-8 rounded-full border border-zinc-200 bg-white px-2 text-[11px] font-medium text-zinc-600 shadow-sm"
+                  >
+                    Quitar
+                  </button>
+                ) : null}
+                <label className="h-8 cursor-pointer rounded-full bg-zinc-900 px-3 text-[11px] font-semibold leading-8 text-white shadow-sm">
+                  Subir
+                  <input
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp,image/svg+xml"
+                    className="sr-only"
+                    disabled={supplierLogoUploadingId === editSup.id}
+                    onChange={(e) => {
+                      const file = e.target.files?.[0] ?? null;
+                      e.currentTarget.value = '';
+                      void uploadSupplierLogo(editSup, file);
+                    }}
+                  />
+                </label>
+              </div>
               <div>
                 <p className="text-[10px] font-medium uppercase tracking-[0.16em] text-zinc-400">Días de reparto</p>
                 <p className="mt-0.5 text-[10px] text-zinc-500">

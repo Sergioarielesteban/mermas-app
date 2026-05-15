@@ -277,6 +277,7 @@ export type PedidoSupplier = {
   id: string;
   name: string;
   contact: string;
+  logoUrl?: string | null;
   /** Días de reparto 0=dom..6=sáb. Vacío = cobertura 7 días al escalar PAR semanal. */
   deliveryCycleWeekdays: number[];
   /** Fechas puntuales válidas de reparto (ej. festivo mueve Jue→Mié): YYYY-MM-DD. */
@@ -323,6 +324,7 @@ export type PedidoOrder = {
   supplierId: string;
   supplierName: string;
   supplierContact?: string;
+  supplierLogoUrl?: string | null;
   status: PedidoStatus;
   notes: string;
   createdAt: string;
@@ -369,6 +371,7 @@ type SupplierRow = {
   id: string;
   name: string;
   contact: string;
+  logo_url?: string | null;
   is_active?: boolean | null;
   delivery_cycle_weekdays?: number[] | null;
   minimum_order_euro?: number | string | null;
@@ -422,7 +425,10 @@ type OrderRow = {
   /** Solo si la migración añadió la columna y se vuelve a incluir en el select. */
   usuario_nombre?: string | null;
   created_by?: string | null;
-  pedido_suppliers: { name: string; contact: string | null } | { name: string; contact: string | null }[] | null;
+  pedido_suppliers:
+    | { name: string; contact: string | null; logo_url?: string | null }
+    | { name: string; contact: string | null; logo_url?: string | null }[]
+    | null;
 };
 type OrderItemRow = {
   id: string;
@@ -634,11 +640,11 @@ export function getPedidoRequesterDisplayName(order: PedidoOrder): string | null
 }
 
 const PURCHASE_ORDER_HEADER_SEL_WITH_REVISION =
-  'id,supplier_id,status,notes,created_at,sent_at,received_at,delivery_date,price_review_archived_at,updated_at,content_revised_after_sent_at,created_by,usuario_nombre,pedido_suppliers(name,contact)';
+  'id,supplier_id,status,notes,created_at,sent_at,received_at,delivery_date,price_review_archived_at,updated_at,content_revised_after_sent_at,created_by,usuario_nombre,pedido_suppliers(name,contact,logo_url)';
 const PURCHASE_ORDER_HEADER_SEL_WITH_UPDATED =
-  'id,supplier_id,status,notes,created_at,sent_at,received_at,delivery_date,price_review_archived_at,updated_at,created_by,usuario_nombre,pedido_suppliers(name,contact)';
+  'id,supplier_id,status,notes,created_at,sent_at,received_at,delivery_date,price_review_archived_at,updated_at,created_by,usuario_nombre,pedido_suppliers(name,contact,logo_url)';
 const PURCHASE_ORDER_HEADER_SEL_LEGACY =
-  'id,supplier_id,status,notes,created_at,sent_at,received_at,delivery_date,price_review_archived_at,created_by,usuario_nombre,pedido_suppliers(name,contact)';
+  'id,supplier_id,status,notes,created_at,sent_at,received_at,delivery_date,price_review_archived_at,created_by,usuario_nombre,pedido_suppliers(name,contact,logo_url)';
 type PurchaseOrderHeaderQuery = ReturnType<ReturnType<SupabaseClient['from']>['select']>;
 
 async function runPurchaseOrderHeaderQuery(
@@ -654,6 +660,10 @@ async function runPurchaseOrderHeaderQuery(
   };
   const runSelResilient = async (sel: string) => {
     let r = await runSel(sel);
+    if (r.error && isMissingSupabaseColumn(r.error.message, 'logo_url')) {
+      const stripped = sel.replace(',logo_url', '');
+      if (stripped !== sel) r = await runSel(stripped);
+    }
     if (r.error && isMissingUsuarioNombreColumnError(r.error.message)) {
       const stripped = sel.replace(',usuario_nombre', '');
       if (stripped !== sel) r = await runSel(stripped);
@@ -776,6 +786,9 @@ function buildPedidoOrdersFromRows(
       supplierId: row.supplier_id,
       supplierName: supplier?.name ?? 'Proveedor',
       supplierContact: supplier?.contact ?? undefined,
+      ...(supplier?.logo_url != null && String(supplier.logo_url).trim() !== ''
+        ? { supplierLogoUrl: String(supplier.logo_url) }
+        : {}),
       status: row.status,
       notes: row.notes ?? '',
       createdAt: row.created_at,
@@ -814,9 +827,15 @@ export type FetchOrdersOptions = {
 export async function fetchSuppliersWithProducts(supabase: SupabaseClient, localId: string) {
   const querySuppliers = async (sel: string) =>
     supabase.from('pedido_suppliers').select(sel).eq('local_id', localId).order('name');
-  let supplierRes = await querySuppliers('id,name,contact,is_active,delivery_cycle_weekdays,minimum_order_euro');
+  let supplierRes = await querySuppliers('id,name,contact,logo_url,is_active,delivery_cycle_weekdays,minimum_order_euro');
+  if (supplierRes.error && isMissingSupabaseColumn(supplierRes.error.message, 'logo_url')) {
+    supplierRes = await querySuppliers('id,name,contact,is_active,delivery_cycle_weekdays,minimum_order_euro');
+  }
   if (supplierRes.error && isMissingSupabaseColumn(supplierRes.error.message, 'minimum_order_euro')) {
-    supplierRes = await querySuppliers('id,name,contact,is_active,delivery_cycle_weekdays');
+    supplierRes = await querySuppliers('id,name,contact,logo_url,is_active,delivery_cycle_weekdays');
+    if (supplierRes.error && isMissingSupabaseColumn(supplierRes.error.message, 'logo_url')) {
+      supplierRes = await querySuppliers('id,name,contact,is_active,delivery_cycle_weekdays');
+    }
   }
   if (supplierRes.error) {
     const m = supplierRes.error.message.toLowerCase();
@@ -942,6 +961,7 @@ export async function fetchSuppliersWithProducts(supabase: SupabaseClient, local
       id: row.id,
       name: row.name,
       contact: row.contact ?? '',
+      ...(row.logo_url != null && String(row.logo_url).trim() !== '' ? { logoUrl: String(row.logo_url) } : {}),
       deliveryCycleWeekdays: normalizeDeliveryCycleWeekdays(row.delivery_cycle_weekdays),
       deliveryExceptionDates: normalizeDeliveryExceptionDates(exBySupplier.get(row.id) ?? []),
       ...(row.minimum_order_euro != null &&
@@ -983,6 +1003,7 @@ export async function updateSupplier(
   input: {
     name: string;
     contact: string;
+    logoUrl?: string | null;
     deliveryCycleWeekdays?: number[];
     deliveryExceptionDates?: string[];
   },
@@ -991,11 +1012,33 @@ export async function updateSupplier(
     name: normalizeLabelUpper(input.name),
     contact: input.contact.trim(),
   };
+  if (input.logoUrl !== undefined) {
+    row.logo_url = input.logoUrl && input.logoUrl.trim() !== '' ? input.logoUrl.trim() : null;
+  }
   if (input.deliveryCycleWeekdays !== undefined) {
     row.delivery_cycle_weekdays = normalizeDeliveryCycleWeekdays(input.deliveryCycleWeekdays);
   }
-  const { data, error } = await supabase.from('pedido_suppliers').update(row).eq('id', supplierId).eq('local_id', localId).select('id,name,contact,delivery_cycle_weekdays').single();
-  if (error) throw new Error(error.message);
+  let updateRes = await supabase
+    .from('pedido_suppliers')
+    .update(row)
+    .eq('id', supplierId)
+    .eq('local_id', localId)
+    .select('id,name,contact,logo_url,delivery_cycle_weekdays')
+    .single();
+  if (updateRes.error && isMissingSupabaseColumn(updateRes.error.message, 'logo_url')) {
+    if (input.logoUrl !== undefined) {
+      throw new Error('Falta aplicar la migración de logos de proveedores en Supabase (columna logo_url).');
+    }
+    updateRes = await supabase
+      .from('pedido_suppliers')
+      .update(row)
+      .eq('id', supplierId)
+      .eq('local_id', localId)
+      .select('id,name,contact,delivery_cycle_weekdays')
+      .single();
+  }
+  if (updateRes.error) throw new Error(updateRes.error.message);
+  const data = updateRes.data;
 
   if (input.deliveryExceptionDates !== undefined) {
     const dates = normalizeDeliveryExceptionDates(input.deliveryExceptionDates);

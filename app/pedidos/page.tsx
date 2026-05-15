@@ -33,6 +33,7 @@ import { usePedidosOrders } from '@/components/PedidosOrdersProvider';
 import { getSupabaseClient } from '@/lib/supabase-client';
 import PedidosAlbaranOcrModal from '@/components/PedidosAlbaranOcrModal';
 import PedidosPremiaLockedScreen from '@/components/PedidosPremiaLockedScreen';
+import { SupplierAvatar } from '@/components/pedidos/SupplierAvatar';
 import { dispatchPedidosDataChanged, usePedidosDataChangedListener } from '@/hooks/usePedidosDataChangedListener';
 import { canAccessPedidos, canUsePedidosModule } from '@/lib/pedidos-access';
 import {
@@ -250,18 +251,10 @@ function daysSinceTimestamp(ts: number) {
   return Math.max(0, Math.floor((today.getTime() - start.getTime()) / 86_400_000));
 }
 
-function supplierInitials(name: string) {
-  const parts = name
-    .replace(/[^\p{L}\p{N}\s]/gu, ' ')
-    .split(/\s+/)
-    .filter(Boolean);
-  const text = (parts[0]?.[0] ?? '') + (parts[1]?.[0] ?? parts[0]?.[1] ?? '');
-  return text.toUpperCase() || 'PR';
-}
-
 type HistoricoProveedorRecibido = {
   key: string;
   supplierName: string;
+  supplierLogoUrl?: string | null;
   orders: PedidoOrder[];
   total: number;
   lastTs: number;
@@ -2080,6 +2073,7 @@ export default function PedidosPage() {
         supplier = {
           key: supplierKey,
           supplierName: o.supplierName,
+          supplierLogoUrl: o.supplierLogoUrl ?? null,
           orders: [],
           total: 0,
           lastTs: 0,
@@ -4542,7 +4536,12 @@ export default function PedidosPage() {
                     aria-label={detailOpen ? 'Ocultar detalles del pedido' : 'Ver detalles del pedido'}
                     aria-expanded={detailOpen}
                   >
-                    {supplierInitials(order.supplierName)}
+                    <SupplierAvatar
+                      name={order.supplierName}
+                      logoUrl={order.supplierLogoUrl}
+                      className="h-full w-full rounded-2xl bg-transparent text-[12px] ring-0"
+                      imageClassName="p-1.5"
+                    />
                   </button>
 
                   <button
@@ -5354,9 +5353,11 @@ export default function PedidosPage() {
                     >
                       <summary className="cursor-pointer list-none px-2.5 py-2.5 outline-none transition active:bg-zinc-50 [&::-webkit-details-marker]:hidden">
                         <div className="flex items-center gap-2.5">
-                          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-zinc-50 text-[11px] font-black tracking-tight text-zinc-700 ring-1 ring-zinc-200">
-                            {supplierInitials(supplier.supplierName)}
-                          </span>
+                          <SupplierAvatar
+                            name={supplier.supplierName}
+                            logoUrl={supplier.supplierLogoUrl}
+                            className="h-10 w-10 bg-zinc-50 text-[11px] text-zinc-700 ring-zinc-200"
+                          />
                           <div className="min-w-0 flex-1">
                             <div className="flex min-w-0 items-center gap-1.5">
                               <p className="truncate text-[13px] font-black leading-tight text-zinc-950">
