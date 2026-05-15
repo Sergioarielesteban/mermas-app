@@ -193,7 +193,7 @@ function SoftField({ className = '', ...props }: React.InputHTMLAttributes<HTMLI
     <input
       {...props}
       className={[
-        'h-11 w-full rounded-2xl border border-zinc-200/80 bg-zinc-50/70 px-3 text-sm text-zinc-900 outline-none transition',
+        'h-9 w-full rounded-[14px] border border-zinc-200/80 bg-zinc-50/70 px-2.5 text-[13px] text-zinc-900 outline-none transition',
         'placeholder:text-zinc-400 focus:border-zinc-300 focus:bg-white focus:ring-4 focus:ring-zinc-900/5',
         className,
       ].join(' ')}
@@ -206,7 +206,7 @@ function SoftSelect({ className = '', ...props }: React.SelectHTMLAttributes<HTM
     <select
       {...props}
       className={[
-        'h-11 w-full rounded-2xl border border-zinc-200/80 bg-zinc-50/70 px-3 text-sm text-zinc-900 outline-none transition',
+        'h-9 w-full rounded-[14px] border border-zinc-200/80 bg-zinc-50/70 px-2.5 text-[13px] text-zinc-900 outline-none transition',
         'focus:border-zinc-300 focus:bg-white focus:ring-4 focus:ring-zinc-900/5',
         className,
       ].join(' ')}
@@ -229,14 +229,14 @@ function ToolbarButton({
     <button
       {...props}
       className={[
-        'inline-flex h-8 items-center gap-1.5 rounded-full px-2.5 text-[12px] font-medium transition active:scale-[0.99]',
+        'inline-flex h-7 items-center gap-1.5 rounded-full px-2 text-[11px] font-medium transition active:scale-[0.99]',
         tone === 'danger'
           ? 'border border-rose-200/80 bg-rose-50/80 text-rose-700 shadow-sm'
           : 'border border-zinc-200/80 bg-white text-zinc-700 shadow-sm',
         className,
       ].join(' ')}
     >
-      <Icon className="h-3.5 w-3.5" strokeWidth={2.25} />
+      <Icon className="h-3 w-3" strokeWidth={2.25} />
       <span>{label}</span>
     </button>
   );
@@ -258,14 +258,14 @@ function MiniIconButton({
       {...props}
       aria-label={label}
       className={[
-        'grid h-8 w-8 place-items-center rounded-full border transition active:scale-[0.98]',
+        'grid h-7 w-7 place-items-center rounded-full border transition active:scale-[0.98]',
         tone === 'danger'
           ? 'border-rose-200 bg-rose-50 text-rose-700'
           : 'border-zinc-200 bg-white text-zinc-600',
         className,
       ].join(' ')}
     >
-      <Icon className="h-3.5 w-3.5" strokeWidth={2.25} />
+      <Icon className="h-3 w-3" strokeWidth={2.25} />
     </button>
   );
 }
@@ -922,7 +922,7 @@ export default function ProveedoresPage() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-3xl space-y-3">
+    <div className="mx-auto w-full max-w-3xl space-y-2.5">
       {showDeletedBanner ? (
         <div className="pointer-events-none fixed inset-0 z-[90] grid place-items-center bg-black/25 px-6">
           <div className="rounded-2xl bg-[#D32F2F] px-7 py-5 text-center shadow-2xl ring-2 ring-white/75">
@@ -946,22 +946,22 @@ export default function ProveedoresPage() {
         </div>
       ) : null}
 
-      <section className="rounded-[20px] border border-zinc-200/80 bg-white/95 p-3 shadow-[0_10px_30px_rgba(15,23,42,0.04)] ring-1 ring-zinc-100/80 sm:p-4">
+      <section className="rounded-[18px] border border-zinc-200/80 bg-white/95 p-2.5 shadow-[0_8px_24px_rgba(15,23,42,0.035)] ring-1 ring-zinc-100/80 sm:p-3">
         <button
           type="button"
-          className="flex h-11 w-full touch-manipulation items-center gap-2.5 rounded-2xl bg-[#D32F2F] px-3 shadow-[0_10px_20px_rgba(211,47,47,0.12)] ring-1 ring-[#D32F2F]/15 transition active:scale-[0.99] active:bg-[#B91C1C]"
+          className="flex h-10 w-full touch-manipulation items-center gap-2 rounded-[15px] bg-[#D32F2F] px-3 shadow-[0_8px_18px_rgba(211,47,47,0.11)] ring-1 ring-[#D32F2F]/15 transition active:scale-[0.99] active:bg-[#B91C1C]"
           onClick={() => {
             setMessage(null);
             setNewSupplierOpen(true);
           }}
         >
-          <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-white/15 ring-1 ring-white/20">
-            <Plus className="h-4 w-4 text-white" strokeWidth={2.5} aria-hidden />
+          <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-white/15 ring-1 ring-white/20">
+            <Plus className="h-3.5 w-3.5 text-white" strokeWidth={2.5} aria-hidden />
           </span>
-          <span className="min-w-0 flex-1 text-center text-[14px] font-semibold text-white">Nuevo proveedor</span>
+          <span className="min-w-0 flex-1 text-center text-[13px] font-semibold text-white">Nuevo proveedor</span>
           <ChevronRight className="h-4 w-4 shrink-0 text-white/85" strokeWidth={2.25} aria-hidden />
         </button>
-        <div className="relative mt-2.5">
+        <div className="relative mt-2">
           <Search
             className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400"
             strokeWidth={2}
@@ -971,7 +971,7 @@ export default function ProveedoresPage() {
             value={supplierCatalogQuery}
             onChange={(e) => setSupplierCatalogQuery(e.target.value)}
             placeholder="Buscar proveedor o artículo…"
-            className="h-10 w-full rounded-2xl border border-zinc-200/80 bg-zinc-50/60 pl-10 pr-3 text-sm text-zinc-900 outline-none placeholder:text-zinc-400 focus:border-zinc-300 focus:bg-white focus:ring-4 focus:ring-zinc-900/5"
+            className="h-9 w-full rounded-[15px] border border-zinc-200/80 bg-zinc-50/60 pl-10 pr-3 text-[13px] text-zinc-900 outline-none placeholder:text-zinc-400 focus:border-zinc-300 focus:bg-white focus:ring-4 focus:ring-zinc-900/5"
           />
         </div>
       </section>
@@ -980,29 +980,36 @@ export default function ProveedoresPage() {
         const SupplierIcon = pickSupplierListIcon(supplier.name);
         const isOpen = expandedSupplierId === supplier.id;
         return (
-        <section key={supplier.id} className="overflow-hidden rounded-[20px] border border-zinc-200/80 bg-white shadow-[0_10px_24px_rgba(15,23,42,0.045)] ring-1 ring-zinc-100/70">
+        <section key={supplier.id} className="overflow-hidden rounded-[18px] border border-zinc-200/75 bg-white shadow-[0_8px_22px_rgba(15,23,42,0.035)] ring-1 ring-zinc-100/70">
           <button
             type="button"
-            className="flex w-full touch-manipulation items-start gap-3 px-3 py-2.5 text-left transition-colors active:bg-zinc-50/80 sm:gap-3.5 sm:px-4 sm:py-3"
+            className="flex w-full touch-manipulation items-center gap-2.5 px-2.5 py-2 text-left transition-colors active:bg-zinc-50/80 sm:px-3 sm:py-2.5"
             onClick={() => setExpandedSupplierId((id) => (id === supplier.id ? null : supplier.id))}
             aria-expanded={isOpen}
           >
-            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-2xl bg-[#D32F2F]/[0.06] ring-1 ring-[#D32F2F]/10" aria-hidden>
-              <SupplierIcon className="h-[17px] w-[17px] text-[#C62828]" strokeWidth={2} />
+            <span className="grid h-8 w-8 shrink-0 place-items-center rounded-[14px] bg-[#D32F2F]/[0.06] ring-1 ring-[#D32F2F]/10" aria-hidden>
+              <SupplierIcon className="h-4 w-4 text-[#C62828]" strokeWidth={2} />
             </span>
             <span className="min-w-0 flex-1">
-              <span className="block truncate text-[14px] font-semibold leading-tight tracking-tight text-zinc-950">{supplier.name}</span>
-              <span className="mt-1 flex items-center gap-1.5 text-[11px] leading-tight text-zinc-500">
-                <Phone className="h-3 w-3 shrink-0 text-zinc-400" strokeWidth={2} aria-hidden />
-                <span className="min-w-0 truncate">{supplier.contact || '—'}</span>
+              <span className="flex min-w-0 items-center gap-2">
+                <span className="truncate text-[14px] font-semibold leading-tight tracking-tight text-zinc-950">{supplier.name}</span>
+                <span className="shrink-0 rounded-full bg-zinc-50 px-1.5 py-0.5 text-[10px] font-semibold text-zinc-500 ring-1 ring-zinc-200/70">
+                  {supplier.products.length}
+                </span>
               </span>
-              <span className="mt-0.5 flex items-start gap-1.5 text-[10px] leading-snug text-zinc-500">
-                <CalendarDays className="mt-0.5 h-3 w-3 shrink-0 text-zinc-400" strokeWidth={2} aria-hidden />
-                <span>{formatDeliveryCycleSummary(supplier.deliveryCycleWeekdays ?? [])}</span>
+              <span className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-[10.5px] leading-tight text-zinc-500">
+                <span className="inline-flex min-w-0 items-center gap-1">
+                  <Phone className="h-3 w-3 shrink-0 text-zinc-400" strokeWidth={2} aria-hidden />
+                  <span className="truncate">{supplier.contact || '—'}</span>
+                </span>
+                <span className="inline-flex min-w-0 items-center gap-1">
+                  <CalendarDays className="h-3 w-3 shrink-0 text-zinc-400" strokeWidth={2} aria-hidden />
+                  <span className="truncate">{formatDeliveryCycleSummary(supplier.deliveryCycleWeekdays ?? [])}</span>
+                </span>
               </span>
             </span>
-            <span className="flex shrink-0 flex-col items-end justify-center gap-1 self-stretch pl-1">
-              <span className="rounded-full bg-[#FFF7F5] px-2 py-0.5 text-[10px] font-medium text-[#B91C1C] ring-1 ring-[#D32F2F]/15">
+            <span className="flex shrink-0 items-center gap-1.5 pl-1">
+              <span className="hidden rounded-full bg-[#FFF7F5] px-2 py-0.5 text-[10px] font-medium text-[#B91C1C] ring-1 ring-[#D32F2F]/15 min-[390px]:inline">
                 Ver artículos
               </span>
               <ChevronRight
@@ -1014,8 +1021,8 @@ export default function ProveedoresPage() {
           </button>
 
           {isOpen ? (
-            <div className="border-t border-zinc-100 px-3 pb-3 pt-2.5 sm:px-4 sm:pb-4 sm:pt-3">
-              <div className="flex flex-wrap items-center gap-2">
+            <div className="border-t border-zinc-100 px-2.5 pb-2.5 pt-2 sm:px-3 sm:pb-3">
+              <div className="flex flex-wrap items-center gap-1.5">
                 <ToolbarButton
                   icon={PencilLine}
                   label={editingSupplierId === supplier.id ? 'Cerrar' : 'Editar'}
@@ -1047,22 +1054,25 @@ export default function ProveedoresPage() {
                 />
               </div>
 
-              <div className="mt-3 space-y-2">
+              <div className="mt-2 space-y-1.5">
             {[...supplier.products]
               .sort((a, b) => a.name.localeCompare(b.name, 'es'))
               .map((p) => (
-              <div key={p.id} className="rounded-[18px] border border-zinc-200/80 bg-white px-3 py-2.5 shadow-[0_8px_20px_rgba(15,23,42,0.035)] ring-1 ring-zinc-100/70">
-                <div className="flex flex-col gap-2">
-                  <div className="flex items-start gap-2.5">
-                    <span className="mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-xl bg-zinc-50 text-zinc-500 ring-1 ring-zinc-200/70" aria-hidden>
-                      <Package className="h-3.5 w-3.5" />
+              <div key={p.id} className="rounded-[16px] border border-zinc-200/70 bg-[#fffdf8] px-2.5 py-2 shadow-[0_5px_14px_rgba(15,23,42,0.03)] ring-1 ring-zinc-100/60">
+                <div className="flex flex-col gap-1.5">
+                  <div className="flex items-center gap-2">
+                    <span className="grid h-6 w-6 shrink-0 place-items-center rounded-[10px] bg-white text-zinc-500 ring-1 ring-zinc-200/70" aria-hidden>
+                      <Package className="h-3 w-3" />
                     </span>
                     <div className="min-w-0 flex-1">
-                      <div className="flex items-start justify-between gap-2">
+                      <div className="flex items-center justify-between gap-2">
                         <p className="min-w-0 flex-1 truncate text-[13px] font-semibold leading-tight tracking-tight text-zinc-950">
                           {p.name}
                         </p>
                         <div className="flex shrink-0 items-center gap-1">
+                          <p className="mr-1 hidden whitespace-nowrap text-right text-[13px] font-semibold leading-none tracking-tight text-zinc-950 tabular-nums min-[390px]:block">
+                            {formatUnitPriceEur(p.pricePerUnit, unitPriceCatalogSuffix[p.unit])}
+                          </p>
                           <button
                             type="button"
                             onClick={() => {
@@ -1120,45 +1130,44 @@ export default function ProveedoresPage() {
                         }));
                               setEditingProductId(p.id);
                             }}
-                            className="grid h-8 w-8 place-items-center rounded-full border border-zinc-200 bg-white text-zinc-600 shadow-sm active:scale-[0.98]"
+                            className="grid h-7 w-7 place-items-center rounded-full border border-zinc-200 bg-white text-zinc-600 shadow-sm active:scale-[0.98]"
                           >
-                            <PencilLine className="h-3.5 w-3.5" strokeWidth={2.25} />
+                            <PencilLine className="h-3 w-3" strokeWidth={2.25} />
                           </button>
                           <button
                             type="button"
                             onClick={() => disableProduct(p.id)}
-                            className="grid h-8 w-8 place-items-center rounded-full border border-rose-200 bg-rose-50 text-rose-700 shadow-sm active:scale-[0.98]"
+                            className="grid h-7 w-7 place-items-center rounded-full border border-rose-200 bg-rose-50 text-rose-700 shadow-sm active:scale-[0.98]"
                           >
-                            <Power className="h-3.5 w-3.5" strokeWidth={2.25} />
+                            <Power className="h-3 w-3" strokeWidth={2.25} />
                           </button>
                         </div>
                       </div>
-                      <div className="mt-0.5 flex flex-wrap items-center gap-2 text-[10px] text-zinc-500">
-                        <span className="rounded-full bg-zinc-50 px-1.5 py-0.5 ring-1 ring-zinc-200/70">catálogo</span>
+                      <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[9.5px] font-medium text-zinc-500">
                         {p.unitsPerPack && p.unitsPerPack > 1 ? (
-                          <span className="rounded-full bg-zinc-50 px-1.5 py-0.5 ring-1 ring-zinc-200/70">
+                          <span className="rounded-full bg-white px-1.5 py-0.5 ring-1 ring-zinc-200/70">
                             x{p.unitsPerPack} {unitPriceCatalogSuffix[p.recipeUnit ?? 'ud']}
                           </span>
                         ) : null}
                       </div>
                     </div>
                   </div>
-                  <div className="pl-9">
-                    <p className="whitespace-nowrap text-[17px] font-semibold leading-none tracking-tight text-zinc-950 tabular-nums sm:text-[18px]">
+                  <div className="pl-8 min-[390px]:hidden">
+                    <p className="whitespace-nowrap text-[14px] font-semibold leading-none tracking-tight text-zinc-950 tabular-nums">
                       {formatUnitPriceEur(p.pricePerUnit, unitPriceCatalogSuffix[p.unit])}
                     </p>
                   </div>
-                  <div className="flex flex-wrap items-center gap-1.5 pl-9 text-[10px] font-medium text-zinc-500">
-                    <span className="rounded-full bg-zinc-50 px-2 py-0.5 ring-1 ring-zinc-200/70">IVA {(p.vatRate * 100).toFixed(0)}%</span>
+                  <div className="flex flex-wrap items-center gap-1 pl-8 text-[9.5px] font-medium text-zinc-500">
+                    <span className="rounded-full bg-white px-1.5 py-0.5 ring-1 ring-zinc-200/70">IVA {(p.vatRate * 100).toFixed(0)}%</span>
                     {p.ultimoPrecioRecibido != null &&
                     Number.isFinite(p.ultimoPrecioRecibido) &&
                     p.ultimoPrecioRecibido > 0 ? (
-                      <span className="rounded-full bg-zinc-50 px-2 py-0.5 ring-1 ring-zinc-200/70">
+                      <span className="rounded-full bg-white px-1.5 py-0.5 ring-1 ring-zinc-200/70">
                         Últ. recepción {formatUnitPriceEur(p.ultimoPrecioRecibido, unitPriceCatalogSuffix[p.unit])}
                       </span>
                     ) : null}
                     {supplierProductHasDistinctBilling(p) && p.billingUnit === 'kg' && p.pricePerBillingUnit != null ? (
-                      <span className="rounded-full bg-zinc-50 px-2 py-0.5 ring-1 ring-zinc-200/70">
+                      <span className="rounded-full bg-white px-1.5 py-0.5 ring-1 ring-zinc-200/70">
                         {formatUnitPriceEur(p.pricePerBillingUnit, 'kg')} · ~{p.billingQtyPerOrderUnit ?? '—'} kg/{unitPriceCatalogSuffix[p.unit]}
                       </span>
                     ) : null}
@@ -1166,12 +1175,12 @@ export default function ProveedoresPage() {
                     unitSupportsReceivedWeightKg(p.unit) &&
                     p.estimatedKgPerUnit != null &&
                     p.estimatedKgPerUnit > 0 ? (
-                      <span className="rounded-full bg-zinc-50 px-2 py-0.5 ring-1 ring-zinc-200/70">
+                      <span className="rounded-full bg-white px-1.5 py-0.5 ring-1 ring-zinc-200/70">
                         ~{p.estimatedKgPerUnit} kg/{p.unit}
                       </span>
                     ) : null}
                     {(p.parStock ?? 0) > 0 ? (
-                      <span className="rounded-full bg-zinc-50 px-2 py-0.5 ring-1 ring-zinc-200/70">
+                      <span className="rounded-full bg-white px-1.5 py-0.5 ring-1 ring-zinc-200/70">
                         Ref. sem. {p.parStock}
                       </span>
                     ) : null}
@@ -1756,7 +1765,7 @@ export default function ProveedoresPage() {
                 title="Editar producto"
                 onClose={() => setEditingProductId(null)}
               >
-                  <div className="grid grid-cols-1 gap-3 rounded-[22px] border border-zinc-200/70 bg-white/70 p-3 shadow-[0_10px_24px_rgba(15,23,42,0.04)] ring-1 ring-zinc-100/70">
+                  <div className="grid grid-cols-1 gap-2 rounded-[18px] border border-zinc-200/70 bg-white/75 p-2.5 shadow-[0_8px_20px_rgba(15,23,42,0.035)] ring-1 ring-zinc-100/70">
                     <SoftField
                       value={productDrafts[editP.id]?.name ?? ''}
                       onChange={(e) =>
@@ -1779,7 +1788,7 @@ export default function ProveedoresPage() {
                       }
                       placeholder="Nombre producto"
                     />
-                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                    <div className="grid grid-cols-3 gap-1.5">
                       <SoftSelect
                         value={productDrafts[editP.id]?.unit ?? 'ud'}
                         onChange={(e) => {
@@ -1803,7 +1812,7 @@ export default function ProveedoresPage() {
                         ))}
                       </SoftSelect>
                       {editDual ? (
-                        <div className="flex h-11 items-center rounded-2xl border border-zinc-200/70 bg-zinc-50/80 px-3 text-xs font-medium text-zinc-800">
+                        <div className="flex h-9 items-center rounded-[14px] border border-zinc-200/70 bg-zinc-50/80 px-2.5 text-[11px] font-medium text-zinc-800">
                           {editDerived != null
                             ? `${formatUnitPriceEur(editDerived, unitPriceCatalogSuffix[u])} (derivado)`
                             : '— (equiv. × €/kg)'}
@@ -1847,7 +1856,7 @@ export default function ProveedoresPage() {
                       />
                     </div>
                     {unitSupportsReceivedWeightKg(u) && u !== 'kg' ? (
-                      <label className="flex cursor-pointer items-center gap-2 text-[12px] text-zinc-700">
+                      <label className="flex cursor-pointer items-center gap-2 rounded-[14px] bg-zinc-50/70 px-2.5 py-1.5 text-[12px] text-zinc-700 ring-1 ring-zinc-200/70">
                         <input
                           type="checkbox"
                           checked={productDrafts[editP.id]?.dualKgBilling === true}
@@ -1861,13 +1870,13 @@ export default function ProveedoresPage() {
                               },
                             }))
                           }
-                          className="h-4 w-4 rounded border-zinc-400"
+                          className="h-3.5 w-3.5 rounded border-zinc-400"
                         />
                         Cobro por kg
                       </label>
                     ) : null}
                     {editDual ? (
-                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                      <div className="grid grid-cols-2 gap-1.5">
                         <SoftField
                           value={productDrafts[editP.id]?.equivKg ?? ''}
                           onChange={(e) =>
@@ -1896,16 +1905,21 @@ export default function ProveedoresPage() {
                         />
                       </div>
                     ) : null}
-                    <div className="rounded-2xl border border-zinc-200/75 bg-zinc-50/55 p-3 ring-1 ring-zinc-100/70">
-                      <p className="text-[10px] font-medium uppercase tracking-[0.16em] text-zinc-400">Plan de consumo</p>
-                      <p className="mt-1 text-[11px] leading-snug text-zinc-600">
-                        Cantidad total estimada que consumes a la semana de este producto.
-                      </p>
-                      <div className="mt-2">
-                        <label className="text-[10px] font-medium uppercase tracking-[0.16em] text-zinc-400">
+                    <div className="rounded-[16px] border border-zinc-200/75 bg-zinc-50/55 p-2 ring-1 ring-zinc-100/70">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-[9px] font-semibold uppercase tracking-[0.16em] text-zinc-400">Plan de consumo</p>
+                        <span
+                          className="grid h-5 w-5 place-items-center rounded-full bg-white text-[10px] font-semibold text-zinc-400 ring-1 ring-zinc-200/70"
+                          title="Cantidad semanal estimada. En avanzado puedes fijar cantidades por día de pedido."
+                        >
+                          ?
+                        </span>
+                      </div>
+                      <div className="mt-1.5 grid grid-cols-[minmax(0,1fr)_auto] items-end gap-1.5">
+                        <label className="min-w-0">
+                          <span className="mb-1 block truncate text-[9px] font-medium uppercase tracking-[0.14em] text-zinc-400">
                           Consumo semanal de referencia
-                        </label>
-                        <div className="mt-1 grid grid-cols-[1fr_auto] items-center gap-2">
+                          </span>
                           <SoftField
                             value={productDrafts[editP.id]?.parWeekly ?? ''}
                             onChange={(e) =>
@@ -1919,13 +1933,13 @@ export default function ProveedoresPage() {
                             }
                             placeholder="0"
                           />
-                          <span className="rounded-full border border-zinc-200 bg-white px-2.5 py-1 text-[11px] text-zinc-600">
+                        </label>
+                          <span className="mb-0.5 rounded-full border border-zinc-200 bg-white px-2 py-1 text-[10px] text-zinc-600">
                             {unitPriceCatalogSuffix[u]}
                           </span>
-                        </div>
                       </div>
 
-                      <div className="mt-3 grid grid-cols-2 rounded-full border border-zinc-200 bg-white p-1">
+                      <div className="mt-2 grid grid-cols-2 rounded-full border border-zinc-200 bg-white p-0.5">
                         <button
                           type="button"
                           onClick={() =>
@@ -1938,7 +1952,7 @@ export default function ProveedoresPage() {
                             }))
                           }
                           className={[
-                            'h-8 rounded-full text-[11px] font-medium transition',
+                            'h-7 rounded-full text-[10.5px] font-medium transition',
                             (productDrafts[editP.id]?.consumptionMode ?? 'simple') === 'simple'
                               ? 'bg-zinc-900 text-white'
                               : 'text-zinc-600',
@@ -1958,7 +1972,7 @@ export default function ProveedoresPage() {
                             }))
                           }
                           className={[
-                            'h-8 rounded-full text-[11px] font-medium transition',
+                            'h-7 rounded-full text-[10.5px] font-medium transition',
                             (productDrafts[editP.id]?.consumptionMode ?? 'simple') === 'advanced'
                               ? 'bg-[#D32F2F] text-white'
                               : 'text-zinc-600',
@@ -1969,11 +1983,11 @@ export default function ProveedoresPage() {
                       </div>
 
                       {(productDrafts[editP.id]?.consumptionMode ?? 'simple') === 'advanced' ? (
-                        <div className="mt-3 space-y-2">
+                        <div className="mt-2 space-y-1.5">
                           {(productDrafts[editP.id]?.consumptionSegments ?? []).map((seg, segIdx) => (
-                            <div key={`${seg.orderDay}-${segIdx}`} className="rounded-2xl border border-zinc-200 bg-white p-2.5">
-                              <div className="flex items-start justify-between gap-2">
-                                <p className="text-[11px] font-medium text-zinc-800">Tramo {segIdx + 1}</p>
+                            <div key={`${seg.orderDay}-${segIdx}`} className="rounded-[14px] border border-zinc-200 bg-white p-2">
+                              <div className="flex items-center justify-between gap-2">
+                                <p className="text-[11px] font-semibold text-zinc-800">Tramo {segIdx + 1}</p>
                                 <button
                                   type="button"
                                   onClick={() =>
@@ -1985,15 +1999,15 @@ export default function ProveedoresPage() {
                                       },
                                     }))
                                   }
-                                  className="text-[11px] font-medium text-rose-700"
+                                  className="rounded-full bg-rose-50 px-2 py-1 text-[10px] font-medium text-rose-700 ring-1 ring-rose-100"
                                   aria-label="Eliminar tramo"
                                 >
                                   Eliminar
                                 </button>
                               </div>
-                              <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                              <div className="mt-1.5 grid grid-cols-2 gap-1.5">
                                 <div>
-                                  <label className="text-[10px] font-medium uppercase tracking-[0.16em] text-zinc-400">Día de pedido</label>
+                                  <label className="text-[9px] font-medium uppercase tracking-[0.14em] text-zinc-400">Día pedido</label>
                                   <SoftSelect
                                     className="mt-1"
                                     value={seg.orderDay}
@@ -2017,7 +2031,7 @@ export default function ProveedoresPage() {
                                   </SoftSelect>
                                 </div>
                                 <div>
-                                  <label className="text-[10px] font-medium uppercase tracking-[0.16em] text-zinc-400">Cantidad objetivo</label>
+                                  <label className="text-[9px] font-medium uppercase tracking-[0.14em] text-zinc-400">Cantidad</label>
                                   <SoftField
                                     className="mt-1"
                                     value={seg.targetQuantity}
@@ -2036,9 +2050,9 @@ export default function ProveedoresPage() {
                                   />
                                 </div>
                               </div>
-                              <div className="mt-2">
-                                <p className="text-[10px] font-medium uppercase tracking-[0.16em] text-zinc-400">Cubre los días</p>
-                                <div className="mt-1 flex flex-wrap gap-1.5">
+                              <div className="mt-1.5">
+                                <p className="text-[9px] font-medium uppercase tracking-[0.14em] text-zinc-400">Cubre</p>
+                                <div className="mt-1 flex flex-wrap gap-1">
                                   {CONSUMPTION_WEEKDAYS.map((day) => {
                                     const selected = seg.coversDays.includes(day.value);
                                     return (
@@ -2061,7 +2075,7 @@ export default function ProveedoresPage() {
                                           })
                                         }
                                         className={[
-                                          'h-7 min-w-[2rem] rounded-full px-2 text-[11px] font-medium',
+                                          'h-6 min-w-[1.75rem] rounded-full px-1.5 text-[10px] font-medium',
                                           selected ? 'bg-[#D32F2F] text-white' : 'border border-zinc-200 bg-zinc-50 text-zinc-600',
                                         ].join(' ')}
                                       >
@@ -2070,13 +2084,15 @@ export default function ProveedoresPage() {
                                     );
                                   })}
                                 </div>
-                                <p className="mt-2 text-[11px] leading-snug text-zinc-600">{formatCoversDaysText(seg.coversDays)}</p>
+                                <p className="mt-1 truncate text-[10.5px] leading-snug text-zinc-500" title={formatCoversDaysText(seg.coversDays)}>
+                                  {formatCoversDaysText(seg.coversDays)}
+                                </p>
                               </div>
                             </div>
                           ))}
                           {(productDrafts[editP.id]?.consumptionSegments ?? []).length === 0 ? (
-                            <p className="rounded-xl border border-dashed border-zinc-200 bg-white px-3 py-2 text-[11px] text-zinc-500">
-                              Sin tramos avanzados. Añade uno para definir cantidades por día de pedido.
+                            <p className="rounded-xl border border-dashed border-zinc-200 bg-white px-2.5 py-1.5 text-[10.5px] text-zinc-500">
+                              Sin tramos. Añade uno para definir cantidades manuales.
                             </p>
                           ) : null}
                           <button
@@ -2093,49 +2109,16 @@ export default function ProveedoresPage() {
                                 },
                               }))
                             }
-                            className="h-9 rounded-full border border-zinc-200 bg-white px-3 text-[12px] font-medium text-zinc-700 shadow-sm"
+                            className="h-8 rounded-full border border-zinc-200 bg-white px-3 text-[11px] font-medium text-zinc-700 shadow-sm"
                           >
                             + Añadir tramo
                           </button>
-                          <div className="rounded-xl border border-zinc-200 bg-white px-3 py-2 text-[11px] text-zinc-600">
-                            <p className="font-medium text-zinc-800">Cómo funciona</p>
-                            <p className="mt-1 leading-snug">
-                              El sistema generará automáticamente los pedidos en los días indicados y con las cantidades objetivo definidas.
-                            </p>
-                          </div>
                         </div>
-                      ) : (
-                        <p className="mt-2 text-[11px] leading-snug text-zinc-500">
-                          El sistema reparte automáticamente el consumo semanal según los días de pedido del proveedor.
-                        </p>
-                      )}
+                      ) : null}
                     </div>
-                    <SoftField
-                      value={productDrafts[editP.id]?.unitsPerPack ?? '1'}
-                      onChange={(e) =>
-                        setProductDrafts((prev) => ({
-                          ...prev,
-                          [editP.id]: {
-                            ...(prev[editP.id] ?? {
-                              name: '',
-                              unit: 'ud',
-                              price: '',
-                              vatRate: '0',
-                              estimatedKg: '',
-                              unitsPerPack: '1',
-                              recipeUnit: 'ud' as Unit,
-                              parWeekly: '',
-                            }),
-                            unitsPerPack: e.target.value,
-                          },
-                        }))
-                      }
-                      placeholder="Piezas por envase (receta)"
-                    />
-                    {parseUnitsPerPack(productDrafts[editP.id]?.unitsPerPack ?? '1') != null &&
-                    parseUnitsPerPack(productDrafts[editP.id]?.unitsPerPack ?? '1')! > 1 ? (
-                      <SoftSelect
-                        value={productDrafts[editP.id]?.recipeUnit ?? 'ud'}
+                    <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-3">
+                      <SoftField
+                        value={productDrafts[editP.id]?.unitsPerPack ?? '1'}
                         onChange={(e) =>
                           setProductDrafts((prev) => ({
                             ...prev,
@@ -2150,37 +2133,62 @@ export default function ProveedoresPage() {
                                 recipeUnit: 'ud' as Unit,
                                 parWeekly: '',
                               }),
-                              recipeUnit: e.target.value as Unit,
+                              unitsPerPack: e.target.value,
                             },
                           }))
                         }
-                      >
-                        {PEDIDO_RECIPE_UNITS.map((o) => (
-                          <option key={o.value} value={o.value}>
-                            {o.label}
-                          </option>
-                        ))}
-                      </SoftSelect>
-                    ) : null}
-                    {!editDual && unitSupportsReceivedWeightKg(productDrafts[editP.id]?.unit ?? editP.unit) ? (
-                      <SoftField
-                        value={productDrafts[editP.id]?.estimatedKg ?? ''}
-                        onChange={(e) =>
-                          setProductDrafts((prev) => ({
-                            ...prev,
-                            [editP.id]: {
-                              ...(prev[editP.id] ?? { ...EMPTY_PRODUCT_DRAFT }),
-                              estimatedKg: e.target.value,
-                            },
-                          }))
-                        }
-                        placeholder="Kg estimados por envase (opcional)"
+                        placeholder="Piezas/envase"
                       />
-                    ) : null}
+                      {parseUnitsPerPack(productDrafts[editP.id]?.unitsPerPack ?? '1') != null &&
+                      parseUnitsPerPack(productDrafts[editP.id]?.unitsPerPack ?? '1')! > 1 ? (
+                        <SoftSelect
+                          value={productDrafts[editP.id]?.recipeUnit ?? 'ud'}
+                          onChange={(e) =>
+                            setProductDrafts((prev) => ({
+                              ...prev,
+                              [editP.id]: {
+                                ...(prev[editP.id] ?? {
+                                  name: '',
+                                  unit: 'ud',
+                                  price: '',
+                                  vatRate: '0',
+                                  estimatedKg: '',
+                                  unitsPerPack: '1',
+                                  recipeUnit: 'ud' as Unit,
+                                  parWeekly: '',
+                                }),
+                                recipeUnit: e.target.value as Unit,
+                              },
+                            }))
+                          }
+                        >
+                          {PEDIDO_RECIPE_UNITS.map((o) => (
+                            <option key={o.value} value={o.value}>
+                              {o.label}
+                            </option>
+                          ))}
+                        </SoftSelect>
+                      ) : null}
+                      {!editDual && unitSupportsReceivedWeightKg(productDrafts[editP.id]?.unit ?? editP.unit) ? (
+                        <SoftField
+                          value={productDrafts[editP.id]?.estimatedKg ?? ''}
+                          onChange={(e) =>
+                            setProductDrafts((prev) => ({
+                              ...prev,
+                              [editP.id]: {
+                                ...(prev[editP.id] ?? { ...EMPTY_PRODUCT_DRAFT }),
+                                estimatedKg: e.target.value,
+                              },
+                            }))
+                          }
+                          placeholder="Kg/envase"
+                        />
+                      ) : null}
+                    </div>
                     <button
                       type="button"
                       onClick={() => saveProductChanges(editP.id)}
-                      className="h-10 rounded-2xl bg-[#D32F2F] px-3 text-sm font-semibold text-white shadow-[0_10px_20px_rgba(211,47,47,0.12)]"
+                      className="h-9 rounded-[15px] bg-[#D32F2F] px-3 text-[13px] font-semibold text-white shadow-[0_8px_18px_rgba(211,47,47,0.11)]"
                     >
                       Guardar cambios
                     </button>
