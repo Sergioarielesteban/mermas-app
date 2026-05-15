@@ -209,6 +209,15 @@ function catalogPriceMapFromSuppliers(suppliers: PedidoSupplier[]) {
   return m;
 }
 
+function supplierLogoMapFromSuppliers(suppliers: PedidoSupplier[]) {
+  const m = new Map<string, string>();
+  for (const s of suppliers) {
+    const logo = s.logoUrl?.trim();
+    if (logo) m.set(s.id, logo);
+  }
+  return m;
+}
+
 function receivedOrderHasAttention(order: PedidoOrder) {
   return order.items.some((item) => Boolean(item.incidentType) || Boolean(item.incidentNotes?.trim()));
 }
@@ -512,6 +521,7 @@ export default function PedidosPage() {
   const [catalogPriceByProductId, setCatalogPriceByProductId] = React.useState<Map<string, number>>(() => new Map());
   const [catalogNameByProductId, setCatalogNameByProductId] = React.useState<Map<string, string>>(() => new Map());
   const [articleNombreByProductId, setArticleNombreByProductId] = React.useState<Map<string, string>>(() => new Map());
+  const [supplierLogoById, setSupplierLogoById] = React.useState<Map<string, string>>(() => new Map());
   const [message, setMessage] = React.useState<string | null>(null);
   const [showDeletedBanner, setShowDeletedBanner] = React.useState(false);
   const deletedBannerTimeoutRef = React.useRef<number | null>(null);
@@ -1932,6 +1942,7 @@ export default function PedidosPage() {
         setCatalogPriceByProductId(map);
         setCatalogNameByProductId(catalogNameByProductIdFromSuppliers(rows));
         setArticleNombreByProductId(articleNombreByProductIdFromSuppliers(rows));
+        setSupplierLogoById(supplierLogoMapFromSuppliers(rows));
         writeCatalogPricesSessionCache(lid, map);
       })
       .catch(() => {
@@ -2073,7 +2084,7 @@ export default function PedidosPage() {
         supplier = {
           key: supplierKey,
           supplierName: o.supplierName,
-          supplierLogoUrl: o.supplierLogoUrl ?? null,
+          supplierLogoUrl: o.supplierLogoUrl ?? supplierLogoById.get(o.supplierId) ?? null,
           orders: [],
           total: 0,
           lastTs: 0,
@@ -2105,7 +2116,7 @@ export default function PedidosPage() {
         lastTs: month.lastTs,
       };
     });
-  }, [receivedOrders]);
+  }, [receivedOrders, supplierLogoById]);
 
   const pedidosResumenEntrega = React.useMemo(() => {
     const now = new Date();
@@ -4538,7 +4549,7 @@ export default function PedidosPage() {
                   >
                     <SupplierAvatar
                       name={order.supplierName}
-                      logoUrl={order.supplierLogoUrl}
+                      logoUrl={order.supplierLogoUrl ?? supplierLogoById.get(order.supplierId)}
                       className="h-full w-full rounded-2xl bg-transparent text-[12px] ring-0"
                       imageClassName="p-1.5"
                     />
