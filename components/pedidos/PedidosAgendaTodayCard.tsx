@@ -50,41 +50,72 @@ export default React.memo(function PedidosAgendaTodayCard({
   const [mandatoryExpanded, setMandatoryExpanded] = React.useState(false);
   const [reviewExpanded, setReviewExpanded] = React.useState(false);
   const [showCompletedReviews, setShowCompletedReviews] = React.useState(false);
-  const [transitionLockUntil, setTransitionLockUntil] = React.useState(0);
-  const transitionTimerRef = React.useRef<number | null>(null);
+  const [hasLoadedOnce, setHasLoadedOnce] = React.useState(false);
+  const [locallyDoneMandatory, setLocallyDoneMandatory] = React.useState<Set<string>>(() => new Set());
+  const [locallyDoneReviews, setLocallyDoneReviews] = React.useState<Set<string>>(() => new Set());
+  const refreshTimerRef = React.useRef<number | null>(null);
 
   React.useEffect(() => {
     return () => {
-      if (transitionTimerRef.current != null) {
-        window.clearTimeout(transitionTimerRef.current);
-        transitionTimerRef.current = null;
+      if (refreshTimerRef.current != null) {
+        window.clearTimeout(refreshTimerRef.current);
+        refreshTimerRef.current = null;
       }
     };
   }, []);
 
-  const beginTransitionLock = React.useCallback(() => {
-    const unlockAt = Date.now() + 320;
-    setTransitionLockUntil(unlockAt);
-    if (transitionTimerRef.current != null) {
-      window.clearTimeout(transitionTimerRef.current);
+  React.useEffect(() => {
+    if (!loading) setHasLoadedOnce(true);
+  }, [loading]);
+
+  React.useEffect(() => {
+    setLocallyDoneMandatory(new Set());
+    setLocallyDoneReviews(new Set());
+  }, [ymd]);
+
+  const scheduleAgendaRefresh = React.useCallback(() => {
+    if (!onAgendaAction) return;
+    if (refreshTimerRef.current != null) {
+      window.clearTimeout(refreshTimerRef.current);
     }
-    transitionTimerRef.current = window.setTimeout(() => {
-      setTransitionLockUntil(0);
-      transitionTimerRef.current = null;
-    }, 320);
-  }, []);
+    refreshTimerRef.current = window.setTimeout(() => {
+      refreshTimerRef.current = null;
+      onAgendaAction();
+    }, 900);
+  }, [onAgendaAction]);
+
+  const markMandatoryDoneInUi = React.useCallback(
+    (supplierId: string) => {
+      setLocallyDoneMandatory((prev) => new Set(prev).add(supplierId));
+      scheduleAgendaRefresh();
+    },
+    [scheduleAgendaRefresh],
+  );
+
+  const markReviewDoneInUi = React.useCallback(
+    (supplierId: string) => {
+      setLocallyDoneReviews((prev) => new Set(prev).add(supplierId));
+      scheduleAgendaRefresh();
+    },
+    [scheduleAgendaRefresh],
+  );
 
   const pendingReviewGroups = React.useMemo(
-    () => reviewSupplierGroups.filter((g) => !g.allDone),
-    [reviewSupplierGroups],
+    () => reviewSupplierGroups.filter((g) => !g.allDone && !locallyDoneReviews.has(g.supplierId)),
+    [locallyDoneReviews, reviewSupplierGroups],
   );
 
   const completedReviewGroups = React.useMemo(
-    () => reviewSupplierGroups.filter((g) => g.allDone),
-    [reviewSupplierGroups],
+    () => reviewSupplierGroups.filter((g) => g.allDone || locallyDoneReviews.has(g.supplierId)),
+    [locallyDoneReviews, reviewSupplierGroups],
   );
 
-  if (loading) {
+  const pendingMandatoryRows = React.useMemo(
+    () => mandatoryRows.filter((row) => !locallyDoneMandatory.has(row.supplierId)),
+    [locallyDoneMandatory, mandatoryRows],
+  );
+
+  if (loading && !hasLoadedOnce) {
     return (
       <section className={AGENDA_CARD_SHELL} aria-live="polite">
         <div className="px-4 py-3.5">
@@ -97,7 +128,8 @@ export default React.memo(function PedidosAgendaTodayCard({
     );
   }
 
-  const showCompletionMicro = showAgendaCompletadaMicro && transitionLockUntil <= Date.now();
+  const showCompletionMicro =
+    showAgendaCompletadaMicro || (hasLoadedOnce && pendingMandatoryRows.length === 0 && pendingReviewGroups.length === 0);
 
   if (showCompletionMicro) {
     return (
@@ -120,14 +152,14 @@ export default React.memo(function PedidosAgendaTodayCard({
     );
   }
 
-  const hasMandatory = mandatoryRows.length > 0;
+  const hasMandatory = pendingMandatoryRows.length > 0;
   const hasReview = pendingReviewGroups.length > 0 || completedReviewGroups.length > 0;
   if (!hasMandatory && !hasReview) return null;
 
-  const totalPending = mandatoryRows.length + pendingReviewGroups.length;
-  const mandatoryOverflow = mandatoryRows.length > MANDATORY_PREVIEW;
+  const totalPending = pendingMandatoryRows.length + pendingReviewGroups.length;
+  const mandatoryOverflow = pendingMandatoryRows.length > MANDATORY_PREVIEW;
   const reviewOverflow = pendingReviewGroups.length > REVIEW_PREVIEW;
-  const mandatoryShown = mandatoryExpanded ? mandatoryRows : mandatoryRows.slice(0, MANDATORY_PREVIEW);
+  const mandatoryShown = mandatoryExpanded ? pendingMandatoryRows : pendingMandatoryRows.slice(0, MANDATORY_PREVIEW);
   const reviewShown = reviewExpanded ? pendingReviewGroups : pendingReviewGroups.slice(0, REVIEW_PREVIEW);
 
   return (
@@ -162,7 +194,7 @@ export default React.memo(function PedidosAgendaTodayCard({
         <div className="flex shrink-0 items-center gap-2">
           <div className="hidden items-center gap-1.5 sm:flex">
             <span className="rounded-full bg-red-50 px-2 py-1 text-[10px] font-black text-red-700 ring-1 ring-red-100">
-              {mandatoryRows.length} oblig.
+              {pendingMandatoryRows.length} oblig.
             </span>
             <span className="rounded-full bg-amber-50 px-2 py-1 text-[10px] font-black text-amber-800 ring-1 ring-amber-100">
               {pendingReviewGroups.length} rev.
@@ -180,7 +212,7 @@ export default React.memo(function PedidosAgendaTodayCard({
             <MetricPill
               tone="red"
               label="Obligatorios"
-              value={mandatoryRows.length}
+              value={pendingMandatoryRows.length}
               icon={<AlarmClock className="h-4 w-4" strokeWidth={2.25} aria-hidden />}
             />
             <MetricPill
@@ -194,7 +226,7 @@ export default React.memo(function PedidosAgendaTodayCard({
           <AgendaSection
             tone="red"
             title="Pedidos obligatorios"
-            count={mandatoryRows.length}
+            count={pendingMandatoryRows.length}
             hint="Proveedores con corte real hoy"
             emptyLabel="Sin obligatorios pendientes"
             action={
@@ -204,7 +236,7 @@ export default React.memo(function PedidosAgendaTodayCard({
                   onClick={() => setMandatoryExpanded((v) => !v)}
                   className="flex h-8 shrink-0 touch-manipulation items-center gap-1 rounded-full bg-red-50 px-2.5 text-[11px] font-bold text-red-700 ring-1 ring-red-100 active:scale-[0.98]"
                 >
-                  {mandatoryExpanded ? 'Menos' : `+${mandatoryRows.length - MANDATORY_PREVIEW}`}
+                  {mandatoryExpanded ? 'Menos' : `+${pendingMandatoryRows.length - MANDATORY_PREVIEW}`}
                   {mandatoryExpanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
                 </button>
               ) : null
@@ -217,8 +249,7 @@ export default React.memo(function PedidosAgendaTodayCard({
                 localId={localId}
                 ymd={ymd}
                 onDone={() => {
-                  beginTransitionLock();
-                  onAgendaAction?.();
+                  markMandatoryDoneInUi(row.supplierId);
                 }}
               />
             ))}
@@ -250,8 +281,7 @@ export default React.memo(function PedidosAgendaTodayCard({
                 localId={localId}
                 ymd={ymd}
                 onDone={() => {
-                  beginTransitionLock();
-                  onAgendaAction?.();
+                  markReviewDoneInUi(group.supplierId);
                 }}
               />
             ))}
