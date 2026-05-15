@@ -50,6 +50,29 @@ export default React.memo(function PedidosAgendaTodayCard({
   const [mandatoryExpanded, setMandatoryExpanded] = React.useState(false);
   const [reviewExpanded, setReviewExpanded] = React.useState(false);
   const [showCompletedReviews, setShowCompletedReviews] = React.useState(false);
+  const [transitionLockUntil, setTransitionLockUntil] = React.useState(0);
+  const transitionTimerRef = React.useRef<number | null>(null);
+
+  React.useEffect(() => {
+    return () => {
+      if (transitionTimerRef.current != null) {
+        window.clearTimeout(transitionTimerRef.current);
+        transitionTimerRef.current = null;
+      }
+    };
+  }, []);
+
+  const beginTransitionLock = React.useCallback(() => {
+    const unlockAt = Date.now() + 320;
+    setTransitionLockUntil(unlockAt);
+    if (transitionTimerRef.current != null) {
+      window.clearTimeout(transitionTimerRef.current);
+    }
+    transitionTimerRef.current = window.setTimeout(() => {
+      setTransitionLockUntil(0);
+      transitionTimerRef.current = null;
+    }, 320);
+  }, []);
 
   const pendingReviewGroups = React.useMemo(
     () => reviewSupplierGroups.filter((g) => !g.allDone),
@@ -74,7 +97,9 @@ export default React.memo(function PedidosAgendaTodayCard({
     );
   }
 
-  if (showAgendaCompletadaMicro) {
+  const showCompletionMicro = showAgendaCompletadaMicro && transitionLockUntil <= Date.now();
+
+  if (showCompletionMicro) {
     return (
       <section
         className="overflow-hidden rounded-[1.35rem] border border-emerald-200/70 bg-emerald-50 px-4 py-3 shadow-sm"
@@ -191,7 +216,10 @@ export default React.memo(function PedidosAgendaTodayCard({
                 row={row}
                 localId={localId}
                 ymd={ymd}
-                onDone={onAgendaAction}
+                onDone={() => {
+                  beginTransitionLock();
+                  onAgendaAction?.();
+                }}
               />
             ))}
           </AgendaSection>
@@ -221,7 +249,10 @@ export default React.memo(function PedidosAgendaTodayCard({
                 group={group}
                 localId={localId}
                 ymd={ymd}
-                onDone={onAgendaAction}
+                onDone={() => {
+                  beginTransitionLock();
+                  onAgendaAction?.();
+                }}
               />
             ))}
 
