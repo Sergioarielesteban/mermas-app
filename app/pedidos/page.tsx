@@ -12,7 +12,6 @@ import {
   LineChart,
   List,
   Loader2,
-  MessageCircle,
   Package,
   Pencil,
   Trash2,
@@ -4627,25 +4626,17 @@ export default function PedidosPage() {
                         {badgeLabel}
                       </span>
                     </div>
-                    <p className="mt-1 line-clamp-2 text-[10px] font-semibold leading-snug text-zinc-500">
-                      Env. {sentDateLabel} · Ent. {deliveryDateLabel} · Rev.{' '}
-                      <span className={order.priceReviewArchivedAt ? 'text-emerald-700' : 'text-zinc-700'}>
-                        {order.priceReviewArchivedAt ? 'OK' : 'Pend.'}
-                      </span>
-                      {order.contentRevisedAfterSentAt ? <span className="text-amber-700"> · Modif.</span> : null}
-                    </p>
+                    <div className="mt-4 grid grid-cols-2 gap-2 text-[10px] font-semibold leading-snug text-zinc-500">
+                      <p className="min-w-0 truncate">
+                        Pedido el <span className="font-black text-zinc-800">{sentDateLabel}</span>
+                      </p>
+                      <p className="min-w-0 truncate text-right">
+                        Entrega <span className="font-black text-zinc-800">{deliveryDateLabel}</span>
+                      </p>
+                    </div>
                   </button>
 
                   <div className="flex shrink-0 items-center gap-1">
-                    <button
-                      type="button"
-                      onClick={() => sendWhatsappOrder(order)}
-                      className="grid h-8 w-8 place-items-center rounded-full bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200/80 transition active:scale-[0.96]"
-                      title="Reenviar WhatsApp"
-                      aria-label="Reenviar pedido por WhatsApp"
-                    >
-                      <MessageCircle className="h-4 w-4" strokeWidth={2.25} aria-hidden />
-                    </button>
                     <button
                       type="button"
                       onClick={() => setSentOrderActionMenuOpenId((prev) => (prev === order.id ? null : order.id))}
@@ -4696,19 +4687,6 @@ export default function PedidosPage() {
                       <Pencil className="h-3.5 w-3.5 shrink-0 text-zinc-700" strokeWidth={2.25} aria-hidden />
                       <span className="text-[7.5px] font-black leading-none text-zinc-600">Editar</span>
                     </Link>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setSentOrderActionMenuOpenId(null);
-                        sendWhatsappOrder(order);
-                      }}
-                      className="flex min-h-[2.25rem] flex-col items-center justify-center gap-0.5 rounded-xl bg-emerald-50 px-1 text-emerald-800 ring-1 ring-emerald-200/80 transition active:scale-[0.98]"
-                      title="WhatsApp"
-                      aria-label="Enviar pedido por WhatsApp"
-                    >
-                      <MessageCircle className="h-3.5 w-3.5 shrink-0" strokeWidth={2.25} aria-hidden />
-                      <span className="text-[7.5px] font-black leading-none">WhatsApp</span>
-                    </button>
                     <button
                       type="button"
                       onClick={async () => {
@@ -5344,11 +5322,7 @@ export default function PedidosPage() {
               </div>
               <p className="mt-2 flex min-w-0 items-center gap-1.5 text-[11px] font-medium leading-snug text-zinc-500">
                 <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" aria-hidden />
-                <span className="truncate">
-                  {historicoProveedorPrincipal
-                    ? `${historicoProveedorPrincipal.supplierName} lidera el mes · ${historicoUltimaEntradaLine}`
-                    : historicoUltimaEntradaLine}
-                </span>
+                <span className="truncate">{historicoUltimaEntradaLine}</span>
               </p>
             </div>
           </div>

@@ -41,6 +41,7 @@ import {
 } from '@/lib/pedidos-supabase';
 import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
 import { isBrowser } from '@/lib/storage';
+import { useOperationalAutoCollapse } from '@/lib/use-operational-auto-collapse';
 import type { Unit } from '@/lib/types';
 import {
   analyzeDominantDisplayUnits,
@@ -999,6 +1000,7 @@ export default function PedidosPreciosPage() {
   const [seriesEvolutionDeleteBusy, setSeriesEvolutionDeleteBusy] = React.useState(false);
   const [evolutionToast, setEvolutionToast] = React.useState<string | null>(null);
   const [expandedEvolutionKey, setExpandedEvolutionKey] = React.useState<string | null>(null);
+  const evolutionListRef = React.useRef<HTMLElement | null>(null);
 
   const productInfoBySupplierProductId = React.useMemo(() => {
     const m = new Map<string, ProductInfo>();
@@ -1134,6 +1136,13 @@ export default function PedidosPreciosPage() {
     const t = window.setTimeout(() => setEvolutionToast(null), 3800);
     return () => window.clearTimeout(t);
   }, [evolutionToast]);
+
+  useOperationalAutoCollapse({
+    activeId: expandedEvolutionKey,
+    containerRef: evolutionListRef,
+    onCollapse: () => setExpandedEvolutionKey(null),
+    timeoutMs: 30_000,
+  });
 
   const reloadCatalogPriceHistory = React.useCallback(async () => {
     if (!localId || !canUse || !isSupabaseEnabled() || !getSupabaseClient()) return;
@@ -2020,7 +2029,7 @@ export default function PedidosPreciosPage() {
         </section>
       ) : null}
 
-      <section className="space-y-2">
+      <section ref={evolutionListRef} className="space-y-2">
         {seriesFilteredVisible.length === 0 ? (
           <div className="rounded-2xl bg-white p-4 text-sm text-zinc-500 ring-1 ring-zinc-200">
             {emptyEvolutionSectionMessage}

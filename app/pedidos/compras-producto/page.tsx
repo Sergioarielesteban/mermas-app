@@ -1,6 +1,5 @@
 'use client';
 
-import Link from 'next/link';
 import React from 'react';
 import {
   ArrowDownRight,
@@ -21,11 +20,12 @@ import {
 } from 'lucide-react';
 import { useAuth } from '@/components/AuthProvider';
 import { usePedidosOrders } from '@/components/PedidosOrdersProvider';
+import { SupplierAvatar } from '@/components/pedidos/SupplierAvatar';
 import PedidosPremiaLockedScreen from '@/components/PedidosPremiaLockedScreen';
 import { canAccessPedidos, canUsePedidosModule } from '@/lib/pedidos-access';
 import { formatQuantityWithUnit, unitPriceCatalogSuffix } from '@/lib/pedidos-format';
 import { orderLineDisplayName } from '@/lib/pedidos-line-display-name';
-import { markPedidosUiSkipRestoreOnce } from '@/lib/pedidos-ui-session';
+import { useOperationalAutoCollapse } from '@/lib/use-operational-auto-collapse';
 import {
   effectiveReceivedWeightKgForReception,
   receptionBillsByWeight,
@@ -91,10 +91,10 @@ type AggregatedPurchases = {
 };
 
 const PERIOD_OPTIONS: Array<{ value: PeriodKey; label: string }> = [
-  { value: 'current-week', label: 'Semana actual' },
-  { value: 'last-week', label: 'Semana pasada' },
-  { value: 'last-4-weeks', label: 'Últimas 4 semanas' },
-  { value: 'current-month', label: 'Mes actual' },
+  { value: 'current-week', label: 'Semana 1' },
+  { value: 'last-week', label: 'Semana 2' },
+  { value: 'last-4-weeks', label: 'Semana 3' },
+  { value: 'current-month', label: 'Semana 4' },
 ];
 
 const EURO_FORMATTER = new Intl.NumberFormat('es-ES', {
@@ -138,6 +138,12 @@ function formatRange(start: Date, endExclusive: Date): string {
   return `${formatShortDate(start)} – ${formatShortDate(end)} ${end.getFullYear()}`;
 }
 
+function formatWeekRangeLabel(start: Date, endExclusive: Date): string {
+  const end = addDays(endExclusive, -1);
+  const fmt = new Intl.DateTimeFormat('es-ES', { day: '2-digit', month: 'short' });
+  return `${fmt.format(start)} - ${fmt.format(end)}`;
+}
+
 function getPeriodRange(period: PeriodKey, now = new Date()): DateRange {
   const today = startOfLocalDay(now);
   const weekStart = startOfMondayWeek(today);
@@ -161,8 +167,8 @@ function getPeriodRange(period: PeriodKey, now = new Date()): DateRange {
     return {
       start,
       end,
-      label: `${formatShortDate(start)} – ${formatShortDate(addDays(end, -1))}`,
-      comparisonLabel: `${formatShortDate(prevStart)} – ${formatShortDate(addDays(start, -1))}`,
+      label: formatWeekRangeLabel(start, end),
+      comparisonLabel: formatWeekRangeLabel(prevStart, start),
     };
   }
 
@@ -535,31 +541,16 @@ function KpiCard({
           ? 'bg-emerald-50 text-emerald-700 ring-emerald-200/70'
           : 'bg-violet-50 text-violet-700 ring-violet-200/70';
   return (
-    <article className="rounded-[22px] border border-zinc-200/80 bg-white px-3.5 py-3 shadow-[0_12px_30px_rgba(15,23,42,0.045)] ring-1 ring-zinc-100/70">
+    <article className="rounded-[20px] border border-zinc-200/80 bg-white px-3 py-2.75 shadow-[0_10px_24px_rgba(15,23,42,0.04)] ring-1 ring-zinc-100/70">
       <div className="flex items-start gap-3">
-        <span className={`grid h-10 w-10 shrink-0 place-items-center rounded-2xl ring-1 ${toneClass}`}>{icon}</span>
+        <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-2xl ring-1 ${toneClass}`}>{icon}</span>
         <div className="min-w-0">
-          <p className="text-[12px] font-medium leading-tight text-zinc-600">{label}</p>
-          <p className="mt-1 font-serif text-[21px] font-black leading-none tracking-tight text-zinc-950">{value}</p>
-          <p className="mt-2 text-[11px] font-semibold leading-tight text-zinc-500">{detail}</p>
+          <p className="text-[11px] font-medium leading-tight text-zinc-600">{label}</p>
+          <p className="mt-1 text-[17px] font-black leading-none tracking-tight tabular-nums text-zinc-950">{value}</p>
+          <p className="mt-1.5 text-[10px] font-semibold leading-tight text-zinc-500">{detail}</p>
         </div>
       </div>
     </article>
-  );
-}
-
-function SupplierAvatar({ name, highlight }: { name: string; highlight: boolean }) {
-  return (
-    <span
-      className={[
-        'grid h-12 w-12 shrink-0 place-items-center rounded-full border text-[12px] font-black tracking-tight',
-        highlight
-          ? 'border-[#D32F2F]/15 bg-[#FFF1EF] text-[#C62828] shadow-[0_8px_22px_rgba(211,47,47,0.09)]'
-          : 'border-zinc-200 bg-white text-zinc-700',
-      ].join(' ')}
-    >
-      {initialsForSupplier(name)}
-    </span>
   );
 }
 
@@ -571,28 +562,28 @@ function ProductRow({ product }: { product: ProductAgg }) {
   const priceSuffix = unitPriceCatalogSuffix[product.unit];
 
   return (
-    <li className="grid grid-cols-[1fr_auto] gap-3 border-t border-zinc-100 px-3 py-3 first:border-t-0 sm:grid-cols-[minmax(0,1.4fr)_0.7fr_0.8fr_0.8fr_0.8fr] sm:items-center">
+    <li className="grid grid-cols-[1fr_auto] gap-2.5 border-t border-zinc-100 px-3 py-2.5 first:border-t-0 sm:grid-cols-[minmax(0,1.4fr)_0.7fr_0.8fr_0.8fr_0.8fr] sm:items-center">
       <div className="min-w-0">
-        <p className="truncate text-[13px] font-black leading-tight text-zinc-950">{product.productName}</p>
-        <p className="mt-1 text-[11px] font-semibold text-zinc-500 sm:hidden">
+        <p className="truncate text-[12px] font-black leading-tight text-zinc-950">{product.productName}</p>
+        <p className="mt-0.5 text-[10px] font-semibold text-zinc-500 sm:hidden">
           {formatQuantityWithUnit(product.quantity, product.unit)} · {formatMoney(avgBase)}/{priceSuffix}
         </p>
       </div>
-      <div className="hidden text-[12px] font-bold text-zinc-800 sm:block">{formatQuantityWithUnit(product.quantity, product.unit)}</div>
-      <div className="hidden text-[12px] font-semibold text-zinc-500 sm:block">{product.unit}</div>
+      <div className="hidden text-[11px] font-bold text-zinc-800 sm:block">{formatQuantityWithUnit(product.quantity, product.unit)}</div>
+      <div className="hidden text-[11px] font-semibold text-zinc-500 sm:block">{product.unit}</div>
       <div className="text-right sm:text-left">
-        <p className="font-serif text-[15px] font-black leading-tight text-zinc-950">{formatMoney(product.totalWithVat)}</p>
-        <p className="mt-1 text-[11px] font-semibold text-zinc-500 sm:hidden">IVA incl.</p>
+        <p className="text-[14px] font-black leading-tight tabular-nums text-zinc-950">{formatMoney(product.totalWithVat)}</p>
+        <p className="mt-0.5 text-[10px] font-semibold text-zinc-500 sm:hidden">IVA incl.</p>
       </div>
-      <div className="hidden text-[12px] font-bold text-zinc-800 sm:block">
+      <div className="hidden text-[11px] font-bold text-zinc-800 sm:block">
         {formatMoney(avgBase)}/{priceSuffix}
       </div>
       <div className="col-span-2 flex items-center justify-between gap-2 sm:col-span-1 sm:block sm:text-right">
-        <span className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-[11px] font-black ${deltaClass} sm:justify-end`}>
+        <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-black ${deltaClass} sm:justify-end`}>
           {qtyDelta > 0 ? <ArrowUpRight className="h-3.5 w-3.5" aria-hidden /> : qtyDelta < 0 ? <ArrowDownRight className="h-3.5 w-3.5" aria-hidden /> : null}
           {productQuantityDeltaLabel(product)}
         </span>
-        <span className={`text-[11px] font-bold ${variationTone(totalDeltaPct)}`}>{formatPct(totalDeltaPct)}</span>
+        <span className={`text-[10px] font-bold ${variationTone(totalDeltaPct)}`}>{formatPct(totalDeltaPct)}</span>
       </div>
     </li>
   );
@@ -611,6 +602,7 @@ export default function ComprasPorProductoPage() {
   const [filtersOpen, setFiltersOpen] = React.useState(false);
   const [onlyChanged, setOnlyChanged] = React.useState(false);
   const [expandedSuppliers, setExpandedSuppliers] = React.useState<Record<string, boolean>>({});
+  const suppliersListRef = React.useRef<HTMLElement | null>(null);
 
   const range = React.useMemo(() => getPeriodRange(period), [period]);
   const previousRange = React.useMemo(() => getPreviousRange(range), [range]);
@@ -631,6 +623,18 @@ export default function ComprasPorProductoPage() {
     });
   }, [firstSupplierKey]);
 
+  const expandedSupplierKey = React.useMemo(() => {
+    const keys = Object.keys(expandedSuppliers).filter((key) => expandedSuppliers[key]);
+    return keys[0] ?? null;
+  }, [expandedSuppliers]);
+
+  useOperationalAutoCollapse({
+    activeId: expandedSupplierKey,
+    containerRef: suppliersListRef,
+    onCollapse: () => setExpandedSuppliers({}),
+    timeoutMs: 30_000,
+  });
+
   const totalDeltaPct = pctDelta(analytics.totalWithVat, analytics.previousTotalWithVat);
   const productDelta = analytics.productCount - analytics.previousProductCount;
   const supplierDelta = analytics.supplierCount - analytics.previousSupplierCount;
@@ -649,46 +653,10 @@ export default function ComprasPorProductoPage() {
   }
 
   return (
-    <div className="min-w-0 space-y-4 overflow-x-hidden pb-24">
-      <section className="space-y-2">
-        <Link
-          href="/pedidos"
-          onClick={markPedidosUiSkipRestoreOnce}
-          className="inline-flex items-center gap-1 py-0.5 text-xs font-medium text-zinc-600 underline-offset-4 hover:text-zinc-900 hover:underline"
-        >
-          ← Pedidos
-        </Link>
-        <div className="rounded-[26px] border border-zinc-200/80 bg-[#FFFCF8] px-4 py-4 shadow-[0_14px_40px_rgba(15,23,42,0.04)] ring-1 ring-white">
-          <div className="flex items-start justify-between gap-4">
-            <div className="min-w-0">
-              <p className="text-[11px] font-black uppercase tracking-[0.16em] text-[#D32F2F]">Compras</p>
-              <h1 className="mt-1 text-balance font-serif text-[28px] font-black leading-none tracking-tight text-zinc-950 sm:text-[34px]">
-                Compras por producto
-              </h1>
-              <p className="mt-2 text-sm font-medium leading-snug text-zinc-600">Análisis semanal de compras reales recibidas.</p>
-            </div>
-            <button
-              type="button"
-              onClick={() => window.print()}
-              className="hidden h-10 shrink-0 items-center gap-2 rounded-2xl border border-zinc-200 bg-white px-3 text-xs font-bold text-zinc-700 shadow-[0_6px_18px_rgba(15,23,42,0.04)] transition active:scale-[0.99] sm:inline-flex"
-            >
-              <FileText className="h-4 w-4" aria-hidden />
-              PDF
-            </button>
-          </div>
-          <div className="mt-4 flex flex-wrap items-center gap-2 text-[11px] font-semibold text-zinc-500">
-            <span>{localName || 'Local'}</span>
-            <span>·</span>
-            <span>{range.label}</span>
-            <span>·</span>
-            <span>Recepciones validadas</span>
-          </div>
-        </div>
-      </section>
-
+    <div className="min-w-0 space-y-3 overflow-x-hidden pb-20">
       <section className="-mx-2 overflow-x-auto px-2">
         <div className="flex min-w-max gap-2 pb-1">
-          <label className="inline-flex h-12 items-center gap-2 rounded-2xl border border-zinc-200 bg-white px-3 text-sm font-bold text-zinc-800 shadow-[0_8px_24px_rgba(15,23,42,0.04)]">
+          <label className="inline-flex h-10 items-center gap-2 rounded-2xl border border-zinc-200 bg-white px-3 text-[12px] font-bold text-zinc-800 shadow-[0_8px_20px_rgba(15,23,42,0.035)]">
             <CalendarDays className="h-4 w-4 text-[#D32F2F]" strokeWidth={2.2} aria-hidden />
             <select
               value={period}
@@ -696,7 +664,7 @@ export default function ComprasPorProductoPage() {
                 setPeriod(e.target.value as PeriodKey);
                 setExpandedSuppliers({});
               }}
-              className="min-w-[9rem] bg-transparent text-sm font-bold outline-none"
+              className="min-w-[8rem] bg-transparent text-[12px] font-bold outline-none"
             >
               {PERIOD_OPTIONS.map((option) => (
                 <option key={option.value} value={option.value}>
@@ -706,7 +674,7 @@ export default function ComprasPorProductoPage() {
             </select>
           </label>
 
-          <label className="inline-flex h-12 items-center gap-2 rounded-2xl border border-zinc-200 bg-white px-3 text-sm font-bold text-zinc-800 shadow-[0_8px_24px_rgba(15,23,42,0.04)]">
+          <label className="inline-flex h-10 items-center gap-2 rounded-2xl border border-zinc-200 bg-white px-3 text-[12px] font-bold text-zinc-800 shadow-[0_8px_20px_rgba(15,23,42,0.035)]">
             <Users className="h-4 w-4 text-zinc-500" strokeWidth={2.2} aria-hidden />
             <select
               value={supplierFilter}
@@ -714,7 +682,7 @@ export default function ComprasPorProductoPage() {
                 setSupplierFilter(e.target.value);
                 setExpandedSuppliers({});
               }}
-              className="min-w-[11rem] bg-transparent text-sm font-bold outline-none"
+              className="min-w-[11rem] bg-transparent text-[12px] font-bold outline-none"
             >
               <option value="all">Todos los proveedores</option>
               {supplierOptions.map((supplier) => (
@@ -725,12 +693,12 @@ export default function ComprasPorProductoPage() {
             </select>
           </label>
 
-          <label className="inline-flex h-12 items-center gap-2 rounded-2xl border border-zinc-200 bg-white px-3 text-sm font-bold text-zinc-800 shadow-[0_8px_24px_rgba(15,23,42,0.04)]">
+          <label className="inline-flex h-10 items-center gap-2 rounded-2xl border border-zinc-200 bg-white px-3 text-[12px] font-bold text-zinc-800 shadow-[0_8px_20px_rgba(15,23,42,0.035)]">
             <Tags className="h-4 w-4 text-zinc-500" strokeWidth={2.2} aria-hidden />
             <select
               value={categoryFilter}
               onChange={(e) => setCategoryFilter(e.target.value)}
-              className="min-w-[10rem] bg-transparent text-sm font-bold outline-none"
+              className="min-w-[10rem] bg-transparent text-[12px] font-bold outline-none"
             >
               <option value="all">Todas las categorías</option>
               {categoryOptions.map((category) => (
@@ -744,7 +712,7 @@ export default function ComprasPorProductoPage() {
           <button
             type="button"
             onClick={() => setFiltersOpen((v) => !v)}
-            className="inline-flex h-12 items-center gap-2 rounded-2xl border border-zinc-200 bg-white px-3 text-sm font-bold text-zinc-700 shadow-[0_8px_24px_rgba(15,23,42,0.04)]"
+            className="inline-flex h-10 items-center gap-2 rounded-2xl border border-zinc-200 bg-white px-3 text-[12px] font-bold text-zinc-700 shadow-[0_8px_20px_rgba(15,23,42,0.035)]"
           >
             <Filter className="h-4 w-4" strokeWidth={2.2} aria-hidden />
             Filtros
@@ -752,10 +720,10 @@ export default function ComprasPorProductoPage() {
         </div>
       </section>
 
-      <section className="flex flex-wrap items-center justify-between gap-2 text-[12px] font-semibold text-zinc-500">
+      <section className="flex flex-wrap items-center justify-between gap-2 text-[11px] font-semibold text-zinc-500">
         <span className="inline-flex items-center gap-2">
           <BarChart3 className="h-4 w-4" strokeWidth={2.2} aria-hidden />
-          Comparado con: {range.comparisonLabel}
+          Comparado con {range.comparisonLabel}
         </span>
         <div className="flex items-center gap-2">
           <CsvButton suppliers={analytics.suppliers} periodLabel={range.label} />
@@ -771,8 +739,8 @@ export default function ComprasPorProductoPage() {
       </section>
 
       {filtersOpen ? (
-        <section className="rounded-[22px] border border-zinc-200/80 bg-white px-3 py-3 shadow-[0_10px_28px_rgba(15,23,42,0.04)]">
-          <label className="flex items-center justify-between gap-4 rounded-2xl bg-zinc-50 px-3 py-2.5 text-sm font-bold text-zinc-800 ring-1 ring-zinc-100">
+        <section className="rounded-[20px] border border-zinc-200/80 bg-white px-3 py-2.5 shadow-[0_10px_24px_rgba(15,23,42,0.04)]">
+          <label className="flex items-center justify-between gap-4 rounded-2xl bg-zinc-50 px-3 py-2 text-[12px] font-bold text-zinc-800 ring-1 ring-zinc-100">
             <span>Mostrar solo productos con cambio</span>
             <input
               type="checkbox"
@@ -784,7 +752,7 @@ export default function ComprasPorProductoPage() {
         </section>
       ) : null}
 
-      <section className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
+      <section className="grid grid-cols-2 gap-2 sm:grid-cols-4">
         <KpiCard
           label="Total comprado"
           value={formatMoney(analytics.totalWithVat)}
@@ -815,19 +783,22 @@ export default function ComprasPorProductoPage() {
         />
       </section>
 
-      <section className="rounded-[26px] border border-zinc-200/80 bg-white shadow-[0_16px_42px_rgba(15,23,42,0.05)] ring-1 ring-zinc-100/70">
-        <div className="flex flex-col gap-3 border-b border-zinc-100 px-3 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-4">
-          <div className="flex min-w-0 gap-4">
-            <span className="border-b-2 border-[#D32F2F] px-1 pb-2 text-sm font-black text-[#D32F2F]">Por proveedor</span>
-            <span className="px-1 pb-2 text-sm font-bold text-zinc-500">Por categoría</span>
+      <section
+        ref={suppliersListRef}
+        className="rounded-[22px] border border-zinc-200/80 bg-white shadow-[0_12px_30px_rgba(15,23,42,0.045)] ring-1 ring-zinc-100/70"
+      >
+        <div className="flex flex-col gap-2.5 border-b border-zinc-100 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between sm:px-4">
+          <div className="flex min-w-0 gap-3">
+            <span className="border-b-2 border-[#D32F2F] px-1 pb-1.5 text-[12px] font-black text-[#D32F2F]">Por proveedor</span>
+            <span className="px-1 pb-1.5 text-[12px] font-bold text-zinc-500">Por categoría</span>
           </div>
-          <label className="flex h-11 items-center gap-2 rounded-2xl border border-zinc-200 bg-white px-3 text-sm text-zinc-700 shadow-[0_6px_18px_rgba(15,23,42,0.035)] sm:w-[18rem]">
+          <label className="flex h-10 items-center gap-2 rounded-2xl border border-zinc-200 bg-white px-3 text-[12px] text-zinc-700 shadow-[0_6px_16px_rgba(15,23,42,0.03)] sm:w-[18rem]">
             <Search className="h-4 w-4 text-zinc-400" strokeWidth={2.2} aria-hidden />
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Buscar producto..."
-              className="min-w-0 flex-1 bg-transparent text-sm font-semibold outline-none placeholder:text-zinc-400"
+              className="min-w-0 flex-1 bg-transparent text-[12px] font-semibold outline-none placeholder:text-zinc-400"
             />
           </label>
         </div>
@@ -847,7 +818,7 @@ export default function ComprasPorProductoPage() {
               const topSupplier = index === 0 && analytics.suppliers.length > 1;
 
               return (
-                <article key={supplier.key} className="bg-white first:rounded-t-[26px] last:rounded-b-[26px]">
+                <article key={supplier.key} className="bg-white first:rounded-t-[22px] last:rounded-b-[22px]">
                   <button
                     type="button"
                     onClick={() =>
@@ -856,21 +827,26 @@ export default function ComprasPorProductoPage() {
                         [supplier.key]: !(prev[supplier.key] ?? index === 0),
                       }))
                     }
-                    className="grid w-full grid-cols-[auto_1fr_auto] items-center gap-3 px-3 py-4 text-left transition hover:bg-[#FFF9F6] active:bg-[#FFF4F0] sm:px-4"
+                    className="grid w-full grid-cols-[auto_1fr_auto] items-center gap-1.5 px-3 py-2 text-left transition hover:bg-[#FFF9F6] active:bg-[#FFF4F0] sm:px-4"
                   >
-                    <SupplierAvatar name={supplier.supplierName} highlight={topSupplier} />
+                    <SupplierAvatar
+                      name={supplier.supplierName}
+                      logoUrl={supplier.logoUrl ?? null}
+                      highlight={topSupplier}
+                      className="h-9 w-9"
+                    />
                     <span className="min-w-0">
                       <span className="flex flex-wrap items-center gap-2">
-                        <span className="truncate font-serif text-[18px] font-black leading-tight text-zinc-950">
+                        <span className="truncate text-[13px] font-black leading-tight text-zinc-950">
                           {supplier.supplierName}
                         </span>
                         {topSupplier ? (
-                          <span className="rounded-full bg-[#D32F2F]/10 px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-[#C62828]">
+                          <span className="rounded-full bg-[#D32F2F]/10 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wide text-[#C62828]">
                             mayor gasto
                           </span>
                         ) : null}
                       </span>
-                      <span className="mt-1 flex flex-wrap items-center gap-2 text-[12px] font-semibold text-zinc-500">
+                      <span className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[9px] font-semibold text-zinc-500">
                         <span>{supplier.products.length} productos</span>
                         <span>·</span>
                         <span className={variationTone(supplierPct)}>{formatPct(supplierPct)} vs período anterior</span>
@@ -880,29 +856,29 @@ export default function ComprasPorProductoPage() {
                     </span>
                     <span className="flex items-center gap-3 text-right">
                       <span className="hidden sm:block">
-                        <span className="block text-[11px] font-bold text-zinc-500">Total comprado</span>
-                        <span className="font-serif text-[19px] font-black text-zinc-950">{formatMoney(supplier.totalWithVat)}</span>
+                        <span className="block text-[9px] font-bold text-zinc-500">Total comprado</span>
+                        <span className="text-[14px] font-black tabular-nums text-zinc-950">{formatMoney(supplier.totalWithVat)}</span>
                       </span>
-                      <span className="grid h-10 w-10 place-items-center rounded-full bg-[#D32F2F]/[0.07] text-[#D32F2F] ring-1 ring-[#D32F2F]/10">
+                      <span className="grid h-9 w-9 place-items-center rounded-full bg-[#D32F2F]/[0.07] text-[#D32F2F] ring-1 ring-[#D32F2F]/10">
                         <ChevronDown
-                          className={`h-4 w-4 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
+                          className={`h-3.5 w-3.5 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
                           strokeWidth={2.4}
                           aria-hidden
                         />
                       </span>
                     </span>
-                    <span className="col-span-3 -mt-2 flex justify-end text-right sm:hidden">
+                    <span className="col-span-3 -mt-0.5 flex justify-end text-right sm:hidden">
                       <span>
-                        <span className="block text-[11px] font-bold text-zinc-500">Total comprado</span>
-                        <span className="font-serif text-[19px] font-black text-zinc-950">{formatMoney(supplier.totalWithVat)}</span>
+                        <span className="block text-[9px] font-bold text-zinc-500">Total comprado</span>
+                        <span className="text-[14px] font-black tabular-nums text-zinc-950">{formatMoney(supplier.totalWithVat)}</span>
                       </span>
                     </span>
                   </button>
 
                   {isExpanded ? (
-                    <div className="px-3 pb-4 sm:px-4">
-                      <div className="overflow-hidden rounded-[20px] border border-zinc-200/80 bg-[#FFFDF9] ring-1 ring-zinc-100/70">
-                        <div className="hidden grid-cols-[minmax(0,1.4fr)_0.7fr_0.8fr_0.8fr_0.8fr] gap-3 border-b border-zinc-100 bg-zinc-50/70 px-3 py-2 text-[11px] font-black uppercase tracking-wide text-zinc-500 sm:grid">
+                    <div className="px-3 pb-2 sm:px-4">
+                      <div className="overflow-hidden rounded-[16px] border border-zinc-200/80 bg-[#FFFDF9] ring-1 ring-zinc-100/70">
+                        <div className="hidden grid-cols-[minmax(0,1.4fr)_0.7fr_0.8fr_0.8fr_0.8fr] gap-3 border-b border-zinc-100 bg-zinc-50/70 px-3 py-1.25 text-[9px] font-black uppercase tracking-wide text-zinc-500 sm:grid">
                           <span>Producto</span>
                           <span>Cantidad comprada</span>
                           <span>Unidad</span>
@@ -915,8 +891,8 @@ export default function ComprasPorProductoPage() {
                           ))}
                         </ul>
                         {supplier.products.length > 8 ? (
-                          <div className="border-t border-zinc-100 px-3 py-3 text-center">
-                            <span className="text-xs font-black text-[#D32F2F]">
+                          <div className="border-t border-zinc-100 px-3 py-1.75 text-center">
+                            <span className="text-[9px] font-black text-[#D32F2F]">
                               + {supplier.products.length - 8} productos más
                             </span>
                           </div>

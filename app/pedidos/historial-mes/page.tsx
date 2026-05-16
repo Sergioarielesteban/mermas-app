@@ -731,9 +731,13 @@ export default function PedidosHistorialMesPage() {
           </button>
           <Link
             href="/pedidos/compras-producto"
-            className="inline-flex h-7 items-center justify-center rounded-full border border-[#D32F2F]/15 bg-[#FFF7F5] px-2.5 text-[10px] font-black text-[#C62828] shadow-[0_6px_18px_rgba(211,47,47,0.06)] sm:h-8 sm:px-3 sm:text-[11px]"
+            className="inline-flex min-h-7 min-w-[8.75rem] items-center justify-center rounded-full border border-[#D32F2F]/15 bg-[#FFF7F5] px-3 py-1 text-center text-[10px] font-black leading-tight text-[#C62828] shadow-[0_6px_18px_rgba(211,47,47,0.06)] sm:min-h-8 sm:min-w-[10rem] sm:px-3.5 sm:text-[11px]"
           >
-            Por producto
+            <span className="whitespace-normal">
+              Consumo semanal
+              <br />
+              por producto
+            </span>
           </Link>
         </div>
         {filtersOpen ? (

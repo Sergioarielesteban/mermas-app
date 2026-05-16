@@ -15,6 +15,7 @@ import {
   Save,
   ShieldCheck,
   Archive,
+  FileDown,
   PlusCircle,
 } from 'lucide-react';
 import { useAuth } from '@/components/AuthProvider';
@@ -49,6 +50,8 @@ import {
   type DeliveryNoteStatus,
 } from '@/lib/delivery-notes-supabase';
 import { syncCatalogPricesFromValidatedDeliveryNote } from '@/lib/delivery-note-catalog-price-sync';
+import { createPedidosAlbaranRecepcionPdf } from '@/lib/pedidos-albaran-recepcion-pdf';
+import { useOperationalAutoCollapse } from '@/lib/use-operational-auto-collapse';
 import {
   fetchOrderById,
   fetchOrders,
@@ -309,6 +312,42 @@ export default function AlbaranDetallePage() {
   const [accountingExpanded, setAccountingExpanded] = useState(false);
   const [ocrExpanded, setOcrExpanded] = useState(false);
   const [manualIncidentExpanded, setManualIncidentExpanded] = useState(false);
+  const manualIncidentDetailsRef = React.useRef<HTMLDetailsElement | null>(null);
+  const headerDetailsRef = React.useRef<HTMLDetailsElement | null>(null);
+  const documentDetailsRef = React.useRef<HTMLDetailsElement | null>(null);
+  const accountingDetailsRef = React.useRef<HTMLDetailsElement | null>(null);
+  const ocrDetailsRef = React.useRef<HTMLDetailsElement | null>(null);
+
+  useOperationalAutoCollapse({
+    activeId: manualIncidentExpanded ? 'manual-incident' : null,
+    containerRef: manualIncidentDetailsRef,
+    onCollapse: () => setManualIncidentExpanded(false),
+    timeoutMs: 30_000,
+  });
+  useOperationalAutoCollapse({
+    activeId: headerExpanded ? 'header' : null,
+    containerRef: headerDetailsRef,
+    onCollapse: () => setHeaderExpanded(false),
+    timeoutMs: 30_000,
+  });
+  useOperationalAutoCollapse({
+    activeId: documentExpanded ? 'document' : null,
+    containerRef: documentDetailsRef,
+    onCollapse: () => setDocumentExpanded(false),
+    timeoutMs: 30_000,
+  });
+  useOperationalAutoCollapse({
+    activeId: accountingExpanded ? 'accounting' : null,
+    containerRef: accountingDetailsRef,
+    onCollapse: () => setAccountingExpanded(false),
+    timeoutMs: 30_000,
+  });
+  useOperationalAutoCollapse({
+    activeId: ocrExpanded ? 'ocr' : null,
+    containerRef: ocrDetailsRef,
+    onCollapse: () => setOcrExpanded(false),
+    timeoutMs: 30_000,
+  });
   const [incidentTab, setIncidentTab] = useState<'open' | 'resolved' | 'all'>('open');
   const [resolveModalId, setResolveModalId] = useState<string | null>(null);
   const [resolveComment, setResolveComment] = useState('');
@@ -789,6 +828,34 @@ export default function AlbaranDetallePage() {
     }
   };
 
+  const exportReceptionPdf = async () => {
+    if (!note) return;
+    setBusy(true);
+    try {
+      await createPedidosAlbaranRecepcionPdf({
+        localLabel: '',
+        note,
+        items,
+        incidents,
+        order,
+        accountingPreview: accountingPreview
+          ? {
+              bookkeepingMonth: accountingPreview.bookkeepingMonth,
+              currency: accountingPreview.currency,
+              headerTotal: accountingPreview.headerTotal,
+              computedLinesTotal: accountingPreview.computedLinesTotal,
+              status: accountingPreview.status,
+              relatedOrderId: accountingPreview.relatedOrderId,
+            }
+          : null,
+      });
+    } catch (e: unknown) {
+      setBanner(e instanceof Error ? e.message : 'Error al generar PDF.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const confirmResolve = async () => {
     if (!localId || !userId || !resolveModalId) return;
     setBusy(true);
@@ -908,12 +975,24 @@ export default function AlbaranDetallePage() {
               : ''}
           </p>
         </div>
-        <Link
-          href="/pedidos/albaranes"
-          className="shrink-0 text-[12px] font-semibold text-zinc-500 hover:text-zinc-900"
-        >
-          ← Bandeja
-        </Link>
+        <div className="flex shrink-0 items-center gap-2">
+          <button
+            type="button"
+            disabled={busy || loading}
+            onClick={() => void exportReceptionPdf()}
+            className="inline-flex h-9 items-center gap-1.5 rounded-full border border-zinc-200 bg-white px-3 text-[12px] font-bold text-zinc-700"
+            title="Descargar informe de recepción en PDF"
+          >
+            <FileDown className="h-3.5 w-3.5" aria-hidden />
+            PDF recepción
+          </button>
+          <Link
+            href="/pedidos/albaranes"
+            className="shrink-0 text-[12px] font-semibold text-zinc-500 hover:text-zinc-900"
+          >
+            ← Bandeja
+          </Link>
+        </div>
       </header>
 
       {/* HERO DE ESTADO */}
@@ -1594,10 +1673,11 @@ export default function AlbaranDetallePage() {
         )}
 
         {/* Nueva incidencia manual — siempre disponible, en bloque secundario */}
-        <details
-          className="mt-4 group rounded-2xl border border-dashed border-zinc-300 bg-white p-3"
-          open={manualIncidentExpanded}
-          onToggle={(e) => setManualIncidentExpanded((e.currentTarget as HTMLDetailsElement).open)}
+      <details
+        ref={manualIncidentDetailsRef}
+        className="mt-4 group rounded-2xl border border-dashed border-zinc-300 bg-white p-3"
+        open={manualIncidentExpanded}
+        onToggle={(e) => setManualIncidentExpanded((e.currentTarget as HTMLDetailsElement).open)}
         >
           <summary className="flex cursor-pointer list-none items-center justify-between text-[12px] font-black uppercase tracking-wide text-zinc-600">
             Añadir incidencia manual
@@ -1638,6 +1718,7 @@ export default function AlbaranDetallePage() {
 
       {/* Cabecera e importes */}
       <details
+        ref={headerDetailsRef}
         className="group rounded-3xl border border-zinc-200 bg-white p-4 shadow-sm open:shadow-md sm:p-5"
         open={headerExpanded}
         onToggle={(e) => setHeaderExpanded((e.target as HTMLDetailsElement).open)}
@@ -1728,6 +1809,7 @@ export default function AlbaranDetallePage() {
 
       {/* Documento original */}
       <details
+        ref={documentDetailsRef}
         className="group rounded-3xl border border-zinc-200 bg-white p-4 shadow-sm open:shadow-md sm:p-5"
         open={documentExpanded}
         onToggle={(e) => setDocumentExpanded((e.currentTarget as HTMLDetailsElement).open)}
@@ -1775,6 +1857,7 @@ export default function AlbaranDetallePage() {
       {/* Datos contables — sólo si hay preview */}
       {accountingPreview ? (
         <details
+          ref={accountingDetailsRef}
           className="group rounded-3xl border border-zinc-200 bg-zinc-50/60 p-4 shadow-sm open:bg-white open:shadow-md sm:p-5"
           open={accountingExpanded}
           onToggle={(e) => setAccountingExpanded((e.currentTarget as HTMLDetailsElement).open)}
@@ -1821,6 +1904,7 @@ export default function AlbaranDetallePage() {
 
       {ocrPreview ? (
         <details
+          ref={ocrDetailsRef}
           className="group rounded-3xl border border-zinc-200 bg-zinc-50/60 p-4 shadow-sm open:bg-white sm:p-5"
           open={ocrExpanded}
           onToggle={(e) => setOcrExpanded((e.currentTarget as HTMLDetailsElement).open)}
