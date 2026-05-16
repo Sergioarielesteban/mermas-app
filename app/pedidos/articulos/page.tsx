@@ -151,7 +151,7 @@ export default function PedidosArticulosPage() {
   }
 
   return (
-    <div className="space-y-2.5 pb-5 sm:space-y-3 sm:pb-7">
+    <div className="space-y-2.5 pb-[6.5rem] sm:space-y-3 sm:pb-7">
       <section className="rounded-[1.25rem] bg-white px-3 py-2.5 shadow-sm ring-1 ring-zinc-200/80">
         <div className="flex items-center justify-between gap-3">
           <div className="min-w-0">
@@ -887,7 +887,7 @@ function ArticleCard({
             ) : null}
           </section>
 
-          <section className="sticky bottom-[calc(4.7rem+env(safe-area-inset-bottom))] z-20 rounded-2xl bg-white/95 p-2 shadow-[0_10px_30px_rgba(15,23,42,0.12)] ring-1 ring-zinc-200/80 backdrop-blur sm:static sm:shadow-sm">
+          <section className="rounded-2xl bg-white p-2 shadow-sm ring-1 ring-zinc-200/80">
             <div className="grid grid-cols-[1fr_auto] gap-2">
               <button
                 type="button"
