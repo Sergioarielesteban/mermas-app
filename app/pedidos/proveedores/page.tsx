@@ -100,6 +100,17 @@ function safeLogoFileName(name: string) {
   return base || 'proveedor';
 }
 
+function isSupplierLogoImageFile(file: File) {
+  if (file.type.startsWith('image/')) return true;
+  return /\.(png|jpe?g|webp|svg)$/i.test(file.name);
+}
+
+type SupplierLogoPendingPreview = { fileName: string; objectUrl: string };
+
+function revokeSupplierLogoPreview(entry: SupplierLogoPendingPreview | undefined) {
+  if (entry?.objectUrl) URL.revokeObjectURL(entry.objectUrl);
+}
+
 async function makeCompactLogoBlob(file: File): Promise<{ blob: Blob; extension: string; contentType: string }> {
   if (file.type === 'image/svg+xml') {
     if (file.size > SUPPLIER_LOGO_MAX_BYTES) throw new Error('El logo SVG es demasiado grande.');
@@ -404,6 +415,11 @@ export default function ProveedoresPage() {
     >
   >({});
   const [supplierLogoUploadingId, setSupplierLogoUploadingId] = React.useState<string | null>(null);
+  const [supplierLogoPendingPreview, setSupplierLogoPendingPreview] = React.useState<
+    Record<string, SupplierLogoPendingPreview>
+  >({});
+  const [supplierLogoUploadError, setSupplierLogoUploadError] = React.useState<Record<string, string>>({});
+  const [supplierLogoFileName, setSupplierLogoFileName] = React.useState<Record<string, string>>({});
   const [exceptionInputBySupplier, setExceptionInputBySupplier] = React.useState<Record<string, string>>({});
   const [productDrafts, setProductDrafts] = React.useState<Record<string, ProductDraft>>({});
   const proveedoresUiHydratedForKeyRef = React.useRef<string | null>(null);
@@ -412,6 +428,16 @@ export default function ProveedoresPage() {
     () => makePersistedScreenStateKey('pedidos-proveedores', [localId ?? 'sin-local']),
     [localId],
   );
+
+  const supplierLogoPendingPreviewRef = React.useRef(supplierLogoPendingPreview);
+  supplierLogoPendingPreviewRef.current = supplierLogoPendingPreview;
+  React.useEffect(() => {
+    return () => {
+      for (const entry of Object.values(supplierLogoPendingPreviewRef.current)) {
+        revokeSupplierLogoPreview(entry);
+      }
+    };
+  }, []);
 
   const saveProveedoresUiState = React.useCallback(() => {
     if (!localId || proveedoresUiHydratedForKeyRef.current !== proveedoresUiKey) return;
@@ -551,12 +577,18 @@ export default function ProveedoresPage() {
     setSupplierDrafts((prev) => {
       const next = { ...prev };
       for (const supplier of rows) {
-        next[supplier.id] = next[supplier.id] ?? {
-          name: supplier.name,
-          contact: supplier.contact ?? '',
-          deliveryCycleWeekdays: [...(supplier.deliveryCycleWeekdays ?? [])],
-          deliveryExceptionDates: [...(supplier.deliveryExceptionDates ?? [])],
-        };
+        const existing = next[supplier.id];
+        if (!existing) {
+          next[supplier.id] = {
+            name: supplier.name,
+            contact: supplier.contact ?? '',
+            logoUrl: supplier.logoUrl ?? null,
+            deliveryCycleWeekdays: [...(supplier.deliveryCycleWeekdays ?? [])],
+            deliveryExceptionDates: [...(supplier.deliveryExceptionDates ?? [])],
+          };
+        } else if (supplier.logoUrl && existing.logoUrl !== supplier.logoUrl) {
+          next[supplier.id] = { ...existing, logoUrl: supplier.logoUrl };
+        }
       }
       return next;
     });
@@ -740,15 +772,35 @@ export default function ProveedoresPage() {
 
   const uploadSupplierLogo = async (supplier: PedidoSupplier, file: File | null) => {
     if (!file) return;
-    if (!localId) return setMessage('Perfil del local no cargado. Cierra sesión y vuelve a entrar.');
-    if (!file.type.startsWith('image/')) return setMessage('El logo debe ser una imagen.');
+    if (!localId) {
+      const msg = 'Perfil del local no cargado. Cierra sesión y vuelve a entrar.';
+      setMessage(msg);
+      setSupplierLogoUploadError((prev) => ({ ...prev, [supplier.id]: msg }));
+      return;
+    }
+    if (!isSupplierLogoImageFile(file)) {
+      const msg = 'El logo debe ser una imagen (PNG, JPG, WEBP o SVG).';
+      setMessage(msg);
+      setSupplierLogoUploadError((prev) => ({ ...prev, [supplier.id]: msg }));
+      return;
+    }
     const supabase = getSupabaseClient();
-    if (!supabase) return setMessage('Supabase no disponible en esta sesión.');
+    if (!supabase) {
+      const msg = 'Supabase no disponible en esta sesión.';
+      setMessage(msg);
+      setSupplierLogoUploadError((prev) => ({ ...prev, [supplier.id]: msg }));
+      return;
+    }
     setSupplierLogoUploadingId(supplier.id);
+    setSupplierLogoUploadError((prev) => {
+      const next = { ...prev };
+      delete next[supplier.id];
+      return next;
+    });
     setMessage(null);
     try {
       const compact = await makeCompactLogoBlob(file);
-      const path = `${localId}/${supplier.id}/${Date.now()}-${safeLogoFileName(supplier.name)}.${compact.extension}`;
+      const path = `${localId.toLowerCase()}/${supplier.id.toLowerCase()}/${Date.now()}-${safeLogoFileName(supplier.name)}.${compact.extension}`;
       const { error } = await supabase.storage.from(SUPPLIER_LOGO_BUCKET).upload(path, compact.blob, {
         cacheControl: '31536000',
         contentType: compact.contentType,
@@ -767,13 +819,24 @@ export default function ProveedoresPage() {
           deliveryExceptionDates: prev[supplier.id]?.deliveryExceptionDates ?? [...(supplier.deliveryExceptionDates ?? [])],
         },
       }));
+      setSupplierLogoFileName((prev) => ({ ...prev, [supplier.id]: file.name }));
+      setSupplierLogoPendingPreview((prev) => {
+        revokeSupplierLogoPreview(prev[supplier.id]);
+        const next = { ...prev };
+        delete next[supplier.id];
+        return next;
+      });
       setMessage('Logo cargado. Guarda el proveedor para aplicarlo.');
     } catch (err) {
-      setMessage(
-        err instanceof Error
-          ? `No se pudo subir el logo: ${err.message}`
-          : 'No se pudo subir el logo. Revisa el bucket pedido-supplier-logos.',
-      );
+      const raw = err instanceof Error ? err.message : '';
+      const rlsBlocked = /row-level security|rls/i.test(raw);
+      const msg = rlsBlocked
+        ? 'Supabase bloqueó la subida (políticas RLS del bucket). Ejecuta supabase-pedidos-supplier-logos.sql en el SQL Editor y comprueba que tu perfil tenga local_id.'
+        : raw
+          ? `No se pudo subir el logo: ${raw}`
+          : 'No se pudo subir el logo. Revisa el bucket pedido-supplier-logos.';
+      setMessage(msg);
+      setSupplierLogoUploadError((prev) => ({ ...prev, [supplier.id]: msg }));
     } finally {
       setSupplierLogoUploadingId(null);
     }
@@ -782,7 +845,6 @@ export default function ProveedoresPage() {
   const saveSupplierChanges = (supplierId: string) => {
     if (!localId) return setMessage('Perfil del local no cargado. Cierra sesión y vuelve a entrar.');
     const draft = supplierDrafts[supplierId];
-    const currentSupplier = suppliers.find((s) => s.id === supplierId);
     const name = draft?.name?.trim() ?? '';
     if (!name) return setMessage('El nombre del proveedor no puede estar vacío.');
     const hasLogoDraft = draft != null && Object.prototype.hasOwnProperty.call(draft, 'logoUrl');
@@ -792,16 +854,29 @@ export default function ProveedoresPage() {
       return setMessage('Agenda: elige al menos un día de pedido o desactiva la agenda.');
     }
 
+    const nextLogoUrl = hasLogoDraft ? (draft?.logoUrl ?? null) : undefined;
     void updateSupplier(supabase, localId, supplierId, {
       name: normalizeUpper(name),
       contact: draft?.contact ?? '',
-      ...(hasLogoDraft && (draft?.logoUrl ?? null) !== (currentSupplier?.logoUrl ?? null)
-        ? { logoUrl: draft?.logoUrl ?? null }
-        : {}),
+      ...(hasLogoDraft ? { logoUrl: draft?.logoUrl ?? null } : {}),
       deliveryCycleWeekdays: draft?.deliveryCycleWeekdays ?? [],
       deliveryExceptionDates: draft?.deliveryExceptionDates ?? [],
     })
       .then(async () => {
+        if (nextLogoUrl !== undefined) {
+          setSuppliers((prev) =>
+            prev.map((s) => {
+              if (s.id !== supplierId) return s;
+              const trimmed = nextLogoUrl?.trim() ?? '';
+              return {
+                ...s,
+                name: normalizeUpper(name),
+                contact: draft?.contact ?? '',
+                logoUrl: trimmed !== '' ? trimmed : undefined,
+              };
+            }),
+          );
+        }
         await upsertOrderSchedule(supabase, localId, supplierId, {
           enabled: agendaEnabled,
           orderWeekdays: agendaOrderDays,
@@ -1075,7 +1150,7 @@ export default function ProveedoresPage() {
             onClick={() => setExpandedSupplierId((id) => (id === supplier.id ? null : supplier.id))}
             aria-expanded={isOpen}
           >
-            <SupplierAvatar name={supplier.name} logoUrl={supplier.logoUrl} className="h-8 w-8 rounded-[14px] text-[10px]" imageClassName="p-1" />
+            <SupplierAvatar name={supplier.name} logoUrl={supplier.logoUrl} className="h-8 w-8 rounded-[14px] text-[10px]" />
             <span className="min-w-0 flex-1">
               <span className="flex min-w-0 items-center gap-2">
                 <span className="truncate text-[14px] font-semibold leading-tight tracking-tight text-zinc-950">{supplier.name}</span>
@@ -1501,20 +1576,56 @@ export default function ProveedoresPage() {
               <div className="flex items-center gap-2 rounded-[16px] border border-zinc-200/70 bg-zinc-50/70 px-2.5 py-2 ring-1 ring-zinc-100/70">
                 <SupplierAvatar
                   name={supplierDrafts[editSup.id]?.name ?? editSup.name}
-                  logoUrl={supplierDrafts[editSup.id]?.logoUrl ?? editSup.logoUrl}
+                  logoUrl={
+                    supplierDrafts[editSup.id]?.logoUrl ??
+                    supplierLogoPendingPreview[editSup.id]?.objectUrl ??
+                    editSup.logoUrl
+                  }
                   className="h-9 w-9 rounded-[14px] text-[10px]"
-                  imageClassName="p-1.5"
                 />
                 <div className="min-w-0 flex-1">
                   <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-400">Logo proveedor</p>
-                  <p className="truncate text-[11px] text-zinc-500">
-                    {supplierLogoUploadingId === editSup.id ? 'Subiendo logo…' : 'PNG, JPG, WEBP o SVG'}
+                  <p
+                    className={[
+                      'truncate text-[11px]',
+                      supplierLogoUploadError[editSup.id] ? 'font-medium text-[#B91C1C]' : 'text-zinc-500',
+                    ].join(' ')}
+                  >
+                    {supplierLogoUploadingId === editSup.id
+                      ? (supplierLogoFileName[editSup.id] ??
+                          supplierLogoPendingPreview[editSup.id]?.fileName ??
+                          'Subiendo logo…')
+                      : supplierLogoUploadError[editSup.id]
+                        ? supplierLogoUploadError[editSup.id]
+                        : (supplierLogoFileName[editSup.id] ??
+                            supplierLogoPendingPreview[editSup.id]?.fileName ??
+                            ((supplierDrafts[editSup.id]?.logoUrl ?? editSup.logoUrl)
+                              ? 'Logo listo · guarda cambios'
+                              : 'PNG, JPG, WEBP o SVG'))}
                   </p>
                 </div>
-                {(supplierDrafts[editSup.id]?.logoUrl ?? editSup.logoUrl) ? (
+                {(supplierDrafts[editSup.id]?.logoUrl ??
+                  supplierLogoPendingPreview[editSup.id]?.objectUrl ??
+                  editSup.logoUrl) ? (
                   <button
                     type="button"
-                    onClick={() =>
+                    onClick={() => {
+                      setSupplierLogoPendingPreview((prev) => {
+                        revokeSupplierLogoPreview(prev[editSup.id]);
+                        const next = { ...prev };
+                        delete next[editSup.id];
+                        return next;
+                      });
+                      setSupplierLogoFileName((prev) => {
+                        const next = { ...prev };
+                        delete next[editSup.id];
+                        return next;
+                      });
+                      setSupplierLogoUploadError((prev) => {
+                        const next = { ...prev };
+                        delete next[editSup.id];
+                        return next;
+                      });
                       setSupplierDrafts((prev) => ({
                         ...prev,
                         [editSup.id]: {
@@ -1524,8 +1635,8 @@ export default function ProveedoresPage() {
                           deliveryCycleWeekdays: prev[editSup.id]?.deliveryCycleWeekdays ?? [...(editSup.deliveryCycleWeekdays ?? [])],
                           deliveryExceptionDates: prev[editSup.id]?.deliveryExceptionDates ?? [...(editSup.deliveryExceptionDates ?? [])],
                         },
-                      }))
-                    }
+                      }));
+                    }}
                     className="h-8 rounded-full border border-zinc-200 bg-white px-2 text-[11px] font-medium text-zinc-600 shadow-sm"
                   >
                     Quitar
@@ -1541,6 +1652,21 @@ export default function ProveedoresPage() {
                     onChange={(e) => {
                       const file = e.target.files?.[0] ?? null;
                       e.currentTarget.value = '';
+                      if (!file) return;
+                      if (!isSupplierLogoImageFile(file)) {
+                        const msg = 'El logo debe ser una imagen (PNG, JPG, WEBP o SVG).';
+                        setSupplierLogoUploadError((prev) => ({ ...prev, [editSup.id]: msg }));
+                        setMessage(msg);
+                        return;
+                      }
+                      setSupplierLogoPendingPreview((prev) => {
+                        revokeSupplierLogoPreview(prev[editSup.id]);
+                        return {
+                          ...prev,
+                          [editSup.id]: { fileName: file.name, objectUrl: URL.createObjectURL(file) },
+                        };
+                      });
+                      setSupplierLogoFileName((prev) => ({ ...prev, [editSup.id]: file.name }));
                       void uploadSupplierLogo(editSup, file);
                     }}
                   />
@@ -1565,6 +1691,7 @@ export default function ProveedoresPage() {
                             const cur = prev[editSup.id] ?? {
                               name: editSup.name,
                               contact: editSup.contact ?? '',
+                              logoUrl: editSup.logoUrl ?? null,
                               deliveryCycleWeekdays: [...(editSup.deliveryCycleWeekdays ?? [])],
                               deliveryExceptionDates: [...(editSup.deliveryExceptionDates ?? [])],
                             };
@@ -1615,6 +1742,7 @@ export default function ProveedoresPage() {
                         const cur = prev[editSup.id] ?? {
                           name: editSup.name,
                           contact: editSup.contact ?? '',
+                          logoUrl: editSup.logoUrl ?? null,
                           deliveryCycleWeekdays: [...(editSup.deliveryCycleWeekdays ?? [])],
                           deliveryExceptionDates: [...(editSup.deliveryExceptionDates ?? [])],
                         };

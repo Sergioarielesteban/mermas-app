@@ -13,6 +13,7 @@ import PedidosPremiaLockedScreen from '@/components/PedidosPremiaLockedScreen';
 import { dispatchPedidosDataChanged, usePedidosDataChangedListener } from '@/hooks/usePedidosDataChangedListener';
 import { canAccessPedidos, canUsePedidosModule } from '@/lib/pedidos-access';
 import RecepcionLineRow from '@/components/pedidos/recepcion/RecepcionLineRow';
+import { SupplierAvatar } from '@/components/pedidos/SupplierAvatar';
 import { formatQuantityWithUnit, unitPriceCatalogSuffix } from '@/lib/pedidos-format';
 import {
   parsePricePerKg,
@@ -821,6 +822,11 @@ export default function RecepcionPedidosPage() {
               ].join(' ')}
             >
               <div className="flex flex-col items-center px-1 pb-0.5 text-center">
+                <SupplierAvatar
+                  name={order.supplierName}
+                  logoUrl={order.supplierLogoUrl}
+                  className="mb-2 h-10 w-10 text-[11px]"
+                />
                 <p className="max-w-[96%] text-sm font-semibold leading-snug tracking-tight text-zinc-900">
                   {order.supplierName}
                 </p>

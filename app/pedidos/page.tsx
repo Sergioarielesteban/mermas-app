@@ -4533,6 +4533,8 @@ export default function PedidosPage() {
               ? new Date(`${order.deliveryDate}T00:00:00`).toLocaleDateString('es-ES')
               : '—';
             const menuOpen = sentOrderActionMenuOpenId === order.id;
+            const orderSupplierLogoUrl = order.supplierLogoUrl ?? supplierLogoById.get(order.supplierId);
+            const orderHasSupplierLogo = Boolean(orderSupplierLogoUrl?.trim());
             return (
             <div key={order.id} className={cardShell}>
               <div className="px-3 py-3 text-left sm:px-3.5">
@@ -4543,15 +4545,19 @@ export default function PedidosPage() {
                       setSentOrderActionMenuOpenId(null);
                       setExpandedSentId((prev) => (prev === order.id ? null : order.id));
                     }}
-                    className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-[#D32F2F]/[0.08] text-[12px] font-black uppercase text-[#B91C1C] ring-1 ring-[#D32F2F]/[0.14] transition active:scale-[0.98]"
+                    className={[
+                      'grid h-11 w-11 shrink-0 place-items-center overflow-hidden rounded-2xl transition active:scale-[0.98]',
+                      orderHasSupplierLogo
+                        ? 'bg-white ring-1 ring-zinc-200/80'
+                        : 'bg-[#D32F2F]/[0.08] text-[12px] font-black uppercase text-[#B91C1C] ring-1 ring-[#D32F2F]/[0.14]',
+                    ].join(' ')}
                     aria-label={detailOpen ? 'Ocultar detalles del pedido' : 'Ver detalles del pedido'}
                     aria-expanded={detailOpen}
                   >
                     <SupplierAvatar
                       name={order.supplierName}
-                      logoUrl={order.supplierLogoUrl ?? supplierLogoById.get(order.supplierId)}
-                      className="h-full w-full rounded-2xl bg-transparent text-[12px] ring-0"
-                      imageClassName="p-1.5"
+                      logoUrl={orderSupplierLogoUrl}
+                      className="h-full w-full rounded-2xl bg-transparent ring-0"
                     />
                   </button>
 
