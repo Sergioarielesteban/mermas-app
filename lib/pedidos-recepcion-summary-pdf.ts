@@ -98,7 +98,9 @@ function kpiBox(doc: jsPDF, x: number, y: number, w: number, h: number, title: s
 
 export async function createPedidosRecepcionSummaryPdf(payload: PedidosRecepcionSummaryPayload): Promise<void> {
   const logo = await loadOfficialChefLogo();
-  const doc = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'a4' });
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'a4' }) as jsPDF & {
+    lastAutoTable?: { finalY?: number };
+  };
   const pageW = doc.internal.pageSize.getWidth();
   const margin = 40;
   let y = margin;
