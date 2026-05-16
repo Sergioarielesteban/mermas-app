@@ -1,11 +1,11 @@
 'use client';
 
-import Link from 'next/link';
 import React from 'react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import {
   AlertTriangle,
+  ChevronDown,
   Download,
   History,
   Lightbulb,
@@ -47,7 +47,6 @@ import {
   euroPerUnitShortLabel,
   hasMixedComparisonUnits,
 } from '@/lib/price-evolution-dominant-unit';
-import { markPedidosUiSkipRestoreOnce } from '@/lib/pedidos-ui-session';
 
 type WindowPreset = '30' | '60' | '90' | '365' | 'all';
 
@@ -999,6 +998,7 @@ export default function PedidosPreciosPage() {
   } | null>(null);
   const [seriesEvolutionDeleteBusy, setSeriesEvolutionDeleteBusy] = React.useState(false);
   const [evolutionToast, setEvolutionToast] = React.useState<string | null>(null);
+  const [expandedEvolutionKey, setExpandedEvolutionKey] = React.useState<string | null>(null);
 
   const productInfoBySupplierProductId = React.useMemo(() => {
     const m = new Map<string, ProductInfo>();
@@ -1797,33 +1797,13 @@ export default function PedidosPreciosPage() {
 
   return (
     <div className="space-y-3 overflow-x-hidden">
-      <section className="flex flex-wrap gap-1.5">
-        <Link
-          href="/pedidos"
-          onClick={markPedidosUiSkipRestoreOnce}
-          className="inline-flex h-8 items-center rounded-lg border border-zinc-300 bg-white px-2.5 text-xs font-semibold text-zinc-700"
-        >
-          ← Atras
-        </Link>
-        <Link
-          href="/pedidos/historial-mes"
-          className="inline-flex h-8 items-center rounded-lg border border-zinc-300 bg-white px-2.5 text-xs font-semibold text-zinc-700"
-        >
-          Compras del mes
-        </Link>
-      </section>
-
-      <section className="rounded-2xl bg-white p-3 shadow-sm ring-1 ring-zinc-200/80 sm:p-4">
-        <div className="flex flex-col gap-0.5 text-center sm:text-left">
-          <p className="font-sans text-[9px] font-semibold uppercase tracking-[0.16em] text-zinc-400">Pedidos</p>
-          <h1 className="font-serif text-xl font-normal tracking-tight text-zinc-900">Evolución de precio</h1>
-        </div>
+      <section className="rounded-2xl bg-white p-2.5 shadow-sm ring-1 ring-zinc-200/70 sm:p-3">
         {message ? <p className="pt-1.5 text-center text-sm text-[#B91C1C] sm:text-left">{message}</p> : null}
 
-        <div className="mt-3 flex flex-col gap-2.5">
-          <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-col gap-2">
+          <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-[auto_1fr_auto] sm:items-center">
             <span className="sr-only">Periodo</span>
-            <div className="inline-flex max-w-full rounded-full bg-zinc-100 p-0.5">
+            <div className="grid grid-cols-5 rounded-full bg-zinc-100/80 p-0.5 ring-1 ring-zinc-200/60">
               {(
                 [
                   ['30', '30d'],
@@ -1838,8 +1818,10 @@ export default function PedidosPreciosPage() {
                   type="button"
                   onClick={() => setWindowPreset(val)}
                   className={[
-                    'rounded-full px-3 py-1.5 text-[12px] font-semibold transition-colors',
-                    windowPreset === val ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-500 hover:text-zinc-800',
+                    'h-7 rounded-full px-2 text-[11px] font-black leading-none transition active:scale-[0.98]',
+                    windowPreset === val
+                      ? 'bg-white text-zinc-950 shadow-sm ring-1 ring-zinc-200/70'
+                      : 'text-zinc-500 hover:bg-white/60 hover:text-zinc-800',
                   ].join(' ')}
                 >
                   {label}
@@ -1850,7 +1832,7 @@ export default function PedidosPreciosPage() {
               value={supplierFilter}
               onChange={(e) => setSupplierFilter(e.target.value)}
               aria-label="Proveedor"
-              className="h-9 min-w-0 flex-1 rounded-full border-0 bg-zinc-100 px-3 text-[13px] font-medium text-zinc-900 ring-1 ring-zinc-200/80 sm:max-w-[14rem]"
+              className="h-8 min-w-0 rounded-full border-0 bg-zinc-100/80 px-3 text-[12px] font-semibold text-zinc-800 ring-1 ring-zinc-200/70 focus:outline-none focus:ring-2 focus:ring-zinc-300 sm:max-w-[14rem]"
             >
               <option value="">Todos los proveedores</option>
               {supplierOptions.map(([id, name]) => (
@@ -1863,9 +1845,9 @@ export default function PedidosPreciosPage() {
               value={String(alertPct)}
               onChange={(e) => setAlertPct(Number(e.target.value))}
               aria-label="Umbral alerta subida"
-              className="h-9 shrink-0 rounded-full border-0 bg-zinc-100 px-2.5 text-[12px] font-medium text-zinc-800 ring-1 ring-zinc-200/80"
+              className="h-8 rounded-full border-0 bg-amber-50 px-3 text-[12px] font-black text-amber-950 ring-1 ring-amber-200/80 focus:outline-none focus:ring-2 focus:ring-amber-200"
             >
-              <option value="0">Alerta: mín.</option>
+              <option value="0">Alerta mínima</option>
               <option value="3">Alerta ≥3%</option>
               <option value="5">Alerta ≥5%</option>
               <option value="8">Alerta ≥8%</option>
@@ -1876,11 +1858,11 @@ export default function PedidosPreciosPage() {
             value={productSearch}
             onChange={(e) => setProductSearch(e.target.value)}
             placeholder="Buscar referencia…"
-            className="h-9 w-full rounded-xl border border-zinc-200 bg-zinc-50/80 px-3 text-[13px] text-zinc-900 placeholder:text-zinc-400 focus:border-zinc-300 focus:bg-white focus:outline-none focus:ring-2 focus:ring-zinc-200"
+            className="h-9 w-full rounded-xl border border-zinc-200/80 bg-zinc-50/80 px-3 text-[13px] text-zinc-900 placeholder:text-zinc-400 focus:border-zinc-300 focus:bg-white focus:outline-none focus:ring-2 focus:ring-zinc-200"
           />
         </div>
 
-        <div className="mt-3 flex flex-wrap items-center gap-2">
+        <div className="mt-2.5 flex flex-wrap items-center gap-2">
           <button
             type="button"
             onClick={downloadReportPdf}
@@ -2038,7 +2020,7 @@ export default function PedidosPreciosPage() {
         </section>
       ) : null}
 
-      <section className="space-y-4">
+      <section className="space-y-2">
         {seriesFilteredVisible.length === 0 ? (
           <div className="rounded-2xl bg-white p-4 text-sm text-zinc-500 ring-1 ring-zinc-200">
             {emptyEvolutionSectionMessage}
@@ -2076,58 +2058,99 @@ export default function PedidosPreciosPage() {
                 }
               : null;
           const historialRows = [...row.purchases].sort((a, b) => Date.parse(b.date) - Date.parse(a.date)).slice(0, 8);
+          const expanded = expandedEvolutionKey === row.key;
+          const trendBadge =
+            trend === 'up'
+              ? 'bg-amber-100 text-amber-950 ring-1 ring-amber-200/80'
+              : trend === 'down'
+                ? 'bg-emerald-50 text-emerald-900 ring-1 ring-emerald-100'
+                : 'bg-zinc-100 text-zinc-600 ring-1 ring-zinc-200/80';
+          const trendLabel = trend === 'up' ? 'Subida' : trend === 'down' ? 'Bajada' : 'Estable';
+          const trendIcon = trend === 'up' ? (
+            <AlertTriangle className="h-3 w-3 shrink-0" aria-hidden />
+          ) : trend === 'down' ? (
+            <TrendingDown className="h-3 w-3 shrink-0" aria-hidden />
+          ) : null;
           return (
             <article
               key={row.key}
               className={[
-                'overflow-hidden rounded-xl bg-white shadow-sm ring-1',
-                alert ? 'ring-2 ring-amber-300/90' : 'ring-zinc-200/90',
+                'overflow-hidden rounded-2xl bg-white shadow-[0_4px_18px_rgba(24,24,27,0.055)] ring-1 transition-[box-shadow,background-color] duration-200',
+                alert
+                  ? expanded
+                    ? 'ring-amber-300/90 shadow-[0_8px_24px_rgba(245,158,11,0.13)]'
+                    : 'ring-amber-200/85'
+                  : expanded
+                    ? 'ring-zinc-300/95 shadow-[0_8px_26px_rgba(24,24,27,0.08)]'
+                    : 'ring-zinc-200/90 hover:shadow-[0_8px_24px_rgba(24,24,27,0.075)]',
               ].join(' ')}
             >
-              <div className="border-b border-zinc-100/90 px-3 pb-3 pt-3 sm:px-3.5">
-                <div className="flex gap-2.5">
-                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-zinc-100 ring-1 ring-zinc-200/80">
-                    <Package className="h-5 w-5 text-zinc-400" aria-hidden />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0">
-                        <h2 className="font-sans text-[13px] font-bold uppercase leading-snug tracking-wide text-zinc-900">
-                          {row.productName}
-                        </h2>
-                        <p className="mt-0.5 text-[11px] leading-snug text-zinc-500">{row.supplierName}</p>
-                      </div>
-                      <div className="flex shrink-0 items-start gap-1">
-                        {trend === 'up' ? (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-amber-950">
-                            <AlertTriangle className="h-3 w-3 shrink-0" aria-hidden />
-                            Subida
-                          </span>
-                        ) : trend === 'down' ? (
-                          <span className="inline-flex items-center rounded-full bg-emerald-50 px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-emerald-900">
-                            Bajada
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center rounded-full bg-zinc-100 px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-zinc-600">
-                            Estable
-                          </span>
-                        )}
-                        <button
-                          type="button"
-                          disabled={seriesEvolutionDeleteBusy}
-                          title="Borrar histórico de este producto"
-                          onClick={() => setSeriesDeleteContext({ key: row.key })}
-                          className="rounded-lg p-1 text-zinc-400 hover:bg-red-50 hover:text-[#B91C1C] disabled:opacity-40"
-                          aria-label="Borrar histórico de este producto"
-                        >
-                          <Trash2 className="h-4 w-4" aria-hidden />
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
+              <div className="flex items-center gap-2 px-2.5 py-2 sm:px-3">
+                <button
+                  type="button"
+                  onClick={() => setExpandedEvolutionKey((key) => (key === row.key ? null : row.key))}
+                  className="flex min-w-0 flex-1 items-center gap-2 text-left outline-none transition active:scale-[0.995] focus-visible:rounded-xl focus-visible:ring-2 focus-visible:ring-[#D32F2F]/25"
+                  aria-expanded={expanded}
+                >
+                  <span
+                    className={[
+                      'grid h-9 w-9 shrink-0 place-items-center rounded-xl ring-1',
+                      trend === 'up'
+                        ? 'bg-amber-50 text-amber-700 ring-amber-200/80'
+                        : trend === 'down'
+                          ? 'bg-emerald-50 text-emerald-700 ring-emerald-100'
+                          : 'bg-zinc-50 text-zinc-500 ring-zinc-200/80',
+                    ].join(' ')}
+                    aria-hidden
+                  >
+                    <Package className="h-4 w-4" />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="line-clamp-2 font-sans text-[13px] font-black uppercase leading-snug tracking-wide text-zinc-950">
+                      {row.productName}
+                    </span>
+                    <span className="mt-0.5 block truncate text-[11px] font-medium uppercase tracking-wide text-zinc-400">
+                      {row.supplierName}
+                    </span>
+                  </span>
+                  <span className="flex shrink-0 flex-col items-end gap-1 text-right">
+                    <span className={['inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[9px] font-black uppercase tracking-wide', trendBadge].join(' ')}>
+                      {trendIcon}
+                      {trendLabel}
+                    </span>
+                    <span
+                      className={[
+                        'text-[17px] font-black tabular-nums leading-none',
+                        row.deltaPct > 0 ? 'text-red-600' : row.deltaPct < 0 ? 'text-emerald-700' : 'text-zinc-900',
+                      ].join(' ')}
+                    >
+                      {row.deltaPct >= 0 ? '+' : ''}
+                      {row.deltaPct.toFixed(1).replace('.', ',')}%
+                    </span>
+                    <span className="whitespace-nowrap text-[11px] font-semibold tabular-nums text-zinc-800">
+                      {row.base.price.toFixed(2).replace('.', ',')} € → {row.current.price.toFixed(2).replace('.', ',')} €
+                    </span>
+                  </span>
+                  <ChevronDown
+                    className={['h-4 w-4 shrink-0 text-zinc-400 transition-transform duration-200', expanded ? 'rotate-180' : ''].join(' ')}
+                    aria-hidden
+                  />
+                </button>
+                <button
+                  type="button"
+                  disabled={seriesEvolutionDeleteBusy}
+                  title="Borrar histórico de este producto"
+                  onClick={() => setSeriesDeleteContext({ key: row.key })}
+                  className="rounded-full p-1.5 text-zinc-400 hover:bg-red-50 hover:text-[#B91C1C] disabled:opacity-40"
+                  aria-label="Borrar histórico de este producto"
+                >
+                  <Trash2 className="h-3.5 w-3.5" aria-hidden />
+                </button>
+              </div>
 
-                <div className="mt-3 grid grid-cols-2 gap-1.5 sm:grid-cols-4">
+              {expanded ? (
+                <div className="border-t border-zinc-100/90 bg-gradient-to-b from-zinc-50/50 to-white">
+                  <div className="grid grid-cols-2 gap-1.5 px-2.5 pb-2 pt-2 sm:grid-cols-4 sm:px-3">
                   <div
                     className="rounded-xl bg-zinc-50/90 px-2 py-2 ring-1 ring-zinc-200/80"
                     title="Precio base del pedido al inicio de la serie (referencia)."
@@ -2183,7 +2206,7 @@ export default function PedidosPreciosPage() {
                   </div>
                 </div>
 
-                <div className="mt-2.5 grid grid-cols-2 gap-1.5">
+                <div className="grid grid-cols-2 gap-1.5 px-2.5 pb-2 sm:px-3">
                   <div className="rounded-xl bg-emerald-50/80 px-2 py-1.5 ring-1 ring-emerald-100/90">
                     <p className="text-[9px] font-medium uppercase tracking-wide text-emerald-800/90">Impacto mensual</p>
                     <p className="mt-0.5 font-sans text-sm font-semibold tabular-nums text-emerald-900">
@@ -2214,7 +2237,6 @@ export default function PedidosPreciosPage() {
                     </p>
                   </div>
                 </div>
-              </div>
 
               <div className="bg-zinc-50/40 px-2.5 pb-2.5 pt-2 sm:px-3">
                 <PriceEvolutionMiniChart
@@ -2257,6 +2279,8 @@ export default function PedidosPreciosPage() {
                       </tbody>
                     </table>
                   </div>
+                </div>
+              ) : null}
                 </div>
               ) : null}
             </article>
