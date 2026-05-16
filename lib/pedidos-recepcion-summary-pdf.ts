@@ -128,7 +128,7 @@ export async function createPedidosRecepcionSummaryPdf(payload: PedidosRecepcion
   let bx = margin;
   for (const b of badgeTexts) {
     const w = Math.max(44, doc.getTextWidth(b.text) + 16);
-    doc.setFillColor(...b.fill);
+    doc.setFillColor(b.fill[0], b.fill[1], b.fill[2]);
     doc.roundedRect(bx, y, w, 16, 8, 8, 'F');
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(8);
