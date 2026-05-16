@@ -18,6 +18,7 @@ import {
   type PedidosRecepcionSummaryAlert,
   type PedidosRecepcionSummaryPayload,
 } from '@/lib/pedidos-recepcion-summary-build';
+import { createPedidosRecepcionSummaryPdf } from '@/lib/pedidos-recepcion-summary-pdf';
 
 type Props = {
   open: boolean;
@@ -79,8 +80,8 @@ export default function PedidosRecepcionSummarySheet({ open, onClose, payload }:
   const impactPositive = payload.diffEur >= 0;
 
   const handlePrint = React.useCallback(() => {
-    window.print();
-  }, []);
+    void createPedidosRecepcionSummaryPdf(payload);
+  }, [payload]);
 
   return (
     <div
