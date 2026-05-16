@@ -71,6 +71,7 @@ type SupplierAgg = {
   key: string;
   supplierId: string;
   supplierName: string;
+  logoUrl?: string | null;
   totalWithVat: number;
   prevTotalWithVat: number;
   orderIds: Set<string>;
@@ -352,11 +353,15 @@ function buildCurrentMap(orders: PedidoOrder[], range: DateRange, supplierFilter
           key: supplierKey,
           supplierId: order.supplierId,
           supplierName,
+          logoUrl: order.supplierLogoUrl ?? null,
           totalWithVat: 0,
           prevTotalWithVat: 0,
           orderIds: new Set<string>(),
           products: [],
         };
+      if (supplier.logoUrl == null && order.supplierLogoUrl) {
+        supplier.logoUrl = order.supplierLogoUrl;
+      }
       supplier.totalWithVat += basis.totalWithVat;
       supplier.orderIds.add(order.id);
       supplierMap.set(supplierKey, supplier);
