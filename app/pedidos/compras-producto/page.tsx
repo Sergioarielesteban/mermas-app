@@ -837,7 +837,6 @@ export default function ComprasPorProductoPage() {
                     <SupplierAvatar
                       name={supplier.supplierName}
                       logoUrl={supplier.logoUrl ?? null}
-                      highlight={topSupplier}
                       className="h-9 w-9"
                     />
                     <span className="min-w-0">
