@@ -36,7 +36,6 @@ import {
   pickOcrPendingNotes,
   summarisePendingReason,
 } from '@/lib/delivery-notes-stats';
-import { markPedidosUiSkipRestoreOnce } from '@/lib/pedidos-ui-session';
 
 const STATUS_OPTIONS: (DeliveryNoteStatus | 'all')[] = [
   'all',
@@ -224,21 +223,6 @@ export default function PedidosAlbaranesPage() {
 
   return (
     <div className="space-y-4 pb-12">
-      {/* HEADER COMPACTO */}
-      <header className="flex items-center justify-between">
-        <div className="min-w-0">
-          <p className="text-[10px] font-bold uppercase tracking-wide text-zinc-500">Pedidos</p>
-          <h1 className="text-[22px] font-black leading-tight text-zinc-900">Albaranes</h1>
-        </div>
-        <Link
-          href="/pedidos"
-          onClick={markPedidosUiSkipRestoreOnce}
-          className="text-[12px] font-semibold text-zinc-500 hover:text-zinc-900"
-        >
-          ← Pedidos
-        </Link>
-      </header>
-
       {banner ? (
         <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950">
           {banner}
@@ -352,7 +336,7 @@ export default function PedidosAlbaranesPage() {
 // ─── HERO OCR ────────────────────────────────────────────────────────────────
 function HeroOcrCard({ onOpen }: { onOpen: () => void }) {
   return (
-    <section className="rounded-3xl border border-zinc-200 bg-gradient-to-br from-white via-white to-rose-50/40 p-4 shadow-sm sm:p-5">
+      <section className="rounded-3xl border border-zinc-200 bg-gradient-to-br from-white via-white to-rose-50/40 p-4 shadow-sm sm:p-5">
       <div className="flex items-start gap-3">
         <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-[#D32F2F]/10 text-[#D32F2F] ring-1 ring-[#D32F2F]/20">
           <ScanLine className="h-6 w-6" aria-hidden />
@@ -381,18 +365,6 @@ function HeroOcrCard({ onOpen }: { onOpen: () => void }) {
           <span className="text-[13.5px] font-black tracking-tight">Subir PDF / Imagen</span>
         </button>
       </div>
-
-      <ul className="mt-3 grid grid-cols-1 gap-1 text-[11px] text-zinc-500 sm:grid-cols-3">
-        <li className="flex items-center gap-1.5">
-          <Sparkles className="h-3 w-3 text-emerald-600" aria-hidden /> Extrae líneas y precios
-        </li>
-        <li className="flex items-center gap-1.5">
-          <AlertTriangle className="h-3 w-3 text-amber-600" aria-hidden /> Detecta diferencias
-        </li>
-        <li className="flex items-center gap-1.5">
-          <Link2 className="h-3 w-3 text-sky-600" aria-hidden /> Vincula con pedido
-        </li>
-      </ul>
     </section>
   );
 }

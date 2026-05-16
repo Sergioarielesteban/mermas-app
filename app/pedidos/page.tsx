@@ -605,6 +605,7 @@ export default function PedidosPage() {
     containerRef: sentOrdersListRef,
     onCollapse: () => setExpandedSentId(null),
     hasPendingChanges: () => Boolean(expandedSentId && incidentOpenBySentOrderId[expandedSentId]),
+    timeoutMs: 30_000,
   });
   useOperationalAutoCollapse({
     activeId: expandedHistoricoId ?? expandedHistoricoSupplierKey,
@@ -613,6 +614,19 @@ export default function PedidosPage() {
       setExpandedHistoricoId(null);
       setExpandedHistoricoSupplierKey(null);
     },
+    timeoutMs: 30_000,
+  });
+  useOperationalAutoCollapse({
+    activeId: pendientesEntregaAccordionOpen ? 'entrega' : null,
+    containerRef: sentOrdersListRef,
+    onCollapse: () => setPendientesEntregaAccordionOpen(false),
+    timeoutMs: 30_000,
+  });
+  useOperationalAutoCollapse({
+    activeId: historicoRecibidosAccordionOpen ? 'almacen' : null,
+    containerRef: historicoOrdersListRef,
+    onCollapse: () => setHistoricoRecibidosAccordionOpen(false),
+    timeoutMs: 30_000,
   });
   const [assistantInput, setAssistantInput] = React.useState('');
   const [assistantReply, setAssistantReply] = React.useState<string | null>(null);

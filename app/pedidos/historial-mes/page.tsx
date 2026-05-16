@@ -26,7 +26,6 @@ import {
   downloadPedidosHistorialComprasDetailPdf,
   downloadPedidosHistorialComprasExecutivePdf,
 } from '@/lib/pedidos-historial-compras-pdf';
-import { markPedidosUiSkipRestoreOnce } from '@/lib/pedidos-ui-session';
 import type { PedidoOrder } from '@/lib/pedidos-supabase';
 import type { Unit } from '@/lib/types';
 
@@ -52,7 +51,6 @@ export default function PedidosHistorialMesPage() {
   const hasPedidosEntry = canAccessPedidos(localCode, email, localName, localId);
   const canUse = canUsePedidosModule(localCode, email, localName, localId);
   const { orders } = usePedidosOrders();
-  const [message, setMessage] = React.useState<string | null>(null);
   const [month, setMonth] = React.useState(() => new Date().toISOString().slice(0, 7));
   const [viewMode, setViewMode] = React.useState<ViewMode>('real');
   const [activeWeek, setActiveWeek] = React.useState<number | null>(null);
@@ -657,54 +655,6 @@ export default function PedidosHistorialMesPage() {
     downloadPedidosHistorialComprasDetailPdf(commonPdfInput);
   }, [commonPdfInput]);
 
-  const downloadLinesCsv = React.useCallback(() => {
-    const rows: string[] = [];
-    rows.push(
-      [
-        'fecha',
-        'proveedor',
-        'estado',
-        'producto',
-        'unidad',
-        'cantidad',
-        'precio_unitario',
-        'iva_pct',
-        'linea_total_iva',
-        'incidencia',
-      ].join(','),
-    );
-    for (const o of filteredMonthlyOrders) {
-      const dt = (o.receivedAt ?? o.sentAt ?? o.createdAt).slice(0, 10);
-      const status = o.status === 'received' ? 'recibido' : 'enviado';
-      for (const it of o.items) {
-        const qty = o.status === 'received' ? it.receivedQuantity : it.quantity;
-        const base = Math.max(0, qty) * it.pricePerUnit;
-        const total = Math.round((base + base * it.vatRate) * 100) / 100;
-        const inc = it.incidentType ?? '';
-        const cols = [
-          dt,
-          o.supplierName,
-          status,
-          it.productName,
-          it.unit,
-          String(qty),
-          it.pricePerUnit.toFixed(4),
-          String(Math.round(it.vatRate * 100)),
-          total.toFixed(2),
-          inc,
-        ].map((v) => `"${String(v).replace(/"/g, '""')}"`);
-        rows.push(cols.join(','));
-      }
-    }
-    const blob = new Blob([rows.join('\n')], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `compras-mes-lineas-${month}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
-  }, [filteredMonthlyOrders, month]);
-
   const downloadSupplierRollupCsv = React.useCallback(() => {
     const rows: string[] = [];
     rows.push(['proveedor', 'producto', 'unidad', 'cantidad_mes'].join(','));
@@ -740,57 +690,28 @@ export default function PedidosHistorialMesPage() {
 
   return (
     <div className="min-w-0 space-y-2.5 overflow-x-hidden sm:space-y-3">
-      <section>
-        <Link
-          href="/pedidos"
-          onClick={markPedidosUiSkipRestoreOnce}
-          className="inline-flex items-center gap-1 py-0.5 text-xs font-medium text-zinc-600 underline-offset-4 hover:text-zinc-900 hover:underline"
-        >
-          ← Pedidos
-        </Link>
-      </section>
-
-      <section className="rounded-xl border border-zinc-200/90 bg-white px-2.5 py-2 ring-1 ring-zinc-100 sm:px-3 sm:py-2">
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <h1 className="text-sm font-bold tracking-tight text-zinc-900 sm:text-base">Compras del mes</h1>
-            <p className="mt-0.5 text-[11px] leading-snug text-zinc-500">Centro de control · decisión rápida · vista operativa</p>
-          </div>
-          <Link
-            href="/pedidos/compras-producto"
-            className="shrink-0 rounded-full border border-[#D32F2F]/15 bg-[#FFF7F5] px-3 py-1.5 text-[11px] font-black text-[#C62828] shadow-[0_6px_18px_rgba(211,47,47,0.06)]"
-          >
-            Por producto
-          </Link>
-        </div>
-      </section>
-
-      {message ? (
-        <section className="rounded-xl bg-white p-3 text-sm text-[#B91C1C] ring-1 ring-zinc-200">{message}</section>
-      ) : null}
-
-      <section className="rounded-xl border border-zinc-200/90 bg-white px-2.5 py-2.5 ring-1 ring-zinc-100 sm:px-3 sm:py-3">
-        <div className="grid grid-cols-2 gap-2 border-b border-zinc-100 pb-2.5 sm:grid-cols-3">
-          <label className="text-[10px] font-medium text-zinc-500">
-            <span className="block uppercase tracking-wide text-zinc-400">Período</span>
+      <section className="rounded-xl border border-zinc-200/80 bg-white px-2.5 py-2.5 ring-1 ring-zinc-100/80 sm:px-3 sm:py-3">
+        <div className="grid grid-cols-2 gap-2 border-b border-zinc-100 pb-2.5 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)_auto_auto] sm:items-end">
+          <label className="min-w-0 text-[10px] font-medium text-zinc-500">
+            <span className="mb-0.5 block uppercase tracking-wide text-zinc-400">Período</span>
             <input
               type="month"
               value={month}
               onChange={(e) => {
                 setMonth(e.target.value);
               }}
-              className="mt-0.5 h-9 w-full rounded-lg border border-zinc-200/90 bg-zinc-50 px-2 text-sm font-semibold text-zinc-900 outline-none focus:border-zinc-300 focus:bg-white focus:ring-1 focus:ring-zinc-200"
+              className="h-7 w-full rounded-full border border-zinc-200/80 bg-zinc-50 px-2.5 text-[11px] font-semibold text-zinc-900 outline-none focus:border-zinc-300 focus:bg-white focus:ring-2 focus:ring-zinc-200 sm:h-8 sm:min-w-[8rem]"
             />
           </label>
-          <label className="text-[10px] font-medium text-zinc-500">
-            <span className="block uppercase tracking-wide text-zinc-400">Proveedor</span>
+          <label className="min-w-0 text-[10px] font-medium text-zinc-500">
+            <span className="mb-0.5 block uppercase tracking-wide text-zinc-400">Proveedor</span>
             <select
               value={supplierFilter}
               onChange={(e) => {
                 setSupplierFilter(e.target.value);
                 setActiveWeek(null);
               }}
-              className="mt-0.5 h-9 w-full rounded-lg border border-zinc-200/90 bg-zinc-50 px-2 text-xs font-semibold text-zinc-900 outline-none focus:border-zinc-300 focus:bg-white focus:ring-1 focus:ring-zinc-200"
+              className="h-7 w-full rounded-full border border-zinc-200/80 bg-zinc-50 px-2.5 text-[11px] font-semibold text-zinc-900 outline-none focus:border-zinc-300 focus:bg-white focus:ring-2 focus:ring-zinc-200 sm:h-8 sm:min-w-[10rem]"
             >
               <option value="all">Todos</option>
               {monthlyBySupplier.map((s) => (
@@ -803,20 +724,26 @@ export default function PedidosHistorialMesPage() {
           <button
             type="button"
             onClick={() => setFiltersOpen((o) => !o)}
-            className="col-span-2 flex h-9 items-center justify-center gap-1.5 self-end rounded-lg border border-zinc-200/90 bg-zinc-50/90 text-[11px] font-semibold text-zinc-800 transition hover:border-zinc-300 hover:bg-white sm:col-span-1"
+            className="flex h-7 items-center justify-center gap-1 rounded-full border border-zinc-200/80 bg-zinc-50/90 px-2.5 text-[10px] font-black text-zinc-800 transition hover:border-zinc-300 hover:bg-white sm:h-8 sm:px-3 sm:text-[11px]"
           >
-            <SlidersHorizontal className="h-3.5 w-3.5 text-zinc-600" aria-hidden />
+            <SlidersHorizontal className="h-3 w-3 text-zinc-600" aria-hidden />
             Filtros
           </button>
+          <Link
+            href="/pedidos/compras-producto"
+            className="inline-flex h-7 items-center justify-center rounded-full border border-[#D32F2F]/15 bg-[#FFF7F5] px-2.5 text-[10px] font-black text-[#C62828] shadow-[0_6px_18px_rgba(211,47,47,0.06)] sm:h-8 sm:px-3 sm:text-[11px]"
+          >
+            Por producto
+          </Link>
         </div>
         {filtersOpen ? (
-          <div className="mt-2 grid grid-cols-2 gap-2 border-b border-zinc-100 pb-3">
+          <div className="mt-2 grid grid-cols-2 gap-2 border-b border-zinc-100 pb-3 sm:grid-cols-2">
             <label className="text-[10px] font-medium text-zinc-500">
-              <span className="block uppercase tracking-wide text-zinc-400">Top N</span>
+              <span className="mb-0.5 block uppercase tracking-wide text-zinc-400">Top N</span>
               <select
                 value={String(topN)}
                 onChange={(e) => setTopN(Number(e.target.value))}
-                className="mt-0.5 h-9 w-full rounded-lg border border-zinc-200/90 bg-zinc-50 px-2 text-xs font-semibold text-zinc-900 outline-none focus:border-zinc-300 focus:bg-white focus:ring-1 focus:ring-zinc-200"
+                className="h-7 w-full rounded-full border border-zinc-200/80 bg-zinc-50 px-2.5 text-[11px] font-semibold text-zinc-900 outline-none focus:border-zinc-300 focus:bg-white focus:ring-2 focus:ring-zinc-200 sm:h-8"
               >
                 <option value="5">Top 5</option>
                 <option value="10">Top 10</option>
@@ -825,14 +752,14 @@ export default function PedidosHistorialMesPage() {
               </select>
             </label>
             <label className="text-[10px] font-medium text-zinc-500">
-              <span className="block uppercase tracking-wide text-zinc-400">Modo</span>
+              <span className="mb-0.5 block uppercase tracking-wide text-zinc-400">Modo</span>
               <select
                 value={viewMode}
                 onChange={(e) => {
                   setViewMode(e.target.value as ViewMode);
                   setActiveWeek(null);
                 }}
-                className="mt-0.5 h-9 w-full rounded-lg border border-zinc-200/90 bg-zinc-50 px-2 text-xs font-semibold text-zinc-900 outline-none focus:border-zinc-300 focus:bg-white focus:ring-1 focus:ring-zinc-200"
+                className="h-7 w-full rounded-full border border-zinc-200/80 bg-zinc-50 px-2.5 text-[11px] font-semibold text-zinc-900 outline-none focus:border-zinc-300 focus:bg-white focus:ring-2 focus:ring-zinc-200 sm:h-8"
               >
                 <option value="real">Real (recepción)</option>
                 <option value="previsto">Previsto (entrega)</option>
@@ -851,38 +778,30 @@ export default function PedidosHistorialMesPage() {
               : 'Previsto: recibidos por fecha real y pendientes por entrega prevista.'}
           </p>
         )}
-        <div className="mt-2 flex flex-wrap gap-1.5">
+        <div className="mt-2 grid grid-cols-3 gap-1 sm:gap-1.5">
           <button
             type="button"
             onClick={downloadExecutivePdf}
-            className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-[#D32F2F] px-3 text-xs font-semibold text-white ring-1 ring-[#B91C1C]/30"
+            className="inline-flex h-8 min-w-0 items-center justify-center gap-1 rounded-full bg-[#D32F2F] px-1.5 text-[9px] font-black leading-none text-white ring-1 ring-[#B91C1C]/30 sm:px-2 sm:text-[10px]"
           >
             <Download className="h-3.5 w-3.5 shrink-0" aria-hidden />
-            Informe ejecutivo PDF
+            PDF ejecutivo
           </button>
           <button
             type="button"
             onClick={downloadDetailPdf}
-            className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-zinc-300 bg-white px-3 text-xs font-semibold text-zinc-800 ring-1 ring-zinc-200/70"
+            className="inline-flex h-8 min-w-0 items-center justify-center gap-1 rounded-full border border-zinc-200/80 bg-white px-1.5 text-[9px] font-black leading-none text-zinc-800 ring-1 ring-zinc-200/70 sm:px-2 sm:text-[10px]"
           >
             <FileText className="h-3.5 w-3.5 shrink-0" aria-hidden />
-            Detalle operativo PDF
+            PDF detalle
           </button>
           <button
             type="button"
             onClick={downloadSupplierRollupCsv}
-            className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-zinc-300 bg-white px-3 text-xs font-semibold text-zinc-800 ring-1 ring-zinc-200/70"
+            className="inline-flex h-8 min-w-0 items-center justify-center gap-1 rounded-full border border-zinc-200/80 bg-white px-1.5 text-[9px] font-black leading-none text-zinc-800 ring-1 ring-zinc-200/70 sm:px-2 sm:text-[10px]"
           >
             <Download className="h-3.5 w-3.5 shrink-0" aria-hidden />
-            Detalle completo CSV
-          </button>
-          <button
-            type="button"
-            onClick={downloadLinesCsv}
-            className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-zinc-300 bg-white px-3 text-xs font-semibold text-zinc-800 ring-1 ring-zinc-200/70"
-          >
-            <Download className="h-3.5 w-3.5 shrink-0" aria-hidden />
-            Exportar líneas
+            CSV completo
           </button>
         </div>
       </section>
@@ -1009,9 +928,6 @@ export default function PedidosHistorialMesPage() {
         aria-label="Total de compras por proveedor"
       >
         <h2 className="text-xs font-bold uppercase tracking-[0.08em] text-zinc-800">Total por proveedor</h2>
-        <p className="mt-0.5 text-[10px] text-zinc-500">
-          Cuánto lleva gastado cada proveedor este período (IVA incl., mismo criterio que el resto de la pantalla).
-        </p>
         {supplierPerformance.length === 0 ? (
           <p className="mt-2 text-[11px] text-zinc-500">Sin compras por proveedor en este filtro.</p>
         ) : (
@@ -1314,22 +1230,6 @@ export default function PedidosHistorialMesPage() {
           </div>
         </section>
 
-        <section className="mt-3 rounded-xl border border-zinc-200/80 bg-zinc-50/50 px-2.5 py-2.5 ring-1 ring-zinc-100 sm:px-3 sm:py-3">
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <h2 className="text-xs font-bold uppercase tracking-[0.08em] text-zinc-700">Evolución de precios</h2>
-              <p className="mt-0.5 max-w-md text-[10px] leading-snug text-zinc-500">
-                Análisis avanzado: curvas, histórico y comparativas (fuera de este resumen).
-              </p>
-            </div>
-            <Link
-              href="/pedidos/precios"
-              className="inline-flex h-9 shrink-0 items-center justify-center rounded-lg border border-zinc-300/90 bg-white px-3 text-[11px] font-semibold text-zinc-800 shadow-sm transition hover:border-zinc-400 hover:bg-zinc-50"
-            >
-              Abrir análisis
-            </Link>
-          </div>
-        </section>
     </div>
   );
 }

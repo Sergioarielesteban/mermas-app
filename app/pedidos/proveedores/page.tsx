@@ -46,7 +46,6 @@ import {
   readSuppliersSessionCache,
   writeSuppliersSessionCache,
 } from '@/lib/pedidos-session-cache';
-import { markPedidosUiSkipRestoreOnce } from '@/lib/pedidos-ui-session';
 import {
   attachOperationalScrollSave,
   attachOperationalStateListeners,
@@ -1107,16 +1106,6 @@ export default function ProveedoresPage() {
           </div>
         </div>
       ) : null}
-      <div className="mb-1">
-        <Link
-          href="/pedidos"
-          onClick={markPedidosUiSkipRestoreOnce}
-          className="inline-flex items-center gap-1 py-0.5 text-xs font-medium text-zinc-500 underline-offset-4 hover:text-zinc-900 hover:underline"
-        >
-          ← Pedidos
-        </Link>
-      </div>
-
       {message ? (
         <div className="rounded-xl border border-amber-200/80 bg-amber-50/90 px-3 py-2 text-sm text-amber-950 ring-1 ring-amber-100/80">
           {message}
