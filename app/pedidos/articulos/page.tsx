@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { ESCANDALLO_USAGE_UNIT_PRESETS, validateEscandalloUsageUnitInput } from '@/lib/escandallo-ingredient-units';
-import { ArrowLeft, ChefHat, ChevronDown, GitCompare, LineChart, Search, Star } from 'lucide-react';
+import { ChevronDown, GitCompare, LineChart, RefreshCw, Search, Star } from 'lucide-react';
 import { useAuth } from '@/components/AuthProvider';
 import { computeCosteUnitarioUsoEur } from '@/lib/purchase-article-internal-cost';
 import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
@@ -27,7 +27,7 @@ import {
   clearEscandalloWizardArticulosReturn,
   readEscandalloWizardArticulosReturn,
 } from '@/lib/escandallo-articulos-nav';
-import { markPedidosUiSkipRestoreOnce } from '@/lib/pedidos-ui-session';
+import { useOperationalAutoCollapse } from '@/lib/use-operational-auto-collapse';
 
 function formatShortDate(iso: string) {
   try {
@@ -53,6 +53,9 @@ export default function PedidosArticulosPage() {
   /** Por defecto solo activos: los inactivos siguen en BD y se recuperan con Inactivos/Todos. */
   const [estadoFilter, setEstadoFilter] = useState<'activos' | 'inactivos' | 'todos'>('activos');
   const [hasArticulosReturn, setHasArticulosReturn] = useState(false);
+  const [expandedArticleId, setExpandedArticleId] = useState<string | null>(null);
+  const articleListRef = React.useRef<HTMLUListElement | null>(null);
+  const dirtyArticleIdsRef = React.useRef(new Set<string>());
 
   const load = useCallback(async () => {
     if (!localId || !supabaseOk) {
@@ -132,6 +135,13 @@ export default function PedidosArticulosPage() {
     });
   }, [articles, catalogByArticle, q, origenFilter, estadoFilter]);
 
+  useOperationalAutoCollapse({
+    activeId: expandedArticleId,
+    containerRef: articleListRef,
+    onCollapse: () => setExpandedArticleId(null),
+    hasPendingChanges: () => (expandedArticleId ? dirtyArticleIdsRef.current.has(expandedArticleId) : false),
+  });
+
   if (!profileReady) {
     return (
       <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-zinc-200">
@@ -152,69 +162,24 @@ export default function PedidosArticulosPage() {
 
   return (
     <div className="space-y-2.5 pb-[6.5rem] sm:space-y-3 sm:pb-7">
-      <section className="rounded-[1.25rem] bg-white px-3 py-2.5 shadow-sm ring-1 ring-zinc-200/80">
-        <div className="flex items-center justify-between gap-3">
-          <div className="min-w-0">
-            <p className="text-[10px] font-black uppercase tracking-[0.16em] text-zinc-400">
-              Pedidos &gt; Artículos master
-            </p>
-            <h1 className="mt-0.5 truncate text-lg font-black tracking-tight text-zinc-950">
-              Artículos master
-            </h1>
-          </div>
-          <Link
-            href="/pedidos"
-            onClick={markPedidosUiSkipRestoreOnce}
-            className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-2xl bg-zinc-50 px-3 text-xs font-black text-zinc-700 ring-1 ring-zinc-200"
-          >
-            <ArrowLeft className="h-3.5 w-3.5" aria-hidden />
-            Volver
-          </Link>
-        </div>
-      </section>
-
-      <div className="space-y-1.5">
-        <div className="grid min-h-0 grid-cols-3 gap-1 sm:gap-1.5">
-          <Link
-            href="/pedidos/proveedores"
-            className="inline-flex min-h-9 items-center justify-center rounded-lg border border-zinc-200 bg-white px-1.5 py-1.5 text-center text-[11px] font-semibold leading-tight text-zinc-700 sm:min-h-10 sm:px-2 sm:text-xs"
-          >
-            Proveedores
-          </Link>
-          <Link
-            href="/pedidos/precios"
-            className="inline-flex min-h-9 items-center justify-center gap-0.5 rounded-lg border border-zinc-200 bg-white px-1.5 py-1.5 text-center text-[11px] font-semibold leading-tight text-zinc-700 sm:min-h-10 sm:gap-1 sm:px-2 sm:text-xs"
-          >
-            <LineChart className="h-3.5 w-3.5 shrink-0" aria-hidden />
-            Precios
-          </Link>
-          <Link
-            href="/escandallos/recetas/nuevo?paso=ingredientes"
-            className="inline-flex min-h-9 items-center justify-center gap-0.5 rounded-lg border border-[#D32F2F]/15 bg-[#D32F2F]/5 px-1.5 py-1.5 text-center text-[11px] font-semibold leading-tight text-[#B91C1C] sm:min-h-10 sm:gap-1 sm:px-2 sm:text-xs"
-          >
-            <ChefHat className="h-3.5 w-3.5 shrink-0" aria-hidden />
-            Ingredientes
-          </Link>
-        </div>
-        {hasArticulosReturn ? (
-          <Link
-            href="/escandallos/recetas/nuevo"
-            onClick={() => {
-              clearEscandalloWizardArticulosReturn();
-              setHasArticulosReturn(false);
-            }}
-            className="flex min-h-9 w-full items-center justify-center rounded-lg border border-zinc-200 bg-white px-2 py-1.5 text-center text-[11px] font-semibold text-zinc-700 sm:text-xs"
-          >
-            Volver al asistente
-          </Link>
-        ) : null}
-      </div>
+      {hasArticulosReturn ? (
+        <Link
+          href="/escandallos/recetas/nuevo"
+          onClick={() => {
+            clearEscandalloWizardArticulosReturn();
+            setHasArticulosReturn(false);
+          }}
+          className="flex min-h-9 w-full items-center justify-center rounded-lg border border-zinc-200 bg-white px-2 py-1.5 text-center text-[11px] font-semibold text-zinc-700 sm:text-xs"
+        >
+          Volver al asistente
+        </Link>
+      ) : null}
 
       {banner ? (
         <div className="rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-sm text-amber-950">{banner}</div>
       ) : null}
 
-      <section className="rounded-xl bg-white p-2 ring-1 ring-zinc-200/90 sm:p-2">
+      <section className="rounded-xl bg-white p-2 ring-1 ring-zinc-200/70 sm:p-2">
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
             <p className="text-[9px] font-bold uppercase leading-tight text-zinc-500">Listado</p>
@@ -232,12 +197,20 @@ export default function PedidosArticulosPage() {
           <button
             type="button"
             onClick={() => void load()}
-            className="shrink-0 rounded-md border border-zinc-200 bg-white px-2 py-0.5 text-[9px] font-semibold text-zinc-700 shadow-sm sm:py-1 sm:text-[10px]"
+            className="inline-flex h-7 shrink-0 items-center gap-1 rounded-full bg-zinc-100/80 px-2.5 text-[9px] font-black text-zinc-600 transition hover:bg-zinc-200/70 active:scale-[0.98] sm:text-[10px]"
           >
+            <RefreshCw className="h-3 w-3" aria-hidden />
             Actualizar
           </button>
+          <button
+            type="button"
+            onClick={() => setExpandedArticleId(null)}
+            className="inline-flex h-7 shrink-0 items-center rounded-full bg-amber-50 px-2.5 text-[9px] font-black text-amber-900 ring-1 ring-amber-200/70 transition hover:bg-amber-100/70 active:scale-[0.98] sm:text-[10px]"
+          >
+            Cerrar todo
+          </button>
         </div>
-        <div className="mt-1.5 grid grid-cols-3 gap-1 sm:flex sm:flex-wrap sm:gap-1">
+        <div className="mt-2 grid grid-cols-3 gap-0.5 rounded-full bg-zinc-100/70 p-0.5 ring-1 ring-zinc-200/50 sm:inline-grid sm:min-w-[18rem]">
           {(
             [
               ['todos', 'Todos'],
@@ -250,19 +223,19 @@ export default function PedidosArticulosPage() {
               type="button"
               onClick={() => setOrigenFilter(key)}
               className={[
-                'min-h-8 rounded-md border px-1.5 py-1 text-[9px] font-bold leading-tight sm:min-h-0 sm:px-2 sm:text-[10px]',
+                'h-7 rounded-full px-2 text-[9px] font-black leading-none transition active:scale-[0.98] sm:text-[10px]',
                 origenFilter === key
                   ? key === 'cocina_central'
-                    ? 'border-amber-300 bg-amber-100 text-amber-950'
-                    : 'border-zinc-400 bg-zinc-900 text-white'
-                  : 'border-zinc-200 bg-zinc-50 text-zinc-700',
+                    ? 'bg-amber-100 text-amber-950 shadow-sm ring-1 ring-amber-200/80'
+                    : 'bg-amber-50 text-amber-950 shadow-sm ring-1 ring-amber-200/70'
+                  : 'text-zinc-500 hover:bg-white/70 hover:text-zinc-800',
               ].join(' ')}
             >
               {label}
             </button>
           ))}
         </div>
-        <div className="mt-1.5 grid grid-cols-3 gap-1 sm:flex sm:flex-wrap sm:gap-1">
+        <div className="mt-1 grid grid-cols-3 gap-0.5 rounded-full bg-zinc-100/70 p-0.5 ring-1 ring-zinc-200/50 sm:inline-grid sm:min-w-[18rem]">
           {(
             [
               ['activos', 'Activos'],
@@ -275,10 +248,14 @@ export default function PedidosArticulosPage() {
               type="button"
               onClick={() => setEstadoFilter(key)}
               className={[
-                'min-h-8 rounded-md border px-1.5 py-1 text-[9px] font-bold leading-tight sm:min-h-0 sm:px-2 sm:text-[10px]',
+                'h-7 rounded-full px-2 text-[9px] font-black leading-none transition active:scale-[0.98] sm:text-[10px]',
                 estadoFilter === key
-                  ? 'border-emerald-600 bg-emerald-900 text-white'
-                  : 'border-zinc-200 bg-white text-zinc-700',
+                  ? key === 'activos'
+                    ? 'bg-emerald-50 text-emerald-900 shadow-sm ring-1 ring-emerald-200/80'
+                    : key === 'inactivos'
+                      ? 'bg-emerald-50 text-emerald-900 shadow-sm ring-1 ring-emerald-200/80'
+                      : 'bg-emerald-50 text-emerald-900 shadow-sm ring-1 ring-emerald-200/80'
+                  : 'text-zinc-500 hover:bg-white/70 hover:text-zinc-800',
               ].join(' ')}
             >
               {label}
@@ -314,7 +291,7 @@ export default function PedidosArticulosPage() {
                   : 'Nada coincide con el filtro o la búsqueda.'}
         </p>
       ) : (
-        <ul className="space-y-1.5">
+        <ul ref={articleListRef} className="space-y-1.5">
           {filtered.map((a) => (
             <ArticleCard
               key={a.id}
@@ -322,6 +299,12 @@ export default function PedidosArticulosPage() {
               catalogRows={catalogByArticle.get(a.id) ?? []}
               priceSamples={priceSamples}
               onReload={() => void load()}
+              expanded={expandedArticleId === a.id}
+              onExpandedChange={(open) => setExpandedArticleId(open ? a.id : null)}
+              onDirtyChange={(dirty) => {
+                if (dirty) dirtyArticleIdsRef.current.add(a.id);
+                else dirtyArticleIdsRef.current.delete(a.id);
+              }}
             />
           ))}
         </ul>
@@ -335,11 +318,17 @@ function ArticleCard({
   catalogRows,
   priceSamples,
   onReload,
+  expanded,
+  onExpandedChange,
+  onDirtyChange,
 }: {
   article: PurchaseArticle;
   catalogRows: SupplierCatalogRow[];
   priceSamples: Map<string, SupplierProductPriceSample[]>;
   onReload: () => void;
+  expanded: boolean;
+  onExpandedChange: (open: boolean) => void;
+  onDirtyChange: (dirty: boolean) => void;
 }) {
   const { localId } = useAuth();
   const supabaseOk = isSupabaseEnabled() && getSupabaseClient();
@@ -383,6 +372,20 @@ function ArticleCard({
 
   const isCc = a.origenArticulo === 'cocina_central';
 
+  const isDirty =
+    refProdId !== (a.referenciaPrincipalSupplierProductId ?? a.createdFromSupplierProductId ?? '') ||
+    unidadUso !== (() => {
+      const u = (a.unidadUso ?? a.unidadBase ?? 'kg').trim();
+      return u || 'kg';
+    })() ||
+    factorUso !== String(a.unidadesUsoPorUnidadCompra ?? 1) ||
+    rendPct !== String(a.rendimientoPct ?? 100);
+
+  useEffect(() => {
+    onDirtyChange(isDirty);
+    return () => onDirtyChange(false);
+  }, [isDirty, onDirtyChange]);
+
   const applyActivo = async (next: boolean) => {
     if (!localId || !supabaseOk) return;
     if (a.activo && !next) {
@@ -412,7 +415,13 @@ function ArticleCard({
       .join(' · ');
     return (
       <li className={['list-none', !a.activo ? 'opacity-60' : ''].join(' ')}>
-        <details className="group overflow-hidden rounded-xl border border-amber-200/80 bg-white ring-1 ring-amber-100/80">
+        <details
+          open={expanded}
+          onToggle={(e) => {
+            if (e.currentTarget.open !== expanded) onExpandedChange(e.currentTarget.open);
+          }}
+          className="group overflow-hidden rounded-xl border border-amber-200/80 bg-white ring-1 ring-amber-100/80"
+        >
           <summary className="flex cursor-pointer list-none items-start gap-2 p-2 sm:p-2.5 [&::-webkit-details-marker]:hidden">
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-1">
@@ -575,7 +584,13 @@ function ArticleCard({
 
   return (
     <li className={['list-none', !a.activo ? 'opacity-60' : ''].join(' ')}>
-      <details className="group overflow-hidden rounded-[1.2rem] bg-white shadow-sm ring-1 ring-zinc-200/80">
+      <details
+        open={expanded}
+        onToggle={(e) => {
+          if (e.currentTarget.open !== expanded) onExpandedChange(e.currentTarget.open);
+        }}
+        className="group overflow-hidden rounded-[1.2rem] bg-white shadow-sm ring-1 ring-zinc-200/80"
+      >
         <summary className="flex cursor-pointer list-none items-start gap-2.5 p-2.5 transition-colors active:bg-zinc-50 sm:p-3 [&::-webkit-details-marker]:hidden">
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-1.5">

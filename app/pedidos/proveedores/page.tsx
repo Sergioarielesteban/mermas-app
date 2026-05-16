@@ -80,6 +80,7 @@ import {
   replaceReviewItemsForSupplier,
   upsertOrderSchedule,
 } from '@/lib/pedidos-order-agenda-supabase';
+import { useOperationalAutoCollapse } from '@/lib/use-operational-auto-collapse';
 import { PEDIDO_ORDER_UNITS, PEDIDO_RECIPE_UNITS } from '@/lib/pedidos-units';
 import type { Unit } from '@/lib/types';
 
@@ -407,6 +408,7 @@ export default function ProveedoresPage() {
   const [editingSupplierId, setEditingSupplierId] = React.useState<string | null>(null);
   const [editingProductId, setEditingProductId] = React.useState<string | null>(null);
   const [expandedSupplierId, setExpandedSupplierId] = React.useState<string | null>(null);
+  const supplierListRef = React.useRef<HTMLDivElement | null>(null);
   const [supplierCatalogQuery, setSupplierCatalogQuery] = React.useState('');
   const [supplierDrafts, setSupplierDrafts] = React.useState<
     Record<
@@ -1055,6 +1057,17 @@ export default function ProveedoresPage() {
     });
   }, [suppliers, supplierCatalogQuery]);
 
+  useOperationalAutoCollapse({
+    activeId: expandedSupplierId,
+    containerRef: supplierListRef,
+    onCollapse: () => setExpandedSupplierId(null),
+    hasPendingChanges: () =>
+      Boolean(
+        expandedSupplierId &&
+          (editingSupplierId === expandedSupplierId || editProductTarget?.supplier.id === expandedSupplierId),
+      ),
+  });
+
   React.useEffect(() => {
     const raw = supplierCatalogQuery.trim();
     if (!raw) return;
@@ -1138,11 +1151,21 @@ export default function ProveedoresPage() {
             className="h-9 w-full rounded-[15px] border border-zinc-200/80 bg-zinc-50/60 pl-10 pr-3 text-[13px] text-zinc-900 outline-none placeholder:text-zinc-400 focus:border-zinc-300 focus:bg-white focus:ring-4 focus:ring-zinc-900/5"
           />
         </div>
+        <div className="mt-2 flex justify-end">
+          <button
+            type="button"
+            onClick={() => setExpandedSupplierId(null)}
+            className="inline-flex h-7 items-center rounded-full bg-amber-50 px-2.5 text-[10px] font-black text-amber-900 ring-1 ring-amber-200/70 transition hover:bg-amber-100/70 active:scale-[0.98]"
+          >
+            Cerrar todo
+          </button>
+        </div>
       </section>
 
-      {visibleSuppliers.map((supplier) => {
-        const isOpen = expandedSupplierId === supplier.id;
-        return (
+      <div ref={supplierListRef} className="space-y-2.5">
+        {visibleSuppliers.map((supplier) => {
+          const isOpen = expandedSupplierId === supplier.id;
+          return (
         <section key={supplier.id} className="overflow-hidden rounded-[18px] border border-zinc-200/75 bg-white shadow-[0_8px_22px_rgba(15,23,42,0.035)] ring-1 ring-zinc-100/70">
           <button
             type="button"
@@ -1354,8 +1377,9 @@ export default function ProveedoresPage() {
             </div>
           ) : null}
         </section>
-      );
-      })}
+        );
+        })}
+      </div>
 
       {suppliers.length > 0 && visibleSuppliers.length === 0 ? (
         <p className="rounded-2xl border border-zinc-200 bg-zinc-50 px-4 py-6 text-center text-sm text-zinc-600">

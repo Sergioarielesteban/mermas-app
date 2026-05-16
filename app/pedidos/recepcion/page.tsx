@@ -57,6 +57,7 @@ import {
   writePersistedScreenState,
 } from '@/lib/persisted-screen-state';
 import { markPedidosUiSkipRestoreOnce } from '@/lib/pedidos-ui-session';
+import { useOperationalAutoCollapse } from '@/lib/use-operational-auto-collapse';
 import { actorLabel, notifyIncidenciaRecepcionDeduped } from '@/services/notifications';
 
 function orderHasAnyIncident(order: PedidoOrder): boolean {
@@ -139,6 +140,8 @@ export default function RecepcionPedidosPage() {
   const [expandedPendingOrderId, setExpandedPendingOrderId] = React.useState<string | null>(null);
   const [archivedAccordionOpen, setArchivedAccordionOpen] = React.useState(true);
   const [expandedArchivedOrderId, setExpandedArchivedOrderId] = React.useState<string | null>(null);
+  const pendingReviewListRef = React.useRef<HTMLDivElement | null>(null);
+  const archivedReviewListRef = React.useRef<HTMLDivElement | null>(null);
   const focusOrderIdFromUrl = searchParams.get('orderId') ?? '';
   const searchString = searchParams.toString();
   const focusOrderAppliedRef = React.useRef(false);
@@ -152,6 +155,20 @@ export default function RecepcionPedidosPage() {
     () => (localId ? `reception-draft:${localId}` : undefined),
     [localId],
   );
+
+  useOperationalAutoCollapse({
+    activeId: expandedPendingOrderId,
+    containerRef: pendingReviewListRef,
+    onCollapse: () => setExpandedPendingOrderId(null),
+    hasPendingChanges: () =>
+      Boolean(expandedPendingOrderId && incidentOpenByOrderId[expandedPendingOrderId]),
+  });
+
+  useOperationalAutoCollapse({
+    activeId: expandedArchivedOrderId,
+    containerRef: archivedReviewListRef,
+    onCollapse: () => setExpandedArchivedOrderId(null),
+  });
 
   const buildOperationalState = React.useCallback(
     (): RecepcionOperationalState | null => {
@@ -800,12 +817,24 @@ export default function RecepcionPedidosPage() {
             Pendientes de revisión de precios
           </h1>
         </div>
-        <div className="space-y-2 p-3 sm:p-3.5">
+        <div ref={pendingReviewListRef} className="space-y-2 p-3 sm:p-3.5">
           {message ? (
             <p className="rounded-xl bg-amber-50 px-3 py-2 text-center text-xs font-medium text-amber-950 ring-1 ring-amber-200/80">
               {message}
             </p>
           ) : null}
+          <div className="flex justify-end">
+            <button
+              type="button"
+              onClick={() => {
+                setExpandedPendingOrderId(null);
+                setExpandedArchivedOrderId(null);
+              }}
+              className="inline-flex h-7 items-center rounded-full bg-amber-50 px-2.5 text-[10px] font-black text-amber-900 ring-1 ring-amber-200/70 transition hover:bg-amber-100/70 active:scale-[0.98]"
+            >
+              Cerrar todo
+            </button>
+          </div>
           {pendingPriceReviewOrders.length === 0 ? (
             <p className="text-center text-sm text-zinc-500">No hay pedidos pendientes de revisión.</p>
           ) : null}
@@ -997,7 +1026,7 @@ export default function RecepcionPedidosPage() {
                   ›
                 </span>
               </summary>
-              <div className="mt-3 space-y-2">
+              <div ref={archivedReviewListRef} className="mt-3 space-y-2">
                 <p className="text-center text-[11px] text-zinc-500">
                   Toca el proveedor o la fecha para ver líneas del pedido. «Reabrir en pendientes» mueve el pedido otra vez
                   arriba.

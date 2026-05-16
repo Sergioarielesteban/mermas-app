@@ -130,6 +130,7 @@ import {
   PEDIDOS_HOME_PATHNAME,
   savePedidosUiState,
 } from '@/lib/pedidos-ui-session';
+import { useOperationalAutoCollapse } from '@/lib/use-operational-auto-collapse';
 import {
   PEDIDOS_VIEW_STATE_KEY,
   parsePedidosViewState,
@@ -568,9 +569,12 @@ export default function PedidosPage() {
 );
 
   const [expandedSentId, setExpandedSentId] = React.useState<string | null>(null);
+  const sentOrdersListRef = React.useRef<HTMLDivElement | null>(null);
   const [sentOrderActionMenuOpenId, setSentOrderActionMenuOpenId] = React.useState<string | null>(null);
   const [ocrOrder, setOcrOrder] = React.useState<PedidoOrder | null>(null);
   const [expandedHistoricoId, setExpandedHistoricoId] = React.useState<string | null>(null);
+  const [expandedHistoricoSupplierKey, setExpandedHistoricoSupplierKey] = React.useState<string | null>(null);
+  const historicoOrdersListRef = React.useRef<HTMLDivElement | null>(null);
   /** Plegado por mes (YYYY-MM) en histórico recibidos; sin entrada = mes actual según índice. */
   const [historicoMonthOpen, setHistoricoMonthOpen] = React.useState<Record<string, boolean>>({});
   const [pendientesEntregaAccordionOpen, setPendientesEntregaAccordionOpen] = React.useState(false);
@@ -596,6 +600,20 @@ export default function PedidosPage() {
   const receptionLineDeleteInFlightRef = React.useRef(false);
   const [incidentOpenBySentOrderId, setIncidentOpenBySentOrderId] = React.useState<Record<string, boolean>>({});
   const [incidentNoteBySentOrderId, setIncidentNoteBySentOrderId] = React.useState<Record<string, string>>({});
+  useOperationalAutoCollapse({
+    activeId: expandedSentId,
+    containerRef: sentOrdersListRef,
+    onCollapse: () => setExpandedSentId(null),
+    hasPendingChanges: () => Boolean(expandedSentId && incidentOpenBySentOrderId[expandedSentId]),
+  });
+  useOperationalAutoCollapse({
+    activeId: expandedHistoricoId ?? expandedHistoricoSupplierKey,
+    containerRef: historicoOrdersListRef,
+    onCollapse: () => {
+      setExpandedHistoricoId(null);
+      setExpandedHistoricoSupplierKey(null);
+    },
+  });
   const [assistantInput, setAssistantInput] = React.useState('');
   const [assistantReply, setAssistantReply] = React.useState<string | null>(null);
   const [assistantPendingAction, setAssistantPendingAction] = React.useState<AssistantPendingAction | null>(null);
@@ -4471,7 +4489,19 @@ export default function PedidosPage() {
             />
           </div>
         </summary>
-        <div className="space-y-4 border-t border-zinc-100/90 bg-gradient-to-b from-zinc-50/80 to-white px-1.5 pb-2.5 pt-2.5 sm:px-2">
+        <div
+          ref={sentOrdersListRef}
+          className="space-y-4 border-t border-zinc-100/90 bg-gradient-to-b from-zinc-50/80 to-white px-1.5 pb-2.5 pt-2.5 sm:px-2"
+        >
+          <div className="flex justify-end px-1">
+            <button
+              type="button"
+              onClick={() => setExpandedSentId(null)}
+              className="inline-flex h-7 items-center rounded-full bg-amber-50 px-2.5 text-[10px] font-black text-amber-900 ring-1 ring-amber-200/70 transition hover:bg-amber-100/70 active:scale-[0.98]"
+            >
+              Cerrar todo
+            </button>
+          </div>
           {sentOrdersEntregaVista.length === 0 ? (
             <p className="py-4 text-center text-xs text-zinc-500">
               {sentOrders.length === 0
@@ -5309,7 +5339,22 @@ export default function PedidosPage() {
             </div>
           </div>
         </summary>
-        <div className="space-y-2 border-t border-zinc-100/90 bg-[#FAF8F5] px-1.5 pb-2 pt-2 sm:px-2">
+        <div
+          ref={historicoOrdersListRef}
+          className="space-y-2 border-t border-zinc-100/90 bg-[#FAF8F5] px-1.5 pb-2 pt-2 sm:px-2"
+        >
+          <div className="flex justify-end px-1">
+            <button
+              type="button"
+              onClick={() => {
+                setExpandedHistoricoId(null);
+                setExpandedHistoricoSupplierKey(null);
+              }}
+              className="inline-flex h-7 items-center rounded-full bg-amber-50 px-2.5 text-[10px] font-black text-amber-900 ring-1 ring-amber-200/70 transition hover:bg-amber-100/70 active:scale-[0.98]"
+            >
+              Cerrar todo
+            </button>
+          </div>
           {receivedOrders.length === 0 ? (
             <div className="rounded-2xl border border-zinc-200 bg-white px-4 py-5 text-center shadow-sm">
               <p className="font-serif text-base text-zinc-900">Sin recepciones registradas</p>
@@ -5363,9 +5408,16 @@ export default function PedidosPage() {
                   );
                   const inactiveDays = daysSinceTimestamp(supplier.lastTs);
                   const showInactiveBadge = monthIdx === 0 && inactiveDays != null && inactiveDays >= 14;
+                  const supplierOpen = expandedHistoricoSupplierKey === supplier.key;
                   return (
                     <details
                       key={supplier.key}
+                      open={supplierOpen}
+                      onToggle={(e) => {
+                        if (e.currentTarget.open !== supplierOpen) {
+                          setExpandedHistoricoSupplierKey(e.currentTarget.open ? supplier.key : null);
+                        }
+                      }}
                       className="group/supplier overflow-hidden rounded-xl border border-zinc-200/85 bg-white shadow-[0_1px_6px_rgba(24,24,27,0.04)] transition hover:border-zinc-300/80"
                     >
                       <summary className="cursor-pointer list-none px-2.5 py-2.5 outline-none transition active:bg-zinc-50 [&::-webkit-details-marker]:hidden">
