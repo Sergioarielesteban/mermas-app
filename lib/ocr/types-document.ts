@@ -174,4 +174,6 @@ export type AlbaranOcrProcessResponse =
       ok: false;
       error: string;
       reason?: string;
+      hint?: string;
+      googleCode?: number | string;
     };

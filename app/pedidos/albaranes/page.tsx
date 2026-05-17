@@ -10,6 +10,7 @@ import {
   Filter,
   Link2,
   Loader2,
+  PlusCircle,
   ScanLine,
   Search,
   Sparkles,
@@ -229,7 +230,7 @@ export default function PedidosAlbaranesPage() {
         </div>
       ) : null}
 
-      {/* 1. HERO OCR */}
+      {/* 1. CTA OCR */}
       <HeroOcrCard onOpen={() => setLauncherOpen(true)} />
 
       {/* 2. OCR PENDIENTES */}
@@ -240,10 +241,13 @@ export default function PedidosAlbaranesPage() {
         onViewAll={() => setStatus('pending_review')}
       />
 
-      {/* 3. ALBARANES RECIENTES */}
+      {/* 3. BANDEJA */}
       <section className="space-y-2">
         <div className="flex items-center justify-between px-1">
-          <h2 className="text-[15px] font-black text-zinc-900">Albaranes recientes</h2>
+          <div>
+            <h2 className="text-[15px] font-black text-zinc-900">Bandeja de albaranes</h2>
+            <p className="text-[11.5px] text-zinc-500">Pendientes, revisados y cerrados en una sola vista.</p>
+          </div>
           <span className="text-[11px] font-semibold text-zinc-500">
             {filtered.length} de {rows.length}
           </span>
@@ -302,7 +306,7 @@ export default function PedidosAlbaranesPage() {
         )}
       </section>
 
-      {/* 5. MINI KPIs COMPACTOS */}
+      {/* 4. MINI KPIs COMPACTOS */}
       <MiniKpiGrid stats={stats} />
 
       {/* BOTTOM SHEETS */}
@@ -336,35 +340,15 @@ export default function PedidosAlbaranesPage() {
 // ─── HERO OCR ────────────────────────────────────────────────────────────────
 function HeroOcrCard({ onOpen }: { onOpen: () => void }) {
   return (
-      <section className="rounded-3xl border border-zinc-200 bg-gradient-to-br from-white via-white to-rose-50/40 p-4 shadow-sm sm:p-5">
-      <div className="flex items-start gap-3">
-        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-[#D32F2F]/10 text-[#D32F2F] ring-1 ring-[#D32F2F]/20">
-          <ScanLine className="h-6 w-6" aria-hidden />
-        </div>
-        <div className="min-w-0 flex-1">
-          <h2 className="text-[16px] font-black text-zinc-900">Escanear albarán</h2>
-          <p className="text-[13px] text-zinc-600">Recepción rápida con OCR</p>
-        </div>
-      </div>
-
-      <div className="mt-3 grid grid-cols-2 gap-2.5">
-        <button
-          type="button"
-          onClick={onOpen}
-          className="flex h-14 items-center justify-center gap-2 rounded-2xl bg-[#D32F2F] text-white shadow-lg ring-1 ring-[#D32F2F]/30 active:scale-[0.98]"
-        >
-          <ScanLine className="h-5 w-5" aria-hidden />
-          <span className="text-[13.5px] font-black tracking-tight">Cámara</span>
-        </button>
-        <button
-          type="button"
-          onClick={onOpen}
-          className="flex h-14 items-center justify-center gap-2 rounded-2xl border border-zinc-200 bg-white text-zinc-900 shadow-sm active:scale-[0.98]"
-        >
-          <FileText className="h-5 w-5 text-[#D32F2F]" aria-hidden />
-          <span className="text-[13.5px] font-black tracking-tight">Subir PDF / Imagen</span>
-        </button>
-      </div>
+    <section className="rounded-3xl border border-zinc-200 bg-white p-4 shadow-sm">
+      <button
+        type="button"
+        onClick={onOpen}
+        className="mt-3 inline-flex min-h-[50px] w-full items-center justify-center gap-2 rounded-2xl bg-[#D32F2F] px-4 text-white shadow-lg ring-1 ring-[#D32F2F]/20 active:scale-[0.99]"
+      >
+        <PlusCircle className="h-5 w-5" aria-hidden />
+        <span className="text-[14px] font-black tracking-tight">Añadir albarán</span>
+      </button>
     </section>
   );
 }

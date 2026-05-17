@@ -2,6 +2,53 @@
  * Compresión cliente para albaranes (reduce uso de Storage y acelera OCR).
  * Solo ejecutar en el navegador.
  */
+async function decodeImageFile(file: File): Promise<{ width: number; height: number; drawTo: (ctx: CanvasRenderingContext2D, w: number, h: number) => void }> {
+  if (typeof window === 'undefined') {
+    throw new Error('Este flujo solo puede ejecutarse en el navegador.');
+  }
+
+  const isHeic = file.type === 'image/heic' || file.type === 'image/heif' || /\.(heic|heif)$/i.test(file.name);
+
+  if (typeof createImageBitmap === 'function') {
+    try {
+      const bitmap = await createImageBitmap(file);
+      return {
+        width: bitmap.width,
+        height: bitmap.height,
+        drawTo: (ctx, w, h) => {
+          ctx.drawImage(bitmap, 0, 0, w, h);
+          bitmap.close();
+        },
+      };
+    } catch {
+      // fallback a <img>
+      if (isHeic) {
+        // seguimos al fallback porque Safari/iOS puede decodificar HEIC en <img>
+      }
+    }
+  }
+
+  const objectUrl = URL.createObjectURL(file);
+  try {
+    const img = new Image();
+    img.decoding = 'async';
+    img.src = objectUrl;
+    await new Promise<void>((resolve, reject) => {
+      img.onload = () => resolve();
+      img.onerror = () => reject(new Error('decode_failed'));
+    });
+    return {
+      width: img.naturalWidth || img.width,
+      height: img.naturalHeight || img.height,
+      drawTo: (ctx, w, h) => {
+        ctx.drawImage(img, 0, 0, w, h);
+      },
+    };
+  } finally {
+    URL.revokeObjectURL(objectUrl);
+  }
+}
+
 export async function compressImageFileToJpeg(
   file: File,
   opts?: { maxLongEdge?: number; quality?: number; maxBytes?: number },
@@ -9,19 +56,15 @@ export async function compressImageFileToJpeg(
   if (!file.type.startsWith('image/')) {
     throw new Error('Este flujo solo admite imágenes. Para PDF usa Pedidos > Albaranes > Escanear albarán.');
   }
+  const isHeic = file.type === 'image/heic' || file.type === 'image/heif' || /\.(heic|heif)$/i.test(file.name);
   const maxLongEdge = opts?.maxLongEdge ?? 1680;
   const quality = opts?.quality ?? 0.82;
   const maxBytes = opts?.maxBytes ?? 650_000;
 
-  let bitmap: ImageBitmap;
   try {
-    bitmap = await createImageBitmap(file);
-  } catch {
-    throw new Error('No se pudo abrir la imagen. Prueba con JPG o PNG, o sube el documento desde Albaranes.');
-  }
-  try {
-    let w = bitmap.width;
-    let h = bitmap.height;
+    const decoded = await decodeImageFile(file);
+    let w = decoded.width;
+    let h = decoded.height;
     const long = Math.max(w, h);
     if (long > maxLongEdge) {
       const scale = maxLongEdge / long;
@@ -33,7 +76,7 @@ export async function compressImageFileToJpeg(
     canvas.height = h;
     const ctx = canvas.getContext('2d');
     if (!ctx) throw new Error('Canvas no disponible.');
-    ctx.drawImage(bitmap, 0, 0, w, h);
+    decoded.drawTo(ctx, w, h);
 
     let q = quality;
     let blob: Blob | null = await new Promise((resolve) => canvas.toBlob((b) => resolve(b), 'image/jpeg', q));
@@ -46,8 +89,11 @@ export async function compressImageFileToJpeg(
     }
     if (!blob) throw new Error('No se pudo comprimir la imagen.');
     return blob;
-  } finally {
-    bitmap.close();
+  } catch (err) {
+    if (isHeic) {
+      throw new Error('Formato HEIC detectado. Convierte la imagen a JPG o vuelve a fotografiar desde cámara.');
+    }
+    throw err;
   }
 }
 

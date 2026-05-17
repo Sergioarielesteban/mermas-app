@@ -136,6 +136,75 @@ export function isDocumentAiConfigured(): boolean {
   }
 }
 
+/** Nombres exactos de variables que usa esta integración (Vercel / .env.local). */
+export const DOCUMENT_AI_ENV_KEYS = {
+  projectId: 'GOOGLE_CLOUD_PROJECT_ID',
+  location: 'GOOGLE_DOCUMENT_AI_LOCATION',
+  processorId: 'GOOGLE_DOCUMENT_AI_PROCESSOR_ID',
+  serviceAccountJson: 'GOOGLE_SERVICE_ACCOUNT_JSON',
+} as const;
+
+/**
+ * Logs seguros de configuración OCR (sin private_key, sin API keys, sin JSON completo).
+ * Llamar al inicio de POST /api/ocr/process y POST /api/pedidos/ocr.
+ */
+export function logOcrIntegrationDiagnostics(extra?: {
+  endpoint?: string;
+  mimeType?: string;
+  fileSizeKb?: number;
+}): void {
+  const { projectIdEnv, location, processorId, serviceAccountJson } = readEnvStrings();
+
+  let jsonParseOk = false;
+  let serviceAccountEmailPresent = false;
+  let privateKeyPresent = false;
+  let projectIdFromJson: string | null = null;
+
+  if (serviceAccountJson) {
+    try {
+      const parsed = parseServiceAccountJson(serviceAccountJson);
+      jsonParseOk = true;
+      serviceAccountEmailPresent = parsed.client_email.length > 0;
+      privateKeyPresent = parsed.private_key.length > 0;
+      projectIdFromJson = parsed.project_id;
+    } catch {
+      jsonParseOk = false;
+    }
+  }
+
+  const projectIdPresent = Boolean(projectIdEnv || projectIdFromJson);
+  const projectIdSource = projectIdEnv
+    ? 'GOOGLE_CLOUD_PROJECT_ID'
+    : projectIdFromJson
+      ? 'service_account.project_id'
+      : 'missing';
+
+  try {
+    console.info(
+      '[ocr/env]',
+      JSON.stringify({
+        endpoint: extra?.endpoint ?? 'unknown',
+        runtime: process.env.NEXT_RUNTIME ?? 'nodejs',
+        envKeys: DOCUMENT_AI_ENV_KEYS,
+        projectIdPresent,
+        projectIdSource,
+        location: location || '(missing)',
+        processorIdPresent: Boolean(processorId),
+        serviceAccountJsonPresent: Boolean(serviceAccountJson),
+        serviceAccountJsonLength: serviceAccountJson.length,
+        serviceAccountEmailPresent,
+        jsonParseOk,
+        privateKeyPresent,
+        geminiApiKeyPresent: Boolean(process.env.GEMINI_API_KEY?.trim()),
+        mimeType: extra?.mimeType,
+        fileSizeKb: extra?.fileSizeKb,
+      }),
+    );
+  } catch {
+    console.info('[ocr/env] diagnostics_unavailable');
+  }
+}
+
 function getClient(env: DocumentAiEnv): DocumentProcessorServiceClient {
   const hash = `${env.projectId}|${env.location}|${env.processorId}|${env.serviceAccountJson.length}`;
   if (cachedClient && cachedConfigHash === hash) return cachedClient;
@@ -333,6 +402,59 @@ function extractGoogleErrorDetail(err: unknown): {
           : 'Revisa credenciales, región y processorId en Vercel.');
 
   return { message: raw.message, code, details, grpcStatus, hint };
+}
+
+export type DocumentAiProcessorCheck = {
+  ok: boolean;
+  processorPath: string;
+  processorDisplayName?: string;
+  processorType?: string;
+  state?: string;
+  error?: string;
+  hint?: string;
+  googleCode?: number | string;
+};
+
+/**
+ * Comprueba credenciales + región + processorId llamando a getProcessor (sin subir archivo).
+ * Misma validación que hace la consola de Google al abrir el procesador.
+ */
+export async function verifyDocumentAiProcessor(): Promise<DocumentAiProcessorCheck> {
+  let env: DocumentAiEnv;
+  try {
+    env = readEnvOrThrow();
+  } catch (e) {
+    return {
+      ok: false,
+      processorPath: '',
+      error: e instanceof Error ? e.message : 'document_ai_config_missing',
+      hint: 'Faltan GOOGLE_DOCUMENT_AI_LOCATION, GOOGLE_DOCUMENT_AI_PROCESSOR_ID o GOOGLE_SERVICE_ACCOUNT_JSON.',
+    };
+  }
+
+  const projectIdForResource = lastResolvedProjectIdForDocumentAi ?? env.projectId;
+  const processorPath = `projects/${projectIdForResource}/locations/${env.location}/processors/${env.processorId}`;
+
+  try {
+    const client = getClient(env);
+    const [processor] = await client.getProcessor({ name: processorPath });
+    return {
+      ok: true,
+      processorPath,
+      processorDisplayName: processor.displayName ?? undefined,
+      processorType: processor.type ?? undefined,
+      state: processor.state != null ? String(processor.state) : undefined,
+    };
+  } catch (e) {
+    const detail = extractGoogleErrorDetail(e);
+    return {
+      ok: false,
+      processorPath,
+      error: detail.message,
+      hint: detail.hint,
+      googleCode: detail.code,
+    };
+  }
 }
 
 export async function processDocumentAi(

@@ -19,7 +19,7 @@
 
 import { useRouter } from 'next/navigation';
 import React from 'react';
-import { Camera, FileUp, Loader2, ScanLine, Sparkles, X } from 'lucide-react';
+import { Camera, FileText, FileUp, Loader2, PlusCircle, ScanLine, X } from 'lucide-react';
 import { useAuth } from '@/components/AuthProvider';
 import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
 import { compressImageFileToJpeg } from '@/lib/pedidos-albaran-ocr';
@@ -49,6 +49,37 @@ const OCR_UNIT_TO_UNIT: Record<AlbaranOcrUnit, Unit> = {
   l: 'ud',
   ml: 'ud',
 };
+
+const OCR_ALLOWED_MIME_TYPES = new Set([
+  'image/jpeg',
+  'image/jpg',
+  'image/png',
+  'application/pdf',
+  'image/heic',
+  'image/heif',
+]);
+
+const OCR_ALLOWED_EXTENSIONS = /\.(jpg|jpeg|png|pdf|heic|heif)$/i;
+const OCR_MAX_BYTES = 10 * 1024 * 1024;
+
+function validateOcrFile(file: File): string | null {
+  const mime = (file.type || '').toLowerCase();
+  const extOk = OCR_ALLOWED_EXTENSIONS.test(file.name);
+  const mimeOk = OCR_ALLOWED_MIME_TYPES.has(mime);
+  if (!extOk && mime !== 'application/pdf') {
+    return 'Formato no compatible. Sube JPG, PNG, HEIC o PDF.';
+  }
+  if (!mimeOk) {
+    return 'Formato no compatible. Sube JPG, PNG, HEIC o PDF.';
+  }
+  if (file.size <= 0) {
+    return 'El archivo está vacío.';
+  }
+  if (file.size > OCR_MAX_BYTES) {
+    return `El archivo supera ${(OCR_MAX_BYTES / 1024 / 1024).toFixed(0)} MB.`;
+  }
+  return null;
+}
 
 type LauncherMode = 'sheet' | 'inline';
 
@@ -116,12 +147,14 @@ export default function AlbaranOcrLauncher({
 
   const [phase, setPhase] = React.useState<Phase>({ kind: 'idle' });
   const [error, setError] = React.useState<string | null>(null);
+  const [pickerOpen, setPickerOpen] = React.useState(false);
 
   const busy = phase.kind !== 'idle' && phase.kind !== 'done';
 
   const reset = React.useCallback(() => {
     setPhase({ kind: 'idle' });
     setError(null);
+    setPickerOpen(false);
     if (cameraRef.current) cameraRef.current.value = '';
     if (fileRef.current) fileRef.current.value = '';
   }, []);
@@ -141,6 +174,12 @@ export default function AlbaranOcrLauncher({
       }
       const supabase = getSupabaseClient()!;
       setError(null);
+
+      const validationError = validateOcrFile(file);
+      if (validationError) {
+        setError(validationError);
+        return;
+      }
 
       try {
         setPhase({ kind: 'create' });
@@ -184,11 +223,15 @@ export default function AlbaranOcrLauncher({
         });
 
         if (!res.ok) {
-          const hint =
+          const parts = [
+            res.reason || res.error,
+            res.hint,
+            res.googleCode !== undefined ? `(código Google: ${res.googleCode})` : null,
             res.error === 'ocr_provider_not_configured' || res.status === 503
-              ? 'Configura en Vercel: GOOGLE_CLOUD_PROJECT_ID, GOOGLE_DOCUMENT_AI_LOCATION, GOOGLE_DOCUMENT_AI_PROCESSOR_ID, GOOGLE_SERVICE_ACCOUNT_JSON y GEMINI_API_KEY.'
-              : res.reason || res.error;
-          throw new Error(hint);
+              ? 'Abre /api/ocr/diagnose con sesión iniciada o revisa Vercel: GOOGLE_CLOUD_PROJECT_ID, GOOGLE_DOCUMENT_AI_LOCATION, GOOGLE_DOCUMENT_AI_PROCESSOR_ID, GOOGLE_SERVICE_ACCOUNT_JSON, GEMINI_API_KEY.'
+              : null,
+          ].filter(Boolean);
+          throw new Error(parts.join(' '));
         }
 
         const payload: AlbaranOcrPayload = res.payload;
@@ -285,23 +328,28 @@ export default function AlbaranOcrLauncher({
     [handleFile],
   );
 
+  const openCamera = () => {
+    setPickerOpen(false);
+    cameraRef.current?.click();
+  };
+  const openGallery = () => {
+    setPickerOpen(false);
+    fileRef.current?.click();
+  };
+  const openPdf = () => {
+    setPickerOpen(false);
+    fileRef.current?.click();
+  };
+
   const content = (
     <div className="space-y-4">
       <div className="flex items-start gap-3">
-        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-[#D32F2F]/10 text-[#D32F2F] ring-1 ring-[#D32F2F]/20">
-          <ScanLine className="h-6 w-6" aria-hidden />
+        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-[#D32F2F]/10 text-[#D32F2F] ring-1 ring-[#D32F2F]/15">
+          <ScanLine className="h-5.5 w-5.5" aria-hidden />
         </div>
         <div className="min-w-0 flex-1">
-          <h2 className="text-[16px] font-black text-zinc-900">Escanear albarán</h2>
-          <p className="text-[13px] text-zinc-600">Recepción rápida con OCR</p>
-          <ul className="mt-2 space-y-0.5 text-[11px] text-zinc-500">
-            <li>· Extrae líneas, precios e IVA automáticamente</li>
-            <li>· Detecta diferencias contra el pedido</li>
-            <li>· Vincula con el pedido cuando coincide</li>
-          </ul>
-          <div className="mt-2 inline-flex items-center gap-1 rounded-full bg-zinc-100 px-2 py-0.5 text-[10px] font-bold text-zinc-700">
-            <Sparkles className="h-3 w-3" aria-hidden /> Document AI + Gemini
-          </div>
+          <h2 className="text-[16px] font-black text-zinc-900">Añadir albarán</h2>
+          <p className="text-[12.5px] text-zinc-600">OCR inteligente activado</p>
         </div>
         {mode === 'sheet' && onClose ? (
           <button
@@ -316,28 +364,62 @@ export default function AlbaranOcrLauncher({
         ) : null}
       </div>
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+      {!pickerOpen ? (
         <button
           type="button"
-          onClick={() => cameraRef.current?.click()}
+          onClick={() => setPickerOpen(true)}
           disabled={busy}
-          className="group flex h-24 flex-col items-center justify-center gap-1.5 rounded-2xl bg-[#D32F2F] px-4 text-white shadow-lg ring-1 ring-[#D32F2F]/30 transition active:scale-[0.98] disabled:opacity-60"
+          className="flex min-h-[52px] w-full items-center justify-center gap-2 rounded-2xl bg-[#D32F2F] px-4 text-white shadow-lg ring-1 ring-[#D32F2F]/20 active:scale-[0.99] disabled:opacity-60"
         >
-          <Camera className="h-6 w-6" aria-hidden />
-          <span className="text-[13px] font-black tracking-tight">Cámara</span>
-          <span className="text-[10px] font-semibold text-white/80">Fotografía el albarán</span>
+          <PlusCircle className="h-5 w-5" aria-hidden />
+          <span className="text-[14px] font-black tracking-tight">Añadir albarán</span>
         </button>
-        <button
-          type="button"
-          onClick={() => fileRef.current?.click()}
-          disabled={busy}
-          className="group flex h-24 flex-col items-center justify-center gap-1.5 rounded-2xl border border-zinc-200 bg-white px-4 text-zinc-900 shadow-sm transition active:scale-[0.98] disabled:opacity-60"
-        >
-          <FileUp className="h-6 w-6 text-[#D32F2F]" aria-hidden />
-          <span className="text-[13px] font-black tracking-tight">Subir PDF / Imagen</span>
-          <span className="text-[10px] font-semibold text-zinc-500">Desde galería o archivos</span>
-        </button>
-      </div>
+      ) : (
+        <div className="space-y-2.5 rounded-3xl border border-zinc-200 bg-zinc-50 p-3">
+          <button
+            type="button"
+            onClick={openCamera}
+            disabled={busy}
+            className="flex h-12 w-full items-center gap-3 rounded-2xl bg-white px-4 text-left shadow-sm ring-1 ring-zinc-200 disabled:opacity-60"
+          >
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#D32F2F]/10 text-[#D32F2F]">
+              <Camera className="h-4.5 w-4.5" aria-hidden />
+            </div>
+            <div className="min-w-0">
+              <p className="text-[13px] font-black text-zinc-900">Fotografiar albarán</p>
+              <p className="text-[11px] text-zinc-500">Usar la cámara</p>
+            </div>
+          </button>
+          <button
+            type="button"
+            onClick={openGallery}
+            disabled={busy}
+            className="flex h-12 w-full items-center gap-3 rounded-2xl bg-white px-4 text-left shadow-sm ring-1 ring-zinc-200 disabled:opacity-60"
+          >
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#D32F2F]/10 text-[#D32F2F]">
+              <FileUp className="h-4.5 w-4.5" aria-hidden />
+            </div>
+            <div className="min-w-0">
+              <p className="text-[13px] font-black text-zinc-900">Elegir imagen</p>
+              <p className="text-[11px] text-zinc-500">Galería o archivos</p>
+            </div>
+          </button>
+          <button
+            type="button"
+            onClick={openPdf}
+            disabled={busy}
+            className="flex h-12 w-full items-center gap-3 rounded-2xl bg-white px-4 text-left shadow-sm ring-1 ring-zinc-200 disabled:opacity-60"
+          >
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#D32F2F]/10 text-[#D32F2F]">
+              <FileText className="h-4.5 w-4.5" aria-hidden />
+            </div>
+            <div className="min-w-0">
+              <p className="text-[13px] font-black text-zinc-900">Subir PDF</p>
+              <p className="text-[11px] text-zinc-500">Archivo del albarán</p>
+            </div>
+          </button>
+        </div>
+      )}
 
       <input
         ref={cameraRef}
@@ -369,7 +451,7 @@ export default function AlbaranOcrLauncher({
       ) : null}
 
       <p className="text-center text-[10.5px] text-zinc-400">
-        Mismo flujo OCR para todo Chef One · Se guarda y queda pendiente de revisión
+        Se guarda como albarán pendiente de revisión
       </p>
     </div>
   );

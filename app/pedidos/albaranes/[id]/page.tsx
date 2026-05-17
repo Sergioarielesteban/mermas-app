@@ -219,60 +219,38 @@ function KvRow({
 }
 
 function StatusStepper({ status }: { status: DeliveryNoteStatus }) {
-  const labels = ['Borrador / carga', 'OCR', 'Revisión', 'Cerrado'];
   const idx = deliveryNoteFlowStepIndex(status);
   const isIncident = status === 'with_incidents';
   const isArchived = status === 'archived';
   const isValidated = status === 'validated';
-
-  const stepKind = (i: number): 'done' | 'current' | 'incident' | 'todo' => {
-    if (isArchived || isValidated) return 'done';
-    if (isIncident) return i < 3 ? 'done' : i === 3 ? 'incident' : 'todo';
-    if (i < idx) return 'done';
-    if (i === idx) return 'current';
-    return 'todo';
-  };
-
+  const steps = [
+    { label: 'Carga', done: true },
+    { label: 'OCR', done: idx >= 1 || isValidated || isArchived },
+    { label: 'Revisión', done: idx >= 2 || isValidated || isArchived, warning: isIncident },
+    { label: 'Cerrado', done: isValidated || isArchived },
+  ];
   return (
-    <div className="mt-3 overflow-x-auto pb-1">
-      <ol className="flex min-w-[280px] items-center gap-0">
-        {labels.map((lab, i) => {
-          const kind = stepKind(i);
-          const connectorGreen =
-            isArchived || isValidated ? true : isIncident ? i < 3 : i < idx;
-          return (
-            <li key={lab} className="flex flex-1 items-center last:flex-none">
-              <div className="flex flex-col items-center gap-1">
-                <span
-                  className={[
-                    'flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[11px] font-black',
-                    kind === 'incident'
-                      ? 'bg-red-600 text-white ring-2 ring-red-300'
-                      : kind === 'done'
-                        ? 'bg-emerald-600 text-white'
-                        : kind === 'current'
-                          ? 'bg-amber-500 text-white ring-2 ring-amber-200'
-                          : 'bg-zinc-200 text-zinc-500',
-                  ].join(' ')}
-                >
-                  {kind === 'done' ? '✓' : kind === 'incident' ? '!' : i + 1}
-                </span>
-                <span className="max-w-[4.5rem] text-center text-[9px] font-bold uppercase leading-tight text-zinc-500">
-                  {kind === 'incident' ? 'Incidencias' : lab}
-                </span>
-              </div>
-              {i < labels.length - 1 ? (
-                <div
-                  className={['mx-1 h-0.5 min-w-[12px] flex-1 rounded-full', connectorGreen ? 'bg-emerald-400' : 'bg-zinc-200'].join(
-                    ' ',
-                  )}
-                  aria-hidden
-                />
-              ) : null}
-            </li>
-          );
-        })}
-      </ol>
+    <div className="mt-3">
+      <div className="flex items-center gap-2 rounded-2xl border border-zinc-200 bg-white px-3 py-2">
+        {steps.map((step, i) => (
+          <React.Fragment key={step.label}>
+            <span
+              className={[
+                'inline-flex items-center gap-1 rounded-full px-2 py-1 text-[10px] font-black uppercase tracking-wide',
+                step.warning
+                  ? 'bg-red-50 text-red-800 ring-1 ring-red-200'
+                  : step.done
+                    ? 'bg-emerald-50 text-emerald-800 ring-1 ring-emerald-200'
+                    : 'bg-zinc-100 text-zinc-500 ring-1 ring-zinc-200',
+              ].join(' ')}
+            >
+              <span className="h-1.5 w-1.5 rounded-full bg-current" aria-hidden />
+              {step.label}
+            </span>
+            {i < steps.length - 1 ? <span className="h-px flex-1 bg-zinc-200" aria-hidden /> : null}
+          </React.Fragment>
+        ))}
+      </div>
     </div>
   );
 }

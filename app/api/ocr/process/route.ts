@@ -26,7 +26,11 @@ import { requireAllowedSupabaseUser } from '@/lib/require-allowed-supabase-user'
 import { logCriticalAndGeneric } from '@/lib/server/api-safe';
 import { enforceRateLimitAuth } from '@/lib/server/security-rate-limit';
 import { logSecurityEvent } from '@/lib/server/security-log';
-import { isDocumentAiConfigured, processDocumentAi } from '@/lib/ocr/providers/document-ai';
+import {
+  isDocumentAiConfigured,
+  logOcrIntegrationDiagnostics,
+  processDocumentAi,
+} from '@/lib/ocr/providers/document-ai';
 import { interpretAlbaranWithGemini, isGeminiConfigured } from '@/lib/ocr/gemini-interpreter';
 import { compareOcrWithOrderAndCatalog, masterProductsFromSupplier } from '@/lib/ocr/compare-with-order';
 import { fetchOrderById, fetchSuppliersWithProducts, type PedidoOrder } from '@/lib/pedidos-supabase';
@@ -36,6 +40,7 @@ import type {
   AlbaranDiffReport,
 } from '@/lib/ocr/types-document';
 
+export const runtime = 'nodejs';
 export const maxDuration = 60;
 
 const MAX_BYTES = 8 * 1024 * 1024;
@@ -45,15 +50,13 @@ const ALLOWED_MIMES = new Set<string>([
   'image/jpeg',
   'image/jpg',
   'image/png',
-  'image/webp',
-  'image/tiff',
   'application/pdf',
 ]);
 
 // Tipos recibidos habitualmente que NO son soportados → mensaje explícito
 const KNOWN_UNSUPPORTED_MIMES: Record<string, string> = {
-  'image/heic': 'HEIC no es compatible. Convierte a JPEG o PNG antes de subir.',
-  'image/heif': 'HEIF no es compatible. Convierte a JPEG o PNG antes de subir.',
+  'image/heic': 'Formato HEIC detectado. Convierte la imagen a JPG o vuelve a fotografiar desde cámara.',
+  'image/heif': 'Formato HEIC detectado. Convierte la imagen a JPG o vuelve a fotografiar desde cámara.',
   'application/octet-stream': 'El archivo llegó como octet-stream (formato desconocido). Sube un JPEG, PNG o PDF.',
 };
 
@@ -64,15 +67,13 @@ function normaliseMime(raw: string | null | undefined, fileName: string | null):
   const name = (fileName ?? '').toLowerCase();
   if (name.endsWith('.pdf')) return 'application/pdf';
   if (name.endsWith('.png')) return 'image/png';
-  if (name.endsWith('.webp')) return 'image/webp';
-  if (name.endsWith('.tif') || name.endsWith('.tiff')) return 'image/tiff';
   // Devolver el mime original para que la validación posterior lo rechace con mensaje claro
   return m || 'image/jpeg';
 }
 
 function unsupportedMimeReason(mime: string): string | null {
   if (ALLOWED_MIMES.has(mime)) return null;
-  return KNOWN_UNSUPPORTED_MIMES[mime] ?? `Formato "${mime}" no compatible. Usa JPEG, PNG, WEBP, TIFF o PDF.`;
+  return KNOWN_UNSUPPORTED_MIMES[mime] ?? `Formato "${mime}" no compatible. Usa JPEG, PNG o PDF.`;
 }
 
 function bearerJwt(request: Request): string | null {
@@ -139,6 +140,8 @@ export async function POST(request: Request): Promise<NextResponse<AlbaranOcrPro
     const rl = enforceRateLimitAuth(request, auth.userId, 'ocr');
     if (rl) return rl as unknown as NextResponse<AlbaranOcrProcessResponse>;
 
+    logOcrIntegrationDiagnostics({ endpoint: 'POST /api/ocr/process' });
+
     if (!isDocumentAiConfigured() || !isGeminiConfigured()) {
       logSecurityEvent('critical', {
         ocr: 'process_not_configured',
@@ -191,10 +194,11 @@ export async function POST(request: Request): Promise<NextResponse<AlbaranOcrPro
       );
     }
 
-    console.info(
-      '[ocr/process] request',
-      JSON.stringify({ mimeType, fileSizeKb, fileName: fileName ?? '(sin nombre)' }),
-    );
+    logOcrIntegrationDiagnostics({
+      endpoint: 'POST /api/ocr/process',
+      mimeType,
+      fileSizeKb,
+    });
 
     const relatedOrderId =
       typeof form.get('relatedOrderId') === 'string'
@@ -242,10 +246,10 @@ export async function POST(request: Request): Promise<NextResponse<AlbaranOcrPro
         {
           ok: false,
           error: 'document_ai_failed',
-          reason: errMsg,
+          reason: hint ? `${errMsg} — ${hint}` : errMsg,
           ...(hint ? { hint } : {}),
           ...(code !== undefined ? { googleCode: code } : {}),
-        },
+        } satisfies AlbaranOcrProcessResponse,
         { status: 502 },
       );
     }

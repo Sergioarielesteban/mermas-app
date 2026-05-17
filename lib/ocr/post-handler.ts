@@ -6,7 +6,7 @@ import { requireAllowedSupabaseUser } from '@/lib/require-allowed-supabase-user'
 import { logCriticalAndGeneric } from '@/lib/server/api-safe';
 import { enforceRateLimitAuth } from '@/lib/server/security-rate-limit';
 import { runOcrFromImageBytes } from '@/lib/ocr/index';
-import { isDocumentAiConfigured } from '@/lib/ocr/providers/document-ai';
+import { isDocumentAiConfigured, logOcrIntegrationDiagnostics } from '@/lib/ocr/providers/document-ai';
 
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 
@@ -15,15 +15,13 @@ const ALLOWED_MIMES = new Set([
   'image/jpeg',
   'image/jpg',
   'image/png',
-  'image/webp',
-  'image/tiff',
   'application/pdf',
 ]);
 
 // Tipos conocidos incompatibles → mensaje claro en lugar de silencio
 const KNOWN_UNSUPPORTED: Record<string, string> = {
-  'image/heic': 'Formato HEIC no compatible con Document AI. Convierte a JPEG o PNG.',
-  'image/heif': 'Formato HEIF no compatible con Document AI. Convierte a JPEG o PNG.',
+  'image/heic': 'Formato HEIC detectado. Convierte la imagen a JPG o vuelve a fotografiar desde cámara.',
+  'image/heif': 'Formato HEIC detectado. Convierte la imagen a JPG o vuelve a fotografiar desde cámara.',
   'application/octet-stream': 'El archivo llegó como octet-stream (tipo desconocido). Sube un JPEG, PNG o PDF.',
 };
 
@@ -40,7 +38,7 @@ function normaliseMimeStrict(raw: unknown): string {
   if (ALLOWED_MIMES.has(m)) return m;
   const hint = KNOWN_UNSUPPORTED[m];
   if (hint) throw new Error(`mime_not_supported: ${hint}`);
-  throw new Error(`mime_not_supported: Formato "${m}" no compatible. Usa JPEG, PNG, WEBP, TIFF o PDF.`);
+  throw new Error(`mime_not_supported: Formato "${m}" no compatible. Usa JPEG, PNG o PDF.`);
 }
 
 export async function handlePedidosOcrPost(request: Request): Promise<NextResponse> {
@@ -52,6 +50,8 @@ export async function handlePedidosOcrPost(request: Request): Promise<NextRespon
 
     const rl = enforceRateLimitAuth(request, auth.userId, 'ocr');
     if (rl) return rl;
+
+    logOcrIntegrationDiagnostics({ endpoint: 'POST /api/pedidos/ocr' });
 
     if (!isDocumentAiConfigured()) {
       return NextResponse.json(
@@ -88,7 +88,12 @@ export async function handlePedidosOcrPost(request: Request): Promise<NextRespon
       return NextResponse.json({ ok: false, error: 'invalid_mime_type', reason }, { status: 415 });
     }
 
-    console.info('[pedidos/ocr] request', JSON.stringify({ mimeType, fileSizeKb: Math.round(buf.length / 1024) }));
+    const fileSizeKb = Math.round(buf.length / 1024);
+    logOcrIntegrationDiagnostics({
+      endpoint: 'POST /api/pedidos/ocr',
+      mimeType,
+      fileSizeKb,
+    });
 
     const result = await runOcrFromImageBytes(buf, mimeType);
     const text = result.rawText ?? '';

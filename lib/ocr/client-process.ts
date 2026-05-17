@@ -32,6 +32,8 @@ export type RunAlbaranOcrProcessErr = {
   status: number;
   error: string;
   reason?: string;
+  hint?: string;
+  googleCode?: number | string;
 };
 
 export type RunAlbaranOcrProcessResult = RunAlbaranOcrProcessOk | RunAlbaranOcrProcessErr;
@@ -46,7 +48,15 @@ export async function runAlbaranOcrProcess(
   input: RunAlbaranOcrProcessInput,
 ): Promise<RunAlbaranOcrProcessResult> {
   const form = new FormData();
-  form.append('image', input.blobOrFile, input.fileName ?? 'albaran');
+  const fileName = input.fileName ?? 'albaran.jpg';
+  form.append('image', input.blobOrFile, fileName);
+  const mime =
+    input.blobOrFile instanceof File && input.blobOrFile.type
+      ? input.blobOrFile.type
+      : fileName.toLowerCase().endsWith('.pdf')
+        ? 'application/pdf'
+        : 'image/jpeg';
+  form.append('mimeType', mime);
   if (input.relatedOrderId) form.append('relatedOrderId', input.relatedOrderId);
 
   let res: Response;
@@ -73,11 +83,19 @@ export async function runAlbaranOcrProcess(
   }
 
   if (!res.ok || !body || body.ok !== true) {
+    const errBody = body as {
+      error?: string;
+      reason?: string;
+      hint?: string;
+      googleCode?: number | string;
+    } | null;
     return {
       ok: false,
       status: res.status,
-      error: body && 'error' in body ? body.error : `http_${res.status}`,
-      reason: body && 'reason' in body ? body.reason : undefined,
+      error: errBody?.error ?? `http_${res.status}`,
+      reason: errBody?.reason,
+      hint: errBody?.hint,
+      googleCode: errBody?.googleCode,
     };
   }
 
