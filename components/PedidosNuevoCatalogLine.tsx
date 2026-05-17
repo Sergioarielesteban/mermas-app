@@ -92,6 +92,14 @@ function PedidosNuevoCatalogLineInner({
   const longPressPlusRef = React.useRef<number | null>(null);
   const longPressMinusRef = React.useRef<number | null>(null);
   const holdRedTimerRef = React.useRef<number | null>(null);
+  const gestureRef = React.useRef<{
+    active: boolean;
+    sign: 1 | -1;
+    startX: number;
+    startY: number;
+    canceled: boolean;
+    deltaApplied: boolean;
+  } | null>(null);
   /** Cantidad en rojo durante incremento/decremento continuo (mock “mantener pulsado”). */
   const [qtyHoldHighlight, setQtyHoldHighlight] = React.useState(false);
 
@@ -137,6 +145,22 @@ function PedidosNuevoCatalogLineInner({
     setQtyHoldHighlight(false);
   }, []);
 
+  const finishGesture = React.useCallback(() => {
+    const g = gestureRef.current;
+    gestureRef.current = null;
+    if (!g) return;
+    if (g.canceled) {
+      clearHoldRed();
+      clearLongPressTimers();
+      hold.onHoldPointerEnd();
+      if (g.deltaApplied) onDelta(g.sign * -1);
+      return;
+    }
+    clearHoldRed();
+    clearLongPressTimers();
+    hold.onHoldPointerEnd();
+  }, [clearHoldRed, clearLongPressTimers, hold, onDelta]);
+
   const scheduleHoldRed = React.useCallback(() => {
     clearHoldRed();
     holdRedTimerRef.current = window.setTimeout(() => {
@@ -162,7 +186,11 @@ function PedidosNuevoCatalogLineInner({
   }, [clearIdleClose]);
 
   React.useEffect(() => {
-    if (!holdShortcutsEnabled) closeShortcuts();
+    if (!holdShortcutsEnabled) {
+      window.requestAnimationFrame(() => {
+        closeShortcuts();
+      });
+    }
   }, [holdShortcutsEnabled, closeShortcuts]);
 
   React.useEffect(() => {
@@ -170,6 +198,7 @@ function PedidosNuevoCatalogLineInner({
       clearIdleClose();
       clearLongPressTimers();
       clearHoldRed();
+      gestureRef.current = null;
     };
   }, [clearHoldRed, clearIdleClose, clearLongPressTimers]);
 
@@ -358,6 +387,14 @@ function PedidosNuevoCatalogLineInner({
                   tabIndex={-1}
                   onPointerDown={(e) => {
                     if (minusDisabled) return;
+                    gestureRef.current = {
+                      active: true,
+                      sign: -1,
+                      startX: e.clientX,
+                      startY: e.clientY,
+                      canceled: false,
+                      deltaApplied: true,
+                    };
                     scheduleHoldRed();
                     hold.onMinusPointerDown(e);
                     clearLongPressTimers();
@@ -368,23 +405,32 @@ function PedidosNuevoCatalogLineInner({
                       }, LONG_PRESS_MS);
                     }
                   }}
-                  onPointerUp={() => {
-                    clearHoldRed();
-                    clearLongPressTimers();
-                    hold.onHoldPointerEnd();
+                  onPointerMove={(e) => {
+                    const g = gestureRef.current;
+                    if (!g || g.sign !== -1 || !g.active || g.canceled) return;
+                    const dy = Math.abs(e.clientY - g.startY);
+                    const dx = Math.abs(e.clientX - g.startX);
+                    if (dy >= 8 && dy > dx) {
+                      g.canceled = true;
+                      finishGesture();
+                    }
                   }}
-                  onPointerCancel={() => {
-                    clearHoldRed();
-                    clearLongPressTimers();
-                    hold.onHoldPointerEnd();
+                  onPointerUp={finishGesture}
+                  onPointerCancel={finishGesture}
+                  onPointerLeave={(e) => {
+                    const g = gestureRef.current;
+                    if (!g || g.sign !== -1) return;
+                    if (e.buttons === 0) finishGesture();
                   }}
-                  onPointerLeave={() => {
-                    clearHoldRed();
-                    clearLongPressTimers();
-                    hold.onHoldPointerEnd();
+                  onClick={(e) => {
+                    const g = gestureRef.current;
+                    if (g?.canceled) {
+                      e.preventDefault();
+                      e.stopPropagation();
+                    }
                   }}
                   className={[
-                    'grid h-10 min-h-10 max-h-10 min-w-[2.25rem] max-w-[2.25rem] shrink-0 touch-manipulation select-none place-items-center bg-white text-lg font-semibold leading-none tracking-tight transition-colors duration-100',
+                    'grid h-10 min-h-10 max-h-10 min-w-[2.5rem] max-w-[2.5rem] shrink-0 touch-manipulation select-none place-items-center bg-white text-lg font-semibold leading-none tracking-tight transition-colors duration-100',
                     minusDisabled
                       ? 'cursor-not-allowed text-zinc-300'
                       : 'text-zinc-500 active:bg-zinc-100',
@@ -439,6 +485,14 @@ function PedidosNuevoCatalogLineInner({
                   type="button"
                   tabIndex={-1}
                   onPointerDown={(e) => {
+                    gestureRef.current = {
+                      active: true,
+                      sign: 1,
+                      startX: e.clientX,
+                      startY: e.clientY,
+                      canceled: false,
+                      deltaApplied: true,
+                    };
                     scheduleHoldRed();
                     hold.onPlusPointerDown(e);
                     clearLongPressTimers();
@@ -449,22 +503,31 @@ function PedidosNuevoCatalogLineInner({
                       }, LONG_PRESS_MS);
                     }
                   }}
-                  onPointerUp={() => {
-                    clearHoldRed();
-                    clearLongPressTimers();
-                    hold.onHoldPointerEnd();
+                  onPointerMove={(e) => {
+                    const g = gestureRef.current;
+                    if (!g || g.sign !== 1 || !g.active || g.canceled) return;
+                    const dy = Math.abs(e.clientY - g.startY);
+                    const dx = Math.abs(e.clientX - g.startX);
+                    if (dy >= 8 && dy > dx) {
+                      g.canceled = true;
+                      finishGesture();
+                    }
                   }}
-                  onPointerCancel={() => {
-                    clearHoldRed();
-                    clearLongPressTimers();
-                    hold.onHoldPointerEnd();
+                  onPointerUp={finishGesture}
+                  onPointerCancel={finishGesture}
+                  onPointerLeave={(e) => {
+                    const g = gestureRef.current;
+                    if (!g || g.sign !== 1) return;
+                    if (e.buttons === 0) finishGesture();
                   }}
-                  onPointerLeave={() => {
-                    clearHoldRed();
-                    clearLongPressTimers();
-                    hold.onHoldPointerEnd();
+                  onClick={(e) => {
+                    const g = gestureRef.current;
+                    if (g?.canceled) {
+                      e.preventDefault();
+                      e.stopPropagation();
+                    }
                   }}
-                  className="grid h-10 min-h-10 max-h-10 min-w-[2.25rem] max-w-[2.25rem] shrink-0 touch-manipulation select-none place-items-center bg-white text-lg font-bold leading-none tracking-tight text-[#E30613] transition-colors duration-100 active:bg-[#FFF0F0]"
+                  className="grid h-10 min-h-10 max-h-10 min-w-[2.5rem] max-w-[2.5rem] shrink-0 touch-manipulation select-none place-items-center bg-white text-lg font-bold leading-none tracking-tight text-[#E30613] transition-colors duration-100 active:bg-[#FFF0F0]"
                   aria-label={`Añadir una unidad de ${p.name}`}
                 >
                   +

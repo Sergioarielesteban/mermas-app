@@ -716,7 +716,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                   href={navBreadcrumb.parentHref}
                   className="font-semibold text-[#B91C1C] underline-offset-2 hover:underline"
                 >
-                  ← {navBreadcrumb.parentLabel}
+                  {navBreadcrumb.parentLabel}
                 </Link>
                 <span className="mx-1.5 text-zinc-400" aria-hidden>
                   /

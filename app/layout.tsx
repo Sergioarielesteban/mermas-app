@@ -74,8 +74,9 @@ export default function RootLayout({
     <html
       lang="es"
       className={`${appSerif.variable} ${geistMono.variable} h-full antialiased`}
+      suppressHydrationWarning
     >
-      <body className="flex h-full min-h-0 flex-col">
+      <body className="flex h-full min-h-0 flex-col" suppressHydrationWarning>
         <PwaRegister />
         <AuthProvider>
           <MermasStoreProvider>

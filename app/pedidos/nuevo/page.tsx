@@ -1427,16 +1427,7 @@ export default function NuevoPedidoPage() {
 
       {!editingId ? (
         <section className="overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-zinc-200/85">
-          <div className="flex items-center border-b border-zinc-100 px-2 py-2 sm:px-3">
-            <Link
-              href="/pedidos"
-              onClick={markPedidosUiSkipRestoreOnce}
-              className="inline-flex min-h-9 min-w-9 items-center justify-center rounded-lg text-sm font-semibold text-zinc-700 hover:bg-zinc-50"
-            >
-              ←
-            </Link>
-          </div>
-          <div className="bg-[#FAFAF9] px-3 pb-2.5 pt-2.5">
+          <div className="bg-[#FAFAF9] px-3 pb-3 pt-2.5">
             <label htmlFor="pedido-nuevo-proveedor" className="sr-only">
               Proveedor
             </label>
@@ -1449,11 +1440,8 @@ export default function NuevoPedidoPage() {
                 value={supplierId}
                 disabled={Boolean(existingSentAt && existingOrderId)}
                 onChange={(e) => setSupplierId(e.target.value)}
-                className="w-full cursor-pointer appearance-none truncate rounded-xl border border-zinc-200 bg-white bg-[length:0.95rem] bg-[position:right_0.65rem_center] bg-no-repeat py-2.5 pl-10 pr-10 text-center text-[15px] font-bold leading-tight text-zinc-900 shadow-sm outline-none ring-1 ring-zinc-100/80 [text-align-last:center] disabled:cursor-not-allowed disabled:bg-zinc-100 disabled:text-zinc-500"
-                style={{
-                  textAlign: 'center',
-                  backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2371717a'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'/%3E%3C/svg%3E")`,
-                }}
+                className="w-full cursor-pointer appearance-none truncate rounded-xl border border-zinc-200 bg-white py-2.5 pl-10 pr-4 text-center text-[15px] font-bold leading-tight text-zinc-900 shadow-sm outline-none ring-1 ring-zinc-100/80 [text-align-last:center] disabled:cursor-not-allowed disabled:bg-zinc-100 disabled:text-zinc-500"
+                style={{ textAlign: 'center' }}
               >
                 {suppliers.map((s) => (
                   <option key={s.id} value={s.id}>
@@ -1461,6 +1449,67 @@ export default function NuevoPedidoPage() {
                   </option>
                 ))}
               </select>
+            </div>
+            <div
+              id="pedido-nuevo-fecha-entrega-banner"
+              role="button"
+              tabIndex={0}
+              onClick={openDeliveryDateEditor}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  openDeliveryDateEditor();
+                }
+              }}
+              className={[
+                'relative mt-2 flex min-h-[2.7rem] w-full items-center justify-between gap-2 rounded-xl border px-3 py-2 text-center shadow-sm ring-1 transition-colors',
+                deliveryDate.trim()
+                  ? 'border-zinc-200 bg-white text-zinc-800 ring-zinc-100'
+                  : 'border-[#E30613]/20 bg-[#FFF7F7] text-[#B42318] ring-[#E30613]/10',
+              ].join(' ')}
+            >
+              <span className="inline-flex min-w-0 flex-1 items-center justify-center gap-2">
+                <span
+                  className={[
+                    'inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full ring-1',
+                    deliveryDate.trim()
+                      ? 'bg-zinc-50 text-zinc-600 ring-zinc-200'
+                      : 'bg-white text-[#E30613] ring-[#E30613]/15',
+                  ].join(' ')}
+                >
+                  <CalendarDays className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
+                </span>
+                <span className="min-w-0">
+                  <span className="block text-[9px] font-bold uppercase tracking-[0.14em] text-zinc-400">
+                    Fecha de entrega
+                  </span>
+                  <span className="block truncate text-[12px] font-semibold leading-tight">
+                    {deliveryDate.trim() && deliveryChipLabel ? `Entrega: ${deliveryChipLabel}` : 'Seleccionar fecha'}
+                  </span>
+                </span>
+              </span>
+              <span className="shrink-0 text-[10px] font-semibold text-zinc-500">Editar</span>
+              <input
+                id="pedido-nuevo-fecha-entrega-top"
+                type="date"
+                value={deliveryDate}
+                aria-label="Fecha de entrega del pedido"
+                onChange={(e) => {
+                  setDeliveryDate(e.target.value);
+                  setDeliveryDateFieldError(false);
+                }}
+                onClick={(e) => {
+                  const el = e.currentTarget;
+                  if (typeof el.showPicker === 'function') {
+                    try {
+                      el.showPicker();
+                    } catch {
+                      // ignore
+                    }
+                  }
+                }}
+                className="absolute inset-0 z-10 h-full w-full cursor-pointer appearance-none opacity-0"
+              />
             </div>
           </div>
         </section>
@@ -1476,11 +1525,8 @@ export default function NuevoPedidoPage() {
               value={supplierId}
               disabled={Boolean(existingSentAt && existingOrderId)}
               onChange={(e) => setSupplierId(e.target.value)}
-              className="w-full cursor-pointer appearance-none truncate rounded-xl border border-zinc-200 bg-white bg-[length:1rem] bg-[position:right_0.65rem_center] bg-no-repeat py-2.5 pl-10 pr-10 text-center text-[15px] font-bold leading-tight text-zinc-900 outline-none [text-align-last:center] disabled:cursor-not-allowed disabled:bg-zinc-100 disabled:text-zinc-500"
-              style={{
-                textAlign: 'center',
-                backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2371717a'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'/%3E%3C/svg%3E")`,
-              }}
+              className="w-full cursor-pointer appearance-none truncate rounded-xl border border-zinc-200 bg-white py-2.5 pl-10 pr-4 text-center text-[15px] font-bold leading-tight text-zinc-900 outline-none [text-align-last:center] disabled:cursor-not-allowed disabled:bg-zinc-100 disabled:text-zinc-500"
+              style={{ textAlign: 'center' }}
             >
               {suppliers.map((s) => (
                 <option key={s.id} value={s.id}>
@@ -1488,6 +1534,67 @@ export default function NuevoPedidoPage() {
                 </option>
               ))}
             </select>
+          </div>
+          <div
+            id="pedido-nuevo-fecha-entrega-banner"
+            role="button"
+            tabIndex={0}
+            onClick={openDeliveryDateEditor}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                openDeliveryDateEditor();
+              }
+            }}
+            className={[
+              'relative mt-2 flex min-h-[2.7rem] w-full items-center justify-between gap-2 rounded-xl border px-3 py-2 text-center shadow-sm ring-1 transition-colors',
+              deliveryDate.trim()
+                ? 'border-zinc-200 bg-white text-zinc-800 ring-zinc-100'
+                : 'border-[#E30613]/20 bg-[#FFF7F7] text-[#B42318] ring-[#E30613]/10',
+            ].join(' ')}
+          >
+            <span className="inline-flex min-w-0 flex-1 items-center justify-center gap-2">
+              <span
+                className={[
+                  'inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full ring-1',
+                  deliveryDate.trim()
+                    ? 'bg-zinc-50 text-zinc-600 ring-zinc-200'
+                    : 'bg-white text-[#E30613] ring-[#E30613]/15',
+                ].join(' ')}
+              >
+                <CalendarDays className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
+              </span>
+              <span className="min-w-0">
+                <span className="block text-[9px] font-bold uppercase tracking-[0.14em] text-zinc-400">
+                  Fecha de entrega
+                </span>
+                <span className="block truncate text-[12px] font-semibold leading-tight">
+                  {deliveryDate.trim() && deliveryChipLabel ? `Entrega: ${deliveryChipLabel}` : 'Seleccionar fecha'}
+                </span>
+              </span>
+            </span>
+            <span className="shrink-0 text-[10px] font-semibold text-zinc-500">Editar</span>
+            <input
+              id="pedido-nuevo-fecha-entrega-top"
+              type="date"
+              value={deliveryDate}
+              aria-label="Fecha de entrega del pedido"
+              onChange={(e) => {
+                setDeliveryDate(e.target.value);
+                setDeliveryDateFieldError(false);
+              }}
+              onClick={(e) => {
+                const el = e.currentTarget;
+                if (typeof el.showPicker === 'function') {
+                  try {
+                    el.showPicker();
+                  } catch {
+                    // ignore
+                  }
+                }
+              }}
+              className="absolute inset-0 z-10 h-full w-full cursor-pointer appearance-none opacity-0"
+            />
           </div>
         </section>
       )}
@@ -1554,64 +1661,6 @@ export default function NuevoPedidoPage() {
                 <Filter className="h-3.5 w-3.5 sm:h-4 sm:w-4" aria-hidden />
                 <span className="hidden sm:inline">Filtros</span>
               </button>
-            </div>
-            <div
-              id="pedido-nuevo-fecha-entrega-banner"
-              role="button"
-              tabIndex={0}
-              onClick={openDeliveryDateEditor}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                  e.preventDefault();
-                  openDeliveryDateEditor();
-                }
-              }}
-              className={[
-                'relative mt-1.5 flex h-[2.35rem] w-full items-center justify-between gap-2 rounded-lg border px-2.5 text-left shadow-sm ring-1 transition-colors',
-                deliveryDate.trim()
-                  ? 'border-zinc-200 bg-white text-zinc-800 ring-zinc-100'
-                  : 'border-[#E30613]/25 bg-[#FFF5F5] text-[#B42318] ring-[#E30613]/10',
-              ].join(' ')}
-            >
-              <span className="inline-flex min-w-0 items-center gap-2">
-                <span
-                  className={[
-                    'inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full ring-1',
-                    deliveryDate.trim()
-                      ? 'bg-white text-zinc-600 ring-zinc-200'
-                      : 'bg-white text-[#E30613] ring-[#E30613]/15',
-                  ].join(' ')}
-                >
-                  <CalendarDays className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
-                </span>
-                <span className="min-w-0">
-                  <span className="block truncate text-[11px] font-semibold">
-                    {deliveryDate.trim() && deliveryChipLabel ? `Entrega: ${deliveryChipLabel}` : 'Seleccionar fecha de entrega'}
-                  </span>
-                </span>
-              </span>
-              <span className="shrink-0 text-[10px] font-semibold text-zinc-500">Editar</span>
-              <input
-                id="pedido-nuevo-fecha-entrega-top"
-                type="date"
-                value={deliveryDate}
-                aria-label="Fecha de entrega del pedido"
-                onChange={(e) => {
-                  setDeliveryDate(e.target.value);
-                  setDeliveryDateFieldError(false);
-                }}
-                onClick={(e) => {
-                  const el = e.currentTarget;
-                  if (typeof el.showPicker === 'function') {
-                    try {
-                      el.showPicker();
-                    } catch {
-                      // ignore
-                    }
-                  }
-                }}
-                className="absolute inset-0 z-10 h-full w-full cursor-pointer appearance-none opacity-0"
-              />
             </div>
           </div>
         ) : null}
