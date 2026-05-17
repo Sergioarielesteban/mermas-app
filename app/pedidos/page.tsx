@@ -9,7 +9,6 @@ import {
   ChevronDown,
   ChevronRight,
   FileText,
-  LineChart,
   List,
   Loader2,
   Package,
@@ -18,6 +17,7 @@ import {
   Truck,
   CheckCircle2,
   AlertTriangle,
+  LineChart,
   TrendingUp,
   Eye,
 } from 'lucide-react';
@@ -4249,43 +4249,31 @@ export default function PedidosPage() {
             <Link
               href="/pedidos/proveedores"
               className={[
-                'group flex min-h-[3.4rem] flex-col justify-between rounded-[20px] border px-3 py-2 text-left transition active:scale-[0.99] sm:min-h-[4.1rem] sm:py-2.5',
+                'group flex min-h-[2.8rem] items-center gap-2 rounded-[18px] border px-3 py-2 text-left transition active:scale-[0.99] sm:min-h-[3.2rem] sm:py-2.5',
                 pedidosNavActive('/pedidos/proveedores')
                   ? 'border-[#D32F2F]/18 bg-[#FFF7F5] shadow-[0_4px_16px_rgba(211,47,47,0.08)] ring-1 ring-[#D32F2F]/10'
                   : 'border-zinc-200/80 bg-white shadow-[0_2px_10px_rgba(0,0,0,0.04)] ring-1 ring-zinc-200/70',
               ].join(' ')}
             >
-              <span className="flex items-start justify-between gap-3">
-                <span className="grid h-9 w-9 place-items-center rounded-full bg-[#D32F2F]/[0.09] text-[#D32F2F] ring-1 ring-[#D32F2F]/12">
-                  <Building2 className="h-4 w-4" strokeWidth={2} aria-hidden />
-                </span>
-                <ChevronRight className="mt-1 h-4 w-4 shrink-0 text-zinc-300 transition group-hover:translate-x-0.5 group-hover:text-zinc-400" strokeWidth={2.25} aria-hidden />
+              <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-[#D32F2F]/[0.09] text-[#D32F2F] ring-1 ring-[#D32F2F]/12">
+                <Building2 className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
               </span>
-              <span className="block">
-                <span className="block font-serif text-[15px] leading-tight text-zinc-950">Proveedores</span>
-                <span className="mt-0.5 block text-[11px] leading-snug text-zinc-600">Gestiona contactos y catálogo</span>
-              </span>
+              <span className="block text-[13px] font-black leading-tight text-zinc-950 sm:text-[14px]">Proveedores</span>
             </Link>
 
             <Link
               href="/pedidos/articulos"
               className={[
-                'group flex min-h-[3.4rem] flex-col justify-between rounded-[20px] border px-3 py-2 text-left transition active:scale-[0.99] sm:min-h-[4.1rem] sm:py-2.5',
+                'group flex min-h-[2.8rem] items-center gap-2 rounded-[18px] border px-3 py-2 text-left transition active:scale-[0.99] sm:min-h-[3.2rem] sm:py-2.5',
                 pedidosNavActive('/pedidos/articulos')
                   ? 'border-[#D32F2F]/18 bg-[#FFF7F5] shadow-[0_4px_16px_rgba(211,47,47,0.08)] ring-1 ring-[#D32F2F]/10'
                   : 'border-zinc-200/80 bg-white shadow-[0_2px_10px_rgba(0,0,0,0.04)] ring-1 ring-zinc-200/70',
               ].join(' ')}
             >
-              <span className="flex items-start justify-between gap-3">
-                <span className="grid h-9 w-9 place-items-center rounded-full bg-amber-50 text-amber-700 ring-1 ring-amber-200/70">
-                  <Package className="h-4 w-4" strokeWidth={2} aria-hidden />
-                </span>
-                <ChevronRight className="mt-1 h-4 w-4 shrink-0 text-zinc-300 transition group-hover:translate-x-0.5 group-hover:text-zinc-400" strokeWidth={2.25} aria-hidden />
+              <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-amber-50 text-amber-700 ring-1 ring-amber-200/70">
+                <Package className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
               </span>
-              <span className="block">
-                <span className="block font-serif text-[15px] leading-tight text-zinc-950">Artículos</span>
-                <span className="mt-0.5 block text-[11px] leading-snug text-zinc-600">Consulta productos activos</span>
-              </span>
+              <span className="block text-[13px] font-black leading-tight text-zinc-950 sm:text-[14px]">Artículos</span>
             </Link>
           </div>
 
@@ -4293,22 +4281,16 @@ export default function PedidosPage() {
             <Link
               href="/pedidos/precios"
               className={[
-                'group flex min-h-[3.4rem] flex-col justify-between rounded-[20px] border px-3 py-2 text-left transition active:scale-[0.99] sm:min-h-[4.1rem] sm:py-2.5',
+                'group flex min-h-[2.8rem] items-center gap-2 rounded-[18px] border px-3 py-2 text-left transition active:scale-[0.99] sm:min-h-[3.2rem] sm:py-2.5',
                 pedidosNavActive('/pedidos/precios')
                   ? 'border-[#D32F2F]/18 bg-[#FFF7F5] shadow-[0_4px_16px_rgba(211,47,47,0.08)] ring-1 ring-[#D32F2F]/10'
                   : 'border-zinc-200/80 bg-white shadow-[0_2px_10px_rgba(0,0,0,0.04)] ring-1 ring-zinc-200/70',
               ].join(' ')}
             >
-              <span className="flex items-start justify-between gap-3">
-                <span className="grid h-9 w-9 place-items-center rounded-full bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200/70">
-                  <TrendingUp className="h-4 w-4" strokeWidth={2} aria-hidden />
-                </span>
-                <ChevronRight className="mt-1 h-4 w-4 shrink-0 text-zinc-300 transition group-hover:translate-x-0.5 group-hover:text-zinc-400" strokeWidth={2.25} aria-hidden />
+              <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200/70">
+                <TrendingUp className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
               </span>
-              <span className="block">
-                <span className="block font-serif text-[15px] leading-tight text-zinc-950">Evolución de precio</span>
-                <span className="mt-0.5 block text-[11px] leading-snug text-zinc-600">Cambios y variaciones</span>
-              </span>
+              <span className="block text-[13px] font-black leading-tight text-zinc-950 sm:text-[14px]">Evolución de precio</span>
             </Link>
 
             <Link
@@ -4316,22 +4298,16 @@ export default function PedidosPage() {
               title="Histórico y compras del mes"
               aria-label="Abrir compras del mes"
               className={[
-                'group flex min-h-[3.4rem] flex-col justify-between rounded-[20px] border px-3 py-2 text-left transition active:scale-[0.99] sm:min-h-[4.1rem] sm:py-2.5',
+                'group flex min-h-[2.8rem] items-center gap-2 rounded-[18px] border px-3 py-2 text-left transition active:scale-[0.99] sm:min-h-[3.2rem] sm:py-2.5',
                 pedidosNavActive('/pedidos/historial-mes')
                   ? 'border-[#D32F2F]/18 bg-[#FFF7F5] shadow-[0_4px_16px_rgba(211,47,47,0.08)] ring-1 ring-[#D32F2F]/10'
                   : 'border-zinc-200/80 bg-white shadow-[0_2px_10px_rgba(0,0,0,0.04)] ring-1 ring-zinc-200/70',
               ].join(' ')}
             >
-              <span className="flex items-start justify-between gap-3">
-                <span className="grid h-9 w-9 place-items-center rounded-full bg-sky-50 text-sky-700 ring-1 ring-sky-200/70">
-                  <LineChart className="h-4 w-4" strokeWidth={2} aria-hidden />
-                </span>
-                <ChevronRight className="mt-1 h-4 w-4 shrink-0 text-zinc-300 transition group-hover:translate-x-0.5 group-hover:text-zinc-400" strokeWidth={2.25} aria-hidden />
+              <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-sky-50 text-sky-700 ring-1 ring-sky-200/70">
+                <LineChart className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
               </span>
-              <span className="block">
-              <span className="block font-serif text-[15px] leading-tight text-zinc-950">Compras del mes</span>
-                <span className="mt-0.5 block text-[11px] leading-snug text-zinc-600">Resumen operativo</span>
-              </span>
+              <span className="block text-[13px] font-black leading-tight text-zinc-950 sm:text-[14px]">Compras del mes</span>
             </Link>
           </div>
 
@@ -4350,6 +4326,28 @@ export default function PedidosPage() {
             <span className="min-w-0 flex-1">
               <span className="block font-serif text-[15px] leading-tight text-zinc-950">Albaranes</span>
               <span className="mt-0.5 block text-[11px] leading-snug text-zinc-600">OCR · recepción · validación</span>
+            </span>
+            <ChevronRight className="h-4 w-4 shrink-0 text-zinc-300 transition group-hover:translate-x-0.5 group-hover:text-zinc-400" strokeWidth={2.25} aria-hidden />
+          </Link>
+
+          <Link
+            href="/pedidos/compras-producto"
+            title="Consumo semanal por producto"
+            aria-label="Abrir consumo semanal por producto"
+            className={[
+              'group flex min-h-[3.75rem] w-full items-center gap-3 rounded-[20px] border px-3 py-2 text-left transition active:scale-[0.99] sm:min-h-[4.5rem] sm:py-2.5',
+              pedidosNavActive('/pedidos/compras-producto')
+                ? 'border-[#D32F2F]/18 bg-[#FFF7F5] shadow-[0_4px_16px_rgba(211,47,47,0.08)] ring-1 ring-[#D32F2F]/10'
+                : 'border-zinc-200/80 bg-white shadow-[0_2px_10px_rgba(0,0,0,0.04)] ring-1 ring-zinc-200/70',
+            ].join(' ')}
+          >
+            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-sky-50 text-sky-700 ring-1 ring-sky-200/70">
+              <LineChart className="h-4.5 w-4.5" strokeWidth={2} aria-hidden />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block font-serif text-[15px] leading-tight text-zinc-950">
+                Consumo de artículos por semana
+              </span>
             </span>
             <ChevronRight className="h-4 w-4 shrink-0 text-zinc-300 transition group-hover:translate-x-0.5 group-hover:text-zinc-400" strokeWidth={2.25} aria-hidden />
           </Link>
@@ -4442,7 +4440,7 @@ export default function PedidosPage() {
         <summary className="relative flex w-full cursor-pointer list-none flex-col outline-none transition-colors focus-visible:ring-2 focus-visible:ring-[#D32F2F]/40 focus-visible:ring-offset-2 [&::-webkit-details-marker]:hidden">
           <div className="relative flex gap-3 px-3.5 pb-2 pt-3.5 pl-4 sm:px-4 sm:pt-4">
             <span
-              className="absolute bottom-12 left-0 top-3 w-[3px] rounded-r-full bg-gradient-to-b from-amber-400 via-amber-500 to-orange-500 sm:bottom-14"
+              className="absolute bottom-0 left-0 top-3 w-[3px] rounded-r-full bg-gradient-to-b from-amber-400 via-amber-500 to-orange-500"
               aria-hidden
             />
             <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[#D32F2F]/[0.09] ring-1 ring-[#D32F2F]/18 sm:h-12 sm:w-12">
@@ -4485,21 +4483,6 @@ export default function PedidosPage() {
                 </p>
               )}
             </div>
-          </div>
-          <div className="flex items-center justify-between gap-2 border-t border-zinc-100/95 bg-zinc-50/50 px-3.5 py-2.5 sm:px-4">
-            <span className="flex min-w-0 items-center gap-2 text-xs font-bold text-[#D32F2F] sm:text-[13px]">
-              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[#D32F2F]/12 ring-1 ring-[#D32F2F]/12">
-                <List className="h-3.5 w-3.5 text-[#D32F2F]" strokeWidth={2.25} aria-hidden />
-              </span>
-              {pendientesEntregaAccordionOpen ? 'Ocultar' : 'Ver pedidos'}
-            </span>
-            <ChevronRight
-              className={[
-                'h-4 w-4 shrink-0 text-zinc-400 transition-transform duration-200',
-                pendientesEntregaAccordionOpen ? 'rotate-90' : '',
-              ].join(' ')}
-              aria-hidden
-            />
           </div>
         </summary>
         <div
@@ -5276,7 +5259,7 @@ export default function PedidosPage() {
         onToggle={(e) => setHistoricoRecibidosAccordionOpen(e.currentTarget.open)}
       >
         <summary className="relative flex w-full cursor-pointer list-none flex-col outline-none transition-colors focus-visible:ring-2 focus-visible:ring-[#D32F2F]/35 focus-visible:ring-offset-2 [&::-webkit-details-marker]:hidden">
-          <div className="relative flex items-start gap-3 px-3.5 pb-3 pt-3.5 sm:px-4">
+          <div className="relative flex items-start gap-3 px-3.5 pb-1.5 pt-2.5 sm:px-4">
             <span
               className="absolute bottom-3 left-0 top-3 w-[3px] rounded-r-full bg-gradient-to-b from-[#D32F2F]/65 via-[#D32F2F] to-[#9F1D1D]"
               aria-hidden
@@ -5288,7 +5271,7 @@ export default function PedidosPage() {
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
                   <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#B91C1C]">ALMACÉN</p>
-                  <p className="mt-1 font-serif text-[19px] leading-tight text-zinc-950 sm:text-[21px]">
+                  <p className="mt-0.5 font-serif text-[16px] leading-tight text-zinc-950 sm:text-[18px]">
                     Historial y recepción operativa
                   </p>
                 </div>
@@ -5300,27 +5283,15 @@ export default function PedidosPage() {
                   aria-hidden
                 />
               </div>
-              <div className="mt-2.5 grid grid-cols-3 gap-1.5">
-                <div className="rounded-xl bg-zinc-50 px-2 py-2 ring-1 ring-zinc-200/80">
-                  <p className="truncate text-[8px] font-black uppercase tracking-wide text-zinc-400">Mes</p>
-                  <p className="mt-1 truncate text-[11px] font-black uppercase tracking-wide text-zinc-900">
-                    {historicoMesPrincipal?.label ?? 'Sin entradas'}
-                  </p>
-                </div>
-                <div className="rounded-xl bg-zinc-50 px-2 py-2 ring-1 ring-zinc-200/80">
-                  <p className="truncate text-[8px] font-black uppercase tracking-wide text-zinc-400">Proveedores</p>
-                  <p className="mt-1 text-[13px] font-black tabular-nums text-zinc-900">
-                    {historicoMesPrincipal?.supplierGroups.length ?? 0}
-                  </p>
-                </div>
-                <div className="rounded-xl bg-[#D32F2F]/[0.045] px-2 py-2 ring-1 ring-[#D32F2F]/12">
+              <div className="mt-1.5 grid grid-cols-1 gap-1 sm:grid-cols-1">
+                <div className="mx-auto w-full max-w-[16rem] rounded-xl bg-[#D32F2F]/[0.045] px-3 py-2 ring-1 ring-[#D32F2F]/12 sm:px-3.5">
                   <p className="truncate text-[8px] font-black uppercase tracking-wide text-[#B91C1C]/60">Total mes</p>
-                  <p className="mt-1 truncate text-[12px] font-black tabular-nums text-[#7F1D1D]">
+                  <p className="mt-0.5 truncate text-[11px] font-black tabular-nums text-[#7F1D1D]">
                     {formatPedidosMoney(historicoMesPrincipal?.total ?? 0)}
                   </p>
                 </div>
               </div>
-              <p className="mt-2 flex min-w-0 items-center gap-1.5 text-[11px] font-medium leading-snug text-zinc-500">
+              <p className="mt-0.75 flex min-w-0 items-center gap-1.5 text-[10px] font-medium leading-snug text-zinc-500">
                 <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" aria-hidden />
                 <span className="truncate">{historicoUltimaEntradaLine}</span>
               </p>
@@ -5359,16 +5330,13 @@ export default function PedidosPage() {
               }}
               className="group/month overflow-hidden rounded-2xl border border-zinc-200/95 bg-white shadow-[0_2px_10px_rgba(24,24,27,0.04)] ring-1 ring-white"
             >
-              <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-3 text-left outline-none transition hover:bg-zinc-50/70 [&::-webkit-details-marker]:hidden">
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2.5 text-left outline-none transition hover:bg-zinc-50/70 [&::-webkit-details-marker]:hidden">
                 <div className="flex min-w-0 items-center gap-2.5">
                   <span className="grid h-9 w-9 shrink-0 place-items-center rounded-2xl bg-[#D32F2F]/[0.07] text-[#B91C1C] ring-1 ring-[#D32F2F]/14">
                     <BarChart2 className="h-4 w-4" strokeWidth={2.1} aria-hidden />
                   </span>
                   <div className="min-w-0">
                     <p className="truncate text-[13px] font-black uppercase tracking-wide text-zinc-950">{month.label}</p>
-                    <p className="mt-0.5 truncate text-[11px] font-medium text-zinc-500">
-                      {month.supplierGroups.length} proveedores · {formatPedidosMoney(month.total)}
-                    </p>
                   </div>
                 </div>
                 <div className="flex shrink-0 items-center gap-2 text-right">

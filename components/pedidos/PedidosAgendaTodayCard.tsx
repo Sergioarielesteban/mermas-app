@@ -227,7 +227,6 @@ export default React.memo(function PedidosAgendaTodayCard({
             tone="red"
             title="Pedidos obligatorios"
             count={pendingMandatoryRows.length}
-            hint="Proveedores con corte real hoy"
             emptyLabel="Sin obligatorios pendientes"
             action={
               mandatoryOverflow ? (
@@ -259,7 +258,6 @@ export default React.memo(function PedidosAgendaTodayCard({
             tone="amber"
             title="Revisión diaria"
             count={pendingReviewGroups.length}
-            hint="Swipe a la derecha o toca el check"
             emptyLabel={completedReviewGroups.length > 0 ? 'Todo revisado por hoy' : 'Sin revisiones pendientes'}
             action={
               reviewOverflow ? (
@@ -343,7 +341,6 @@ function AgendaSection({
   tone,
   title,
   count,
-  hint,
   emptyLabel,
   action,
   children,
@@ -351,7 +348,6 @@ function AgendaSection({
   tone: 'red' | 'amber';
   title: string;
   count: number;
-  hint: string;
   emptyLabel: string;
   action?: React.ReactNode;
   children: React.ReactNode;
@@ -371,13 +367,7 @@ function AgendaSection({
             <h3 className={['truncate font-serif text-[17px] font-normal leading-tight', labelClass].join(' ')}>
               {title}
             </h3>
-            <p className="truncate text-[11px] font-medium leading-tight text-zinc-500">{hint}</p>
           </div>
-          {count > 0 ? (
-            <span className={['rounded-full px-2 py-0.5 text-[11px] font-black tabular-nums', isRed ? 'bg-red-50 text-red-700' : 'bg-amber-50 text-amber-800'].join(' ')}>
-              {count}
-            </span>
-          ) : null}
         </div>
         {action}
       </div>
@@ -510,9 +500,6 @@ function MandatoryOrderRow({
             <span className="block truncate font-serif text-[16px] leading-tight text-zinc-950">
               {row.supplierName}
             </span>
-            <span className="mt-0.5 block truncate text-[11px] font-semibold text-red-700/80">
-              Pedido obligatorio
-            </span>
           </span>
           <span className={['shrink-0 rounded-full px-2 py-1 text-[11px] font-black tabular-nums', statusClass].join(' ')}>
             {row.statusTone === 'danger' ? 'vencido' : `antes ${row.cutoffLabel}`}
@@ -626,9 +613,6 @@ function ReviewSwipeRow({
           <span className="min-w-0 flex-1">
             <span className="block truncate font-serif text-[16px] leading-tight text-zinc-950">
               {group.supplierName}
-            </span>
-            <span className="mt-0.5 block truncate text-[11px] font-semibold text-amber-800/85">
-              Revisar antes de pedir
             </span>
           </span>
           {group.cutoffLabel ? (
