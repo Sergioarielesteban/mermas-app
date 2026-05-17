@@ -6,8 +6,8 @@ import {
   ChevronDown,
   FileText,
   Search,
-  Users,
 } from 'lucide-react';
+import { generateConsumoSemanalPdf } from '@/lib/consumo-semanal-pdf';
 import { useAuth } from '@/components/AuthProvider';
 import { usePedidosOrders } from '@/components/PedidosOrdersProvider';
 import { SupplierAvatar } from '@/components/pedidos/SupplierAvatar';
@@ -23,7 +23,6 @@ import {
 import type { Unit } from '@/lib/types';
 
 type PeriodMode = 'week' | 'month';
-type SupplierFilter = 'all' | string;
 type ViewMode = 'supplier' | 'product';
 
 type DateRange = {
@@ -145,7 +144,7 @@ function buildWeekOptions(now = new Date()): PeriodOption[] {
     const end = addDays(start, 7);
     return {
       value: offset,
-      label: offset === 0 ? `Esta semana · S${isoWeekNumber(start)}` : `Semana ${isoWeekNumber(start)}`,
+      label: `S-${isoWeekNumber(start)} del ${start.getDate()}/${start.getMonth() + 1} al ${end.getDate()}/${end.getMonth() + 1}`,
       detail: formatRange(start, end),
     };
   });
@@ -200,14 +199,13 @@ function productSearchMatches(productName: string, supplierName: string, search:
   return normalizeText(productName).includes(q) || normalizeText(supplierName).includes(q);
 }
 
-function buildCurrentMap(orders: PedidoOrder[], range: DateRange, supplierFilter: SupplierFilter, search: string) {
+function buildCurrentMap(orders: PedidoOrder[], range: DateRange, search: string) {
   const supplierMap = new Map<string, SupplierAgg>();
   const productMap = new Map<string, ProductAgg>();
 
   for (const order of orders) {
     const receivedAt = orderReceivedDate(order);
     if (!receivedAt || !isInsideRange(receivedAt, range)) continue;
-    if (supplierFilter !== 'all' && order.supplierId !== supplierFilter) continue;
 
     const supplierName = order.supplierName?.trim() || 'Proveedor';
 
@@ -260,10 +258,9 @@ function buildCurrentMap(orders: PedidoOrder[], range: DateRange, supplierFilter
 function aggregatePurchases(
   orders: PedidoOrder[],
   range: DateRange,
-  supplierFilter: SupplierFilter,
   search: string,
 ): AggregatedPurchases {
-  const current = buildCurrentMap(orders, range, supplierFilter, search);
+  const current = buildCurrentMap(orders, range, search);
 
   const suppliers = Array.from(current.supplierMap.values())
     .map((supplier) => {
@@ -317,18 +314,6 @@ function aggregatePurchases(
   };
 }
 
-function purchaseSortForFilters(orders: PedidoOrder[], range: DateRange): Array<{ id: string; name: string }> {
-  const suppliers = new Map<string, string>();
-  for (const order of orders) {
-    const receivedAt = orderReceivedDate(order);
-    if (!receivedAt || !isInsideRange(receivedAt, range)) continue;
-    suppliers.set(order.supplierId, order.supplierName?.trim() || 'Proveedor');
-  }
-  return Array.from(suppliers.entries())
-    .map(([id, name]) => ({ id, name }))
-    .sort((a, b) => a.name.localeCompare(b.name, 'es'));
-}
-
 function ProductRow({ product }: { product: ProductAgg }) {
   return (
     <li className="border-t border-zinc-100 px-3 py-2.5 first:border-t-0">
@@ -376,11 +361,12 @@ export default function ComprasPorProductoPage() {
 
   const [periodMode, setPeriodMode] = React.useState<PeriodMode>('week');
   const [periodOffset, setPeriodOffset] = React.useState(0);
-  const [supplierFilter, setSupplierFilter] = React.useState<SupplierFilter>('all');
   const [viewMode, setViewMode] = React.useState<ViewMode>('supplier');
   const [search, setSearch] = React.useState('');
   const [expandedSuppliers, setExpandedSuppliers] = React.useState<Record<string, boolean>>({});
   const [expandedProducts, setExpandedProducts] = React.useState<Record<string, boolean>>({});
+  const [pdfGenerating, setPdfGenerating] = React.useState(false);
+  const [pdfError, setPdfError] = React.useState<string | null>(null);
   const purchasesListRef = React.useRef<HTMLElement | null>(null);
 
   const periodOptions = React.useMemo(
@@ -388,12 +374,8 @@ export default function ComprasPorProductoPage() {
     [periodMode],
   );
   const range = React.useMemo(() => getNaturalPeriodRange(periodMode, periodOffset), [periodMode, periodOffset]);
-  const supplierOptions = React.useMemo(() => purchaseSortForFilters(orders, range), [orders, range]);
 
-  const analytics = React.useMemo(
-    () => aggregatePurchases(orders, range, supplierFilter, search),
-    [orders, range, search, supplierFilter],
-  );
+  const analytics = React.useMemo(() => aggregatePurchases(orders, range, search), [orders, range, search]);
 
   const expandedAccordionKey = React.useMemo(() => {
     const source = viewMode === 'supplier' ? expandedSuppliers : expandedProducts;
@@ -425,8 +407,8 @@ export default function ComprasPorProductoPage() {
 
   return (
     <div className="min-w-0 space-y-3 overflow-x-hidden pb-20">
-      <section className="-mx-2 overflow-x-auto px-2">
-        <div className="flex min-w-max gap-2 pb-1">
+      <section className="-mx-2 px-2">
+        <div className="grid grid-cols-2 gap-2 pb-1">
           <div className="inline-grid h-10 grid-cols-2 items-center overflow-hidden rounded-2xl border border-zinc-200 bg-white text-[12px] font-bold text-zinc-800 shadow-[0_8px_20px_rgba(15,23,42,0.035)]">
             <button
               type="button"
@@ -460,7 +442,7 @@ export default function ComprasPorProductoPage() {
             </button>
           </div>
 
-          <label className="inline-flex h-10 w-[16.75rem] items-center gap-2 rounded-2xl border border-zinc-200 bg-white px-3 text-[12px] font-bold text-zinc-800 shadow-[0_8px_20px_rgba(15,23,42,0.035)]">
+          <label className="inline-flex h-10 items-center gap-2 rounded-2xl border border-zinc-200 bg-white px-3 text-[12px] font-bold text-zinc-800 shadow-[0_8px_20px_rgba(15,23,42,0.035)]">
             <CalendarDays className="h-4 w-4 text-[#D32F2F]" strokeWidth={2.2} aria-hidden />
             <select
               value={periodOffset}
@@ -479,35 +461,39 @@ export default function ComprasPorProductoPage() {
             </select>
           </label>
 
-          <label className="inline-flex h-10 min-w-[13rem] items-center gap-2 rounded-2xl border border-zinc-200 bg-white px-3 text-[12px] font-bold text-zinc-800 shadow-[0_8px_20px_rgba(15,23,42,0.035)]">
-            <Users className="h-4 w-4 text-zinc-500" strokeWidth={2.2} aria-hidden />
-            <select
-              value={supplierFilter}
-              onChange={(e) => {
-                setSupplierFilter(e.target.value);
-                setExpandedSuppliers({});
-                setExpandedProducts({});
-              }}
-              className="min-w-0 flex-1 bg-transparent text-[12px] font-bold outline-none"
-            >
-              <option value="all">Todos los proveedores</option>
-              {supplierOptions.map((supplier) => (
-                <option key={supplier.id} value={supplier.id}>
-                  {supplier.name}
-                </option>
-              ))}
-            </select>
-          </label>
-
           <button
             type="button"
-            onClick={() => window.print()}
-            className="inline-flex h-10 items-center gap-2 rounded-2xl border border-zinc-200 bg-white px-3 text-[12px] font-bold text-zinc-700 shadow-[0_8px_20px_rgba(15,23,42,0.035)] transition active:scale-[0.99]"
+            disabled={pdfGenerating}
+            onClick={async () => {
+              setPdfGenerating(true);
+              setPdfError(null);
+              try {
+                await generateConsumoSemanalPdf({
+                  localLabel: localName ?? localCode ?? 'Local',
+                  periodLabel: range.label,
+                  suppliers: analytics.suppliers.map((s) => ({
+                    supplierName: s.supplierName,
+                    logoUrl: s.logoUrl,
+                    products: s.products.map((p) => ({
+                      productName: p.productName,
+                      quantity: p.quantity,
+                      unit: p.unit,
+                    })),
+                  })),
+                });
+              } catch (err) {
+                setPdfError(err instanceof Error ? err.message : 'No se pudo generar el PDF.');
+              } finally {
+                setPdfGenerating(false);
+              }
+            }}
+            className="inline-flex h-10 items-center justify-center gap-2 rounded-2xl border border-zinc-200 bg-white px-3 text-[12px] font-bold text-zinc-700 shadow-[0_8px_20px_rgba(15,23,42,0.035)] transition active:scale-[0.99] disabled:opacity-60"
           >
             <FileText className="h-4 w-4 text-[#D32F2F]" strokeWidth={2.2} aria-hidden />
-            PDF
+            {pdfGenerating ? 'Generando…' : 'Informe PDF'}
           </button>
         </div>
+        {pdfError ? <p className="mt-1 px-1 text-[11px] font-semibold text-rose-600">{pdfError}</p> : null}
       </section>
 
       <section

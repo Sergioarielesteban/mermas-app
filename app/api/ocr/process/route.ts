@@ -40,28 +40,39 @@ export const maxDuration = 60;
 
 const MAX_BYTES = 8 * 1024 * 1024;
 
+// Document AI no soporta heic/heif — los rechazamos aquí con mensaje claro.
 const ALLOWED_MIMES = new Set<string>([
   'image/jpeg',
   'image/jpg',
   'image/png',
   'image/webp',
   'image/tiff',
-  'image/heic',
-  'image/heif',
   'application/pdf',
 ]);
+
+// Tipos recibidos habitualmente que NO son soportados → mensaje explícito
+const KNOWN_UNSUPPORTED_MIMES: Record<string, string> = {
+  'image/heic': 'HEIC no es compatible. Convierte a JPEG o PNG antes de subir.',
+  'image/heif': 'HEIF no es compatible. Convierte a JPEG o PNG antes de subir.',
+  'application/octet-stream': 'El archivo llegó como octet-stream (formato desconocido). Sube un JPEG, PNG o PDF.',
+};
 
 function normaliseMime(raw: string | null | undefined, fileName: string | null): string {
   const m = (raw ?? '').toLowerCase();
   if (ALLOWED_MIMES.has(m)) return m;
+  // Inferir por extensión del nombre
   const name = (fileName ?? '').toLowerCase();
   if (name.endsWith('.pdf')) return 'application/pdf';
   if (name.endsWith('.png')) return 'image/png';
   if (name.endsWith('.webp')) return 'image/webp';
-  if (name.endsWith('.heic')) return 'image/heic';
-  if (name.endsWith('.heif')) return 'image/heif';
   if (name.endsWith('.tif') || name.endsWith('.tiff')) return 'image/tiff';
-  return 'image/jpeg';
+  // Devolver el mime original para que la validación posterior lo rechace con mensaje claro
+  return m || 'image/jpeg';
+}
+
+function unsupportedMimeReason(mime: string): string | null {
+  if (ALLOWED_MIMES.has(mime)) return null;
+  return KNOWN_UNSUPPORTED_MIMES[mime] ?? `Formato "${mime}" no compatible. Usa JPEG, PNG, WEBP, TIFF o PDF.`;
 }
 
 function bearerJwt(request: Request): string | null {
@@ -155,27 +166,35 @@ export async function POST(request: Request): Promise<NextResponse<AlbaranOcrPro
     }
     const fileName = file instanceof File ? file.name : null;
     const mimeType = normaliseMime(file.type, fileName);
-    if (!ALLOWED_MIMES.has(mimeType)) {
+    const mimeError = unsupportedMimeReason(mimeType);
+    if (mimeError) {
+      console.warn('[ocr/process] MIME rechazado:', { raw: file.type, normalised: mimeType, fileName });
       return NextResponse.json(
-        { ok: false, error: 'invalid_mime_type', reason: `MIME ${mimeType} no soportado.` },
+        { ok: false, error: 'invalid_mime_type', reason: mimeError },
         { status: 415 },
       );
     }
 
     const buf = Buffer.from(await file.arrayBuffer());
+    const fileSizeKb = Math.round(buf.length / 1024);
     if (buf.length === 0) {
-      return NextResponse.json({ ok: false, error: 'empty_file' }, { status: 400 });
+      return NextResponse.json({ ok: false, error: 'empty_file', reason: 'El archivo está vacío.' }, { status: 400 });
     }
     if (buf.length > MAX_BYTES) {
       return NextResponse.json(
         {
           ok: false,
           error: 'file_too_large',
-          reason: `Máx ${(MAX_BYTES / 1024 / 1024).toFixed(0)} MB.`,
+          reason: `El archivo pesa ${fileSizeKb} KB; el máximo permitido es ${(MAX_BYTES / 1024 / 1024).toFixed(0)} MB.`,
         },
         { status: 413 },
       );
     }
+
+    console.info(
+      '[ocr/process] request',
+      JSON.stringify({ mimeType, fileSizeKb, fileName: fileName ?? '(sin nombre)' }),
+    );
 
     const relatedOrderId =
       typeof form.get('relatedOrderId') === 'string'
@@ -187,12 +206,46 @@ export async function POST(request: Request): Promise<NextResponse<AlbaranOcrPro
     try {
       docAiResult = await processDocumentAi(buf, mimeType);
     } catch (e) {
+      const errMsg = e instanceof Error ? e.message : String(e);
+      const hint = (e as Error & { googleHint?: string }).googleHint;
+      const code = (e as Error & { googleCode?: number | string }).googleCode;
+
       logSecurityEvent('critical', {
         ocr: 'document_ai_failed',
-        error: e instanceof Error ? e.message : 'unknown',
+        error: errMsg,
+        code,
+        hint,
       });
+
+      // Detectar errores de MIME dentro del provider (e.g. heic detectado tarde)
+      if (errMsg.startsWith('document_ai_mime_not_supported')) {
+        return NextResponse.json(
+          { ok: false, error: 'invalid_mime_type', reason: errMsg.replace('document_ai_mime_not_supported: ', '') },
+          { status: 415 },
+        );
+      }
+
+      // Errores de config
+      if (errMsg.startsWith('document_ai_config_missing') || errMsg.startsWith('document_ai_service_account_invalid')) {
+        return NextResponse.json(
+          {
+            ok: false,
+            error: 'ocr_provider_not_configured',
+            reason: `Config incompleta: ${errMsg.replace(/^document_ai_\w+: /, '')}`,
+          },
+          { status: 503 },
+        );
+      }
+
+      // Error real de Google — exponer detalles sin filtrar
       return NextResponse.json(
-        { ok: false, error: 'document_ai_failed', reason: 'Document AI no pudo procesar el archivo.' },
+        {
+          ok: false,
+          error: 'document_ai_failed',
+          reason: errMsg,
+          ...(hint ? { hint } : {}),
+          ...(code !== undefined ? { googleCode: code } : {}),
+        },
         { status: 502 },
       );
     }

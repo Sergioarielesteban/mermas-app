@@ -268,30 +268,172 @@ function extractPlainText(doc: DocumentAiDocument | null | undefined): string {
   return text.replace(/\u0000/g, '').trim();
 }
 
+// Tipos que Document AI acepta directamente. heic/heif no son compatibles.
+const DOCUMENT_AI_SUPPORTED_MIMES = new Set([
+  'image/jpeg',
+  'image/jpg',
+  'image/png',
+  'image/webp',
+  'image/tiff',
+  'image/bmp',
+  'image/gif',
+  'application/pdf',
+]);
+
+/**
+ * Extrae detalles legibles del error que devuelve el cliente gRPC de Google.
+ * Los errores de la biblioteca @google-cloud/ tienen .code (número gRPC) y
+ * .details (string) además de .message.
+ */
+function extractGoogleErrorDetail(err: unknown): {
+  message: string;
+  code: number | string | undefined;
+  details: string | undefined;
+  grpcStatus: string | undefined;
+  hint: string;
+} {
+  if (!(err instanceof Error)) {
+    return {
+      message: String(err),
+      code: undefined,
+      details: undefined,
+      grpcStatus: undefined,
+      hint: 'Error desconocido (no es instancia de Error).',
+    };
+  }
+
+  const raw = err as Error & { code?: number; details?: string; metadata?: unknown };
+  const code = raw.code;
+  const details = raw.details ?? undefined;
+
+  // Mapear código gRPC a causa probable
+  const grpcMap: Record<number, string> = {
+    1: 'CANCELLED — solicitud cancelada',
+    2: 'UNKNOWN — error desconocido en el servidor',
+    3: 'INVALID_ARGUMENT — parámetro inválido (processorId, location o mimeType incorrecto)',
+    4: 'DEADLINE_EXCEEDED — timeout; el archivo puede ser demasiado grande o lento',
+    5: 'NOT_FOUND — recurso no encontrado (processorId o projectId incorrecto)',
+    7: 'PERMISSION_DENIED — credenciales sin permisos o proyecto incorrecto',
+    8: 'RESOURCE_EXHAUSTED — cuota agotada',
+    12: 'UNIMPLEMENTED — operación no soportada por el procesador',
+    13: 'INTERNAL — error interno de Google',
+    14: 'UNAVAILABLE — servicio no disponible (región incorrecta o temporalmente caído)',
+    16: 'UNAUTHENTICATED — credenciales inválidas o expiradas',
+  };
+  const grpcStatus = typeof code === 'number' ? grpcMap[code] : undefined;
+
+  const hint =
+    grpcStatus ??
+    (raw.message.toLowerCase().includes('permission')
+      ? 'PERMISSION_DENIED — revisa el serviceAccount y los roles IAM'
+      : raw.message.toLowerCase().includes('not found')
+        ? 'NOT_FOUND — revisa projectId, location y processorId'
+        : raw.message.toLowerCase().includes('invalid')
+          ? 'INVALID_ARGUMENT — revisa mimeType, processorId o location'
+          : 'Revisa credenciales, región y processorId en Vercel.');
+
+  return { message: raw.message, code, details, grpcStatus, hint };
+}
+
 export async function processDocumentAi(
   fileBytes: Buffer,
   mimeType: string,
 ): Promise<DocumentAiResult> {
+  // ── Validar MIME antes de llamar a Google ──────────────────────────────────
+  if (!DOCUMENT_AI_SUPPORTED_MIMES.has(mimeType)) {
+    const err = new Error(
+      `document_ai_mime_not_supported: el formato "${mimeType}" no es compatible con Document AI. ` +
+        'Usa image/jpeg, image/png, image/webp, image/tiff o application/pdf.',
+    );
+    console.error('[document-ai] MIME no soportado:', mimeType);
+    throw err;
+  }
+
   const env = readEnvOrThrow();
+
+  // ── Validar variables de entorno ───────────────────────────────────────────
+  const missingEnvs: string[] = [];
+  if (!process.env.GOOGLE_SERVICE_ACCOUNT_JSON?.trim()) missingEnvs.push('GOOGLE_SERVICE_ACCOUNT_JSON');
+  if (!process.env.GOOGLE_DOCUMENT_AI_LOCATION?.trim()) missingEnvs.push('GOOGLE_DOCUMENT_AI_LOCATION');
+  if (!process.env.GOOGLE_DOCUMENT_AI_PROCESSOR_ID?.trim()) missingEnvs.push('GOOGLE_DOCUMENT_AI_PROCESSOR_ID');
+  if (!process.env.GOOGLE_CLOUD_PROJECT_ID?.trim()) {
+    // Puede estar en el JSON del service account; si env.projectId está resuelto, está bien
+    if (!env.projectId) missingEnvs.push('GOOGLE_CLOUD_PROJECT_ID (o project_id en el JSON)');
+  }
+  if (missingEnvs.length > 0) {
+    const msg = `document_ai_config_missing: faltan variables de entorno: ${missingEnvs.join(', ')}`;
+    console.error('[document-ai]', msg);
+    throw new Error(msg);
+  }
+
   const client = getClient(env);
-  const projectIdForResource =
-    lastResolvedProjectIdForDocumentAi ?? env.projectId;
+  const projectIdForResource = lastResolvedProjectIdForDocumentAi ?? env.projectId;
   const name = `projects/${projectIdForResource}/locations/${env.location}/processors/${env.processorId}`;
 
-  const t0 = Date.now();
-  const [response] = await client.processDocument({
-    name,
-    rawDocument: {
-      content: fileBytes,
+  // ── Log detallado pre-llamada ──────────────────────────────────────────────
+  const fileSizeKb = Math.round(fileBytes.length / 1024);
+  console.info(
+    '[document-ai] pre-call',
+    JSON.stringify({
       mimeType,
-    },
-  });
-  const durationMs = Date.now() - t0;
+      fileSizeKb,
+      fileSizeBytes: fileBytes.length,
+      projectId: projectIdForResource,
+      location: env.location,
+      processorId: env.processorId,
+      processorPath: name,
+    }),
+  );
 
+  const t0 = Date.now();
+  let response;
+  try {
+    [response] = await client.processDocument({
+      name,
+      rawDocument: {
+        content: fileBytes,
+        mimeType,
+      },
+    });
+  } catch (googleErr) {
+    const detail = extractGoogleErrorDetail(googleErr);
+    const durationMs = Date.now() - t0;
+
+    console.error(
+      '[document-ai] ERROR de Google',
+      JSON.stringify({
+        message: detail.message,
+        code: detail.code,
+        grpcStatus: detail.grpcStatus,
+        details: detail.details,
+        hint: detail.hint,
+        durationMs,
+        processorPath: name,
+        mimeType,
+        fileSizeKb,
+      }),
+    );
+
+    // Lanzar error enriquecido para que los handlers HTTP lo propaguen
+    const enriched = new Error(
+      `document_ai_google_error: ${detail.message} | code=${detail.code ?? 'n/a'} | hint=${detail.hint}`,
+    );
+    (enriched as Error & { googleCode?: number | string; googleDetails?: string; googleHint?: string }).googleCode = detail.code;
+    (enriched as Error & { googleDetails?: string }).googleDetails = detail.details;
+    (enriched as Error & { googleHint?: string }).googleHint = detail.hint;
+    throw enriched;
+  }
+
+  const durationMs = Date.now() - t0;
   const doc = response.document;
   const plainText = extractPlainText(doc);
   const entities = (doc?.entities ?? []).map(flattenEntity);
   const pageCount = doc?.pages?.length ?? 0;
+
+  console.info(
+    '[document-ai] OK',
+    JSON.stringify({ durationMs, pageCount, plainTextLen: plainText.length, entities: entities.length }),
+  );
 
   return {
     providerId: 'document-ai',
