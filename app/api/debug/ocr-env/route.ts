@@ -1,5 +1,3 @@
-import { DocumentProcessorServiceClient } from '@google-cloud/documentai';
-
 export const runtime = 'nodejs';
 
 type ServiceAccountInfo = {
@@ -38,6 +36,21 @@ function safeProjectIdValue(projectId: string): string {
   return projectId.length <= 8 ? projectId : `${projectId.slice(0, 8)}…`;
 }
 
+async function getAccessToken(clientEmail: string, privateKey: string): Promise<string> {
+  const { GoogleAuth } = await import('google-auth-library');
+  const auth = new GoogleAuth({
+    credentials: { client_email: clientEmail, private_key: privateKey },
+    scopes: ['https://www.googleapis.com/auth/cloud-platform'],
+  });
+  const client = await auth.getClient();
+  const token = await client.getAccessToken();
+  return token.token ?? '';
+}
+
+function documentAiHost(location: string): string {
+  return location === 'us' ? 'documentai.googleapis.com' : `${location}-documentai.googleapis.com`;
+}
+
 export async function GET() {
   const projectIdEnv = (process.env.GOOGLE_CLOUD_PROJECT_ID ?? '').trim();
   const location = (process.env.GOOGLE_DOCUMENT_AI_LOCATION ?? '').trim();
@@ -70,6 +83,9 @@ export async function GET() {
 
   let ok = false;
   let error: string | null = null;
+  let httpStatus: number | null = null;
+  let body: unknown = null;
+  let processorUrl: string | null = null;
 
   try {
     if (!projectId || !location || !processorId || !serviceAccountJsonParsable) {
@@ -77,19 +93,18 @@ export async function GET() {
     }
 
     const parsed = parseServiceAccountJson(serviceAccountJson);
-    const apiEndpoint = location !== 'us' ? `${location}-documentai.googleapis.com` : undefined;
-    const client = new DocumentProcessorServiceClient({
-      credentials: {
-        client_email: parsed.client_email,
-        private_key: parsed.private_key,
-      },
-      projectId,
-      apiEndpoint,
+    const accessToken = await getAccessToken(parsed.client_email, parsed.private_key);
+    const host = documentAiHost(location);
+    processorUrl = `https://${host}/v1/projects/${projectId}/locations/${location}/processors/${processorId}`;
+    const res = await fetch(processorUrl, {
+      headers: { Authorization: `Bearer ${accessToken}` },
     });
-
-    const name = `projects/${projectId}/locations/${location}/processors/${processorId}`;
-    await client.getProcessor({ name });
-    ok = true;
+    httpStatus = res.status;
+    body = await res.json();
+    ok = res.ok;
+    if (!res.ok) {
+      error = `HTTP ${res.status}`;
+    }
   } catch (err) {
     ok = false;
     error = err instanceof Error ? `${err.message} | ${err.stack}` : String(err);
@@ -98,6 +113,9 @@ export async function GET() {
   return Response.json({
     ok,
     error,
+    httpStatus,
+    processorUrl,
+    body,
     projectIdPresent,
     projectIdValue: safeProjectIdValue(projectId),
     location,
