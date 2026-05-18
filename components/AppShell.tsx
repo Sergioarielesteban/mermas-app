@@ -384,6 +384,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
   const navBreadcrumb = useMemo(() => getAppNavBreadcrumb(pathname), [pathname]);
   const isPedidosRoute = Boolean(pathname?.startsWith('/pedidos'));
+  const isEscandallosRoute = Boolean(pathname?.startsWith('/escandallos'));
 
   /**
    * Recuperación fuerte: sin desregistrar el SW, `/_next/static/` sigue en cache-first y puedes quedarte
@@ -710,7 +711,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                 {isPedidosRoute ? 'Panel' : 'Salir del módulo'}
               </button>
             </div>
-            {navBreadcrumb && !isPedidosRoute ? (
+            {navBreadcrumb && !isPedidosRoute && !isEscandallosRoute ? (
               <p className="text-center text-[11px] leading-snug text-zinc-600">
                 <Link
                   href={navBreadcrumb.parentHref}
