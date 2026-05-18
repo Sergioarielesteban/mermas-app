@@ -20,7 +20,7 @@ import type {
 } from '@/lib/ocr/types-document';
 import type { DocumentAiRawEntity } from '@/lib/ocr/providers/document-ai';
 
-const DEFAULT_MODEL = process.env.GEMINI_MODEL?.trim() || 'gemini-2.0-flash-001';
+const DEFAULT_MODEL = process.env.GEMINI_MODEL?.trim() || 'gemini-2.0-flash';
 
 export function isGeminiConfigured(): boolean {
   return !!process.env.GEMINI_API_KEY?.trim();

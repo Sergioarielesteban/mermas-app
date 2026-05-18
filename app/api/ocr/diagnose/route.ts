@@ -42,7 +42,7 @@ export async function GET(request: Request) {
 
   const geminiEnv = {
     GEMINI_API_KEY: envPresent('GEMINI_API_KEY'),
-    GEMINI_MODEL: process.env.GEMINI_MODEL?.trim() || 'gemini-2.0-flash-001 (default)',
+    GEMINI_MODEL: process.env.GEMINI_MODEL?.trim() || 'gemini-2.0-flash (default)',
   };
 
   const configured = {
