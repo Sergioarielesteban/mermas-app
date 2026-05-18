@@ -116,7 +116,7 @@ export async function handlePedidosOcrPost(request: Request): Promise<NextRespon
         );
       }
       // Error real de Google (enriquecido por el provider)
-      if (msg.startsWith('document_ai_google_error')) {
+      if (msg.startsWith('document_ai_google_error') || msg.startsWith('document_ai_rest_error')) {
         const hint = (err as Error & { googleHint?: string }).googleHint;
         const code = (err as Error & { googleCode?: number | string }).googleCode;
         console.error('[pedidos/ocr] Google error:', { msg, hint, code });

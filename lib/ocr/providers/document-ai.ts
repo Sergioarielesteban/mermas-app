@@ -1,18 +1,14 @@
 /**
- * Google Cloud Document AI provider.
+ * Google Cloud Document AI provider (REST).
  *
  * Auth: `GOOGLE_SERVICE_ACCOUNT_JSON` (JSON completo en env). En Vercel el
  * `private_key` suele llevar `\n` literales; hay que convertirlos a saltos
- * reales antes de pasarlos al cliente.
+ * reales antes de pasarlos a GoogleAuth.
  *
  * Usado por POST /api/ocr/process y por POST /api/pedidos/ocr (solo texto).
  */
 
-import { DocumentProcessorServiceClient, protos } from '@google-cloud/documentai';
 import { logSecurityEvent } from '@/lib/server/security-log';
-
-type DocumentEntity = protos.google.cloud.documentai.v1.Document.IEntity;
-type DocumentAiDocument = protos.google.cloud.documentai.v1.IDocument;
 
 export type DocumentAiRawEntity = {
   type: string;
@@ -32,10 +28,40 @@ export type DocumentAiResult = {
   durationMs: number;
 };
 
-let cachedClient: DocumentProcessorServiceClient | null = null;
-let cachedConfigHash: string | null = null;
-/** Mismo `projectId` pasado al cliente (env o `project_id` del JSON). */
-let lastResolvedProjectIdForDocumentAi: string | null = null;
+type RestEntity = {
+  type?: string | null;
+  mentionText?: string | null;
+  confidence?: number | null;
+  normalizedValue?: {
+    text?: string | null;
+    dateValue?: { year?: number; month?: number; day?: number } | null;
+    moneyValue?: {
+      units?: string | number | null;
+      nanos?: number | null;
+      currencyCode?: string | null;
+    } | null;
+  } | null;
+  properties?: RestEntity[] | null;
+};
+
+type RestDocument = {
+  text?: string | null;
+  pages?: unknown[] | null;
+  entities?: RestEntity[] | null;
+};
+
+type RestProcessResponse = {
+  document?: RestDocument | null;
+  error?: { message?: string; code?: number; status?: string };
+};
+
+type RestProcessor = {
+  name?: string;
+  displayName?: string;
+  type?: string;
+  state?: string;
+};
+
 let diagnosticsLogged = false;
 
 function logDocumentAiDiagnostics(meta: Record<string, string | number | boolean | undefined>) {
@@ -87,6 +113,15 @@ function parseServiceAccountJson(raw: string): ParsedServiceAccount {
   return { client_email, private_key, project_id };
 }
 
+function parseServiceAccountCredentials(raw: string): Record<string, unknown> {
+  const unwrapped = unwrapServiceAccountRaw(raw);
+  const credentials = JSON.parse(unwrapped) as Record<string, unknown>;
+  if (typeof credentials.private_key === 'string') {
+    credentials.private_key = credentials.private_key.replace(/\\n/g, '\n');
+  }
+  return credentials;
+}
+
 type DocumentAiEnv = {
   projectId: string;
   location: string;
@@ -125,6 +160,68 @@ function readEnvOrThrow(): DocumentAiEnv {
     throw new Error('document_ai_config_missing');
   }
   return { projectId, location, processorId, serviceAccountJson };
+}
+
+function documentAiHost(location: string): string {
+  return location === 'us' ? 'documentai.googleapis.com' : `${location}-documentai.googleapis.com`;
+}
+
+function processorResourcePath(projectId: string, location: string, processorId: string): string {
+  return `projects/${projectId}/locations/${location}/processors/${processorId}`;
+}
+
+async function getGoogleAccessToken(serviceAccountJson: string): Promise<string> {
+  const raw = serviceAccountJson;
+  const hasRaw = Boolean(raw && raw.length > 0);
+
+  try {
+    const credentials = parseServiceAccountCredentials(raw);
+    parseServiceAccountJson(raw);
+
+    if (!diagnosticsLogged) {
+      diagnosticsLogged = true;
+      const parsed = parseServiceAccountJson(raw);
+      logDocumentAiDiagnostics({
+        hasServiceAccountJson: hasRaw,
+        serviceAccountJsonLength: raw.length,
+        jsonParseOk: true,
+        hasClientEmail: parsed.client_email.length > 0,
+        hasPrivateKey: parsed.private_key.length > 0,
+        privateKeyApproxLength: parsed.private_key.length,
+        hasProjectId: Boolean((process.env.GOOGLE_CLOUD_PROJECT_ID ?? '').trim() || parsed.project_id),
+        hasProcessorId: Boolean((process.env.GOOGLE_DOCUMENT_AI_PROCESSOR_ID ?? '').trim()),
+        hasLocation: Boolean((process.env.GOOGLE_DOCUMENT_AI_LOCATION ?? '').trim()),
+        projectIdFromEnv: Boolean((process.env.GOOGLE_CLOUD_PROJECT_ID ?? '').trim()),
+        transport: 'rest',
+      });
+    }
+
+    const { GoogleAuth } = await import('google-auth-library');
+    const auth = new GoogleAuth({
+      credentials,
+      scopes: ['https://www.googleapis.com/auth/cloud-platform'],
+    });
+    const client = await auth.getClient();
+    const { token } = await client.getAccessToken();
+    if (!token) throw new Error('missing_access_token');
+    return token;
+  } catch (e) {
+    if (!diagnosticsLogged) {
+      diagnosticsLogged = true;
+      logDocumentAiDiagnostics({
+        hasServiceAccountJson: hasRaw,
+        serviceAccountJsonLength: raw.length,
+        jsonParseOk: false,
+        error: e instanceof Error ? e.name : 'unknown',
+        transport: 'rest',
+      });
+    }
+    logSecurityEvent('critical', {
+      ocr: 'document_ai_sa_parse_failed',
+      error: e instanceof Error ? e.message : 'unknown',
+    });
+    throw new Error('document_ai_service_account_invalid');
+  }
 }
 
 export function isDocumentAiConfigured(): boolean {
@@ -198,6 +295,7 @@ export function logOcrIntegrationDiagnostics(extra?: {
         geminiApiKeyPresent: Boolean(process.env.GEMINI_API_KEY?.trim()),
         mimeType: extra?.mimeType,
         fileSizeKb: extra?.fileSizeKb,
+        transport: 'rest',
       }),
     );
   } catch {
@@ -205,94 +303,7 @@ export function logOcrIntegrationDiagnostics(extra?: {
   }
 }
 
-function getClient(env: DocumentAiEnv): DocumentProcessorServiceClient {
-  const hash = `${env.projectId}|${env.location}|${env.processorId}|${env.serviceAccountJson.length}`;
-  if (cachedClient && cachedConfigHash === hash) return cachedClient;
-
-  const raw = env.serviceAccountJson;
-  const hasRaw = Boolean(raw && raw.length > 0);
-
-  let parseOk = false;
-  let hasClientEmail = false;
-  let hasPrivateKey = false;
-  let privateKeyLen = 0;
-  let projectIdResolved = env.projectId;
-
-  let credentials: { client_email: string; private_key: string };
-  try {
-    const parsed = parseServiceAccountJson(raw);
-    parseOk = true;
-    hasClientEmail = parsed.client_email.length > 0;
-    hasPrivateKey = parsed.private_key.length > 0;
-    privateKeyLen = parsed.private_key.length;
-    projectIdResolved =
-      (process.env.GOOGLE_CLOUD_PROJECT_ID ?? '').trim() || parsed.project_id || env.projectId;
-    if (!projectIdResolved) {
-      throw new Error('missing_project_id');
-    }
-    credentials = {
-      client_email: parsed.client_email,
-      private_key: parsed.private_key,
-    };
-  } catch (e) {
-    if (!diagnosticsLogged) {
-      diagnosticsLogged = true;
-      logDocumentAiDiagnostics({
-        hasServiceAccountJson: hasRaw,
-        serviceAccountJsonLength: raw.length,
-        jsonParseOk: false,
-        hasClientEmail: false,
-        hasPrivateKey: false,
-        privateKeyApproxLength: 0,
-        hasProjectId: Boolean((process.env.GOOGLE_CLOUD_PROJECT_ID ?? '').trim()),
-        hasProcessorId: Boolean((process.env.GOOGLE_DOCUMENT_AI_PROCESSOR_ID ?? '').trim()),
-        hasLocation: Boolean((process.env.GOOGLE_DOCUMENT_AI_LOCATION ?? '').trim()),
-        error: e instanceof Error ? e.name : 'unknown',
-      });
-    }
-    logSecurityEvent('critical', {
-      ocr: 'document_ai_sa_parse_failed',
-      error: e instanceof Error ? e.message : 'unknown',
-    });
-    throw new Error('document_ai_service_account_invalid');
-  }
-
-  if (!diagnosticsLogged) {
-    diagnosticsLogged = true;
-    logDocumentAiDiagnostics({
-      hasServiceAccountJson: hasRaw,
-      serviceAccountJsonLength: raw.length,
-      jsonParseOk: parseOk,
-      hasClientEmail,
-      hasPrivateKey,
-      privateKeyApproxLength: privateKeyLen,
-      hasProjectId: Boolean(projectIdResolved),
-      hasProcessorId: Boolean((process.env.GOOGLE_DOCUMENT_AI_PROCESSOR_ID ?? '').trim()),
-      hasLocation: Boolean((process.env.GOOGLE_DOCUMENT_AI_LOCATION ?? '').trim()),
-      projectIdFromEnv: Boolean((process.env.GOOGLE_CLOUD_PROJECT_ID ?? '').trim()),
-    });
-  }
-
-  const apiEndpoint =
-    env.location && env.location !== 'us'
-      ? `${env.location}-documentai.googleapis.com`
-      : undefined;
-
-  lastResolvedProjectIdForDocumentAi = projectIdResolved;
-
-  cachedClient = new DocumentProcessorServiceClient({
-    credentials: {
-      client_email: credentials.client_email,
-      private_key: credentials.private_key,
-    },
-    projectId: projectIdResolved,
-    apiEndpoint,
-  });
-  cachedConfigHash = hash;
-  return cachedClient;
-}
-
-function flattenEntity(e: DocumentEntity): DocumentAiRawEntity {
+function flattenEntity(e: RestEntity): DocumentAiRawEntity {
   const properties = (e.properties ?? []).map(flattenEntity);
   const normalizedValue =
     e.normalizedValue?.text != null
@@ -311,9 +322,7 @@ function flattenEntity(e: DocumentEntity): DocumentAiRawEntity {
   };
 }
 
-function formatDocAiDate(
-  d: NonNullable<NonNullable<DocumentEntity['normalizedValue']>['dateValue']>,
-): string {
+function formatDocAiDate(d: { year?: number; month?: number; day?: number }): string {
   const y = typeof d.year === 'number' && d.year > 0 ? d.year : 0;
   const m = typeof d.month === 'number' && d.month > 0 ? d.month : 0;
   const day = typeof d.day === 'number' && d.day > 0 ? d.day : 0;
@@ -321,9 +330,11 @@ function formatDocAiDate(
   return `${y}-${String(m).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 }
 
-function formatDocAiMoney(
-  m: NonNullable<NonNullable<DocumentEntity['normalizedValue']>['moneyValue']>,
-): string {
+function formatDocAiMoney(m: {
+  units?: string | number | null;
+  nanos?: number | null;
+  currencyCode?: string | null;
+}): string {
   const units = typeof m.units === 'string' || typeof m.units === 'number' ? Number(m.units) : 0;
   const nanos = typeof m.nanos === 'number' ? m.nanos / 1e9 : 0;
   const amount = units + nanos;
@@ -331,10 +342,40 @@ function formatDocAiMoney(
   return currency ? `${amount.toFixed(2)} ${currency}` : amount.toFixed(2);
 }
 
-function extractPlainText(doc: DocumentAiDocument | null | undefined): string {
+function extractPlainText(doc: RestDocument | null | undefined): string {
   const text = typeof doc?.text === 'string' ? doc.text : '';
   if (!text) return '';
   return text.replace(/\u0000/g, '').trim();
+}
+
+function extractRestErrorHint(status: number, bodyText: string): string {
+  const lower = bodyText.toLowerCase();
+  if (status === 401 || status === 403 || lower.includes('permission')) {
+    return 'PERMISSION_DENIED — revisa el serviceAccount y los roles IAM';
+  }
+  if (status === 404 || lower.includes('not found')) {
+    return 'NOT_FOUND — revisa projectId, location y processorId';
+  }
+  if (status === 400 || lower.includes('invalid')) {
+    return 'INVALID_ARGUMENT — revisa mimeType, processorId o location';
+  }
+  if (status === 429) {
+    return 'RESOURCE_EXHAUSTED — cuota agotada';
+  }
+  if (status >= 500) {
+    return 'INTERNAL/UNAVAILABLE — error del servicio Document AI';
+  }
+  return 'Revisa credenciales, región y processorId en Vercel.';
+}
+
+function throwDocumentAiRestError(status: number, bodyText: string): never {
+  const hint = extractRestErrorHint(status, bodyText);
+  const enriched = new Error(
+    `document_ai_google_error: REST HTTP ${status} ${bodyText} | hint=${hint}`,
+  );
+  (enriched as Error & { googleCode?: number; googleHint?: string }).googleCode = status;
+  (enriched as Error & { googleHint?: string }).googleHint = hint;
+  throw enriched;
 }
 
 // Tipos que Document AI acepta directamente. heic/heif no son compatibles.
@@ -349,61 +390,6 @@ const DOCUMENT_AI_SUPPORTED_MIMES = new Set([
   'application/pdf',
 ]);
 
-/**
- * Extrae detalles legibles del error que devuelve el cliente gRPC de Google.
- * Los errores de la biblioteca @google-cloud/ tienen .code (número gRPC) y
- * .details (string) además de .message.
- */
-function extractGoogleErrorDetail(err: unknown): {
-  message: string;
-  code: number | string | undefined;
-  details: string | undefined;
-  grpcStatus: string | undefined;
-  hint: string;
-} {
-  if (!(err instanceof Error)) {
-    return {
-      message: String(err),
-      code: undefined,
-      details: undefined,
-      grpcStatus: undefined,
-      hint: 'Error desconocido (no es instancia de Error).',
-    };
-  }
-
-  const raw = err as Error & { code?: number; details?: string; metadata?: unknown };
-  const code = raw.code;
-  const details = raw.details ?? undefined;
-
-  // Mapear código gRPC a causa probable
-  const grpcMap: Record<number, string> = {
-    1: 'CANCELLED — solicitud cancelada',
-    2: 'UNKNOWN — error desconocido en el servidor',
-    3: 'INVALID_ARGUMENT — parámetro inválido (processorId, location o mimeType incorrecto)',
-    4: 'DEADLINE_EXCEEDED — timeout; el archivo puede ser demasiado grande o lento',
-    5: 'NOT_FOUND — recurso no encontrado (processorId o projectId incorrecto)',
-    7: 'PERMISSION_DENIED — credenciales sin permisos o proyecto incorrecto',
-    8: 'RESOURCE_EXHAUSTED — cuota agotada',
-    12: 'UNIMPLEMENTED — operación no soportada por el procesador',
-    13: 'INTERNAL — error interno de Google',
-    14: 'UNAVAILABLE — servicio no disponible (región incorrecta o temporalmente caído)',
-    16: 'UNAUTHENTICATED — credenciales inválidas o expiradas',
-  };
-  const grpcStatus = typeof code === 'number' ? grpcMap[code] : undefined;
-
-  const hint =
-    grpcStatus ??
-    (raw.message.toLowerCase().includes('permission')
-      ? 'PERMISSION_DENIED — revisa el serviceAccount y los roles IAM'
-      : raw.message.toLowerCase().includes('not found')
-        ? 'NOT_FOUND — revisa projectId, location y processorId'
-        : raw.message.toLowerCase().includes('invalid')
-          ? 'INVALID_ARGUMENT — revisa mimeType, processorId o location'
-          : 'Revisa credenciales, región y processorId en Vercel.');
-
-  return { message: raw.message, code, details, grpcStatus, hint };
-}
-
 export type DocumentAiProcessorCheck = {
   ok: boolean;
   processorPath: string;
@@ -416,8 +402,7 @@ export type DocumentAiProcessorCheck = {
 };
 
 /**
- * Comprueba credenciales + región + processorId llamando a getProcessor (sin subir archivo).
- * Misma validación que hace la consola de Google al abrir el procesador.
+ * Comprueba credenciales + región + processorId vía REST GET (sin subir archivo).
  */
 export async function verifyDocumentAiProcessor(): Promise<DocumentAiProcessorCheck> {
   let env: DocumentAiEnv;
@@ -432,27 +417,51 @@ export async function verifyDocumentAiProcessor(): Promise<DocumentAiProcessorCh
     };
   }
 
-  const projectIdForResource = lastResolvedProjectIdForDocumentAi ?? env.projectId;
-  const processorPath = `projects/${projectIdForResource}/locations/${env.location}/processors/${env.processorId}`;
+  const processorPath = processorResourcePath(env.projectId, env.location, env.processorId);
+  const host = documentAiHost(env.location);
+  const url = `https://${host}/v1/${processorPath}`;
 
   try {
-    const client = getClient(env);
-    const [processor] = await client.getProcessor({ name: processorPath });
+    const token = await getGoogleAccessToken(env.serviceAccountJson);
+    const res = await fetch(url, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const bodyText = await res.text();
+    if (!res.ok) {
+      const hint = extractRestErrorHint(res.status, bodyText);
+      return {
+        ok: false,
+        processorPath,
+        error: bodyText || `HTTP ${res.status}`,
+        hint,
+        googleCode: res.status,
+      };
+    }
+    const processor = JSON.parse(bodyText) as RestProcessor;
     return {
       ok: true,
       processorPath,
       processorDisplayName: processor.displayName ?? undefined,
       processorType: processor.type ?? undefined,
-      state: processor.state != null ? String(processor.state) : undefined,
+      state: processor.state ?? undefined,
     };
   } catch (e) {
-    const detail = extractGoogleErrorDetail(e);
+    if (e instanceof Error && e.message.startsWith('document_ai_google_error')) {
+      const hint = (e as Error & { googleHint?: string }).googleHint;
+      const code = (e as Error & { googleCode?: number }).googleCode;
+      return {
+        ok: false,
+        processorPath,
+        error: e.message,
+        hint,
+        googleCode: code,
+      };
+    }
     return {
       ok: false,
       processorPath,
-      error: detail.message,
-      hint: detail.hint,
-      googleCode: detail.code,
+      error: e instanceof Error ? e.message : String(e),
+      hint: 'Error de red o credenciales al contactar Document AI.',
     };
   }
 }
@@ -461,7 +470,6 @@ export async function processDocumentAi(
   fileBytes: Buffer,
   mimeType: string,
 ): Promise<DocumentAiResult> {
-  // ── Validar MIME antes de llamar a Google ──────────────────────────────────
   if (!DOCUMENT_AI_SUPPORTED_MIMES.has(mimeType)) {
     const err = new Error(
       `document_ai_mime_not_supported: el formato "${mimeType}" no es compatible con Document AI. ` +
@@ -473,14 +481,12 @@ export async function processDocumentAi(
 
   const env = readEnvOrThrow();
 
-  // ── Validar variables de entorno ───────────────────────────────────────────
   const missingEnvs: string[] = [];
   if (!process.env.GOOGLE_SERVICE_ACCOUNT_JSON?.trim()) missingEnvs.push('GOOGLE_SERVICE_ACCOUNT_JSON');
   if (!process.env.GOOGLE_DOCUMENT_AI_LOCATION?.trim()) missingEnvs.push('GOOGLE_DOCUMENT_AI_LOCATION');
   if (!process.env.GOOGLE_DOCUMENT_AI_PROCESSOR_ID?.trim()) missingEnvs.push('GOOGLE_DOCUMENT_AI_PROCESSOR_ID');
-  if (!process.env.GOOGLE_CLOUD_PROJECT_ID?.trim()) {
-    // Puede estar en el JSON del service account; si env.projectId está resuelto, está bien
-    if (!env.projectId) missingEnvs.push('GOOGLE_CLOUD_PROJECT_ID (o project_id en el JSON)');
+  if (!process.env.GOOGLE_CLOUD_PROJECT_ID?.trim() && !env.projectId) {
+    missingEnvs.push('GOOGLE_CLOUD_PROJECT_ID (o project_id en el JSON)');
   }
   if (missingEnvs.length > 0) {
     const msg = `document_ai_config_missing: faltan variables de entorno: ${missingEnvs.join(', ')}`;
@@ -488,11 +494,11 @@ export async function processDocumentAi(
     throw new Error(msg);
   }
 
-  const client = getClient(env);
-  const projectIdForResource = lastResolvedProjectIdForDocumentAi ?? env.projectId;
-  const name = `projects/${projectIdForResource}/locations/${env.location}/processors/${env.processorId}`;
+  const projectId = env.projectId;
+  const name = processorResourcePath(projectId, env.location, env.processorId);
+  const host = documentAiHost(env.location);
+  const url = `https://${host}/v1/${name}:process`;
 
-  // ── Log detallado pre-llamada ──────────────────────────────────────────────
   const fileSizeKb = Math.round(fileBytes.length / 1024);
   console.info(
     '[document-ai] pre-call',
@@ -500,16 +506,18 @@ export async function processDocumentAi(
       mimeType,
       fileSizeKb,
       fileSizeBytes: fileBytes.length,
-      projectId: projectIdForResource,
+      projectId,
       location: env.location,
       processorId: env.processorId,
       processorPath: name,
+      transport: 'rest',
+      url,
     }),
   );
 
   const { projectIdEnv, location, processorId, serviceAccountJson } = readEnvStrings();
   console.log('[document-ai] credentials check:', {
-    projectId: projectIdEnv,
+    projectId: projectIdEnv || projectId,
     location,
     processorId,
     hasKey: serviceAccountJson.length > 0,
@@ -517,53 +525,55 @@ export async function processDocumentAi(
   });
 
   const t0 = Date.now();
-  let response;
-  try {
-    [response] = await client.processDocument({
-      name,
+  const token = await getGoogleAccessToken(env.serviceAccountJson);
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
       rawDocument: {
-        content: fileBytes,
+        content: fileBytes.toString('base64'),
         mimeType,
       },
-    });
-  } catch (googleErr) {
-    const detail = extractGoogleErrorDetail(googleErr);
-    const durationMs = Date.now() - t0;
+    }),
+  });
 
+  const bodyText = await response.text();
+  const durationMs = Date.now() - t0;
+
+  if (!response.ok) {
     console.error(
-      '[document-ai] ERROR de Google',
+      '[document-ai] ERROR REST',
       JSON.stringify({
-        message: detail.message,
-        code: detail.code,
-        grpcStatus: detail.grpcStatus,
-        details: detail.details,
-        hint: detail.hint,
+        status: response.status,
+        body: bodyText.slice(0, 2000),
         durationMs,
         processorPath: name,
         mimeType,
         fileSizeKb,
       }),
     );
-
-    // Lanzar error enriquecido para que los handlers HTTP lo propaguen
-    const enriched = new Error(
-      `document_ai_google_error: ${detail.message} | code=${detail.code ?? 'n/a'} | hint=${detail.hint}`,
-    );
-    (enriched as Error & { googleCode?: number | string; googleDetails?: string; googleHint?: string }).googleCode = detail.code;
-    (enriched as Error & { googleDetails?: string }).googleDetails = detail.details;
-    (enriched as Error & { googleHint?: string }).googleHint = detail.hint;
-    throw enriched;
+    throwDocumentAiRestError(response.status, bodyText);
   }
 
-  const durationMs = Date.now() - t0;
-  const doc = response.document;
+  let parsed: RestProcessResponse;
+  try {
+    parsed = JSON.parse(bodyText) as RestProcessResponse;
+  } catch {
+    throw new Error(`document_ai_rest_error: invalid_json_response ${bodyText.slice(0, 500)}`);
+  }
+
+  const doc = parsed.document;
   const plainText = extractPlainText(doc);
   const entities = (doc?.entities ?? []).map(flattenEntity);
   const pageCount = doc?.pages?.length ?? 0;
 
   console.info(
     '[document-ai] OK',
-    JSON.stringify({ durationMs, pageCount, plainTextLen: plainText.length, entities: entities.length }),
+    JSON.stringify({ durationMs, pageCount, plainTextLen: plainText.length, entities: entities.length, transport: 'rest' }),
   );
 
   return {
