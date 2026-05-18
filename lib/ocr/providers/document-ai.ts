@@ -507,6 +507,15 @@ export async function processDocumentAi(
     }),
   );
 
+  const { projectIdEnv, location, processorId, serviceAccountJson } = readEnvStrings();
+  console.log('[document-ai] credentials check:', {
+    projectId: projectIdEnv,
+    location,
+    processorId,
+    hasKey: serviceAccountJson.length > 0,
+    keyStart: serviceAccountJson.slice(0, 30),
+  });
+
   const t0 = Date.now();
   let response;
   try {
