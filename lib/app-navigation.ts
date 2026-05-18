@@ -169,10 +169,11 @@ export function getParentRoute(pathname: string | null): string {
   if (path.startsWith('/cocina-central/') && path !== '/cocina-central') return '/cocina-central';
   if (path === '/cocina-central') return APP_MODULE_HOME;
 
-  // —— Escandallos ——
-  if (path.endsWith('/editar') && /^\/escandallos\/recetas\/.+/.test(path)) return '/escandallos/recetas';
-  if (path === '/escandallos/recetas/nuevo' || path === '/escandallos/recetas/bases') return '/escandallos/recetas';
-  if (path === '/escandallos/recetas') return '/escandallos';
+  // —— Escandallos (libro y centro en /escandallos; /escandallos/recetas redirige) ——
+  if (path.endsWith('/editar') && /^\/escandallos\/recetas\/.+/.test(path)) return '/escandallos?libro=1';
+  if (path === '/escandallos/recetas/nuevo') return '/escandallos?libro=1';
+  if (path === '/escandallos/recetas/bases') return '/escandallos?bases=1';
+  if (path === '/escandallos/recetas') return '/escandallos?libro=1';
   if (path.startsWith('/escandallos/') && path !== '/escandallos') return '/escandallos';
   if (path === '/escandallos') return APP_MODULE_HOME;
 

@@ -675,22 +675,15 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                 : '-mx-4 px-4 sm:-mx-5 sm:px-5 md:-mx-6 md:px-6 lg:-mx-8 lg:px-8',
             ].join(' ')}
           >
-            <div
-              className={[
-                'flex items-stretch',
-                isPedidosRoute
-                  ? 'flex-row gap-1.5'
-                  : 'flex-col gap-2 min-[400px]:flex-row min-[400px]:items-stretch',
-              ].join(' ')}
-            >
+            <div className="flex min-w-0 flex-row items-stretch gap-1.5 sm:gap-2">
               <button
                 type="button"
                 onClick={goHierarchyBack}
                 className={[
-                  'flex flex-1 items-center justify-center gap-1 rounded-lg border bg-white transition active:scale-[0.99]',
+                  'flex min-w-0 flex-1 items-center justify-center gap-1 rounded-lg border bg-white transition active:scale-[0.99]',
                   isPedidosRoute
                     ? 'min-h-9 border-zinc-200/90 px-2.5 py-1.5 text-xs font-semibold text-zinc-700 shadow-none hover:bg-zinc-50'
-                    : 'min-h-10 border-zinc-300/90 px-3 py-2 text-sm font-bold text-zinc-800 shadow-[0_1px_0_rgba(0,0,0,0.04)] ring-1 ring-zinc-200/70 hover:bg-zinc-50',
+                    : 'min-h-10 border-zinc-300/90 px-2 py-2 text-xs font-bold text-zinc-800 shadow-[0_1px_0_rgba(0,0,0,0.04)] ring-1 ring-zinc-200/70 hover:bg-zinc-50 sm:px-3 sm:text-sm',
                 ].join(' ')}
               >
                 <span aria-hidden className="text-sm leading-none">
@@ -702,10 +695,10 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                 type="button"
                 onClick={exitToModuleHome}
                 className={[
-                  'flex flex-1 items-center justify-center rounded-lg border transition active:scale-[0.99]',
+                  'flex min-w-0 flex-1 items-center justify-center rounded-lg border transition active:scale-[0.99]',
                   isPedidosRoute
                     ? 'min-h-9 border-transparent bg-zinc-100/80 px-2 py-1.5 text-[11px] font-medium text-zinc-600 hover:bg-zinc-100'
-                    : 'min-h-10 border-zinc-200 bg-zinc-50 px-3 py-2 text-xs font-bold uppercase tracking-wide text-zinc-800 ring-1 ring-zinc-200/80 hover:bg-zinc-100',
+                    : 'min-h-10 border-zinc-200 bg-zinc-50 px-2 py-2 text-[10px] font-bold uppercase leading-tight tracking-wide text-zinc-800 ring-1 ring-zinc-200/80 hover:bg-zinc-100 sm:px-3 sm:text-xs',
                 ].join(' ')}
               >
                 {isPedidosRoute ? 'Panel' : 'Salir del módulo'}

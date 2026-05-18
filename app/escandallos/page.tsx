@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import type { LucideIcon } from 'lucide-react';
+import { useSearchParams } from 'next/navigation';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertCircle,
@@ -9,8 +10,11 @@ import {
   ArrowUpRight,
   BarChart3,
   Calculator,
+  ChevronDown,
   ChevronRight,
   CircleDollarSign,
+  Eye,
+  MoreHorizontal,
   PencilLine,
   Plus,
   RefreshCw,
@@ -89,13 +93,64 @@ function formatMargin(foodCostPct: number | null) {
   return foodCostPct != null ? `${Math.round((100 - foodCostPct) * 10) / 10} %` : '—';
 }
 
+function statusBadgeLabel(bucket: EscandalloRecipeDashboardRow['bucket']): string {
+  switch (bucket) {
+    case 'optimal':
+      return 'OK';
+    case 'watch':
+      return 'ATENCIÓN';
+    case 'high':
+      return 'ALTO';
+    case 'no_pvp':
+      return 'SIN PVP';
+    case 'no_lines':
+      return 'SIN ING.';
+    case 'sub':
+      return 'BASE';
+    default:
+      return bucketLabel(bucket);
+  }
+}
+
+function statusBadgeTone(bucket: EscandalloRecipeDashboardRow['bucket']): 'neutral' | 'terracotta' | 'olive' | 'amber' | 'red' {
+  if (bucket === 'high' || bucket === 'no_lines' || bucket === 'watch' || bucket === 'no_pvp') return 'red';
+  if (bucket === 'optimal' || bucket === 'sub') return 'olive';
+  return 'neutral';
+}
+
+function formatRecipeUpdatedLabel(iso: string | undefined): string {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '—';
+  const diffDays = Math.floor((Date.now() - d.getTime()) / 86_400_000);
+  if (diffDays <= 0) return 'hoy';
+  if (diffDays === 1) return 'ayer';
+  if (diffDays < 7) return `${diffDays}d`;
+  return d.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
+}
+
+function foodCostValueClass(pct: number | null): string {
+  if (pct == null) return 'text-[#7E7468]';
+  if (pct > 30) return 'text-[#D32F2F]';
+  return 'text-emerald-700';
+}
+
+function marginValueClass(pct: number | null): string {
+  if (pct == null) return 'text-[#0A0908]';
+  if (pct <= 30) return 'text-emerald-700';
+  return 'text-[#0A0908]';
+}
+
 function accentClass(tone: 'terracotta' | 'olive' | 'amber' | 'red' | 'neutral') {
   switch (tone) {
+    case 'olive':
+      return 'bg-emerald-50 text-emerald-700 ring-emerald-100';
     case 'amber':
     case 'red':
+    case 'terracotta':
       return 'bg-[#D32F2F]/10 text-[#B91C1C] ring-[#D32F2F]/15';
     default:
-      return 'bg-zinc-100 text-zinc-700 ring-zinc-200';
+      return 'bg-[#F7F3EE] text-[#7E7468] ring-[rgba(10,9,8,0.06)]';
   }
 }
 
@@ -105,12 +160,14 @@ function MiniCard({
   hint,
   Icon,
   accent,
+  compact = false,
 }: {
   title: string;
   value: string;
   hint?: string;
   Icon: LucideIcon;
   accent: 'red' | 'emerald' | 'amber' | 'zinc' | 'olive';
+  compact?: boolean;
 }) {
   const iconClass =
     accent === 'emerald'
@@ -123,13 +180,41 @@ function MiniCard({
             ? 'text-zinc-700 bg-zinc-100 ring-zinc-200'
             : 'text-[#B91C1C] bg-[#D32F2F]/10 ring-[#D32F2F]/15';
   return (
-    <div className="rounded-[1.35rem] bg-white p-2.5 shadow-sm ring-1 ring-zinc-200/80">
-      <div className={`grid h-8 w-8 place-items-center rounded-2xl ring-1 ${iconClass}`}>
-        <Icon className="h-4 w-4" strokeWidth={2.2} />
+    <div
+      className={[
+        'bg-white shadow-sm ring-1 ring-zinc-200/80',
+        compact ? 'rounded-xl p-1.5' : 'rounded-[1.35rem] p-2.5',
+      ].join(' ')}
+    >
+      <div
+        className={[
+          `grid place-items-center ring-1 ${iconClass}`,
+          compact ? 'h-[1.35rem] w-[1.35rem] rounded-lg' : 'h-8 w-8 rounded-2xl',
+        ].join(' ')}
+      >
+        <Icon className={compact ? 'h-3 w-3' : 'h-4 w-4'} strokeWidth={2.2} />
       </div>
-      <p className="mt-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-zinc-500">{title}</p>
-      <p className="mt-0.5 text-[1.55rem] font-black tabular-nums tracking-tight text-zinc-950">{value}</p>
-      {hint ? <p className="mt-0.5 text-[10px] leading-snug text-[#7E7468]">{hint}</p> : null}
+      <p
+        className={[
+          'font-bold uppercase text-zinc-500',
+          compact ? 'mt-1 text-[7px] tracking-[0.1em]' : 'mt-1.5 text-[10px] tracking-[0.14em]',
+        ].join(' ')}
+      >
+        {title}
+      </p>
+      <p
+        className={[
+          'font-black tabular-nums tracking-tight text-zinc-950',
+          compact ? 'mt-0.5 text-[1.1rem] leading-none' : 'mt-0.5 text-[1.55rem]',
+        ].join(' ')}
+      >
+        {value}
+      </p>
+      {hint ? (
+        <p className={['leading-snug text-[#7E7468]', compact ? 'mt-0.5 text-[7px]' : 'mt-0.5 text-[10px]'].join(' ')}>
+          {hint}
+        </p>
+      ) : null}
     </div>
   );
 }
@@ -137,12 +222,20 @@ function MiniCard({
 function Badge({
   children,
   tone = 'neutral',
+  dense = false,
 }: {
   children: React.ReactNode;
   tone?: 'neutral' | 'terracotta' | 'olive' | 'amber' | 'red';
+  dense?: boolean;
 }) {
   return (
-    <span className={`inline-flex rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.12em] ring-1 ${accentClass(tone)}`}>
+    <span
+      className={[
+        'inline-flex shrink-0 rounded-full font-bold uppercase ring-1',
+        dense ? 'px-1.5 py-0.5 text-[7px] tracking-[0.1em]' : 'px-2.5 py-1 text-[10px] tracking-[0.12em]',
+        accentClass(tone),
+      ].join(' ')}
+    >
       {children}
     </span>
   );
@@ -154,23 +247,45 @@ function SectionHeader({
   open,
   onToggle,
   accent,
+  compact = false,
 }: {
   title: string;
   icon: LucideIcon;
   open: boolean;
   onToggle: () => void;
   accent: 'red' | 'emerald' | 'amber' | 'zinc' | 'olive';
+  compact?: boolean;
 }) {
   const iconClass =
     accent === 'emerald'
       ? 'text-emerald-700 bg-emerald-50 ring-emerald-100'
       : accent === 'amber'
-        ? 'text-amber-700 bg-amber-50 ring-amber-100'
+        ? 'text-[#B91C1C] bg-[#D32F2F]/10 ring-[#D32F2F]/15'
         : accent === 'olive'
-          ? 'text-zinc-700 bg-zinc-100 ring-zinc-200'
+          ? 'text-emerald-700 bg-emerald-50 ring-emerald-100'
           : accent === 'zinc'
-            ? 'text-zinc-700 bg-zinc-100 ring-zinc-200'
+            ? 'text-[#7E7468] bg-[#F7F3EE] ring-[rgba(10,9,8,0.06)]'
             : 'text-[#B91C1C] bg-[#D32F2F]/10 ring-[#D32F2F]/15';
+  if (compact) {
+    return (
+      <button
+        type="button"
+        onClick={onToggle}
+        className="flex w-full min-h-[52px] max-h-[68px] items-center gap-2.5 py-1 text-left"
+      >
+        <div className={`grid h-7 w-7 shrink-0 place-items-center rounded-full ring-1 ${iconClass}`}>
+          <Icon className="h-3.5 w-3.5" strokeWidth={2.2} />
+        </div>
+        <span className="min-w-0 flex-1 truncate font-[Cormorant_Garamond] text-[17px] font-normal leading-none text-[#0A0908]">
+          {title}
+        </span>
+        <ChevronDown
+          className={`h-4 w-4 shrink-0 text-[#7E7468] transition-transform duration-200 ${open ? 'rotate-180' : ''}`}
+          aria-hidden
+        />
+      </button>
+    );
+  }
   return (
     <button
       type="button"
@@ -179,7 +294,7 @@ function SectionHeader({
     >
       <div className="flex min-w-0 items-center gap-3">
         <div className={`grid h-8 w-8 shrink-0 place-items-center rounded-full ring-1 ${iconClass}`}>
-          <Icon className="h-4.5 w-4.5" />
+          <Icon className="h-4 w-4" strokeWidth={2.2} />
         </div>
         <p className="min-w-0 truncate text-[1.05rem] font-black leading-tight text-zinc-950">{title}</p>
       </div>
@@ -190,71 +305,113 @@ function SectionHeader({
   );
 }
 
+function RecipeMetric({
+  label,
+  value,
+  valueClassName = 'text-[#0A0908]',
+}: {
+  label: string;
+  value: string;
+  valueClassName?: string;
+}) {
+  return (
+    <div className="min-w-0 px-1 text-center first:pl-0 last:pr-0">
+      <p className="text-[7px] font-bold uppercase tracking-[0.12em] text-[#7E7468]">{label}</p>
+      <p className={`mt-0.5 truncate text-[13px] font-black tabular-nums leading-none ${valueClassName}`}>{value}</p>
+    </div>
+  );
+}
+
 function RecipeCard({
   r,
   actionHref,
+  updatedLabel,
+  onRefresh,
 }: {
   r: EscandalloRecipeDashboardRow;
   actionHref?: string;
+  updatedLabel?: string;
+  onRefresh?: () => void;
 }) {
-  const tone = r.bucket === 'high' || r.bucket === 'no_lines' ? 'red' : r.bucket === 'no_pvp' ? 'amber' : r.bucket === 'watch' ? 'amber' : 'neutral';
+  const editHref = actionHref ?? `/escandallos/recetas/${r.id}/editar`;
+  const badgeTone = statusBadgeTone(r.bucket);
+  const kindLabel = r.isSubRecipe ? 'BASE' : 'PLATO';
+
   return (
-    <article className="flex h-full flex-col rounded-2xl bg-white p-3 shadow-sm ring-1 ring-zinc-200/80">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <Badge tone={tone}>{bucketLabel(r.bucket)}</Badge>
-          <h3 className="mt-2 line-clamp-2 text-[1.03rem] font-black leading-tight text-zinc-950">{r.name}</h3>
-          <p className="mt-1 text-xs font-semibold uppercase tracking-[0.12em] text-zinc-500">
-            {r.isSubRecipe ? 'Base' : 'Plato'} · {r.yieldQty} {r.yieldLabel}
+    <article className="group rounded-xl border border-[rgba(10,9,8,0.06)] bg-white px-2.5 py-2 shadow-[0_1px_0_rgba(10,9,8,0.04)] transition-[box-shadow,transform] active:scale-[0.995] hover:shadow-[0_2px_10px_rgba(10,9,8,0.05)]">
+      <div className="flex items-start gap-2">
+        <Badge tone={badgeTone} dense>
+          {statusBadgeLabel(r.bucket)}
+        </Badge>
+        <div className="min-w-0 flex-1">
+          <h3 className="line-clamp-2 text-[13px] font-bold leading-[1.15] tracking-tight text-[#0A0908]">{r.name}</h3>
+          <p className="mt-0.5 text-[8px] font-semibold uppercase tracking-[0.14em] text-[#7E7468]">
+            {kindLabel} · {r.yieldQty} {r.yieldLabel}
           </p>
         </div>
-        {actionHref ? (
-          <Link href={actionHref} className="rounded-full bg-zinc-100 p-2 text-zinc-600" aria-label="Editar receta">
-            <SlidersHorizontal className="h-4 w-4" />
+        <div className="flex shrink-0 flex-col items-end gap-1">
+          {updatedLabel ? (
+            <p className="text-[8px] font-medium tabular-nums text-[#7E7468]">{updatedLabel}</p>
+          ) : null}
+          <Link
+            href={editHref}
+            className="grid h-7 w-7 place-items-center rounded-lg text-[#7E7468] transition hover:bg-[#F7F3EE] active:bg-[#F7F3EE]"
+            aria-label="Opciones de receta"
+          >
+            <MoreHorizontal className="h-4 w-4" />
           </Link>
-        ) : (
-          <button className="rounded-full bg-zinc-100 p-2 text-zinc-600" type="button" aria-label="Más opciones">
-            <SlidersHorizontal className="h-4 w-4" />
-          </button>
-        )}
-      </div>
-      <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
-        <div className="rounded-2xl bg-zinc-50 p-2.5 ring-1 ring-zinc-200/70">
-          <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-zinc-500">Coste / ración</p>
-          <p className="mt-1 text-lg font-black text-zinc-900">{formatMoneyEur(r.costPerYieldEur)}</p>
-        </div>
-        <div className="rounded-2xl bg-zinc-50 p-2.5 ring-1 ring-zinc-200/70">
-          <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-zinc-500">PVP</p>
-          <p className="mt-1 text-lg font-black text-zinc-900">{r.saleGrossEur != null ? formatMoneyEur(r.saleGrossEur) : '—'}</p>
-        </div>
-        <div className="rounded-2xl bg-zinc-50 p-2.5 ring-1 ring-zinc-200/70">
-          <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-zinc-500">Food cost</p>
-          <p className={`mt-1 text-lg font-black ${r.foodCostPct == null ? 'text-zinc-500' : r.foodCostPct > 35 ? 'text-[#D32F2F]' : 'text-emerald-700'}`}>
-            {r.foodCostPct != null ? `${r.foodCostPct.toFixed(1)} %` : '—'}
-          </p>
-        </div>
-        <div className="rounded-2xl bg-zinc-50 p-2.5 ring-1 ring-zinc-200/70">
-          <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-zinc-500">Margen</p>
-          <p className="mt-1 text-lg font-black text-zinc-900">{formatMargin(r.foodCostPct)}</p>
         </div>
       </div>
-      <div className="mt-3 flex flex-wrap gap-2">
-        <Link href={actionHref ?? `/escandallos/recetas/${r.id}/editar`} className="inline-flex flex-1 items-center justify-center gap-2 rounded-2xl border border-zinc-200 bg-white px-3 py-2 text-sm font-semibold text-zinc-900">
-          <PencilLine className="h-4 w-4" /> Editar
+
+      <div className="mt-2 grid grid-cols-4 divide-x divide-[rgba(10,9,8,0.06)] rounded-lg bg-[#FAFAF9] py-1.5 ring-1 ring-[rgba(10,9,8,0.04)]">
+        <RecipeMetric label="Coste/ración" value={formatMoneyEur(r.costPerYieldEur)} />
+        <RecipeMetric label="PVP" value={r.saleGrossEur != null ? formatMoneyEur(r.saleGrossEur) : '—'} />
+        <RecipeMetric
+          label="Food cost"
+          value={r.foodCostPct != null ? `${r.foodCostPct.toFixed(1)} %` : '—'}
+          valueClassName={foodCostValueClass(r.foodCostPct)}
+        />
+        <RecipeMetric label="Margen" value={formatMargin(r.foodCostPct)} valueClassName={marginValueClass(r.foodCostPct)} />
+      </div>
+
+      <div className="mt-2 grid grid-cols-3 gap-1.5">
+        <Link
+          href={editHref}
+          className="inline-flex h-8 items-center justify-center gap-1 rounded-lg border border-[rgba(10,9,8,0.08)] bg-white px-1.5 text-[10px] font-semibold text-[#0A0908] transition hover:bg-[#F7F3EE] active:bg-[#F7F3EE]"
+        >
+          <PencilLine className="h-3 w-3 shrink-0" />
+          <span className="truncate">Editar</span>
         </Link>
-        <Link href="/escandallos/recetas" className="inline-flex flex-1 items-center justify-center gap-2 rounded-2xl border border-zinc-200 bg-white px-3 py-2 text-sm font-semibold text-zinc-900">
-          <CircleDollarSign className="h-4 w-4" /> Ver coste
+        <Link
+          href={editHref}
+          className="inline-flex h-8 items-center justify-center gap-1 rounded-lg border border-[rgba(10,9,8,0.08)] bg-white px-1.5 text-[10px] font-semibold text-[#0A0908] transition hover:bg-[#F7F3EE] active:bg-[#F7F3EE]"
+        >
+          <Eye className="h-3 w-3 shrink-0" />
+          <span className="truncate">Ver coste</span>
         </Link>
-        <button type="button" onClick={() => window.location.reload()} className="inline-flex flex-1 items-center justify-center gap-2 rounded-2xl bg-[#D32F2F] px-3 py-2 text-sm font-semibold text-white">
-          <ArrowUpRight className="h-4 w-4" /> Actualizar
+        <button
+          type="button"
+          onClick={() => (onRefresh ? onRefresh() : window.location.reload())}
+          className="inline-flex h-8 items-center justify-center gap-1 rounded-lg bg-[#D32F2F] px-1.5 text-[10px] font-semibold text-white transition hover:bg-[#B91C1C] active:scale-[0.98]"
+        >
+          <RefreshCw className="h-3 w-3 shrink-0" />
+          <span className="truncate">Actualizar</span>
         </button>
       </div>
-      <p className="mt-3 text-xs text-zinc-500">{r.saleGrossEur != null ? `Último PVP ${formatMoneyEur(r.saleGrossEur)}` : 'Sin PVP registrado'}</p>
+
+      <p className="mt-1.5 text-[8px] leading-snug text-[#7E7468]">
+        {r.saleGrossEur != null ? `Último PVP ${formatMoneyEur(r.saleGrossEur)}` : 'Sin PVP registrado'}
+        <span className="mx-1 text-[rgba(10,9,8,0.2)]">·</span>
+        {updatedLabel ? `Actualizado ${updatedLabel}` : 'Sin fecha de actualización'}
+        <span className="mx-1 text-[rgba(10,9,8,0.2)]">·</span>
+        {r.lineCount} {r.lineCount === 1 ? 'ingrediente' : 'ingredientes'}
+      </p>
     </article>
   );
 }
 
 export default function EscandallosPage() {
+  const searchParams = useSearchParams();
   const { localId, profileReady } = useAuth();
   const supabaseOk = isSupabaseEnabled() && getSupabaseClient();
   const [recipes, setRecipes] = useState<EscandalloRecipe[]>([]);
@@ -270,10 +427,32 @@ export default function EscandallosPage() {
   const [importPreview, setImportPreview] = useState<SalesImportMatchedRow[] | null>(null);
   const [quickCalcOpen, setQuickCalcOpen] = useState(false);
   const [recipeFilter, setRecipeFilter] = useState<RecipeFilter>('all');
+  const [recipeSearch, setRecipeSearch] = useState('');
   const [recipeBookOpen, setRecipeBookOpen] = useState(true);
+  const recipeFiltersRef = useRef<HTMLDivElement>(null);
   const [basesOpen, setBasesOpen] = useState(false);
   const [monthlyOpen, setMonthlyOpen] = useState(false);
   const lastActivityRef = useRef<number>(0);
+  const libroSectionRef = useRef<HTMLElement>(null);
+
+  useEffect(() => {
+    if (searchParams.get('libro') === '1') {
+      setRecipeBookOpen(true);
+    }
+    if (searchParams.get('bases') === '1') {
+      setBasesOpen(true);
+    }
+  }, [searchParams]);
+
+  useEffect(() => {
+    if (searchParams.get('libro') !== '1' && searchParams.get('bases') !== '1') return;
+    if (loading) return;
+    const t = window.setTimeout(() => {
+      libroSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 100);
+    return () => window.clearTimeout(t);
+  }, [searchParams, loading]);
+
   const touchActivity = useCallback(() => {
     lastActivityRef.current = Date.now();
   }, []);
@@ -393,13 +572,21 @@ export default function EscandallosPage() {
     };
   }, [mainRows, salesQtyDraft, kpis.avgFc]);
 
-  const filteredRecipeRows = useMemo(() => [...mainRows].filter((r) => {
-    if (recipeFilter === 'all') return true;
-    if (recipeFilter === 'plates') return !r.isSubRecipe;
-    if (recipeFilter === 'bases') return r.isSubRecipe;
-    if (recipeFilter === 'high') return r.bucket === 'high' || r.bucket === 'no_pvp';
-    return r.bucket === 'no_pvp' || r.bucket === 'no_lines';
-  }).sort((a, b) => a.name.localeCompare(b.name, 'es')), [mainRows, recipeFilter]);
+  const recipeUpdatedById = useMemo(() => new Map(recipes.map((r) => [r.id, r.updatedAt])), [recipes]);
+
+  const filteredRecipeRows = useMemo(() => {
+    const q = recipeSearch.trim().toLowerCase();
+    return [...mainRows]
+      .filter((r) => {
+        if (recipeFilter === 'all') return true;
+        if (recipeFilter === 'plates') return !r.isSubRecipe;
+        if (recipeFilter === 'bases') return r.isSubRecipe;
+        if (recipeFilter === 'high') return r.bucket === 'high' || r.bucket === 'no_pvp';
+        return r.bucket === 'no_pvp' || r.bucket === 'no_lines';
+      })
+      .filter((r) => !q || r.name.toLowerCase().includes(q))
+      .sort((a, b) => a.name.localeCompare(b.name, 'es'));
+  }, [mainRows, recipeFilter, recipeSearch]);
 
   const baseRows = useMemo(() => [...subRows].sort((a, b) => a.name.localeCompare(b.name, 'es')), [subRows]);
 
@@ -543,11 +730,11 @@ export default function EscandallosPage() {
 
       <EscandalloQuickCalculatorModal open={quickCalcOpen} onClose={() => setQuickCalcOpen(false)} rawProducts={rawProducts} localId={localId} />
 
-      <section className="grid grid-cols-2 gap-2.5 lg:grid-cols-4">
-        <MiniCard title="Food cost medio" value={kpis.avgFc != null ? `${kpis.avgFc} %` : '—'} hint={kpis.withFcCount > 0 ? `${kpis.withFcCount} platos con PVP` : 'Completa PVP para calcularlo'} Icon={TrendingUp} accent={kpis.avgFc != null && kpis.avgFc <= 30 ? 'emerald' : 'amber'} />
-        <MiniCard title="Platos en riesgo" value={String(kpis.high)} hint={`${kpis.noPvp} sin PVP · ${kpis.noLines} sin ingredientes`} Icon={AlertTriangle} accent="red" />
-        <MiniCard title="Recetas incompletas" value={String(kpis.noPvp + kpis.noLines)} hint="Sin precio o sin líneas" Icon={AlertCircle} accent="amber" />
-        <MiniCard title="Bases activas" value={String(kpis.subCount)} hint="Elaboraciones reutilizables" Icon={UtensilsCrossed} accent="olive" />
+      <section className="grid grid-cols-2 gap-1.5 sm:gap-2 lg:grid-cols-4">
+        <MiniCard compact title="Food cost medio" value={kpis.avgFc != null ? `${kpis.avgFc} %` : '—'} hint={kpis.withFcCount > 0 ? `${kpis.withFcCount} platos con PVP` : 'Completa PVP para calcularlo'} Icon={TrendingUp} accent={kpis.avgFc != null && kpis.avgFc <= 30 ? 'emerald' : 'amber'} />
+        <MiniCard compact title="Platos en riesgo" value={String(kpis.high)} hint={`${kpis.noPvp} sin PVP · ${kpis.noLines} sin ingredientes`} Icon={AlertTriangle} accent="red" />
+        <MiniCard compact title="Recetas incompletas" value={String(kpis.noPvp + kpis.noLines)} hint="Sin precio o sin líneas" Icon={AlertCircle} accent="amber" />
+        <MiniCard compact title="Bases activas" value={String(kpis.subCount)} hint="Elaboraciones reutilizables" Icon={UtensilsCrossed} accent="olive" />
       </section>
 
       {banner ? <div className="rounded-[1.25rem] border border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-700 ring-1 ring-zinc-200/80">{banner}</div> : null}
@@ -564,28 +751,77 @@ export default function EscandallosPage() {
         </div>
       ) : (
         <>
-          <section className="rounded-[1.5rem] bg-white p-3 shadow-sm ring-1 ring-zinc-200/80">
-            <SectionHeader title="Libro de recetas" icon={Sparkles} accent="amber" open={recipeBookOpen} onToggle={() => setRecipeBookOpen((v) => !v)} />
+          <section
+            ref={libroSectionRef}
+            className="rounded-xl border border-[rgba(10,9,8,0.06)] bg-white p-2.5 shadow-[0_1px_0_rgba(10,9,8,0.04)] ring-1 ring-[rgba(10,9,8,0.04)]"
+          >
+            <SectionHeader
+              title="Libro de recetas"
+              icon={Sparkles}
+              accent="amber"
+              compact
+              open={recipeBookOpen}
+              onToggle={() => setRecipeBookOpen((v) => !v)}
+            />
             {recipeBookOpen ? (
               <>
-                <div className="mt-3 flex items-center gap-2 overflow-x-auto pb-1">
-                  {[['all', 'Todas'], ['plates', 'Platos'], ['bases', 'Bases'], ['high', 'Alto coste'], ['incomplete', 'Sin completar']].map(([key, label]) => (
+                <div
+                  ref={recipeFiltersRef}
+                  className="mt-2 flex items-center gap-1.5 overflow-x-auto pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+                >
+                  {[['all', 'Todas'], ['plates', 'Platos'], ['bases', 'Bases'], ['high', 'Alto coste'], ['incomplete', 'Sin completar']].map(
+                    ([key, label]) => (
+                      <button
+                        key={key}
+                        type="button"
+                        onClick={() => setRecipeFilter(key as RecipeFilter)}
+                        className={[
+                          'shrink-0 rounded-full px-2.5 py-1 text-[10px] font-semibold tracking-tight transition',
+                          recipeFilter === key
+                            ? 'bg-[#0A0908] text-white'
+                            : 'border border-[rgba(10,9,8,0.06)] bg-[#F7F3EE] text-[#0A0908] hover:bg-[#F0EBE4]',
+                        ].join(' ')}
+                      >
+                        {label}
+                      </button>
+                    ),
+                  )}
+                </div>
+                <div className="mt-2 flex items-center gap-1.5">
+                  <label className="flex min-h-[36px] min-w-0 flex-1 items-center gap-2 rounded-lg border border-[rgba(10,9,8,0.08)] bg-white px-2.5 ring-1 ring-[rgba(10,9,8,0.03)]">
+                    <Search className="h-3.5 w-3.5 shrink-0 text-[#7E7468]" aria-hidden />
+                    <input
+                      value={recipeSearch}
+                      onChange={(e) => setRecipeSearch(e.target.value)}
+                      className="min-w-0 flex-1 bg-transparent text-[12px] text-[#0A0908] outline-none placeholder:text-[#7E7468]/80"
+                      placeholder="Buscar receta..."
+                    />
+                  </label>
                   <button
-                      key={key}
-                      type="button"
-                      onClick={() => setRecipeFilter(key as RecipeFilter)}
-                      className={`rounded-full px-4 py-2 text-[12px] font-semibold ${recipeFilter === key ? 'bg-zinc-950 text-white' : 'bg-zinc-100 text-zinc-900'}`}
-                    >
-                      {label}
-                    </button>
-                  ))}
+                    type="button"
+                    onClick={() => recipeFiltersRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })}
+                    className="inline-flex h-9 shrink-0 items-center gap-1 rounded-lg border border-[rgba(10,9,8,0.08)] bg-[#F7F3EE] px-2.5 text-[10px] font-semibold text-[#0A0908] transition hover:bg-[#F0EBE4] active:scale-[0.98]"
+                  >
+                    <SlidersHorizontal className="h-3.5 w-3.5" />
+                    Filtros
+                  </button>
                 </div>
-                <div className="mt-3 flex items-center gap-2 rounded-2xl bg-zinc-100 px-4 py-2.5">
-                  <Search className="h-4 w-4 text-zinc-500" />
-                  <input className="w-full bg-transparent text-[12px] outline-none placeholder:text-zinc-400" placeholder="Buscar receta..." />
-                </div>
-                <div className="mt-3 grid items-stretch gap-2 sm:grid-cols-2 xl:grid-cols-3">
-                  {filteredRecipeRows.map((r) => <RecipeCard key={r.id} r={r} actionHref={`/escandallos/recetas/${r.id}/editar`} />)}
+                <div className="mt-2 flex flex-col gap-2">
+                  {filteredRecipeRows.length === 0 ? (
+                    <p className="rounded-lg bg-[#FAFAF9] px-3 py-4 text-center text-[12px] text-[#7E7468]">
+                      No hay recetas con este filtro.
+                    </p>
+                  ) : (
+                    filteredRecipeRows.map((r) => (
+                      <RecipeCard
+                        key={r.id}
+                        r={r}
+                        actionHref={`/escandallos/recetas/${r.id}/editar`}
+                        updatedLabel={formatRecipeUpdatedLabel(recipeUpdatedById.get(r.id))}
+                        onRefresh={() => void load()}
+                      />
+                    ))
+                  )}
                 </div>
               </>
             ) : null}

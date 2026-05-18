@@ -5,9 +5,12 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ArrowDown,
   ArrowUp,
-  ChefHat,
   ChevronDown,
+  FileText,
   Plus,
+  RefreshCw,
+  Save,
+  StickyNote,
   Trash2,
 } from 'lucide-react';
 import RecipeTechnicalSheetPanel from '@/components/escandallos/RecipeTechnicalSheetPanel';
@@ -68,6 +71,61 @@ type RecipeTechBundle = {
   loading: boolean;
 };
 
+function fcValueClass(pct: number | null): string {
+  if (pct == null) return 'text-[#7E7468]';
+  if (pct > 30) return 'text-[#D32F2F]';
+  return 'text-emerald-700';
+}
+
+function lineSourceBadge(type: EscandalloLine['sourceType']): string {
+  switch (type) {
+    case 'raw':
+      return 'CRUDO';
+    case 'processed':
+      return 'ELABORADO';
+    case 'subrecipe':
+      return 'BASE';
+    default:
+      return 'MANUAL';
+  }
+}
+
+function lineBadgeTone(type: EscandalloLine['sourceType']): string {
+  switch (type) {
+    case 'raw':
+      return 'bg-[#F7F3EE] text-[#7E7468] ring-[rgba(10,9,8,0.06)]';
+    case 'processed':
+      return 'bg-violet-50 text-violet-800 ring-violet-100';
+    case 'subrecipe':
+      return 'bg-emerald-50 text-emerald-800 ring-emerald-100';
+    default:
+      return 'bg-zinc-100 text-zinc-600 ring-zinc-200';
+  }
+}
+
+function parseLineLabel(label: string): { supplier?: string; name: string } {
+  const sep = label.indexOf(' · ');
+  if (sep > 0) return { supplier: label.slice(0, sep), name: label.slice(sep + 3) };
+  return { name: label };
+}
+
+function EditorMetric({
+  label,
+  value,
+  valueClassName = 'text-[#0A0908]',
+}: {
+  label: string;
+  value: string;
+  valueClassName?: string;
+}) {
+  return (
+    <div className="min-w-0 flex-1 px-0.5 text-center">
+      <p className="text-[7px] font-bold uppercase tracking-[0.12em] text-[#7E7468]">{label}</p>
+      <p className={`mt-0.5 truncate text-[12px] font-black tabular-nums leading-none ${valueClassName}`}>{value}</p>
+    </div>
+  );
+}
+
 export default function EscandalloRecipeEditorClient({ recipeId }: { recipeId: string }) {
   const router = useRouter();
   const { localId, profileReady } = useAuth();
@@ -97,6 +155,8 @@ export default function EscandalloRecipeEditorClient({ recipeId }: { recipeId: s
   const [techBundle, setTechBundle] = useState<RecipeTechBundle>({ sheet: null, steps: [], loading: false });
   const [recipeAllergens, setRecipeAllergens] = useState<RecipeAllergenRow[]>([]);
   const [techOpen, setTechOpen] = useState(false);
+  const [notesOpen, setNotesOpen] = useState(false);
+  const [detailsOpen, setDetailsOpen] = useState(false);
   const hydratedRecipeId = useRef<string | null>(null);
 
   const rawById = useMemo(() => new Map(rawProducts.map((p) => [p.id, p])), [rawProducts]);
@@ -526,6 +586,24 @@ export default function EscandalloRecipeEditorClient({ recipeId }: { recipeId: s
     }
   };
 
+  const handleRefreshCosts = async () => {
+    if (!recipe) return;
+    setBusyId('refresh');
+    setBanner(null);
+    try {
+      await load();
+      if (!demoReadonly && localId && supabaseOk) {
+        await refreshRecipeLines(recipe.id);
+      }
+      setSuccessMsg('Costes actualizados.');
+      window.setTimeout(() => setSuccessMsg(null), 2800);
+    } catch (e: unknown) {
+      setBanner(e instanceof Error ? e.message : 'No se pudieron actualizar los costes.');
+    } finally {
+      setBusyId(null);
+    }
+  };
+
   const handleDeleteRecipe = async () => {
     if (!localId || !recipe || demoReadonly) return;
     if (!(await appConfirm('¿Eliminar esta receta y todos sus ingredientes?'))) return;
@@ -535,7 +613,7 @@ export default function EscandalloRecipeEditorClient({ recipeId }: { recipeId: s
       await deleteEscandalloRecipe(supabase, localId, recipe.id);
       clearEscandalloRecipeEditorDraft(localId, recipe.id);
       setRecipes((prev) => prev.filter((r) => r.id !== recipe.id));
-      router.push(recipe.isSubRecipe ? '/escandallos/recetas/bases' : '/escandallos/recetas');
+      router.push(recipe.isSubRecipe ? '/escandallos?bases=1' : '/escandallos?libro=1');
     } catch (e: unknown) {
       setBanner(e instanceof Error ? e.message : 'No se pudo eliminar.');
     } finally {
@@ -608,12 +686,20 @@ export default function EscandalloRecipeEditorClient({ recipeId }: { recipeId: s
     alerts.push('Base sin ingredientes');
   }
 
+  const kindLabel = recipe?.isSubRecipe ? 'BASE' : 'PLATO';
+  const statusTone =
+    fcPct != null && fcPct > 30
+      ? 'bg-[#D32F2F]/10 text-[#B91C1C] ring-[#D32F2F]/15'
+      : fcPct != null
+        ? 'bg-emerald-50 text-emerald-800 ring-emerald-100'
+        : 'bg-[#F7F3EE] text-[#7E7468] ring-[rgba(10,9,8,0.06)]';
+
   return (
-    <div className="min-h-0 h-auto space-y-5 overflow-x-hidden overflow-y-visible pb-8 max-lg:pb-[calc(1.5rem+env(safe-area-inset-bottom,0px))] lg:overflow-visible lg:pb-8">
+    <div className="min-h-0 space-y-3 overflow-x-hidden pb-[calc(8.5rem+env(safe-area-inset-bottom,0px))]">
       {demoReadonly ? (
-        <div className="flex justify-end">
-          <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-bold text-amber-900">Demo · solo lectura</span>
-        </div>
+        <span className="inline-flex rounded-full bg-amber-50 px-2.5 py-0.5 text-[10px] font-bold text-amber-900 ring-1 ring-amber-200">
+          Demo · solo lectura
+        </span>
       ) : null}
 
       {banner ? (
@@ -630,270 +716,261 @@ export default function EscandalloRecipeEditorClient({ recipeId }: { recipeId: s
       ) : (
         <>
           {/* Bloque A — cabecera */}
-          <header className="relative z-0 space-y-4 rounded-2xl border border-zinc-200/90 bg-white/95 p-4 shadow-sm ring-1 ring-zinc-100 backdrop-blur-md sm:p-5 lg:sticky lg:top-0 lg:z-20">
+          <article className="rounded-xl border border-[rgba(10,9,8,0.06)] bg-white px-2.5 py-2 shadow-[0_1px_0_rgba(10,9,8,0.04)] ring-1 ring-[rgba(10,9,8,0.04)]">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider text-zinc-500">
-                  <ChefHat className="h-3.5 w-3.5 text-[#B91C1C]" aria-hidden />
-                  {recipe.isSubRecipe ? 'Base / elaborado' : 'Plato carta'}
-                </div>
                 <input
                   value={draftRecipeName}
                   disabled={demoReadonly}
                   onChange={(e) => setDraftRecipeName(e.target.value)}
-                  className="mt-1 w-full border-0 border-b border-transparent bg-transparent text-2xl font-black tracking-tight text-zinc-900 outline-none transition placeholder:text-zinc-300 focus:border-zinc-200 sm:text-3xl"
-                  placeholder="Nombre del plato"
+                  className="w-full border-0 bg-transparent text-[15px] font-bold leading-tight tracking-tight text-[#0A0908] outline-none placeholder:text-[#7E7468]/50"
+                  placeholder="Nombre de la receta"
                 />
-                <p className="mt-1 text-xs text-zinc-500">
-                  Rendimiento y categoría de presentación: unidad en carta (ej. raciones, kg).
+                <p className="mt-0.5 text-[8px] font-semibold uppercase tracking-[0.14em] text-[#7E7468]">
+                  {kindLabel} · {draftYieldQty || recipe.yieldQty} {draftYieldLabel || recipe.yieldLabel}
                 </p>
               </div>
-              <span className="shrink-0 rounded-full bg-zinc-900 px-3 py-1 text-[10px] font-bold uppercase tracking-wide text-white">
+              <span className={`shrink-0 rounded-full px-1.5 py-0.5 text-[7px] font-bold uppercase tracking-[0.1em] ring-1 ${statusTone}`}>
                 {statusLabel}
               </span>
             </div>
 
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              <label className="block rounded-xl bg-zinc-50/80 px-3 py-2 ring-1 ring-zinc-100">
-                <span className="text-[10px] font-bold uppercase text-zinc-500">Raciones / rendimiento</span>
-                <div className="mt-1 flex gap-2">
+            <div className="mt-2 grid grid-cols-4 divide-x divide-[rgba(10,9,8,0.06)] rounded-lg bg-[#FAFAF9] py-1.5 ring-1 ring-[rgba(10,9,8,0.04)]">
+              <EditorMetric label="Coste/rac." value={formatMoneyEur(costPerYield)} />
+              {!recipe.isSubRecipe ? (
+                <EditorMetric label="PVP" value={grossLive != null && grossLive > 0 ? formatMoneyEur(grossLive) : '—'} />
+              ) : (
+                <EditorMetric label="Total" value={formatMoneyEur(totalCostLive)} />
+              )}
+              {!recipe.isSubRecipe ? (
+                <EditorMetric label="Food cost" value={fcPct != null ? `${fcPct.toFixed(1)} %` : '—'} valueClassName={fcValueClass(fcPct)} />
+              ) : (
+                <EditorMetric label="Rendim." value={rendimientoPct != null ? `${rendimientoPct.toFixed(1)} %` : '—'} />
+              )}
+              {!recipe.isSubRecipe ? (
+                <EditorMetric label="Margen" value={marginPct != null ? `${marginPct} %` : '—'} valueClassName={fcPct != null && fcPct <= 30 ? 'text-emerald-700' : 'text-[#0A0908]'} />
+              ) : (
+                <EditorMetric label="Entrada" value={`${pesoEntradaKg.toFixed(2)} kg`} />
+              )}
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setDetailsOpen((v) => !v)}
+              className="flex w-full items-center gap-2 rounded-lg py-1 text-left transition hover:bg-[#FAFAF9]/80"
+            >
+              <span className="shrink-0 text-[9px] font-bold uppercase tracking-[0.12em] text-[#7E7468]">
+                Precio y rendimiento
+              </span>
+              {!detailsOpen ? (
+                <span className="min-w-0 flex-1 truncate text-[10px] font-medium tabular-nums text-[#0A0908]">
+                  {recipe.isSubRecipe ? (
+                    <>
+                      {draftYieldQty || recipe.yieldQty} {draftYieldLabel || recipe.yieldLabel}
+                      {finalWeightLive != null && finalWeightLive > 0
+                        ? ` · ${finalWeightLive} ${draftFinalWeightUnit}`
+                        : ''}
+                    </>
+                  ) : (
+                    <>
+                      {draftYieldQty || recipe.yieldQty} {draftYieldLabel || recipe.yieldLabel}
+                      {grossLive != null && grossLive > 0 ? ` · ${formatMoneyEur(grossLive)}` : ' · sin PVP'}
+                      {grossLive != null && grossLive > 0 ? ` · IVA ${draftSaleVat || '10'}%` : ''}
+                      {draftPosArticleCode.trim() ? ` · TPV ${draftPosArticleCode.trim()}` : ''}
+                    </>
+                  )}
+                </span>
+              ) : (
+                <span className="min-w-0 flex-1" />
+              )}
+              <ChevronDown
+                className={`h-3.5 w-3.5 shrink-0 text-[#7E7468] transition ${detailsOpen ? 'rotate-180' : ''}`}
+              />
+            </button>
+            {detailsOpen ? (
+              <div className="mt-1 space-y-1.5 border-t border-[rgba(10,9,8,0.06)] pt-2">
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
+                  <span className="w-full text-[8px] font-bold uppercase tracking-[0.1em] text-[#7E7468] sm:w-auto sm:mr-0.5">
+                    Rendimiento
+                  </span>
                   <input
                     value={draftYieldQty}
                     disabled={demoReadonly}
                     onChange={(e) => setDraftYieldQty(e.target.value)}
-                    className="w-20 rounded-lg border border-zinc-200 bg-white px-2 py-1.5 text-sm font-semibold tabular-nums"
+                    className="h-8 w-12 rounded-lg border border-[rgba(10,9,8,0.08)] bg-[#FAFAF9] px-1.5 text-center text-[13px] font-black tabular-nums text-[#0A0908] outline-none focus:border-[#D32F2F]/35 focus:ring-1 focus:ring-[#D32F2F]/15"
                     inputMode="decimal"
+                    aria-label="Cantidad de rendimiento"
                   />
                   <input
                     value={draftYieldLabel}
                     disabled={demoReadonly}
                     onChange={(e) => setDraftYieldLabel(e.target.value)}
-                    className="min-w-0 flex-1 rounded-lg border border-zinc-200 bg-white px-2 py-1.5 text-sm"
-                    placeholder="raciones, kg…"
+                    className="h-8 min-w-[4.5rem] flex-1 rounded-lg border border-[rgba(10,9,8,0.08)] bg-[#FAFAF9] px-2 text-[12px] font-semibold text-[#0A0908] outline-none focus:border-[#D32F2F]/35 focus:ring-1 focus:ring-[#D32F2F]/15 sm:max-w-[7rem]"
+                    placeholder="raciones"
+                    aria-label="Unidad de rendimiento"
                   />
                 </div>
-              </label>
-              {recipe.isSubRecipe ? (
-                <label className="block rounded-xl bg-zinc-50/80 px-3 py-2 ring-1 ring-zinc-100">
-                  <span className="text-[10px] font-bold uppercase text-zinc-500">Peso final obtenido</span>
-                  <div className="mt-1 flex gap-2">
+
+                {recipe.isSubRecipe ? (
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
+                    <span className="w-full text-[8px] font-bold uppercase tracking-[0.1em] text-[#7E7468] sm:w-auto">
+                      Peso final
+                    </span>
                     <input
                       value={draftFinalWeightQty}
                       disabled={demoReadonly}
                       onChange={(e) => setDraftFinalWeightQty(e.target.value)}
-                      className="w-24 rounded-lg border border-zinc-200 bg-white px-2 py-1.5 text-sm font-semibold tabular-nums"
+                      className="h-8 w-16 rounded-lg border border-[rgba(10,9,8,0.08)] bg-[#FAFAF9] px-1.5 text-center text-[13px] font-black tabular-nums text-[#0A0908] outline-none focus:border-[#D32F2F]/35 focus:ring-1 focus:ring-[#D32F2F]/15"
                       inputMode="decimal"
-                      placeholder="kg / L"
+                      placeholder="0"
+                      aria-label="Peso final"
                     />
                     <select
                       value={draftFinalWeightUnit}
                       disabled={demoReadonly}
                       onChange={(e) => setDraftFinalWeightUnit(e.target.value === 'l' ? 'l' : 'kg')}
-                      className="rounded-lg border border-zinc-200 bg-white px-2 py-1.5 text-sm"
+                      className="h-8 rounded-lg border border-[rgba(10,9,8,0.08)] bg-[#FAFAF9] px-2 text-[11px] font-bold uppercase text-[#0A0908] outline-none focus:border-[#D32F2F]/35"
+                      aria-label="Unidad peso final"
                     >
                       <option value="kg">kg</option>
                       <option value="l">L</option>
                     </select>
+                    {rendimientoPct != null ? (
+                      <span className="text-[10px] font-semibold tabular-nums text-[#7E7468]">
+                        {rendimientoPct.toFixed(1)}% rend.
+                      </span>
+                    ) : null}
                   </div>
-                  {pesoEntradaKg > 0 && finalWeightLive != null && finalWeightLive > pesoEntradaKg ? (
-                    <p className="mt-1 text-[11px] font-medium text-amber-700">
-                      Aviso: el peso final supera el peso de entrada.
-                    </p>
-                  ) : null}
-                </label>
-              ) : null}
-              {!recipe.isSubRecipe ? (
-                <label className="block rounded-xl bg-zinc-50/80 px-3 py-2 ring-1 ring-zinc-100">
-                  <span className="text-[10px] font-bold uppercase text-zinc-500">PVP (€ IVA inc.)</span>
-                  <input
-                    value={draftSaleGross}
-                    disabled={demoReadonly}
-                    onChange={(e) => setDraftSaleGross(e.target.value)}
-                    className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-2 py-1.5 text-sm font-semibold tabular-nums"
-                    inputMode="decimal"
-                  />
-                </label>
-              ) : null}
-              {!recipe.isSubRecipe ? (
-                <label className="block rounded-xl bg-zinc-50/80 px-3 py-2 ring-1 ring-zinc-100">
-                  <span className="text-[10px] font-bold uppercase text-zinc-500">IVA %</span>
-                  <input
-                    value={draftSaleVat}
-                    disabled={demoReadonly}
-                    onChange={(e) => setDraftSaleVat(e.target.value)}
-                    className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-2 py-1.5 text-sm tabular-nums"
-                    inputMode="decimal"
-                  />
-                </label>
-              ) : null}
-              <div className="rounded-xl bg-gradient-to-br from-[#B91C1C]/12 via-white to-white px-3 py-2 ring-1 ring-[#D32F2F]/15">
-                <span className="text-[10px] font-bold uppercase text-zinc-500">
-                  Coste / {recipe.isSubRecipe && finalWeightLive != null && finalWeightLive > 0 ? draftFinalWeightUnit : draftYieldLabel || recipe.yieldLabel}
-                </span>
-                <p className="mt-1 text-xl font-black tabular-nums text-zinc-900">{formatMoneyEur(costPerYield)}</p>
-                <p className="text-[11px] text-zinc-500">Total batch {formatMoneyEur(totalCostLive)}</p>
-              </div>
-            </div>
+                ) : null}
 
-            {!recipe.isSubRecipe ? (
-              <div className="grid gap-3 sm:grid-cols-3">
-                <div className="rounded-xl border border-zinc-100 bg-white px-3 py-2">
-                  <p className="text-[10px] font-bold uppercase text-zinc-500">Food cost</p>
-                  <p className={`text-lg font-black tabular-nums ${fcHint.className}`}>
-                    {fcPct != null ? `${fcPct.toFixed(1)} %` : '—'}
-                  </p>
-                </div>
-                <div className="rounded-xl border border-zinc-100 bg-white px-3 py-2">
-                  <p className="text-[10px] font-bold uppercase text-zinc-500">Margen bruto</p>
-                  <p className="text-lg font-black tabular-nums text-zinc-900">
-                    {marginPct != null ? `${marginPct} %` : '—'}
-                  </p>
-                </div>
-                <label className="block rounded-xl border border-zinc-100 bg-white px-3 py-2">
-                  <span className="text-[10px] font-bold uppercase text-zinc-500">Código TPV</span>
-                  <input
-                    value={draftPosArticleCode}
-                    disabled={demoReadonly}
-                    onChange={(e) => setDraftPosArticleCode(e.target.value)}
-                    className="mt-1 w-full rounded-lg border border-zinc-200 bg-zinc-50/50 px-2 py-1.5 font-mono text-sm"
-                    placeholder="00042"
-                  />
-                </label>
+                {!recipe.isSubRecipe ? (
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
+                    <span className="w-full text-[8px] font-bold uppercase tracking-[0.1em] text-[#7E7468] sm:w-auto">
+                      Carta
+                    </span>
+                    <div className="flex items-center gap-1">
+                      <span className="text-[11px] font-semibold text-[#7E7468]">€</span>
+                      <input
+                        value={draftSaleGross}
+                        disabled={demoReadonly}
+                        onChange={(e) => setDraftSaleGross(e.target.value)}
+                        className="h-8 w-[4.5rem] rounded-lg border border-[rgba(10,9,8,0.08)] bg-[#FAFAF9] px-1.5 text-[13px] font-black tabular-nums text-[#0A0908] outline-none focus:border-[#D32F2F]/35 focus:ring-1 focus:ring-[#D32F2F]/15"
+                        inputMode="decimal"
+                        placeholder="PVP"
+                        aria-label="PVP con IVA"
+                      />
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <span className="text-[9px] font-bold uppercase text-[#7E7468]">IVA</span>
+                      <input
+                        value={draftSaleVat}
+                        disabled={demoReadonly}
+                        onChange={(e) => setDraftSaleVat(e.target.value)}
+                        className="h-8 w-11 rounded-lg border border-[rgba(10,9,8,0.08)] bg-[#FAFAF9] px-1 text-center text-[12px] font-bold tabular-nums text-[#0A0908] outline-none focus:border-[#D32F2F]/35 focus:ring-1 focus:ring-[#D32F2F]/15"
+                        inputMode="decimal"
+                        aria-label="IVA porcentaje"
+                      />
+                      <span className="text-[11px] text-[#7E7468]">%</span>
+                    </div>
+                    <div className="flex min-w-0 flex-1 items-center gap-1 sm:max-w-[9rem]">
+                      <span className="shrink-0 text-[9px] font-bold uppercase text-[#7E7468]">TPV</span>
+                      <input
+                        value={draftPosArticleCode}
+                        disabled={demoReadonly}
+                        onChange={(e) => setDraftPosArticleCode(e.target.value)}
+                        className="h-8 min-w-0 flex-1 rounded-lg border border-[rgba(10,9,8,0.08)] bg-[#FAFAF9] px-2 font-mono text-[11px] text-[#0A0908] outline-none focus:border-[#D32F2F]/35 focus:ring-1 focus:ring-[#D32F2F]/15"
+                        placeholder="00042"
+                        aria-label="Código TPV"
+                      />
+                    </div>
+                  </div>
+                ) : null}
+
+                {recipe.isSubRecipe && pesoEntradaKg > 0 && finalWeightLive != null && finalWeightLive > pesoEntradaKg ? (
+                  <p className="text-[9px] font-medium text-amber-700">El peso final supera la entrada.</p>
+                ) : null}
+                {recipe.isSubRecipe && (finalWeightLive == null || finalWeightLive <= 0) ? (
+                  <p className="text-[9px] text-amber-700">Indica peso final para coste preciso.</p>
+                ) : null}
               </div>
             ) : null}
-            {recipe.isSubRecipe ? (
-              <div className="grid gap-3 sm:grid-cols-3">
-                <div className="rounded-xl border border-zinc-100 bg-white px-3 py-2">
-                  <p className="text-[10px] font-bold uppercase text-zinc-500">Peso entrada</p>
-                  <p className="text-lg font-black tabular-nums text-zinc-900">{pesoEntradaKg.toFixed(3)} kg</p>
-                </div>
-                <div className="rounded-xl border border-zinc-100 bg-white px-3 py-2">
-                  <p className="text-[10px] font-bold uppercase text-zinc-500">Peso final</p>
-                  <p className="text-lg font-black tabular-nums text-zinc-900">
-                    {finalWeightLive != null && finalWeightLive > 0 ? `${finalWeightLive.toFixed(3)} ${draftFinalWeightUnit === 'l' ? 'L' : 'kg'}` : '—'}
-                  </p>
-                </div>
-                <div className="rounded-xl border border-zinc-100 bg-white px-3 py-2">
-                  <p className="text-[10px] font-bold uppercase text-zinc-500">Rendimiento</p>
-                  <p className="text-lg font-black tabular-nums text-zinc-900">
-                    {rendimientoPct != null ? `${rendimientoPct.toFixed(2)} %` : '—'}
-                  </p>
-                </div>
-              </div>
-            ) : null}
-            {recipe.isSubRecipe && (finalWeightLive == null || finalWeightLive <= 0) ? (
-              <p className="text-xs text-amber-700">Introduce el peso final tras cocción para un coste mas preciso.</p>
-            ) : null}
 
-            <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
-              <button
-                type="button"
-                disabled={busyId === recipe.id || demoReadonly}
-                onClick={() => void handleSaveRecipeMeta()}
-                className="min-h-[48px] w-full rounded-xl bg-zinc-900 px-4 py-3 text-sm font-bold text-white shadow-sm disabled:opacity-50 sm:w-auto sm:py-2"
-              >
-                {busyId === recipe.id ? 'Guardando…' : 'Guardar cabecera'}
-              </button>
-              <button
-                type="button"
-                disabled={busyId === recipe.id || demoReadonly}
-                onClick={() => void handleDeleteRecipe()}
-                className="min-h-[44px] w-full rounded-xl border border-red-200 bg-red-50 py-2.5 text-sm font-semibold text-red-800 disabled:opacity-50 sm:w-auto"
-              >
-                Eliminar receta
-              </button>
-            </div>
-          </header>
+          </article>
 
-          {/* Bloque B — líneas existentes */}
-          <section className="rounded-2xl border border-zinc-200/90 bg-white p-4 shadow-sm ring-1 ring-zinc-100 sm:p-5">
-            <div className="flex items-center justify-between gap-2">
-              <h2 className="text-sm font-black uppercase tracking-wide text-zinc-800">Ingredientes</h2>
-              <span className="text-xs tabular-nums text-zinc-500">{sortedLines.length} líneas</span>
+          <section className="rounded-xl border border-[rgba(10,9,8,0.06)] bg-white px-2.5 py-2 ring-1 ring-[rgba(10,9,8,0.04)]">
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <h2 className="text-[11px] font-black uppercase tracking-wide text-[#0A0908]">Ingredientes</h2>
+              <span className="text-[10px] font-semibold tabular-nums text-[#7E7468]">{sortedLines.length}</span>
             </div>
             {sortedLines.length === 0 ? (
-              <p className="mt-3 text-sm text-zinc-500">Aún no hay líneas. Usa el formulario inferior.</p>
+              <p className="text-[12px] text-[#7E7468]">Sin ingredientes. Busca abajo para añadir el primero.</p>
             ) : (
-              <ul className="mt-3 space-y-1.5">
+              <ul className="space-y-1.5">
                 {sortedLines.map((line, idx) => {
                   const unitEur = lineUnitPriceEur(line, rawById, processedById, priceInner);
                   const lineCost = Math.round(line.qty * unitEur * 100) / 100;
-                  const src =
-                    line.sourceType === 'raw'
-                      ? 'Crudo'
-                      : line.sourceType === 'processed'
-                        ? 'Elaborado'
-                        : line.sourceType === 'subrecipe'
-                          ? 'Sub-receta'
-                          : 'Manual';
-                  const subLines = line.sourceType === 'subrecipe' && line.subRecipeId
-                    ? (linesByRecipe[line.subRecipeId] ?? [])
-                    : [];
+                  const parsed = parseLineLabel(line.label);
+                  const subLines =
+                    line.sourceType === 'subrecipe' && line.subRecipeId
+                      ? (linesByRecipe[line.subRecipeId] ?? [])
+                      : [];
                   return (
                     <li
                       key={line.id}
-                      className="min-h-0 overflow-visible rounded-xl border border-zinc-100 bg-zinc-50/60 px-3 py-3 text-sm"
+                      className="rounded-xl border border-[rgba(10,9,8,0.06)] bg-[#FAFAF9]/80 px-2.5 py-2"
                     >
-                      <div className="flex flex-col gap-2">
-                        <div className="flex items-start gap-2">
-                          <span className="mt-0.5 shrink-0 rounded-md bg-white px-1.5 py-0.5 text-[10px] font-bold uppercase text-zinc-500 ring-1 ring-zinc-200">
-                            {src}
-                          </span>
-                          <span className="min-w-0 flex-1 break-words font-semibold leading-snug text-zinc-900">{line.label}</span>
-                        </div>
-                        <div className="flex flex-col gap-1.5 sm:flex-row sm:items-baseline sm:justify-between sm:gap-3">
-                          <p className="min-w-0 flex-1 text-[13px] leading-snug text-zinc-600">
-                            <span className="font-semibold tabular-nums text-zinc-800">
-                              {line.qty} {line.unit}
-                            </span>
-                            <span className="mx-1.5 text-zinc-300">·</span>
-                            <span className="tabular-nums">{formatUnitPriceEur(unitEur, line.unit)}</span>
+                      <div className="flex items-start gap-2">
+                        <span className={`mt-0.5 shrink-0 rounded-full px-1.5 py-0.5 text-[7px] font-bold uppercase tracking-[0.1em] ring-1 ${lineBadgeTone(line.sourceType)}`}>
+                          {lineSourceBadge(line.sourceType)}
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <p className="line-clamp-2 text-[12px] font-bold leading-tight text-[#0A0908]">{parsed.name}</p>
+                          {parsed.supplier ? (
+                            <p className="mt-0.5 truncate text-[10px] text-[#7E7468]">{parsed.supplier}</p>
+                          ) : null}
+                          <p className="mt-0.5 text-[10px] tabular-nums text-[#7E7468]">
+                            {line.qty} {line.unit} · {formatUnitPriceEur(unitEur, line.unit)}
                           </p>
-                          <p className="shrink-0 text-right text-lg font-black tabular-nums text-zinc-900">{formatMoneyEur(lineCost)}</p>
                         </div>
-                        <div className="flex justify-end gap-1 border-t border-zinc-200/80 pt-2">
-                          <button
-                            type="button"
-                            disabled={idx === 0 || busyId === 'reorder' || demoReadonly}
-                            onClick={() => void swapLineOrder(idx, idx - 1)}
-                            className="min-h-[40px] min-w-[40px] rounded-lg border border-zinc-200/90 p-2 text-zinc-600 hover:bg-white disabled:opacity-30 sm:min-h-0 sm:min-w-0 sm:p-1.5"
-                            aria-label="Subir"
-                          >
-                            <ArrowUp className="h-4 w-4" />
-                          </button>
-                          <button
-                            type="button"
-                            disabled={idx >= sortedLines.length - 1 || busyId === 'reorder' || demoReadonly}
-                            onClick={() => void swapLineOrder(idx, idx + 1)}
-                            className="min-h-[40px] min-w-[40px] rounded-lg border border-zinc-200/90 p-2 text-zinc-600 hover:bg-white disabled:opacity-30 sm:min-h-0 sm:min-w-0 sm:p-1.5"
-                            aria-label="Bajar"
-                          >
-                            <ArrowDown className="h-4 w-4" />
-                          </button>
-                          <button
-                            type="button"
-                            disabled={busyId === line.id || demoReadonly}
-                            onClick={() => void handleDeleteLine(line.id)}
-                            className="min-h-[40px] min-w-[40px] rounded-lg p-2 text-red-700 hover:bg-red-50 disabled:opacity-40 sm:min-h-0 sm:min-w-0 sm:p-1.5"
-                            aria-label="Eliminar"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
-                        </div>
+                        <p className="shrink-0 text-[14px] font-black tabular-nums text-[#0A0908]">{formatMoneyEur(lineCost)}</p>
+                      </div>
+                      <div className="mt-2 flex justify-end gap-0.5 border-t border-[rgba(10,9,8,0.06)] pt-1.5">
+                        <button
+                          type="button"
+                          disabled={idx === 0 || busyId === 'reorder' || demoReadonly}
+                          onClick={() => void swapLineOrder(idx, idx - 1)}
+                          className="grid h-7 w-7 place-items-center rounded-md text-[#7E7468] hover:bg-white disabled:opacity-25"
+                          aria-label="Subir"
+                        >
+                          <ArrowUp className="h-3.5 w-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          disabled={idx >= sortedLines.length - 1 || busyId === 'reorder' || demoReadonly}
+                          onClick={() => void swapLineOrder(idx, idx + 1)}
+                          className="grid h-7 w-7 place-items-center rounded-md text-[#7E7468] hover:bg-white disabled:opacity-25"
+                          aria-label="Bajar"
+                        >
+                          <ArrowDown className="h-3.5 w-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          disabled={busyId === line.id || demoReadonly}
+                          onClick={() => void handleDeleteLine(line.id)}
+                          className="grid h-7 w-7 place-items-center rounded-md text-[#D32F2F] hover:bg-[#D32F2F]/10 disabled:opacity-40"
+                          aria-label="Eliminar"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
                       </div>
                       {subLines.length > 0 ? (
-                        <div className="mt-3 border-t border-dashed border-zinc-200/90 pt-2 text-[11px] leading-relaxed text-zinc-500">
-                          <p className="font-semibold text-zinc-600">Desglose base</p>
-                          <ul className="mt-1.5 space-y-1.5">
-                            {subLines.map((sl) => (
-                              <li key={sl.id} className="break-words pl-0.5 tabular-nums">
-                                <span className="font-medium text-zinc-600">{sl.label}</span>
-                                <span className="text-zinc-400"> · </span>
-                                {sl.qty} {sl.unit}
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
+                        <ul className="mt-2 space-y-0.5 border-t border-dashed border-[rgba(10,9,8,0.08)] pt-1.5 text-[10px] text-[#7E7468]">
+                          {subLines.map((sl) => (
+                            <li key={sl.id} className="tabular-nums">
+                              {sl.label} · {sl.qty} {sl.unit}
+                            </li>
+                          ))}
+                        </ul>
                       ) : null}
                     </li>
                   );
@@ -902,11 +979,11 @@ export default function EscandalloRecipeEditorClient({ recipeId }: { recipeId: s
             )}
           </section>
 
-          {/* Añadir filas */}
-          <section className="rounded-2xl border border-zinc-200/90 bg-gradient-to-b from-zinc-50/80 to-white p-4 ring-1 ring-zinc-100 sm:p-5">
-            <h2 className="text-sm font-black uppercase tracking-wide text-zinc-700">Añadir al escandallo</h2>
-            <div className="mt-3">
+          <section className="rounded-xl border border-[rgba(10,9,8,0.06)] bg-white px-2.5 py-2.5 ring-1 ring-[rgba(10,9,8,0.04)]">
+            <h2 className="text-[11px] font-black uppercase tracking-wide text-[#0A0908]">Añadir ingrediente</h2>
+            <div className="mt-2">
               <EscandalloIngredientDraftEditor
+                variant="editor"
                 drafts={ingredientDrafts}
                 onChange={setIngredientDrafts}
                 sortedRaw={sortedRawProducts}
@@ -918,94 +995,127 @@ export default function EscandalloRecipeEditorClient({ recipeId }: { recipeId: s
                 rawById={rawById}
                 processedById={processedById}
                 recipesById={recipesById}
+                addButtonLabel="Otra línea pendiente"
               />
             </div>
             <button
               type="button"
               disabled={busyId !== null || demoReadonly}
               onClick={() => void handleAddLinesBatch()}
-              className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-[#D32F2F] py-3 text-sm font-black text-white shadow-md transition hover:bg-[#B91C1C] disabled:opacity-50"
+              className="mt-3 flex h-10 w-full items-center justify-center gap-1.5 rounded-xl bg-[#D32F2F] text-[12px] font-bold text-white transition hover:bg-[#B91C1C] active:scale-[0.99] disabled:opacity-50"
             >
               <Plus className="h-4 w-4 shrink-0" aria-hidden />
-              Añadir ingredientes a la receta
+              Añadir a la receta
             </button>
           </section>
 
-          <details className="rounded-2xl border border-zinc-200 bg-white ring-1 ring-zinc-100">
-            <summary className="cursor-pointer select-none px-4 py-3 text-sm font-semibold text-zinc-700 hover:bg-zinc-50">
-              <span className="inline-flex items-center gap-2">
-                <ChevronDown className="h-4 w-4 opacity-60" aria-hidden />
-                Notas internas
-              </span>
-            </summary>
-            <div className="border-t border-zinc-100 px-4 pb-4 pt-2">
-              <textarea
-                value={draftRecipeNotes}
-                disabled={demoReadonly}
-                onChange={(e) => setDraftRecipeNotes(e.target.value)}
-                rows={2}
-                className="w-full rounded-xl border border-zinc-200 px-3 py-2 text-sm"
-                placeholder="Opcional"
-              />
-            </div>
-          </details>
+          <div className="rounded-xl border border-[rgba(10,9,8,0.06)] bg-white ring-1 ring-[rgba(10,9,8,0.04)]">
+            <button
+              type="button"
+              onClick={() => setNotesOpen((v) => !v)}
+              className="flex w-full items-center gap-2 px-3 py-2.5 text-left"
+            >
+              <StickyNote className="h-4 w-4 shrink-0 text-[#7E7468]" />
+              <span className="flex-1 text-[11px] font-bold text-[#0A0908]">Notas internas</span>
+              <ChevronDown className={`h-4 w-4 text-[#7E7468] transition ${notesOpen ? 'rotate-180' : ''}`} />
+            </button>
+            {notesOpen ? (
+              <div className="border-t border-[rgba(10,9,8,0.06)] px-3 pb-3 pt-2">
+                <textarea
+                  value={draftRecipeNotes}
+                  disabled={demoReadonly}
+                  onChange={(e) => setDraftRecipeNotes(e.target.value)}
+                  rows={3}
+                  className="w-full resize-none rounded-lg border border-[rgba(10,9,8,0.08)] bg-[#FAFAF9] px-2.5 py-2 text-[12px] text-[#0A0908] outline-none focus:border-[#D32F2F]/35 focus:ring-2 focus:ring-[#D32F2F]/10"
+                  placeholder="Notas de cocina, mise en place, avisos…"
+                />
+              </div>
+            ) : null}
+          </div>
 
-          <button
-            type="button"
-            onClick={() => setTechOpen((v) => !v)}
-            className="flex w-full items-center justify-between rounded-xl border border-zinc-200 bg-white px-4 py-3 text-left text-sm font-semibold text-zinc-800 ring-1 ring-zinc-100 hover:bg-zinc-50"
-          >
-            Ficha técnica y alérgenos
-            <ChevronDown className={`h-4 w-4 transition ${techOpen ? 'rotate-180' : ''}`} />
-          </button>
-          {techOpen && recipe ? (
-            <RecipeTechnicalSheetPanel
-              recipe={recipe}
-              lines={lines}
-              sheet={techBundle.sheet}
-              steps={techBundle.steps}
-              recipeAllergens={recipeAllergens}
-              loading={techBundle.loading}
-              saving={busyId === `tech-${recipeId}`}
-              onCreate={() => handleCreateTechnicalSheet()}
-              onSave={(patch, drafts) => {
-                if (!techBundle.sheet) return Promise.resolve();
-                return handleSaveTechnicalSheet(techBundle.sheet.id, patch, drafts);
-              }}
-            />
-          ) : null}
+          <div className="rounded-xl border border-[rgba(10,9,8,0.06)] bg-white ring-1 ring-[rgba(10,9,8,0.04)]">
+            <button
+              type="button"
+              onClick={() => setTechOpen((v) => !v)}
+              className="flex w-full items-center gap-2 px-3 py-2.5 text-left"
+            >
+              <FileText className="h-4 w-4 shrink-0 text-[#7E7468]" />
+              <span className="flex-1 text-[11px] font-bold text-[#0A0908]">Ficha técnica y alérgenos</span>
+              {recipeAllergens.length > 0 ? (
+                <span className="rounded-full bg-[#F7F3EE] px-1.5 py-0.5 text-[9px] font-bold text-[#7E7468]">
+                  {recipeAllergens.length}
+                </span>
+              ) : null}
+              <ChevronDown className={`h-4 w-4 shrink-0 text-[#7E7468] transition ${techOpen ? 'rotate-180' : ''}`} />
+            </button>
+            {techOpen && recipe ? (
+              <div className="border-t border-[rgba(10,9,8,0.06)] px-2 pb-2 pt-1">
+                <RecipeTechnicalSheetPanel
+                  recipe={recipe}
+                  lines={lines}
+                  sheet={techBundle.sheet}
+                  steps={techBundle.steps}
+                  recipeAllergens={recipeAllergens}
+                  loading={techBundle.loading}
+                  saving={busyId === `tech-${recipeId}`}
+                  onCreate={() => handleCreateTechnicalSheet()}
+                  onSave={(patch, drafts) => {
+                    if (!techBundle.sheet) return Promise.resolve();
+                    return handleSaveTechnicalSheet(techBundle.sheet.id, patch, drafts);
+                  }}
+                />
+              </div>
+            ) : null}
+          </div>
 
-          {/* Bloque D — móvil: en flujo (un solo scroll); lg: sticky cabecera sigue siendo la de arriba */}
-          <div className="relative z-0 mt-1 rounded-2xl border border-zinc-200 bg-white/95 px-4 py-3 shadow-sm backdrop-blur-md max-lg:shadow-[0_-2px_16px_rgba(0,0,0,0.06)] lg:mt-0 lg:pb-3">
-            <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-3 text-sm text-zinc-800 sm:text-sm">
-              <div className="flex flex-wrap gap-x-4 gap-y-1 tabular-nums text-zinc-700">
-                <span>
-                  <span className="text-zinc-500">Coste total</span>{' '}
-                  <strong className="text-zinc-900">{formatMoneyEur(totalCostLive)}</strong>
-                </span>
-                <span>
-                  <span className="text-zinc-500">/ {draftYieldLabel || recipe.yieldLabel}</span>{' '}
-                  <strong className="text-zinc-900">{formatMoneyEur(costPerYield)}</strong>
-                </span>
-                {!recipe.isSubRecipe ? (
-                  <>
-                    <span>
-                      <span className="text-zinc-500">Food cost</span>{' '}
-                      <strong className={fcHint.className}>{fcPct != null ? `${fcPct.toFixed(1)} %` : '—'}</strong>
-                    </span>
-                    <span>
-                      <span className="text-zinc-500">Margen</span>{' '}
-                      <strong>{marginPct != null ? `${marginPct} %` : '—'}</strong>
-                    </span>
-                  </>
-                ) : null}
-                <span className="text-zinc-500">{sortedLines.length} ingredientes</span>
+          <div className="fixed bottom-0 left-0 right-0 z-30 border-t border-[rgba(10,9,8,0.08)] bg-white/95 px-3 py-2.5 shadow-[0_-6px_24px_rgba(10,9,8,0.1)] backdrop-blur-md max-lg:pb-[calc(0.65rem+env(safe-area-inset-bottom,0px))]">
+            <div className="mx-auto max-w-lg">
+              <div className="grid grid-cols-4 gap-1 rounded-lg bg-[#FAFAF9] py-1.5 ring-1 ring-[rgba(10,9,8,0.04)]">
+                <EditorMetric label="Coste" value={formatMoneyEur(totalCostLive)} />
+                <EditorMetric
+                  label="Food cost"
+                  value={!recipe.isSubRecipe && fcPct != null ? `${fcPct.toFixed(1)}%` : '—'}
+                  valueClassName={fcValueClass(fcPct)}
+                />
+                <EditorMetric
+                  label="Margen"
+                  value={marginPct != null ? `${marginPct}%` : '—'}
+                  valueClassName={fcPct != null && fcPct <= 30 ? 'text-emerald-700' : 'text-[#0A0908]'}
+                />
+                <EditorMetric label="Ing." value={String(sortedLines.length)} />
               </div>
               {alerts.length > 0 ? (
-                <span className="text-[11px] font-semibold text-amber-800">{alerts.slice(0, 2).join(' · ')}</span>
-              ) : (
-                <span className="text-[11px] font-semibold text-emerald-700">Listo para carta</span>
-              )}
+                <p className="mt-1.5 truncate text-center text-[9px] font-semibold text-amber-800">{alerts.slice(0, 2).join(' · ')}</p>
+              ) : null}
+              <div className="mt-2 grid grid-cols-3 gap-1.5">
+                <button
+                  type="button"
+                  disabled={busyId === recipe.id || demoReadonly}
+                  onClick={() => void handleSaveRecipeMeta()}
+                  className="col-span-3 inline-flex h-10 items-center justify-center gap-1.5 rounded-xl bg-[#D32F2F] text-[12px] font-bold text-white transition hover:bg-[#B91C1C] disabled:opacity-50"
+                >
+                  <Save className="h-4 w-4" />
+                  {busyId === recipe.id ? 'Guardando…' : 'Guardar cambios'}
+                </button>
+                <button
+                  type="button"
+                  disabled={busyId === 'refresh' || demoReadonly}
+                  onClick={() => void handleRefreshCosts()}
+                  className="inline-flex h-9 items-center justify-center gap-1 rounded-lg border border-[rgba(10,9,8,0.08)] bg-white text-[10px] font-semibold text-[#0A0908]"
+                >
+                  <RefreshCw className={`h-3.5 w-3.5 ${busyId === 'refresh' ? 'animate-spin' : ''}`} />
+                  Actualizar
+                </button>
+                <button
+                  type="button"
+                  disabled={busyId === recipe.id || demoReadonly}
+                  onClick={() => void handleDeleteRecipe()}
+                  className="col-span-2 inline-flex h-9 items-center justify-center gap-1 rounded-lg border border-[#D32F2F]/20 bg-[#D32F2F]/5 text-[10px] font-semibold text-[#B91C1C]"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                  Eliminar receta
+                </button>
+              </div>
             </div>
           </div>
 

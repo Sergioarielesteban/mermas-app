@@ -1,5 +1,6 @@
-import EscandallosBasesLabClient from '@/components/escandallos/EscandallosBasesLabClient';
+import { redirect } from 'next/navigation';
 
-export default function EscandallosBasesPage() {
-  return <EscandallosBasesLabClient />;
+/** Bases y elaboraciones: sección en /escandallos. */
+export default function EscandallosBasesRedirectPage() {
+  redirect('/escandallos?bases=1');
 }
