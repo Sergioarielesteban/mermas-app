@@ -92,7 +92,7 @@ export async function GET() {
     ok = true;
   } catch (err) {
     ok = false;
-    error = err instanceof Error ? err.message : String(err);
+    error = err instanceof Error ? `${err.message} | ${err.stack}` : String(err);
   }
 
   return Response.json({
