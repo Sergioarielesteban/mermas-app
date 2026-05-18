@@ -6,7 +6,7 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { logSecurityEvent } from '@/lib/server/security-log';
 
-const DEFAULT_MODEL = process.env.ASSISTANT_GEMINI_MODEL?.trim() || 'gemini-2.5-flash-preview-04-17';
+const DEFAULT_MODEL = process.env.ASSISTANT_GEMINI_MODEL?.trim() || 'gemini-2.5-flash-preview-05-20';
 
 const BASE_SYSTEM = `Eres el asistente operativo de Chef One, un sistema de gestión para restaurantes.
 Tienes acceso al contexto operativo del restaurante inyectado en JSON. Ese JSON contiene datos reales de Supabase.
