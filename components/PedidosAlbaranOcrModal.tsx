@@ -4,6 +4,12 @@ import React from 'react';
 import { ScanLine, X } from 'lucide-react';
 import { useAuth } from '@/components/AuthProvider';
 import { getSupabaseClient } from '@/lib/supabase-client';
+import {
+  insertDeliveryNote,
+  insertDeliveryNoteOcrRun,
+  updateDeliveryNote,
+} from '@/lib/delivery-notes-supabase';
+import { uploadDeliveryNoteOriginal } from '@/lib/delivery-notes-storage';
 import { compressImageFileToJpeg, runAlbaranOcr } from '@/lib/pedidos-albaran-ocr';
 import { uploadPedidoAlbaranAttachment } from '@/lib/pedidos-albaran-storage';
 import { buildAlbaranSuggestionsFromOcr, type AlbaranOcrLineSuggestion } from '@/lib/pedidos-albaran-suggest';
@@ -25,20 +31,24 @@ export default function PedidosAlbaranOcrModal({ order, open, onClose, onApplied
   const [error, setError] = React.useState<string | null>(null);
   const [ocrText, setOcrText] = React.useState('');
   const [jpegBlob, setJpegBlob] = React.useState<Blob | null>(null);
+  const [saveToDeliveryNotes, setSaveToDeliveryNotes] = React.useState(true);
   const [suggestions, setSuggestions] = React.useState<AlbaranOcrLineSuggestion[]>([]);
   const [applyIds, setApplyIds] = React.useState<Record<string, boolean>>({});
 
   React.useEffect(() => {
     if (!open) {
-      setSavePhoto(false);
-      setBusy(false);
-      setPhase(null);
-      setError(null);
-      setOcrText('');
-      setJpegBlob(null);
-      setSuggestions([]);
-      setApplyIds({});
-      if (fileRef.current) fileRef.current.value = '';
+      queueMicrotask(() => {
+        setSavePhoto(false);
+        setBusy(false);
+        setPhase(null);
+        setError(null);
+        setOcrText('');
+        setJpegBlob(null);
+        setSaveToDeliveryNotes(true);
+        setSuggestions([]);
+        setApplyIds({});
+        if (fileRef.current) fileRef.current.value = '';
+      });
     }
   }, [open]);
 
@@ -134,6 +144,37 @@ export default function PedidosAlbaranOcrModal({ order, open, onClose, onApplied
         setPhase('Subiendo foto…');
         await uploadPedidoAlbaranAttachment(supabase, localId, order.id, jpegBlob);
       }
+      if (saveToDeliveryNotes) {
+        setPhase('Guardando en albaranes…');
+        const note = await insertDeliveryNote(supabase, localId, {
+          supplierId: null,
+          supplierName: order.supplierName || '',
+          relatedOrderId: order.id,
+          status: 'ocr_read',
+          sourceType: 'linked_order',
+          createdBy: null,
+          notes: ocrText.trim(),
+        });
+        if (jpegBlob) {
+          const uploaded = await uploadDeliveryNoteOriginal(
+            supabase,
+            localId,
+            note.id,
+            new File([jpegBlob], 'albaran.jpg', { type: jpegBlob.type || 'image/jpeg' }),
+          );
+          await updateDeliveryNote(supabase, localId, note.id, {
+            originalStoragePath: uploaded.storagePath,
+            originalMimeType: uploaded.mimeType,
+            originalFileName: uploaded.fileName,
+            sourceType: 'linked_order',
+          });
+        }
+        await insertDeliveryNoteOcrRun(supabase, localId, note.id, ocrText, {
+          errorMessage: null,
+          durationMs: null,
+          createdBy: null,
+        });
+      }
       if (patches.length > 0) {
         setPhase('Guardando líneas…');
         await applyAlbaranOcrPatches(supabase, localId, order.items, patches);
@@ -182,13 +223,27 @@ export default function PedidosAlbaranOcrModal({ order, open, onClose, onApplied
           <label className="flex cursor-pointer items-start gap-2 rounded-xl border border-zinc-200 bg-zinc-50/80 px-3 py-2.5">
             <input
               type="checkbox"
+              checked={saveToDeliveryNotes}
+              disabled={busy}
+              onChange={(e) => setSaveToDeliveryNotes(e.target.checked)}
+              className="mt-0.5 h-4 w-4 rounded border-zinc-300"
+            />
+            <span className="text-xs font-semibold text-zinc-800">
+              Guardar también en albaranes. Crea el registro en{' '}
+              <code className="rounded bg-white px-1 text-[10px]">delivery_notes</code> con el OCR leído.
+            </span>
+          </label>
+
+          <label className="flex cursor-pointer items-start gap-2 rounded-xl border border-zinc-200 bg-zinc-50/80 px-3 py-2.5">
+            <input
+              type="checkbox"
               checked={savePhoto}
               disabled={busy}
               onChange={(e) => setSavePhoto(e.target.checked)}
               className="mt-0.5 h-4 w-4 rounded border-zinc-300"
             />
             <span className="text-xs font-semibold text-zinc-800">
-              Guardar foto en Supabase (opcional, comprimida). Requiere migración{' '}
+              Guardar foto en Pedidos (opcional, comprimida). Requiere migración{' '}
               <code className="rounded bg-white px-1 text-[10px]">supabase-pedidos-albaran-storage.sql</code>.
             </span>
           </label>

@@ -30,7 +30,7 @@ import { useAuth } from '@/components/AuthProvider';
 import { CHEF_ONE_TAPER_LINE_CLASS } from '@/components/ChefOneGlowLine';
 import { usePedidosOrders } from '@/components/PedidosOrdersProvider';
 import { getSupabaseClient } from '@/lib/supabase-client';
-import PedidosAlbaranOcrModal from '@/components/PedidosAlbaranOcrModal';
+import AlbaranOcrLauncher from '@/components/pedidos/albaranes/AlbaranOcrLauncher';
 import PedidosPremiaLockedScreen from '@/components/PedidosPremiaLockedScreen';
 import { SupplierAvatar } from '@/components/pedidos/SupplierAvatar';
 import { dispatchPedidosDataChanged, usePedidosDataChangedListener } from '@/hooks/usePedidosDataChangedListener';
@@ -5697,13 +5697,15 @@ export default function PedidosPage() {
         </div>
       </details>
 
-      <PedidosAlbaranOcrModal
-        order={ocrOrder}
+      <AlbaranOcrLauncher
+        mode="sheet"
         open={ocrOrder != null}
+        relatedOrderId={ocrOrder?.id ?? null}
+        skipRedirect
         onClose={() => setOcrOrder(null)}
-        onApplied={() => {
+        onCreated={(deliveryNoteId) => {
           dispatchPedidosDataChanged();
-          setMessage('Albarán OCR guardado. Revisa cantidades y precios en el pedido.');
+          setMessage(`Albarán guardado en pedidos y albaranes. ID: ${deliveryNoteId.slice(0, 8)}…`);
         }}
       />
 

@@ -161,7 +161,7 @@ export default function AlbaranOcrLauncher({
 
   React.useEffect(() => {
     if (mode === 'sheet' && open) {
-      reset();
+      queueMicrotask(reset);
     }
   }, [mode, open, reset]);
 
