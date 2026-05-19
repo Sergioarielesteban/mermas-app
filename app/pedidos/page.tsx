@@ -12,6 +12,7 @@ import {
   List,
   Loader2,
   Package,
+  MessageCircle,
   Pencil,
   Trash2,
   Truck,
@@ -4670,6 +4671,19 @@ export default function PedidosPage() {
                       <Pencil className="h-3.5 w-3.5 shrink-0 text-zinc-700" strokeWidth={2.25} aria-hidden />
                       <span className="text-[7.5px] font-black leading-none text-zinc-600">Editar</span>
                     </Link>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSentOrderActionMenuOpenId(null);
+                        sendWhatsappOrder(order);
+                      }}
+                      className="flex min-h-[2.25rem] flex-col items-center justify-center gap-0.5 rounded-xl bg-emerald-50 px-1 text-emerald-900 ring-1 ring-emerald-200/80 transition active:scale-[0.98]"
+                      title="Reenviar pedido por WhatsApp"
+                      aria-label="Enviar pedido por WhatsApp"
+                    >
+                      <MessageCircle className="h-3.5 w-3.5 shrink-0 text-emerald-700" strokeWidth={2.25} aria-hidden />
+                      <span className="text-[7.5px] font-black leading-none text-emerald-800">WhatsApp</span>
+                    </button>
                     <button
                       type="button"
                       onClick={async () => {
