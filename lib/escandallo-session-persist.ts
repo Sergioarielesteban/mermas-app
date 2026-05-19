@@ -11,6 +11,7 @@ export type EscandalloWizardPersistV1 = {
   yieldLabel: string;
   saleGross: string;
   saleVat: string;
+  recipeKind?: 'plato' | 'base' | 'subelaboracion';
   ingredientDrafts: IngredientDraftRow[];
   updatedAt: number;
 };

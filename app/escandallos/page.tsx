@@ -7,12 +7,10 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   AlertCircle,
   AlertTriangle,
-  ArrowUpRight,
   BarChart3,
   Calculator,
   ChevronDown,
   ChevronRight,
-  CircleDollarSign,
   Eye,
   MoreHorizontal,
   PencilLine,
@@ -436,12 +434,15 @@ export default function EscandallosPage() {
   const libroSectionRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
-    if (searchParams.get('libro') === '1') {
-      setRecipeBookOpen(true);
-    }
-    if (searchParams.get('bases') === '1') {
-      setBasesOpen(true);
-    }
+    const t = window.setTimeout(() => {
+      if (searchParams.get('libro') === '1') {
+        setRecipeBookOpen(true);
+      }
+      if (searchParams.get('bases') === '1') {
+        setBasesOpen(true);
+      }
+    }, 0);
+    return () => window.clearTimeout(t);
   }, [searchParams]);
 
   useEffect(() => {
@@ -827,8 +828,8 @@ export default function EscandallosPage() {
             ) : null}
           </section>
 
-          <section className="rounded-[1.5rem] bg-white p-3 shadow-sm ring-1 ring-zinc-200/80">
-            <SectionHeader title="Bases y elaboraciones" icon={UtensilsCrossed} accent="olive" open={basesOpen} onToggle={() => setBasesOpen((v) => !v)} />
+          <section className="rounded-xl border border-[rgba(10,9,8,0.06)] bg-white p-2.5 shadow-[0_1px_0_rgba(10,9,8,0.04)] ring-1 ring-[rgba(10,9,8,0.04)]">
+            <SectionHeader title="Bases y elaboraciones" icon={UtensilsCrossed} accent="olive" compact open={basesOpen} onToggle={() => setBasesOpen((v) => !v)} />
             {basesOpen ? (
               <div className="mt-3 grid items-stretch gap-2 sm:grid-cols-2 xl:grid-cols-4">
                 {baseRows.map((r) => (
@@ -846,8 +847,8 @@ export default function EscandallosPage() {
             ) : null}
           </section>
 
-          <section className="rounded-[1.5rem] bg-white p-3 shadow-sm ring-1 ring-zinc-200/80">
-            <SectionHeader title="Cierre mensual" icon={BarChart3} accent="emerald" open={monthlyOpen} onToggle={() => setMonthlyOpen((v) => !v)} />
+          <section className="rounded-xl border border-[rgba(10,9,8,0.06)] bg-white p-2.5 shadow-[0_1px_0_rgba(10,9,8,0.04)] ring-1 ring-[rgba(10,9,8,0.04)]">
+            <SectionHeader title="Cierre mensual" icon={BarChart3} accent="emerald" compact open={monthlyOpen} onToggle={() => setMonthlyOpen((v) => !v)} />
             {monthlyOpen ? <div className="mt-3 grid gap-3 lg:grid-cols-2">
               <div className="flex h-full flex-col rounded-[1.25rem] bg-zinc-50 p-3 ring-1 ring-zinc-200/80">
                 <div className="flex flex-wrap items-center gap-3">
