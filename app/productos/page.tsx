@@ -82,7 +82,10 @@ export default function ProductosPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [showDeletedBanner, setShowDeletedBanner] = useState(false);
+  const [productBanner, setProductBanner] = useState<{ text: string; tone: 'success' | 'error' } | null>(null);
+  const [savingProduct, setSavingProduct] = useState(false);
   const deletedBannerTimeoutRef = React.useRef<number | null>(null);
+  const productBannerTimeoutRef = React.useRef<number | null>(null);
   const [search, setSearch] = useState('');
 
   const resolveEscandalloUnitCost = async (
@@ -483,6 +486,20 @@ export default function ProductosPage() {
   const isUnitReadOnly = originType !== 'manual';
   const isPriceFromAuto = originType !== 'manual';
 
+  const showProductBanner = (text: string, tone: 'success' | 'error' = 'error') => {
+    setProductBanner({ text, tone });
+    if (productBannerTimeoutRef.current) window.clearTimeout(productBannerTimeoutRef.current);
+    productBannerTimeoutRef.current = window.setTimeout(() => {
+      setProductBanner(null);
+      productBannerTimeoutRef.current = null;
+    }, tone === 'success' ? 1000 : 2200);
+  };
+
+  const showFormMessage = (text: string) => {
+    setMessage(text);
+    showProductBanner(text, 'error');
+  };
+
   const priceFieldDisplay = useMemo(() => {
     if (originType === 'master') {
       if (masterPriceLoading) return '—';
@@ -510,7 +527,7 @@ export default function ProductosPage() {
     price,
   ]);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const numeric =
       originType === 'escandallo'
@@ -523,32 +540,24 @@ export default function ProductosPage() {
               ? Math.max(0, Number(price))
               : Number(price);
     const trimmed = name.trim();
-    if (!trimmed || !Number.isFinite(numeric) || numeric < 0) return;
+    if (!trimmed || !Number.isFinite(numeric) || numeric < 0) {
+      showFormMessage('Revisa nombre y precio antes de guardar.');
+      return;
+    }
     if (originType === 'manual' && numeric <= 0) {
-      setMessage('Indica un precio manual mayor que 0.');
+      showFormMessage('Indica un precio manual mayor que 0.');
       return;
     }
     if (originType === 'master' && !masterArticleId) {
-      setMessage('Selecciona un Artículo Máster para este origen.');
-      return;
-    }
-    if (
-      originType === 'master' &&
-      (!Number.isFinite(masterAutoPrice ?? NaN) || (masterAutoPrice ?? 0) <= 0)
-    ) {
-      setMessage('No se pudo obtener el coste del artículo máster.');
+      showFormMessage('Selecciona un Artículo Máster para este origen.');
       return;
     }
     if (originType === 'escandallo' && !escandalloId) {
-      setMessage('Selecciona un escandallo para usar precio automático.');
-      return;
-    }
-    if (originType === 'escandallo' && (!Number.isFinite(escandalloAutoPrice ?? NaN) || (escandalloAutoPrice ?? 0) <= 0)) {
-      setMessage('No se pudo resolver el coste del escandallo seleccionado.');
+      showFormMessage('Selecciona un escandallo para usar precio automático.');
       return;
     }
     if (originType === 'base_subreceta' && !baseSubrecipeId) {
-      setMessage('Selecciona una base/subreceta/elaborado para este origen.');
+      showFormMessage('Selecciona una base/subreceta/elaborado para este origen.');
       return;
     }
     if (originType === 'composicion') {
@@ -556,7 +565,7 @@ export default function ProductosPage() {
         (x) => x.componentId && Number.isFinite(Number(x.qty)) && Number(x.qty) > 0 && x.unit,
       );
       if (valid.length === 0) {
-        setMessage('Añade al menos una línea válida en la composición.');
+        showFormMessage('Añade al menos una línea válida en la composición.');
         return;
       }
     }
@@ -566,62 +575,52 @@ export default function ProductosPage() {
         (editingId ? p.id !== editingId : true),
     );
     if (duplicate) {
-      setMessage('Ya existe un producto con ese nombre.');
+      showFormMessage('Ya existe un producto con ese nombre.');
       return;
     }
 
-    if (editingId) {
-      updateProduct(editingId, {
-        name,
-        unit,
-        pricePerUnit: numeric,
-        typeOrigin: originType,
-        masterArticleId: originType === 'master' ? masterArticleId || null : null,
-        escandalloId: originType === 'escandallo' ? escandalloId || null : null,
-        baseSubrecipeId: originType === 'base_subreceta' ? baseSubrecipeId || null : null,
-        baseSubrecipeKind: originType === 'base_subreceta' ? baseSubrecipeKind : null,
-        manualPricePerUnit: originType === 'manual' ? numeric : null,
-        compositionLines:
-          originType === 'composicion'
-            ? compositionLines
-                .filter((x) => x.componentId && Number.isFinite(Number(x.qty)) && Number(x.qty) > 0 && x.unit)
-                .map((x) => ({
-                  id: x.id,
-                  componentType: x.componentType,
-                  componentId: x.componentId,
-                  componentKind: x.componentKind ?? null,
-                  qty: Number(x.qty),
-                  unit: x.unit,
-                }))
-            : [],
-      });
-      setMessage('Producto actualizado.');
-    } else {
-      addProduct({
-        name,
-        unit,
-        pricePerUnit: numeric,
-        typeOrigin: originType,
-        masterArticleId: originType === 'master' ? masterArticleId || null : null,
-        escandalloId: originType === 'escandallo' ? escandalloId || null : null,
-        baseSubrecipeId: originType === 'base_subreceta' ? baseSubrecipeId || null : null,
-        baseSubrecipeKind: originType === 'base_subreceta' ? baseSubrecipeKind : null,
-        manualPricePerUnit: originType === 'manual' ? numeric : null,
-        compositionLines:
-          originType === 'composicion'
-            ? compositionLines
-                .filter((x) => x.componentId && Number.isFinite(Number(x.qty)) && Number(x.qty) > 0 && x.unit)
-                .map((x) => ({
-                  id: x.id,
-                  componentType: x.componentType,
-                  componentId: x.componentId,
-                  componentKind: x.componentKind ?? null,
-                  qty: Number(x.qty),
-                  unit: x.unit,
-                }))
-            : [],
-      });
-      setMessage('Producto añadido.');
+    const payload = {
+      name,
+      unit,
+      pricePerUnit: numeric,
+      typeOrigin: originType,
+      masterArticleId: originType === 'master' ? masterArticleId || null : null,
+      escandalloId: originType === 'escandallo' ? escandalloId || null : null,
+      baseSubrecipeId: originType === 'base_subreceta' ? baseSubrecipeId || null : null,
+      baseSubrecipeKind: originType === 'base_subreceta' ? baseSubrecipeKind : null,
+      manualPricePerUnit: originType === 'manual' ? numeric : null,
+      compositionLines:
+        originType === 'composicion'
+          ? compositionLines
+              .filter((x) => x.componentId && Number.isFinite(Number(x.qty)) && Number(x.qty) > 0 && x.unit)
+              .map((x) => ({
+                id: x.id,
+                componentType: x.componentType,
+                componentId: x.componentId,
+                componentKind: x.componentKind ?? null,
+                qty: Number(x.qty),
+                unit: x.unit,
+              }))
+          : [],
+    };
+
+    if (savingProduct) return;
+    setSavingProduct(true);
+    try {
+      if (editingId) {
+        updateProduct(editingId, payload);
+        setMessage('Producto actualizado.');
+      } else {
+        const result = await addProduct(payload);
+        if (!result.ok) {
+          showFormMessage(result.reason ?? 'No se pudo guardar el producto.');
+          return;
+        }
+        setMessage('Producto añadido.');
+        showProductBanner('ARTÍCULO AÑADIDO', 'success');
+      }
+    } finally {
+      setSavingProduct(false);
     }
     setName('');
     setUnit('ud');
@@ -642,6 +641,7 @@ export default function ProductosPage() {
   React.useEffect(
     () => () => {
       if (deletedBannerTimeoutRef.current) window.clearTimeout(deletedBannerTimeoutRef.current);
+      if (productBannerTimeoutRef.current) window.clearTimeout(productBannerTimeoutRef.current);
     },
     [],
   );
@@ -652,6 +652,18 @@ export default function ProductosPage() {
         <div className="pointer-events-none fixed inset-0 z-[90] grid place-items-center bg-black/25 px-6">
           <div className="rounded-2xl bg-[#D32F2F] px-7 py-5 text-center shadow-2xl ring-2 ring-white/75">
             <p className="text-xl font-black uppercase tracking-wide text-white">ELIMINADO</p>
+          </div>
+        </div>
+      ) : null}
+      {productBanner ? (
+        <div className="pointer-events-none fixed inset-0 z-[3000] grid place-items-center bg-black/25 px-6">
+          <div
+            className={[
+              'max-w-sm rounded-2xl px-7 py-5 text-center shadow-2xl ring-2 ring-white/75',
+              productBanner.tone === 'success' ? 'bg-[#D32F2F]' : 'bg-zinc-900',
+            ].join(' ')}
+          >
+            <p className="text-xl font-black uppercase tracking-wide text-white">{productBanner.text}</p>
           </div>
         </div>
       ) : null}
@@ -1162,9 +1174,10 @@ export default function ProductosPage() {
               <button
                 type="submit"
                 form="merma-producto-form"
-                className="h-12 w-full min-h-12 rounded-xl bg-[#D32F2F] text-sm font-extrabold uppercase text-white"
+                disabled={savingProduct}
+                className="h-12 w-full min-h-12 rounded-xl bg-[#D32F2F] text-sm font-extrabold uppercase text-white disabled:cursor-wait disabled:opacity-70"
               >
-                {editingId ? 'GUARDAR CAMBIOS' : 'GUARDAR PRODUCTO'}
+                {savingProduct ? 'GUARDANDO...' : editingId ? 'GUARDAR CAMBIOS' : 'GUARDAR PRODUCTO'}
               </button>
             </div>
           </div>
