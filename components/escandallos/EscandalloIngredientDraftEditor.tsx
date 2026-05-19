@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState, type SetStateAction } from 'react';
+import React, { useEffect, type SetStateAction } from 'react';
 import { ChevronDown, ChevronUp, Plus, Search, Trash2 } from 'lucide-react';
 import { ESCANDALLO_USAGE_UNIT_PRESETS } from '@/lib/escandallo-ingredient-units';
 import {
@@ -51,19 +51,6 @@ function badgeLabel(t: IngredientDraftRow['sourceType']): string {
   }
 }
 
-function badgeTone(t: IngredientDraftRow['sourceType']): string {
-  switch (t) {
-    case 'raw':
-      return 'bg-[#F7F3EE] text-[#7E7468] ring-[rgba(10,9,8,0.06)]';
-    case 'processed':
-      return 'bg-violet-50 text-violet-800 ring-violet-100';
-    case 'subrecipe':
-      return 'bg-emerald-50 text-emerald-800 ring-emerald-100';
-    default:
-      return 'bg-zinc-100 text-zinc-600 ring-zinc-200';
-  }
-}
-
 function displayUnitForRow(
   row: IngredientDraftRow,
   sortedRaw: EscandalloRawProduct[],
@@ -77,42 +64,6 @@ function displayUnitForRow(
     return processedProducts.find((x) => x.id === row.processedId)?.outputUnit ?? row.unit;
   }
   return row.unit.trim() || 'ud';
-}
-
-function rowDisplayName(
-  row: IngredientDraftRow,
-  sortedRaw: EscandalloRawProduct[],
-  processedProducts: EscandalloProcessedProduct[],
-  recipes: EscandalloRecipe[],
-): string {
-  if (row.sourceType === 'raw' && row.rawId) {
-    const p = sortedRaw.find((x) => x.id === row.rawId);
-    return (p?.name ?? row.rawSearch) || 'Producto';
-  }
-  if (row.sourceType === 'processed' && row.processedId) {
-    return processedProducts.find((x) => x.id === row.processedId)?.name ?? 'Elaborado';
-  }
-  if (row.sourceType === 'subrecipe' && row.subRecipeId) {
-    return recipes.find((x) => x.id === row.subRecipeId)?.name ?? 'Base';
-  }
-  return row.manualLabel.trim() || 'Concepto manual';
-}
-
-function rowSupplierHint(
-  row: IngredientDraftRow,
-  sortedRaw: EscandalloRawProduct[],
-): string | null {
-  if (row.sourceType === 'raw' && row.rawId) {
-    return sortedRaw.find((x) => x.id === row.rawId)?.supplierName ?? null;
-  }
-  return null;
-}
-
-function rowHasContent(row: IngredientDraftRow): boolean {
-  if (row.sourceType === 'raw') return Boolean(row.rawId || row.rawSearch.trim());
-  if (row.sourceType === 'processed') return Boolean(row.processedId);
-  if (row.sourceType === 'subrecipe') return Boolean(row.subRecipeId);
-  return Boolean(row.manualLabel.trim() || row.manualPrice.trim());
 }
 
 export default function EscandalloIngredientDraftEditor({
@@ -130,14 +81,16 @@ export default function EscandalloIngredientDraftEditor({
   addButtonLabel = 'Añadir ingrediente',
   variant = 'default',
 }: EscandalloIngredientDraftEditorProps) {
-  const [globalSearch, setGlobalSearch] = useState('');
-  const [searchFocused, setSearchFocused] = useState(false);
-
   const updateRow = (key: string, patch: Partial<IngredientDraftRow>) => {
     onChange(drafts.map((d) => (d.key === key ? { ...d, ...patch } : d)));
   };
 
   const removeRow = (key: string) => {
+    if (variant === 'editor') {
+      const next = drafts.filter((d) => d.key !== key);
+      onChange(next.length > 0 ? next : []);
+      return;
+    }
     if (drafts.length <= 1) {
       onChange([emptyIngredientDraft()]);
       return;
@@ -161,38 +114,6 @@ export default function EscandalloIngredientDraftEditor({
     return sortedRaw.filter((p) => `${p.name} ${p.supplierName}`.toLowerCase().includes(s)).slice(0, 32);
   };
 
-  const pickRawProduct = (p: EscandalloRawProduct) => {
-    onChange((prev) => {
-      const emptyIdx = prev.findIndex((d) => d.sourceType === 'raw' && !d.rawId);
-      if (emptyIdx >= 0) {
-        return prev.map((d, i) =>
-          i === emptyIdx
-            ? {
-                ...d,
-                sourceType: 'raw' as const,
-                rawId: p.id,
-                rawSearch: rawProductPickerSummaryLine(p),
-                rawDropdownOpen: false,
-                unit: escandalloRecipeUnitForRawProduct(p),
-              }
-            : d,
-        );
-      }
-      return [
-        ...prev,
-        {
-          ...emptyIngredientDraft(),
-          sourceType: 'raw' as const,
-          rawId: p.id,
-          rawSearch: rawProductPickerSummaryLine(p),
-          unit: escandalloRecipeUnitForRawProduct(p),
-        },
-      ];
-    });
-    setGlobalSearch('');
-    setSearchFocused(false);
-  };
-
   const canEstimate = rawById != null && processedById != null && recipesById != null;
 
   const anyRawPickerOpen = drafts.some((d) => d.rawDropdownOpen);
@@ -211,193 +132,185 @@ export default function EscandalloIngredientDraftEditor({
     return () => document.removeEventListener('pointerdown', onDoc, true);
   }, [anyRawPickerOpen, onChange]);
 
-  const showGlobalResults =
-    variant === 'editor' && (searchFocused || globalSearch.trim().length > 0);
+  const draftRowConfigured = (row: IngredientDraftRow): boolean => {
+    if (row.sourceType === 'raw') return Boolean(row.rawId);
+    if (row.sourceType === 'processed') return Boolean(row.processedId);
+    if (row.sourceType === 'subrecipe') return Boolean(row.subRecipeId);
+    return Boolean(row.manualLabel.trim());
+  };
 
-  const renderCompactDraftRow = (row: IngredientDraftRow, idx: number) => {
-    const est =
-      canEstimate
-        ? estimateDraftRowCostEur(row, rawById!, processedById!, recipesById!, linesByRecipe, excludeRecipeId)
-        : null;
-    const subLines =
-      row.sourceType === 'subrecipe' && row.subRecipeId ? (linesByRecipe[row.subRecipeId] ?? []) : [];
+  const renderCompactDraftRow = (row: IngredientDraftRow) => {
+    const est = canEstimate
+      ? estimateDraftRowCostEur(row, rawById!, processedById!, recipesById!, linesByRecipe, excludeRecipeId)
+      : null;
+    const subLines = row.sourceType === 'subrecipe' && row.subRecipeId ? (linesByRecipe[row.subRecipeId] ?? []) : [];
     const dispUnit = displayUnitForRow(row, sortedRaw, processedProducts);
-    const name = rowDisplayName(row, sortedRaw, processedProducts, recipes);
-    const supplier = rowSupplierHint(row, sortedRaw);
-    const qtyNum = parseDecimal(row.qty);
-    const unitEurForLine =
-      est != null && qtyNum != null && qtyNum > 0 ? est / qtyNum : null;
-    const unitPriceStr =
-      unitEurForLine != null && Number.isFinite(unitEurForLine)
-        ? formatUnitPriceEur(unitEurForLine, dispUnit)
-        : '—';
+    const configured = draftRowConfigured(row);
 
     return (
-      <div
-        key={row.key}
-        className="rounded-xl border border-[rgba(10,9,8,0.06)] bg-white px-2.5 py-2 shadow-[0_1px_0_rgba(10,9,8,0.04)] ring-1 ring-[rgba(10,9,8,0.04)]"
-      >
-        <EditorDraftRowTop
-          row={row}
-          name={name}
-          supplier={supplier}
-          unitPriceStr={unitPriceStr}
-          dispUnit={dispUnit}
-          qtyNum={qtyNum}
-          est={est}
-        />
+      <div key={row.key} className="rounded-lg border border-[rgba(10,9,8,0.06)] bg-[#FAFAF9]/80 px-2 py-1.5">
+        <div className="flex items-start gap-2">
+          <div className="min-w-0 flex-1">
+            <div className="flex items-start gap-2">
+              <select
+                value={row.sourceType}
+                disabled={disabled}
+                onChange={(e) =>
+                  updateRow(row.key, {
+                    sourceType: e.target.value as IngredientDraftRow['sourceType'],
+                    rawId: '',
+                    processedId: '',
+                    subRecipeId: '',
+                    rawSearch: '',
+                    rawDropdownOpen: false,
+                    manualLabel: '',
+                    manualPrice: '',
+                    unit: e.target.value === 'raw' || e.target.value === 'processed' ? 'kg' : row.unit || 'kg',
+                  })
+                }
+                className="h-7 w-[4.9rem] shrink-0 rounded-md border border-zinc-200 bg-white px-1 text-[8px] font-bold uppercase tracking-wide text-zinc-900 outline-none focus:border-[#D32F2F]/35"
+                aria-label="Tipo de ingrediente"
+              >
+                <option value="raw">Crudo</option>
+                <option value="processed">Elaborado</option>
+                <option value="subrecipe">Base</option>
+                <option value="manual">Manual</option>
+              </select>
 
-        {(row.sourceType === 'processed' ||
-          row.sourceType === 'subrecipe' ||
-          row.sourceType === 'manual' ||
-          (row.sourceType === 'raw' && !row.rawId)) && (
-          <div className="mt-2 space-y-2 border-t border-[rgba(10,9,8,0.06)] pt-2">
-            <select
-              value={row.sourceType}
-              disabled={disabled}
-              onChange={(e) =>
-                updateRow(row.key, {
-                  sourceType: e.target.value as IngredientDraftRow['sourceType'],
-                  rawId: '',
-                  processedId: '',
-                  subRecipeId: '',
-                  rawSearch: '',
-                  rawDropdownOpen: false,
-                  unit: 'kg',
-                })
-              }
-              className="h-7 rounded-lg border border-[rgba(10,9,8,0.08)] bg-[#FAFAF9] px-2 text-[9px] font-bold uppercase tracking-wide text-[#0A0908]"
-              aria-label="Tipo"
-            >
-              <option value="raw">Crudo</option>
-              <option value="processed">Elaborado</option>
-              <option value="subrecipe">Base</option>
-              <option value="manual">Manual</option>
-            </select>
-            {row.sourceType === 'processed' ? (
-              <select
-                value={row.processedId}
-                disabled={disabled}
-                onChange={(e) => {
-                  const id = e.target.value;
-                  const p = processedProducts.find((x) => x.id === id);
-                  updateRow(row.key, { processedId: id, unit: p?.outputUnit ?? 'kg' });
-                }}
-                className="h-9 w-full rounded-lg border border-[rgba(10,9,8,0.08)] bg-white px-2 text-[12px] font-semibold text-[#0A0908]"
-              >
-                <option value="">Elaborado…</option>
-                {processedProducts.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name}
-                  </option>
-                ))}
-              </select>
-            ) : null}
-            {row.sourceType === 'subrecipe' ? (
-              <select
-                value={row.subRecipeId}
-                disabled={disabled}
-                onChange={(e) => updateRow(row.key, { subRecipeId: e.target.value })}
-                className="h-9 w-full rounded-lg border border-[rgba(10,9,8,0.08)] bg-white px-2 text-[12px] font-semibold text-[#0A0908]"
-              >
-                <option value="">Base…</option>
-                {recipes
-                  .filter((r) => r.id !== excludeRecipeId)
-                  .map((r) => (
-                    <option key={r.id} value={r.id}>
-                      {r.name}
-                      {r.isSubRecipe ? ' (base)' : ''}
-                    </option>
-                  ))}
-              </select>
-            ) : null}
-            {row.sourceType === 'manual' ? (
-              <div className="flex gap-2">
-                <input
-                  value={row.manualLabel}
-                  disabled={disabled}
-                  onChange={(e) => updateRow(row.key, { manualLabel: e.target.value })}
-                  placeholder="Nombre"
-                  className="h-9 min-w-0 flex-1 rounded-lg border border-[rgba(10,9,8,0.08)] px-2 text-[12px]"
-                />
-                <input
-                  value={row.manualPrice}
-                  disabled={disabled}
-                  onChange={(e) => updateRow(row.key, { manualPrice: e.target.value })}
-                  placeholder="€/ud"
-                  className="h-9 w-20 rounded-lg border border-[rgba(10,9,8,0.08)] px-2 text-[12px] tabular-nums"
-                  inputMode="decimal"
-                />
+              <div className="min-w-0 flex-1">
+                {row.sourceType === 'raw' ? (
+                  <div className="relative w-full" data-esc-raw-picker>
+                    <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#7E7468]" aria-hidden />
+                    <input
+                      value={row.rawSearch}
+                      disabled={disabled}
+                      autoComplete="off"
+                      onFocus={() => updateRow(row.key, { rawDropdownOpen: true })}
+                      onChange={(e) => updateRow(row.key, { rawSearch: e.target.value, rawDropdownOpen: true, rawId: '' })}
+                      placeholder="Buscar producto…"
+                      className="h-7 w-full rounded-lg border border-[rgba(10,9,8,0.08)] bg-white py-1 pl-8 pr-2 text-[11px] font-medium text-[#0A0908] outline-none focus:border-[#D32F2F]/35 focus:ring-1 focus:ring-[#D32F2F]/10"
+                    />
+                    {row.rawDropdownOpen ? (
+                      <div
+                        className="absolute left-0 right-0 z-[80] mt-1 max-h-56 overflow-y-auto overscroll-contain rounded-xl border border-[rgba(10,9,8,0.08)] bg-white shadow-[0_8px_24px_rgba(10,9,8,0.12)]"
+                        onPointerDown={(e) => e.stopPropagation()}
+                      >
+                        {filteredRaw(row.rawSearch).length === 0 ? (
+                          <p className="px-3 py-3 text-center text-[11px] text-[#7E7468]">Sin resultados</p>
+                        ) : (
+                          filteredRaw(row.rawSearch).map((p) => (
+                            <button
+                              key={p.id}
+                              type="button"
+                              disabled={disabled}
+                              onClick={() =>
+                                updateRow(row.key, {
+                                  rawId: p.id,
+                                  rawSearch: p.name,
+                                  rawDropdownOpen: false,
+                                  unit: escandalloRecipeUnitForRawProduct(p),
+                                })
+                              }
+                              className="flex w-full flex-col items-start gap-0.5 border-b border-zinc-100 px-3 py-2 text-left last:border-b-0 hover:bg-zinc-50"
+                            >
+                              <span className="truncate text-[11px] font-bold text-zinc-900">{p.name}</span>
+                            </button>
+                          ))
+                        )}
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
+                {row.sourceType === 'processed' ? (
+                  <select
+                    value={row.processedId}
+                    disabled={disabled}
+                    onChange={(e) => {
+                      const id = e.target.value;
+                      const p = processedProducts.find((x) => x.id === id);
+                      updateRow(row.key, { processedId: id, unit: p?.outputUnit ?? 'kg' });
+                    }}
+                    className="h-7 w-full rounded-lg border border-[rgba(10,9,8,0.08)] bg-white px-2 text-[11px] font-medium text-[#0A0908] outline-none focus:border-[#D32F2F]/35 focus:ring-1 focus:ring-[#D32F2F]/10"
+                  >
+                    <option value="">Selecciona elaborado…</option>
+                    {processedProducts.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name}
+                      </option>
+                    ))}
+                  </select>
+                ) : null}
+                {row.sourceType === 'subrecipe' ? (
+                  <select
+                    value={row.subRecipeId}
+                    disabled={disabled}
+                    onChange={(e) => updateRow(row.key, { subRecipeId: e.target.value })}
+                    className="h-7 w-full rounded-lg border border-[rgba(10,9,8,0.08)] bg-white px-2 text-[11px] font-medium text-[#0A0908] outline-none focus:border-[#D32F2F]/35 focus:ring-1 focus:ring-[#D32F2F]/10"
+                  >
+                    <option value="">Selecciona base…</option>
+                    {recipes
+                      .filter((r) => r.id !== excludeRecipeId)
+                      .map((r) => (
+                        <option key={r.id} value={r.id}>
+                          {r.name}
+                          {r.isSubRecipe ? ' (base)' : ''}
+                        </option>
+                      ))}
+                  </select>
+                ) : null}
+                {row.sourceType === 'manual' ? (
+                  <div className="flex gap-1.5">
+                    <input
+                      value={row.manualLabel}
+                      disabled={disabled}
+                      onChange={(e) => updateRow(row.key, { manualLabel: e.target.value })}
+                      placeholder="Nombre"
+                      className="h-7 min-w-0 flex-1 rounded-lg border border-[rgba(10,9,8,0.08)] bg-white px-2 text-[11px] font-medium text-[#0A0908] outline-none focus:border-[#D32F2F]/35 focus:ring-1 focus:ring-[#D32F2F]/10"
+                    />
+                    <input
+                      value={row.manualPrice}
+                      disabled={disabled}
+                      onChange={(e) => updateRow(row.key, { manualPrice: e.target.value })}
+                      placeholder="€/ud"
+                      className="h-7 w-16 shrink-0 rounded-lg border border-[rgba(10,9,8,0.08)] bg-white px-1.5 text-[11px] font-bold tabular-nums text-[#0A0908] outline-none focus:border-[#D32F2F]/35"
+                      inputMode="decimal"
+                    />
+                  </div>
+                ) : null}
               </div>
-            ) : null}
-            {row.sourceType === 'raw' && !row.rawId ? (
-              <p className="text-[10px] text-[#7E7468]">Usa el buscador superior o elige otro tipo.</p>
-            ) : null}
-            {(row.sourceType === 'subrecipe' || row.sourceType === 'manual') && (
-              <>
-                <input
-                  list={`esc-draft-units-${row.key}`}
-                  value={row.unit}
-                  disabled={disabled}
-                  onChange={(e) => updateRow(row.key, { unit: e.target.value })}
-                  className="h-8 w-24 rounded-lg border border-[rgba(10,9,8,0.08)] px-2 text-[11px]"
-                  placeholder="ud"
-                />
-                <datalist id={`esc-draft-units-${row.key}`}>
-                  {ESCANDALLO_USAGE_UNIT_PRESETS.map((u) => (
-                    <option key={u} value={u} />
-                  ))}
-                </datalist>
-              </>
-            )}
-          </div>
-        )}
+            </div>
 
-        <div className="mt-2 flex items-center justify-between gap-2 border-t border-[rgba(10,9,8,0.06)] pt-2">
-          <div className="flex items-center gap-1">
-            <input
-              value={row.qty}
-              disabled={disabled}
-              onChange={(e) => updateRow(row.key, { qty: e.target.value })}
-              className="h-8 w-14 rounded-lg border border-[rgba(10,9,8,0.08)] bg-[#FAFAF9] px-1.5 text-center text-[13px] font-black tabular-nums text-[#0A0908] outline-none focus:border-[#D32F2F]/40 focus:ring-1 focus:ring-[#D32F2F]/15"
-              inputMode="decimal"
-              aria-label="Cantidad"
-            />
-            <span className="text-[11px] font-semibold text-[#7E7468]">{dispUnit}</span>
-          </div>
-          <div className="flex items-center gap-0.5">
-            <button
-              type="button"
-              disabled={disabled || idx === 0}
-              onClick={() => moveRow(idx, idx - 1)}
-              className="grid h-7 w-7 place-items-center rounded-md text-[#7E7468] transition hover:bg-[#F7F3EE] disabled:opacity-25"
-              aria-label="Subir"
-            >
-              <ChevronUp className="h-3.5 w-3.5" />
-            </button>
-            <button
-              type="button"
-              disabled={disabled || idx >= drafts.length - 1}
-              onClick={() => moveRow(idx, idx + 1)}
-              className="grid h-7 w-7 place-items-center rounded-md text-[#7E7468] transition hover:bg-[#F7F3EE] disabled:opacity-25"
-              aria-label="Bajar"
-            >
-              <ChevronDown className="h-3.5 w-3.5" />
-            </button>
-            <button
-              type="button"
-              disabled={disabled}
-              onClick={() => removeRow(row.key)}
-              className="grid h-7 w-7 place-items-center rounded-md text-[#D32F2F] transition hover:bg-[#D32F2F]/10"
-              aria-label="Quitar"
-            >
-              <Trash2 className="h-3.5 w-3.5" />
-            </button>
+            <div className="mt-1.5 flex items-center gap-2">
+              <div className="flex items-center gap-1.5">
+                <label className="flex items-center gap-1">
+                  <span className="text-[9px] font-bold uppercase text-[#7E7468]">Cantidad</span>
+                  <input
+                    value={row.qty}
+                    disabled={disabled}
+                    onChange={(e) => updateRow(row.key, { qty: e.target.value })}
+                    className="h-7 w-16 rounded-lg border border-[rgba(10,9,8,0.08)] bg-white px-2 text-[11px] font-semibold tabular-nums text-[#0A0908] outline-none focus:border-[#D32F2F]/35 focus:ring-1 focus:ring-[#D32F2F]/10"
+                    inputMode="decimal"
+                  />
+                </label>
+                <span className="text-[10px] font-semibold text-[#7E7468]">{dispUnit}</span>
+              </div>
+              <div className="ml-auto flex items-center gap-2">
+                {configured ? <p className="text-[13px] font-black tabular-nums text-[#0A0908]">{est != null ? formatMoneyEur(est) : '—'}</p> : null}
+                <button
+                  type="button"
+                  disabled={disabled}
+                  onClick={() => removeRow(row.key)}
+                  className="grid h-7 w-7 shrink-0 place-items-center rounded-md text-[#D32F2F] transition hover:bg-[#D32F2F]/10"
+                  aria-label="Quitar línea"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            </div>
           </div>
         </div>
-
         {row.sourceType === 'subrecipe' && subLines.length > 0 ? (
-          <ul className="mt-2 space-y-0.5 border-t border-dashed border-[rgba(10,9,8,0.08)] pt-2 text-[10px] text-[#7E7468]">
+          <ul className="mt-1 space-y-0.5 border-t border-dashed border-[rgba(10,9,8,0.08)] pt-1 text-[9px] text-[#7E7468]">
             {subLines.map((ln) => (
               <li key={ln.id} className="tabular-nums">
                 {ln.label} · {ln.qty} {ln.unit}
@@ -410,108 +323,22 @@ export default function EscandalloIngredientDraftEditor({
   };
 
   if (variant === 'editor') {
-    const visibleDrafts = drafts.filter((d, i) => rowHasContent(d) || i > 0 || drafts.length > 1);
-    const results = filteredRaw(globalSearch);
-
+    const visibleDrafts = drafts;
     return (
       <div className="space-y-2.5">
-        <div className="relative" data-esc-raw-picker>
-          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[#7E7468]" aria-hidden />
-          <input
-            value={globalSearch}
-            disabled={disabled}
-            autoComplete="off"
-            onFocus={() => setSearchFocused(true)}
-            onBlur={() => window.setTimeout(() => setSearchFocused(false), 160)}
-            onChange={(e) => setGlobalSearch(e.target.value)}
-            placeholder="Buscar producto o proveedor…"
-            className="h-10 w-full rounded-xl border border-[rgba(10,9,8,0.08)] bg-white py-2 pl-9 pr-3 text-[13px] font-medium text-[#0A0908] shadow-[0_1px_0_rgba(10,9,8,0.04)] outline-none transition placeholder:text-[#7E7468]/80 focus:border-[#D32F2F]/35 focus:ring-2 focus:ring-[#D32F2F]/10"
-          />
-          {showGlobalResults ? (
-            <div
-              className="absolute left-0 right-0 z-[80] mt-1.5 max-h-[min(50vh,18rem)] overflow-y-auto overscroll-contain rounded-xl border border-[rgba(10,9,8,0.08)] bg-white shadow-[0_8px_24px_rgba(10,9,8,0.12)]"
-              onPointerDown={(e) => e.stopPropagation()}
-            >
-              {results.length === 0 ? (
-                <p className="px-3 py-4 text-center text-[12px] text-[#7E7468]">Sin resultados</p>
-              ) : (
-                results.map((p) => {
-                  const pack = p.unitsPerPack > 0 ? p.unitsPerPack : 1;
-                  const ru = p.recipeUnit ?? 'ud';
-                  const sub =
-                    pack > 1
-                      ? `${formatUnitPriceEur(roundMoney(p.pricePerUnit / pack), ru)} / ${ru}`
-                      : formatUnitPriceEur(p.pricePerUnit, p.unit);
-                  return (
-                    <button
-                      key={p.id}
-                      type="button"
-                      disabled={disabled}
-                      onClick={() => pickRawProduct(p)}
-                      className="flex w-full items-center gap-2 border-b border-[rgba(10,9,8,0.04)] px-2.5 py-2.5 text-left last:border-b-0 transition hover:bg-[#FAFAF9] active:bg-[#F7F3EE]"
-                    >
-                      <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-[#D32F2F]/10 text-[11px] font-black text-[#B91C1C]">
-                        +
-                      </span>
-                      <span className="min-w-0 flex-1">
-                        <span className="block truncate text-[12px] font-bold text-[#0A0908]">{p.name}</span>
-                        <span className="block truncate text-[10px] text-[#7E7468]">
-                          {p.supplierName} · {sub}
-                        </span>
-                      </span>
-                    </button>
-                  );
-                })
-              )}
-            </div>
-          ) : null}
-        </div>
-
-        <div className="flex flex-wrap gap-1.5">
-          {(['raw', 'processed', 'subrecipe', 'manual'] as const).map((t) => (
-            <button
-              key={t}
-              type="button"
-              disabled={disabled}
-              onClick={() => {
-                onChange((prev) => {
-                  const emptyIdx = prev.findIndex((d) => !rowHasContent(d));
-                  if (emptyIdx >= 0) {
-                    return prev.map((d, i) =>
-                      i === emptyIdx
-                        ? {
-                            ...emptyIngredientDraft(),
-                            key: d.key,
-                            sourceType: t,
-                            unit: t === 'raw' ? 'kg' : d.unit,
-                          }
-                        : d,
-                    );
-                  }
-                  return [...prev, { ...emptyIngredientDraft(), sourceType: t }];
-                });
-              }}
-              className={`rounded-full px-2.5 py-1 text-[9px] font-bold uppercase tracking-wide ring-1 transition ${badgeTone(t)}`}
-            >
-              {badgeLabel(t)}
-            </button>
-          ))}
-        </div>
-
         {visibleDrafts.length > 0 ? (
           <div className="space-y-1.5">
             <p className="text-[9px] font-bold uppercase tracking-[0.12em] text-[#7E7468]">Pendientes de añadir</p>
-            {visibleDrafts.map((row, idx) => renderCompactDraftRow(row, drafts.indexOf(row)))}
+            {visibleDrafts.map((row) => renderCompactDraftRow(row))}
           </div>
         ) : null}
-
         <button
           type="button"
           disabled={disabled}
           onClick={() => onChange([...drafts, emptyIngredientDraft()])}
-          className="flex w-full items-center justify-center gap-1.5 rounded-xl border border-dashed border-[rgba(10,9,8,0.12)] py-2 text-[11px] font-semibold text-[#7E7468] transition hover:border-[#D32F2F]/25 hover:bg-[#FAFAF9] hover:text-[#0A0908]"
+          className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-zinc-300 bg-zinc-50/50 py-2.5 text-sm font-semibold text-zinc-700 transition hover:bg-zinc-100"
         >
-          <Plus className="h-3.5 w-3.5" />
+          <Plus className="h-4 w-4" />
           {addButtonLabel}
         </button>
       </div>
@@ -829,46 +656,6 @@ export default function EscandalloIngredientDraftEditor({
         <Plus className="h-4 w-4" />
         {addButtonLabel}
       </button>
-    </div>
-  );
-}
-
-function EditorDraftRowTop({
-  row,
-  name,
-  supplier,
-  unitPriceStr,
-  dispUnit,
-  qtyNum,
-  est,
-}: {
-  row: IngredientDraftRow;
-  name: string;
-  supplier: string | null;
-  unitPriceStr: string;
-  dispUnit: string;
-  qtyNum: number | null;
-  est: number | null;
-}) {
-  return (
-    <div className="flex items-start gap-2">
-      <span
-        className={`mt-0.5 shrink-0 rounded-full px-1.5 py-0.5 text-[7px] font-bold uppercase tracking-[0.1em] ring-1 ${badgeTone(row.sourceType)}`}
-      >
-        {badgeLabel(row.sourceType)}
-      </span>
-      <div className="min-w-0 flex-1">
-        <p className="line-clamp-2 text-[12px] font-bold leading-tight text-[#0A0908]">{name}</p>
-        {supplier ? <p className="mt-0.5 truncate text-[10px] text-[#7E7468]">{supplier}</p> : null}
-        {qtyNum != null && qtyNum > 0 ? (
-          <p className="mt-0.5 text-[10px] tabular-nums text-[#7E7468]">
-            {row.qty.trim()} {dispUnit} · {unitPriceStr}
-          </p>
-        ) : null}
-      </div>
-      <p className="shrink-0 text-[14px] font-black tabular-nums text-[#0A0908]">
-        {est != null ? formatMoneyEur(est) : '—'}
-      </p>
     </div>
   );
 }

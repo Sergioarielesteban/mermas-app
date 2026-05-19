@@ -158,6 +158,36 @@ export default function EscandalloRecipeEditorClient({ recipeId }: { recipeId: s
     setIngredientDrafts([emptyIngredientDraft()]);
   }, []);
 
+  const hydrateDraftFromRecipeWithStored = useCallback(
+    (r: EscandalloRecipe, stored: ReturnType<typeof readEscandalloRecipeEditorDraft>) => {
+      setDraftRecipeName(stored?.draftRecipeName?.trim() ? stored.draftRecipeName : r.name);
+      setDraftRecipeNotes(stored?.draftRecipeNotes != null ? stored.draftRecipeNotes : r.notes);
+      setDraftYieldQty(stored?.draftYieldQty?.trim() ? stored.draftYieldQty : String(r.yieldQty));
+      setDraftYieldLabel(stored?.draftYieldLabel?.trim() ? stored.draftYieldLabel : r.yieldLabel);
+      setDraftSaleGross(stored?.draftSaleGross?.trim() ? stored.draftSaleGross : r.salePriceGrossEur != null ? String(r.salePriceGrossEur) : '');
+      setDraftSaleVat(
+        stored?.draftSaleVat?.trim()
+          ? stored.draftSaleVat
+          : r.saleVatRatePct != null
+            ? String(r.saleVatRatePct)
+            : '10',
+      );
+      setDraftPosArticleCode(stored?.draftPosArticleCode != null ? stored.draftPosArticleCode : r.posArticleCode ?? '');
+      setDraftFinalWeightQty(
+        stored?.draftFinalWeightQty?.trim()
+          ? stored.draftFinalWeightQty
+          : r.finalWeightQty != null
+            ? String(r.finalWeightQty)
+            : '',
+      );
+      setDraftFinalWeightUnit(
+        stored?.draftFinalWeightUnit === 'l' ? 'l' : r.finalWeightUnit === 'l' ? 'l' : 'kg',
+      );
+      setIngredientDrafts(stored?.ingredientDrafts?.length ? stored.ingredientDrafts : [emptyIngredientDraft()]);
+    },
+    [],
+  );
+
   /** Refetch de catálogo sin bloquear la pantalla con "Cargando…" si ya había datos. */
   const catalogHydratedRef = useRef(false);
   useEffect(() => {
@@ -239,20 +269,11 @@ export default function EscandalloRecipeEditorClient({ recipeId }: { recipeId: s
     hydratedRecipeId.current = recipe.id;
     const stored = localId ? readEscandalloRecipeEditorDraft(localId, recipeId) : null;
     if (stored) {
-      setDraftRecipeName(stored.draftRecipeName);
-      setDraftRecipeNotes(stored.draftRecipeNotes);
-      setDraftYieldQty(stored.draftYieldQty);
-      setDraftYieldLabel(stored.draftYieldLabel);
-      setDraftSaleGross(stored.draftSaleGross);
-      setDraftSaleVat(stored.draftSaleVat);
-      setDraftPosArticleCode(stored.draftPosArticleCode);
-      setDraftFinalWeightQty(stored.draftFinalWeightQty ?? (recipe.finalWeightQty != null ? String(recipe.finalWeightQty) : ''));
-      setDraftFinalWeightUnit(stored.draftFinalWeightUnit === 'l' ? 'l' : recipe.finalWeightUnit === 'l' ? 'l' : 'kg');
-      setIngredientDrafts(stored.ingredientDrafts);
+      hydrateDraftFromRecipeWithStored(recipe, stored);
     } else {
       hydrateDraftFromRecipe(recipe);
     }
-  }, [recipe, loading, hydrateDraftFromRecipe, localId, recipeId]);
+  }, [recipe, loading, hydrateDraftFromRecipe, hydrateDraftFromRecipeWithStored, localId, recipeId]);
 
   const canPersistEditorDraft = Boolean(localId && recipe && !loading && !demoReadonly);
   useEffect(() => {
@@ -927,7 +948,6 @@ export default function EscandalloRecipeEditorClient({ recipeId }: { recipeId: s
                 rawById={rawById}
                 processedById={processedById}
                 recipesById={recipesById}
-                addButtonLabel="Otra línea pendiente"
               />
             </div>
             <button
@@ -940,30 +960,6 @@ export default function EscandalloRecipeEditorClient({ recipeId }: { recipeId: s
               Añadir a la receta
             </button>
           </section>
-
-          <div className="rounded-xl border border-[rgba(10,9,8,0.06)] bg-white ring-1 ring-[rgba(10,9,8,0.04)]">
-            <button
-              type="button"
-              onClick={() => setNotesOpen((v) => !v)}
-              className="flex w-full items-center gap-2 px-3 py-2.5 text-left"
-            >
-              <StickyNote className="h-4 w-4 shrink-0 text-[#7E7468]" />
-              <span className="flex-1 text-[11px] font-bold text-[#0A0908]">Notas internas</span>
-              <ChevronDown className={`h-4 w-4 text-[#7E7468] transition ${notesOpen ? 'rotate-180' : ''}`} />
-            </button>
-            {notesOpen ? (
-              <div className="border-t border-[rgba(10,9,8,0.06)] px-3 pb-3 pt-2">
-                <textarea
-                  value={draftRecipeNotes}
-                  disabled={demoReadonly}
-                  onChange={(e) => setDraftRecipeNotes(e.target.value)}
-                  rows={3}
-                  className="w-full resize-none rounded-lg border border-[rgba(10,9,8,0.08)] bg-[#FAFAF9] px-2.5 py-2 text-[12px] text-[#0A0908] outline-none focus:border-[#D32F2F]/35 focus:ring-2 focus:ring-[#D32F2F]/10"
-                  placeholder="Notas de cocina, mise en place, avisos…"
-                />
-              </div>
-            ) : null}
-          </div>
 
           <div className="rounded-xl border border-[rgba(10,9,8,0.06)] bg-white ring-1 ring-[rgba(10,9,8,0.04)]">
             <button
@@ -995,6 +991,30 @@ export default function EscandalloRecipeEditorClient({ recipeId }: { recipeId: s
                     if (!techBundle.sheet) return Promise.resolve();
                     return handleSaveTechnicalSheet(techBundle.sheet.id, patch, drafts);
                   }}
+                />
+              </div>
+            ) : null}
+          </div>
+
+          <div className="rounded-xl border border-[rgba(10,9,8,0.06)] bg-white ring-1 ring-[rgba(10,9,8,0.04)]">
+            <button
+              type="button"
+              onClick={() => setNotesOpen((v) => !v)}
+              className="flex w-full items-center gap-2 px-3 py-2.5 text-left"
+            >
+              <StickyNote className="h-4 w-4 shrink-0 text-[#7E7468]" />
+              <span className="flex-1 text-[11px] font-bold text-[#0A0908]">Notas internas</span>
+              <ChevronDown className={`h-4 w-4 text-[#7E7468] transition ${notesOpen ? 'rotate-180' : ''}`} />
+            </button>
+            {notesOpen ? (
+              <div className="border-t border-[rgba(10,9,8,0.06)] px-3 pb-3 pt-2">
+                <textarea
+                  value={draftRecipeNotes}
+                  disabled={demoReadonly}
+                  onChange={(e) => setDraftRecipeNotes(e.target.value)}
+                  rows={3}
+                  className="w-full resize-none rounded-lg border border-[rgba(10,9,8,0.08)] bg-[#FAFAF9] px-2.5 py-2 text-[12px] text-[#0A0908] outline-none focus:border-[#D32F2F]/35 focus:ring-2 focus:ring-[#D32F2F]/10"
+                  placeholder="Notas de cocina, mise en place, avisos…"
                 />
               </div>
             ) : null}
