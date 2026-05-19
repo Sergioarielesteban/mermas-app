@@ -11,10 +11,12 @@ import {
   ChevronDown,
   ClipboardList,
   Flame,
+  Plus,
   Refrigerator,
   Save,
   ShieldCheck,
   StickyNote,
+  Trash2,
   Utensils,
 } from 'lucide-react';
 import EscandalloIngredientDraftEditor from '@/components/escandallos/EscandalloIngredientDraftEditor';
@@ -43,6 +45,13 @@ import {
   type EscandalloRawProduct,
   type EscandalloRecipe,
 } from '@/lib/escandallos-supabase';
+import {
+  insertEscandalloTechnicalSheet,
+  replaceEscandalloTechnicalSheetSteps,
+  updateEscandalloTechnicalSheet,
+  type EscandalloTechnicalSheetUpdate,
+  type TechnicalSheetStepDraft,
+} from '@/lib/escandallos-technical-sheet-supabase';
 import { writeEscandalloWizardBeforeArticulosNav } from '@/lib/escandallo-articulos-nav';
 import {
   clearEscandalloQuickCalcPrefill,
@@ -56,12 +65,17 @@ import {
 import { formatMoneyEur } from '@/lib/money-format';
 
 type RecipeKind = 'plato' | 'base' | 'subelaboracion';
+type NewStepDraft = TechnicalSheetStepDraft & { key: string };
 
 const RECIPE_KIND_OPTIONS: Array<{ value: RecipeKind; label: string; defaultYieldLabel: string }> = [
   { value: 'plato', label: 'Plato', defaultYieldLabel: 'raciones' },
   { value: 'base', label: 'Base', defaultYieldLabel: 'kg' },
   { value: 'subelaboracion', label: 'Sub-elaboración', defaultYieldLabel: 'ud' },
 ];
+
+function newStepDraft(): NewStepDraft {
+  return { key: `s-${Math.random().toString(36).slice(2, 11)}`, titulo: '', descripcion: '' };
+}
 
 export default function EscandalloNewRecipeWizard() {
   const router = useRouter();
@@ -87,6 +101,25 @@ export default function EscandalloNewRecipeWizard() {
   const [recipeKind, setRecipeKind] = useState<RecipeKind>('plato');
   const [photoPreview, setPhotoPreview] = useState('');
   const [openBlock, setOpenBlock] = useState<string | null>(null);
+  const [rendimientoTotal, setRendimientoTotal] = useState('');
+  const [numeroRaciones, setNumeroRaciones] = useState('');
+  const [gramajePorRacion, setGramajePorRacion] = useState('');
+  const [tPrep, setTPrep] = useState('');
+  const [tCocc, setTCocc] = useState('');
+  const [tReposo, setTReposo] = useState('');
+  const [tempServicio, setTempServicio] = useState('');
+  const [tipoCons, setTipoCons] = useState('');
+  const [tempCons, setTempCons] = useState('');
+  const [vidaUtil, setVidaUtil] = useState('');
+  const [regeneracion, setRegeneracion] = useState('');
+  const [alergManual, setAlergManual] = useState('');
+  const [emplDesc, setEmplDesc] = useState('');
+  const [emplDeco, setEmplDeco] = useState('');
+  const [emplMenaje, setEmplMenaje] = useState('');
+  const [emplFoto, setEmplFoto] = useState('');
+  const [notasChef, setNotasChef] = useState('');
+  const [puntosCrit, setPuntosCrit] = useState('');
+  const [stepDrafts, setStepDrafts] = useState<NewStepDraft[]>([newStepDraft()]);
 
   const rawById = useMemo(() => new Map(rawProducts.map((p) => [p.id, p])), [rawProducts]);
   const processedById = useMemo(() => new Map(processedProducts.map((p) => [p.id, p])), [processedProducts]);
@@ -122,9 +155,17 @@ export default function EscandalloNewRecipeWizard() {
       setSaleVat(d.saleVat);
       setIngredientDrafts(d.ingredientDrafts);
       setRecipeKind(d.recipeKind ?? 'plato');
+    } else {
+      const tipo = searchParams.get('tipo');
+      if (tipo === 'base' || tipo === 'subelaboracion') {
+        const nextKind = tipo as RecipeKind;
+        const nextOption = RECIPE_KIND_OPTIONS.find((option) => option.value === nextKind);
+        setRecipeKind(nextKind);
+        setYieldLabel(nextOption?.defaultYieldLabel ?? 'kg');
+      }
     }
     setWizardSessionReady(true);
-  }, [profileReady, localId]);
+  }, [profileReady, localId, searchParams]);
 
   /** Desde calculadora rápida: rellenar nombre, PVP e IVA si no hay borrador con nombre. */
   useEffect(() => {
@@ -243,9 +284,57 @@ export default function EscandalloNewRecipeWizard() {
   const fcPct = foodCostPercentOfNetSale(totalCost, yNum > 0 ? yNum : 1, netSale);
   const fcHint = foodCostStatus(fcPct);
   const marginPct = fcPct != null ? Math.round((100 - fcPct) * 10) / 10 : null;
+  const selectedRecipeKind = RECIPE_KIND_OPTIONS.find((option) => option.value === recipeKind) ?? RECIPE_KIND_OPTIONS[0];
 
   const canStep1 = name.trim().length > 0 && yNum > 0;
   const canFinish = canStep1 && !saving;
+
+  const parseOptInt = (raw: string): number | null => {
+    const t = raw.trim();
+    if (t === '') return null;
+    const n = Math.round(Number(t.replace(',', '.')));
+    return Number.isFinite(n) && n >= 0 ? n : null;
+  };
+
+  const parseOptDecimal = (raw: string): number | null => {
+    const t = raw.trim().replace(',', '.');
+    if (t === '') return null;
+    const match = t.match(/\d+(?:\.\d+)?/);
+    const n = match ? Number(match[0]) : Number(t);
+    return Number.isFinite(n) && n >= 0 ? Math.round(n * 10000) / 10000 : null;
+  };
+
+  const buildTechnicalPatch = (): EscandalloTechnicalSheetUpdate => ({
+    categoria: selectedRecipeKind.label,
+    fotoUrl: photoPreview.trim() === '' ? null : photoPreview.trim(),
+    activa: true,
+    rendimientoTotal: rendimientoTotal.trim(),
+    numeroRaciones: parseOptDecimal(numeroRaciones),
+    gramajePorRacionG: parseOptDecimal(gramajePorRacion),
+    tiempoPreparacionMin: parseOptInt(tPrep),
+    tiempoCoccionMin: parseOptInt(tCocc),
+    tiempoReposoMin: parseOptInt(tReposo),
+    temperaturaServicio: tempServicio.trim(),
+    tipoConservacion: tipoCons.trim(),
+    temperaturaConservacion: tempCons.trim(),
+    vidaUtil: vidaUtil.trim(),
+    regeneracion: regeneracion.trim(),
+    alergenosManual: alergManual
+      .split(/[\n,]+/)
+      .map((s) => s.trim())
+      .filter(Boolean),
+    emplatadoDescripcion: emplDesc.trim(),
+    emplatadoDecoracion: emplDeco.trim(),
+    emplatadoMenaje: emplMenaje.trim(),
+    emplatadoFotoUrl: emplFoto.trim() === '' ? null : emplFoto.trim(),
+    notasChef: notasChef.trim(),
+    puntosCriticos: puntosCrit.trim(),
+  });
+
+  const buildStepDrafts = (): TechnicalSheetStepDraft[] =>
+    stepDrafts
+      .filter((d) => d.titulo.trim() !== '' || d.descripcion.trim() !== '')
+      .map((d) => ({ titulo: d.titulo.trim(), descripcion: d.descripcion.trim() }));
 
   const handleSave = async () => {
     if (!localId || !supabaseOk) return;
@@ -267,6 +356,9 @@ export default function EscandalloNewRecipeWizard() {
       if (previewPayloads.length > 0) {
         await insertEscandalloLinesBatch(supabase, localId, recipe.id, previewPayloads, 0);
       }
+      const sheet = await insertEscandalloTechnicalSheet(supabase, localId, recipe.id);
+      await updateEscandalloTechnicalSheet(supabase, localId, sheet.id, buildTechnicalPatch());
+      await replaceEscandalloTechnicalSheetSteps(supabase, localId, sheet.id, buildStepDrafts());
       clearEscandalloWizardDraft();
       router.push(`/escandallos/recetas/${recipe.id}/editar`);
     } catch (e: unknown) {
@@ -288,63 +380,82 @@ export default function EscandalloNewRecipeWizard() {
     );
   }
 
-  const readImageFile = (file: File) => {
+  const readImageFile = (file: File, onReady: (dataUrl: string) => void = setPhotoPreview) => {
     const reader = new FileReader();
     reader.onload = () => {
-      if (typeof reader.result === 'string') setPhotoPreview(reader.result);
+      if (typeof reader.result === 'string') onReady(reader.result);
     };
     reader.readAsDataURL(file);
   };
 
   const createdIngredientCount = previewPayloads.length;
-  const selectedRecipeKind = RECIPE_KIND_OPTIONS.find((option) => option.value === recipeKind) ?? RECIPE_KIND_OPTIONS[0];
+  const inputCls =
+    'h-8 w-full rounded-lg border border-[rgba(10,9,8,0.08)] bg-[#FAFAF9] px-2 text-[12px] font-semibold text-[#0A0908] outline-none focus:border-[#C4531F]/45 focus:ring-1 focus:ring-[#C4531F]/15';
+  const textareaCls =
+    'min-h-14 w-full resize-none rounded-lg border border-[rgba(10,9,8,0.08)] bg-[#FAFAF9] px-2 py-1.5 text-[12px] leading-snug text-[#0A0908] outline-none focus:border-[#C4531F]/45 focus:ring-1 focus:ring-[#C4531F]/15';
+  const labelCls = 'text-[8px] font-black uppercase tracking-[0.11em] text-[#7E7468]';
+  const totalTime = [tPrep, tCocc, tReposo].reduce((acc, n) => acc + (Number(n.replace(',', '.')) || 0), 0);
+  const productionSummary = [
+    numeroRaciones.trim() || yieldQty.trim() ? `${numeroRaciones.trim() || yieldQty.trim()} rac.` : '',
+    gramajePorRacion.trim(),
+    totalTime > 0 ? `${totalTime} min` : '',
+  ].filter(Boolean).join(' · ');
+  const conservationSummary = [tipoCons.trim() || 'Tipo', tempCons.trim(), vidaUtil.trim()].filter(Boolean).join(' · ');
+  const allergensSummary = alergManual
+    .split(/[\n,]+/)
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .slice(0, 3)
+    .join(' · ');
+  const platingSummary = [emplDesc.trim() ? 'Montaje' : '', emplDeco.trim(), emplFoto.trim() ? 'foto' : ''].filter(Boolean).join(' · ');
+  const observationsSummary = [notasChef, puntosCrit].filter((x) => x.trim()).length;
   const secondaryBlocks = [
     {
       id: 'production',
       title: 'Producción',
-      summary: `${yieldQty || '1'} ${yieldLabel || 'raciones'}`,
+      summary: productionSummary || `${yieldQty || '1'} ${yieldLabel || 'raciones'}`,
       icon: Flame,
       tone: 'bg-[#D32F2F]/8 text-[#B91C1C] ring-[#D32F2F]/12',
     },
     {
       id: 'conservation',
       title: 'Conservación',
-      summary: 'Tipo, temperatura, vida útil',
+      summary: conservationSummary,
       icon: Refrigerator,
       tone: 'bg-[#4A6B3A]/10 text-[#35502A] ring-[#4A6B3A]/15',
     },
     {
       id: 'allergens',
       title: 'Alérgenos',
-      summary: 'Gluten, lactosa, trazas',
+      summary: allergensSummary || 'Gluten, lactosa, trazas',
       icon: AlertTriangle,
       tone: 'bg-[#B8872A]/10 text-[#7A5518] ring-[#B8872A]/15',
     },
     {
       id: 'plating',
       title: 'Emplatado',
-      summary: photoPreview ? 'Foto añadida' : 'Montaje, decoración, foto',
+      summary: platingSummary || 'Montaje, decoración, foto',
       icon: Utensils,
       tone: 'bg-[#F7F3EE] text-[#7E7468] ring-[rgba(10,9,8,0.06)]',
     },
     {
       id: 'appcc',
       title: 'APPCC',
-      summary: 'Completar al guardar',
+      summary: stepDrafts.some((s) => s.titulo.trim() || s.descripcion.trim()) ? 'Elaboración añadida' : 'Controles de elaboración',
       icon: ShieldCheck,
       tone: 'bg-[#4A6B3A]/10 text-[#35502A] ring-[#4A6B3A]/15',
     },
     {
       id: 'observations',
       title: 'Observaciones',
-      summary: 'Notas internas',
+      summary: observationsSummary > 0 ? `${observationsSummary} notas` : 'Notas internas',
       icon: StickyNote,
       tone: 'bg-[#F7F3EE] text-[#7E7468] ring-[rgba(10,9,8,0.06)]',
     },
   ];
 
   return (
-    <div className="min-h-0 space-y-2 overflow-x-hidden pb-[calc(6.75rem+env(safe-area-inset-bottom,0px))]">
+    <div className="min-h-0 space-y-2 overflow-x-hidden pb-[calc(11.5rem+env(safe-area-inset-bottom,0px))]">
       {banner ? (
         <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950">{banner}</div>
       ) : null}
@@ -511,14 +622,179 @@ export default function EscandalloNewRecipeWizard() {
                 </button>
                 {openBlock === id ? (
                   <div className="border-t border-[rgba(10,9,8,0.06)] px-2.5 py-2">
-                    <p className="text-[11px] font-medium text-[#7E7468]">Se completará en el editor técnico tras guardar la receta.</p>
+                    {id === 'production' ? (
+                      <div className="grid grid-cols-3 gap-1.5">
+                        <label className="space-y-1">
+                          <span className={labelCls}>Raciones</span>
+                          <input value={numeroRaciones} onChange={(e) => setNumeroRaciones(e.target.value)} className={inputCls} inputMode="decimal" placeholder={yieldQty || '1'} />
+                        </label>
+                        <label className="space-y-1">
+                          <span className={labelCls}>Gramaje</span>
+                          <input value={gramajePorRacion} onChange={(e) => setGramajePorRacion(e.target.value)} className={inputCls} placeholder="180 g" />
+                        </label>
+                        <label className="space-y-1">
+                          <span className={labelCls}>Total</span>
+                          <input value={totalTime > 0 ? String(totalTime) : ''} readOnly className={`${inputCls} bg-white text-[#7E7468]`} placeholder="min" />
+                        </label>
+                        <label className="space-y-1">
+                          <span className={labelCls}>Prep</span>
+                          <input value={tPrep} onChange={(e) => setTPrep(e.target.value)} className={inputCls} inputMode="numeric" placeholder="min" />
+                        </label>
+                        <label className="space-y-1">
+                          <span className={labelCls}>Cocción</span>
+                          <input value={tCocc} onChange={(e) => setTCocc(e.target.value)} className={inputCls} inputMode="numeric" placeholder="min" />
+                        </label>
+                        <label className="space-y-1">
+                          <span className={labelCls}>Reposo</span>
+                          <input value={tReposo} onChange={(e) => setTReposo(e.target.value)} className={inputCls} inputMode="numeric" placeholder="min" />
+                        </label>
+                        <label className="col-span-3 space-y-1">
+                          <span className={labelCls}>Temperatura servicio</span>
+                          <input value={tempServicio} onChange={(e) => setTempServicio(e.target.value)} className={inputCls} placeholder="62 °C / frío 4 °C" />
+                        </label>
+                        <label className="col-span-3 space-y-1">
+                          <span className={labelCls}>Rendimiento total</span>
+                          <input value={rendimientoTotal} onChange={(e) => setRendimientoTotal(e.target.value)} className={inputCls} placeholder="1 bandeja, 2,5 kg mezcla..." />
+                        </label>
+                        <div className="col-span-3 mt-1 space-y-1.5 border-t border-[rgba(10,9,8,0.06)] pt-2">
+                          <div className="flex items-center justify-between">
+                            <span className={labelCls}>Elaboración / pasos</span>
+                            <button type="button" onClick={() => setStepDrafts((prev) => [...prev, newStepDraft()])} className="inline-flex items-center gap-1 rounded-lg border border-dashed border-[rgba(10,9,8,0.16)] px-2 py-1 text-[10px] font-bold text-[#0A0908]">
+                              <Plus className="h-3 w-3" aria-hidden />
+                              Paso
+                            </button>
+                          </div>
+                          {stepDrafts.map((stepDraft, idx) => (
+                            <div key={stepDraft.key} className="rounded-lg border border-[rgba(10,9,8,0.06)] bg-[#FAFAF9] p-1.5">
+                              <div className="flex items-center gap-1.5">
+                                <span className="grid h-6 w-6 shrink-0 place-items-center rounded-md bg-[#0A0908] text-[10px] font-black text-white">{idx + 1}</span>
+                                <input
+                                  value={stepDraft.titulo}
+                                  onChange={(e) => setStepDrafts((prev) => prev.map((s, i) => (i === idx ? { ...s, titulo: e.target.value } : s)))}
+                                  className={`${inputCls} min-w-0 flex-1 bg-white`}
+                                  placeholder="Título"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => setStepDrafts((prev) => (prev.length <= 1 ? [newStepDraft()] : prev.filter((_, i) => i !== idx)))}
+                                  className="p-1 text-[#D32F2F]"
+                                  aria-label="Eliminar paso"
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </button>
+                              </div>
+                              <textarea
+                                value={stepDraft.descripcion}
+                                onChange={(e) => setStepDrafts((prev) => prev.map((s, i) => (i === idx ? { ...s, descripcion: e.target.value } : s)))}
+                                rows={2}
+                                className={`${textareaCls} mt-1 bg-white`}
+                                placeholder="Operación, tiempos, control..."
+                              />
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
+                    {id === 'conservation' ? (
+                      <div className="grid grid-cols-3 gap-1.5">
+                        <label className="space-y-1">
+                          <span className={labelCls}>Tipo</span>
+                          <input value={tipoCons} onChange={(e) => setTipoCons(e.target.value)} className={inputCls} placeholder="Refrig." />
+                        </label>
+                        <label className="space-y-1">
+                          <span className={labelCls}>Temp.</span>
+                          <input value={tempCons} onChange={(e) => setTempCons(e.target.value)} className={inputCls} placeholder="0-4 °C" />
+                        </label>
+                        <label className="space-y-1">
+                          <span className={labelCls}>Vida</span>
+                          <input value={vidaUtil} onChange={(e) => setVidaUtil(e.target.value)} className={inputCls} placeholder="3 días" />
+                        </label>
+                        <label className="col-span-3 space-y-1">
+                          <span className={labelCls}>Formato / regeneración</span>
+                          <textarea value={regeneracion} onChange={(e) => setRegeneracion(e.target.value)} rows={2} className={textareaCls} placeholder="Vacío, GN, MAP, regeneración..." />
+                        </label>
+                      </div>
+                    ) : null}
+                    {id === 'allergens' ? (
+                      <label className="block space-y-1">
+                        <span className={labelCls}>Alérgenos / trazas</span>
+                        <textarea value={alergManual} onChange={(e) => setAlergManual(e.target.value)} rows={2} className={textareaCls} placeholder="Gluten, lactosa, trazas de frutos secos..." />
+                      </label>
+                    ) : null}
+                    {id === 'plating' ? (
+                      <div className="grid gap-1.5">
+                        <label className="space-y-1">
+                          <span className={labelCls}>Montaje</span>
+                          <textarea value={emplDesc} onChange={(e) => setEmplDesc(e.target.value)} rows={2} className={textareaCls} />
+                        </label>
+                        <div className="grid grid-cols-2 gap-1.5">
+                          <label className="space-y-1">
+                            <span className={labelCls}>Decoración</span>
+                            <input value={emplDeco} onChange={(e) => setEmplDeco(e.target.value)} className={inputCls} />
+                          </label>
+                          <label className="space-y-1">
+                            <span className={labelCls}>Soporte</span>
+                            <input value={emplMenaje} onChange={(e) => setEmplMenaje(e.target.value)} className={inputCls} />
+                          </label>
+                        </div>
+                        <label className="flex h-9 cursor-pointer items-center justify-center gap-1.5 rounded-lg border border-dashed border-[rgba(10,9,8,0.16)] bg-[#FAFAF9] px-2 text-[11px] font-bold text-[#0A0908]">
+                          <Camera className="h-3.5 w-3.5 text-[#C4531F]" aria-hidden />
+                          Subir foto emplatado
+                          <input
+                            type="file"
+                            accept="image/*"
+                            className="sr-only"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (!file) return;
+                              readImageFile(file, setEmplFoto);
+                              e.target.value = '';
+                            }}
+                          />
+                        </label>
+                        {emplFoto.trim() ? (
+                          <div className="flex items-center gap-2 rounded-lg bg-[#FAFAF9] p-1.5">
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img src={emplFoto.trim()} alt="" className="h-12 w-12 rounded-md object-cover" />
+                            <span className="text-[10px] font-semibold text-[#7E7468]">Foto añadida</span>
+                          </div>
+                        ) : null}
+                      </div>
+                    ) : null}
+                    {id === 'appcc' ? (
+                      <p className="text-[11px] font-medium leading-relaxed text-[#7E7468]">
+                        La ficha APPCC se genera al guardar con los ingredientes y los pasos de elaboración que indiques en Producción.
+                      </p>
+                    ) : null}
+                    {id === 'observations' ? (
+                      <div className="grid gap-1.5">
+                        <label className="space-y-1">
+                          <span className={labelCls}>Notas del chef</span>
+                          <textarea value={notasChef} onChange={(e) => setNotasChef(e.target.value)} rows={2} className={textareaCls} />
+                        </label>
+                        <label className="space-y-1">
+                          <span className={labelCls}>Puntos críticos</span>
+                          <textarea value={puntosCrit} onChange={(e) => setPuntosCrit(e.target.value)} rows={2} className={textareaCls} />
+                        </label>
+                      </div>
+                    ) : null}
                   </div>
                 ) : null}
               </section>
             ))}
           </div>
 
-          <div className="fixed bottom-0 left-0 right-0 z-30 border-t border-[rgba(10,9,8,0.08)] bg-white/92 px-3 py-2 shadow-[0_-4px_18px_rgba(10,9,8,0.08)] backdrop-blur-md max-lg:pb-[calc(0.55rem+env(safe-area-inset-bottom,0px))]">
+          <button
+            type="button"
+            disabled={!canFinish}
+            onClick={() => void handleSave()}
+            className="flex h-11 w-full items-center justify-center gap-1.5 rounded-xl bg-[#D32F2F] text-[13px] font-black text-white transition hover:bg-[#B91C1C] disabled:opacity-50"
+          >
+            <Save className="h-4 w-4" aria-hidden />
+            Guardar receta
+          </button>
+
+          <div className="fixed left-0 right-0 z-30 border-t border-[rgba(10,9,8,0.08)] bg-white/92 px-3 py-2 shadow-[0_-4px_18px_rgba(10,9,8,0.08)] backdrop-blur-md bottom-[4.55rem] lg:bottom-0 max-lg:pb-[calc(0.55rem+env(safe-area-inset-bottom,0px))]">
             <div className="mx-auto grid max-w-lg grid-cols-[1fr_auto] gap-2">
               <div className="grid grid-cols-4 gap-1 rounded-lg bg-[#FAFAF9] px-1 py-1 ring-1 ring-[rgba(10,9,8,0.04)]">
                 <div className="text-center">
