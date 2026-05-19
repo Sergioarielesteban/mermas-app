@@ -81,7 +81,9 @@ export default function ProductosPage() {
   const masterComboboxRef = useRef<HTMLDivElement | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [showAddedBanner, setShowAddedBanner] = useState(false);
   const [showDeletedBanner, setShowDeletedBanner] = useState(false);
+  const addedBannerTimeoutRef = React.useRef<number | null>(null);
   const deletedBannerTimeoutRef = React.useRef<number | null>(null);
   const [search, setSearch] = useState('');
 
@@ -532,19 +534,8 @@ export default function ProductosPage() {
       setMessage('Selecciona un Artículo Máster para este origen.');
       return;
     }
-    if (
-      originType === 'master' &&
-      (!Number.isFinite(masterAutoPrice ?? NaN) || (masterAutoPrice ?? 0) <= 0)
-    ) {
-      setMessage('No se pudo obtener el coste del artículo máster.');
-      return;
-    }
     if (originType === 'escandallo' && !escandalloId) {
       setMessage('Selecciona un escandallo para usar precio automático.');
-      return;
-    }
-    if (originType === 'escandallo' && (!Number.isFinite(escandalloAutoPrice ?? NaN) || (escandalloAutoPrice ?? 0) <= 0)) {
-      setMessage('No se pudo resolver el coste del escandallo seleccionado.');
       return;
     }
     if (originType === 'base_subreceta' && !baseSubrecipeId) {
@@ -621,7 +612,13 @@ export default function ProductosPage() {
                 }))
             : [],
       });
-      setMessage('Producto añadido.');
+      setMessage(null);
+      setShowAddedBanner(true);
+      if (addedBannerTimeoutRef.current) window.clearTimeout(addedBannerTimeoutRef.current);
+      addedBannerTimeoutRef.current = window.setTimeout(() => {
+        setShowAddedBanner(false);
+        addedBannerTimeoutRef.current = null;
+      }, 1000);
     }
     setName('');
     setUnit('ud');
@@ -641,6 +638,7 @@ export default function ProductosPage() {
 
   React.useEffect(
     () => () => {
+      if (addedBannerTimeoutRef.current) window.clearTimeout(addedBannerTimeoutRef.current);
       if (deletedBannerTimeoutRef.current) window.clearTimeout(deletedBannerTimeoutRef.current);
     },
     [],
@@ -648,6 +646,13 @@ export default function ProductosPage() {
 
   return (
     <div className="relative">
+      {showAddedBanner ? (
+        <div className="pointer-events-none fixed inset-0 z-[90] grid place-items-center bg-black/25 px-6">
+          <div className="rounded-2xl bg-[#D32F2F] px-7 py-5 text-center shadow-2xl ring-2 ring-white/75">
+            <p className="text-xl font-black uppercase tracking-wide text-white">ARTÍCULO AÑADIDO</p>
+          </div>
+        </div>
+      ) : null}
       {showDeletedBanner ? (
         <div className="pointer-events-none fixed inset-0 z-[90] grid place-items-center bg-black/25 px-6">
           <div className="rounded-2xl bg-[#D32F2F] px-7 py-5 text-center shadow-2xl ring-2 ring-white/75">
