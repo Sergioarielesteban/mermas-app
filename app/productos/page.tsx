@@ -83,6 +83,8 @@ export default function ProductosPage() {
   const [message, setMessage] = useState<string | null>(null);
   const [showDeletedBanner, setShowDeletedBanner] = useState(false);
   const deletedBannerTimeoutRef = React.useRef<number | null>(null);
+  const [savedBannerLabel, setSavedBannerLabel] = useState<string | null>(null);
+  const savedBannerTimeoutRef = React.useRef<number | null>(null);
   const [search, setSearch] = useState('');
 
   const resolveEscandalloUnitCost = async (
@@ -532,19 +534,8 @@ export default function ProductosPage() {
       setMessage('Selecciona un Artículo Máster para este origen.');
       return;
     }
-    if (
-      originType === 'master' &&
-      (!Number.isFinite(masterAutoPrice ?? NaN) || (masterAutoPrice ?? 0) <= 0)
-    ) {
-      setMessage('No se pudo obtener el coste del artículo máster.');
-      return;
-    }
     if (originType === 'escandallo' && !escandalloId) {
       setMessage('Selecciona un escandallo para usar precio automático.');
-      return;
-    }
-    if (originType === 'escandallo' && (!Number.isFinite(escandalloAutoPrice ?? NaN) || (escandalloAutoPrice ?? 0) <= 0)) {
-      setMessage('No se pudo resolver el coste del escandallo seleccionado.');
       return;
     }
     if (originType === 'base_subreceta' && !baseSubrecipeId) {
@@ -595,7 +586,13 @@ export default function ProductosPage() {
                 }))
             : [],
       });
-      setMessage('Producto actualizado.');
+      setMessage(null);
+      setSavedBannerLabel('ARTÍCULO ACTUALIZADO');
+      if (savedBannerTimeoutRef.current) window.clearTimeout(savedBannerTimeoutRef.current);
+      savedBannerTimeoutRef.current = window.setTimeout(() => {
+        setSavedBannerLabel(null);
+        savedBannerTimeoutRef.current = null;
+      }, 1200);
     } else {
       addProduct({
         name,
@@ -621,7 +618,13 @@ export default function ProductosPage() {
                 }))
             : [],
       });
-      setMessage('Producto añadido.');
+      setMessage(null);
+      setSavedBannerLabel('ARTÍCULO AÑADIDO');
+      if (savedBannerTimeoutRef.current) window.clearTimeout(savedBannerTimeoutRef.current);
+      savedBannerTimeoutRef.current = window.setTimeout(() => {
+        setSavedBannerLabel(null);
+        savedBannerTimeoutRef.current = null;
+      }, 1200);
     }
     setName('');
     setUnit('ud');
@@ -642,6 +645,7 @@ export default function ProductosPage() {
   React.useEffect(
     () => () => {
       if (deletedBannerTimeoutRef.current) window.clearTimeout(deletedBannerTimeoutRef.current);
+      if (savedBannerTimeoutRef.current) window.clearTimeout(savedBannerTimeoutRef.current);
     },
     [],
   );
@@ -649,9 +653,16 @@ export default function ProductosPage() {
   return (
     <div className="relative">
       {showDeletedBanner ? (
-        <div className="pointer-events-none fixed inset-0 z-[90] grid place-items-center bg-black/25 px-6">
+        <div className="pointer-events-none fixed inset-0 z-[3000] grid place-items-center bg-black/25 px-6">
           <div className="rounded-2xl bg-[#D32F2F] px-7 py-5 text-center shadow-2xl ring-2 ring-white/75">
             <p className="text-xl font-black uppercase tracking-wide text-white">ELIMINADO</p>
+          </div>
+        </div>
+      ) : null}
+      {savedBannerLabel ? (
+        <div className="pointer-events-none fixed inset-0 z-[3000] grid place-items-center bg-black/25 px-6">
+          <div className="rounded-2xl bg-[#D32F2F] px-7 py-5 text-center shadow-2xl ring-2 ring-white/75">
+            <p className="text-xl font-black uppercase tracking-wide text-white">{savedBannerLabel}</p>
           </div>
         </div>
       ) : null}
@@ -831,6 +842,11 @@ export default function ProductosPage() {
             </div>
 
             <div className="modal-body min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-3 pb-[140px]">
+              {message ? (
+                <div className="mb-3 rounded-xl border border-red-200 bg-red-50 p-3 text-sm font-semibold text-red-800">
+                  {message}
+                </div>
+              ) : null}
               <form id="merma-producto-form" className="space-y-3" onSubmit={handleSubmit}>
                 <label className="block text-xs font-semibold text-zinc-700">
                   Nombre del Producto
