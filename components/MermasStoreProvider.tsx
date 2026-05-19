@@ -1,5 +1,6 @@
 'use client';
 
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { usePathname } from 'next/navigation';
 import React, { createContext, useContext, useEffect, useLayoutEffect, useMemo, useState } from 'react';
 import { useAuth } from '@/components/AuthProvider';
@@ -42,6 +43,12 @@ type CreateProductInput = {
   compositionLines?: Product['compositionLines'];
 };
 
+type ProductMutationResult = {
+  ok: boolean;
+  product?: Product;
+  reason?: string;
+};
+
 type AddMermaInput = {
   productId: string;
   quantity: number;
@@ -56,8 +63,8 @@ type AddMermaInput = {
 type MermasStore = {
   products: Product[];
   mermas: MermaRecord[];
-  addProduct: (input: CreateProductInput) => void;
-  updateProduct: (id: string, input: CreateProductInput) => void;
+  addProduct: (input: CreateProductInput) => Promise<ProductMutationResult>;
+  updateProduct: (id: string, input: CreateProductInput) => Promise<ProductMutationResult>;
   removeProduct: (id: string) => Promise<{ ok: boolean; reason?: string }>;
   addMerma: (input: AddMermaInput) => Promise<{ ok: boolean; record?: MermaRecord; reason?: string }>;
   updateMerma: (id: string, input: AddMermaInput) => { ok: boolean; reason?: string };
@@ -219,6 +226,11 @@ PAN BRIOCHE SIN GLUTEN	1,59 €`;
 const StoreContext = createContext<MermasStore | null>(null);
 
 const mermasCloudSessionKey = (localId: string) => `chefone_mermas_cloud:${localId}`;
+const PRODUCT_FULL_SELECT =
+  'id,name,unit,price_per_unit,tipo_origen,master_article_id,escandallo_id,base_subreceta_id,base_subreceta_kind,precio_manual,composicion_json,created_at';
+const PRODUCT_COMPAT_SELECT =
+  'id,name,unit,price_per_unit,tipo_origen,master_article_id,escandallo_id,precio_manual,composicion_json,created_at';
+const PRODUCT_MINIMAL_SELECT = 'id,name,unit,price_per_unit,created_at';
 
 function sortProductsByName(items: Product[]) {
   return [...items].sort((a, b) =>
@@ -251,6 +263,56 @@ function parsePrice(raw: string): number {
   const n = Number(normalized);
   if (!Number.isFinite(n)) return 0;
   return Math.round(n * 100) / 100;
+}
+
+async function fetchStoredProductRowByName(
+  supabase: SupabaseClient,
+  localId: string,
+  name: string,
+): Promise<ProductRow | null> {
+  for (const select of [PRODUCT_FULL_SELECT, PRODUCT_COMPAT_SELECT, PRODUCT_MINIMAL_SELECT]) {
+    const query = await supabase
+      .from('products')
+      .select(select)
+      .eq('local_id', localId)
+      .eq('name', name)
+      .maybeSingle();
+    if (!query.error && query.data) return query.data as ProductRow;
+  }
+  return null;
+}
+
+async function fetchStoredProductRowById(
+  supabase: SupabaseClient,
+  localId: string,
+  id: string,
+): Promise<ProductRow | null> {
+  for (const select of [PRODUCT_FULL_SELECT, PRODUCT_COMPAT_SELECT, PRODUCT_MINIMAL_SELECT]) {
+    const query = await supabase
+      .from('products')
+      .select(select)
+      .eq('local_id', localId)
+      .eq('id', id)
+      .maybeSingle();
+    if (!query.error && query.data) return query.data as ProductRow;
+  }
+  return null;
+}
+
+function formatProductMutationError(
+  action: 'crear' | 'actualizar',
+  error: { message?: string | null; details?: string | null; hint?: string | null } | null | undefined,
+  input: Pick<CreateProductInput, 'unit' | 'typeOrigin'>,
+): string {
+  const detail = [error?.message, error?.details, error?.hint].filter(Boolean).join(' ');
+  if (/duplicate key|unique/i.test(detail)) return 'Ya existe un producto con ese nombre.';
+  if (/unit/i.test(detail) && /check|constraint|invalid/i.test(detail)) {
+    return `No se pudo ${action} el producto porque la unidad "${input.unit}" no es compatible con la base de datos actual.`;
+  }
+  if (/tipo_origen|master_article_id|escandallo_id|base_subreceta|precio_manual|composicion_json/i.test(detail)) {
+    return 'La base de datos de mermas necesita la migración de origen dinámico para guardar este tipo de producto.';
+  }
+  return `No se pudo ${action} el producto.`;
 }
 
 function buildSeedProducts(): Product[] {

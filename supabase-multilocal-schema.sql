@@ -31,7 +31,7 @@ create table if not exists public.products (
   id uuid primary key default gen_random_uuid(),
   local_id uuid not null references public.locals(id) on delete restrict,
   name text not null,
-  unit text not null check (unit in ('kg', 'ud', 'bolsa', 'racion')),
+  unit text not null check (unit in ('kg', 'ud', 'bolsa', 'racion', 'caja', 'paquete', 'bandeja', 'docena', 'litro', 'ml', 'g')),
   price_per_unit numeric(10,2) not null check (price_per_unit >= 0),
   is_active boolean not null default true,
   created_by uuid references auth.users(id),
