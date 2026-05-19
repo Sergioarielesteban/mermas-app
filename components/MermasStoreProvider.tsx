@@ -8,6 +8,8 @@ import {
   mapMermaRow,
   mapMermaRowLean,
   mapProductRow,
+  normalizeProductUnitForDb,
+  productInsertErrorMessage,
   type MermaRow,
   type ProductRow,
 } from '@/lib/mermas-supabase';
@@ -56,8 +58,8 @@ type AddMermaInput = {
 type MermasStore = {
   products: Product[];
   mermas: MermaRecord[];
-  addProduct: (input: CreateProductInput) => void;
-  updateProduct: (id: string, input: CreateProductInput) => void;
+  addProduct: (input: CreateProductInput) => Promise<{ ok: boolean; reason?: string }>;
+  updateProduct: (id: string, input: CreateProductInput) => Promise<{ ok: boolean; reason?: string }>;
   removeProduct: (id: string) => Promise<{ ok: boolean; reason?: string }>;
   addMerma: (input: AddMermaInput) => Promise<{ ok: boolean; record?: MermaRecord; reason?: string }>;
   updateMerma: (id: string, input: AddMermaInput) => { ok: boolean; reason?: string };
@@ -1103,12 +1105,19 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
       return { unitCost: Math.max(0, manual ?? 0), originUsed: manual && manual > 0 ? 'manual' : 'sin_precio' };
     };
 
-    const addProduct = (input: CreateProductInput) => {
+    const addProduct = async (input: CreateProductInput): Promise<{ ok: boolean; reason?: string }> => {
       const trimmed = input.name.trim();
-      if (!trimmed) return;
+      if (!trimmed) return { ok: false, reason: 'Indica el nombre del producto.' };
       const typeOrigin = input.typeOrigin ?? 'manual';
-      if (!Number.isFinite(input.pricePerUnit) || input.pricePerUnit < 0) return;
-      if (typeOrigin === 'manual' && input.pricePerUnit <= 0) return;
+      if (!Number.isFinite(input.pricePerUnit) || input.pricePerUnit < 0) {
+        return { ok: false, reason: 'Precio no válido.' };
+      }
+      if (typeOrigin === 'manual' && input.pricePerUnit <= 0) {
+        return { ok: false, reason: 'Indica un precio manual mayor que 0.' };
+      }
+      if (typeOrigin !== 'manual' && typeOrigin !== 'composicion' && input.pricePerUnit <= 0) {
+        return { ok: false, reason: 'No se pudo calcular el coste automático. Revisa el origen seleccionado.' };
+      }
       const manualPrice =
         typeOrigin === 'manual'
           ? Math.round((input.manualPricePerUnit ?? input.pricePerUnit) * 100) / 100
@@ -1117,7 +1126,15 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
       const escandalloId = typeOrigin === 'escandallo' ? (input.escandalloId ?? null) : null;
       const baseSubrecipeId = typeOrigin === 'base_subreceta' ? (input.baseSubrecipeId ?? null) : null;
       const baseSubrecipeKind = typeOrigin === 'base_subreceta' ? (input.baseSubrecipeKind ?? null) : null;
-      if (typeOrigin === 'base_subreceta' && !baseSubrecipeId) return;
+      if (typeOrigin === 'master' && !masterArticleId) {
+        return { ok: false, reason: 'Selecciona un Artículo Máster.' };
+      }
+      if (typeOrigin === 'escandallo' && !escandalloId) {
+        return { ok: false, reason: 'Selecciona un escandallo.' };
+      }
+      if (typeOrigin === 'base_subreceta' && !baseSubrecipeId) {
+        return { ok: false, reason: 'Selecciona una base o subreceta.' };
+      }
       const compositionLines =
         typeOrigin === 'composicion'
           ? (input.compositionLines ?? [])
@@ -1131,82 +1148,94 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
                 unit: x.unit,
               }))
           : [];
+      if (typeOrigin === 'composicion' && compositionLines.length === 0) {
+        return { ok: false, reason: 'Añade al menos una línea válida en la composición.' };
+      }
       const normalized = normalizeName(trimmed);
       const exists = products.some((p) => normalizeName(p.name) === normalized);
-      if (exists) return;
+      if (exists) return { ok: false, reason: 'Ya existe un producto con ese nombre.' };
+
+      const unit = normalizeProductUnitForDb(input.unit);
+      const pricePerUnit = Math.round(input.pricePerUnit * 100) / 100;
 
       if (useCloud) {
-        if (!localId) return;
+        if (!localId) {
+          return { ok: false, reason: 'Perfil del local aún cargando. Espera 2 segundos y vuelve a guardar.' };
+        }
         const supabase = getSupabaseClient();
-        if (!supabase) return;
-        void (async () => {
-          const basePayload = {
-            local_id: localId,
-            name: trimmed,
-            unit: input.unit,
-            price_per_unit: Math.round(input.pricePerUnit * 100) / 100,
-            is_active: true,
-          };
-          let data: ProductRow | null = null;
-          const first = await supabase
+        if (!supabase) return { ok: false, reason: 'Sin conexión con Supabase.' };
+        const basePayload = {
+          local_id: localId,
+          name: trimmed,
+          unit,
+          price_per_unit: pricePerUnit,
+          is_active: true,
+        };
+        const originPayload = {
+          ...basePayload,
+          tipo_origen: typeOrigin,
+          master_article_id: masterArticleId,
+          escandallo_id: escandalloId,
+          base_subreceta_id: baseSubrecipeId,
+          base_subreceta_kind: baseSubrecipeKind,
+          precio_manual: manualPrice,
+          composicion_json: compositionLines,
+        };
+        const fullSelect =
+          'id,name,unit,price_per_unit,tipo_origen,master_article_id,escandallo_id,base_subreceta_id,base_subreceta_kind,precio_manual,composicion_json,created_at';
+        const compatSelect =
+          'id,name,unit,price_per_unit,tipo_origen,master_article_id,escandallo_id,precio_manual,composicion_json,created_at';
+
+        let data: ProductRow | null = null;
+        let lastError: string | undefined;
+        const first = await supabase.from('products').insert(originPayload).select(fullSelect).maybeSingle();
+        if (!first.error && first.data) {
+          data = first.data as ProductRow;
+        } else {
+          lastError = first.error?.message;
+          const fallbackCompat = await supabase
             .from('products')
             .insert({
               ...basePayload,
               tipo_origen: typeOrigin,
               master_article_id: masterArticleId,
               escandallo_id: escandalloId,
-              base_subreceta_id: baseSubrecipeId,
-              base_subreceta_kind: baseSubrecipeKind,
               precio_manual: manualPrice,
               composicion_json: compositionLines,
             })
-            .select(
-              'id,name,unit,price_per_unit,tipo_origen,master_article_id,escandallo_id,base_subreceta_id,base_subreceta_kind,precio_manual,composicion_json,created_at',
-            )
+            .select(compatSelect)
             .maybeSingle();
-          if (first.error) {
-            const fallbackCompat = await supabase
-              .from('products')
-              .insert({
-                ...basePayload,
-                tipo_origen: typeOrigin,
-                master_article_id: masterArticleId,
-                escandallo_id: escandalloId,
-                precio_manual: manualPrice,
-                composicion_json: compositionLines,
-              })
-              .select('id,name,unit,price_per_unit,tipo_origen,master_article_id,escandallo_id,precio_manual,composicion_json,created_at')
-              .maybeSingle();
-            if (!fallbackCompat.error && fallbackCompat.data) {
-              data = fallbackCompat.data as ProductRow;
-            }
-          } else if (first.data) {
-            data = first.data as ProductRow;
+          if (!fallbackCompat.error && fallbackCompat.data) {
+            data = fallbackCompat.data as ProductRow;
+          } else {
+            lastError = fallbackCompat.error?.message ?? lastError;
           }
-          if (!data) {
-            const fallback = await supabase
-              .from('products')
-              .insert(basePayload)
-              .select('id,name,unit,price_per_unit,created_at')
-              .single();
-            if (fallback.error || !fallback.data) return;
-            data = fallback.data as ProductRow;
-          }
-          if (!data) return;
-          const p = mapProductRow(data);
-          protectProductIdsRef.current.add(p.id);
-          setProducts((prev) => sortProductsByName([p, ...prev]));
-          markLocalEdit();
-        })();
-        return;
+        }
+        if (!data && typeOrigin === 'manual') {
+          const fallback = await supabase
+            .from('products')
+            .insert(basePayload)
+            .select('id,name,unit,price_per_unit,created_at')
+            .maybeSingle();
+          if (!fallback.error && fallback.data) data = fallback.data as ProductRow;
+          else lastError = fallback.error?.message ?? lastError;
+        }
+        if (!data) {
+          return { ok: false, reason: productInsertErrorMessage(lastError, typeOrigin) };
+        }
+        const p = mapProductRow(data);
+        protectProductIdsRef.current.add(p.id);
+        setProducts((prev) => sortProductsByName([p, ...prev]));
+        markLocalEdit();
+        return { ok: true };
       }
 
       const id = uid('p');
       const product: Product = {
         id,
         name: trimmed,
-        unit: input.unit,
-        pricePerUnit: Math.round(input.pricePerUnit * 100) / 100,
+        unit,
+        pricePerUnit,
         typeOrigin,
         masterArticleId,
         escandalloId,
@@ -1218,14 +1247,25 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
       };
       markLocalEdit();
       setProducts((prev) => sortProductsByName([product, ...prev]));
+      return { ok: true };
     };
 
-    const updateProduct = (id: string, input: CreateProductInput) => {
+    const updateProduct = async (
+      id: string,
+      input: CreateProductInput,
+    ): Promise<{ ok: boolean; reason?: string }> => {
       const trimmed = input.name.trim();
-      if (!trimmed) return;
+      if (!trimmed) return { ok: false, reason: 'Indica el nombre del producto.' };
       const typeOrigin = input.typeOrigin ?? 'manual';
-      if (!Number.isFinite(input.pricePerUnit) || input.pricePerUnit < 0) return;
-      if (typeOrigin === 'manual' && input.pricePerUnit <= 0) return;
+      if (!Number.isFinite(input.pricePerUnit) || input.pricePerUnit < 0) {
+        return { ok: false, reason: 'Precio no válido.' };
+      }
+      if (typeOrigin === 'manual' && input.pricePerUnit <= 0) {
+        return { ok: false, reason: 'Indica un precio manual mayor que 0.' };
+      }
+      if (typeOrigin !== 'manual' && typeOrigin !== 'composicion' && input.pricePerUnit <= 0) {
+        return { ok: false, reason: 'No se pudo calcular el coste automático. Revisa el origen seleccionado.' };
+      }
       const manualPrice =
         typeOrigin === 'manual'
           ? Math.round((input.manualPricePerUnit ?? input.pricePerUnit) * 100) / 100
@@ -1234,7 +1274,9 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
       const escandalloId = typeOrigin === 'escandallo' ? (input.escandalloId ?? null) : null;
       const baseSubrecipeId = typeOrigin === 'base_subreceta' ? (input.baseSubrecipeId ?? null) : null;
       const baseSubrecipeKind = typeOrigin === 'base_subreceta' ? (input.baseSubrecipeKind ?? null) : null;
-      if (typeOrigin === 'base_subreceta' && !baseSubrecipeId) return;
+      if (typeOrigin === 'base_subreceta' && !baseSubrecipeId) {
+        return { ok: false, reason: 'Selecciona una base o subreceta.' };
+      }
       const compositionLines =
         typeOrigin === 'composicion'
           ? (input.compositionLines ?? [])
@@ -1250,79 +1292,57 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
           : [];
       const normalized = normalizeName(trimmed);
       const exists = products.some((p) => p.id !== id && normalizeName(p.name) === normalized);
-      if (exists) return;
+      if (exists) return { ok: false, reason: 'Ya existe un producto con ese nombre.' };
+
+      const unit = normalizeProductUnitForDb(input.unit);
+      const nextPrice = Math.round(input.pricePerUnit * 100) / 100;
+      const patch = {
+        name: trimmed,
+        unit,
+        price_per_unit: nextPrice,
+        tipo_origen: typeOrigin,
+        master_article_id: masterArticleId,
+        escandallo_id: escandalloId,
+        base_subreceta_id: baseSubrecipeId,
+        base_subreceta_kind: baseSubrecipeKind,
+        precio_manual: manualPrice,
+        composicion_json: compositionLines,
+      };
+      const patchCompat = {
+        name: trimmed,
+        unit,
+        price_per_unit: nextPrice,
+        tipo_origen: typeOrigin,
+        master_article_id: masterArticleId,
+        escandallo_id: escandalloId,
+        precio_manual: manualPrice,
+        composicion_json: compositionLines,
+      };
+      const patchBasic = { name: trimmed, unit, price_per_unit: nextPrice };
 
       if (useCloud) {
-        if (!localId) return;
+        if (!localId) {
+          return { ok: false, reason: 'Perfil del local aún cargando. Espera 2 segundos y vuelve a guardar.' };
+        }
         const supabase = getSupabaseClient();
-        if (!supabase) return;
-        void (async () => {
-          const nextPrice = Math.round(input.pricePerUnit * 100) / 100;
-          const first = await supabase
-            .from('products')
-            .update({
-              name: trimmed,
-              unit: input.unit,
-              price_per_unit: nextPrice,
-              tipo_origen: typeOrigin,
-              master_article_id: masterArticleId,
-              escandallo_id: escandalloId,
-              base_subreceta_id: baseSubrecipeId,
-              base_subreceta_kind: baseSubrecipeKind,
-              precio_manual: manualPrice,
-              composicion_json: compositionLines,
-            })
-            .eq('id', id);
-          if (first.error) {
-            const fallbackCompat = await supabase
-              .from('products')
-              .update({
-                name: trimmed,
-                unit: input.unit,
-                price_per_unit: nextPrice,
-                tipo_origen: typeOrigin,
-                master_article_id: masterArticleId,
-                escandallo_id: escandalloId,
-                precio_manual: manualPrice,
-                composicion_json: compositionLines,
-              })
-              .eq('id', id);
-            if (fallbackCompat.error) {
-              const fallback = await supabase
-              .from('products')
-              .update({
-                name: trimmed,
-                unit: input.unit,
-                price_per_unit: nextPrice,
-              })
-              .eq('id', id);
-              if (fallback.error) return;
+        if (!supabase) return { ok: false, reason: 'Sin conexión con Supabase.' };
+        let lastError: string | undefined;
+        const first = await supabase.from('products').update(patch).eq('id', id).eq('local_id', localId);
+        if (first.error) {
+          lastError = first.error.message;
+          const fallbackCompat = await supabase.from('products').update(patchCompat).eq('id', id).eq('local_id', localId);
+          if (fallbackCompat.error) {
+            lastError = fallbackCompat.error.message;
+            if (typeOrigin === 'manual') {
+              const fallback = await supabase.from('products').update(patchBasic).eq('id', id).eq('local_id', localId);
+              if (fallback.error) {
+                return { ok: false, reason: productInsertErrorMessage(fallback.error.message, typeOrigin) };
+              }
+            } else {
+              return { ok: false, reason: productInsertErrorMessage(lastError, typeOrigin) };
             }
           }
-          setProducts((prev) =>
-            sortProductsByName(
-              prev.map((p) =>
-                p.id === id
-                  ? {
-                      ...p,
-                      name: trimmed,
-                      unit: input.unit,
-                      pricePerUnit: nextPrice,
-                      typeOrigin,
-                      masterArticleId,
-                      escandalloId,
-                      baseSubrecipeId,
-                      baseSubrecipeKind,
-                      manualPricePerUnit: manualPrice,
-                      compositionLines,
-                    }
-                  : p,
-              ),
-            ),
-          );
-          markLocalEdit();
-        })();
-        return;
+        }
       }
 
       setProducts((prev) =>
@@ -1332,8 +1352,8 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
               ? {
                   ...p,
                   name: trimmed,
-                  unit: input.unit,
-                  pricePerUnit: Math.round(input.pricePerUnit * 100) / 100,
+                  unit,
+                  pricePerUnit: nextPrice,
                   typeOrigin,
                   masterArticleId,
                   escandalloId,
@@ -1347,6 +1367,7 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
         ),
       );
       markLocalEdit();
+      return { ok: true };
     };
 
     const removeProduct = async (id: string) => {

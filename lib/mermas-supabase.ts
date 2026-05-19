@@ -1,6 +1,45 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { MermaMotiveKey, MermaRecord, Product, Unit } from '@/lib/types';
 
+const PRODUCT_DB_UNITS: readonly Unit[] = [
+  'kg',
+  'g',
+  'ud',
+  'bolsa',
+  'racion',
+  'caja',
+  'paquete',
+  'bandeja',
+  'docena',
+  'litro',
+  'ml',
+] as const;
+
+/** Unidades aceptadas por `products.unit` (tras migración de ampliación). */
+export function normalizeProductUnitForDb(unit: Unit): Unit {
+  if (PRODUCT_DB_UNITS.includes(unit)) return unit;
+  return 'ud';
+}
+
+export function productInsertErrorMessage(raw: string | undefined, typeOrigin: string): string {
+  const msg = raw ?? '';
+  if (/products_unit_check|unit.*check|violates check constraint.*unit/i.test(msg)) {
+    return 'Unidad de medida no válida en el servidor. Contacta con soporte o usa otra unidad.';
+  }
+  if (/foreign key|violates foreign key/i.test(msg)) {
+    if (typeOrigin === 'master') return 'El artículo máster seleccionado ya no existe o no pertenece a este local.';
+    if (typeOrigin === 'escandallo') return 'El escandallo seleccionado ya no existe o no pertenece a este local.';
+    return 'El origen seleccionado ya no es válido. Vuelve a elegirlo.';
+  }
+  if (/duplicate key|unique constraint|uq_products/i.test(msg)) {
+    return 'Ya existe un producto con ese nombre.';
+  }
+  if (/tipo_origen|composicion_json|base_subreceta/i.test(msg)) {
+    return 'El servidor no tiene la migración de orígenes de coste. Aplica supabase-mermas-origen-dinamico.sql.';
+  }
+  return 'No se pudo guardar el producto. Revisa los datos e inténtalo de nuevo.';
+}
+
 export type ProductRow = {
   id: string;
   name: string;

@@ -82,7 +82,10 @@ export default function ProductosPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [showDeletedBanner, setShowDeletedBanner] = useState(false);
+  const [showAddedBanner, setShowAddedBanner] = useState(false);
+  const [saving, setSaving] = useState(false);
   const deletedBannerTimeoutRef = React.useRef<number | null>(null);
+  const addedBannerTimeoutRef = React.useRef<number | null>(null);
   const [search, setSearch] = useState('');
 
   const resolveEscandalloUnitCost = async (
@@ -510,8 +513,18 @@ export default function ProductosPage() {
     price,
   ]);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const showAddedSuccessBanner = () => {
+    setShowAddedBanner(true);
+    if (addedBannerTimeoutRef.current) window.clearTimeout(addedBannerTimeoutRef.current);
+    addedBannerTimeoutRef.current = window.setTimeout(() => {
+      setShowAddedBanner(false);
+      addedBannerTimeoutRef.current = null;
+    }, 1000);
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (saving) return;
     const numeric =
       originType === 'escandallo'
         ? Math.max(0, escandalloAutoPrice ?? 0)
@@ -551,6 +564,17 @@ export default function ProductosPage() {
       setMessage('Selecciona una base/subreceta/elaborado para este origen.');
       return;
     }
+    if (
+      originType === 'base_subreceta' &&
+      (!Number.isFinite(baseSubrecipeAutoPrice ?? NaN) || (baseSubrecipeAutoPrice ?? 0) <= 0)
+    ) {
+      setMessage('No se pudo resolver el coste de la base/subreceta seleccionada.');
+      return;
+    }
+    if (originType === 'composicion' && numeric <= 0) {
+      setMessage('La composición debe tener un coste mayor que 0.');
+      return;
+    }
     if (originType === 'composicion') {
       const valid = compositionLines.filter(
         (x) => x.componentId && Number.isFinite(Number(x.qty)) && Number(x.qty) > 0 && x.unit,
@@ -570,59 +594,46 @@ export default function ProductosPage() {
       return;
     }
 
+    const productPayload = {
+      name,
+      unit,
+      pricePerUnit: numeric,
+      typeOrigin: originType,
+      masterArticleId: originType === 'master' ? masterArticleId || null : null,
+      escandalloId: originType === 'escandallo' ? escandalloId || null : null,
+      baseSubrecipeId: originType === 'base_subreceta' ? baseSubrecipeId || null : null,
+      baseSubrecipeKind: originType === 'base_subreceta' ? baseSubrecipeKind : null,
+      manualPricePerUnit: originType === 'manual' ? numeric : null,
+      compositionLines:
+        originType === 'composicion'
+          ? compositionLines
+              .filter((x) => x.componentId && Number.isFinite(Number(x.qty)) && Number(x.qty) > 0 && x.unit)
+              .map((x) => ({
+                id: x.id,
+                componentType: x.componentType,
+                componentId: x.componentId,
+                componentKind: x.componentKind ?? null,
+                qty: Number(x.qty),
+                unit: x.unit,
+              }))
+          : [],
+    };
+
+    setSaving(true);
+    const result = editingId ? await updateProduct(editingId, productPayload) : await addProduct(productPayload);
+    setSaving(false);
+    if (!result.ok) {
+      setMessage(result.reason ?? 'No se pudo guardar el producto.');
+      return;
+    }
+
     if (editingId) {
-      updateProduct(editingId, {
-        name,
-        unit,
-        pricePerUnit: numeric,
-        typeOrigin: originType,
-        masterArticleId: originType === 'master' ? masterArticleId || null : null,
-        escandalloId: originType === 'escandallo' ? escandalloId || null : null,
-        baseSubrecipeId: originType === 'base_subreceta' ? baseSubrecipeId || null : null,
-        baseSubrecipeKind: originType === 'base_subreceta' ? baseSubrecipeKind : null,
-        manualPricePerUnit: originType === 'manual' ? numeric : null,
-        compositionLines:
-          originType === 'composicion'
-            ? compositionLines
-                .filter((x) => x.componentId && Number.isFinite(Number(x.qty)) && Number(x.qty) > 0 && x.unit)
-                .map((x) => ({
-                  id: x.id,
-                  componentType: x.componentType,
-                  componentId: x.componentId,
-                  componentKind: x.componentKind ?? null,
-                  qty: Number(x.qty),
-                  unit: x.unit,
-                }))
-            : [],
-      });
       setMessage('Producto actualizado.');
     } else {
-      addProduct({
-        name,
-        unit,
-        pricePerUnit: numeric,
-        typeOrigin: originType,
-        masterArticleId: originType === 'master' ? masterArticleId || null : null,
-        escandalloId: originType === 'escandallo' ? escandalloId || null : null,
-        baseSubrecipeId: originType === 'base_subreceta' ? baseSubrecipeId || null : null,
-        baseSubrecipeKind: originType === 'base_subreceta' ? baseSubrecipeKind : null,
-        manualPricePerUnit: originType === 'manual' ? numeric : null,
-        compositionLines:
-          originType === 'composicion'
-            ? compositionLines
-                .filter((x) => x.componentId && Number.isFinite(Number(x.qty)) && Number(x.qty) > 0 && x.unit)
-                .map((x) => ({
-                  id: x.id,
-                  componentType: x.componentType,
-                  componentId: x.componentId,
-                  componentKind: x.componentKind ?? null,
-                  qty: Number(x.qty),
-                  unit: x.unit,
-                }))
-            : [],
-      });
-      setMessage('Producto añadido.');
+      setMessage(null);
+      showAddedSuccessBanner();
     }
+    setName('');
     setName('');
     setUnit('ud');
     setPrice('0');
@@ -642,6 +653,7 @@ export default function ProductosPage() {
   React.useEffect(
     () => () => {
       if (deletedBannerTimeoutRef.current) window.clearTimeout(deletedBannerTimeoutRef.current);
+      if (addedBannerTimeoutRef.current) window.clearTimeout(addedBannerTimeoutRef.current);
     },
     [],
   );
@@ -652,6 +664,13 @@ export default function ProductosPage() {
         <div className="pointer-events-none fixed inset-0 z-[90] grid place-items-center bg-black/25 px-6">
           <div className="rounded-2xl bg-[#D32F2F] px-7 py-5 text-center shadow-2xl ring-2 ring-white/75">
             <p className="text-xl font-black uppercase tracking-wide text-white">ELIMINADO</p>
+          </div>
+        </div>
+      ) : null}
+      {showAddedBanner ? (
+        <div className="pointer-events-none fixed inset-0 z-[90] grid place-items-center bg-black/25 px-6">
+          <div className="rounded-2xl bg-[#D32F2F] px-7 py-5 text-center shadow-2xl ring-2 ring-white/75">
+            <p className="text-xl font-black uppercase tracking-wide text-white">ARTÍCULO AÑADIDO</p>
           </div>
         </div>
       ) : null}
@@ -1162,9 +1181,10 @@ export default function ProductosPage() {
               <button
                 type="submit"
                 form="merma-producto-form"
-                className="h-12 w-full min-h-12 rounded-xl bg-[#D32F2F] text-sm font-extrabold uppercase text-white"
+                disabled={saving}
+                className="h-12 w-full min-h-12 rounded-xl bg-[#D32F2F] text-sm font-extrabold uppercase text-white disabled:opacity-60"
               >
-                {editingId ? 'GUARDAR CAMBIOS' : 'GUARDAR PRODUCTO'}
+                {saving ? 'GUARDANDO…' : editingId ? 'GUARDAR CAMBIOS' : 'GUARDAR PRODUCTO'}
               </button>
             </div>
           </div>
