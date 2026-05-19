@@ -83,6 +83,8 @@ export default function ProductosPage() {
   const [message, setMessage] = useState<string | null>(null);
   const [showDeletedBanner, setShowDeletedBanner] = useState(false);
   const deletedBannerTimeoutRef = React.useRef<number | null>(null);
+  const [showAddedBanner, setShowAddedBanner] = useState(false);
+  const addedBannerTimeoutRef = React.useRef<number | null>(null);
   const [search, setSearch] = useState('');
 
   const resolveEscandalloUnitCost = async (
@@ -510,8 +512,17 @@ export default function ProductosPage() {
     price,
   ]);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (
+      (originType === 'master' && masterPriceLoading) ||
+      (originType === 'escandallo' && escandalloPriceLoading) ||
+      (originType === 'base_subreceta' && escandalloPriceLoading) ||
+      (originType === 'composicion' && escandalloPriceLoading)
+    ) {
+      setMessage('Espera a que termine el cálculo del precio automático.');
+      return;
+    }
     const numeric =
       originType === 'escandallo'
         ? Math.max(0, escandalloAutoPrice ?? 0)
@@ -551,12 +562,23 @@ export default function ProductosPage() {
       setMessage('Selecciona una base/subreceta/elaborado para este origen.');
       return;
     }
+    if (
+      originType === 'base_subreceta' &&
+      (!Number.isFinite(baseSubrecipeAutoPrice ?? NaN) || (baseSubrecipeAutoPrice ?? 0) <= 0)
+    ) {
+      setMessage('No se pudo resolver el coste de la base/subreceta seleccionada.');
+      return;
+    }
     if (originType === 'composicion') {
       const valid = compositionLines.filter(
         (x) => x.componentId && Number.isFinite(Number(x.qty)) && Number(x.qty) > 0 && x.unit,
       );
       if (valid.length === 0) {
         setMessage('Añade al menos una línea válida en la composición.');
+        return;
+      }
+      if (!Number.isFinite(numeric) || numeric <= 0) {
+        setMessage('No se pudo calcular el coste de la composición. Revisa las líneas y unidades.');
         return;
       }
     }
@@ -571,7 +593,7 @@ export default function ProductosPage() {
     }
 
     if (editingId) {
-      updateProduct(editingId, {
+      const upd = await updateProduct(editingId, {
         name,
         unit,
         pricePerUnit: numeric,
@@ -595,9 +617,13 @@ export default function ProductosPage() {
                 }))
             : [],
       });
+      if (!upd.ok) {
+        setMessage(upd.reason ?? 'No se pudo actualizar el producto.');
+        return;
+      }
       setMessage('Producto actualizado.');
     } else {
-      addProduct({
+      const created = await addProduct({
         name,
         unit,
         pricePerUnit: numeric,
@@ -621,7 +647,17 @@ export default function ProductosPage() {
                 }))
             : [],
       });
-      setMessage('Producto añadido.');
+      if (!created.ok) {
+        setMessage(created.reason ?? 'No se pudo guardar el producto.');
+        return;
+      }
+      setMessage(null);
+      setShowAddedBanner(true);
+      if (addedBannerTimeoutRef.current) window.clearTimeout(addedBannerTimeoutRef.current);
+      addedBannerTimeoutRef.current = window.setTimeout(() => {
+        setShowAddedBanner(false);
+        addedBannerTimeoutRef.current = null;
+      }, 1000);
     }
     setName('');
     setUnit('ud');
@@ -642,12 +678,20 @@ export default function ProductosPage() {
   React.useEffect(
     () => () => {
       if (deletedBannerTimeoutRef.current) window.clearTimeout(deletedBannerTimeoutRef.current);
+      if (addedBannerTimeoutRef.current) window.clearTimeout(addedBannerTimeoutRef.current);
     },
     [],
   );
 
   return (
     <div className="relative">
+      {showAddedBanner ? (
+        <div className="pointer-events-none fixed inset-0 z-[95] grid place-items-center bg-black/25 px-6">
+          <div className="rounded-2xl bg-[#D32F2F] px-7 py-5 text-center shadow-2xl ring-2 ring-white/75">
+            <p className="text-xl font-black uppercase tracking-wide text-white">ARTÍCULO AÑADIDO</p>
+          </div>
+        </div>
+      ) : null}
       {showDeletedBanner ? (
         <div className="pointer-events-none fixed inset-0 z-[90] grid place-items-center bg-black/25 px-6">
           <div className="rounded-2xl bg-[#D32F2F] px-7 py-5 text-center shadow-2xl ring-2 ring-white/75">
