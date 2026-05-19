@@ -56,7 +56,7 @@ type AddMermaInput = {
 type MermasStore = {
   products: Product[];
   mermas: MermaRecord[];
-  addProduct: (input: CreateProductInput) => void;
+  addProduct: (input: CreateProductInput) => Promise<ProductWriteResult>;
   updateProduct: (id: string, input: CreateProductInput) => void;
   removeProduct: (id: string) => Promise<{ ok: boolean; reason?: string }>;
   addMerma: (input: AddMermaInput) => Promise<{ ok: boolean; record?: MermaRecord; reason?: string }>;
@@ -72,6 +72,8 @@ type PersistedState = {
   products: Product[];
   mermas: MermaRecord[];
 };
+
+type ProductWriteResult = { ok: boolean; product?: Product; reason?: string };
 
 type SeedMermaRow = {
   occurredAt: string;
@@ -1103,12 +1105,16 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
       return { unitCost: Math.max(0, manual ?? 0), originUsed: manual && manual > 0 ? 'manual' : 'sin_precio' };
     };
 
-    const addProduct = (input: CreateProductInput) => {
+    const addProduct = async (input: CreateProductInput): Promise<ProductWriteResult> => {
       const trimmed = input.name.trim();
-      if (!trimmed) return;
+      if (!trimmed) return { ok: false, reason: 'Indica un nombre para el producto.' };
       const typeOrigin = input.typeOrigin ?? 'manual';
-      if (!Number.isFinite(input.pricePerUnit) || input.pricePerUnit < 0) return;
-      if (typeOrigin === 'manual' && input.pricePerUnit <= 0) return;
+      if (!Number.isFinite(input.pricePerUnit) || input.pricePerUnit < 0) {
+        return { ok: false, reason: 'Indica un precio válido.' };
+      }
+      if (typeOrigin === 'manual' && input.pricePerUnit <= 0) {
+        return { ok: false, reason: 'Indica un precio manual mayor que 0.' };
+      }
       const manualPrice =
         typeOrigin === 'manual'
           ? Math.round((input.manualPricePerUnit ?? input.pricePerUnit) * 100) / 100
@@ -1117,7 +1123,15 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
       const escandalloId = typeOrigin === 'escandallo' ? (input.escandalloId ?? null) : null;
       const baseSubrecipeId = typeOrigin === 'base_subreceta' ? (input.baseSubrecipeId ?? null) : null;
       const baseSubrecipeKind = typeOrigin === 'base_subreceta' ? (input.baseSubrecipeKind ?? null) : null;
-      if (typeOrigin === 'base_subreceta' && !baseSubrecipeId) return;
+      if (typeOrigin === 'master' && !masterArticleId) {
+        return { ok: false, reason: 'Selecciona un Artículo Máster para este origen.' };
+      }
+      if (typeOrigin === 'escandallo' && !escandalloId) {
+        return { ok: false, reason: 'Selecciona un escandallo para este origen.' };
+      }
+      if (typeOrigin === 'base_subreceta' && !baseSubrecipeId) {
+        return { ok: false, reason: 'Selecciona una base/subreceta/elaborado para este origen.' };
+      }
       const compositionLines =
         typeOrigin === 'composicion'
           ? (input.compositionLines ?? [])
@@ -1131,23 +1145,28 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
                 unit: x.unit,
               }))
           : [];
+      if (typeOrigin === 'composicion' && compositionLines.length === 0) {
+        return { ok: false, reason: 'Añade al menos una línea válida en la composición.' };
+      }
       const normalized = normalizeName(trimmed);
       const exists = products.some((p) => normalizeName(p.name) === normalized);
-      if (exists) return;
+      if (exists) return { ok: false, reason: 'Ya existe un producto con ese nombre.' };
+      const nextPrice = Math.round(input.pricePerUnit * 100) / 100;
 
       if (useCloud) {
-        if (!localId) return;
+        if (!localId) return { ok: false, reason: 'Perfil del local aún cargando. Reintenta en 2 segundos.' };
         const supabase = getSupabaseClient();
-        if (!supabase) return;
-        void (async () => {
+        if (!supabase) return { ok: false, reason: 'Sin conexión.' };
+        try {
           const basePayload = {
             local_id: localId,
             name: trimmed,
             unit: input.unit,
-            price_per_unit: Math.round(input.pricePerUnit * 100) / 100,
+            price_per_unit: nextPrice,
             is_active: true,
           };
           let data: ProductRow | null = null;
+          let lastError = '';
           const first = await supabase
             .from('products')
             .insert({
@@ -1165,6 +1184,7 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
             )
             .maybeSingle();
           if (first.error) {
+            lastError = first.error.message;
             const fallbackCompat = await supabase
               .from('products')
               .insert({
@@ -1179,6 +1199,8 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
               .maybeSingle();
             if (!fallbackCompat.error && fallbackCompat.data) {
               data = fallbackCompat.data as ProductRow;
+            } else if (fallbackCompat.error) {
+              lastError = fallbackCompat.error.message;
             }
           } else if (first.data) {
             data = first.data as ProductRow;
@@ -1189,16 +1211,30 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
               .insert(basePayload)
               .select('id,name,unit,price_per_unit,created_at')
               .single();
-            if (fallback.error || !fallback.data) return;
+            if (fallback.error || !fallback.data) {
+              return { ok: false, reason: fallback.error?.message || lastError || 'No se pudo guardar el producto.' };
+            }
             data = fallback.data as ProductRow;
           }
-          if (!data) return;
-          const p = mapProductRow(data);
+          if (!data) return { ok: false, reason: lastError || 'No se pudo guardar el producto.' };
+          const p: Product = {
+            ...mapProductRow(data),
+            pricePerUnit: nextPrice,
+            typeOrigin,
+            masterArticleId,
+            escandalloId,
+            baseSubrecipeId,
+            baseSubrecipeKind,
+            manualPricePerUnit: manualPrice,
+            compositionLines,
+          };
           protectProductIdsRef.current.add(p.id);
           setProducts((prev) => sortProductsByName([p, ...prev]));
           markLocalEdit();
-        })();
-        return;
+          return { ok: true, product: p };
+        } catch (err) {
+          return { ok: false, reason: err instanceof Error ? err.message : 'No se pudo guardar el producto.' };
+        }
       }
 
       const id = uid('p');
@@ -1206,7 +1242,7 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
         id,
         name: trimmed,
         unit: input.unit,
-        pricePerUnit: Math.round(input.pricePerUnit * 100) / 100,
+        pricePerUnit: nextPrice,
         typeOrigin,
         masterArticleId,
         escandalloId,
@@ -1218,6 +1254,7 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
       };
       markLocalEdit();
       setProducts((prev) => sortProductsByName([product, ...prev]));
+      return { ok: true, product };
     };
 
     const updateProduct = (id: string, input: CreateProductInput) => {
