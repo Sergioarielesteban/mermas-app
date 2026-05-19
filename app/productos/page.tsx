@@ -83,6 +83,9 @@ export default function ProductosPage() {
   const [message, setMessage] = useState<string | null>(null);
   const [showDeletedBanner, setShowDeletedBanner] = useState(false);
   const deletedBannerTimeoutRef = React.useRef<number | null>(null);
+  const [showAddedBanner, setShowAddedBanner] = useState(false);
+  const addedBannerTimeoutRef = React.useRef<number | null>(null);
+  const [formError, setFormError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
 
   const resolveEscandalloUnitCost = async (
@@ -276,6 +279,7 @@ export default function ProductosPage() {
     return () => {
       active = false;
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [originType, escandalloId, localId]);
 
   useEffect(() => {
@@ -362,6 +366,7 @@ export default function ProductosPage() {
           ? baseSubrecipeAutoPrice ?? 0
           : Number(price);
     setPrice(next.toFixed(2));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [originType, escandalloAutoPrice, baseSubrecipeAutoPrice]);
 
   useEffect(() => {
@@ -512,6 +517,7 @@ export default function ProductosPage() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    setFormError(null);
     const numeric =
       originType === 'escandallo'
         ? Math.max(0, escandalloAutoPrice ?? 0)
@@ -525,30 +531,19 @@ export default function ProductosPage() {
     const trimmed = name.trim();
     if (!trimmed || !Number.isFinite(numeric) || numeric < 0) return;
     if (originType === 'manual' && numeric <= 0) {
-      setMessage('Indica un precio manual mayor que 0.');
+      setFormError('Indica un precio manual mayor que 0.');
       return;
     }
     if (originType === 'master' && !masterArticleId) {
-      setMessage('Selecciona un Artículo Máster para este origen.');
-      return;
-    }
-    if (
-      originType === 'master' &&
-      (!Number.isFinite(masterAutoPrice ?? NaN) || (masterAutoPrice ?? 0) <= 0)
-    ) {
-      setMessage('No se pudo obtener el coste del artículo máster.');
+      setFormError('Selecciona un Artículo Máster para este origen.');
       return;
     }
     if (originType === 'escandallo' && !escandalloId) {
-      setMessage('Selecciona un escandallo para usar precio automático.');
-      return;
-    }
-    if (originType === 'escandallo' && (!Number.isFinite(escandalloAutoPrice ?? NaN) || (escandalloAutoPrice ?? 0) <= 0)) {
-      setMessage('No se pudo resolver el coste del escandallo seleccionado.');
+      setFormError('Selecciona un escandallo para usar precio automático.');
       return;
     }
     if (originType === 'base_subreceta' && !baseSubrecipeId) {
-      setMessage('Selecciona una base/subreceta/elaborado para este origen.');
+      setFormError('Selecciona una base/subreceta/elaborado para este origen.');
       return;
     }
     if (originType === 'composicion') {
@@ -556,7 +551,7 @@ export default function ProductosPage() {
         (x) => x.componentId && Number.isFinite(Number(x.qty)) && Number(x.qty) > 0 && x.unit,
       );
       if (valid.length === 0) {
-        setMessage('Añade al menos una línea válida en la composición.');
+        setFormError('Añade al menos una línea válida en la composición.');
         return;
       }
     }
@@ -566,9 +561,23 @@ export default function ProductosPage() {
         (editingId ? p.id !== editingId : true),
     );
     if (duplicate) {
-      setMessage('Ya existe un producto con ese nombre.');
+      setFormError('Ya existe un producto con ese nombre.');
       return;
     }
+
+    const compositionPayload =
+      originType === 'composicion'
+        ? compositionLines
+            .filter((x) => x.componentId && Number.isFinite(Number(x.qty)) && Number(x.qty) > 0 && x.unit)
+            .map((x) => ({
+              id: x.id,
+              componentType: x.componentType,
+              componentId: x.componentId,
+              componentKind: x.componentKind ?? null,
+              qty: Number(x.qty),
+              unit: x.unit,
+            }))
+        : [];
 
     if (editingId) {
       updateProduct(editingId, {
@@ -581,19 +590,7 @@ export default function ProductosPage() {
         baseSubrecipeId: originType === 'base_subreceta' ? baseSubrecipeId || null : null,
         baseSubrecipeKind: originType === 'base_subreceta' ? baseSubrecipeKind : null,
         manualPricePerUnit: originType === 'manual' ? numeric : null,
-        compositionLines:
-          originType === 'composicion'
-            ? compositionLines
-                .filter((x) => x.componentId && Number.isFinite(Number(x.qty)) && Number(x.qty) > 0 && x.unit)
-                .map((x) => ({
-                  id: x.id,
-                  componentType: x.componentType,
-                  componentId: x.componentId,
-                  componentKind: x.componentKind ?? null,
-                  qty: Number(x.qty),
-                  unit: x.unit,
-                }))
-            : [],
+        compositionLines: compositionPayload,
       });
       setMessage('Producto actualizado.');
     } else {
@@ -607,21 +604,14 @@ export default function ProductosPage() {
         baseSubrecipeId: originType === 'base_subreceta' ? baseSubrecipeId || null : null,
         baseSubrecipeKind: originType === 'base_subreceta' ? baseSubrecipeKind : null,
         manualPricePerUnit: originType === 'manual' ? numeric : null,
-        compositionLines:
-          originType === 'composicion'
-            ? compositionLines
-                .filter((x) => x.componentId && Number.isFinite(Number(x.qty)) && Number(x.qty) > 0 && x.unit)
-                .map((x) => ({
-                  id: x.id,
-                  componentType: x.componentType,
-                  componentId: x.componentId,
-                  componentKind: x.componentKind ?? null,
-                  qty: Number(x.qty),
-                  unit: x.unit,
-                }))
-            : [],
+        compositionLines: compositionPayload,
       });
-      setMessage('Producto añadido.');
+      setShowAddedBanner(true);
+      if (addedBannerTimeoutRef.current) window.clearTimeout(addedBannerTimeoutRef.current);
+      addedBannerTimeoutRef.current = window.setTimeout(() => {
+        setShowAddedBanner(false);
+        addedBannerTimeoutRef.current = null;
+      }, 1200);
     }
     setName('');
     setUnit('ud');
@@ -636,12 +626,14 @@ export default function ProductosPage() {
     setEscandalloAutoPrice(null);
     setMasterAutoPrice(null);
     setEditingId(null);
+    setFormError(null);
     setOpen(false);
   };
 
   React.useEffect(
     () => () => {
       if (deletedBannerTimeoutRef.current) window.clearTimeout(deletedBannerTimeoutRef.current);
+      if (addedBannerTimeoutRef.current) window.clearTimeout(addedBannerTimeoutRef.current);
     },
     [],
   );
@@ -652,6 +644,13 @@ export default function ProductosPage() {
         <div className="pointer-events-none fixed inset-0 z-[90] grid place-items-center bg-black/25 px-6">
           <div className="rounded-2xl bg-[#D32F2F] px-7 py-5 text-center shadow-2xl ring-2 ring-white/75">
             <p className="text-xl font-black uppercase tracking-wide text-white">ELIMINADO</p>
+          </div>
+        </div>
+      ) : null}
+      {showAddedBanner ? (
+        <div className="pointer-events-none fixed inset-0 z-[92] grid place-items-center bg-black/25 px-6">
+          <div className="rounded-2xl bg-[#D32F2F] px-7 py-5 text-center shadow-2xl ring-2 ring-white/75">
+            <p className="text-xl font-black uppercase tracking-wide text-white">ARTÍCULO AÑADIDO</p>
           </div>
         </div>
       ) : null}
@@ -728,6 +727,7 @@ export default function ProductosPage() {
                     );
                     setOpen(true);
                     setMessage(null);
+                    setFormError(null);
                   }}
                   className="grid h-9 w-9 place-items-center rounded-lg border border-zinc-200 text-zinc-600 hover:bg-zinc-100"
                   aria-label={`Editar ${p.name}`}
@@ -787,6 +787,7 @@ export default function ProductosPage() {
           setEscandalloAutoPrice(null);
           setMasterAutoPrice(null);
           setMessage(null);
+          setFormError(null);
         }}
         className="fixed bottom-24 right-6 z-40 grid h-16 w-16 place-items-center rounded-full bg-gradient-to-r from-[#B91C1C] to-[#D32F2F] text-white shadow-xl"
         aria-label="Añadir producto"
@@ -821,6 +822,7 @@ export default function ProductosPage() {
                     setCompositionLines([]);
                     setEscandalloAutoPrice(null);
                     setMasterAutoPrice(null);
+                    setFormError(null);
                   }}
                   className="grid h-9 w-9 place-items-center rounded-lg text-zinc-600 hover:bg-zinc-100"
                   aria-label="Cerrar"
@@ -1159,6 +1161,11 @@ export default function ProductosPage() {
             </div>
 
             <div className="modal-footer sticky bottom-0 z-[999] shrink-0 border-t border-zinc-100 bg-white px-4 py-4 shadow-[0_-8px_24px_rgba(0,0,0,0.08)] pb-[calc(16px+env(safe-area-inset-bottom))]">
+              {formError ? (
+                <div className="mb-3 rounded-xl bg-red-50 px-3 py-2 text-sm font-medium text-red-700 ring-1 ring-red-200">
+                  {formError}
+                </div>
+              ) : null}
               <button
                 type="submit"
                 form="merma-producto-form"
