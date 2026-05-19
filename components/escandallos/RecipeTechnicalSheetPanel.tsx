@@ -1,5 +1,7 @@
 'use client';
 
+/* eslint-disable react-hooks/set-state-in-effect */
+
 import Link from 'next/link';
 import React, { useEffect, useMemo, useState } from 'react';
 import {
@@ -7,10 +9,10 @@ import {
   ArrowDown,
   ArrowUp,
   Camera,
+  ChevronDown,
   ClipboardList,
   Flame,
   ImageIcon,
-  Layers,
   Loader2,
   Plus,
   Refrigerator,
@@ -59,38 +61,57 @@ type Props = {
   onSave: (patch: EscandalloTechnicalSheetUpdate, stepDrafts: TechnicalSheetStepDraft[]) => Promise<void>;
 };
 
-function Block({
+function CompactAccordion({
+  id,
   title,
+  summary,
   icon: Icon,
+  tone = 'neutral',
+  open,
+  onToggle,
   children,
-  className,
 }: {
+  id: string;
   title: string;
+  summary: string;
   icon: LucideIcon;
+  tone?: 'neutral' | 'red' | 'amber' | 'olive';
+  open: boolean;
+  onToggle: (id: string) => void;
   children: React.ReactNode;
-  className?: string;
 }) {
+  const toneClass =
+    tone === 'red'
+      ? 'bg-[#D32F2F]/8 text-[#B91C1C] ring-[#D32F2F]/12'
+      : tone === 'amber'
+        ? 'bg-[#B8872A]/10 text-[#7A5518] ring-[#B8872A]/15'
+        : tone === 'olive'
+          ? 'bg-[#4A6B3A]/10 text-[#35502A] ring-[#4A6B3A]/15'
+          : 'bg-[#F7F3EE] text-[#7E7468] ring-[rgba(10,9,8,0.06)]';
+
   return (
-    <section
-      className={[
-        'rounded-2xl border border-zinc-200/90 bg-white p-4 shadow-sm ring-1 ring-zinc-100 sm:p-5',
-        className ?? '',
-      ].join(' ')}
-    >
-      <div className="mb-3 flex items-center gap-2 border-b border-zinc-100 pb-2">
-        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[#D32F2F]/10 text-[#B91C1C] ring-1 ring-[#D32F2F]/15">
-          <Icon className="h-4 w-4" strokeWidth={2.2} aria-hidden />
+    <section className="overflow-hidden rounded-lg border border-[rgba(10,9,8,0.07)] bg-white ring-1 ring-[rgba(10,9,8,0.035)]">
+      <button
+        type="button"
+        onClick={() => onToggle(id)}
+        className="flex min-h-11 w-full items-center gap-2 px-2.5 py-2 text-left transition hover:bg-[#FAFAF9]"
+      >
+        <span className={`grid h-7 w-7 shrink-0 place-items-center rounded-lg ring-1 ${toneClass}`}>
+          <Icon className="h-3.5 w-3.5" strokeWidth={2.1} aria-hidden />
         </span>
-        <h3 className="text-sm font-black uppercase tracking-wide text-zinc-900">{title}</h3>
-      </div>
-      {children}
+        <span className="min-w-0 flex-1">
+          <span className="block text-[11px] font-black uppercase tracking-wide text-[#0A0908]">{title}</span>
+          <span className="block truncate text-[10px] font-medium text-[#7E7468]">{summary || 'Sin datos'}</span>
+        </span>
+        <ChevronDown className={`h-3.5 w-3.5 shrink-0 text-[#7E7468] transition ${open ? 'rotate-180' : ''}`} />
+      </button>
+      {open ? <div className="border-t border-[rgba(10,9,8,0.06)] px-2.5 pb-2.5 pt-2">{children}</div> : null}
     </section>
   );
 }
 
 export default function RecipeTechnicalSheetPanel({
   recipe,
-  lines,
   sheet,
   steps,
   recipeAllergens,
@@ -100,6 +121,7 @@ export default function RecipeTechnicalSheetPanel({
   onSave,
 }: Props) {
   const [creating, setCreating] = useState(false);
+  const [openBlocks, setOpenBlocks] = useState<Record<string, boolean>>({});
 
   const [categoria, setCategoria] = useState('');
   const [codigoInterno, setCodigoInterno] = useState('');
@@ -198,7 +220,8 @@ export default function RecipeTechnicalSheetPanel({
   const parseOptDecimal = (raw: string): number | null => {
     const t = raw.trim().replace(',', '.');
     if (t === '') return null;
-    const n = Number(t);
+    const match = t.match(/\d+(?:\.\d+)?/);
+    const n = match ? Number(match[0]) : Number(t);
     return Number.isFinite(n) && n >= 0 ? Math.round(n * 10000) / 10000 : null;
   };
 
@@ -240,6 +263,14 @@ export default function RecipeTechnicalSheetPanel({
       },
       drafts,
     );
+  };
+
+  const readImageFile = (file: File, onReady: (dataUrl: string) => void) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === 'string') onReady(reader.result);
+    };
+    reader.readAsDataURL(file);
   };
 
   const moveStep = (idx: number, dir: -1 | 1) => {
@@ -295,325 +326,278 @@ export default function RecipeTechnicalSheetPanel({
   }
 
   const inputCls =
-    'mt-1 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm outline-none focus:border-[#D32F2F]/40 focus:ring-2 focus:ring-[#D32F2F]/15';
-  const labelCls = 'text-[10px] font-bold uppercase tracking-wide text-zinc-500';
+    'h-8 w-full rounded-lg border border-[rgba(10,9,8,0.08)] bg-[#FAFAF9] px-2 text-[12px] font-semibold text-[#0A0908] outline-none focus:border-[#C4531F]/45 focus:ring-1 focus:ring-[#C4531F]/15';
+  const textareaCls =
+    'min-h-16 w-full resize-none rounded-lg border border-[rgba(10,9,8,0.08)] bg-[#FAFAF9] px-2 py-1.5 text-[12px] leading-snug text-[#0A0908] outline-none focus:border-[#C4531F]/45 focus:ring-1 focus:ring-[#C4531F]/15';
+  const labelCls = 'text-[8px] font-black uppercase tracking-[0.11em] text-[#7E7468]';
+  const metricCls = 'space-y-1';
+  const summaryValue = (value: string, fallback = '—') => value.trim() || fallback;
+  const totalTime = [tPrep, tCocc, tReposo].reduce((acc, n) => acc + (Number(n.replace(',', '.')) || 0), 0);
+  const productionSummary = [
+    numeroRaciones.trim() ? `${numeroRaciones.trim()} rac.` : recipe.yieldQty ? `${recipe.yieldQty} rac.` : '',
+    gramajePorRacion.trim(),
+    totalTime > 0 ? `${totalTime} min` : '',
+  ].filter(Boolean).join(' · ');
+  const conservationSummary = [
+    summaryValue(tipoCons, 'Sin tipo'),
+    tempCons.trim(),
+    vidaUtil.trim(),
+  ].filter(Boolean).join(' · ');
+  const allergenSummary = allergensVisible.length
+    ? allergensVisible.slice(0, 3).map((a) => a.allergen?.name ?? 'Alérgeno').join(' · ') + (allergensVisible.length > 3 ? ` · +${allergensVisible.length - 3}` : '')
+    : 'Sin alérgenos activos';
+  const platingSummary = [
+    emplDesc.trim() ? 'Montaje' : '',
+    emplFoto.trim() ? 'foto añadida' : '',
+    emplMenaje.trim() ? emplMenaje.trim() : '',
+  ].filter(Boolean).join(' · ');
+  const observationsCount = [notasChef, puntosCrit, errores, reco].filter((x) => x.trim()).length;
+  const toggleBlock = (id: string) => setOpenBlocks((prev) => ({ ...prev, [id]: !prev[id] }));
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-col gap-3 rounded-2xl border border-zinc-200 bg-gradient-to-r from-zinc-50 to-white p-4 ring-1 ring-zinc-100 sm:flex-row sm:items-center sm:justify-between">
-        <div className="min-w-0">
-          <p className="text-[10px] font-black uppercase tracking-[0.12em] text-[#B91C1C]">Ficha técnica</p>
-          <p className="mt-0.5 truncate text-lg font-black text-zinc-900">{recipe.name}</p>
-          <p className="mt-1 text-xs text-zinc-600">
-            Estado:{' '}
-            <span className={activa ? 'font-bold text-emerald-700' : 'font-bold text-zinc-500'}>
-              {activa ? 'Activa' : 'Inactiva'}
-            </span>
-            {codigoInterno.trim() ? (
-              <>
-                {' '}
-                · Código <span className="font-mono tabular-nums">{codigoInterno.trim()}</span>
-              </>
-            ) : null}
-          </p>
-        </div>
-        <button
-          type="button"
-          disabled={saving}
-          onClick={() => void handleSave()}
-          className="inline-flex shrink-0 items-center justify-center gap-2 rounded-2xl bg-zinc-900 px-5 py-3 text-sm font-black text-white shadow-md transition hover:bg-zinc-800 disabled:opacity-60"
-        >
-          {saving ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Save className="h-4 w-4" aria-hidden />}
-          Guardar ficha
-        </button>
-      </div>
+    <div className="space-y-1.5">
+      <CompactAccordion
+        id="production"
+        title="Producción"
+        summary={productionSummary || rendimientoTotal || `${recipe.yieldQty} ${recipe.yieldLabel}`}
+        icon={Flame}
+        tone="red"
+        open={Boolean(openBlocks.production)}
+        onToggle={toggleBlock}
+      >
+          <div className="grid grid-cols-3 gap-1.5">
+            <label className={metricCls}>
+              <span className={labelCls}>Raciones</span>
+              <input value={numeroRaciones} onChange={(e) => setNumeroRaciones(e.target.value)} className={inputCls} inputMode="decimal" placeholder={String(recipe.yieldQty)} />
+            </label>
+            <label className={metricCls}>
+              <span className={labelCls}>Gramaje / unidad</span>
+              <input value={gramajePorRacion} onChange={(e) => setGramajePorRacion(e.target.value)} className={inputCls} placeholder="180 g / unid" />
+            </label>
+            <label className={metricCls}>
+              <span className={labelCls}>Total</span>
+              <input value={totalTime > 0 ? String(totalTime) : ''} readOnly className={`${inputCls} bg-white text-[#7E7468]`} placeholder="min" />
+            </label>
+            <label className={metricCls}>
+              <span className={labelCls}>Prep</span>
+              <input value={tPrep} onChange={(e) => setTPrep(e.target.value)} className={inputCls} inputMode="numeric" placeholder="min" />
+            </label>
+            <label className={metricCls}>
+              <span className={labelCls}>Cocción</span>
+              <input value={tCocc} onChange={(e) => setTCocc(e.target.value)} className={inputCls} inputMode="numeric" placeholder="min" />
+            </label>
+            <label className={metricCls}>
+              <span className={labelCls}>Reposo</span>
+              <input value={tReposo} onChange={(e) => setTReposo(e.target.value)} className={inputCls} inputMode="numeric" placeholder="min" />
+            </label>
+            <label className={`${metricCls} col-span-3`}>
+              <span className={labelCls}>Temperatura servicio</span>
+              <input value={tempServicio} onChange={(e) => setTempServicio(e.target.value)} className={inputCls} placeholder="62 °C / frío 4 °C" />
+            </label>
+            <label className={`${metricCls} col-span-3`}>
+              <span className={labelCls}>Rendimiento total</span>
+              <input value={rendimientoTotal} onChange={(e) => setRendimientoTotal(e.target.value)} className={inputCls} placeholder="1 bandeja, 2,5 kg mezcla..." />
+            </label>
 
-      <Block title="Datos generales" icon={Layers}>
-        <p className="text-xs text-zinc-600">
-          <span className="font-semibold text-zinc-800">Nombre (receta):</span> {recipe.name}
-        </p>
-        <div className="mt-3 grid gap-3 sm:grid-cols-2">
-          <div>
-            <label className={labelCls}>Categoría</label>
-            <input value={categoria} onChange={(e) => setCategoria(e.target.value)} className={inputCls} placeholder="Ej. Entrante frío" />
-          </div>
-          <div>
-            <label className={labelCls}>Código interno</label>
-            <input
-              value={codigoInterno}
-              onChange={(e) => setCodigoInterno(e.target.value)}
-              className={`${inputCls} font-mono tabular-nums`}
-              placeholder="Opcional"
-            />
-          </div>
-        </div>
-        <div className="mt-3">
-          <label className={labelCls}>Foto principal (URL)</label>
-          <input value={fotoUrl} onChange={(e) => setFotoUrl(e.target.value)} className={inputCls} placeholder="https://…" />
-          {fotoUrl.trim() ? (
-            <div className="mt-2 overflow-hidden rounded-xl border border-zinc-200 bg-zinc-50">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={fotoUrl.trim()} alt="" className="max-h-48 w-full object-cover" />
-            </div>
-          ) : null}
-        </div>
-        <label className="mt-4 flex cursor-pointer items-center gap-2">
-          <input type="checkbox" checked={activa} onChange={(e) => setActiva(e.target.checked)} className="h-4 w-4 rounded border-zinc-300" />
-          <span className="text-sm font-semibold text-zinc-800">Ficha activa (visible para operativa)</span>
-        </label>
-      </Block>
-
-      <Block title="Producción" icon={Flame}>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <div className="sm:col-span-2">
-            <label className={labelCls}>Rendimiento total (texto libre)</label>
-            <input
-              value={rendimientoTotal}
-              onChange={(e) => setRendimientoTotal(e.target.value)}
-              className={inputCls}
-              placeholder="Ej. 1 bandeja 60×40, 2,5 kg mezcla…"
-            />
-          </div>
-          <div>
-            <label className={labelCls}>N.º raciones (opcional)</label>
-            <input value={numeroRaciones} onChange={(e) => setNumeroRaciones(e.target.value)} className={inputCls} inputMode="decimal" />
-          </div>
-          <div>
-            <label className={labelCls}>Gramaje por ración (g)</label>
-            <input value={gramajePorRacion} onChange={(e) => setGramajePorRacion(e.target.value)} className={inputCls} inputMode="decimal" />
-          </div>
-          <div>
-            <label className={labelCls}>Preparación (min)</label>
-            <input value={tPrep} onChange={(e) => setTPrep(e.target.value)} className={inputCls} inputMode="numeric" />
-          </div>
-          <div>
-            <label className={labelCls}>Cocción (min)</label>
-            <input value={tCocc} onChange={(e) => setTCocc(e.target.value)} className={inputCls} inputMode="numeric" />
-          </div>
-          <div>
-            <label className={labelCls}>Reposo (min)</label>
-            <input value={tReposo} onChange={(e) => setTReposo(e.target.value)} className={inputCls} inputMode="numeric" />
-          </div>
-          <div>
-            <label className={labelCls}>Temperatura de servicio</label>
-            <input value={tempServicio} onChange={(e) => setTempServicio(e.target.value)} className={inputCls} placeholder="Ej. 62 °C / frío 4 °C" />
-          </div>
-        </div>
-      </Block>
-
-      <Block title="Ingredientes (escandallo)" icon={ClipboardList}>
-        <p className="text-xs leading-relaxed text-zinc-600">
-          Lista de la receta: mismas cantidades que en la pestaña <strong>Ingredientes</strong>. Si cambias el escandallo, esta sección se actualiza al guardar la receta.
-        </p>
-        {lines.length === 0 ? (
-          <p className="mt-3 text-sm text-zinc-400">Aún no hay líneas en el escandallo.</p>
-        ) : (
-          <ul className="mt-3 divide-y divide-zinc-100 rounded-xl border border-zinc-200 bg-zinc-50/50">
-            {lines.map((line) => (
-              <li key={line.id} className="flex flex-wrap items-baseline justify-between gap-2 px-3 py-2.5 text-sm">
-                <span className="font-semibold text-zinc-900">{line.label}</span>
-                <span className="tabular-nums text-zinc-700">
-                  {line.qty} {line.unit}
-                </span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </Block>
-
-      <Block title="Elaboración paso a paso" icon={Sparkles}>
-        <div className="space-y-3">
-          {stepDrafts.map((st, idx) => (
-            <div key={st.key} className="rounded-xl border border-zinc-200 bg-zinc-50/80 p-3 ring-1 ring-zinc-100">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-zinc-900 text-xs font-black text-white">
-                  {idx + 1}
-                </span>
-                <input
-                  value={st.titulo}
-                  onChange={(e) =>
-                    setStepDrafts((prev) => prev.map((p, i) => (i === idx ? { ...p, titulo: e.target.value } : p)))
-                  }
-                  className="min-w-0 flex-1 rounded-lg border border-zinc-200 bg-white px-2 py-1.5 text-sm font-semibold outline-none focus:ring-2 focus:ring-[#D32F2F]/20"
-                  placeholder={`Título opcional · Paso ${idx + 1}`}
-                />
-                <div className="ml-auto flex gap-1">
-                  <button
-                    type="button"
-                    onClick={() => moveStep(idx, -1)}
-                    disabled={idx === 0}
-                    className="rounded-lg border border-zinc-200 bg-white p-2 text-zinc-700 disabled:opacity-40"
-                    aria-label="Subir paso"
-                  >
-                    <ArrowUp className="h-4 w-4" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => moveStep(idx, 1)}
-                    disabled={idx >= stepDrafts.length - 1}
-                    className="rounded-lg border border-zinc-200 bg-white p-2 text-zinc-700 disabled:opacity-40"
-                    aria-label="Bajar paso"
-                  >
-                    <ArrowDown className="h-4 w-4" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (stepDrafts.length <= 1) {
-                        setStepDrafts([emptyStep()]);
-                        return;
-                      }
-                      setStepDrafts((prev) => prev.filter((_, i) => i !== idx));
-                    }}
-                    className="rounded-lg border border-red-100 bg-red-50 p-2 text-red-800"
-                    aria-label="Eliminar paso"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </button>
+            <div className="col-span-3 mt-1 space-y-1.5 border-t border-[rgba(10,9,8,0.06)] pt-2">
+              <div className="flex items-center justify-between">
+                <span className="text-[9px] font-black uppercase text-[#7E7468]">Elaboración</span>
+                <button type="button" onClick={() => setStepDrafts((prev) => [...prev, emptyStep()])} className="inline-flex items-center gap-1 rounded-lg border border-dashed border-[rgba(10,9,8,0.16)] px-2 py-1 text-[10px] font-bold text-[#0A0908]">
+                  <Plus className="h-3 w-3" aria-hidden />
+                  Paso
+                </button>
+              </div>
+              {stepDrafts.map((st, idx) => (
+                <div key={st.key} className="rounded-lg border border-[rgba(10,9,8,0.06)] bg-[#FAFAF9] p-1.5">
+                  <div className="flex items-center gap-1.5">
+                    <span className="grid h-6 w-6 shrink-0 place-items-center rounded-md bg-[#0A0908] text-[10px] font-black text-white">{idx + 1}</span>
+                    <input
+                      value={st.titulo}
+                      onChange={(e) => setStepDrafts((prev) => prev.map((p, i) => (i === idx ? { ...p, titulo: e.target.value } : p)))}
+                      className={`${inputCls} min-w-0 flex-1 bg-white`}
+                      placeholder="Título"
+                    />
+                    <button type="button" onClick={() => moveStep(idx, -1)} disabled={idx === 0} className="p-1 text-[#7E7468] disabled:opacity-30" aria-label="Subir paso"><ArrowUp className="h-3.5 w-3.5" /></button>
+                    <button type="button" onClick={() => moveStep(idx, 1)} disabled={idx >= stepDrafts.length - 1} className="p-1 text-[#7E7468] disabled:opacity-30" aria-label="Bajar paso"><ArrowDown className="h-3.5 w-3.5" /></button>
+                    <button
+                      type="button"
+                      onClick={() => setStepDrafts((prev) => (prev.length <= 1 ? [emptyStep()] : prev.filter((_, i) => i !== idx)))}
+                      className="p-1 text-[#D32F2F]"
+                      aria-label="Eliminar paso"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                  <textarea
+                    value={st.descripcion}
+                    onChange={(e) => setStepDrafts((prev) => prev.map((p, i) => (i === idx ? { ...p, descripcion: e.target.value } : p)))}
+                    rows={2}
+                    className={`${textareaCls} mt-1 bg-white`}
+                    placeholder="Operación, tiempos, control..."
+                  />
                 </div>
-              </div>
-              <textarea
-                value={st.descripcion}
-                onChange={(e) =>
-                  setStepDrafts((prev) => prev.map((p, i) => (i === idx ? { ...p, descripcion: e.target.value } : p)))
-                }
-                rows={3}
-                className="mt-2 w-full rounded-lg border border-zinc-200 bg-white px-2 py-2 text-sm outline-none focus:ring-2 focus:ring-[#D32F2F]/15"
-                placeholder="Describe la operación, tiempos, puntos de control…"
-              />
+              ))}
             </div>
-          ))}
-        </div>
-        <button
-          type="button"
-          onClick={() => setStepDrafts((prev) => [...prev, emptyStep()])}
-          className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-zinc-300 bg-white py-2.5 text-sm font-bold text-zinc-700 hover:bg-zinc-50"
-        >
-          <Plus className="h-4 w-4" aria-hidden />
-          Añadir paso
-        </button>
-      </Block>
+          </div>
+      </CompactAccordion>
 
-      <Block title="Emplatado / presentación" icon={Camera}>
-        <div className="grid gap-3">
-          <div>
-            <label className={labelCls}>Montaje / descripción</label>
-            <textarea value={emplDesc} onChange={(e) => setEmplDesc(e.target.value)} rows={3} className={inputCls} />
+      <CompactAccordion
+        id="conservation"
+        title="Conservación"
+        summary={conservationSummary}
+        icon={Refrigerator}
+        tone="olive"
+        open={Boolean(openBlocks.conservation)}
+        onToggle={toggleBlock}
+      >
+          <div className="grid grid-cols-3 gap-1.5">
+            <label className={metricCls}>
+              <span className={labelCls}>Tipo</span>
+              <input value={tipoCons} onChange={(e) => setTipoCons(e.target.value)} className={inputCls} placeholder="Refrig." />
+            </label>
+            <label className={metricCls}>
+              <span className={labelCls}>Temp.</span>
+              <input value={tempCons} onChange={(e) => setTempCons(e.target.value)} className={inputCls} placeholder="0-4 °C" />
+            </label>
+            <label className={metricCls}>
+              <span className={labelCls}>Vida</span>
+              <input value={vidaUtil} onChange={(e) => setVidaUtil(e.target.value)} className={inputCls} placeholder="3 días" />
+            </label>
+            <label className={`${metricCls} col-span-3`}>
+              <span className={labelCls}>Formato / regeneración</span>
+              <textarea value={regeneracion} onChange={(e) => setRegeneracion(e.target.value)} rows={2} className={textareaCls} placeholder="Vacío, GN, MAP, horno, salamandra..." />
+            </label>
           </div>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div>
-              <label className={labelCls}>Decoración</label>
-              <input value={emplDeco} onChange={(e) => setEmplDeco(e.target.value)} className={inputCls} />
-            </div>
-            <div>
-              <label className={labelCls}>Soporte / menaje</label>
-              <input value={emplMenaje} onChange={(e) => setEmplMenaje(e.target.value)} className={inputCls} />
-            </div>
+      </CompactAccordion>
+
+      <CompactAccordion
+        id="allergens"
+        title="Alérgenos"
+        summary={allergenSummary}
+        icon={AlertTriangle}
+        tone="amber"
+        open={Boolean(openBlocks.allergens)}
+        onToggle={toggleBlock}
+      >
+          <div className="flex flex-wrap gap-1.5">
+            {allergensVisible.length === 0 ? (
+              <span className="rounded-full bg-[#F7F3EE] px-2 py-1 text-[10px] font-semibold text-[#7E7468]">Sin alérgenos activos</span>
+            ) : (
+              allergensVisible.map((a) => (
+                <span
+                  key={a.id}
+                  className="inline-flex items-center gap-1 rounded-full border border-[#B8872A]/20 bg-[#B8872A]/10 px-2 py-1 text-[10px] font-bold text-[#7A5518]"
+                >
+                  <span aria-hidden>{a.allergen?.icon ?? '•'}</span>
+                  {a.allergen?.name ?? 'Alérgeno'}
+                  <span className="font-medium opacity-75">{presenceLabel(a.presence_type)}</span>
+                </span>
+              ))
+            )}
           </div>
-          <div>
-            <label className={labelCls}>Foto emplatado (URL)</label>
-            <input value={emplFoto} onChange={(e) => setEmplFoto(e.target.value)} className={inputCls} placeholder="https://…" />
+          {!recipe.isSubRecipe ? (
+            <Link href={`/appcc/carta-alergenos/${recipe.id}`} className="mt-2 inline-flex items-center gap-1.5 text-[11px] font-bold text-[#C4531F]">
+              <ImageIcon className="h-3.5 w-3.5" aria-hidden />
+              Carta APPCC
+            </Link>
+          ) : null}
+          <label className="mt-2 block space-y-1">
+            <span className={labelCls}>Notas manuales</span>
+            <textarea value={alergManual} onChange={(e) => setAlergManual(e.target.value)} rows={2} className={textareaCls} placeholder="Trazas, puede contener..." />
+          </label>
+      </CompactAccordion>
+
+      <CompactAccordion
+        id="plating"
+        title="Emplatado"
+        summary={platingSummary || 'Montaje · decoración · foto'}
+        icon={Camera}
+        open={Boolean(openBlocks.plating)}
+        onToggle={toggleBlock}
+      >
+          <div className="grid gap-1.5">
+            <label className={metricCls}>
+              <span className={labelCls}>Montaje</span>
+              <textarea value={emplDesc} onChange={(e) => setEmplDesc(e.target.value)} rows={2} className={textareaCls} />
+            </label>
+            <div className="grid grid-cols-2 gap-1.5">
+              <label className={metricCls}>
+                <span className={labelCls}>Decoración</span>
+                <input value={emplDeco} onChange={(e) => setEmplDeco(e.target.value)} className={inputCls} />
+              </label>
+              <label className={metricCls}>
+                <span className={labelCls}>Soporte</span>
+                <input value={emplMenaje} onChange={(e) => setEmplMenaje(e.target.value)} className={inputCls} />
+              </label>
+            </div>
+            <div className={metricCls}>
+              <span className={labelCls}>Foto emplatado</span>
+              <label className="flex h-9 cursor-pointer items-center justify-center gap-1.5 rounded-lg border border-dashed border-[rgba(10,9,8,0.16)] bg-[#FAFAF9] px-2 text-[11px] font-bold text-[#0A0908]">
+                <Camera className="h-3.5 w-3.5 text-[#C4531F]" aria-hidden />
+                Subir foto
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="sr-only"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    readImageFile(file, setEmplFoto);
+                    e.target.value = '';
+                  }}
+                />
+              </label>
+            </div>
             {emplFoto.trim() ? (
-              <div className="mt-2 overflow-hidden rounded-xl border border-zinc-200 bg-zinc-50">
+              <div className="flex items-center gap-2 rounded-lg border border-[rgba(10,9,8,0.08)] bg-[#FAFAF9] p-1.5">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={emplFoto.trim()} alt="" className="max-h-48 w-full object-cover" />
+                <img src={emplFoto.trim()} alt="" className="h-12 w-12 rounded-md object-cover" />
+                <span className="text-[10px] font-semibold text-[#7E7468]">Foto añadida</span>
+                <button type="button" onClick={() => setEmplFoto('')} className="ml-auto rounded-md px-2 py-1 text-[10px] font-bold text-[#D32F2F]">
+                  Quitar
+                </button>
               </div>
             ) : null}
           </div>
-        </div>
-      </Block>
+      </CompactAccordion>
 
-      <Block title="Conservación" icon={Refrigerator}>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <div className="sm:col-span-2">
-            <label className={labelCls}>Tipo</label>
-            <input value={tipoCons} onChange={(e) => setTipoCons(e.target.value)} className={inputCls} placeholder="Ej. refrigerado / congelado / MAP" />
+      <CompactAccordion
+        id="observations"
+        title="Observaciones"
+        summary={observationsCount > 0 ? `${observationsCount} notas` : 'Sin notas'}
+        icon={ClipboardList}
+        open={Boolean(openBlocks.observations)}
+        onToggle={toggleBlock}
+      >
+          <div className="grid gap-1.5">
+            <label className={metricCls}>
+              <span className={labelCls}>Notas chef</span>
+              <textarea value={notasChef} onChange={(e) => setNotasChef(e.target.value)} rows={2} className={textareaCls} />
+            </label>
+            <label className={metricCls}>
+              <span className={labelCls}>Puntos críticos</span>
+              <textarea value={puntosCrit} onChange={(e) => setPuntosCrit(e.target.value)} rows={2} className={textareaCls} />
+            </label>
+            <div className="grid grid-cols-2 gap-1.5">
+              <label className={metricCls}>
+                <span className={labelCls}>Errores</span>
+                <textarea value={errores} onChange={(e) => setErrores(e.target.value)} rows={2} className={textareaCls} />
+              </label>
+              <label className={metricCls}>
+                <span className={labelCls}>Recomend.</span>
+                <textarea value={reco} onChange={(e) => setReco(e.target.value)} rows={2} className={textareaCls} />
+              </label>
+            </div>
           </div>
-          <div>
-            <label className={labelCls}>Temperatura</label>
-            <input value={tempCons} onChange={(e) => setTempCons(e.target.value)} className={inputCls} placeholder="Ej. 0–4 °C" />
-          </div>
-          <div>
-            <label className={labelCls}>Vida útil estimada</label>
-            <input value={vidaUtil} onChange={(e) => setVidaUtil(e.target.value)} className={inputCls} placeholder="Ej. 48 h" />
-          </div>
-          <div className="sm:col-span-2">
-            <label className={labelCls}>Regeneración (opcional)</label>
-            <textarea value={regeneracion} onChange={(e) => setRegeneracion(e.target.value)} rows={2} className={inputCls} />
-          </div>
-        </div>
-      </Block>
-
-      <Block title="Alérgenos" icon={AlertTriangle}>
-        <p className="text-xs text-zinc-600">
-          Calculados desde ingredientes y revisión APPCC. Para matriz completa y exclusiones, abre la carta de alérgenos.
-        </p>
-        <div className="mt-2 flex flex-wrap gap-2">
-          {allergensVisible.length === 0 ? (
-            <span className="text-sm text-zinc-400">Sin alérgenos activos registrados para este plato.</span>
-          ) : (
-            allergensVisible.map((a) => (
-              <span
-                key={a.id}
-                className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-950 ring-1 ring-amber-200/80"
-              >
-                <span aria-hidden>{a.allergen?.icon ?? '•'}</span>
-                {a.allergen?.name ?? 'Alérgeno'}
-                <span className="text-[10px] font-normal text-amber-800/90">({presenceLabel(a.presence_type)})</span>
-              </span>
-            ))
-          )}
-        </div>
-        {!recipe.isSubRecipe ? (
-          <Link
-            href={`/appcc/carta-alergenos/${recipe.id}`}
-            className="mt-3 inline-flex items-center gap-2 text-sm font-bold text-[#D32F2F] hover:underline"
-          >
-            <ImageIcon className="h-4 w-4" aria-hidden />
-            Abrir carta de alérgenos del plato
-          </Link>
-        ) : null}
-        <div className="mt-4">
-          <label className={labelCls}>Confirmación manual / notas (una línea por ítem)</label>
-          <textarea
-            value={alergManual}
-            onChange={(e) => setAlergManual(e.target.value)}
-            rows={3}
-            className={inputCls}
-            placeholder="Ej. trazas frutos secos en salsa (revisado en sala)"
-          />
-        </div>
-      </Block>
-
-      <Block title="Observaciones internas" icon={ClipboardList}>
-        <div className="grid gap-3">
-          <div>
-            <label className={labelCls}>Notas del chef</label>
-            <textarea value={notasChef} onChange={(e) => setNotasChef(e.target.value)} rows={2} className={inputCls} />
-          </div>
-          <div>
-            <label className={labelCls}>Puntos críticos (CCP / merma)</label>
-            <textarea value={puntosCrit} onChange={(e) => setPuntosCrit(e.target.value)} rows={2} className={inputCls} />
-          </div>
-          <div>
-            <label className={labelCls}>Errores comunes</label>
-            <textarea value={errores} onChange={(e) => setErrores(e.target.value)} rows={2} className={inputCls} />
-          </div>
-          <div>
-            <label className={labelCls}>Recomendaciones internas</label>
-            <textarea value={reco} onChange={(e) => setReco(e.target.value)} rows={2} className={inputCls} />
-          </div>
-        </div>
-      </Block>
-
+      </CompactAccordion>
       <button
         type="button"
         disabled={saving}
         onClick={() => void handleSave()}
-        className="flex w-full items-center justify-center gap-2 rounded-2xl bg-[#D32F2F] py-4 text-base font-black text-white shadow-lg shadow-red-900/20 transition hover:bg-[#B91C1C] disabled:opacity-60"
+        className="mt-2 flex h-10 w-full items-center justify-center gap-1.5 rounded-xl bg-[#D32F2F] text-[12px] font-black text-white transition hover:bg-[#B91C1C] disabled:opacity-60"
       >
-        {saving ? <Loader2 className="h-5 w-5 animate-spin" aria-hidden /> : <Save className="h-5 w-5" aria-hidden />}
-        Guardar ficha técnica
+        {saving ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Save className="h-4 w-4" aria-hidden />}
+        Guardar ficha
       </button>
     </div>
   );
