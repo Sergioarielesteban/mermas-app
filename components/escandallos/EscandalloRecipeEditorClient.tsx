@@ -3,8 +3,6 @@
 import { useRouter } from 'next/navigation';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ArrowDown,
-  ArrowUp,
   ChevronDown,
   FileText,
   Plus,
@@ -56,7 +54,6 @@ import {
   recipeTotalCostEur,
   saleNetPerUnitFromGross,
   effectiveRecipeYieldQtyForCost,
-  updateEscandalloLine,
   updateEscandalloRecipe,
   type EscandalloLine,
   type EscandalloProcessedProduct,
@@ -75,32 +72,6 @@ function fcValueClass(pct: number | null): string {
   if (pct == null) return 'text-[#7E7468]';
   if (pct > 30) return 'text-[#D32F2F]';
   return 'text-emerald-700';
-}
-
-function lineSourceBadge(type: EscandalloLine['sourceType']): string {
-  switch (type) {
-    case 'raw':
-      return 'CRUDO';
-    case 'processed':
-      return 'ELABORADO';
-    case 'subrecipe':
-      return 'BASE';
-    default:
-      return 'MANUAL';
-  }
-}
-
-function lineBadgeTone(type: EscandalloLine['sourceType']): string {
-  switch (type) {
-    case 'raw':
-      return 'bg-[#F7F3EE] text-[#7E7468] ring-[rgba(10,9,8,0.06)]';
-    case 'processed':
-      return 'bg-violet-50 text-violet-800 ring-violet-100';
-    case 'subrecipe':
-      return 'bg-emerald-50 text-emerald-800 ring-emerald-100';
-    default:
-      return 'bg-zinc-100 text-zinc-600 ring-zinc-200';
-  }
 }
 
 function parseLineLabel(label: string): { supplier?: string; name: string } {
@@ -566,26 +537,6 @@ export default function EscandalloRecipeEditorClient({ recipeId }: { recipeId: s
     [lines],
   );
 
-  const swapLineOrder = async (i: number, j: number) => {
-    if (!localId || !recipe || demoReadonly) return;
-    const a = sortedLines[i];
-    const b = sortedLines[j];
-    if (!a || !b) return;
-    const supabase = getSupabaseClient()!;
-    setBusyId('reorder');
-    try {
-      const soA = a.sortOrder;
-      const soB = b.sortOrder;
-      await updateEscandalloLine(supabase, localId, a.id, { sortOrder: soB });
-      await updateEscandalloLine(supabase, localId, b.id, { sortOrder: soA });
-      await refreshRecipeLines(recipe.id);
-    } catch (e: unknown) {
-      setBanner(e instanceof Error ? e.message : 'No se pudo reordenar.');
-    } finally {
-      setBusyId(null);
-    }
-  };
-
   const handleRefreshCosts = async () => {
     if (!recipe) return;
     setBusyId('refresh');
@@ -905,8 +856,8 @@ export default function EscandalloRecipeEditorClient({ recipeId }: { recipeId: s
             {sortedLines.length === 0 ? (
               <p className="text-[12px] text-[#7E7468]">Sin ingredientes. Busca abajo para añadir el primero.</p>
             ) : (
-              <ul className="space-y-1.5">
-                {sortedLines.map((line, idx) => {
+              <ul className="space-y-1">
+                {sortedLines.map((line) => {
                   const unitEur = lineUnitPriceEur(line, rawById, processedById, priceInner);
                   const lineCost = Math.round(line.qty * unitEur * 100) / 100;
                   const parsed = parseLineLabel(line.label);
@@ -917,54 +868,35 @@ export default function EscandalloRecipeEditorClient({ recipeId }: { recipeId: s
                   return (
                     <li
                       key={line.id}
-                      className="rounded-xl border border-[rgba(10,9,8,0.06)] bg-[#FAFAF9]/80 px-2.5 py-2"
+                      className="rounded-lg border border-[rgba(10,9,8,0.06)] bg-[#FAFAF9]/80 px-2 py-1.5"
                     >
                       <div className="flex items-start gap-2">
-                        <span className={`mt-0.5 shrink-0 rounded-full px-1.5 py-0.5 text-[7px] font-bold uppercase tracking-[0.1em] ring-1 ${lineBadgeTone(line.sourceType)}`}>
-                          {lineSourceBadge(line.sourceType)}
-                        </span>
                         <div className="min-w-0 flex-1">
-                          <p className="line-clamp-2 text-[12px] font-bold leading-tight text-[#0A0908]">{parsed.name}</p>
+                          <p className="line-clamp-2 text-[12px] font-bold leading-snug text-[#0A0908]">{parsed.name}</p>
                           {parsed.supplier ? (
-                            <p className="mt-0.5 truncate text-[10px] text-[#7E7468]">{parsed.supplier}</p>
+                            <p className="truncate text-[9px] text-[#7E7468]">{parsed.supplier}</p>
                           ) : null}
-                          <p className="mt-0.5 text-[10px] tabular-nums text-[#7E7468]">
+                          <p className="text-[10px] tabular-nums text-[#7E7468]">
                             {line.qty} {line.unit} · {formatUnitPriceEur(unitEur, line.unit)}
                           </p>
                         </div>
-                        <p className="shrink-0 text-[14px] font-black tabular-nums text-[#0A0908]">{formatMoneyEur(lineCost)}</p>
-                      </div>
-                      <div className="mt-2 flex justify-end gap-0.5 border-t border-[rgba(10,9,8,0.06)] pt-1.5">
-                        <button
-                          type="button"
-                          disabled={idx === 0 || busyId === 'reorder' || demoReadonly}
-                          onClick={() => void swapLineOrder(idx, idx - 1)}
-                          className="grid h-7 w-7 place-items-center rounded-md text-[#7E7468] hover:bg-white disabled:opacity-25"
-                          aria-label="Subir"
-                        >
-                          <ArrowUp className="h-3.5 w-3.5" />
-                        </button>
-                        <button
-                          type="button"
-                          disabled={idx >= sortedLines.length - 1 || busyId === 'reorder' || demoReadonly}
-                          onClick={() => void swapLineOrder(idx, idx + 1)}
-                          className="grid h-7 w-7 place-items-center rounded-md text-[#7E7468] hover:bg-white disabled:opacity-25"
-                          aria-label="Bajar"
-                        >
-                          <ArrowDown className="h-3.5 w-3.5" />
-                        </button>
-                        <button
-                          type="button"
-                          disabled={busyId === line.id || demoReadonly}
-                          onClick={() => void handleDeleteLine(line.id)}
-                          className="grid h-7 w-7 place-items-center rounded-md text-[#D32F2F] hover:bg-[#D32F2F]/10 disabled:opacity-40"
-                          aria-label="Eliminar"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </button>
+                        <div className="flex shrink-0 flex-col items-end gap-0.5">
+                          <p className="text-[13px] font-black tabular-nums leading-none text-[#0A0908]">
+                            {formatMoneyEur(lineCost)}
+                          </p>
+                          <button
+                            type="button"
+                            disabled={busyId === line.id || demoReadonly}
+                            onClick={() => void handleDeleteLine(line.id)}
+                            className="grid h-6 w-6 place-items-center rounded-md text-[#D32F2F] transition hover:bg-[#D32F2F]/10 disabled:opacity-40"
+                            aria-label="Eliminar ingrediente"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
                       </div>
                       {subLines.length > 0 ? (
-                        <ul className="mt-2 space-y-0.5 border-t border-dashed border-[rgba(10,9,8,0.08)] pt-1.5 text-[10px] text-[#7E7468]">
+                        <ul className="mt-1 space-y-0.5 border-t border-dashed border-[rgba(10,9,8,0.08)] pt-1 text-[9px] text-[#7E7468]">
                           {subLines.map((sl) => (
                             <li key={sl.id} className="tabular-nums">
                               {sl.label} · {sl.qty} {sl.unit}
