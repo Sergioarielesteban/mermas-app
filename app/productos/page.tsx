@@ -81,7 +81,9 @@ export default function ProductosPage() {
   const masterComboboxRef = useRef<HTMLDivElement | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [showAddedBanner, setShowAddedBanner] = useState(false);
   const [showDeletedBanner, setShowDeletedBanner] = useState(false);
+  const addedBannerTimeoutRef = React.useRef<number | null>(null);
   const deletedBannerTimeoutRef = React.useRef<number | null>(null);
   const [search, setSearch] = useState('');
 
@@ -510,7 +512,7 @@ export default function ProductosPage() {
     price,
   ]);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const numeric =
       originType === 'escandallo'
@@ -523,7 +525,14 @@ export default function ProductosPage() {
               ? Math.max(0, Number(price))
               : Number(price);
     const trimmed = name.trim();
-    if (!trimmed || !Number.isFinite(numeric) || numeric < 0) return;
+    if (!trimmed) {
+      setMessage('Escribe un nombre para el producto.');
+      return;
+    }
+    if (!Number.isFinite(numeric) || numeric < 0) {
+      setMessage('Precio inválido.');
+      return;
+    }
     if (originType === 'manual' && numeric <= 0) {
       setMessage('Indica un precio manual mayor que 0.');
       return;
@@ -551,14 +560,26 @@ export default function ProductosPage() {
       setMessage('Selecciona una base/subreceta/elaborado para este origen.');
       return;
     }
-    if (originType === 'composicion') {
-      const valid = compositionLines.filter(
-        (x) => x.componentId && Number.isFinite(Number(x.qty)) && Number(x.qty) > 0 && x.unit,
-      );
-      if (valid.length === 0) {
-        setMessage('Añade al menos una línea válida en la composición.');
-        return;
-      }
+    if (originType === 'base_subreceta' && (!Number.isFinite(baseSubrecipeAutoPrice ?? NaN) || (baseSubrecipeAutoPrice ?? 0) <= 0)) {
+      setMessage('No se pudo resolver el coste de la base/subreceta seleccionada.');
+      return;
+    }
+    const normalizedCompositionLines =
+      originType === 'composicion'
+        ? compositionLines
+            .filter((x) => x.componentId && Number.isFinite(Number(x.qty)) && Number(x.qty) > 0 && x.unit)
+            .map((x) => ({
+              id: x.id,
+              componentType: x.componentType,
+              componentId: x.componentId,
+              componentKind: x.componentKind ?? null,
+              qty: Number(x.qty),
+              unit: x.unit,
+            }))
+        : [];
+    if (originType === 'composicion' && normalizedCompositionLines.length === 0) {
+      setMessage('Añade al menos una línea válida en la composición.');
+      return;
     }
     const duplicate = products.some(
       (p) =>
@@ -570,58 +591,39 @@ export default function ProductosPage() {
       return;
     }
 
+    const payload = {
+      name: trimmed,
+      unit,
+      pricePerUnit: numeric,
+      typeOrigin: originType,
+      masterArticleId: originType === 'master' ? masterArticleId || null : null,
+      escandalloId: originType === 'escandallo' ? escandalloId || null : null,
+      baseSubrecipeId: originType === 'base_subreceta' ? baseSubrecipeId || null : null,
+      baseSubrecipeKind: originType === 'base_subreceta' ? baseSubrecipeKind : null,
+      manualPricePerUnit: originType === 'manual' ? numeric : null,
+      compositionLines: normalizedCompositionLines,
+    };
+
     if (editingId) {
-      updateProduct(editingId, {
-        name,
-        unit,
-        pricePerUnit: numeric,
-        typeOrigin: originType,
-        masterArticleId: originType === 'master' ? masterArticleId || null : null,
-        escandalloId: originType === 'escandallo' ? escandalloId || null : null,
-        baseSubrecipeId: originType === 'base_subreceta' ? baseSubrecipeId || null : null,
-        baseSubrecipeKind: originType === 'base_subreceta' ? baseSubrecipeKind : null,
-        manualPricePerUnit: originType === 'manual' ? numeric : null,
-        compositionLines:
-          originType === 'composicion'
-            ? compositionLines
-                .filter((x) => x.componentId && Number.isFinite(Number(x.qty)) && Number(x.qty) > 0 && x.unit)
-                .map((x) => ({
-                  id: x.id,
-                  componentType: x.componentType,
-                  componentId: x.componentId,
-                  componentKind: x.componentKind ?? null,
-                  qty: Number(x.qty),
-                  unit: x.unit,
-                }))
-            : [],
-      });
+      const result = await updateProduct(editingId, payload);
+      if (!result.ok) {
+        setMessage(result.reason ?? 'No se pudo actualizar el producto.');
+        return;
+      }
       setMessage('Producto actualizado.');
     } else {
-      addProduct({
-        name,
-        unit,
-        pricePerUnit: numeric,
-        typeOrigin: originType,
-        masterArticleId: originType === 'master' ? masterArticleId || null : null,
-        escandalloId: originType === 'escandallo' ? escandalloId || null : null,
-        baseSubrecipeId: originType === 'base_subreceta' ? baseSubrecipeId || null : null,
-        baseSubrecipeKind: originType === 'base_subreceta' ? baseSubrecipeKind : null,
-        manualPricePerUnit: originType === 'manual' ? numeric : null,
-        compositionLines:
-          originType === 'composicion'
-            ? compositionLines
-                .filter((x) => x.componentId && Number.isFinite(Number(x.qty)) && Number(x.qty) > 0 && x.unit)
-                .map((x) => ({
-                  id: x.id,
-                  componentType: x.componentType,
-                  componentId: x.componentId,
-                  componentKind: x.componentKind ?? null,
-                  qty: Number(x.qty),
-                  unit: x.unit,
-                }))
-            : [],
-      });
-      setMessage('Producto añadido.');
+      const result = await addProduct(payload);
+      if (!result.ok) {
+        setMessage(result.reason ?? 'No se pudo añadir el producto.');
+        return;
+      }
+      setMessage(null);
+      setShowAddedBanner(true);
+      if (addedBannerTimeoutRef.current) window.clearTimeout(addedBannerTimeoutRef.current);
+      addedBannerTimeoutRef.current = window.setTimeout(() => {
+        setShowAddedBanner(false);
+        addedBannerTimeoutRef.current = null;
+      }, 1100);
     }
     setName('');
     setUnit('ud');
@@ -641,6 +643,7 @@ export default function ProductosPage() {
 
   React.useEffect(
     () => () => {
+      if (addedBannerTimeoutRef.current) window.clearTimeout(addedBannerTimeoutRef.current);
       if (deletedBannerTimeoutRef.current) window.clearTimeout(deletedBannerTimeoutRef.current);
     },
     [],
@@ -648,6 +651,13 @@ export default function ProductosPage() {
 
   return (
     <div className="relative">
+      {showAddedBanner ? (
+        <div className="pointer-events-none fixed inset-0 z-[91] grid place-items-center bg-black/25 px-6">
+          <div className="rounded-2xl bg-[#D32F2F] px-7 py-5 text-center shadow-2xl ring-2 ring-white/75">
+            <p className="text-xl font-black uppercase tracking-wide text-white">ARTÍCULO AÑADIDO</p>
+          </div>
+        </div>
+      ) : null}
       {showDeletedBanner ? (
         <div className="pointer-events-none fixed inset-0 z-[90] grid place-items-center bg-black/25 px-6">
           <div className="rounded-2xl bg-[#D32F2F] px-7 py-5 text-center shadow-2xl ring-2 ring-white/75">
@@ -668,7 +678,7 @@ export default function ProductosPage() {
           />
         </label>
       </div>
-      {message ? (
+      {message && !open ? (
         <div className="mb-3 rounded-xl bg-white p-3 text-sm text-zinc-700 ring-1 ring-zinc-200">
           {message}
         </div>
@@ -832,6 +842,11 @@ export default function ProductosPage() {
 
             <div className="modal-body min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-3 pb-[140px]">
               <form id="merma-producto-form" className="space-y-3" onSubmit={handleSubmit}>
+                {message ? (
+                  <div className="rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2 text-xs font-semibold text-zinc-700">
+                    {message}
+                  </div>
+                ) : null}
                 <label className="block text-xs font-semibold text-zinc-700">
                   Nombre del Producto
                   <input
