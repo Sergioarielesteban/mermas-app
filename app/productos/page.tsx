@@ -688,12 +688,13 @@ export default function ProductosPage() {
       setMessage('Ya existe un producto con ese nombre.');
       return;
     }
+    const pricePerUnit = numeric ?? 0;
 
     if (editingId) {
       updateProduct(editingId, {
         name,
         unit,
-        pricePerUnit: numeric,
+        pricePerUnit,
         typeOrigin: originType,
         masterArticleId: originType === 'master' ? masterArticleId || null : null,
         escandalloId: originType === 'escandallo' ? escandalloId || null : null,
@@ -719,7 +720,7 @@ export default function ProductosPage() {
       addProduct({
         name,
         unit,
-        pricePerUnit: numeric ?? 0,
+        pricePerUnit,
         typeOrigin: originType,
         masterArticleId: originType === 'master' ? masterArticleId || null : null,
         escandalloId: originType === 'escandallo' ? escandalloId || null : null,
