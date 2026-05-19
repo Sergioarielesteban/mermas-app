@@ -82,12 +82,12 @@ export default function ProductosPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [showDeletedBanner, setShowDeletedBanner] = useState(false);
+  const [showAddedBanner, setShowAddedBanner] = useState(false);
   const deletedBannerTimeoutRef = React.useRef<number | null>(null);
+  const addedBannerTimeoutRef = React.useRef<number | null>(null);
   const [search, setSearch] = useState('');
 
-  const resolveEscandalloUnitCost = async (
-    recipeId: string,
-  ): Promise<number | null> => {
+  const resolveEscandalloUnitCost = React.useCallback(async (recipeId: string): Promise<number | null> => {
     if (!localId || !isSupabaseEnabled()) return null;
     const supabase = getSupabaseClient();
     if (!supabase) return null;
@@ -125,7 +125,7 @@ export default function ProductosPage() {
     if (!Number.isFinite(total) || total <= 0) return null;
     const perUnit = Math.round((total / effectiveRecipeYieldQtyForCost(recipe)) * 10000) / 10000;
     return perUnit > 0 ? perUnit : null;
-  };
+  }, [localId]);
 
   const filteredProducts = products.filter((p) =>
     p.name.toLowerCase().includes(search.trim().toLowerCase()),
@@ -276,7 +276,7 @@ export default function ProductosPage() {
     return () => {
       active = false;
     };
-  }, [originType, escandalloId, localId]);
+  }, [originType, escandalloId, localId, resolveEscandalloUnitCost]);
 
   useEffect(() => {
     if (originType !== 'base_subreceta' || !baseSubrecipeId || !localId || !isSupabaseEnabled()) {
@@ -360,7 +360,7 @@ export default function ProductosPage() {
         ? escandalloAutoPrice ?? 0
         : originType === 'base_subreceta'
           ? baseSubrecipeAutoPrice ?? 0
-          : Number(price);
+          : 0;
     setPrice(next.toFixed(2));
   }, [originType, escandalloAutoPrice, baseSubrecipeAutoPrice]);
 
@@ -510,21 +510,143 @@ export default function ProductosPage() {
     price,
   ]);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const resolveOriginPrice = async (): Promise<number | null> => {
+    if (!localId || !isSupabaseEnabled()) return null;
+    const supabase = getSupabaseClient();
+    if (!supabase) return null;
+    if (originType === 'manual') {
+      const parsed = Number(price);
+      return Number.isFinite(parsed) && parsed > 0 ? Math.round(parsed * 100) / 100 : null;
+    }
+    if (originType === 'master') {
+      if (!masterArticleId) return null;
+      const m = masterOptions.find((x) => x.id === masterArticleId);
+      const cost = m?.costeUnitarioUso;
+      return cost != null && Number.isFinite(cost) && cost > 0 ? Math.round(cost * 100) / 100 : null;
+    }
+    if (originType === 'escandallo') {
+      if (!escandalloId) return null;
+      const perUnit = await resolveEscandalloUnitCost(escandalloId);
+      return perUnit != null && Number.isFinite(perUnit) && perUnit > 0 ? Math.round(perUnit * 100) / 100 : null;
+    }
+    if (originType === 'base_subreceta') {
+      if (!baseSubrecipeId) return null;
+      if (baseSubrecipeKind === 'processed') {
+        const processed = await fetchProcessedProductsForEscandallo(supabase, localId);
+        const rawProducts = await fetchEscandalloRawProductsWithWeightedPurchasePrices(supabase, localId);
+        const p = processed.find((x) => x.id === baseSubrecipeId);
+        const raw = p ? rawProducts.find((x) => x.id === p.sourceSupplierProductId) : null;
+        if (!p || !raw || p.outputQty <= 0) return null;
+        const unitPrice = ((raw.pricePerUnit > 0 ? raw.pricePerUnit : 0) * p.inputQty + p.extraCostEur) / p.outputQty;
+        return unitPrice > 0 ? Math.round(unitPrice * 100) / 100 : null;
+      }
+      const recipes = await fetchEscandalloRecipes(supabase, localId);
+      const rawProducts = await fetchEscandalloRawProductsWithWeightedPurchasePrices(supabase, localId);
+      const processedProducts = await fetchProcessedProductsForEscandallo(supabase, localId);
+      const recipe = recipes.find((r) => r.id === baseSubrecipeId);
+      if (!recipe) return null;
+      const linesByRecipe: Record<string, EscandalloLine[]> = {};
+      const recipesById = new Map(recipes.map((r) => [r.id, r]));
+      const linesList = await Promise.all(recipes.map((r) => fetchEscandalloLines(supabase, localId, r.id)));
+      recipes.forEach((r, i) => {
+        linesByRecipe[r.id] = linesList[i];
+      });
+      const total = recipeTotalCostEur(
+        linesByRecipe[recipe.id] ?? [],
+        new Map(rawProducts.map((x) => [x.id, x])),
+        new Map(processedProducts.map((x) => [x.id, x])),
+        { linesByRecipe, recipesById, recipeId: recipe.id },
+      );
+      const denom = effectiveRecipeYieldQtyForCost(recipe);
+      return total > 0 && denom > 0 ? Math.round((total / denom) * 100) / 100 : null;
+    }
+    if (originType === 'composicion') {
+      const validLines = compositionLines.filter(
+        (x) => x.componentId && Number.isFinite(Number(x.qty)) && Number(x.qty) > 0 && x.unit,
+      );
+      if (validLines.length === 0) return null;
+      const [recipes, rawProducts, processedProducts] = await Promise.all([
+        fetchEscandalloRecipes(supabase, localId),
+        fetchEscandalloRawProductsWithWeightedPurchasePrices(supabase, localId),
+        fetchProcessedProductsForEscandallo(supabase, localId),
+      ]);
+      const linesByRecipe: Record<string, EscandalloLine[]> = {};
+      const recipesById = new Map(recipes.map((r) => [r.id, r]));
+      const escandalloCostCache = new Map<string, number | null>();
+      const resolveRecipeCostCached = async (recipeId: string): Promise<number | null> => {
+        if (escandalloCostCache.has(recipeId)) return escandalloCostCache.get(recipeId) ?? null;
+        const recipe = recipes.find((r) => r.id === recipeId);
+        if (!recipe) {
+          escandalloCostCache.set(recipeId, null);
+          return null;
+        }
+        const toVisit = [recipeId];
+        const visited = new Set<string>();
+        while (toVisit.length > 0) {
+          const current = toVisit.pop()!;
+          if (visited.has(current)) continue;
+          visited.add(current);
+          if (!linesByRecipe[current]) {
+            linesByRecipe[current] = await fetchEscandalloLines(supabase, localId, current);
+          }
+          for (const ln of linesByRecipe[current] ?? []) {
+            if (ln.sourceType === 'subrecipe' && ln.subRecipeId && !visited.has(ln.subRecipeId)) {
+              toVisit.push(ln.subRecipeId);
+            }
+          }
+        }
+        const total = recipeTotalCostEur(
+          linesByRecipe[recipeId] ?? [],
+          new Map(rawProducts.map((x) => [x.id, x])),
+          new Map(processedProducts.map((x) => [x.id, x])),
+          { linesByRecipe, recipesById, recipeId },
+        );
+        const per = total > 0 ? Math.round((total / effectiveRecipeYieldQtyForCost(recipe)) * 100) / 100 : null;
+        escandalloCostCache.set(recipeId, per);
+        return per;
+      };
+      let total = 0;
+      for (const line of validLines) {
+        const qty = Number(line.qty);
+        let sourceUnitCost: number | null = null;
+        let sourceUnit: string = line.unit;
+        if (line.componentType === 'master') {
+          const m = masterOptions.find((x) => x.id === line.componentId);
+          if (m && m.costeUnitarioUso != null && m.costeUnitarioUso > 0) {
+            sourceUnitCost = m.costeUnitarioUso;
+            sourceUnit = m.unidadUso ?? line.unit;
+          }
+        } else if (line.componentType === 'escandallo') {
+          sourceUnitCost = await resolveRecipeCostCached(line.componentId);
+          sourceUnit = 'racion';
+        } else if (line.componentKind === 'processed') {
+          const p = processedProducts.find((x) => x.id === line.componentId);
+          const raw = p ? rawProducts.find((x) => x.id === p.sourceSupplierProductId) : null;
+          if (p && raw && p.outputQty > 0) {
+            sourceUnitCost = ((raw.pricePerUnit > 0 ? raw.pricePerUnit : 0) * p.inputQty + p.extraCostEur) / p.outputQty;
+            sourceUnit = p.outputUnit;
+          }
+        } else {
+          sourceUnitCost = await resolveRecipeCostCached(line.componentId);
+          sourceUnit = 'racion';
+        }
+        if (sourceUnitCost == null || !Number.isFinite(sourceUnitCost) || sourceUnitCost <= 0) continue;
+        const converted = convertUnitCost(sourceUnitCost, sourceUnit, line.unit);
+        const unitCost = converted != null ? converted : sourceUnitCost;
+        total += Math.round(unitCost * qty * 10000) / 10000;
+      }
+      return total > 0 ? Math.round(total * 100) / 100 : null;
+    }
+    return null;
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const numeric =
-      originType === 'escandallo'
-        ? Math.max(0, escandalloAutoPrice ?? 0)
-        : originType === 'base_subreceta'
-          ? Math.max(0, baseSubrecipeAutoPrice ?? 0)
-          : originType === 'master'
-            ? Math.max(0, masterAutoPrice ?? 0)
-            : originType === 'composicion'
-              ? Math.max(0, Number(price))
-              : Number(price);
     const trimmed = name.trim();
-    if (!trimmed || !Number.isFinite(numeric) || numeric < 0) return;
-    if (originType === 'manual' && numeric <= 0) {
+    if (!trimmed) return;
+    const numeric = await resolveOriginPrice();
+    if (!Number.isFinite(numeric ?? NaN) || (numeric ?? 0) < 0) return;
+    if (originType === 'manual' && (numeric ?? 0) <= 0) {
       setMessage('Indica un precio manual mayor que 0.');
       return;
     }
@@ -532,10 +654,7 @@ export default function ProductosPage() {
       setMessage('Selecciona un Artículo Máster para este origen.');
       return;
     }
-    if (
-      originType === 'master' &&
-      (!Number.isFinite(masterAutoPrice ?? NaN) || (masterAutoPrice ?? 0) <= 0)
-    ) {
+    if (originType === 'master' && (numeric ?? 0) <= 0) {
       setMessage('No se pudo obtener el coste del artículo máster.');
       return;
     }
@@ -543,7 +662,7 @@ export default function ProductosPage() {
       setMessage('Selecciona un escandallo para usar precio automático.');
       return;
     }
-    if (originType === 'escandallo' && (!Number.isFinite(escandalloAutoPrice ?? NaN) || (escandalloAutoPrice ?? 0) <= 0)) {
+    if (originType === 'escandallo' && (numeric ?? 0) <= 0) {
       setMessage('No se pudo resolver el coste del escandallo seleccionado.');
       return;
     }
@@ -600,7 +719,7 @@ export default function ProductosPage() {
       addProduct({
         name,
         unit,
-        pricePerUnit: numeric,
+        pricePerUnit: numeric ?? 0,
         typeOrigin: originType,
         masterArticleId: originType === 'master' ? masterArticleId || null : null,
         escandalloId: originType === 'escandallo' ? escandalloId || null : null,
@@ -620,8 +739,14 @@ export default function ProductosPage() {
                   unit: x.unit,
                 }))
             : [],
-      });
-      setMessage('Producto añadido.');
+        });
+      setMessage('Artículo agregado.');
+      setShowAddedBanner(true);
+      if (addedBannerTimeoutRef.current) window.clearTimeout(addedBannerTimeoutRef.current);
+      addedBannerTimeoutRef.current = window.setTimeout(() => {
+        setShowAddedBanner(false);
+        addedBannerTimeoutRef.current = null;
+      }, 1000);
     }
     setName('');
     setUnit('ud');
@@ -642,12 +767,20 @@ export default function ProductosPage() {
   React.useEffect(
     () => () => {
       if (deletedBannerTimeoutRef.current) window.clearTimeout(deletedBannerTimeoutRef.current);
+      if (addedBannerTimeoutRef.current) window.clearTimeout(addedBannerTimeoutRef.current);
     },
     [],
   );
 
   return (
     <div className="relative">
+      {showAddedBanner ? (
+        <div className="pointer-events-none fixed inset-0 z-[90] grid place-items-center bg-black/25 px-6">
+          <div className="rounded-2xl bg-[#D32F2F] px-7 py-5 text-center shadow-2xl ring-2 ring-white/75">
+            <p className="text-xl font-black uppercase tracking-wide text-white">ARTICULO AGREGADO</p>
+          </div>
+        </div>
+      ) : null}
       {showDeletedBanner ? (
         <div className="pointer-events-none fixed inset-0 z-[90] grid place-items-center bg-black/25 px-6">
           <div className="rounded-2xl bg-[#D32F2F] px-7 py-5 text-center shadow-2xl ring-2 ring-white/75">
@@ -1173,4 +1306,3 @@ export default function ProductosPage() {
     </div>
   );
 }
-
