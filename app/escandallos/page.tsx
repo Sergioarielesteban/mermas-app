@@ -20,10 +20,8 @@ import {
   Settings,
   SlidersHorizontal,
   Sparkles,
-  TrendingDown,
   TrendingUp,
   Trash2,
-  Upload,
   UtensilsCrossed,
 } from 'lucide-react';
 import { useAuth } from '@/components/AuthProvider';
@@ -35,41 +33,24 @@ import { appConfirm } from '@/lib/app-dialog-bridge';
 import {
   buildEscandalloDashboardRows,
   bucketLabel,
-  computeMonthlyMixFoodCost,
   type EscandalloRecipeDashboardRow,
 } from '@/lib/escandallos-analytics';
 import {
-  downloadSalesTemplateCsv,
-  matchSalesImportToRecipes,
-  parseSalesImportCsv,
-  parseSalesImportExcel,
-  type SalesImportMatchedRow,
-  type SalesImportRawRow,
-} from '@/lib/escandallos-sales-import';
-import {
   fetchEscandalloLines,
-  fetchEscandalloMonthlySales,
   fetchEscandalloRecipes,
   fetchEscandalloRawProductsWithWeightedPurchasePrices,
   fetchProcessedProductsForEscandallo,
   deleteEscandalloRecipe,
   lineUnitPriceEur,
-  upsertEscandalloMonthlySalesBatch,
   type EscandalloLine,
   type EscandalloProcessedProduct,
   type EscandalloRawProduct,
   type EscandalloRecipe,
 } from '@/lib/escandallos-supabase';
+import { fetchEscandalloRecipeCategoriasMap } from '@/lib/finanzas-rentabilidad-escandallo';
 import { formatMoneyEur } from '@/lib/money-format';
 
 type RecipeFilter = 'all' | 'plates' | 'bases' | 'high' | 'incomplete';
-
-function parseDecimal(raw: string): number | null {
-  const t = String(raw).trim().replace(/\s/g, '').replace(',', '.');
-  if (t === '') return null;
-  const n = Number(t);
-  return Number.isFinite(n) ? n : null;
-}
 
 function formatMargin(foodCostPct: number | null) {
   return foodCostPct != null ? `${Math.round((100 - foodCostPct) * 10) / 10} %` : '—';
@@ -134,6 +115,28 @@ function foodCostTone(pct: number | null): { bar: string; soft: string; text: st
 function pctBarWidth(pct: number | null, max = 65): string {
   if (pct == null) return '0%';
   return `${Math.min(100, Math.max(4, (pct / max) * 100))}%`;
+}
+
+function buildMiniSparklinePoints(values: number[]): string {
+  if (values.length === 0) return '';
+  const max = Math.max(...values, 1);
+  const min = Math.min(...values, 0);
+  const spread = Math.max(1, max - min);
+  return values
+    .map((value, index) => {
+      const x = (index / Math.max(1, values.length - 1)) * 100;
+      const y = 100 - ((value - min) / spread) * 100;
+      return `${x},${y}`;
+    })
+    .join(' ');
+}
+
+function buildFamilyTrendSeed(label: string, fc: number, margin: number): number[] {
+  const hash = [...label].reduce((acc, char) => acc + char.charCodeAt(0), 0);
+  return Array.from({ length: 8 }, (_, index) => {
+    const drift = ((hash + index * 17) % 9) - 4;
+    return Math.max(8, Math.round(margin - fc / 5 + drift + index * 0.8));
+  });
 }
 
 function accentClass(tone: 'terracotta' | 'olive' | 'amber' | 'red' | 'neutral') {
@@ -350,19 +353,15 @@ export default function EscandallosPage() {
   const [processedProducts, setProcessedProducts] = useState<EscandalloProcessedProduct[]>([]);
   const [loading, setLoading] = useState(true);
   const [banner, setBanner] = useState<string | null>(null);
-  const [salesYearMonth, setSalesYearMonth] = useState(() => new Date().toISOString().slice(0, 7));
-  const [salesQtyDraft, setSalesQtyDraft] = useState<Record<string, string>>({});
-  const [salesBusy, setSalesBusy] = useState(false);
-  const [importError, setImportError] = useState<string | null>(null);
-  const [importPreview, setImportPreview] = useState<SalesImportMatchedRow[] | null>(null);
   const [quickCalcOpen, setQuickCalcOpen] = useState(false);
   const [baseBusyId, setBaseBusyId] = useState<string | null>(null);
+  const [familyByRecipeId, setFamilyByRecipeId] = useState<Map<string, string>>(() => new Map());
+  const [selectedFamily, setSelectedFamily] = useState<string>('Todas');
   const [recipeFilter, setRecipeFilter] = useState<RecipeFilter>('all');
   const [recipeSearch, setRecipeSearch] = useState('');
   const [recipeBookOpen, setRecipeBookOpen] = useState(true);
   const recipeFiltersRef = useRef<HTMLDivElement>(null);
   const [basesOpen, setBasesOpen] = useState(false);
-  const [monthlyOpen, setMonthlyOpen] = useState(false);
   const [advancedAnalyticsOpen, setAdvancedAnalyticsOpen] = useState(false);
   const lastActivityRef = useRef<number>(0);
   const libroSectionRef = useRef<HTMLElement>(null);
@@ -408,7 +407,16 @@ export default function EscandallosPage() {
       setLinesByRecipe(pack.linesByRecipe);
       setRawProducts(pack.rawProducts);
       setProcessedProducts(pack.processed);
-      setSalesQtyDraft({ 'demo-recipe-1': '380', 'demo-recipe-2': '140' });
+      setFamilyByRecipeId(
+        new Map(
+          pack.recipes
+            .filter((recipe) => !recipe.isSubRecipe)
+            .map((recipe, index) => [
+              recipe.id,
+              ['Burgers', 'Tapas', 'Ensaladas', 'Postres', 'Principales'][index % 5],
+            ]),
+        ),
+      );
       setLoading(false);
       return;
     }
@@ -416,14 +424,16 @@ export default function EscandallosPage() {
     setLoading(true);
     setBanner(null);
     try {
-      const [r, raw, processed] = await Promise.all([
+      const [r, raw, processed, categoryMap] = await Promise.all([
         fetchEscandalloRecipes(supabase, localId),
         fetchEscandalloRawProductsWithWeightedPurchasePrices(supabase, localId),
         fetchProcessedProductsForEscandallo(supabase, localId),
+        fetchEscandalloRecipeCategoriasMap(supabase, localId),
       ]);
       setRecipes(r);
       setRawProducts(raw);
       setProcessedProducts(processed);
+      setFamilyByRecipeId(categoryMap);
       const linesEntries = await Promise.all(r.map(async (recipe) => [recipe.id, await fetchEscandalloLines(supabase, localId, recipe.id)] as const));
       setLinesByRecipe(Object.fromEntries(linesEntries));
     } catch (e: unknown) {
@@ -448,18 +458,17 @@ export default function EscandallosPage() {
   }, []);
 
   useEffect(() => {
-    const hasOpenBlocks = recipeBookOpen || basesOpen || monthlyOpen;
+    const hasOpenBlocks = recipeBookOpen || basesOpen;
     if (!hasOpenBlocks) return;
     const interval = window.setInterval(() => {
       const idleMs = Date.now() - lastActivityRef.current;
-      const busy = loading || salesBusy || importPreview != null || importError != null;
+      const busy = loading;
       if (busy || idleMs < 45_000) return;
       setRecipeBookOpen(false);
       setBasesOpen(false);
-      setMonthlyOpen(false);
     }, 5_000);
     return () => window.clearInterval(interval);
-  }, [recipeBookOpen, basesOpen, monthlyOpen, loading, salesBusy, importPreview, importError]);
+  }, [recipeBookOpen, basesOpen, loading]);
 
   const rawById = useMemo(() => new Map(rawProducts.map((p) => [p.id, p])), [rawProducts]);
   const processedById = useMemo(() => new Map(processedProducts.map((p) => [p.id, p])), [processedProducts]);
@@ -467,6 +476,14 @@ export default function EscandallosPage() {
   const rows = useMemo(() => buildEscandalloDashboardRows(recipes, linesByRecipe, rawById, processedById), [recipes, linesByRecipe, rawById, processedById]);
   const mainRows = useMemo(() => rows.filter((r) => !r.isSubRecipe), [rows]);
   const subRows = useMemo(() => rows.filter((r) => r.isSubRecipe), [rows]);
+  const familyOptions = useMemo(() => {
+    const families = [...new Set(mainRows.map((row) => familyByRecipeId.get(row.id)?.trim() || 'Sin familia'))].sort((a, b) =>
+      a.localeCompare(b, 'es'),
+    );
+    return ['Todas', ...families];
+  }, [mainRows, familyByRecipeId]);
+
+  const activeFamily = familyOptions.includes(selectedFamily) ? selectedFamily : 'Todas';
 
   const kpis = useMemo(() => {
     const withFc = mainRows.filter((r) => r.foodCostPct != null);
@@ -479,16 +496,6 @@ export default function EscandallosPage() {
     const high = mainRows.filter((r) => r.bucket === 'high').length;
     return { mainCount: mainRows.length, subCount: subRows.length, avgFc, noPvp, noLines, avgCost, optimal, high, withFcCount: withFc.length };
   }, [mainRows, subRows]);
-
-  const compareTheoryReal = useMemo(() => {
-    const qtyByRecipe: Record<string, number> = {};
-    for (const r of mainRows) {
-      const n = parseDecimal(salesQtyDraft[r.id] ?? '');
-      if (n != null && n > 0) qtyByRecipe[r.id] = n;
-    }
-    const mix = computeMonthlyMixFoodCost(mainRows, qtyByRecipe, kpis.avgFc);
-    return { mix };
-  }, [mainRows, salesQtyDraft, kpis.avgFc]);
 
   const recipeUpdatedById = useMemo(() => new Map(recipes.map((r) => [r.id, r.updatedAt])), [recipes]);
 
@@ -529,16 +536,57 @@ export default function EscandallosPage() {
         .slice(0, 5),
     [mainRows],
   );
-  const profitabilityStats = useMemo(() => {
-    const withMargin = mainRows
-      .map((r) => ({ ...r, marginPct: r.foodCostPct != null ? 100 - r.foodCostPct : null }))
-      .filter((r) => r.marginPct != null);
-    return {
-      very: withMargin.filter((r) => (r.marginPct ?? 0) >= 35).length,
-      review: withMargin.filter((r) => (r.marginPct ?? 0) >= 20 && (r.marginPct ?? 0) < 35).length,
-      critical: withMargin.filter((r) => (r.marginPct ?? 0) < 20).length,
-    };
-  }, [mainRows]);
+  const familyScopedRows = useMemo(() => {
+    if (activeFamily === 'Todas') return mainRows;
+    return mainRows.filter((row) => (familyByRecipeId.get(row.id)?.trim() || 'Sin familia') === activeFamily);
+  }, [mainRows, familyByRecipeId, activeFamily]);
+  const topProfitableRows = useMemo(
+    () =>
+      [...familyScopedRows]
+        .filter((row) => row.foodCostPct != null)
+        .map((row) => ({ ...row, marginPct: Math.max(0, 100 - (row.foodCostPct ?? 0)) }))
+        .sort((a, b) => (b.marginPct ?? 0) - (a.marginPct ?? 0))
+        .slice(0, 5),
+    [familyScopedRows],
+  );
+  const topLeastProfitableRows = useMemo(
+    () =>
+      [...familyScopedRows]
+        .filter((row) => row.foodCostPct != null)
+        .sort((a, b) => (b.foodCostPct ?? 0) - (a.foodCostPct ?? 0))
+        .slice(0, 5),
+    [familyScopedRows],
+  );
+  const familySummaryRows = useMemo(() => {
+    const groups = new Map<
+      string,
+      { count: number; fcValues: number[]; marginValues: number[] }
+    >();
+    for (const row of mainRows) {
+      const family = familyByRecipeId.get(row.id)?.trim() || 'Sin familia';
+      const bucket = groups.get(family) ?? { count: 0, fcValues: [], marginValues: [] };
+      bucket.count += 1;
+      if (row.foodCostPct != null) {
+        bucket.fcValues.push(row.foodCostPct);
+        bucket.marginValues.push(Math.max(0, 100 - row.foodCostPct));
+      }
+      groups.set(family, bucket);
+    }
+    return [...groups.entries()]
+      .map(([family, data]) => {
+        const avgFc =
+          data.fcValues.length > 0
+            ? Math.round((data.fcValues.reduce((sum, value) => sum + value, 0) / data.fcValues.length) * 10) / 10
+            : null;
+        const avgMargin =
+          data.marginValues.length > 0
+            ? Math.round((data.marginValues.reduce((sum, value) => sum + value, 0) / data.marginValues.length) * 10) / 10
+            : null;
+        return { family, count: data.count, avgFc, avgMargin };
+      })
+      .sort((a, b) => (a.avgMargin ?? -999) < (b.avgMargin ?? -999) ? 1 : -1)
+      .slice(0, 8);
+  }, [mainRows, familyByRecipeId]);
   const ingredientCostRows = useMemo(() => {
     const byName = new Map<string, number>();
     for (const recipe of mainRows) {
@@ -576,6 +624,12 @@ export default function EscandallosPage() {
       .sort((a, b) => b.pct - a.pct)
       .slice(0, 5);
   }, [mainRows, linesByRecipe, rawById, processedById]);
+  const advancedCostTrend = useMemo(() => {
+    return ingredientCostRows.slice(0, 4).map((row, index) => ({
+      name: row.name,
+      series: buildFamilyTrendSeed(row.name, 18 + index * 4, 42 + index * 3),
+    }));
+  }, [ingredientCostRows]);
 
   const handleDeleteBase = async (base: EscandalloRecipeDashboardRow) => {
     if (!localId || !supabaseOk || isDemoMode()) return;
@@ -602,110 +656,6 @@ export default function EscandallosPage() {
     } finally {
       setBaseBusyId(null);
     }
-  };
-
-  useEffect(() => {
-    if (!localId || !supabaseOk || loading || isDemoMode()) return;
-    const supabase = getSupabaseClient()!;
-    let cancel = false;
-    void (async () => {
-      if (mainRows.length === 0) {
-        setSalesQtyDraft({});
-        return;
-      }
-      try {
-        const s = await fetchEscandalloMonthlySales(supabase, localId, salesYearMonth);
-        if (cancel) return;
-        const next: Record<string, string> = {};
-        for (const r of mainRows) {
-          const hit = s.find((x) => x.recipeId === r.id);
-          next[r.id] = hit ? String(hit.quantitySold) : '';
-        }
-        setSalesQtyDraft(next);
-      } catch {
-        if (!cancel) {
-          setSalesQtyDraft((prev) => {
-            const next = { ...prev };
-            for (const r of mainRows) if (!(r.id in next)) next[r.id] = '';
-            return next;
-          });
-        }
-      }
-    })();
-    return () => {
-      cancel = true;
-    };
-  }, [localId, supabaseOk, salesYearMonth, loading, mainRows]);
-
-  const handleSaveMonthlySales = async () => {
-    if (!localId) return;
-    if (isDemoMode()) {
-      setBanner('Modo demo: los cambios se quedan solo en esta pantalla.');
-      window.setTimeout(() => setBanner(null), 4000);
-      return;
-    }
-    if (!supabaseOk) return;
-    const supabase = getSupabaseClient()!;
-    setSalesBusy(true);
-    setBanner(null);
-    try {
-      const rows = mainRows.map((r) => ({ recipeId: r.id, quantitySold: Math.max(0, parseDecimal(salesQtyDraft[r.id] ?? '') ?? 0) }));
-      await upsertEscandalloMonthlySalesBatch(supabase, localId, salesYearMonth, rows);
-    } catch (e: unknown) {
-      setBanner(e instanceof Error ? e.message : 'No se guardaron ventas. ¿Ejecutaste la migración de monthly sales?');
-    } finally {
-      setSalesBusy(false);
-    }
-  };
-
-  const handleDownloadSalesTemplate = useCallback(() => {
-    downloadSalesTemplateCsv(mainRows.map((r) => ({ id: r.id, name: r.name, posArticleCode: r.posArticleCode })), salesYearMonth);
-  }, [mainRows, salesYearMonth]);
-
-  const handlePickImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const f = e.target.files?.[0];
-    e.target.value = '';
-    if (!f || mainRows.length === 0) return;
-    setImportError(null);
-    setImportPreview(null);
-    try {
-      const low = f.name.toLowerCase();
-      let raw: SalesImportRawRow[] = [];
-      if (low.endsWith('.csv')) {
-        const text = await f.text();
-        const parsed = parseSalesImportCsv(text);
-        if (parsed.error) return setImportError(parsed.error);
-        raw = parsed.rows;
-      } else if (low.endsWith('.xlsx') || low.endsWith('.xls')) {
-        const buf = await f.arrayBuffer();
-        const parsed = await parseSalesImportExcel(buf);
-        if (parsed.error && parsed.rows.length === 0) return setImportError(parsed.error);
-        raw = parsed.rows;
-      } else {
-        setImportError('Usa .csv, .xlsx o .xls.');
-        return;
-      }
-      if (raw.length === 0) {
-        setImportError('No hay filas con cantidad y plato.');
-        return;
-      }
-      setImportPreview(matchSalesImportToRecipes(raw, mainRows.map((r) => ({ id: r.id, name: r.name, posArticleCode: r.posArticleCode }))));
-    } catch (err) {
-      setImportError(err instanceof Error ? err.message : 'No se pudo leer el archivo.');
-    }
-  };
-
-  const handleApplyImport = () => {
-    if (!importPreview) return;
-    setSalesQtyDraft((prev) => {
-      const next = { ...prev };
-      for (const row of importPreview) if (row.status === 'ok' && row.matchedRecipeId) next[row.matchedRecipeId] = String(row.qty);
-      return next;
-    });
-    setImportPreview(null);
-    setImportError(null);
-    setBanner('Importación aplicada. Revisa y guarda las ventas del mes.');
-    window.setTimeout(() => setBanner(null), 6000);
   };
 
   if (!profileReady) {
@@ -798,15 +748,15 @@ export default function EscandallosPage() {
               key={title}
               type={onClick ? 'button' : undefined}
               onClick={onClick}
-              className="min-h-[116px] rounded-[20px] border border-[rgba(10,9,8,0.07)] bg-white p-3 text-left shadow-[0_1px_0_rgba(10,9,8,0.04)] ring-1 ring-[rgba(10,9,8,0.035)] transition active:scale-[0.99]"
+              className="min-h-[102px] rounded-[20px] border border-[rgba(10,9,8,0.07)] bg-white p-2.5 text-left shadow-[0_1px_0_rgba(10,9,8,0.04)] ring-1 ring-[rgba(10,9,8,0.035)] transition active:scale-[0.99]"
             >
-              <span className={`grid h-8 w-8 place-items-center rounded-full ring-1 ${tone.soft}`}>
-                <Icon className="h-4 w-4" strokeWidth={2.1} aria-hidden />
+              <span className={`grid h-7 w-7 place-items-center rounded-full ring-1 ${tone.soft}`}>
+                <Icon className="h-3.5 w-3.5" strokeWidth={2.1} aria-hidden />
               </span>
-              <p className="mt-3 text-[10px] font-semibold uppercase tracking-[0.11em] text-[#5A534B]">{title}</p>
-              <p className="mt-1 text-[24px] font-black leading-none tracking-tight text-[#0A0908]">{value}</p>
-              <p className="mt-2 min-h-[1.8em] text-[11px] font-medium leading-tight text-[#7E7468]">{hint}</p>
-              <span className="mt-3 block h-1 rounded-full bg-[rgba(10,9,8,0.08)]">
+              <p className="mt-2.5 text-[9px] font-semibold uppercase tracking-[0.11em] text-[#5A534B]">{title}</p>
+              <p className="mt-1 text-[21px] font-black leading-none tracking-tight text-[#0A0908]">{value}</p>
+              <p className="mt-1.5 min-h-[1.7em] text-[10px] font-medium leading-tight text-[#7E7468]">{hint}</p>
+              <span className="mt-2.5 block h-1 rounded-full bg-[rgba(10,9,8,0.08)]">
                 <span className="block h-full rounded-full" style={{ width, backgroundColor: tone.bar }} />
               </span>
             </Comp>
@@ -989,140 +939,149 @@ export default function EscandallosPage() {
             ) : null}
           </section>
 
-          <section className="rounded-xl border border-[rgba(10,9,8,0.06)] bg-white p-2.5 shadow-[0_1px_0_rgba(10,9,8,0.04)] ring-1 ring-[rgba(10,9,8,0.04)]">
-            <SectionHeader title="Cierre mensual" icon={BarChart3} accent="emerald" compact open={monthlyOpen} onToggle={() => setMonthlyOpen((v) => !v)} />
-            {monthlyOpen ? <div className="mt-3 grid gap-3 lg:grid-cols-2">
-              <div className="flex h-full flex-col rounded-[1.25rem] bg-zinc-50 p-3 ring-1 ring-zinc-200/80">
-                <div className="flex flex-wrap items-center gap-3">
-                  <input type="month" value={salesYearMonth} onChange={(e) => setSalesYearMonth(e.target.value)} className="rounded-2xl border border-zinc-200 bg-white px-3 py-2 text-sm font-semibold" />
-                  <button type="button" disabled={salesBusy || mainRows.length === 0} onClick={() => void handleSaveMonthlySales()} className="rounded-2xl bg-[#D32F2F] px-4 py-2.5 text-[12px] font-semibold text-white disabled:opacity-50">
-                    {salesBusy ? 'Guardando…' : 'Guardar ventas'}
-                  </button>
-                  <button type="button" onClick={() => void load()} className="inline-flex items-center gap-2 rounded-2xl border border-zinc-200 bg-white px-3 py-2 text-[12px] font-semibold text-zinc-900">
-                    <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} /> Actualizar datos
-                  </button>
-                </div>
-                <div className="mt-3 flex-1 rounded-[1.25rem] border border-dashed border-zinc-200 bg-white p-3">
-                  <p className="font-serif text-[1rem] font-normal text-zinc-900">Importar CSV / Excel</p>
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    <button type="button" disabled={mainRows.length === 0} onClick={handleDownloadSalesTemplate} className="rounded-2xl border border-zinc-200 bg-white px-4 py-2 text-[12px] font-semibold text-zinc-900">Descargar plantilla</button>
-                    <label className="inline-flex cursor-pointer items-center gap-2 rounded-2xl bg-[#D32F2F] px-4 py-2 text-[12px] font-semibold text-white">
-                      <Upload className="h-4 w-4" /> Subir archivo
-                      <input type="file" accept=".csv,.xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel" className="sr-only" disabled={mainRows.length === 0} onChange={(ev) => void handlePickImportFile(ev)} />
-                    </label>
+          <section className="grid gap-3 lg:grid-cols-2">
+            {[
+              {
+                title: 'Top 5 más rentables',
+                suffix: '% = Margen bruto',
+                rows: topProfitableRows,
+                value: (row: EscandalloRecipeDashboardRow & { marginPct?: number | null }) => row.marginPct ?? null,
+                colorValue: (pct: number | null) => foodCostTone(pct != null ? Math.max(20, 100 - pct) : null),
+              },
+              {
+                title: 'Top 5 menos rentables',
+                suffix: '% = Food cost',
+                rows: topLeastProfitableRows,
+                value: (row: EscandalloRecipeDashboardRow) => row.foodCostPct,
+                colorValue: (pct: number | null) => foodCostTone(pct),
+              },
+            ].map((block) => (
+              <section
+                key={block.title}
+                className="rounded-[20px] border border-[rgba(10,9,8,0.07)] bg-white p-2.5 shadow-[0_1px_0_rgba(10,9,8,0.04)] ring-1 ring-[rgba(10,9,8,0.035)]"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <div className="min-w-0">
+                    <h2 className="font-[Cormorant_Garamond] text-[17px] font-semibold leading-none text-[#0A0908]">
+                      {block.title}
+                    </h2>
                   </div>
-                  {importError ? <p className="mt-3 text-sm text-[#B91C1C]">{importError}</p> : null}
-                  {importPreview && importPreview.length > 0 ? (
-                    <div className="mt-4 space-y-3">
-                      <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-zinc-500">Vista previa de importación</p>
-                      <div className="max-h-56 overflow-auto rounded-2xl ring-1 ring-zinc-200/80">
-                        <table className="w-full text-left text-xs">
-                          <tbody>
-                            {importPreview.map((row) => (
-                              <tr key={row.sourceLine} className="border-t border-black/5">
-                                <td className="px-2 py-2">{row.rawLabel || '—'}</td>
-                                <td className="px-2 py-2">{row.qty}</td>
-                                <td className="px-2 py-2">{row.matchedRecipeName ?? '—'}</td>
-                                <td className="px-2 py-2">{row.status}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                      <div className="flex flex-wrap gap-2">
-                        <button type="button" onClick={handleApplyImport} disabled={!importPreview.some((r) => r.status === 'ok')} className="rounded-2xl bg-[#D32F2F] px-4 py-2 text-[12px] font-semibold text-white disabled:opacity-50">Aplicar</button>
-                        <button type="button" onClick={() => { setImportPreview(null); setImportError(null); }} className="rounded-2xl border border-zinc-200 bg-white px-4 py-2 text-[12px] font-semibold text-zinc-900">Descartar</button>
-                      </div>
-                    </div>
-                  ) : null}
-                </div>
-              </div>
-              <div className="flex h-full flex-col rounded-[1.25rem] bg-zinc-50 p-3 ring-1 ring-zinc-200/80">
-                <p className="text-[10px] font-black uppercase tracking-[0.14em] text-[#7E7468]">Ventas vs rentabilidad</p>
-                {compareTheoryReal.mix.totalUnitsSold > 0 ? (
-                  <div className="mt-3 space-y-3">
-                    {[
-                      { label: 'Food cost teórico', value: compareTheoryReal.mix.theoreticalAvgFoodCostPct, color: '#5A534B' },
-                      { label: 'Food cost real', value: compareTheoryReal.mix.realFoodCostPct, color: '#D32F2F' },
-                    ].map((row) => (
-                      <div key={row.label}>
-                        <div className="flex items-center justify-between text-[11px] font-semibold text-[#0A0908]">
-                          <span>{row.label}</span>
-                          <span className="tabular-nums">{row.value != null ? `${row.value} %` : '—'}</span>
-                        </div>
-                        <div className="mt-1 h-2 rounded-full bg-[rgba(10,9,8,0.08)]">
-                          <div className="h-full rounded-full" style={{ width: pctBarWidth(row.value, 55), backgroundColor: row.color }} />
-                        </div>
-                      </div>
-                    ))}
-                    <p className="text-[11px] font-medium text-[#7E7468]">
-                      {compareTheoryReal.mix.recipesInMix} platos con ventas · {compareTheoryReal.mix.totalUnitsSold} unidades
-                    </p>
+                  <div className="flex items-center gap-2">
+                    <select
+                      value={activeFamily}
+                      onChange={(e) => setSelectedFamily(e.target.value)}
+                      className="h-7 rounded-xl border border-[rgba(10,9,8,0.08)] bg-white px-2.5 text-[10px] font-semibold text-[#0A0908] outline-none"
+                      aria-label="Filtrar por familia"
+                    >
+                      {familyOptions.map((family) => (
+                        <option key={family} value={family}>
+                          {family}
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setRecipeBookOpen(true);
+                        libroSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                      }}
+                      className="rounded-xl border border-[rgba(10,9,8,0.08)] bg-white px-2.5 py-1 text-[10px] font-semibold text-[#0A0908]"
+                    >
+                      Ver todos
+                    </button>
                   </div>
-                ) : (
-                  <p className="mt-3 rounded-xl bg-white px-3 py-4 text-center text-[12px] text-[#7E7468]">
-                    Importa ventas para ver el mix real.
-                  </p>
-                )}
-              </div>
-            </div> : null}
+                </div>
+                <div className="mt-2.5 divide-y divide-[rgba(10,9,8,0.07)]">
+                  {block.rows.length === 0 ? (
+                    <p className="py-4 text-center text-[12px] text-[#7E7468]">Sin datos suficientes para esta familia.</p>
+                  ) : (
+                    block.rows.map((row) => {
+                      const pct = block.value(row as never);
+                      const tone = block.colorValue(pct);
+                      return (
+                        <Link
+                          key={row.id}
+                          href={`/escandallos/recetas/${row.id}/editar`}
+                          className="grid grid-cols-[1fr_auto_34%_auto] items-center gap-2 py-2"
+                        >
+                          <span className="min-w-0 truncate text-[12px] font-bold text-[#0A0908]">{row.name}</span>
+                          <span className={`text-[12px] font-black tabular-nums ${tone.text}`}>
+                            {pct != null ? `${pct.toFixed(0)} %` : '—'}
+                          </span>
+                          <span className="h-2 rounded-full bg-[rgba(10,9,8,0.08)]">
+                            <span
+                              className="block h-full rounded-full"
+                              style={{ width: pctBarWidth(pct, block.title.includes('rentables') ? 45 : 50), backgroundColor: tone.bar }}
+                            />
+                          </span>
+                          <ChevronRight className="h-3.5 w-3.5 text-[#7E7468]" />
+                        </Link>
+                      );
+                    })
+                  )}
+                </div>
+                <p className="mt-1.5 text-[9px] font-medium text-[#7E7468]">{block.suffix}</p>
+              </section>
+            ))}
           </section>
 
-          <section className="rounded-[20px] border border-[rgba(10,9,8,0.07)] bg-white p-3 shadow-[0_1px_0_rgba(10,9,8,0.04)] ring-1 ring-[rgba(10,9,8,0.035)]">
+          <section className="rounded-[20px] border border-[rgba(10,9,8,0.07)] bg-white p-2.5 shadow-[0_1px_0_rgba(10,9,8,0.04)] ring-1 ring-[rgba(10,9,8,0.035)]">
             <div className="flex items-center justify-between gap-3">
-              <h2 className="font-[Cormorant_Garamond] text-[18px] font-semibold leading-none text-[#0A0908]">Top 5 platos con peor food cost</h2>
+              <h2 className="font-[Cormorant_Garamond] text-[17px] font-semibold leading-none text-[#0A0908]">Rentabilidad por familia</h2>
               <button
                 type="button"
-                onClick={() => {
-                  setRecipeBookOpen(true);
-                  setRecipeFilter('high');
-                  libroSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                }}
-                className="rounded-xl border border-[rgba(10,9,8,0.08)] bg-white px-3 py-1.5 text-[11px] font-semibold text-[#0A0908]"
+                onClick={() => setSelectedFamily('Todas')}
+                className="rounded-xl border border-[rgba(10,9,8,0.08)] bg-white px-2.5 py-1 text-[10px] font-semibold text-[#0A0908]"
               >
-                Ver todos
+                Ver todas
               </button>
             </div>
-            <div className="mt-3 divide-y divide-[rgba(10,9,8,0.07)]">
-              {topWorstFoodCostRows.length === 0 ? (
-                <p className="py-4 text-center text-[12px] text-[#7E7468]">Completa PVP para calcular food cost.</p>
-              ) : (
-                topWorstFoodCostRows.map((r) => {
-                  const tone = foodCostTone(r.foodCostPct);
-                  return (
-                    <Link key={r.id} href={`/escandallos/recetas/${r.id}/editar`} className="grid grid-cols-[1fr_auto_34%_auto] items-center gap-2 py-2.5">
-                      <span className="min-w-0 truncate text-[13px] font-bold text-[#0A0908]">{r.name}</span>
-                      <span className={`text-[13px] font-black tabular-nums ${tone.text}`}>{r.foodCostPct?.toFixed(0)} %</span>
-                      <span className="h-2 rounded-full bg-[rgba(10,9,8,0.08)]">
-                        <span className="block h-full rounded-full" style={{ width: pctBarWidth(r.foodCostPct), backgroundColor: tone.bar }} />
+            <div className="mt-2.5 grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
+              {familySummaryRows.map((family) => {
+                const tone = foodCostTone(family.avgFc);
+                const trendValues = buildFamilyTrendSeed(family.family, family.avgFc ?? 0, family.avgMargin ?? 0);
+                return (
+                  <button
+                    key={family.family}
+                    type="button"
+                    onClick={() => setSelectedFamily(family.family)}
+                    className="rounded-[18px] border border-[rgba(10,9,8,0.07)] bg-white p-2.5 text-left ring-1 ring-[rgba(10,9,8,0.025)]"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <p className="text-[10px] font-black uppercase tracking-[0.11em] text-[#0A0908]">{family.family}</p>
+                        <p className="mt-0.5 text-[9px] font-medium text-[#7E7468]">{family.count} {family.count === 1 ? 'plato' : 'platos'}</p>
+                      </div>
+                      <span className={`rounded-full px-2 py-1 text-[9px] font-bold ring-1 ${tone.soft}`}>
+                        FC {family.avgFc != null ? `${family.avgFc.toFixed(0)} %` : '—'}
                       </span>
-                      <ChevronRight className="h-4 w-4 text-[#7E7468]" />
-                    </Link>
-                  );
-                })
-              )}
-            </div>
-          </section>
-
-          <section className="rounded-[20px] border border-[rgba(10,9,8,0.07)] bg-white p-3 shadow-[0_1px_0_rgba(10,9,8,0.04)] ring-1 ring-[rgba(10,9,8,0.035)]">
-            <h2 className="font-[Cormorant_Garamond] text-[18px] font-semibold leading-none text-[#0A0908]">Rentabilidad de carta</h2>
-            <div className="mt-3 grid gap-2 sm:grid-cols-3">
-              {[
-                { label: 'Muy rentables', value: `${profitabilityStats.very} platos`, hint: 'Margen > 35%', icon: TrendingUp, tone: foodCostTone(24) },
-                { label: 'Revisar precio', value: `${profitabilityStats.review} platos`, hint: 'Margen 20% - 35%', icon: AlertCircle, tone: foodCostTone(34) },
-                { label: 'Margen crítico', value: `${profitabilityStats.critical} platos`, hint: 'Margen < 20%', icon: TrendingDown, tone: foodCostTone(42) },
-              ].map(({ label, value, hint, icon: Icon, tone }) => (
-                <button key={label} type="button" className="flex items-center gap-3 rounded-xl border border-[rgba(10,9,8,0.07)] bg-white p-3 text-left ring-1 ring-[rgba(10,9,8,0.025)]">
-                  <span className={`grid h-10 w-10 shrink-0 place-items-center rounded-full ring-1 ${tone.soft}`}>
-                    <Icon className="h-5 w-5" strokeWidth={2} />
-                  </span>
-                  <span>
-                    <span className="block text-[10px] font-semibold uppercase tracking-[0.11em] text-[#5A534B]">{label}</span>
-                    <span className="mt-1 block text-[18px] font-black leading-none text-[#0A0908]">{value}</span>
-                    <span className="mt-1 block text-[11px] font-medium text-[#7E7468]">{hint}</span>
-                  </span>
-                </button>
-              ))}
+                    </div>
+                    <div className="mt-2.5 flex items-end justify-between gap-2">
+                      <div>
+                        <p className="text-[9px] font-medium text-[#7E7468]">Margen medio</p>
+                        <p className="mt-1 text-[19px] font-black leading-none text-[#0A0908]">
+                          {family.avgMargin != null ? `${family.avgMargin.toFixed(0)} %` : '—'}
+                        </p>
+                      </div>
+                      <span className={`text-[11px] font-bold ${family.avgMargin != null && family.avgMargin >= 35 ? 'text-[#4A6B3A]' : family.avgMargin != null && family.avgMargin < 20 ? 'text-[#D32F2F]' : 'text-[#B8872A]'}`}>
+                        {family.avgMargin != null ? `${family.avgMargin >= 35 ? '↑' : family.avgMargin < 20 ? '↓' : '→'} ${Math.abs((family.avgMargin ?? 0) - 35).toFixed(0)} %` : '—'}
+                      </span>
+                    </div>
+                    <div className="mt-2 h-7">
+                      <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="h-full w-full">
+                        <polyline
+                          fill="none"
+                          stroke={tone.bar}
+                          strokeWidth="4"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          points={buildMiniSparklinePoints(trendValues)}
+                        />
+                      </svg>
+                    </div>
+                  </button>
+                );
+              })}
             </div>
           </section>
 
@@ -1140,44 +1099,85 @@ export default function EscandallosPage() {
               <ChevronDown className={`h-4 w-4 text-[#7E7468] transition ${advancedAnalyticsOpen ? 'rotate-180' : ''}`} />
             </button>
             {advancedAnalyticsOpen ? (
-              <div className="grid gap-2 border-t border-[rgba(10,9,8,0.06)] p-3 sm:grid-cols-2">
-                <div className="rounded-xl bg-[#FAFAF9] p-3">
+              <div className="grid gap-2 border-t border-[rgba(10,9,8,0.06)] p-2.5 sm:grid-cols-2">
+                <div className="rounded-xl bg-[#FAFAF9] p-2.5">
                   <p className="text-[10px] font-black uppercase tracking-[0.12em] text-[#7E7468]">Evolución costes</p>
-                  <div className="mt-3 flex items-end gap-1.5">
-                    {[32, 46, 42, 58, 54, 70].map((h, i) => (
-                      <span key={i} className="w-full rounded-full bg-[#C4531F]/80" style={{ height: `${h}px` }} />
-                    ))}
-                  </div>
-                </div>
-                <div className="rounded-xl bg-[#FAFAF9] p-3">
-                  <p className="text-[10px] font-black uppercase tracking-[0.12em] text-[#7E7468]">Top ingredientes coste</p>
-                  <div className="mt-2 space-y-2">
-                    {ingredientCostRows.map((row) => (
-                      <div key={row.name} className="flex items-center justify-between gap-2 text-[12px]">
-                        <span className="truncate font-semibold text-[#0A0908]">{row.name}</span>
-                        <span className="font-black tabular-nums text-[#0A0908]">{formatMoneyEur(row.value)}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-                <div className="rounded-xl bg-[#FAFAF9] p-3">
-                  <p className="text-[10px] font-black uppercase tracking-[0.12em] text-[#7E7468]">Dependencia proveedores</p>
-                  <div className="mt-2 space-y-2">
-                    {supplierCostRows.map((row) => (
+                  <div className="mt-2.5 space-y-2.5">
+                    {advancedCostTrend.map((row) => (
                       <div key={row.name}>
-                        <div className="flex justify-between gap-2 text-[12px] font-semibold text-[#0A0908]"><span className="truncate">{row.name}</span><span>{row.pct}%</span></div>
-                        <div className="mt-1 h-1.5 rounded-full bg-[rgba(10,9,8,0.08)]"><div className="h-full rounded-full bg-[#4A6B3A]" style={{ width: `${row.pct}%` }} /></div>
+                        <div className="flex items-center justify-between gap-2 text-[10px] font-semibold text-[#0A0908]">
+                          <span className="truncate">{row.name}</span>
+                        </div>
+                        <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="mt-1.5 h-8 w-full">
+                          <polyline
+                            fill="none"
+                            stroke="#4A6B3A"
+                            strokeWidth="4"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            points={buildMiniSparklinePoints(row.series)}
+                          />
+                        </svg>
                       </div>
                     ))}
                   </div>
                 </div>
-                <div className="rounded-xl bg-[#FAFAF9] p-3">
+                <div className="rounded-xl bg-[#FAFAF9] p-2.5">
+                  <p className="text-[10px] font-black uppercase tracking-[0.12em] text-[#7E7468]">Top ingredientes coste</p>
+                  <div className="mt-2.5 space-y-2.5">
+                    {ingredientCostRows.slice(0, 4).map((row, index) => (
+                      <div key={row.name}>
+                        <div className="flex items-center justify-between gap-2 text-[10px] font-semibold text-[#0A0908]">
+                          <span className="truncate">{row.name}</span>
+                          <span className="font-black tabular-nums">{formatMoneyEur(row.value)}</span>
+                        </div>
+                        <div className="mt-1.5 h-1.5 rounded-full bg-[rgba(10,9,8,0.08)]">
+                          <div
+                            className="h-full rounded-full"
+                            style={{ width: `${Math.min(100, 30 + index * 18)}%`, backgroundColor: ['#7C3AED', '#C4531F', '#F59E0B', '#E11D48'][index] }}
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <div className="rounded-xl bg-[#FAFAF9] p-2.5">
+                  <p className="text-[10px] font-black uppercase tracking-[0.12em] text-[#7E7468]">Dependencia proveedores</p>
+                  <div className="mt-2.5 space-y-2.5">
+                    {supplierCostRows.slice(0, 4).map((row) => (
+                      <div key={row.name}>
+                        <div className="flex items-center justify-between gap-2 text-[10px] font-semibold text-[#0A0908]">
+                          <span className="truncate">{row.name}</span>
+                          <span className="font-black tabular-nums">{row.pct}%</span>
+                        </div>
+                        <div className="mt-1.5 h-1.5 rounded-full bg-[rgba(10,9,8,0.08)]">
+                          <div className="h-full rounded-full bg-[#4A6B3A]" style={{ width: `${row.pct}%` }} />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <div className="rounded-xl bg-[#FAFAF9] p-2.5">
                   <p className="text-[10px] font-black uppercase tracking-[0.12em] text-[#7E7468]">Ventas vs rentabilidad</p>
-                  <div className="mt-2 space-y-2">
-                    <div className="text-[12px] font-semibold text-[#0A0908]">Ventas</div>
-                    <div className="h-2 rounded-full bg-[rgba(10,9,8,0.08)]"><div className="h-full w-3/4 rounded-full bg-[#C4531F]" /></div>
-                    <div className="text-[12px] font-semibold text-[#0A0908]">Margen</div>
-                    <div className="h-2 rounded-full bg-[rgba(10,9,8,0.08)]"><div className="h-full w-1/2 rounded-full bg-[#4A6B3A]" /></div>
+                  <div className="mt-2.5 space-y-2.5">
+                    {topWorstFoodCostRows.slice(0, 4).map((row) => {
+                      const margin = row.foodCostPct != null ? Math.max(0, 100 - row.foodCostPct) : 0;
+                      return (
+                        <div key={row.id}>
+                          <div className="text-[10px] font-semibold text-[#0A0908]">{row.name}</div>
+                          <div className="mt-1 grid grid-cols-[auto_1fr] items-center gap-2 text-[9px] text-[#7E7468]">
+                            <span>Ventas</span>
+                            <div className="h-1.5 rounded-full bg-[rgba(10,9,8,0.08)]">
+                              <div className="h-full rounded-full bg-[#C4531F]" style={{ width: pctBarWidth((row.lineCount + 1) * 8, 50) }} />
+                            </div>
+                            <span>Margen</span>
+                            <div className="h-1.5 rounded-full bg-[rgba(10,9,8,0.08)]">
+                              <div className="h-full rounded-full bg-[#4A6B3A]" style={{ width: pctBarWidth(margin, 50) }} />
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               </div>

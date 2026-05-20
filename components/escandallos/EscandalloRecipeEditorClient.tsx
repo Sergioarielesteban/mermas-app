@@ -35,6 +35,7 @@ import {
   type EscandalloTechnicalSheetUpdate,
   type TechnicalSheetStepDraft,
 } from '@/lib/escandallos-technical-sheet-supabase';
+import { fetchEscandalloRecipeCategoriasMap } from '@/lib/finanzas-rentabilidad-escandallo';
 import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
 import {
   clearEscandalloRecipeEditorDraft,
@@ -125,6 +126,7 @@ export default function EscandalloRecipeEditorClient({ recipeId }: { recipeId: s
 
   const [techBundle, setTechBundle] = useState<RecipeTechBundle>({ sheet: null, steps: [], loading: false });
   const [recipeAllergens, setRecipeAllergens] = useState<RecipeAllergenRow[]>([]);
+  const [familyOptions, setFamilyOptions] = useState<string[]>([]);
   const [ingredientsOpen, setIngredientsOpen] = useState(false);
   const hydratedRecipeId = useRef<string | null>(null);
 
@@ -227,14 +229,20 @@ export default function EscandalloRecipeEditorClient({ recipeId }: { recipeId: s
     }
     setBanner(null);
     try {
-      const [r, raw, processed] = await Promise.all([
+      const [r, raw, processed, categoryMap] = await Promise.all([
         fetchEscandalloRecipes(supabase, localId),
         fetchEscandalloRawProductsWithWeightedPurchasePrices(supabase, localId),
         fetchProcessedProductsForEscandallo(supabase, localId),
+        fetchEscandalloRecipeCategoriasMap(supabase, localId),
       ]);
       setRecipes(r);
       setRawProducts(raw);
       setProcessedProducts(processed);
+      setFamilyOptions(
+        [...new Set([...categoryMap.values()].map((value) => value.trim()).filter(Boolean))].sort((a, b) =>
+          a.localeCompare(b, 'es'),
+        ),
+      );
       const linesEntries = await Promise.all(
         r.map(async (rec) => {
           const ls = await fetchEscandalloLines(supabase, localId, rec.id);
@@ -704,6 +712,56 @@ export default function EscandalloRecipeEditorClient({ recipeId }: { recipeId: s
               </span>
             </div>
 
+            <div className={`mt-2 grid gap-1 ${recipe.isSubRecipe ? 'grid-cols-2' : 'grid-cols-2 sm:grid-cols-4'}`}>
+              <label className="space-y-1">
+                <span className="text-[8px] font-black uppercase tracking-[0.11em] text-[#7E7468]">Raciones</span>
+                <input
+                  value={draftYieldQty}
+                  disabled={demoReadonly}
+                  onChange={(e) => setDraftYieldQty(e.target.value)}
+                  className="h-7.5 w-full rounded-lg border border-[rgba(10,9,8,0.08)] bg-[#FAFAF9] px-2 text-[12px] font-bold tabular-nums text-[#0A0908] outline-none"
+                  inputMode="decimal"
+                  placeholder="1"
+                />
+              </label>
+              <label className="space-y-1">
+                <span className="text-[8px] font-black uppercase tracking-[0.11em] text-[#7E7468]">Unidad</span>
+                <input
+                  value={draftYieldLabel}
+                  disabled={demoReadonly}
+                  onChange={(e) => setDraftYieldLabel(e.target.value)}
+                  className="h-7.5 w-full rounded-lg border border-[rgba(10,9,8,0.08)] bg-[#FAFAF9] px-2 text-[12px] font-semibold text-[#0A0908] outline-none"
+                  placeholder="raciones"
+                />
+              </label>
+              {!recipe.isSubRecipe ? (
+                <>
+                  <label className="space-y-1">
+                    <span className="text-[8px] font-black uppercase tracking-[0.11em] text-[#7E7468]">PVP</span>
+                    <input
+                      value={draftSaleGross}
+                      disabled={demoReadonly}
+                      onChange={(e) => setDraftSaleGross(e.target.value)}
+                      className="h-7.5 w-full rounded-lg border border-[rgba(10,9,8,0.08)] bg-[#FAFAF9] px-2 text-[12px] font-bold tabular-nums text-[#0A0908] outline-none"
+                      inputMode="decimal"
+                      placeholder="4,90"
+                    />
+                  </label>
+                  <label className="space-y-1">
+                    <span className="text-[8px] font-black uppercase tracking-[0.11em] text-[#7E7468]">IVA</span>
+                    <input
+                      value={draftSaleVat}
+                      disabled={demoReadonly}
+                      onChange={(e) => setDraftSaleVat(e.target.value)}
+                      className="h-7.5 w-full rounded-lg border border-[rgba(10,9,8,0.08)] bg-[#FAFAF9] px-2 text-[12px] font-bold tabular-nums text-[#0A0908] outline-none"
+                      inputMode="decimal"
+                      placeholder="10"
+                    />
+                  </label>
+                </>
+              ) : null}
+            </div>
+
             <div className="mt-2 grid grid-cols-4 divide-x divide-[rgba(10,9,8,0.06)] rounded-lg bg-[#FAFAF9] py-1.5 ring-1 ring-[rgba(10,9,8,0.04)]">
               <EditorMetric label="Coste/rac." value={formatMoneyEur(costPerYield)} />
               {!recipe.isSubRecipe ? (
@@ -838,6 +896,7 @@ export default function EscandalloRecipeEditorClient({ recipeId }: { recipeId: s
             sheet={techBundle.sheet}
             steps={techBundle.steps}
             recipeAllergens={recipeAllergens}
+            familyOptions={familyOptions}
             loading={techBundle.loading}
             saving={busyId === `tech-${recipeId}`}
             onCreate={() => handleCreateTechnicalSheet()}

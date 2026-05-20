@@ -52,6 +52,7 @@ import {
   type EscandalloTechnicalSheetUpdate,
   type TechnicalSheetStepDraft,
 } from '@/lib/escandallos-technical-sheet-supabase';
+import { fetchEscandalloRecipeCategoriasMap } from '@/lib/finanzas-rentabilidad-escandallo';
 import { writeEscandalloWizardBeforeArticulosNav } from '@/lib/escandallo-articulos-nav';
 import {
   clearEscandalloQuickCalcPrefill,
@@ -100,6 +101,8 @@ export default function EscandalloNewRecipeWizard() {
   const [ingredientDrafts, setIngredientDrafts] = useState<IngredientDraftRow[]>([emptyIngredientDraft()]);
   const [recipeKind, setRecipeKind] = useState<RecipeKind>('plato');
   const [photoPreview, setPhotoPreview] = useState('');
+  const [familyName, setFamilyName] = useState('');
+  const [familyOptions, setFamilyOptions] = useState<string[]>([]);
   const [openBlock, setOpenBlock] = useState<string | null>(null);
   const [rendimientoTotal, setRendimientoTotal] = useState('');
   const [numeroRaciones, setNumeroRaciones] = useState('');
@@ -228,14 +231,20 @@ export default function EscandalloNewRecipeWizard() {
       setLoading(true);
     }
     try {
-      const [r, raw, processed] = await Promise.all([
+      const [r, raw, processed, categoryMap] = await Promise.all([
         fetchEscandalloRecipes(supabase, localId),
         fetchEscandalloRawProductsWithWeightedPurchasePrices(supabase, localId),
         fetchProcessedProductsForEscandallo(supabase, localId),
+        fetchEscandalloRecipeCategoriasMap(supabase, localId),
       ]);
       setRecipes(r);
       setRawProducts(raw);
       setProcessedProducts(processed);
+      setFamilyOptions(
+        [...new Set([...categoryMap.values()].map((value) => value.trim()).filter(Boolean))].sort((a, b) =>
+          a.localeCompare(b, 'es'),
+        ),
+      );
       const entries = await Promise.all(
         r.map(async (rec) => {
           const ls = await fetchEscandalloLines(supabase, localId, rec.id);
@@ -287,7 +296,7 @@ export default function EscandalloNewRecipeWizard() {
   const selectedRecipeKind = RECIPE_KIND_OPTIONS.find((option) => option.value === recipeKind) ?? RECIPE_KIND_OPTIONS[0];
 
   const canStep1 = name.trim().length > 0 && yNum > 0;
-  const canFinish = canStep1 && !saving;
+  const canFinish = canStep1 && familyName.trim().length > 0 && !saving;
 
   const parseOptInt = (raw: string): number | null => {
     const t = raw.trim();
@@ -305,7 +314,7 @@ export default function EscandalloNewRecipeWizard() {
   };
 
   const buildTechnicalPatch = (): EscandalloTechnicalSheetUpdate => ({
-    categoria: selectedRecipeKind.label,
+    categoria: familyName.trim(),
     fotoUrl: photoPreview.trim() === '' ? null : photoPreview.trim(),
     activa: true,
     rendimientoTotal: rendimientoTotal.trim(),
@@ -340,6 +349,10 @@ export default function EscandalloNewRecipeWizard() {
     if (!localId || !supabaseOk) return;
     if (!previewBuilt.ok) {
       setBanner(previewBuilt.message);
+      return;
+    }
+    if (!familyName.trim()) {
+      setBanner('Añade una familia de carta para guardar la receta.');
       return;
     }
     setSaving(true);
@@ -516,6 +529,35 @@ export default function EscandalloNewRecipeWizard() {
                     </option>
                   ))}
                 </select>
+                <div className="flex gap-1.5">
+                  <input
+                    list="escandallo-family-options"
+                    value={familyName}
+                    onChange={(e) => setFamilyName(e.target.value)}
+                    className="h-8 min-w-0 flex-1 rounded-lg border border-[rgba(10,9,8,0.08)] bg-[#FAFAF9] px-2 text-[12px] font-semibold text-[#0A0908] outline-none placeholder:text-[#7E7468]/70 focus:border-[#D32F2F]/35 focus:ring-1 focus:ring-[#D32F2F]/10"
+                    placeholder="Familia carta"
+                    aria-label="Familia de carta"
+                  />
+                  <datalist id="escandallo-family-options">
+                    {familyOptions.map((option) => (
+                      <option key={option} value={option} />
+                    ))}
+                  </datalist>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!familyName.trim()) return;
+                      setFamilyOptions((prev) =>
+                        prev.includes(familyName.trim())
+                          ? prev
+                          : [...prev, familyName.trim()].sort((a, b) => a.localeCompare(b, 'es')),
+                      );
+                    }}
+                    className="inline-flex h-8 shrink-0 items-center justify-center rounded-lg border border-[rgba(10,9,8,0.08)] bg-white px-2 text-[11px] font-bold text-[#C4531F]"
+                  >
+                    + Crear
+                  </button>
+                </div>
                 <div className="grid grid-cols-[1fr_1fr_0.7fr] gap-1.5">
                   <input
                     value={yieldQty}

@@ -55,6 +55,7 @@ type Props = {
   sheet: EscandalloTechnicalSheet | null;
   steps: EscandalloTechnicalSheetStep[];
   recipeAllergens: RecipeAllergenRow[];
+  familyOptions: string[];
   loading: boolean;
   saving: boolean;
   onCreate: () => Promise<void>;
@@ -115,6 +116,7 @@ export default function RecipeTechnicalSheetPanel({
   sheet,
   steps,
   recipeAllergens,
+  familyOptions,
   loading,
   saving,
   onCreate,
@@ -356,6 +358,32 @@ export default function RecipeTechnicalSheetPanel({
 
   return (
     <div className="space-y-1.5">
+      <section className="rounded-lg border border-[rgba(10,9,8,0.07)] bg-white ring-1 ring-[rgba(10,9,8,0.035)]">
+        <div className="grid gap-1.5 px-2.5 py-2">
+          <div className="flex items-center justify-between gap-2">
+            <div>
+              <p className="text-[11px] font-black uppercase tracking-wide text-[#0A0908]">Familia de carta</p>
+              <p className="text-[10px] font-medium text-[#7E7468]">Agrupa la receta en la analítica de escandallos.</p>
+            </div>
+          </div>
+          <div className="flex gap-1.5">
+            <input
+              list="escandallo-editor-family-options"
+              value={categoria}
+              onChange={(e) => setCategoria(e.target.value)}
+              className={`${inputCls} min-w-0 flex-1`}
+              placeholder="Burgers, tapas, postres..."
+              aria-label="Familia de carta"
+            />
+            <datalist id="escandallo-editor-family-options">
+              {familyOptions.map((option) => (
+                <option key={option} value={option} />
+              ))}
+            </datalist>
+          </div>
+        </div>
+      </section>
+
       <CompactAccordion
         id="production"
         title="Producción"
