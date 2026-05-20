@@ -1291,6 +1291,16 @@ export default function NuevoPedidoPage() {
     }
     const supabase = getSupabaseClient();
     if (!supabase) return setMessage('Sin conexión con Supabase.');
+    const whatsappMessage = buildWhatsappDraftMessage({
+      createdAtIso: existingCreatedAt ?? new Date().toISOString(),
+      deliveryDate: parsed.toLocaleDateString('es-ES'),
+      localName: localName ?? 'MATARO',
+      requestedBy: requesterResolvedName,
+      notes: notes.trim(),
+      items,
+      contentRevisedAfterSent: markRevWhatsapp || Boolean(hadContentRevisionFlag),
+    });
+    openWhatsAppMessage(phone, whatsappMessage);
     void saveOrder(supabase, localId, {
       orderId: existingOrderId ?? undefined,
       supplierId: selectedSupplier.id,
@@ -1336,16 +1346,6 @@ export default function NuevoPedidoPage() {
         }
         resetPedidoFormAfterSuccess();
         void pullNewOrderIntoStore(orderId);
-        const whatsappMessage = buildWhatsappDraftMessage({
-          createdAtIso: existingCreatedAt ?? new Date().toISOString(),
-          deliveryDate: parsed.toLocaleDateString('es-ES'),
-          localName: localName ?? 'MATARO',
-          requestedBy: requesterResolvedName,
-          notes: notes.trim(),
-          items,
-          contentRevisedAfterSent: markRevWhatsapp || Boolean(hadContentRevisionFlag),
-        });
-        openWhatsAppMessage(phone, whatsappMessage);
         dispatchPedidosDataChanged();
         markPedidosUiSkipRestoreOnce();
         router.replace('/pedidos?pedido=enviado');
