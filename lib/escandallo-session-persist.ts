@@ -12,6 +12,8 @@ export type EscandalloWizardPersistV1 = {
   saleGross: string;
   saleVat: string;
   recipeKind?: 'plato' | 'base' | 'subelaboracion';
+  finalWeightQty?: string;
+  finalWeightUnit?: 'kg' | 'l';
   ingredientDrafts: IngredientDraftRow[];
   updatedAt: number;
 };

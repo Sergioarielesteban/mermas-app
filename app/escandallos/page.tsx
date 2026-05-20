@@ -359,7 +359,7 @@ export default function EscandallosPage() {
   const [selectedFamily, setSelectedFamily] = useState<string>('Todas');
   const [recipeFilter, setRecipeFilter] = useState<RecipeFilter>('all');
   const [recipeSearch, setRecipeSearch] = useState('');
-  const [recipeBookOpen, setRecipeBookOpen] = useState(true);
+  const [recipeBookOpen, setRecipeBookOpen] = useState(false);
   const recipeFiltersRef = useRef<HTMLDivElement>(null);
   const [basesOpen, setBasesOpen] = useState(false);
   const [topProfitableOpen, setTopProfitableOpen] = useState(false);

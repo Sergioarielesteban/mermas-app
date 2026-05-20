@@ -71,7 +71,7 @@ type NewStepDraft = TechnicalSheetStepDraft & { key: string };
 const RECIPE_KIND_OPTIONS: Array<{ value: RecipeKind; label: string; defaultYieldLabel: string }> = [
   { value: 'plato', label: 'Plato', defaultYieldLabel: 'raciones' },
   { value: 'base', label: 'Base', defaultYieldLabel: 'kg' },
-  { value: 'subelaboracion', label: 'Sub-elaboración', defaultYieldLabel: 'ud' },
+  { value: 'subelaboracion', label: 'Elaboración', defaultYieldLabel: 'kg' },
 ];
 
 function newStepDraft(): NewStepDraft {
@@ -98,6 +98,8 @@ export default function EscandalloNewRecipeWizard() {
   const [yieldLabel, setYieldLabel] = useState('raciones');
   const [saleGross, setSaleGross] = useState('');
   const [saleVat, setSaleVat] = useState('10');
+  const [finalWeightQty, setFinalWeightQty] = useState('');
+  const [finalWeightUnit, setFinalWeightUnit] = useState<'kg' | 'l'>('kg');
   const [ingredientDrafts, setIngredientDrafts] = useState<IngredientDraftRow[]>([emptyIngredientDraft()]);
   const [recipeKind, setRecipeKind] = useState<RecipeKind>('plato');
   const [photoPreview, setPhotoPreview] = useState('');
@@ -156,6 +158,8 @@ export default function EscandalloNewRecipeWizard() {
       setYieldLabel(d.yieldLabel);
       setSaleGross(d.saleGross);
       setSaleVat(d.saleVat);
+      setFinalWeightQty(d.finalWeightQty ?? '');
+      setFinalWeightUnit(d.finalWeightUnit === 'l' ? 'l' : 'kg');
       setIngredientDrafts(d.ingredientDrafts);
       setRecipeKind(d.recipeKind ?? 'plato');
     } else {
@@ -212,10 +216,12 @@ export default function EscandalloNewRecipeWizard() {
       saleGross,
       saleVat,
       recipeKind,
+      finalWeightQty,
+      finalWeightUnit,
       ingredientDrafts,
       updatedAt: Date.now(),
     });
-  }, [profileReady, localId, wizardSessionReady, step, name, yieldQty, yieldLabel, saleGross, saleVat, recipeKind, ingredientDrafts]);
+  }, [profileReady, localId, wizardSessionReady, step, name, yieldQty, yieldLabel, saleGross, saleVat, recipeKind, finalWeightQty, finalWeightUnit, ingredientDrafts]);
 
   const load = useCallback(async () => {
     if (!localId || !supabaseOk) {
@@ -276,11 +282,25 @@ export default function EscandalloNewRecipeWizard() {
     () => insertPayloadsToTempLines(tempRecipeId, previewPayloads),
     [previewPayloads],
   );
+  const selectedRecipeKind = RECIPE_KIND_OPTIONS.find((option) => option.value === recipeKind) ?? RECIPE_KIND_OPTIONS[0];
+  const isPlateRecipe = recipeKind === 'plato';
 
   const yNum = parseDecimal(yieldQty) ?? 1;
   const gross = parseDecimal(saleGross);
   const vat = parseDecimal(saleVat) ?? 10;
+  const finalWeightNum = parseDecimal(finalWeightQty);
   const netSale = gross != null && gross > 0 ? saleNetPerUnitFromGross(gross, vat) : null;
+  const pesoEntradaKg = useMemo(() => {
+    const toKg = (qty: number, unit: EscandalloLine['unit']): number => {
+      if (!Number.isFinite(qty) || qty <= 0) return 0;
+      if (unit === 'kg') return qty;
+      if (unit === 'g') return qty / 1000;
+      return 0;
+    };
+    return Math.round(tempLines.reduce((acc, line) => acc + toKg(line.qty, line.unit), 0) * 1000) / 1000;
+  }, [tempLines]);
+  const effectiveYieldForCost =
+    !isPlateRecipe && finalWeightNum != null && finalWeightNum > 0 ? finalWeightNum : yNum;
   const totalCost = useMemo(() => {
     if (!previewBuilt.ok) return 0;
     return recipeTotalCostEur(tempLines, rawById, processedById, {
@@ -289,12 +309,14 @@ export default function EscandalloNewRecipeWizard() {
       recipeId: tempRecipeId,
     });
   }, [previewBuilt.ok, tempLines, rawById, processedById, linesByRecipe, recipesById]);
-  const perYield = yNum > 0 ? Math.round((totalCost / yNum) * 100) / 100 : 0;
+  const perYield = effectiveYieldForCost > 0 ? Math.round((totalCost / effectiveYieldForCost) * 100) / 100 : 0;
   const fcPct = foodCostPercentOfNetSale(totalCost, yNum > 0 ? yNum : 1, netSale);
   const fcHint = foodCostStatus(fcPct);
   const marginPct = fcPct != null ? Math.round((100 - fcPct) * 10) / 10 : null;
-  const selectedRecipeKind = RECIPE_KIND_OPTIONS.find((option) => option.value === recipeKind) ?? RECIPE_KIND_OPTIONS[0];
-
+  const rendimientoSubPct =
+    !isPlateRecipe && finalWeightNum != null && finalWeightNum > 0 && pesoEntradaKg > 0
+      ? Math.round((finalWeightNum / pesoEntradaKg) * 10000) / 100
+      : null;
   const canStep1 = name.trim().length > 0 && yNum > 0;
   const canFinish = canStep1 && familyName.trim().length > 0 && !saving;
 
@@ -359,12 +381,18 @@ export default function EscandalloNewRecipeWizard() {
     setBanner(null);
     try {
       const supabase = getSupabaseClient()!;
+      if (!isPlateRecipe && finalWeightNum != null && finalWeightNum > 0 && pesoEntradaKg > 0 && finalWeightNum > pesoEntradaKg) {
+        setBanner('El peso de salida no puede superar el peso de entrada.');
+        return;
+      }
       const recipe = await insertEscandalloRecipe(supabase, localId, name.trim(), {
         yieldQty: yNum,
         yieldLabel: yieldLabel.trim() || 'raciones',
         isSubRecipe: recipeKind !== 'plato',
         saleVatRatePct: gross != null && gross > 0 ? vat : null,
         salePriceGrossEur: gross != null && gross > 0 ? gross : null,
+        finalWeightQty: !isPlateRecipe && finalWeightNum != null && finalWeightNum > 0 ? finalWeightNum : null,
+        finalWeightUnit: !isPlateRecipe && finalWeightNum != null && finalWeightNum > 0 ? finalWeightUnit : null,
       });
       if (previewPayloads.length > 0) {
         await insertEscandalloLinesBatch(supabase, localId, recipe.id, previewPayloads, 0);
@@ -558,48 +586,137 @@ export default function EscandalloNewRecipeWizard() {
                     + Crear
                   </button>
                 </div>
-                <div className="grid grid-cols-[1fr_1fr_0.7fr] gap-1.5">
-                  <input
-                    value={yieldQty}
-                    onChange={(e) => setYieldQty(e.target.value)}
-                    className="h-8 rounded-lg border border-[rgba(10,9,8,0.08)] bg-[#FAFAF9] px-2 text-[12px] font-bold tabular-nums text-[#0A0908] outline-none"
-                    inputMode="decimal"
-                    aria-label="Raciones"
-                  />
-                  <input
-                    value={yieldLabel}
-                    onChange={(e) => setYieldLabel(e.target.value)}
-                    className="h-8 rounded-lg border border-[rgba(10,9,8,0.08)] bg-[#FAFAF9] px-2 text-[12px] font-semibold text-[#0A0908] outline-none"
-                    placeholder="raciones"
-                    aria-label="Unidad de rendimiento"
-                  />
-                  <input
-                    value={saleGross}
-                    onChange={(e) => setSaleGross(e.target.value)}
-                    className="h-8 rounded-lg border border-[rgba(10,9,8,0.08)] bg-[#FAFAF9] px-2 text-[12px] font-bold tabular-nums text-[#0A0908] outline-none"
-                    inputMode="decimal"
-                    placeholder="PVP"
-                    aria-label="PVP"
-                  />
+                <div className={`grid gap-1.5 ${isPlateRecipe ? 'grid-cols-2 sm:grid-cols-4' : 'grid-cols-2 sm:grid-cols-4'}`}>
+                  <label className="space-y-1">
+                    <span className={labelCls}>{isPlateRecipe ? 'Raciones' : 'Salida'}</span>
+                    <input
+                      value={yieldQty}
+                      onChange={(e) => setYieldQty(e.target.value)}
+                      className={inputCls}
+                      inputMode="decimal"
+                    />
+                  </label>
+                  <label className="space-y-1">
+                    <span className={labelCls}>{isPlateRecipe ? 'Unidad' : 'Unidad salida'}</span>
+                    <input
+                      value={yieldLabel}
+                      onChange={(e) => setYieldLabel(e.target.value)}
+                      className={inputCls}
+                      placeholder="raciones"
+                    />
+                  </label>
+                  {isPlateRecipe ? (
+                    <>
+                      <label className="space-y-1">
+                        <span className={labelCls}>PVP</span>
+                        <input
+                          value={saleGross}
+                          onChange={(e) => setSaleGross(e.target.value)}
+                          className={inputCls}
+                          inputMode="decimal"
+                          placeholder="4,90"
+                        />
+                      </label>
+                      <label className="space-y-1">
+                        <span className={labelCls}>IVA</span>
+                        <input
+                          value={saleVat}
+                          onChange={(e) => setSaleVat(e.target.value)}
+                          className={inputCls}
+                          inputMode="decimal"
+                          placeholder="10"
+                        />
+                      </label>
+                    </>
+                  ) : null}
+                  {!isPlateRecipe ? (
+                    <>
+                      <label className="space-y-1">
+                        <span className={labelCls}>Entrada</span>
+                        <input
+                          value={pesoEntradaKg > 0 ? `${pesoEntradaKg.toFixed(2)} kg` : ''}
+                          readOnly
+                          className={`${inputCls} bg-white text-[#7E7468]`}
+                          placeholder="auto"
+                        />
+                      </label>
+                      <div className="grid grid-cols-[1fr_4.25rem] gap-1.5">
+                        <label className="space-y-1">
+                          <span className={labelCls}>Salida útil</span>
+                          <input
+                            value={finalWeightQty}
+                            onChange={(e) => setFinalWeightQty(e.target.value)}
+                            className={inputCls}
+                            inputMode="decimal"
+                            placeholder="3,5"
+                          />
+                        </label>
+                        <label className="space-y-1">
+                          <span className={labelCls}>Unidad</span>
+                          <select
+                            value={finalWeightUnit}
+                            onChange={(e) => setFinalWeightUnit(e.target.value === 'l' ? 'l' : 'kg')}
+                            className={inputCls}
+                          >
+                            <option value="kg">kg</option>
+                            <option value="l">l</option>
+                          </select>
+                        </label>
+                      </div>
+                    </>
+                  ) : null}
                 </div>
               </div>
             </div>
 
-            <div className="mt-2 grid grid-cols-3 divide-x divide-[rgba(10,9,8,0.06)] rounded-lg bg-[#FAFAF9] py-1.5 ring-1 ring-[rgba(10,9,8,0.04)]">
+            <div
+              className={`mt-2 grid divide-x divide-[rgba(10,9,8,0.06)] rounded-lg bg-[#FAFAF9] py-1.5 ring-1 ring-[rgba(10,9,8,0.04)] ${isPlateRecipe ? 'grid-cols-4' : 'grid-cols-4'}`}
+            >
               <div className="text-center">
                 <p className="text-[7px] font-bold uppercase tracking-[0.12em] text-[#7E7468]">Coste / rac.</p>
                 <p className="mt-0.5 text-[15px] font-black tabular-nums text-[#0A0908]">{formatMoneyEur(perYield)}</p>
               </div>
-              <div className="text-center">
-                <p className="text-[7px] font-bold uppercase tracking-[0.12em] text-[#7E7468]">Food cost</p>
-                <p className={`mt-0.5 text-[15px] font-black tabular-nums ${fcHint.className}`}>
-                  {fcPct != null ? `${fcPct.toFixed(1)} %` : '— %'}
-                </p>
-              </div>
-              <div className="text-center">
-                <p className="text-[7px] font-bold uppercase tracking-[0.12em] text-[#7E7468]">Margen</p>
-                <p className="mt-0.5 text-[15px] font-black tabular-nums text-[#4A6B3A]">{marginPct != null ? `${marginPct} %` : '— %'}</p>
-              </div>
+              {isPlateRecipe ? (
+                <div className="text-center">
+                  <p className="text-[7px] font-bold uppercase tracking-[0.12em] text-[#7E7468]">PVP</p>
+                  <p className="mt-0.5 text-[15px] font-black tabular-nums text-[#0A0908]">
+                    {gross != null && gross > 0 ? formatMoneyEur(gross) : '—'}
+                  </p>
+                </div>
+              ) : (
+                <div className="text-center">
+                  <p className="text-[7px] font-bold uppercase tracking-[0.12em] text-[#7E7468]">Total</p>
+                  <p className="mt-0.5 text-[15px] font-black tabular-nums text-[#0A0908]">{formatMoneyEur(totalCost)}</p>
+                </div>
+              )}
+              {isPlateRecipe ? (
+                <div className="text-center">
+                  <p className="text-[7px] font-bold uppercase tracking-[0.12em] text-[#7E7468]">Food cost</p>
+                  <p className={`mt-0.5 text-[15px] font-black tabular-nums ${fcHint.className}`}>
+                    {fcPct != null ? `${fcPct.toFixed(1)} %` : '— %'}
+                  </p>
+                </div>
+              ) : (
+                <div className="text-center">
+                  <p className="text-[7px] font-bold uppercase tracking-[0.12em] text-[#7E7468]">Rendim.</p>
+                  <p className="mt-0.5 text-[15px] font-black tabular-nums text-[#4A6B3A]">
+                    {rendimientoSubPct != null ? `${rendimientoSubPct.toFixed(1)} %` : '— %'}
+                  </p>
+                </div>
+              )}
+              {isPlateRecipe ? (
+                <div className="text-center">
+                  <p className="text-[7px] font-bold uppercase tracking-[0.12em] text-[#7E7468]">Margen</p>
+                  <p className="mt-0.5 text-[15px] font-black tabular-nums text-[#4A6B3A]">{marginPct != null ? `${marginPct} %` : '— %'}</p>
+                </div>
+              ) : (
+                <div className="text-center">
+                  <p className="text-[7px] font-bold uppercase tracking-[0.12em] text-[#7E7468]">Entrada</p>
+                  <p className="mt-0.5 text-[15px] font-black tabular-nums text-[#0A0908]">
+                    {pesoEntradaKg > 0 ? `${pesoEntradaKg.toFixed(2)} kg` : '—'}
+                  </p>
+                </div>
+              )}
             </div>
           </section>
 
@@ -698,6 +815,40 @@ export default function EscandalloNewRecipeWizard() {
                           <span className={labelCls}>Rendimiento total</span>
                           <input value={rendimientoTotal} onChange={(e) => setRendimientoTotal(e.target.value)} className={inputCls} placeholder="1 bandeja, 2,5 kg mezcla..." />
                         </label>
+                        {!isPlateRecipe ? (
+                          <>
+                            <label className="space-y-1">
+                              <span className={labelCls}>Peso entrada</span>
+                              <input
+                                value={pesoEntradaKg > 0 ? `${pesoEntradaKg.toFixed(2)} kg` : ''}
+                                readOnly
+                                className={`${inputCls} bg-white text-[#7E7468]`}
+                                placeholder="auto"
+                              />
+                            </label>
+                            <label className="space-y-1">
+                              <span className={labelCls}>Peso salida</span>
+                              <input
+                                value={finalWeightQty}
+                                onChange={(e) => setFinalWeightQty(e.target.value)}
+                                className={inputCls}
+                                inputMode="decimal"
+                                placeholder="3,5"
+                              />
+                            </label>
+                            <label className="space-y-1">
+                              <span className={labelCls}>Unidad salida</span>
+                              <select
+                                value={finalWeightUnit}
+                                onChange={(e) => setFinalWeightUnit(e.target.value === 'l' ? 'l' : 'kg')}
+                                className={inputCls}
+                              >
+                                <option value="kg">kg</option>
+                                <option value="l">l</option>
+                              </select>
+                            </label>
+                          </>
+                        ) : null}
                         <div className="col-span-3 mt-1 space-y-1.5 border-t border-[rgba(10,9,8,0.06)] pt-2">
                           <div className="flex items-center justify-between">
                             <span className={labelCls}>Elaboración / pasos</span>
