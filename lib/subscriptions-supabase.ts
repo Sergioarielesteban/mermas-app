@@ -31,6 +31,19 @@ function normalizeProvider(value: string | null | undefined): SubscriptionProvid
   return 'manual';
 }
 
+function subscriptionMissingExpiresAtColumn(message: string | undefined): boolean {
+  if (!message) return false;
+  const normalized = message.toLowerCase();
+  return normalized.includes('expires_at') && normalized.includes('does not exist');
+}
+
+const SUBSCRIPTION_SELECT_BASE =
+  'id, local_id, plan_code, provider, status, created_at, updated_at' as const;
+
+function subscriptionSelectColumns(includeExpiresAt: boolean): string {
+  return includeExpiresAt ? `${SUBSCRIPTION_SELECT_BASE}, expires_at` : SUBSCRIPTION_SELECT_BASE;
+}
+
 function mapSubscriptionRow(row: Record<string, unknown>): LocalSubscription {
   return {
     id: String(row.id),
@@ -48,18 +61,33 @@ export async function fetchActiveSubscriptionByLocal(
   supabase: SupabaseClient,
   localId: string,
 ): Promise<LocalSubscription | null> {
-  const { data, error } = await supabase
+  let includeExpiresAt = true;
+  let { data, error } = await supabase
     .from('subscriptions')
-    .select('id, local_id, plan_code, provider, status, created_at, updated_at, expires_at')
+    .select(subscriptionSelectColumns(includeExpiresAt))
     .eq('local_id', localId)
     .eq('status', 'active')
     .order('updated_at', { ascending: false })
     .order('created_at', { ascending: false })
     .limit(1)
     .maybeSingle();
+
+  if (error && subscriptionMissingExpiresAtColumn(error.message)) {
+    includeExpiresAt = false;
+    ({ data, error } = await supabase
+      .from('subscriptions')
+      .select(subscriptionSelectColumns(includeExpiresAt))
+      .eq('local_id', localId)
+      .eq('status', 'active')
+      .order('updated_at', { ascending: false })
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle());
+  }
+
   if (error) throw new Error(error.message);
   if (!data) return null;
-  return mapSubscriptionRow(data as Record<string, unknown>);
+  return mapSubscriptionRow(data as unknown as Record<string, unknown>);
 }
 
 export async function upsertManualSubscriptionPlan(
@@ -69,7 +97,8 @@ export async function upsertManualSubscriptionPlan(
 ): Promise<LocalSubscription> {
   const active = await fetchActiveSubscriptionByLocal(supabase, localId);
   if (active) {
-    const { data, error } = await supabase
+    let includeExpiresAt = true;
+    let { data, error } = await supabase
       .from('subscriptions')
       .update({
         plan_code: nextPlan,
@@ -78,13 +107,30 @@ export async function upsertManualSubscriptionPlan(
         updated_at: new Date().toISOString(),
       })
       .eq('id', active.id)
-      .select('id, local_id, plan_code, provider, status, created_at, updated_at, expires_at')
+      .select(subscriptionSelectColumns(includeExpiresAt))
       .single();
+
+    if (error && subscriptionMissingExpiresAtColumn(error.message)) {
+      includeExpiresAt = false;
+      ({ data, error } = await supabase
+        .from('subscriptions')
+        .update({
+          plan_code: nextPlan,
+          provider: 'manual',
+          status: 'active',
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', active.id)
+        .select(subscriptionSelectColumns(includeExpiresAt))
+        .single());
+    }
+
     if (error || !data) throw new Error(error?.message ?? 'No se pudo actualizar la suscripción');
-    return mapSubscriptionRow(data as Record<string, unknown>);
+    return mapSubscriptionRow(data as unknown as Record<string, unknown>);
   }
 
-  const { data, error } = await supabase
+  let includeExpiresAt = true;
+  let { data, error } = await supabase
     .from('subscriptions')
     .insert({
       local_id: localId,
@@ -92,10 +138,25 @@ export async function upsertManualSubscriptionPlan(
       provider: 'manual',
       status: 'active',
     })
-    .select('id, local_id, plan_code, provider, status, created_at, updated_at, expires_at')
+    .select(subscriptionSelectColumns(includeExpiresAt))
     .single();
+
+  if (error && subscriptionMissingExpiresAtColumn(error.message)) {
+    includeExpiresAt = false;
+    ({ data, error } = await supabase
+      .from('subscriptions')
+      .insert({
+        local_id: localId,
+        plan_code: nextPlan,
+        provider: 'manual',
+        status: 'active',
+      })
+      .select(subscriptionSelectColumns(includeExpiresAt))
+      .single());
+  }
+
   if (error || !data) throw new Error(error?.message ?? 'No se pudo crear la suscripción');
-  return mapSubscriptionRow(data as Record<string, unknown>);
+  return mapSubscriptionRow(data as unknown as Record<string, unknown>);
 }
 
 export async function countOperationalUsersForLocal(supabase: SupabaseClient, localId: string): Promise<number> {
