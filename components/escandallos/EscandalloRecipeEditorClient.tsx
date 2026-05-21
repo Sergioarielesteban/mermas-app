@@ -26,6 +26,7 @@ import {
   type IngredientDraftRow,
 } from '@/lib/escandallos-recipe-draft-utils';
 import {
+  fetchEscandalloTechnicalSheetsMap,
   fetchEscandalloTechnicalSheetWithSteps,
   insertEscandalloTechnicalSheet,
   replaceEscandalloTechnicalSheetSteps,
@@ -125,6 +126,7 @@ export default function EscandalloRecipeEditorClient({ recipeId }: { recipeId: s
   const [ingredientDrafts, setIngredientDrafts] = useState<IngredientDraftRow[]>([emptyIngredientDraft()]);
 
   const [techBundle, setTechBundle] = useState<RecipeTechBundle>({ sheet: null, steps: [], loading: false });
+  const [technicalSheetsByRecipe, setTechnicalSheetsByRecipe] = useState<Map<string, EscandalloTechnicalSheet>>(new Map());
   const [recipeAllergens, setRecipeAllergens] = useState<RecipeAllergenRow[]>([]);
   const [familyOptions, setFamilyOptions] = useState<string[]>([]);
   const [ingredientsOpen, setIngredientsOpen] = useState(false);
@@ -141,8 +143,13 @@ export default function EscandalloRecipeEditorClient({ recipeId }: { recipeId: s
   const recipe = recipesById.get(recipeId) ?? null;
   const lines = useMemo(() => (recipe ? (linesByRecipe[recipe.id] ?? []) : []), [linesByRecipe, recipe]);
   const priceInner = useMemo(
-    () => ({ linesByRecipe, recipesById, expanding: new Set<string>(recipe ? [recipe.id] : []) }),
-    [linesByRecipe, recipesById, recipe],
+    () => ({
+      linesByRecipe,
+      recipesById,
+      technicalSheetsByRecipe,
+      expanding: new Set<string>(recipe ? [recipe.id] : []),
+    }),
+    [linesByRecipe, recipesById, technicalSheetsByRecipe, recipe],
   );
 
   const hydrateDraftFromRecipe = useCallback((r: EscandalloRecipe) => {
@@ -229,11 +236,12 @@ export default function EscandalloRecipeEditorClient({ recipeId }: { recipeId: s
     }
     setBanner(null);
     try {
-      const [r, raw, processed, categoryMap] = await Promise.all([
+      const [r, raw, processed, categoryMap, sheetsMap] = await Promise.all([
         fetchEscandalloRecipes(supabase, localId),
         fetchEscandalloRawProductsWithWeightedPurchasePrices(supabase, localId),
         fetchProcessedProductsForEscandallo(supabase, localId),
         fetchEscandalloRecipeCategoriasMap(supabase, localId),
+        fetchEscandalloTechnicalSheetsMap(supabase, localId),
       ]);
       setRecipes(r);
       setRawProducts(raw);
@@ -243,6 +251,7 @@ export default function EscandalloRecipeEditorClient({ recipeId }: { recipeId: s
           a.localeCompare(b, 'es'),
         ),
       );
+      setTechnicalSheetsByRecipe(sheetsMap);
       const linesEntries = await Promise.all(
         r.map(async (rec) => {
           const ls = await fetchEscandalloLines(supabase, localId, rec.id);
@@ -255,6 +264,7 @@ export default function EscandalloRecipeEditorClient({ recipeId }: { recipeId: s
       setBanner(e instanceof Error ? e.message : 'No se pudieron cargar los datos.');
       setRecipes([]);
       setLinesByRecipe({});
+      setTechnicalSheetsByRecipe(new Map());
     } finally {
       setLoading(false);
     }
@@ -606,6 +616,7 @@ export default function EscandalloRecipeEditorClient({ recipeId }: { recipeId: s
     try {
       const sheet = await insertEscandalloTechnicalSheet(supabase, localId, recipeId);
       setTechBundle({ sheet, steps: [], loading: false });
+      setTechnicalSheetsByRecipe((prev) => new Map(prev).set(recipeId, sheet));
     } catch (e: unknown) {
       setBanner(e instanceof Error ? e.message : 'No se pudo crear la ficha.');
     } finally {
@@ -626,6 +637,7 @@ export default function EscandalloRecipeEditorClient({ recipeId }: { recipeId: s
       const sheet = await updateEscandalloTechnicalSheet(supabase, localId, sheetId, patch);
       const steps = await replaceEscandalloTechnicalSheetSteps(supabase, localId, sheetId, stepDrafts);
       setTechBundle({ sheet, steps, loading: false });
+      setTechnicalSheetsByRecipe((prev) => new Map(prev).set(sheet.recipeId, sheet));
     } catch (e: unknown) {
       setBanner(e instanceof Error ? e.message : 'No se pudo guardar la ficha técnica.');
     } finally {
@@ -810,6 +822,29 @@ export default function EscandalloRecipeEditorClient({ recipeId }: { recipeId: s
                       const unitEur = lineUnitPriceEur(line, rawById, processedById, priceInner);
                       const lineCost = Math.round(line.qty * unitEur * 100) / 100;
                       const parsed = parseLineLabel(line.label);
+                      const subSheet = line.subRecipeId ? technicalSheetsByRecipe.get(line.subRecipeId) : null;
+                      const subModeLabel =
+                        line.sourceType === 'subrecipe'
+                          ? line.subRecipeUsageMode === 'standard_portion'
+                            ? `${line.qty} ración estándar`
+                            : 'Personalizado'
+                          : null;
+                      const subDetail =
+                        line.sourceType === 'subrecipe'
+                          ? line.subRecipeUsageMode === 'standard_portion'
+                            ? `${
+                                line.subRecipeOperationalQuantity ?? subSheet?.operationalQuantity ?? '—'
+                              } ${line.subRecipeOperationalUnit ?? subSheet?.operationalUnit ?? ''} · ${
+                                subSheet?.yieldCostPerUnit != null && subSheet?.yieldUnit
+                                  ? formatUnitPriceEur(subSheet.yieldCostPerUnit, subSheet.yieldUnit)
+                                  : 'Pendiente de configurar'
+                              }`
+                            : `${line.qty} ${line.unit} · ${
+                                subSheet?.yieldCostPerUnit != null && subSheet?.yieldUnit
+                                  ? formatUnitPriceEur(subSheet.yieldCostPerUnit, subSheet.yieldUnit)
+                                  : formatUnitPriceEur(unitEur, line.unit)
+                              }`
+                          : null;
                       const subLines =
                         line.sourceType === 'subrecipe' && line.subRecipeId
                           ? (linesByRecipe[line.subRecipeId] ?? [])
@@ -826,7 +861,8 @@ export default function EscandalloRecipeEditorClient({ recipeId }: { recipeId: s
                                 <p className="truncate text-[9px] text-[#7E7468]">{parsed.supplier}</p>
                               ) : null}
                               <p className="text-[10px] tabular-nums text-[#7E7468]">
-                                {line.qty} {line.unit} · {formatUnitPriceEur(unitEur, line.unit)}
+                                {line.sourceType === 'subrecipe' && subModeLabel ? subModeLabel : `${line.qty} ${line.unit}`} ·{' '}
+                                {line.sourceType === 'subrecipe' && subDetail ? subDetail : formatUnitPriceEur(unitEur, line.unit)}
                               </p>
                             </div>
                             <div className="flex shrink-0 flex-col items-end gap-0.5">
@@ -874,6 +910,7 @@ export default function EscandalloRecipeEditorClient({ recipeId }: { recipeId: s
                       rawById={rawById}
                       processedById={processedById}
                       recipesById={recipesById}
+                      technicalSheetsByRecipe={technicalSheetsByRecipe}
                     />
                   </div>
                   <button
@@ -897,6 +934,7 @@ export default function EscandalloRecipeEditorClient({ recipeId }: { recipeId: s
             steps={techBundle.steps}
             recipeAllergens={recipeAllergens}
             familyOptions={familyOptions}
+            productionTotalCost={totalCostLive}
             loading={techBundle.loading}
             saving={busyId === `tech-${recipeId}`}
             onCreate={() => handleCreateTechnicalSheet()}

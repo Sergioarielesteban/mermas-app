@@ -1,4 +1,8 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import type {
+  EscandalloOperationalUsageType,
+  EscandalloYieldUnit,
+} from '@/lib/escandallo-operational-usage';
 
 export type EscandalloTechnicalSheet = {
   id: string;
@@ -28,6 +32,15 @@ export type EscandalloTechnicalSheet = {
   puntosCriticos: string;
   erroresComunes: string;
   recomendaciones: string;
+  yieldQuantity: number | null;
+  yieldUnit: EscandalloYieldUnit | null;
+  yieldMermaPct: number | null;
+  yieldCostTotal: number | null;
+  yieldCostPerUnit: number | null;
+  operationalUsageType: EscandalloOperationalUsageType | null;
+  operationalQuantity: number | null;
+  operationalUnit: EscandalloYieldUnit | null;
+  operationalCost: number | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -67,6 +80,15 @@ export type EscandalloTechnicalSheetUpdate = Partial<{
   puntosCriticos: string;
   erroresComunes: string;
   recomendaciones: string;
+  yieldQuantity: number | null;
+  yieldUnit: EscandalloYieldUnit | null;
+  yieldMermaPct: number | null;
+  yieldCostTotal: number | null;
+  yieldCostPerUnit: number | null;
+  operationalUsageType: EscandalloOperationalUsageType | null;
+  operationalQuantity: number | null;
+  operationalUnit: EscandalloYieldUnit | null;
+  operationalCost: number | null;
 }>;
 
 type SheetRow = {
@@ -97,6 +119,15 @@ type SheetRow = {
   puntos_criticos: string;
   errores_comunes: string;
   recomendaciones: string;
+  yield_quantity: number | null;
+  yield_unit: string | null;
+  yield_merma_pct: number | null;
+  yield_cost_total: number | null;
+  yield_cost_per_unit: number | null;
+  operational_usage_type: string | null;
+  operational_quantity: number | null;
+  operational_unit: string | null;
+  operational_cost: number | null;
   created_at: string;
   updated_at: string;
 };
@@ -112,6 +143,29 @@ type StepRow = {
 };
 
 function mapSheet(row: SheetRow): EscandalloTechnicalSheet {
+  const yieldUnit =
+    row.yield_unit === 'kg' ||
+    row.yield_unit === 'g' ||
+    row.yield_unit === 'l' ||
+    row.yield_unit === 'ml' ||
+    row.yield_unit === 'ud'
+      ? row.yield_unit
+      : null;
+  const operationalUnit =
+    row.operational_unit === 'kg' ||
+    row.operational_unit === 'g' ||
+    row.operational_unit === 'l' ||
+    row.operational_unit === 'ml' ||
+    row.operational_unit === 'ud'
+      ? row.operational_unit
+      : null;
+  const operationalUsageType =
+    row.operational_usage_type === 'weight' ||
+    row.operational_usage_type === 'volume' ||
+    row.operational_usage_type === 'unit' ||
+    row.operational_usage_type === 'standard_portion'
+      ? row.operational_usage_type
+      : null;
   return {
     id: row.id,
     localId: row.local_id,
@@ -147,6 +201,33 @@ function mapSheet(row: SheetRow): EscandalloTechnicalSheet {
     puntosCriticos: row.puntos_criticos ?? '',
     erroresComunes: row.errores_comunes ?? '',
     recomendaciones: row.recomendaciones ?? '',
+    yieldQuantity:
+      row.yield_quantity != null && Number.isFinite(Number(row.yield_quantity))
+        ? Number(row.yield_quantity)
+        : null,
+    yieldUnit,
+    yieldMermaPct:
+      row.yield_merma_pct != null && Number.isFinite(Number(row.yield_merma_pct))
+        ? Number(row.yield_merma_pct)
+        : null,
+    yieldCostTotal:
+      row.yield_cost_total != null && Number.isFinite(Number(row.yield_cost_total))
+        ? Number(row.yield_cost_total)
+        : null,
+    yieldCostPerUnit:
+      row.yield_cost_per_unit != null && Number.isFinite(Number(row.yield_cost_per_unit))
+        ? Number(row.yield_cost_per_unit)
+        : null,
+    operationalUsageType,
+    operationalQuantity:
+      row.operational_quantity != null && Number.isFinite(Number(row.operational_quantity))
+        ? Number(row.operational_quantity)
+        : null,
+    operationalUnit,
+    operationalCost:
+      row.operational_cost != null && Number.isFinite(Number(row.operational_cost))
+        ? Number(row.operational_cost)
+        : null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -190,10 +271,21 @@ function sheetToRowPatch(patch: EscandalloTechnicalSheetUpdate): Record<string, 
   if (patch.puntosCriticos !== undefined) out.puntos_criticos = patch.puntosCriticos;
   if (patch.erroresComunes !== undefined) out.errores_comunes = patch.erroresComunes;
   if (patch.recomendaciones !== undefined) out.recomendaciones = patch.recomendaciones;
+  if (patch.yieldQuantity !== undefined) out.yield_quantity = patch.yieldQuantity;
+  if (patch.yieldUnit !== undefined) out.yield_unit = patch.yieldUnit;
+  if (patch.yieldMermaPct !== undefined) out.yield_merma_pct = patch.yieldMermaPct;
+  if (patch.yieldCostTotal !== undefined) out.yield_cost_total = patch.yieldCostTotal;
+  if (patch.yieldCostPerUnit !== undefined) out.yield_cost_per_unit = patch.yieldCostPerUnit;
+  if (patch.operationalUsageType !== undefined) out.operational_usage_type = patch.operationalUsageType;
+  if (patch.operationalQuantity !== undefined) out.operational_quantity = patch.operationalQuantity;
+  if (patch.operationalUnit !== undefined) out.operational_unit = patch.operationalUnit;
+  if (patch.operationalCost !== undefined) out.operational_cost = patch.operationalCost;
   return out;
 }
 
 const SHEET_SELECT =
+  'id,local_id,recipe_id,categoria,codigo_interno,foto_url,activa,rendimiento_total,numero_raciones,gramaje_por_racion_g,tiempo_preparacion_min,tiempo_coccion_min,tiempo_reposo_min,temperatura_servicio,emplatado_descripcion,emplatado_decoracion,emplatado_menaje,emplatado_foto_url,tipo_conservacion,temperatura_conservacion,vida_util,regeneracion,alergenos_manual,notas_chef,puntos_criticos,errores_comunes,recomendaciones,yield_quantity,yield_unit,yield_merma_pct,yield_cost_total,yield_cost_per_unit,operational_usage_type,operational_quantity,operational_unit,operational_cost,created_at,updated_at';
+const SHEET_SELECT_LEGACY =
   'id,local_id,recipe_id,categoria,codigo_interno,foto_url,activa,rendimiento_total,numero_raciones,gramaje_por_racion_g,tiempo_preparacion_min,tiempo_coccion_min,tiempo_reposo_min,temperatura_servicio,emplatado_descripcion,emplatado_decoracion,emplatado_menaje,emplatado_foto_url,tipo_conservacion,temperatura_conservacion,vida_util,regeneracion,alergenos_manual,notas_chef,puntos_criticos,errores_comunes,recomendaciones,created_at,updated_at';
 
 export async function fetchEscandalloTechnicalSheetWithSteps(
@@ -207,7 +299,27 @@ export async function fetchEscandalloTechnicalSheetWithSteps(
     .eq('local_id', localId)
     .eq('recipe_id', recipeId)
     .maybeSingle();
-  if (sheetErr) throw new Error(sheetErr.message);
+  if (sheetErr) {
+    const legacy = await supabase
+      .from('escandallo_recipe_technical_sheets')
+      .select(SHEET_SELECT_LEGACY)
+      .eq('local_id', localId)
+      .eq('recipe_id', recipeId)
+      .maybeSingle();
+    if (legacy.error) throw new Error(legacy.error.message);
+    if (!legacy.data) return { sheet: null, steps: [] };
+    const sheet = mapSheet(legacy.data as SheetRow);
+    const { data: stepRows, error: stepErr } = await supabase
+      .from('escandallo_recipe_technical_sheet_steps')
+      .select('id,local_id,technical_sheet_id,orden,titulo,descripcion,created_at')
+      .eq('local_id', localId)
+      .eq('technical_sheet_id', sheet.id)
+      .order('orden', { ascending: true })
+      .order('created_at', { ascending: true });
+    if (stepErr) throw new Error(stepErr.message);
+    const steps = ((stepRows ?? []) as StepRow[]).map(mapStep);
+    return { sheet, steps };
+  }
   if (!sheetRow) return { sheet: null, steps: [] };
   const sheet = mapSheet(sheetRow as SheetRow);
   const { data: stepRows, error: stepErr } = await supabase
@@ -232,7 +344,15 @@ export async function insertEscandalloTechnicalSheet(
     .insert({ local_id: localId, recipe_id: recipeId })
     .select(SHEET_SELECT)
     .single();
-  if (error) throw new Error(error.message);
+  if (error) {
+    const legacy = await supabase
+      .from('escandallo_recipe_technical_sheets')
+      .insert({ local_id: localId, recipe_id: recipeId })
+      .select(SHEET_SELECT_LEGACY)
+      .single();
+    if (legacy.error) throw new Error(legacy.error.message);
+    return mapSheet(legacy.data as SheetRow);
+  }
   return mapSheet(data as SheetRow);
 }
 
@@ -250,7 +370,16 @@ export async function updateEscandalloTechnicalSheet(
       .eq('local_id', localId)
       .eq('id', sheetId)
       .single();
-    if (error) throw new Error(error.message);
+    if (error) {
+      const legacy = await supabase
+        .from('escandallo_recipe_technical_sheets')
+        .select(SHEET_SELECT_LEGACY)
+        .eq('local_id', localId)
+        .eq('id', sheetId)
+        .single();
+      if (legacy.error) throw new Error(legacy.error.message);
+      return mapSheet(legacy.data as SheetRow);
+    }
     return mapSheet(data as SheetRow);
   }
   const { data, error } = await supabase
@@ -260,8 +389,53 @@ export async function updateEscandalloTechnicalSheet(
     .eq('id', sheetId)
     .select(SHEET_SELECT)
     .single();
-  if (error) throw new Error(error.message);
+  if (error) {
+    const fallbackRow = { ...row };
+    delete fallbackRow.yield_quantity;
+    delete fallbackRow.yield_unit;
+    delete fallbackRow.yield_merma_pct;
+    delete fallbackRow.yield_cost_total;
+    delete fallbackRow.yield_cost_per_unit;
+    delete fallbackRow.operational_usage_type;
+    delete fallbackRow.operational_quantity;
+    delete fallbackRow.operational_unit;
+    delete fallbackRow.operational_cost;
+    const legacy = await supabase
+      .from('escandallo_recipe_technical_sheets')
+      .update(fallbackRow)
+      .eq('local_id', localId)
+      .eq('id', sheetId)
+      .select(SHEET_SELECT_LEGACY)
+      .single();
+    if (legacy.error) throw new Error(legacy.error.message);
+    return mapSheet(legacy.data as SheetRow);
+  }
   return mapSheet(data as SheetRow);
+}
+
+export async function fetchEscandalloTechnicalSheetsMap(
+  supabase: SupabaseClient,
+  localId: string,
+): Promise<Map<string, EscandalloTechnicalSheet>> {
+  const full = await supabase
+    .from('escandallo_recipe_technical_sheets')
+    .select(SHEET_SELECT)
+    .eq('local_id', localId);
+  if (!full.error) {
+    return new Map(((full.data ?? []) as SheetRow[]).map((row) => {
+      const mapped = mapSheet(row);
+      return [mapped.recipeId, mapped] as const;
+    }));
+  }
+  const legacy = await supabase
+    .from('escandallo_recipe_technical_sheets')
+    .select(SHEET_SELECT_LEGACY)
+    .eq('local_id', localId);
+  if (legacy.error) throw new Error(legacy.error.message);
+  return new Map(((legacy.data ?? []) as SheetRow[]).map((row) => {
+    const mapped = mapSheet(row);
+    return [mapped.recipeId, mapped] as const;
+  }));
 }
 
 export type TechnicalSheetStepDraft = {

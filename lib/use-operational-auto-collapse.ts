@@ -20,7 +20,7 @@ export function useOperationalAutoCollapse({
   activeId,
   containerRef,
   onCollapse,
-  timeoutMs = 40_000,
+  timeoutMs = 120_000,
   hasPendingChanges,
 }: AutoCollapseOptions) {
   const onCollapseRef = React.useRef(onCollapse);

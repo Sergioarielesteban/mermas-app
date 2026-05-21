@@ -3,6 +3,7 @@
 import React, { useEffect, type SetStateAction } from 'react';
 import { ChevronDown, ChevronUp, Plus, Search, Trash2 } from 'lucide-react';
 import { ESCANDALLO_USAGE_UNIT_PRESETS } from '@/lib/escandallo-ingredient-units';
+import { computeOperationalCost, formatOperationalSummary, type EscandalloYieldUnit } from '@/lib/escandallo-operational-usage';
 import {
   emptyIngredientDraft,
   estimateDraftRowCostEur,
@@ -17,6 +18,7 @@ import {
   type EscandalloRawProduct,
   type EscandalloRecipe,
 } from '@/lib/escandallos-supabase';
+import type { EscandalloTechnicalSheet } from '@/lib/escandallos-technical-sheet-supabase';
 import { formatMoneyEur, formatUnitPriceEur, roundMoney } from '@/lib/money-format';
 
 export type EscandalloIngredientDraftEditorProps = {
@@ -31,6 +33,7 @@ export type EscandalloIngredientDraftEditorProps = {
   rawById?: Map<string, EscandalloRawProduct>;
   processedById?: Map<string, EscandalloProcessedProduct>;
   recipesById?: Map<string, EscandalloRecipe>;
+  technicalSheetsByRecipe?: Map<string, EscandalloTechnicalSheet>;
   addButtonLabel?: string;
   /** UI compacta tipo Pedidos para el editor de receta */
   variant?: 'default' | 'editor';
@@ -66,6 +69,46 @@ function displayUnitForRow(
   return row.unit.trim() || 'ud';
 }
 
+function getSubrecipeOperationalConfig(
+  row: IngredientDraftRow,
+  recipesById?: Map<string, EscandalloRecipe>,
+  technicalSheetsByRecipe?: Map<string, EscandalloTechnicalSheet>,
+) {
+  if (!row.subRecipeId) return null;
+  const recipe = recipesById?.get(row.subRecipeId) ?? null;
+  const sheet = technicalSheetsByRecipe?.get(row.subRecipeId) ?? null;
+  const yieldUnit = (sheet?.yieldUnit ?? recipe?.finalWeightUnit ?? null) as EscandalloYieldUnit | null;
+  const yieldCostPerUnit =
+    sheet?.yieldCostPerUnit != null && Number.isFinite(sheet.yieldCostPerUnit) ? sheet.yieldCostPerUnit : null;
+  const quantity =
+    row.subRecipeOperationalQuantity && parseDecimal(row.subRecipeOperationalQuantity) != null
+      ? parseDecimal(row.subRecipeOperationalQuantity)!
+      : sheet?.operationalQuantity ?? null;
+  const unit = (row.subRecipeOperationalUnit
+    ? row.subRecipeOperationalUnit
+    : sheet?.operationalUnit ?? null) as EscandalloYieldUnit | null;
+  const portionCost =
+    sheet?.operationalCost != null && Number.isFinite(sheet.operationalCost)
+      ? sheet.operationalCost
+      : computeOperationalCost(yieldCostPerUnit, yieldUnit, quantity, unit);
+  return {
+    recipe,
+    sheet,
+    quantity,
+    unit,
+    yieldUnit,
+    yieldCostPerUnit,
+    portionCost,
+    canUseStandard: Boolean(
+      sheet?.operationalUsageType &&
+        quantity != null &&
+        quantity > 0 &&
+        unit &&
+        portionCost != null,
+    ),
+  };
+}
+
 export default function EscandalloIngredientDraftEditor({
   drafts,
   onChange,
@@ -78,6 +121,7 @@ export default function EscandalloIngredientDraftEditor({
   rawById,
   processedById,
   recipesById,
+  technicalSheetsByRecipe,
   addButtonLabel = 'Añadir ingrediente',
   variant = 'default',
 }: EscandalloIngredientDraftEditorProps) {
@@ -141,11 +185,22 @@ export default function EscandalloIngredientDraftEditor({
 
   const renderCompactDraftRow = (row: IngredientDraftRow) => {
     const est = canEstimate
-      ? estimateDraftRowCostEur(row, rawById!, processedById!, recipesById!, linesByRecipe, excludeRecipeId)
+      ? estimateDraftRowCostEur(
+          row,
+          rawById!,
+          processedById!,
+          recipesById!,
+          linesByRecipe,
+          excludeRecipeId,
+          technicalSheetsByRecipe,
+        )
       : null;
     const subLines = row.sourceType === 'subrecipe' && row.subRecipeId ? (linesByRecipe[row.subRecipeId] ?? []) : [];
     const dispUnit = displayUnitForRow(row, sortedRaw, processedProducts);
     const configured = draftRowConfigured(row);
+    const subrecipeConfig =
+      row.sourceType === 'subrecipe' ? getSubrecipeOperationalConfig(row, recipesById, technicalSheetsByRecipe) : null;
+    const usingStandard = row.sourceType === 'subrecipe' && row.subRecipeUsageMode === 'standard_portion';
 
     return (
       <div key={row.key} className="rounded-lg border border-[rgba(10,9,8,0.06)] bg-[#FAFAF9]/80 px-2 py-1.5">
@@ -162,12 +217,15 @@ export default function EscandalloIngredientDraftEditor({
                     processedId: '',
                     subRecipeId: '',
                     rawSearch: '',
-                    rawDropdownOpen: false,
-                    manualLabel: '',
-                    manualPrice: '',
-                    unit: e.target.value === 'raw' || e.target.value === 'processed' ? 'kg' : row.unit || 'kg',
-                  })
-                }
+                      rawDropdownOpen: false,
+                      manualLabel: '',
+                      manualPrice: '',
+                      unit: e.target.value === 'raw' || e.target.value === 'processed' ? 'kg' : row.unit || 'kg',
+                      subRecipeUsageMode: 'custom',
+                      subRecipeOperationalQuantity: '',
+                      subRecipeOperationalUnit: '',
+                    })
+                  }
                 className="h-7 w-[4.9rem] shrink-0 rounded-md border border-zinc-200 bg-white px-1 text-[8px] font-bold uppercase tracking-wide text-zinc-900 outline-none focus:border-[#D32F2F]/35"
                 aria-label="Tipo de ingrediente"
               >
@@ -241,22 +299,58 @@ export default function EscandalloIngredientDraftEditor({
                   </select>
                 ) : null}
                 {row.sourceType === 'subrecipe' ? (
-                  <select
-                    value={row.subRecipeId}
-                    disabled={disabled}
-                    onChange={(e) => updateRow(row.key, { subRecipeId: e.target.value })}
-                    className="h-7 w-full rounded-lg border border-[rgba(10,9,8,0.08)] bg-white px-2 text-[11px] font-medium text-[#0A0908] outline-none focus:border-[#D32F2F]/35 focus:ring-1 focus:ring-[#D32F2F]/10"
-                  >
-                    <option value="">Selecciona base…</option>
-                    {recipes
-                      .filter((r) => r.id !== excludeRecipeId)
-                      .map((r) => (
-                        <option key={r.id} value={r.id}>
-                          {r.name}
-                          {r.isSubRecipe ? ' (base)' : ''}
-                        </option>
-                      ))}
-                  </select>
+                  <div className="space-y-1">
+                    <select
+                      value={row.subRecipeId}
+                      disabled={disabled}
+                      onChange={(e) =>
+                        updateRow(row.key, {
+                          subRecipeId: e.target.value,
+                          subRecipeUsageMode: 'custom',
+                          subRecipeOperationalQuantity: '',
+                          subRecipeOperationalUnit: '',
+                          unit: 'g',
+                        })
+                      }
+                      className="h-7 w-full rounded-lg border border-[rgba(10,9,8,0.08)] bg-white px-2 text-[11px] font-medium text-[#0A0908] outline-none focus:border-[#D32F2F]/35 focus:ring-1 focus:ring-[#D32F2F]/10"
+                    >
+                      <option value="">Selecciona base / elaboración…</option>
+                      {recipes
+                        .filter((r) => r.id !== excludeRecipeId && r.isSubRecipe)
+                        .map((r) => (
+                          <option key={r.id} value={r.id}>
+                            {r.name}
+                          </option>
+                        ))}
+                    </select>
+                    {subrecipeConfig?.canUseStandard ? (
+                      <div className="grid grid-cols-[1fr_auto] gap-1.5">
+                        <select
+                          value={row.subRecipeUsageMode ?? 'custom'}
+                          disabled={disabled}
+                          onChange={(e) =>
+                            updateRow(row.key, {
+                              subRecipeUsageMode: e.target.value as 'custom' | 'standard_portion',
+                              unit: e.target.value === 'standard_portion' ? 'ud' : row.unit || 'g',
+                            })
+                          }
+                          className="h-7 rounded-lg border border-[rgba(10,9,8,0.08)] bg-white px-2 text-[10px] font-bold text-[#0A0908]"
+                        >
+                          <option value="custom">Personalizado</option>
+                          <option value="standard_portion">Ración estándar</option>
+                        </select>
+                        {row.subRecipeUsageMode === 'standard_portion' ? (
+                          <span className="inline-flex items-center rounded-md bg-[#4A6B3A]/10 px-2 text-[10px] font-bold text-[#35502A]">
+                            {formatOperationalSummary(subrecipeConfig.quantity, subrecipeConfig.unit)}
+                          </span>
+                        ) : null}
+                      </div>
+                    ) : row.subRecipeId ? (
+                      <p className="text-[10px] font-medium text-[#B8872A]">
+                        Configura uso operativo para usar raciones estándar.
+                      </p>
+                    ) : null}
+                  </div>
                 ) : null}
                 {row.sourceType === 'manual' ? (
                   <div className="flex gap-1.5">
@@ -295,6 +389,14 @@ export default function EscandalloIngredientDraftEditor({
                 <span className="text-[10px] font-semibold text-[#7E7468]">{dispUnit}</span>
               </div>
               <div className="ml-auto flex items-center gap-2">
+                {usingStandard && subrecipeConfig ? (
+                  <p className="hidden text-[9px] font-medium text-[#7E7468] sm:block">
+                    {formatOperationalSummary(subrecipeConfig.quantity, subrecipeConfig.unit)} ·{' '}
+                    {subrecipeConfig.yieldCostPerUnit != null && subrecipeConfig.yieldUnit
+                      ? formatUnitPriceEur(subrecipeConfig.yieldCostPerUnit, subrecipeConfig.yieldUnit)
+                      : 'Pendiente'}
+                  </p>
+                ) : null}
                 {configured ? <p className="text-[13px] font-black tabular-nums text-[#0A0908]">{est != null ? formatMoneyEur(est) : '—'}</p> : null}
                 <button
                   type="button"
@@ -350,10 +452,20 @@ export default function EscandalloIngredientDraftEditor({
       {drafts.map((row, idx) => {
         const est =
           canEstimate
-            ? estimateDraftRowCostEur(row, rawById, processedById, recipesById, linesByRecipe, excludeRecipeId)
+            ? estimateDraftRowCostEur(
+                row,
+                rawById,
+                processedById,
+                recipesById,
+                linesByRecipe,
+                excludeRecipeId,
+                technicalSheetsByRecipe,
+              )
             : null;
         const subLines =
           row.sourceType === 'subrecipe' && row.subRecipeId ? (linesByRecipe[row.subRecipeId] ?? []) : [];
+        const subrecipeConfig =
+          row.sourceType === 'subrecipe' ? getSubrecipeOperationalConfig(row, recipesById, technicalSheetsByRecipe) : null;
         const qtyNum = parseDecimal(row.qty);
         const dispUnit = displayUnitForRow(row, sortedRaw, processedProducts);
         const unitEurForLine =
@@ -392,6 +504,9 @@ export default function EscandalloIngredientDraftEditor({
                       rawSearch: '',
                       rawDropdownOpen: false,
                       unit: 'kg',
+                      subRecipeUsageMode: 'custom',
+                      subRecipeOperationalQuantity: '',
+                      subRecipeOperationalUnit: '',
                     })
                   }
                   className="min-h-[40px] rounded-full border border-zinc-200 bg-zinc-100 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wide text-zinc-900 outline-none focus:border-[#D32F2F]/40 focus:ring-2 focus:ring-[#D32F2F]/15 sm:min-h-0"
@@ -399,7 +514,7 @@ export default function EscandalloIngredientDraftEditor({
                 >
                   <option value="raw">Crudo</option>
                   <option value="processed">Elaborado</option>
-                  <option value="subrecipe">Sub-receta</option>
+                  <option value="subrecipe">Base</option>
                   <option value="manual">Manual</option>
                 </select>
               </div>
@@ -489,22 +604,78 @@ export default function EscandalloIngredientDraftEditor({
                   </select>
                 ) : null}
                 {row.sourceType === 'subrecipe' ? (
-                  <select
-                    value={row.subRecipeId}
-                    disabled={disabled}
-                    onChange={(e) => updateRow(row.key, { subRecipeId: e.target.value })}
-                    className="min-h-[48px] w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-base font-semibold leading-snug sm:min-h-0 sm:text-sm"
-                  >
-                    <option value="">Base / sub-receta…</option>
-                    {recipes
-                      .filter((r) => r.id !== excludeRecipeId)
-                      .map((r) => (
-                        <option key={r.id} value={r.id}>
-                          {r.name}
-                          {r.isSubRecipe ? ' (base)' : ''}
-                        </option>
-                      ))}
-                  </select>
+                  <div className="space-y-2">
+                    <select
+                      value={row.subRecipeId}
+                      disabled={disabled}
+                      onChange={(e) =>
+                        updateRow(row.key, {
+                          subRecipeId: e.target.value,
+                          subRecipeUsageMode: 'custom',
+                          subRecipeOperationalQuantity: '',
+                          subRecipeOperationalUnit: '',
+                          unit: 'g',
+                          qty: row.qty || '1',
+                        })
+                      }
+                      className="min-h-[48px] w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-base font-semibold leading-snug sm:min-h-0 sm:text-sm"
+                    >
+                      <option value="">Base / elaboración…</option>
+                      {recipes
+                        .filter((r) => r.id !== excludeRecipeId && r.isSubRecipe)
+                        .map((r) => (
+                          <option key={r.id} value={r.id}>
+                            {r.name}
+                          </option>
+                        ))}
+                    </select>
+                    {subrecipeConfig?.canUseStandard ? (
+                      <div className="grid gap-2 sm:grid-cols-[1fr_6rem_auto]">
+                        <label className="flex min-w-0 flex-col gap-0.5">
+                          <span className="text-[9px] font-bold uppercase text-zinc-500">Modo</span>
+                          <select
+                            value={row.subRecipeUsageMode ?? 'custom'}
+                            disabled={disabled}
+                            onChange={(e) =>
+                              updateRow(row.key, {
+                                subRecipeUsageMode: e.target.value as 'custom' | 'standard_portion',
+                                unit: e.target.value === 'standard_portion' ? 'ud' : row.unit || 'g',
+                                qty: row.qty || '1',
+                              })
+                            }
+                            className="min-h-[44px] rounded-lg border border-zinc-200 bg-white px-2 py-2 text-base sm:min-h-0 sm:text-sm"
+                          >
+                            <option value="custom">Personalizado</option>
+                            <option value="standard_portion">Ración estándar</option>
+                          </select>
+                        </label>
+                        {row.subRecipeUsageMode === 'standard_portion' ? (
+                          <>
+                            <label className="flex flex-col gap-0.5">
+                              <span className="text-[9px] font-bold uppercase text-zinc-500">Cantidad</span>
+                              <input
+                                value={row.qty}
+                                disabled={disabled}
+                                onChange={(e) => updateRow(row.key, { qty: e.target.value })}
+                                className="min-h-[44px] rounded-lg border border-zinc-200 bg-white px-2 py-2 text-base font-semibold tabular-nums sm:min-h-0 sm:text-sm"
+                                inputMode="decimal"
+                              />
+                            </label>
+                            <div className="flex min-h-[44px] flex-col justify-center rounded-lg border border-emerald-100 bg-emerald-50 px-2 py-1.5 sm:min-h-0">
+                              <span className="text-[8px] font-bold uppercase text-emerald-800/80">Detalle</span>
+                              <span className="text-[11px] font-semibold text-emerald-950">
+                                {formatOperationalSummary(subrecipeConfig.quantity, subrecipeConfig.unit)}
+                              </span>
+                            </div>
+                          </>
+                        ) : null}
+                      </div>
+                    ) : row.subRecipeId ? (
+                      <p className="text-[11px] font-medium text-[#B8872A]">
+                        Configura uso operativo para usar raciones estándar.
+                      </p>
+                    ) : null}
+                  </div>
                 ) : null}
                 {row.sourceType === 'manual' ? (
                   <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
@@ -560,7 +731,7 @@ export default function EscandalloIngredientDraftEditor({
                     </span>
                   </div>
                 ) : null}
-                {row.sourceType === 'subrecipe' || row.sourceType === 'manual' ? (
+                {row.sourceType === 'manual' || (row.sourceType === 'subrecipe' && row.subRecipeUsageMode !== 'standard_portion') ? (
                   <>
                     <label className="flex min-w-0 flex-col gap-0.5 sm:max-w-[9rem]">
                       <span className="text-[9px] font-bold uppercase text-zinc-500">Unidad uso</span>
@@ -586,10 +757,36 @@ export default function EscandalloIngredientDraftEditor({
                 <p className="text-[11px] leading-snug text-zinc-600 sm:max-w-[20rem]">
                   <span className="text-zinc-500">{badgeLabel(row.sourceType)}</span>
                   <span className="mx-1.5 text-zinc-300">·</span>
-                  {qtyLabel}
+                  {row.sourceType === 'subrecipe' && row.subRecipeUsageMode === 'standard_portion' ? (
+                    <>
+                      <span className="font-semibold tabular-nums text-zinc-900">{row.qty.trim() || '1'}</span>{' '}
+                      <span className="text-zinc-700">ración estándar</span>
+                    </>
+                  ) : (
+                    qtyLabel
+                  )}
                   <span className="mx-1.5 text-zinc-300">·</span>
-                  <span className="tabular-nums text-zinc-700">{unitPriceStr}</span>
+                  <span className="tabular-nums text-zinc-700">
+                    {row.sourceType === 'subrecipe' && subrecipeConfig?.yieldCostPerUnit != null && subrecipeConfig?.yieldUnit
+                      ? formatUnitPriceEur(subrecipeConfig.yieldCostPerUnit, subrecipeConfig.yieldUnit)
+                      : unitPriceStr}
+                  </span>
                 </p>
+                {row.sourceType === 'subrecipe' ? (
+                  <p className="text-[10px] leading-snug text-zinc-500">
+                    {row.subRecipeUsageMode === 'standard_portion'
+                      ? `${formatOperationalSummary(subrecipeConfig?.quantity, subrecipeConfig?.unit)} · ${
+                          subrecipeConfig?.yieldCostPerUnit != null && subrecipeConfig?.yieldUnit
+                            ? formatUnitPriceEur(subrecipeConfig.yieldCostPerUnit, subrecipeConfig.yieldUnit)
+                            : 'Pendiente de configurar'
+                        }`
+                      : `Personalizado · ${row.qty.trim() || '—'} ${dispUnit} · ${
+                          subrecipeConfig?.yieldCostPerUnit != null && subrecipeConfig?.yieldUnit
+                            ? formatUnitPriceEur(subrecipeConfig.yieldCostPerUnit, subrecipeConfig.yieldUnit)
+                            : unitPriceStr
+                        }`}
+                  </p>
+                ) : null}
                 <p className="text-lg font-black tabular-nums text-zinc-900">
                   {est != null ? `~${formatMoneyEur(est)}` : '—'}
                 </p>

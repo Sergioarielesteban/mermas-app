@@ -300,31 +300,31 @@ export default function AlbaranDetallePage() {
     activeId: manualIncidentExpanded ? 'manual-incident' : null,
     containerRef: manualIncidentDetailsRef,
     onCollapse: () => setManualIncidentExpanded(false),
-    timeoutMs: 30_000,
+    timeoutMs: 120_000,
   });
   useOperationalAutoCollapse({
     activeId: headerExpanded ? 'header' : null,
     containerRef: headerDetailsRef,
     onCollapse: () => setHeaderExpanded(false),
-    timeoutMs: 30_000,
+    timeoutMs: 120_000,
   });
   useOperationalAutoCollapse({
     activeId: documentExpanded ? 'document' : null,
     containerRef: documentDetailsRef,
     onCollapse: () => setDocumentExpanded(false),
-    timeoutMs: 30_000,
+    timeoutMs: 120_000,
   });
   useOperationalAutoCollapse({
     activeId: accountingExpanded ? 'accounting' : null,
     containerRef: accountingDetailsRef,
     onCollapse: () => setAccountingExpanded(false),
-    timeoutMs: 30_000,
+    timeoutMs: 120_000,
   });
   useOperationalAutoCollapse({
     activeId: ocrExpanded ? 'ocr' : null,
     containerRef: ocrDetailsRef,
     onCollapse: () => setOcrExpanded(false),
-    timeoutMs: 30_000,
+    timeoutMs: 120_000,
   });
   const [incidentTab, setIncidentTab] = useState<'open' | 'resolved' | 'all'>('open');
   const [resolveModalId, setResolveModalId] = useState<string | null>(null);

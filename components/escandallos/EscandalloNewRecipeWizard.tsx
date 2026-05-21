@@ -46,10 +46,12 @@ import {
   type EscandalloRecipe,
 } from '@/lib/escandallos-supabase';
 import {
+  fetchEscandalloTechnicalSheetsMap,
   insertEscandalloTechnicalSheet,
   replaceEscandalloTechnicalSheetSteps,
   updateEscandalloTechnicalSheet,
   type EscandalloTechnicalSheetUpdate,
+  type EscandalloTechnicalSheet,
   type TechnicalSheetStepDraft,
 } from '@/lib/escandallos-technical-sheet-supabase';
 import { fetchEscandalloRecipeCategoriasMap } from '@/lib/finanzas-rentabilidad-escandallo';
@@ -64,6 +66,14 @@ import {
   writeEscandalloWizardDraft,
 } from '@/lib/escandallo-session-persist';
 import { formatMoneyEur } from '@/lib/money-format';
+import {
+  computeMermaPct,
+  computeOperationalCost,
+  computeYieldCostPerUnit,
+  inferUsageTypeFromUnit,
+  type EscandalloOperationalUsageType,
+  type EscandalloYieldUnit,
+} from '@/lib/escandallo-operational-usage';
 
 type RecipeKind = 'plato' | 'base' | 'subelaboracion';
 type NewStepDraft = TechnicalSheetStepDraft & { key: string };
@@ -89,6 +99,7 @@ export default function EscandalloNewRecipeWizard() {
   const [linesByRecipe, setLinesByRecipe] = useState<Record<string, EscandalloLine[]>>({});
   const [rawProducts, setRawProducts] = useState<EscandalloRawProduct[]>([]);
   const [processedProducts, setProcessedProducts] = useState<EscandalloProcessedProduct[]>([]);
+  const [technicalSheetsByRecipe, setTechnicalSheetsByRecipe] = useState<Map<string, EscandalloTechnicalSheet>>(new Map());
   const [loading, setLoading] = useState(true);
   const [banner, setBanner] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -99,7 +110,10 @@ export default function EscandalloNewRecipeWizard() {
   const [saleGross, setSaleGross] = useState('');
   const [saleVat, setSaleVat] = useState('10');
   const [finalWeightQty, setFinalWeightQty] = useState('');
-  const [finalWeightUnit, setFinalWeightUnit] = useState<'kg' | 'l'>('kg');
+  const [finalWeightUnit, setFinalWeightUnit] = useState<EscandalloYieldUnit>('kg');
+  const [operationalUsageType, setOperationalUsageType] = useState<EscandalloOperationalUsageType>('standard_portion');
+  const [operationalQuantity, setOperationalQuantity] = useState('');
+  const [operationalUnit, setOperationalUnit] = useState<EscandalloYieldUnit>('g');
   const [ingredientDrafts, setIngredientDrafts] = useState<IngredientDraftRow[]>([emptyIngredientDraft()]);
   const [recipeKind, setRecipeKind] = useState<RecipeKind>('plato');
   const [photoPreview, setPhotoPreview] = useState('');
@@ -159,7 +173,10 @@ export default function EscandalloNewRecipeWizard() {
       setSaleGross(d.saleGross);
       setSaleVat(d.saleVat);
       setFinalWeightQty(d.finalWeightQty ?? '');
-      setFinalWeightUnit(d.finalWeightUnit === 'l' ? 'l' : 'kg');
+      setFinalWeightUnit(d.finalWeightUnit ?? 'kg');
+      setOperationalUsageType(d.operationalUsageType ?? 'standard_portion');
+      setOperationalQuantity(d.operationalQuantity ?? '');
+      setOperationalUnit(d.operationalUnit ?? 'g');
       setIngredientDrafts(d.ingredientDrafts);
       setRecipeKind(d.recipeKind ?? 'plato');
     } else {
@@ -218,10 +235,13 @@ export default function EscandalloNewRecipeWizard() {
       recipeKind,
       finalWeightQty,
       finalWeightUnit,
+      operationalUsageType,
+      operationalQuantity,
+      operationalUnit,
       ingredientDrafts,
       updatedAt: Date.now(),
     });
-  }, [profileReady, localId, wizardSessionReady, step, name, yieldQty, yieldLabel, saleGross, saleVat, recipeKind, finalWeightQty, finalWeightUnit, ingredientDrafts]);
+  }, [profileReady, localId, wizardSessionReady, step, name, yieldQty, yieldLabel, saleGross, saleVat, recipeKind, finalWeightQty, finalWeightUnit, operationalUsageType, operationalQuantity, operationalUnit, ingredientDrafts]);
 
   const load = useCallback(async () => {
     if (!localId || !supabaseOk) {
@@ -229,6 +249,7 @@ export default function EscandalloNewRecipeWizard() {
       setLinesByRecipe({});
       setRawProducts([]);
       setProcessedProducts([]);
+      setTechnicalSheetsByRecipe(new Map());
       setLoading(false);
       return;
     }
@@ -237,15 +258,17 @@ export default function EscandalloNewRecipeWizard() {
       setLoading(true);
     }
     try {
-      const [r, raw, processed, categoryMap] = await Promise.all([
+      const [r, raw, processed, categoryMap, sheetsMap] = await Promise.all([
         fetchEscandalloRecipes(supabase, localId),
         fetchEscandalloRawProductsWithWeightedPurchasePrices(supabase, localId),
         fetchProcessedProductsForEscandallo(supabase, localId),
         fetchEscandalloRecipeCategoriasMap(supabase, localId),
+        fetchEscandalloTechnicalSheetsMap(supabase, localId),
       ]);
       setRecipes(r);
       setRawProducts(raw);
       setProcessedProducts(processed);
+      setTechnicalSheetsByRecipe(sheetsMap);
       setFamilyOptions(
         [...new Set([...categoryMap.values()].map((value) => value.trim()).filter(Boolean))].sort((a, b) =>
           a.localeCompare(b, 'es'),
@@ -289,6 +312,7 @@ export default function EscandalloNewRecipeWizard() {
   const gross = parseDecimal(saleGross);
   const vat = parseDecimal(saleVat) ?? 10;
   const finalWeightNum = parseDecimal(finalWeightQty);
+  const operationalQtyNum = parseDecimal(operationalQuantity);
   const netSale = gross != null && gross > 0 ? saleNetPerUnitFromGross(gross, vat) : null;
   const pesoEntradaKg = useMemo(() => {
     const toKg = (qty: number, unit: EscandalloLine['unit']): number => {
@@ -310,6 +334,18 @@ export default function EscandalloNewRecipeWizard() {
     });
   }, [previewBuilt.ok, tempLines, rawById, processedById, linesByRecipe, recipesById]);
   const perYield = effectiveYieldForCost > 0 ? Math.round((totalCost / effectiveYieldForCost) * 100) / 100 : 0;
+  const mermaPct =
+    !isPlateRecipe && finalWeightNum != null && finalWeightNum > 0 && pesoEntradaKg > 0
+      ? computeMermaPct(pesoEntradaKg, 'kg', finalWeightNum, finalWeightUnit)
+      : null;
+  const yieldCostPerUnit =
+    !isPlateRecipe && finalWeightNum != null && finalWeightNum > 0
+      ? computeYieldCostPerUnit(totalCost, finalWeightNum)
+      : null;
+  const operationalCost =
+    !isPlateRecipe && yieldCostPerUnit != null && operationalQtyNum != null && operationalQtyNum > 0
+      ? computeOperationalCost(yieldCostPerUnit, finalWeightUnit, operationalQtyNum, operationalUnit)
+      : null;
   const fcPct = foodCostPercentOfNetSale(totalCost, yNum > 0 ? yNum : 1, netSale);
   const fcHint = foodCostStatus(fcPct);
   const marginPct = fcPct != null ? Math.round((100 - fcPct) * 10) / 10 : null;
@@ -360,6 +396,17 @@ export default function EscandalloNewRecipeWizard() {
     emplatadoFotoUrl: emplFoto.trim() === '' ? null : emplFoto.trim(),
     notasChef: notasChef.trim(),
     puntosCriticos: puntosCrit.trim(),
+    yieldQuantity: !isPlateRecipe && finalWeightNum != null && finalWeightNum > 0 ? finalWeightNum : null,
+    yieldUnit: !isPlateRecipe && finalWeightNum != null && finalWeightNum > 0 ? finalWeightUnit : null,
+    yieldMermaPct: !isPlateRecipe ? mermaPct : null,
+    yieldCostTotal: !isPlateRecipe ? totalCost : null,
+    yieldCostPerUnit: !isPlateRecipe ? yieldCostPerUnit : null,
+    operationalUsageType: !isPlateRecipe ? operationalUsageType : null,
+    operationalQuantity:
+      !isPlateRecipe && operationalQtyNum != null && operationalQtyNum > 0 ? operationalQtyNum : null,
+    operationalUnit:
+      !isPlateRecipe && operationalQtyNum != null && operationalQtyNum > 0 ? operationalUnit : null,
+    operationalCost: !isPlateRecipe ? operationalCost : null,
   });
 
   const buildStepDrafts = (): TechnicalSheetStepDraft[] =>
@@ -655,14 +702,70 @@ export default function EscandalloNewRecipeWizard() {
                           <span className={labelCls}>Unidad</span>
                           <select
                             value={finalWeightUnit}
-                            onChange={(e) => setFinalWeightUnit(e.target.value === 'l' ? 'l' : 'kg')}
+                            onChange={(e) => setFinalWeightUnit(e.target.value as EscandalloYieldUnit)}
                             className={inputCls}
                           >
                             <option value="kg">kg</option>
+                            <option value="g">g</option>
                             <option value="l">l</option>
+                            <option value="ml">ml</option>
+                            <option value="ud">ud</option>
                           </select>
                         </label>
                       </div>
+                      <label className="space-y-1">
+                        <span className={labelCls}>Merma</span>
+                        <input
+                          value={mermaPct != null ? `${mermaPct.toFixed(2)} %` : ''}
+                          readOnly
+                          className={`${inputCls} bg-white text-[#7E7468]`}
+                          placeholder="auto"
+                        />
+                      </label>
+                      <label className="space-y-1">
+                        <span className={labelCls}>Tipo uso</span>
+                        <select
+                          value={operationalUsageType}
+                          onChange={(e) => setOperationalUsageType(e.target.value as EscandalloOperationalUsageType)}
+                          className={inputCls}
+                        >
+                          <option value="weight">Por peso</option>
+                          <option value="volume">Por volumen</option>
+                          <option value="unit">Por unidad</option>
+                          <option value="standard_portion">Ración estándar</option>
+                        </select>
+                      </label>
+                      <label className="space-y-1">
+                        <span className={labelCls}>Cantidad uso</span>
+                        <input
+                          value={operationalQuantity}
+                          onChange={(e) => setOperationalQuantity(e.target.value)}
+                          className={inputCls}
+                          inputMode="decimal"
+                          placeholder={operationalUsageType === 'standard_portion' ? '25' : '1'}
+                        />
+                      </label>
+                      <label className="space-y-1">
+                        <span className={labelCls}>Unidad uso</span>
+                        <select
+                          value={operationalUnit}
+                          onChange={(e) => {
+                            const next = e.target.value as EscandalloYieldUnit;
+                            setOperationalUnit(next);
+                            if (operationalUsageType !== 'standard_portion') {
+                              const inferred = inferUsageTypeFromUnit(next);
+                              if (inferred) setOperationalUsageType(inferred);
+                            }
+                          }}
+                          className={inputCls}
+                        >
+                          <option value="g">g</option>
+                          <option value="kg">kg</option>
+                          <option value="ml">ml</option>
+                          <option value="l">l</option>
+                          <option value="ud">ud</option>
+                        </select>
+                      </label>
                     </>
                   ) : null}
                 </div>
@@ -718,6 +821,24 @@ export default function EscandalloNewRecipeWizard() {
                 </div>
               )}
             </div>
+            {!isPlateRecipe ? (
+              <div className="mt-1.5 rounded-lg bg-[#FAFAF9] px-2 py-1.5 ring-1 ring-[rgba(10,9,8,0.04)]">
+                <div className="grid grid-cols-2 gap-2 text-center">
+                  <div>
+                    <p className="text-[7px] font-bold uppercase tracking-[0.12em] text-[#7E7468]">Coste real</p>
+                    <p className="mt-0.5 text-[13px] font-black tabular-nums text-[#0A0908]">
+                      {yieldCostPerUnit != null ? `${yieldCostPerUnit.toFixed(2)} €/` + finalWeightUnit : '—'}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-[7px] font-bold uppercase tracking-[0.12em] text-[#7E7468]">Coste operativo</p>
+                    <p className="mt-0.5 text-[13px] font-black tabular-nums text-[#4A6B3A]">
+                      {operationalCost != null ? `${operationalCost.toFixed(2)} €` : 'Pendiente'}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            ) : null}
           </section>
 
           <section className="rounded-xl border border-[rgba(10,9,8,0.06)] bg-white px-2.5 py-2.5 ring-1 ring-[rgba(10,9,8,0.04)]">
@@ -758,6 +879,7 @@ export default function EscandalloNewRecipeWizard() {
                 rawById={rawById}
                 processedById={processedById}
                 recipesById={recipesById}
+                technicalSheetsByRecipe={technicalSheetsByRecipe}
               />
             </div>
           </section>

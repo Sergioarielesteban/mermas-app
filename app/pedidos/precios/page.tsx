@@ -1141,7 +1141,7 @@ export default function PedidosPreciosPage() {
     activeId: expandedEvolutionKey,
     containerRef: evolutionListRef,
     onCollapse: () => setExpandedEvolutionKey(null),
-    timeoutMs: 30_000,
+    timeoutMs: 120_000,
   });
 
   const reloadCatalogPriceHistory = React.useCallback(async () => {

@@ -9,7 +9,6 @@ import {
   AlertTriangle,
   BarChart3,
   Calculator,
-  ChevronDown,
   ChevronRight,
   Eye,
   MoreHorizontal,
@@ -17,8 +16,6 @@ import {
   Plus,
   RefreshCw,
   Search,
-  Settings,
-  SlidersHorizontal,
   Sparkles,
   TrendingDown,
   TrendingUp,
@@ -174,67 +171,150 @@ function Badge({
   );
 }
 
-function SectionHeader({
-  title,
+function EscIconWell({
   icon: Icon,
+  tone,
+}: {
+  icon: LucideIcon;
+  tone: 'violet' | 'emerald' | 'amber' | 'terra' | 'zinc';
+}) {
+  const toneClass =
+    tone === 'violet'
+      ? 'bg-violet-100 text-violet-800'
+      : tone === 'emerald'
+        ? 'bg-emerald-50 text-emerald-700'
+        : tone === 'amber'
+          ? 'bg-amber-50 text-amber-800'
+          : tone === 'terra'
+            ? 'bg-[#C4531F]/10 text-[#9F3E18]'
+            : 'bg-zinc-100 text-zinc-600';
+  return (
+    <div className={`grid h-11 w-11 shrink-0 place-items-center rounded-2xl ring-1 ring-white/70 sm:h-12 sm:w-12 ${toneClass}`}>
+      <Icon className="h-5 w-5 sm:h-[1.35rem] sm:w-[1.35rem]" strokeWidth={2.1} aria-hidden />
+    </div>
+  );
+}
+
+function EscMiniMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="min-w-0">
+      <p className="text-[9px] font-semibold uppercase tracking-[0.14em] text-zinc-400">{label}</p>
+      <p className="mt-0.5 font-mono text-[15px] font-bold tabular-nums leading-none text-zinc-900">{value}</p>
+    </div>
+  );
+}
+
+function EscModuleCard({
+  title,
+  subtitle,
+  icon,
+  iconTone,
   open,
   onToggle,
-  accent,
-  compact = false,
+  metrics,
+  preview,
+  children,
 }: {
   title: string;
+  subtitle: string;
   icon: LucideIcon;
+  iconTone: 'violet' | 'emerald' | 'amber' | 'terra' | 'zinc';
   open: boolean;
   onToggle: () => void;
-  accent: 'red' | 'emerald' | 'amber' | 'zinc' | 'olive';
-  compact?: boolean;
+  metrics?: { label: string; value: string }[];
+  preview?: React.ReactNode;
+  children: React.ReactNode;
 }) {
-  const iconClass =
-    accent === 'emerald'
-      ? 'text-emerald-700 bg-emerald-50 ring-emerald-100'
-      : accent === 'amber'
-        ? 'text-[#B91C1C] bg-[#D32F2F]/10 ring-[#D32F2F]/15'
-        : accent === 'olive'
-          ? 'text-emerald-700 bg-emerald-50 ring-emerald-100'
-          : accent === 'zinc'
-            ? 'text-[#7E7468] bg-[#F7F3EE] ring-[rgba(10,9,8,0.06)]'
-            : 'text-[#B91C1C] bg-[#D32F2F]/10 ring-[#D32F2F]/15';
-  if (compact) {
-    return (
-      <button
-        type="button"
-        onClick={onToggle}
-        className="flex w-full min-h-[52px] max-h-[68px] items-center gap-2.5 py-1 text-left"
-      >
-        <div className={`grid h-7 w-7 shrink-0 place-items-center rounded-full ring-1 ${iconClass}`}>
-          <Icon className="h-3.5 w-3.5" strokeWidth={2.2} />
+  return (
+    <section
+      className={[
+        'overflow-hidden rounded-3xl bg-white ring-1 ring-zinc-200/80 transition-all duration-200',
+        open
+          ? 'shadow-[0_6px_24px_rgba(0,0,0,0.06)]'
+          : 'shadow-sm hover:scale-[1.01] hover:shadow-[0_6px_24px_rgba(0,0,0,0.06)]',
+      ].join(' ')}
+    >
+      <button type="button" onClick={onToggle} className="flex w-full items-stretch gap-3 p-3.5 text-left sm:gap-3.5 sm:p-4">
+        <EscIconWell icon={icon} tone={iconTone} />
+        <div className="min-w-0 flex-1">
+          <p className="font-serif text-[16px] font-normal leading-tight text-zinc-900">{title}</p>
+          <p className="mt-0.5 text-[11px] font-medium leading-snug text-zinc-500">{subtitle}</p>
+          {!open && metrics && metrics.length > 0 ? (
+            <div className="mt-2.5 flex flex-wrap gap-x-5 gap-y-2">{metrics.map((m) => <EscMiniMetric key={m.label} {...m} />)}</div>
+          ) : null}
+          {!open && preview ? <div className="mt-2.5">{preview}</div> : null}
         </div>
-        <span className="min-w-0 flex-1 truncate font-[Cormorant_Garamond] text-[17px] font-normal leading-none text-[#0A0908]">
-          {title}
+        <span className="flex shrink-0 items-center self-center text-zinc-300">
+          <ChevronRight className={`h-5 w-5 transition-transform duration-200 ${open ? 'rotate-90' : ''}`} aria-hidden />
         </span>
-        <ChevronDown
-          className={`h-4 w-4 shrink-0 text-[#7E7468] transition-transform duration-200 ${open ? 'rotate-180' : ''}`}
-          aria-hidden
-        />
       </button>
-    );
+      {open ? (
+        <div className="border-t border-zinc-100/90 bg-gradient-to-b from-zinc-50/40 to-white px-3.5 pb-4 pt-3 sm:px-4">
+          {children}
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+function EscTopDishPreview({
+  row,
+  pct,
+  tone,
+  badgeLabel,
+  badgeTone,
+  barMax,
+}: {
+  row: EscandalloRecipeDashboardRow | undefined;
+  pct: number | null;
+  tone: ReturnType<typeof foodCostTone>;
+  badgeLabel: string;
+  badgeTone: 'olive' | 'terracotta' | 'red';
+  barMax: number;
+}) {
+  if (!row || pct == null) {
+    return <p className="text-[11px] text-zinc-500">Sin datos suficientes para esta familia.</p>;
   }
   return (
-    <button
-      type="button"
-      onClick={onToggle}
-      className="flex w-full items-center justify-between gap-3 px-1 py-1 text-left"
-    >
-      <div className="flex min-w-0 items-center gap-3">
-        <div className={`grid h-8 w-8 shrink-0 place-items-center rounded-full ring-1 ${iconClass}`}>
-          <Icon className="h-4 w-4" strokeWidth={2.2} />
-        </div>
-        <p className="min-w-0 truncate text-[1.05rem] font-black leading-tight text-zinc-950">{title}</p>
+    <div className="rounded-2xl bg-zinc-50/80 px-2.5 py-2 ring-1 ring-zinc-200/60">
+      <div className="flex items-center gap-2">
+        <Badge tone={badgeTone} dense>
+          {badgeLabel}
+        </Badge>
+        <span className="min-w-0 flex-1 truncate text-[11px] font-semibold uppercase tracking-wide text-zinc-800">{row.name}</span>
+        <span className={`font-mono text-[14px] font-black tabular-nums ${tone.text}`}>{pct.toFixed(0)} %</span>
       </div>
-      <span className="grid h-6 w-6 shrink-0 place-items-center text-zinc-400">
-        <ChevronRight className={`h-4 w-4 transition-transform ${open ? 'rotate-90' : ''}`} />
+      <span className="mt-2 block h-1.5 overflow-hidden rounded-full bg-zinc-200/80">
+        <span className="block h-full rounded-full transition-all duration-200" style={{ width: pctBarWidth(pct, barMax), backgroundColor: tone.bar }} />
       </span>
-    </button>
+    </div>
+  );
+}
+
+function EscFamilyBarsPreview({ rows }: { rows: { family: string; avgMargin: number | null }[] }) {
+  if (rows.length === 0) {
+    return <p className="text-[11px] text-zinc-500">Sin familias con margen calculado.</p>;
+  }
+  return (
+    <div className="space-y-1.5">
+      {rows.slice(0, 4).map((family) => {
+        const tone = foodCostTone(family.avgMargin != null ? Math.max(20, 100 - family.avgMargin) : null);
+        return (
+          <div key={family.family} className="flex items-center gap-2">
+            <span className="w-[5.5rem] shrink-0 truncate text-[9px] font-bold uppercase tracking-wide text-zinc-600">{family.family}</span>
+            <span className="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-zinc-200/80">
+              <span
+                className="block h-full rounded-full"
+                style={{ width: pctBarWidth(family.avgMargin, 85), backgroundColor: tone.bar }}
+              />
+            </span>
+            <span className={`w-9 shrink-0 text-right font-mono text-[11px] font-bold tabular-nums ${tone.text}`}>
+              {family.avgMargin != null ? `${family.avgMargin.toFixed(0)}%` : '—'}
+            </span>
+          </div>
+        );
+      })}
+    </div>
   );
 }
 
@@ -360,13 +440,12 @@ export default function EscandallosPage() {
   const [recipeFilter, setRecipeFilter] = useState<RecipeFilter>('all');
   const [recipeSearch, setRecipeSearch] = useState('');
   const [recipeBookOpen, setRecipeBookOpen] = useState(false);
-  const recipeFiltersRef = useRef<HTMLDivElement>(null);
   const [basesOpen, setBasesOpen] = useState(false);
   const [topProfitableOpen, setTopProfitableOpen] = useState(false);
   const [topLeastProfitableOpen, setTopLeastProfitableOpen] = useState(false);
   const [familyProfitabilityOpen, setFamilyProfitabilityOpen] = useState(false);
   const lastActivityRef = useRef<number>(0);
-  const libroSectionRef = useRef<HTMLElement>(null);
+  const libroSectionRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const t = window.setTimeout(() => {
@@ -636,9 +715,15 @@ export default function EscandallosPage() {
     setBasesOpen(true);
   };
 
+  const incompleteRecipeCount = kpis.noPvp + kpis.noLines;
+  const topProfitableHero = topProfitableRows[0];
+  const topLeastProfitableHero = topLeastProfitableRows[0];
+  const topProfitableHeroPct = topProfitableHero?.marginPct ?? null;
+  const topLeastProfitableHeroPct = topLeastProfitableHero?.foodCostPct ?? null;
+
   return (
     <div
-      className="space-y-5 bg-[#FAFAF9] pb-10"
+      className="space-y-4 bg-[#f5f5f7] pb-10"
       onPointerDownCapture={touchActivity}
       onFocusCapture={touchActivity}
       onInputCapture={touchActivity}
@@ -665,64 +750,64 @@ export default function EscandallosPage() {
 
       <EscandalloQuickCalculatorModal open={quickCalcOpen} onClose={() => setQuickCalcOpen(false)} rawProducts={rawProducts} localId={localId} />
 
-      <section className="grid grid-cols-2 gap-2 lg:grid-cols-4">
-        <div className="min-h-[102px] rounded-[20px] border border-[rgba(10,9,8,0.07)] bg-white p-2.5 text-left shadow-[0_1px_0_rgba(10,9,8,0.04)] ring-1 ring-[rgba(10,9,8,0.035)]">
-          <span className={`grid h-7 w-7 place-items-center rounded-full ring-1 ${foodCostTone(kpis.avgFc).soft}`}>
-            <TrendingUp className="h-3.5 w-3.5" strokeWidth={2.1} aria-hidden />
+      <section className="grid grid-cols-2 gap-2.5 lg:grid-cols-4">
+        <div className="min-h-[102px] rounded-3xl bg-white p-3 text-left shadow-sm ring-1 ring-zinc-200/80">
+          <span className={`grid h-8 w-8 place-items-center rounded-2xl ring-1 ring-white/70 ${foodCostTone(kpis.avgFc).soft}`}>
+            <TrendingUp className="h-4 w-4" strokeWidth={2.1} aria-hidden />
           </span>
-          <p className="mt-2.5 text-[9px] font-semibold uppercase tracking-[0.11em] text-[#5A534B]">Food cost medio</p>
-          <p className="mt-1 text-[21px] font-black leading-none tracking-tight text-[#0A0908]">{kpis.avgFc != null ? `${kpis.avgFc} %` : '—'}</p>
-          <p className="mt-1.5 min-h-[1.7em] text-[10px] font-medium leading-tight text-[#7E7468]">Objetivo &lt; 35%</p>
-          <span className="mt-2.5 block h-1 rounded-full bg-[rgba(10,9,8,0.08)]">
-            <span className="block h-full rounded-full" style={{ width: pctBarWidth(kpis.avgFc, 45), backgroundColor: foodCostTone(kpis.avgFc).bar }} />
+          <p className="mt-2 text-[9px] font-semibold uppercase tracking-[0.12em] text-zinc-400">Food cost medio</p>
+          <p className="mt-1 font-mono text-[21px] font-bold tabular-nums leading-none text-zinc-900">{kpis.avgFc != null ? `${kpis.avgFc} %` : '—'}</p>
+          <p className="mt-1.5 min-h-[1.7em] text-[10px] font-medium leading-tight text-zinc-500">Objetivo &lt; 35%</p>
+          <span className="mt-2 block h-1 overflow-hidden rounded-full bg-zinc-200/80">
+            <span className="block h-full rounded-full transition-all duration-200" style={{ width: pctBarWidth(kpis.avgFc, 45), backgroundColor: foodCostTone(kpis.avgFc).bar }} />
           </span>
         </div>
 
         <button
           type="button"
           onClick={() => openRecipeFilter('high')}
-          className="min-h-[102px] rounded-[20px] border border-[rgba(10,9,8,0.07)] bg-white p-2.5 text-left shadow-[0_1px_0_rgba(10,9,8,0.04)] ring-1 ring-[rgba(10,9,8,0.035)] transition active:scale-[0.99]"
+          className="min-h-[102px] rounded-3xl bg-white p-3 text-left shadow-sm ring-1 ring-zinc-200/80 transition duration-200 hover:scale-[1.01] hover:shadow-[0_6px_24px_rgba(0,0,0,0.06)] active:scale-[0.99]"
         >
-          <span className={`grid h-7 w-7 place-items-center rounded-full ring-1 ${foodCostTone(42).soft}`}>
-            <AlertTriangle className="h-3.5 w-3.5" strokeWidth={2.1} aria-hidden />
+          <span className={`grid h-8 w-8 place-items-center rounded-2xl ring-1 ring-white/70 ${foodCostTone(42).soft}`}>
+            <AlertTriangle className="h-4 w-4" strokeWidth={2.1} aria-hidden />
           </span>
-          <p className="mt-2.5 text-[9px] font-semibold uppercase tracking-[0.11em] text-[#5A534B]">Platos en riesgo</p>
-          <p className="mt-1 text-[21px] font-black leading-none tracking-tight text-[#0A0908]">{kpis.high}</p>
-          <p className="mt-1.5 min-h-[1.7em] text-[10px] font-medium leading-tight text-[#7E7468]">Superan FC objetivo</p>
-          <span className="mt-2.5 block h-1 rounded-full bg-[rgba(10,9,8,0.08)]">
-            <span className="block h-full rounded-full" style={{ width: pctBarWidth(kpis.high, Math.max(1, mainRows.length)), backgroundColor: foodCostTone(42).bar }} />
+          <p className="mt-2 text-[9px] font-semibold uppercase tracking-[0.12em] text-zinc-400">Platos en riesgo</p>
+          <p className="mt-1 font-mono text-[21px] font-bold tabular-nums leading-none text-zinc-900">{kpis.high}</p>
+          <p className="mt-1.5 min-h-[1.7em] text-[10px] font-medium leading-tight text-zinc-500">Superan FC objetivo</p>
+          <span className="mt-2 block h-1 overflow-hidden rounded-full bg-zinc-200/80">
+            <span className="block h-full rounded-full transition-all duration-200" style={{ width: pctBarWidth(kpis.high, Math.max(1, mainRows.length)), backgroundColor: foodCostTone(42).bar }} />
           </span>
         </button>
 
         <button
           type="button"
           onClick={() => openRecipeFilter('incomplete')}
-          className="min-h-[102px] rounded-[20px] border border-[rgba(10,9,8,0.07)] bg-white p-2.5 text-left shadow-[0_1px_0_rgba(10,9,8,0.04)] ring-1 ring-[rgba(10,9,8,0.035)] transition active:scale-[0.99]"
+          className="min-h-[102px] rounded-3xl bg-white p-3 text-left shadow-sm ring-1 ring-zinc-200/80 transition duration-200 hover:scale-[1.01] hover:shadow-[0_6px_24px_rgba(0,0,0,0.06)] active:scale-[0.99]"
         >
-          <span className={`grid h-7 w-7 place-items-center rounded-full ring-1 ${foodCostTone(34).soft}`}>
-            <AlertCircle className="h-3.5 w-3.5" strokeWidth={2.1} aria-hidden />
+          <span className={`grid h-8 w-8 place-items-center rounded-2xl ring-1 ring-white/70 ${foodCostTone(34).soft}`}>
+            <AlertCircle className="h-4 w-4" strokeWidth={2.1} aria-hidden />
           </span>
-          <p className="mt-2.5 text-[9px] font-semibold uppercase tracking-[0.11em] text-[#5A534B]">Recetas incompletas</p>
-          <p className="mt-1 text-[21px] font-black leading-none tracking-tight text-[#0A0908]">{kpis.noPvp + kpis.noLines}</p>
-          <p className="mt-1.5 min-h-[1.7em] text-[10px] font-medium leading-tight text-[#7E7468]">Sin precio / ingredientes / ficha</p>
-          <span className="mt-2.5 block h-1 rounded-full bg-[rgba(10,9,8,0.08)]">
-            <span className="block h-full rounded-full" style={{ width: pctBarWidth(kpis.noPvp + kpis.noLines, Math.max(1, mainRows.length)), backgroundColor: foodCostTone(34).bar }} />
+          <p className="mt-2 text-[9px] font-semibold uppercase tracking-[0.12em] text-zinc-400">Recetas incompletas</p>
+          <p className="mt-1 font-mono text-[21px] font-bold tabular-nums leading-none text-zinc-900">{kpis.noPvp + kpis.noLines}</p>
+          <p className="mt-1.5 min-h-[1.7em] text-[10px] font-medium leading-tight text-zinc-500">Sin precio / ingredientes / ficha</p>
+          <span className="mt-2 block h-1 overflow-hidden rounded-full bg-zinc-200/80">
+            <span className="block h-full rounded-full transition-all duration-200" style={{ width: pctBarWidth(kpis.noPvp + kpis.noLines, Math.max(1, mainRows.length)), backgroundColor: foodCostTone(34).bar }} />
           </span>
         </button>
 
         <button
           type="button"
           onClick={openBasesBlock}
-          className="min-h-[102px] rounded-[20px] border border-[rgba(10,9,8,0.07)] bg-white p-2.5 text-left shadow-[0_1px_0_rgba(10,9,8,0.04)] ring-1 ring-[rgba(10,9,8,0.035)] transition active:scale-[0.99]"
+          className="min-h-[102px] rounded-3xl bg-white p-3 text-left shadow-sm ring-1 ring-zinc-200/80 transition duration-200 hover:scale-[1.01] hover:shadow-[0_6px_24px_rgba(0,0,0,0.06)] active:scale-[0.99]"
         >
-          <span className={`grid h-7 w-7 place-items-center rounded-full ring-1 ${foodCostTone(24).soft}`}>
-            <UtensilsCrossed className="h-3.5 w-3.5" strokeWidth={2.1} aria-hidden />
+          <span className={`grid h-8 w-8 place-items-center rounded-2xl ring-1 ring-white/70 ${foodCostTone(24).soft}`}>
+            <UtensilsCrossed className="h-4 w-4" strokeWidth={2.1} aria-hidden />
           </span>
-          <p className="mt-2.5 text-[9px] font-semibold uppercase tracking-[0.11em] text-[#5A534B]">Bases activas</p>
-          <p className="mt-1 text-[21px] font-black leading-none tracking-tight text-[#0A0908]">{kpis.subCount}</p>
-          <p className="mt-1.5 min-h-[1.7em] text-[10px] font-medium leading-tight text-[#7E7468]">Utilizadas en {totalBaseUsage} recetas</p>
-          <span className="mt-2.5 block h-1 rounded-full bg-[rgba(10,9,8,0.08)]">
-            <span className="block h-full rounded-full" style={{ width: pctBarWidth(kpis.subCount, Math.max(1, kpis.subCount + 1)), backgroundColor: foodCostTone(24).bar }} />
+          <p className="mt-2 text-[9px] font-semibold uppercase tracking-[0.12em] text-zinc-400">Bases activas</p>
+          <p className="mt-1 font-mono text-[21px] font-bold tabular-nums leading-none text-zinc-900">{kpis.subCount}</p>
+          <p className="mt-1.5 min-h-[1.7em] text-[10px] font-medium leading-tight text-zinc-500">Utilizadas en {totalBaseUsage} recetas</p>
+          <span className="mt-2 block h-1 overflow-hidden rounded-full bg-zinc-200/80">
+            <span className="block h-full rounded-full transition-all duration-200" style={{ width: pctBarWidth(kpis.subCount, Math.max(1, kpis.subCount + 1)), backgroundColor: foodCostTone(24).bar }} />
           </span>
         </button>
       </section>
@@ -741,373 +826,336 @@ export default function EscandallosPage() {
         </div>
       ) : (
         <>
-          <section
-            ref={libroSectionRef}
-            className="rounded-xl border border-[rgba(10,9,8,0.06)] bg-white p-2.5 shadow-[0_1px_0_rgba(10,9,8,0.04)] ring-1 ring-[rgba(10,9,8,0.04)]"
-          >
-            <SectionHeader
+          <div ref={libroSectionRef}>
+            <EscModuleCard
               title="Libro de recetas"
+              subtitle="Gestiona recetas y fichas técnicas"
               icon={Sparkles}
-              accent="amber"
-              compact
+              iconTone="violet"
               open={recipeBookOpen}
               onToggle={() => {
                 touchActivity();
                 setRecipeBookOpen((v) => !v);
               }}
-            />
-            {recipeBookOpen ? (
-              <>
-                <div
-                  ref={recipeFiltersRef}
-                  className="mt-2 flex items-center gap-1.5 overflow-x-auto pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-                >
-                  {[['all', 'Todas'], ['plates', 'Platos'], ['bases', 'Bases'], ['high', 'Alto coste'], ['incomplete', 'Sin completar']].map(
-                    ([key, label]) => (
-                      <button
-                        key={key}
-                        type="button"
-                        onClick={() => setRecipeFilter(key as RecipeFilter)}
-                        className={[
-                          'shrink-0 rounded-full px-2.5 py-1 text-[10px] font-semibold tracking-tight transition',
-                          recipeFilter === key
-                            ? 'bg-[#0A0908] text-white'
-                            : 'border border-[rgba(10,9,8,0.06)] bg-[#F7F3EE] text-[#0A0908] hover:bg-[#F0EBE4]',
-                        ].join(' ')}
-                      >
-                        {label}
-                      </button>
-                    ),
-                  )}
-                </div>
-                <div className="mt-2 flex items-center gap-1.5">
-                  <label className="flex min-h-[36px] min-w-0 flex-1 items-center gap-2 rounded-lg border border-[rgba(10,9,8,0.08)] bg-white px-2.5 ring-1 ring-[rgba(10,9,8,0.03)]">
-                    <Search className="h-3.5 w-3.5 shrink-0 text-[#7E7468]" aria-hidden />
-                    <input
-                      value={recipeSearch}
-                      onChange={(e) => setRecipeSearch(e.target.value)}
-                      className="min-w-0 flex-1 bg-transparent text-[12px] text-[#0A0908] outline-none placeholder:text-[#7E7468]/80"
-                      placeholder="Buscar receta..."
-                    />
-                  </label>
-                  <button
-                    type="button"
-                    onClick={() => recipeFiltersRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })}
-                    className="inline-flex h-9 shrink-0 items-center gap-1 rounded-lg border border-[rgba(10,9,8,0.08)] bg-[#F7F3EE] px-2.5 text-[10px] font-semibold text-[#0A0908] transition hover:bg-[#F0EBE4] active:scale-[0.98]"
-                  >
-                    <SlidersHorizontal className="h-3.5 w-3.5" />
-                    Filtros
-                  </button>
-                </div>
-                <div className="mt-2 flex flex-col gap-2">
-                  {filteredRecipeRows.length === 0 ? (
-                    <p className="rounded-lg bg-[#FAFAF9] px-3 py-4 text-center text-[12px] text-[#7E7468]">
-                      No hay recetas con este filtro.
-                    </p>
-                  ) : (
-                    filteredRecipeRows.map((r) => (
-                      <RecipeCard
-                        key={r.id}
-                        r={r}
-                        actionHref={`/escandallos/recetas/${r.id}/editar`}
-                        updatedLabel={formatRecipeUpdatedLabel(recipeUpdatedById.get(r.id))}
-                        onRefresh={() => void load()}
-                      />
-                    ))
-                  )}
-                </div>
-              </>
-            ) : null}
-          </section>
-
-          <section className="rounded-xl border border-[rgba(10,9,8,0.06)] bg-white p-2.5 shadow-[0_1px_0_rgba(10,9,8,0.04)] ring-1 ring-[rgba(10,9,8,0.04)]">
-            <SectionHeader
-              title="Bases y elaboraciones"
-              icon={UtensilsCrossed}
-              accent="olive"
-              compact
-              open={basesOpen}
-              onToggle={() => {
-                touchActivity();
-                setBasesOpen((v) => !v);
-              }}
-            />
-            {basesOpen ? (
-              <div className="mt-3 space-y-2">
-                <div className="flex items-center justify-between gap-2 px-1">
-                  <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#7E7468]">Bases ({baseRows.length})</p>
-                  <Link
-                    href="/escandallos/recetas/nuevo?tipo=base"
-                    className="inline-flex h-8 items-center justify-center gap-1.5 rounded-full bg-[#D32F2F] px-3 text-[11px] font-black text-white shadow-[0_2px_8px_rgba(211,47,47,0.18)] transition hover:bg-[#B91C1C] active:scale-[0.98]"
-                  >
-                    <Plus className="h-3.5 w-3.5" aria-hidden />
-                    Nueva base
-                  </Link>
-                </div>
-                {baseRows.length === 0 ? (
-                  <p className="rounded-xl bg-[#FAFAF9] px-3 py-4 text-center text-[12px] text-[#7E7468]">Aún no hay bases.</p>
-                ) : (
-                  <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
-                    {baseRows.map((r) => {
-                      const usageCount = baseUsageById.get(r.id) ?? 0;
-                      const updatedLabel = formatRecipeUpdatedLabel(recipeUpdatedById.get(r.id));
-                      return (
-                        <article
-                          key={r.id}
-                          className="rounded-xl border border-[rgba(10,9,8,0.07)] bg-white px-2.5 py-2 shadow-[0_1px_0_rgba(10,9,8,0.04)] ring-1 ring-[rgba(10,9,8,0.035)] transition active:scale-[0.995]"
-                        >
-                          <div className="min-w-0">
-                              <div className="flex items-start gap-2">
-                                <div className="min-w-0 flex-1">
-                                  <h3 className="line-clamp-2 text-[13px] font-bold leading-[1.15] tracking-tight text-[#0A0908]">
-                                    {r.name}
-                                  </h3>
-                                  <p className="mt-0.5 line-clamp-1 text-[9px] font-semibold uppercase tracking-[0.11em] text-[#7E7468]">
-                                    {r.yieldQty} {r.yieldLabel} · utilizada en{' '}
-                                    <span className={usageCount > 0 ? 'font-bold text-[#C4531F]' : 'font-semibold text-[#7E7468]'}>
-                                      {usageCount} {usageCount === 1 ? 'receta' : 'recetas'}
-                                    </span>
-                                  </p>
-                                </div>
-                                <div className="flex shrink-0 items-center gap-1 pt-0.5">
-                                  <Link
-                                    href={`/escandallos/recetas/${r.id}/editar`}
-                                    className="grid h-7 w-7 place-items-center rounded-full bg-[#F7F3EE] text-[#5A534B] ring-1 ring-[rgba(10,9,8,0.06)] transition hover:bg-[#F0EBE4]"
-                                    aria-label="Configurar base"
-                                  >
-                                    <Settings className="h-3.5 w-3.5" />
-                                  </Link>
-                                  <Link
-                                    href={`/escandallos/recetas/${r.id}/editar`}
-                                    className="grid h-7 w-7 place-items-center rounded-full bg-[#F7F3EE] text-[#5A534B] ring-1 ring-[rgba(10,9,8,0.06)] transition hover:bg-[#F0EBE4]"
-                                    aria-label="Editar base"
-                                  >
-                                    <PencilLine className="h-3.5 w-3.5" />
-                                  </Link>
-                                  <button
-                                    type="button"
-                                    disabled={baseBusyId === r.id}
-                                    onClick={() => void handleDeleteBase(r)}
-                                    className="grid h-7 w-7 place-items-center rounded-full bg-[#D32F2F]/10 text-[#D32F2F] ring-1 ring-[#D32F2F]/12 transition hover:bg-[#D32F2F]/15 disabled:opacity-50"
-                                    aria-label="Eliminar base"
-                                  >
-                                    <Trash2 className="h-3.5 w-3.5" />
-                                  </button>
-                                </div>
-                              </div>
-                              <div className="mt-1.5 flex flex-wrap items-baseline gap-x-2 gap-y-1">
-                                <p className="text-[12px] font-black leading-none tracking-tight text-[#0A0908]">
-                                  {formatMoneyEur(r.costPerYieldEur)}<span className="text-[10px] font-semibold text-[#0A0908]">/{r.yieldLabel || 'ud'}</span>
-                                </p>
-                                <span className="text-[9px] font-medium text-[#7E7468]">·</span>
-                                <p className="text-[9px] font-medium text-[#7E7468]">Act.: {updatedLabel}</p>
-                              </div>
-                          </div>
-                        </article>
-                      );
-                    })}
-                  </div>
-                )}
-                <div className="rounded-xl border border-[rgba(211,47,47,0.08)] bg-[#D32F2F]/5 px-3 py-2 text-[11px] font-medium leading-snug text-[#7E7468]">
-                  <span className="font-bold text-[#C4531F]">Info:</span> las bases se recalculan automáticamente cuando cambian los costes de sus ingredientes.
-                </div>
-              </div>
-            ) : null}
-          </section>
-
-          <div className="space-y-3">
-            {(
-              [
-              {
-                title: 'Top 5 más rentables',
-                suffix: '% = Margen bruto',
-                rows: topProfitableRows,
-                open: topProfitableOpen,
-                setOpen: setTopProfitableOpen,
-                icon: TrendingUp,
-                accent: 'emerald' as const,
-                barMax: 45,
-                value: (row: EscandalloRecipeDashboardRow & { marginPct?: number | null }) => row.marginPct ?? null,
-                colorValue: (pct: number | null) => foodCostTone(pct != null ? Math.max(20, 100 - pct) : null),
-              },
-              {
-                title: 'Top 5 menos rentables',
-                suffix: '% = Food cost',
-                rows: topLeastProfitableRows,
-                open: topLeastProfitableOpen,
-                setOpen: setTopLeastProfitableOpen,
-                icon: TrendingDown,
-                accent: 'amber' as const,
-                barMax: 50,
-                value: (row: EscandalloRecipeDashboardRow) => row.foodCostPct,
-                colorValue: (pct: number | null) => foodCostTone(pct),
-              },
-              ] as const
-            ).map((block) => (
-              <section
-                key={block.title}
-                className="rounded-xl border border-[rgba(10,9,8,0.06)] bg-white p-2.5 shadow-[0_1px_0_rgba(10,9,8,0.04)] ring-1 ring-[rgba(10,9,8,0.04)]"
-              >
-                <SectionHeader
-                  title={block.title}
-                  icon={block.icon}
-                  accent={block.accent}
-                  compact
-                  open={block.open}
-                  onToggle={() => {
-                    touchActivity();
-                    block.setOpen((v) => !v);
-                  }}
+              metrics={[
+                { label: 'Recetas', value: String(kpis.mainCount) },
+                { label: 'Sin completar', value: String(incompleteRecipeCount) },
+              ]}
+            >
+              <label className="flex min-h-[40px] items-center gap-2 rounded-2xl border border-zinc-200/80 bg-white px-3 ring-1 ring-zinc-100/80">
+                <Search className="h-4 w-4 shrink-0 text-zinc-400" aria-hidden />
+                <input
+                  value={recipeSearch}
+                  onChange={(e) => setRecipeSearch(e.target.value)}
+                  className="min-w-0 flex-1 bg-transparent text-[13px] text-zinc-900 outline-none placeholder:text-zinc-400"
+                  placeholder="Buscar receta…"
                 />
-                {block.open ? (
-                  <>
-                    <div className="mt-2 flex flex-wrap items-center justify-end gap-1.5">
-                      <select
-                        value={activeFamily}
-                        onChange={(e) => setSelectedFamily(e.target.value)}
-                        className="h-7 rounded-lg border border-[rgba(10,9,8,0.08)] bg-white px-2.5 text-[10px] font-semibold text-[#0A0908] outline-none focus:border-[#D32F2F]/35"
-                        aria-label="Filtrar por familia"
-                      >
-                        {familyOptions.map((family) => (
-                          <option key={family} value={family}>
-                            {family}
-                          </option>
-                        ))}
-                      </select>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          touchActivity();
-                          setRecipeBookOpen(true);
-                          libroSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                        }}
-                        className="rounded-lg border border-[rgba(10,9,8,0.08)] bg-[#F7F3EE] px-2.5 py-1 text-[10px] font-semibold text-[#0A0908] transition hover:bg-[#F0EBE4]"
-                      >
-                        Ver todos
-                      </button>
-                    </div>
-                    <div className="mt-2 divide-y divide-[rgba(10,9,8,0.07)]">
-                      {block.rows.length === 0 ? (
-                        <p className="py-4 text-center text-[12px] text-[#7E7468]">Sin datos suficientes para esta familia.</p>
-                      ) : (
-                        block.rows.map((row) => {
-                          const pct = block.value(row as never);
-                          const tone = block.colorValue(pct);
-                          return (
-                            <Link
-                              key={row.id}
-                              href={`/escandallos/recetas/${row.id}/editar`}
-                              className="grid grid-cols-[1fr_auto_34%_auto] items-center gap-2 py-2"
-                            >
-                              <span className="min-w-0 truncate text-[12px] font-bold text-[#0A0908]">{row.name}</span>
-                              <span className={`text-[12px] font-black tabular-nums ${tone.text}`}>
-                                {pct != null ? `${pct.toFixed(0)} %` : '—'}
-                              </span>
-                              <span className="h-2 rounded-full bg-[rgba(10,9,8,0.08)]">
-                                <span
-                                  className="block h-full rounded-full"
-                                  style={{ width: pctBarWidth(pct, block.barMax), backgroundColor: tone.bar }}
-                                />
-                              </span>
-                              <ChevronRight className="h-3.5 w-3.5 text-[#7E7468]" />
-                            </Link>
-                          );
-                        })
-                      )}
-                    </div>
-                    <p className="mt-1.5 text-[9px] font-medium text-[#7E7468]">{block.suffix}</p>
-                  </>
-                ) : null}
-              </section>
-            ))}
-
-            <section className="rounded-xl border border-[rgba(10,9,8,0.06)] bg-white p-2.5 shadow-[0_1px_0_rgba(10,9,8,0.04)] ring-1 ring-[rgba(10,9,8,0.04)]">
-              <SectionHeader
-                title="Rentabilidad por familia"
-                icon={BarChart3}
-                accent="zinc"
-                compact
-                open={familyProfitabilityOpen}
-                onToggle={() => {
-                  touchActivity();
-                  setFamilyProfitabilityOpen((v) => !v);
-                }}
-              />
-              {familyProfitabilityOpen ? (
-                <>
-                  <div className="mt-2 flex justify-end">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        touchActivity();
-                        setSelectedFamily('Todas');
-                      }}
-                      className="rounded-lg border border-[rgba(10,9,8,0.08)] bg-[#F7F3EE] px-2.5 py-1 text-[10px] font-semibold text-[#0A0908] transition hover:bg-[#F0EBE4]"
-                    >
-                      Ver todas
-                    </button>
-                  </div>
-                  <div className="mt-2 grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
-                    {familySummaryRows.map((family) => {
-                      const tone = foodCostTone(family.avgFc);
-                      const trendValues = buildFamilyTrendSeed(family.family, family.avgFc ?? 0, family.avgMargin ?? 0);
-                      return (
-                        <button
-                          key={family.family}
-                          type="button"
-                          onClick={() => {
-                            touchActivity();
-                            setSelectedFamily(family.family);
-                          }}
-                          className="rounded-[18px] border border-[rgba(10,9,8,0.07)] bg-white p-2.5 text-left ring-1 ring-[rgba(10,9,8,0.025)] transition active:scale-[0.99]"
-                        >
-                          <div className="flex items-start justify-between gap-2">
-                            <div>
-                              <p className="text-[10px] font-black uppercase tracking-[0.11em] text-[#0A0908]">{family.family}</p>
-                              <p className="mt-0.5 text-[9px] font-medium text-[#7E7468]">
-                                {family.count} {family.count === 1 ? 'plato' : 'platos'}
-                              </p>
-                            </div>
-                            <span className={`rounded-full px-2 py-1 text-[9px] font-bold ring-1 ${tone.soft}`}>
-                              FC {family.avgFc != null ? `${family.avgFc.toFixed(0)} %` : '—'}
-                            </span>
-                          </div>
-                          <div className="mt-2.5 flex items-end justify-between gap-2">
-                            <div>
-                              <p className="text-[9px] font-medium text-[#7E7468]">Margen medio</p>
-                              <p className="mt-1 text-[19px] font-black leading-none text-[#0A0908]">
-                                {family.avgMargin != null ? `${family.avgMargin.toFixed(0)} %` : '—'}
-                              </p>
-                            </div>
-                            <span
-                              className={`text-[11px] font-bold ${family.avgMargin != null && family.avgMargin >= 35 ? 'text-[#4A6B3A]' : family.avgMargin != null && family.avgMargin < 20 ? 'text-[#D32F2F]' : 'text-[#B8872A]'}`}
-                            >
-                              {family.avgMargin != null
-                                ? `${family.avgMargin >= 35 ? '↑' : family.avgMargin < 20 ? '↓' : '→'} ${Math.abs((family.avgMargin ?? 0) - 35).toFixed(0)} %`
-                                : '—'}
-                            </span>
-                          </div>
-                          <div className="mt-2 h-7">
-                            <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="h-full w-full">
-                              <polyline
-                                fill="none"
-                                stroke={tone.bar}
-                                strokeWidth="4"
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                points={buildMiniSparklinePoints(trendValues)}
-                              />
-                            </svg>
-                          </div>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </>
-              ) : null}
-            </section>
+              </label>
+              <div className="mt-3 flex flex-col gap-2.5">
+                {filteredRecipeRows.length === 0 ? (
+                  <p className="rounded-2xl bg-white px-3 py-5 text-center text-[12px] text-zinc-500 ring-1 ring-zinc-200/70">
+                    No hay recetas que coincidan.
+                  </p>
+                ) : (
+                  filteredRecipeRows.map((r) => (
+                    <RecipeCard
+                      key={r.id}
+                      r={r}
+                      actionHref={`/escandallos/recetas/${r.id}/editar`}
+                      updatedLabel={formatRecipeUpdatedLabel(recipeUpdatedById.get(r.id))}
+                      onRefresh={() => void load()}
+                    />
+                  ))
+                )}
+              </div>
+            </EscModuleCard>
           </div>
 
+          <EscModuleCard
+            title="Bases y elaboraciones"
+            subtitle="Gestiona bases reutilizables"
+            icon={UtensilsCrossed}
+            iconTone="emerald"
+            open={basesOpen}
+            onToggle={() => {
+              touchActivity();
+              setBasesOpen((v) => !v);
+            }}
+            metrics={[
+              { label: 'Bases activas', value: String(kpis.subCount) },
+              { label: 'Usos', value: String(totalBaseUsage) },
+            ]}
+          >
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-zinc-400">{baseRows.length} bases</p>
+              <Link
+                href="/escandallos/recetas/nuevo?tipo=base"
+                className="inline-flex h-8 items-center justify-center gap-1.5 rounded-full bg-[#D32F2F] px-3 text-[11px] font-bold text-white shadow-sm transition hover:bg-[#B91C1C] active:scale-[0.98]"
+              >
+                <Plus className="h-3.5 w-3.5" aria-hidden />
+                Nueva base
+              </Link>
+            </div>
+            {baseRows.length === 0 ? (
+              <p className="mt-3 rounded-2xl bg-white px-3 py-5 text-center text-[12px] text-zinc-500 ring-1 ring-zinc-200/70">Aún no hay bases.</p>
+            ) : (
+              <div className="mt-3 grid gap-2.5 sm:grid-cols-2 xl:grid-cols-3">
+                {baseRows.map((r) => {
+                  const usageCount = baseUsageById.get(r.id) ?? 0;
+                  const updatedLabel = formatRecipeUpdatedLabel(recipeUpdatedById.get(r.id));
+                  return (
+                    <article
+                      key={r.id}
+                      className="rounded-2xl border border-zinc-200/70 bg-white px-3 py-2.5 shadow-sm ring-1 ring-zinc-100/80 transition duration-200 hover:shadow-[0_6px_24px_rgba(0,0,0,0.06)] active:scale-[0.995]"
+                    >
+                      <div className="flex items-start gap-2">
+                        <div className="min-w-0 flex-1">
+                          <h3 className="line-clamp-2 font-serif text-[14px] font-normal leading-snug text-zinc-900">{r.name}</h3>
+                          <p className="mt-1 text-[10px] font-medium text-zinc-500">
+                            {r.yieldQty} {r.yieldLabel} ·{' '}
+                            <span className={usageCount > 0 ? 'font-semibold text-[#C4531F]' : ''}>
+                              {usageCount} {usageCount === 1 ? 'uso' : 'usos'}
+                            </span>
+                          </p>
+                          <p className="mt-1.5 font-mono text-[13px] font-bold tabular-nums text-zinc-900">
+                            {formatMoneyEur(r.costPerYieldEur)}
+                            <span className="text-[10px] font-medium text-zinc-500">/{r.yieldLabel || 'ud'}</span>
+                          </p>
+                          <p className="mt-0.5 text-[9px] text-zinc-400">Act. {updatedLabel}</p>
+                        </div>
+                        <div className="flex shrink-0 flex-col gap-1">
+                          <Link
+                            href={`/escandallos/recetas/${r.id}/editar`}
+                            className="grid h-7 w-7 place-items-center rounded-xl bg-zinc-100 text-zinc-600 transition hover:bg-zinc-200"
+                            aria-label="Editar base"
+                          >
+                            <PencilLine className="h-3.5 w-3.5" />
+                          </Link>
+                          <button
+                            type="button"
+                            disabled={baseBusyId === r.id}
+                            onClick={() => void handleDeleteBase(r)}
+                            className="grid h-7 w-7 place-items-center rounded-xl bg-red-50 text-red-600 transition hover:bg-red-100 disabled:opacity-50"
+                            aria-label="Eliminar base"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
+            )}
+            <p className="mt-3 rounded-2xl border border-[#D32F2F]/10 bg-[#D32F2F]/5 px-3 py-2 text-[11px] leading-snug text-zinc-600">
+              <span className="font-semibold text-[#C4531F]">Info:</span> las bases se recalculan cuando cambian los costes de sus ingredientes.
+            </p>
+          </EscModuleCard>
+
+          <EscModuleCard
+            title="Top 5 más rentables"
+            subtitle="Platos con mejor margen bruto"
+            icon={TrendingUp}
+            iconTone="emerald"
+            open={topProfitableOpen}
+            onToggle={() => {
+              touchActivity();
+              setTopProfitableOpen((v) => !v);
+            }}
+            preview={
+              <EscTopDishPreview
+                row={topProfitableHero}
+                pct={topProfitableHeroPct}
+                tone={foodCostTone(topProfitableHeroPct != null ? Math.max(20, 100 - topProfitableHeroPct) : null)}
+                badgeLabel="Margen"
+                badgeTone="olive"
+                barMax={45}
+              />
+            }
+          >
+            <div className="mb-2 flex justify-end">
+              <button
+                type="button"
+                onClick={() => {
+                  touchActivity();
+                  setRecipeBookOpen(true);
+                  libroSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }}
+                className="text-[11px] font-semibold text-zinc-500 underline-offset-2 transition hover:text-zinc-800 hover:underline"
+              >
+                Ver todos
+              </button>
+            </div>
+            <div className="divide-y divide-zinc-100 rounded-2xl bg-white ring-1 ring-zinc-200/70">
+              {topProfitableRows.length === 0 ? (
+                <p className="px-3 py-5 text-center text-[12px] text-zinc-500">Sin datos suficientes.</p>
+              ) : (
+                topProfitableRows.map((row) => {
+                  const pct = row.marginPct ?? null;
+                  const tone = foodCostTone(pct != null ? Math.max(20, 100 - pct) : null);
+                  return (
+                    <Link
+                      key={row.id}
+                      href={`/escandallos/recetas/${row.id}/editar`}
+                      className="flex items-center gap-3 px-3 py-2.5 transition hover:bg-zinc-50/80"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-[12px] font-semibold text-zinc-900">{row.name}</p>
+                        <span className="mt-1.5 block h-1.5 overflow-hidden rounded-full bg-zinc-100">
+                          <span className="block h-full rounded-full" style={{ width: pctBarWidth(pct, 45), backgroundColor: tone.bar }} />
+                        </span>
+                      </div>
+                      <Badge tone="olive" dense>
+                        Margen
+                      </Badge>
+                      <span className={`font-mono text-[14px] font-black tabular-nums ${tone.text}`}>
+                        {pct != null ? `${pct.toFixed(0)} %` : '—'}
+                      </span>
+                      <ChevronRight className="h-4 w-4 shrink-0 text-zinc-300" />
+                    </Link>
+                  );
+                })
+              )}
+            </div>
+          </EscModuleCard>
+
+          <EscModuleCard
+            title="Top 5 menos rentables"
+            subtitle="Platos con food cost más alto"
+            icon={TrendingDown}
+            iconTone="terra"
+            open={topLeastProfitableOpen}
+            onToggle={() => {
+              touchActivity();
+              setTopLeastProfitableOpen((v) => !v);
+            }}
+            preview={
+              <EscTopDishPreview
+                row={topLeastProfitableHero}
+                pct={topLeastProfitableHeroPct}
+                tone={foodCostTone(topLeastProfitableHeroPct)}
+                badgeLabel="Food cost"
+                badgeTone="terracotta"
+                barMax={50}
+              />
+            }
+          >
+            <div className="mb-2 flex justify-end">
+              <button
+                type="button"
+                onClick={() => {
+                  touchActivity();
+                  setRecipeBookOpen(true);
+                  libroSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }}
+                className="text-[11px] font-semibold text-zinc-500 underline-offset-2 transition hover:text-zinc-800 hover:underline"
+              >
+                Ver todos
+              </button>
+            </div>
+            <div className="divide-y divide-zinc-100 rounded-2xl bg-white ring-1 ring-zinc-200/70">
+              {topLeastProfitableRows.length === 0 ? (
+                <p className="px-3 py-5 text-center text-[12px] text-zinc-500">Sin datos suficientes.</p>
+              ) : (
+                topLeastProfitableRows.map((row) => {
+                  const pct = row.foodCostPct;
+                  const tone = foodCostTone(pct);
+                  return (
+                    <Link
+                      key={row.id}
+                      href={`/escandallos/recetas/${row.id}/editar`}
+                      className="flex items-center gap-3 px-3 py-2.5 transition hover:bg-zinc-50/80"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-[12px] font-semibold text-zinc-900">{row.name}</p>
+                        <span className="mt-1.5 block h-1.5 overflow-hidden rounded-full bg-zinc-100">
+                          <span className="block h-full rounded-full" style={{ width: pctBarWidth(pct, 50), backgroundColor: tone.bar }} />
+                        </span>
+                      </div>
+                      <Badge tone="terracotta" dense>
+                        Food cost
+                      </Badge>
+                      <span className={`font-mono text-[14px] font-black tabular-nums ${tone.text}`}>
+                        {pct != null ? `${pct.toFixed(0)} %` : '—'}
+                      </span>
+                      <ChevronRight className="h-4 w-4 shrink-0 text-zinc-300" />
+                    </Link>
+                  );
+                })
+              )}
+            </div>
+          </EscModuleCard>
+
+          <EscModuleCard
+            title="Rentabilidad por familia"
+            subtitle="Margen medio por categoría de carta"
+            icon={BarChart3}
+            iconTone="zinc"
+            open={familyProfitabilityOpen}
+            onToggle={() => {
+              touchActivity();
+              setFamilyProfitabilityOpen((v) => !v);
+            }}
+            preview={<EscFamilyBarsPreview rows={familySummaryRows} />}
+          >
+            <div className="mb-2 flex justify-end">
+              <button
+                type="button"
+                onClick={() => {
+                  touchActivity();
+                  setSelectedFamily('Todas');
+                }}
+                className="text-[11px] font-semibold text-zinc-500 underline-offset-2 transition hover:text-zinc-800 hover:underline"
+              >
+                Ver todas
+              </button>
+            </div>
+            <div className="grid gap-2.5 sm:grid-cols-2 xl:grid-cols-4">
+              {familySummaryRows.map((family) => {
+                const tone = foodCostTone(family.avgFc);
+                const trendValues = buildFamilyTrendSeed(family.family, family.avgFc ?? 0, family.avgMargin ?? 0);
+                return (
+                  <button
+                    key={family.family}
+                    type="button"
+                    onClick={() => {
+                      touchActivity();
+                      setSelectedFamily(family.family);
+                    }}
+                    className="rounded-2xl border border-zinc-200/70 bg-white p-3 text-left shadow-sm ring-1 ring-zinc-100/80 transition duration-200 hover:scale-[1.01] hover:shadow-[0_6px_24px_rgba(0,0,0,0.06)] active:scale-[0.99]"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-zinc-800">{family.family}</p>
+                        <p className="mt-0.5 text-[10px] text-zinc-500">
+                          {family.count} {family.count === 1 ? 'plato' : 'platos'}
+                        </p>
+                      </div>
+                      <span className={`rounded-full px-2 py-0.5 text-[8px] font-bold uppercase tracking-wide ring-1 ${tone.soft}`}>
+                        FC {family.avgFc != null ? `${family.avgFc.toFixed(0)}%` : '—'}
+                      </span>
+                    </div>
+                    <p className="mt-2 text-[9px] font-semibold uppercase tracking-wide text-zinc-400">Margen medio</p>
+                    <p className="mt-0.5 font-mono text-[22px] font-black tabular-nums leading-none text-zinc-900">
+                      {family.avgMargin != null ? `${family.avgMargin.toFixed(0)} %` : '—'}
+                    </p>
+                    <div className="mt-2 h-8 rounded-lg bg-zinc-50 px-1 py-1">
+                      <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="h-full w-full">
+                        <polyline
+                          fill="none"
+                          stroke={tone.bar}
+                          strokeWidth="4"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          points={buildMiniSparklinePoints(trendValues)}
+                        />
+                      </svg>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </EscModuleCard>
         </>
       )}
     </div>

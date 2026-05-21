@@ -206,15 +206,12 @@ export default function AppFrame({ children }: { children: React.ReactNode }) {
       return;
     }
     if (email && isLogin) {
-      const resume = readAppResumeState(normalizedEmail);
-      if (resume) {
-        try {
-          window.sessionStorage.setItem(APP_RESUME_SCROLL_RESTORE_FLAG, '1');
-        } catch {
-          /* ignore */
-        }
+      try {
+        window.sessionStorage.setItem(APP_RESUME_SCROLL_RESTORE_FLAG, '1');
+      } catch {
+        /* ignore */
       }
-      router.replace(resume?.href ?? '/panel');
+      router.replace('/panel?agenda=1');
     }
     return () => {
       if (loginFallbackTimerRef.current != null) {

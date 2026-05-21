@@ -20,6 +20,7 @@
  */
 
 import React from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import ProductoGuiadoChecklist from '@/components/ProductoGuiadoChecklist';
 import ChefOneAssistantSheet from '@/components/panel/ChefOneAssistantSheet';
 import PanelAssistantCard from '@/components/panel/PanelAssistantCard';
@@ -95,6 +96,8 @@ export default function OperationalDayHome() {
 
 function OperationalDayHomeInner() {
   const panel = usePanelConfig();
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const { perms } = usePanelData();
   const [customizeOpen, setCustomizeOpen] = React.useState(false);
   const [assistantOpen, setAssistantOpen] = React.useState(false);
@@ -106,6 +109,15 @@ function OperationalDayHomeInner() {
     window.addEventListener('chef-one:panel-customize:open', onOpen);
     return () => window.removeEventListener('chef-one:panel-customize:open', onOpen);
   }, []);
+
+  React.useEffect(() => {
+    if (searchParams.get('agenda') !== '1') return;
+    const timer = window.setTimeout(() => {
+      document.getElementById('panel-agenda-pedidos')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      router.replace('/panel', { scroll: false });
+    }, 60);
+    return () => window.clearTimeout(timer);
+  }, [router, searchParams]);
 
   return (
     <div className="space-y-4 pb-2">

@@ -390,7 +390,7 @@ export default function ComprasPorProductoPage() {
       setExpandedSuppliers({});
       setExpandedProducts({});
     },
-    timeoutMs: 30_000,
+    timeoutMs: 120_000,
   });
 
   if (!hasPedidosEntry) {

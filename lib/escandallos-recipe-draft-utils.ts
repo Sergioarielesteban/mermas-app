@@ -1,4 +1,5 @@
 import { ESCANDALLO_USAGE_UNIT_PRESETS } from '@/lib/escandallo-ingredient-units';
+import type { EscandalloYieldUnit } from '@/lib/escandallo-operational-usage';
 import {
   escandalloRecipeUnitForRawProduct,
   lineUnitPriceEur,
@@ -8,6 +9,7 @@ import {
   type EscandalloRawProduct,
   type EscandalloRecipe,
 } from '@/lib/escandallos-supabase';
+import type { EscandalloTechnicalSheet } from '@/lib/escandallos-technical-sheet-supabase';
 import { parsePriceInput } from '@/lib/money-format';
 
 /** Opciones compactas para selects legacy; en UI preferir datalist con presets + texto libre. */
@@ -36,6 +38,9 @@ export type IngredientDraftRow = {
   manualPrice: string;
   qty: string;
   unit: string;
+  subRecipeUsageMode?: 'custom' | 'standard_portion';
+  subRecipeOperationalQuantity?: string;
+  subRecipeOperationalUnit?: EscandalloYieldUnit | '';
 };
 
 export function emptyIngredientDraft(): IngredientDraftRow {
@@ -51,6 +56,9 @@ export function emptyIngredientDraft(): IngredientDraftRow {
     manualPrice: '',
     qty: '1',
     unit: 'kg',
+    subRecipeUsageMode: 'custom',
+    subRecipeOperationalQuantity: '',
+    subRecipeOperationalUnit: '',
   };
 }
 
@@ -98,6 +106,30 @@ export function draftRowsToPayloads(
       if (recipeId != null && subRec.id === recipeId)
         return { ok: false, message: 'Una receta no puede referenciarse a sí misma.' };
     }
+    const subRecipeUsageMode =
+      row.sourceType === 'subrecipe'
+        ? row.subRecipeUsageMode === 'standard_portion'
+          ? 'standard_portion'
+          : 'custom'
+        : null;
+    const subRecipeOperationalQuantity =
+      row.sourceType === 'subrecipe' && subRecipeUsageMode === 'standard_portion'
+        ? parseDecimal(row.subRecipeOperationalQuantity ?? '')
+        : null;
+    const subRecipeOperationalUnit =
+      row.sourceType === 'subrecipe' && subRecipeUsageMode === 'standard_portion'
+        ? (row.subRecipeOperationalUnit
+            ? row.subRecipeOperationalUnit
+            : null)
+        : null;
+    if (row.sourceType === 'subrecipe' && subRecipeUsageMode === 'standard_portion') {
+      if (subRecipeOperationalQuantity == null || subRecipeOperationalQuantity <= 0 || !subRecipeOperationalUnit) {
+        return {
+          ok: false,
+          message: 'Configura cantidad y unidad de ración estándar para usar una base/elaboración por ración.',
+        };
+      }
+    }
     payloads.push({
       sourceType: row.sourceType,
       label,
@@ -114,6 +146,9 @@ export function draftRowsToPayloads(
       processedProductId: row.sourceType === 'processed' ? processed?.id ?? null : null,
       subRecipeId: row.sourceType === 'subrecipe' ? subRec?.id ?? null : null,
       manualPricePerUnit: row.sourceType === 'manual' ? manual : null,
+      subRecipeUsageMode,
+      subRecipeOperationalQuantity,
+      subRecipeOperationalUnit,
     });
   }
   return { ok: true, payloads };
@@ -127,6 +162,7 @@ export function estimateDraftRowCostEur(
   recipesById: Map<string, EscandalloRecipe>,
   linesByRecipe: Record<string, EscandalloLine[]>,
   excludeRecipeId: string | null,
+  technicalSheetsByRecipe?: Map<string, EscandalloTechnicalSheet>,
 ): number | null {
   const qty = parseDecimal(row.qty);
   if (qty == null || qty <= 0) return null;
@@ -146,12 +182,16 @@ export function estimateDraftRowCostEur(
     qty: p.qty,
     unit: p.unit,
     manualPricePerUnit: p.manualPricePerUnit ?? null,
+    subRecipeUsageMode: p.subRecipeUsageMode ?? null,
+    subRecipeOperationalQuantity: p.subRecipeOperationalQuantity ?? null,
+    subRecipeOperationalUnit: p.subRecipeOperationalUnit ?? null,
     sortOrder: 0,
     createdAt: '',
   };
   const unit = lineUnitPriceEur(tempLine, rawById, processedById, {
     linesByRecipe,
     recipesById,
+    technicalSheetsByRecipe,
     expanding: new Set<string>([rid]),
   });
   if (!Number.isFinite(unit)) return null;
@@ -175,6 +215,9 @@ export function insertPayloadsToTempLines(
     qty: p.qty,
     unit: p.unit,
     manualPricePerUnit: p.manualPricePerUnit ?? null,
+    subRecipeUsageMode: p.subRecipeUsageMode ?? null,
+    subRecipeOperationalQuantity: p.subRecipeOperationalQuantity ?? null,
+    subRecipeOperationalUnit: p.subRecipeOperationalUnit ?? null,
     sortOrder: i,
     createdAt: '',
   }));

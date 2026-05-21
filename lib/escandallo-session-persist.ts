@@ -1,4 +1,8 @@
 import type { IngredientDraftRow } from '@/lib/escandallos-recipe-draft-utils';
+import type {
+  EscandalloOperationalUsageType,
+  EscandalloYieldUnit,
+} from '@/lib/escandallo-operational-usage';
 
 const WIZARD_KEY = 'escandallo-new-recipe-wizard-v1';
 
@@ -13,7 +17,10 @@ export type EscandalloWizardPersistV1 = {
   saleVat: string;
   recipeKind?: 'plato' | 'base' | 'subelaboracion';
   finalWeightQty?: string;
-  finalWeightUnit?: 'kg' | 'l';
+  finalWeightUnit?: EscandalloYieldUnit;
+  operationalUsageType?: EscandalloOperationalUsageType;
+  operationalQuantity?: string;
+  operationalUnit?: EscandalloYieldUnit;
   ingredientDrafts: IngredientDraftRow[];
   updatedAt: number;
 };
@@ -66,7 +73,7 @@ export type EscandalloRecipeEditorPersistV1 = {
   draftSaleVat: string;
   draftPosArticleCode: string;
   draftFinalWeightQty?: string;
-  draftFinalWeightUnit?: 'kg' | 'l';
+  draftFinalWeightUnit?: EscandalloYieldUnit;
   ingredientDrafts: IngredientDraftRow[];
   updatedAt: number;
 };

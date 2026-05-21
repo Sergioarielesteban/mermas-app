@@ -50,6 +50,9 @@ function mapLine(row: LineRow): EscandalloLine {
       row.manual_price_per_unit != null && Number.isFinite(Number(row.manual_price_per_unit))
         ? Number(row.manual_price_per_unit)
         : null,
+    subRecipeUsageMode: null,
+    subRecipeOperationalQuantity: null,
+    subRecipeOperationalUnit: null,
     sortOrder: Number(row.sort_order ?? 0),
     createdAt: row.created_at,
   };

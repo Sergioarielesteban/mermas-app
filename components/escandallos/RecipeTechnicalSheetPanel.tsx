@@ -23,6 +23,17 @@ import {
 } from 'lucide-react';
 import type { RecipeAllergenRow } from '@/lib/appcc-allergens-supabase';
 import { presenceLabel } from '@/lib/appcc-allergens-supabase';
+import {
+  computeMermaPct,
+  computeOperationalCost,
+  computeYieldCostPerUnit,
+  formatOperationalSummary,
+  fromCanonicalQuantity,
+  isEscandalloYieldUnit,
+  type EscandalloOperationalUsageType,
+  type EscandalloYieldUnit,
+  unitFamily,
+} from '@/lib/escandallo-operational-usage';
 import type { EscandalloLine, EscandalloRecipe } from '@/lib/escandallos-supabase';
 import type {
   EscandalloTechnicalSheet,
@@ -56,6 +67,7 @@ type Props = {
   steps: EscandalloTechnicalSheetStep[];
   recipeAllergens: RecipeAllergenRow[];
   familyOptions: string[];
+  productionTotalCost: number;
   loading: boolean;
   saving: boolean;
   onCreate: () => Promise<void>;
@@ -113,10 +125,12 @@ function CompactAccordion({
 
 export default function RecipeTechnicalSheetPanel({
   recipe,
+  lines,
   sheet,
   steps,
   recipeAllergens,
   familyOptions,
+  productionTotalCost,
   loading,
   saving,
   onCreate,
@@ -132,6 +146,11 @@ export default function RecipeTechnicalSheetPanel({
   const [rendimientoTotal, setRendimientoTotal] = useState('');
   const [numeroRaciones, setNumeroRaciones] = useState('');
   const [gramajePorRacion, setGramajePorRacion] = useState('');
+  const [yieldQuantity, setYieldQuantity] = useState('');
+  const [yieldUnit, setYieldUnit] = useState<EscandalloYieldUnit>('kg');
+  const [operationalUsageType, setOperationalUsageType] = useState<EscandalloOperationalUsageType>('standard_portion');
+  const [operationalQuantity, setOperationalQuantity] = useState('');
+  const [operationalUnit, setOperationalUnit] = useState<EscandalloYieldUnit>('g');
   const [tPrep, setTPrep] = useState('');
   const [tCocc, setTCocc] = useState('');
   const [tReposo, setTReposo] = useState('');
@@ -160,6 +179,11 @@ export default function RecipeTechnicalSheetPanel({
       setRendimientoTotal('');
       setNumeroRaciones('');
       setGramajePorRacion('');
+      setYieldQuantity('');
+      setYieldUnit('kg');
+      setOperationalUsageType('standard_portion');
+      setOperationalQuantity('');
+      setOperationalUnit('g');
       setTPrep('');
       setTCocc('');
       setTReposo('');
@@ -187,6 +211,11 @@ export default function RecipeTechnicalSheetPanel({
     setRendimientoTotal(sheet.rendimientoTotal);
     setNumeroRaciones(sheet.numeroRaciones != null ? String(sheet.numeroRaciones) : '');
     setGramajePorRacion(sheet.gramajePorRacionG != null ? String(sheet.gramajePorRacionG) : '');
+    setYieldQuantity(sheet.yieldQuantity != null ? String(sheet.yieldQuantity) : '');
+    setYieldUnit(sheet.yieldUnit && isEscandalloYieldUnit(sheet.yieldUnit) ? sheet.yieldUnit : 'kg');
+    setOperationalUsageType(sheet.operationalUsageType ?? 'standard_portion');
+    setOperationalQuantity(sheet.operationalQuantity != null ? String(sheet.operationalQuantity) : '');
+    setOperationalUnit(sheet.operationalUnit && isEscandalloYieldUnit(sheet.operationalUnit) ? sheet.operationalUnit : 'g');
     setTPrep(sheet.tiempoPreparacionMin != null ? String(sheet.tiempoPreparacionMin) : '');
     setTCocc(sheet.tiempoCoccionMin != null ? String(sheet.tiempoCoccionMin) : '');
     setTReposo(sheet.tiempoReposoMin != null ? String(sheet.tiempoReposoMin) : '');
@@ -227,6 +256,60 @@ export default function RecipeTechnicalSheetPanel({
     return Number.isFinite(n) && n >= 0 ? Math.round(n * 10000) / 10000 : null;
   };
 
+  const inferredInputUnit = useMemo<EscandalloYieldUnit | null>(() => {
+    const units = lines.map((line) => line.unit).filter(Boolean);
+    if (units.some((u) => unitFamily(u) === 'weight')) return 'kg';
+    if (units.some((u) => unitFamily(u) === 'volume')) return 'l';
+    if (units.some((u) => unitFamily(u) === 'unit')) return 'ud';
+    return null;
+  }, [lines]);
+
+  const productionInputQty = useMemo<number | null>(() => {
+    if (!inferredInputUnit) return null;
+    const targetCanonicalUnit =
+      inferredInputUnit === 'kg' ? 'g' : inferredInputUnit === 'l' ? 'ml' : 'ud';
+    let totalCanonical = 0;
+    let hasAny = false;
+    for (const line of lines) {
+      if (unitFamily(line.unit) !== unitFamily(inferredInputUnit)) continue;
+      const canonical =
+        targetCanonicalUnit === 'g'
+          ? (line.unit === 'kg' ? line.qty * 1000 : line.unit === 'g' ? line.qty : null)
+          : targetCanonicalUnit === 'ml'
+            ? (line.unit === 'l' ? line.qty * 1000 : line.unit === 'ml' ? line.qty : null)
+            : line.unit === 'ud'
+              ? line.qty
+              : null;
+      if (canonical == null || !Number.isFinite(canonical) || canonical <= 0) continue;
+      totalCanonical += canonical;
+      hasAny = true;
+    }
+    if (!hasAny) return null;
+    return fromCanonicalQuantity(totalCanonical, inferredInputUnit);
+  }, [lines, inferredInputUnit]);
+
+  const yieldQtyNum = parseOptDecimal(yieldQuantity);
+  const operationalQtyNum = parseOptDecimal(operationalQuantity);
+  const yieldMermaPct = computeMermaPct(
+    productionInputQty,
+    inferredInputUnit,
+    yieldQtyNum,
+    yieldUnit,
+  );
+  const yieldCostPerUnit = computeYieldCostPerUnit(productionTotalCost, yieldQtyNum);
+  const operationalCost = computeOperationalCost(
+    yieldCostPerUnit,
+    yieldUnit,
+    operationalQtyNum,
+    operationalUnit,
+  );
+  const usageSummary = operationalQtyNum && operationalQtyNum > 0
+    ? `${operationalUsageType === 'standard_portion' ? 'Ración estándar' : 'Uso'} · ${formatOperationalSummary(
+        operationalQtyNum,
+        operationalUnit,
+      )}`
+    : 'Pendiente de configurar';
+
   const handleSave = async () => {
     if (!sheet) return;
     const manualList = alergManual
@@ -245,6 +328,15 @@ export default function RecipeTechnicalSheetPanel({
         rendimientoTotal: rendimientoTotal.trim(),
         numeroRaciones: parseOptDecimal(numeroRaciones),
         gramajePorRacionG: parseOptDecimal(gramajePorRacion),
+        yieldQuantity: recipe.isSubRecipe ? yieldQtyNum : null,
+        yieldUnit: recipe.isSubRecipe ? yieldUnit : null,
+        yieldMermaPct: recipe.isSubRecipe ? yieldMermaPct : null,
+        yieldCostTotal: recipe.isSubRecipe ? productionTotalCost : null,
+        yieldCostPerUnit: recipe.isSubRecipe ? yieldCostPerUnit : null,
+        operationalUsageType: recipe.isSubRecipe ? operationalUsageType : null,
+        operationalQuantity: recipe.isSubRecipe ? operationalQtyNum : null,
+        operationalUnit: recipe.isSubRecipe ? operationalUnit : null,
+        operationalCost: recipe.isSubRecipe ? operationalCost : null,
         tiempoPreparacionMin: parseOptInt(tPrep),
         tiempoCoccionMin: parseOptInt(tCocc),
         tiempoReposoMin: parseOptInt(tReposo),
@@ -336,9 +428,17 @@ export default function RecipeTechnicalSheetPanel({
   const summaryValue = (value: string, fallback = '—') => value.trim() || fallback;
   const totalTime = [tPrep, tCocc, tReposo].reduce((acc, n) => acc + (Number(n.replace(',', '.')) || 0), 0);
   const productionSummary = [
-    numeroRaciones.trim() ? `${numeroRaciones.trim()} rac.` : recipe.yieldQty ? `${recipe.yieldQty} rac.` : '',
-    gramajePorRacion.trim(),
-    totalTime > 0 ? `${totalTime} min` : '',
+    recipe.isSubRecipe
+      ? yieldQtyNum != null && yieldQtyNum > 0
+        ? `${yieldQtyNum} ${yieldUnit}`
+        : 'Salida pendiente'
+      : numeroRaciones.trim()
+        ? `${numeroRaciones.trim()} rac.`
+        : recipe.yieldQty
+          ? `${recipe.yieldQty} rac.`
+          : '',
+    recipe.isSubRecipe ? (yieldMermaPct != null ? `${yieldMermaPct.toFixed(1)}% merma` : '') : gramajePorRacion.trim(),
+    recipe.isSubRecipe ? (yieldCostPerUnit != null ? `${yieldCostPerUnit.toFixed(2)} €/` + yieldUnit : '') : totalTime > 0 ? `${totalTime} min` : '',
   ].filter(Boolean).join(' · ');
   const conservationSummary = [
     summaryValue(tipoCons, 'Sin tipo'),
@@ -394,14 +494,82 @@ export default function RecipeTechnicalSheetPanel({
         onToggle={toggleBlock}
       >
           <div className="grid grid-cols-3 gap-1.5">
+            {recipe.isSubRecipe ? (
+              <>
+                <label className={metricCls}>
+                  <span className={labelCls}>Entrada total</span>
+                  <input
+                    value={
+                      productionInputQty != null && inferredInputUnit
+                        ? `${productionInputQty.toFixed(2)} ${inferredInputUnit}`
+                        : ''
+                    }
+                    readOnly
+                    className={`${inputCls} bg-white text-[#7E7468]`}
+                    placeholder="Auto"
+                  />
+                </label>
+                <label className={metricCls}>
+                  <span className={labelCls}>Salida real</span>
+                  <input
+                    value={yieldQuantity}
+                    onChange={(e) => setYieldQuantity(e.target.value)}
+                    className={inputCls}
+                    inputMode="decimal"
+                    placeholder="3,5"
+                  />
+                </label>
+                <label className={metricCls}>
+                  <span className={labelCls}>Unidad salida</span>
+                  <select value={yieldUnit} onChange={(e) => setYieldUnit(e.target.value as EscandalloYieldUnit)} className={inputCls}>
+                    <option value="kg">kg</option>
+                    <option value="g">g</option>
+                    <option value="l">l</option>
+                    <option value="ml">ml</option>
+                    <option value="ud">ud</option>
+                  </select>
+                </label>
+                <label className={metricCls}>
+                  <span className={labelCls}>Merma %</span>
+                  <input
+                    value={yieldMermaPct != null ? yieldMermaPct.toFixed(2) : ''}
+                    readOnly
+                    className={`${inputCls} bg-white text-[#7E7468]`}
+                    placeholder="Auto"
+                  />
+                </label>
+                <label className={metricCls}>
+                  <span className={labelCls}>Coste total</span>
+                  <input
+                    value={productionTotalCost > 0 ? productionTotalCost.toFixed(2) : ''}
+                    readOnly
+                    className={`${inputCls} bg-white text-[#7E7468]`}
+                    placeholder="0,00"
+                  />
+                </label>
+                <label className={metricCls}>
+                  <span className={labelCls}>Coste real / unidad</span>
+                  <input
+                    value={yieldCostPerUnit != null ? `${yieldCostPerUnit.toFixed(4)} €/` + yieldUnit : ''}
+                    readOnly
+                    className={`${inputCls} bg-white text-[#7E7468]`}
+                    placeholder="Pendiente"
+                  />
+                </label>
+              </>
+            ) : null}
+            {!recipe.isSubRecipe ? (
             <label className={metricCls}>
               <span className={labelCls}>Raciones</span>
               <input value={numeroRaciones} onChange={(e) => setNumeroRaciones(e.target.value)} className={inputCls} inputMode="decimal" placeholder={String(recipe.yieldQty)} />
             </label>
+            ) : null}
+            {!recipe.isSubRecipe ? (
             <label className={metricCls}>
               <span className={labelCls}>Gramaje / unidad</span>
               <input value={gramajePorRacion} onChange={(e) => setGramajePorRacion(e.target.value)} className={inputCls} placeholder="180 g / unid" />
             </label>
+            ) : null}
             <label className={metricCls}>
               <span className={labelCls}>Total</span>
               <input value={totalTime > 0 ? String(totalTime) : ''} readOnly className={`${inputCls} bg-white text-[#7E7468]`} placeholder="min" />
@@ -468,6 +636,63 @@ export default function RecipeTechnicalSheetPanel({
             </div>
           </div>
       </CompactAccordion>
+
+      {recipe.isSubRecipe ? (
+        <CompactAccordion
+          id="operational"
+          title="Uso operativo"
+          summary={usageSummary}
+          icon={Sparkles}
+          tone="olive"
+          open={Boolean(openBlocks.operational)}
+          onToggle={toggleBlock}
+        >
+          <div className="grid grid-cols-3 gap-1.5">
+            <label className={`${metricCls} col-span-3`}>
+              <span className={labelCls}>Tipo de uso</span>
+              <select
+                value={operationalUsageType}
+                onChange={(e) => setOperationalUsageType(e.target.value as EscandalloOperationalUsageType)}
+                className={inputCls}
+              >
+                <option value="weight">Por peso</option>
+                <option value="volume">Por volumen</option>
+                <option value="unit">Por unidad</option>
+                <option value="standard_portion">Por ración estándar</option>
+              </select>
+            </label>
+            <label className={metricCls}>
+              <span className={labelCls}>{operationalUsageType === 'standard_portion' ? 'Cantidad por ración' : 'Cantidad'}</span>
+              <input
+                value={operationalQuantity}
+                onChange={(e) => setOperationalQuantity(e.target.value)}
+                className={inputCls}
+                inputMode="decimal"
+                placeholder="25"
+              />
+            </label>
+            <label className={metricCls}>
+              <span className={labelCls}>Unidad</span>
+              <select value={operationalUnit} onChange={(e) => setOperationalUnit(e.target.value as EscandalloYieldUnit)} className={inputCls}>
+                <option value="g">g</option>
+                <option value="kg">kg</option>
+                <option value="ml">ml</option>
+                <option value="l">l</option>
+                <option value="ud">ud</option>
+              </select>
+            </label>
+            <label className={metricCls}>
+              <span className={labelCls}>Coste operativo</span>
+              <input
+                value={operationalCost != null ? `${operationalCost.toFixed(4)} €` : ''}
+                readOnly
+                className={`${inputCls} bg-white text-[#7E7468]`}
+                placeholder="Pendiente"
+              />
+            </label>
+          </div>
+        </CompactAccordion>
+      ) : null}
 
       <CompactAccordion
         id="conservation"
