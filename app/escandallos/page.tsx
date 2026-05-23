@@ -10,10 +10,10 @@ import {
   BarChart3,
   Calculator,
   ChevronRight,
-  Eye,
   MoreHorizontal,
   PencilLine,
   Plus,
+  Printer,
   RefreshCw,
   Search,
   Sparkles,
@@ -28,11 +28,18 @@ import { isDemoMode } from '@/lib/demo-mode';
 import { getDemoEscandalloPack } from '@/lib/demo-dataset';
 import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
 import { appConfirm } from '@/lib/app-dialog-bridge';
+import { fetchRecipeAllergensForLocal, type RecipeAllergenRow } from '@/lib/appcc-allergens-supabase';
 import {
   buildEscandalloDashboardRows,
   bucketLabel,
   type EscandalloRecipeDashboardRow,
 } from '@/lib/escandallos-analytics';
+import {
+  fetchEscandalloTechnicalSheetWithSteps,
+  type EscandalloTechnicalSheet,
+  type EscandalloTechnicalSheetStep,
+} from '@/lib/escandallos-technical-sheet-supabase';
+import { printRecipePDF, type RecipePrintPayload } from '@/lib/escandallo-recipe-print-pdf';
 import {
   fetchEscandalloLines,
   fetchEscandalloRecipes,
@@ -340,11 +347,15 @@ function RecipeCard({
   actionHref,
   updatedLabel,
   onRefresh,
+  onPrint,
+  printing = false,
 }: {
   r: EscandalloRecipeDashboardRow;
   actionHref?: string;
   updatedLabel?: string;
   onRefresh?: () => void;
+  onPrint?: () => void;
+  printing?: boolean;
 }) {
   const editHref = actionHref ?? `/escandallos/recetas/${r.id}/editar`;
   const badgeTone = statusBadgeTone(r.bucket);
@@ -395,13 +406,15 @@ function RecipeCard({
           <PencilLine className="h-3 w-3 shrink-0" />
           <span className="truncate">Editar</span>
         </Link>
-        <Link
-          href={editHref}
-          className="inline-flex h-8 items-center justify-center gap-1 rounded-lg border border-[rgba(10,9,8,0.08)] bg-white px-1.5 text-[10px] font-semibold text-[#0A0908] transition hover:bg-[#F7F3EE] active:bg-[#F7F3EE]"
+        <button
+          type="button"
+          onClick={onPrint}
+          disabled={printing}
+          className="inline-flex h-8 items-center justify-center gap-1 rounded-lg border border-[rgba(10,9,8,0.08)] bg-white px-1.5 text-[10px] font-semibold text-[#0A0908] transition hover:bg-[#F7F3EE] active:bg-[#F7F3EE] disabled:cursor-not-allowed disabled:opacity-60"
         >
-          <Eye className="h-3 w-3 shrink-0" />
-          <span className="truncate">Ver coste</span>
-        </Link>
+          <Printer className="h-3 w-3 shrink-0" />
+          <span className="truncate">{printing ? 'Imprimiendo…' : 'Imprimir'}</span>
+        </button>
         <button
           type="button"
           onClick={() => (onRefresh ? onRefresh() : window.location.reload())}
@@ -433,6 +446,7 @@ export default function EscandallosPage() {
   const [processedProducts, setProcessedProducts] = useState<EscandalloProcessedProduct[]>([]);
   const [loading, setLoading] = useState(true);
   const [banner, setBanner] = useState<string | null>(null);
+  const [printingRecipeId, setPrintingRecipeId] = useState<string | null>(null);
   const [quickCalcOpen, setQuickCalcOpen] = useState(false);
   const [baseBusyId, setBaseBusyId] = useState<string | null>(null);
   const [familyByRecipeId, setFamilyByRecipeId] = useState<Map<string, string>>(() => new Map());
@@ -563,6 +577,7 @@ export default function EscandallosPage() {
 
   const rawById = useMemo(() => new Map(rawProducts.map((p) => [p.id, p])), [rawProducts]);
   const processedById = useMemo(() => new Map(processedProducts.map((p) => [p.id, p])), [processedProducts]);
+  const recipesById = useMemo(() => new Map(recipes.map((r) => [r.id, r])), [recipes]);
   const rows = useMemo(() => buildEscandalloDashboardRows(recipes, linesByRecipe, rawById, processedById), [recipes, linesByRecipe, rawById, processedById]);
   const mainRows = useMemo(() => rows.filter((r) => !r.isSubRecipe), [rows]);
   const subRows = useMemo(() => rows.filter((r) => r.isSubRecipe), [rows]);
@@ -669,6 +684,58 @@ export default function EscandallosPage() {
       .sort((a, b) => (a.avgMargin ?? -999) < (b.avgMargin ?? -999) ? 1 : -1)
       .slice(0, 8);
   }, [mainRows, familyByRecipeId]);
+
+  const handlePrintRecipe = useCallback(
+    async (recipeId: string) => {
+      if (!localId) return;
+      const recipe = recipesById.get(recipeId);
+      if (!recipe) return;
+
+      setPrintingRecipeId(recipeId);
+      setBanner(null);
+      try {
+        let sheet: EscandalloTechnicalSheet | null = null;
+        let steps: EscandalloTechnicalSheetStep[] = [];
+        let recipeAllergens: RecipeAllergenRow[] = [];
+
+        if (!isDemoMode()) {
+          const supabase = getSupabaseClient();
+          if (!supabase) throw new Error('No se pudo iniciar la impresión.');
+          const [sheetPack, allergens] = await Promise.all([
+            fetchEscandalloTechnicalSheetWithSteps(supabase, localId, recipeId),
+            fetchRecipeAllergensForLocal(supabase, localId),
+          ]);
+          sheet = sheetPack.sheet;
+          steps = sheetPack.steps;
+          recipeAllergens = allergens.filter((row) => row.recipe_id === recipeId);
+        }
+
+        const payload: RecipePrintPayload = {
+          recipe,
+          lines: linesByRecipe[recipeId] ?? [],
+          sheet,
+          steps,
+          recipeAllergens,
+          rawById,
+          processedById,
+          recipesById,
+          technicalSheetsByRecipe: new Map(),
+          linesByRecipe,
+          productionTotalCost: rows.find((row) => row.id === recipeId)?.totalCostEur ?? 0,
+          creatorName: null,
+          localName: null,
+        };
+
+        await printRecipePDF(payload);
+      } catch (error: unknown) {
+        setBanner(error instanceof Error ? error.message : 'No se pudo generar el PDF.');
+      } finally {
+        setPrintingRecipeId(null);
+      }
+    },
+    [linesByRecipe, localId, processedById, rawById, recipesById, rows],
+  );
+
   const handleDeleteBase = async (base: EscandalloRecipeDashboardRow) => {
     if (!localId || !supabaseOk || isDemoMode()) return;
     const usageCount = baseUsageById.get(base.id) ?? 0;
@@ -864,6 +931,8 @@ export default function EscandallosPage() {
                       actionHref={`/escandallos/recetas/${r.id}/editar`}
                       updatedLabel={formatRecipeUpdatedLabel(recipeUpdatedById.get(r.id))}
                       onRefresh={() => void load()}
+                      onPrint={() => void handlePrintRecipe(r.id)}
+                      printing={printingRecipeId === r.id}
                     />
                   ))
                 )}
@@ -924,6 +993,15 @@ export default function EscandallosPage() {
                           <p className="mt-0.5 text-[9px] text-zinc-400">Act. {updatedLabel}</p>
                         </div>
                         <div className="flex shrink-0 flex-col gap-1">
+                          <button
+                            type="button"
+                            onClick={() => void handlePrintRecipe(r.id)}
+                            disabled={printingRecipeId === r.id}
+                            className="grid h-7 w-7 place-items-center rounded-xl bg-zinc-100 text-zinc-600 transition hover:bg-zinc-200 disabled:opacity-50"
+                            aria-label="Imprimir base"
+                          >
+                            <Printer className="h-3.5 w-3.5" />
+                          </button>
                           <Link
                             href={`/escandallos/recetas/${r.id}/editar`}
                             className="grid h-7 w-7 place-items-center rounded-xl bg-zinc-100 text-zinc-600 transition hover:bg-zinc-200"

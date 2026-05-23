@@ -796,5 +796,10 @@ export async function printRecipePDF(payload: RecipePrintPayload): Promise<void>
     drawFooter(doc, p, total, payload, header.code);
   }
 
+  const blobUrl = doc.output('bloburl');
+  if (typeof window !== 'undefined') {
+    const win = window.open(blobUrl, '_blank', 'noopener,noreferrer');
+    if (win) return;
+  }
   doc.save(`chef-one-${safeFileName(payload.recipe.name)}-${new Date().toISOString().slice(0, 10)}.pdf`);
 }
