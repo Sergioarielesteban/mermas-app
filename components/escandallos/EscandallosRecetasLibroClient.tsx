@@ -2,12 +2,14 @@
 
 import Link from 'next/link';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { BookOpen, Layers, Plus, Search, Sparkles } from 'lucide-react';
+import { BookOpen, Layers, Plus, Printer, Search, Sparkles } from 'lucide-react';
 import MermasStyleHero from '@/components/MermasStyleHero';
 import { useAuth } from '@/components/AuthProvider';
 import { getDemoEscandalloPack } from '@/lib/demo-dataset';
 import { isDemoMode } from '@/lib/demo-mode';
 import { buildEscandalloDashboardRows, bucketLabel, type EscandalloRecipeDashboardRow } from '@/lib/escandallos-analytics';
+import { fetchRecipeAllergensForLocal } from '@/lib/appcc-allergens-supabase';
+import { fetchEscandalloTechnicalSheetWithSteps } from '@/lib/escandallos-technical-sheet-supabase';
 import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
 import {
   fetchEscandalloLines,
@@ -20,6 +22,12 @@ import {
   type EscandalloRecipe,
 } from '@/lib/escandallos-supabase';
 import { formatMoneyEur } from '@/lib/money-format';
+import { printRecipePDF, type RecipePrintPayload } from '@/lib/escandallo-recipe-print-pdf';
+import type {
+  EscandalloTechnicalSheet,
+  EscandalloTechnicalSheetStep,
+} from '@/lib/escandallos-technical-sheet-supabase';
+import type { RecipeAllergenRow } from '@/lib/appcc-allergens-supabase';
 
 type CatFilter = string;
 type PvpFilter = 'all' | 'with' | 'without';
@@ -37,6 +45,7 @@ export default function EscandallosRecetasLibroClient() {
   const [processedProducts, setProcessedProducts] = useState<EscandalloProcessedProduct[]>([]);
   const [loading, setLoading] = useState(true);
   const [banner, setBanner] = useState<string | null>(null);
+  const [printingRecipeId, setPrintingRecipeId] = useState<string | null>(null);
   const [q, setQ] = useState('');
   const [cat, setCat] = useState<CatFilter>('__all__');
   const [pvp, setPvp] = useState<PvpFilter>('all');
@@ -139,6 +148,56 @@ export default function EscandallosRecetasLibroClient() {
     if (r.bucket === 'optimal') return { label: 'Activo', className: 'bg-emerald-600' };
     return { label: bucketLabel(r.bucket), className: 'bg-zinc-500' };
   };
+
+  const handlePrintRecipe = useCallback(
+    async (recipeId: string) => {
+      if (!localId) return;
+      const recipe = recipes.find((r) => r.id === recipeId);
+      if (!recipe) return;
+
+      setPrintingRecipeId(recipeId);
+      try {
+        let sheet: EscandalloTechnicalSheet | null = null;
+        let steps: EscandalloTechnicalSheetStep[] = [];
+        let recipeAllergens: RecipeAllergenRow[] = [];
+
+        if (!demoPack) {
+          const supabase = getSupabaseClient();
+          if (!supabase) throw new Error('No se pudo iniciar la impresión.');
+          const [sheetPack, allergens] = await Promise.all([
+            fetchEscandalloTechnicalSheetWithSteps(supabase, localId, recipeId),
+            fetchRecipeAllergensForLocal(supabase, localId),
+          ]);
+          sheet = sheetPack.sheet;
+          steps = sheetPack.steps;
+          recipeAllergens = allergens.filter((row) => row.recipe_id === recipeId);
+        }
+
+        const payload: RecipePrintPayload = {
+          recipe,
+          lines: linesByRecipe[recipeId] ?? [],
+          sheet,
+          steps,
+          recipeAllergens,
+          rawById,
+          processedById,
+          recipesById: new Map(recipes.map((r) => [r.id, r])),
+          technicalSheetsByRecipe: new Map(),
+          linesByRecipe,
+          productionTotalCost: rows.find((row) => row.id === recipeId)?.totalCostEur ?? 0,
+          creatorName: null,
+          localName: null,
+        };
+
+        await printRecipePDF(payload);
+      } catch (error: unknown) {
+        setBanner(error instanceof Error ? error.message : 'No se pudo generar el PDF.');
+      } finally {
+        setPrintingRecipeId(null);
+      }
+    },
+    [demoPack, linesByRecipe, localId, processedById, rawById, recipes, rows],
+  );
 
   if (!profileReady) {
     return <p className="text-sm text-zinc-600">Cargando sesión…</p>;
@@ -316,16 +375,35 @@ export default function EscandallosRecetasLibroClient() {
                     <dd className="font-bold tabular-nums text-zinc-900">{margin != null ? `${margin} %` : '—'}</dd>
                   </div>
                 </dl>
-                {!demoPack ? (
-                  <Link
-                    href={`/escandallos/recetas/${r.id}/editar`}
-                    className="mt-4 block w-full rounded-xl bg-zinc-900 py-2.5 text-center text-sm font-bold text-white transition hover:bg-zinc-800"
+                <div className="mt-4 grid grid-cols-3 gap-2">
+                  {!demoPack ? (
+                    <Link
+                      href={`/escandallos/recetas/${r.id}/editar`}
+                      className="inline-flex h-10 items-center justify-center rounded-xl border border-zinc-200 bg-white text-sm font-bold text-zinc-800 transition hover:bg-zinc-50"
+                    >
+                      Editar
+                    </Link>
+                  ) : (
+                    <span className="inline-flex h-10 items-center justify-center rounded-xl border border-zinc-200 bg-zinc-50 text-xs font-semibold text-zinc-500">
+                      Demo
+                    </span>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => void handlePrintRecipe(r.id)}
+                    disabled={printingRecipeId === r.id}
+                    className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-zinc-200 bg-white text-sm font-bold text-zinc-800 transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60"
                   >
-                    Editar
-                  </Link>
-                ) : (
-                  <p className="mt-4 text-center text-xs text-zinc-500">Demo · solo lectura</p>
-                )}
+                    <Printer className="h-4 w-4" aria-hidden />
+                    {printingRecipeId === r.id ? 'Imprimiendo…' : 'Imprimir'}
+                  </button>
+                  <button
+                    type="button"
+                    className="inline-flex h-10 items-center justify-center rounded-xl bg-[#D32F2F] text-sm font-black text-white transition hover:bg-[#B91C1C]"
+                  >
+                    Actualizar
+                  </button>
+                </div>
               </li>
             );
           })}

@@ -608,8 +608,8 @@ export default function EscandalloNewRecipeWizard() {
               placeholder={namePlaceholder}
               autoFocus
             />
-            <div className="mt-2 grid gap-2 min-[380px]:grid-cols-[4.75rem_minmax(0,1fr)]">
-              <label className="grid h-[4.75rem] cursor-pointer place-items-center rounded-xl border border-dashed border-[rgba(10,9,8,0.14)] bg-[#FAFAF9] text-center text-[9px] font-bold text-[#7E7468] min-[380px]:row-span-2">
+            <div className="mt-2 grid gap-2 min-[380px]:grid-cols-[5.5rem_minmax(0,1fr)] min-[380px]:items-stretch">
+              <label className="grid min-h-[18rem] cursor-pointer place-items-center rounded-xl border border-dashed border-[rgba(10,9,8,0.14)] bg-[#FAFAF9] text-center text-[9px] font-bold text-[#7E7468] min-[380px]:row-span-3">
                 {photoPreview ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img src={photoPreview} alt="" className="h-full w-full rounded-xl object-cover" />
@@ -632,7 +632,7 @@ export default function EscandalloNewRecipeWizard() {
                 />
               </label>
 
-              <div className="min-w-0 space-y-1.5">
+              <div className="min-w-0 space-y-1.5 min-[380px]:self-stretch">
                   <div className={isPlateRecipe ? 'grid gap-1.5 sm:grid-cols-[11rem_1fr_auto]' : 'grid gap-1.5'}>
                     <select
                       value={recipeKind}
