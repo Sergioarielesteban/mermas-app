@@ -277,12 +277,21 @@ export default function RecipeTechnicalSheetPanel({
     operationalQtyNum,
     operationalUnit,
   );
-  const usageSummary = operationalQtyNum && operationalQtyNum > 0
-    ? `${operationalUsageType === 'standard_portion' ? 'Ración estándar' : 'Uso'} · ${formatOperationalSummary(
-        operationalQtyNum,
-        operationalUnit,
-      )}`
-    : 'Pendiente de configurar';
+  const operationalNeedsYieldConfig =
+    recipe.isSubRecipe &&
+    operationalQtyNum != null &&
+    operationalQtyNum > 0 &&
+    operationalUsageType === 'standard_portion' &&
+    yieldCostPerUnit == null;
+  const usageSummary =
+    operationalQtyNum && operationalQtyNum > 0
+      ? operationalNeedsYieldConfig
+        ? 'Configura salida real para calcular coste operativo'
+        : `${operationalUsageType === 'standard_portion' ? 'Ración estándar' : 'Uso'} · ${formatOperationalSummary(
+            operationalQtyNum,
+            operationalUnit,
+          )}`
+      : 'Pendiente de configurar';
 
   const handleSave = async () => {
     if (!sheet) return;
@@ -666,7 +675,7 @@ export default function RecipeTechnicalSheetPanel({
                 value={operationalCost != null ? `${operationalCost.toFixed(4)} €` : ''}
                 readOnly
                 className={`${inputCls} bg-white text-[#7E7468]`}
-                placeholder="Pendiente"
+                placeholder={operationalNeedsYieldConfig ? 'Configura salida real para calcular coste operativo' : 'Pendiente'}
               />
             </label>
           </div>

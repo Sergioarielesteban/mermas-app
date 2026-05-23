@@ -295,31 +295,11 @@ export async function fetchEscandalloTechnicalSheetWithSteps(
 ): Promise<{ sheet: EscandalloTechnicalSheet | null; steps: EscandalloTechnicalSheetStep[] }> {
   const { data: sheetRow, error: sheetErr } = await supabase
     .from('escandallo_recipe_technical_sheets')
-    .select(SHEET_SELECT)
+    .select()
     .eq('local_id', localId)
     .eq('recipe_id', recipeId)
     .maybeSingle();
-  if (sheetErr) {
-    const legacy = await supabase
-      .from('escandallo_recipe_technical_sheets')
-      .select(SHEET_SELECT_LEGACY)
-      .eq('local_id', localId)
-      .eq('recipe_id', recipeId)
-      .maybeSingle();
-    if (legacy.error) throw new Error(legacy.error.message);
-    if (!legacy.data) return { sheet: null, steps: [] };
-    const sheet = mapSheet(legacy.data as SheetRow);
-    const { data: stepRows, error: stepErr } = await supabase
-      .from('escandallo_recipe_technical_sheet_steps')
-      .select('id,local_id,technical_sheet_id,orden,titulo,descripcion,created_at')
-      .eq('local_id', localId)
-      .eq('technical_sheet_id', sheet.id)
-      .order('orden', { ascending: true })
-      .order('created_at', { ascending: true });
-    if (stepErr) throw new Error(stepErr.message);
-    const steps = ((stepRows ?? []) as StepRow[]).map(mapStep);
-    return { sheet, steps };
-  }
+  if (sheetErr) throw new Error(sheetErr.message);
   if (!sheetRow) return { sheet: null, steps: [] };
   const sheet = mapSheet(sheetRow as SheetRow);
   const { data: stepRows, error: stepErr } = await supabase
@@ -342,17 +322,9 @@ export async function insertEscandalloTechnicalSheet(
   const { data, error } = await supabase
     .from('escandallo_recipe_technical_sheets')
     .insert({ local_id: localId, recipe_id: recipeId })
-    .select(SHEET_SELECT)
+    .select()
     .single();
-  if (error) {
-    const legacy = await supabase
-      .from('escandallo_recipe_technical_sheets')
-      .insert({ local_id: localId, recipe_id: recipeId })
-      .select(SHEET_SELECT_LEGACY)
-      .single();
-    if (legacy.error) throw new Error(legacy.error.message);
-    return mapSheet(legacy.data as SheetRow);
-  }
+  if (error) throw new Error(error.message);
   return mapSheet(data as SheetRow);
 }
 
@@ -366,20 +338,11 @@ export async function updateEscandalloTechnicalSheet(
   if (Object.keys(row).length === 0) {
     const { data, error } = await supabase
       .from('escandallo_recipe_technical_sheets')
-      .select(SHEET_SELECT)
+      .select()
       .eq('local_id', localId)
       .eq('id', sheetId)
       .single();
-    if (error) {
-      const legacy = await supabase
-        .from('escandallo_recipe_technical_sheets')
-        .select(SHEET_SELECT_LEGACY)
-        .eq('local_id', localId)
-        .eq('id', sheetId)
-        .single();
-      if (legacy.error) throw new Error(legacy.error.message);
-      return mapSheet(legacy.data as SheetRow);
-    }
+    if (error) throw new Error(error.message);
     return mapSheet(data as SheetRow);
   }
   const { data, error } = await supabase
@@ -387,29 +350,9 @@ export async function updateEscandalloTechnicalSheet(
     .update(row)
     .eq('local_id', localId)
     .eq('id', sheetId)
-    .select(SHEET_SELECT)
+    .select()
     .single();
-  if (error) {
-    const fallbackRow = { ...row };
-    delete fallbackRow.yield_quantity;
-    delete fallbackRow.yield_unit;
-    delete fallbackRow.yield_merma_pct;
-    delete fallbackRow.yield_cost_total;
-    delete fallbackRow.yield_cost_per_unit;
-    delete fallbackRow.operational_usage_type;
-    delete fallbackRow.operational_quantity;
-    delete fallbackRow.operational_unit;
-    delete fallbackRow.operational_cost;
-    const legacy = await supabase
-      .from('escandallo_recipe_technical_sheets')
-      .update(fallbackRow)
-      .eq('local_id', localId)
-      .eq('id', sheetId)
-      .select(SHEET_SELECT_LEGACY)
-      .single();
-    if (legacy.error) throw new Error(legacy.error.message);
-    return mapSheet(legacy.data as SheetRow);
-  }
+  if (error) throw new Error(error.message);
   return mapSheet(data as SheetRow);
 }
 
@@ -419,20 +362,10 @@ export async function fetchEscandalloTechnicalSheetsMap(
 ): Promise<Map<string, EscandalloTechnicalSheet>> {
   const full = await supabase
     .from('escandallo_recipe_technical_sheets')
-    .select(SHEET_SELECT)
+    .select()
     .eq('local_id', localId);
-  if (!full.error) {
-    return new Map(((full.data ?? []) as SheetRow[]).map((row) => {
-      const mapped = mapSheet(row);
-      return [mapped.recipeId, mapped] as const;
-    }));
-  }
-  const legacy = await supabase
-    .from('escandallo_recipe_technical_sheets')
-    .select(SHEET_SELECT_LEGACY)
-    .eq('local_id', localId);
-  if (legacy.error) throw new Error(legacy.error.message);
-  return new Map(((legacy.data ?? []) as SheetRow[]).map((row) => {
+  if (full.error) throw new Error(full.error.message);
+  return new Map(((full.data ?? []) as SheetRow[]).map((row) => {
     const mapped = mapSheet(row);
     return [mapped.recipeId, mapped] as const;
   }));
