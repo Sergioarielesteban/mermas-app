@@ -142,6 +142,12 @@ type StepRow = {
   created_at: string;
 };
 
+function missingColumnFromSupabaseError(message: string | null | undefined): string | null {
+  const text = String(message ?? '');
+  const match = text.match(/Could not find the '([^']+)' column/i);
+  return match?.[1] ?? null;
+}
+
 function mapSheet(row: SheetRow): EscandalloTechnicalSheet {
   const yieldUnit =
     row.yield_unit === 'kg' ||
@@ -334,8 +340,8 @@ export async function updateEscandalloTechnicalSheet(
   sheetId: string,
   patch: EscandalloTechnicalSheetUpdate,
 ): Promise<EscandalloTechnicalSheet> {
-  const row = sheetToRowPatch(patch);
-  if (Object.keys(row).length === 0) {
+  const baseRow = sheetToRowPatch(patch);
+  if (Object.keys(baseRow).length === 0) {
     const { data, error } = await supabase
       .from('escandallo_recipe_technical_sheets')
       .select()
@@ -345,15 +351,37 @@ export async function updateEscandalloTechnicalSheet(
     if (error) throw new Error(error.message);
     return mapSheet(data as SheetRow);
   }
-  const { data, error } = await supabase
-    .from('escandallo_recipe_technical_sheets')
-    .update(row)
-    .eq('local_id', localId)
-    .eq('id', sheetId)
-    .select()
-    .single();
-  if (error) throw new Error(error.message);
-  return mapSheet(data as SheetRow);
+
+  let row: Record<string, unknown> = { ...baseRow };
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    const { data, error } = await supabase
+      .from('escandallo_recipe_technical_sheets')
+      .update(row)
+      .eq('local_id', localId)
+      .eq('id', sheetId)
+      .select()
+      .single();
+    if (!error) return mapSheet(data as SheetRow);
+
+    const missingColumn = missingColumnFromSupabaseError(error.message);
+    if (!missingColumn || !(missingColumn in row)) {
+      throw new Error(error.message);
+    }
+
+    delete row[missingColumn];
+    if (Object.keys(row).length === 0) {
+      const { data: current, error: fetchError } = await supabase
+        .from('escandallo_recipe_technical_sheets')
+        .select()
+        .eq('local_id', localId)
+        .eq('id', sheetId)
+        .single();
+      if (fetchError) throw new Error(fetchError.message);
+      return mapSheet(current as SheetRow);
+    }
+  }
+
+  throw new Error('No se pudo guardar la ficha técnica.');
 }
 
 export async function fetchEscandalloTechnicalSheetsMap(
