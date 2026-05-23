@@ -47,9 +47,9 @@ export type RecipePrintPayload = {
 const PAGE_W = 595.28;
 const PAGE_H = 841.89;
 const MM = 2.8346456693;
-const MARGIN_TOP = 20 * MM;
-const MARGIN_BOTTOM = 18 * MM;
-const MARGIN_X = 14 * MM;
+const MARGIN_TOP = 12 * MM;
+const MARGIN_BOTTOM = 10 * MM;
+const MARGIN_X = 10 * MM;
 const CONTENT_W = PAGE_W - MARGIN_X * 2;
 
 const WHITE: RGB = [255, 255, 255];
@@ -200,11 +200,11 @@ async function loadImageDataUrl(src: string | null | undefined): Promise<string 
   }
 }
 
-function drawLogo(doc: jsPDF, logo: LogoAsset | null, y: number, width = 164): void {
+function drawLogo(doc: jsPDF, logo: LogoAsset | null, y: number, width = 128): void {
   const x = (PAGE_W - width) / 2;
   if (!logo) {
     doc.setFont('times', 'normal');
-    doc.setFontSize(36);
+    doc.setFontSize(30);
     doc.setTextColor(...RED);
     doc.text('Chef One', PAGE_W / 2, y + 26, { align: 'center' });
     return;
@@ -239,20 +239,20 @@ function drawCard(doc: jsPDF, x: number, y: number, w: number, h: number, fill: 
 
 function drawSectionTitle(doc: jsPDF, x: number, y: number, title: string, color: RGB = RED): void {
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(10);
+  doc.setFontSize(8.5);
   doc.setTextColor(...color);
   doc.text(title.toUpperCase(), x, y);
 }
 
 function drawKeyValue(doc: jsPDF, x: number, y: number, label: string, value: string, valueColor: RGB = INK): void {
   doc.setFont('helvetica', 'normal');
-  doc.setFontSize(7);
+  doc.setFontSize(6.5);
   doc.setTextColor(...MUTED);
   doc.text(label, x, y);
   doc.setFont('times', 'normal');
-  doc.setFontSize(15);
+  doc.setFontSize(11.5);
   doc.setTextColor(...valueColor);
-  doc.text(value, x, y + 18);
+  doc.text(value, x, y + 12);
 }
 
 function splitNotes(doc: jsPDF, text: string | null | undefined, width: number): string[] {
@@ -262,35 +262,35 @@ function splitNotes(doc: jsPDF, text: string | null | undefined, width: number):
 }
 
 function addPageIfNeeded(doc: jsPDF, y: number, needed: number, logo: LogoAsset | null, recipeName: string, code: string): number {
-  if (y + needed <= PAGE_H - MARGIN_BOTTOM - 22) return y;
+  if (y + needed <= PAGE_H - MARGIN_BOTTOM - 10) return y;
   doc.addPage();
   drawMiniHeader(doc, logo, recipeName, code);
-  return MARGIN_TOP + 30;
+  return MARGIN_TOP + 18;
 }
 
 function drawMiniHeader(doc: jsPDF, logo: LogoAsset | null, recipeName: string, code: string): void {
   doc.setFillColor(...WHITE);
   doc.rect(0, 0, PAGE_W, PAGE_H, 'F');
-  drawLogo(doc, logo, 16, 92);
-  drawRule(doc, 51);
+  drawLogo(doc, logo, 8, 84);
+  drawRule(doc, 38);
   doc.setFont('times', 'bold');
-  doc.setFontSize(13);
+  doc.setFontSize(11);
   doc.setTextColor(...INK);
-  doc.text(recipeName, MARGIN_X, 72);
+  doc.text(recipeName, MARGIN_X, 54);
   doc.setFont('helvetica', 'normal');
-  doc.setFontSize(8);
+  doc.setFontSize(6.5);
   doc.setTextColor(...MUTED);
-  doc.text(code, PAGE_W - MARGIN_X, 72, { align: 'right' });
+  doc.text(code, PAGE_W - MARGIN_X, 54, { align: 'right' });
 }
 
 function drawFooter(doc: jsPDF, page: number, total: number, payload: RecipePrintPayload, code: string): void {
-  const y = PAGE_H - 24;
+  const y = PAGE_H - 12;
   const chefLabel = safeText(payload.creatorName, safeText(payload.localName, 'Chef One'));
   doc.setDrawColor(...RED);
-  doc.setLineWidth(0.7);
-  doc.line(MARGIN_X, y - 12, PAGE_W - MARGIN_X, y - 12);
+  doc.setLineWidth(0.5);
+  doc.line(MARGIN_X, y - 8, PAGE_W - MARGIN_X, y - 8);
   doc.setFont('helvetica', 'normal');
-  doc.setFontSize(7);
+  doc.setFontSize(5.8);
   doc.setTextColor(...MUTED);
   doc.text(`Fecha impresión: ${asDateTime()}   |   Usuario: ${chefLabel}`, MARGIN_X, y);
   doc.text(`Código: ${code}   |   Página ${page}/${total}`, PAGE_W - MARGIN_X, y, { align: 'right' });
@@ -383,7 +383,7 @@ function productionValues(payload: RecipePrintPayload): {
 function addMetricCards(doc: jsPDF, payload: RecipePrintPayload, values: ReturnType<typeof productionValues>, y: number): number {
   const gap = 8;
   const w = (CONTENT_W - gap * 3) / 4;
-  const h = 52;
+  const h = 34;
   const metrics = [
     {
       label: 'Coste real',
@@ -411,15 +411,15 @@ function addMetricCards(doc: jsPDF, payload: RecipePrintPayload, values: ReturnT
     const x = MARGIN_X + i * (w + gap);
     drawCard(doc, x, y, w, h, WHITE);
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(7);
+    doc.setFontSize(6);
     doc.setTextColor(...RED);
-    doc.text(m.label.toUpperCase(), x + 12, y + 16);
+    doc.text(m.label.toUpperCase(), x + 8, y + 11);
     doc.setFont('times', 'bold');
-    doc.setFontSize(16);
+    doc.setFontSize(11.5);
     doc.setTextColor(...metricTone(m.label, m.raw));
-    doc.text(m.value, x + 12, y + 38);
+    doc.text(m.value, x + 8, y + 24);
   });
-  return y + h + 10;
+  return y + h + 6;
 }
 
 function addHeader(doc: jsPDF, payload: RecipePrintPayload, logo: LogoAsset | null, photoDataUrl: string | null): { y: number; code: string } {
@@ -431,86 +431,83 @@ function addHeader(doc: jsPDF, payload: RecipePrintPayload, logo: LogoAsset | nu
 
   doc.setFillColor(...WHITE);
   doc.rect(0, 0, PAGE_W, PAGE_H, 'F');
-  drawLogo(doc, logo, 12, 166);
-  drawRule(doc, 66);
+  drawLogo(doc, logo, 6, 132);
+  drawRule(doc, 40);
 
   const leftX = MARGIN_X;
-  const titleY = 112;
-  const photoW = kind === 'PLATO' ? 170 : 132;
-  const photoH = kind === 'PLATO' ? 124 : 96;
+  const titleY = 76;
+  const photoW = kind === 'PLATO' ? 96 : 88;
+  const photoH = kind === 'PLATO' ? 88 : 72;
   const photoX = PAGE_W - MARGIN_X - photoW;
-  const photoY = 82;
+  const photoY = 48;
 
   doc.setFont('times', 'bold');
-  doc.setFontSize(kind === 'PLATO' ? 29 : 27);
+  doc.setFontSize(kind === 'PLATO' ? 22 : 20);
   doc.setTextColor(...INK);
-  const nameLines = doc.splitTextToSize(safeText(recipe.name, 'Receta sin nombre'), photoX - leftX - 30) as string[];
+  const nameLines = doc.splitTextToSize(safeText(recipe.name, 'Receta sin nombre'), photoX - leftX - 22) as string[];
   doc.text(nameLines.slice(0, 2), leftX, titleY);
-  drawBadge(doc, leftX + Math.min(doc.getTextWidth(nameLines[0] ?? ''), photoX - leftX - 94) + 12, titleY - 22, kind, kindColor(kind));
+  drawBadge(doc, leftX + Math.min(doc.getTextWidth(nameLines[0] ?? ''), photoX - leftX - 90) + 10, titleY - 16, kind, kindColor(kind));
 
   doc.setFont('helvetica', 'normal');
-  doc.setFontSize(10);
+  doc.setFontSize(8);
   doc.setTextColor(...MUTED);
-  const notes = splitNotes(doc, recipe.notes, photoX - leftX - 38);
-  doc.text(notes.slice(0, 2).length ? notes.slice(0, 2) : [category], leftX, titleY + 30);
+  const notes = splitNotes(doc, recipe.notes, photoX - leftX - 28);
+  doc.text(notes.slice(0, 1).length ? notes.slice(0, 1) : [category], leftX, titleY + 20);
 
   if (photoDataUrl) {
     drawCard(doc, photoX, photoY, photoW, photoH, WHITE);
     doc.addImage(photoDataUrl, 'JPEG', photoX + 2, photoY + 2, photoW - 4, photoH - 4);
   }
 
-  const factsY = 188;
+  const factsY = 124;
   doc.setDrawColor(...BORDER);
   doc.setLineWidth(0.5);
-  doc.line(leftX, factsY - 22, photoDataUrl ? photoX - 18 : PAGE_W - MARGIN_X, factsY - 22);
-  const factW = (photoDataUrl ? photoX - leftX - 28 : CONTENT_W) / 4;
+  doc.line(leftX, factsY - 12, photoDataUrl ? photoX - 12 : PAGE_W - MARGIN_X, factsY - 12);
+  const metadataRight = photoDataUrl ? photoX - 12 : PAGE_W - MARGIN_X;
+  const factW = (metadataRight - leftX) / 5;
   const facts: [string, string][] = [
-    ['Ración estándar', payload.sheet?.operationalQuantity ? `${formatQty(payload.sheet.operationalQuantity)} ${payload.sheet.operationalUnit ?? ''}` : `${formatQty(recipe.yieldQty)} ${recipe.yieldLabel}`],
-    ['Usada en', kind === 'PLATO' ? 'Carta' : 'recetas'],
+    ['Tipo', kind],
+    ['Categoría', category],
     ['Código', code],
     ['Estado', sheet?.activa === false ? 'Inactiva' : 'Activa'],
+    ['Fecha', asDateTime().slice(0, 10)],
   ];
   facts.forEach(([label, value], i) => {
     const x = leftX + i * factW;
-    if (i > 0) doc.line(x - 10, factsY - 8, x - 10, factsY + 28);
+    if (i > 0) doc.line(x - 7, factsY - 5, x - 7, factsY + 16);
     doc.setFont('helvetica', 'normal');
-    doc.setFontSize(7);
+    doc.setFontSize(6);
     doc.setTextColor(...MUTED);
     doc.text(label, x, factsY);
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(9);
+    doc.setFontSize(7.2);
     doc.setTextColor(...INK);
-    doc.text(value, x, factsY + 14);
+    doc.text(value, x, factsY + 10);
   });
 
-  return { y: addMetricCards(doc, payload, values, 236), code };
+  return { y: addMetricCards(doc, payload, values, 148), code };
 }
 
 function addProductionAndUsage(doc: jsPDF, payload: RecipePrintPayload, y: number, values: ReturnType<typeof productionValues>): number {
-  const gap = 8;
-  const w = (CONTENT_W - gap) / 2;
-  const h = 136;
+  const h = 108;
   y = addPageIfNeeded(doc, y, h, null, payload.recipe.name, payload.recipe.posArticleCode ?? '');
 
-  drawCard(doc, MARGIN_X, y, w, h, WHITE);
-  drawSectionTitle(doc, MARGIN_X + 14, y + 25, 'Producción');
+  drawCard(doc, MARGIN_X, y, CONTENT_W, h, WHITE);
+  drawSectionTitle(doc, MARGIN_X + 10, y + 16, 'Producción operativa');
+  const third = (CONTENT_W - 20) / 3;
   const leftRows: [string, string, RGB?][] = [
     ['Entrada total', values.inputKg != null ? `${formatQty(values.inputKg, 3)} kg` : '—'],
-    ['Salida real', values.outputQty != null ? `${formatQty(values.outputQty)} ${values.outputUnit}` : '—'],
+    ['Salida', values.outputQty != null ? `${formatQty(values.outputQty)} ${values.outputUnit}` : '—'],
     ['Merma', formatPct(values.mermaPct), values.mermaPct != null && values.mermaPct > 30 ? TERRA : INK],
     ['Unidad salida', values.outputUnit],
-    ['Coste total producción', formatMoneyEur(payload.productionTotalCost)],
     ['Coste real', values.costPerYield != null ? `${formatMoneyEur(values.costPerYield)}/${values.outputUnit}` : '—'],
+    ['Coste operativo', values.operationalCost != null ? formatMoneyEur(values.operationalCost) : '—', OLIVE],
   ];
   leftRows.forEach(([label, value, color], i) => {
     const col = i % 3;
     const row = Math.floor(i / 3);
-    drawKeyValue(doc, MARGIN_X + 14 + col * ((w - 28) / 3), y + 58 + row * 48, label, value, color ?? INK);
+    drawKeyValue(doc, MARGIN_X + 10 + col * third, y + 30 + row * 26, label, value, color ?? INK);
   });
-
-  const ux = MARGIN_X + w + gap;
-  drawCard(doc, ux, y, w, h, WHITE);
-  drawSectionTitle(doc, ux + 14, y + 25, 'Uso operativo');
   const usageType =
     payload.sheet?.operationalUsageType === 'standard_portion'
       ? 'Ración estándar'
@@ -522,102 +519,89 @@ function addProductionAndUsage(doc: jsPDF, payload: RecipePrintPayload, y: numbe
             ? 'Peso'
             : 'Pendiente';
   const usageRows: [string, string][] = [
-    ['Tipo', usageType],
+    ['Tipo uso', usageType],
     ['Cantidad', payload.sheet?.operationalQuantity != null ? formatQty(payload.sheet.operationalQuantity) : '—'],
     ['Unidad', safeText(payload.sheet?.operationalUnit)],
   ];
   usageRows.forEach(([label, value], i) => {
-    drawKeyValue(doc, ux + 14 + i * ((w - 28) / 3), y + 58, label, value);
+    drawKeyValue(doc, MARGIN_X + 10 + i * third, y + 86, label, value);
   });
-  doc.setFillColor(...PALE_GREEN);
-  doc.setDrawColor(212, 226, 204);
-  doc.roundedRect(ux + 14, y + 92, w - 28, 30, 4, 4, 'FD');
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(8);
-  doc.setTextColor(...OLIVE);
-  const usageLabel = payload.sheet?.operationalUsageType === 'standard_portion' ? 'Coste operativo por ración' : 'Coste operativo';
-  doc.text(usageLabel, ux + 24, y + 111);
-  doc.setFont('times', 'bold');
-  doc.setFontSize(18);
-  doc.text(values.operationalCost != null ? formatMoneyEur(values.operationalCost) : '—', ux + w - 24, y + 112, { align: 'right' });
-  return y + h + 10;
+  return y + h + 6;
 }
 
 function addIngredients(doc: DocWithTable, payload: RecipePrintPayload, y: number, logo: LogoAsset | null, code: string): number {
-  y = addPageIfNeeded(doc, y, 140, logo, payload.recipe.name, code);
-  drawCard(doc, MARGIN_X, y, CONTENT_W, 38, WHITE);
-  drawSectionTitle(doc, MARGIN_X + 14, y + 24, 'Ingredientes');
+  y = addPageIfNeeded(doc, y, 104, logo, payload.recipe.name, code);
+  drawCard(doc, MARGIN_X, y, CONTENT_W, 30, WHITE);
+  drawSectionTitle(doc, MARGIN_X + 12, y + 19, 'Ingredientes');
   doc.setFont('helvetica', 'normal');
-  doc.setFontSize(8);
+  doc.setFontSize(6.5);
   doc.setTextColor(...MUTED);
-  doc.text(`${payload.lines.length} ingredientes`, PAGE_W - MARGIN_X - 14, y + 24, { align: 'right' });
-  y += 48;
+  doc.text(`${payload.lines.length} ingredientes`, PAGE_W - MARGIN_X - 12, y + 19, { align: 'right' });
+  y += 36;
 
   const body = payload.lines.map((line) => {
     const parsed = parseLineName(line.label);
     const badge = lineSourceBadge(line);
     const raw = line.rawSupplierProductId ? payload.rawById.get(line.rawSupplierProductId) : null;
     const weightDetail = line.sourceType === 'raw' ? rawIngredientWeightDetail(line.qty, line.unit, raw) : null;
-    const name = `${badge ? `[${badge}] ` : ''}${parsed.name}${weightDetail ? `\n${weightDetail}` : ''}`;
+    const provider = lineSupplier(line, payload.rawById);
+    const details = [weightDetail, provider !== '—' ? provider : ''].filter(Boolean).join(' · ');
+    const name = `${badge ? `[${badge}] ` : ''}${parsed.name}${details ? `\n${details}` : ''}`;
     return [
       name,
       formatQty(line.qty, 3),
       String(line.unit),
       formatMoneyEur(lineCost(line, payload)),
-      '—',
-      lineSupplier(line, payload.rawById),
     ];
   });
-  if (body.length === 0) body.push(['Sin ingredientes', '—', '—', '—', '—', '—']);
+  if (body.length === 0) body.push(['Sin ingredientes', '—', '—', '—']);
 
   autoTable(doc, {
     startY: y,
-    head: [['Ingrediente', 'Cantidad', 'Unidad', 'Coste', 'Merma', 'Proveedor']],
+    head: [['Ingrediente', 'Cantidad', 'Unidad', 'Coste']],
     body,
-    margin: { left: MARGIN_X, right: MARGIN_X, top: MARGIN_TOP + 28, bottom: MARGIN_BOTTOM + 18 },
+    margin: { left: MARGIN_X, right: MARGIN_X, top: MARGIN_TOP + 16, bottom: MARGIN_BOTTOM + 10 },
     styles: {
       font: 'helvetica',
-      fontSize: 8,
+      fontSize: 7.2,
       textColor: INK,
-      cellPadding: { top: 5, right: 6, bottom: 5, left: 6 },
+      cellPadding: { top: 3, right: 4, bottom: 3, left: 4 },
       lineColor: BORDER,
-      lineWidth: 0.3,
+      lineWidth: 0.2,
       overflow: 'linebreak',
     },
     headStyles: {
       fillColor: SOFT,
       textColor: INK,
       fontStyle: 'bold',
-      fontSize: 7,
+      fontSize: 6.2,
       halign: 'left',
     },
     alternateRowStyles: { fillColor: [253, 252, 250] },
     columnStyles: {
-      0: { cellWidth: 190 },
-      1: { halign: 'right', cellWidth: 54 },
+      0: { cellWidth: 284 },
+      1: { halign: 'right', cellWidth: 56 },
       2: { halign: 'center', cellWidth: 46 },
-      3: { halign: 'right', cellWidth: 58 },
-      4: { halign: 'center', cellWidth: 48 },
-      5: { cellWidth: 102 },
+      3: { halign: 'right', cellWidth: 62 },
     },
     didDrawPage: (data) => {
       if (data.pageNumber > 1) drawMiniHeader(doc, logo, payload.recipe.name, code);
     },
   });
 
-  y = doc.lastAutoTable?.finalY != null ? doc.lastAutoTable.finalY + 8 : y + 90;
-  y = addPageIfNeeded(doc, y, 34, logo, payload.recipe.name, code);
+  y = doc.lastAutoTable?.finalY != null ? doc.lastAutoTable.finalY + 5 : y + 74;
+  y = addPageIfNeeded(doc, y, 26, logo, payload.recipe.name, code);
   doc.setFillColor(...PALE_TERRA);
   doc.setDrawColor(244, 220, 214);
-  doc.roundedRect(MARGIN_X, y, CONTENT_W, 30, 4, 4, 'FD');
+  doc.roundedRect(MARGIN_X, y, CONTENT_W, 24, 4, 4, 'FD');
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(8);
+  doc.setFontSize(6.5);
   doc.setTextColor(...RED);
-  doc.text('COSTE TOTAL PRODUCCIÓN', MARGIN_X + 14, y + 19);
+  doc.text('COSTE TOTAL PRODUCCIÓN', MARGIN_X + 12, y + 15);
   doc.setFont('times', 'bold');
-  doc.setFontSize(18);
-  doc.text(formatMoneyEur(payload.productionTotalCost), PAGE_W - MARGIN_X - 14, y + 21, { align: 'right' });
-  return y + 40;
+  doc.setFontSize(15);
+  doc.text(formatMoneyEur(payload.productionTotalCost), PAGE_W - MARGIN_X - 12, y + 17, { align: 'right' });
+  return y + 30;
 }
 
 function addSteps(doc: jsPDF, payload: RecipePrintPayload, y: number, logo: LogoAsset | null, code: string): number {
@@ -634,42 +618,43 @@ function addSteps(doc: jsPDF, payload: RecipePrintPayload, y: number, logo: Logo
           createdAt: '',
         },
       ];
-  const estimated = Math.min(180, 36 + steps.length * 24);
+  const estimated = Math.min(124, 26 + steps.length * 15);
   y = addPageIfNeeded(doc, y, estimated, logo, payload.recipe.name, code);
   drawCard(doc, MARGIN_X, y, CONTENT_W, estimated, WHITE);
-  drawSectionTitle(doc, MARGIN_X + 14, y + 24, 'Pasos de producción');
-  let cursor = y + 48;
+  drawSectionTitle(doc, MARGIN_X + 12, y + 18, 'Pasos de producción');
+  let cursor = y + 32;
   for (const [idx, step] of steps.entries()) {
     const text = safeText(`${step.titulo ? `${step.titulo}: ` : ''}${step.descripcion}`, '—');
-    const lines = doc.splitTextToSize(text, CONTENT_W - 62) as string[];
+    const lines = doc.splitTextToSize(text, CONTENT_W - 50) as string[];
     doc.setFillColor(...RED);
-    doc.circle(MARGIN_X + 22, cursor - 4, 6, 'F');
+    doc.circle(MARGIN_X + 18, cursor - 2, 4.5, 'F');
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(7);
+    doc.setFontSize(6);
     doc.setTextColor(...WHITE);
-    doc.text(String(idx + 1), MARGIN_X + 22, cursor - 1.5, { align: 'center' });
+    doc.text(String(idx + 1), MARGIN_X + 18, cursor - 0.2, { align: 'center' });
     doc.setFont('helvetica', 'normal');
-    doc.setFontSize(9);
+    doc.setFontSize(7.2);
     doc.setTextColor(...INK);
-    doc.text(lines, MARGIN_X + 38, cursor);
-    cursor += Math.max(18, lines.length * 11 + 8);
-    if (cursor > y + estimated - 16 && idx < steps.length - 1) {
-      y = cursor + 8;
+    doc.text(lines, MARGIN_X + 30, cursor);
+    cursor += Math.max(12, lines.length * 8 + 4);
+    if (cursor > y + estimated - 10 && idx < steps.length - 1) {
+      y = cursor + 4;
       return addSteps(doc, { ...payload, steps: steps.slice(idx + 1) }, y, logo, code);
     }
   }
-  return y + estimated + 10;
+  return y + estimated + 6;
 }
 
 function addConservationAndAllergens(doc: jsPDF, payload: RecipePrintPayload, y: number, logo: LogoAsset | null, code: string): number {
-  const gap = 8;
-  const w = (CONTENT_W - gap) / 2;
-  const h = 118;
+  const h = 78;
   y = addPageIfNeeded(doc, y, h, logo, payload.recipe.name, code);
 
   const sheet = payload.sheet;
-  drawCard(doc, MARGIN_X, y, w, h, WHITE);
-  drawSectionTitle(doc, MARGIN_X + 14, y + 24, 'Conservación');
+  drawCard(doc, MARGIN_X, y, CONTENT_W, h, WHITE);
+  drawSectionTitle(doc, MARGIN_X + 12, y + 18, 'Conservación y alérgenos');
+  const splitX = MARGIN_X + CONTENT_W * 0.54;
+  doc.setDrawColor(...BORDER);
+  doc.line(splitX, y + 10, splitX, y + h - 10);
   const conservation: [string, string][] = [
     ['Temperatura', safeText(sheet?.temperaturaConservacion)],
     ['Caducidad', safeText(sheet?.vidaUtil)],
@@ -679,96 +664,95 @@ function addConservationAndAllergens(doc: jsPDF, payload: RecipePrintPayload, y:
   conservation.forEach(([label, value], i) => {
     const col = i % 2;
     const row = Math.floor(i / 2);
-    drawKeyValue(doc, MARGIN_X + 14 + col * ((w - 28) / 2), y + 54 + row * 40, label, value);
+    drawKeyValue(doc, MARGIN_X + 12 + col * 112, y + 28 + row * 22, label, value);
   });
 
-  const ax = MARGIN_X + w + gap;
-  drawCard(doc, ax, y, w, h, WHITE);
-  drawSectionTitle(doc, ax + 14, y + 24, 'Alérgenos');
+  const ax = splitX + 10;
   const active = payload.recipeAllergens.filter((a) => a.status !== 'excluded');
   if (active.length === 0) {
     doc.setFillColor(...PALE_GREEN);
     doc.setDrawColor(212, 226, 204);
-    doc.roundedRect(ax + 14, y + 44, 96, 24, 12, 12, 'FD');
+    doc.roundedRect(ax, y + 24, 90, 18, 9, 9, 'FD');
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(8);
+    doc.setFontSize(6.8);
     doc.setTextColor(...OLIVE);
-    doc.text('Ninguno detectado', ax + 62, y + 59, { align: 'center' });
+    doc.text('Ninguno detectado', ax + 45, y + 35.5, { align: 'center' });
   } else {
     active.slice(0, 12).forEach((row, i) => {
       const col = i % 3;
       const line = Math.floor(i / 3);
-      const chipX = ax + 14 + col * ((w - 28) / 3);
-      const chipY = y + 42 + line * 18;
+      const chipX = ax + col * 70;
+      const chipY = y + 22 + line * 14;
       const label = safeText(row.allergen?.name ?? row.allergen_id);
       doc.setFillColor(row.presence_type === 'contains' ? 253 : 255, row.presence_type === 'contains' ? 244 : 251, row.presence_type === 'contains' ? 241 : 248);
       doc.setDrawColor(...BORDER);
-      doc.roundedRect(chipX, chipY, (w - 36) / 3, 14, 7, 7, 'FD');
+      doc.roundedRect(chipX, chipY, 62, 10, 5, 5, 'FD');
       doc.setFont('helvetica', 'bold');
-      doc.setFontSize(6.5);
+      doc.setFontSize(5.5);
       doc.setTextColor(row.presence_type === 'contains' ? TERRA[0] : GOLD[0], row.presence_type === 'contains' ? TERRA[1] : GOLD[1], row.presence_type === 'contains' ? TERRA[2] : GOLD[2]);
-      doc.text(label.slice(0, 16), chipX + 4, chipY + 9);
+      doc.text(label.slice(0, 14), chipX + 3, chipY + 6.8);
       if (line === 3 && col === 2 && active.length > 12) {
-        doc.text(`+${active.length - 12}`, chipX + ((w - 36) / 3) - 4, chipY + 9, { align: 'right' });
+        doc.text(`+${active.length - 12}`, chipX + 58, chipY + 6.8, { align: 'right' });
       }
     });
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(6.5);
-    doc.setTextColor(...MUTED);
-    doc.text(active.map((a) => `${safeText(a.allergen?.name)}: ${presenceLabel(a.presence_type)}`).slice(0, 2).join(' · '), ax + 14, y + h - 12);
   }
-  return y + h + 10;
+  return y + h + 6;
 }
 
 function addObservationsAndQr(doc: jsPDF, payload: RecipePrintPayload, y: number, qrDataUrl: string | null, logo: LogoAsset | null, code: string, values: ReturnType<typeof productionValues>): number {
-  y = addPageIfNeeded(doc, y, 92, logo, payload.recipe.name, code);
-  const obs = safeText(payload.sheet?.notasChef ?? payload.recipe.notes, '—');
-  const qrW = qrDataUrl ? 74 : 0;
-  const obsW = CONTENT_W - qrW - (qrDataUrl ? 12 : 0);
-  drawCard(doc, MARGIN_X, y, obsW, 82, WHITE);
-  drawSectionTitle(doc, MARGIN_X + 14, y + 24, 'Observaciones');
+  y = addPageIfNeeded(doc, y, 58, logo, payload.recipe.name, code);
+  const obsSource = safeText(payload.sheet?.notasChef ?? payload.recipe.notes, '—');
+  const obs = obsSource === '—' ? obsSource : `${obsSource}`.slice(0, 180);
+  const qrW = qrDataUrl ? 54 : 0;
+  const obsW = CONTENT_W - qrW - (qrDataUrl ? 8 : 0);
+  drawCard(doc, MARGIN_X, y, obsW, 34, WHITE);
+  drawSectionTitle(doc, MARGIN_X + 12, y + 16, 'Observaciones');
   doc.setFont('helvetica', 'normal');
-  doc.setFontSize(9);
+  doc.setFontSize(7);
   doc.setTextColor(...INK);
-  doc.text(doc.splitTextToSize(obs, obsW - 28) as string[], MARGIN_X + 14, y + 45);
+  const lines = (doc.splitTextToSize(obs, obsW - 20) as string[]).slice(0, 3);
+  doc.text(lines, MARGIN_X + 12, y + 28);
 
   if (qrDataUrl) {
-    const qx = MARGIN_X + obsW + 12;
-    drawCard(doc, qx, y, qrW, 82, WHITE);
-    doc.addImage(qrDataUrl, 'PNG', qx + 9, y + 8, 50, 50);
+    const qx = MARGIN_X + obsW + 8;
+    drawCard(doc, qx, y, qrW, 34, WHITE);
+    doc.addImage(qrDataUrl, 'PNG', qx + 4, y + 4, 26, 26);
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(6.5);
+    doc.setFontSize(5.5);
     doc.setTextColor(...INK);
-    doc.text('Escanea para ver', qx + qrW / 2, y + 66, { align: 'center' });
-    doc.text('en Chef One', qx + qrW / 2, y + 75, { align: 'center' });
+    doc.text('Chef One', qx + 34, y + 15, { align: 'left' });
+    doc.setFont('helvetica', 'normal');
+    doc.text(code, qx + 34, y + 23, { align: 'left' });
   }
 
-  y += 94;
-  y = addPageIfNeeded(doc, y, 46, logo, payload.recipe.name, code);
-  drawCard(doc, MARGIN_X, y, CONTENT_W, 44, WHITE);
+  y += 40;
+  y = addPageIfNeeded(doc, y, 28, logo, payload.recipe.name, code);
+  drawCard(doc, MARGIN_X, y, CONTENT_W, 24, WHITE);
   const summary: [string, string, RGB?][] = [
     ['COSTE REAL', values.costPerYield != null ? `${formatMoneyEur(values.costPerYield)}/${values.outputUnit}` : '—'],
     ['COSTE OPERATIVO', values.operationalCost != null ? formatMoneyEur(values.operationalCost) : '—', OLIVE],
     [payload.recipe.isSubRecipe ? 'MERMA' : 'MARGEN BRUTO', payload.recipe.isSubRecipe ? formatPct(values.mermaPct) : formatPct(values.margin), values.margin != null && values.margin > 65 ? OLIVE : TERRA],
     ['VERSIÓN', 'v1.0'],
+    ['USUARIO', safeText(payload.creatorName ?? payload.localName).slice(0, 18)],
     ['CÓDIGO', code],
   ];
   summary.forEach(([label, value, color], i) => {
-    const x = MARGIN_X + 16 + i * (CONTENT_W / summary.length);
+    const cellW = CONTENT_W / summary.length;
+    const x = MARGIN_X + 10 + i * cellW;
     if (i > 0) {
       doc.setDrawColor(...BORDER);
-      doc.line(x - 14, y + 8, x - 14, y + 36);
+      doc.line(MARGIN_X + i * cellW, y + 5, MARGIN_X + i * cellW, y + 19);
     }
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(6.5);
+    doc.setFontSize(5.4);
     doc.setTextColor(...RED);
-    doc.text(label, x, y + 15);
+    doc.text(label, x, y + 10);
     doc.setFont('times', 'bold');
-    doc.setFontSize(13);
+    doc.setFontSize(9.2);
     doc.setTextColor(...(color ?? INK));
-    doc.text(value, x, y + 32);
+    doc.text(value, x, y + 18);
   });
-  return y + 54;
+  return y + 30;
 }
 
 export async function printRecipePDF(payload: RecipePrintPayload): Promise<void> {
