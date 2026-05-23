@@ -398,7 +398,7 @@ export default function RecipeTechnicalSheetPanel({
   const textareaCls =
     'min-h-16 w-full resize-none rounded-lg border border-[rgba(10,9,8,0.08)] bg-[#FAFAF9] px-2 py-1.5 text-[12px] leading-snug text-[#0A0908] outline-none focus:border-[#C4531F]/45 focus:ring-1 focus:ring-[#C4531F]/15';
   const labelCls = 'text-[8px] font-black uppercase tracking-[0.11em] text-[#7E7468]';
-  const metricCls = 'space-y-1';
+  const metricCls = 'space-y-0.5';
   const summaryValue = (value: string, fallback = '—') => value.trim() || fallback;
   const totalTime = [tPrep, tCocc, tReposo].reduce((acc, n) => acc + (Number(n.replace(',', '.')) || 0), 0);
   const productionSummary = [
@@ -467,7 +467,7 @@ export default function RecipeTechnicalSheetPanel({
         open={Boolean(openBlocks.production)}
         onToggle={toggleBlock}
       >
-          <div className="grid grid-cols-3 gap-1.5">
+          <div className={recipe.isSubRecipe ? 'grid grid-cols-2 gap-1.5' : 'grid grid-cols-3 gap-1.5'}>
             {recipe.isSubRecipe ? (
               <>
                 <label className={metricCls}>
@@ -483,11 +483,6 @@ export default function RecipeTechnicalSheetPanel({
                     placeholder="Auto"
                   />
                 </label>
-                {hasVolumeWithoutWeightConversion ? (
-                  <p className="col-span-3 rounded-lg bg-[#B8872A]/10 px-2 py-1 text-[10px] font-semibold text-[#7A5518]">
-                    Configura equivalencia L → kg para incluir este ingrediente en la entrada total.
-                  </p>
-                ) : null}
                 <label className={metricCls}>
                   <span className={labelCls}>Salida real</span>
                   <input
@@ -517,6 +512,11 @@ export default function RecipeTechnicalSheetPanel({
                     placeholder="Auto"
                   />
                 </label>
+                {hasVolumeWithoutWeightConversion ? (
+                  <p className="col-span-2 rounded-lg bg-[#B8872A]/10 px-2 py-1 text-[10px] font-semibold text-[#7A5518]">
+                    Configura equivalencia L → kg para incluir este ingrediente en la entrada total.
+                  </p>
+                ) : null}
                 <label className={metricCls}>
                   <span className={labelCls}>Coste total</span>
                   <input
@@ -565,16 +565,16 @@ export default function RecipeTechnicalSheetPanel({
               <span className={labelCls}>Reposo</span>
               <input value={tReposo} onChange={(e) => setTReposo(e.target.value)} className={inputCls} inputMode="numeric" placeholder="min" />
             </label>
-            <label className={`${metricCls} col-span-3`}>
+            <label className={`${metricCls} ${recipe.isSubRecipe ? 'col-span-1' : 'col-span-3'}`}>
               <span className={labelCls}>Temperatura servicio</span>
-              <input value={tempServicio} onChange={(e) => setTempServicio(e.target.value)} className={inputCls} placeholder="62 °C / frío 4 °C" />
+              <input value={tempServicio} onChange={(e) => setTempServicio(e.target.value)} className={inputCls} />
             </label>
-            <label className={`${metricCls} col-span-3`}>
+            <label className={`${metricCls} ${recipe.isSubRecipe ? 'col-span-1' : 'col-span-3'}`}>
               <span className={labelCls}>Rendimiento total</span>
-              <input value={rendimientoTotal} onChange={(e) => setRendimientoTotal(e.target.value)} className={inputCls} placeholder="1 bandeja, 2,5 kg mezcla..." />
+              <input value={rendimientoTotal} onChange={(e) => setRendimientoTotal(e.target.value)} className={inputCls} />
             </label>
 
-            <div className="col-span-3 mt-1 space-y-1.5 border-t border-[rgba(10,9,8,0.06)] pt-2">
+            <div className={`${recipe.isSubRecipe ? 'col-span-2' : 'col-span-3'} mt-1 space-y-1.5 border-t border-[rgba(10,9,8,0.06)] pt-2`}>
               <div className="flex items-center justify-between">
                 <span className="text-[9px] font-black uppercase text-[#7E7468]">Elaboración</span>
                 <button type="button" onClick={() => setStepDrafts((prev) => [...prev, emptyStep()])} className="inline-flex items-center gap-1 rounded-lg border border-dashed border-[rgba(10,9,8,0.16)] px-2 py-1 text-[10px] font-bold text-[#0A0908]">
@@ -626,8 +626,8 @@ export default function RecipeTechnicalSheetPanel({
           open={Boolean(openBlocks.operational)}
           onToggle={toggleBlock}
         >
-          <div className="grid grid-cols-3 gap-1.5">
-            <label className={`${metricCls} col-span-3`}>
+          <div className="grid gap-1.5 min-[380px]:grid-cols-[minmax(0,2fr)_5rem_5rem] min-[380px]:gap-3">
+            <label className={metricCls}>
               <span className={labelCls}>Tipo de uso</span>
               <select
                 value={operationalUsageType}
@@ -660,7 +660,7 @@ export default function RecipeTechnicalSheetPanel({
                 <option value="ud">ud</option>
               </select>
             </label>
-            <label className={metricCls}>
+            <label className="space-y-0.5 min-[380px]:col-span-3">
               <span className={labelCls}>Coste operativo</span>
               <input
                 value={operationalCost != null ? `${operationalCost.toFixed(4)} €` : ''}

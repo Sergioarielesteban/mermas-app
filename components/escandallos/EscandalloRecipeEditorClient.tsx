@@ -13,6 +13,7 @@ import {
   Trash2,
 } from 'lucide-react';
 import RecipeTechnicalSheetPanel from '@/components/escandallos/RecipeTechnicalSheetPanel';
+import RecipePrintPDFButton from '@/components/escandallos/RecipePrintPDF';
 import EscandalloIngredientDraftEditor from '@/components/escandallos/EscandalloIngredientDraftEditor';
 import { useAuth } from '@/components/AuthProvider';
 import { fetchRecipeAllergens, type RecipeAllergenRow } from '@/lib/appcc-allergens-supabase';
@@ -102,7 +103,7 @@ function EditorMetric({
 
 export default function EscandalloRecipeEditorClient({ recipeId }: { recipeId: string }) {
   const router = useRouter();
-  const { localId, profileReady } = useAuth();
+  const { localId, profileReady, displayName, localName } = useAuth();
   const supabaseOk = isSupabaseEnabled() && getSupabaseClient();
   const demoReadonly = isDemoMode() && Boolean(localId) && !supabaseOk;
 
@@ -403,6 +404,34 @@ export default function EscandalloRecipeEditorClient({ recipeId }: { recipeId: s
   const fcPct =
     recipe && !recipe.isSubRecipe ? foodCostPercentOfNetSale(totalCostLive, yLive > 0 ? yLive : 1, netSale) : null;
   const marginPct = fcPct != null ? Math.round((100 - fcPct) * 10) / 10 : null;
+  const printableRecipe = useMemo(() => {
+    if (!recipe) return null;
+    const finalWeight = finalWeightLive != null && finalWeightLive > 0 ? finalWeightLive : recipe.finalWeightQty;
+    const gross = grossLive != null && grossLive > 0 ? grossLive : recipe.salePriceGrossEur;
+    return {
+      ...recipe,
+      name: draftRecipeName.trim() || recipe.name,
+      notes: draftRecipeNotes,
+      yieldQty: yLive > 0 ? yLive : recipe.yieldQty,
+      yieldLabel: draftYieldLabel.trim() || recipe.yieldLabel,
+      saleVatRatePct: recipe.isSubRecipe ? recipe.saleVatRatePct : vatLive,
+      salePriceGrossEur: recipe.isSubRecipe ? recipe.salePriceGrossEur : gross,
+      posArticleCode: draftPosArticleCode.trim() || recipe.posArticleCode,
+      finalWeightQty: recipe.isSubRecipe ? finalWeight : recipe.finalWeightQty,
+      finalWeightUnit: recipe.isSubRecipe ? draftFinalWeightUnit : recipe.finalWeightUnit,
+    };
+  }, [
+    recipe,
+    finalWeightLive,
+    grossLive,
+    draftRecipeName,
+    draftRecipeNotes,
+    yLive,
+    draftYieldLabel,
+    vatLive,
+    draftPosArticleCode,
+    draftFinalWeightUnit,
+  ]);
 
   const statusLabel = useMemo(() => {
     if (!recipe) return '—';
@@ -975,6 +1004,26 @@ export default function EscandalloRecipeEditorClient({ recipeId }: { recipeId: s
                   <Save className="h-3.5 w-3.5" />
                   {busyId === recipe.id ? 'Guardando…' : 'Guardar cambios'}
                 </button>
+                {printableRecipe ? (
+                  <RecipePrintPDFButton
+                    payload={{
+                      recipe: printableRecipe,
+                      lines,
+                      sheet: techBundle.sheet,
+                      steps: techBundle.steps,
+                      recipeAllergens,
+                      rawById,
+                      processedById,
+                      recipesById,
+                      technicalSheetsByRecipe,
+                      linesByRecipe,
+                      productionTotalCost: totalCostLive,
+                      creatorName: displayName,
+                      localName,
+                    }}
+                    disabled={busyId !== null}
+                  />
+                ) : null}
                 <button
                   type="button"
                   disabled={busyId === 'refresh' || demoReadonly}
@@ -988,10 +1037,10 @@ export default function EscandalloRecipeEditorClient({ recipeId }: { recipeId: s
                   type="button"
                   disabled={busyId === recipe.id || demoReadonly}
                   onClick={() => void handleDeleteRecipe()}
-                  className="col-span-2 inline-flex h-8 items-center justify-center gap-1 rounded-lg border border-[#D32F2F]/20 bg-[#D32F2F]/5 text-[9px] font-semibold text-[#B91C1C]"
+                  className="inline-flex h-8 items-center justify-center gap-1 rounded-lg border border-[#D32F2F]/20 bg-[#D32F2F]/5 text-[9px] font-semibold text-[#B91C1C]"
                 >
                   <Trash2 className="h-3.5 w-3.5" />
-                  Eliminar receta
+                  Eliminar
                 </button>
               </div>
             </div>

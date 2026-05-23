@@ -608,8 +608,8 @@ export default function EscandalloNewRecipeWizard() {
               placeholder={namePlaceholder}
               autoFocus
             />
-            <div className="mt-2 grid grid-cols-[4.75rem_1fr] gap-2">
-              <label className="grid h-[4.75rem] cursor-pointer place-items-center rounded-xl border border-dashed border-[rgba(10,9,8,0.14)] bg-[#FAFAF9] text-center text-[9px] font-bold text-[#7E7468]">
+            <div className="mt-2 grid gap-2 min-[380px]:grid-cols-[4.75rem_minmax(0,1fr)]">
+              <label className="grid h-[4.75rem] cursor-pointer place-items-center rounded-xl border border-dashed border-[rgba(10,9,8,0.14)] bg-[#FAFAF9] text-center text-[9px] font-bold text-[#7E7468] min-[380px]:row-span-2">
                 {photoPreview ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img src={photoPreview} alt="" className="h-full w-full rounded-xl object-cover" />
@@ -632,7 +632,7 @@ export default function EscandalloNewRecipeWizard() {
                 />
               </label>
 
-              <div className="min-w-0 space-y-2">
+              <div className="min-w-0 space-y-1.5">
                   <div className={isPlateRecipe ? 'grid gap-1.5 sm:grid-cols-[11rem_1fr_auto]' : 'grid gap-1.5'}>
                     <select
                       value={recipeKind}
@@ -710,10 +710,10 @@ export default function EscandalloNewRecipeWizard() {
                   </div>
                 ) : (
                   <>
-                    <div className="rounded-lg border border-[rgba(10,9,8,0.06)] bg-[#FAFAF9]/70 p-2">
-                      <p className="mb-1.5 text-[8px] font-black uppercase tracking-[0.14em] text-[#7E7468]">Producción</p>
-                      <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4">
-                        <label className="space-y-1">
+                    <div className="rounded-lg border border-[rgba(10,9,8,0.06)] bg-[#FAFAF9]/70 px-2 py-1.5">
+                      <p className="mb-1 text-[8px] font-black uppercase tracking-[0.14em] text-[#7E7468]">Producción</p>
+                      <div className="grid grid-cols-2 gap-1.5">
+                        <label className="space-y-0.5">
                           <span className={labelCls}>Entrada total</span>
                           <input
                             value={pesoEntradaKg > 0 ? `${pesoEntradaKg.toFixed(2)} kg` : ''}
@@ -721,11 +721,11 @@ export default function EscandalloNewRecipeWizard() {
                             className={`${inputCls} bg-white text-[#7E7468]`}
                           />
                         </label>
-                        <label className="space-y-1">
+                        <label className="space-y-0.5">
                           <span className={labelCls}>Salida real</span>
                           <input value={finalWeightQty} onChange={(e) => setFinalWeightQty(e.target.value)} className={inputCls} inputMode="decimal" />
                         </label>
-                        <label className="space-y-1">
+                        <label className="space-y-0.5">
                           <span className={labelCls}>Unidad salida</span>
                           <select
                             value={finalWeightUnit}
@@ -739,7 +739,7 @@ export default function EscandalloNewRecipeWizard() {
                             <option value="ud">ud</option>
                           </select>
                         </label>
-                        <label className="space-y-1">
+                        <label className="space-y-0.5">
                           <span className={labelCls}>Merma</span>
                           <input
                             value={mermaPct != null ? `${mermaPct.toFixed(2)} %` : ''}
@@ -755,10 +755,10 @@ export default function EscandalloNewRecipeWizard() {
                       ) : null}
                     </div>
 
-                    <div className="rounded-lg border border-[rgba(10,9,8,0.06)] bg-[#FAFAF9]/70 p-2">
-                      <p className="mb-1.5 text-[8px] font-black uppercase tracking-[0.14em] text-[#7E7468]">Uso operativo</p>
-                      <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">
-                        <label className="space-y-1 sm:col-span-1">
+                    <div className="rounded-lg border border-[rgba(10,9,8,0.06)] bg-[#FAFAF9]/70 px-2 py-1.5">
+                      <p className="mb-1 text-[8px] font-black uppercase tracking-[0.14em] text-[#7E7468]">Uso operativo</p>
+                      <div className="grid gap-1.5 min-[380px]:grid-cols-[minmax(0,2fr)_5rem_5rem] min-[380px]:gap-3">
+                        <label className="space-y-0.5">
                           <span className={labelCls}>Tipo</span>
                           <select
                             value={operationalSelectValue}
@@ -775,11 +775,11 @@ export default function EscandalloNewRecipeWizard() {
                             <option value="custom">Personalizado</option>
                           </select>
                         </label>
-                        <label className="space-y-1">
+                        <label className="space-y-0.5">
                           <span className={labelCls}>Cantidad</span>
                           <input value={operationalQuantity} onChange={(e) => setOperationalQuantity(e.target.value)} className={inputCls} inputMode="decimal" />
                         </label>
-                        <label className="space-y-1">
+                        <label className="space-y-0.5">
                           <span className={labelCls}>Unidad</span>
                           <select
                             value={operationalUnit}
@@ -807,7 +807,7 @@ export default function EscandalloNewRecipeWizard() {
               </div>
             </div>
 
-            <div className="mt-2 grid divide-x divide-[rgba(10,9,8,0.06)] rounded-lg bg-[#FAFAF9] py-1.5 ring-1 ring-[rgba(10,9,8,0.04)] grid-cols-4">
+            <div className="mt-2 grid divide-x divide-[rgba(10,9,8,0.06)] rounded-lg bg-[#FAFAF9] py-1 ring-1 ring-[rgba(10,9,8,0.04)] grid-cols-4">
               {isPlateRecipe ? (
                 <>
                   <div className="text-center">
