@@ -375,16 +375,16 @@ export default function EscandallosRecetasLibroClient() {
                     <dd className="font-bold tabular-nums text-zinc-900">{margin != null ? `${margin} %` : '—'}</dd>
                   </div>
                 </dl>
-                <div className="mt-4 grid grid-cols-3 gap-2">
+                <div className="mt-4 grid grid-cols-3 gap-1.5">
                   {!demoPack ? (
                     <Link
                       href={`/escandallos/recetas/${r.id}/editar`}
-                      className="inline-flex h-10 items-center justify-center rounded-xl border border-zinc-200 bg-white text-sm font-bold text-zinc-800 transition hover:bg-zinc-50"
+                      className="inline-flex h-9 items-center justify-center gap-1 rounded-lg border border-[rgba(10,9,8,0.08)] bg-white text-[9px] font-semibold text-[#0A0908] transition hover:bg-zinc-50"
                     >
                       Editar
                     </Link>
                   ) : (
-                    <span className="inline-flex h-10 items-center justify-center rounded-xl border border-zinc-200 bg-zinc-50 text-xs font-semibold text-zinc-500">
+                    <span className="inline-flex h-9 items-center justify-center rounded-lg border border-[rgba(10,9,8,0.08)] bg-zinc-50 text-[9px] font-semibold text-zinc-500">
                       Demo
                     </span>
                   )}
@@ -392,14 +392,14 @@ export default function EscandallosRecetasLibroClient() {
                     type="button"
                     onClick={() => void handlePrintRecipe(r.id)}
                     disabled={printingRecipeId === r.id}
-                    className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-zinc-200 bg-white text-sm font-bold text-zinc-800 transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60"
+                    className="inline-flex h-9 items-center justify-center gap-1 rounded-lg border border-[rgba(10,9,8,0.08)] bg-white text-[9px] font-semibold text-[#0A0908] transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60"
                   >
-                    <Printer className="h-4 w-4" aria-hidden />
+                    <Printer className="h-3.5 w-3.5" aria-hidden />
                     {printingRecipeId === r.id ? 'Imprimiendo…' : 'Imprimir'}
                   </button>
                   <button
                     type="button"
-                    className="inline-flex h-10 items-center justify-center rounded-xl bg-[#D32F2F] text-sm font-black text-white transition hover:bg-[#B91C1C]"
+                    className="inline-flex h-9 items-center justify-center gap-1 rounded-lg bg-[#D32F2F] text-[9px] font-semibold text-white transition hover:bg-[#B91C1C]"
                   >
                     Actualizar
                   </button>
