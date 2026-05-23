@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { validateEscandalloUsageUnitInput } from '@/lib/escandallo-ingredient-units';
+import type { VolumeConversionUnit, WeightConversionUnit } from '@/lib/escandallo-input-weight';
 
 export type PurchaseArticle = {
   id: string;
@@ -41,6 +42,20 @@ export type PurchaseArticle = {
   formatoCompraNombre: string | null;
   cantidadPorFormato: number | null;
   unidadPorFormato: 'kg' | 'l' | 'ud' | null;
+  /** Equivalencia opcional por artículo para convertir volumen usado en escandallos a peso de entrada. */
+  conversionToWeightEnabled: boolean;
+  conversionWeightUnit: WeightConversionUnit | null;
+  conversionVolumeUnit: VolumeConversionUnit | null;
+  conversionFactor: number | null;
+};
+
+export type PurchaseArticleCostHint = {
+  costeUnitarioUso: number | null;
+  unidadUso: string | null;
+  conversionToWeightEnabled: boolean;
+  conversionWeightUnit: WeightConversionUnit | null;
+  conversionVolumeUnit: VolumeConversionUnit | null;
+  conversionFactor: number | null;
 };
 
 export type PurchaseArticleDuplicateCandidate = {
@@ -130,6 +145,14 @@ function mapArticleRow(row: ArticleRow): PurchaseArticle {
   const upfRaw = row.unidad_por_formato != null ? String(row.unidad_por_formato).trim().toLowerCase() : null;
   const upf: PurchaseArticle['unidadPorFormato'] =
     upfRaw === 'kg' || upfRaw === 'l' || upfRaw === 'ud' ? upfRaw : null;
+  const conversionWeightRaw =
+    row.conversion_weight_unit != null ? String(row.conversion_weight_unit).trim().toLowerCase() : null;
+  const conversionWeightUnit: WeightConversionUnit | null =
+    conversionWeightRaw === 'kg' || conversionWeightRaw === 'g' ? conversionWeightRaw : null;
+  const conversionVolumeRaw =
+    row.conversion_volume_unit != null ? String(row.conversion_volume_unit).trim().toLowerCase() : null;
+  const conversionVolumeUnit: VolumeConversionUnit | null =
+    conversionVolumeRaw === 'l' || conversionVolumeRaw === 'ml' ? conversionVolumeRaw : null;
   return {
     id: String(row.id),
     localId: String(row.local_id),
@@ -173,11 +196,20 @@ function mapArticleRow(row: ArticleRow): PurchaseArticle {
     cantidadPorFormato:
       row.cantidad_por_formato != null ? Number(row.cantidad_por_formato) : null,
     unidadPorFormato: upf,
+    conversionToWeightEnabled: Boolean(row.conversion_to_weight_enabled),
+    conversionWeightUnit,
+    conversionVolumeUnit,
+    conversionFactor:
+      row.conversion_factor != null && Number.isFinite(Number(row.conversion_factor))
+        ? Number(row.conversion_factor)
+        : null,
   };
 }
 
-const ARTICLE_SEL =
+const ARTICLE_SEL_LEGACY =
   'id,local_id,nombre,nombre_corto,categoria,subcategoria,descripcion,unidad_base,activo,coste_master,metodo_coste_master,coste_master_fijado_en,proveedor_preferido_id,observaciones,created_from_supplier_product_id,referencia_principal_supplier_product_id,unidad_compra,coste_compra_actual,iva_compra_pct,unidad_uso,unidades_uso_por_unidad_compra,rendimiento_pct,coste_unitario_uso,origen_coste,origen_articulo,central_production_recipe_id,central_cost_synced_at,unidad_base_coste,coste_base,formato_compra_nombre,cantidad_por_formato,unidad_por_formato,created_at,updated_at';
+const ARTICLE_SEL =
+  `${ARTICLE_SEL_LEGACY},conversion_to_weight_enabled,conversion_weight_unit,conversion_volume_unit,conversion_factor`;
 
 export function isMissingPurchaseArticlesError(message: string): boolean {
   const m = message.toLowerCase();
@@ -193,7 +225,15 @@ export async function fetchPurchaseArticles(supabase: SupabaseClient, localId: s
     .select(ARTICLE_SEL)
     .eq('local_id', localId)
     .order('nombre', { ascending: true });
-  if (error) throw new Error(error.message);
+  if (error) {
+    const legacy = await supabase
+      .from('purchase_articles')
+      .select(ARTICLE_SEL_LEGACY)
+      .eq('local_id', localId)
+      .order('nombre', { ascending: true });
+    if (legacy.error) throw new Error(legacy.error.message);
+    return ((legacy.data ?? []) as ArticleRow[]).map(mapArticleRow);
+  }
   return ((data ?? []) as ArticleRow[]).map(mapArticleRow);
 }
 
@@ -202,27 +242,93 @@ export async function fetchPurchaseArticleCostHintsByIds(
   supabase: SupabaseClient,
   localId: string,
   articleIds: string[],
-): Promise<Map<string, { costeUnitarioUso: number | null; unidadUso: string | null }>> {
-  const map = new Map<string, { costeUnitarioUso: number | null; unidadUso: string | null }>();
+): Promise<Map<string, PurchaseArticleCostHint>> {
+  const map = new Map<string, PurchaseArticleCostHint>();
   const uniq = [...new Set(articleIds)].filter(Boolean);
   if (!uniq.length) return map;
+  const mapHintRow = (row: Record<string, unknown>): PurchaseArticleCostHint => {
+    const weightRaw =
+      row.conversion_weight_unit != null ? String(row.conversion_weight_unit).trim().toLowerCase() : null;
+    const volumeRaw =
+      row.conversion_volume_unit != null ? String(row.conversion_volume_unit).trim().toLowerCase() : null;
+    return {
+      unidadUso: row.unidad_uso != null ? String(row.unidad_uso) : null,
+      costeUnitarioUso: row.coste_unitario_uso != null ? Number(row.coste_unitario_uso) : null,
+      conversionToWeightEnabled: Boolean(row.conversion_to_weight_enabled),
+      conversionWeightUnit: weightRaw === 'kg' || weightRaw === 'g' ? weightRaw : null,
+      conversionVolumeUnit: volumeRaw === 'l' || volumeRaw === 'ml' ? volumeRaw : null,
+      conversionFactor:
+        row.conversion_factor != null && Number.isFinite(Number(row.conversion_factor))
+          ? Number(row.conversion_factor)
+          : null,
+    };
+  };
   try {
-    const { data, error } = await supabase
+    const full = await supabase
+      .from('purchase_articles')
+      .select('id,unidad_uso,coste_unitario_uso,conversion_to_weight_enabled,conversion_weight_unit,conversion_volume_unit,conversion_factor')
+      .eq('local_id', localId)
+      .in('id', uniq);
+    if (!full.error) {
+      for (const row of (full.data ?? []) as Record<string, unknown>[]) {
+        map.set(String(row.id), mapHintRow(row));
+      }
+      return map;
+    }
+    const legacy = await supabase
       .from('purchase_articles')
       .select('id,unidad_uso,coste_unitario_uso')
       .eq('local_id', localId)
       .in('id', uniq);
-    if (error) return map;
-    for (const row of (data ?? []) as Record<string, unknown>[]) {
-      map.set(String(row.id), {
-        unidadUso: row.unidad_uso != null ? String(row.unidad_uso) : null,
-        costeUnitarioUso: row.coste_unitario_uso != null ? Number(row.coste_unitario_uso) : null,
-      });
+    if (legacy.error) return map;
+    for (const row of (legacy.data ?? []) as Record<string, unknown>[]) {
+      map.set(String(row.id), mapHintRow(row));
     }
   } catch {
     /* sin columnas o sin tabla */
   }
   return map;
+}
+
+export type PurchaseArticleWeightConversionPatch = {
+  conversionToWeightEnabled: boolean;
+  conversionWeightUnit: WeightConversionUnit | null;
+  conversionVolumeUnit: VolumeConversionUnit | null;
+  conversionFactor: number | null;
+};
+
+export async function updatePurchaseArticleWeightConversionFields(
+  supabase: SupabaseClient,
+  localId: string,
+  articleId: string,
+  patch: PurchaseArticleWeightConversionPatch,
+): Promise<void> {
+  const enabled = Boolean(patch.conversionToWeightEnabled);
+  const factor = patch.conversionFactor;
+  if (enabled) {
+    if (patch.conversionWeightUnit !== 'kg' && patch.conversionWeightUnit !== 'g') {
+      throw new Error('Selecciona unidad de peso para la equivalencia.');
+    }
+    if (patch.conversionVolumeUnit !== 'l' && patch.conversionVolumeUnit !== 'ml') {
+      throw new Error('Selecciona unidad de volumen para la equivalencia.');
+    }
+    if (factor == null || !Number.isFinite(factor) || factor <= 0) {
+      throw new Error('La equivalencia debe ser mayor que 0.');
+    }
+  }
+
+  const row = {
+    conversion_to_weight_enabled: enabled,
+    conversion_weight_unit: enabled ? patch.conversionWeightUnit : null,
+    conversion_volume_unit: enabled ? patch.conversionVolumeUnit : null,
+    conversion_factor: enabled && factor != null ? Math.round(factor * 1000000) / 1000000 : null,
+  };
+  const { error } = await supabase
+    .from('purchase_articles')
+    .update(row)
+    .eq('id', articleId)
+    .eq('local_id', localId);
+  if (error) throw new Error(error.message);
 }
 
 export type PurchaseArticleMasterCostPatch = {

@@ -63,6 +63,7 @@ import {
   type EscandalloRecipe,
 } from '@/lib/escandallos-supabase';
 import { formatMoneyEur, formatUnitPriceEur } from '@/lib/money-format';
+import { rawIngredientWeightDetail, totalInputWeightKg } from '@/lib/escandallo-input-weight';
 
 type RecipeTechBundle = {
   sheet: EscandalloTechnicalSheet | null;
@@ -387,15 +388,8 @@ export default function EscandalloRecipeEditorClient({ recipeId }: { recipeId: s
           : yLive
       : yLive;
   const costPerYield = effectiveYieldForCost > 0 ? Math.round((totalCostLive / effectiveYieldForCost) * 100) / 100 : 0;
-  const pesoEntradaKg = useMemo(() => {
-    const toKg = (qty: number, unit: EscandalloLine['unit']): number => {
-      if (!Number.isFinite(qty) || qty <= 0) return 0;
-      if (unit === 'kg') return qty;
-      if (unit === 'g') return qty / 1000;
-      return 0;
-    };
-    return Math.round(lines.reduce((acc, line) => acc + toKg(line.qty, line.unit), 0) * 1000) / 1000;
-  }, [lines]);
+  const inputWeight = useMemo(() => totalInputWeightKg(lines, rawById), [lines, rawById]);
+  const pesoEntradaKg = Math.round(inputWeight.kg * 1000) / 1000;
   const rendimientoPct =
     recipe?.isSubRecipe && finalWeightLive != null && finalWeightLive > 0 && pesoEntradaKg > 0
       ? Math.round((finalWeightLive / pesoEntradaKg) * 10000) / 100
@@ -822,6 +816,10 @@ export default function EscandalloRecipeEditorClient({ recipeId }: { recipeId: s
                       const unitEur = lineUnitPriceEur(line, rawById, processedById, priceInner);
                       const lineCost = Math.round(line.qty * unitEur * 100) / 100;
                       const parsed = parseLineLabel(line.label);
+                      const inputWeightDetail =
+                        line.sourceType === 'raw'
+                          ? rawIngredientWeightDetail(line.qty, line.unit, line.rawSupplierProductId ? rawById.get(line.rawSupplierProductId) : null)
+                          : null;
                       const subSheet = line.subRecipeId ? technicalSheetsByRecipe.get(line.subRecipeId) : null;
                       const subModeLabel =
                         line.sourceType === 'subrecipe'
@@ -864,6 +862,9 @@ export default function EscandalloRecipeEditorClient({ recipeId }: { recipeId: s
                                 {line.sourceType === 'subrecipe' && subModeLabel ? subModeLabel : `${line.qty} ${line.unit}`} ·{' '}
                                 {line.sourceType === 'subrecipe' && subDetail ? subDetail : formatUnitPriceEur(unitEur, line.unit)}
                               </p>
+                              {inputWeightDetail ? (
+                                <p className="text-[9px] font-medium text-[#7E7468]">{parsed.name} · {inputWeightDetail}</p>
+                              ) : null}
                             </div>
                             <div className="flex shrink-0 flex-col items-end gap-0.5">
                               <p className="text-[13px] font-black tabular-nums leading-none text-[#0A0908]">
@@ -935,6 +936,7 @@ export default function EscandalloRecipeEditorClient({ recipeId }: { recipeId: s
             recipeAllergens={recipeAllergens}
             familyOptions={familyOptions}
             productionTotalCost={totalCostLive}
+            rawById={rawById}
             loading={techBundle.loading}
             saving={busyId === `tech-${recipeId}`}
             onCreate={() => handleCreateTechnicalSheet()}

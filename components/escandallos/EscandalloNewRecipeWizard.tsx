@@ -70,22 +70,44 @@ import {
   computeMermaPct,
   computeOperationalCost,
   computeYieldCostPerUnit,
+  convertQuantity,
   inferUsageTypeFromUnit,
   type EscandalloOperationalUsageType,
   type EscandalloYieldUnit,
 } from '@/lib/escandallo-operational-usage';
+import { totalInputWeightKg } from '@/lib/escandallo-input-weight';
 
-type RecipeKind = 'plato' | 'base' | 'subelaboracion';
-type NewStepDraft = TechnicalSheetStepDraft & { key: string };
+type RecipeKind = 'plato' | 'base' | 'elaboracion';
+type NewStepDraft = TechnicalSheetStepDraft & {
+  key: string;
+  isCritical?: boolean;
+  targetTemperature?: string;
+  targetTime?: string;
+  controlObservation?: string;
+};
 
 const RECIPE_KIND_OPTIONS: Array<{ value: RecipeKind; label: string; defaultYieldLabel: string }> = [
   { value: 'plato', label: 'Plato', defaultYieldLabel: 'raciones' },
   { value: 'base', label: 'Base', defaultYieldLabel: 'kg' },
-  { value: 'subelaboracion', label: 'Elaboración', defaultYieldLabel: 'kg' },
+  { value: 'elaboracion', label: 'Elaboración', defaultYieldLabel: 'kg' },
 ];
 
 function newStepDraft(): NewStepDraft {
-  return { key: `s-${Math.random().toString(36).slice(2, 11)}`, titulo: '', descripcion: '' };
+  return {
+    key: `s-${Math.random().toString(36).slice(2, 11)}`,
+    titulo: '',
+    descripcion: '',
+    isCritical: false,
+    targetTemperature: '',
+    targetTime: '',
+    controlObservation: '',
+  };
+}
+
+function normalizeRecipeKind(value: string | null | undefined): RecipeKind {
+  if (value === 'base') return 'base';
+  if (value === 'elaboracion' || value === 'subelaboracion') return 'elaboracion';
+  return 'plato';
 }
 
 export default function EscandalloNewRecipeWizard() {
@@ -137,7 +159,6 @@ export default function EscandalloNewRecipeWizard() {
   const [emplMenaje, setEmplMenaje] = useState('');
   const [emplFoto, setEmplFoto] = useState('');
   const [notasChef, setNotasChef] = useState('');
-  const [puntosCrit, setPuntosCrit] = useState('');
   const [stepDrafts, setStepDrafts] = useState<NewStepDraft[]>([newStepDraft()]);
 
   const rawById = useMemo(() => new Map(rawProducts.map((p) => [p.id, p])), [rawProducts]);
@@ -178,11 +199,11 @@ export default function EscandalloNewRecipeWizard() {
       setOperationalQuantity(d.operationalQuantity ?? '');
       setOperationalUnit(d.operationalUnit ?? 'g');
       setIngredientDrafts(d.ingredientDrafts);
-      setRecipeKind(d.recipeKind ?? 'plato');
+      setRecipeKind(normalizeRecipeKind(d.recipeKind));
     } else {
       const tipo = searchParams.get('tipo');
-      if (tipo === 'base' || tipo === 'subelaboracion') {
-        const nextKind = tipo as RecipeKind;
+      if (tipo === 'base' || tipo === 'elaboracion' || tipo === 'subelaboracion') {
+        const nextKind = normalizeRecipeKind(tipo);
         const nextOption = RECIPE_KIND_OPTIONS.find((option) => option.value === nextKind);
         setRecipeKind(nextKind);
         setYieldLabel(nextOption?.defaultYieldLabel ?? 'kg');
@@ -314,15 +335,9 @@ export default function EscandalloNewRecipeWizard() {
   const finalWeightNum = parseDecimal(finalWeightQty);
   const operationalQtyNum = parseDecimal(operationalQuantity);
   const netSale = gross != null && gross > 0 ? saleNetPerUnitFromGross(gross, vat) : null;
-  const pesoEntradaKg = useMemo(() => {
-    const toKg = (qty: number, unit: EscandalloLine['unit']): number => {
-      if (!Number.isFinite(qty) || qty <= 0) return 0;
-      if (unit === 'kg') return qty;
-      if (unit === 'g') return qty / 1000;
-      return 0;
-    };
-    return Math.round(tempLines.reduce((acc, line) => acc + toKg(line.qty, line.unit), 0) * 1000) / 1000;
-  }, [tempLines]);
+  const inputWeight = useMemo(() => totalInputWeightKg(tempLines, rawById), [tempLines, rawById]);
+  const pesoEntradaKg = Math.round(inputWeight.kg * 1000) / 1000;
+  const hasVolumeWithoutWeightConversion = inputWeight.missingConversionLines.length > 0;
   const effectiveYieldForCost =
     !isPlateRecipe && finalWeightNum != null && finalWeightNum > 0 ? finalWeightNum : yNum;
   const totalCost = useMemo(() => {
@@ -350,7 +365,7 @@ export default function EscandalloNewRecipeWizard() {
   const fcHint = foodCostStatus(fcPct);
   const marginPct = fcPct != null ? Math.round((100 - fcPct) * 10) / 10 : null;
   const canStep1 = name.trim().length > 0 && yNum > 0;
-  const canFinish = canStep1 && familyName.trim().length > 0 && !saving;
+  const canFinish = canStep1 && (!isPlateRecipe || familyName.trim().length > 0) && !saving;
 
   const parseOptInt = (raw: string): number | null => {
     const t = raw.trim();
@@ -367,8 +382,21 @@ export default function EscandalloNewRecipeWizard() {
     return Number.isFinite(n) && n >= 0 ? Math.round(n * 10000) / 10000 : null;
   };
 
+  const buildCriticalStepSummaries = (): string[] =>
+    stepDrafts
+      .filter((d) => d.isCritical)
+      .map((d, idx) => {
+        const title = d.titulo.trim() || `Paso ${idx + 1}`;
+        const details = [
+          d.targetTemperature?.trim() ? `Temp. ${d.targetTemperature.trim()}` : '',
+          d.targetTime?.trim() ? `Tiempo ${d.targetTime.trim()}` : '',
+          d.controlObservation?.trim(),
+        ].filter(Boolean);
+        return details.length > 0 ? `${title}: ${details.join(' · ')}` : title;
+      });
+
   const buildTechnicalPatch = (): EscandalloTechnicalSheetUpdate => ({
-    categoria: familyName.trim(),
+    categoria: isPlateRecipe ? familyName.trim() : '',
     fotoUrl: photoPreview.trim() === '' ? null : photoPreview.trim(),
     activa: true,
     rendimientoTotal: rendimientoTotal.trim(),
@@ -386,12 +414,12 @@ export default function EscandalloNewRecipeWizard() {
       .split(/[\n,]+/)
       .map((s) => s.trim())
       .filter(Boolean),
-    emplatadoDescripcion: emplDesc.trim(),
-    emplatadoDecoracion: emplDeco.trim(),
-    emplatadoMenaje: emplMenaje.trim(),
-    emplatadoFotoUrl: emplFoto.trim() === '' ? null : emplFoto.trim(),
+    emplatadoDescripcion: isPlateRecipe ? emplDesc.trim() : '',
+    emplatadoDecoracion: isPlateRecipe ? emplDeco.trim() : '',
+    emplatadoMenaje: isPlateRecipe ? emplMenaje.trim() : '',
+    emplatadoFotoUrl: isPlateRecipe && emplFoto.trim() !== '' ? emplFoto.trim() : null,
     notasChef: notasChef.trim(),
-    puntosCriticos: puntosCrit.trim(),
+    puntosCriticos: buildCriticalStepSummaries().join('\n'),
     yieldQuantity: !isPlateRecipe && finalWeightNum != null && finalWeightNum > 0 ? finalWeightNum : null,
     yieldUnit: !isPlateRecipe && finalWeightNum != null && finalWeightNum > 0 ? finalWeightUnit : null,
     yieldMermaPct: !isPlateRecipe ? mermaPct : null,
@@ -407,8 +435,21 @@ export default function EscandalloNewRecipeWizard() {
 
   const buildStepDrafts = (): TechnicalSheetStepDraft[] =>
     stepDrafts
-      .filter((d) => d.titulo.trim() !== '' || d.descripcion.trim() !== '')
-      .map((d) => ({ titulo: d.titulo.trim(), descripcion: d.descripcion.trim() }));
+      .filter((d) => d.titulo.trim() !== '' || d.descripcion.trim() !== '' || d.isCritical)
+      .map((d, idx) => {
+        const appccLines = d.isCritical
+          ? [
+              'APPCC: punto crítico',
+              d.targetTemperature?.trim() ? `Temperatura objetivo: ${d.targetTemperature.trim()}` : '',
+              d.targetTime?.trim() ? `Tiempo objetivo: ${d.targetTime.trim()}` : '',
+              d.controlObservation?.trim() ? `Control: ${d.controlObservation.trim()}` : '',
+            ].filter(Boolean)
+          : [];
+        return {
+          titulo: d.titulo.trim() || `Paso ${idx + 1}`,
+          descripcion: [d.descripcion.trim(), appccLines.join('\n')].filter(Boolean).join('\n\n'),
+        };
+      });
 
   const handleSave = async () => {
     if (!localId || !supabaseOk) return;
@@ -416,7 +457,7 @@ export default function EscandalloNewRecipeWizard() {
       setBanner(previewBuilt.message);
       return;
     }
-    if (!familyName.trim()) {
+    if (isPlateRecipe && !familyName.trim()) {
       setBanner('Añade una familia de carta para guardar la receta.');
       return;
     }
@@ -424,7 +465,11 @@ export default function EscandalloNewRecipeWizard() {
     setBanner(null);
     try {
       const supabase = getSupabaseClient()!;
-      if (!isPlateRecipe && finalWeightNum != null && finalWeightNum > 0 && pesoEntradaKg > 0 && finalWeightNum > pesoEntradaKg) {
+      const outputInKg =
+        !isPlateRecipe && finalWeightNum != null && finalWeightNum > 0
+          ? convertQuantity(finalWeightNum, finalWeightUnit, 'kg')
+          : null;
+      if (!isPlateRecipe && outputInKg != null && pesoEntradaKg > 0 && outputInKg > pesoEntradaKg) {
         setBanner('El peso de salida no puede superar el peso de entrada.');
         return;
       }
@@ -478,26 +523,33 @@ export default function EscandalloNewRecipeWizard() {
   const textareaCls =
     'min-h-14 w-full resize-none rounded-lg border border-[rgba(10,9,8,0.08)] bg-[#FAFAF9] px-2 py-1.5 text-[12px] leading-snug text-[#0A0908] outline-none focus:border-[#C4531F]/45 focus:ring-1 focus:ring-[#C4531F]/15';
   const labelCls = 'text-[8px] font-black uppercase tracking-[0.11em] text-[#7E7468]';
-  const totalTime = [tPrep, tCocc, tReposo].reduce((acc, n) => acc + (Number(n.replace(',', '.')) || 0), 0);
-  const productionSummary = [
-    numeroRaciones.trim() || yieldQty.trim() ? `${numeroRaciones.trim() || yieldQty.trim()} rac.` : '',
-    gramajePorRacion.trim(),
-    totalTime > 0 ? `${totalTime} min` : '',
-  ].filter(Boolean).join(' · ');
-  const conservationSummary = [tipoCons.trim() || 'Tipo', tempCons.trim(), vidaUtil.trim()].filter(Boolean).join(' · ');
-  const allergensSummary = alergManual
+  const namePlaceholder =
+    recipeKind === 'base' ? 'Nombre de la base' : recipeKind === 'elaboracion' ? 'Nombre de la elaboración' : 'Nombre del plato';
+  const saveLabel =
+    recipeKind === 'base' ? 'Guardar base' : recipeKind === 'elaboracion' ? 'Guardar elaboración' : 'Guardar receta';
+  const criticalStepSummaries = buildCriticalStepSummaries();
+  const allergenChips = alergManual
     .split(/[\n,]+/)
     .map((s) => s.trim())
     .filter(Boolean)
-    .slice(0, 3)
-    .join(' · ');
+    .slice(0, 8);
+  const operationalSelectValue =
+    operationalUsageType === 'standard_portion' ? 'standard_portion' : operationalUsageType === 'unit' ? 'unit' : 'custom';
+  const totalTime = [tPrep, tCocc, tReposo].reduce((acc, n) => acc + (Number(n.replace(',', '.')) || 0), 0);
+  const productionSummary = [
+    isPlateRecipe && (numeroRaciones.trim() || yieldQty.trim()) ? `${numeroRaciones.trim() || yieldQty.trim()} rac.` : '',
+    isPlateRecipe ? gramajePorRacion.trim() : finalWeightNum != null && finalWeightNum > 0 ? `${finalWeightNum} ${finalWeightUnit}` : '',
+    totalTime > 0 ? `${totalTime} min` : '',
+  ].filter(Boolean).join(' · ');
+  const conservationSummary = [tipoCons.trim() || 'Tipo', tempCons.trim(), vidaUtil.trim()].filter(Boolean).join(' · ');
+  const allergensSummary = allergenChips.slice(0, 3).join(' · ');
   const platingSummary = [emplDesc.trim() ? 'Montaje' : '', emplDeco.trim(), emplFoto.trim() ? 'foto' : ''].filter(Boolean).join(' · ');
-  const observationsSummary = [notasChef, puntosCrit].filter((x) => x.trim()).length;
+  const observationsSummary = notasChef.trim() ? 1 : 0;
   const secondaryBlocks = [
     {
       id: 'production',
       title: 'Producción',
-      summary: productionSummary || `${yieldQty || '1'} ${yieldLabel || 'raciones'}`,
+      summary: productionSummary || (isPlateRecipe ? `${yieldQty || '1'} ${yieldLabel || 'raciones'}` : 'Pasos y controles'),
       icon: Flame,
       tone: 'bg-[#D32F2F]/8 text-[#B91C1C] ring-[#D32F2F]/12',
     },
@@ -511,7 +563,7 @@ export default function EscandalloNewRecipeWizard() {
     {
       id: 'allergens',
       title: 'Alérgenos',
-      summary: allergensSummary || 'Gluten, lactosa, trazas',
+      summary: allergensSummary || 'Sin alérgenos',
       icon: AlertTriangle,
       tone: 'bg-[#B8872A]/10 text-[#7A5518] ring-[#B8872A]/15',
     },
@@ -525,7 +577,7 @@ export default function EscandalloNewRecipeWizard() {
     {
       id: 'appcc',
       title: 'APPCC',
-      summary: stepDrafts.some((s) => s.titulo.trim() || s.descripcion.trim()) ? 'Elaboración añadida' : 'Controles de elaboración',
+      summary: criticalStepSummaries.length > 0 ? `${criticalStepSummaries.length} puntos críticos` : 'Sin puntos críticos',
       icon: ShieldCheck,
       tone: 'bg-[#4A6B3A]/10 text-[#35502A] ring-[#4A6B3A]/15',
     },
@@ -536,7 +588,7 @@ export default function EscandalloNewRecipeWizard() {
       icon: StickyNote,
       tone: 'bg-[#F7F3EE] text-[#7E7468] ring-[rgba(10,9,8,0.06)]',
     },
-  ];
+  ].filter((block) => isPlateRecipe || block.id !== 'plating');
 
   return (
     <div className="min-h-0 space-y-2 overflow-x-hidden pb-[calc(11.5rem+env(safe-area-inset-bottom,0px))]">
@@ -549,8 +601,15 @@ export default function EscandalloNewRecipeWizard() {
       ) : (
         <>
           <section className="rounded-xl border border-[rgba(10,9,8,0.06)] bg-white px-2.5 py-2 shadow-[0_1px_0_rgba(10,9,8,0.04)] ring-1 ring-[rgba(10,9,8,0.04)]">
-            <div className="grid grid-cols-[5.5rem_1fr] gap-2">
-              <label className="grid h-[5.5rem] cursor-pointer place-items-center rounded-xl border border-dashed border-[rgba(10,9,8,0.14)] bg-[#FAFAF9] text-center text-[10px] font-bold text-[#7E7468]">
+            <input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className="h-10 w-full rounded-lg border border-[rgba(10,9,8,0.08)] bg-[#FAFAF9] px-2.5 text-[17px] font-bold leading-tight text-[#0A0908] outline-none focus:border-[#D32F2F]/35 focus:ring-1 focus:ring-[#D32F2F]/10"
+              placeholder={namePlaceholder}
+              autoFocus
+            />
+            <div className="mt-2 grid grid-cols-[4.75rem_1fr] gap-2">
+              <label className="grid h-[4.75rem] cursor-pointer place-items-center rounded-xl border border-dashed border-[rgba(10,9,8,0.14)] bg-[#FAFAF9] text-center text-[9px] font-bold text-[#7E7468]">
                 {photoPreview ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img src={photoPreview} alt="" className="h-full w-full rounded-xl object-cover" />
@@ -574,14 +633,7 @@ export default function EscandalloNewRecipeWizard() {
               </label>
 
               <div className="min-w-0 space-y-2">
-                <div className="space-y-1.5">
-                  <input
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    className="h-9 w-full rounded-lg border border-[rgba(10,9,8,0.08)] bg-[#FAFAF9] px-2 text-[16px] font-bold leading-tight text-[#0A0908] outline-none focus:border-[#D32F2F]/35 focus:ring-1 focus:ring-[#D32F2F]/10"
-                    autoFocus
-                  />
-                  <div className="grid gap-1.5 sm:grid-cols-[11rem_1fr_auto]">
+                  <div className={isPlateRecipe ? 'grid gap-1.5 sm:grid-cols-[11rem_1fr_auto]' : 'grid gap-1.5'}>
                     <select
                       value={recipeKind}
                       onChange={(e) => {
@@ -601,34 +653,38 @@ export default function EscandalloNewRecipeWizard() {
                         </option>
                       ))}
                     </select>
-                    <input
-                      list="escandallo-family-options"
-                      value={familyName}
-                      onChange={(e) => setFamilyName(e.target.value)}
-                      className="h-8 min-w-0 rounded-lg border border-[rgba(10,9,8,0.08)] bg-[#FAFAF9] px-2 text-[12px] font-semibold text-[#0A0908] outline-none focus:border-[#D32F2F]/35 focus:ring-1 focus:ring-[#D32F2F]/10"
-                      aria-label="Familia de carta"
-                    />
-                    <datalist id="escandallo-family-options">
-                      {familyOptions.map((option) => (
-                        <option key={option} value={option} />
-                      ))}
-                    </datalist>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (!familyName.trim()) return;
-                        setFamilyOptions((prev) =>
-                          prev.includes(familyName.trim())
-                            ? prev
-                            : [...prev, familyName.trim()].sort((a, b) => a.localeCompare(b, 'es')),
-                        );
-                      }}
-                      className="inline-flex h-8 shrink-0 items-center justify-center rounded-lg border border-[rgba(10,9,8,0.08)] bg-white px-2 text-[11px] font-bold text-[#C4531F]"
-                    >
-                      + Crear
-                    </button>
+                    {isPlateRecipe ? (
+                      <>
+                        <input
+                          list="escandallo-family-options"
+                          value={familyName}
+                          onChange={(e) => setFamilyName(e.target.value)}
+                          className="h-8 min-w-0 rounded-lg border border-[rgba(10,9,8,0.08)] bg-[#FAFAF9] px-2 text-[12px] font-semibold text-[#0A0908] outline-none focus:border-[#D32F2F]/35 focus:ring-1 focus:ring-[#D32F2F]/10"
+                          aria-label="Familia de carta"
+                          placeholder="Familia carta"
+                        />
+                        <datalist id="escandallo-family-options">
+                          {familyOptions.map((option) => (
+                            <option key={option} value={option} />
+                          ))}
+                        </datalist>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (!familyName.trim()) return;
+                            setFamilyOptions((prev) =>
+                              prev.includes(familyName.trim())
+                                ? prev
+                                : [...prev, familyName.trim()].sort((a, b) => a.localeCompare(b, 'es')),
+                            );
+                          }}
+                          className="inline-flex h-8 shrink-0 items-center justify-center rounded-lg border border-[rgba(10,9,8,0.08)] bg-white px-2 text-[11px] font-bold text-[#C4531F]"
+                        >
+                          + Crear
+                        </button>
+                      </>
+                    ) : null}
                   </div>
-                </div>
 
                 {isPlateRecipe ? (
                   <div className="rounded-lg border border-[rgba(10,9,8,0.06)] bg-[#FAFAF9]/70 p-2">
@@ -692,6 +748,11 @@ export default function EscandalloNewRecipeWizard() {
                           />
                         </label>
                       </div>
+                      {hasVolumeWithoutWeightConversion ? (
+                        <p className="mt-1.5 rounded-lg bg-[#B8872A]/10 px-2 py-1 text-[10px] font-semibold text-[#7A5518]">
+                          Configura equivalencia L → kg para incluir este ingrediente en la entrada total.
+                        </p>
+                      ) : null}
                     </div>
 
                     <div className="rounded-lg border border-[rgba(10,9,8,0.06)] bg-[#FAFAF9]/70 p-2">
@@ -700,14 +761,18 @@ export default function EscandalloNewRecipeWizard() {
                         <label className="space-y-1 sm:col-span-1">
                           <span className={labelCls}>Tipo</span>
                           <select
-                            value={operationalUsageType}
-                            onChange={(e) => setOperationalUsageType(e.target.value as EscandalloOperationalUsageType)}
+                            value={operationalSelectValue}
+                            onChange={(e) => {
+                              const next = e.target.value;
+                              if (next === 'standard_portion') setOperationalUsageType('standard_portion');
+                              else if (next === 'unit') setOperationalUsageType('unit');
+                              else setOperationalUsageType(inferUsageTypeFromUnit(operationalUnit) ?? 'weight');
+                            }}
                             className={inputCls}
                           >
-                            <option value="weight">Por peso</option>
-                            <option value="volume">Por volumen</option>
-                            <option value="unit">Por unidad</option>
                             <option value="standard_portion">Ración estándar</option>
+                            <option value="unit">Unidad</option>
+                            <option value="custom">Personalizado</option>
                           </select>
                         </label>
                         <label className="space-y-1">
@@ -858,76 +923,48 @@ export default function EscandalloNewRecipeWizard() {
                 {openBlock === id ? (
                   <div className="border-t border-[rgba(10,9,8,0.06)] px-2.5 py-2">
                     {id === 'production' ? (
-                      <div className="grid grid-cols-3 gap-1.5">
-                        <label className="space-y-1">
-                          <span className={labelCls}>Raciones</span>
-                          <input value={numeroRaciones} onChange={(e) => setNumeroRaciones(e.target.value)} className={inputCls} inputMode="decimal" placeholder={yieldQty || '1'} />
-                        </label>
-                        <label className="space-y-1">
-                          <span className={labelCls}>Gramaje</span>
-                          <input value={gramajePorRacion} onChange={(e) => setGramajePorRacion(e.target.value)} className={inputCls} placeholder="180 g" />
-                        </label>
-                        <label className="space-y-1">
-                          <span className={labelCls}>Total</span>
-                          <input value={totalTime > 0 ? String(totalTime) : ''} readOnly className={`${inputCls} bg-white text-[#7E7468]`} placeholder="min" />
-                        </label>
-                        <label className="space-y-1">
-                          <span className={labelCls}>Prep</span>
-                          <input value={tPrep} onChange={(e) => setTPrep(e.target.value)} className={inputCls} inputMode="numeric" placeholder="min" />
-                        </label>
-                        <label className="space-y-1">
-                          <span className={labelCls}>Cocción</span>
-                          <input value={tCocc} onChange={(e) => setTCocc(e.target.value)} className={inputCls} inputMode="numeric" placeholder="min" />
-                        </label>
-                        <label className="space-y-1">
-                          <span className={labelCls}>Reposo</span>
-                          <input value={tReposo} onChange={(e) => setTReposo(e.target.value)} className={inputCls} inputMode="numeric" placeholder="min" />
-                        </label>
-                        <label className="col-span-3 space-y-1">
-                          <span className={labelCls}>Temperatura servicio</span>
-                          <input value={tempServicio} onChange={(e) => setTempServicio(e.target.value)} className={inputCls} placeholder="62 °C / frío 4 °C" />
-                        </label>
-                        <label className="col-span-3 space-y-1">
-                          <span className={labelCls}>Rendimiento total</span>
-                          <input value={rendimientoTotal} onChange={(e) => setRendimientoTotal(e.target.value)} className={inputCls} placeholder="1 bandeja, 2,5 kg mezcla..." />
-                        </label>
-                        {!isPlateRecipe ? (
-                          <>
+                      <div className="grid gap-2">
+                        {isPlateRecipe ? (
+                          <div className="grid grid-cols-3 gap-1.5">
                             <label className="space-y-1">
-                              <span className={labelCls}>Peso entrada</span>
-                              <input
-                                value={pesoEntradaKg > 0 ? `${pesoEntradaKg.toFixed(2)} kg` : ''}
-                                readOnly
-                                className={`${inputCls} bg-white text-[#7E7468]`}
-                                placeholder="auto"
-                              />
+                              <span className={labelCls}>Raciones</span>
+                              <input value={numeroRaciones} onChange={(e) => setNumeroRaciones(e.target.value)} className={inputCls} inputMode="decimal" />
                             </label>
                             <label className="space-y-1">
-                              <span className={labelCls}>Peso salida</span>
-                              <input
-                                value={finalWeightQty}
-                                onChange={(e) => setFinalWeightQty(e.target.value)}
-                                className={inputCls}
-                                inputMode="decimal"
-                                placeholder="3,5"
-                              />
+                              <span className={labelCls}>Gramaje</span>
+                              <input value={gramajePorRacion} onChange={(e) => setGramajePorRacion(e.target.value)} className={inputCls} />
                             </label>
                             <label className="space-y-1">
-                              <span className={labelCls}>Unidad salida</span>
-                              <select
-                                value={finalWeightUnit}
-                                onChange={(e) => setFinalWeightUnit(e.target.value === 'l' ? 'l' : 'kg')}
-                                className={inputCls}
-                              >
-                                <option value="kg">kg</option>
-                                <option value="l">l</option>
-                              </select>
+                              <span className={labelCls}>Total min</span>
+                              <input value={totalTime > 0 ? String(totalTime) : ''} readOnly className={`${inputCls} bg-white text-[#7E7468]`} />
                             </label>
-                          </>
+                            <label className="space-y-1">
+                              <span className={labelCls}>Prep</span>
+                              <input value={tPrep} onChange={(e) => setTPrep(e.target.value)} className={inputCls} inputMode="numeric" />
+                            </label>
+                            <label className="space-y-1">
+                              <span className={labelCls}>Cocción</span>
+                              <input value={tCocc} onChange={(e) => setTCocc(e.target.value)} className={inputCls} inputMode="numeric" />
+                            </label>
+                            <label className="space-y-1">
+                              <span className={labelCls}>Reposo</span>
+                              <input value={tReposo} onChange={(e) => setTReposo(e.target.value)} className={inputCls} inputMode="numeric" />
+                            </label>
+                            <div className="col-span-3 grid grid-cols-2 gap-1.5">
+                              <label className="space-y-1">
+                                <span className={labelCls}>Temp. servicio</span>
+                                <input value={tempServicio} onChange={(e) => setTempServicio(e.target.value)} className={inputCls} />
+                              </label>
+                              <label className="space-y-1">
+                                <span className={labelCls}>Rendimiento total</span>
+                                <input value={rendimientoTotal} onChange={(e) => setRendimientoTotal(e.target.value)} className={inputCls} />
+                              </label>
+                            </div>
+                          </div>
                         ) : null}
-                        <div className="col-span-3 mt-1 space-y-1.5 border-t border-[rgba(10,9,8,0.06)] pt-2">
+                        <div className="space-y-1.5">
                           <div className="flex items-center justify-between">
-                            <span className={labelCls}>Elaboración / pasos</span>
+                            <span className={labelCls}>Pasos de producción</span>
                             <button type="button" onClick={() => setStepDrafts((prev) => [...prev, newStepDraft()])} className="inline-flex items-center gap-1 rounded-lg border border-dashed border-[rgba(10,9,8,0.16)] px-2 py-1 text-[10px] font-bold text-[#0A0908]">
                               <Plus className="h-3 w-3" aria-hidden />
                               Paso
@@ -941,7 +978,7 @@ export default function EscandalloNewRecipeWizard() {
                                   value={stepDraft.titulo}
                                   onChange={(e) => setStepDrafts((prev) => prev.map((s, i) => (i === idx ? { ...s, titulo: e.target.value } : s)))}
                                   className={`${inputCls} min-w-0 flex-1 bg-white`}
-                                  placeholder="Título"
+                                  aria-label={`Título del paso ${idx + 1}`}
                                 />
                                 <button
                                   type="button"
@@ -957,8 +994,45 @@ export default function EscandalloNewRecipeWizard() {
                                 onChange={(e) => setStepDrafts((prev) => prev.map((s, i) => (i === idx ? { ...s, descripcion: e.target.value } : s)))}
                                 rows={2}
                                 className={`${textareaCls} mt-1 bg-white`}
-                                placeholder="Operación, tiempos, control..."
+                                aria-label={`Descripción del paso ${idx + 1}`}
                               />
+                              <label className="mt-1.5 flex items-center gap-2 rounded-md bg-white px-2 py-1 text-[10px] font-bold text-[#0A0908] ring-1 ring-[rgba(10,9,8,0.06)]">
+                                <input
+                                  type="checkbox"
+                                  checked={Boolean(stepDraft.isCritical)}
+                                  onChange={(e) => setStepDrafts((prev) => prev.map((s, i) => (i === idx ? { ...s, isCritical: e.target.checked } : s)))}
+                                  className="h-3.5 w-3.5 accent-[#C4531F]"
+                                />
+                                Punto crítico
+                              </label>
+                              {stepDraft.isCritical ? (
+                                <div className="mt-1.5 grid grid-cols-2 gap-1.5">
+                                  <label className="space-y-1">
+                                    <span className={labelCls}>Temp. objetivo</span>
+                                    <input
+                                      value={stepDraft.targetTemperature ?? ''}
+                                      onChange={(e) => setStepDrafts((prev) => prev.map((s, i) => (i === idx ? { ...s, targetTemperature: e.target.value } : s)))}
+                                      className={`${inputCls} bg-white`}
+                                    />
+                                  </label>
+                                  <label className="space-y-1">
+                                    <span className={labelCls}>Tiempo objetivo</span>
+                                    <input
+                                      value={stepDraft.targetTime ?? ''}
+                                      onChange={(e) => setStepDrafts((prev) => prev.map((s, i) => (i === idx ? { ...s, targetTime: e.target.value } : s)))}
+                                      className={`${inputCls} bg-white`}
+                                    />
+                                  </label>
+                                  <label className="col-span-2 space-y-1">
+                                    <span className={labelCls}>Observación control</span>
+                                    <input
+                                      value={stepDraft.controlObservation ?? ''}
+                                      onChange={(e) => setStepDrafts((prev) => prev.map((s, i) => (i === idx ? { ...s, controlObservation: e.target.value } : s)))}
+                                      className={`${inputCls} bg-white`}
+                                    />
+                                  </label>
+                                </div>
+                              ) : null}
                             </div>
                           ))}
                         </div>
@@ -968,27 +1042,38 @@ export default function EscandalloNewRecipeWizard() {
                       <div className="grid grid-cols-3 gap-1.5">
                         <label className="space-y-1">
                           <span className={labelCls}>Tipo</span>
-                          <input value={tipoCons} onChange={(e) => setTipoCons(e.target.value)} className={inputCls} placeholder="Refrig." />
+                          <input value={tipoCons} onChange={(e) => setTipoCons(e.target.value)} className={inputCls} />
                         </label>
                         <label className="space-y-1">
                           <span className={labelCls}>Temp.</span>
-                          <input value={tempCons} onChange={(e) => setTempCons(e.target.value)} className={inputCls} placeholder="0-4 °C" />
+                          <input value={tempCons} onChange={(e) => setTempCons(e.target.value)} className={inputCls} />
                         </label>
                         <label className="space-y-1">
                           <span className={labelCls}>Vida</span>
-                          <input value={vidaUtil} onChange={(e) => setVidaUtil(e.target.value)} className={inputCls} placeholder="3 días" />
+                          <input value={vidaUtil} onChange={(e) => setVidaUtil(e.target.value)} className={inputCls} />
                         </label>
                         <label className="col-span-3 space-y-1">
                           <span className={labelCls}>Formato / regeneración</span>
-                          <textarea value={regeneracion} onChange={(e) => setRegeneracion(e.target.value)} rows={2} className={textareaCls} placeholder="Vacío, GN, MAP, regeneración..." />
+                          <textarea value={regeneracion} onChange={(e) => setRegeneracion(e.target.value)} rows={2} className={textareaCls} />
                         </label>
                       </div>
                     ) : null}
                     {id === 'allergens' ? (
-                      <label className="block space-y-1">
-                        <span className={labelCls}>Alérgenos / trazas</span>
-                        <textarea value={alergManual} onChange={(e) => setAlergManual(e.target.value)} rows={2} className={textareaCls} placeholder="Gluten, lactosa, trazas de frutos secos..." />
-                      </label>
+                      <div className="space-y-2">
+                        {allergenChips.length > 0 ? (
+                          <div className="flex flex-wrap gap-1">
+                            {allergenChips.map((chip) => (
+                              <span key={chip} className="rounded-full bg-[#B8872A]/10 px-2 py-1 text-[10px] font-bold text-[#7A5518] ring-1 ring-[#B8872A]/15">
+                                {chip}
+                              </span>
+                            ))}
+                          </div>
+                        ) : null}
+                        <label className="block space-y-1">
+                          <span className={labelCls}>Ajuste manual</span>
+                          <textarea value={alergManual} onChange={(e) => setAlergManual(e.target.value)} rows={2} className={textareaCls} />
+                        </label>
+                      </div>
                     ) : null}
                     {id === 'plating' ? (
                       <div className="grid gap-1.5">
@@ -1031,19 +1116,28 @@ export default function EscandalloNewRecipeWizard() {
                       </div>
                     ) : null}
                     {id === 'appcc' ? (
-                      <p className="text-[11px] font-medium leading-relaxed text-[#7E7468]">
-                        La ficha APPCC se genera al guardar con los ingredientes y los pasos de elaboración que indiques en Producción.
-                      </p>
+                      <div className="space-y-1.5">
+                        {stepDrafts.filter((s) => s.isCritical).length > 0 ? (
+                          stepDrafts
+                            .filter((s) => s.isCritical)
+                            .map((s, idx) => (
+                              <div key={s.key} className="rounded-lg bg-[#FAFAF9] px-2 py-1.5 ring-1 ring-[rgba(10,9,8,0.06)]">
+                                <p className="text-[11px] font-black text-[#0A0908]">{s.titulo.trim() || `Paso ${idx + 1}`}</p>
+                                <p className="mt-0.5 text-[10px] font-semibold text-[#7E7468]">
+                                  {[s.targetTemperature?.trim(), s.targetTime?.trim(), s.controlObservation?.trim()].filter(Boolean).join(' · ') || 'Punto crítico'}
+                                </p>
+                              </div>
+                            ))
+                        ) : (
+                          <p className="text-[11px] font-semibold text-[#7E7468]">Sin puntos críticos marcados en producción.</p>
+                        )}
+                      </div>
                     ) : null}
                     {id === 'observations' ? (
                       <div className="grid gap-1.5">
                         <label className="space-y-1">
                           <span className={labelCls}>Notas del chef</span>
                           <textarea value={notasChef} onChange={(e) => setNotasChef(e.target.value)} rows={2} className={textareaCls} />
-                        </label>
-                        <label className="space-y-1">
-                          <span className={labelCls}>Puntos críticos</span>
-                          <textarea value={puntosCrit} onChange={(e) => setPuntosCrit(e.target.value)} rows={2} className={textareaCls} />
                         </label>
                       </div>
                     ) : null}
@@ -1052,16 +1146,6 @@ export default function EscandalloNewRecipeWizard() {
               </section>
             ))}
           </div>
-
-          <button
-            type="button"
-            disabled={!canFinish}
-            onClick={() => void handleSave()}
-            className="flex h-11 w-full items-center justify-center gap-1.5 rounded-xl bg-[#D32F2F] text-[13px] font-black text-white transition hover:bg-[#B91C1C] disabled:opacity-50"
-          >
-            <Save className="h-4 w-4" aria-hidden />
-            Guardar receta
-          </button>
 
           <div className="fixed left-0 right-0 z-30 border-t border-[rgba(10,9,8,0.08)] bg-white/92 px-3 py-2 shadow-[0_-4px_18px_rgba(10,9,8,0.08)] backdrop-blur-md bottom-[4.55rem] lg:bottom-0 max-lg:pb-[calc(0.55rem+env(safe-area-inset-bottom,0px))]">
             <div className="mx-auto grid max-w-lg grid-cols-[1fr_auto] gap-2">
@@ -1090,7 +1174,7 @@ export default function EscandalloNewRecipeWizard() {
                 className="inline-flex h-full min-w-[8.5rem] items-center justify-center gap-1.5 rounded-xl bg-[#D32F2F] px-3 text-[12px] font-black text-white transition hover:bg-[#B91C1C] disabled:opacity-50"
               >
                 <Save className="h-3.5 w-3.5" aria-hidden />
-                Guardar receta
+                {saveLabel}
               </button>
             </div>
           </div>

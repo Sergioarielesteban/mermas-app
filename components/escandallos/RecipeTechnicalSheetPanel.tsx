@@ -28,13 +28,12 @@ import {
   computeOperationalCost,
   computeYieldCostPerUnit,
   formatOperationalSummary,
-  fromCanonicalQuantity,
   isEscandalloYieldUnit,
   type EscandalloOperationalUsageType,
   type EscandalloYieldUnit,
-  unitFamily,
 } from '@/lib/escandallo-operational-usage';
-import type { EscandalloLine, EscandalloRecipe } from '@/lib/escandallos-supabase';
+import type { EscandalloLine, EscandalloRawProduct, EscandalloRecipe } from '@/lib/escandallos-supabase';
+import { totalInputWeightKg } from '@/lib/escandallo-input-weight';
 import type {
   EscandalloTechnicalSheet,
   EscandalloTechnicalSheetStep,
@@ -68,6 +67,7 @@ type Props = {
   recipeAllergens: RecipeAllergenRow[];
   familyOptions: string[];
   productionTotalCost: number;
+  rawById: Map<string, EscandalloRawProduct>;
   loading: boolean;
   saving: boolean;
   onCreate: () => Promise<void>;
@@ -131,6 +131,7 @@ export default function RecipeTechnicalSheetPanel({
   recipeAllergens,
   familyOptions,
   productionTotalCost,
+  rawById,
   loading,
   saving,
   onCreate,
@@ -256,37 +257,10 @@ export default function RecipeTechnicalSheetPanel({
     return Number.isFinite(n) && n >= 0 ? Math.round(n * 10000) / 10000 : null;
   };
 
-  const inferredInputUnit = useMemo<EscandalloYieldUnit | null>(() => {
-    const units = lines.map((line) => line.unit).filter(Boolean);
-    if (units.some((u) => unitFamily(u) === 'weight')) return 'kg';
-    if (units.some((u) => unitFamily(u) === 'volume')) return 'l';
-    if (units.some((u) => unitFamily(u) === 'unit')) return 'ud';
-    return null;
-  }, [lines]);
-
-  const productionInputQty = useMemo<number | null>(() => {
-    if (!inferredInputUnit) return null;
-    const targetCanonicalUnit =
-      inferredInputUnit === 'kg' ? 'g' : inferredInputUnit === 'l' ? 'ml' : 'ud';
-    let totalCanonical = 0;
-    let hasAny = false;
-    for (const line of lines) {
-      if (unitFamily(line.unit) !== unitFamily(inferredInputUnit)) continue;
-      const canonical =
-        targetCanonicalUnit === 'g'
-          ? (line.unit === 'kg' ? line.qty * 1000 : line.unit === 'g' ? line.qty : null)
-          : targetCanonicalUnit === 'ml'
-            ? (line.unit === 'l' ? line.qty * 1000 : line.unit === 'ml' ? line.qty : null)
-            : line.unit === 'ud'
-              ? line.qty
-              : null;
-      if (canonical == null || !Number.isFinite(canonical) || canonical <= 0) continue;
-      totalCanonical += canonical;
-      hasAny = true;
-    }
-    if (!hasAny) return null;
-    return fromCanonicalQuantity(totalCanonical, inferredInputUnit);
-  }, [lines, inferredInputUnit]);
+  const inputWeight = useMemo(() => totalInputWeightKg(lines, rawById), [lines, rawById]);
+  const productionInputQty = inputWeight.kg > 0 ? Math.round(inputWeight.kg * 1000) / 1000 : null;
+  const inferredInputUnit: EscandalloYieldUnit | null = productionInputQty != null ? 'kg' : null;
+  const hasVolumeWithoutWeightConversion = inputWeight.missingConversionLines.length > 0;
 
   const yieldQtyNum = parseOptDecimal(yieldQuantity);
   const operationalQtyNum = parseOptDecimal(operationalQuantity);
@@ -509,6 +483,11 @@ export default function RecipeTechnicalSheetPanel({
                     placeholder="Auto"
                   />
                 </label>
+                {hasVolumeWithoutWeightConversion ? (
+                  <p className="col-span-3 rounded-lg bg-[#B8872A]/10 px-2 py-1 text-[10px] font-semibold text-[#7A5518]">
+                    Configura equivalencia L → kg para incluir este ingrediente en la entrada total.
+                  </p>
+                ) : null}
                 <label className={metricCls}>
                   <span className={labelCls}>Salida real</span>
                   <input

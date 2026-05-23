@@ -15,7 +15,7 @@ export type EscandalloWizardPersistV1 = {
   yieldLabel: string;
   saleGross: string;
   saleVat: string;
-  recipeKind?: 'plato' | 'base' | 'subelaboracion';
+  recipeKind?: 'plato' | 'base' | 'elaboracion' | 'subelaboracion';
   finalWeightQty?: string;
   finalWeightUnit?: EscandalloYieldUnit;
   operationalUsageType?: EscandalloOperationalUsageType;

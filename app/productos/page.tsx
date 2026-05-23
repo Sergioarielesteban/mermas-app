@@ -17,7 +17,11 @@ import {
   recipeTotalCostEur,
   type EscandalloLine,
 } from '@/lib/escandallos-supabase';
-import { fetchPurchaseArticleCostHintsByIds, fetchPurchaseArticles } from '@/lib/purchase-articles-supabase';
+import {
+  fetchPurchaseArticleCostHintsByIds,
+  fetchPurchaseArticles,
+  updatePurchaseArticleWeightConversionFields,
+} from '@/lib/purchase-articles-supabase';
 import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
 import type { Unit } from '@/lib/types';
 
@@ -68,7 +72,16 @@ export default function ProductosPage() {
   const [masterSearch, setMasterSearch] = useState('');
   const [escandalloSearch, setEscandalloSearch] = useState('');
   const [masterOptions, setMasterOptions] = useState<
-    Array<{ id: string; nombre: string; costeUnitarioUso: number | null; unidadUso: string | null }>
+    Array<{
+      id: string;
+      nombre: string;
+      costeUnitarioUso: number | null;
+      unidadUso: string | null;
+      conversionToWeightEnabled: boolean;
+      conversionWeightUnit: 'kg' | 'g' | null;
+      conversionVolumeUnit: 'l' | 'ml' | null;
+      conversionFactor: number | null;
+    }>
   >([]);
   const [escandalloOptions, setEscandalloOptions] = useState<Array<{ id: string; name: string }>>([]);
   const [baseSubrecipeOptions, setBaseSubrecipeOptions] = useState<Array<{ id: string; name: string; kind: 'recipe' | 'processed' }>>([]);
@@ -78,6 +91,10 @@ export default function ProductosPage() {
   const [escandalloPriceLoading, setEscandalloPriceLoading] = useState(false);
   const [masterPriceLoading, setMasterPriceLoading] = useState(false);
   const [masterComboboxOpen, setMasterComboboxOpen] = useState(false);
+  const [conversionEnabled, setConversionEnabled] = useState(false);
+  const [conversionVolumeUnit, setConversionVolumeUnit] = useState<'l' | 'ml'>('l');
+  const [conversionWeightUnit, setConversionWeightUnit] = useState<'kg' | 'g'>('kg');
+  const [conversionFactor, setConversionFactor] = useState('');
   const masterComboboxRef = useRef<HTMLDivElement | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -168,6 +185,10 @@ export default function ProductosPage() {
             nombre: a.nombre,
             costeUnitarioUso: a.costeUnitarioUso,
             unidadUso: a.unidadUso,
+            conversionToWeightEnabled: a.conversionToWeightEnabled,
+            conversionWeightUnit: a.conversionWeightUnit,
+            conversionVolumeUnit: a.conversionVolumeUnit,
+            conversionFactor: a.conversionFactor,
           })),
         );
         setEscandalloOptions(recipes.map((r) => ({ id: r.id, name: r.name })));
@@ -198,9 +219,31 @@ export default function ProductosPage() {
       setMasterSearch('');
       setMasterAutoPrice(null);
       setMasterComboboxOpen(false);
+      setConversionEnabled(false);
+      setConversionVolumeUnit('l');
+      setConversionWeightUnit('kg');
+      setConversionFactor('');
     }
     setOriginType(id);
   };
+
+  useEffect(() => {
+    if (originType !== 'master' || !masterArticleId) {
+      if (originType !== 'master') {
+        setConversionEnabled(false);
+        setConversionVolumeUnit('l');
+        setConversionWeightUnit('kg');
+        setConversionFactor('');
+      }
+      return;
+    }
+    const article = masterOptions.find((x) => x.id === masterArticleId);
+    if (!article) return;
+    setConversionEnabled(article.conversionToWeightEnabled);
+    setConversionVolumeUnit(article.conversionVolumeUnit ?? 'l');
+    setConversionWeightUnit(article.conversionWeightUnit ?? 'kg');
+    setConversionFactor(article.conversionFactor != null ? String(article.conversionFactor) : '');
+  }, [originType, masterArticleId, masterOptions]);
 
   useEffect(() => {
     const onDoc = (e: MouseEvent) => {
@@ -690,6 +733,43 @@ export default function ProductosPage() {
     }
     const pricePerUnit = numeric ?? 0;
 
+    if (originType === 'master') {
+      if (!localId || !isSupabaseEnabled()) {
+        setMessage('No hay conexión para guardar la equivalencia del artículo máster.');
+        return;
+      }
+      const supabase = getSupabaseClient();
+      if (!supabase) {
+        setMessage('Conexión a datos no disponible.');
+        return;
+      }
+      const factor = Number(conversionFactor.trim().replace(',', '.'));
+      try {
+        await updatePurchaseArticleWeightConversionFields(supabase, localId, masterArticleId, {
+          conversionToWeightEnabled: conversionEnabled,
+          conversionVolumeUnit: conversionEnabled ? conversionVolumeUnit : null,
+          conversionWeightUnit: conversionEnabled ? conversionWeightUnit : null,
+          conversionFactor: conversionEnabled ? factor : null,
+        });
+        setMasterOptions((prev) =>
+          prev.map((article) =>
+            article.id === masterArticleId
+              ? {
+                  ...article,
+                  conversionToWeightEnabled: conversionEnabled,
+                  conversionVolumeUnit: conversionEnabled ? conversionVolumeUnit : null,
+                  conversionWeightUnit: conversionEnabled ? conversionWeightUnit : null,
+                  conversionFactor: conversionEnabled ? Math.round(factor * 1000000) / 1000000 : null,
+                }
+              : article,
+          ),
+        );
+      } catch (err: unknown) {
+        setMessage(err instanceof Error ? err.message : 'No se pudo guardar la equivalencia del artículo.');
+        return;
+      }
+    }
+
     if (editingId) {
       updateProduct(editingId, {
         name,
@@ -761,6 +841,10 @@ export default function ProductosPage() {
     setCompositionLines([]);
     setEscandalloAutoPrice(null);
     setMasterAutoPrice(null);
+    setConversionEnabled(false);
+    setConversionVolumeUnit('l');
+    setConversionWeightUnit('kg');
+    setConversionFactor('');
     setEditingId(null);
     setOpen(false);
   };
@@ -860,6 +944,13 @@ export default function ProductosPage() {
                         unit: x.unit as Unit,
                       })),
                     );
+                    const master = p.masterArticleId
+                      ? masterOptionsRef.current.find((x) => x.id === p.masterArticleId)
+                      : null;
+                    setConversionEnabled(Boolean(master?.conversionToWeightEnabled));
+                    setConversionVolumeUnit(master?.conversionVolumeUnit ?? 'l');
+                    setConversionWeightUnit(master?.conversionWeightUnit ?? 'kg');
+                    setConversionFactor(master?.conversionFactor != null ? String(master.conversionFactor) : '');
                     setOpen(true);
                     setMessage(null);
                   }}
@@ -920,6 +1011,10 @@ export default function ProductosPage() {
           setCompositionLines([]);
           setEscandalloAutoPrice(null);
           setMasterAutoPrice(null);
+          setConversionEnabled(false);
+          setConversionVolumeUnit('l');
+          setConversionWeightUnit('kg');
+          setConversionFactor('');
           setMessage(null);
         }}
         className="fixed bottom-24 right-6 z-40 grid h-16 w-16 place-items-center rounded-full bg-gradient-to-r from-[#B91C1C] to-[#D32F2F] text-white shadow-xl"
@@ -955,6 +1050,10 @@ export default function ProductosPage() {
                     setCompositionLines([]);
                     setEscandalloAutoPrice(null);
                     setMasterAutoPrice(null);
+                    setConversionEnabled(false);
+                    setConversionVolumeUnit('l');
+                    setConversionWeightUnit('kg');
+                    setConversionFactor('');
                   }}
                   className="grid h-9 w-9 place-items-center rounded-lg text-zinc-600 hover:bg-zinc-100"
                   aria-label="Cerrar"
@@ -1069,6 +1168,59 @@ export default function ProductosPage() {
                           {masterOptions.find((x) => x.id === masterArticleId)?.nombre ?? masterSearch}
                         </span>
                       </p>
+                    ) : null}
+                    {masterArticleId ? (
+                      <div className="rounded-xl border border-[rgba(10,9,8,0.08)] bg-white p-3">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="text-[11px] font-black uppercase tracking-[0.12em] text-zinc-800">
+                              Equivalencia para escandallos
+                            </p>
+                            <p className="mt-0.5 text-[10px] leading-snug text-zinc-500">
+                              Útil para nata, leche, aceite, caldos o líquidos que se pesan en producción.
+                            </p>
+                          </div>
+                          <label className="inline-flex shrink-0 items-center gap-2 text-[11px] font-bold text-zinc-700">
+                            <input
+                              type="checkbox"
+                              checked={conversionEnabled}
+                              onChange={(e) => setConversionEnabled(e.target.checked)}
+                              className="h-4 w-4 rounded border-zinc-300 accent-[#D32F2F]"
+                            />
+                            Activar
+                          </label>
+                        </div>
+                        <div className="mt-3 grid grid-cols-[auto_4.5rem_1fr_5rem_4.5rem] items-center gap-1.5">
+                          <span className="text-[11px] font-semibold text-zinc-600">1</span>
+                          <select
+                            value={conversionVolumeUnit}
+                            disabled={!conversionEnabled}
+                            onChange={(e) => setConversionVolumeUnit(e.target.value as 'l' | 'ml')}
+                            className="h-9 rounded-lg border border-zinc-200 bg-zinc-50 px-2 text-xs font-semibold text-zinc-900 outline-none focus:border-[#D32F2F] disabled:bg-zinc-100 disabled:text-zinc-400"
+                          >
+                            <option value="l">l</option>
+                            <option value="ml">ml</option>
+                          </select>
+                          <span className="text-center text-[11px] font-semibold text-zinc-500">equivale a</span>
+                          <input
+                            value={conversionFactor}
+                            disabled={!conversionEnabled}
+                            onChange={(e) => setConversionFactor(e.target.value)}
+                            inputMode="decimal"
+                            placeholder="1"
+                            className="h-9 rounded-lg border border-zinc-200 bg-zinc-50 px-2 text-xs font-bold tabular-nums text-zinc-900 outline-none focus:border-[#D32F2F] disabled:bg-zinc-100 disabled:text-zinc-400"
+                          />
+                          <select
+                            value={conversionWeightUnit}
+                            disabled={!conversionEnabled}
+                            onChange={(e) => setConversionWeightUnit(e.target.value as 'kg' | 'g')}
+                            className="h-9 rounded-lg border border-zinc-200 bg-zinc-50 px-2 text-xs font-semibold text-zinc-900 outline-none focus:border-[#D32F2F] disabled:bg-zinc-100 disabled:text-zinc-400"
+                          >
+                            <option value="kg">kg</option>
+                            <option value="g">g</option>
+                          </select>
+                        </div>
+                      </div>
                     ) : null}
                   </div>
                 ) : null}

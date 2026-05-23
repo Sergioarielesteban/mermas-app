@@ -19,6 +19,7 @@ import type { EscandalloTechnicalSheet } from '@/lib/escandallos-technical-sheet
 import { formatUnitPriceEur, roundMoney } from '@/lib/money-format';
 import { resolveOperationalPrice, type OperationalPriceSource } from '@/lib/operational-price';
 import { fetchPurchaseArticleCostHintsByIds } from '@/lib/purchase-articles-supabase';
+import type { VolumeConversionUnit, WeightConversionUnit } from '@/lib/escandallo-input-weight';
 import { fetchOrders } from '@/lib/pedidos-supabase';
 import type { Unit } from '@/lib/types';
 
@@ -105,6 +106,11 @@ export type EscandalloRawProduct = {
   internalCostPerUsageUnitEur?: number | null;
   /** Texto de `purchase_articles.unidad_uso` (debe coincidir con la unidad de la línea para aplicar coste interno). */
   internalUsageUnitLabel?: string | null;
+  /** Conversión opcional por artículo: volumen usado en escandallo → peso equivalente para entrada/merma. */
+  conversionToWeightEnabled?: boolean | null;
+  conversionWeightUnit?: WeightConversionUnit | null;
+  conversionVolumeUnit?: VolumeConversionUnit | null;
+  conversionFactor?: number | null;
 };
 
 export type EscandalloProcessedProduct = {
@@ -392,8 +398,14 @@ export async function fetchEscandalloRawProductsWithWeightedPurchasePrices(
     const h = hints.get(p.articleId);
     if (!h) return p;
     const label = h.unidadUso?.trim().replace(/\s+/g, ' ') ?? '';
-    if (!label) return p;
-    const next: EscandalloRawProduct = { ...p, internalUsageUnitLabel: label };
+    const next: EscandalloRawProduct = {
+      ...p,
+      internalUsageUnitLabel: label || (p.internalUsageUnitLabel ?? null),
+      conversionToWeightEnabled: h.conversionToWeightEnabled,
+      conversionWeightUnit: h.conversionWeightUnit,
+      conversionVolumeUnit: h.conversionVolumeUnit,
+      conversionFactor: h.conversionFactor,
+    };
     if (h.costeUnitarioUso != null && Number.isFinite(h.costeUnitarioUso)) {
       return { ...next, internalCostPerUsageUnitEur: h.costeUnitarioUso };
     }

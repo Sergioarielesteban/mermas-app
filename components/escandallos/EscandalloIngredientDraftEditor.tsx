@@ -20,6 +20,7 @@ import {
 } from '@/lib/escandallos-supabase';
 import type { EscandalloTechnicalSheet } from '@/lib/escandallos-technical-sheet-supabase';
 import { formatMoneyEur, formatUnitPriceEur, roundMoney } from '@/lib/money-format';
+import { rawIngredientWeightDetail } from '@/lib/escandallo-input-weight';
 
 export type EscandalloIngredientDraftEditorProps = {
   drafts: IngredientDraftRow[];
@@ -198,6 +199,12 @@ export default function EscandalloIngredientDraftEditor({
     const subLines = row.sourceType === 'subrecipe' && row.subRecipeId ? (linesByRecipe[row.subRecipeId] ?? []) : [];
     const dispUnit = displayUnitForRow(row, sortedRaw, processedProducts);
     const configured = draftRowConfigured(row);
+    const rawProduct = row.sourceType === 'raw' && row.rawId ? sortedRaw.find((x) => x.id === row.rawId) : null;
+    const qtyNum = parseDecimal(row.qty);
+    const rawWeightDetail =
+      row.sourceType === 'raw' && rawProduct && qtyNum != null
+        ? rawIngredientWeightDetail(qtyNum, dispUnit, rawProduct)
+        : null;
     const subrecipeConfig =
       row.sourceType === 'subrecipe' ? getSubrecipeOperationalConfig(row, recipesById, technicalSheetsByRecipe) : null;
     const usingStandard = row.sourceType === 'subrecipe' && row.subRecipeUsageMode === 'standard_portion';
@@ -409,6 +416,11 @@ export default function EscandalloIngredientDraftEditor({
                 </button>
               </div>
             </div>
+            {rawWeightDetail ? (
+              <p className="mt-1 text-[9px] font-medium text-[#7E7468]">
+                {rawProduct?.name} · {rawWeightDetail}
+              </p>
+            ) : null}
           </div>
         </div>
         {row.sourceType === 'subrecipe' && subLines.length > 0 ? (
@@ -468,6 +480,11 @@ export default function EscandalloIngredientDraftEditor({
           row.sourceType === 'subrecipe' ? getSubrecipeOperationalConfig(row, recipesById, technicalSheetsByRecipe) : null;
         const qtyNum = parseDecimal(row.qty);
         const dispUnit = displayUnitForRow(row, sortedRaw, processedProducts);
+        const rawProduct = row.sourceType === 'raw' && row.rawId ? sortedRaw.find((x) => x.id === row.rawId) : null;
+        const rawWeightDetail =
+          row.sourceType === 'raw' && rawProduct && qtyNum != null
+            ? rawIngredientWeightDetail(qtyNum, dispUnit, rawProduct)
+            : null;
         const unitEurForLine =
           est != null && qtyNum != null && qtyNum > 0 ? est / qtyNum : null;
         const unitPriceStr =
@@ -785,6 +802,11 @@ export default function EscandalloIngredientDraftEditor({
                             ? formatUnitPriceEur(subrecipeConfig.yieldCostPerUnit, subrecipeConfig.yieldUnit)
                             : unitPriceStr
                         }`}
+                  </p>
+                ) : null}
+                {rawWeightDetail ? (
+                  <p className="text-[10px] leading-snug text-zinc-500">
+                    {rawProduct?.name} · {rawWeightDetail}
                   </p>
                 ) : null}
                 <p className="text-lg font-black tabular-nums text-zinc-900">
