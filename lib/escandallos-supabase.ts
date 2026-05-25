@@ -84,13 +84,17 @@ export type EscandalloRawProduct = {
   supplierId: string;
   supplierName: string;
   name: string;
+  /** Unidad de compra / entrega (caja, kg, bandeja...). */
   unit: Unit;
   /**
-   * Precio por unidad de pedido (envase, kg…) usado en costes.
-   * Tras `fetchEscandalloRawProductsWithWeightedPurchasePrices`, si hay compras en ventana,
-   * es el PMP (misma idea que Pedidos → Precios, modo €/ud); si no, el precio de ficha del catálogo.
+   * Precio operativo por `pricingUnit` usado en escandallos.
+   * Si el proveedor factura por kg/l/ud distinto a la compra, aquí viaja ese precio real.
    */
   pricePerUnit: number;
+  /** Unidad real del precio operativo (billing_unit si aplica; si no, unit). */
+  pricingUnit?: Unit;
+  /** Cantidad de `pricingUnit` contenida en 1 unidad de compra, si la facturación difiere. */
+  pricingQtyPerPurchaseUnit?: number | null;
   /** Fuente aplicada al precio operativo del proveedor (PMP > último precio > sin precio). */
   operationalPriceSource?: OperationalPriceSource;
   /** Piezas de receta por cada unidad de pedido. 1 = el precio ya es €/unidad de receta. */
@@ -169,6 +173,9 @@ type RawProductRow = {
   name: string;
   unit: string;
   price_per_unit: number;
+  billing_unit?: string | null;
+  billing_qty_per_order_unit?: number | null;
+  price_per_billing_unit?: number | null;
   units_per_pack?: number | null;
   recipe_unit?: string | null;
   article_id?: string | null;
@@ -337,7 +344,7 @@ export async function fetchProductsForEscandallo(
 ): Promise<EscandalloRawProduct[]> {
   const { data, error } = await supabase
     .from('pedido_supplier_products')
-    .select('id,supplier_id,name,unit,price_per_unit,units_per_pack,recipe_unit,article_id,pedido_suppliers(name)')
+    .select('id,supplier_id,name,unit,price_per_unit,billing_unit,billing_qty_per_order_unit,price_per_billing_unit,units_per_pack,recipe_unit,article_id,pedido_suppliers(name)')
     .eq('local_id', localId)
     .eq('is_active', true)
     .order('name');
@@ -349,7 +356,27 @@ export async function fetchProductsForEscandallo(
       unitsPerPack > 1 && r.recipe_unit != null && String(r.recipe_unit).trim() !== ''
         ? (String(r.recipe_unit) as Unit)
         : null;
-    const supplierPrice = Number(r.price_per_unit);
+    const billingUnit =
+      r.billing_unit != null && String(r.billing_unit).trim() !== ''
+        ? (String(r.billing_unit) as Unit)
+        : null;
+    const billingQtyPerOrderUnit =
+      r.billing_qty_per_order_unit != null && Number.isFinite(Number(r.billing_qty_per_order_unit))
+        ? Number(r.billing_qty_per_order_unit)
+        : null;
+    const pricePerBillingUnit =
+      r.price_per_billing_unit != null && Number.isFinite(Number(r.price_per_billing_unit))
+        ? Number(r.price_per_billing_unit)
+        : null;
+    const hasDualBilling =
+      billingUnit != null &&
+      billingUnit !== (r.unit as Unit) &&
+      billingQtyPerOrderUnit != null &&
+      billingQtyPerOrderUnit > 0 &&
+      pricePerBillingUnit != null &&
+      pricePerBillingUnit > 0;
+    const supplierPrice = hasDualBilling ? pricePerBillingUnit! : Number(r.price_per_unit);
+    const pricingUnit = hasDualBilling ? billingUnit! : (r.unit as Unit);
     const { price, source } = resolveOperationalPrice({ supplierLastPrice: supplierPrice });
     return {
       id: r.id,
@@ -358,6 +385,8 @@ export async function fetchProductsForEscandallo(
       name: r.name,
       unit: r.unit as Unit,
       pricePerUnit: price ?? 0,
+      pricingUnit,
+      pricingQtyPerPurchaseUnit: hasDualBilling ? billingQtyPerOrderUnit : null,
       operationalPriceSource: source,
       unitsPerPack,
       recipeUnit,
@@ -385,9 +414,10 @@ export async function fetchEscandalloRawProductsWithWeightedPurchasePrices(
   );
   const withPmp = products.map((p) => {
     const w = weighted.get(p.id);
+    const supplierLastPrice = p.pricePerUnit;
     const resolved = resolveOperationalPrice({
       pmpPrice: w != null && w.weightedQty > 0 ? w.weightedAvg : null,
-      supplierLastPrice: p.pricePerUnit,
+      supplierLastPrice,
     });
     return { ...p, pricePerUnit: resolved.price ?? 0, operationalPriceSource: resolved.source };
   });
@@ -417,6 +447,7 @@ export async function fetchEscandalloRawProductsWithWeightedPurchasePrices(
 export function escandalloRecipeUnitForRawProduct(p: EscandalloRawProduct): EscandalloIngredientUnit {
   const master = p.internalUsageUnitLabel?.trim();
   if (master) return sanitizeEscandalloIngredientUnit(master);
+  if (p.pricingUnit && p.pricingUnit !== p.unit) return sanitizeEscandalloIngredientUnit(String(p.pricingUnit));
   const n = p.unitsPerPack > 0 ? p.unitsPerPack : 1;
   if (n > 1) return sanitizeEscandalloIngredientUnit(String(p.recipeUnit ?? 'ud'));
   return sanitizeEscandalloIngredientUnit(String(p.unit));
@@ -426,8 +457,13 @@ export function escandalloRecipeUnitForRawProduct(p: EscandalloRawProduct): Esca
 export function rawSupplierLineUnitPriceEur(line: EscandalloLine, p: EscandalloRawProduct): number {
   const packSize = p.unitsPerPack > 0 ? p.unitsPerPack : 1;
   const purchaseUnit = sanitizeEscandalloIngredientUnit(String(p.unit));
+  const pricingUnit = sanitizeEscandalloIngredientUnit(String(p.pricingUnit ?? p.unit));
   const usageUnit = escandalloRecipeUnitForRawProduct(p);
   const lineUnit = sanitizeEscandalloIngredientUnit(String(line.unit));
+  const pricingQtyPerPurchaseUnit =
+    p.pricingQtyPerPurchaseUnit != null && Number.isFinite(p.pricingQtyPerPurchaseUnit) && p.pricingQtyPerPurchaseUnit > 0
+      ? p.pricingQtyPerPurchaseUnit
+      : null;
 
   const convFactor = (from: string, to: string): number | null => {
     if (unitsMatchForIngredientCost(from, to)) return 1;
@@ -440,41 +476,44 @@ export function rawSupplierLineUnitPriceEur(line: EscandalloLine, p: EscandalloR
     return null;
   };
 
-  // 1) Si existe coste_unitario_uso del Artículo Máster, siempre prevalece.
-  let usageUnitPrice =
-    p.internalCostPerUsageUnitEur != null && Number.isFinite(p.internalCostPerUsageUnitEur) && p.internalCostPerUsageUnitEur > 0
-      ? p.internalCostPerUsageUnitEur
-      : null;
-
-  // 2) Si no hay coste de uso interno, convertir precio operativo de compra a unidad de uso.
-  if (usageUnitPrice == null) {
-    if (packSize > 1) {
-      usageUnitPrice = p.pricePerUnit / packSize;
-    } else {
-      const f = convFactor(purchaseUnit, usageUnit);
-      usageUnitPrice = f != null ? p.pricePerUnit * f : p.pricePerUnit;
+  // 1) Prioridad real de escandallo: PMP / último válido / catálogo en la unidad de precio del proveedor.
+  if (p.pricePerUnit != null && Number.isFinite(p.pricePerUnit) && p.pricePerUnit > 0) {
+    const directToLine = convFactor(pricingUnit, lineUnit);
+    if (directToLine != null) return roundMoney(p.pricePerUnit * directToLine);
+    if (pricingQtyPerPurchaseUnit != null && unitsMatchForIngredientCost(lineUnit, purchaseUnit)) {
+      return roundMoney(p.pricePerUnit * pricingQtyPerPurchaseUnit);
+    }
+    const toUsage = convFactor(pricingUnit, usageUnit);
+    if (toUsage != null) {
+      const usageUnitPrice = p.pricePerUnit * toUsage;
+      const usageToLine = convFactor(usageUnit, lineUnit);
+      if (usageToLine != null) return roundMoney(usageUnitPrice * usageToLine);
+      if (unitsMatchForIngredientCost(usageUnit, lineUnit)) return roundMoney(usageUnitPrice);
     }
   }
 
-  if (usageUnitPrice == null || !Number.isFinite(usageUnitPrice) || usageUnitPrice <= 0) return 0;
-
-  // 3) Ajustar al unit de la línea desde unidad de uso (kg↔g, l↔ml, equivalentes exactos).
+  // 2) Fallback final: coste manual/derivado del artículo máster en unidad de uso.
+  const usageUnitPrice =
+    p.internalCostPerUsageUnitEur != null && Number.isFinite(p.internalCostPerUsageUnitEur) && p.internalCostPerUsageUnitEur > 0
+      ? p.internalCostPerUsageUnitEur
+      : null;
+  if (usageUnitPrice == null) return 0;
   const toLine = convFactor(usageUnit, lineUnit);
   if (toLine != null) return roundMoney(usageUnitPrice * toLine);
-
-  // Fallback seguro: mantener coste por unidad de uso (nunca precio de caja bruto).
-  return roundMoney(usageUnitPrice);
+  if (unitsMatchForIngredientCost(usageUnit, lineUnit)) return roundMoney(usageUnitPrice);
+  return 0;
 }
 
 export function rawProductPickerSummaryLine(p: EscandalloRawProduct): string {
   const pack = p.unitsPerPack > 0 ? p.unitsPerPack : 1;
   const base = `${p.supplierName} · ${p.name}`;
+  const priceUnit = p.pricingUnit ?? p.unit;
   if (pack > 1) {
     const ru = p.recipeUnit ?? 'ud';
     const each = roundMoney(p.pricePerUnit / pack);
-    return `${base} (compra ${formatUnitPriceEur(p.pricePerUnit, p.unit)} · coste uso ${formatUnitPriceEur(each, ru)} · ×${pack})`;
+    return `${base} (precio ${formatUnitPriceEur(p.pricePerUnit, priceUnit)} · coste uso ${formatUnitPriceEur(each, ru)} · ×${pack})`;
   }
-  return `${base} (${formatUnitPriceEur(p.pricePerUnit, p.unit)})`;
+  return `${base} (${formatUnitPriceEur(p.pricePerUnit, priceUnit)})`;
 }
 
 export async function fetchProcessedProductsForEscandallo(

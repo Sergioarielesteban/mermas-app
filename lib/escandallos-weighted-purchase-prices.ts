@@ -9,6 +9,25 @@ function orderBillDate(order: PedidoOrder): string {
 
 /** Misma regla que Pedidos → Precios (modo unitario): precio efectivo por unidad de catálogo en la línea. */
 function unitPriceForPurchaseHistory(item: PedidoOrder['items'][number]): number | null {
+  if (
+    item.billingUnit != null &&
+    item.billingUnit !== item.unit &&
+    item.receivedPricePerKg != null &&
+    Number.isFinite(item.receivedPricePerKg) &&
+    item.receivedPricePerKg > 0 &&
+    item.billingUnit === 'kg'
+  ) {
+    return Math.round(item.receivedPricePerKg * 10000) / 10000;
+  }
+  if (
+    item.billingUnit != null &&
+    item.billingUnit !== item.unit &&
+    item.pricePerBillingUnit != null &&
+    Number.isFinite(item.pricePerBillingUnit) &&
+    item.pricePerBillingUnit > 0
+  ) {
+    return Math.round(item.pricePerBillingUnit * 10000) / 10000;
+  }
   const p = item.pricePerUnit;
   if (Number.isFinite(p) && p > 0) return Math.round(p * 100) / 100;
   const billed = billingQuantityForLine(item);

@@ -565,15 +565,20 @@ function ArticleCard({
   const principalRefRow =
     (refProdId ? compareRows.find((r) => r.id === refProdId) : null) ?? originRow ?? compareRows[0];
   const nombreVisibleProveedor = principalRefRow?.name?.trim() || '';
+  const facturacionUnit = (principalRefRow?.billingUnit ?? principalRefRow?.unit ?? a.unidadCompra ?? 'ud') as string;
   const compraUnitEur =
     principalRefRow != null
       ? principalRefRow.pricePerUnit
       : a.costeCompraActual ?? master ?? null;
+  const precioFacturacionEur =
+    principalRefRow?.pricePerBillingUnit != null
+      ? principalRefRow.pricePerBillingUnit
+      : compraUnitEur;
   const factorNum = Number(String(factorUso).replace(/\s/g, '').replace(',', '.'));
   const rendNum = Number(String(rendPct).replace(/\s/g, '').replace(',', '.'));
   const previewCosteUso =
-    compraUnitEur != null && Number.isFinite(factorNum) && factorNum > 0 && Number.isFinite(rendNum)
-      ? computeCosteUnitarioUsoEur(compraUnitEur, factorNum, rendNum > 0 ? rendNum : 100)
+    precioFacturacionEur != null && Number.isFinite(factorNum) && factorNum > 0 && Number.isFinite(rendNum)
+      ? computeCosteUnitarioUsoEur(precioFacturacionEur, factorNum, rendNum > 0 ? rendNum : 100)
       : null;
 
   const saveMasterEconomics = async () => {
@@ -714,6 +719,8 @@ function ArticleCard({
   const unitCompra = (principalRefRow?.unit ?? a.unidadCompra ?? 'ud') as string;
   const precioCompraLine =
     compraUnitEur != null ? formatUnitPriceEur(roundMoney(compraUnitEur), unitCompra) : '—';
+  const precioFacturacionLine =
+    precioFacturacionEur != null ? formatUnitPriceEur(roundMoney(precioFacturacionEur), facturacionUnit) : '—';
   const factorMeta =
     Number.isFinite(factorNum) && factorNum > 0
       ? `${factorNum.toLocaleString('es-ES', { maximumFractionDigits: 4 })} ud`
@@ -860,10 +867,18 @@ function ArticleCard({
                     <dd className="mt-0.5 font-black text-zinc-950">{principalRefRow?.unit ?? a.unidadCompra ?? '—'}</dd>
                   </div>
                   <div>
+                    <dt className="text-[9px] font-bold uppercase text-zinc-400">Unidad facturación / precio</dt>
+                    <dd className="mt-0.5 font-black text-zinc-950">{facturacionUnit}</dd>
+                  </div>
+                  <div>
                     <dt className="text-[9px] font-bold uppercase text-zinc-400">Último recibido</dt>
                     <dd className="mt-0.5 font-black tabular-nums text-zinc-950">
                       {compraUnitEur != null ? formatMoneyEur(roundMoney(compraUnitEur)) : '—'}
                     </dd>
+                  </div>
+                  <div>
+                    <dt className="text-[9px] font-bold uppercase text-zinc-400">Precio operativo</dt>
+                    <dd className="mt-0.5 font-black tabular-nums text-zinc-950">{precioFacturacionLine}</dd>
                   </div>
                   <div>
                     <dt className="text-[9px] font-bold uppercase text-zinc-400">IVA</dt>
@@ -881,7 +896,7 @@ function ArticleCard({
                     <option value="">—</option>
                     {compareRows.map((r) => (
                       <option key={r.id} value={r.id}>
-                        {r.supplierName} · {r.name} ({formatUnitPriceEur(r.pricePerUnit, r.unit)})
+                        {r.supplierName} · {r.name} ({formatUnitPriceEur(r.pricePerBillingUnit ?? r.pricePerUnit, r.billingUnit ?? r.unit)})
                       </option>
                     ))}
                   </select>
@@ -1105,7 +1120,7 @@ function ArticleCard({
                         </div>
                         <div className="shrink-0 text-right">
                           <p className="text-sm font-black tabular-nums text-zinc-950">
-                            {formatUnitPriceEur(row.pricePerUnit, row.unit)}
+                            {formatUnitPriceEur(row.pricePerBillingUnit ?? row.pricePerUnit, row.billingUnit ?? row.unit)}
                           </p>
                           <p
                             className={[
@@ -1120,6 +1135,9 @@ function ArticleCard({
                       <div className="mt-1.5 grid grid-cols-2 gap-2 text-[10px] text-zinc-500">
                         <p>
                           Unidad compra: <span className="font-bold text-zinc-800">{row.unit}</span>
+                        </p>
+                        <p className="text-right">
+                          Facturación: <span className="font-bold text-zinc-800">{row.billingUnit ?? row.unit}</span>
                         </p>
                         <p className="text-right">
                           Última compra:{' '}

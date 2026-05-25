@@ -80,6 +80,9 @@ export type SupplierCatalogRow = {
   name: string;
   unit: string;
   pricePerUnit: number;
+  billingUnit: string | null;
+  billingQtyPerOrderUnit: number | null;
+  pricePerBillingUnit: number | null;
   isActive: boolean;
 };
 
@@ -105,7 +108,7 @@ export async function fetchSupplierCatalogRowsForArticleIds(
   if (!articleIds.length) return map;
   const { data, error } = await supabase
     .from('pedido_supplier_products')
-    .select('id,supplier_id,article_id,name,unit,price_per_unit,is_active,pedido_suppliers(name)')
+    .select('id,supplier_id,article_id,name,unit,price_per_unit,billing_unit,billing_qty_per_order_unit,price_per_billing_unit,is_active,pedido_suppliers(name)')
     .eq('local_id', localId)
     .in('article_id', articleIds);
   if (error) throw new Error(error.message);
@@ -128,6 +131,15 @@ export async function fetchSupplierCatalogRowsForArticleIds(
       name: String(row.name ?? ''),
       unit: String(row.unit ?? ''),
       pricePerUnit: Number(row.price_per_unit ?? 0),
+      billingUnit: row.billing_unit != null ? String(row.billing_unit) : null,
+      billingQtyPerOrderUnit:
+        row.billing_qty_per_order_unit != null && Number.isFinite(Number(row.billing_qty_per_order_unit))
+          ? Number(row.billing_qty_per_order_unit)
+          : null,
+      pricePerBillingUnit:
+        row.price_per_billing_unit != null && Number.isFinite(Number(row.price_per_billing_unit))
+          ? Number(row.price_per_billing_unit)
+          : null,
       isActive: Boolean(row.is_active),
     };
     const list = map.get(aid) ?? [];
