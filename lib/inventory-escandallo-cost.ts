@@ -23,6 +23,7 @@ type LineRow = {
   raw_supplier_product_id: string | null;
   processed_product_id: string | null;
   sub_recipe_id: string | null;
+  central_production_recipe_id?: string | null;
   label: string;
   qty: number;
   unit: string;
@@ -34,7 +35,13 @@ type LineRow = {
 function mapLine(row: LineRow): EscandalloLine {
   const rawSt = row.source_type ?? 'manual';
   const sourceType: EscandalloLine['sourceType'] =
-    rawSt === 'raw' || rawSt === 'processed' || rawSt === 'manual' || rawSt === 'subrecipe' ? rawSt : 'manual';
+    rawSt === 'raw' ||
+    rawSt === 'processed' ||
+    rawSt === 'manual' ||
+    rawSt === 'subrecipe' ||
+    rawSt === 'central_kitchen'
+      ? rawSt
+      : 'manual';
   return {
     id: row.id,
     localId: row.local_id,
@@ -43,6 +50,7 @@ function mapLine(row: LineRow): EscandalloLine {
     rawSupplierProductId: row.raw_supplier_product_id,
     processedProductId: row.processed_product_id,
     subRecipeId: row.sub_recipe_id ?? null,
+    centralProductionRecipeId: row.central_production_recipe_id ?? null,
     label: row.label,
     qty: Number(row.qty),
     unit: sanitizeEscandalloIngredientUnit(String(row.unit)),

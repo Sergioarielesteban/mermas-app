@@ -42,6 +42,8 @@ function logAccessDebug(input: {
   bypass: boolean;
   reason: 'admin_bypass' | 'blocked_plan' | 'blocked_role' | 'allowed';
 }) {
+  if (process.env.NODE_ENV === 'production') return;
+  if (process.env.NEXT_PUBLIC_ACCESS_DEBUG !== '1') return;
   const now = Date.now();
   const key = `${input.role ?? 'none'}|${input.plan ?? 'none'}|${input.module}|${input.reason}|${input.bypass}`;
   const last = ACCESS_DEBUG_RECENT.get(key) ?? 0;

@@ -21,6 +21,7 @@ import { fetchPurchaseArticleCostHintsByIds } from '@/lib/purchase-articles-supa
 import type { VolumeConversionUnit, WeightConversionUnit } from '@/lib/escandallo-input-weight';
 import { fetchWeightedAvgHistoricoComparableBySupplierProductIds } from '@/lib/pedidos-supabase';
 import type { Unit } from '@/lib/types';
+import type { EscandalloCentralKitchenCatalogItem } from '@/lib/central-kitchen-public-catalog';
 
 export type EscandalloRecipe = {
   id: string;
@@ -48,10 +49,11 @@ export type EscandalloLine = {
   id: string;
   localId: string;
   recipeId: string;
-  sourceType: 'raw' | 'processed' | 'manual' | 'subrecipe';
+  sourceType: 'raw' | 'processed' | 'manual' | 'subrecipe' | 'central_kitchen';
   rawSupplierProductId: string | null;
   processedProductId: string | null;
   subRecipeId: string | null;
+  centralProductionRecipeId: string | null;
   label: string;
   qty: number;
   unit: EscandalloIngredientUnit;
@@ -68,6 +70,7 @@ export type EscandalloRecipePriceContext = {
   linesByRecipe: Record<string, EscandalloLine[]>;
   recipesById: Map<string, EscandalloRecipe>;
   technicalSheetsByRecipe?: Map<string, EscandalloTechnicalSheet>;
+  centralKitchenById?: Map<string, EscandalloCentralKitchenCatalogItem>;
   recipeId: string;
 };
 
@@ -75,6 +78,7 @@ type LinePriceInnerContext = {
   linesByRecipe: Record<string, EscandalloLine[]>;
   recipesById: Map<string, EscandalloRecipe>;
   technicalSheetsByRecipe?: Map<string, EscandalloTechnicalSheet>;
+  centralKitchenById?: Map<string, EscandalloCentralKitchenCatalogItem>;
   expanding: Set<string>;
 };
 
@@ -180,10 +184,11 @@ type LineRow = {
   id: string;
   local_id: string;
   recipe_id: string;
-  source_type: 'raw' | 'processed' | 'manual' | 'subrecipe' | null;
+  source_type: 'raw' | 'processed' | 'manual' | 'subrecipe' | 'central_kitchen' | null;
   raw_supplier_product_id: string | null;
   processed_product_id: string | null;
   sub_recipe_id: string | null;
+  central_production_recipe_id?: string | null;
   label: string;
   qty: number;
   unit: string;
@@ -266,7 +271,13 @@ export function effectiveRecipeYieldQtyForCost(recipe: Pick<EscandalloRecipe, 'y
 function mapLine(row: LineRow): EscandalloLine {
   const rawSt = row.source_type ?? 'manual';
   const sourceType: EscandalloLine['sourceType'] =
-    rawSt === 'raw' || rawSt === 'processed' || rawSt === 'manual' || rawSt === 'subrecipe' ? rawSt : 'manual';
+    rawSt === 'raw' ||
+    rawSt === 'processed' ||
+    rawSt === 'manual' ||
+    rawSt === 'subrecipe' ||
+    rawSt === 'central_kitchen'
+      ? rawSt
+      : 'manual';
   return {
     id: row.id,
     localId: row.local_id,
@@ -275,6 +286,7 @@ function mapLine(row: LineRow): EscandalloLine {
     rawSupplierProductId: row.raw_supplier_product_id,
     processedProductId: row.processed_product_id,
     subRecipeId: row.sub_recipe_id ?? null,
+    centralProductionRecipeId: row.central_production_recipe_id ?? null,
     label: row.label,
     qty: Number(row.qty),
     unit: sanitizeEscandalloIngredientUnit(String(row.unit)),
@@ -342,7 +354,7 @@ export async function fetchEscandalloLines(
   recipeId: string,
 ): Promise<EscandalloLine[]> {
   const selectFull =
-    'id,local_id,recipe_id,source_type,raw_supplier_product_id,processed_product_id,sub_recipe_id,label,qty,unit,manual_price_per_unit,sub_recipe_usage_mode,sub_recipe_operational_quantity,sub_recipe_operational_unit,sort_order,created_at';
+    'id,local_id,recipe_id,source_type,raw_supplier_product_id,processed_product_id,sub_recipe_id,central_production_recipe_id,label,qty,unit,manual_price_per_unit,sub_recipe_usage_mode,sub_recipe_operational_quantity,sub_recipe_operational_unit,sort_order,created_at';
   const selectLegacy =
     'id,local_id,recipe_id,source_type,raw_supplier_product_id,processed_product_id,sub_recipe_id,label,qty,unit,manual_price_per_unit,sort_order,created_at';
   const { data, error } = await supabase
@@ -744,13 +756,14 @@ export async function insertEscandalloLine(
   localId: string,
   recipeId: string,
   payload: {
-    sourceType: 'raw' | 'processed' | 'manual' | 'subrecipe';
+    sourceType: 'raw' | 'processed' | 'manual' | 'subrecipe' | 'central_kitchen';
     label: string;
     qty: number;
     unit: EscandalloIngredientUnit;
     rawSupplierProductId?: string | null;
     processedProductId?: string | null;
     subRecipeId?: string | null;
+    centralProductionRecipeId?: string | null;
     manualPricePerUnit?: number | null;
     subRecipeUsageMode?: 'custom' | 'standard_portion' | null;
     subRecipeOperationalQuantity?: number | null;
@@ -772,6 +785,8 @@ export async function insertEscandalloLine(
       processed_product_id:
         payload.sourceType === 'processed' ? (payload.processedProductId ?? null) : null,
       sub_recipe_id: payload.sourceType === 'subrecipe' ? (payload.subRecipeId ?? null) : null,
+      central_production_recipe_id:
+        payload.sourceType === 'central_kitchen' ? (payload.centralProductionRecipeId ?? null) : null,
       label: payload.label.trim(),
       qty: Math.max(0.0001, Math.round(payload.qty * 10000) / 10000),
       unit: sanitizeEscandalloIngredientUnit(payload.unit),
@@ -794,7 +809,7 @@ export async function insertEscandalloLine(
       sort_order: payload.sortOrder ?? 0,
     })
     .select(
-      'id,local_id,recipe_id,source_type,raw_supplier_product_id,processed_product_id,sub_recipe_id,label,qty,unit,manual_price_per_unit,sub_recipe_usage_mode,sub_recipe_operational_quantity,sub_recipe_operational_unit,sort_order,created_at',
+      'id,local_id,recipe_id,source_type,raw_supplier_product_id,processed_product_id,sub_recipe_id,central_production_recipe_id,label,qty,unit,manual_price_per_unit,sub_recipe_usage_mode,sub_recipe_operational_quantity,sub_recipe_operational_unit,sort_order,created_at',
     )
     .single();
   if (error) {
@@ -809,6 +824,8 @@ export async function insertEscandalloLine(
         processed_product_id:
           payload.sourceType === 'processed' ? (payload.processedProductId ?? null) : null,
         sub_recipe_id: payload.sourceType === 'subrecipe' ? (payload.subRecipeId ?? null) : null,
+        central_production_recipe_id:
+          payload.sourceType === 'central_kitchen' ? (payload.centralProductionRecipeId ?? null) : null,
         label: payload.label.trim(),
         qty: Math.max(0.0001, Math.round(payload.qty * 10000) / 10000),
         unit: sanitizeEscandalloIngredientUnit(payload.unit),
@@ -831,13 +848,14 @@ export async function insertEscandalloLine(
 }
 
 export type EscandalloLineInsertPayload = {
-  sourceType: 'raw' | 'processed' | 'manual' | 'subrecipe';
+  sourceType: 'raw' | 'processed' | 'manual' | 'subrecipe' | 'central_kitchen';
   label: string;
   qty: number;
   unit: EscandalloIngredientUnit;
   rawSupplierProductId?: string | null;
   processedProductId?: string | null;
   subRecipeId?: string | null;
+  centralProductionRecipeId?: string | null;
   manualPricePerUnit?: number | null;
   subRecipeUsageMode?: 'custom' | 'standard_portion' | null;
   subRecipeOperationalQuantity?: number | null;
@@ -865,6 +883,8 @@ export async function insertEscandalloLinesBatch(
       processed_product_id:
         payload.sourceType === 'processed' ? (payload.processedProductId ?? null) : null,
       sub_recipe_id: payload.sourceType === 'subrecipe' ? (payload.subRecipeId ?? null) : null,
+      central_production_recipe_id:
+        payload.sourceType === 'central_kitchen' ? (payload.centralProductionRecipeId ?? null) : null,
       label: payload.label.trim(),
       qty: Math.max(0.0001, Math.round(payload.qty * 10000) / 10000),
       unit: sanitizeEscandalloIngredientUnit(payload.unit),
@@ -891,7 +911,7 @@ export async function insertEscandalloLinesBatch(
     .from('escandallo_recipe_lines')
     .insert(rows)
     .select(
-      'id,local_id,recipe_id,source_type,raw_supplier_product_id,processed_product_id,sub_recipe_id,label,qty,unit,manual_price_per_unit,sub_recipe_usage_mode,sub_recipe_operational_quantity,sub_recipe_operational_unit,sort_order,created_at',
+      'id,local_id,recipe_id,source_type,raw_supplier_product_id,processed_product_id,sub_recipe_id,central_production_recipe_id,label,qty,unit,manual_price_per_unit,sub_recipe_usage_mode,sub_recipe_operational_quantity,sub_recipe_operational_unit,sort_order,created_at',
     );
   if (error) {
     const legacy = await supabase
@@ -899,6 +919,7 @@ export async function insertEscandalloLinesBatch(
       .insert(
         rows.map((row) => {
           const next: Record<string, unknown> = { ...row };
+          delete next.central_production_recipe_id;
           delete next.sub_recipe_usage_mode;
           delete next.sub_recipe_operational_quantity;
           delete next.sub_recipe_operational_unit;
@@ -922,10 +943,11 @@ export async function updateEscandalloLine(
     label: string;
     qty: number;
     unit: EscandalloIngredientUnit;
-    sourceType: 'raw' | 'processed' | 'manual' | 'subrecipe';
+    sourceType: 'raw' | 'processed' | 'manual' | 'subrecipe' | 'central_kitchen';
     rawSupplierProductId: string | null;
     processedProductId: string | null;
     subRecipeId: string | null;
+    centralProductionRecipeId: string | null;
     manualPricePerUnit: number | null;
     subRecipeUsageMode: 'custom' | 'standard_portion' | null;
     subRecipeOperationalQuantity: number | null;
@@ -941,6 +963,7 @@ export async function updateEscandalloLine(
   if (patch.rawSupplierProductId !== undefined) row.raw_supplier_product_id = patch.rawSupplierProductId;
   if (patch.processedProductId !== undefined) row.processed_product_id = patch.processedProductId;
   if (patch.subRecipeId !== undefined) row.sub_recipe_id = patch.subRecipeId;
+  if (patch.centralProductionRecipeId !== undefined) row.central_production_recipe_id = patch.centralProductionRecipeId;
   if (patch.manualPricePerUnit !== undefined) {
     row.manual_price_per_unit =
       patch.manualPricePerUnit != null && Number.isFinite(patch.manualPricePerUnit)
@@ -963,6 +986,7 @@ export async function updateEscandalloLine(
     .eq('local_id', localId);
   if (!error) return;
   const fallbackRow = { ...row };
+  delete fallbackRow.central_production_recipe_id;
   delete fallbackRow.sub_recipe_usage_mode;
   delete fallbackRow.sub_recipe_operational_quantity;
   delete fallbackRow.sub_recipe_operational_unit;
@@ -985,6 +1009,7 @@ function recipeLinesTotalRecursive(
   recipesById: Map<string, EscandalloRecipe>,
   rawProductById: Map<string, EscandalloRawProduct>,
   processedById: Map<string, EscandalloProcessedProduct>,
+  centralKitchenById: Map<string, EscandalloCentralKitchenCatalogItem> | undefined,
   expanding: Set<string>,
 ): number {
   if (expanding.has(recipeId)) return 0;
@@ -994,11 +1019,41 @@ function recipeLinesTotalRecursive(
     sum += line.qty * lineUnitPriceEur(line, rawProductById, processedById, {
       linesByRecipe,
       recipesById,
+      centralKitchenById,
       expanding,
     });
   }
   expanding.delete(recipeId);
   return Math.round(sum * 100) / 100;
+}
+
+function centralKitchenLineUnitPriceEur(
+  line: EscandalloLine,
+  item: EscandalloCentralKitchenCatalogItem,
+): number {
+  if (item.unitCost == null || !Number.isFinite(item.unitCost) || item.unitCost <= 0) return 0;
+  const fromUnit = String(item.outputUnit ?? '').trim().toLowerCase();
+  const toUnit = sanitizeEscandalloIngredientUnit(String(line.unit)).trim().toLowerCase();
+  if (unitsMatchForIngredientCost(fromUnit, toUnit)) return roundMoney(item.unitCost);
+  if (!unitCompatible(fromUnit, toUnit)) return 0;
+  const baseQtyForOneRequested = convertQuantity(1, toUnit, fromUnit);
+  if (baseQtyForOneRequested == null || !Number.isFinite(baseQtyForOneRequested) || baseQtyForOneRequested <= 0) {
+    return 0;
+  }
+  return roundMoney(item.unitCost * baseQtyForOneRequested);
+}
+
+export function subrecipeLineUsesOperationalPortion(
+  line: Pick<EscandalloLine, 'sourceType' | 'subRecipeUsageMode' | 'unit'>,
+  sheet: EscandalloTechnicalSheet | null | undefined,
+): boolean {
+  if (line.sourceType !== 'subrecipe' || !sheet) return false;
+  if (line.subRecipeUsageMode === 'standard_portion') return true;
+  if (sheet.operationalCost == null || !Number.isFinite(sheet.operationalCost) || sheet.operationalCost < 0) return false;
+  if (!sheet.yieldUnit) return false;
+  const normalizedUnit = sanitizeEscandalloIngredientUnit(String(line.unit ?? ''));
+  if (normalizedUnit !== 'ud') return false;
+  return !unitCompatible(sheet.yieldUnit, normalizedUnit);
 }
 
 function subrecipeYieldUnitPriceFromSheet(
@@ -1007,7 +1062,7 @@ function subrecipeYieldUnitPriceFromSheet(
   sheet: EscandalloTechnicalSheet | undefined,
 ): number | null {
   if (!sheet) return null;
-  if (line.subRecipeUsageMode === 'standard_portion') {
+  if (subrecipeLineUsesOperationalPortion(line, sheet)) {
     if (sheet.operationalCost != null && Number.isFinite(sheet.operationalCost) && sheet.operationalCost >= 0) {
       return roundMoney(sheet.operationalCost);
     }
@@ -1075,6 +1130,7 @@ export function lineUnitPriceEur(
       innerCtx.recipesById,
       rawProductById,
       processedById,
+      innerCtx.centralKitchenById,
       innerCtx.expanding,
     );
     const denom = effectiveRecipeYieldQtyForCost(sub);
@@ -1103,6 +1159,10 @@ export function lineUnitPriceEur(
       return roundMoney(totalInput / p.outputQty);
     }
   }
+  if (line.sourceType === 'central_kitchen' && line.centralProductionRecipeId) {
+    const item = innerCtx?.centralKitchenById?.get(line.centralProductionRecipeId);
+    if (item) return centralKitchenLineUnitPriceEur(line, item);
+  }
   if (line.sourceType === 'manual' && line.manualPricePerUnit != null && Number.isFinite(line.manualPricePerUnit)) {
     return line.manualPricePerUnit;
   }
@@ -1122,6 +1182,7 @@ export function recipeTotalCostEur(
         linesByRecipe: ctx.linesByRecipe,
         recipesById: ctx.recipesById,
         technicalSheetsByRecipe: ctx.technicalSheetsByRecipe,
+        centralKitchenById: ctx.centralKitchenById,
         expanding,
       }
     : undefined;

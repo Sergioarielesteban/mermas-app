@@ -76,6 +76,7 @@ import {
   type EscandalloYieldUnit,
 } from '@/lib/escandallo-operational-usage';
 import { totalInputWeightKg } from '@/lib/escandallo-input-weight';
+import { fetchCentralKitchenPublicCatalog, type EscandalloCentralKitchenCatalogItem } from '@/lib/central-kitchen-public-catalog';
 
 type RecipeKind = 'plato' | 'base' | 'elaboracion';
 type NewStepDraft = TechnicalSheetStepDraft & {
@@ -121,6 +122,7 @@ export default function EscandalloNewRecipeWizard() {
   const [linesByRecipe, setLinesByRecipe] = useState<Record<string, EscandalloLine[]>>({});
   const [rawProducts, setRawProducts] = useState<EscandalloRawProduct[]>([]);
   const [processedProducts, setProcessedProducts] = useState<EscandalloProcessedProduct[]>([]);
+  const [centralKitchenProducts, setCentralKitchenProducts] = useState<EscandalloCentralKitchenCatalogItem[]>([]);
   const [technicalSheetsByRecipe, setTechnicalSheetsByRecipe] = useState<Map<string, EscandalloTechnicalSheet>>(new Map());
   const [loading, setLoading] = useState(true);
   const [banner, setBanner] = useState<string | null>(null);
@@ -163,6 +165,10 @@ export default function EscandalloNewRecipeWizard() {
   const rawById = useMemo(() => new Map(rawProducts.map((p) => [p.id, p])), [rawProducts]);
   const processedById = useMemo(() => new Map(processedProducts.map((p) => [p.id, p])), [processedProducts]);
   const recipesById = useMemo(() => new Map(recipes.map((r) => [r.id, r])), [recipes]);
+  const centralKitchenById = useMemo(
+    () => new Map(centralKitchenProducts.map((item) => [item.id, item])),
+    [centralKitchenProducts],
+  );
   const sortedRaw = useMemo(
     () => [...rawProducts].sort((a, b) => a.name.localeCompare(b.name, 'es')),
     [rawProducts],
@@ -269,6 +275,7 @@ export default function EscandalloNewRecipeWizard() {
       setLinesByRecipe({});
       setRawProducts([]);
       setProcessedProducts([]);
+      setCentralKitchenProducts([]);
       setTechnicalSheetsByRecipe(new Map());
       setLoading(false);
       return;
@@ -278,16 +285,18 @@ export default function EscandalloNewRecipeWizard() {
       setLoading(true);
     }
     try {
-      const [r, raw, processed, categoryMap, sheetsMapResult] = await Promise.all([
+      const [r, raw, processed, categoryMap, sheetsMapResult, centralCatalog] = await Promise.all([
         fetchEscandalloRecipes(supabase, localId),
         fetchEscandalloRawProductsWithWeightedPurchasePrices(supabase, localId),
         fetchProcessedProductsForEscandallo(supabase, localId),
         fetchEscandalloRecipeCategoriasMap(supabase, localId),
         fetchEscandalloTechnicalSheetsMap(supabase, localId).catch(() => new Map<string, EscandalloTechnicalSheet>()),
+        fetchCentralKitchenPublicCatalog(supabase).catch(() => [] as EscandalloCentralKitchenCatalogItem[]),
       ]);
       setRecipes(r);
       setRawProducts(raw);
       setProcessedProducts(processed);
+      setCentralKitchenProducts(centralCatalog);
       setTechnicalSheetsByRecipe(sheetsMapResult);
       setFamilyOptions(
         [...new Set([...categoryMap.values()].map((value) => value.trim()).filter(Boolean))].sort((a, b) =>
@@ -315,8 +324,8 @@ export default function EscandalloNewRecipeWizard() {
   }, [profileReady, load]);
 
   const previewBuilt = useMemo(
-    () => draftRowsToPayloads(ingredientDrafts, rawById, processedById, recipesById, null),
-    [ingredientDrafts, rawById, processedById, recipesById],
+    () => draftRowsToPayloads(ingredientDrafts, rawById, processedById, recipesById, centralKitchenById, null),
+    [ingredientDrafts, rawById, processedById, recipesById, centralKitchenById],
   );
 
   const previewPayloads = useMemo(() => (previewBuilt.ok ? previewBuilt.payloads : []), [previewBuilt]);
@@ -344,9 +353,10 @@ export default function EscandalloNewRecipeWizard() {
     return recipeTotalCostEur(tempLines, rawById, processedById, {
       linesByRecipe,
       recipesById,
+      centralKitchenById,
       recipeId: tempRecipeId,
     });
-  }, [previewBuilt.ok, tempLines, rawById, processedById, linesByRecipe, recipesById]);
+  }, [previewBuilt.ok, tempLines, rawById, processedById, linesByRecipe, recipesById, centralKitchenById]);
   const perYield = effectiveYieldForCost > 0 ? Math.round((totalCost / effectiveYieldForCost) * 100) / 100 : 0;
   const mermaPct =
     !isPlateRecipe && finalWeightNum != null && finalWeightNum > 0 && pesoEntradaKg > 0
@@ -865,6 +875,7 @@ export default function EscandalloNewRecipeWizard() {
                 onChange={setIngredientDrafts}
                 sortedRaw={sortedRaw}
                 processedProducts={processedProducts}
+                centralKitchenProducts={centralKitchenProducts}
                 recipes={recipes}
                 excludeRecipeId={null}
                 disabled={saving}

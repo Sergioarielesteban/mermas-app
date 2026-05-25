@@ -54,6 +54,7 @@ import {
 } from '@/lib/escandallos-supabase';
 import { fetchEscandalloRecipeCategoriasMap } from '@/lib/finanzas-rentabilidad-escandallo';
 import { formatMoneyEur } from '@/lib/money-format';
+import { fetchCentralKitchenPublicCatalog, type EscandalloCentralKitchenCatalogItem } from '@/lib/central-kitchen-public-catalog';
 
 type RecipeFilter = 'all' | 'plates' | 'bases' | 'high' | 'incomplete';
 
@@ -474,6 +475,7 @@ export default function EscandallosPage() {
   const [linesByRecipe, setLinesByRecipe] = useState<Record<string, EscandalloLine[]>>({});
   const [rawProducts, setRawProducts] = useState<EscandalloRawProduct[]>([]);
   const [processedProducts, setProcessedProducts] = useState<EscandalloProcessedProduct[]>([]);
+  const [centralKitchenProducts, setCentralKitchenProducts] = useState<EscandalloCentralKitchenCatalogItem[]>([]);
   const [technicalSheetsByRecipe, setTechnicalSheetsByRecipe] = useState<Map<string, EscandalloTechnicalSheet>>(new Map());
   const [loading, setLoading] = useState(true);
   const [banner, setBanner] = useState<string | null>(null);
@@ -538,6 +540,7 @@ export default function EscandallosPage() {
       setLinesByRecipe(pack.linesByRecipe);
       setRawProducts(pack.rawProducts);
       setProcessedProducts(pack.processed);
+      setCentralKitchenProducts([]);
       setTechnicalSheetsByRecipe(new Map());
       setFamilyByRecipeId(
         new Map(
@@ -556,16 +559,18 @@ export default function EscandallosPage() {
     setLoading(true);
     setBanner(null);
     try {
-      const [r, raw, processed, categoryMap, sheetsMapResult] = await Promise.all([
+      const [r, raw, processed, categoryMap, sheetsMapResult, centralCatalog] = await Promise.all([
         fetchEscandalloRecipes(supabase, localId),
         fetchEscandalloRawProductsWithWeightedPurchasePrices(supabase, localId),
         fetchProcessedProductsForEscandallo(supabase, localId),
         fetchEscandalloRecipeCategoriasMap(supabase, localId),
         fetchEscandalloTechnicalSheetsMap(supabase, localId).catch(() => new Map<string, EscandalloTechnicalSheet>()),
+        fetchCentralKitchenPublicCatalog(supabase).catch(() => [] as EscandalloCentralKitchenCatalogItem[]),
       ]);
       setRecipes(r);
       setRawProducts(raw);
       setProcessedProducts(processed);
+      setCentralKitchenProducts(centralCatalog);
       setTechnicalSheetsByRecipe(sheetsMapResult);
       setFamilyByRecipeId(categoryMap);
       const linesEntries = await Promise.all(r.map(async (recipe) => [recipe.id, await fetchEscandalloLines(supabase, localId, recipe.id)] as const));
@@ -575,6 +580,7 @@ export default function EscandallosPage() {
       setRecipes([]);
       setLinesByRecipe({});
       setTechnicalSheetsByRecipe(new Map());
+      setCentralKitchenProducts([]);
     } finally {
       setLoading(false);
     }
@@ -617,10 +623,22 @@ export default function EscandallosPage() {
 
   const rawById = useMemo(() => new Map(rawProducts.map((p) => [p.id, p])), [rawProducts]);
   const processedById = useMemo(() => new Map(processedProducts.map((p) => [p.id, p])), [processedProducts]);
+  const centralKitchenById = useMemo(
+    () => new Map(centralKitchenProducts.map((item) => [item.id, item])),
+    [centralKitchenProducts],
+  );
   const recipesById = useMemo(() => new Map(recipes.map((r) => [r.id, r])), [recipes]);
   const rows = useMemo(
-    () => buildEscandalloDashboardRows(recipes, linesByRecipe, rawById, processedById, technicalSheetsByRecipe),
-    [recipes, linesByRecipe, rawById, processedById, technicalSheetsByRecipe],
+    () =>
+      buildEscandalloDashboardRows(
+        recipes,
+        linesByRecipe,
+        rawById,
+        processedById,
+        technicalSheetsByRecipe,
+        centralKitchenById,
+      ),
+    [recipes, linesByRecipe, rawById, processedById, technicalSheetsByRecipe, centralKitchenById],
   );
   const mainRows = useMemo(() => rows.filter((r) => !r.isSubRecipe), [rows]);
   const subRows = useMemo(() => rows.filter((r) => r.isSubRecipe), [rows]);
@@ -763,6 +781,7 @@ export default function EscandallosPage() {
           processedById,
           recipesById,
           technicalSheetsByRecipe: new Map(),
+          centralKitchenById,
           linesByRecipe,
           productionTotalCost: rows.find((row) => row.id === recipeId)?.totalCostEur ?? 0,
           creatorName: null,
@@ -776,7 +795,7 @@ export default function EscandallosPage() {
         setPrintingRecipeId(null);
       }
     },
-    [linesByRecipe, localId, processedById, rawById, recipesById, rows],
+    [centralKitchenById, linesByRecipe, localId, processedById, rawById, recipesById, rows],
   );
 
   const handleDeleteBase = async (base: EscandalloRecipeDashboardRow) => {
@@ -1041,44 +1060,44 @@ export default function EscandallosPage() {
                         <p className="mt-0.5 text-[8px] text-zinc-400">Act. {updatedLabel}</p>
                       </div>
 
-                      <div className="mt-2 grid grid-cols-2 divide-x divide-[rgba(10,9,8,0.06)] rounded-lg bg-[#FAFAF9] py-1.5 ring-1 ring-[rgba(10,9,8,0.04)]">
-                        <div className="min-w-0 px-1 text-center first:pl-0 last:pr-0">
-                          <p className="text-[7px] font-bold uppercase tracking-[0.12em] text-[#7E7468]">Coste real</p>
+                      <div className="mt-2 grid grid-cols-2 divide-x divide-zinc-200/80 rounded-2xl border border-zinc-200/80 bg-white px-2 py-2 ring-1 ring-zinc-100/70">
+                        <div className="min-w-0 px-2">
+                          <p className="text-[8px] font-semibold uppercase tracking-[0.14em] text-zinc-400">Coste real</p>
                           {realCostPerUnit != null && realYieldUnit ? (
-                            <p className="mt-0.5 truncate text-[13px] font-black tabular-nums leading-none text-[#0A0908]">
+                            <p className="mt-1 font-mono text-[15px] font-bold tabular-nums leading-none text-zinc-900">
                               {formatMoneyEur(realCostPerUnit)}
-                              <span className="text-[10px] font-bold text-[#7E7468]">/{realYieldUnit}</span>
+                              <span className="ml-0.5 text-[11px] font-bold text-zinc-500">/{realYieldUnit}</span>
                             </p>
                           ) : (
-                            <p className="mt-0.5 truncate text-[13px] font-black leading-none text-[#7E7468]">Salida pendiente</p>
+                            <p className="mt-1 truncate text-[12px] font-semibold leading-none text-zinc-500">Salida pendiente</p>
                           )}
                         </div>
-                        <div className="min-w-0 px-1 text-center first:pl-0 last:pr-0">
-                          <p className="text-[7px] font-bold uppercase tracking-[0.12em] text-[#7E7468]">Coste operativo</p>
+                        <div className="min-w-0 px-2">
+                          <p className="text-[8px] font-semibold uppercase tracking-[0.14em] text-zinc-400">Coste operativo</p>
                           {sheet?.operationalCost != null && sheet.operationalCost > 0 && operationalUsage ? (
-                            <p className="mt-0.5 truncate text-[13px] font-black leading-none text-[#0A0908]">
+                            <p className="mt-1 truncate font-mono text-[15px] font-bold tabular-nums leading-none text-zinc-900">
                               {formatMoneyEur(sheet.operationalCost)}
-                              <span className="text-[10px] font-bold text-[#7E7468]"> / {operationalUsage}</span>
+                              <span className="ml-0.5 text-[11px] font-bold text-zinc-500">/ {operationalUsage}</span>
                             </p>
                           ) : (
-                            <p className="mt-0.5 truncate text-[13px] font-black leading-none text-[#7E7468]">Uso pendiente</p>
+                            <p className="mt-1 truncate text-[12px] font-semibold leading-none text-zinc-500">Uso pendiente</p>
                           )}
                         </div>
                       </div>
 
-                      <div className="mt-3 grid grid-cols-3 gap-2.5 px-0.5">
+                      <div className="mt-2.5 grid grid-cols-3 gap-2">
                         <button
                           type="button"
                           onClick={() => void handlePrintRecipe(r.id)}
                           disabled={printingRecipeId === r.id}
-                          className="inline-flex min-h-[40px] items-center justify-center gap-1.5 rounded-2xl border border-zinc-200 bg-white px-2.5 text-[11px] font-bold text-zinc-700 transition hover:bg-zinc-50 disabled:opacity-50"
+                          className="inline-flex min-h-[36px] items-center justify-center gap-1.5 rounded-2xl border border-zinc-200 bg-white px-2 text-[10px] font-bold text-zinc-700 transition hover:bg-zinc-50 disabled:opacity-50"
                         >
                           <Printer className="h-3.5 w-3.5 shrink-0" />
                           <span>{printingRecipeId === r.id ? 'Imprimiendo…' : 'Imprimir'}</span>
                         </button>
                         <Link
                           href={`/escandallos/recetas/${r.id}/editar`}
-                          className="inline-flex min-h-[40px] items-center justify-center gap-1.5 rounded-2xl border border-zinc-200 bg-white px-2.5 text-[11px] font-bold text-zinc-700 transition hover:bg-zinc-50"
+                          className="inline-flex min-h-[36px] items-center justify-center gap-1.5 rounded-2xl border border-zinc-200 bg-white px-2 text-[10px] font-bold text-zinc-700 transition hover:bg-zinc-50"
                         >
                           <PencilLine className="h-3.5 w-3.5 shrink-0" />
                           <span>Editar</span>
@@ -1087,7 +1106,7 @@ export default function EscandallosPage() {
                           type="button"
                           disabled={baseBusyId === r.id}
                           onClick={() => void handleDeleteBase(r)}
-                          className="inline-flex min-h-[40px] items-center justify-center gap-1.5 rounded-2xl border border-red-200 bg-red-50 px-2.5 text-[11px] font-bold text-red-700 transition hover:bg-red-100 disabled:opacity-50"
+                          className="inline-flex min-h-[36px] items-center justify-center gap-1.5 rounded-2xl border border-red-200 bg-red-50 px-2 text-[10px] font-bold text-red-700 transition hover:bg-red-100 disabled:opacity-50"
                         >
                           <Trash2 className="h-3.5 w-3.5 shrink-0" />
                           <span>Eliminar</span>

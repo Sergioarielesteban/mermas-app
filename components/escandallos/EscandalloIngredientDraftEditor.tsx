@@ -3,7 +3,7 @@
 import React, { useEffect, type SetStateAction } from 'react';
 import { ChevronDown, ChevronUp, Plus, Search, Trash2 } from 'lucide-react';
 import { ESCANDALLO_USAGE_UNIT_PRESETS } from '@/lib/escandallo-ingredient-units';
-import { computeOperationalCost, formatOperationalSummary, type EscandalloYieldUnit } from '@/lib/escandallo-operational-usage';
+import { computeOperationalCost, formatOperationalSummary, type EscandalloYieldUnit, unitCompatible } from '@/lib/escandallo-operational-usage';
 import {
   emptyIngredientDraft,
   estimateDraftRowCostEur,
@@ -12,15 +12,15 @@ import {
 } from '@/lib/escandallos-recipe-draft-utils';
 import {
   escandalloRecipeUnitForRawProduct,
-  rawProductPickerSummaryLine,
   type EscandalloLine,
   type EscandalloProcessedProduct,
   type EscandalloRawProduct,
   type EscandalloRecipe,
 } from '@/lib/escandallos-supabase';
 import type { EscandalloTechnicalSheet } from '@/lib/escandallos-technical-sheet-supabase';
-import { formatMoneyEur, formatUnitPriceEur, roundMoney } from '@/lib/money-format';
+import { formatMoneyEur, formatUnitPriceEur } from '@/lib/money-format';
 import { rawIngredientWeightDetail } from '@/lib/escandallo-input-weight';
+import type { EscandalloCentralKitchenCatalogItem } from '@/lib/central-kitchen-public-catalog';
 
 export type EscandalloIngredientDraftEditorProps = {
   drafts: IngredientDraftRow[];
@@ -28,6 +28,7 @@ export type EscandalloIngredientDraftEditorProps = {
   sortedRaw: EscandalloRawProduct[];
   processedProducts: EscandalloProcessedProduct[];
   recipes: EscandalloRecipe[];
+  centralKitchenProducts?: EscandalloCentralKitchenCatalogItem[];
   excludeRecipeId: string | null;
   disabled: boolean;
   linesByRecipe?: Record<string, EscandalloLine[]>;
@@ -51,6 +52,8 @@ function badgeLabel(t: IngredientDraftRow['sourceType']): string {
       return 'BASE';
     case 'manual':
       return 'MANUAL';
+    case 'central_kitchen':
+      return 'COCINA CENTRAL';
     default:
       return '';
   }
@@ -60,6 +63,7 @@ function displayUnitForRow(
   row: IngredientDraftRow,
   sortedRaw: EscandalloRawProduct[],
   processedProducts: EscandalloProcessedProduct[],
+  centralKitchenProducts: EscandalloCentralKitchenCatalogItem[],
 ): string {
   if (row.sourceType === 'raw' && row.rawId) {
     const rp = sortedRaw.find((x) => x.id === row.rawId);
@@ -68,8 +72,21 @@ function displayUnitForRow(
   if (row.sourceType === 'processed' && row.processedId) {
     return processedProducts.find((x) => x.id === row.processedId)?.outputUnit ?? row.unit;
   }
+  if (row.sourceType === 'central_kitchen' && row.centralKitchenId) {
+    return centralKitchenProducts.find((x) => x.id === row.centralKitchenId)?.outputUnit ?? row.unit;
+  }
   return row.unit.trim() || 'ud';
 }
+
+type SearchOption = {
+  key: string;
+  group: 'ARTÍCULOS' | 'BASES Y ELABORACIONES' | 'COCINA CENTRAL';
+  sourceType: IngredientDraftRow['sourceType'];
+  id: string;
+  title: string;
+  subtitle: string;
+  unit: string;
+};
 
 function getSubrecipeOperationalConfig(
   row: IngredientDraftRow,
@@ -143,6 +160,7 @@ export default function EscandalloIngredientDraftEditor({
   sortedRaw,
   processedProducts,
   recipes,
+  centralKitchenProducts = [],
   excludeRecipeId,
   disabled,
   linesByRecipe = {},
@@ -154,6 +172,11 @@ export default function EscandalloIngredientDraftEditor({
   onSubmitDrafts,
   variant = 'default',
 }: EscandalloIngredientDraftEditorProps) {
+  const centralKitchenById = React.useMemo(
+    () => new Map(centralKitchenProducts.map((item) => [item.id, item])),
+    [centralKitchenProducts],
+  );
+
   const updateRow = (key: string, patch: Partial<IngredientDraftRow>) => {
     onChange(drafts.map((d) => (d.key === key ? { ...d, ...patch } : d)));
   };
@@ -181,10 +204,94 @@ export default function EscandalloIngredientDraftEditor({
     });
   };
 
-  const filteredRaw = (q: string) => {
+  const buildSearchOptions = (sourceType: IngredientDraftRow['sourceType'], q: string): SearchOption[] => {
     const s = q.trim().toLowerCase();
-    if (!s) return sortedRaw.slice(0, 24);
-    return sortedRaw.filter((p) => `${p.name} ${p.supplierName}`.toLowerCase().includes(s)).slice(0, 32);
+    if (sourceType === 'processed') {
+      return processedProducts
+        .filter((p) => !s || p.name.toLowerCase().includes(s))
+        .slice(0, s ? 18 : 10)
+        .map(
+          (p): SearchOption => ({
+            key: `proc-${p.id}`,
+            group: 'BASES Y ELABORACIONES',
+            sourceType: 'processed',
+            id: p.id,
+            title: p.name,
+            subtitle: `Elaboración · ${p.outputUnit}`,
+            unit: p.outputUnit,
+          }),
+        );
+    }
+    if (sourceType === 'subrecipe') {
+      return recipes
+        .filter((r) => r.id !== excludeRecipeId && r.isSubRecipe)
+        .filter((r) => !s || r.name.toLowerCase().includes(s))
+        .slice(0, s ? 18 : 10)
+        .map(
+          (r): SearchOption => ({
+            key: `sub-${r.id}`,
+            group: 'BASES Y ELABORACIONES',
+            sourceType: 'subrecipe',
+            id: r.id,
+            title: r.name,
+            subtitle: 'Base / elaboración Chef One',
+            unit: 'g',
+          }),
+        );
+    }
+    if (sourceType === 'central_kitchen') {
+      return centralKitchenProducts
+        .filter((p) => p.active)
+        .filter((p) => !s || `${p.name} ${p.category ?? ''}`.toLowerCase().includes(s))
+        .slice(0, s ? 18 : 10)
+        .map(
+          (p): SearchOption => ({
+            key: `ck-${p.id}`,
+            group: 'COCINA CENTRAL',
+            sourceType: 'central_kitchen',
+            id: p.id,
+            title: p.name,
+            subtitle:
+              p.unitCost != null ? `${formatUnitPriceEur(p.unitCost, p.outputUnit)} · Cocina Central` : 'Cocina Central',
+            unit: p.outputUnit,
+          }),
+        );
+    }
+    if (sourceType === 'manual') return [];
+    const rawOpts = sortedRaw
+      .filter((p) => !s || `${p.name} ${p.supplierName}`.toLowerCase().includes(s))
+      .slice(0, s ? 18 : 10)
+      .map(
+        (p): SearchOption => ({
+          key: `raw-${p.id}`,
+          group: 'ARTÍCULOS',
+          sourceType: 'raw',
+          id: p.id,
+          title: p.name,
+          subtitle: p.supplierName,
+          unit: escandalloRecipeUnitForRawProduct(p),
+        }),
+      );
+    return rawOpts;
+  };
+
+  const selectSearchOption = (row: IngredientDraftRow, option: SearchOption) => {
+    updateRow(row.key, {
+      sourceType: option.sourceType,
+      rawId: option.sourceType === 'raw' ? option.id : '',
+      processedId: option.sourceType === 'processed' ? option.id : '',
+      subRecipeId: option.sourceType === 'subrecipe' ? option.id : '',
+      centralKitchenId: option.sourceType === 'central_kitchen' ? option.id : '',
+      rawSearch: option.title,
+      rawDropdownOpen: false,
+      manualLabel: '',
+      manualPrice: '',
+      unit: option.unit,
+      qty: row.qty || '1',
+      subRecipeUsageMode: option.sourceType === 'subrecipe' ? 'custom' : 'custom',
+      subRecipeOperationalQuantity: '',
+      subRecipeOperationalUnit: '',
+    });
   };
 
   const canEstimate = rawById != null && processedById != null && recipesById != null;
@@ -209,6 +316,7 @@ export default function EscandalloIngredientDraftEditor({
     if (row.sourceType === 'raw') return Boolean(row.rawId);
     if (row.sourceType === 'processed') return Boolean(row.processedId);
     if (row.sourceType === 'subrecipe') return Boolean(row.subRecipeId);
+    if (row.sourceType === 'central_kitchen') return Boolean(row.centralKitchenId);
     return Boolean(row.manualLabel.trim());
   };
 
@@ -219,14 +327,23 @@ export default function EscandalloIngredientDraftEditor({
           rawById!,
           processedById!,
           recipesById!,
+          centralKitchenById,
           linesByRecipe,
           excludeRecipeId,
           technicalSheetsByRecipe,
         )
       : null;
-    const dispUnit = displayUnitForRow(row, sortedRaw, processedProducts);
+    const dispUnit = displayUnitForRow(row, sortedRaw, processedProducts, centralKitchenProducts);
     const configured = draftRowConfigured(row);
     const rawProduct = row.sourceType === 'raw' && row.rawId ? sortedRaw.find((x) => x.id === row.rawId) : null;
+    const centralItem =
+      row.sourceType === 'central_kitchen' && row.centralKitchenId
+        ? centralKitchenProducts.find((x) => x.id === row.centralKitchenId) ?? null
+        : null;
+    const centralUnitWarning =
+      centralItem && !unitCompatible(centralItem.outputUnit, row.unit) && centralItem.outputUnit !== row.unit
+        ? 'Unidad no compatible con el formato de Cocina Central.'
+        : null;
     const qtyNum = parseDecimal(row.qty);
     const rawWeightDetail =
       row.sourceType === 'raw' && rawProduct && qtyNum != null
@@ -250,15 +367,16 @@ export default function EscandalloIngredientDraftEditor({
                     rawId: '',
                     processedId: '',
                     subRecipeId: '',
+                    centralKitchenId: '',
                     rawSearch: '',
-                      rawDropdownOpen: false,
-                      manualLabel: '',
-                      manualPrice: '',
-                      unit: e.target.value === 'raw' || e.target.value === 'processed' ? 'kg' : row.unit || 'kg',
-                      subRecipeUsageMode: 'custom',
-                      subRecipeOperationalQuantity: '',
-                      subRecipeOperationalUnit: '',
-                    })
+                    rawDropdownOpen: false,
+                    manualLabel: '',
+                    manualPrice: '',
+                    unit: row.unit || 'kg',
+                    subRecipeUsageMode: 'custom',
+                    subRecipeOperationalQuantity: '',
+                    subRecipeOperationalUnit: '',
+                  })
                   }
                 className="h-7 w-[4.9rem] shrink-0 rounded-md border border-zinc-200 bg-white px-1 text-[8px] font-bold uppercase tracking-wide text-zinc-900 outline-none focus:border-[#D32F2F]/35"
                 aria-label="Tipo de ingrediente"
@@ -266,11 +384,12 @@ export default function EscandalloIngredientDraftEditor({
                 <option value="raw">Crudo</option>
                 <option value="processed">Elaborado</option>
                 <option value="subrecipe">Base</option>
+                <option value="central_kitchen">Cocina Central</option>
                 <option value="manual">Manual</option>
               </select>
 
               <div className="min-w-0 flex-1">
-                {row.sourceType === 'raw' ? (
+                {row.sourceType !== 'manual' ? (
                   <div className="relative w-full" data-esc-raw-picker>
                     <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#7E7468]" aria-hidden />
                     <input
@@ -278,8 +397,17 @@ export default function EscandalloIngredientDraftEditor({
                       disabled={disabled}
                       autoComplete="off"
                       onFocus={() => updateRow(row.key, { rawDropdownOpen: true })}
-                      onChange={(e) => updateRow(row.key, { rawSearch: e.target.value, rawDropdownOpen: true, rawId: '' })}
-                      placeholder="Buscar producto…"
+                      onChange={(e) =>
+                        updateRow(row.key, {
+                          rawSearch: e.target.value,
+                          rawDropdownOpen: true,
+                          rawId: '',
+                          processedId: '',
+                          subRecipeId: '',
+                          centralKitchenId: '',
+                        })
+                      }
+                      placeholder="Buscar artículos, bases o Cocina Central…"
                       className="h-7 w-full rounded-lg border border-[rgba(10,9,8,0.08)] bg-white py-1 pl-8 pr-2 text-[11px] font-medium text-[#0A0908] outline-none focus:border-[#D32F2F]/35 focus:ring-1 focus:ring-[#D32F2F]/10"
                     />
                     {row.rawDropdownOpen ? (
@@ -287,76 +415,41 @@ export default function EscandalloIngredientDraftEditor({
                         className="absolute left-0 right-0 z-[80] mt-1 max-h-56 overflow-y-auto overscroll-contain rounded-xl border border-[rgba(10,9,8,0.08)] bg-white shadow-[0_8px_24px_rgba(10,9,8,0.12)]"
                         onPointerDown={(e) => e.stopPropagation()}
                       >
-                        {filteredRaw(row.rawSearch).length === 0 ? (
+                        {buildSearchOptions(row.sourceType, row.rawSearch).length === 0 ? (
                           <p className="px-3 py-3 text-center text-[11px] text-[#7E7468]">Sin resultados</p>
                         ) : (
-                          filteredRaw(row.rawSearch).map((p) => (
-                            <button
-                              key={p.id}
-                              type="button"
-                              disabled={disabled}
-                              onClick={() =>
-                                updateRow(row.key, {
-                                  rawId: p.id,
-                                  rawSearch: p.name,
-                                  rawDropdownOpen: false,
-                                  unit: escandalloRecipeUnitForRawProduct(p),
-                                })
-                              }
-                              className="flex w-full flex-col items-start gap-0.5 border-b border-zinc-100 px-3 py-2 text-left last:border-b-0 hover:bg-zinc-50"
-                            >
-                              <span className="truncate text-[11px] font-bold text-zinc-900">{p.name}</span>
-                            </button>
-                          ))
+                          (() => {
+                            let currentGroup = '';
+                            return buildSearchOptions(row.sourceType, row.rawSearch).map((option) => {
+                              const showGroup = option.group !== currentGroup;
+                              currentGroup = option.group;
+                              return (
+                                <React.Fragment key={option.key}>
+                                  {showGroup ? (
+                                    <p className="bg-[#FAFAF9] px-3 py-1 text-[9px] font-black uppercase tracking-[0.12em] text-[#7E7468]">
+                                      {option.group}
+                                    </p>
+                                  ) : null}
+                                  <button
+                                    type="button"
+                                    disabled={disabled}
+                                    onClick={() => selectSearchOption(row, option)}
+                                    className="flex w-full flex-col items-start gap-0.5 border-b border-zinc-100 px-3 py-2 text-left last:border-b-0 hover:bg-zinc-50"
+                                  >
+                                    <span className="truncate text-[11px] font-bold text-zinc-900">{option.title}</span>
+                                    <span className="truncate text-[10px] text-[#7E7468]">{option.subtitle}</span>
+                                  </button>
+                                </React.Fragment>
+                              );
+                            });
+                          })()
                         )}
                       </div>
                     ) : null}
                   </div>
                 ) : null}
-                {row.sourceType === 'processed' ? (
-                  <select
-                    value={row.processedId}
-                    disabled={disabled}
-                    onChange={(e) => {
-                      const id = e.target.value;
-                      const p = processedProducts.find((x) => x.id === id);
-                      updateRow(row.key, { processedId: id, unit: p?.outputUnit ?? 'kg' });
-                    }}
-                    className="h-7 w-full rounded-lg border border-[rgba(10,9,8,0.08)] bg-white px-2 text-[11px] font-medium text-[#0A0908] outline-none focus:border-[#D32F2F]/35 focus:ring-1 focus:ring-[#D32F2F]/10"
-                  >
-                    <option value="">Selecciona elaborado…</option>
-                    {processedProducts.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.name}
-                      </option>
-                    ))}
-                  </select>
-                ) : null}
                 {row.sourceType === 'subrecipe' ? (
                   <div className="space-y-1">
-                    <select
-                      value={row.subRecipeId}
-                      disabled={disabled}
-                      onChange={(e) =>
-                        updateRow(row.key, {
-                          subRecipeId: e.target.value,
-                          subRecipeUsageMode: 'custom',
-                          subRecipeOperationalQuantity: '',
-                          subRecipeOperationalUnit: '',
-                          unit: 'g',
-                        })
-                      }
-                      className="h-7 w-full rounded-lg border border-[rgba(10,9,8,0.08)] bg-white px-2 text-[11px] font-medium text-[#0A0908] outline-none focus:border-[#D32F2F]/35 focus:ring-1 focus:ring-[#D32F2F]/10"
-                    >
-                      <option value="">Selecciona base / elaboración…</option>
-                      {recipes
-                        .filter((r) => r.id !== excludeRecipeId && r.isSubRecipe)
-                        .map((r) => (
-                          <option key={r.id} value={r.id}>
-                            {r.name}
-                          </option>
-                        ))}
-                    </select>
                     {subrecipeConfig?.canUseStandard ? (
                       <div className="grid grid-cols-[1fr_auto] gap-1.5">
                         <select
@@ -425,7 +518,18 @@ export default function EscandalloIngredientDraftEditor({
                     inputMode="decimal"
                   />
                 </label>
-                <span className="text-[10px] font-semibold text-[#7E7468]">{dispUnit}</span>
+                {row.sourceType === 'central_kitchen' ? (
+                  <input
+                    list={`esc-draft-units-${row.key}`}
+                    value={row.unit}
+                    disabled={disabled}
+                    onChange={(e) => updateRow(row.key, { unit: e.target.value })}
+                    className="h-7 w-16 rounded-lg border border-[rgba(10,9,8,0.08)] bg-white px-2 text-[10px] font-semibold text-[#7E7468] outline-none focus:border-[#D32F2F]/35"
+                    placeholder={dispUnit}
+                  />
+                ) : (
+                  <span className="text-[10px] font-semibold text-[#7E7468]">{dispUnit}</span>
+                )}
               </div>
               <div className="ml-auto flex items-center gap-2">
                 {usingStandard && subrecipeConfig ? (
@@ -452,6 +556,9 @@ export default function EscandalloIngredientDraftEditor({
               <p className="mt-1 text-[9px] font-medium text-[#7E7468]">
                 {rawProduct?.name} · {rawWeightDetail}
               </p>
+            ) : null}
+            {centralUnitWarning ? (
+              <p className="mt-1 text-[9px] font-medium text-[#B8872A]">{centralUnitWarning}</p>
             ) : null}
           </div>
         </div>
@@ -498,6 +605,7 @@ export default function EscandalloIngredientDraftEditor({
                 rawById,
                 processedById,
                 recipesById,
+                centralKitchenById,
                 linesByRecipe,
                 excludeRecipeId,
                 technicalSheetsByRecipe,
@@ -508,11 +616,19 @@ export default function EscandalloIngredientDraftEditor({
         const subrecipeConfig =
           row.sourceType === 'subrecipe' ? getSubrecipeOperationalConfig(row, recipesById, technicalSheetsByRecipe) : null;
         const qtyNum = parseDecimal(row.qty);
-        const dispUnit = displayUnitForRow(row, sortedRaw, processedProducts);
+        const dispUnit = displayUnitForRow(row, sortedRaw, processedProducts, centralKitchenProducts);
         const rawProduct = row.sourceType === 'raw' && row.rawId ? sortedRaw.find((x) => x.id === row.rawId) : null;
+        const centralItem =
+          row.sourceType === 'central_kitchen' && row.centralKitchenId
+            ? centralKitchenProducts.find((x) => x.id === row.centralKitchenId) ?? null
+            : null;
         const rawWeightDetail =
           row.sourceType === 'raw' && rawProduct && qtyNum != null
             ? rawIngredientWeightDetail(qtyNum, dispUnit, rawProduct)
+            : null;
+        const centralUnitWarning =
+          centralItem && !unitCompatible(centralItem.outputUnit, row.unit) && centralItem.outputUnit !== row.unit
+            ? 'Unidad no compatible con el formato de Cocina Central.'
             : null;
         const unitEurForLine =
           est != null && qtyNum != null && qtyNum > 0 ? est / qtyNum : null;
@@ -547,6 +663,7 @@ export default function EscandalloIngredientDraftEditor({
                       rawId: '',
                       processedId: '',
                       subRecipeId: '',
+                      centralKitchenId: '',
                       rawSearch: '',
                       rawDropdownOpen: false,
                       unit: 'kg',
@@ -561,11 +678,12 @@ export default function EscandalloIngredientDraftEditor({
                   <option value="raw">Crudo</option>
                   <option value="processed">Elaborado</option>
                   <option value="subrecipe">Base</option>
+                  <option value="central_kitchen">Cocina Central</option>
                   <option value="manual">Manual</option>
                 </select>
               </div>
               <div className="min-w-0 flex-1 space-y-2">
-                {row.sourceType === 'raw' ? (
+                {row.sourceType !== 'manual' ? (
                   <div className="relative w-full" data-esc-raw-picker>
                     <Search
                       className="pointer-events-none absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-zinc-400"
@@ -581,9 +699,12 @@ export default function EscandalloIngredientDraftEditor({
                           rawSearch: e.target.value,
                           rawDropdownOpen: true,
                           rawId: '',
+                          processedId: '',
+                          subRecipeId: '',
+                          centralKitchenId: '',
                         });
                       }}
-                      placeholder="Buscar por proveedor o producto…"
+                      placeholder="Buscar artículos, bases o Cocina Central…"
                       className="min-h-[48px] w-full rounded-xl border-2 border-zinc-200 bg-white py-3 pl-11 pr-3 text-base leading-snug outline-none transition focus:border-[#D32F2F]/50 focus:ring-2 focus:ring-[#D32F2F]/15 sm:min-h-0 sm:py-2.5 sm:text-sm"
                     />
                     {row.rawDropdownOpen ? (
@@ -591,90 +712,42 @@ export default function EscandalloIngredientDraftEditor({
                         className="absolute left-0 right-0 z-[80] mt-2 max-h-[min(55vh,22rem)] overflow-y-auto overscroll-contain rounded-xl border-2 border-zinc-200 bg-white shadow-2xl sm:max-h-72"
                         onPointerDown={(e) => e.stopPropagation()}
                       >
-                        {filteredRaw(row.rawSearch).length === 0 ? (
+                        {buildSearchOptions(row.sourceType, row.rawSearch).length === 0 ? (
                           <p className="px-4 py-4 text-center text-sm text-zinc-500">Sin resultados</p>
                         ) : (
-                          filteredRaw(row.rawSearch).map((p) => {
-                            const pack = p.unitsPerPack > 0 ? p.unitsPerPack : 1;
-                            const ru = p.recipeUnit ?? 'ud';
-                            const sub =
-                              pack > 1
-                                ? `Compra ${formatUnitPriceEur(p.pricePerUnit, p.unit)} · Coste uso ${formatUnitPriceEur(roundMoney(p.pricePerUnit / pack), ru)}`
-                                : formatUnitPriceEur(p.pricePerUnit, p.unit);
-                            return (
-                              <button
-                                key={p.id}
-                                type="button"
-                                onClick={() =>
-                                  updateRow(row.key, {
-                                    rawId: p.id,
-                                    rawSearch: rawProductPickerSummaryLine(p),
-                                    rawDropdownOpen: false,
-                                    unit: escandalloRecipeUnitForRawProduct(p),
-                                  })
-                                }
-                                className="flex min-h-[56px] w-full flex-col items-start gap-0.5 border-b border-zinc-100 px-4 py-3 text-left last:border-b-0 hover:bg-zinc-50 active:bg-zinc-100"
-                              >
-                                <span className="text-xs font-bold uppercase tracking-wide text-zinc-500">
-                                  {p.supplierName}
-                                </span>
-                                <span className="break-words text-[15px] font-semibold leading-snug text-zinc-900">
-                                  {p.name}
-                                </span>
-                                <span className="text-sm tabular-nums text-zinc-600">{sub}</span>
-                              </button>
-                            );
-                          })
+                          (() => {
+                            let currentGroup = '';
+                            return buildSearchOptions(row.sourceType, row.rawSearch).map((option) => {
+                              const showGroup = option.group !== currentGroup;
+                              currentGroup = option.group;
+                              return (
+                                <React.Fragment key={option.key}>
+                                  {showGroup ? (
+                                    <p className="bg-[#FAFAF9] px-4 py-2 text-[10px] font-black uppercase tracking-[0.12em] text-[#7E7468]">
+                                      {option.group}
+                                    </p>
+                                  ) : null}
+                                  <button
+                                    type="button"
+                                    onClick={() => selectSearchOption(row, option)}
+                                    className="flex min-h-[56px] w-full flex-col items-start gap-0.5 border-b border-zinc-100 px-4 py-3 text-left last:border-b-0 hover:bg-zinc-50 active:bg-zinc-100"
+                                  >
+                                    <span className="break-words text-[15px] font-semibold leading-snug text-zinc-900">
+                                      {option.title}
+                                    </span>
+                                    <span className="text-sm text-zinc-600">{option.subtitle}</span>
+                                  </button>
+                                </React.Fragment>
+                              );
+                            });
+                          })()
                         )}
                       </div>
                     ) : null}
                   </div>
                 ) : null}
-                {row.sourceType === 'processed' ? (
-                  <select
-                    value={row.processedId}
-                    disabled={disabled}
-                    onChange={(e) => {
-                      const id = e.target.value;
-                      const p = processedProducts.find((x) => x.id === id);
-                      updateRow(row.key, { processedId: id, unit: p?.outputUnit ?? 'kg' });
-                    }}
-                    className="min-h-[48px] w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-base leading-snug sm:min-h-0 sm:text-sm"
-                  >
-                    <option value="">Elaborado…</option>
-                    {processedProducts.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.name}
-                      </option>
-                    ))}
-                  </select>
-                ) : null}
                 {row.sourceType === 'subrecipe' ? (
                   <div className="space-y-2">
-                    <select
-                      value={row.subRecipeId}
-                      disabled={disabled}
-                      onChange={(e) =>
-                        updateRow(row.key, {
-                          subRecipeId: e.target.value,
-                          subRecipeUsageMode: 'custom',
-                          subRecipeOperationalQuantity: '',
-                          subRecipeOperationalUnit: '',
-                          unit: 'g',
-                          qty: row.qty || '1',
-                        })
-                      }
-                      className="min-h-[48px] w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-base font-semibold leading-snug sm:min-h-0 sm:text-sm"
-                    >
-                      <option value="">Base / elaboración…</option>
-                      {recipes
-                        .filter((r) => r.id !== excludeRecipeId && r.isSubRecipe)
-                        .map((r) => (
-                          <option key={r.id} value={r.id}>
-                            {r.name}
-                          </option>
-                        ))}
-                    </select>
                     {subrecipeConfig?.canUseStandard ? (
                       <div className="grid gap-2 sm:grid-cols-[1fr_6rem_auto]">
                         <label className="flex min-w-0 flex-col gap-0.5">
@@ -781,7 +854,9 @@ export default function EscandalloIngredientDraftEditor({
                     </span>
                   </div>
                 ) : null}
-                {row.sourceType === 'manual' || (row.sourceType === 'subrecipe' && row.subRecipeUsageMode !== 'standard_portion') ? (
+                {row.sourceType === 'manual' ||
+                row.sourceType === 'central_kitchen' ||
+                (row.sourceType === 'subrecipe' && row.subRecipeUsageMode !== 'standard_portion') ? (
                   <>
                     <label className="flex min-w-0 flex-col gap-0.5 sm:max-w-[9rem]">
                       <span className="text-[9px] font-bold uppercase text-zinc-500">Unidad uso</span>
@@ -841,6 +916,12 @@ export default function EscandalloIngredientDraftEditor({
                   <p className="text-[10px] leading-snug text-zinc-500">
                     {rawProduct?.name} · {rawWeightDetail}
                   </p>
+                ) : null}
+                {centralItem && !centralItem.active ? (
+                  <p className="text-[10px] leading-snug text-[#B8872A]">Producto desactivado en Cocina Central</p>
+                ) : null}
+                {centralUnitWarning ? (
+                  <p className="text-[10px] leading-snug text-[#B8872A]">{centralUnitWarning}</p>
                 ) : null}
                 <p className="text-lg font-black tabular-nums text-zinc-900">
                   {est != null ? `~${formatMoneyEur(est)}` : '—'}

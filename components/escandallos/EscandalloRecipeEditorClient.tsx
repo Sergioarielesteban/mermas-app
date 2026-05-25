@@ -7,7 +7,6 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ClipboardList,
   ChevronDown,
-  Plus,
   RefreshCw,
   Save,
   Trash2,
@@ -59,6 +58,7 @@ import {
   recipeTotalCostEur,
   saleNetPerUnitFromGross,
   effectiveRecipeYieldQtyForCost,
+  subrecipeLineUsesOperationalPortion,
   updateEscandalloRecipe,
   type EscandalloLine,
   type EscandalloProcessedProduct,
@@ -67,6 +67,7 @@ import {
 } from '@/lib/escandallos-supabase';
 import { formatMoneyEur, formatUnitPriceEur } from '@/lib/money-format';
 import { rawIngredientWeightDetail, totalInputWeightKg } from '@/lib/escandallo-input-weight';
+import { fetchCentralKitchenPublicCatalog, type EscandalloCentralKitchenCatalogItem } from '@/lib/central-kitchen-public-catalog';
 
 type RecipeTechBundle = {
   sheet: EscandalloTechnicalSheet | null;
@@ -113,6 +114,7 @@ export default function EscandalloRecipeEditorClient({ recipeId }: { recipeId: s
   const [linesByRecipe, setLinesByRecipe] = useState<Record<string, EscandalloLine[]>>({});
   const [rawProducts, setRawProducts] = useState<EscandalloRawProduct[]>([]);
   const [processedProducts, setProcessedProducts] = useState<EscandalloProcessedProduct[]>([]);
+  const [centralKitchenProducts, setCentralKitchenProducts] = useState<EscandalloCentralKitchenCatalogItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [banner, setBanner] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
@@ -141,6 +143,10 @@ export default function EscandalloRecipeEditorClient({ recipeId }: { recipeId: s
   const rawById = useMemo(() => new Map(rawProducts.map((p) => [p.id, p])), [rawProducts]);
   const processedById = useMemo(() => new Map(processedProducts.map((p) => [p.id, p])), [processedProducts]);
   const recipesById = useMemo(() => new Map(recipes.map((r) => [r.id, r])), [recipes]);
+  const centralKitchenById = useMemo(
+    () => new Map(centralKitchenProducts.map((item) => [item.id, item])),
+    [centralKitchenProducts],
+  );
   const sortedRawProducts = useMemo(
     () => [...rawProducts].sort((a, b) => a.name.localeCompare(b.name, 'es')),
     [rawProducts],
@@ -168,9 +174,10 @@ export default function EscandalloRecipeEditorClient({ recipeId }: { recipeId: s
       linesByRecipe,
       recipesById,
       technicalSheetsByRecipe,
+      centralKitchenById,
       expanding: new Set<string>(recipe ? [recipe.id] : []),
     }),
-    [linesByRecipe, recipesById, technicalSheetsByRecipe, recipe],
+    [linesByRecipe, recipesById, technicalSheetsByRecipe, centralKitchenById, recipe],
   );
 
   const hydrateDraftFromRecipe = useCallback((r: EscandalloRecipe) => {
@@ -228,6 +235,7 @@ export default function EscandalloRecipeEditorClient({ recipeId }: { recipeId: s
       setLinesByRecipe({});
       setRawProducts([]);
       setProcessedProducts([]);
+      setCentralKitchenProducts([]);
       setLoading(false);
       return;
     }
@@ -239,6 +247,7 @@ export default function EscandalloRecipeEditorClient({ recipeId }: { recipeId: s
       setLinesByRecipe(pack.linesByRecipe);
       setRawProducts(pack.rawProducts);
       setProcessedProducts(pack.processed);
+      setCentralKitchenProducts([]);
       setLoading(false);
       catalogHydratedRef.current = true;
       return;
@@ -248,6 +257,7 @@ export default function EscandalloRecipeEditorClient({ recipeId }: { recipeId: s
       setLinesByRecipe({});
       setRawProducts([]);
       setProcessedProducts([]);
+      setCentralKitchenProducts([]);
       setLoading(false);
       return;
     }
@@ -257,16 +267,18 @@ export default function EscandalloRecipeEditorClient({ recipeId }: { recipeId: s
     }
     setBanner(null);
     try {
-      const [r, raw, processed, categoryMap, sheetsMapResult] = await Promise.all([
+      const [r, raw, processed, categoryMap, sheetsMapResult, centralCatalog] = await Promise.all([
         fetchEscandalloRecipes(supabase, localId),
         fetchEscandalloRawProductsWithWeightedPurchasePrices(supabase, localId),
         fetchProcessedProductsForEscandallo(supabase, localId),
         fetchEscandalloRecipeCategoriasMap(supabase, localId),
         fetchEscandalloTechnicalSheetsMap(supabase, localId).catch(() => new Map<string, EscandalloTechnicalSheet>()),
+        fetchCentralKitchenPublicCatalog(supabase).catch(() => [] as EscandalloCentralKitchenCatalogItem[]),
       ]);
       setRecipes(r);
       setRawProducts(raw);
       setProcessedProducts(processed);
+      setCentralKitchenProducts(centralCatalog);
       setFamilyOptions(
         [...new Set([...categoryMap.values()].map((value) => value.trim()).filter(Boolean))].sort((a, b) =>
           a.localeCompare(b, 'es'),
@@ -286,6 +298,7 @@ export default function EscandalloRecipeEditorClient({ recipeId }: { recipeId: s
       setRecipes([]);
       setLinesByRecipe({});
       setTechnicalSheetsByRecipe(new Map());
+      setCentralKitchenProducts([]);
     } finally {
       setLoading(false);
     }
@@ -399,9 +412,10 @@ export default function EscandalloRecipeEditorClient({ recipeId }: { recipeId: s
       linesByRecipe,
       recipesById,
       technicalSheetsByRecipe,
+      centralKitchenById,
       recipeId: recipe.id,
     });
-  }, [lines, rawById, processedById, linesByRecipe, recipesById, technicalSheetsByRecipe, recipe]);
+  }, [lines, rawById, processedById, linesByRecipe, recipesById, technicalSheetsByRecipe, centralKitchenById, recipe]);
 
   const yLive = parseDecimal(draftYieldQty) ?? recipe?.yieldQty ?? 1;
   const finalWeightLive = parseDecimal(draftFinalWeightQty);
@@ -597,7 +611,7 @@ export default function EscandalloRecipeEditorClient({ recipeId }: { recipeId: s
 
   const handleAddLinesBatch = async () => {
     if (!localId || !recipe || demoReadonly) return;
-    const built = draftRowsToPayloads(ingredientDrafts, rawById, processedById, recipesById, recipe.id);
+    const built = draftRowsToPayloads(ingredientDrafts, rawById, processedById, recipesById, centralKitchenById, recipe.id);
     if (!built.ok) {
       setBanner(built.message);
       return;
@@ -756,7 +770,6 @@ export default function EscandalloRecipeEditorClient({ recipeId }: { recipeId: s
     alerts.push('Base sin ingredientes');
   }
 
-  const kindLabel = recipe?.isSubRecipe ? 'BASE' : 'PLATO';
   const typeSummaryLabel = recipe?.isSubRecipe ? 'Base / Elaboración' : 'Plato';
   const statusTone =
     fcPct != null && fcPct > 30
@@ -950,16 +963,21 @@ export default function EscandalloRecipeEditorClient({ recipeId }: { recipeId: s
                         line.sourceType === 'raw'
                           ? rawIngredientWeightDetail(line.qty, line.unit, line.rawSupplierProductId ? rawById.get(line.rawSupplierProductId) : null)
                           : null;
+                      const centralItem =
+                        line.sourceType === 'central_kitchen' && line.centralProductionRecipeId
+                          ? centralKitchenById.get(line.centralProductionRecipeId) ?? null
+                          : null;
                       const subSheet = line.subRecipeId ? technicalSheetsByRecipe.get(line.subRecipeId) : null;
+                      const usesOperationalPortion = subrecipeLineUsesOperationalPortion(line, subSheet);
                       const subModeLabel =
                         line.sourceType === 'subrecipe'
-                          ? line.subRecipeUsageMode === 'standard_portion'
+                          ? usesOperationalPortion
                             ? `${line.qty} ración estándar`
                             : 'Personalizado'
                           : null;
                       const subDetail =
                         line.sourceType === 'subrecipe'
-                          ? line.subRecipeUsageMode === 'standard_portion'
+                          ? usesOperationalPortion
                             ? `${
                                 line.subRecipeOperationalQuantity ?? subSheet?.operationalQuantity ?? '—'
                               } ${line.subRecipeOperationalUnit ?? subSheet?.operationalUnit ?? ''} · ${
@@ -986,10 +1004,20 @@ export default function EscandalloRecipeEditorClient({ recipeId }: { recipeId: s
                               ) : null}
                               <p className="text-[10px] tabular-nums text-[#7E7468]">
                                 {line.sourceType === 'subrecipe' && subModeLabel ? subModeLabel : `${line.qty} ${line.unit}`} ·{' '}
-                                {line.sourceType === 'subrecipe' && subDetail ? subDetail : formatUnitPriceEur(unitEur, line.unit)}
+                                {line.sourceType === 'subrecipe' && subDetail
+                                  ? subDetail
+                                  : line.sourceType === 'central_kitchen' && centralItem?.unitCost != null
+                                    ? formatUnitPriceEur(centralItem.unitCost, centralItem.outputUnit)
+                                    : formatUnitPriceEur(unitEur, line.unit)}
                               </p>
                               {inputWeightDetail ? (
                                 <p className="text-[9px] font-medium text-[#7E7468]">{parsed.name} · {inputWeightDetail}</p>
+                              ) : null}
+                              {line.sourceType === 'central_kitchen' ? (
+                                <p className="text-[9px] font-semibold uppercase tracking-[0.08em] text-[#4A6B3A]">Cocina Central</p>
+                              ) : null}
+                              {line.sourceType === 'central_kitchen' && centralItem && !centralItem.active ? (
+                                <p className="text-[9px] font-medium text-[#B8872A]">Producto desactivado en Cocina Central</p>
                               ) : null}
                             </div>
                             <div className="flex shrink-0 flex-col items-end gap-0.5">
@@ -1022,6 +1050,7 @@ export default function EscandalloRecipeEditorClient({ recipeId }: { recipeId: s
                       onSubmitDrafts={() => void handleAddLinesBatch()}
                       sortedRaw={sortedRawProducts}
                       processedProducts={processedProducts}
+                      centralKitchenProducts={centralKitchenProducts}
                       recipes={recipes}
                       excludeRecipeId={recipe.id}
                       disabled={busyId !== null || demoReadonly}
@@ -1096,6 +1125,7 @@ export default function EscandalloRecipeEditorClient({ recipeId }: { recipeId: s
                       processedById,
                       recipesById,
                       technicalSheetsByRecipe,
+                      centralKitchenById,
                       linesByRecipe,
                       productionTotalCost: totalCostLive,
                       creatorName: displayName,

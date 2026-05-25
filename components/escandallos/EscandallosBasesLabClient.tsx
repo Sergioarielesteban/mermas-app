@@ -138,7 +138,7 @@ export default function EscandallosBasesLabClient() {
     try {
       let subPayloads: EscandalloLineInsertPayload[] | null = null;
       if (isSubRecipe) {
-        const built = draftRowsToPayloads(subIngredientDrafts, rawById, processedById, recipesById, null);
+        const built = draftRowsToPayloads(subIngredientDrafts, rawById, processedById, recipesById, new Map(), null);
         if (!built.ok) {
           setBanner(built.message);
           return;
@@ -287,6 +287,7 @@ export default function EscandallosBasesLabClient() {
             onChange={setSubIngredientDrafts}
             sortedRaw={sortedRawProducts}
             processedProducts={processedProducts}
+            centralKitchenProducts={[]}
             recipes={recipes}
             excludeRecipeId={null}
             disabled={busyId !== null}

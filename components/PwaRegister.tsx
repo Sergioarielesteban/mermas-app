@@ -19,7 +19,23 @@ export default function PwaRegister() {
 
   useEffect(() => {
     if (typeof window === 'undefined' || !('serviceWorker' in navigator)) return;
-    if (process.env.NODE_ENV !== 'production') return;
+
+    if (process.env.NODE_ENV !== 'production') {
+      /** En local, un SW de producción o sesiones previas cachea `/_next/static/` y rompe HMR. */
+      void (async () => {
+        try {
+          const regs = await navigator.serviceWorker.getRegistrations();
+          await Promise.all(regs.map((r) => r.unregister()));
+          if (typeof caches !== 'undefined') {
+            const keys = await caches.keys();
+            await Promise.all(keys.map((k) => caches.delete(k)));
+          }
+        } catch {
+          /* ignore */
+        }
+      })();
+      return;
+    }
 
     try {
       if (sessionStorage.getItem(PWA_WAITING_KEY) === '1') {

@@ -5,12 +5,14 @@ import {
   lineUnitPriceEur,
   type EscandalloLine,
   type EscandalloLineInsertPayload,
+  type EscandalloRecipePriceContext,
   type EscandalloProcessedProduct,
   type EscandalloRawProduct,
   type EscandalloRecipe,
 } from '@/lib/escandallos-supabase';
 import type { EscandalloTechnicalSheet } from '@/lib/escandallos-technical-sheet-supabase';
 import { parsePriceInput } from '@/lib/money-format';
+import type { EscandalloCentralKitchenCatalogItem } from '@/lib/central-kitchen-public-catalog';
 
 /** Opciones compactas para selects legacy; en UI preferir datalist con presets + texto libre. */
 export const ESCANDALLO_DRAFT_UNITS: { value: string; label: string }[] = [
@@ -28,12 +30,13 @@ export function newDraftKey() {
 
 export type IngredientDraftRow = {
   key: string;
-  sourceType: 'raw' | 'processed' | 'subrecipe' | 'manual';
+  sourceType: 'raw' | 'processed' | 'subrecipe' | 'central_kitchen' | 'manual';
   rawSearch: string;
   rawDropdownOpen: boolean;
   rawId: string;
   processedId: string;
   subRecipeId: string;
+  centralKitchenId: string;
   manualLabel: string;
   manualPrice: string;
   qty: string;
@@ -52,6 +55,7 @@ export function emptyIngredientDraft(): IngredientDraftRow {
     rawId: '',
     processedId: '',
     subRecipeId: '',
+    centralKitchenId: '',
     manualLabel: '',
     manualPrice: '',
     qty: '1',
@@ -74,6 +78,7 @@ export function draftRowsToPayloads(
   rawById: Map<string, EscandalloRawProduct>,
   processedById: Map<string, EscandalloProcessedProduct>,
   recipesById: Map<string, EscandalloRecipe>,
+  centralKitchenById: Map<string, EscandalloCentralKitchenCatalogItem>,
   recipeId: string | null,
 ): { ok: true; payloads: EscandalloLineInsertPayload[] } | { ok: false; message: string } {
   const payloads: EscandalloLineInsertPayload[] = [];
@@ -83,6 +88,7 @@ export function draftRowsToPayloads(
     const raw = row.rawId ? rawById.get(row.rawId) : undefined;
     const processed = row.processedId ? processedById.get(row.processedId) : undefined;
     const subRec = row.subRecipeId ? recipesById.get(row.subRecipeId) : undefined;
+    const centralItem = row.centralKitchenId ? centralKitchenById.get(row.centralKitchenId) : undefined;
     const label =
       row.sourceType === 'raw'
         ? raw?.name ?? ''
@@ -90,6 +96,8 @@ export function draftRowsToPayloads(
           ? processed?.name ?? ''
           : row.sourceType === 'subrecipe'
             ? subRec?.name ?? ''
+            : row.sourceType === 'central_kitchen'
+              ? centralItem?.name ?? ''
             : row.manualLabel.trim();
     if (!label) continue;
     let manual: number | null = null;
@@ -105,6 +113,9 @@ export function draftRowsToPayloads(
       if (!subRec) return { ok: false, message: 'Selecciona sub-receta en cada fila rellena.' };
       if (recipeId != null && subRec.id === recipeId)
         return { ok: false, message: 'Una receta no puede referenciarse a sí misma.' };
+    }
+    if (row.sourceType === 'central_kitchen' && !centralItem) {
+      return { ok: false, message: 'Selecciona producto de Cocina Central en cada fila rellena.' };
     }
     const subRecipeUsageMode =
       row.sourceType === 'subrecipe'
@@ -145,6 +156,7 @@ export function draftRowsToPayloads(
       rawSupplierProductId: row.sourceType === 'raw' ? raw?.id ?? null : null,
       processedProductId: row.sourceType === 'processed' ? processed?.id ?? null : null,
       subRecipeId: row.sourceType === 'subrecipe' ? subRec?.id ?? null : null,
+      centralProductionRecipeId: row.sourceType === 'central_kitchen' ? centralItem?.id ?? null : null,
       manualPricePerUnit: row.sourceType === 'manual' ? manual : null,
       subRecipeUsageMode,
       subRecipeOperationalQuantity,
@@ -160,13 +172,14 @@ export function estimateDraftRowCostEur(
   rawById: Map<string, EscandalloRawProduct>,
   processedById: Map<string, EscandalloProcessedProduct>,
   recipesById: Map<string, EscandalloRecipe>,
+  centralKitchenById: Map<string, EscandalloCentralKitchenCatalogItem>,
   linesByRecipe: Record<string, EscandalloLine[]>,
   excludeRecipeId: string | null,
   technicalSheetsByRecipe?: Map<string, EscandalloTechnicalSheet>,
 ): number | null {
   const qty = parseDecimal(row.qty);
   if (qty == null || qty <= 0) return null;
-  const built = draftRowsToPayloads([row], rawById, processedById, recipesById, excludeRecipeId);
+  const built = draftRowsToPayloads([row], rawById, processedById, recipesById, centralKitchenById, excludeRecipeId);
   if (!built.ok || built.payloads.length === 0) return null;
   const p = built.payloads[0];
   const rid = excludeRecipeId ?? '__draft__';
@@ -178,6 +191,7 @@ export function estimateDraftRowCostEur(
     rawSupplierProductId: p.rawSupplierProductId ?? null,
     processedProductId: p.processedProductId ?? null,
     subRecipeId: p.subRecipeId ?? null,
+    centralProductionRecipeId: p.centralProductionRecipeId ?? null,
     label: p.label,
     qty: p.qty,
     unit: p.unit,
@@ -188,10 +202,18 @@ export function estimateDraftRowCostEur(
     sortOrder: 0,
     createdAt: '',
   };
-  const unit = lineUnitPriceEur(tempLine, rawById, processedById, {
+  const priceCtx: EscandalloRecipePriceContext = {
     linesByRecipe,
     recipesById,
     technicalSheetsByRecipe,
+    centralKitchenById,
+    recipeId: rid,
+  };
+  const unit = lineUnitPriceEur(tempLine, rawById, processedById, {
+    linesByRecipe: priceCtx.linesByRecipe,
+    recipesById: priceCtx.recipesById,
+    technicalSheetsByRecipe: priceCtx.technicalSheetsByRecipe,
+    centralKitchenById: priceCtx.centralKitchenById,
     expanding: new Set<string>([rid]),
   });
   if (!Number.isFinite(unit)) return null;
@@ -211,6 +233,7 @@ export function insertPayloadsToTempLines(
     rawSupplierProductId: p.rawSupplierProductId ?? null,
     processedProductId: p.processedProductId ?? null,
     subRecipeId: p.subRecipeId ?? null,
+    centralProductionRecipeId: p.centralProductionRecipeId ?? null,
     label: p.label,
     qty: p.qty,
     unit: p.unit,

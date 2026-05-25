@@ -32,6 +32,7 @@ import type {
   EscandalloTechnicalSheetStep,
 } from '@/lib/escandallos-technical-sheet-supabase';
 import type { RecipeAllergenRow } from '@/lib/appcc-allergens-supabase';
+import { fetchCentralKitchenPublicCatalog, type EscandalloCentralKitchenCatalogItem } from '@/lib/central-kitchen-public-catalog';
 
 type CatFilter = string;
 type PvpFilter = 'all' | 'with' | 'without';
@@ -47,6 +48,7 @@ export default function EscandallosRecetasLibroClient() {
   const [linesByRecipe, setLinesByRecipe] = useState<Record<string, EscandalloLine[]>>({});
   const [rawProducts, setRawProducts] = useState<EscandalloRawProduct[]>([]);
   const [processedProducts, setProcessedProducts] = useState<EscandalloProcessedProduct[]>([]);
+  const [centralKitchenProducts, setCentralKitchenProducts] = useState<EscandalloCentralKitchenCatalogItem[]>([]);
   const [technicalSheetsByRecipe, setTechnicalSheetsByRecipe] = useState<Map<string, EscandalloTechnicalSheet>>(new Map());
   const [loading, setLoading] = useState(true);
   const [banner, setBanner] = useState<string | null>(null);
@@ -63,6 +65,7 @@ export default function EscandallosRecetasLibroClient() {
       setLinesByRecipe({});
       setRawProducts([]);
       setProcessedProducts([]);
+      setCentralKitchenProducts([]);
       setLoading(false);
       return;
     }
@@ -72,6 +75,7 @@ export default function EscandallosRecetasLibroClient() {
       setLinesByRecipe(pack.linesByRecipe);
       setRawProducts(pack.rawProducts);
       setProcessedProducts(pack.processed);
+      setCentralKitchenProducts([]);
       setTechnicalSheetsByRecipe(new Map());
       setLoading(false);
       return;
@@ -81,6 +85,7 @@ export default function EscandallosRecetasLibroClient() {
       setLinesByRecipe({});
       setRawProducts([]);
       setProcessedProducts([]);
+      setCentralKitchenProducts([]);
       setTechnicalSheetsByRecipe(new Map());
       setLoading(false);
       return;
@@ -89,15 +94,17 @@ export default function EscandallosRecetasLibroClient() {
     setLoading(true);
     setBanner(null);
     try {
-      const [r, raw, processed, sheetsMapResult] = await Promise.all([
+      const [r, raw, processed, sheetsMapResult, centralCatalog] = await Promise.all([
         fetchEscandalloRecipes(supabase, localId),
         fetchEscandalloRawProductsWithWeightedPurchasePrices(supabase, localId),
         fetchProcessedProductsForEscandallo(supabase, localId),
         fetchEscandalloTechnicalSheetsMap(supabase, localId).catch(() => new Map<string, EscandalloTechnicalSheet>()),
+        fetchCentralKitchenPublicCatalog(supabase).catch(() => [] as EscandalloCentralKitchenCatalogItem[]),
       ]);
       setRecipes(r);
       setRawProducts(raw);
       setProcessedProducts(processed);
+      setCentralKitchenProducts(centralCatalog);
       setTechnicalSheetsByRecipe(sheetsMapResult);
       const entries = await Promise.all(
         r.map(async (rec) => {
@@ -120,10 +127,22 @@ export default function EscandallosRecetasLibroClient() {
 
   const rawById = useMemo(() => new Map(rawProducts.map((p) => [p.id, p])), [rawProducts]);
   const processedById = useMemo(() => new Map(processedProducts.map((p) => [p.id, p])), [processedProducts]);
+  const centralKitchenById = useMemo(
+    () => new Map(centralKitchenProducts.map((item) => [item.id, item])),
+    [centralKitchenProducts],
+  );
 
   const rows = useMemo(
-    () => buildEscandalloDashboardRows(recipes, linesByRecipe, rawById, processedById, technicalSheetsByRecipe),
-    [recipes, linesByRecipe, rawById, processedById, technicalSheetsByRecipe],
+    () =>
+      buildEscandalloDashboardRows(
+        recipes,
+        linesByRecipe,
+        rawById,
+        processedById,
+        technicalSheetsByRecipe,
+        centralKitchenById,
+      ),
+    [recipes, linesByRecipe, rawById, processedById, technicalSheetsByRecipe, centralKitchenById],
   );
 
   const mainRows = useMemo(() => rows.filter((r) => !r.isSubRecipe), [rows]);
@@ -192,6 +211,7 @@ export default function EscandallosRecetasLibroClient() {
           processedById,
           recipesById: new Map(recipes.map((r) => [r.id, r])),
           technicalSheetsByRecipe: new Map(),
+          centralKitchenById,
           linesByRecipe,
           productionTotalCost: rows.find((row) => row.id === recipeId)?.totalCostEur ?? 0,
           creatorName: null,
@@ -205,7 +225,7 @@ export default function EscandallosRecetasLibroClient() {
         setPrintingRecipeId(null);
       }
     },
-    [demoPack, linesByRecipe, localId, processedById, rawById, recipes, rows],
+    [demoPack, linesByRecipe, localId, processedById, rawById, recipes, rows, centralKitchenById],
   );
 
   if (!profileReady) {

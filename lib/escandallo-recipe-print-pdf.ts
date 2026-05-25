@@ -24,6 +24,7 @@ import {
   type EscandalloRecipe,
 } from '@/lib/escandallos-supabase';
 import { formatMoneyEur } from '@/lib/money-format';
+import type { EscandalloCentralKitchenCatalogItem } from '@/lib/central-kitchen-public-catalog';
 
 type RGB = [number, number, number];
 type LogoAsset = { dataUrl: string; width: number; height: number };
@@ -39,6 +40,7 @@ export type RecipePrintPayload = {
   processedById: Map<string, EscandalloProcessedProduct>;
   recipesById: Map<string, EscandalloRecipe>;
   technicalSheetsByRecipe: Map<string, EscandalloTechnicalSheet>;
+  centralKitchenById: Map<string, EscandalloCentralKitchenCatalogItem>;
   linesByRecipe: Record<string, EscandalloLine[]>;
   productionTotalCost: number;
   creatorName?: string | null;
@@ -313,6 +315,7 @@ function parseLineName(label: string): { supplier?: string; name: string } {
 function lineSourceBadge(line: EscandalloLine): string {
   if (line.sourceType === 'subrecipe') return line.subRecipeUsageMode === 'standard_portion' ? 'BASE' : 'BASE';
   if (line.sourceType === 'processed') return 'ELABORACIÓN';
+  if (line.sourceType === 'central_kitchen') return 'COCINA CENTRAL';
   if (line.sourceType === 'manual') return 'MANUAL';
   return '';
 }
@@ -322,6 +325,7 @@ function lineSupplier(line: EscandalloLine, rawById: Map<string, EscandalloRawPr
     return rawById.get(line.rawSupplierProductId)?.supplierName ?? '—';
   }
   if (line.sourceType === 'processed') return 'Elaboración propia';
+  if (line.sourceType === 'central_kitchen') return 'Cocina Central';
   if (line.sourceType === 'subrecipe') return 'Chef One';
   return '—';
 }
@@ -334,6 +338,7 @@ function lineCost(
     linesByRecipe: payload.linesByRecipe,
     recipesById: payload.recipesById,
     technicalSheetsByRecipe: payload.technicalSheetsByRecipe,
+    centralKitchenById: payload.centralKitchenById,
     expanding: new Set([payload.recipe.id]),
   });
   return Math.round(line.qty * unitPrice * 10000) / 10000;
