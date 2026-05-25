@@ -455,7 +455,6 @@ export function escandalloRecipeUnitForRawProduct(p: EscandalloRawProduct): Esca
 
 /** € por unidad de receta (o € por unidad de compra si la línea va en envases). */
 export function rawSupplierLineUnitPriceEur(line: EscandalloLine, p: EscandalloRawProduct): number {
-  const packSize = p.unitsPerPack > 0 ? p.unitsPerPack : 1;
   const purchaseUnit = sanitizeEscandalloIngredientUnit(String(p.unit));
   const pricingUnit = sanitizeEscandalloIngredientUnit(String(p.pricingUnit ?? p.unit));
   const usageUnit = escandalloRecipeUnitForRawProduct(p);

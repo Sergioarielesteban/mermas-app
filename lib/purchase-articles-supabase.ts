@@ -370,6 +370,7 @@ export type PurchaseArticleMasterCostPatch = {
   unidadUso?: string | null;
   unidadesUsoPorUnidadCompra?: number | null;
   rendimientoPct?: number | null;
+  costeUnitarioUso?: number | null;
   origenCoste?: string | null;
 };
 
@@ -459,6 +460,12 @@ export async function updatePurchaseArticleMasterCostFields(
   }
   if (patch.rendimientoPct !== undefined && patch.rendimientoPct != null) {
     row.rendimiento_pct = Math.round(patch.rendimientoPct * 100) / 100;
+  }
+  if (patch.costeUnitarioUso !== undefined) {
+    row.coste_unitario_uso =
+      patch.costeUnitarioUso != null && Number.isFinite(patch.costeUnitarioUso) && patch.costeUnitarioUso >= 0
+        ? Math.round(patch.costeUnitarioUso * 1e8) / 1e8
+        : null;
   }
   if (patch.origenCoste !== undefined) row.origen_coste = patch.origenCoste?.trim() || null;
   if (Object.keys(row).length === 0) return;

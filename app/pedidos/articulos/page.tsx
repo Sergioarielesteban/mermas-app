@@ -36,6 +36,7 @@ import {
   clearEscandalloWizardArticulosReturn,
   readEscandalloWizardArticulosReturn,
 } from '@/lib/escandallo-articulos-nav';
+import { fetchEscandalloRawProductsWithWeightedPurchasePrices } from '@/lib/escandallos-supabase';
 import { useOperationalAutoCollapse } from '@/lib/use-operational-auto-collapse';
 
 function formatShortDate(iso: string) {
@@ -68,6 +69,9 @@ export default function PedidosArticulosPage() {
   const [articles, setArticles] = useState<PurchaseArticle[]>([]);
   const [catalogByArticle, setCatalogByArticle] = useState<Map<string, SupplierCatalogRow[]>>(new Map());
   const [priceSamples, setPriceSamples] = useState<Map<string, SupplierProductPriceSample[]>>(new Map());
+  const [escandalloPricingBySupplierProduct, setEscandalloPricingBySupplierProduct] = useState<
+    Map<string, { pricePerUnit: number; unit: string; source: string | null }>
+  >(new Map());
   const [loading, setLoading] = useState(true);
   const [banner, setBanner] = useState<string | null>(null);
   const [q, setQ] = useState('');
@@ -99,10 +103,22 @@ export default function PedidosArticulosPage() {
 
       const productIds = [...new Set([...catalogMap.values()].flat().map((r) => r.id))];
       const samples = productIds.length ? await fetchSupplierProductPriceSamples(supabase, localId, productIds) : new Map();
+      const escPricingRows = await fetchEscandalloRawProductsWithWeightedPurchasePrices(supabase, localId).catch(() => []);
+      const escPricingMap = new Map(
+        escPricingRows.map((row) => [
+          row.id,
+          {
+            pricePerUnit: row.pricePerUnit,
+            unit: row.pricingUnit ?? row.unit,
+            source: row.operationalPriceSource ?? null,
+          },
+        ]),
+      );
 
       setArticles(list);
       setCatalogByArticle(catalogMap);
       setPriceSamples(samples);
+      setEscandalloPricingBySupplierProduct(escPricingMap);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'No se pudieron cargar artículos.';
       if (isMissingPurchaseArticlesError(msg)) {
@@ -113,6 +129,7 @@ export default function PedidosArticulosPage() {
       setArticles([]);
       setCatalogByArticle(new Map());
       setPriceSamples(new Map());
+      setEscandalloPricingBySupplierProduct(new Map());
     } finally {
       setLoading(false);
     }
@@ -320,6 +337,7 @@ export default function PedidosArticulosPage() {
               article={a}
               catalogRows={catalogByArticle.get(a.id) ?? []}
               priceSamples={priceSamples}
+              escandalloPricingBySupplierProduct={escandalloPricingBySupplierProduct}
               onReload={() => void load()}
               expanded={expandedArticleId === a.id}
               onExpandedChange={(open) => setExpandedArticleId(open ? a.id : null)}
@@ -339,6 +357,7 @@ function ArticleCard({
   article: a,
   catalogRows,
   priceSamples,
+  escandalloPricingBySupplierProduct,
   onReload,
   expanded,
   onExpandedChange,
@@ -347,6 +366,7 @@ function ArticleCard({
   article: PurchaseArticle;
   catalogRows: SupplierCatalogRow[];
   priceSamples: Map<string, SupplierProductPriceSample[]>;
+  escandalloPricingBySupplierProduct: Map<string, { pricePerUnit: number; unit: string; source: string | null }>;
   onReload: () => void;
   expanded: boolean;
   onExpandedChange: (open: boolean) => void;
@@ -565,6 +585,7 @@ function ArticleCard({
   const principalRefRow =
     (refProdId ? compareRows.find((r) => r.id === refProdId) : null) ?? originRow ?? compareRows[0];
   const nombreVisibleProveedor = principalRefRow?.name?.trim() || '';
+  const escandalloPricing = principalRefRow ? escandalloPricingBySupplierProduct.get(principalRefRow.id) ?? null : null;
   const facturacionUnit = (principalRefRow?.billingUnit ?? principalRefRow?.unit ?? a.unidadCompra ?? 'ud') as string;
   const compraUnitEur =
     principalRefRow != null
@@ -612,6 +633,7 @@ function ArticleCard({
         unidadUso: unidadUso.trim(),
         unidadesUsoPorUnidadCompra: factorNum,
         rendimientoPct: rendNum,
+        costeUnitarioUso: previewCosteUso,
         origenCoste: 'app_config',
       });
       onReload();
@@ -721,6 +743,18 @@ function ArticleCard({
     compraUnitEur != null ? formatUnitPriceEur(roundMoney(compraUnitEur), unitCompra) : '—';
   const precioFacturacionLine =
     precioFacturacionEur != null ? formatUnitPriceEur(roundMoney(precioFacturacionEur), facturacionUnit) : '—';
+  const precioEscandalloLine =
+    escandalloPricing != null
+      ? formatUnitPriceEur(roundMoney(escandalloPricing.pricePerUnit), escandalloPricing.unit)
+      : '—';
+  const precioEscandalloSource =
+    escandalloPricing?.source === 'pmp'
+      ? 'PMP'
+      : escandalloPricing?.source === 'ultimo_precio'
+        ? 'Último precio'
+        : escandalloPricing?.source === 'articulo_master'
+          ? 'Master manual'
+          : null;
   const factorMeta =
     Number.isFinite(factorNum) && factorNum > 0
       ? `${factorNum.toLocaleString('es-ES', { maximumFractionDigits: 4 })} ud`
@@ -952,7 +986,12 @@ function ArticleCard({
                 </p>
                 {a.costeUnitarioUso != null ? (
                   <p className="mt-0.5 text-[11px] font-semibold text-emerald-800">
-                    Guardado: {formatMoneyEur(roundMoney(a.costeUnitarioUso))}
+                    Guardado: {formatMoneyEur(roundMoney(a.costeUnitarioUso))}/{a.unidadUso || unidadUso || 'ud'}
+                  </p>
+                ) : null}
+                {precioEscandalloSource ? (
+                  <p className="mt-1 text-[11px] font-semibold text-emerald-900">
+                    Escandallo usa ahora: {precioEscandalloLine} · {precioEscandalloSource}
                   </p>
                 ) : null}
               </div>
