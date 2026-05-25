@@ -676,6 +676,7 @@ function ArticleCard({
     if (!technicalPath || !localId || !supabaseOk) return;
     const supabase = getSupabaseClient();
     if (!supabase) return;
+    const pdfWindow = !isTechnicalImage ? window.open('', '_blank', 'noopener,noreferrer') : null;
     setDocBusy(true);
     setDocMsg(null);
     try {
@@ -684,9 +685,14 @@ function ArticleCard({
         setDocPreviewUrl(signedUrl);
         setImageViewerUrl(signedUrl);
       } else {
-        window.open(signedUrl, '_blank', 'noopener,noreferrer');
+        if (pdfWindow) {
+          pdfWindow.location.href = signedUrl;
+        } else {
+          window.location.href = signedUrl;
+        }
       }
     } catch (e: unknown) {
+      if (pdfWindow && !pdfWindow.closed) pdfWindow.close();
       setDocMsg(e instanceof Error ? e.message : 'No se pudo abrir el documento.');
     } finally {
       setDocBusy(false);
