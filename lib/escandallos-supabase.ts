@@ -938,6 +938,34 @@ function subrecipeYieldUnitPriceFromSheet(
   sheet: EscandalloTechnicalSheet | undefined,
 ): number | null {
   if (!sheet) return null;
+  if (line.subRecipeUsageMode === 'standard_portion') {
+    if (sheet.operationalCost != null && Number.isFinite(sheet.operationalCost) && sheet.operationalCost >= 0) {
+      return roundMoney(sheet.operationalCost);
+    }
+    const yieldUnit = sheet.yieldUnit;
+    if (!yieldUnit) return null;
+    const yieldQty =
+      sheet.yieldQuantity != null && Number.isFinite(sheet.yieldQuantity) && sheet.yieldQuantity > 0
+        ? sheet.yieldQuantity
+        : subRecipe.finalWeightQty != null && Number.isFinite(subRecipe.finalWeightQty) && subRecipe.finalWeightQty > 0
+          ? subRecipe.finalWeightQty
+          : null;
+    if (yieldQty == null) return null;
+    const costPerUnit =
+      sheet.yieldCostPerUnit != null && Number.isFinite(sheet.yieldCostPerUnit) && sheet.yieldCostPerUnit >= 0
+        ? sheet.yieldCostPerUnit
+        : computeYieldCostPerUnit(sheet.yieldCostTotal, yieldQty);
+    if (costPerUnit == null) return null;
+    const quantity =
+      line.subRecipeOperationalQuantity != null &&
+      Number.isFinite(line.subRecipeOperationalQuantity) &&
+      line.subRecipeOperationalQuantity > 0
+        ? line.subRecipeOperationalQuantity
+        : sheet.operationalQuantity;
+    const unit = line.subRecipeOperationalUnit ?? sheet.operationalUnit;
+    const cost = computeOperationalCost(costPerUnit, yieldUnit, quantity, unit);
+    return cost != null ? roundMoney(cost) : null;
+  }
   const yieldUnit = sheet.yieldUnit;
   if (!yieldUnit) return null;
   const yieldQty =
@@ -952,20 +980,6 @@ function subrecipeYieldUnitPriceFromSheet(
       ? sheet.yieldCostPerUnit
       : computeYieldCostPerUnit(sheet.yieldCostTotal, yieldQty);
   if (costPerUnit == null) return null;
-  if (line.subRecipeUsageMode === 'standard_portion') {
-    const quantity =
-      line.subRecipeOperationalQuantity != null &&
-      Number.isFinite(line.subRecipeOperationalQuantity) &&
-      line.subRecipeOperationalQuantity > 0
-        ? line.subRecipeOperationalQuantity
-        : sheet.operationalQuantity;
-    const unit = line.subRecipeOperationalUnit ?? sheet.operationalUnit;
-    const cost =
-      sheet.operationalCost != null && Number.isFinite(sheet.operationalCost) && sheet.operationalCost >= 0
-        ? sheet.operationalCost
-        : computeOperationalCost(costPerUnit, yieldUnit, quantity, unit);
-    return cost != null ? roundMoney(cost) : null;
-  }
   const perRequestedUnit = computeOperationalCost(costPerUnit, yieldUnit, 1, line.unit);
   return perRequestedUnit != null ? roundMoney(perRequestedUnit) : null;
 }
@@ -1035,7 +1049,12 @@ export function recipeTotalCostEur(
   const expanding = new Set<string>();
   if (ctx) expanding.add(ctx.recipeId);
   const innerCtx: LinePriceInnerContext | undefined = ctx
-    ? { linesByRecipe: ctx.linesByRecipe, recipesById: ctx.recipesById, expanding }
+    ? {
+        linesByRecipe: ctx.linesByRecipe,
+        recipesById: ctx.recipesById,
+        technicalSheetsByRecipe: ctx.technicalSheetsByRecipe,
+        expanding,
+      }
     : undefined;
   let sum = 0;
   for (const line of lines) {

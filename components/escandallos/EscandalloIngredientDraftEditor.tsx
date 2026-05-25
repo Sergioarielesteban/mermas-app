@@ -36,6 +36,7 @@ export type EscandalloIngredientDraftEditorProps = {
   recipesById?: Map<string, EscandalloRecipe>;
   technicalSheetsByRecipe?: Map<string, EscandalloTechnicalSheet>;
   addButtonLabel?: string;
+  onSubmitDrafts?: () => void;
   /** UI compacta tipo Pedidos para el editor de receta */
   variant?: 'default' | 'editor';
 };
@@ -110,6 +111,32 @@ function getSubrecipeOperationalConfig(
   };
 }
 
+function getStandardPortionPatch(
+  row: IngredientDraftRow,
+  mode: 'custom' | 'standard_portion',
+  recipesById?: Map<string, EscandalloRecipe>,
+  technicalSheetsByRecipe?: Map<string, EscandalloTechnicalSheet>,
+) {
+  if (mode !== 'standard_portion') {
+    return {
+      subRecipeUsageMode: mode,
+      subRecipeOperationalQuantity: '',
+      subRecipeOperationalUnit: '',
+      unit: row.unit || 'g',
+    } as const;
+  }
+  const config = getSubrecipeOperationalConfig(row, recipesById, technicalSheetsByRecipe);
+  return {
+    subRecipeUsageMode: mode,
+    subRecipeOperationalQuantity:
+      config?.quantity != null && Number.isFinite(config.quantity) && config.quantity > 0
+        ? String(config.quantity)
+        : '',
+    subRecipeOperationalUnit: config?.unit ?? '',
+    unit: 'ud',
+  } as const;
+}
+
 export default function EscandalloIngredientDraftEditor({
   drafts,
   onChange,
@@ -124,6 +151,7 @@ export default function EscandalloIngredientDraftEditor({
   recipesById,
   technicalSheetsByRecipe,
   addButtonLabel = 'Añadir ingrediente',
+  onSubmitDrafts,
   variant = 'default',
 }: EscandalloIngredientDraftEditorProps) {
   const updateRow = (key: string, patch: Partial<IngredientDraftRow>) => {
@@ -133,7 +161,7 @@ export default function EscandalloIngredientDraftEditor({
   const removeRow = (key: string) => {
     if (variant === 'editor') {
       const next = drafts.filter((d) => d.key !== key);
-      onChange(next.length > 0 ? next : []);
+      onChange(next.length > 0 ? next : [emptyIngredientDraft()]);
       return;
     }
     if (drafts.length <= 1) {
@@ -196,7 +224,6 @@ export default function EscandalloIngredientDraftEditor({
           technicalSheetsByRecipe,
         )
       : null;
-    const subLines = row.sourceType === 'subrecipe' && row.subRecipeId ? (linesByRecipe[row.subRecipeId] ?? []) : [];
     const dispUnit = displayUnitForRow(row, sortedRaw, processedProducts);
     const configured = draftRowConfigured(row);
     const rawProduct = row.sourceType === 'raw' && row.rawId ? sortedRaw.find((x) => x.id === row.rawId) : null;
@@ -336,10 +363,15 @@ export default function EscandalloIngredientDraftEditor({
                           value={row.subRecipeUsageMode ?? 'custom'}
                           disabled={disabled}
                           onChange={(e) =>
-                            updateRow(row.key, {
-                              subRecipeUsageMode: e.target.value as 'custom' | 'standard_portion',
-                              unit: e.target.value === 'standard_portion' ? 'ud' : row.unit || 'g',
-                            })
+                            updateRow(
+                              row.key,
+                              getStandardPortionPatch(
+                                row,
+                                e.target.value as 'custom' | 'standard_portion',
+                                recipesById,
+                                technicalSheetsByRecipe,
+                              ),
+                            )
                           }
                           className="h-7 rounded-lg border border-[rgba(10,9,8,0.08)] bg-white px-2 text-[10px] font-bold text-[#0A0908]"
                         >
@@ -423,15 +455,6 @@ export default function EscandalloIngredientDraftEditor({
             ) : null}
           </div>
         </div>
-        {row.sourceType === 'subrecipe' && subLines.length > 0 ? (
-          <ul className="mt-1 space-y-0.5 border-t border-dashed border-[rgba(10,9,8,0.08)] pt-1 text-[9px] text-[#7E7468]">
-            {subLines.map((ln) => (
-              <li key={ln.id} className="tabular-nums">
-                {ln.label} · {ln.qty} {ln.unit}
-              </li>
-            ))}
-          </ul>
-        ) : null}
       </div>
     );
   };
@@ -449,7 +472,13 @@ export default function EscandalloIngredientDraftEditor({
         <button
           type="button"
           disabled={disabled}
-          onClick={() => onChange([...drafts, emptyIngredientDraft()])}
+          onClick={() => {
+            if (onSubmitDrafts) {
+              onSubmitDrafts();
+              return;
+            }
+            onChange([...drafts, emptyIngredientDraft()]);
+          }}
           className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-zinc-300 bg-zinc-50/50 py-2.5 text-sm font-semibold text-zinc-700 transition hover:bg-zinc-100"
         >
           <Plus className="h-4 w-4" />
@@ -655,8 +684,12 @@ export default function EscandalloIngredientDraftEditor({
                             disabled={disabled}
                             onChange={(e) =>
                               updateRow(row.key, {
-                                subRecipeUsageMode: e.target.value as 'custom' | 'standard_portion',
-                                unit: e.target.value === 'standard_portion' ? 'ud' : row.unit || 'g',
+                                ...getStandardPortionPatch(
+                                  row,
+                                  e.target.value as 'custom' | 'standard_portion',
+                                  recipesById,
+                                  technicalSheetsByRecipe,
+                                ),
                                 qty: row.qty || '1',
                               })
                             }

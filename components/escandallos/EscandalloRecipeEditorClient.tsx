@@ -13,6 +13,7 @@ import {
   Trash2,
 } from 'lucide-react';
 import RecipeTechnicalSheetPanel from '@/components/escandallos/RecipeTechnicalSheetPanel';
+import type { RecipeTechnicalSheetPanelHandle } from '@/components/escandallos/RecipeTechnicalSheetPanel';
 import RecipePrintPDFButton from '@/components/escandallos/RecipePrintPDF';
 import EscandalloIngredientDraftEditor from '@/components/escandallos/EscandalloIngredientDraftEditor';
 import { useAuth } from '@/components/AuthProvider';
@@ -135,6 +136,7 @@ export default function EscandalloRecipeEditorClient({ recipeId }: { recipeId: s
   const [familyOptions, setFamilyOptions] = useState<string[]>([]);
   const [ingredientsOpen, setIngredientsOpen] = useState(false);
   const hydratedRecipeId = useRef<string | null>(null);
+  const technicalSheetPanelRef = useRef<RecipeTechnicalSheetPanelHandle | null>(null);
 
   const rawById = useMemo(() => new Map(rawProducts.map((p) => [p.id, p])), [rawProducts]);
   const processedById = useMemo(() => new Map(processedProducts.map((p) => [p.id, p])), [processedProducts]);
@@ -146,6 +148,21 @@ export default function EscandalloRecipeEditorClient({ recipeId }: { recipeId: s
 
   const recipe = recipesById.get(recipeId) ?? null;
   const lines = useMemo(() => (recipe ? (linesByRecipe[recipe.id] ?? []) : []), [linesByRecipe, recipe]);
+  const recipeSubtitle = useMemo(() => {
+    if (!recipe) return '';
+    const subtitleKindLabel = recipe.isSubRecipe ? 'BASE' : 'PLATO';
+    if (recipe.isSubRecipe) {
+      const finalQty = parseDecimal(draftFinalWeightQty);
+      const qty =
+        finalQty != null && finalQty > 0
+          ? finalQty
+          : recipe.finalWeightQty != null && Number.isFinite(recipe.finalWeightQty) && recipe.finalWeightQty > 0
+            ? recipe.finalWeightQty
+            : null;
+      if (qty != null) return `${subtitleKindLabel} · ${qty} ${draftFinalWeightUnit || recipe.finalWeightUnit || 'kg'}`;
+    }
+    return `${subtitleKindLabel} · ${draftYieldQty || recipe.yieldQty} ${draftYieldLabel || recipe.yieldLabel}`;
+  }, [recipe, draftFinalWeightQty, draftFinalWeightUnit, draftYieldQty, draftYieldLabel]);
   const priceInner = useMemo(
     () => ({
       linesByRecipe,
@@ -381,9 +398,10 @@ export default function EscandalloRecipeEditorClient({ recipeId }: { recipeId: s
     return recipeTotalCostEur(lines, rawById, processedById, {
       linesByRecipe,
       recipesById,
+      technicalSheetsByRecipe,
       recipeId: recipe.id,
     });
-  }, [lines, rawById, processedById, linesByRecipe, recipesById, recipe]);
+  }, [lines, rawById, processedById, linesByRecipe, recipesById, technicalSheetsByRecipe, recipe]);
 
   const yLive = parseDecimal(draftYieldQty) ?? recipe?.yieldQty ?? 1;
   const finalWeightLive = parseDecimal(draftFinalWeightQty);
@@ -450,23 +468,23 @@ export default function EscandalloRecipeEditorClient({ recipeId }: { recipeId: s
     return 'Activo';
   }, [recipe, lines.length, grossLive, fcPct]);
 
-  const handleSaveRecipeMeta = async () => {
+  const handleSaveRecipeMeta = async (opts?: { silentSuccess?: boolean }): Promise<boolean> => {
     if (!recipe) {
       setBanner('La receta no está cargada. Espera un momento o vuelve al libro.');
-      return;
+      return false;
     }
     if (!localId) {
       setBanner('No hay local en sesión. Cierra sesión y entra de nuevo.');
-      return;
+      return false;
     }
     if (demoReadonly) {
       setBanner('Modo demo: la cabecera no se puede guardar.');
-      return;
+      return false;
     }
     const supabase = getSupabaseClient();
     if (!supabase) {
       setBanner('Conexión a datos no disponible en este dispositivo.');
-      return;
+      return false;
     }
     const y = parseDecimal(draftYieldQty);
     const finalWeight = parseDecimal(draftFinalWeightQty);
@@ -486,7 +504,7 @@ export default function EscandalloRecipeEditorClient({ recipeId }: { recipeId: s
         if (finalWeight != null && finalWeight > 0) {
           if (pesoEntradaKg > 0 && finalWeight > pesoEntradaKg) {
             setBanner('El peso final no puede superar el peso de entrada.');
-            return;
+            return false;
           }
           patch.finalWeightQty = finalWeight;
           patch.finalWeightUnit = draftFinalWeightUnit;
@@ -522,8 +540,10 @@ export default function EscandalloRecipeEditorClient({ recipeId }: { recipeId: s
           setTechnicalSheetsByRecipe((prev) => new Map(prev).set(recipe.id, nextSheet!));
         }
       }
-      setSuccessMsg('Cabecera guardada.');
-      window.setTimeout(() => setSuccessMsg(null), 3200);
+      if (!opts?.silentSuccess) {
+        setSuccessMsg('Cabecera guardada.');
+        window.setTimeout(() => setSuccessMsg(null), 3200);
+      }
       setRecipes((prev) =>
         prev
           .map((r) =>
@@ -566,8 +586,10 @@ export default function EscandalloRecipeEditorClient({ recipeId }: { recipeId: s
           )
           .sort((a, b) => a.name.localeCompare(b.name, 'es')),
       );
+      return true;
     } catch (e: unknown) {
       setBanner(e instanceof Error ? e.message : 'No se pudo guardar.');
+      return false;
     } finally {
       setBusyId(null);
     }
@@ -674,8 +696,8 @@ export default function EscandalloRecipeEditorClient({ recipeId }: { recipeId: s
     sheetId: string,
     patch: EscandalloTechnicalSheetUpdate,
     stepDrafts: TechnicalSheetStepDraft[],
-  ) => {
-    if (!localId || demoReadonly || !supabaseOk) return;
+  ): Promise<boolean> => {
+    if (!localId || demoReadonly || !supabaseOk) return false;
     const supabase = getSupabaseClient()!;
     setBusyId(`tech-${recipeId}`);
     setBanner(null);
@@ -684,11 +706,24 @@ export default function EscandalloRecipeEditorClient({ recipeId }: { recipeId: s
       const steps = await replaceEscandalloTechnicalSheetSteps(supabase, localId, sheetId, stepDrafts);
       setTechBundle({ sheet, steps, loading: false });
       setTechnicalSheetsByRecipe((prev) => new Map(prev).set(sheet.recipeId, sheet));
+      return true;
     } catch (e: unknown) {
       setBanner(e instanceof Error ? e.message : 'No se pudo guardar la ficha técnica.');
+      return false;
     } finally {
       setBusyId(null);
     }
+  };
+
+  const handleSaveAll = async () => {
+    const metaSaved = await handleSaveRecipeMeta({ silentSuccess: true });
+    if (!metaSaved) return;
+    if (techBundle.sheet) {
+      const technicalSaved = await technicalSheetPanelRef.current?.save();
+      if (technicalSaved === false) return;
+    }
+    setSuccessMsg('Cambios guardados.');
+    window.setTimeout(() => setSuccessMsg(null), 3200);
   };
 
   if (!profileReady) {
@@ -763,7 +798,7 @@ export default function EscandalloRecipeEditorClient({ recipeId }: { recipeId: s
                   placeholder="Nombre de la receta"
                 />
                 <p className="mt-0.5 text-[8px] font-semibold uppercase tracking-[0.14em] text-[#7E7468]">
-                  {kindLabel} · {draftYieldQty || recipe.yieldQty} {draftYieldLabel || recipe.yieldLabel}
+                  {recipeSubtitle}
                 </p>
               </div>
               {!recipe.isSubRecipe ? (
@@ -938,10 +973,6 @@ export default function EscandalloRecipeEditorClient({ recipeId }: { recipeId: s
                                   : formatUnitPriceEur(unitEur, line.unit)
                               }`
                           : null;
-                      const subLines =
-                        line.sourceType === 'subrecipe' && line.subRecipeId
-                          ? (linesByRecipe[line.subRecipeId] ?? [])
-                          : [];
                       return (
                         <li
                           key={line.id}
@@ -976,15 +1007,6 @@ export default function EscandalloRecipeEditorClient({ recipeId }: { recipeId: s
                               </button>
                             </div>
                           </div>
-                          {subLines.length > 0 ? (
-                            <ul className="mt-1 space-y-0.5 border-t border-dashed border-[rgba(10,9,8,0.08)] pt-1 text-[9px] text-[#7E7468]">
-                              {subLines.map((sl) => (
-                                <li key={sl.id} className="tabular-nums">
-                                  {sl.label} · {sl.qty} {sl.unit}
-                                </li>
-                              ))}
-                            </ul>
-                          ) : null}
                         </li>
                       );
                     })}
@@ -997,6 +1019,7 @@ export default function EscandalloRecipeEditorClient({ recipeId }: { recipeId: s
                       variant="editor"
                       drafts={ingredientDrafts}
                       onChange={setIngredientDrafts}
+                      onSubmitDrafts={() => void handleAddLinesBatch()}
                       sortedRaw={sortedRawProducts}
                       processedProducts={processedProducts}
                       recipes={recipes}
@@ -1009,21 +1032,13 @@ export default function EscandalloRecipeEditorClient({ recipeId }: { recipeId: s
                       technicalSheetsByRecipe={technicalSheetsByRecipe}
                     />
                   </div>
-                  <button
-                    type="button"
-                    disabled={busyId !== null || demoReadonly}
-                    onClick={() => void handleAddLinesBatch()}
-                    className="mt-3 flex h-10 w-full items-center justify-center gap-1.5 rounded-xl bg-[#D32F2F] text-[12px] font-bold text-white transition hover:bg-[#B91C1C] active:scale-[0.99] disabled:opacity-50"
-                  >
-                    <Plus className="h-4 w-4 shrink-0" aria-hidden />
-                    Añadir a la receta
-                  </button>
                 </div>
               </div>
             ) : null}
           </section>
 
           <RecipeTechnicalSheetPanel
+            ref={technicalSheetPanelRef}
             recipe={recipe}
             lines={lines}
             sheet={techBundle.sheet}
@@ -1035,7 +1050,7 @@ export default function EscandalloRecipeEditorClient({ recipeId }: { recipeId: s
             saving={busyId === `tech-${recipeId}`}
             onCreate={() => handleCreateTechnicalSheet()}
             onSave={(patch, drafts) => {
-              if (!techBundle.sheet) return Promise.resolve();
+              if (!techBundle.sheet) return Promise.resolve(false);
               return handleSaveTechnicalSheet(techBundle.sheet.id, patch, drafts);
             }}
           />
@@ -1062,12 +1077,12 @@ export default function EscandalloRecipeEditorClient({ recipeId }: { recipeId: s
               <div className="mt-1.5 grid grid-cols-3 gap-1">
                 <button
                   type="button"
-                  disabled={busyId === recipe.id || demoReadonly}
-                  onClick={() => void handleSaveRecipeMeta()}
+                  disabled={busyId !== null || demoReadonly}
+                  onClick={() => void handleSaveAll()}
                   className="col-span-3 inline-flex h-9 items-center justify-center gap-1.5 rounded-xl bg-[#D32F2F] text-[12px] font-bold text-white transition hover:bg-[#B91C1C] disabled:opacity-50"
                 >
                   <Save className="h-3.5 w-3.5" />
-                  {busyId === recipe.id ? 'Guardando…' : 'Guardar cambios'}
+                  {busyId !== null ? 'Guardando…' : 'Guardar cambios'}
                 </button>
                 {printableRecipe ? (
                   <RecipePrintPDFButton

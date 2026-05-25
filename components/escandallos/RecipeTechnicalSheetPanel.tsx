@@ -3,7 +3,7 @@
 /* eslint-disable react-hooks/set-state-in-effect */
 
 import Link from 'next/link';
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { forwardRef, useEffect, useImperativeHandle, useMemo, useState } from 'react';
 import {
   AlertTriangle,
   ArrowDown,
@@ -16,7 +16,6 @@ import {
   Loader2,
   Plus,
   Refrigerator,
-  Save,
   Sparkles,
   Trash2,
   type LucideIcon,
@@ -71,7 +70,11 @@ type Props = {
   loading: boolean;
   saving: boolean;
   onCreate: () => Promise<void>;
-  onSave: (patch: EscandalloTechnicalSheetUpdate, stepDrafts: TechnicalSheetStepDraft[]) => Promise<void>;
+  onSave: (patch: EscandalloTechnicalSheetUpdate, stepDrafts: TechnicalSheetStepDraft[]) => Promise<boolean>;
+};
+
+export type RecipeTechnicalSheetPanelHandle = {
+  save: () => Promise<boolean>;
 };
 
 function CompactAccordion({
@@ -123,7 +126,7 @@ function CompactAccordion({
   );
 }
 
-export default function RecipeTechnicalSheetPanel({
+const RecipeTechnicalSheetPanel = forwardRef<RecipeTechnicalSheetPanelHandle, Props>(function RecipeTechnicalSheetPanel({
   recipe,
   lines,
   sheet,
@@ -135,7 +138,7 @@ export default function RecipeTechnicalSheetPanel({
   saving,
   onCreate,
   onSave,
-}: Props) {
+}: Props, ref) {
   const [creating, setCreating] = useState(false);
   const [openBlocks, setOpenBlocks] = useState<Record<string, boolean>>({});
 
@@ -287,7 +290,7 @@ export default function RecipeTechnicalSheetPanel({
       : 'Pendiente de configurar';
 
   const handleSave = async () => {
-    if (!sheet) return;
+    if (!sheet) return false;
     const officialPhotoUrl = emplFoto.trim() === '' ? null : emplFoto.trim();
     const manualList = alergManual
       .split(/[\n,]+/)
@@ -296,7 +299,7 @@ export default function RecipeTechnicalSheetPanel({
     const drafts: TechnicalSheetStepDraft[] = stepDrafts
       .filter((d) => d.titulo.trim() !== '' || d.descripcion.trim() !== '')
       .map((d) => ({ titulo: d.titulo, descripcion: d.descripcion }));
-    await onSave(
+    return onSave(
       {
         codigoInterno: codigoInterno.trim(),
         fotoUrl: officialPhotoUrl,
@@ -334,6 +337,10 @@ export default function RecipeTechnicalSheetPanel({
       drafts,
     );
   };
+
+  useImperativeHandle(ref, () => ({
+    save: handleSave,
+  }));
 
   const readImageFile = (file: File, onReady: (dataUrl: string) => void) => {
     const reader = new FileReader();
@@ -819,15 +826,8 @@ export default function RecipeTechnicalSheetPanel({
             </div>
           </div>
       </CompactAccordion>
-      <button
-        type="button"
-        disabled={saving}
-        onClick={() => void handleSave()}
-        className="mt-2 flex h-10 w-full items-center justify-center gap-1.5 rounded-xl bg-[#D32F2F] text-[12px] font-black text-white transition hover:bg-[#B91C1C] disabled:opacity-60"
-      >
-        {saving ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Save className="h-4 w-4" aria-hidden />}
-        Guardar ficha
-      </button>
     </div>
   );
-}
+});
+
+export default RecipeTechnicalSheetPanel;
