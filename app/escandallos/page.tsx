@@ -27,7 +27,6 @@ import EscandalloQuickCalculatorModal from '@/components/escandallos/EscandalloQ
 import { isDemoMode } from '@/lib/demo-mode';
 import { getDemoEscandalloPack } from '@/lib/demo-dataset';
 import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
-import { appConfirm } from '@/lib/app-dialog-bridge';
 import { fetchRecipeAllergensForLocal, type RecipeAllergenRow } from '@/lib/appcc-allergens-supabase';
 import {
   buildEscandalloDashboardRows,
@@ -96,6 +95,23 @@ function formatRecipeUpdatedLabel(iso: string | undefined): string {
   if (diffDays === 1) return 'ayer';
   if (diffDays < 7) return `${diffDays}d`;
   return d.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
+}
+
+function formatQuantityLabel(value: number | null | undefined, unit: string | null | undefined): string | null {
+  if (value == null || !Number.isFinite(value) || value <= 0 || !unit) return null;
+  const formatted = value.toLocaleString('es-ES', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+  return `${formatted} ${unit}`;
+}
+
+function baseOperationalUsageLabel(sheet: EscandalloTechnicalSheet | null | undefined): string | null {
+  if (!sheet || sheet.operationalCost == null || sheet.operationalCost <= 0) return null;
+  const qtyLabel = formatQuantityLabel(sheet.operationalQuantity, sheet.operationalUnit);
+  if (sheet.operationalUsageType === 'standard_portion') {
+    return qtyLabel ? `ración ${qtyLabel}` : 'ración';
+  }
+  if (qtyLabel) return qtyLabel;
+  if (sheet.operationalUnit) return sheet.operationalUnit;
+  return null;
 }
 
 function foodCostValueClass(pct: number | null): string {
@@ -464,6 +480,10 @@ export default function EscandallosPage() {
   const [printingRecipeId, setPrintingRecipeId] = useState<string | null>(null);
   const [quickCalcOpen, setQuickCalcOpen] = useState(false);
   const [baseBusyId, setBaseBusyId] = useState<string | null>(null);
+  const [deleteConfirmBase, setDeleteConfirmBase] = useState<{
+    base: EscandalloRecipeDashboardRow;
+    usageCount: number;
+  } | null>(null);
   const [familyByRecipeId, setFamilyByRecipeId] = useState<Map<string, string>>(() => new Map());
   const [selectedFamily, setSelectedFamily] = useState<string>('Todas');
   const [recipeFilter, setRecipeFilter] = useState<RecipeFilter>('all');
@@ -760,13 +780,15 @@ export default function EscandallosPage() {
   );
 
   const handleDeleteBase = async (base: EscandalloRecipeDashboardRow) => {
-    if (!localId || !supabaseOk || isDemoMode()) return;
     const usageCount = baseUsageById.get(base.id) ?? 0;
-    const message =
-      usageCount > 0
-        ? `Esta base está siendo usada en ${usageCount} ${usageCount === 1 ? 'receta' : 'recetas'}.\n\n¿Eliminarla igualmente?`
-        : `¿Eliminar la base "${base.name}"?`;
-    if (!(await appConfirm(message))) return;
+    setDeleteConfirmBase({ base, usageCount });
+  };
+
+  const handleConfirmDeleteBase = async () => {
+    if (!localId || !supabaseOk || isDemoMode()) return;
+    const modalState = deleteConfirmBase;
+    if (!modalState) return;
+    const base = modalState.base;
     const supabase = getSupabaseClient()!;
     setBaseBusyId(base.id);
     setBanner(null);
@@ -779,6 +801,7 @@ export default function EscandallosPage() {
         return next;
       });
       setBanner('Base eliminada.');
+      setDeleteConfirmBase(null);
     } catch (e: unknown) {
       setBanner(e instanceof Error ? e.message : 'No se pudo eliminar la base.');
     } finally {
@@ -996,53 +1019,79 @@ export default function EscandallosPage() {
                 {baseRows.map((r) => {
                   const usageCount = baseUsageById.get(r.id) ?? 0;
                   const updatedLabel = formatRecipeUpdatedLabel(recipeUpdatedById.get(r.id));
+                  const sheet = technicalSheetsByRecipe.get(r.id);
+                  const realYieldQty = sheet?.yieldQuantity ?? null;
+                  const realYieldUnit = sheet?.yieldUnit ?? null;
+                  const realYieldLabel = formatQuantityLabel(realYieldQty, realYieldUnit);
+                  const realCostPerUnit =
+                    realYieldQty != null && realYieldQty > 0 && realYieldUnit
+                      ? Math.round((r.totalCostEur / realYieldQty) * 100) / 100
+                      : null;
+                  const operationalUsage = baseOperationalUsageLabel(sheet);
                   return (
                     <article
                       key={r.id}
                       className="rounded-2xl border border-zinc-200/70 bg-white px-3 py-2.5 shadow-sm ring-1 ring-zinc-100/80 transition duration-200 hover:shadow-[0_6px_24px_rgba(0,0,0,0.06)] active:scale-[0.995]"
                     >
-                      <div className="flex items-start gap-2">
-                        <div className="min-w-0 flex-1">
-                          <h3 className="line-clamp-2 font-serif text-[14px] font-normal leading-snug text-zinc-900">{r.name}</h3>
-                          <p className="mt-1 text-[10px] font-medium text-zinc-500">
-                            {r.yieldQty} {r.yieldLabel} ·{' '}
-                            <span className={usageCount > 0 ? 'font-semibold text-[#C4531F]' : ''}>
-                              {usageCount} {usageCount === 1 ? 'uso' : 'usos'}
-                            </span>
-                          </p>
-                          <p className="mt-1.5 font-mono text-[13px] font-bold tabular-nums text-zinc-900">
-                            {formatMoneyEur(r.costPerYieldEur)}
-                            <span className="text-[10px] font-medium text-zinc-500">/{r.yieldLabel || 'ud'}</span>
-                          </p>
-                          <p className="mt-0.5 text-[9px] text-zinc-400">Act. {updatedLabel}</p>
+                      <div className="min-w-0">
+                        <h3 className="line-clamp-2 font-serif text-[14px] font-semibold leading-snug text-zinc-900">{r.name}</h3>
+                        <p className="mt-0.5 text-[10px] font-medium uppercase tracking-[0.07em] text-zinc-500">
+                          BASE · {realYieldLabel ?? 'Salida pendiente'} · {usageCount} {usageCount === 1 ? 'uso' : 'usos'}
+                        </p>
+                        <p className="mt-0.5 text-[8px] text-zinc-400">Act. {updatedLabel}</p>
+                      </div>
+
+                      <div className="mt-2 grid grid-cols-2 divide-x divide-[rgba(10,9,8,0.06)] rounded-lg bg-[#FAFAF9] py-1.5 ring-1 ring-[rgba(10,9,8,0.04)]">
+                        <div className="min-w-0 px-1 text-center first:pl-0 last:pr-0">
+                          <p className="text-[7px] font-bold uppercase tracking-[0.12em] text-[#7E7468]">Coste real</p>
+                          {realCostPerUnit != null && realYieldUnit ? (
+                            <p className="mt-0.5 truncate text-[13px] font-black tabular-nums leading-none text-[#0A0908]">
+                              {formatMoneyEur(realCostPerUnit)}
+                              <span className="text-[10px] font-bold text-[#7E7468]">/{realYieldUnit}</span>
+                            </p>
+                          ) : (
+                            <p className="mt-0.5 truncate text-[13px] font-black leading-none text-[#7E7468]">Salida pendiente</p>
+                          )}
                         </div>
-                        <div className="flex shrink-0 flex-col gap-1">
-                          <button
-                            type="button"
-                            onClick={() => void handlePrintRecipe(r.id)}
-                            disabled={printingRecipeId === r.id}
-                            className="grid h-7 w-7 place-items-center rounded-xl bg-zinc-100 text-zinc-600 transition hover:bg-zinc-200 disabled:opacity-50"
-                            aria-label="Imprimir base"
-                          >
-                            <Printer className="h-3.5 w-3.5" />
-                          </button>
-                          <Link
-                            href={`/escandallos/recetas/${r.id}/editar`}
-                            className="grid h-7 w-7 place-items-center rounded-xl bg-zinc-100 text-zinc-600 transition hover:bg-zinc-200"
-                            aria-label="Editar base"
-                          >
-                            <PencilLine className="h-3.5 w-3.5" />
-                          </Link>
-                          <button
-                            type="button"
-                            disabled={baseBusyId === r.id}
-                            onClick={() => void handleDeleteBase(r)}
-                            className="grid h-7 w-7 place-items-center rounded-xl bg-red-50 text-red-600 transition hover:bg-red-100 disabled:opacity-50"
-                            aria-label="Eliminar base"
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </button>
+                        <div className="min-w-0 px-1 text-center first:pl-0 last:pr-0">
+                          <p className="text-[7px] font-bold uppercase tracking-[0.12em] text-[#7E7468]">Coste operativo</p>
+                          {sheet?.operationalCost != null && sheet.operationalCost > 0 && operationalUsage ? (
+                            <p className="mt-0.5 truncate text-[13px] font-black leading-none text-[#0A0908]">
+                              {formatMoneyEur(sheet.operationalCost)}
+                              <span className="text-[10px] font-bold text-[#7E7468]"> / {operationalUsage}</span>
+                            </p>
+                          ) : (
+                            <p className="mt-0.5 truncate text-[13px] font-black leading-none text-[#7E7468]">Uso pendiente</p>
+                          )}
                         </div>
+                      </div>
+
+                      <div className="mt-3 grid grid-cols-3 gap-2.5 px-0.5">
+                        <button
+                          type="button"
+                          onClick={() => void handlePrintRecipe(r.id)}
+                          disabled={printingRecipeId === r.id}
+                          className="inline-flex min-h-[40px] items-center justify-center gap-1.5 rounded-2xl border border-zinc-200 bg-white px-2.5 text-[11px] font-bold text-zinc-700 transition hover:bg-zinc-50 disabled:opacity-50"
+                        >
+                          <Printer className="h-3.5 w-3.5 shrink-0" />
+                          <span>{printingRecipeId === r.id ? 'Imprimiendo…' : 'Imprimir'}</span>
+                        </button>
+                        <Link
+                          href={`/escandallos/recetas/${r.id}/editar`}
+                          className="inline-flex min-h-[40px] items-center justify-center gap-1.5 rounded-2xl border border-zinc-200 bg-white px-2.5 text-[11px] font-bold text-zinc-700 transition hover:bg-zinc-50"
+                        >
+                          <PencilLine className="h-3.5 w-3.5 shrink-0" />
+                          <span>Editar</span>
+                        </Link>
+                        <button
+                          type="button"
+                          disabled={baseBusyId === r.id}
+                          onClick={() => void handleDeleteBase(r)}
+                          className="inline-flex min-h-[40px] items-center justify-center gap-1.5 rounded-2xl border border-red-200 bg-red-50 px-2.5 text-[11px] font-bold text-red-700 transition hover:bg-red-100 disabled:opacity-50"
+                        >
+                          <Trash2 className="h-3.5 w-3.5 shrink-0" />
+                          <span>Eliminar</span>
+                        </button>
                       </div>
                     </article>
                   );
@@ -1260,6 +1309,45 @@ export default function EscandallosPage() {
           </EscModuleCard>
         </>
       )}
+
+      {deleteConfirmBase ? (
+        <div className="fixed inset-0 z-[80] flex items-end justify-center bg-[rgba(10,9,8,0.45)] px-4 py-6 sm:items-center">
+          <div className="w-full max-w-md rounded-[1.75rem] bg-white p-5 shadow-[0_24px_80px_rgba(0,0,0,0.22)] ring-1 ring-zinc-200">
+            <div className="flex items-start gap-3">
+              <div className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-red-50 text-red-600 ring-1 ring-red-100">
+                <AlertTriangle className="h-5 w-5" aria-hidden />
+              </div>
+              <div className="min-w-0">
+                <h3 className="text-[20px] font-black text-zinc-950">Eliminar base</h3>
+                <p className="mt-1 text-sm text-zinc-600">Esta acción no se puede deshacer.</p>
+                {deleteConfirmBase.usageCount > 0 ? (
+                  <p className="mt-3 text-sm text-zinc-700">
+                    Esta base se usa en {deleteConfirmBase.usageCount}{' '}
+                    {deleteConfirmBase.usageCount === 1 ? 'receta' : 'recetas'}. Si la eliminas, esas recetas perderán este componente.
+                  </p>
+                ) : null}
+              </div>
+            </div>
+            <div className="mt-5 grid grid-cols-2 gap-3">
+              <button
+                type="button"
+                onClick={() => setDeleteConfirmBase(null)}
+                className="inline-flex min-h-[48px] items-center justify-center rounded-2xl border border-zinc-200 bg-white px-4 text-sm font-bold text-zinc-700 transition hover:bg-zinc-50"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={baseBusyId === deleteConfirmBase.base.id}
+                onClick={() => void handleConfirmDeleteBase()}
+                className="inline-flex min-h-[48px] items-center justify-center rounded-2xl bg-[#D32F2F] px-4 text-sm font-bold text-white transition hover:bg-[#B91C1C] disabled:opacity-60"
+              >
+                {baseBusyId === deleteConfirmBase.base.id ? 'Eliminando…' : 'Eliminar definitivamente'}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
